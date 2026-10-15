@@ -51,6 +51,10 @@ import { BaseEntity } from '../../../common/entities/base.entity';
  *   livetv_fast_zap — "true"/"false" override. Unset, the server prefers a
  *     transcode over a copy only where hardware encoding exists, because that
  *     is the whole condition under which it reaches the first segment sooner.
+ *   engine_url — non-empty overrides FLIKS_ENGINE_URL for the remote engine
+ *   engine_token — non-empty overrides FLIKS_ENGINE_TOKEN
+ *   engine_path_mappings — JSON array of { from, to }; absent, empty, or
+ *     invalid JSON means no path mappings
  */
 @Entity('app_settings')
 export class AppSetting extends BaseEntity {

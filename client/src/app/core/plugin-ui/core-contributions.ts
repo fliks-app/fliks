@@ -106,6 +106,7 @@ export const CORE_SETTINGS_SECTIONS: readonly CoreSettingsSection[] = [
     items: [
       { id: 'core.schedulers', slot: 'settings.page', weight: 100, labelKey: 'settings.nav.schedulers', action: { kind: 'route', path: '/admin/settings/schedulers' } },
       { id: 'core.streaming', slot: 'settings.page', weight: 200, labelKey: 'settings.nav.streaming', action: { kind: 'route', path: '/admin/settings/streaming' } },
+      { id: 'core.engine', slot: 'settings.page', weight: 250, labelKey: 'settings.nav.engine', action: { kind: 'route', path: '/admin/settings/engine' } },
       { id: 'core.plugins', slot: 'settings.page', weight: 300, labelKey: 'settings.nav.plugins', action: { kind: 'route', path: '/admin/settings/plugins' } },
     ],
   },

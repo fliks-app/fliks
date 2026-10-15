@@ -10,6 +10,8 @@ import {
 } from './engine-resolver.controller';
 import { EngineResolverService } from './engine-resolver.service';
 import { EngineService } from './engine.service';
+import { SettingsModule } from '../settings/settings.module';
+import { EngineRemoteController } from './engine-remote.controller';
 
 @Global()
 @Module({
@@ -18,8 +20,9 @@ import { EngineService } from './engine.service';
     AuthModule,
     StreamingModule,
     LiveTvModule,
+    SettingsModule,
   ],
-  controllers: [EngineResolverController],
+  controllers: [EngineResolverController, EngineRemoteController],
   providers: [EngineService, EngineResolverService, EngineHostGuard],
   exports: [EngineService],
 })

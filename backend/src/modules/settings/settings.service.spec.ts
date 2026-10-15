@@ -33,6 +33,9 @@ describe('SettingsService', () => {
     'livetv_restricted_groups',
     'livetv_restricted_groups_exempt',
     'livetv_restricted_groups_vanished',
+    'engine_url',
+    'engine_token',
+    'engine_path_mappings',
   ])('refuses to write "%s" via the generic path', async (key) => {
     await expect(service.set(key, '[]')).rejects.toThrow(BadRequestException);
     expect(rows[key]).toBeUndefined();

@@ -55,6 +55,7 @@ const BASELINE_SIDEBAR = [
   { label: 'admin.section_advanced', links: [
     { label: 'settings.nav.schedulers', href: '/admin/settings/schedulers' },
     { label: 'settings.nav.streaming', href: '/admin/settings/streaming' },
+    { label: 'settings.nav.engine', href: '/admin/settings/engine' },
     { label: 'settings.nav.plugins', href: '/admin/settings/plugins' },
   ] },
 ];

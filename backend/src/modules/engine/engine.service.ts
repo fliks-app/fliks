@@ -3,8 +3,17 @@ import {
   Logger,
   OnModuleDestroy,
   OnModuleInit,
+  Optional,
   ServiceUnavailableException,
 } from '@nestjs/common';
+import { SettingsService } from '../settings/settings.service';
+import {
+  ENGINE_PATH_MAPPINGS_KEY,
+  ENGINE_TOKEN_KEY,
+  ENGINE_URL_KEY,
+  parsePathMappings,
+  type EnginePathMapping,
+} from './engine-remote-config';
 import { createHash, randomBytes, timingSafeEqual } from 'crypto';
 import { createEngineClient, type EngineClient } from './engine-client';
 import type { components } from './schema';
@@ -94,6 +103,20 @@ const POLL_MS = 10_000;
 const CAPABILITIES_TIMEOUT_MS = 5 * 60_000;
 const DEFAULT_RENDER_NODE = '/dev/dri/renderD128';
 
+export type EngineConnectionTestResult =
+  | { ok: false; error: string }
+  | {
+      ok: true;
+      engineVersion: string;
+      protocolVersion: number;
+      probeOk?: boolean;
+      probeError?: string;
+    };
+
+function unreachableMessage(url: string): string {
+  return `The streaming engine at ${url} did not answer`;
+}
+
 export function toEngineStreaming(
   ss: StreamingSettings,
 ): EngineStreamingConfig {
@@ -133,7 +156,14 @@ export class EngineService implements OnModuleInit, OnModuleDestroy {
   private livetv?: LiveTvConfig;
   private pushing: Promise<unknown> = Promise.resolve();
   private reachable = false;
+  private storedUrl = '';
+  private storedToken = '';
+  private pathMappings: EnginePathMapping[] = [];
+  /** Bumped by reconfigure so an in-flight handshake cannot adopt afterwards. */
+  private epoch = 0;
   protected sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+  constructor(@Optional() private readonly settings?: SettingsService) {}
 
   /** True once the engine answered `hello` with a compatible protocol. */
   get enabled(): boolean {
@@ -150,7 +180,7 @@ export class EngineService implements OnModuleInit, OnModuleDestroy {
 
   /** `off`: not configured or refused; `down`: configured but the last hello failed. */
   get status(): 'off' | 'up' | 'down' {
-    if (!process.env.FLIKS_ENGINE_URL) return 'off';
+    if (!this.configuredUrl()) return 'off';
     if (!this.client) return this.candidate ? 'down' : 'off';
     return this.reachable ? 'up' : 'down';
   }
@@ -170,29 +200,120 @@ export class EngineService implements OnModuleInit, OnModuleDestroy {
     return this.ready;
   }
 
+  private configuredUrl(): string {
+    const stored = this.storedUrl.trim();
+    if (stored) return stored;
+    return process.env.FLIKS_ENGINE_URL ?? '';
+  }
+
+  private effectiveToken(): string {
+    const stored = this.storedToken.trim();
+    if (stored) return stored;
+    return process.env.FLIKS_ENGINE_TOKEN ?? '';
+  }
+
+  private async loadRemoteSettings(): Promise<void> {
+    if (!this.settings) return;
+    this.storedUrl = (await this.settings.get(ENGINE_URL_KEY)) ?? '';
+    this.storedToken = (await this.settings.get(ENGINE_TOKEN_KEY)) ?? '';
+    this.pathMappings = parsePathMappings(
+      await this.settings.get(ENGINE_PATH_MAPPINGS_KEY),
+    );
+  }
+
   private async init(): Promise<void> {
-    const url = process.env.FLIKS_ENGINE_URL;
-    const token = process.env.FLIKS_ENGINE_TOKEN;
+    const epoch = this.epoch;
+    await this.loadRemoteSettings();
+    if (epoch !== this.epoch) return;
+    const url = this.configuredUrl();
+    const token = this.effectiveToken();
     if (!url || !token) {
       this.log.error(
         'FLIKS_ENGINE_URL/FLIKS_ENGINE_TOKEN unset: playback is unavailable without the engine',
       );
       return;
     }
-    await this.connect(createEngineClient(url, token));
+    await this.connect(createEngineClient(url, token), epoch);
+  }
+
+  /** Drops the live client and reconnects from stored settings or env. */
+  async reconfigure(): Promise<void> {
+    this.epoch++;
+    clearTimeout(this.timer);
+    this.timer = undefined;
+    this.client = null;
+    this.candidate = null;
+    this.reachable = false;
+    this.ready = this.init();
+    return this.ready;
+  }
+
+  /** One-shot hello (and optional probe) without adopting the engine. */
+  async testConnection(
+    url: string,
+    token: string,
+    probePath?: string,
+  ): Promise<EngineConnectionTestResult> {
+    if (!url.trim() || !token.trim()) {
+      return { ok: false, error: 'Engine URL and token are required' };
+    }
+    const client = createEngineClient(url, token);
+    try {
+      const { data, response } = await client.GET('/v1/hello');
+      if (!data || !response.ok) {
+        return { ok: false, error: unreachableMessage(url) };
+      }
+      const base = {
+        ok: true as const,
+        engineVersion: data.engineVersion,
+        protocolVersion: data.protocolVersion,
+      };
+      const path = probePath?.trim();
+      if (!path) return base;
+      try {
+        const probe = await client.POST('/v1/probe', {
+          body: { media: { mediaFileId: 0, path } },
+        });
+        if (!probe.response.ok) {
+          return {
+            ...base,
+            probeOk: false,
+            probeError: `probe -> ${probe.response.status}`,
+          };
+        }
+        if (probe.data && probe.data.ok === false) {
+          return {
+            ...base,
+            probeOk: false,
+            probeError: probe.data.error ?? 'Probe failed',
+          };
+        }
+        return { ...base, probeOk: true };
+      } catch {
+        return { ...base, probeOk: false, probeError: 'Probe did not answer' };
+      }
+    } catch {
+      return { ok: false, error: unreachableMessage(url) };
+    }
   }
 
   /** Handshake: retries while the engine starts, then keeps going in the background. */
-  async connect(client: EngineClient): Promise<void> {
+  async connect(client: EngineClient, epoch = this.epoch): Promise<void> {
+    if (epoch !== this.epoch) return;
     this.candidate = client;
     for (let attempt = 1; attempt <= HELLO_ATTEMPTS; attempt++) {
       const data = await this.hello();
+      if (epoch !== this.epoch) return;
       if (data) {
-        if (await this.adopt(data, false)) this.schedule(POLL_MS);
+        if ((await this.adopt(data, false, epoch)) && epoch === this.epoch) {
+          this.schedule(POLL_MS);
+        }
         return;
       }
       await this.sleep(HELLO_RETRY_MS);
+      if (epoch !== this.epoch) return;
     }
+    if (epoch !== this.epoch) return;
     this.log.error(
       'engine did not answer /v1/hello: no playback until it does, retrying in the background',
     );
@@ -221,8 +342,11 @@ export class EngineService implements OnModuleInit, OnModuleDestroy {
   private async adopt(
     data: NonNullable<Awaited<ReturnType<EngineService['hello']>>>,
     notify: boolean,
+    epoch = this.epoch,
   ): Promise<boolean> {
-    const client = this.candidate!;
+    if (epoch !== this.epoch) return false;
+    const client = this.candidate;
+    if (!client) return false;
     const missing = REQUIRED_FEATURES.filter((f) => !data.features.includes(f));
     const refusal =
       data.protocolVersion < MIN_ENGINE_PROTOCOL
@@ -234,6 +358,7 @@ export class EngineService implements OnModuleInit, OnModuleDestroy {
       return false;
     }
     const { data: cfg } = await client.GET('/v1/config');
+    if (epoch !== this.epoch) return false;
     this.revision = cfg?.revision ?? 0;
     this.lastPushed = '';
     this.instanceId = data.instanceId;
@@ -254,13 +379,16 @@ export class EngineService implements OnModuleInit, OnModuleDestroy {
   }
 
   private schedule(ms: number): void {
-    this.timer = setTimeout(() => void this.tick(), ms);
+    const epoch = this.epoch;
+    this.timer = setTimeout(() => void this.tick(epoch), ms);
     this.timer.unref();
   }
 
   /** Background step: reconnect while down, otherwise detect an engine restart by its instanceId. */
-  private async tick(): Promise<void> {
+  private async tick(epoch = this.epoch): Promise<void> {
+    if (epoch !== this.epoch) return;
     const data = await this.hello();
+    if (epoch !== this.epoch) return;
     const connected = this.client !== null;
     this.reachable = !!data;
     if (!data) {
@@ -274,9 +402,11 @@ export class EngineService implements OnModuleInit, OnModuleDestroy {
     if (connected)
       this.log.log('engine restarted: reloading config and capabilities');
     try {
-      if (await this.adopt(data, true)) this.schedule(POLL_MS);
+      if ((await this.adopt(data, true, epoch)) && epoch === this.epoch) {
+        this.schedule(POLL_MS);
+      }
     } catch {
-      this.schedule(POLL_MS);
+      if (epoch === this.epoch) this.schedule(POLL_MS);
     }
   }
 
@@ -297,7 +427,7 @@ export class EngineService implements OnModuleInit, OnModuleDestroy {
     const run = this.pushing.then(async () => {
       const { streaming, livetv } = this;
       if (!this.client || !streaming) return;
-      const key = JSON.stringify({ streaming, livetv });
+      const key = JSON.stringify({ streaming, livetv, pathMappings: this.pathMappings });
       if (key === this.lastPushed) return;
       const { response } = await this.client.PUT('/v1/config', {
         body: {
@@ -306,6 +436,7 @@ export class EngineService implements OnModuleInit, OnModuleDestroy {
           hostToken: this.hostToken,
           streaming,
           ...(livetv && { livetv }),
+          ...(this.pathMappings.length && { pathMappings: this.pathMappings }),
           lifetime: engineLifetime(),
         },
       });

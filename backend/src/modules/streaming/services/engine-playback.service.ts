@@ -90,10 +90,16 @@ export class EnginePlaybackService {
     device: DeviceProfileDto,
     q: PlaybackQuery,
   ): Promise<EnginePlaybackInfo> {
-    if (!this.engine.runtime)
+    if (!this.engine.runtime) {
+      if (this.engine.status === 'down') {
+        throw new ServiceUnavailableException(
+          'The streaming engine is unreachable',
+        );
+      }
       throw new ServiceUnavailableException(
         'Playback needs the streaming engine, which is not running',
       );
+    }
     const resolved = await this.streamingService.resolveFile(mediaFileId, user);
     const info = resolved.mediaFile.streamInfo;
     const burnIn = await this.resolveBurnIn(q.burnInSubtitleId, mediaFileId);

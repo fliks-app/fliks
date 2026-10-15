@@ -490,12 +490,21 @@ describe('EnginePlaybackService.playbackInfo', () => {
     });
 
     it('answers 503 without opening anything when the engine does not run playback', async () => {
-      const t = setup({ engine: { runtime: false } });
+      const t = setup({ engine: { runtime: false, status: 'off' } });
       await expect(
         t.svc.playbackInfo(user, 1, device as never, query),
-      ).rejects.toThrow(ServiceUnavailableException);
+      ).rejects.toThrow('Playback needs the streaming engine, which is not running');
       expect(t.engine.openSession).not.toHaveBeenCalled();
       expect(t.deps.streamingService.resolveFile).not.toHaveBeenCalled();
+      t.cleanup();
+    });
+
+    it('answers 503 when the engine is configured but unreachable', async () => {
+      const t = setup({ engine: { runtime: false, status: 'down' } });
+      await expect(
+        t.svc.playbackInfo(user, 1, device as never, query),
+      ).rejects.toThrow('The streaming engine is unreachable');
+      expect(t.engine.openSession).not.toHaveBeenCalled();
       t.cleanup();
     });
   });

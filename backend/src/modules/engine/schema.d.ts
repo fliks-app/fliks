@@ -618,6 +618,11 @@ export interface components {
              */
             livetv?: components["schemas"]["LiveTvConfig"];
             /**
+             * @description Absent: the host path is the path this engine opens.
+             * @default []
+             */
+            pathMappings?: components["schemas"]["PathMapping"][];
+            /**
              * Format: int32
              * @default 0
              */
@@ -1346,6 +1351,11 @@ export interface components {
              */
             tonemapAlgo?: string | null;
             tonemapCurve?: null | components["schemas"]["TonemapCurve"];
+        };
+        /** @description One prefix of a host media path rewritten to the path this engine opens. */
+        PathMapping: {
+            from: string;
+            to: string;
         };
         PipelineStage: {
             hw: boolean;

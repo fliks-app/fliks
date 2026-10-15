@@ -19,6 +19,9 @@ const PROTECTED_KEYS = new Map<string, string>([
     'livetv_restricted_groups_vanished',
     'PUT /livetv/admin/access/restricted-groups',
   ],
+  ['engine_url', 'PUT /engine/remote'],
+  ['engine_token', 'PUT /engine/remote'],
+  ['engine_path_mappings', 'PUT /engine/remote'],
 ]);
 
 @Injectable()

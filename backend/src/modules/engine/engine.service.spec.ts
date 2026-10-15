@@ -5,7 +5,9 @@ import {
   toEngineStreaming,
   type EngineClient,
 } from './engine.service';
+import * as engineClient from './engine-client';
 import type { StreamingSettings } from '../streaming/streaming-settings-cache.service';
+import { SettingsService } from '../settings/settings.service';
 
 const HELLO = {
   engineVersion: '0.2.0',
@@ -555,6 +557,154 @@ describe('EngineService runtime', () => {
     it('refuses to call a disabled engine', async () => {
       await expect(svc().openSession({} as never)).rejects.toThrow('The streaming engine is not running');
     });
+  });
+});
+
+describe('EngineService remote config', () => {
+  const env = { ...process.env };
+  afterEach(() => {
+    process.env = { ...env };
+    jest.restoreAllMocks();
+  });
+
+  function fakeSettings(values: Record<string, string | null>) {
+    return {
+      get: jest.fn(async (key: string) => values[key] ?? null),
+    } as unknown as SettingsService;
+  }
+
+  it('connects with stored url and token over env', async () => {
+    process.env.FLIKS_ENGINE_URL = 'http://env';
+    process.env.FLIKS_ENGINE_TOKEN = 'env-tok';
+    const create = jest
+      .spyOn(engineClient, 'createEngineClient')
+      .mockReturnValue(mockClient());
+    const s = new EngineService(
+      fakeSettings({
+        engine_url: 'http://stored',
+        engine_token: 'stored-tok',
+      }),
+    );
+    (s as any).sleep = async () => undefined;
+    await s.whenReady();
+    expect(create).toHaveBeenCalledWith('http://stored', 'stored-tok');
+    expect(s.enabled).toBe(true);
+  });
+
+  it('sends pathMappings on PUT when set and omits them when empty', async () => {
+    process.env.FLIKS_ENGINE_URL = 'http://e';
+    process.env.FLIKS_ENGINE_TOKEN = 't';
+    const c = mockClient();
+    jest.spyOn(engineClient, 'createEngineClient').mockReturnValue(c);
+    const s = new EngineService(
+      fakeSettings({
+        engine_path_mappings: JSON.stringify([
+          { from: '/nas', to: '/data' },
+        ]),
+      }),
+    );
+    (s as any).sleep = async () => undefined;
+    await s.whenReady();
+    await s.pushStreaming(toEngineStreaming(settings));
+    expect((c.PUT.mock.calls[0] as any)[1].body.pathMappings).toEqual([
+      { from: '/nas', to: '/data' },
+    ]);
+
+    await s.pushStreaming(
+      toEngineStreaming({ ...settings, gpuRenderNode: 'auto' }),
+    );
+    expect((c.PUT.mock.calls[1] as any)[1].body.pathMappings).toEqual([
+      { from: '/nas', to: '/data' },
+    ]);
+
+    const s2 = svc();
+    const c2 = mockClient();
+    await s2.connect(c2);
+    await s2.pushStreaming(toEngineStreaming(settings));
+    expect((c2.PUT.mock.calls[0] as any)[1].body).not.toHaveProperty(
+      'pathMappings',
+    );
+  });
+
+  it('testConnection reports unreachable when hello throws', async () => {
+    jest.spyOn(engineClient, 'createEngineClient').mockReturnValue(
+      mockClient({ GET: jest.fn().mockRejectedValue(new Error('down')) }),
+    );
+    const s = svc();
+    await expect(
+      s.testConnection('http://x', 't'),
+    ).resolves.toEqual({
+      ok: false,
+      error: 'The streaming engine at http://x did not answer',
+    });
+  });
+
+  it('testConnection returns probe data after a successful hello', async () => {
+    jest.spyOn(engineClient, 'createEngineClient').mockReturnValue(
+      mockClient({
+        GET: jest.fn(async (url: string) =>
+          url === '/v1/hello'
+            ? {
+                data: {
+                  ...HELLO,
+                  engineVersion: '1.0.0',
+                  protocolVersion: 1,
+                },
+                response: { ok: true, status: 200 },
+              }
+            : { data: { revision: 0 }, response: { status: 200 } },
+        ),
+        POST: jest.fn(async () => ({
+          data: { ok: true, info: { video: [] } },
+          response: { ok: true, status: 200 },
+        })),
+      }),
+    );
+    const s = svc();
+    await expect(
+      s.testConnection('http://x', 't', '/media/a.mkv'),
+    ).resolves.toMatchObject({
+      ok: true,
+      engineVersion: '1.0.0',
+      protocolVersion: 1,
+      probeOk: true,
+    });
+  });
+
+  it('does not adopt a handshake that started before reconfigure', async () => {
+    let releaseHello!: () => void;
+    const helloGate = new Promise<void>((r) => {
+      releaseHello = r;
+    });
+    const oldHello = jest.fn(async (url: string) => {
+      if (url === '/v1/hello') {
+        await helloGate;
+        return {
+          data: { ...HELLO, instanceId: 'old' },
+          response: { ok: true, status: 200 },
+        };
+      }
+      return { data: { revision: 3 }, response: { ok: true, status: 200 } };
+    });
+    jest
+      .spyOn(engineClient, 'createEngineClient')
+      .mockReturnValueOnce(mockClient({ GET: oldHello }))
+      .mockReturnValue(mockClient());
+    const s = new EngineService(
+      fakeSettings({ engine_url: 'http://a', engine_token: 't' }),
+    );
+    (s as any).sleep = async () => undefined;
+    const boot = s.whenReady();
+    for (let i = 0; i < 20 && oldHello.mock.calls.length === 0; i++) {
+      await new Promise((r) => setImmediate(r));
+    }
+    expect(oldHello).toHaveBeenCalled();
+    await s.reconfigure();
+    expect((s as any).instanceId).toBe('x');
+    releaseHello();
+    await boot;
+    expect((s as any).instanceId).toBe('x');
+    expect(s.enabled).toBe(true);
   });
 });
 
