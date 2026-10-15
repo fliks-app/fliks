@@ -340,13 +340,8 @@ pub async fn update(
         drop_connections(&st, id).await;
     }
     if password_changed {
-        // F9: the caller keeps its newest session; a manager's reset revokes them all.
-        let keep = if is_self {
-            db::newest_refresh_token(&st.db, id).await?
-        } else {
-            None
-        };
-        db::revoke_other_families(&st.db, id, keep).await?;
+        // F9: the caller keeps working on its access token until it expires.
+        db::revoke_other_families(&st.db, id, None).await?;
     }
     if dto.enabled == Some(false) || role_changing || admin_changing || dto.library_ids.is_some() {
         revoke_in_background(&st, id);

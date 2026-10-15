@@ -300,7 +300,7 @@ async fn create_defaults_and_conflict(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
-async fn password_change_revokes_other_sessions_and_share_disabled_tears_down(pool: PgPool) {
+async fn password_change_revokes_every_session_and_share_disabled_tears_down(pool: PgPool) {
     let c = ctx(pool).await;
     let (a, ta) = c.user("a", "[]", false).await;
     for (hash, used) in [("h1", "2026-01-01"), ("h2", "2026-02-01")] {
@@ -337,7 +337,7 @@ async fn password_change_revokes_other_sessions_and_share_disabled_tears_down(po
             .fetch_all(&c.pool)
             .await
             .unwrap();
-    assert_eq!(live, ["h2"]);
+    assert!(live.is_empty(), "{live:?}");
 }
 
 #[sqlx::test(migrations = false)]

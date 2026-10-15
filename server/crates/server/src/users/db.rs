@@ -166,19 +166,7 @@ pub async fn social_teardown(c: &mut PgConnection, user_id: i32) -> Result<(), s
     Ok(())
 }
 
-/// The user's newest live refresh token, taken as the caller's session (the PUT carries no refresh token).
-pub async fn newest_refresh_token(db: &PgPool, user_id: i32) -> Result<Option<i32>, sqlx::Error> {
-    sqlx::query_scalar(
-        r#"SELECT "id" FROM refresh_tokens
-           WHERE "userId" = $1 AND "revokedAt" IS NULL AND "expiresAt" > now()
-           ORDER BY COALESCE("lastUsedAt", "createdAt") DESC, "id" DESC LIMIT 1"#,
-    )
-    .bind(user_id)
-    .fetch_optional(db)
-    .await
-}
-
-/// F9: revoke every live refresh token of the user except `keep` (a `refresh_tokens.id`).
+/// Revoke every live refresh token of the user except `keep` (a `refresh_tokens.id`).
 /// Same signature as the auth module's helper, which supersedes this one when merged.
 pub async fn revoke_other_families(
     db: &PgPool,
