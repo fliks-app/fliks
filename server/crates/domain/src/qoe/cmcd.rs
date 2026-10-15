@@ -1,4 +1,5 @@
 //! CMCD off a request: an RFC 8941 Structured Field Dictionary parsed like `@svta/cml-cmcd` 2.8.2.
+use crate::js::trim;
 use serde::Serialize;
 use std::collections::BTreeMap;
 
@@ -28,15 +29,6 @@ enum Sf {
 
 type Parsed<'a, T> = Result<(T, &'a str), ()>;
 type Dict = BTreeMap<String, Sf>;
-
-/// JS `String.prototype.trim` whitespace.
-fn js_ws(c: char) -> bool {
-    (c.is_whitespace() && c != '\u{85}') || c == '\u{feff}'
-}
-
-fn trim(s: &str) -> &str {
-    s.trim_matches(js_ws)
-}
 
 fn parse_key(src: &str) -> Parsed<'_, &str> {
     if !src.starts_with(|c: char| c.is_ascii_lowercase() || c == '*') {

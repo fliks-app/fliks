@@ -124,13 +124,9 @@ pub struct PipelineStage {
     #[serde(
         default,
         skip_serializing_if = "Option::is_none",
-        deserialize_with = "present"
+        deserialize_with = "crate::js::present"
     )]
     pub name: Option<Option<String>>,
-}
-
-fn present<'de, D: Deserializer<'de>>(d: D) -> Result<Option<Option<String>>, D::Error> {
-    Option::<String>::deserialize(d).map(Some)
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
