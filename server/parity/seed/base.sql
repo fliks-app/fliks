@@ -248,6 +248,21 @@ CREATE TYPE public.users_profilevisibility_enum AS ENUM (
 );
 
 
+--
+-- Name: set_updated_at(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.set_updated_at() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF NEW."updatedAt" IS NOT DISTINCT FROM OLD."updatedAt" THEN
+    NEW."updatedAt" = now();
+  END IF;
+  RETURN NEW;
+END $$;
+
+
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
@@ -2898,6 +2913,8 @@ COPY public._sqlx_migrations (version, description, installed_on, success, check
 1786100000000	canonicalize-subtitle-language-codes	2026-01-01 00:00:00+00	t	\\xc28e984667b7ee200dc1f20ff2b2748068b18a7441cad74a93c1e2c5fe1e7e1766ac67c13176230bbd1bbc9c56eab7e2	0
 1786200000000	drop-unrenderable-sidecar-subtitles	2026-01-01 00:00:00+00	t	\\x702474a3b710f21ae49c4e5ce4297bc71705a502c542b8d5d4bc351937a2a96dc6ea76fdb715bf846985ba1d10ee345d	0
 1786300000000	create-playback-qoe	2026-01-01 00:00:00+00	t	\\xe5e4e8991f47690862b8d28d5e8b63acb95506c8288faf97d8d6d97e2cedb18dffe15ce35e842e97064976fa12d03cea	0
+1786400000000	pg trgm	2026-01-01 00:00:00+00	t	\\x5364f2aab2a907ef12aa2aeb5b6a24d04f8839b7f5835c35ba52f29c0568cbb0c8435ce0f60e1f3b1546e43b8abe8360	0
+1786500000000	updated at trigger	2026-01-01 00:00:00+00	t	\\xa08d5738eee946976096dae99719b149c27748ba8250460ae2bcf7be938e642c694351c72dac35289c99f018ddb18cca	0
 \.
 
 
@@ -4849,6 +4866,370 @@ CREATE UNIQUE INDEX idx_playback_user_episode ON public.playback_states USING bt
 --
 
 CREATE UNIQUE INDEX idx_playback_user_movie ON public.playback_states USING btree ("userId", "mediaId") WHERE ("episodeId" IS NULL);
+
+
+--
+-- Name: app_settings set_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON public.app_settings FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: auto_approval_rules set_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON public.auto_approval_rules FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: commands set_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON public.commands FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: content_recommendations set_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON public.content_recommendations FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: custom_formats set_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON public.custom_formats FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: episode_markers set_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON public.episode_markers FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: episodes set_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON public.episodes FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: language_profiles set_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON public.language_profiles FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: libraries set_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON public.libraries FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: library_user_access set_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON public.library_user_access FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: likes set_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON public.likes FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: livetv_channel_streams set_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON public.livetv_channel_streams FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: livetv_channels set_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON public.livetv_channels FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: livetv_group_access set_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON public.livetv_group_access FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: livetv_guide_channels set_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON public.livetv_guide_channels FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: livetv_guide_sources set_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON public.livetv_guide_sources FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: livetv_programs set_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON public.livetv_programs FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: livetv_sources set_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON public.livetv_sources FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: livetv_user_channel_prefs set_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON public.livetv_user_channel_prefs FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: media set_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON public.media FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: media_cast set_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON public.media_cast FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: media_crew set_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON public.media_crew FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: media_file_scans set_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON public.media_file_scans FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: media_files set_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON public.media_files FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: media_metadata set_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON public.media_metadata FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: media_servers set_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON public.media_servers FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: notification_connections set_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON public.notification_connections FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: pairing_requests set_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON public.pairing_requests FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: persons set_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON public.persons FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: playback_states set_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON public.playback_states FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: playlist_items set_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON public.playlist_items FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: playlist_saves set_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON public.playlist_saves FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: playlist_shares set_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON public.playlist_shares FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: playlists set_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON public.playlists FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: plugin_packages set_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON public.plugin_packages FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: plugin_registrations set_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON public.plugin_registrations FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: plugin_sources set_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON public.plugin_sources FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: quality_definitions set_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON public.quality_definitions FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: quality_profiles set_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON public.quality_profiles FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: recommendation_dismissals set_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON public.recommendation_dismissals FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: refresh_tokens set_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON public.refresh_tokens FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: remote_control_grants set_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON public.remote_control_grants FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: request_comments set_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON public.request_comments FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: requests set_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON public.requests FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: roles set_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON public.roles FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: seasons set_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON public.seasons FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: subtitle_blacklist set_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON public.subtitle_blacklist FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: subtitle_files set_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON public.subtitle_files FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: subtitle_providers set_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON public.subtitle_providers FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: translation_providers set_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON public.translation_providers FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: user_follows set_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON public.user_follows FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: users set_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON public.users FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
 
 --

@@ -31,15 +31,36 @@ pub async fn adopt_typeorm(pool: &PgPool) -> Result<(), MigrateError> {
         return Ok(());
     }
 
-    if !table_exists(pool, "migrations").await? {
-        return Ok(());
-    }
-
-    let typeorm_rows: Vec<(i64, String)> =
+    let has_ledger = table_exists(pool, "migrations").await?;
+    let typeorm_rows: Vec<(i64, String)> = if has_ledger {
         sqlx::query_as("SELECT timestamp, name FROM migrations ORDER BY timestamp")
             .fetch_all(pool)
             .await
-            .map_err(MigrateError::Execute)?;
+            .map_err(MigrateError::Execute)?
+    } else {
+        Vec::new()
+    };
+
+    if typeorm_rows.is_empty() {
+        let others: bool = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name <> 'migrations')",
+        )
+        .fetch_one(pool)
+        .await
+        .map_err(MigrateError::Execute)?;
+        if others {
+            return Err(MigrateError::Source(
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "database built by TypeORM synchronize (empty migrations ledger): re-baseline it, see CLAUDE.md (repo root) 'Dev database re-baseline'",
+                )
+                .into(),
+            ));
+        }
+        if !has_ledger {
+            return Ok(());
+        }
+    }
 
     let mut tx = pool.begin().await.map_err(MigrateError::Execute)?;
 
@@ -166,6 +187,35 @@ mod tests {
                 .await
                 .expect("existence check")
         );
+
+        Ok(())
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn adopt_typeorm_refuses_synchronize_built_database(pool: PgPool) -> sqlx::Result<()> {
+        create_typeorm_migrations(&pool).await?;
+        sqlx::query("CREATE TABLE users (id serial PRIMARY KEY)")
+            .execute(&pool)
+            .await?;
+
+        let err = migrate(&pool).await.unwrap_err();
+        assert!(err.to_string().contains("empty migrations ledger"), "{err}");
+        assert!(!table_exists(&pool, "_sqlx_migrations").await.unwrap());
+
+        Ok(())
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn adopt_typeorm_refuses_synchronize_database_without_ledger(
+        pool: PgPool,
+    ) -> sqlx::Result<()> {
+        sqlx::query("CREATE TABLE users (id serial PRIMARY KEY)")
+            .execute(&pool)
+            .await?;
+
+        let err = migrate(&pool).await.unwrap_err();
+        assert!(err.to_string().contains("empty migrations ledger"), "{err}");
+        assert!(!table_exists(&pool, "_sqlx_migrations").await.unwrap());
 
         Ok(())
     }
