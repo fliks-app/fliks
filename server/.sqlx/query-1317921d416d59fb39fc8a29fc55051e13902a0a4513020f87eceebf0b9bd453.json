@@ -1,0 +1,53 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT \"publicId\" AS public_id, \"deviceId\" AS device_id, \"deviceName\" AS device_name,\n                  \"systemName\" AS system_name, \"createdAt\" AS created_at, \"expiresAt\" AS expires_at\n           FROM pairing_requests WHERE \"userId\" = $1 AND status = 'pending' AND \"expiresAt\" >= $2\n           ORDER BY \"createdAt\" DESC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "public_id",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "device_id",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "device_name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "system_name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 5,
+        "name": "expires_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "1317921d416d59fb39fc8a29fc55051e13902a0a4513020f87eceebf0b9bd453"
+}

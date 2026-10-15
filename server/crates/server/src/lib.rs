@@ -1,4 +1,5 @@
 pub mod app;
+pub mod auth;
 pub mod auth_token;
 pub mod bridge;
 pub mod config;
@@ -46,6 +47,7 @@ pub async fn serve(cfg: Config) -> Result<(), BoxError> {
     let secret = jwt_secret::resolve(&cfg);
     let upstream = Upstream::parse(&nest::url(&cfg))?;
     let state = AppState::new(pool, cfg, &secret);
+    auth::spawn_jobs(state.db.clone());
     let cfg = state.cfg.clone();
     let app = app::router(
         state,

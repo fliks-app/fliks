@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE pairing_requests SET \"accessToken\" = NULL WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c94b2a50603f4e24a0907d7706b3ea0535e4b016dd1a7a7ce7503aad98e5fb0a"
+}

@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, \"passwordHash\" AS hash, enabled FROM users WHERE username = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "hash",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "enabled",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "d5be3f8fb000eccfb382aa793a5fb2c867eadf485f37a861070096c8496c0e8a"
+}

@@ -31,10 +31,12 @@ utoipa = "5"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 getrandom = "0.3"
 bcrypt = "0.17"
+sha2 = "0.10"
+base64 = "0.22"
+subtle = "2"
 fliks-engine = { git = "https://github.com/fliks-app/engine", tag = "v0.3.2" }
 
 [dev-dependencies]
-base64 = "0.22"
 tower = { version = "0.5", features = ["util"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "multipart"] }
 tokio = { version = "1", features = ["time"] }
