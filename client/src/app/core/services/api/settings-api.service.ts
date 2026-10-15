@@ -1,6 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
+import { SECRETS_SET_KEY } from '@fliks/plugin-contract/ui';
 
 export interface AppSetting {
   key: string;
@@ -9,7 +10,7 @@ export interface AppSetting {
 
 /** Keys of the secret settings the server holds a value for but does not return. */
 export function settingsSecretsSet(all: Record<string, unknown>): string[] {
-  const v = all['secretsSet'];
+  const v = all[SECRETS_SET_KEY];
   return Array.isArray(v) ? v.map(String) : [];
 }
 
