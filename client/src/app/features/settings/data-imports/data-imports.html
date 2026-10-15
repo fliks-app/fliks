@@ -130,7 +130,7 @@
           <button
             type="button"
             class="btn btn-outline btn-sm"
-            [disabled]="!canSubmitSeerr || seerrSaving()"
+            [disabled]="!canSaveSeerr || seerrSaving()"
             (click)="saveSeerrCredentials()"
           >
             @if (seerrSaving()) {
@@ -262,7 +262,7 @@
             <button
               type="button"
               class="btn btn-outline btn-sm"
-              [disabled]="!canSubmitRadarr || radarrSaving()"
+              [disabled]="!canSaveRadarr || radarrSaving()"
               (click)="saveRadarrCredentials()"
             >
               @if (radarrSaving()) {
@@ -431,7 +431,7 @@
             <button
               type="button"
               class="btn btn-outline btn-sm"
-              [disabled]="!canSubmitSonarr || sonarrSaving()"
+              [disabled]="!canSaveSonarr || sonarrSaving()"
               (click)="saveSonarrCredentials()"
             >
               @if (sonarrSaving()) {
