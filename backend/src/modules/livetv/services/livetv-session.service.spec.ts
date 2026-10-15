@@ -385,7 +385,7 @@ describe('LiveTvSessionService', () => {
       await emit({ type: 'SegmentServed', sessionId: 'sid-1', waitedMs: 0 });
       expect(qoe.observeServed).toHaveBeenCalledWith(
         expect.objectContaining({ sessionId: 'sid-1', kind: 'live' }),
-        null,
+        undefined,
         2,
         0,
       );

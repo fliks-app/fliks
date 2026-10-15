@@ -4,13 +4,11 @@ import type {
   LiveSession,
   LiveSessionRegistry,
 } from '../live-session.service';
-import type { QoePipeline } from '../../qoe/core/types';
 import { parseSourceFps } from '../../media-tools/fps';
 
 type Decision = components['schemas']['Decision'];
 type ClientInfo = components['schemas']['ClientInfo'];
 type SessionSnapshot = components['schemas']['SessionSnapshot'];
-type EngineQoePipeline = components['schemas']['QoePipeline'];
 
 /** What the host keeps in the engine's opaque session `tags`, so a restarted Node can rebuild presence. */
 export interface PresenceTags {
@@ -29,30 +27,6 @@ export function toTags(t: PresenceTags): Record<string, string> {
       .filter(([, v]) => v != null && v !== '')
       .map(([k, v]) => [k, String(v)]),
   );
-}
-
-/** The engine's pipeline report with its absent members as the QoE core's explicit nulls. */
-export function toQoePipeline(p: EngineQoePipeline): QoePipeline {
-  const o = p.output;
-  return {
-    source: null,
-    decode: null,
-    encode: null,
-    tonemap: null,
-    burnIn: null,
-    crop: null,
-    audioTranscode: null,
-    ...p,
-    output: o
-      ? {
-          codec: o.codec ?? null,
-          hdr: o.hdr ?? null,
-          quality: o.quality ?? null,
-          bitrate: o.bitrate ?? null,
-          requested: o.requested ?? null,
-        }
-      : null,
-  } as QoePipeline;
 }
 
 export interface PresenceFacts {

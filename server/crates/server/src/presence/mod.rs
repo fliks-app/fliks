@@ -94,16 +94,22 @@ impl Presence {
     }
 
     /// The engine listed `snaps`: unknown ones are restored, entries the list lacks are dropped
-    /// unless opened after `listed_at`. Existing entries keep their heartbeat-fed fields.
-    fn resync(&self, snaps: &[SessionSnapshot], listed_at: f64) {
+    /// unless opened after `listed_at` (those sids come back). Existing entries keep their heartbeat-fed fields.
+    fn resync(&self, snaps: &[SessionSnapshot], listed_at: f64) -> Vec<String> {
         let mut map = self.map();
         for s in snaps {
             map.entry(s.session_id.clone())
                 .or_insert_with(|| LiveSession::from_snapshot(s));
         }
+        let mut dropped = vec![];
         map.retain(|sid, s| {
-            s.started_at >= listed_at || snaps.iter().any(|n| &n.session_id == sid)
+            let keep = s.started_at >= listed_at || snaps.iter().any(|n| &n.session_id == sid);
+            if !keep {
+                dropped.push(sid.clone());
+            }
+            keep
         });
+        dropped
     }
 }
 

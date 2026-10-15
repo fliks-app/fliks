@@ -1,5 +1,7 @@
 use crate::http::{layers, static_files};
-use crate::{auth, events, fs, playback, remote, roles, settings, state::AppState, system, users};
+use crate::{
+    auth, events, fs, playback, qoe, remote, roles, settings, state::AppState, system, users,
+};
 use axum::{Router, extract::Request, response::Response, routing::any, routing::any_service};
 use fliks_engine::gateway::{self, RouteTable, Upstream};
 use std::path::PathBuf;
@@ -40,6 +42,10 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         fs::browse,
         events::events,
         events::activity,
+        qoe::sessions,
+        qoe::session,
+        qoe::summary,
+        qoe::events,
         users::list,
         users::create,
         users::get_one,
@@ -123,6 +129,7 @@ fn api() -> Router<AppState> {
         .merge(events::router())
         .merge(remote::router())
         .merge(playback::router())
+        .merge(qoe::router())
 }
 
 async fn internal_404(req: Request) -> Response {

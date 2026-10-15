@@ -35,6 +35,7 @@ bcrypt = "0.17"
 sha2 = "0.10"
 base64 = "0.22"
 subtle = "2"
+libc = "0.2"
 percent-encoding = "2"
 fliks-engine = { git = "https://github.com/fliks-app/engine", tag = "v0.3.2" }
 

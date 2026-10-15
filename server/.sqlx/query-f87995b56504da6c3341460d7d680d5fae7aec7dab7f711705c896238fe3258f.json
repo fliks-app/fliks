@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE app_settings SET \"value\" = NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "f87995b56504da6c3341460d7d680d5fae7aec7dab7f711705c896238fe3258f"
+}

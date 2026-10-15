@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO app_settings (\"key\", \"value\") VALUES ('qoe_enabled', 'false')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "8aa6d1d53455af3e01f33a807c70d28724de0945840c4ca58f439fe9fb21096a"
+}

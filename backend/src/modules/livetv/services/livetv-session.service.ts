@@ -16,10 +16,8 @@ import {
   type LiveSnapshot,
   type LiveTvConfig,
 } from '../../engine/engine.service';
-import { readCmcdRaw } from '../../qoe/core/cmcd';
 import { QoeService, type SessionRef } from '../../qoe/qoe.service';
 import { EngineEventsService } from '../../streaming/services/engine-events.service';
-import { toQoePipeline } from '../../streaming/services/engine-presence';
 import { EngineLivetvConfigClient } from '../../bridge/engine-livetv-config.client';
 import { SettingsService } from '../../settings/settings.service';
 import { ActivityRegistryService } from '../../scheduler/activity-registry.service';
@@ -248,8 +246,7 @@ export class LiveTvSessionService implements OnModuleInit {
     this.viewers.set(res.sessionId, viewer);
     this.reportActivity(res.capacityToken);
     const ref = this.qoeRefOf(res.sessionId, viewer);
-    this.qoe?.register(ref);
-    this.qoe?.setPipeline(ref, toQoePipeline(res.qoePipeline));
+    this.qoe?.register(ref, res.qoePipeline);
     return {
       sessionId: res.sessionId,
       channelId: channel.id,
@@ -426,7 +423,7 @@ export class LiveTvSessionService implements OnModuleInit {
         if (!v) break;
         this.qoe?.observeServed(
           this.qoeRefOf(ev.sessionId, v),
-          ev.cmcdRaw ? readCmcdRaw(ev.cmcdRaw) : null,
+          ev.cmcdRaw ?? undefined,
           this.segmentSeconds,
           ev.waitedMs,
         );

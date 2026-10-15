@@ -64,13 +64,13 @@ describe('LivetvController — QoE heartbeat', () => {
     return { controller, recordSample };
   };
 
-  it('stores the validated sample of the owner', () => {
+  it('forwards the raw sample of the owner', () => {
     const ref = { sessionId: 's', userId: 1 };
     const { controller, recordSample } = build(ref);
     expect(controller.heartbeat('s', { qoe: sample }, user)).toEqual({ ok: true });
     expect(recordSample).toHaveBeenCalledWith(
       { ...ref, state: 'playing' },
-      expect.objectContaining({ engine: 'shaka', cmcd: true, stallCount: 2 }),
+      sample,
     );
   });
 
@@ -78,12 +78,6 @@ describe('LivetvController — QoE heartbeat', () => {
     const { controller, recordSample } = build({ sessionId: 's', userId: 1, state: 'playing' });
     controller.heartbeat('s', { qoe: sample, state: 'paused' }, user);
     expect(recordSample).toHaveBeenCalledWith(expect.objectContaining({ state: 'paused' }), expect.anything());
-  });
-
-  it('ignores a sample that fails validation', () => {
-    const { controller, recordSample } = build({ sessionId: 's', userId: 1 });
-    controller.heartbeat('s', { qoe: { engine: 'nope' } }, user);
-    expect(recordSample).not.toHaveBeenCalled();
   });
 
   it("rejects another user's session", () => {

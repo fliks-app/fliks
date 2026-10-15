@@ -27,7 +27,7 @@ import { QoeService } from '../qoe/qoe.service';
 import { EngineError, EngineService } from '../engine/engine.service';
 import { restorePresence } from '../streaming/services/engine-presence';
 import { servedRungBitrate } from '../streaming/served-rung';
-import { parseEvents, parsePlaybackId, parseSample, parseSentAt } from '../qoe/core/validate';
+import { parseSample } from '../qoe/core/validate';
 
 /** Debounce window for DB writes — heartbeat fires every 10 s but we
  *  flush playback state on a coarser cadence to avoid hammering
@@ -266,31 +266,5 @@ export class PlaybackController {
       this.log.warn(`engine heartbeat failed: ${(err as Error).message}`);
       return undefined;
     }
-  }
-
-  /** Point events (stall, error, recovery, quality switch) of a live session.
-   *  Silent 204 for an unknown session: a fatal error often outlives it. */
-  @Post('sessions/:sessionId/events')
-  @UseGuards(SessionTokenGuard)
-  @HttpCode(204)
-  postQoeEvents(
-    @Req() req: Request,
-    @Param('sessionId') sessionId: string,
-    @Body() body: { events?: unknown; playbackId?: unknown; sentAt?: unknown },
-  ): void {
-    const user = req.user as User;
-    if (!this.qoe.enabled) return;
-    // The exit flush races DELETE /stream/sessions/:id, so an ended session still takes events.
-    const live =
-      this.liveSessions.peek(sessionId) ?? this.qoe.trackedSession(sessionId);
-    if (!live) return;
-    if (live.userId !== user.id && live.attributedUserId !== user.id) {
-      throw new ForbiddenException('Not your session');
-    }
-    this.qoe.recordEvents(
-      live,
-      parseEvents(body?.events, Date.now(), parseSentAt(body?.sentAt)),
-      parsePlaybackId(body?.playbackId),
-    );
   }
 }

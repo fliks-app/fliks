@@ -1,0 +1,46 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT COALESCE(s.\"userId\"::text || ':' || s.\"playbackId\", s.\"sessionId\") AS \"key!\",\n                  MAX(s.\"userId\") AS \"uid\", MAX(s.\"playbackId\") AS \"pid\",\n                  COUNT(*) OVER() AS \"total!\"\n           FROM playback_qoe_sessions s\n           WHERE s.\"lastSeenAt\" >= $1\n             AND ($3::text IS NULL OR s.\"playbackVerdict\" = $3)\n             AND ($4::int4 IS NULL OR s.\"userId\" = $4)\n             AND (cardinality($5::text[]) = 0 OR s.\"deviceLabel\" = ANY($5))\n           GROUP BY COALESCE(s.\"userId\"::text || ':' || s.\"playbackId\", s.\"sessionId\")\n           HAVING MAX(s.\"lastSeenAt\") >= $2\n           ORDER BY MAX(s.\"lastSeenAt\") DESC\n           LIMIT $6 OFFSET $7",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "key!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "uid",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 2,
+        "name": "pid",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "total!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Timestamptz",
+        "Timestamptz",
+        "Text",
+        "Int4",
+        "TextArray",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "3aaa2267230752cb05477ef4eec574a6c70bbe39051b0a11cc0f600d6f898f78"
+}
