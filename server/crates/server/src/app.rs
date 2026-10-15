@@ -1,6 +1,6 @@
 use crate::http::{layers, static_files};
 use crate::system;
-use axum::{Router, http::StatusCode, routing::any, routing::any_service};
+use axum::{Router, extract::Request, response::Response, routing::any, routing::any_service};
 use fliks_engine::gateway::{self, RouteTable, Upstream};
 use std::path::PathBuf;
 use utoipa::OpenApi;
@@ -26,9 +26,9 @@ pub fn router(
         None,
     );
     let local = system::router()
-        .route("/internal", any(StatusCode::NOT_FOUND))
-        .route("/internal/", any(StatusCode::NOT_FOUND))
-        .route("/internal/{*rest}", any(StatusCode::NOT_FOUND))
+        .route("/internal", any(internal_404))
+        .route("/internal/", any(internal_404))
+        .route("/internal/{*rest}", any(internal_404))
         .fallback_service(static_files::router(client_dir, cast_dir));
     // Merged after the layers so Nest answers the other methods unlayered instead of a 405.
     let local = layers::apply(local, cors_origin, BODY_LIMIT_BYTES)
@@ -37,4 +37,8 @@ pub fn router(
     ["/api", "/api/", "/api/{*rest}", "/engine/resolve"]
         .into_iter()
         .fold(local, |r, p| r.route(p, any_service(forwarder.clone())))
+}
+
+async fn internal_404(req: Request) -> Response {
+    static_files::cannot(&req)
 }

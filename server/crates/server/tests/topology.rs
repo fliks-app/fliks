@@ -178,7 +178,10 @@ async fn fallback_internal_liveness_restart_and_shutdown(pool: PgPool) {
         get_text(&format!("{b}/internal/bridge/emit"))
             .await
             .unwrap(),
-        (404, String::new())
+        (
+            404,
+            r#"{"error":"Not Found","message":"Cannot GET /internal/bridge/emit","statusCode":404}"#.into()
+        )
     );
 
     // Nest got its spawn environment.
