@@ -79,3 +79,26 @@ async fn unprefixed_engine_resolve_and_unknown_api_paths_forward_but_internal_do
         }
     }
 }
+
+#[tokio::test]
+async fn forwarded_methods_on_owned_paths_skip_the_rust_layers() {
+    let router = app::router(fake_nest().await, None, "/nonexistent".into(), None);
+    let send = |m: &str| {
+        let req = Request::builder()
+            .method(m)
+            .uri("/api/system/liveness")
+            .header("origin", "http://localhost:4200")
+            .body(Body::empty())
+            .unwrap();
+        router.clone().oneshot(req)
+    };
+    let get = send("GET").await.unwrap();
+    assert_eq!(
+        get.headers()["access-control-allow-origin"],
+        "http://localhost:4200"
+    );
+    let post = send("POST").await.unwrap();
+    assert!(post.headers().contains_key(FORWARDED));
+    assert!(!post.headers().contains_key("access-control-allow-origin"));
+    assert!(!post.headers().contains_key("vary"));
+}

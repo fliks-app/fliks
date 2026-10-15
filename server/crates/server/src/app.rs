@@ -25,12 +25,14 @@ pub fn router(
         nest,
         None,
     );
-    let local = system::router(forwarder.clone())
+    let local = system::router()
         .route("/internal", any(StatusCode::NOT_FOUND))
         .route("/internal/", any(StatusCode::NOT_FOUND))
         .route("/internal/{*rest}", any(StatusCode::NOT_FOUND))
         .fallback_service(static_files::router(client_dir, cast_dir));
-    let local = layers::apply(local, cors_origin, BODY_LIMIT_BYTES);
+    // Merged after the layers so Nest answers the other methods unlayered instead of a 405.
+    let local = layers::apply(local, cors_origin, BODY_LIMIT_BYTES)
+        .route(system::LIVENESS, any_service(forwarder.clone()));
     // Nest's only unprefixed route is `/engine/resolve` (bootstrap.md rule 1).
     ["/api", "/api/", "/api/{*rest}", "/engine/resolve"]
         .into_iter()
