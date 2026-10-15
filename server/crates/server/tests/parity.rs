@@ -1,5 +1,6 @@
 //! HTTP parity runner (plan 5.3): `cargo test -p fliks-server --test parity -- --ignored --nocapture`.
-//! Env: PARITY_TARGET, PARITY_RECORD=1, PARITY_FILTER=<substring>, PARITY_HOST_TOKEN (engine actor).
+//! Env: PARITY_TARGET, PARITY_RECORD=1, PARITY_FILTER=<substring>, PARITY_HOST_TOKEN (engine actor),
+//! PARITY_ENGINE=up|down (scenarios with `"engine"` set to the other value are skipped).
 use reqwest::{Client, Method, multipart};
 use serde_json::{Map, Value, json};
 use std::{collections::HashMap, fs, path::Path, process::Command, time::Duration};
@@ -519,7 +520,8 @@ async fn parity() {
         &Path::new(env!("CARGO_MANIFEST_DIR")).join("../../parity/scenarios"),
         &mut files,
     );
-    let (mut ok, mut failed, mut dev) = (0, 0, vec![]);
+    let engine = env("PARITY_ENGINE", "up");
+    let (mut ok, mut failed, mut skipped, mut dev) = (0, 0, 0, vec![]);
     for f in files
         .iter()
         .filter(|f| f.to_string_lossy().contains(&filter))
@@ -527,9 +529,15 @@ async fn parity() {
         let mut sc: Value = serde_json::from_str(&fs::read_to_string(f).unwrap())
             .unwrap_or_else(|e| panic!("{f:?}: {e}"));
         let name = sc["name"].as_str().unwrap_or("?").to_string();
+        if sc["engine"].as_str().is_some_and(|e| e != engine) {
+            skipped += 1;
+            continue;
+        }
         reset_db();
-        let errs = run(&ctx, &mut sc, record).await;
-        if record && sc["deviation"].is_null() {
+        // untagged scenarios are recorded with the engine up only
+        let rec = record && (sc["engine"].is_string() || engine == "up");
+        let errs = run(&ctx, &mut sc, rec).await;
+        if rec && sc["deviation"].is_null() {
             fs::write(f, serde_json::to_string_pretty(&sc).unwrap() + "\n").unwrap();
         }
         let line = |tag: &str| {
@@ -553,7 +561,7 @@ async fn parity() {
     }
     dev.iter().for_each(|l| println!("{l}"));
     println!(
-        "parity: {ok} passed, {failed} failed, {} deviation",
+        "parity: {ok} passed, {failed} failed, {skipped} skipped (engine {engine}), {} deviation",
         dev.len()
     );
     assert_eq!(failed, 0);
