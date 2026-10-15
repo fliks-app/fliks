@@ -2,9 +2,19 @@
 //! (listed in the OpenAPI document) or reaches the forwarder, never a 405.
 use axum::{Router, body::Body, http::Request, routing::any};
 use fliks_engine::gateway::Upstream;
-use fliks_server::app::{self, ApiDoc};
+use fliks_server::{
+    app::{self, ApiDoc},
+    config::Config,
+    state::AppState,
+};
+use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
 use tower::ServiceExt;
 use utoipa::OpenApi;
+
+fn state() -> AppState {
+    let pool = PgPoolOptions::new().connect_lazy_with(PgConnectOptions::new());
+    AppState::new(pool, Config::from_lookup(|_| None), "secret")
+}
 
 const FORWARDED: &str = "x-fake-nest";
 
@@ -40,7 +50,13 @@ async fn every_nest_route_is_owned_or_forwarded() {
     let routes: Vec<serde_json::Value> =
         serde_json::from_str(include_str!("../../../contract/nest-routes.json")).unwrap();
     let doc = serde_json::to_value(ApiDoc::openapi()).unwrap();
-    let router = app::router(fake_nest().await, None, "/nonexistent".into(), None);
+    let router = app::router(
+        state(),
+        fake_nest().await,
+        None,
+        "/nonexistent".into(),
+        None,
+    );
     for r in routes {
         let (method, path) = (r["method"].as_str().unwrap(), r["path"].as_str().unwrap());
         // Bridge routes are loopback-only, never forwarded (asserted below).
@@ -66,7 +82,13 @@ async fn every_nest_route_is_owned_or_forwarded() {
 
 #[tokio::test]
 async fn unprefixed_engine_resolve_and_unknown_api_paths_forward_but_internal_does_not() {
-    let router = app::router(fake_nest().await, None, "/nonexistent".into(), None);
+    let router = app::router(
+        state(),
+        fake_nest().await,
+        None,
+        "/nonexistent".into(),
+        None,
+    );
     for (path, forwarded) in [
         ("/engine/resolve", true),
         ("/api/unknown/thing", true),
@@ -91,7 +113,13 @@ async fn unprefixed_engine_resolve_and_unknown_api_paths_forward_but_internal_do
 
 #[tokio::test]
 async fn forwarded_methods_on_owned_paths_skip_the_rust_layers() {
-    let router = app::router(fake_nest().await, None, "/nonexistent".into(), None);
+    let router = app::router(
+        state(),
+        fake_nest().await,
+        None,
+        "/nonexistent".into(),
+        None,
+    );
     let send = |m: &str| {
         let req = Request::builder()
             .method(m)
