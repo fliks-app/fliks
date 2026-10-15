@@ -312,6 +312,11 @@ export class DataImportsSettingsComponent implements OnInit {
     return typed.trim().length > 0 || kept;
   }
 
+  /** Save also covers a pending clear, so a stored key counts even when cleared. */
+  private canSave(url: string, setting: string, typed: string): boolean {
+    return url.trim().length > 0 && (typed.trim().length > 0 || this.storedKeys().has(setting));
+  }
+
   keyStored(p: 'seerr' | Provider): boolean {
     return this.storedKeys().has(`${p}_api_key`);
   }
@@ -353,6 +358,10 @@ export class DataImportsSettingsComponent implements OnInit {
     const v = typed.trim();
     if (!v && this.clearedKeys().has(setting)) return { [name]: null };
     return v || !this.storedKeys().has(setting) ? { [name]: v } : {};
+  }
+
+  get canSaveSeerr(): boolean {
+    return this.canSave(this.seerrUrl(), SETTING_SEERR_API_KEY, this.seerrApiKey());
   }
 
   get canSubmitSeerr(): boolean {
@@ -418,6 +427,10 @@ export class DataImportsSettingsComponent implements OnInit {
   // Radarr / Sonarr
   // ---------------------------------------------------------------------------
 
+  get canSaveRadarr(): boolean {
+    return this.canSave(this.radarrUrl(), SETTING_RADARR_API_KEY, this.radarrApiKey());
+  }
+
   get canSubmitRadarr(): boolean {
     return this.radarrUrl().trim().length > 0 && this.hasKey(SETTING_RADARR_API_KEY, this.radarrApiKey());
   }
@@ -425,6 +438,10 @@ export class DataImportsSettingsComponent implements OnInit {
   /** Import-specific gate: credentials AND a picked target library. */
   get canImportRadarr(): boolean {
     return this.canSubmitRadarr && this.radarrLibrary() != null;
+  }
+
+  get canSaveSonarr(): boolean {
+    return this.canSave(this.sonarrUrl(), SETTING_SONARR_API_KEY, this.sonarrApiKey());
   }
 
   get canSubmitSonarr(): boolean {
