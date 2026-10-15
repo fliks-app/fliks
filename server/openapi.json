@@ -10,6 +10,44 @@
     "version": "1"
   },
   "paths": {
+    "/api/engine/remote": {
+      "get": {
+        "tags": [
+          "crate::engine::remote"
+        ],
+        "operationId": "get_remote",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "crate::engine::remote"
+        ],
+        "summary": "Saves the three keys, then both processes reconnect: Rust here, Nest through the settings bridge.",
+        "operationId": "put_remote",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/engine/remote/test": {
+      "post": {
+        "tags": [
+          "crate::engine::remote"
+        ],
+        "operationId": "test_remote",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/system/activity": {
       "get": {
         "tags": [
@@ -146,6 +184,19 @@
           "users"
         ],
         "operationId": "stats",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/engine/resolve": {
+      "post": {
+        "tags": [
+          "crate::engine::resolve"
+        ],
+        "operationId": "resolve",
         "responses": {
           "200": {
             "description": ""
