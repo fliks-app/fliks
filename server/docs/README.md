@@ -59,6 +59,7 @@ A 500 or a half-written request is never part of the frozen contract:
 | C5 | a superseded SSE connection leaves its socket open | the server closes it |
 | C6 | playback-info 500s after creating the session when the markers query fails; `toggle-season-watched` does not check the season belongs to the media | markers failure is logged and playback proceeds without markers; season not under the media → 404 |
 | C7 | static client and `/cast`: weak ETag from the mtime in ms, `; charset=UTF-8` on text types, `Vary: Origin` only, bare OPTIONS → 204; a missing `/cast/*` file answers 404 with an ENOENT message leaking the absolute path | ETag from mtime in seconds, no charset suffix, tower-http `Vary`, bare OPTIONS → 404; missing `/cast/*` → 404 `Cannot GET <url>` (no path leak). Browser-cache only: one re-download per file after the upgrade |
+| C8 | raw-SQL / explicit updates did not touch "updatedAt" (series watched toggles, search vector refresh, leave-social playlist privacy, live TV group stamp/renumber) | a BEFORE UPDATE trigger sets "updatedAt" = now() whenever an UPDATE leaves it unchanged (migration `1786500000000_updated_at_trigger.sql`); playlists made private on leave-social move up in the owner's home row |
 
 Frozen as is (decided): the heartbeat keeps its debounce entry after a failed history write and returns
 `sessionLost: false` when the engine session lives but presence cannot be rebuilt. Lists whose order comes
