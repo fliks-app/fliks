@@ -8,13 +8,13 @@
       "expect": {
         "body": {
           "error": "Not Found",
-          "message": "Cannot GET /internal/events",
+          "message": "Cannot GET /internal/bridge/settings-changed",
           "statusCode": 404
         },
         "status": 404
       },
       "method": "GET",
-      "path": "/internal/events"
+      "path": "/internal/bridge/settings-changed"
     }
   ]
 }

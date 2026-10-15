@@ -80,12 +80,6 @@ fn revoke_in_background(st: &AppState, id: i32) {
     tokio::spawn(async move { engine.revoke_owner(id).await });
 }
 
-async fn drop_connections(st: &AppState, id: i32) {
-    if let Err(e) = st.bridge.drop_connections(id, None).await {
-        tracing::warn!(user = id, error = %e, "dropping SSE connections failed");
-    }
-}
-
 async fn public(db: &PgPool, id: i32) -> Result<Json<PublicUser>, AppError> {
     db::find_one(db, id)
         .await?
@@ -340,7 +334,7 @@ pub async fn update(
     tx.commit().await?;
 
     if role_changing || enabled_changing || password_changed {
-        drop_connections(&st, id).await;
+        st.hub.drop_connections_for_user(id);
     }
     if password_changed {
         // F9: the caller keeps working on its access token until it expires.
@@ -376,7 +370,7 @@ pub async fn remove(
         .await?;
     tx.commit().await?;
     // F17
-    drop_connections(&st, id).await;
+    st.hub.drop_connections_for_user(id);
     revoke_in_background(&st, id);
     Ok(())
 }

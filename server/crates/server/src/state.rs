@@ -1,5 +1,5 @@
 //! Shared handler state (`State<AppState>`); no DI container, plain fields.
-use crate::{auth_token::Jwt, bridge::Bridge, config::Config, engine::Engine, nest};
+use crate::{auth_token::Jwt, bridge::Bridge, config::Config, engine::Engine, events::Hub, nest};
 use sqlx::PgPool;
 use std::sync::Arc;
 
@@ -10,6 +10,7 @@ pub struct AppState {
     pub jwt: Arc<Jwt>,
     pub engine: Engine,
     pub bridge: Bridge,
+    pub hub: Hub,
 }
 
 impl AppState {
@@ -23,6 +24,7 @@ impl AppState {
             )),
             engine: Engine::new(&cfg.engine_url, &cfg.engine_token),
             bridge: Bridge::new(&nest::url(&cfg), &cfg.bridge_token),
+            hub: Hub::new(),
             cfg: Arc::new(cfg),
             db,
         }

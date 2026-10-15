@@ -1,7 +1,10 @@
 //! Rust to Nest bridge client (`docs/bridge.md`, plan §6.4): one POST per call, bearer
-//! `FLIKS_BRIDGE_TOKEN`. Removed with the hub at S2 and the settings listeners at S9.
+//! `FLIKS_BRIDGE_TOKEN`; also checks the token of the Rust-side bridges. Removed at S9.
+use crate::http::AppError;
+use axum::http::{HeaderMap, StatusCode, header::AUTHORIZATION};
 use serde_json::{Value, json};
 use std::time::Duration;
+use subtle::ConstantTimeEq;
 
 #[derive(Debug)]
 pub struct BridgeError(String);
@@ -35,30 +38,18 @@ impl Bridge {
         }
     }
 
-    /// `pairing.requested` to the target user's connections only (F13).
-    pub async fn pairing_requested(
-        &self,
-        user_id: i32,
-        pairing_id: &str,
-        device_name: &str,
-        device_id: &str,
-    ) -> Result<(), BridgeError> {
-        let body = json!({"event": "pairing.requested", "userId": user_id, "pairingId": pairing_id,
-            "deviceName": device_name, "deviceId": device_id});
-        self.post("emit", body).await
-    }
-
-    /// Complete the user's SSE connections; with a non-empty `target_id` only that device's.
-    pub async fn drop_connections(
-        &self,
-        user_id: i32,
-        target_id: Option<&str>,
-    ) -> Result<(), BridgeError> {
-        let mut body = json!({"userId": user_id});
-        if let Some(t) = target_id {
-            body["targetId"] = t.into();
+    /// 401 unless the request carries `Authorization: Bearer <bridge token>` (constant-time compare).
+    pub fn check(&self, headers: &HeaderMap) -> Result<(), AppError> {
+        let given = headers
+            .get(AUTHORIZATION)
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.strip_prefix("Bearer "))
+            .unwrap_or_default();
+        if bool::from(given.as_bytes().ct_eq(self.token.as_bytes())) {
+            Ok(())
+        } else {
+            Err(AppError::bare(StatusCode::UNAUTHORIZED))
         }
-        self.post("drop-connections", body).await
     }
 
     /// One call per committed write with all its keys (non-empty), in order; `origin` unchanged.
@@ -125,21 +116,12 @@ mod tests {
     #[tokio::test]
     async fn posts_the_documented_payloads_with_the_bearer() {
         let (b, seen) = fake().await;
-        b.pairing_requested(7, "p1", "TV", "dev").await.unwrap();
-        b.drop_connections(3, Some("dev")).await.unwrap();
-        b.drop_connections(3, None).await.unwrap();
         let keys = ["a".to_owned(), "b".to_owned()];
         b.settings_changed(&keys, Some("plugin")).await.unwrap();
         b.settings_changed(&keys[..1], None).await.unwrap();
         let seen = seen.lock().unwrap();
         let bearer = Some("Bearer secret".to_owned());
         let want = [
-            (
-                "emit",
-                json!({"event": "pairing.requested", "userId": 7, "pairingId": "p1", "deviceName": "TV", "deviceId": "dev"}),
-            ),
-            ("drop-connections", json!({"userId": 3, "targetId": "dev"})),
-            ("drop-connections", json!({"userId": 3})),
             (
                 "settings-changed",
                 json!({"keys": ["a", "b"], "origin": "plugin"}),
@@ -149,7 +131,7 @@ mod tests {
         for (got, (ep, body)) in seen.iter().zip(want) {
             assert_eq!(got, &(ep.to_owned(), bearer.clone(), body));
         }
-        assert_eq!(seen.len(), 5);
+        assert_eq!(seen.len(), 2);
     }
 
     #[tokio::test]
@@ -166,9 +148,24 @@ mod tests {
         tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
         assert!(
             Bridge::new(&url, "t")
-                .drop_connections(1, None)
+                .settings_changed(&["k".to_owned()], None)
                 .await
                 .is_err()
         );
+    }
+
+    #[test]
+    fn check_accepts_only_the_exact_bearer() {
+        let b = Bridge::new("http://x", "secret");
+        let with = |v: &str| {
+            let mut h = HeaderMap::new();
+            h.insert(AUTHORIZATION, v.parse().unwrap());
+            h
+        };
+        assert!(b.check(&with("Bearer secret")).is_ok());
+        for bad in ["Bearer secre", "Bearer secrets", "secret", "Bearer "] {
+            assert!(b.check(&with(bad)).is_err(), "{bad}");
+        }
+        assert!(b.check(&HeaderMap::new()).is_err());
     }
 }
