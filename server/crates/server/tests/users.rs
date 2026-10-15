@@ -92,7 +92,8 @@ impl Ctx {
 }
 
 async fn put(c: &Ctx, t: &str, id: i32, body: Value) -> (u16, Value) {
-    c.call("PUT", &format!("/api/users/{id}"), t, Some(body)).await
+    c.call("PUT", &format!("/api/users/{id}"), t, Some(body))
+        .await
 }
 
 fn bare_403() -> Value {
@@ -128,16 +129,24 @@ async fn self_and_other_access(pool: PgPool) {
             .0,
         403
     );
-        assert_eq!(put(&c, &ta, b, json!({"username": "x"})).await.1, bare_403());
+    assert_eq!(
+        put(&c, &ta, b, json!({"username": "x"})).await.1,
+        bare_403()
+    );
 }
 
 #[sqlx::test(migrations = false)]
 async fn self_update_rules(pool: PgPool) {
     let c = ctx(pool).await;
     let (a, ta) = c.user("a", "[]", false).await;
-    let put = |body| c.call("PUT", &uri, &ta, Some(body));
 
-    let (s, b) = put(&c, &ta, a, json!({"hideSpoilers": true, "libraryOrder": [3, 1]})).await;
+    let (s, b) = put(
+        &c,
+        &ta,
+        a,
+        json!({"hideSpoilers": true, "libraryOrder": [3, 1]}),
+    )
+    .await;
     assert_eq!(
         (s, &b["hideSpoilers"], &b["libraryOrder"]),
         (200, &json!(true), &json!([3, 1]))
@@ -151,9 +160,18 @@ async fn self_update_rules(pool: PgPool) {
         )
     );
     // F11
-    assert_eq!(put(&c, &ta, a, json!({"movieQuotaLimit": 5})).await.1, bare_403());
+    assert_eq!(
+        put(&c, &ta, a, json!({"movieQuotaLimit": 5})).await.1,
+        bare_403()
+    );
     // C2: rejected before any write
-    let (s, _) = put(&c, &ta, a, json!({"hideSpoilers": false, "libraryIds": [1]})).await;
+    let (s, _) = put(
+        &c,
+        &ta,
+        a,
+        json!({"hideSpoilers": false, "libraryIds": [1]}),
+    )
+    .await;
     assert_eq!(s, 403);
     assert!(c.column::<bool>(a, "hideSpoilers").await);
     // C1 and validation
@@ -176,7 +194,7 @@ async fn admin_guards_f10(pool: PgPool) {
         .user("m", r#"["users.manage","roles.manage"]"#, false)
         .await;
     let (n, _) = c.user("n", "[]", false).await;
-    
+
     assert_eq!(
         put(&c, &tm, admin, json!({"username": "x"})).await.1,
         bare_403()
@@ -187,7 +205,10 @@ async fn admin_guards_f10(pool: PgPool) {
             .1,
         bare_403()
     );
-    assert_eq!(put(&c, &tm, n, json!({"isAdmin": true})).await.1, bare_403());
+    assert_eq!(
+        put(&c, &tm, n, json!({"isAdmin": true})).await.1,
+        bare_403()
+    );
     let create = json!({"username": "z", "password": "longenough", "isAdmin": true});
     assert_eq!(
         c.call("POST", "/api/users", &tm, Some(create.clone()))
@@ -203,14 +224,15 @@ async fn admin_guards_f10(pool: PgPool) {
     // two admins: demoting one is fine, the last enabled one is protected
     assert_eq!(put(&c, &tadmin, n, json!({"isAdmin": true})).await.0, 200);
     assert_eq!(put(&c, &tadmin, n, json!({"isAdmin": false})).await.0, 200);
-    for body in [json!({"enabled": false}), json!({"isAdmin": false})] {
-        let (s, _) = put(&c, &tadmin, admin, body).await;
-        assert_eq!(s, 409);
-    }
     let z: i32 = sqlx::query_scalar("SELECT id FROM users WHERE username = 'z'")
         .fetch_one(&c.pool)
         .await
         .unwrap();
+    assert_eq!(put(&c, &tadmin, z, json!({"isAdmin": false})).await.0, 200);
+    for body in [json!({"enabled": false}), json!({"isAdmin": false})] {
+        let (s, _) = put(&c, &tadmin, admin, body).await;
+        assert_eq!(s, 409);
+    }
     assert_eq!(
         c.call("DELETE", &format!("/api/users/{z}"), &tadmin, None)
             .await
@@ -229,12 +251,10 @@ async fn admin_guards_f10(pool: PgPool) {
 async fn create_defaults_and_conflict(pool: PgPool) {
     let c = ctx(pool).await;
     let (_, tm) = c.user("m", r#"["users.manage"]"#, false).await;
-    let lib: i32 = sqlx::query_scalar(
-        r#"INSERT INTO libraries (name, type, path) VALUES ('l', 'movie', '/x') RETURNING id"#,
-    )
-    .fetch_one(&c.pool)
-    .await
-    .unwrap();
+    let lib: i32 = sqlx::query_scalar(r#"INSERT INTO libraries (name) VALUES ('l') RETURNING id"#)
+        .fetch_one(&c.pool)
+        .await
+        .unwrap();
     let role: i32 = sqlx::query_scalar(
         r#"INSERT INTO roles (name, permissions, "isDefault") VALUES ('def', '[]', true) RETURNING id"#,
     )
