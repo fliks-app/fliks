@@ -1,7 +1,7 @@
 /**
  * Single tuning surface for streaming-session lifetimes: every env var that controls how long a
- * session, an ffmpeg job or a cache sweep lives, with its default. The engine gets them in
- * `PUT /v1/config` ({@link engineLifetime}); live TV, the dashboard and QoE read some directly.
+ * session, an ffmpeg job or a cache sweep lives, with its default. fliks-server sends them to the engine
+ * in `PUT /v1/config`; live TV, the dashboard and QoE read some directly.
  * Lazy reads keep the unit tests able to mutate process.env per-case.
  *
  * Cache retention and size live in Settings > Streaming, not here.
@@ -57,16 +57,3 @@ export const StreamLifetime = {
       DEFAULT_CACHE_GC_INTERVAL_MS,
     ),
 } as const;
-
-/** `EngineConfig.lifetime`: the env-tuned durations of the engine's sessions and jobs. */
-export function engineLifetime() {
-  return {
-    liveSessionTtlMs: StreamLifetime.liveSessionTtlMs(),
-    liveSessionGcIntervalMs: StreamLifetime.liveSessionGcIntervalMs(),
-    sessionReviveTtlMs: StreamLifetime.sessionReviveTtlMs(),
-    maxSessionsPerOwner: StreamLifetime.maxSessionsPerUser(),
-    jobGraceMs: StreamLifetime.jobGraceMs(),
-    jobFallbackTimeoutMs: StreamLifetime.jobFallbackTimeoutMs(),
-    cacheGcIntervalMs: StreamLifetime.cacheGcIntervalMs(),
-  };
-}
