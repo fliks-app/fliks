@@ -14,7 +14,7 @@ Per-domain specs land under [`spec/`](spec/) as milestones complete (template: p
 
 ## Deviations
 
-Decided behaviour for the Rust port (security fixes F, correctness fixes C; D3). Not implemented until the named milestone. Each has a parity exception.
+Decided behaviour for the Rust port (security fixes F, correctness fixes C; D3). Each lands in its owning milestone. Each has a parity exception.
 
 | # | Today (Nest) | Rust behaviour | Client impact |
 |---|---|---|---|
@@ -25,7 +25,7 @@ Decided behaviour for the Rust port (security fixes F, correctness fixes C; D3).
 | F5 | `GET /api/settings` and `GET /api/engine/remote` return secrets in clear | secret keys redacted with the existing redact/merge convention (`backend/src/common/utils/secret-fields.util.ts`); PUT with the placeholder keeps the stored value | admin settings pages |
 | F6 | `refresh_tokens` never pruned | daily prune of expired/revoked rows older than 30 days | none |
 | F7 | access token 1 h but cookie `maxAge` default 7 d | cookie `Max-Age` = token lifetime | none |
-| F8 | `scope:'stream'` tokens (12 h, travel in URLs) accepted on every route without `SessionTokenGuard`: pairing approve, `PUT /users/:self {password}`, `stream-token` self-renewal, `cast-info` | the extractor rejects `scope:'stream'` (401) except on routes explicitly marked stream-allowed (media delivery routes listed in `auth.md`) | verify every client calls API routes with its access token (parity + client smoke) |
+| F8 | `scope:'stream'` tokens (12 h, travel in URLs) accepted on every route without `SessionTokenGuard`: pairing approve, `PUT /users/:self {password}`, `stream-token` self-renewal, `cast-info` | the extractor rejects `scope:'stream'` (401) except on routes explicitly marked stream-allowed (media delivery routes, listed in the spec of the milestone that ports them; none in S1) | verify every client calls API routes with its access token (parity + client smoke) |
 | F9 | password change revokes nothing | revokes every refresh-token family of the user and drops their SSE connections; the caller's access token stays valid until it expires | none |
 | F10 | `users.manage` alone can set `isAdmin`, reset/delete an admin, delete the last admin | only an admin may set `isAdmin` or modify/delete an admin; the last enabled admin cannot be deleted, disabled or demoted (409) | admin user pages show the error |
 | F11 | a user can raise their own quota fields | quota fields writable only with `users.manage` | none |
@@ -67,7 +67,7 @@ A 500 or a half-written request is never part of the frozen contract:
 Frozen as is (decided): the heartbeat keeps its debounce entry after a failed history write and returns
 `sessionLost: false` when the engine session lives but presence cannot be rebuilt. Lists whose order comes
 from DB collation / ICU (`GET /api/settings`, `/api/fs/browse`) are compared order-insensitively by parity;
-Rust sorts by key / name in byte order.
+Rust sorts settings by key and fs entries case-insensitively (lowercase first).
 
 ## Open divergences
 
