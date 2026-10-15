@@ -4,10 +4,8 @@ import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import {
   EngineRemoteApiService,
   type EnginePathMapping,
-  type EngineRemoteConfig,
   type EngineRemoteStatus,
 } from '../../../core/services/api/engine-remote-api.service';
-import { SECRET_MASK } from '../../../shared/components/schema-form/schema-form';
 import { ToastService } from '../../../core/services/toast.service';
 
 @Component({
@@ -26,9 +24,6 @@ export class EngineSettingsComponent implements OnInit {
 
   readonly url = signal('');
   readonly token = signal('');
-  readonly tokenStored = signal(false);
-  readonly tokenCleared = signal(false);
-  readonly secretMask = SECRET_MASK;
   readonly probePath = signal('');
   readonly pathMappings = signal<EnginePathMapping[]>([]);
   readonly status = signal<EngineRemoteStatus>('off');
@@ -48,34 +43,13 @@ export class EngineSettingsComponent implements OnInit {
   private async refresh() {
     const cfg = await this.api.get();
     this.url.set(cfg.url);
-    this.applyToken(cfg);
+    this.token.set(cfg.token);
     this.pathMappings.set(
       cfg.pathMappings.length ? [...cfg.pathMappings] : [{ from: '', to: '' }],
     );
     this.status.set(cfg.status);
     this.processUrl.set(cfg.processUrl);
     this.mismatch.set(!!cfg.mismatch);
-  }
-
-  private applyToken(cfg: EngineRemoteConfig) {
-    this.token.set(cfg.token ?? '');
-    this.tokenStored.set(
-      !!cfg.token || !!cfg.secretsSet?.some((k) => k === 'token' || k === 'engine_token'),
-    );
-    this.tokenCleared.set(false);
-  }
-
-  onTokenInput(value: string) {
-    this.token.set(value);
-    if (value.trim()) this.tokenCleared.set(false);
-  }
-
-  /** Blank leaves the stored token alone, `null` erases it, as the API defines. */
-  private tokenValue(): string | null | undefined {
-    if (this.tokenCleared()) return null;
-    const typed = this.token().trim();
-    if (typed) return typed;
-    return this.tokenStored() ? undefined : '';
   }
 
   addMapping() {
@@ -98,13 +72,12 @@ export class EngineSettingsComponent implements OnInit {
     try {
       const cfg = await this.api.save({
         url: this.url(),
-        token: this.tokenValue(),
+        token: this.token(),
         pathMappings: this.pathMappings(),
       });
       this.status.set(cfg.status);
       this.processUrl.set(cfg.processUrl);
       this.mismatch.set(!!cfg.mismatch);
-      this.applyToken(cfg);
       this.toast.success(this.translate.instant('settings.engine.saved'));
     } catch {
       /* interceptor */
@@ -119,7 +92,7 @@ export class EngineSettingsComponent implements OnInit {
       const probe = this.probePath().trim();
       const result = await this.api.test({
         url: this.url(),
-        ...(this.token().trim() && { token: this.token().trim() }),
+        token: this.token(),
         ...(probe && { probePath: probe }),
       });
       if (!result.ok) {

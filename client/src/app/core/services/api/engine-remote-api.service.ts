@@ -11,9 +11,7 @@ export interface EnginePathMapping {
 
 export interface EngineRemoteConfig {
   url: string;
-  /** Absent when the server redacts it; see `secretsSet`. */
-  token?: string;
-  secretsSet?: string[];
+  token: string;
   pathMappings: EnginePathMapping[];
   status: EngineRemoteStatus;
   /** `FLIKS_ENGINE_URL`. Video bytes follow this, not a different saved URL. */
@@ -42,7 +40,7 @@ export class EngineRemoteApiService {
 
   save(body: {
     url: string;
-    token?: string | null;
+    token: string;
     pathMappings: EnginePathMapping[];
   }): Promise<EngineRemoteConfig> {
     return firstValueFrom(
@@ -52,7 +50,7 @@ export class EngineRemoteApiService {
 
   test(body: {
     url: string;
-    token?: string;
+    token: string;
     probePath?: string;
   }): Promise<EngineRemoteTestResult> {
     return firstValueFrom(
