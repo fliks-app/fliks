@@ -61,6 +61,7 @@ jobs:
         with:
           path: |
             ~/.cargo/registry
+            ~/.cargo/git
             server/target
           key: macos-server-${{ hashFiles('server/Cargo.lock') }}
           restore-keys: macos-server-

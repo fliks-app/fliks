@@ -17,6 +17,7 @@ on:
   pull_request:
     paths:
       - 'windows/**'
+      - 'server/**'
       - '.github/workflows/windows-installer.yml'
   workflow_dispatch:
 
@@ -68,6 +69,7 @@ jobs:
         with:
           path: |
             ~/.cargo/registry
+            ~/.cargo/git
             server/target
           key: win-server-${{ hashFiles('server/Cargo.lock') }}
           restore-keys: win-server-
