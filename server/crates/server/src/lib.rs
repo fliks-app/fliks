@@ -12,6 +12,7 @@ pub mod roles;
 pub mod settings;
 pub mod state;
 pub mod system;
+pub mod users;
 
 use config::Config;
 use fliks_engine::{gateway::Upstream, supervise};

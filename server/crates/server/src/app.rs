@@ -1,5 +1,5 @@
 use crate::http::{layers, static_files};
-use crate::{state::AppState, system};
+use crate::{state::AppState, system, users};
 use axum::{Router, extract::Request, response::Response, routing::any, routing::any_service};
 use fliks_engine::gateway::{self, RouteTable, Upstream};
 use std::path::PathBuf;
@@ -10,7 +10,20 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
 
 /// A route is ported iff it is listed here (plan §4.3).
 #[derive(OpenApi)]
-#[openapi(info(title = "Fliks", version = "1"), paths(system::liveness))]
+#[openapi(
+    info(title = "Fliks", version = "1"),
+    paths(
+        system::liveness,
+        users::list,
+        users::create,
+        users::get_one,
+        users::update,
+        users::remove,
+        users::stats,
+        users::set_avatar,
+        users::clear_avatar
+    )
+)]
 pub struct ApiDoc;
 
 /// Rust-owned routes and static files get the layers; the forwarded paths do not, as Nest sets its own CORS headers.
@@ -47,6 +60,7 @@ fn api() -> Router<AppState> {
         .merge(crate::roles::router())
         .merge(crate::settings::router())
         .merge(crate::fs::router())
+        .merge(crate::users::router())
 }
 
 async fn internal_404(req: Request) -> Response {

@@ -68,6 +68,28 @@ impl Engine {
         res.json().await.ok()
     }
 
+    /// `POST /v1/revoke` for a deleted or demoted owner, only when the engine announces `revoke`; failures are logged.
+    pub async fn revoke_owner(&self, user_id: i32) {
+        if !self
+            .hello()
+            .await
+            .is_some_and(|h| h.features.iter().any(|f| f == "revoke"))
+        {
+            return;
+        }
+        let sent = self
+            .http
+            .post(format!("{}/v1/revoke", self.url))
+            .bearer_auth(&self.token)
+            .json(&serde_json::json!({"ownerId": user_id.to_string()}))
+            .send()
+            .await
+            .and_then(|r| r.error_for_status());
+        if let Err(e) = sent {
+            tracing::warn!(user = user_id, error = %e, "engine revoke failed");
+        }
+    }
+
     /// Server features the engine backs; empty when it is down or Nest's adopt gate would refuse it
     /// (protocol below 1, or no `probe`/`capabilities`).
     pub async fn features(&self) -> Vec<&'static str> {

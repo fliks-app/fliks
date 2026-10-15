@@ -13,7 +13,7 @@ name = "fliks-server"
 path = "src/main.rs"
 
 [dependencies]
-axum = "0.8"
+axum = { version = "0.8", features = ["multipart"] }
 jsonwebtoken = { version = "10", default-features = false, features = ["rust_crypto"] }
 reqwest = { version = "0.12", default-features = false, features = ["json"] }
 serde_path_to_error = "0.1"
@@ -30,6 +30,7 @@ fliks-engine-core = { git = "https://github.com/fliks-app/engine", tag = "v0.3.2
 utoipa = "5"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 getrandom = "0.3"
+bcrypt = "0.17"
 fliks-engine = { git = "https://github.com/fliks-app/engine", tag = "v0.3.2" }
 
 [dev-dependencies]
