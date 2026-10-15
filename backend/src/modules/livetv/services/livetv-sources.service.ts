@@ -336,7 +336,7 @@ export class LiveTvSourcesService {
    *  one source could be resynced twice at once, in a non-deterministic order. */
   async sync(sourceId: number): Promise<LiveTvSyncResult> {
     const activityId = `LiveTvSourceSync:${sourceId}`;
-    if (this.activityRegistry.has(activityId)) {
+    if (await this.activityRegistry.has(activityId)) {
       throw new ConflictException('errors.already_running');
     }
     this.activityRegistry.upsertRunning(activityId, 'LiveTvSourceSync');

@@ -126,7 +126,7 @@ function setup(sourceOverrides: Record<string, unknown> = {}) {
   };
   const notifications = { dispatch: jest.fn().mockResolvedValue(undefined) };
   const activityRegistry = {
-    has: jest.fn().mockReturnValue(false),
+    has: jest.fn().mockResolvedValue(false),
     upsertRunning: jest.fn(),
     remove: jest.fn(),
   };
@@ -167,11 +167,11 @@ describe('LiveTvSourcesService.sync (m3u)', () => {
     mockedLiveTvGet.mockResolvedValue({ status: 304, data: '', headers: {} });
     const { service, activityRegistry } = setup({ playlistEtag: '"abc"', channelCount: 3 });
 
-    activityRegistry.has.mockReturnValueOnce(true);
+    activityRegistry.has.mockResolvedValueOnce(true);
     await expect(service.sync(1)).rejects.toThrow(ConflictException);
     expect(activityRegistry.upsertRunning).not.toHaveBeenCalled();
 
-    activityRegistry.has.mockReturnValue(false);
+    activityRegistry.has.mockResolvedValue(false);
     await service.sync(1);
     expect(activityRegistry.upsertRunning).toHaveBeenCalledWith(
       'LiveTvSourceSync:1',

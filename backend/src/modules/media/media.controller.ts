@@ -337,7 +337,7 @@ export class MediaController {
     const activityId = `Identify:${id}`;
     // Refused and reserved before the ids are written: a second identify would
     // otherwise commit its ids under the first walk and answer 409.
-    if (this.activityRegistry.has(activityId)) {
+    if (await this.activityRegistry.has(activityId)) {
       throw new ConflictException('errors.already_running');
     }
     this.activityRegistry.upsertRunning(activityId, 'Identify');
@@ -396,7 +396,7 @@ export class MediaController {
 
     this.eventsService.emit({ type: 'metadata.started', mediaId: id, title });
     const activityId = `RefreshMetadata:${id}`;
-    if (this.activityRegistry.has(activityId)) {
+    if (await this.activityRegistry.has(activityId)) {
       throw new ConflictException('errors.already_running');
     }
     this.activityRegistry.upsertRunning(
@@ -447,7 +447,7 @@ export class MediaController {
 
     this.eventsService.emit({ type: 'metadata.started', mediaId: id, title });
     const activityId = `RefreshEpisodeMetadata:${episodeId}`;
-    if (this.activityRegistry.has(activityId)) {
+    if (await this.activityRegistry.has(activityId)) {
       throw new ConflictException('errors.already_running');
     }
     this.activityRegistry.upsertRunning(
@@ -501,7 +501,7 @@ export class MediaController {
     });
 
     const activityId = `Rescan:${id}`;
-    if (this.activityRegistry.has(activityId)) {
+    if (await this.activityRegistry.has(activityId)) {
       throw new ConflictException('errors.already_running');
     }
     this.activityRegistry.upsertRunning(
