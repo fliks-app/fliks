@@ -64,7 +64,13 @@ async fn list(dir: PathBuf) -> Result<Json<Listing>, AppError> {
             });
         }
     }
-    entries.sort_by(|a, b| a.name.cmp(&b.name));
+    // ponytail: case-insensitive, lowercase first; ICU `localeCompare` also folds accents.
+    entries.sort_by(|a, b| {
+        let fold = |s: &str| s.to_lowercase();
+        fold(&a.name)
+            .cmp(&fold(&b.name))
+            .then_with(|| b.name.cmp(&a.name))
+    });
     Ok(Json(Listing {
         current: dir.to_string_lossy().into_owned(),
         parent: parent_of(&dir),
