@@ -221,6 +221,7 @@ struct BackendEnvironment {
             "PATH": "\(ffmpegBin):\(pgBin):\(nodeBin):\(systemPath)",
             "UV_THREADPOOL_SIZE": "16",
             // Two variables, not FLIKS_NEST_CMD: the bundle path contains a space.
+            "FLIKS_CAST_DIR": Paths.effectiveBackendDist.deletingLastPathComponent().appendingPathComponent("public").path,
             "FLIKS_NODE_BIN": Paths.nodeBinary.path,
             "FLIKS_NEST_ENTRY": Paths.effectiveBackendDist.appendingPathComponent("main.js").path,
         ]
