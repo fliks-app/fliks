@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO remote_control_grants (code, \"deviceId\", \"ownerUserId\", \"granteeUserId\", \"deviceName\", \"codeExpiresAt\")\n           VALUES ($1, $2, $3, NULL, $4, $5) RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Varchar",
+        "Int4",
+        "Varchar",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "50b79a21687eac34c4573f3340cb1d1b1529e282edbbdce3f0d68495002d77df"
+}

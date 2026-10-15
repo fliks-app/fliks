@@ -1,5 +1,5 @@
 use crate::http::{layers, static_files};
-use crate::{auth, events, fs, roles, settings, state::AppState, system, users};
+use crate::{auth, events, fs, remote, roles, settings, state::AppState, system, users};
 use axum::{Router, extract::Request, response::Response, routing::any, routing::any_service};
 use fliks_engine::gateway::{self, RouteTable, Upstream};
 use std::path::PathBuf;
@@ -51,7 +51,15 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         crate::engine::remote::get_remote,
         crate::engine::remote::put_remote,
         crate::engine::remote::test_remote,
-        crate::engine::resolve::resolve
+        crate::engine::resolve::resolve,
+        remote::targets,
+        remote::register,
+        remote::commands,
+        remote::command,
+        remote::grant_code,
+        remote::grant_claim,
+        remote::grants,
+        remote::revoke
     )
 )]
 pub struct ApiDoc;
@@ -97,6 +105,7 @@ fn api() -> Router<AppState> {
         .merge(crate::engine::router())
         .merge(users::router())
         .merge(events::router())
+        .merge(remote::router())
 }
 
 async fn internal_404(req: Request) -> Response {

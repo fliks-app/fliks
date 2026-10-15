@@ -8,7 +8,9 @@
       "expect": {
         "body": {
           "error": "Bad Request",
-          "message": "validation",
+          "message": [
+            "targetId must be a string"
+          ],
           "statusCode": 400
         },
         "status": 400

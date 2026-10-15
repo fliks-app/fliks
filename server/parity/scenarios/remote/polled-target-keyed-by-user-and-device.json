@@ -8,15 +8,15 @@
   "seed": "base",
   "steps": [
     {
-      "as": "user",
+      "as": "manager",
       "body": {
-        "deviceId": "dev-1",
+        "deviceId": "dev-f14",
         "formFactor": "tv",
         "name": "Living room"
       },
       "expect": {
         "body": {
-          "targetId": "dev-1#native"
+          "targetId": "dev-f14#native"
         },
         "status": 201
       },
@@ -24,15 +24,15 @@
       "path": "/api/remote/register"
     },
     {
-      "as": "other",
+      "as": "readonly",
       "body": {
-        "deviceId": "dev-1",
+        "deviceId": "dev-f14",
         "formFactor": "tv",
         "name": "Bedroom"
       },
       "expect": {
         "body": {
-          "targetId": "dev-1#native"
+          "targetId": "dev-f14#native"
         },
         "status": 201
       },
@@ -40,7 +40,7 @@
       "path": "/api/remote/register"
     },
     {
-      "as": "user",
+      "as": "manager",
       "body": {
         "action": "play"
       },
@@ -49,19 +49,19 @@
         "status": 202
       },
       "method": "POST",
-      "path": "/api/remote/dev-1%23native/command"
+      "path": "/api/remote/dev-f14%23native/command"
     },
     {
-      "as": "other",
+      "as": "readonly",
       "expect": {
         "body": [],
         "status": 200
       },
       "method": "GET",
-      "path": "/api/remote/commands?targetId=dev-1%23native"
+      "path": "/api/remote/commands?targetId=dev-f14%23native"
     },
     {
-      "as": "user",
+      "as": "manager",
       "expect": {
         "body": [
           {
@@ -73,7 +73,7 @@
         "status": 200
       },
       "method": "GET",
-      "path": "/api/remote/commands?targetId=dev-1%23native"
+      "path": "/api/remote/commands?targetId=dev-f14%23native"
     }
   ]
 }

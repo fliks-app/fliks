@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT \"granteeUserId\" AS \"grantee!\" FROM remote_control_grants\n           WHERE \"deviceId\" = $1 AND \"granteeUserId\" IS NOT NULL",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "grantee!",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "b4a2925167e36b24101ca94ca0ff6a8869fa04722705106515138fef9db1ef11"
+}
