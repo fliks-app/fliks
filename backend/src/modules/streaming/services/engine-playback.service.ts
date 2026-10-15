@@ -90,6 +90,11 @@ export class EnginePlaybackService {
     device: DeviceProfileDto,
     q: PlaybackQuery,
   ): Promise<EnginePlaybackInfo> {
+    if (this.engine.gatewayMismatch) {
+      throw new ServiceUnavailableException(
+        'The saved engine URL is not the one this process forwards video to',
+      );
+    }
     if (!this.engine.runtime) {
       if (this.engine.status === 'down') {
         throw new ServiceUnavailableException(

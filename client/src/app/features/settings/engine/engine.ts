@@ -27,6 +27,8 @@ export class EngineSettingsComponent implements OnInit {
   readonly probePath = signal('');
   readonly pathMappings = signal<EnginePathMapping[]>([]);
   readonly status = signal<EngineRemoteStatus>('off');
+  readonly processUrl = signal('');
+  readonly mismatch = signal(false);
   readonly testResult = signal<string | null>(null);
 
   async ngOnInit() {
@@ -46,6 +48,8 @@ export class EngineSettingsComponent implements OnInit {
       cfg.pathMappings.length ? [...cfg.pathMappings] : [{ from: '', to: '' }],
     );
     this.status.set(cfg.status);
+    this.processUrl.set(cfg.processUrl);
+    this.mismatch.set(!!cfg.mismatch);
   }
 
   addMapping() {
@@ -72,6 +76,8 @@ export class EngineSettingsComponent implements OnInit {
         pathMappings: this.pathMappings(),
       });
       this.status.set(cfg.status);
+      this.processUrl.set(cfg.processUrl);
+      this.mismatch.set(!!cfg.mismatch);
       this.toast.success(this.translate.instant('settings.engine.saved'));
     } catch {
       /* interceptor */

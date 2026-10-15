@@ -499,6 +499,17 @@ describe('EnginePlaybackService.playbackInfo', () => {
       t.cleanup();
     });
 
+    it('answers 503 when the saved engine is not the process gateway', async () => {
+      const t = setup({ engine: { runtime: true, gatewayMismatch: true } });
+      await expect(
+        t.svc.playbackInfo(user, 1, device as never, query),
+      ).rejects.toThrow(
+        'The saved engine URL is not the one this process forwards video to',
+      );
+      expect(t.engine.openSession).not.toHaveBeenCalled();
+      t.cleanup();
+    });
+
     it('answers 503 when the engine is configured but unreachable', async () => {
       const t = setup({ engine: { runtime: false, status: 'down' } });
       await expect(

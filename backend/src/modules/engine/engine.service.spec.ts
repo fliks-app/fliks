@@ -706,6 +706,55 @@ describe('EngineService remote config', () => {
     expect((s as any).instanceId).toBe('x');
     expect(s.enabled).toBe(true);
   });
+
+  it('pushes path mappings changed since the last connect', async () => {
+    const values: Record<string, string | null> = {
+      engine_url: 'http://stored',
+      engine_token: 'stored-tok',
+      engine_path_mappings: JSON.stringify([{ from: '/nas', to: '/data' }]),
+    };
+    const c = mockClient();
+    jest.spyOn(engineClient, 'createEngineClient').mockReturnValue(c);
+    const s = new EngineService(fakeSettings(values));
+    (s as any).sleep = async () => undefined;
+    const heard = jest.fn();
+    s.onConnect(heard);
+    await s.whenReady();
+    await s.pushStreaming(toEngineStreaming(settings));
+    values.engine_path_mappings = JSON.stringify([{ from: '/nas', to: '/other' }]);
+    await s.reconfigure();
+    expect(heard).toHaveBeenCalledTimes(1);
+    const last = c.PUT.mock.calls.at(-1) as any;
+    expect(last[1].body.pathMappings).toEqual([{ from: '/nas', to: '/other' }]);
+  });
+
+  it('tests the process engine when the form is empty', async () => {
+    process.env.FLIKS_ENGINE_URL = 'http://env';
+    process.env.FLIKS_ENGINE_TOKEN = 'env-tok';
+    const create = jest
+      .spyOn(engineClient, 'createEngineClient')
+      .mockReturnValue(mockClient());
+    await svc().testConnection('', '');
+    expect(create).toHaveBeenCalledWith('http://env', 'env-tok');
+  });
+
+  it('treats a trailing slash as the same engine and flags a different host', async () => {
+    process.env.FLIKS_ENGINE_URL = 'http://gateway';
+    process.env.FLIKS_ENGINE_TOKEN = 't';
+    jest.spyOn(engineClient, 'createEngineClient').mockReturnValue(mockClient());
+    const same = new EngineService(
+      fakeSettings({ engine_url: 'http://gateway/', engine_token: 't' }),
+    );
+    (same as any).sleep = async () => undefined;
+    await same.whenReady();
+    expect(same.gatewayMismatch).toBe(false);
+    const other = new EngineService(
+      fakeSettings({ engine_url: 'http://other', engine_token: 't' }),
+    );
+    (other as any).sleep = async () => undefined;
+    await other.whenReady();
+    expect(other.gatewayMismatch).toBe(true);
+  });
 });
 
 describe('EngineService jobs', () => {

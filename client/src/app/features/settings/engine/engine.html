@@ -10,6 +10,11 @@
         <span>{{ 'settings.engine.status_down_message' | translate }}</span>
       </div>
     }
+    @if (mismatch()) {
+      <div role="alert" class="alert alert-warning">
+        <span>{{ 'settings.engine.gateway_mismatch' | translate: { url: processUrl() } }}</span>
+      </div>
+    }
 
     <div class="form-control">
       <label class="label"><span class="label-text font-medium">{{ 'settings.engine.url' | translate }}</span></label>

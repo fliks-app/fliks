@@ -11,6 +11,7 @@ import {
   ENGINE_PATH_MAPPINGS_KEY,
   ENGINE_TOKEN_KEY,
   ENGINE_URL_KEY,
+  engineUrlsDiffer,
   parsePathMappings,
   type EnginePathMapping,
 } from './engine-remote-config';
@@ -185,6 +186,11 @@ export class EngineService implements OnModuleInit, OnModuleDestroy {
     return this.reachable ? 'up' : 'down';
   }
 
+  /** Saved URL and `FLIKS_ENGINE_URL` point at different engines. Video still follows the process URL. */
+  get gatewayMismatch(): boolean {
+    return engineUrlsDiffer(this.storedUrl, process.env.FLIKS_ENGINE_URL ?? '');
+  }
+
   /** `hello.features` of the adopted engine, empty without one. */
   get engineFeatures(): readonly string[] {
     return this.client ? this.features : [];
@@ -221,7 +227,7 @@ export class EngineService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
-  private async init(): Promise<void> {
+  private async init(notify = false): Promise<void> {
     const epoch = this.epoch;
     await this.loadRemoteSettings();
     if (epoch !== this.epoch) return;
@@ -233,19 +239,22 @@ export class EngineService implements OnModuleInit, OnModuleDestroy {
       );
       return;
     }
-    await this.connect(createEngineClient(url, token), epoch);
+    await this.connect(createEngineClient(url, token), epoch, notify);
   }
 
   /** Drops the live client and reconnects from stored settings or env. */
   async reconfigure(): Promise<void> {
     this.epoch++;
+    const epoch = this.epoch;
     clearTimeout(this.timer);
     this.timer = undefined;
     this.client = null;
     this.candidate = null;
     this.reachable = false;
-    this.ready = this.init();
-    return this.ready;
+    this.ready = this.init(true);
+    await this.ready;
+    if (epoch !== this.epoch || !this.client) return;
+    await this.push();
   }
 
   /** One-shot hello (and optional probe) without adopting the engine. */
@@ -254,14 +263,16 @@ export class EngineService implements OnModuleInit, OnModuleDestroy {
     token: string,
     probePath?: string,
   ): Promise<EngineConnectionTestResult> {
-    if (!url.trim() || !token.trim()) {
+    const targetUrl = url.trim() || this.configuredUrl();
+    const targetToken = token.trim() || this.effectiveToken();
+    if (!targetUrl || !targetToken) {
       return { ok: false, error: 'Engine URL and token are required' };
     }
-    const client = createEngineClient(url, token);
+    const client = createEngineClient(targetUrl, targetToken);
     try {
       const { data, response } = await client.GET('/v1/hello');
       if (!data || !response.ok) {
-        return { ok: false, error: unreachableMessage(url) };
+        return { ok: false, error: unreachableMessage(targetUrl) };
       }
       const base = {
         ok: true as const,
@@ -293,19 +304,23 @@ export class EngineService implements OnModuleInit, OnModuleDestroy {
         return { ...base, probeOk: false, probeError: 'Probe did not answer' };
       }
     } catch {
-      return { ok: false, error: unreachableMessage(url) };
+      return { ok: false, error: unreachableMessage(targetUrl) };
     }
   }
 
   /** Handshake: retries while the engine starts, then keeps going in the background. */
-  async connect(client: EngineClient, epoch = this.epoch): Promise<void> {
+  async connect(
+    client: EngineClient,
+    epoch = this.epoch,
+    notify = false,
+  ): Promise<void> {
     if (epoch !== this.epoch) return;
     this.candidate = client;
     for (let attempt = 1; attempt <= HELLO_ATTEMPTS; attempt++) {
       const data = await this.hello();
       if (epoch !== this.epoch) return;
       if (data) {
-        if ((await this.adopt(data, false, epoch)) && epoch === this.epoch) {
+        if ((await this.adopt(data, notify, epoch)) && epoch === this.epoch) {
           this.schedule(POLL_MS);
         }
         return;

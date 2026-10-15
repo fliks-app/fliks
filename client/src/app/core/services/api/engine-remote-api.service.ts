@@ -14,6 +14,9 @@ export interface EngineRemoteConfig {
   token: string;
   pathMappings: EnginePathMapping[];
   status: EngineRemoteStatus;
+  /** `FLIKS_ENGINE_URL`. Video bytes follow this, not a different saved URL. */
+  processUrl: string;
+  mismatch?: boolean;
   error?: string;
 }
 

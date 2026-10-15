@@ -19,6 +19,7 @@ import {
   ENGINE_PATH_MAPPINGS_KEY,
   ENGINE_TOKEN_KEY,
   ENGINE_URL_KEY,
+  engineUrlsDiffer,
   parsePathMappings,
   sanitizePathMappings,
 } from './engine-remote-config';
@@ -72,11 +73,14 @@ export class EngineRemoteController {
     ]);
     const pathMappings = parsePathMappings(raw);
     const status = this.engine.status;
+    const processUrl = process.env.FLIKS_ENGINE_URL ?? '';
     return {
       url: url ?? '',
       token: token ?? '',
       pathMappings,
       status,
+      processUrl,
+      ...(engineUrlsDiffer(url ?? '', processUrl) && { mismatch: true }),
       ...(status === 'down' && {
         error: 'The streaming engine is unreachable',
       }),
