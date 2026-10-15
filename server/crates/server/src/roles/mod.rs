@@ -7,6 +7,7 @@ use crate::state::AppState;
 use axum::{Router, routing::get};
 
 pub use db::seed;
+pub use routes::*;
 
 pub fn router() -> Router<AppState> {
     Router::new()

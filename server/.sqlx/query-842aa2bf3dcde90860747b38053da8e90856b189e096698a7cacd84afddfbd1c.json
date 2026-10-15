@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT \"id\" FROM roles WHERE \"id\" = $1 OR ($1::int IS NULL AND \"isDefault\")\n           ORDER BY (\"id\" = $1) DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "842aa2bf3dcde90860747b38053da8e90856b189e096698a7cacd84afddfbd1c"
+}

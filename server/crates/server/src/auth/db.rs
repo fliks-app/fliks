@@ -200,8 +200,7 @@ pub async fn open_pairing(
     if exists.is_none() {
         return Ok(Opened::NoUser);
     }
-    sqlx::query("SELECT pg_advisory_xact_lock(hashtext($1))")
-        .bind(device_id)
+    sqlx::query!("SELECT pg_advisory_xact_lock(hashtext($1))", device_id)
         .execute(&mut *tx)
         .await?;
     let pending = sqlx::query_scalar!(

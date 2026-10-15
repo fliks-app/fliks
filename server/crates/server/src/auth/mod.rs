@@ -4,4 +4,4 @@ mod jobs;
 mod routes;
 
 pub use jobs::spawn as spawn_jobs;
-pub use routes::router;
+pub use routes::*;

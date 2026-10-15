@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT \"id\" FROM users WHERE \"isAdmin\" AND \"enabled\" AND \"id\" <> $1 FOR UPDATE",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "c5fd600fdd687bfb3b2517f6177f9d1c03e744560a46934bff6234d79ab33be7"
+}

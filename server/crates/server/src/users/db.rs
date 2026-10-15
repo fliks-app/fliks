@@ -1,10 +1,10 @@
 //! Queries and the `PublicUser` shape (`docs/spec/users.md` rules 2-4, SQL section).
 use crate::http::{
     AppError,
-    auth::{USER_COLUMNS, UserRow},
+    auth::{RoleRow, UserRow, load_users},
 };
 use serde::Serialize;
-use sqlx::{FromRow, PgConnection, PgPool, Row, postgres::PgRow};
+use sqlx::{PgConnection, PgPool};
 use std::collections::HashMap;
 
 #[derive(Serialize)]
@@ -17,72 +17,55 @@ pub struct PublicUser {
     pub library_ids: Vec<i32>,
 }
 
-fn select_users(tail: &str) -> String {
-    format!(
-        r#"SELECT {USER_COLUMNS}, r."name" AS "roleName", r."permissions" AS "rolePermissions"
-           FROM users u LEFT JOIN roles r ON r."id" = u."roleId" {tail}"#
-    )
-}
-
-fn public(row: &PgRow, library_ids: Vec<i32>) -> Result<PublicUser, sqlx::Error> {
-    let user = UserRow::from_row(row)?;
-    let perms: Option<String> = row.try_get("rolePermissions")?;
+fn public((user, role): (UserRow, Option<RoleRow>), library_ids: Vec<i32>) -> PublicUser {
     let permissions = if user.is_admin {
         vec!["manage:all".into()]
     } else {
-        perms
-            .and_then(|p| serde_json::from_str(&p).ok())
+        role.as_ref()
+            .map(|r| r.permissions.clone())
             .unwrap_or_default()
     };
-    Ok(PublicUser {
-        role: row.try_get("roleName")?,
+    PublicUser {
+        role: role.map(|r| r.name),
         permissions,
         library_ids,
         user,
-    })
+    }
 }
 
 pub async fn list(db: &PgPool) -> Result<Vec<PublicUser>, sqlx::Error> {
-    let rows = sqlx::query(&select_users(r#"ORDER BY u."username" ASC"#))
-        .fetch_all(db)
-        .await?;
-    let ids: Vec<i32> = rows.iter().map(|r| r.get("id")).collect();
-    let access: Vec<(i32, i32)> = sqlx::query_as(
-        r#"SELECT lua."userId" AS "userId", lua."libraryId" AS "libraryId"
-           FROM library_user_access lua WHERE lua."userId" = ANY($1) ORDER BY lua."id""#,
+    let rows = load_users(db, None, false).await?;
+    let ids: Vec<i32> = rows.iter().map(|(u, _)| u.id).collect();
+    let access = sqlx::query!(
+        r#"SELECT "userId" AS "user_id!", "libraryId" AS "library_id!" FROM library_user_access WHERE "userId" = ANY($1) ORDER BY "id""#,
+        &ids
     )
-    .bind(&ids)
     .fetch_all(db)
     .await?;
     let mut by_user: HashMap<i32, Vec<i32>> = HashMap::new();
-    for (u, l) in access {
-        by_user.entry(u).or_default().push(l);
+    for a in access {
+        by_user.entry(a.user_id).or_default().push(a.library_id);
     }
-    rows.iter()
-        .map(|r| {
-            public(
-                r,
-                by_user.remove(&r.get::<i32, _>("id")).unwrap_or_default(),
-            )
+    Ok(rows
+        .into_iter()
+        .map(|row| {
+            let libs = by_user.remove(&row.0.id).unwrap_or_default();
+            public(row, libs)
         })
-        .collect()
+        .collect())
 }
 
 pub async fn find_one(db: &PgPool, id: i32) -> Result<Option<PublicUser>, sqlx::Error> {
-    let Some(row) = sqlx::query(&select_users(r#"WHERE u."id" = $1"#))
-        .bind(id)
-        .fetch_optional(db)
-        .await?
-    else {
+    let Some(row) = load_users(db, Some(id), false).await?.pop() else {
         return Ok(None);
     };
-    let ids = sqlx::query_scalar(
-        r#"SELECT lua."libraryId" FROM library_user_access lua WHERE lua."userId" = $1 ORDER BY lua."id""#,
+    let ids = sqlx::query_scalar!(
+        r#"SELECT "libraryId" AS "library_id!" FROM library_user_access WHERE "userId" = $1 ORDER BY "id""#,
+        id
     )
-    .bind(id)
     .fetch_all(db)
     .await?;
-    public(&row, ids).map(Some)
+    Ok(Some(public(row, ids)))
 }
 
 pub fn not_found(id: i32) -> AppError {
@@ -94,27 +77,32 @@ pub async fn username_taken(
     username: &str,
     except: Option<i32>,
 ) -> Result<bool, sqlx::Error> {
-    sqlx::query_scalar(
-        r#"SELECT EXISTS(SELECT 1 FROM users WHERE "username" = $1 AND ($2::int IS NULL OR "id" <> $2))"#,
+    sqlx::query_scalar!(
+        r#"SELECT EXISTS(SELECT 1 FROM users WHERE "username" = $1 AND ($2::int IS NULL OR "id" <> $2)) AS "taken!""#,
+        username,
+        except
     )
-    .bind(username)
-    .bind(except)
     .fetch_one(c)
     .await
 }
 
 /// Locks and returns the target row with its password-less columns.
 pub async fn lock_user(c: &mut PgConnection, id: i32) -> Result<Option<UserRow>, sqlx::Error> {
-    let sql = format!(r#"SELECT {USER_COLUMNS} FROM users u WHERE u."id" = $1 FOR UPDATE"#);
-    sqlx::query_as(&sql).bind(id).fetch_optional(c).await
+    let locked = sqlx::query_scalar!(r#"SELECT "id" FROM users WHERE "id" = $1 FOR UPDATE"#, id)
+        .fetch_optional(&mut *c)
+        .await?;
+    match locked {
+        Some(id) => Ok(load_users(c, Some(id), false).await?.pop().map(|(u, _)| u)),
+        None => Ok(None),
+    }
 }
 
 /// True when no other enabled admin exists; locks the admin rows so concurrent demotions serialise.
 pub async fn is_last_enabled_admin(c: &mut PgConnection, id: i32) -> Result<bool, sqlx::Error> {
-    let others: Vec<i32> = sqlx::query_scalar(
+    let others = sqlx::query_scalar!(
         r#"SELECT "id" FROM users WHERE "isAdmin" AND "enabled" AND "id" <> $1 FOR UPDATE"#,
+        id
     )
-    .bind(id)
     .fetch_all(c)
     .await?;
     Ok(others.is_empty())
@@ -125,10 +113,12 @@ pub async fn replace_library_access(
     user_id: i32,
     ids: &[i32],
 ) -> Result<(), sqlx::Error> {
-    sqlx::query(r#"DELETE FROM library_user_access WHERE "userId" = $1"#)
-        .bind(user_id)
-        .execute(&mut *c)
-        .await?;
+    sqlx::query!(
+        r#"DELETE FROM library_user_access WHERE "userId" = $1"#,
+        user_id
+    )
+    .execute(&mut *c)
+    .await?;
     add_library_access(c, user_id, ids).await
 }
 
@@ -137,48 +127,62 @@ pub async fn add_library_access(
     user_id: i32,
     ids: &[i32],
 ) -> Result<(), sqlx::Error> {
-    sqlx::query(
+    sqlx::query!(
         r#"INSERT INTO library_user_access ("userId", "libraryId")
            SELECT $1, l FROM unnest($2::int[]) WITH ORDINALITY AS t(l, n) ORDER BY n
            ON CONFLICT DO NOTHING"#,
+        user_id,
+        ids
     )
-    .bind(user_id)
-    .bind(ids)
     .execute(c)
     .await
     .map(drop)
 }
 
-/// Statements run in order, `$1` = the user id (spec "Social teardown", verbatim).
-const TEARDOWN: [&str; 6] = [
-    r#"DELETE FROM user_follows WHERE "followerId" = $1 OR "followingId" = $1"#,
-    r#"DELETE FROM playlist_saves WHERE "userId" = $1"#,
-    r#"DELETE FROM playlist_shares WHERE "userId" = $1"#,
-    r#"DELETE FROM playlist_shares WHERE "playlistId" IN (SELECT id FROM playlists WHERE "ownerId" = $1)"#,
-    r#"UPDATE playlists SET visibility = 'private' WHERE "ownerId" = $1 AND visibility <> 'private'"#,
-    r#"DELETE FROM content_recommendations WHERE "senderId" = $1 OR "recipientId" = $1"#,
-];
-
+/// Spec "Social teardown", verbatim and in order.
 pub async fn social_teardown(c: &mut PgConnection, user_id: i32) -> Result<(), sqlx::Error> {
-    for sql in TEARDOWN {
-        sqlx::query(sql).bind(user_id).execute(&mut *c).await?;
-    }
+    sqlx::query!(
+        r#"DELETE FROM user_follows WHERE "followerId" = $1 OR "followingId" = $1"#,
+        user_id
+    )
+    .execute(&mut *c)
+    .await?;
+    sqlx::query!(r#"DELETE FROM playlist_saves WHERE "userId" = $1"#, user_id)
+        .execute(&mut *c)
+        .await?;
+    sqlx::query!(
+        r#"DELETE FROM playlist_shares WHERE "userId" = $1"#,
+        user_id
+    )
+    .execute(&mut *c)
+    .await?;
+    sqlx::query!(r#"DELETE FROM playlist_shares WHERE "playlistId" IN (SELECT id FROM playlists WHERE "ownerId" = $1)"#, user_id)
+        .execute(&mut *c)
+        .await?;
+    sqlx::query!(r#"UPDATE playlists SET visibility = 'private' WHERE "ownerId" = $1 AND visibility <> 'private'"#, user_id)
+        .execute(&mut *c)
+        .await?;
+    sqlx::query!(
+        r#"DELETE FROM content_recommendations WHERE "senderId" = $1 OR "recipientId" = $1"#,
+        user_id
+    )
+    .execute(&mut *c)
+    .await?;
     Ok(())
 }
 
 /// Revoke every live refresh token of the user except `keep` (a `refresh_tokens.id`).
-/// Same signature as the auth module's helper, which supersedes this one when merged.
 pub async fn revoke_other_families(
     db: &PgPool,
     user_id: i32,
     keep: Option<i32>,
 ) -> Result<(), sqlx::Error> {
-    sqlx::query(
+    sqlx::query!(
         r#"UPDATE refresh_tokens SET "revokedAt" = now()
            WHERE "userId" = $1 AND "revokedAt" IS NULL AND ($2::int IS NULL OR "id" <> $2)"#,
+        user_id,
+        keep
     )
-    .bind(user_id)
-    .bind(keep)
     .execute(db)
     .await
     .map(drop)

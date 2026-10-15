@@ -20,7 +20,7 @@ use axum::{
 };
 use fliks_domain::acl::{Action, Subject};
 use serde_json::{Value, json};
-use sqlx::{PgPool, Row, types::Json as Jsonb};
+use sqlx::{PgPool, types::Json as Jsonb};
 use std::{
     path::{Path, PathBuf},
     sync::OnceLock,
@@ -123,42 +123,42 @@ pub async fn create(
     }
     // A falsy or unknown roleId falls back to the default role.
     let wanted = dto.role_id.flatten().filter(|r| *r != 0);
-    let role: Option<i32> = sqlx::query_scalar(
+    let role = sqlx::query_scalar!(
         r#"SELECT "id" FROM roles WHERE "id" = $1 OR ($1::int IS NULL AND "isDefault")
            ORDER BY ("id" = $1) DESC LIMIT 1"#,
+        wanted
     )
-    .bind(wanted)
     .fetch_optional(&mut *tx)
     .await?;
     let role = match role {
         Some(r) => Some(r),
         None => {
-            sqlx::query_scalar(r#"SELECT "id" FROM roles WHERE "isDefault" LIMIT 1"#)
+            sqlx::query_scalar!(r#"SELECT "id" FROM roles WHERE "isDefault" LIMIT 1"#)
                 .fetch_optional(&mut *tx)
                 .await?
         }
     };
     let password = hash(dto.password).await?;
-    let id: i32 = sqlx::query_scalar(
+    let id = sqlx::query_scalar!(
         r#"INSERT INTO users (username, "passwordHash", email, "roleId", "isAdmin", enabled)
            VALUES ($1, $2, $3, $4, $5, $6) RETURNING id"#,
+        dto.username,
+        password,
+        dto.email.flatten(),
+        role,
+        dto.is_admin.unwrap_or(false),
+        dto.enabled.unwrap_or(true)
     )
-    .bind(&dto.username)
-    .bind(password)
-    .bind(dto.email.flatten())
-    .bind(role)
-    .bind(dto.is_admin.unwrap_or(false))
-    .bind(dto.enabled.unwrap_or(true))
     .fetch_one(&mut *tx)
     .await?;
     let libraries = match dto.library_ids {
         Some(ids) => ids,
         None => match role {
             Some(r) => {
-                sqlx::query_scalar(
+                sqlx::query_scalar!(
                     r#"SELECT "libraryId" FROM role_default_libraries WHERE "roleId" = $1 ORDER BY "libraryId""#,
+                    r
                 )
-                .bind(r)
                 .fetch_all(&mut *tx)
                 .await?
             }
@@ -183,17 +183,6 @@ pub async fn get_one(
     }
     public(&st.db, id).await
 }
-
-/// Writable columns of the merged row, in `UPDATE_SQL` order after `$1` = id.
-const UPDATE_SQL: &str = r#"UPDATE users SET "username" = $2, "email" = $3,
-    "passwordHash" = COALESCE($4, "passwordHash"), "roleId" = $5, "isAdmin" = $6, "enabled" = $7,
-    "requirePasswordChange" = $8, "movieQuotaLimit" = $9, "seriesQuotaLimit" = $10,
-    "quotaPeriodDays" = $11, "libraryOrder" = $12, "hiddenLibraryIds" = $13,
-    "profileVisibility" = $14::users_profilevisibility_enum, "shareTastes" = $15,
-    "shareRecommendations" = $16, "shareWatchHistory" = $17, "shareLikes" = $18, "shareStats" = $19,
-    "shareDisabled" = $20, "hideSpoilers" = $21, "edlEnabled" = $22, "edlAutoSkipCommercials" = $23,
-    "spoilerHideStills" = $24, "spoilerHideOverviews" = $25, "spoilerHideTitles" = $26,
-    "updatedAt" = now() WHERE "id" = $1"#;
 
 #[utoipa::path(put, path = "/api/users/{id}", responses((status = 200)))]
 pub async fn update(
@@ -302,33 +291,43 @@ pub async fn update(
     if let Some(v) = dto.hidden_library_ids {
         t.hidden_library_ids = Jsonb(v);
     }
-    sqlx::query(UPDATE_SQL)
-        .bind(id)
-        .bind(&t.username)
-        .bind(&t.email)
-        .bind(hashed)
-        .bind(t.role_id)
-        .bind(t.is_admin)
-        .bind(t.enabled)
-        .bind(t.require_password_change)
-        .bind(t.movie_quota_limit)
-        .bind(t.series_quota_limit)
-        .bind(t.quota_period_days)
-        .bind(&t.library_order)
-        .bind(&t.hidden_library_ids)
-        .bind(&t.profile_visibility)
-        .bind(t.share_tastes)
-        .bind(t.share_recommendations)
-        .bind(t.share_watch_history)
-        .bind(t.share_likes)
-        .bind(t.share_stats)
-        .bind(t.share_disabled)
-        .bind(t.hide_spoilers)
-        .bind(t.edl_enabled)
-        .bind(t.edl_auto_skip_commercials)
-        .bind(t.spoiler_hide_stills)
-        .bind(t.spoiler_hide_overviews)
-        .bind(t.spoiler_hide_titles)
+    sqlx::query!(
+        r#"UPDATE users SET "username" = $2, "email" = $3,
+        "passwordHash" = COALESCE($4, "passwordHash"), "roleId" = $5, "isAdmin" = $6, "enabled" = $7,
+        "requirePasswordChange" = $8, "movieQuotaLimit" = $9, "seriesQuotaLimit" = $10,
+        "quotaPeriodDays" = $11, "libraryOrder" = $12, "hiddenLibraryIds" = $13,
+        "profileVisibility" = $14::text::users_profilevisibility_enum, "shareTastes" = $15,
+        "shareRecommendations" = $16, "shareWatchHistory" = $17, "shareLikes" = $18, "shareStats" = $19,
+        "shareDisabled" = $20, "hideSpoilers" = $21, "edlEnabled" = $22, "edlAutoSkipCommercials" = $23,
+        "spoilerHideStills" = $24, "spoilerHideOverviews" = $25, "spoilerHideTitles" = $26,
+        "updatedAt" = now() WHERE "id" = $1"#,
+        id,
+        &t.username,
+        t.email.as_deref(),
+        hashed,
+        t.role_id,
+        t.is_admin,
+        t.enabled,
+        t.require_password_change,
+        t.movie_quota_limit,
+        t.series_quota_limit,
+        t.quota_period_days,
+        &t.library_order as _,
+        &t.hidden_library_ids as _,
+        &t.profile_visibility,
+        t.share_tastes,
+        t.share_recommendations,
+        t.share_watch_history,
+        t.share_likes,
+        t.share_stats,
+        t.share_disabled,
+        t.hide_spoilers,
+        t.edl_enabled,
+        t.edl_auto_skip_commercials,
+        t.spoiler_hide_stills,
+        t.spoiler_hide_overviews,
+        t.spoiler_hide_titles
+    )
         .execute(&mut *tx)
         .await?;
     if dto.share_disabled == Some(true) && !target.share_disabled {
@@ -370,8 +369,7 @@ pub async fn remove(
     if target.is_admin && target.enabled && db::is_last_enabled_admin(&mut tx, id).await? {
         return Err(AppError::conflict("Cannot remove the last enabled admin"));
     }
-    sqlx::query("DELETE FROM users WHERE id = $1")
-        .bind(id)
+    sqlx::query!("DELETE FROM users WHERE id = $1", id)
         .execute(&mut *tx)
         .await?;
     tx.commit().await?;
@@ -389,43 +387,42 @@ pub async fn stats(
 ) -> Result<Json<Value>, AppError> {
     a.require(Action::Manage, Subject::User)?;
     let id = parse_id(&id)?;
-    let (last_login, created): (
-        Option<chrono::DateTime<chrono::Utc>>,
-        chrono::DateTime<chrono::Utc>,
-    ) = sqlx::query_as(r#"SELECT "lastLogin", "createdAt" FROM users WHERE id = $1"#)
-        .bind(id)
-        .fetch_optional(&st.db)
-        .await?
-        .ok_or_else(|| not_found(id))?;
-    let p = sqlx::query(
-        r#"SELECT ROUND(COALESCE(SUM(CASE WHEN ps."playedAt" IS NOT NULL THEN ps."positionSeconds" ELSE 0 END), 0)::numeric)::bigint AS "totalWatchTimeSeconds",
-                  COUNT(DISTINCT CASE WHEN ps.completed AND media.type = 'movie' THEN ps."mediaId" END) AS "moviesWatched",
-                  COUNT(DISTINCT CASE WHEN ps.completed AND media.type = 'series' THEN ps."mediaId" END) AS "seriesStarted",
-                  COUNT(DISTINCT CASE WHEN ps.completed AND ps."episodeId" IS NOT NULL THEN ps."episodeId" END) AS "episodesWatched",
-                  MAX(ps."lastPlayedAt") AS "lastPlayedAt"
+    let user = sqlx::query!(
+        r#"SELECT "lastLogin", "createdAt" FROM users WHERE id = $1"#,
+        id
+    )
+    .fetch_optional(&st.db)
+    .await?
+    .ok_or_else(|| not_found(id))?;
+    let (last_login, created) = (user.lastLogin, user.createdAt);
+    let p = sqlx::query!(
+        r#"SELECT ROUND(COALESCE(SUM(CASE WHEN ps."playedAt" IS NOT NULL THEN ps."positionSeconds" ELSE 0 END), 0)::numeric)::bigint AS "total_watch_time_seconds!",
+                  COUNT(DISTINCT CASE WHEN ps.completed AND media.type = 'movie' THEN ps."mediaId" END) AS "movies_watched!",
+                  COUNT(DISTINCT CASE WHEN ps.completed AND media.type = 'series' THEN ps."mediaId" END) AS "series_started!",
+                  COUNT(DISTINCT CASE WHEN ps.completed AND ps."episodeId" IS NOT NULL THEN ps."episodeId" END) AS "episodes_watched!",
+                  MAX(ps."lastPlayedAt") AS last_played_at
            FROM playback_states ps LEFT JOIN media ON media.id = ps."mediaId"
            WHERE ps."userId" = $1"#,
+        id
     )
-    .bind(id)
     .fetch_one(&st.db)
     .await?;
-    let counts: Vec<(String, i64)> = sqlx::query_as(
-        r#"SELECT r.status::text AS status, COUNT(*) AS count FROM requests r WHERE r."userId" = $1 GROUP BY r.status"#,
+    let counts = sqlx::query!(
+        r#"SELECT r.status::text AS "status!", COUNT(*) AS "count!" FROM requests r WHERE r."userId" = $1 GROUP BY r.status"#,
+        id
     )
-    .bind(id)
     .fetch_all(&st.db)
     .await?;
-    let n = |s: &str| counts.iter().find(|c| c.0 == s).map_or(0, |c| c.1);
+    let n = |s: &str| counts.iter().find(|c| c.status == s).map_or(0, |c| c.count);
     let iso =
         |d: chrono::DateTime<chrono::Utc>| d.to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-    let last_played: Option<chrono::DateTime<chrono::Utc>> = p.try_get("lastPlayedAt")?;
     Ok(Json(json!({
         "playback": {
-            "totalWatchTimeSeconds": p.try_get::<i64, _>("totalWatchTimeSeconds")?,
-            "moviesWatched": p.try_get::<i64, _>("moviesWatched")?,
-            "seriesStarted": p.try_get::<i64, _>("seriesStarted")?,
-            "episodesWatched": p.try_get::<i64, _>("episodesWatched")?,
-            "lastPlayedAt": last_played.map(iso),
+            "totalWatchTimeSeconds": p.total_watch_time_seconds,
+            "moviesWatched": p.movies_watched,
+            "seriesStarted": p.series_started,
+            "episodesWatched": p.episodes_watched,
+            "lastPlayedAt": p.last_played_at.map(iso),
         },
         "requests": {"pending": n("pending"), "approved": n("approved"), "declined": n("declined")},
         "activity": {"lastActiveAt": last_login.map(iso), "memberSince": iso(created)},
@@ -478,11 +475,13 @@ fn avatar_path(id: i32, suffix: &str) -> PathBuf {
 }
 
 async fn set_avatar_url(db: &PgPool, id: i32, url: Option<String>) -> Result<(), AppError> {
-    let done = sqlx::query(r#"UPDATE users SET avatar = $1, "updatedAt" = now() WHERE id = $2"#)
-        .bind(url)
-        .bind(id)
-        .execute(db)
-        .await?;
+    let done = sqlx::query!(
+        r#"UPDATE users SET avatar = $1, "updatedAt" = now() WHERE id = $2"#,
+        url,
+        id
+    )
+    .execute(db)
+    .await?;
     if done.rows_affected() == 0 {
         return Err(not_found(id));
     }
@@ -562,17 +561,19 @@ pub async fn clear_avatar(
 
 /// Boot seed (rule 7): an empty `users` table gets `admin` / `password` (F1 keeps it).
 pub async fn seed_admin(db: &PgPool) -> Result<(), AppError> {
-    let empty: bool = sqlx::query_scalar("SELECT NOT EXISTS(SELECT 1 FROM users)")
+    let empty = sqlx::query_scalar!(r#"SELECT NOT EXISTS(SELECT 1 FROM users) AS "empty!""#)
         .fetch_one(db)
         .await?;
     if !empty {
         return Ok(());
     }
     let password = hash("password".into()).await?;
-    sqlx::query(r#"INSERT INTO users (username, "passwordHash", "isAdmin", enabled) VALUES ('admin', $1, true, true)"#)
-        .bind(password)
-        .execute(db)
-        .await?;
+    sqlx::query!(
+        r#"INSERT INTO users (username, "passwordHash", "isAdmin", enabled) VALUES ('admin', $1, true, true)"#,
+        password
+    )
+    .execute(db)
+    .await?;
     tracing::warn!("no users: created default admin 'admin' with password 'password'");
     tracing::warn!("change the default admin password now");
     Ok(())

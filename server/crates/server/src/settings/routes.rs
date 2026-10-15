@@ -81,7 +81,11 @@ async fn notify(st: &AppState, keys: &[String]) {
     }
 }
 
-pub async fn list(State(st): State<AppState>, authed: Authed) -> Result<Json<Value>, AppError> {
+#[utoipa::path(get, path = "/api/settings", responses((status = 200)))]
+pub(crate) async fn list(
+    State(st): State<AppState>,
+    authed: Authed,
+) -> Result<Json<Value>, AppError> {
     authed.require(Action::Manage, Subject::Settings)?;
     let rows = db::list(&st.db).await.map_err(db_err)?;
     let secrets = Secrets::load(&st.db, rows.iter().map(|(k, _)| k.as_str()))
@@ -90,7 +94,8 @@ pub async fn list(State(st): State<AppState>, authed: Authed) -> Result<Json<Val
     Ok(Json(secrets.redact_all(rows)))
 }
 
-pub async fn get_one(
+#[utoipa::path(get, path = "/api/settings/{key}", responses((status = 200)))]
+pub(crate) async fn get_one(
     State(st): State<AppState>,
     authed: Authed,
     Path(key): Path<String>,
@@ -104,7 +109,8 @@ pub async fn get_one(
     Ok(Json(secrets.redact_one(&key, value)))
 }
 
-pub async fn put_one(
+#[utoipa::path(put, path = "/api/settings/{key}", responses((status = 200)))]
+pub(crate) async fn put_one(
     State(st): State<AppState>,
     authed: Authed,
     Path(key): Path<String>,
@@ -123,25 +129,22 @@ pub async fn put_one(
         .map_err(db_err)?;
     let mut tx = st.db.begin().await.map_err(db_err)?;
     let stored = db::get(&st.db, &key).await.map_err(db_err)?;
-    let (mut saved, wrote) = match (secrets.merge(&key, incoming), stored) {
-        (Write::Keep, Some(row)) => (row, false),
-        (Write::Keep, None) => (db::set(&mut tx, &key, None).await.map_err(db_err)?, true),
-        (Write::Set(v), _) => (
-            db::set(&mut tx, &key, v.as_deref()).await.map_err(db_err)?,
-            true,
-        ),
+    let mut saved = match (secrets.merge(&key, incoming), stored) {
+        (Write::Keep, Some(row)) => row,
+        (Write::Keep, None) => db::set(&mut tx, &key, None).await.map_err(db_err)?,
+        (Write::Set(v), _) => db::set(&mut tx, &key, v.as_deref()).await.map_err(db_err)?,
     };
     tx.commit().await.map_err(db_err)?;
-    if wrote {
-        notify(&st, std::slice::from_ref(&key)).await;
-    }
+    // Nest notifies on every PUT, even when a secret kept its stored value (spec rule 8).
+    notify(&st, std::slice::from_ref(&key)).await;
     if secrets.is_secret(&key) {
         saved.value = None;
     }
     Ok(Json(saved))
 }
 
-pub async fn put_bulk(
+#[utoipa::path(put, path = "/api/settings", responses((status = 200)))]
+pub(crate) async fn put_bulk(
     State(st): State<AppState>,
     authed: Authed,
     ValidJson(body): ValidJson<Value>,
@@ -158,7 +161,7 @@ pub async fn put_bulk(
         .await
         .map_err(db_err)?;
     let mut tx = st.db.begin().await.map_err(db_err)?;
-    let mut written = Vec::new();
+    let mut keys = Vec::new();
     for (key, value) in data {
         let incoming = match value {
             Value::Null => Incoming::Null,
@@ -166,10 +169,10 @@ pub async fn put_bulk(
         };
         if let Write::Set(v) = secrets.merge(&key, incoming) {
             db::set(&mut tx, &key, v.as_deref()).await.map_err(db_err)?;
-            written.push(key);
         }
+        keys.push(key);
     }
     tx.commit().await.map_err(db_err)?;
-    notify(&st, &written).await;
+    notify(&st, &keys).await;
     Ok(Json(json!({"ok": true})))
 }

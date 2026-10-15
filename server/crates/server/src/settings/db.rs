@@ -4,9 +4,8 @@ use serde::Serialize;
 use sqlx::{PgPool, Postgres, Transaction};
 
 /// The saved `AppSetting` entity.
-#[derive(Debug, Serialize, sqlx::FromRow)]
+#[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-#[sqlx(rename_all = "camelCase")]
 pub struct Setting {
     pub id: i32,
     #[serde(with = "iso_ms")]
@@ -17,19 +16,20 @@ pub struct Setting {
     pub value: Option<String>,
 }
 
-const COLUMNS: &str = r#""id", "createdAt", "updatedAt", "key", "value""#;
-
 pub async fn list(pool: &PgPool) -> sqlx::Result<Vec<(String, Option<String>)>> {
-    sqlx::query_as(r#"SELECT "key", "value" FROM app_settings ORDER BY "key""#)
+    let rows = sqlx::query!(r#"SELECT "key", "value" FROM app_settings ORDER BY "key""#)
         .fetch_all(pool)
-        .await
+        .await?;
+    Ok(rows.into_iter().map(|r| (r.key, r.value)).collect())
 }
 
 pub async fn get(pool: &PgPool, key: &str) -> sqlx::Result<Option<Setting>> {
-    sqlx::query_as(&format!(
-        r#"SELECT {COLUMNS} FROM app_settings WHERE "key" = $1"#
-    ))
-    .bind(key)
+    sqlx::query_as!(
+        Setting,
+        r#"SELECT "id", "createdAt" AS created_at, "updatedAt" AS updated_at, "key", "value"
+           FROM app_settings WHERE "key" = $1"#,
+        key
+    )
     .fetch_optional(pool)
     .await
 }
@@ -40,21 +40,23 @@ pub async fn set(
     key: &str,
     value: Option<&str>,
 ) -> sqlx::Result<Setting> {
-    sqlx::query_as(&format!(
+    sqlx::query_as!(
+        Setting,
         r#"INSERT INTO app_settings ("key", "value") VALUES ($1, $2)
            ON CONFLICT ("key") DO UPDATE SET "value" = EXCLUDED."value", "updatedAt" = now()
-           RETURNING {COLUMNS}"#
-    ))
-    .bind(key)
-    .bind(value)
+           RETURNING "id", "createdAt" AS created_at, "updatedAt" AS updated_at, "key", "value""#,
+        key,
+        value
+    )
     .fetch_one(&mut **tx)
     .await
 }
 
 pub async fn manifests(pool: &PgPool) -> sqlx::Result<Vec<(String, serde_json::Value)>> {
-    sqlx::query_as(r#"SELECT "pluginId", "manifest" FROM plugin_packages"#)
+    let rows = sqlx::query!(r#"SELECT "pluginId", "manifest" FROM plugin_packages"#)
         .fetch_all(pool)
-        .await
+        .await?;
+    Ok(rows.into_iter().map(|r| (r.pluginId, r.manifest)).collect())
 }
 
 /// The text node-pg's `prepareValue` writes for a non-null JSON value Nest passes through untyped.

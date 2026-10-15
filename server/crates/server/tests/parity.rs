@@ -537,7 +537,8 @@ async fn parity() {
 
     let mut files = vec![];
     collect(
-        &Path::new(env!("CARGO_MANIFEST_DIR")).join("../../parity/scenarios"),
+        &Path::new(&std::env::var("CARGO_MANIFEST_DIR").expect("run through cargo test"))
+            .join("../../parity/scenarios"),
         &mut files,
     );
     let engine = env("PARITY_ENGINE", "up");

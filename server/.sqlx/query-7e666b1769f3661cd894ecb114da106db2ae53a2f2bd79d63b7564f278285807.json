@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT \"libraryId\" FROM role_default_libraries WHERE \"roleId\" = $1 ORDER BY \"libraryId\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "libraryId",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "7e666b1769f3661cd894ecb114da106db2ae53a2f2bd79d63b7564f278285807"
+}

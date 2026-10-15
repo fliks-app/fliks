@@ -149,12 +149,14 @@ async fn grantable(st: &AppState) -> Res<Vec<String>> {
     Ok(out)
 }
 
-pub async fn list(State(st): State<AppState>, a: Authed) -> Res<Json<Vec<db::Role>>> {
+#[utoipa::path(get, path = "/api/roles", responses((status = 200)))]
+pub(crate) async fn list(State(st): State<AppState>, a: Authed) -> Res<Json<Vec<db::Role>>> {
     a.require(Action::Read, Subject::Role)?;
     Ok(Json(db::list(&st.db).await?))
 }
 
-pub async fn permissions(State(st): State<AppState>, a: Authed) -> Res<Json<Vec<String>>> {
+#[utoipa::path(get, path = "/api/roles/permissions", responses((status = 200)))]
+pub(crate) async fn permissions(State(st): State<AppState>, a: Authed) -> Res<Json<Vec<String>>> {
     a.require(Action::Manage, Subject::Role)?;
     Ok(Json(grantable(&st).await?))
 }
@@ -165,7 +167,8 @@ async fn one(st: &AppState, id: i32) -> Res<db::Role> {
         .ok_or_else(|| AppError::not_found(format!("Role #{id} not found")))
 }
 
-pub async fn get(
+#[utoipa::path(get, path = "/api/roles/{id}", responses((status = 200)))]
+pub(crate) async fn get(
     State(st): State<AppState>,
     a: Authed,
     PathParams(id): PathParams<i32>,
@@ -176,7 +179,8 @@ pub async fn get(
 
 const NAME_TAKEN: &str = "Role name already exists";
 
-pub async fn create(
+#[utoipa::path(post, path = "/api/roles", responses((status = 200)))]
+pub(crate) async fn create(
     State(st): State<AppState>,
     a: Authed,
     ValidJson(body): ValidJson<Value>,
@@ -212,7 +216,8 @@ pub async fn create(
     Ok((StatusCode::CREATED, Json(role)))
 }
 
-pub async fn update(
+#[utoipa::path(put, path = "/api/roles/{id}", responses((status = 200)))]
+pub(crate) async fn update(
     State(st): State<AppState>,
     a: Authed,
     PathParams(id): PathParams<i32>,
@@ -253,7 +258,8 @@ pub async fn update(
     Ok(Json(one(&st, id).await?))
 }
 
-pub async fn remove(
+#[utoipa::path(delete, path = "/api/roles/{id}", responses((status = 200)))]
+pub(crate) async fn remove(
     State(st): State<AppState>,
     a: Authed,
     PathParams(id): PathParams<i32>,
