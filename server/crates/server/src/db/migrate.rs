@@ -41,6 +41,24 @@ pub async fn adopt_typeorm(pool: &PgPool) -> Result<(), MigrateError> {
             .await
             .map_err(MigrateError::Execute)?;
 
+    if typeorm_rows.is_empty() {
+        let others: bool = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name <> 'migrations')",
+        )
+        .fetch_one(pool)
+        .await
+        .map_err(MigrateError::Execute)?;
+        if others {
+            return Err(MigrateError::Source(
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "database built by TypeORM synchronize (empty migrations ledger): re-baseline it, see CLAUDE.md (repo root) 'Dev database re-baseline'",
+                )
+                .into(),
+            ));
+        }
+    }
+
     let mut tx = pool.begin().await.map_err(MigrateError::Execute)?;
 
     tx.ensure_migrations_table().await?;
@@ -166,6 +184,20 @@ mod tests {
                 .await
                 .expect("existence check")
         );
+
+        Ok(())
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn adopt_typeorm_refuses_synchronize_built_database(pool: PgPool) -> sqlx::Result<()> {
+        create_typeorm_migrations(&pool).await?;
+        sqlx::query("CREATE TABLE users (id serial PRIMARY KEY)")
+            .execute(&pool)
+            .await?;
+
+        let err = migrate(&pool).await.unwrap_err();
+        assert!(err.to_string().contains("empty migrations ledger"), "{err}");
+        assert!(!table_exists(&pool, "_sqlx_migrations").await.unwrap());
 
         Ok(())
     }
