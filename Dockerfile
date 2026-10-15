@@ -3,7 +3,7 @@
 # ============================================================
 
 # Engine image (ffmpeg, mkvmerge, fpcalc, OpenCL, the fliks-engine binary): bump with scripts/bump-engine.sh.
-ARG ENGINE_IMAGE=ghcr.io/fliks-app/engine:main
+ARG ENGINE_IMAGE=ghcr.io/fliks-app/engine:0.3.1
 
 # --- Stage 1: Build client ---
 FROM node:24-alpine AS client-build
@@ -146,8 +146,5 @@ EXPOSE 4848
 HEALTHCHECK --interval=30s --timeout=15s --start-period=60s --retries=3 \
   CMD node -e "require('http').get('http://localhost:'+(process.env.PORT||4848)+'/api/system/liveness',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
 
-# FLIKS_ENGINE_GATEWAY=1 puts the engine on the public port in front of Node (4849); off until
-# engine.lock pins a release with --upstream.
-ARG FLIKS_ENGINE_GATEWAY=0
-ENV FLIKS_ENGINE_GATEWAY=${FLIKS_ENGINE_GATEWAY}
-CMD ["sh", "-c", "if [ \"$FLIKS_ENGINE_GATEWAY\" = 1 ]; then exec fliks-engine --supervise --upstream http://127.0.0.1:4849 -- node dist/main; else exec fliks-engine --supervise -- node dist/main; fi"]
+# The engine owns the public port and forwards non-media routes to Node on 4849.
+CMD ["fliks-engine", "--supervise", "--upstream", "http://127.0.0.1:4849", "--", "node", "dist/main"]
