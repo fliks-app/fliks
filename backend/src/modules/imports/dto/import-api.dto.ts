@@ -29,8 +29,10 @@ export class ImportApiDto {
   @IsUrl({ require_tld: false, require_protocol: true })
   url: string;
 
+  /** Absent or blank: the stored setting is used. */
+  @IsOptional()
   @IsString()
-  apiKey: string;
+  apiKey?: string;
 
   /** 'skip' = only import new media, 'update' = import new + update existing fields */
   @IsOptional()
