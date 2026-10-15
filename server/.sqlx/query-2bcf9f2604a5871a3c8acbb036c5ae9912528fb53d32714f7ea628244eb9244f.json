@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE pairing_requests SET status = 'expired', \"accessToken\" = NULL WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "2bcf9f2604a5871a3c8acbb036c5ae9912528fb53d32714f7ea628244eb9244f"
+}

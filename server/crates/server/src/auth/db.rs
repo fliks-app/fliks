@@ -258,19 +258,18 @@ pub async fn pairing_status(
     else {
         return Ok(None);
     };
-    if p.status == "pending" && p.expires_at < now {
+    let unclaimed = p.status == "approved" && p.access_token.as_deref() == Some(APPROVED);
+    // F15: an approval not claimed before `expiresAt` expires like a pending request.
+    if (p.status == "pending" || unclaimed) && p.expires_at < now {
         sqlx::query!(
-            r#"UPDATE pairing_requests SET status = 'expired' WHERE id = $1"#,
+            r#"UPDATE pairing_requests SET status = 'expired', "accessToken" = NULL WHERE id = $1"#,
             p.id
         )
         .execute(&mut *tx)
         .await?;
         p.status = "expired".into();
     }
-    let claimable = p.status == "approved"
-        && p.device_id == device_id
-        && p.access_token.as_deref() == Some(APPROVED)
-        && p.expires_at >= now;
+    let claimable = p.status == "approved" && unclaimed && p.device_id == device_id;
     let (true, Some(approver)) = (claimable, p.approved_by) else {
         tx.commit().await?;
         return Ok(Some(PairingStatus::Status(p.status)));
@@ -596,7 +595,7 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
-        assert!(matches!(s, PairingStatus::Status(s) if s == "approved"));
+        assert!(matches!(s, PairingStatus::Status(s) if s == "expired"));
         let tokens: i64 = sqlx::query_scalar("SELECT count(*) FROM refresh_tokens")
             .fetch_one(&pool)
             .await
