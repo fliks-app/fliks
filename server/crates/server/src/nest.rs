@@ -10,7 +10,7 @@ pub fn url(cfg: &Config) -> String {
 }
 
 /// `None` when `FLIKS_NEST_URL` points at a Nest managed elsewhere.
-pub fn spawn(cfg: &Config) -> Option<JoinHandle<u8>> {
+pub fn spawn(cfg: &Config, jwt_secret: &str) -> Option<JoinHandle<u8>> {
     if cfg.nest_url.is_some() {
         return None;
     }
@@ -20,6 +20,7 @@ pub fn spawn(cfg: &Config) -> Option<JoinHandle<u8>> {
         ("FLIKS_HOST_URL", host.clone()),
         ("FLIKS_SERVER_URL", host),
         ("FLIKS_BRIDGE_TOKEN", cfg.bridge_token.clone()),
+        ("JWT_SECRET", jwt_secret.to_owned()),
     ];
     let (cmd, engine_url, engine_token) = (
         cfg.nest_cmd.clone(),

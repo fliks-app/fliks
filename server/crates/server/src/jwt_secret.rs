@@ -1,4 +1,4 @@
-//! Creates `<conf>/.jwt-secret` exactly where and how Nest's `getJwtSecret` would, so Nest finds it.
+//! Resolves the JWT secret like Nest's `getJwtSecret`, creating `<conf>/.jwt-secret` where Nest looks for it.
 use crate::config::{Config, random_hex};
 use std::fs::{self, DirBuilder, OpenOptions};
 use std::io::{ErrorKind, Write};
@@ -31,25 +31,44 @@ fn conf_dir(cfg: &Config) -> PathBuf {
     }
 }
 
-/// No-op when `JWT_SECRET` is set or the file exists. A write failure only warns: Nest then keeps an in-memory secret.
-pub fn ensure(cfg: &Config) {
-    if cfg.jwt_secret.is_some() {
-        return;
+fn read(file: &Path) -> Option<String> {
+    let s = fs::read_to_string(file).ok()?.trim().to_owned();
+    (!s.is_empty()).then_some(s)
+}
+
+/// `JWT_SECRET`, else the conf file, else a fresh one written 0600 (`create_new`: the first writer wins).
+/// A failed write only warns and yields a process-local secret, which Nest will not share.
+pub fn resolve(cfg: &Config) -> String {
+    if let Some(s) = &cfg.jwt_secret {
+        return s.clone();
     }
     let dir = conf_dir(cfg);
+    let file = dir.join(".jwt-secret");
+    if let Some(s) = read(&file) {
+        return s;
+    }
+    let secret = random_hex(32);
     let mut open = OpenOptions::new();
     open.write(true).create_new(true);
     #[cfg(unix)]
     std::os::unix::fs::OpenOptionsExt::mode(&mut open, 0o600);
     let result = private_dir(&dir).and_then(|()| {
-        open.open(dir.join(".jwt-secret"))
-            .and_then(|mut f| f.write_all(random_hex(32).as_bytes()))
+        open.open(&file)
+            .and_then(|mut f| f.write_all(secret.as_bytes()))
     });
     match result {
-        Err(e) if e.kind() != ErrorKind::AlreadyExists => {
+        Ok(()) => secret,
+        Err(e) if e.kind() == ErrorKind::AlreadyExists => read(&file).unwrap_or_else(|| {
+            tracing::warn!(
+                "{} is empty: using a process-local JWT secret",
+                file.display()
+            );
+            secret
+        }),
+        Err(e) => {
             tracing::warn!("cannot persist the JWT secret in {}: {e}", dir.display());
+            secret
         }
-        _ => {}
     }
 }
 
@@ -71,9 +90,10 @@ mod tests {
     fn creates_hex_0600_in_0700_dir_and_keeps_an_existing_file() {
         let base = std::env::temp_dir().join(format!("fliks-jwt-{}", random_hex(4)));
         let conf = base.join("conf");
-        ensure(&cfg_in(&conf, None));
+        let first = resolve(&cfg_in(&conf, None));
         let file = conf.join(".jwt-secret");
         let secret = fs::read_to_string(&file).unwrap();
+        assert_eq!(first, secret);
         assert!(secret.len() == 64 && secret.bytes().all(|b| b.is_ascii_hexdigit()));
         assert_eq!(
             fs::metadata(&file).unwrap().permissions().mode() & 0o777,
@@ -83,7 +103,7 @@ mod tests {
             fs::metadata(&conf).unwrap().permissions().mode() & 0o777,
             0o700
         );
-        ensure(&cfg_in(&conf, None));
+        assert_eq!(resolve(&cfg_in(&conf, None)), secret);
         assert_eq!(fs::read_to_string(&file).unwrap(), secret);
         fs::remove_dir_all(&base).unwrap();
     }
@@ -91,7 +111,7 @@ mod tests {
     #[test]
     fn env_secret_writes_nothing() {
         let base = std::env::temp_dir().join(format!("fliks-jwt-{}", random_hex(4)));
-        ensure(&cfg_in(&base.join("conf"), Some("x")));
+        assert_eq!(resolve(&cfg_in(&base.join("conf"), Some("x"))), "x");
         assert!(!base.exists());
     }
 }
