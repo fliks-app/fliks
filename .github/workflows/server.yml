@@ -1,0 +1,76 @@
+# Rust server: fmt, clippy, tests, sqlx offline cache and openapi.json drift. Linux only; parity runs locally.
+name: Server
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'server/**'
+      - '.github/workflows/server.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'server/**'
+      - '.github/workflows/server.yml'
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  rust:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: fliks
+          POSTGRES_PASSWORD: fliks
+          POSTGRES_DB: fliks
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U fliks"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    defaults:
+      run:
+        working-directory: server
+    env:
+      DATABASE_URL: postgres://fliks:fliks@localhost:5432/fliks
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: server
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+        env:
+          SQLX_OFFLINE: 'true'
+      - run: cargo test --workspace
+        env:
+          SQLX_OFFLINE: 'true'
+      # No query! macros yet, so no .sqlx cache: the check starts once the directory is committed.
+      - name: sqlx offline cache is current
+        run: |
+          if [ -d .sqlx ]; then
+            cargo install sqlx-cli --locked --no-default-features --features postgres,rustls
+            cargo run -q -p fliks-server -- migrate
+            cargo sqlx prepare --check --workspace
+          else
+            echo "::notice::no .sqlx directory, sqlx prepare check skipped"
+          fi
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USERNAME: fliks
+          DB_PASSWORD: fliks
+          DB_NAME: fliks
+      - name: openapi.json is current
+        run: cargo run -q -p fliks-server -- openapi | diff - openapi.json

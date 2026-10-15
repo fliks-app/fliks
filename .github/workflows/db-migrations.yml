@@ -1,9 +1,5 @@
-# Validates that all committed migrations apply cleanly on a fresh
-# Postgres. Catches the dev/prod drift inherent to keeping
-# `synchronize: true` locally — if a developer ships an entity change
-# without generating the matching migration, prod's `migrationsRun` at
-# boot will silently leave the schema out of sync. Catching it here at
-# PR time turns a future incident into a red CI check.
+# The Rust server owns the schema: its sqlx migrations apply on a fresh Postgres, and the
+# TypeORM entities must describe the result (an entity change without a migration goes red).
 name: DB migrations
 
 on:
@@ -11,16 +7,18 @@ on:
     branches: [main]
     paths:
       - 'backend/**'
+      - 'server/**'
       # A change to the check itself has to run the check.
       - '.github/workflows/db-migrations.yml'
   push:
     branches: [main]
     paths:
       - 'backend/**'
+      - 'server/**'
       - '.github/workflows/db-migrations.yml'
 
 jobs:
-  apply-migrations:
+  migrations:
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -37,10 +35,6 @@ jobs:
           --health-timeout 5s
           --health-retries 10
 
-    defaults:
-      run:
-        working-directory: backend
-
     env:
       DB_HOST: localhost
       DB_PORT: 5432
@@ -50,15 +44,22 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: server
       - uses: actions/setup-node@v6
         with:
           node-version: 24
           cache: npm
           cache-dependency-path: backend/package-lock.json
       - run: npm ci
+        working-directory: backend
       - name: Run migrations on a fresh DB
-        run: npm run db:migration:run
+        run: cargo run -q -p fliks-server -- migrate
+        working-directory: server
       - name: Verify entity metadata matches the migrated schema
+        working-directory: backend
         # `migration:generate` against a DB holding the latest schema emits a
         # file only when the entities and the schema disagree. It exits
         # non-zero in the no-diff case too, so a plain exit code says nothing —

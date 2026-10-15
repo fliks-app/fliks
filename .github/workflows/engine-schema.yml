@@ -8,6 +8,7 @@ on:
     paths:
       - 'backend/src/modules/engine/**'
       - 'engine.lock'
+      - 'server/crates/server/Cargo.toml'
       - 'scripts/bump-engine.sh'
       - '.github/workflows/engine-schema.yml'
 
@@ -18,6 +19,14 @@ jobs:
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v6
+
+      - name: Server engine tags match engine.lock
+        run: |
+          v="$(sed -n 's/^version=//p' engine.lock)"
+          for c in fliks-engine-core fliks-engine; do
+            t="$(sed -n "s/^$c = .*tag = \"v\([^\"]*\)\".*/\1/p" server/crates/server/Cargo.toml)"
+            [ "$t" = "$v" ] || { echo "::error::$c tag is v$t, engine.lock says v$v"; exit 1; }
+          done
 
       - name: Find the openapi.json of the pinned release
         id: release
