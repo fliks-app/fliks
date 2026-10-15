@@ -403,19 +403,6 @@
   },
   {
     "method": "GET",
-    "path": "/api/fs/browse",
-    "controller": "FilesystemController",
-    "handler": "browse",
-    "file": "src/modules/filesystem/filesystem.controller.ts",
-    "line": 16,
-    "guards": [
-      "JwtOrApiKeyGuard",
-      "PoliciesGuard"
-    ],
-    "policies": "(ability) => ability.can(Action.Manage, 'Settings')"
-  },
-  {
-    "method": "GET",
     "path": "/api/images/:type/:id",
     "controller": "ImageController",
     "handler": "serveWithoutVariant",
@@ -440,7 +427,7 @@
     "controller": "ImportsController",
     "handler": "scanOrphans",
     "file": "src/modules/imports/imports.controller.ts",
-    "line": 172,
+    "line": 201,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -453,7 +440,7 @@
     "controller": "ImportsController",
     "handler": "relinkOrphans",
     "file": "src/modules/imports/imports.controller.ts",
-    "line": 206,
+    "line": 235,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -467,7 +454,7 @@
     "controller": "ImportsController",
     "handler": "relinkOrphansBatch",
     "file": "src/modules/imports/imports.controller.ts",
-    "line": 189,
+    "line": 218,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -481,7 +468,7 @@
     "controller": "ImportsController",
     "handler": "previewOrphans",
     "file": "src/modules/imports/imports.controller.ts",
-    "line": 178,
+    "line": 207,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -495,7 +482,7 @@
     "controller": "ImportsController",
     "handler": "importRadarrApi",
     "file": "src/modules/imports/imports.controller.ts",
-    "line": 66,
+    "line": 86,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -509,7 +496,7 @@
     "controller": "ImportsController",
     "handler": "previewRadarr",
     "file": "src/modules/imports/imports.controller.ts",
-    "line": 60,
+    "line": 77,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -523,7 +510,7 @@
     "controller": "ImportsController",
     "handler": "testRadarrConnection",
     "file": "src/modules/imports/imports.controller.ts",
-    "line": 54,
+    "line": 68,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -537,7 +524,7 @@
     "controller": "ImportsController",
     "handler": "importSeerrRequests",
     "file": "src/modules/imports/imports.controller.ts",
-    "line": 124,
+    "line": 153,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -550,7 +537,7 @@
     "controller": "ImportsController",
     "handler": "testSeerr",
     "file": "src/modules/imports/imports.controller.ts",
-    "line": 112,
+    "line": 138,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -564,7 +551,7 @@
     "controller": "ImportsController",
     "handler": "importSonarrApi",
     "file": "src/modules/imports/imports.controller.ts",
-    "line": 95,
+    "line": 121,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -578,7 +565,7 @@
     "controller": "ImportsController",
     "handler": "previewSonarr",
     "file": "src/modules/imports/imports.controller.ts",
-    "line": 89,
+    "line": 112,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -592,7 +579,7 @@
     "controller": "ImportsController",
     "handler": "testSonarrConnection",
     "file": "src/modules/imports/imports.controller.ts",
-    "line": 83,
+    "line": 103,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -3576,60 +3563,6 @@
       "PoliciesGuard"
     ],
     "policies": "(ability) => ability.can(Action.Create, FliksRequest)"
-  },
-  {
-    "method": "GET",
-    "path": "/api/settings",
-    "controller": "SettingsController",
-    "handler": "getAll",
-    "file": "src/modules/settings/settings.controller.ts",
-    "line": 26,
-    "guards": [
-      "JwtOrApiKeyGuard",
-      "PoliciesGuard"
-    ],
-    "policies": "(ability) => ability.can(Action.Manage, 'Settings')"
-  },
-  {
-    "method": "PUT",
-    "path": "/api/settings",
-    "controller": "SettingsController",
-    "handler": "setBulk",
-    "file": "src/modules/settings/settings.controller.ts",
-    "line": 45,
-    "guards": [
-      "JwtOrApiKeyGuard",
-      "PoliciesGuard"
-    ],
-    "policies": "(ability) => ability.can(Action.Manage, 'Settings')",
-    "body": "SetBulkDto"
-  },
-  {
-    "method": "GET",
-    "path": "/api/settings/:key",
-    "controller": "SettingsController",
-    "handler": "getOne",
-    "file": "src/modules/settings/settings.controller.ts",
-    "line": 32,
-    "guards": [
-      "JwtOrApiKeyGuard",
-      "PoliciesGuard"
-    ],
-    "policies": "(ability) => ability.can(Action.Manage, 'Settings')"
-  },
-  {
-    "method": "PUT",
-    "path": "/api/settings/:key",
-    "controller": "SettingsController",
-    "handler": "setOne",
-    "file": "src/modules/settings/settings.controller.ts",
-    "line": 38,
-    "guards": [
-      "JwtOrApiKeyGuard",
-      "PoliciesGuard"
-    ],
-    "policies": "(ability) => ability.can(Action.Manage, 'Settings')",
-    "body": "SetSettingDto"
   },
   {
     "method": "GET",
