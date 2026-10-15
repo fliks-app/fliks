@@ -140,7 +140,7 @@ All tables are in the existing schema (`server/migrations`). TypeORM `find` call
 
 1. **resolveFile** (find with relations) `[ts:src/modules/streaming/streaming.service.ts:77-80]`:
    `SELECT mf.*, m.*, l.* FROM media_files mf LEFT JOIN media m ON m.id = mf."mediaId" LEFT JOIN libraries l ON l.id = m."libraryId" WHERE mf.id = $1 LIMIT 1`
-2. **Library ACL ids** `getAccessibleLibraryIds(user)`: owned by the libraries spec (admin or `manage:all` -> every `libraries.id`; else `library_access` rows of the user).
+2. **Library ACL ids** `getAccessibleLibraryIds(user)`: owned by the libraries spec (admin or `manage:all` -> every `libraries.id`; else `library_user_access` rows of the user).
 3. **Saved position** `getState(userId, mediaId, episodeId)` `[ts:src/modules/playback/playback.service.ts:120-142]`:
    `SELECT ps.* FROM playback_states ps WHERE ps."userId" = $1 AND ps."mediaId" = $2 AND (ps."episodeId" = $3 | ps."episodeId" IS NULL when $3 is absent/0) LIMIT 1`
 4. **markSessionStarted** `[ts:src/modules/playback/playback.service.ts:295-319]`: `findState` as in 3; if found `UPDATE playback_states SET "lastPlayedAt" = now, "updatedAt" = now WHERE id = $id` (the `mediaFileId` assignment in the code does not persist); else `INSERT INTO playback_states ("userId","mediaId","mediaFileId","episodeId","positionSeconds","durationSeconds",completed,"lastPlayedAt") VALUES ($u,$m,$mf|NULL,$ep|NULL,0,0,false,now)` (`playedAt` left NULL; `hiddenFromContinueWatching` default false).
