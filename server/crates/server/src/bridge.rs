@@ -35,33 +35,43 @@ impl Bridge {
         }
     }
 
-    /// Push an SSE event into Nest's hub: `{event, userIds?}`, `None` audience = every connection.
-    pub async fn emit(&self, event: Value, user_ids: Option<&[i32]>) -> Result<(), BridgeError> {
-        self.post("emit", json!({"event": event, "userIds": user_ids}))
-            .await
+    /// `pairing.requested` to the target user's connections only (F13).
+    pub async fn pairing_requested(
+        &self,
+        user_id: i32,
+        pairing_id: &str,
+        device_name: &str,
+        device_id: &str,
+    ) -> Result<(), BridgeError> {
+        let body = json!({"event": "pairing.requested", "userId": user_id, "pairingId": pairing_id,
+            "deviceName": device_name, "deviceId": device_id});
+        self.post("emit", body).await
     }
 
-    /// Complete the user's SSE connections; with `target_id` only that device's (`{userId, targetId?}`).
+    /// Complete the user's SSE connections; with a non-empty `target_id` only that device's.
     pub async fn drop_connections(
         &self,
         user_id: i32,
         target_id: Option<&str>,
     ) -> Result<(), BridgeError> {
-        self.post(
-            "drop-connections",
-            json!({"userId": user_id, "targetId": target_id}),
-        )
-        .await
+        let mut body = json!({"userId": user_id});
+        if let Some(t) = target_id {
+            body["targetId"] = t.into();
+        }
+        self.post("drop-connections", body).await
     }
 
-    /// Run Nest's settings listeners after a committed write: `{key, origin?}`.
+    /// One call per committed write with all its keys (non-empty), in order; `origin` unchanged.
     pub async fn settings_changed(
         &self,
-        key: &str,
+        keys: &[String],
         origin: Option<&str>,
     ) -> Result<(), BridgeError> {
-        self.post("settings-changed", json!({"key": key, "origin": origin}))
-            .await
+        let mut body = json!({"keys": keys});
+        if let Some(o) = origin {
+            body["origin"] = o.into();
+        }
+        self.post("settings-changed", body).await
     }
 
     async fn post(&self, endpoint: &str, body: Value) -> Result<(), BridgeError> {
@@ -115,48 +125,38 @@ mod tests {
     #[tokio::test]
     async fn posts_the_documented_payloads_with_the_bearer() {
         let (b, seen) = fake().await;
-        b.emit(json!({"type": "pairing.requested"}), Some(&[7]))
-            .await
-            .unwrap();
-        b.emit(json!({"type": "x"}), None).await.unwrap();
+        b.pairing_requested(7, "p1", "TV", "dev").await.unwrap();
         b.drop_connections(3, Some("dev")).await.unwrap();
         b.drop_connections(3, None).await.unwrap();
-        b.settings_changed("public_url", None).await.unwrap();
+        let keys = ["a".to_owned(), "b".to_owned()];
+        b.settings_changed(&keys, Some("plugin")).await.unwrap();
+        b.settings_changed(&keys[..1], None).await.unwrap();
         let seen = seen.lock().unwrap();
         let bearer = Some("Bearer secret".to_owned());
-        assert_eq!(
-            seen[0],
+        let want = [
             (
-                "emit".into(),
-                bearer.clone(),
-                json!({"event": {"type": "pairing.requested"}, "userIds": [7]})
-            )
-        );
-        assert_eq!(seen[1].2, json!({"event": {"type": "x"}, "userIds": null}));
-        assert_eq!(
-            seen[2],
+                "emit",
+                json!({"event": "pairing.requested", "userId": 7, "pairingId": "p1", "deviceName": "TV", "deviceId": "dev"}),
+            ),
+            ("drop-connections", json!({"userId": 3, "targetId": "dev"})),
+            ("drop-connections", json!({"userId": 3})),
             (
-                "drop-connections".into(),
-                bearer.clone(),
-                json!({"userId": 3, "targetId": "dev"})
-            )
-        );
-        assert_eq!(seen[3].2, json!({"userId": 3, "targetId": null}));
-        assert_eq!(
-            seen[4],
-            (
-                "settings-changed".into(),
-                bearer,
-                json!({"key": "public_url", "origin": null})
-            )
-        );
+                "settings-changed",
+                json!({"keys": ["a", "b"], "origin": "plugin"}),
+            ),
+            ("settings-changed", json!({"keys": ["a"]})),
+        ];
+        for (got, (ep, body)) in seen.iter().zip(want) {
+            assert_eq!(got, &(ep.to_owned(), bearer.clone(), body));
+        }
+        assert_eq!(seen.len(), 5);
     }
 
     #[tokio::test]
     async fn failures_are_errors_not_panics() {
         assert!(
             Bridge::new("http://127.0.0.1:1", "t")
-                .settings_changed("k", None)
+                .settings_changed(&["k".to_owned()], None)
                 .await
                 .is_err()
         );

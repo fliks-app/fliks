@@ -51,7 +51,7 @@ pub async fn serve(cfg: Config) -> Result<(), BoxError> {
     );
     // Bind before spawning Nest so a port clash cannot orphan it.
     let listener = tokio::net::TcpListener::bind(("0.0.0.0", cfg.port)).await?;
-    let nest = nest::spawn(&cfg);
+    let nest = nest::spawn(&cfg, &secret);
     tracing::info!("listening on {}", listener.local_addr()?);
     let served = axum::serve(
         listener,
