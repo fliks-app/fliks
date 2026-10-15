@@ -151,17 +151,13 @@ async fn fallback_internal_liveness_restart_and_shutdown(pool: PgPool) {
         64
     );
 
-    // Liveness is Rust's; everything else under /api and /engine reaches Nest.
+    // Liveness is Rust's; everything else under /api reaches Nest.
     assert_eq!(
         get_text(&format!("{b}/api/system/liveness")).await.unwrap(),
         (200, r#"{"ok":true}"#.into())
     );
     let forwarded = eventually(&format!("{b}/api/anything"), |r| r.0 == 200).await;
     assert_eq!(forwarded.1, "nest");
-    assert_eq!(
-        get_text(&format!("{b}/engine/resolve")).await.unwrap().1,
-        "nest"
-    );
 
     let hc = |port: &str| {
         Command::new(env!("CARGO_BIN_EXE_fliks-server"))

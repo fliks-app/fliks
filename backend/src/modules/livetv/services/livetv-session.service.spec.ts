@@ -47,11 +47,11 @@ const channel = (streams: LiveTvChannelStream[]) =>
 
 describe('LiveTvSessionService', () => {
   let service: LiveTvSessionService;
+  let livetvConfig: { put: jest.Mock };
   let engine: {
     openLive: jest.Mock;
     deleteSession: jest.Mock;
     listLive: jest.Mock;
-    pushLivetv: jest.Mock;
     whenReady: jest.Mock;
   };
   let streamRepo: { update: jest.Mock; find: jest.Mock };
@@ -100,9 +100,9 @@ describe('LiveTvSessionService', () => {
       openLive: jest.fn(),
       deleteSession: jest.fn(),
       listLive: jest.fn().mockResolvedValue([]),
-      pushLivetv: jest.fn(),
       whenReady: jest.fn().mockResolvedValue(undefined),
     };
+    livetvConfig = { put: jest.fn() };
     streamRepo = { update: jest.fn(), find: jest.fn().mockResolvedValue([]) };
     bump = { execute: jest.fn(), where: jest.fn() };
     bump.where.mockReturnValue(bump);
@@ -140,6 +140,7 @@ describe('LiveTvSessionService', () => {
       capacity,
       engine as never,
       bus as never,
+      livetvConfig as never,
       qoe as never,
     );
     service.onModuleInit();
@@ -544,7 +545,7 @@ describe('LiveTvSessionService', () => {
     ]);
   });
 
-  it('pushes the live TV settings to the engine, with the segment floor', async () => {
+  it('hands the live TV settings to fliks-server, with the segment floor', async () => {
     const values: Record<string, string> = {
       livetv_segment_seconds: '0',
       livetv_fast_zap: 'false',
@@ -555,7 +556,7 @@ describe('LiveTvSessionService', () => {
       'livetv_segment_seconds',
     );
     await new Promise((r) => setImmediate(r));
-    expect(engine.pushLivetv).toHaveBeenLastCalledWith({
+    expect(livetvConfig.put).toHaveBeenLastCalledWith({
       segmentSeconds: 1,
       timeshiftMinutes: 15,
       probeSeconds: 3,

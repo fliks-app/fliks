@@ -108,7 +108,7 @@ export class EnginePlaybackService {
     const resolved = await this.streamingService.resolveFile(mediaFileId, user);
     const info = resolved.mediaFile.streamInfo;
     const burnIn = await this.resolveBurnIn(q.burnInSubtitleId, mediaFileId);
-    await this.hardware.apply(await this.settingsCache.get());
+    this.hardware.apply(await this.settingsCache.get());
 
     const held = await this.sourceScans.lookup(
       mediaFileId,

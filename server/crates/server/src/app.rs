@@ -23,7 +23,11 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         users::remove,
         users::stats,
         users::set_avatar,
-        users::clear_avatar
+        users::clear_avatar,
+        crate::engine::remote::get_remote,
+        crate::engine::remote::put_remote,
+        crate::engine::remote::test_remote,
+        crate::engine::resolve::resolve
     )
 )]
 pub struct ApiDoc;
@@ -47,10 +51,10 @@ pub fn router(
         .route("/internal/", any(internal_404))
         .route("/internal/{*rest}", any(internal_404))
         .fallback_service(static_files::router(client_dir, cast_dir));
-    // Merged after the layers so Nest answers the other methods unlayered instead of a 405.
+    // Merged after the layers so Nest answers the other methods unlayered instead of a 405 (liveness,
+    // `/engine/resolve`).
     let local = layers::apply(local, cors_origin, BODY_LIMIT_BYTES)
         .route(system::LIVENESS, any_service(forwarder.clone()));
-    // Nest's only unprefixed route is `/engine/resolve` (bootstrap.md rule 1).
     ["/api", "/api/", "/api/{*rest}", "/engine/resolve"]
         .into_iter()
         .fold(local, |r, p| r.route(p, any_service(forwarder.clone())))
@@ -63,6 +67,7 @@ fn api() -> Router<AppState> {
         .merge(crate::roles::router())
         .merge(crate::settings::router())
         .merge(crate::fs::router())
+        .merge(crate::engine::router())
         .merge(users::router())
         .merge(events::router())
 }

@@ -20,6 +20,7 @@ import { readCmcdRaw } from '../../qoe/core/cmcd';
 import { QoeService, type SessionRef } from '../../qoe/qoe.service';
 import { EngineEventsService } from '../../streaming/services/engine-events.service';
 import { toQoePipeline } from '../../streaming/services/engine-presence';
+import { EngineLivetvConfigClient } from '../../bridge/engine-livetv-config.client';
 import { SettingsService } from '../../settings/settings.service';
 import { ActivityRegistryService } from '../../scheduler/activity-registry.service';
 import { LiveTvCapacityService } from './livetv-capacity.service';
@@ -126,6 +127,7 @@ export class LiveTvSessionService implements OnModuleInit {
     private readonly capacity: LiveTvCapacityService,
     private readonly engine: EngineService,
     private readonly events: EngineEventsService,
+    private readonly livetvConfig: EngineLivetvConfigClient,
     @Optional() private readonly qoe?: QoeService,
   ) {}
 
@@ -153,7 +155,7 @@ export class LiveTvSessionService implements OnModuleInit {
         fastZap: fastZap === 'true' ? true : fastZap === 'false' ? false : null,
       };
       this.segmentSeconds = config.segmentSeconds!;
-      await this.engine.pushLivetv(config);
+      await this.livetvConfig.put(config);
     } catch (err) {
       this.log.warn(`live TV config not pushed: ${(err as Error).message}`);
     }

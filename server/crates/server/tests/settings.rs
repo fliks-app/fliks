@@ -250,6 +250,28 @@ async fn bulk_validates_everything_before_writing(pool: PgPool) {
     assert_eq!(stored(&c.pool, "d").await, Some(Some("false".into())));
 }
 
+#[sqlx::test(migrations = false)]
+async fn engine_values_the_engine_would_refuse_are_400_before_any_write(pool: PgPool) {
+    let c = ctx(pool).await;
+    let a = Some(c.admin.as_str());
+    let bulk = json!({"data": {"a": "1", "streaming_ffmpeg_slots": 2.5}});
+    let (s, b) = call(&c.app, "PUT", "/api/settings", a, bulk).await;
+    assert_eq!(
+        (s, b["message"].clone()),
+        (
+            400,
+            json!(["streaming_ffmpeg_slots must be a positive integer number"])
+        )
+    );
+    assert_eq!(stored(&c.pool, "a").await, None);
+    let uri = "/api/settings/streaming_qsv_preset";
+    let (s, _) = call(&c.app, "PUT", uri, a, json!({"value": "Fast"})).await;
+    assert_eq!(s, 400);
+    assert_eq!(stored(&c.pool, "streaming_qsv_preset").await, None);
+    let (s, _) = call(&c.app, "PUT", uri, a, json!({"value": "slow"})).await;
+    assert_eq!(s, 200);
+}
+
 #[cfg(unix)]
 #[sqlx::test(migrations = false)]
 async fn fs_browse_lists_sorted_directories_only(pool: PgPool) {

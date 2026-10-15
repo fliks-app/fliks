@@ -17,7 +17,6 @@ const caps = {
 function setup(enabled = true) {
   const engine = {
     enabled,
-    pushStreaming: jest.fn().mockResolvedValue(undefined),
     capabilitiesFor: jest.fn().mockResolvedValue(caps),
   };
   return { engine, hw: new HostHardwareService({} as never, engine as never) };
@@ -30,8 +29,7 @@ describe('HostHardwareService', () => {
 
   it('is a CPU host with no engine, and still applies the GPU pin', async () => {
     const { hw, engine } = setup(false);
-    await hw.apply(ss('/dev/dri/renderD129'), true);
-    expect(engine.pushStreaming).not.toHaveBeenCalled();
+    hw.apply(ss('/dev/dri/renderD129'), true);
     expect(vaapiRenderNode()).toBe('/dev/dri/renderD129');
     expect(hw.hwAccel).toBe('none');
     expect(hw.tonemapAlgos).toEqual(['auto']);
@@ -40,7 +38,7 @@ describe('HostHardwareService', () => {
 
   it("serves the engine's detection once loaded", async () => {
     const { hw } = setup();
-    await hw.apply(ss(), true);
+    hw.apply(ss(), true);
     await flush();
     expect(hw.hwAccel).toBe('vaapi');
     expect(hw.libfdkAac).toBe(true);
@@ -52,19 +50,12 @@ describe('HostHardwareService', () => {
 
   it('re-detects on a GPU re-pin only', async () => {
     const { hw, engine } = setup();
-    await hw.apply(ss(), true);
-    await hw.apply(ss());
+    hw.apply(ss(), true);
+    hw.apply(ss());
     expect(engine.capabilitiesFor).toHaveBeenCalledTimes(1);
-    await hw.apply(ss('/dev/dri/renderD129'));
+    hw.apply(ss('/dev/dri/renderD129'));
     expect(engine.capabilitiesFor).toHaveBeenLastCalledWith(
       '/dev/dri/renderD129',
     );
-    expect(engine.pushStreaming).toHaveBeenCalledTimes(3);
-  });
-
-  it('never throws when the push fails', async () => {
-    const { hw, engine } = setup();
-    engine.pushStreaming.mockRejectedValue(new Error('409'));
-    await expect(hw.apply(ss())).resolves.toBeUndefined();
   });
 });
