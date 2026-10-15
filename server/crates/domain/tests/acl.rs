@@ -53,7 +53,9 @@ fn check(p: &Permissions, user_id: i64, inst: &[Value], action: Action, subject:
 
 #[test]
 fn acl_reproduces_expected() {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/acl/cases.json");
+    // Read at run time: a target dir shared across worktrees reuses binaries built in another one.
+    let dir = std::env::var("CARGO_MANIFEST_DIR").expect("run through cargo test");
+    let path = PathBuf::from(dir).join("../../fixtures/acl/cases.json");
     let mut fx = Fixture::load(&path);
     let cases = fx.root["cases"].as_array().unwrap().clone();
     assert_eq!(cases.len(), 35);

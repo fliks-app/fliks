@@ -4,11 +4,7 @@ import { User } from './entities/user.entity';
 import { MediaServer } from './entities/media-server.entity';
 import { Role } from '../roles/entities/role.entity';
 import { LibraryUserAccess } from '../libraries/entities/library-user-access.entity';
-import { UsersService } from './users.service';
 import { UsersStatsService } from './users-stats.service';
-import { UsersController } from './users.controller';
-import { AuthModule } from '../auth/auth.module';
-import { ImageModule } from '../images/image.module';
 import { PlaybackState } from '../playback/entities/playback-state.entity';
 import { FliksRequest } from '../requests/entities/request.entity';
 
@@ -24,11 +20,8 @@ import { FliksRequest } from '../requests/entities/request.entity';
       PlaybackState,
       FliksRequest,
     ]),
-    AuthModule,
-    ImageModule,
   ],
-  controllers: [UsersController],
-  providers: [UsersService, UsersStatsService],
-  exports: [TypeOrmModule, UsersService, UsersStatsService],
+  providers: [UsersStatsService],
+  exports: [TypeOrmModule, UsersStatsService],
 })
 export class UsersModule {}

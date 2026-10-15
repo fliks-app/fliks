@@ -26,7 +26,7 @@ Decided behaviour for the Rust port (security fixes F, correctness fixes C; D3).
 | F6 | `refresh_tokens` never pruned | daily prune of expired/revoked rows older than 30 days | none |
 | F7 | access token 1 h but cookie `maxAge` default 7 d | cookie `Max-Age` = token lifetime | none |
 | F8 | `scope:'stream'` tokens (12 h, travel in URLs) accepted on every route without `SessionTokenGuard`: pairing approve, `PUT /users/:self {password}`, `stream-token` self-renewal, `cast-info` | the extractor rejects `scope:'stream'` (401) except on routes explicitly marked stream-allowed (media delivery routes listed in `auth.md`) | verify every client calls API routes with its access token (parity + client smoke) |
-| F9 | password change revokes nothing | revokes every other refresh-token family of the user and drops their SSE connections; the caller keeps its session | none |
+| F9 | password change revokes nothing | revokes every refresh-token family of the user and drops their SSE connections; the caller's access token stays valid until it expires | none |
 | F10 | `users.manage` alone can set `isAdmin`, reset/delete an admin, delete the last admin | only an admin may set `isAdmin` or modify/delete an admin; the last enabled admin cannot be deleted, disabled or demoted (409) | admin user pages show the error |
 | F11 | a user can raise their own quota fields | quota fields writable only with `users.manage` | none |
 | F12 | `roles.manage` can store any permission string, incl. `manage:all` | permissions a request adds (not already on the role) validated against `GET /roles/permissions`; granting `manage:all` requires admin | none |
@@ -34,6 +34,7 @@ Decided behaviour for the Rust port (security fixes F, correctness fixes C; D3).
 | F14 | polled remote targets keyed by `deviceId` only (another account takes them over) | keyed by `(userId, deviceId)` | none |
 | F15 | an approved pairing stays claimable after `expiresAt` until the hourly cleanup | claim checks `expiresAt` | none |
 | F16 | Nest accepts HS256, HS384 and HS512 and a token without `exp` (valid forever) | only HS256 is accepted and `exp` is required: a token without `exp` or signed HS384/HS512 is 401; Fliks only ever signs HS256 with `exp` | none |
+| F17 | a deleted user's open SSE connections stay open | dropped on delete | none |
 
 Not done (user decision 2026-10-15): login rate limiting/lockout.
 
