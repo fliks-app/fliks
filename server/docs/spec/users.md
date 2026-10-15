@@ -99,7 +99,7 @@ Out of scope (milestone S5): `/api/media-servers/*` is NOT served by this module
 
 ### F. Delete
 
-27. `DELETE /users/:id`: user not found → 404 `User #<id> not found`; `DELETE FROM users WHERE id = $1` (all dependants go through the schema's `ON DELETE CASCADE`/`SET NULL`, owned by the S0 migrations); then engine revoke (rule 26); 200 with an empty body. No self-delete or last-admin guard, no SSE drop, and the avatar files stay on disk. `[ts:src/modules/users/users.service.ts:392]`–`[ts:src/modules/users/users.service.ts:397]`
+27. `DELETE /users/:id`: user not found → 404 `User #<id> not found`; `DELETE FROM users WHERE id = $1` (all dependants go through the schema's `ON DELETE CASCADE`/`SET NULL`, owned by the S0 migrations); then engine revoke (rule 26); 200 with an empty body. No self-delete or last-admin guard, no SSE drop (**F17**: Rust drops them), and the avatar files stay on disk. `[ts:src/modules/users/users.service.ts:392]`–`[ts:src/modules/users/users.service.ts:397]`
 
 ### G. Stats
 

@@ -34,6 +34,7 @@ Decided behaviour for the Rust port (security fixes F, correctness fixes C; D3).
 | F14 | polled remote targets keyed by `deviceId` only (another account takes them over) | keyed by `(userId, deviceId)` | none |
 | F15 | an approved pairing stays claimable after `expiresAt` until the hourly cleanup | claim checks `expiresAt` | none |
 | F16 | Nest accepts HS256, HS384 and HS512 and a token without `exp` (valid forever) | only HS256 is accepted and `exp` is required: a token without `exp` or signed HS384/HS512 is 401; Fliks only ever signs HS256 with `exp` | none |
+| F17 | a deleted user's open SSE connections stay open | dropped on delete | none |
 
 Not done (user decision 2026-10-15): login rate limiting/lockout.
 

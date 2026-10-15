@@ -372,6 +372,7 @@ pub async fn remove(
         .execute(&mut *tx)
         .await?;
     tx.commit().await?;
+    // F17
     drop_connections(&st, id).await;
     revoke_in_background(&st, id);
     Ok(())
