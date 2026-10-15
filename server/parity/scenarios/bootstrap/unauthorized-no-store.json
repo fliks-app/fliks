@@ -1,0 +1,22 @@
+{
+  "deviation": null,
+  "name": "bootstrap-unauthorized-no-store",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "anon",
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "headers": {
+          "cache-control": "no-store, no-cache, must-revalidate"
+        },
+        "status": 401
+      },
+      "method": "GET",
+      "path": "/api/auth/me"
+    }
+  ]
+}
