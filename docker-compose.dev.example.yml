@@ -3,7 +3,8 @@
 # library, then `docker compose up` → UI on http://localhost:4500.
 # node_modules live in the images at /src, above the bind-mounted sources:
 # `docker compose build` after any package.json change.
-# The engine is the front door (:3000, --upstream backend:3001), as in production; Node has no published port.
+# The engine is the front door (:3000, --upstream server:3001), as in production; server (Rust) forwards
+# what it doesn't own to backend (Nest, :3002). Neither has a published port.
 # The engine runs from the checkout at ${FLIKS_ENGINE_SRC:-../fliks-engine} (cargo watch); first build takes minutes.
 
 services:
@@ -16,6 +17,8 @@ services:
         condition: service_healthy
       engine:
         condition: service_healthy
+      server:
+        condition: service_started
     # Uncomment for Intel QSV/VAAPI. The render node is root:render and the
     # non-root user below is not in that group, so both lines are needed or the
     # probe fails and transcodes fall back to CPU.
@@ -30,8 +33,10 @@ services:
     command: npm run start:dev
     environment:
       NODE_ENV: development
-      PORT: 3001
-      FLIKS_HOST_URL: http://backend:3001
+      PORT: 3002
+      FLIKS_HOST_URL: http://server:3001
+      FLIKS_SERVER_URL: http://server:3001
+      FLIKS_BRIDGE_TOKEN: dev-bridge
       CORS_ORIGIN: http://localhost:4500
       DB_HOST: postgres
       DB_PORT: 5432
@@ -62,7 +67,7 @@ services:
       target: engine-dev
     working_dir: /engine
     command: >
-      cargo watch -w crates -x 'run --bin fliks-engine -- --listen 0.0.0.0:7400 --public-listen 0.0.0.0:3000 --upstream http://backend:3001'
+      cargo watch -w crates -x 'run --bin fliks-engine -- --listen 0.0.0.0:7400 --public-listen 0.0.0.0:3000 --upstream http://server:3001'
     environment:
       FLIKS_ENGINE_TOKEN: dev-engine-token
       CARGO_TARGET_DIR: /cargo-target
@@ -86,6 +91,38 @@ services:
       - engine-registry:/usr/local/cargo/registry
       # Engine reads media by path: same mount as the backend.
       - ./.dev/medias:/medias
+
+  server:
+    build:
+      context: .
+      target: server-dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+      engine:
+        condition: service_healthy
+    working_dir: /src/server
+    command: cargo watch -x 'run -p fliks-server'
+    environment:
+      PORT: 3001
+      FLIKS_NEST_URL: http://backend:3002
+      FLIKS_ENGINE_URL: http://engine:7400
+      FLIKS_ENGINE_TOKEN: dev-engine-token
+      FLIKS_BRIDGE_TOKEN: dev-bridge
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USERNAME: fliks
+      DB_PASSWORD: password
+      DB_NAME: fliks
+      JWT_SECRET: dev-secret
+      CORS_ORIGIN: http://localhost:4500
+      CARGO_BUILD_JOBS: 4
+      CARGO_TARGET_DIR: /cargo-target
+      SQLX_OFFLINE: 'true'
+    volumes:
+      - ./server:/src/server
+      - server-target:/cargo-target
+      - server-registry:/usr/local/cargo/registry
 
   client:
     build:
@@ -121,3 +158,5 @@ volumes:
   postgres:
   engine-target:
   engine-registry:
+  server-target:
+  server-registry:
