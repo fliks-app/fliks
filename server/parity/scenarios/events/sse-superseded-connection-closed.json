@@ -1,0 +1,60 @@
+{
+  "deviation": "C5",
+  "ignore": [
+    "$..connectionId"
+  ],
+  "name": "events-sse-superseded-connection-closed",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": [
+          {
+            "data": {
+              "type": "sse.connected"
+            },
+            "event": ""
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/system/events?device=d1",
+      "sse": {
+        "after": [
+          {
+            "as": "user",
+            "expect": {
+              "status": 0
+            },
+            "method": "GET",
+            "path": "/api/system/events?device=d1",
+            "sse": {
+              "events": 1,
+              "timeoutMs": 1500
+            }
+          },
+          {
+            "as": "user",
+            "body": {
+              "deviceId": "dev-1",
+              "formFactor": "tv",
+              "name": "Living room"
+            },
+            "expect": {
+              "body": {
+                "targetId": "dev-1#native"
+              },
+              "status": 201
+            },
+            "method": "POST",
+            "path": "/api/remote/register"
+          }
+        ],
+        "events": 3,
+        "timeoutMs": 3000
+      }
+    }
+  ]
+}
