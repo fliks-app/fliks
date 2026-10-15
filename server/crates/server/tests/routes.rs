@@ -183,6 +183,22 @@ async fn forwarded_methods_on_owned_paths_skip_the_rust_layers() {
     assert!(post.headers().contains_key(FORWARDED));
     assert!(!post.headers().contains_key("access-control-allow-origin"));
     assert!(!post.headers().contains_key("vary"));
+    let put = Request::put("/api/playback/media/1/state")
+        .header("origin", "http://localhost:4200")
+        .body(Body::empty())
+        .unwrap();
+    let put = router.clone().oneshot(put).await.unwrap();
+    assert!(put.headers().contains_key(FORWARDED));
+    assert!(!put.headers().contains_key("access-control-allow-origin"));
+    // A preflight on a fully owned path stays with the Rust CORS layer.
+    let preflight = Request::options("/api/auth/login")
+        .header("origin", "http://localhost:4200")
+        .header("access-control-request-method", "POST")
+        .body(Body::empty())
+        .unwrap();
+    let preflight = router.clone().oneshot(preflight).await.unwrap();
+    assert_eq!(preflight.status(), 204);
+    assert!(!preflight.headers().contains_key(FORWARDED));
     let req = Request::get("/engine/resolve").body(Body::empty()).unwrap();
     let res = router.clone().oneshot(req).await.unwrap();
     assert!(res.headers().contains_key(FORWARDED), "GET /engine/resolve");
