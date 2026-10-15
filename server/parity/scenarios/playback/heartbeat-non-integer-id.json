@@ -1,0 +1,25 @@
+{
+  "deviation": null,
+  "name": "playback-heartbeat-non-integer-id",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "durationSeconds": 3600,
+        "mediaFileId": 1,
+        "positionSeconds": 600
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Validation failed (numeric string is expected)",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PUT",
+      "path": "/api/playback/media/abc/state"
+    }
+  ]
+}

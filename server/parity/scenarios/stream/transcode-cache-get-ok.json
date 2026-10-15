@@ -1,0 +1,19 @@
+{
+  "deviation": null,
+  "name": "stream-transcode-cache-get-ok",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "bytes": 0,
+          "entries": 0
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/system/transcode-cache"
+    }
+  ]
+}

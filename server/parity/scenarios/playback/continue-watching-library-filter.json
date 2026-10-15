@@ -1,0 +1,33 @@
+{
+  "deviation": null,
+  "name": "playback-continue-watching-library-filter",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": [
+          {
+            "durationSeconds": 1800,
+            "episodeId": 1,
+            "episodeLabel": "S01E01 - Episode 1",
+            "fanartUrl": null,
+            "id": 3,
+            "lastPlayedAt": "2026-01-04T00:00:00.000Z",
+            "mediaFileId": 18,
+            "mediaId": 18,
+            "mediaTitle": "Parity Series A",
+            "mediaType": "series",
+            "positionSeconds": 600,
+            "posterUrl": null,
+            "progressPercent": 33,
+            "stillUrl": null
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/playback/continue-watching?libraryId=2"
+    }
+  ]
+}

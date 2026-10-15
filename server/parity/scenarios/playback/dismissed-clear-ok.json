@@ -1,0 +1,37 @@
+{
+  "deviation": null,
+  "name": "playback-dismissed-clear-ok",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "status": 204
+      },
+      "method": "POST",
+      "path": "/api/playback/recommendations/3/dismiss"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "removed": 1
+        },
+        "status": 200
+      },
+      "method": "DELETE",
+      "path": "/api/playback/recommendations/dismissed"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "count": 0
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/playback/recommendations/dismissed/count"
+    }
+  ]
+}

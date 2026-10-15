@@ -1,0 +1,20 @@
+{
+  "deviation": null,
+  "name": "playback-toggle-watched-unknown-media",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {},
+      "expect": {
+        "body": {
+          "message": "Internal server error",
+          "statusCode": 500
+        },
+        "status": 500
+      },
+      "method": "POST",
+      "path": "/api/playback/media/999/toggle-watched"
+    }
+  ]
+}

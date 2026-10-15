@@ -1,0 +1,41 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastPlayedAt",
+    "$..playedAt"
+  ],
+  "name": "playback-watched-episodes-after-series-toggle",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "watched": true
+      },
+      "expect": {
+        "body": {
+          "watched": true
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/playback/media/18/toggle-series-watched"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/playback/media/18/watched-episodes"
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "deviation": null,
+  "name": "stream-gpus-ok",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "defaultNode": "/dev/dri/renderD128",
+          "gpus": []
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/stream/info/gpus"
+    }
+  ]
+}

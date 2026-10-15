@@ -1,0 +1,16 @@
+{
+  "deviation": null,
+  "name": "playback-watched-ids-other-user",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "other",
+      "expect": {
+        "body": [],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/playback/watched-ids"
+    }
+  ]
+}

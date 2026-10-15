@@ -1,0 +1,20 @@
+{
+  "deviation": null,
+  "name": "qoe-sessions-list-forbidden",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "GET",
+      "path": "/api/system/qoe/sessions"
+    }
+  ]
+}

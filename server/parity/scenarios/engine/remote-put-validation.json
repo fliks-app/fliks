@@ -1,0 +1,27 @@
+{
+  "deviation": null,
+  "name": "engine-remote-put-validation",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "pathMappings": [],
+        "token": "",
+        "url": 5
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "url must be a string"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PUT",
+      "path": "/api/engine/remote"
+    }
+  ]
+}

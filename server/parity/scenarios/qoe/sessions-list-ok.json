@@ -1,0 +1,19 @@
+{
+  "deviation": null,
+  "name": "qoe-sessions-list-ok",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "items": [],
+          "total": 0
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/system/qoe/sessions"
+    }
+  ]
+}

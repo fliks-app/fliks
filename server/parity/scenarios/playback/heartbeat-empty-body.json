@@ -1,0 +1,21 @@
+{
+  "deviation": null,
+  "name": "playback-heartbeat-empty-body",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {},
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "mediaId and mediaFileId are required",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PUT",
+      "path": "/api/playback/media/1/state"
+    }
+  ]
+}

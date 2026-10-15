@@ -1,0 +1,74 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastPlayedAt",
+    "$..playedAt"
+  ],
+  "name": "playback-toggle-watched-ok",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "mediaFileId": 1
+      },
+      "expect": {
+        "body": {
+          "completed": true,
+          "durationSeconds": 3600,
+          "episodeId": null,
+          "hiddenFromContinueWatching": false,
+          "id": 1,
+          "mediaFile": {
+            "id": 1
+          },
+          "mediaFileId": 1,
+          "mediaId": 1,
+          "positionSeconds": 0,
+          "userId": 2
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/playback/media/1/toggle-watched"
+    },
+    {
+      "as": "user",
+      "body": {
+        "mediaFileId": 1
+      },
+      "expect": {
+        "body": {
+          "completed": false,
+          "durationSeconds": 3600,
+          "episodeId": null,
+          "hiddenFromContinueWatching": false,
+          "id": 1,
+          "mediaFile": {
+            "id": 1
+          },
+          "mediaFileId": 1,
+          "mediaId": 1,
+          "positionSeconds": 0,
+          "userId": 2
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/playback/media/1/toggle-watched"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": [
+          2
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/playback/watched-ids"
+    }
+  ]
+}

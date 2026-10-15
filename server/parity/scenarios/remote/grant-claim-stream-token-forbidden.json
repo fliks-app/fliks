@@ -1,0 +1,42 @@
+{
+  "capture": {
+    "st": "$.steps[0].body.streamToken"
+  },
+  "deviation": null,
+  "ignore": [
+    "$..streamToken",
+    "$..expiresAt"
+  ],
+  "name": "remote-grant-claim-stream-token-forbidden",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": {},
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/auth/stream-token"
+    },
+    {
+      "as": "anon",
+      "body": {
+        "code": "ZZZZZZ"
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "session_token_required",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "headers": {
+        "Authorization": "Bearer {st}"
+      },
+      "method": "POST",
+      "path": "/api/remote/grants/claim"
+    }
+  ]
+}

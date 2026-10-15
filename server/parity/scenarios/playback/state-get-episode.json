@@ -1,0 +1,30 @@
+{
+  "deviation": null,
+  "name": "playback-state-get-episode",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "completed": false,
+          "createdAt": "2026-01-01T00:00:00.000Z",
+          "durationSeconds": 1800,
+          "episodeId": 1,
+          "hiddenFromContinueWatching": false,
+          "id": 3,
+          "lastPlayedAt": "2026-01-04T00:00:00.000Z",
+          "mediaFileId": 18,
+          "mediaId": 18,
+          "playedAt": null,
+          "positionSeconds": 600,
+          "updatedAt": "2026-01-01T00:00:00.000Z",
+          "userId": 2
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/playback/media/18/state?episodeId=1"
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "deviation": null,
+  "name": "stream-playback-info-engine-down",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "deviceName": "Parity",
+        "deviceType": "desktop",
+        "directPlayProfiles": [
+          {
+            "audioCodecs": [
+              "aac"
+            ],
+            "containers": [
+              "mkv",
+              "mp4"
+            ],
+            "videoCodecs": [
+              "h264"
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "body": {
+          "error": "Service Unavailable",
+          "message": "Playback needs the streaming engine, which is not running",
+          "statusCode": 503
+        },
+        "status": 503
+      },
+      "method": "POST",
+      "path": "/api/stream/1/playback-info"
+    }
+  ]
+}

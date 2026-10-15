@@ -1,0 +1,45 @@
+{
+  "capture": {
+    "code": "$.steps[0].body.code"
+  },
+  "deviation": null,
+  "ignore": [
+    "$.code"
+  ],
+  "name": "remote-grant-claim-own-device",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "deviceId": "dev-1",
+        "deviceName": "Living room"
+      },
+      "expect": {
+        "body": {
+          "expiresIn": 600,
+          "id": 1
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/remote/grants/code"
+    },
+    {
+      "as": "user",
+      "body": {
+        "code": "{code}"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "remote.error_own_device",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/remote/grants/claim"
+    }
+  ]
+}

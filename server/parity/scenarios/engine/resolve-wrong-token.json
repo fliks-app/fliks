@@ -1,0 +1,27 @@
+{
+  "deviation": null,
+  "name": "engine-resolve-wrong-token",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "anon",
+      "body": {
+        "credential": "x",
+        "mediaId": 1,
+        "purpose": "stream"
+      },
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "headers": {
+        "Authorization": "Bearer wrong"
+      },
+      "method": "POST",
+      "path": "/engine/resolve"
+    }
+  ]
+}

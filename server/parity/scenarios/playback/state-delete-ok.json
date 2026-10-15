@@ -1,0 +1,23 @@
+{
+  "deviation": null,
+  "name": "playback-state-delete-ok",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "status": 200
+      },
+      "method": "DELETE",
+      "path": "/api/playback/media/1/state"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/playback/media/1/state"
+    }
+  ]
+}

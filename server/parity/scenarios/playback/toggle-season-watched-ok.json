@@ -1,0 +1,62 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastPlayedAt",
+    "$..playedAt"
+  ],
+  "name": "playback-toggle-season-watched-ok",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "watched": true
+      },
+      "expect": {
+        "body": {
+          "watched": true
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/playback/media/18/seasons/1/toggle-watched"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": [
+          1,
+          2
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/playback/media/18/watched-episodes"
+    },
+    {
+      "as": "user",
+      "body": {
+        "watched": false
+      },
+      "expect": {
+        "body": {
+          "watched": false
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/playback/media/18/seasons/1/toggle-watched"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": [],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/playback/media/18/watched-episodes"
+    }
+  ]
+}

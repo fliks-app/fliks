@@ -1,0 +1,26 @@
+{
+  "deviation": null,
+  "name": "qoe-summary-ok",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "byDevice": [],
+          "byVerdict": {
+            "device": 0,
+            "error": 0,
+            "network": 0,
+            "ok": 0,
+            "server": 0,
+            "unknown": 0
+          }
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/system/qoe/summary"
+    }
+  ]
+}

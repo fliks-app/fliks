@@ -1,0 +1,41 @@
+{
+  "deviation": null,
+  "name": "remote-command-unknown-action",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "deviceId": "dev-1",
+        "formFactor": "tv",
+        "name": "Living room"
+      },
+      "expect": {
+        "body": {
+          "targetId": "dev-1#native"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/remote/register"
+    },
+    {
+      "as": "user",
+      "body": {
+        "action": "bogus"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "action must be one of the following values: load, play, pause, playpause, stop, seek, volume, mute, next, audio, subtitle, quality, browse"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/remote/dev-1%23native/command"
+    }
+  ]
+}

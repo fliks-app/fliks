@@ -1,0 +1,22 @@
+{
+  "deviation": null,
+  "name": "remote-register-unauthenticated",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "anon",
+      "body": {
+        "deviceId": "d"
+      },
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "POST",
+      "path": "/api/remote/register"
+    }
+  ]
+}

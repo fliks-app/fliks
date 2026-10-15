@@ -1,0 +1,25 @@
+{
+  "deviation": null,
+  "name": "engine-resolve-user-jwt-is-not-host-token",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "auth": "bearer",
+      "body": {
+        "credential": "x",
+        "mediaId": 1,
+        "purpose": "stream"
+      },
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "POST",
+      "path": "/engine/resolve"
+    }
+  ]
+}

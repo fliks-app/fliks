@@ -1,0 +1,20 @@
+{
+  "deviation": null,
+  "name": "remote-grant-revoke-not-found",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "remote.error_unknown_grant",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "DELETE",
+      "path": "/api/remote/grants/999"
+    }
+  ]
+}

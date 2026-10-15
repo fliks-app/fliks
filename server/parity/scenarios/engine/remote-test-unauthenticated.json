@@ -1,0 +1,23 @@
+{
+  "deviation": null,
+  "name": "engine-remote-test-unauthenticated",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "anon",
+      "body": {
+        "token": "x",
+        "url": "http://127.0.0.1:9"
+      },
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "POST",
+      "path": "/api/engine/remote/test"
+    }
+  ]
+}

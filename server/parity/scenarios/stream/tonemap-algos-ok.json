@@ -1,0 +1,20 @@
+{
+  "deviation": null,
+  "name": "stream-tonemap-algos-ok",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "available": [
+            "auto"
+          ]
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/stream/info/tonemap-algos"
+    }
+  ]
+}

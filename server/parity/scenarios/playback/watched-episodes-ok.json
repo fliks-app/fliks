@@ -1,0 +1,16 @@
+{
+  "deviation": null,
+  "name": "playback-watched-episodes-ok",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": [],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/playback/media/18/watched-episodes"
+    }
+  ]
+}

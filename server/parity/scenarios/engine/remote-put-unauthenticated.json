@@ -1,0 +1,24 @@
+{
+  "deviation": null,
+  "name": "engine-remote-put-unauthenticated",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "anon",
+      "body": {
+        "pathMappings": [],
+        "token": "",
+        "url": ""
+      },
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "PUT",
+      "path": "/api/engine/remote"
+    }
+  ]
+}

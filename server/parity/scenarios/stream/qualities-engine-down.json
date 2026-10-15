@@ -1,0 +1,20 @@
+{
+  "deviation": null,
+  "name": "stream-qualities-engine-down",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "error": "Service Unavailable",
+          "message": "The streaming engine is not running",
+          "statusCode": 503
+        },
+        "status": 503
+      },
+      "method": "GET",
+      "path": "/api/stream/info/qualities/1"
+    }
+  ]
+}

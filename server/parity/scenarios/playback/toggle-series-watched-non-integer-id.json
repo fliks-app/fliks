@@ -1,0 +1,23 @@
+{
+  "deviation": null,
+  "name": "playback-toggle-series-watched-non-integer-id",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "watched": true
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Validation failed (numeric string is expected)",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/playback/media/abc/toggle-series-watched"
+    }
+  ]
+}

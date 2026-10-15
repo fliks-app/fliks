@@ -1,0 +1,25 @@
+{
+  "deviation": null,
+  "name": "engine-remote-put-forbidden",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "pathMappings": [],
+        "token": "",
+        "url": ""
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "PUT",
+      "path": "/api/engine/remote"
+    }
+  ]
+}

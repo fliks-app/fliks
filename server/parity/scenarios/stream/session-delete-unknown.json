@@ -1,0 +1,15 @@
+{
+  "deviation": null,
+  "name": "stream-session-delete-unknown",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "status": 204
+      },
+      "method": "DELETE",
+      "path": "/api/stream/sessions/nosuch"
+    }
+  ]
+}

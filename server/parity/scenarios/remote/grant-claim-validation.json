@@ -1,0 +1,25 @@
+{
+  "deviation": null,
+  "name": "remote-grant-claim-validation",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "other",
+      "body": {
+        "code": "x"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "code must be longer than or equal to 4 characters"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/remote/grants/claim"
+    }
+  ]
+}

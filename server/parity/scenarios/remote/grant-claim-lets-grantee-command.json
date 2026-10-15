@@ -1,0 +1,77 @@
+{
+  "capture": {
+    "code": "$.steps[1].body.code"
+  },
+  "deviation": null,
+  "ignore": [
+    "$..code",
+    "$..createdAt",
+    "$..cmdId"
+  ],
+  "name": "remote-grant-claim-lets-grantee-command",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "deviceId": "dev-1",
+        "formFactor": "tv",
+        "name": "Living room"
+      },
+      "expect": {
+        "body": {
+          "targetId": "dev-1#native"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/remote/register"
+    },
+    {
+      "as": "user",
+      "body": {
+        "deviceId": "dev-1",
+        "deviceName": "Living room"
+      },
+      "expect": {
+        "body": {
+          "expiresIn": 600,
+          "id": 1
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/remote/grants/code"
+    },
+    {
+      "as": "other",
+      "body": {
+        "code": "{code}"
+      },
+      "expect": {
+        "body": {
+          "deviceId": "dev-1",
+          "deviceName": "Living room",
+          "granteeUsername": "other",
+          "id": 1,
+          "ownerUsername": "user"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/remote/grants/claim"
+    },
+    {
+      "as": "other",
+      "body": {
+        "action": "pause"
+      },
+      "expect": {
+        "body": {},
+        "status": 202
+      },
+      "method": "POST",
+      "path": "/api/remote/dev-1%23native/command"
+    }
+  ]
+}

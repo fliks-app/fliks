@@ -1,0 +1,43 @@
+{
+  "deviation": null,
+  "name": "remote-targets-after-register",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "deviceId": "dev-1",
+        "formFactor": "tv",
+        "name": "Living room"
+      },
+      "expect": {
+        "body": {
+          "targetId": "dev-1#native"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/remote/register"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": [
+          {
+            "deviceName": "Living room",
+            "formFactor": "tv",
+            "nowPlaying": null,
+            "ownerUsername": null,
+            "systemName": null,
+            "targetId": "dev-1#native",
+            "tvPlatform": null,
+            "userAgent": null
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/remote/targets"
+    }
+  ]
+}

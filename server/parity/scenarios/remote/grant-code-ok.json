@@ -1,0 +1,26 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$.code"
+  ],
+  "name": "remote-grant-code-ok",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "deviceId": "dev-1",
+        "deviceName": "Living room"
+      },
+      "expect": {
+        "body": {
+          "expiresIn": 600,
+          "id": 1
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/remote/grants/code"
+    }
+  ]
+}

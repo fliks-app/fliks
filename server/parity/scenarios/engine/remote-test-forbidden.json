@@ -1,0 +1,24 @@
+{
+  "deviation": null,
+  "name": "engine-remote-test-forbidden",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "token": "x",
+        "url": "http://127.0.0.1:9"
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "POST",
+      "path": "/api/engine/remote/test"
+    }
+  ]
+}

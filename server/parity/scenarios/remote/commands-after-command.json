@@ -1,0 +1,82 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..cmdId",
+    "$..expiresAt"
+  ],
+  "name": "remote-commands-after-command",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "deviceId": "dev-1",
+        "formFactor": "tv",
+        "name": "Living room"
+      },
+      "expect": {
+        "body": {
+          "targetId": "dev-1#native"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/remote/register"
+    },
+    {
+      "as": "user",
+      "body": {
+        "action": "play"
+      },
+      "expect": {
+        "body": {},
+        "status": 202
+      },
+      "method": "POST",
+      "path": "/api/remote/dev-1%23native/command"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": [
+          {
+            "action": "pause",
+            "byTargetId": null,
+            "type": "remote.command"
+          },
+          {
+            "action": "load",
+            "byTargetId": null,
+            "mediaFileId": 1,
+            "mediaId": 1,
+            "mediaType": "movie",
+            "type": "remote.command"
+          },
+          {
+            "action": "seek",
+            "byTargetId": null,
+            "positionSeconds": 12,
+            "type": "remote.command"
+          },
+          {
+            "action": "play",
+            "byTargetId": null,
+            "type": "remote.command"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/remote/commands?targetId=dev-1%23native"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": [],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/remote/commands?targetId=dev-1%23native"
+    }
+  ]
+}

@@ -1,0 +1,61 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastPlayedAt",
+    "$..playedAt"
+  ],
+  "name": "playback-heartbeat-ok",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "durationSeconds": 3600,
+        "mediaFileId": 2,
+        "positionSeconds": 600
+      },
+      "expect": {
+        "body": {
+          "state": {
+            "completed": false,
+            "durationSeconds": 3600,
+            "episodeId": null,
+            "hiddenFromContinueWatching": false,
+            "id": 2,
+            "mediaFile": {
+              "id": 2
+            },
+            "mediaFileId": 2,
+            "mediaId": 2,
+            "positionSeconds": 600,
+            "userId": 2
+          }
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/playback/media/2/state"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "completed": false,
+          "durationSeconds": 3600,
+          "episodeId": null,
+          "hiddenFromContinueWatching": false,
+          "id": 2,
+          "mediaFileId": 2,
+          "mediaId": 2,
+          "positionSeconds": 600,
+          "userId": 2
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/playback/media/2/state"
+    }
+  ]
+}

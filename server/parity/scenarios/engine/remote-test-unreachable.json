@@ -1,0 +1,23 @@
+{
+  "deviation": null,
+  "name": "engine-remote-test-unreachable",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "token": "x",
+        "url": "http://127.0.0.1:9"
+      },
+      "expect": {
+        "body": {
+          "error": "The streaming engine at http://127.0.0.1:9 did not answer",
+          "ok": false
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/engine/remote/test"
+    }
+  ]
+}

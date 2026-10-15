@@ -1,0 +1,19 @@
+{
+  "deviation": null,
+  "name": "stream-transcode-cache-delete-media-unauthenticated",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "anon",
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "DELETE",
+      "path": "/api/system/transcode-cache/1"
+    }
+  ]
+}

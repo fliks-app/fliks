@@ -1,0 +1,25 @@
+{
+  "deviation": null,
+  "name": "qoe-events-unknown-session",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "events": [
+          {
+            "at": 1,
+            "type": "play"
+          }
+        ],
+        "playbackId": "p1",
+        "sentAt": 1
+      },
+      "expect": {
+        "status": 204
+      },
+      "method": "POST",
+      "path": "/api/playback/sessions/nosuch/events"
+    }
+  ]
+}

@@ -1,0 +1,211 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$.code"
+  ],
+  "name": "remote-grant-code-too-many",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "deviceId": "dev-1",
+        "deviceName": "Living room"
+      },
+      "expect": {
+        "body": {
+          "expiresIn": 600,
+          "id": 1
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/remote/grants/code"
+    },
+    {
+      "as": "user",
+      "body": {
+        "deviceId": "dev-1",
+        "deviceName": "Living room"
+      },
+      "expect": {
+        "body": {
+          "expiresIn": 600,
+          "id": 2
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/remote/grants/code"
+    },
+    {
+      "as": "user",
+      "body": {
+        "deviceId": "dev-1",
+        "deviceName": "Living room"
+      },
+      "expect": {
+        "body": {
+          "expiresIn": 600,
+          "id": 3
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/remote/grants/code"
+    },
+    {
+      "as": "user",
+      "body": {
+        "deviceId": "dev-1",
+        "deviceName": "Living room"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "remote.error_too_many_codes",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/remote/grants/code"
+    },
+    {
+      "as": "user",
+      "body": {
+        "deviceId": "dev-1",
+        "deviceName": "Living room"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "remote.error_too_many_codes",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/remote/grants/code"
+    },
+    {
+      "as": "user",
+      "body": {
+        "deviceId": "dev-1",
+        "deviceName": "Living room"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "remote.error_too_many_codes",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/remote/grants/code"
+    },
+    {
+      "as": "user",
+      "body": {
+        "deviceId": "dev-1",
+        "deviceName": "Living room"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "remote.error_too_many_codes",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/remote/grants/code"
+    },
+    {
+      "as": "user",
+      "body": {
+        "deviceId": "dev-1",
+        "deviceName": "Living room"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "remote.error_too_many_codes",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/remote/grants/code"
+    },
+    {
+      "as": "user",
+      "body": {
+        "deviceId": "dev-1",
+        "deviceName": "Living room"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "remote.error_too_many_codes",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/remote/grants/code"
+    },
+    {
+      "as": "user",
+      "body": {
+        "deviceId": "dev-1",
+        "deviceName": "Living room"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "remote.error_too_many_codes",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/remote/grants/code"
+    },
+    {
+      "as": "user",
+      "body": {
+        "deviceId": "dev-1",
+        "deviceName": "Living room"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "remote.error_too_many_codes",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/remote/grants/code"
+    },
+    {
+      "as": "user",
+      "body": {
+        "deviceId": "dev-1",
+        "deviceName": "Living room"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "remote.error_too_many_codes",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/remote/grants/code"
+    }
+  ]
+}

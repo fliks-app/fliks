@@ -1,0 +1,24 @@
+{
+  "deviation": null,
+  "name": "playback-heartbeat-unauthenticated",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "anon",
+      "body": {
+        "durationSeconds": 3600,
+        "mediaFileId": 1,
+        "positionSeconds": 600
+      },
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "PUT",
+      "path": "/api/playback/media/1/state"
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "deviation": null,
+  "name": "remote-commands-missing-target-id",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "message": "Internal server error",
+          "statusCode": 500
+        },
+        "status": 500
+      },
+      "method": "GET",
+      "path": "/api/remote/commands"
+    }
+  ]
+}
