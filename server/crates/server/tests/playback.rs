@@ -151,6 +151,22 @@ async fn toggle_watched_round_trip_and_state(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
+async fn toggle_watched_without_a_file_keeps_duration_null(pool: PgPool) {
+    let c = ctx(pool).await;
+    let m = c
+        .id(r#"INSERT INTO media (title, type) VALUES ('m', 'movie') RETURNING id"#)
+        .await;
+    let uri = format!("/api/playback/media/{m}/toggle-watched");
+    for completed in [true, false] {
+        let (s, row) = c.api("POST", &uri, None).await;
+        assert_eq!(
+            (s, row["completed"].clone(), row["durationSeconds"].clone()),
+            (201, json!(completed), Value::Null)
+        );
+    }
+}
+
+#[sqlx::test(migrations = false)]
 async fn recommendation_ties_break_by_media_id(pool: PgPool) {
     let c = ctx(pool).await;
     let lib = c

@@ -364,7 +364,7 @@ pub async fn continue_watching(
             i.progress_percent = 0.0;
         }
     }
-    items.sort_by_key(|i| std::cmp::Reverse(i.last_played_at));
+    items.sort_by_key(|i| std::cmp::Reverse(i.last_played_at.timestamp_millis()));
     items.truncate(CONTINUE_MAX);
     Ok(items)
 }
@@ -578,23 +578,20 @@ pub async fn toggle_watched(
     }
     let prev_file = existing.as_ref().and_then(|e| e.media_file_id);
     let mut position = existing.as_ref().map_or(0.0, |e| e.position_seconds);
-    let mut duration = existing
-        .as_ref()
-        .and_then(|e| e.duration_seconds)
-        .unwrap_or(0.0);
+    let mut duration = existing.as_ref().and_then(|e| e.duration_seconds);
     if completing {
         position = 0.0;
-        if duration == 0.0
+        if duration.is_none_or(|d| d == 0.0)
             && let Some(id) = file.or(prev_file)
         {
-            duration = sqlx::query_scalar!(
+            duration = Some(sqlx::query_scalar!(
                     r#"SELECT ("streamInfo"->>'durationSeconds')::float8 FROM media_files WHERE id = $1"#,
                     id
                 )
                 .fetch_optional(db)
                 .await?
                 .flatten()
-                .unwrap_or(0.0);
+                .unwrap_or(0.0));
         }
     }
     match &existing {
