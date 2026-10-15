@@ -56,6 +56,8 @@ impl Jwt {
     pub fn new(secret: &str, access_ttl_secs: u64, stream_ttl_secs: u64) -> Self {
         let mut validation = Validation::new(Algorithm::HS256);
         validation.leeway = 0;
+        // Node's jsonwebtoken rejects at now >= exp.
+        validation.reject_tokens_expiring_in_less_than = 1;
         validation.validate_nbf = true;
         validation.validate_aud = false;
         validation.required_spec_claims = HashSet::from(["exp".to_owned()]);

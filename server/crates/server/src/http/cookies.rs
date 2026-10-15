@@ -17,9 +17,12 @@ pub fn cookie_value(headers: &HeaderMap, name: &str) -> Option<String> {
     headers
         .get_all(header::COOKIE)
         .iter()
-        .filter_map(|v| v.to_str().ok())
-        .flat_map(|h| h.split(';'))
-        .find_map(|seg| seg.trim().strip_prefix(&prefix).map(decode_uri_component))
+        // Lossy, not to_str: one non-ASCII cookie from another app must not hide ours (Node reads latin1).
+        .map(|v| String::from_utf8_lossy(v.as_bytes()).into_owned())
+        .find_map(|h| {
+            h.split(';')
+                .find_map(|seg| seg.trim().strip_prefix(&prefix).map(decode_uri_component))
+        })
 }
 
 /// JS `decodeURIComponent` with the raw fallback of `parseCookieValue`.
@@ -143,6 +146,16 @@ mod tests {
             None
         );
         assert_eq!(cookie_value(&HeaderMap::new(), ACCESS_COOKIE), None);
+    }
+
+    #[test]
+    fn cookie_value_survives_non_ascii_cookies() {
+        let mut h = HeaderMap::new();
+        h.append(
+            "cookie",
+            HeaderValue::from_bytes(b"x=\xc3\xa9; fliks_access=t").unwrap(),
+        );
+        assert_eq!(cookie_value(&h, ACCESS_COOKIE).as_deref(), Some("t"));
     }
 
     #[test]
