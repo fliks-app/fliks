@@ -337,10 +337,9 @@ export class MediaController {
     const activityId = `Identify:${id}`;
     // Refused and reserved before the ids are written: a second identify would
     // otherwise commit its ids under the first walk and answer 409.
-    if (await this.activityRegistry.has(activityId)) {
+    if (!(await this.activityRegistry.claim(activityId, 'Identify'))) {
       throw new ConflictException('errors.already_running');
     }
-    this.activityRegistry.upsertRunning(activityId, 'Identify');
     let media: Awaited<ReturnType<MediaService['identify']>>;
     try {
       media = await this.mediaService.identify(id, dto);
@@ -396,14 +395,12 @@ export class MediaController {
 
     this.eventsService.emit({ type: 'metadata.started', mediaId: id, title });
     const activityId = `RefreshMetadata:${id}`;
-    if (await this.activityRegistry.has(activityId)) {
-      throw new ConflictException('errors.already_running');
-    }
-    this.activityRegistry.upsertRunning(
+    const claimed = await this.activityRegistry.claim(
       activityId,
       'RefreshMetadata',
       buildMediaProgressSubject(media),
     );
+    if (!claimed) throw new ConflictException('errors.already_running');
     // Fire-and-forget so the client doesn't sit waiting on TMDB + image
     // downloads. SSE event signals completion.
     void this.mediaService.refreshMetadata(id).then(
@@ -447,14 +444,12 @@ export class MediaController {
 
     this.eventsService.emit({ type: 'metadata.started', mediaId: id, title });
     const activityId = `RefreshEpisodeMetadata:${episodeId}`;
-    if (await this.activityRegistry.has(activityId)) {
-      throw new ConflictException('errors.already_running');
-    }
-    this.activityRegistry.upsertRunning(
+    const claimed = await this.activityRegistry.claim(
       activityId,
       'RefreshEpisodeMetadata',
       buildMediaProgressSubject(media),
     );
+    if (!claimed) throw new ConflictException('errors.already_running');
     void this.mediaService.refreshEpisodeMetadata(id, episodeId).then(
       () => {
         this.activityRegistry.remove(activityId);
@@ -501,14 +496,12 @@ export class MediaController {
     });
 
     const activityId = `Rescan:${id}`;
-    if (await this.activityRegistry.has(activityId)) {
-      throw new ConflictException('errors.already_running');
-    }
-    this.activityRegistry.upsertRunning(
+    const claimed = await this.activityRegistry.claim(
       activityId,
       'Rescan',
       buildMediaProgressSubject(media),
     );
+    if (!claimed) throw new ConflictException('errors.already_running');
     // Fire-and-forget: don't await.
     void this.mediaService.rescanFiles(id).then(
       (result) => {

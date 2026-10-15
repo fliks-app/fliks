@@ -11,7 +11,7 @@ interface BridgeInit {
   raw?: boolean;
 }
 
-/** Throws on a non-2xx. Returns the parsed JSON, `undefined` on 204, or the response when `raw`. */
+/** Throws on a non-2xx (the error carries `status`). Returns the parsed JSON, `undefined` on 204, or the response when `raw`. */
 export async function bridgeFetch(
   path: string,
   init: BridgeInit & { raw: true },
@@ -36,7 +36,11 @@ export async function bridgeFetch(
     body: init.body === undefined ? undefined : JSON.stringify(init.body),
     signal: init.signal ?? AbortSignal.timeout(5_000),
   });
-  if (!res.ok) throw new Error(`${path} answered ${res.status}`);
+  if (!res.ok) {
+    throw Object.assign(new Error(`${path} answered ${res.status}`), {
+      status: res.status,
+    });
+  }
   if (init.raw) return res;
   return res.status === 204 ? undefined : res.json();
 }

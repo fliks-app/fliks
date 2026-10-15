@@ -23,8 +23,8 @@ type Op =
 
 /**
  * Client of the registry in fliks-server (`/internal/activity`): "what is the server doing right
- * now" lives there, next to the SSE hub that pings clients when it changes. Writes are queued so
- * the registry sees them in call order; `has` waits for the queue to drain first.
+ * now" lives there, next to the SSE hub that pings clients when it changes. Writes and claims are
+ * queued so the registry sees them in call order.
  */
 @Injectable()
 export class ActivityRegistryService {
@@ -55,15 +55,31 @@ export class ActivityRegistryService {
     this.send({ op: 'remove', id });
   }
 
-  /** Whether this exact work is already registered, so a producer can refuse a
-   *  duplicate rather than run it twice. */
-  async has(id: string): Promise<boolean> {
-    if (!bridgeConfigured()) return false;
-    await this.sent;
-    const res = (await bridgeFetch(
-      `/internal/activity/${encodeURIComponent(id)}`,
-    )) as { has: boolean };
-    return res.has;
+  /** Registers the work as running unless it already is, atomically in the registry: `false`
+   *  means a duplicate the producer must refuse rather than run twice. */
+  claim(
+    id: string,
+    type: string,
+    subject?: MediaProgressSubject,
+  ): Promise<boolean> {
+    if (!bridgeConfigured()) return Promise.resolve(true);
+    const claimed = this.sent.then(() =>
+      bridgeFetch('/internal/activity/claim', {
+        method: 'POST',
+        body: { id, type, subject },
+      }).then(
+        () => true,
+        (err: Error & { status?: number }) => {
+          if (err.status === 409) return false;
+          throw err;
+        },
+      ),
+    );
+    this.sent = claimed.then(
+      () => undefined,
+      () => undefined,
+    );
+    return claimed;
   }
 
   private send(body: Op): void {

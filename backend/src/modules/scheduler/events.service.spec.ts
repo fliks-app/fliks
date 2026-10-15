@@ -111,17 +111,13 @@ describe('EventsService (forwarder)', () => {
 describe('ActivityRegistryService (bridge client)', () => {
   const flush = () => new Promise((r) => setImmediate(r));
 
-  it('sends mutations in order and answers has after the queue drained', async () => {
-    const calls = mockFetch(() => ({
-      ok: true,
-      status: 200,
-      json: () => Promise.resolve({ has: true }),
-    }));
+  it('sends mutations and claims in call order', async () => {
+    const calls = mockFetch();
     const registry = new ActivityRegistryService();
     registry.upsertPending('Rescan:1', 'Rescan', { title: 'T' }, 'p');
     registry.upsertRunning('Rescan:1', 'Rescan', undefined, 1, 2);
     registry.remove('Rescan:1');
-    await expect(registry.has('Rescan:1')).resolves.toBe(true);
+    await expect(registry.claim('Rescan:1', 'Rescan')).resolves.toBe(true);
     expect(calls.map((c) => [c.method, c.path, c.body])).toEqual([
       [
         'POST',
@@ -140,13 +136,24 @@ describe('ActivityRegistryService (bridge client)', () => {
         { op: 'running', id: 'Rescan:1', type: 'Rescan', current: 1, total: 2 },
       ],
       ['POST', '/internal/activity', { op: 'remove', id: 'Rescan:1' }],
-      ['GET', '/internal/activity/Rescan%3A1', undefined],
+      ['POST', '/internal/activity/claim', { id: 'Rescan:1', type: 'Rescan' }],
     ]);
     await flush();
   });
 
-  it('answers false without the bridge env', async () => {
+  it('answers false on 409 and rethrows other failures', async () => {
+    let status = 409;
+    mockFetch(() => ({ ok: false, status, json: () => Promise.resolve({}) }));
+    const registry = new ActivityRegistryService();
+    await expect(registry.claim('x', 'T')).resolves.toBe(false);
+    status = 500;
+    await expect(registry.claim('x', 'T')).rejects.toThrow('answered 500');
+  });
+
+  it('claims without the bridge env', async () => {
     delete process.env.FLIKS_BRIDGE_TOKEN;
-    await expect(new ActivityRegistryService().has('x')).resolves.toBe(false);
+    await expect(new ActivityRegistryService().claim('x', 'T')).resolves.toBe(
+      true,
+    );
   });
 });
