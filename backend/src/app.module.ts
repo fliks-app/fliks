@@ -32,6 +32,7 @@ import { PluginHostModule } from './modules/plugins/host/plugin-host.module';
 import { LiveTvModule } from './modules/livetv/livetv.module';
 import { CommonModule } from './common/common.module';
 import { EngineModule } from './modules/engine/engine.module';
+import { BridgeModule } from './modules/bridge/bridge.module';
 
 @Module({
   imports: [
@@ -56,6 +57,7 @@ import { EngineModule } from './modules/engine/engine.module';
     }),
     CommonModule,
     EngineModule,
+    BridgeModule,
     EventsModule,
     AuthModule,
     UsersModule,

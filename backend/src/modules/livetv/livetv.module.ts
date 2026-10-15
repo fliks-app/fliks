@@ -22,6 +22,7 @@ import { LivetvController } from './controllers/livetv.controller';
 import { LivetvAdminController } from './controllers/livetv-admin.controller';
 import { LiveTvAccessController } from './controllers/livetv-access.controller';
 import { AuthModule } from '../auth/auth.module';
+import { BridgeModule } from '../bridge/bridge.module';
 import { SettingsModule } from '../settings/settings.module';
 import { QoeModule } from '../qoe/qoe.module';
 import { StreamingModule } from '../streaming/streaming.module';
@@ -44,6 +45,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
       Command,
     ]),
     forwardRef(() => AuthModule),
+    BridgeModule,
     SettingsModule,
     StreamingModule,
     QoeModule,

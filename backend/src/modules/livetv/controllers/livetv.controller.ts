@@ -22,7 +22,7 @@ import { PoliciesGuard } from '../../auth/casl/policies.guard';
 import { CheckPolicies } from '../../auth/casl/check-policies.decorator';
 import { Action } from '../../auth/casl/actions.enum';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
-import { AuthService } from '../../auth/auth.service';
+import { StreamTokenClient } from '../../bridge/stream-token.client';
 import { User } from '../../users/entities/user.entity';
 import { ImageService, ImageSize } from '../../images/image.service';
 import { QoeService } from '../../qoe/qoe.service';
@@ -47,7 +47,7 @@ export class LivetvController {
     private readonly channels: LiveTvChannelsService,
     private readonly guide: LiveTvGuideService,
     private readonly sessions: LiveTvSessionService,
-    private readonly auth: AuthService,
+    private readonly streamTokens: StreamTokenClient,
     private readonly images: ImageService,
     private readonly qoe: QoeService,
   ) {}
@@ -150,7 +150,7 @@ export class LivetvController {
       ...dto,
       userAgent: req.headers['user-agent'] ?? null,
     });
-    const token = this.auth.generateStreamToken(user);
+    const token = await this.streamTokens.mint(user.id);
     return {
       ...result,
       url: `${result.url}?token=${encodeURIComponent(token)}`,
