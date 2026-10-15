@@ -1,0 +1,569 @@
+//! `POST /engine/resolve` (`engine-glue.md` section F): the engine asks whether a credential may read
+//! a media file, and where it is. `live` is Nest's until S7 (bridge B1).
+use crate::{
+    http::{
+        AppError,
+        auth::{UserRow, load_enabled},
+        cookies::{ACCESS_COOKIE, cookie_value},
+        validate::ValidJson,
+    },
+    state::AppState,
+};
+use axum::{
+    Json,
+    extract::{FromRequestParts, State},
+    http::{HeaderMap, HeaderValue, StatusCode, header, request::Parts},
+};
+use fliks_domain::acl::{Action, Permissions, Subject};
+use fliks_engine_core::{
+    api::{ResolveMediaId, ResolvePurpose, ResolveRequest, ResolveResponse},
+    jsnum,
+};
+use serde_json::Value;
+use sha2::{Digest, Sha256};
+use std::{
+    path::{Component, Path, PathBuf},
+    sync::OnceLock,
+    time::Duration,
+};
+use subtle::ConstantTimeEq;
+
+const TTL_S: f64 = 60.0;
+const PURPOSES: &str = "stream, download, sprite, subtitle, live";
+const KEYS: [&str; 5] = [
+    "mediaId",
+    "credential",
+    "purpose",
+    "subtitleId",
+    "streamIndex",
+];
+
+/// `Authorization` is exactly `Bearer <token>`, compared in constant time.
+pub(super) fn bearer_is(headers: &HeaderMap, token: &str) -> bool {
+    let digest = |s: &str| Sha256::digest(s.as_bytes());
+    let got = headers
+        .get(header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    digest(got)
+        .ct_eq(&digest(&format!("Bearer {token}")))
+        .into()
+}
+
+/// `EngineHostGuard`: only the engine, presenting the per-process host token, gets through.
+pub struct HostAuth;
+
+impl FromRequestParts<AppState> for HostAuth {
+    type Rejection = AppError;
+
+    async fn from_request_parts(parts: &mut Parts, st: &AppState) -> Result<Self, AppError> {
+        if bearer_is(&parts.headers, st.engine.host_token()) {
+            Ok(Self)
+        } else {
+            Err(AppError::bare(StatusCode::UNAUTHORIZED))
+        }
+    }
+}
+
+/// Why a request is not answered with an allow: a refusal the routes would give as a 4xx, or a host fault.
+enum Fail {
+    Denied,
+    Fault(AppError),
+}
+
+impl From<sqlx::Error> for Fail {
+    fn from(e: sqlx::Error) -> Self {
+        Self::Fault(e.into())
+    }
+}
+
+fn deny() -> ResolveResponse {
+    ResolveResponse {
+        allow: false,
+        path: None,
+        owner_id: None,
+        format: None,
+        ttl_s: Some(TTL_S),
+    }
+}
+
+#[utoipa::path(post, path = "/engine/resolve", responses((status = 200)))]
+pub async fn resolve(
+    State(st): State<AppState>,
+    _guard: HostAuth,
+    ValidJson(body): ValidJson<Value>,
+) -> Result<Json<ResolveResponse>, AppError> {
+    let request = parse(&body).map_err(AppError::bad_request)?;
+    let Some((user, perms)) = user_for(&st, &request.credential).await? else {
+        return Ok(Json(deny()));
+    };
+    match locate(&st, &user, &perms, &request).await {
+        Ok(found) => Ok(Json(ResolveResponse {
+            allow: true,
+            owner_id: Some(user.id.to_string()),
+            ttl_s: Some(found.ttl_s.unwrap_or(TTL_S)),
+            ..found
+        })),
+        Err(Fail::Denied) => Ok(Json(deny())),
+        Err(Fail::Fault(e)) => Err(e),
+    }
+}
+
+/// The DTO checks of `ResolveRequestDto` under `forbidNonWhitelisted`, with class-validator's messages.
+/// `mediaId` is normalized: a file id for the file purposes, the viewer's session id for `live`; a
+/// `mediaId` that is neither is `u32::MAX`, which no file has (the routes answered 400, a denial).
+fn parse(body: &Value) -> Result<ResolveRequest, Vec<String>> {
+    let empty = serde_json::Map::new();
+    let obj = body.as_object().unwrap_or(&empty);
+    let mut errors: Vec<String> = obj
+        .keys()
+        .filter(|k| !KEYS.contains(&k.as_str()))
+        .map(|k| format!("property {k} should not exist"))
+        .collect();
+    let media_id = obj.get("mediaId").filter(|v| !v.is_null());
+    if media_id.is_none() {
+        errors.push("mediaId should not be null or undefined".into());
+    }
+    let credential = obj.get("credential").and_then(Value::as_str);
+    if credential.is_none() {
+        errors.push("credential must be a string".into());
+    }
+    let purpose = obj
+        .get("purpose")
+        .and_then(Value::as_str)
+        .and_then(|p| serde_json::from_value::<ResolvePurpose>(p.into()).ok());
+    if purpose.is_none() {
+        errors.push(format!(
+            "purpose must be one of the following values: {PURPOSES}"
+        ));
+    }
+    let mut optional_int = |key: &str| -> Option<u32> {
+        let v = obj.get(key).filter(|v| !v.is_null())?;
+        let n = v.as_f64().filter(|_| v.is_number());
+        if n.is_none_or(|n| n < 0.0) {
+            errors.push(format!("{key} must not be less than 0"));
+        }
+        if n.is_none_or(|n| n.fract() != 0.0) {
+            errors.push(format!("{key} must be an integer number"));
+        }
+        // Beyond u32 no row exists: the same denial the database lookup gave.
+        n.map(|n| {
+            if n <= f64::from(u32::MAX) {
+                n as u32
+            } else {
+                u32::MAX
+            }
+        })
+    };
+    let subtitle_id = optional_int("subtitleId");
+    let stream_index = optional_int("streamIndex");
+    let (Some(media_id), Some(credential), Some(purpose), true) =
+        (media_id, credential, purpose, errors.is_empty())
+    else {
+        return Err(errors);
+    };
+    Ok(ResolveRequest {
+        media_id: normalize(media_id, purpose),
+        credential: credential.to_owned(),
+        purpose,
+        subtitle_id,
+        stream_index,
+    })
+}
+
+fn normalize(media_id: &Value, purpose: ResolvePurpose) -> ResolveMediaId {
+    if purpose == ResolvePurpose::Live {
+        return ResolveMediaId::Live(match media_id {
+            Value::String(s) => s.clone(),
+            Value::Number(n) => n.as_f64().map_or_else(String::new, jsnum::js_string),
+            _ => String::new(),
+        });
+    }
+    let id = match media_id {
+        Value::Number(n) => n.as_f64(),
+        Value::String(s) => jsnum::number(s),
+        _ => None,
+    };
+    ResolveMediaId::File(
+        id.filter(|n| n.fract() == 0.0 && *n > 0.0 && *n < f64::from(u32::MAX))
+            .map_or(u32::MAX, |n| n as u32),
+    )
+}
+
+/// `tokenOf`: `Bearer <jwt>`, else the `fliks_access` of a cookie header, else the bare token.
+fn token_of(credential: &str) -> Option<String> {
+    let c = credential.trim();
+    let words: Vec<&str> = c.split_whitespace().collect();
+    let token = if let [scheme, token] = words[..]
+        && scheme.eq_ignore_ascii_case("bearer")
+    {
+        token.to_owned()
+    } else if c.contains('=') {
+        let mut headers = HeaderMap::new();
+        headers.insert(header::COOKIE, HeaderValue::from_bytes(c.as_bytes()).ok()?);
+        cookie_value(&headers, ACCESS_COOKIE)?
+    } else {
+        c.to_owned()
+    };
+    (!token.is_empty()).then_some(token)
+}
+
+/// Same rules as `Authed` (signature, expiry, user still enabled) except that a `scope` claim is accepted:
+/// players carry stream tokens in their URLs.
+async fn user_for(
+    st: &AppState,
+    credential: &str,
+) -> Result<Option<(UserRow, Permissions)>, AppError> {
+    let Some(claims) = token_of(credential).and_then(|t| st.jwt.verify(&t)) else {
+        return Ok(None);
+    };
+    Ok(load_enabled(&st.db, claims.sub).await?.map(|(user, role)| {
+        let perms = Permissions::from(
+            role.as_ref().map_or(&[][..], |r| &r.permissions),
+            user.is_admin,
+        );
+        (user, perms)
+    }))
+}
+
+async fn locate(
+    st: &AppState,
+    user: &UserRow,
+    perms: &Permissions,
+    req: &ResolveRequest,
+) -> Result<ResolveResponse, Fail> {
+    let found = |path: Option<String>, format: Option<&str>| ResolveResponse {
+        allow: true,
+        path,
+        owner_id: None,
+        format: format.map(str::to_owned),
+        ttl_s: None,
+    };
+    let id = match &req.media_id {
+        ResolveMediaId::Live(viewer) => return nest_live(st, viewer, user.id).await,
+        ResolveMediaId::File(id) if *id != u32::MAX => *id,
+        ResolveMediaId::File(_) => return Err(Fail::Denied),
+    };
+    if req.purpose == ResolvePurpose::Subtitle
+        && let Some(subtitle_id) = req.subtitle_id
+    {
+        let file = subtitle_on_disk(st, user, perms, subtitle_id).await?;
+        let format = file
+            .extension()
+            .map(|e| e.to_string_lossy().to_lowercase())
+            .unwrap_or_default();
+        return Ok(found(
+            Some(file.to_string_lossy().into_owned()),
+            Some(&format),
+        ));
+    }
+    let file = resolve_file(st, user, perms, id).await?;
+    let file = file.to_string_lossy().into_owned();
+    match req.purpose {
+        ResolvePurpose::Sprite => {
+            let sprite = cache_dir()
+                .join("thumbnails")
+                .join(id.to_string())
+                .join("sprite.jpg");
+            Ok(found(Some(sprite.to_string_lossy().into_owned()), None))
+        }
+        ResolvePurpose::Subtitle if req.stream_index.is_none() => Err(Fail::Denied),
+        ResolvePurpose::Subtitle => Ok(found(Some(file), Some("embedded"))),
+        _ => Ok(found(Some(file), None)),
+    }
+}
+
+/// Where a file row sits: its library and the path stored under the media root.
+#[derive(sqlx::FromRow)]
+struct Located {
+    library_id: Option<i32>,
+    folder: Option<String>,
+    library_path: Option<String>,
+    stored: Option<String>,
+}
+
+impl Located {
+    async fn find(db: &sqlx::PgPool, sql: &str, id: u32) -> Result<Self, Fail> {
+        let id = i32::try_from(id).map_err(|_| Fail::Denied)?;
+        let row = sqlx::query_as(sql).bind(id).fetch_optional(db).await?;
+        row.ok_or(Fail::Denied)
+    }
+}
+
+/// A media file the user may read, as its absolute path: library ACL, then the path must stay under the
+/// media root, exist, and not escape it through a symlink. Every refusal is a 404 to the routes.
+async fn resolve_file(
+    st: &AppState,
+    user: &UserRow,
+    perms: &Permissions,
+    id: u32,
+) -> Result<PathBuf, Fail> {
+    let row = Located::find(
+        &st.db,
+        r#"SELECT m."libraryId" AS library_id, m."folderName" AS folder, l."path" AS library_path,
+                  mf."relativePath" AS stored
+           FROM media_files mf
+           LEFT JOIN media m ON m."id" = mf."mediaId"
+           LEFT JOIN libraries l ON l."id" = m."libraryId"
+           WHERE mf."id" = $1"#,
+        id,
+    )
+    .await?;
+    check_library(st, user, perms, row.library_id).await?;
+    let root = media_root(row.library_path, row.folder).ok_or(Fail::Denied)?;
+    let absolute = lexical_resolve(&root, &row.stored.unwrap_or_default());
+    if !absolute.starts_with(&root) {
+        return Err(Fail::Denied);
+    }
+    tokio::fs::metadata(&absolute)
+        .await
+        .map_err(|_| Fail::Denied)?;
+    let real = tokio::fs::canonicalize(&absolute)
+        .await
+        .map_err(|_| Fail::Denied)?;
+    if !real.starts_with(&root) {
+        return Err(Fail::Denied);
+    }
+    Ok(absolute)
+}
+
+/// An external subtitle's file, `realpath`ed; only the lexical containment is checked (no symlink rule).
+async fn subtitle_on_disk(
+    st: &AppState,
+    user: &UserRow,
+    perms: &Permissions,
+    id: u32,
+) -> Result<PathBuf, Fail> {
+    let row = Located::find(
+        &st.db,
+        r#"SELECT m."libraryId" AS library_id, m."folderName" AS folder, l."path" AS library_path,
+                  sf."filePath" AS stored
+           FROM subtitle_files sf
+           LEFT JOIN media m ON m."id" = sf."mediaId"
+           LEFT JOIN libraries l ON l."id" = m."libraryId"
+           WHERE sf."id" = $1"#,
+        id,
+    )
+    .await?;
+    check_library(st, user, perms, row.library_id).await?;
+    let stored = row
+        .stored
+        .filter(|s| !s.trim().is_empty())
+        .ok_or(Fail::Denied)?;
+    let root = media_root(row.library_path, row.folder).ok_or(Fail::Denied)?;
+    let absolute = lexical_resolve(&root, stored.trim());
+    if !absolute.starts_with(&root) {
+        return Err(Fail::Denied);
+    }
+    tokio::fs::canonicalize(&absolute)
+        .await
+        .map_err(|_| Fail::Denied)
+}
+
+/// `getAccessibleLibraryIds`: every library for an admin or `manage:all`, else the user's grants; a media
+/// outside a library is denied to everyone.
+async fn check_library(
+    st: &AppState,
+    user: &UserRow,
+    perms: &Permissions,
+    library_id: Option<i32>,
+) -> Result<(), Fail> {
+    let Some(library) = library_id else {
+        return Err(Fail::Denied);
+    };
+    if perms.can(Action::Manage, &Subject::All) {
+        return Ok(());
+    }
+    let granted: bool = sqlx::query_scalar(
+        r#"SELECT EXISTS (SELECT 1 FROM library_user_access WHERE "userId" = $1 AND "libraryId" = $2)"#,
+    )
+    .bind(user.id)
+    .bind(library)
+    .fetch_one(&st.db)
+    .await?;
+    granted.then_some(()).ok_or(Fail::Denied)
+}
+
+/// `library.path` joined with the media's folder (the library root for a movie without one).
+fn media_root(library_path: Option<String>, folder: Option<String>) -> Option<PathBuf> {
+    let library = library_path.filter(|p| !p.is_empty())?;
+    Some(lexical_resolve(
+        Path::new(&library),
+        folder.as_deref().unwrap_or(""),
+    ))
+}
+
+/// `path.resolve(base, rel)` without touching the disk: `rel` wins when absolute, `.` and `..` fold.
+fn lexical_resolve(base: &Path, rel: &str) -> PathBuf {
+    let mut out = PathBuf::new();
+    for c in base.join(rel).components() {
+        match c {
+            Component::ParentDir => {
+                out.pop();
+            }
+            Component::CurDir => {}
+            c => out.push(c),
+        }
+    }
+    out
+}
+
+/// Extracted subtitles and legacy sprites: `FLIKS_CACHE_DIR`, else `<data dir>/cache`.
+pub fn cache_dir() -> PathBuf {
+    let env = |k| {
+        std::env::var(k)
+            .ok()
+            .map(|v| v.trim().to_owned())
+            .filter(|v| !v.is_empty())
+    };
+    env("FLIKS_CACHE_DIR").map_or_else(
+        || {
+            let data = env("FLIKS_DATA_DIR")
+                .or_else(|| env("FLIKS_IMAGES_DIR"))
+                .map(PathBuf::from)
+                .unwrap_or_else(|| {
+                    let legacy = PathBuf::from("images");
+                    if legacy.exists() {
+                        legacy
+                    } else {
+                        "data".into()
+                    }
+                });
+            data.join("cache")
+        },
+        PathBuf::from,
+    )
+}
+
+/// Bridge B1: Nest answers `live` (it owns the viewers and the channel access policy) until S7.
+async fn nest_live(st: &AppState, viewer: &str, user_id: i32) -> Result<ResolveResponse, Fail> {
+    static HTTP: OnceLock<reqwest::Client> = OnceLock::new();
+    let http = HTTP.get_or_init(|| {
+        reqwest::Client::builder()
+            .timeout(Duration::from_secs(5))
+            .build()
+            .expect("reqwest client")
+    });
+    let fault = |e: String| {
+        tracing::error!(error = %e, "live resolve bridge");
+        Fail::Fault(AppError::plain(StatusCode::BAD_GATEWAY, "Bad Gateway"))
+    };
+    let res = http
+        .post(format!("{}/engine/resolve", crate::nest::url(&st.cfg)))
+        .bearer_auth(&st.cfg.bridge_token)
+        .json(&serde_json::json!({"mediaId": viewer, "userId": user_id, "purpose": "live"}))
+        .send()
+        .await
+        .map_err(|e| fault(e.without_url().to_string()))?;
+    if !res.status().is_success() {
+        return Err(fault(format!("status {}", res.status())));
+    }
+    let verdict: ResolveResponse = res
+        .json()
+        .await
+        .map_err(|e| fault(e.without_url().to_string()))?;
+    if verdict.allow {
+        Ok(verdict)
+    } else {
+        Err(Fail::Denied)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn credentials_come_as_bearer_cookie_or_bare_token() {
+        for (c, want) in [
+            ("Bearer abc", Some("abc")),
+            ("  bearer   abc ", Some("abc")),
+            ("fliks_access=abc; other=1", Some("abc")),
+            ("other=1; fliks_access=a%20b", Some("a b")),
+            ("abc", Some("abc")),
+            ("Bearer a b", Some("Bearer a b")),
+            ("Bearer", Some("Bearer")),
+            ("other=1", None),
+            ("fliks_access=", None),
+            ("", None),
+        ] {
+            assert_eq!(token_of(c).as_deref(), want, "{c:?}");
+        }
+    }
+
+    #[test]
+    fn lexical_resolve_folds_dots_and_lets_absolute_paths_win() {
+        let root = Path::new("/m/Movie");
+        assert_eq!(
+            lexical_resolve(root, "a/../b.mkv"),
+            Path::new("/m/Movie/b.mkv")
+        );
+        assert_eq!(lexical_resolve(root, ""), Path::new("/m/Movie"));
+        assert_eq!(lexical_resolve(root, "/etc/x"), Path::new("/etc/x"));
+        let escaped = lexical_resolve(root, "../Other/x.mkv");
+        assert!(!escaped.starts_with(root));
+        assert!(
+            !lexical_resolve(Path::new("/m/Movie"), "../Movie2/x").starts_with(root),
+            "a sibling sharing the prefix is outside"
+        );
+    }
+
+    #[test]
+    fn body_validation_matches_the_dto() {
+        let msgs = |v: Value| parse(&v).err().unwrap();
+        assert_eq!(
+            msgs(json!({})),
+            [
+                "mediaId should not be null or undefined",
+                "credential must be a string",
+                "purpose must be one of the following values: stream, download, sprite, subtitle, live",
+            ]
+        );
+        assert_eq!(
+            msgs(json!({"mediaId": 1, "credential": "x", "purpose": "stream", "extra": 1})),
+            ["property extra should not exist"]
+        );
+        assert_eq!(
+            msgs(
+                json!({"mediaId": 1, "credential": "x", "purpose": "stream", "subtitleId": -1, "streamIndex": 1.5})
+            ),
+            [
+                "subtitleId must not be less than 0",
+                "streamIndex must be an integer number"
+            ]
+        );
+        assert_eq!(
+            msgs(json!({"mediaId": null, "credential": 1, "purpose": "x"})).len(),
+            3
+        );
+        let ok = parse(
+            &json!({"mediaId": "12", "credential": "c", "purpose": "download", "subtitleId": null}),
+        )
+        .unwrap();
+        assert_eq!(
+            (ok.media_id, ok.subtitle_id),
+            (ResolveMediaId::File(12), None)
+        );
+    }
+
+    #[test]
+    fn media_ids_are_files_or_viewers() {
+        let id = |v: Value, p| normalize(&v, p);
+        use ResolvePurpose::{Live, Stream};
+        assert_eq!(id(json!(7), Stream), ResolveMediaId::File(7));
+        assert_eq!(id(json!(" 7 "), Stream), ResolveMediaId::File(7));
+        for bad in [
+            json!(0),
+            json!(-1),
+            json!(1.5),
+            json!("x"),
+            json!(true),
+            json!(1e12),
+        ] {
+            assert_eq!(id(bad, Stream), ResolveMediaId::File(u32::MAX));
+        }
+        assert_eq!(id(json!("abc"), Live), ResolveMediaId::Live("abc".into()));
+        assert_eq!(id(json!(5), Live), ResolveMediaId::Live("5".into()));
+    }
+}

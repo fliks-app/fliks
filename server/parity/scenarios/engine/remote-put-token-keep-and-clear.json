@@ -1,0 +1,109 @@
+{
+  "deviation": "F5",
+  "engine": "down",
+  "name": "engine-remote-put-token-keep-and-clear",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "pathMappings": [
+          {
+            "from": " /nas ",
+            "to": "/data"
+          }
+        ],
+        "token": "secret-tok",
+        "url": "http://127.0.0.1:9"
+      },
+      "expect": {
+        "body": {
+          "error": "The streaming engine is unreachable",
+          "pathMappings": [
+            {
+              "from": "/nas",
+              "to": "/data"
+            }
+          ],
+          "processUrl": "",
+          "secretsSet": [
+            "engine_token"
+          ],
+          "status": "down",
+          "url": "http://127.0.0.1:9"
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/engine/remote"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "pathMappings": [],
+        "token": "",
+        "url": ""
+      },
+      "expect": {
+        "body": {
+          "pathMappings": [],
+          "processUrl": "",
+          "secretsSet": [
+            "engine_token"
+          ],
+          "status": "off",
+          "url": ""
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/engine/remote"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "key": "engine_token",
+          "secretSet": true,
+          "value": null
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/settings/engine_token"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "pathMappings": [],
+        "token": null,
+        "url": ""
+      },
+      "expect": {
+        "body": {
+          "pathMappings": [],
+          "processUrl": "",
+          "status": "off",
+          "url": ""
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/engine/remote"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "pathMappings": [],
+          "processUrl": "",
+          "status": "off",
+          "url": ""
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/engine/remote"
+    }
+  ]
+}

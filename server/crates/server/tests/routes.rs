@@ -81,7 +81,7 @@ async fn every_nest_route_is_owned_or_forwarded() {
 }
 
 #[tokio::test]
-async fn unprefixed_engine_resolve_and_unknown_api_paths_forward_but_internal_does_not() {
+async fn unknown_api_paths_forward_but_internal_does_not() {
     let router = app::router(
         state(),
         fake_nest().await,
@@ -90,7 +90,6 @@ async fn unprefixed_engine_resolve_and_unknown_api_paths_forward_but_internal_do
         None,
     );
     for (path, forwarded) in [
-        ("/engine/resolve", true),
         ("/api/unknown/thing", true),
         ("/api", true),
         ("/api/system/liveness", true),

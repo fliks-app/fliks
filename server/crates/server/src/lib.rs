@@ -49,6 +49,7 @@ pub async fn serve(cfg: Config) -> Result<(), BoxError> {
     let upstream = Upstream::parse(&nest::url(&cfg))?;
     let state = AppState::new(pool, cfg, &secret);
     auth::spawn_jobs(state.db.clone());
+    state.engine.start(state.db.clone(), state.cfg.port).await;
     let cfg = state.cfg.clone();
     let hub = state.hub.clone();
     let app = app::router(
