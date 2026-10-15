@@ -51,10 +51,11 @@ pub fn router(
         .route("/internal/", any(internal_404))
         .route("/internal/{*rest}", any(internal_404))
         .fallback_service(static_files::router(client_dir, cast_dir));
-    // Merged after the layers so Nest answers the other methods unlayered instead of a 405.
+    // Merged after the layers so Nest answers the other methods unlayered instead of a 405 (liveness,
+    // `/engine/resolve`).
     let local = layers::apply(local, cors_origin, BODY_LIMIT_BYTES)
         .route(system::LIVENESS, any_service(forwarder.clone()));
-    ["/api", "/api/", "/api/{*rest}"]
+    ["/api", "/api/", "/api/{*rest}", "/engine/resolve"]
         .into_iter()
         .fold(local, |r, p| r.route(p, any_service(forwarder.clone())))
 }

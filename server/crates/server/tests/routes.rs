@@ -137,4 +137,7 @@ async fn forwarded_methods_on_owned_paths_skip_the_rust_layers() {
     assert!(post.headers().contains_key(FORWARDED));
     assert!(!post.headers().contains_key("access-control-allow-origin"));
     assert!(!post.headers().contains_key("vary"));
+    let req = Request::get("/engine/resolve").body(Body::empty()).unwrap();
+    let res = router.clone().oneshot(req).await.unwrap();
+    assert!(res.headers().contains_key(FORWARDED), "GET /engine/resolve");
 }
