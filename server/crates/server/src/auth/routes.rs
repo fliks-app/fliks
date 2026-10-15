@@ -221,10 +221,12 @@ async fn refresh(
     ValidJson(dto): ValidJson<RefreshDto>,
 ) -> Result<Response, AppError> {
     let raw = match dto.refresh_token {
+        // Nest's `!refreshToken`: every JSON falsy value is missing.
         None | Some(Value::Null | Value::Bool(false)) => None,
+        Some(Value::Number(n)) if n.as_f64() == Some(0.0) => None,
         Some(Value::String(s)) if s.is_empty() => None,
         Some(Value::String(s)) => Some(s),
-        // A non-string cannot be a token; Nest 500s here.
+        // A truthy non-string cannot be a token; Nest 500s here.
         Some(_) => return Err(AppError::unauthorized("Invalid refresh token")),
     };
     let raw = raw.ok_or_else(|| AppError::unauthorized("Missing refresh token"))?;
@@ -325,7 +327,7 @@ async fn register(
     let hash = tokio::task::spawn_blocking(move || bcrypt::hash(password, BCRYPT_COST))
         .await
         .map_err(|_| internal())?
-        .map_err(|_| AppError::bad_request(vec!["password is invalid".to_owned()]))?;
+        .map_err(|_| internal())?;
     let id = sqlx::query_scalar!(
         r#"INSERT INTO users (username, email, "passwordHash", "roleId", "isAdmin", "mediaServerType")
            VALUES ($1, $2, $3, $4, false, 'local') RETURNING id"#,
