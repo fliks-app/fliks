@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM role_default_libraries WHERE \"roleId\" = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c4a29f3fb96835ee6876071215959a68cc17a2f546ef1e11182c4ec3fc2bee8a"
+}

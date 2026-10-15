@@ -43,7 +43,7 @@ pub fn router(
 
 /// Ported domain routers are merged here, one `.merge(...)` per domain.
 fn api() -> Router<AppState> {
-    Router::new()
+    Router::new().merge(crate::roles::router())
 }
 
 async fn internal_404(req: Request) -> Response {

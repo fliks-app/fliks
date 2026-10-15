@@ -7,6 +7,7 @@ pub mod engine;
 pub mod http;
 pub mod jwt_secret;
 pub mod nest;
+pub mod roles;
 pub mod state;
 pub mod system;
 
@@ -38,6 +39,7 @@ pub async fn migrate(cfg: &Config) -> Result<(), BoxError> {
 pub async fn serve(cfg: Config) -> Result<(), BoxError> {
     let pool = connect(&cfg).await?;
     db::migrate(&pool).await?;
+    roles::seed(&pool).await?;
     let secret = jwt_secret::resolve(&cfg);
     let upstream = Upstream::parse(&nest::url(&cfg))?;
     let state = AppState::new(pool, cfg, &secret);

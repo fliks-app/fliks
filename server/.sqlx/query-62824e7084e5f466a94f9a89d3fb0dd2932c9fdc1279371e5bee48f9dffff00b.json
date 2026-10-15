@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE roles SET \"isDefault\" = false, \"updatedAt\" = now() WHERE \"isDefault\"",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "62824e7084e5f466a94f9a89d3fb0dd2932c9fdc1279371e5bee48f9dffff00b"
+}
