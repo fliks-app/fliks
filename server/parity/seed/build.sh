@@ -10,7 +10,6 @@ db=fliks_parity_tpl
 sql() { docker exec -i fliks-postgres-1 sh -c 'PGOPTIONS="-c client_min_messages=warning" psql -U "$POSTGRES_USER" -v ON_ERROR_STOP=1 -q "$@"' _ "$@"; }
 
 sql -d postgres -c "DROP DATABASE IF EXISTS $db WITH (FORCE)" -c "CREATE DATABASE $db"
-sql -d $db -c "CREATE EXTENSION IF NOT EXISTS pg_trgm"
 for f in "$mig"/*.sql; do sql -d $db <"$f"; done
 
 # sqlx ledger, so fliks-server finds the schema already migrated
