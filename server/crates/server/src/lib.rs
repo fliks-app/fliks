@@ -1,14 +1,19 @@
 pub mod app;
+pub mod auth_token;
+pub mod bridge;
 pub mod config;
 pub mod db;
+pub mod engine;
 pub mod http;
 pub mod jwt_secret;
 pub mod nest;
+pub mod state;
 pub mod system;
 
 use config::Config;
 use fliks_engine::{gateway::Upstream, supervise};
-use sqlx::postgres::PgPoolOptions;
+use sqlx::{PgPool, postgres::PgPoolOptions};
+use state::AppState;
 use std::{net::SocketAddr, time::Duration};
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
@@ -16,21 +21,29 @@ type BoxError = Box<dyn std::error::Error + Send + Sync>;
 /// Nest's TypeORM pool size (`bootstrap.md` rule 14).
 const POOL_MAX: u32 = 30;
 
-pub async fn migrate(cfg: &Config) -> Result<(), BoxError> {
-    let pool = PgPoolOptions::new()
+async fn connect(cfg: &Config) -> Result<PgPool, sqlx::Error> {
+    PgPoolOptions::new()
         .max_connections(POOL_MAX)
         .connect_with(cfg.db.clone())
-        .await?;
+        .await
+}
+
+pub async fn migrate(cfg: &Config) -> Result<(), BoxError> {
+    let pool = connect(cfg).await?;
     db::migrate(&pool).await?;
     pool.close().await;
     Ok(())
 }
 
 pub async fn serve(cfg: Config) -> Result<(), BoxError> {
-    migrate(&cfg).await?;
-    jwt_secret::ensure(&cfg);
+    let pool = connect(&cfg).await?;
+    db::migrate(&pool).await?;
+    let secret = jwt_secret::resolve(&cfg);
     let upstream = Upstream::parse(&nest::url(&cfg))?;
+    let state = AppState::new(pool, cfg, &secret);
+    let cfg = state.cfg.clone();
     let app = app::router(
+        state,
         upstream,
         cfg.serve_static_path.clone(),
         cfg.cast_dir.clone(),
@@ -38,7 +51,7 @@ pub async fn serve(cfg: Config) -> Result<(), BoxError> {
     );
     // Bind before spawning Nest so a port clash cannot orphan it.
     let listener = tokio::net::TcpListener::bind(("0.0.0.0", cfg.port)).await?;
-    let nest = nest::spawn(&cfg);
+    let nest = nest::spawn(&cfg, &secret);
     tracing::info!("listening on {}", listener.local_addr()?);
     let served = axum::serve(
         listener,

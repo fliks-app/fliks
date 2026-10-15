@@ -1,5 +1,5 @@
 use crate::http::{layers, static_files};
-use crate::system;
+use crate::{state::AppState, system};
 use axum::{Router, extract::Request, response::Response, routing::any, routing::any_service};
 use fliks_engine::gateway::{self, RouteTable, Upstream};
 use std::path::PathBuf;
@@ -15,6 +15,7 @@ pub struct ApiDoc;
 
 /// Rust-owned routes and static files get the layers; the forwarded paths do not, as Nest sets its own CORS headers.
 pub fn router(
+    state: AppState,
     nest: Upstream,
     client_dir: Option<PathBuf>,
     cast_dir: PathBuf,
@@ -26,6 +27,7 @@ pub fn router(
         None,
     );
     let local = system::router()
+        .merge(api().with_state(state))
         .route("/internal", any(internal_404))
         .route("/internal/", any(internal_404))
         .route("/internal/{*rest}", any(internal_404))
@@ -37,6 +39,11 @@ pub fn router(
     ["/api", "/api/", "/api/{*rest}", "/engine/resolve"]
         .into_iter()
         .fold(local, |r, p| r.route(p, any_service(forwarder.clone())))
+}
+
+/// Ported domain routers are merged here, one `.merge(...)` per domain.
+fn api() -> Router<AppState> {
+    Router::new()
 }
 
 async fn internal_404(req: Request) -> Response {
