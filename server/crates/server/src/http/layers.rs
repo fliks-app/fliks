@@ -1,7 +1,7 @@
 use axum::Router;
 use axum::body::{Body, to_bytes};
 use axum::extract::{Request, State};
-use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE, HeaderValue};
+use axum::http::header::{ACCESS_CONTROL_REQUEST_METHOD, CACHE_CONTROL, CONTENT_TYPE, HeaderValue};
 use axum::http::{Method, StatusCode};
 use axum::middleware::{Next, from_fn, from_fn_with_state};
 use axum::response::{IntoResponse, Response};
@@ -55,8 +55,9 @@ async fn body_limit(State(limit): State<usize>, req: Request, next: Next) -> Res
         .get(CONTENT_TYPE)
         .and_then(|v| v.to_str().ok())
         .is_some_and(|ct| {
-            let ct = ct.to_ascii_lowercase();
-            ct.contains("json") || ct.starts_with("application/x-www-form-urlencoded")
+            let essence = ct.split(';').next().unwrap_or_default().trim();
+            essence.eq_ignore_ascii_case("application/json")
+                || essence.eq_ignore_ascii_case("application/x-www-form-urlencoded")
         });
     if !limited {
         return next.run(req).await;
@@ -70,6 +71,17 @@ async fn body_limit(State(limit): State<usize>, req: Request, next: Next) -> Res
         Err(_) => AppError::plain(StatusCode::PAYLOAD_TOO_LARGE, "request entity too large")
             .into_response(),
     }
+}
+
+/// Express `cors` answers preflights 204 (`optionsSuccessStatus`); tower-http answers 200.
+async fn preflight_204(req: Request, next: Next) -> Response {
+    let preflight = req.method() == Method::OPTIONS
+        && req.headers().contains_key(ACCESS_CONTROL_REQUEST_METHOD);
+    let mut res = next.run(req).await;
+    if preflight {
+        *res.status_mut() = StatusCode::NO_CONTENT;
+    }
+    res
 }
 
 pub fn apply(router: Router, cors_origin: Option<String>, body_limit_bytes: usize) -> Router {
@@ -89,6 +101,7 @@ pub fn apply(router: Router, cors_origin: Option<String>, body_limit_bytes: usiz
         .layer(from_fn_with_state(body_limit_bytes, body_limit))
         .layer(from_fn(no_store_on_error))
         .layer(cors)
+        .layer(from_fn(preflight_204))
         .layer(TraceLayer::new_for_http())
 }
 
@@ -160,6 +173,7 @@ mod tests {
             )
             .await
             .unwrap();
+        assert_eq!(pre.status(), 204);
         let h = pre.headers();
         assert_eq!(h["access-control-allow-origin"], "https://a.test");
         assert_eq!(h["access-control-allow-credentials"], "true");
@@ -197,6 +211,13 @@ mod tests {
         );
         assert_eq!(
             send("application/json", "x".repeat(100 * 1024))
+                .await
+                .unwrap()
+                .status(),
+            200
+        );
+        assert_eq!(
+            send("application/vnd.api+json", big.clone())
                 .await
                 .unwrap()
                 .status(),

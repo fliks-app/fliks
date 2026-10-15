@@ -61,34 +61,33 @@ fn matches_etag(header: &str, etag: &str) -> bool {
     header.trim() == "*" || header.split(',').any(|t| weak(t) == weak(etag))
 }
 
-/// `/api/**` never reaches the SPA fallback; every 404 here has Nest's body.
+/// Every miss gets Nest's `Cannot <METHOD> <originalUrl>` 404; ServeDir's 405 on other methods included.
 async fn nest_404(req: Request, next: Next) -> Response {
-    let (method, path) = (req.method().clone(), req.uri().path().to_owned());
-    let res = if path == "/api" || path.starts_with("/api/") {
-        let mut r = Response::new(Body::empty());
-        *r.status_mut() = StatusCode::NOT_FOUND;
-        r
-    } else {
-        next.run(req).await
-    };
-    if res.status() == StatusCode::NOT_FOUND {
-        return AppError::not_found(format!("Cannot {method} {path}")).into_response();
+    let method = req.method().clone();
+    let url = req
+        .uri()
+        .path_and_query()
+        .map_or("/", |p| p.as_str())
+        .to_owned();
+    let res = next.run(req).await;
+    if matches!(
+        res.status(),
+        StatusCode::NOT_FOUND | StatusCode::METHOD_NOT_ALLOWED
+    ) {
+        return AppError::not_found(format!("Cannot {method} {url}")).into_response();
     }
     res
 }
 
-pub fn router(client_dir: PathBuf, cast_dir: PathBuf) -> Router {
-    let index = client_dir.join("index.html");
-    // The SPA fallback must not swallow API paths; those 404 like Nest's `exclude`.
-    let spa = ServeDir::new(&client_dir)
-        .fallback(ServeFile::new(index))
-        .append_index_html_on_directories(true);
+/// `/cast` always; the SPA at `/` (with `index.html` fallback) only when a client dir is set.
+pub fn router(client_dir: Option<PathBuf>, cast_dir: PathBuf) -> Router {
     let cast = ServeDir::new(cast_dir).append_index_html_on_directories(false);
-    Router::new()
-        .nest_service("/cast", cast)
-        .fallback_service(spa)
-        .layer(from_fn(validators))
-        .layer(from_fn(nest_404))
+    let mut r = Router::new().nest_service("/cast", cast);
+    if let Some(dir) = client_dir {
+        r = r
+            .fallback_service(ServeDir::new(&dir).fallback(ServeFile::new(dir.join("index.html"))));
+    }
+    r.layer(from_fn(validators)).layer(from_fn(nest_404))
 }
 
 #[cfg(test)]
@@ -109,7 +108,14 @@ mod tests {
     }
 
     async fn get(r: &Router, uri: &str, hdr: Option<(&str, &str)>) -> Response {
-        let mut b = Request::get(uri);
+        send(r, Request::get(uri), hdr).await
+    }
+
+    async fn send(
+        r: &Router,
+        mut b: axum::http::request::Builder,
+        hdr: Option<(&str, &str)>,
+    ) -> Response {
         if let Some((k, v)) = hdr {
             b = b.header(k, v);
         }
@@ -127,9 +133,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn serves_files_spa_cast_and_excludes_api() {
+    async fn serves_files_spa_cast_and_nest_404() {
         let (c, k) = dirs("serve");
-        let r = router(c, k);
+        let r = router(Some(c), k);
         let file = get(&r, "/app.js", None).await;
         assert_eq!(file.status(), 200);
         assert_eq!(file.headers()[CACHE_CONTROL], "public, max-age=0");
@@ -148,15 +154,25 @@ mod tests {
         let missing = get(&r, "/cast/nope.html", None).await;
         assert_eq!(missing.status(), 404);
         assert!(text(missing).await.contains("Cannot GET /cast/nope.html"));
-        let api = get(&r, "/api/x", None).await;
-        assert_eq!(api.status(), 404);
-        assert!(text(api).await.contains("\"statusCode\":404"));
+        let post = send(&r, Request::post("/app.js?a=1"), None).await;
+        assert_eq!(post.status(), 404);
+        assert!(text(post).await.contains("Cannot POST /app.js?a=1"));
+    }
+
+    #[tokio::test]
+    async fn without_client_dir_only_cast() {
+        let (_, k) = dirs("nocli");
+        let r = router(None, k);
+        assert_eq!(get(&r, "/cast/receiver.html", None).await.status(), 200);
+        let miss = get(&r, "/", None).await;
+        assert_eq!(miss.status(), 404);
+        assert!(text(miss).await.contains("Cannot GET /"));
     }
 
     #[tokio::test]
     async fn conditional_get_304() {
         let (c, k) = dirs("etag");
-        let r = router(c, k);
+        let r = router(Some(c), k);
         let etag = get(&r, "/app.js", None).await.headers()[ETAG]
             .to_str()
             .unwrap()
