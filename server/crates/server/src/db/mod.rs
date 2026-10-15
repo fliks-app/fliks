@@ -1,3 +1,3 @@
 pub mod migrate;
 
-pub use migrate::{adopt_typeorm, migrate, MigrateError};
+pub use migrate::{MigrateError, adopt_typeorm, migrate};
