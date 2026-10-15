@@ -27,12 +27,18 @@ describe('ImportsController api key fallback', () => {
     expect(settings.get).not.toHaveBeenCalled();
   });
 
-  it.each([undefined, '', '  '])('falls back to the stored key for %p', async (k) => {
-    const { ctrl, radarr, settings } = make('stored');
-    await ctrl.previewRadarr({ url: 'http://r', apiKey: k });
-    expect(settings.get).toHaveBeenCalledWith('radarr_api_key');
-    expect(radarr.previewRootFolders).toHaveBeenCalledWith('http://r', 'stored');
-  });
+  it.each([undefined, '', '  '])(
+    'falls back to the stored key for %p',
+    async (k) => {
+      const { ctrl, radarr, settings } = make('stored');
+      await ctrl.previewRadarr({ url: 'http://r', apiKey: k });
+      expect(settings.get).toHaveBeenCalledWith('radarr_api_key');
+      expect(radarr.previewRootFolders).toHaveBeenCalledWith(
+        'http://r',
+        'stored',
+      );
+    },
+  );
 
   it('uses the sonarr and seerr setting keys', async () => {
     const { ctrl, sonarr, seerr, settings } = make('stored');
