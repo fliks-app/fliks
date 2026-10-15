@@ -8,5 +8,6 @@ mod routes;
 mod sse;
 
 pub use event::{Bus, DomainEvent, Num, RawEvent, SseEvent, Subject};
+pub(crate) use hub::uuid_v4;
 pub use hub::{Connection, Hub, Identity, Target};
 pub use routes::{__path_activity, __path_events, activity, events, router};

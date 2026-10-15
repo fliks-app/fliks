@@ -134,7 +134,7 @@ impl Drop for Teardown {
     }
 }
 
-fn uuid_v4() -> String {
+pub(crate) fn uuid_v4() -> String {
     let mut b = [0u8; 16];
     getrandom::fill(&mut b).expect("os rng");
     b[6] = b[6] & 0x0f | 0x40;
