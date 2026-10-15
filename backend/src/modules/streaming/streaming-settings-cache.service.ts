@@ -1,13 +1,11 @@
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, Optional } from '@nestjs/common';
+import { EngineService, toEngineStreaming } from '../engine/engine.service';
 import { SettingsService } from '../settings/settings.service';
 import { StreamLifetime } from './lifetime-constants';
-import {
-  DEFAULT_TONEMAP_CURVE,
-  type TonemapCurve,
-} from './transcoding/codec/types';
-import type { TonemapAlgo } from './transcoding/types';
 
-export type { TonemapAlgo, TonemapCurve };
+export type TonemapAlgo = 'auto' | 'opencl' | 'vaapi' | 'qsv';
+export type TonemapCurve = 'hable' | 'mobius' | 'reinhard';
+const DEFAULT_TONEMAP_CURVE: TonemapCurve = 'mobius';
 
 export interface StreamingSettings {
   segmentDuration: number;
@@ -54,18 +52,6 @@ export interface StreamingSettings {
    *  pick. On a multi-GPU box, pinning a specific `/dev/dri/renderD*` keeps
    *  sessions off the wrong adapter. */
   gpuRenderNode: string;
-  /**
-   * When embedded subtitles get extracted to WebVTT. Pulling a subtitle out of
-   * a container means reading the whole file, so the choice is where to spend
-   * that read:
-   *   - `'playback'` (default): when a file starts playing, so the wait is gone
-   *     by the time anyone opens the subtitle menu, and only for what is watched.
-   *   - `'import'`: also at import and rescan — every file ready up front, at the
-   *     cost of reading a whole library that may never be watched with subtitles.
-   *   - `'off'`: only when a client actually requests a track.
-   * Every mode still extracts on demand; they only differ on what runs ahead.
-   */
-  subtitlePrewarm: SubtitlePrewarm;
   /** Whether a streaming ffmpeg run is paused once it gets too far ahead of
    *  the viewer's playhead. Default `true`. */
   throttleEnabled: boolean;
@@ -75,7 +61,6 @@ export interface StreamingSettings {
 }
 
 export type AutoQualityMode = 'directplay' | 'abr';
-export type SubtitlePrewarm = 'off' | 'playback' | 'import';
 
 const KEYS = [
   'streaming_segment_duration',
@@ -88,7 +73,6 @@ const KEYS = [
   'streaming_auto_quality_mode',
   'streaming_auto_crop_enabled',
   'streaming_gpu_render_node',
-  'streaming_subtitle_prewarm',
   'streaming_throttle_enabled',
   'streaming_throttle_threshold_seconds',
 ] as const;
@@ -107,7 +91,6 @@ const GB = 1024 ** 3;
 const HOUR_MS = 60 * 60 * 1000;
 
 const AUTO_QUALITY_MODES: AutoQualityMode[] = ['directplay', 'abr'];
-const SUBTITLE_PREWARMS: SubtitlePrewarm[] = ['off', 'playback', 'import'];
 
 /** A stored number that is missing, malformed or <= 0 means "no admin value":
  *  the env/derived default stands rather than a zero budget. */
@@ -118,9 +101,16 @@ function positive(raw: string | null): number | null {
 
 @Injectable()
 export class StreamingSettingsCache implements OnModuleInit {
-  constructor(private readonly settings: SettingsService) {}
+  constructor(
+    private readonly settings: SettingsService,
+    @Optional() private readonly engine?: EngineService,
+  ) {}
+
+  private readonly log = new Logger(StreamingSettingsCache.name);
 
   private cache: StreamingSettings | null = null;
+  /** The segment duration of the last load, for synchronous readers. */
+  segmentDuration = 3;
   private inflight: Promise<StreamingSettings> | null = null;
   /** Bumped on every change so an in-flight load that was invalidated mid-flight
    *  doesn't commit its now-stale value. */
@@ -132,6 +122,11 @@ export class StreamingSettingsCache implements OnModuleInit {
         this.cache = null;
         this.inflight = null;
         this.epoch++;
+        if (this.engine?.enabled) {
+          void this.get()
+            .then((ss) => this.engine?.pushStreaming(toEngineStreaming(ss)))
+            .catch((err: Error) => this.log.warn(`engine config not pushed: ${err.message}`));
+        }
       }
     });
   }
@@ -143,7 +138,10 @@ export class StreamingSettingsCache implements OnModuleInit {
     this.inflight = (async () => {
       try {
         const s = await this.load();
-        if (this.epoch === epoch) this.cache = s;
+        if (this.epoch === epoch) {
+          this.cache = s;
+          this.segmentDuration = s.segmentDuration;
+        }
         return s;
       } finally {
         // Clear so a rejected load can be retried, and so a fresh read after an
@@ -167,7 +165,6 @@ export class StreamingSettingsCache implements OnModuleInit {
       autoQualityMode,
       autoCropEnabled,
       gpuRenderNode,
-      subtitlePrewarm,
       throttleEnabled,
       throttleThresholdSeconds,
     ] = values;
@@ -205,11 +202,6 @@ export class StreamingSettingsCache implements OnModuleInit {
       // 'false' disables cropping.
       autoCropEnabled: autoCropEnabled !== 'false',
       gpuRenderNode: renderNode,
-      subtitlePrewarm: SUBTITLE_PREWARMS.includes(
-        subtitlePrewarm as SubtitlePrewarm,
-      )
-        ? (subtitlePrewarm as SubtitlePrewarm)
-        : 'playback',
       // Default on; only the explicit string 'false' disables throttling.
       throttleEnabled: throttleEnabled !== 'false',
       throttleThresholdSeconds: Math.max(

@@ -8,7 +8,11 @@
 ## Engine
 
 - The video/streaming engine lives in github.com/fliks-app/engine; its protocol is that repo's `PROTOCOL.md`.
-- Bump it with `scripts/bump-engine.sh <version>`, which rewrites `engine.lock` (version + sha256 per platform).
+- Background media jobs (sprites, keyframe scan, intro fingerprint, subtitle extraction) are engine jobs: `EngineService.runJob`.
+- Bump it with `scripts/bump-engine.sh <version>`, which rewrites `engine.lock` (version + sha256 per platform, for the desktop bundles) and the `ENGINE_IMAGE` default in the `Dockerfile` (`ghcr.io/fliks-app/engine:<version>`).
+- The image is built `FROM` the engine image (`ARG ENGINE_IMAGE`): ffmpeg, mkvmerge, fpcalc, OpenCL and the `fliks-engine` binary are defined in the engine repo, not here. Test an unreleased engine with `--build-arg ENGINE_IMAGE=ghcr.io/fliks-app/engine:main` (or the `engine_image` input of the publish workflow).
+- `backend/src/modules/engine/schema.d.ts` is generated from the engine's `openapi.json`: never edit or read it; `bump-engine.sh <version>` regenerates it, `bump-engine.sh --local <engine checkout>` does for local engine development.
+- The dev stack (`docker-compose.dev.example.yml`) runs the engine from `../fliks-engine` via cargo watch as the front door (gateway, Node behind it); run `scripts/bump-engine.sh --local ../fliks-engine` after a protocol change.
 
 ## Angular conventions
 

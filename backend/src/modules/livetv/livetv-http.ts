@@ -30,8 +30,8 @@ export async function assertNotInternal(rawUrl: string): Promise<void> {
 /**
  * The agent every outbound Live TV request identifies as. Providers block the
  * ffmpeg and axios defaults outright, and some panels reject an empty one, so
- * no call in this module may go out without it: playlist, guide, panel API,
- * ffmpeg and ffprobe all read from here.
+ * no call in this module may go out without it: playlist, guide, panel API
+ * and the engine's upstream headers all read from here.
  */
 export const LIVETV_USER_AGENT = 'VLC/3.0.20 LibVLC/3.0.20';
 
@@ -58,13 +58,6 @@ export function liveTvHeaders(
   };
   if (identity.referer) headers['Referer'] = identity.referer;
   return headers;
-}
-
-/** ffmpeg and ffprobe take the same identity through their own flags. */
-export function liveTvFfmpegHeaderArgs(identity: LiveTvRequestIdentity = {}): string[] {
-  const args = ['-user_agent', identity.userAgent || LIVETV_USER_AGENT];
-  if (identity.referer) args.push('-headers', `Referer: ${identity.referer}\r\n`);
-  return args;
 }
 
 /** What a conditional refresh remembers between runs. */

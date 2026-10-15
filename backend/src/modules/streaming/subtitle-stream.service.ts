@@ -1,130 +1,50 @@
 import {
   Injectable,
   Logger,
-  BadRequestException,
   NotFoundException,
   OnModuleInit,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { SubtitleFile } from '../subtitles/entities/subtitle-file.entity';
-import { Readable } from 'stream';
-import type { SpawnOptions } from 'child_process';
-import { randomUUID } from 'crypto';
-import * as fsSync from 'fs';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { StreamingService } from './streaming.service';
 import { User } from '../users/entities/user.entity';
-import { EventsService } from '../scheduler/events.service';
-import { ActivityRegistryService } from '../scheduler/activity-registry.service';
-import { StreamingSettingsCache } from './streaming-settings-cache.service';
-import { Command } from '../scheduler/entities/command.entity';
 import { resolveSubtitleAbsolutePath } from '../subtitles/subtitle-path.util';
 import { normalizeLanguageCode } from '../../common/constants/app-languages';
-import type { SubtitleRenditionMeta } from './transcoding/types';
-import { assToVtt, normalizeVtt, srtToVtt } from './subtitle-vtt.util';
 import { isRenderableTextSidecar } from '../../common/constants/subtitle-codecs';
-import { withFfmpegSlot } from '../../common/utils/ffmpeg-slots';
-import { spawnBackground } from '../../common/utils/spawn-priority';
-import {
-  ATOMIC_TEMP_PREFIX,
-  writeFileAtomic,
-} from '../../common/utils/atomic-file';
 import { getCacheDir, getDataDir } from '../../common/constants/paths';
-import {
-  formatMediaProgressSubject,
-  type MediaProgressSubject,
-} from '../../common/utils/media-progress-subject.util';
-import {
-  cueOffsetSeconds as cueOffsetOnServedTimeline,
-  sourceTimeline,
-} from './transcoding/source-timeline';
 
-/** getCacheDir() probes the filesystem on its first call, keep this lazy. */
-const subsDir = () => path.join(getCacheDir(), 'subs');
-
-/**
- * Global cap on concurrent warmup extractions — a full library refresh can
- * trigger thousands of warmupCache() calls and we don't want hundreds of
- * ffmpeg processes fighting for disk I/O.
- */
-const WARMUP_CONCURRENCY = 2;
-
-/** Cap on one extraction. Generous on purpose — the cost is a full container
- *  read (40s for a 22 GB remux on SSD, minutes on a NAS) — but a hung ffmpeg on
- *  a broken file or a dead mount would otherwise hold a warmup slot, and its
- *  `inflight` promise, forever. */
-const EXTRACT_TIMEOUT_MS = 15 * 60_000;
-
-interface WarmupTask {
-  absolutePath: string;
-  mediaFileId: number;
-  /**
-   * All subtitle stream indices to extract in a single FFmpeg invocation.
-   * Container scan dominates extraction cost on big mkvs (one 30 GB read
-   * per ffmpeg run), so packing N outputs into one process gives a 3-5×
-   * speedup vs spawning N processes that each re-scan the same file.
-   */
-  streamIndices: number[];
-  /** Tracks the Command row + remaining task count for this media file. */
-  batch: WarmupBatch;
-  /** What queued this batch: decides whether it waits on the ffmpeg slot pool. */
-  trigger: 'import' | 'playback';
-}
-
-interface Extraction {
-  indices: number[];
-  /** Waits on the ffmpeg slot pool and runs at idle priority. */
-  background: boolean;
-  abort: AbortController;
-  promise: Promise<void>;
-  /** The foreground job that aborted this one; its outcome is this job's. */
-  takenOverBy?: Promise<void>;
-}
-
-interface WarmupBatch {
-  cmd: Command | null;
-  mediaFileId: number;
-  subject: MediaProgressSubject;
-  total: number;
-  remaining: number;
-  failed: number;
+/** A text subtitle track the engine publishes as an HLS `SUBTITLES` rendition. */
+export interface SubtitleRenditionMeta {
+  kind: 'embedded' | 'external';
+  key: number;
+  language?: string;
+  /** Embedded tracks only: the container's BCP-47 tag (`es-419`). */
+  languageTag?: string;
+  name: string;
+  forced?: boolean;
 }
 
 @Injectable()
 export class SubtitleStreamService implements OnModuleInit {
   private readonly log = new Logger(SubtitleStreamService.name);
-  private readonly warmupQueue: WarmupTask[] = [];
-  private warmupRunning = 0;
-  /** Running extractions keyed by `${mfid}-${streamIndex}`, one job per ffmpeg run. */
-  private readonly inflight = new Map<string, Extraction>();
-  /**
-   * One batch per mediaFileId. A second warmupCache() call for a file that
-   * already has a running batch is silently ignored — otherwise two separate
-   * Command rows + progress bars would be created even though `inflight`
-   * already dedupes the actual FFmpeg work.
-   */
-  private readonly activeBatches = new Map<number, WarmupBatch>();
 
   constructor(
     @InjectRepository(SubtitleFile)
     private readonly subtitleFileRepo: Repository<SubtitleFile>,
-    @InjectRepository(Command)
-    private readonly commandRepo: Repository<Command>,
     private readonly streamingService: StreamingService,
-    private readonly eventsService: EventsService,
-    private readonly streamingSettings: StreamingSettingsCache,
-    private readonly activityRegistry: ActivityRegistryService,
   ) {}
 
-  /** Subs used to sit directly in the data dir, next to the avatars. */
+  /** The host's own VTT cache is gone (the engine extracts and serves embedded tracks). */
   async onModuleInit(): Promise<void> {
-    if (getCacheDir() === getDataDir()) return;
-    const legacyDir = path.join(getDataDir(), 'subs');
-    await fs.rm(legacyDir, { recursive: true, force: true }).catch((err) => {
-      this.log.warn(`Failed to remove legacy subs dir "${legacyDir}": ${err}`);
-    });
+    for (const dir of new Set([getCacheDir(), getDataDir()])) {
+      const legacy = path.join(dir, 'subs');
+      await fs.rm(legacy, { recursive: true, force: true }).catch((err) => {
+        this.log.warn(`Failed to remove legacy subs dir "${legacy}": ${err}`);
+      });
+    }
   }
 
   /** ACL is checked on the subtitle's OWN media, so a foreign id can't be read
@@ -132,10 +52,10 @@ export class SubtitleStreamService implements OnModuleInit {
   private async resolveSubtitleOnDisk(
     subtitleId: number,
     user?: User,
-  ): Promise<{ sub: SubtitleFile; realSubPath: string }> {
+  ): Promise<string> {
     const sub = await this.subtitleFileRepo.findOne({
       where: { id: subtitleId },
-      relations: ['media', 'media.library', 'mediaFile'],
+      relations: ['media', 'media.library'],
     });
     await this.streamingService.assertLibraryAccess(
       sub?.media?.libraryId ?? null,
@@ -155,9 +75,8 @@ export class SubtitleStreamService implements OnModuleInit {
       throw new NotFoundException(`Subtitle file not found on disk`);
     }
 
-    let realSubPath: string;
     try {
-      realSubPath = await fs.realpath(absolute);
+      return await fs.realpath(absolute);
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
       this.log.error(
@@ -165,7 +84,6 @@ export class SubtitleStreamService implements OnModuleInit {
       );
       throw new NotFoundException(`Subtitle file not found on disk`);
     }
-    return { sub, realSubPath };
   }
 
   /** The stored file, named after the copy on disk so its original extension
@@ -174,41 +92,8 @@ export class SubtitleStreamService implements OnModuleInit {
     subtitleId: number,
     user?: User,
   ): Promise<{ path: string; filename: string }> {
-    const { realSubPath } = await this.resolveSubtitleOnDisk(subtitleId, user);
+    const realSubPath = await this.resolveSubtitleOnDisk(subtitleId, user);
     return { path: realSubPath, filename: path.basename(realSubPath) };
-  }
-
-  /**
-   * Get an external subtitle file converted to WebVTT.
-   */
-  async getSubtitleAsVtt(
-    subtitleId: number,
-    user?: User,
-  ): Promise<{ vtt: string; cueOffsetSeconds: number }> {
-    const { sub, realSubPath } = await this.resolveSubtitleOnDisk(
-      subtitleId,
-      user,
-    );
-
-    const content = await fs.readFile(realSubPath, 'utf-8');
-    const ext = path.extname(realSubPath).toLowerCase();
-    // Sidecars count from the container start, like the extracts and the
-    // players' clocks they are authored against (X-TIMESTAMP-MAP offset).
-    const cueOffsetSeconds = cueOffsetOnServedTimeline(
-      sourceTimeline(
-        sub.mediaFile?.streamInfo,
-        sub.media?.path && sub.mediaFile?.relativePath
-          ? path.join(sub.media.path, sub.mediaFile.relativePath)
-          : realSubPath,
-      ),
-    );
-    const vtt =
-      ext === '.vtt'
-        ? normalizeVtt(content)
-        : ext === '.ass' || ext === '.ssa'
-          ? assToVtt(content)
-          : srtToVtt(content); // .srt + unknown fallback
-    return { vtt, cueOffsetSeconds };
   }
 
   /**
@@ -264,495 +149,5 @@ export class SubtitleStreamService implements OnModuleInit {
       );
     }
     return out;
-  }
-
-  /**
-   * Extract an embedded subtitle stream as WebVTT using FFmpeg.
-   * Caches the output on disk — subsequent requests stream the cached file
-   * instantly, which matters a lot on Android: ExoPlayer pre-fetches every
-   * SubtitleConfiguration URL during `prepare()`, so a file with 3-5 embedded
-   * subs serialises 3-5 full FFmpeg passes without the cache (15-20s of
-   * player-start delay). Warmup is also called at scan time so first-ever
-   * playback is already fast.
-   */
-  async extractEmbeddedSubtitle(
-    mediaFileId: number,
-    streamIndex: number,
-    user?: User,
-  ): Promise<Readable> {
-    if (
-      !Number.isInteger(streamIndex) ||
-      streamIndex < 0 ||
-      streamIndex > 999
-    ) {
-      throw new BadRequestException(`Invalid stream index: ${streamIndex}`);
-    }
-
-    const resolved = await this.streamingService.resolveFile(mediaFileId, user);
-    const cachePath = this.cachePathFor(mediaFileId, streamIndex);
-    if (fsSync.existsSync(cachePath)) {
-      return fsSync.createReadStream(cachePath);
-    }
-    // Stream requests bypass the warmup queue and go straight to extraction
-    // — a live user shouldn't wait behind hundreds of background warmup tasks
-    // queued by a library rescan.
-    //
-    // ExoPlayer (Android) pre-fetches every SubtitleConfiguration URL during
-    // prepare() in parallel, so 5 cache misses would otherwise spawn 5 single
-    // ffmpeg processes that each re-scan the same 30 GB container. Instead we
-    // batch every uncached text sub of this file into ONE ffmpeg invocation
-    // and let the parallel callers join via `inflight`.
-    const textSubs =
-      resolved.mediaFile.streamInfo?.subtitles?.filter(
-        (s) => !s.isImageBased,
-      ) ?? [];
-    const uncachedIndices = textSubs
-      .map((s) => s.streamIndex)
-      .filter((idx) => !fsSync.existsSync(this.cachePathFor(mediaFileId, idx)));
-
-    await this.extract(
-      resolved.absolutePath,
-      mediaFileId,
-      uncachedIndices.includes(streamIndex) ? uncachedIndices : [streamIndex],
-      false,
-    );
-    return fsSync.createReadStream(cachePath);
-  }
-
-  /**
-   * Pre-extract all non-bitmap embedded subtitles of a media file to disk, so
-   * opening the subtitle menu doesn't pay for a full container read. Skips
-   * image-based subs (PGS / VOBSUB / DVB) which need burn-in, not VTT
-   * conversion. Fire-and-forget friendly — errors are logged but don't
-   * propagate.
-   *
-   * `trigger` is what caused the call; whether it runs is the admin's
-   * `subtitlePrewarm` setting. Gated here rather than at the call sites so the
-   * three of them can't drift from it. Nothing depends on this having run: a
-   * client asking for an unextracted track gets it extracted then, by the same
-   * batched code.
-   */
-  async warmupCache(
-    absolutePath: string,
-    mediaFileId: number,
-    subtitles: { streamIndex: number; isImageBased: boolean }[] | undefined,
-    subject: MediaProgressSubject,
-    trigger: 'import' | 'playback' = 'import',
-  ): Promise<void> {
-    if (!subtitles?.length) return;
-    const mode = (await this.streamingSettings.get()).subtitlePrewarm;
-    if (mode === 'off' || (mode === 'playback' && trigger === 'import')) return;
-    if (this.activeBatches.has(mediaFileId)) {
-      this.log.debug?.(
-        `warmupCache: batch already running for media file #${mediaFileId}, ignoring duplicate call`,
-      );
-      return;
-    }
-    const textSubs = subtitles.filter((s) => !s.isImageBased);
-    if (!textSubs.length) return;
-
-    // Skip subs whose cache file is already on disk.
-    const pending = textSubs.filter(
-      (s) => !fsSync.existsSync(this.cachePathFor(mediaFileId, s.streamIndex)),
-    );
-    if (!pending.length) return;
-
-    // Track the batch as a Command so the admin task panel shows progress,
-    // matching what GenerateSprite does.
-    const label = formatMediaProgressSubject(subject);
-    const cmd = await this.commandRepo
-      .save(
-        this.commandRepo.create({
-          name: 'WarmupSubtitles',
-          status: 'running',
-          trigger: 'system',
-          startedOn: new Date(),
-          body: { mediaFileId, mediaTitle: label, count: pending.length },
-        }),
-      )
-      .catch((err) => {
-        this.log.warn(
-          `Could not create WarmupSubtitles command row: ${err instanceof Error ? err.message : err}`,
-        );
-        return null;
-      });
-    this.eventsService.emit({
-      type: 'command.started',
-      name: 'WarmupSubtitles',
-    });
-
-    const batch: WarmupBatch = {
-      cmd,
-      mediaFileId,
-      subject,
-      total: pending.length,
-      remaining: pending.length,
-      failed: 0,
-    };
-
-    this.activeBatches.set(mediaFileId, batch);
-    this.activityRegistry.upsertPending(
-      `WarmupSubtitles:${mediaFileId}`,
-      'WarmupSubtitles',
-      subject,
-    );
-    // One task per file (multi-output ffmpeg) instead of one per stream.
-    this.warmupQueue.push({
-      absolutePath,
-      mediaFileId,
-      streamIndices: pending.map((s) => s.streamIndex),
-      batch,
-      trigger,
-    });
-    // Emit initial progress=0 so the UI bar appears immediately at queue time,
-    // not only after the first extraction finishes.
-    this.eventsService.emit({
-      type: 'task.progress',
-      command: `WarmupSubtitles:${mediaFileId}`,
-      current: 0,
-      total: pending.length,
-      message: label,
-      subject,
-    });
-    this.log.log(
-      `Queued subtitle warmup for "${label}" (${pending.length} stream(s), ` +
-        `queue: ${this.warmupQueue.length}, running: ${this.warmupRunning})`,
-    );
-    this.processWarmupQueue();
-  }
-
-  /** Mark a warmup batch as done — fires the command.completed event. */
-  private async finalizeBatch(batch: WarmupBatch): Promise<void> {
-    const hasFailures = batch.failed > 0;
-    const allFailed = hasFailures && batch.failed === batch.total;
-    if (batch.cmd) {
-      batch.cmd.status = allFailed ? 'failed' : 'completed';
-      batch.cmd.endedOn = new Date();
-      if (hasFailures) {
-        batch.cmd.body = {
-          ...batch.cmd.body,
-          failed: batch.failed,
-        };
-      }
-      try {
-        await this.commandRepo.save(batch.cmd);
-      } catch (err) {
-        this.log.warn(
-          `Could not finalize WarmupSubtitles command: ${err instanceof Error ? err.message : err}`,
-        );
-      }
-    }
-    // Free the mediaFileId so a later rescan of the same file can warm up again.
-    this.activeBatches.delete(batch.mediaFileId);
-    this.eventsService.emit({
-      type: 'command.completed',
-      name: 'WarmupSubtitles',
-      status: allFailed ? 'failed' : 'completed',
-    });
-    this.eventsService.emit({
-      type: 'task.progress',
-      command: `WarmupSubtitles:${batch.mediaFileId}`,
-      current: batch.total,
-      total: batch.total,
-      message: formatMediaProgressSubject(batch.subject),
-      subject: batch.subject,
-    });
-  }
-
-  /**
-   * Delete a single media file's subtitle cache subdirectory — called when a
-   * file is re-probed or removed so a later warmup regenerates its VTTs from
-   * fresh streamInfo, or so nothing lingers once the file is gone.
-   */
-  async clearMediaFileSubtitleCache(mediaFileId: number): Promise<void> {
-    const cacheDir = this.cacheDirFor(mediaFileId);
-    try {
-      await fs.rm(cacheDir, { recursive: true, force: true });
-    } catch (err) {
-      this.log.warn(
-        `clearMediaFileSubtitleCache failed for "${cacheDir}": ${err instanceof Error ? err.message : err}`,
-      );
-    }
-  }
-
-  private processWarmupQueue(): void {
-    while (this.warmupRunning < WARMUP_CONCURRENCY && this.warmupQueue.length) {
-      const task = this.warmupQueue.shift()!;
-      this.warmupRunning++;
-      void this.runWarmupTask(task).finally(() => {
-        this.warmupRunning--;
-        this.processWarmupQueue();
-      });
-    }
-  }
-
-  /**
-   * Run one warmup task — single FFmpeg call extracting every queued stream
-   * of a media file in parallel outputs. Falls back to per-stream extraction
-   * if the batch fails (one corrupt sub shouldn't kill the others).
-   */
-  private async runWarmupTask(task: WarmupTask): Promise<void> {
-    const { absolutePath, mediaFileId, streamIndices, batch, trigger } = task;
-    // Only an import-time warmup competes for the shared ffmpeg slot pool; a
-    // playback-triggered one must extract immediately, same as a live cache miss.
-    const background = trigger === 'import';
-    const activityId = `WarmupSubtitles:${mediaFileId}`;
-    this.activityRegistry.upsertRunning(
-      activityId,
-      'WarmupSubtitles',
-      batch.subject,
-      0,
-      batch.total,
-    );
-
-    try {
-      try {
-        await this.extract(
-          absolutePath,
-          mediaFileId,
-          streamIndices,
-          background,
-        );
-        batch.remaining = 0;
-      } catch (err) {
-        this.log.warn(
-          `Batch subtitle extract failed for media file #${mediaFileId}, ` +
-            `falling back to per-stream: ${err instanceof Error ? err.message : err}`,
-        );
-        for (const idx of streamIndices) {
-          try {
-            await this.extract(absolutePath, mediaFileId, [idx], background);
-          } catch (e) {
-            batch.failed++;
-            this.log.warn(
-              `Subtitle warmup failed for media file #${mediaFileId} stream ${idx}: ${e instanceof Error ? e.message : e}`,
-            );
-          }
-          batch.remaining = Math.max(0, batch.remaining - 1);
-          const current = batch.total - batch.remaining;
-          this.eventsService.emit({
-            type: 'task.progress',
-            command: activityId,
-            current,
-            total: batch.total,
-            message: formatMediaProgressSubject(batch.subject),
-            subject: batch.subject,
-          });
-          this.activityRegistry.upsertRunning(
-            activityId,
-            'WarmupSubtitles',
-            batch.subject,
-            current,
-            batch.total,
-          );
-        }
-        batch.remaining = 0;
-      }
-    } finally {
-      this.activityRegistry.remove(activityId);
-    }
-
-    // Final progress tick (covers the success path which jumped 0 → total
-    // in one go) then close the batch.
-    this.eventsService.emit({
-      type: 'task.progress',
-      command: `WarmupSubtitles:${mediaFileId}`,
-      current: batch.total,
-      total: batch.total,
-      message: formatMediaProgressSubject(batch.subject),
-      subject: batch.subject,
-    });
-    await this.finalizeBatch(batch);
-  }
-
-  /** A foreground caller never joins a background job, queued for a slot or at idle
-   *  priority: it aborts that job and extracts all of its streams itself. */
-  private async extract(
-    absolutePath: string,
-    mediaFileId: number,
-    streamIndices: number[],
-    background: boolean,
-  ): Promise<void> {
-    const joins: Promise<void>[] = [];
-    const taken = new Set<Extraction>();
-    const own = new Set<number>();
-    for (const idx of streamIndices) {
-      const job = this.inflight.get(this.inflightKey(mediaFileId, idx));
-      if (job && (background || !job.background)) joins.push(job.promise);
-      else if (job) taken.add(job);
-      else if (!fsSync.existsSync(this.cachePathFor(mediaFileId, idx)))
-        own.add(idx);
-    }
-    for (const job of taken) job.indices.forEach((idx) => own.add(idx));
-    if (own.size) {
-      joins.push(
-        this.startExtraction(
-          absolutePath,
-          mediaFileId,
-          [...own],
-          background,
-          taken,
-        ),
-      );
-    }
-    await Promise.all(joins);
-  }
-
-  private startExtraction(
-    absolutePath: string,
-    mediaFileId: number,
-    indices: number[],
-    background: boolean,
-    takenOver: Set<Extraction>,
-  ): Promise<void> {
-    const abort = new AbortController();
-    const keys = indices.map((idx) => this.inflightKey(mediaFileId, idx));
-    const job: Extraction = {
-      indices,
-      background,
-      abort,
-      promise: Promise.resolve(),
-    };
-    job.promise = this.extractToCache(
-      absolutePath,
-      mediaFileId,
-      indices,
-      background,
-      abort.signal,
-    )
-      .catch((err) => {
-        if (job.takenOverBy) return job.takenOverBy;
-        throw err;
-      })
-      .finally(() => {
-        for (const key of keys)
-          if (this.inflight.get(key) === job) this.inflight.delete(key);
-      });
-    for (const key of keys) this.inflight.set(key, job);
-    for (const old of takenOver) {
-      old.takenOverBy = job.promise;
-      old.abort.abort(new Error('taken over by a foreground request'));
-    }
-    return job.promise;
-  }
-
-  private inflightKey(mediaFileId: number, streamIndex: number): string {
-    return `${mediaFileId}-${streamIndex}`;
-  }
-
-  /**
-   * Cache path: `<cacheDir>/subs/<mediaFileId>/emb-<streamIndex>.vtt`. The
-   * managed cache directory (not the library mount) survives library moves and
-   * still works when the library is mounted read-only.
-   */
-  private cacheDirFor(mediaFileId: number): string {
-    return path.join(subsDir(), String(mediaFileId));
-  }
-
-  private cachePathFor(mediaFileId: number, streamIndex: number): string {
-    return path.join(this.cacheDirFor(mediaFileId), `emb-${streamIndex}.vtt`);
-  }
-
-  /** One ffmpeg run for every stream, since the container read dominates the cost.
-   *  One failing output rejects the whole run. */
-  private async extractToCache(
-    absolutePath: string,
-    mediaFileId: number,
-    streamIndices: number[],
-    background: boolean,
-    signal: AbortSignal,
-  ): Promise<void> {
-    const dir = this.cacheDirFor(mediaFileId);
-    await fs.mkdir(dir, { recursive: true });
-    const outputs = streamIndices.map((idx) => ({
-      idx,
-      final: this.cachePathFor(mediaFileId, idx),
-      raw: path.join(dir, `${ATOMIC_TEMP_PREFIX}${randomUUID()}`),
-    }));
-
-    const args: string[] = [
-      // Trusted streamInfo populated at import — skip the probe scan.
-      '-analyzeduration',
-      '0',
-      '-probesize',
-      '200000',
-      '-vn',
-      '-an',
-      '-i',
-      absolutePath,
-    ];
-    for (const out of outputs) {
-      args.push(
-        '-map',
-        `0:${out.idx}`,
-        '-c:s',
-        'ass',
-        '-f',
-        'ass',
-        '-y',
-        out.raw,
-      );
-    }
-
-    const runFfmpeg = () =>
-      new Promise<void>((resolve, reject) => {
-        const opts: SpawnOptions = {
-          stdio: ['ignore', 'ignore', 'pipe'],
-          timeout: EXTRACT_TIMEOUT_MS,
-          signal,
-        };
-        const proc = spawnBackground('ffmpeg', args, {
-          ...opts,
-          background,
-          io: true,
-          cpu: true,
-        });
-        let stderrTail = '';
-        proc.stderr?.on('data', (chunk: Buffer) => {
-          stderrTail = (stderrTail + chunk.toString()).slice(-2000);
-        });
-        proc.on('close', (code, killedBy) => {
-          if (code === 0) resolve();
-          else
-            reject(
-              new Error(
-                killedBy
-                  ? `ffmpeg subtitle extract killed by ${killedBy}`
-                  : `ffmpeg subtitle extract failed (${code}): ${stderrTail}`,
-              ),
-            );
-        });
-        proc.on('error', reject);
-      });
-
-    try {
-      if (background) await withFfmpegSlot(runFfmpeg, signal);
-      else await runFfmpeg();
-      await Promise.all(
-        outputs.map(async (out) => {
-          await this.assertExtracted(out.raw);
-          await writeFileAtomic(
-            out.final,
-            assToVtt(await fs.readFile(out.raw, 'utf-8')),
-          );
-        }),
-      );
-    } finally {
-      await Promise.allSettled(
-        outputs.map((out) => fs.rm(out.raw, { force: true })),
-      );
-    }
-  }
-
-  /** ffmpeg can exit 0 having written nothing (a mislabelled track, a stream it
-   *  could not decode). Promoting that caches an empty track forever, and the
-   *  player shows a subtitle that renders nothing. A track with no cues is
-   *  legitimate and still carries its ASS header, so only zero bytes is a
-   *  failure. */
-  private async assertExtracted(tmpPath: string): Promise<void> {
-    const { size } = await fs.stat(tmpPath);
-    if (size === 0) {
-      throw new Error(`ffmpeg wrote an empty subtitle file: "${tmpPath}"`);
-    }
   }
 }

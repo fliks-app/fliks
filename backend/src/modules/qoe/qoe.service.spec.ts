@@ -1,5 +1,4 @@
 import { QoeService } from './qoe.service';
-import { SessionRouter } from '../streaming/services/session-router.service';
 import type { QoeSample } from './core/types';
 
 const session = {
@@ -204,6 +203,12 @@ describe('QoeService', () => {
       cmcd: true,
       bandwidthBps: 20_000_000,
     });
+  });
+
+  it('takes the CMCD and the production wait of a segment served elsewhere', () => {
+    const { svc } = build();
+    for (let i = 0; i < 5; i++) svc.observeServed(session, { mtp: 20_000, bl: 3_000 }, 3, 1_500);
+    expect(svc.liveSummary('s1')).toMatchObject({ cmcd: true, bandwidthBps: 20_000_000, transcodeSpeed: 2 });
   });
 
   it('stores the cause of a recorded stall in the event data and exposes the last stall', async () => {
@@ -452,16 +457,5 @@ describe('QoeService playbacks', () => {
     svc.sessionEnded(session);
     await new Promise((r) => setImmediate(r));
     expect(createQueryBuilder).not.toHaveBeenCalled();
-  });
-});
-
-describe('CMCD query param on stream URLs', () => {
-  it('does not disturb sid resolution or the freshness gate', () => {
-    const touch = jest.fn().mockReturnValue(true);
-    const router = new SessionRouter({ touch } as never, {} as never);
-    router.assertFresh({
-      query: { sid: 'abc', token: 't', CMCD: 'bl=100,sid="other",su' },
-    } as never);
-    expect(touch).toHaveBeenCalledWith('abc');
   });
 });

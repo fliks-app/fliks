@@ -1,6 +1,8 @@
 import type { PreRollItem } from '../../../common/plugin-contract';
-import type { AudioPlan } from '../transcoding/audio-encode';
+import type { components } from '../../engine/schema';
 import type { EdlRange } from '../edl/edl-parser';
+
+type AudioPlan = components['schemas']['AudioPlan'];
 
 /**
  * Playback info response — the backend's decision on how to play a media file.

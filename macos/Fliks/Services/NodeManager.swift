@@ -37,7 +37,10 @@ actor NodeManager {
         let proc = Process()
         if let engine = Paths.engineBinary {
             proc.executableURL = engine
-            proc.arguments = ["--supervise", "--", Paths.nodeBinary.path, "dist/main.js"]
+            // The engine owns the public port; Node listens on port + 1 behind it.
+            proc.arguments = ["--supervise", "--public-listen", "0.0.0.0:\(config.port)",
+                              "--upstream", "http://127.0.0.1:\(config.port + 1)",
+                              "--", Paths.nodeBinary.path, "dist/main.js"]
         } else {
             proc.executableURL = Paths.nodeBinary
             proc.arguments = ["dist/main.js"]

@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { edlPathFor, readEdlSidecar, resetEdlSidecarState, toPlaybackTimeline } from './edl-sidecar';
+import { edlPathFor, readEdlSidecar, resetEdlSidecarState, shiftRanges } from './edl-sidecar';
 
 describe('edlPathFor', () => {
   it('swaps the extension and keeps dots in the name', () => {
@@ -50,30 +50,25 @@ describe('readEdlSidecar', () => {
   });
 });
 
-describe('toPlaybackTimeline', () => {
+describe('shiftRanges', () => {
   const ranges = [
     { start: 0, end: 5, action: 'cut' as const },
     { start: 10, end: 20, action: 'mute' as const },
   ];
-  const tl = { formatStart: 1.4, origin: 1.5 };
 
-  it('leaves DirectPlay untouched', () => {
-    expect(toPlaybackTimeline(ranges, tl, 'DirectPlay')).toEqual(ranges);
-  });
-
-  it('shifts HLS by formatStart - origin and clamps at zero', () => {
-    const out = toPlaybackTimeline(ranges, tl, 'Transcode');
+  it('shifts by the playback clock offset and clamps at zero', () => {
+    const out = shiftRanges(ranges, -0.1);
     expect(out[0].start).toBe(0);
     expect(out[0].end).toBeCloseTo(4.9);
     expect(out[1].start).toBeCloseTo(9.9);
   });
 
   it('rounds to the millisecond after the shift and drops empty ranges', () => {
-    const out = toPlaybackTimeline([{ start: 1, end: 2, action: 'cut' }, { start: 0.0004, end: 0.0006, action: 'mute' }], { formatStart: 0.1234567, origin: 0 }, 'Transcode');
+    const out = shiftRanges([{ start: 1, end: 2, action: 'cut' }, { start: 0.0004, end: 0.0006, action: 'mute' }], 0.1234567);
     expect(out).toEqual([{ start: 1.123, end: 2.123, action: 'cut' }]);
   });
 
   it('drops ranges that end up before the origin', () => {
-    expect(toPlaybackTimeline([{ start: 0, end: 1, action: 'cut' }], { formatStart: 0, origin: 2 }, 'DirectStream')).toEqual([]);
+    expect(shiftRanges([{ start: 0, end: 1, action: 'cut' }], -2)).toEqual([]);
   });
 });

@@ -13,9 +13,10 @@ describe('SubtitleTranslationService — what a failed run leaves behind', () =>
       { get: jest.fn() } as never,
       { emit: jest.fn() } as never,
       { get: jest.fn() } as never,
-      {} as never,
-      {} as never,
-    );
+    {} as never,
+    {} as never,
+    { runJob: jest.fn() } as never,
+  );
     await (service as never as {
       runTranslation: (...args: unknown[]) => Promise<void>;
     }).runTranslation(42, { id: 7, mediaId: 1, language: 'en' }, 'fr', { engine: 'gemini' }, 1);

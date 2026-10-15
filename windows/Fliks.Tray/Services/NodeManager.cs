@@ -70,7 +70,9 @@ internal sealed class NodeManager
         if (AppPaths.EngineExe is { } engine)
         {
             proc.StartInfo.FileName = engine;
-            foreach (var a in new[] { "--supervise", "--", AppPaths.NodeExe, AppPaths.BackendMainJs })
+            // The engine owns the public port; Node listens on port + 1 behind it.
+            foreach (var a in new[] { "--supervise", "--public-listen", $"0.0.0.0:{config.Port}",
+                         "--upstream", $"http://127.0.0.1:{config.Port + 1}", "--", AppPaths.NodeExe, AppPaths.BackendMainJs })
                 proc.StartInfo.ArgumentList.Add(a);
         }
         else

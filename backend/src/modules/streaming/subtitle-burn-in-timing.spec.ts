@@ -27,4 +27,15 @@ describe('text burn-in timing', () => {
     });
     expect(filter).toBe("setpts=PTS-95000/TB,subtitles='/m/v.srt',setpts=PTS+95000/TB");
   });
+
+  it('reads an embedded text track from the video itself, no extracted file', () => {
+    const filter = SubtitleBurnInService.prototype.buildFilter.call({}, {
+      type: 'text',
+      videoPath: '/m/v.mkv',
+      streamIndex: 5,
+      subtitleOrdinal: 1,
+      codec: 'subrip',
+    });
+    expect(filter).toBe("subtitles='/m/v.mkv':si=1");
+  });
 });

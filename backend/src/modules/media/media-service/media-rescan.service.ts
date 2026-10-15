@@ -26,7 +26,7 @@ import { NamingService } from '../../scheduler/naming.service';
 import { FfprobeService } from '../../media-probe/ffprobe.service';
 import { SubtitlesService } from '../../subtitles/subtitles.service';
 import { EmbeddedSubtitleService } from '../../subtitles/embedded-subtitle.service';
-import { SubtitleStreamService } from '../../streaming/subtitle-stream.service';
+import { EngineService } from '../../engine/engine.service';
 import { ThumbnailService } from '../../streaming/thumbnail.service';
 import { MediaServersService } from '../../media-servers/media-servers.service';
 import { PostImportQueueService } from '../../../common/post-import/post-import-queue.service';
@@ -66,7 +66,7 @@ export class MediaRescanService {
     private readonly ffprobe: FfprobeService,
     private readonly subtitles: SubtitlesService,
     private readonly embeddedSubtitle: EmbeddedSubtitleService,
-    private readonly subtitleStream: SubtitleStreamService,
+    private readonly engine: EngineService,
     private readonly thumbnailService: ThumbnailService,
     private readonly mediaServers: MediaServersService,
     private readonly metadata: MediaMetadataService,
@@ -243,26 +243,18 @@ export class MediaRescanService {
 
   /**
    * Post-probe enrichment shared by every import path (grab→import, disk
-   * import, rescan). Runs ffmpeg `cropdetect` and stashes the result into
-   * `streamInfo.video[0].crop`, then pre-extracts embedded text subtitles
-   * to the player cache (so the first playback doesn't pay the extraction
-   * cost — ExoPlayer on Android blocks prepare until every
-   * SubtitleConfiguration URL has been fetched).
+   * import, rescan): the engine's `cropdetect` result into `streamInfo.video[0].crop`
+   * and the OpenSubtitles hash.
    *
    * Caller must have already persisted `file.streamInfo` from a fresh
-   * ffprobe of `absPath`. Best-effort: failures are logged but don't throw.
+   * probe of `absPath`. Best-effort: failures are logged but don't throw.
    * `streamInfo` is a JSONB blob, so both steps mutate `file` in memory and
    * only this method saves: one write instead of three.
    */
-  async finalizeImportedFile(
-    file: MediaFile,
-    absPath: string,
-    media: Media,
-  ): Promise<void> {
+  async finalizeImportedFile(file: MediaFile, absPath: string): Promise<void> {
     await this.detectAndStoreCrop(file, absPath);
     await this.computeAndStoreOsdbHash(file, absPath);
     await this.mediaFileRepo.save(file);
-    this.rebuildSubtitleCacheForFile(file, absPath, media);
   }
 
   /**
@@ -302,12 +294,7 @@ export class MediaRescanService {
     const v = streamInfo?.video?.[0];
     if (!v) return;
     try {
-      const crop = await this.ffprobe.detectCrop(
-        absPath,
-        streamInfo.durationSeconds,
-        v.width,
-        v.height,
-      );
+      const crop = await this.ffprobe.detectCrop(absPath);
       v.crop = crop ?? undefined;
       file.streamInfo = streamInfo;
     } catch (err) {
@@ -318,38 +305,17 @@ export class MediaRescanService {
     }
   }
 
-  /**
-   * Fire-and-forget clear + warmup of the embedded-subtitle cache for a file.
-   * Whether the warmup actually runs is the admin's `subtitlePrewarm` setting,
-   * enforced inside `warmupCache`.
-   */
-  private rebuildSubtitleCacheForFile(
-    file: MediaFile,
-    absPath: string,
-    media: Media,
-  ): void {
-    const ep = file.episode;
-    const subject = buildMediaProgressSubject(
-      media,
-      ep
-        ? {
-            id: ep.id,
-            seasonNumber: ep.season?.seasonNumber,
-            episodeNumber: ep.episodeNumber,
-            title: ep.title,
-          }
-        : null,
-    );
-    void this.subtitleStream
-      .clearMediaFileSubtitleCache(file.id)
-      .then(() =>
-        this.subtitleStream.warmupCache(
-          absPath,
-          file.id,
-          file.streamInfo?.subtitles,
-          subject,
-        ),
-      )
+  /** Fire-and-forget: the engine re-extracts the file's text subtitle tracks, replacing its cache. */
+  private rebuildSubtitleCacheForFile(file: MediaFile, absPath: string): void {
+    const info = file.streamInfo;
+    if (!info?.subtitles?.some((s) => !s.isImageBased)) return;
+    void this.engine
+      .runJob({
+        kind: { type: 'SubtitleExtract', info },
+        media: { mediaFileId: file.id, path: absPath },
+        priority: 'high',
+        force: true,
+      })
       .catch((err) =>
         this.log.warn(
           `Subtitle cache rebuild failed for file #${file.id}: ${err instanceof Error ? err.message : err}`,
@@ -397,7 +363,7 @@ export class MediaRescanService {
         await this.mediaFileRepo.save(file);
       }
       if (opts.subtitleCache) {
-        this.rebuildSubtitleCacheForFile(file, absPath, media);
+        this.rebuildSubtitleCacheForFile(file, absPath);
       }
       if (opts.sprites) {
         const ep = file.episode;
@@ -414,6 +380,7 @@ export class MediaRescanService {
         // Background, force=true so the existing sprite/meta gets rebuilt.
         void this.thumbnailService.generateForFile(file, media, subject, {
           force: true,
+          priority: 'high',
         });
       }
     }
@@ -421,7 +388,6 @@ export class MediaRescanService {
 
   async rescanFiles(
     mediaId: number,
-    options?: { skipWarmup?: boolean },
   ): Promise<{
     added: number;
     removed: number;
@@ -445,12 +411,6 @@ export class MediaRescanService {
     // After the rescan we backfill metadata (titles, stills) for those slots
     // by running the shared series refresh so they don't show up empty.
     let metadataSlotsCreated = false;
-
-    // A full rescan re-reads streamInfo, so every cached VTT derived from the
-    // old layout is stale.
-    for (const f of media.files ?? []) {
-      void this.subtitleStream.clearMediaFileSubtitleCache(f.id);
-    }
 
     const mediaDir = path.resolve(media.path);
     if (!(await pathExists(mediaDir))) {
@@ -543,7 +503,6 @@ export class MediaRescanService {
         try {
           await this.mediaFileRepo.remove(dbFile);
           void this.thumbnailService.deleteForFile(removedFileId);
-          void this.subtitleStream.clearMediaFileSubtitleCache(removedFileId);
           removed++;
           this.log.log(
             `Rescan: removed missing file "${normPath}" for media #${mediaId}`,
@@ -591,16 +550,6 @@ export class MediaRescanService {
 
       const filename = path.basename(absPath);
 
-      // Fed to the subtitle-warmup progress below. Prefer whatever this pass just
-      // parsed/linked (exact season/episode numbers, no extra query); otherwise fall
-      // back to the `files.episode.season` relation preloaded above.
-      let epForProgress: {
-        id?: number | null;
-        seasonNumber?: number | null;
-        episodeNumber?: number | null;
-        title?: string | null;
-      } | null = null;
-
       // Series files: parse filename, either link a missing episodeId OR
       // patch an existing link with a newly-discovered multi-episode range
       // (e.g. "S07E11-E12.mkv" already imported as E11 gets endEpisodeNumber
@@ -617,12 +566,6 @@ export class MediaRescanService {
             if (created) metadataSlotsCreated = true;
             if (ep) {
               dbFile.episode = ep;
-              epForProgress = {
-                id: ep.id,
-                seasonNumber: epNums.season,
-                episodeNumber: epNums.episode,
-                title: ep.title,
-              };
               try {
                 await this.mediaFileRepo.save(dbFile);
                 await this.episodeRepo.update(ep.id, { hasFile: true });
@@ -647,12 +590,6 @@ export class MediaRescanService {
           const special = await this.matchSpecialFile(mediaId, absPath);
           if (special) {
             dbFile.episode = special;
-            epForProgress = {
-              id: special.id,
-              seasonNumber: 0,
-              episodeNumber: special.episodeNumber,
-              title: special.title,
-            };
             await this.mediaFileRepo.save(dbFile);
             await this.episodeRepo.update(special.id, { hasFile: true });
             updated++;
@@ -669,14 +606,6 @@ export class MediaRescanService {
               `Rescan: set endEpisodeNumber=${epNums.episodeEnd} on S${String(epNums.season).padStart(2, '0')}E${String(epNums.episode).padStart(2, '0')} for media #${mediaId}`,
             );
           }
-        }
-        if (!epForProgress && dbFile.episode) {
-          epForProgress = {
-            id: dbFile.episode.id,
-            seasonNumber: dbFile.episode.season?.seasonNumber,
-            episodeNumber: dbFile.episode.episodeNumber,
-            title: dbFile.episode.title,
-          };
         }
       }
 
@@ -716,14 +645,8 @@ export class MediaRescanService {
         this.log.log(
           `Rescan: refreshed "${normPath}" for media #${mediaId} (size: ${diskSize}, quality: ${probed.quality}${sizeUnchanged ? ', skipped crop' : ''})`,
         );
-        if (!options?.skipWarmup) {
-          void this.subtitleStream.warmupCache(
-            absPath,
-            dbFile.id,
-            streamInfo?.subtitles,
-            buildMediaProgressSubject(media, epForProgress),
-          );
-        }
+        // The track layout may have changed: drop the engine's extracts of the old one.
+        if (!sizeUnchanged) void this.engine.invalidate(dbFile.id);
       } catch (err) {
         this.log.error(
           `Rescan[media #${mediaId}]: failed to save refreshed metadata for "${normPath}"`,
@@ -758,12 +681,6 @@ export class MediaRescanService {
 
       // Try to match episode for series — create season/episode on the fly if missing
       let episodeId: number | undefined;
-      let epForProgress: {
-        id?: number | null;
-        seasonNumber?: number | null;
-        episodeNumber?: number | null;
-        title?: string | null;
-      } | null = null;
       if (media.type === MediaType.SERIES) {
         const epNums = this.naming.parseEpisodeNumbers(filename, absPath);
         if (epNums) {
@@ -775,14 +692,6 @@ export class MediaRescanService {
             );
             if (created) metadataSlotsCreated = true;
             episodeId = ep?.id;
-            if (ep) {
-              epForProgress = {
-                id: ep.id,
-                seasonNumber: epNums.season,
-                episodeNumber: epNums.episode,
-                title: ep.title,
-              };
-            }
           } catch (err) {
             this.log.error(
               `Rescan[media #${mediaId}]: failed to create season/episode for new file "${filename}" — importing file without episode link`,
@@ -793,12 +702,6 @@ export class MediaRescanService {
           const special = await this.matchSpecialFile(mediaId, absPath);
           if (special) {
             episodeId = special.id;
-            epForProgress = {
-              id: special.id,
-              seasonNumber: 0,
-              episodeNumber: special.episodeNumber,
-              title: special.title,
-            };
           } else {
             this.log.warn(
               `Rescan[media #${mediaId}]: series file name has no SxxEyy pattern — "${filename}" (skipped, alien file in series folder)`,
@@ -817,7 +720,7 @@ export class MediaRescanService {
       // filename-derived guess (source text at the 480p default bucket).
       const quality = probed.quality ?? qualityFromResolution(filename);
       try {
-        const savedFile = await this.mediaFileRepo.save(
+        await this.mediaFileRepo.save(
           this.mediaFileRepo.create({
             media,
             episode: episodeId != null ? ({ id: episodeId } as Episode) : null,
@@ -833,14 +736,6 @@ export class MediaRescanService {
         );
         if (episodeId != null) {
           await this.episodeRepo.update(episodeId, { hasFile: true });
-        }
-        if (!options?.skipWarmup) {
-          void this.subtitleStream.warmupCache(
-            absPath,
-            savedFile.id,
-            probed.streamInfo.subtitles,
-            buildMediaProgressSubject(media, epForProgress),
-          );
         }
       } catch (err) {
         this.log.error(
@@ -1051,12 +946,7 @@ export class MediaRescanService {
     if (opts.detectCrop && streamInfo?.video?.[0]) {
       try {
         const v = streamInfo.video[0];
-        const crop = await this.ffprobe.detectCrop(
-          absPath,
-          streamInfo.durationSeconds,
-          v.width,
-          v.height,
-        );
+        const crop = await this.ffprobe.detectCrop(absPath);
         if (crop) v.crop = crop;
       } catch (err) {
         this.log.warn(

@@ -1,5 +1,8 @@
-const execFileMock = jest.fn();
-jest.mock('child_process', () => ({ execFile: execFileMock }));
+const readFile = jest.fn(async () =>
+  Buffer.from('1\n00:00:10,000 --> 00:00:12,000\nsync me\n'),
+);
+const writeFile = jest.fn(async () => undefined);
+jest.mock('fs/promises', () => ({ readFile, writeFile }));
 
 import { SubtitleSyncService } from './subtitle-sync.service';
 import { SubtitleFile } from './entities/subtitle-file.entity';
@@ -19,30 +22,34 @@ describe('SubtitleSyncService — a failed sync', () => {
       ...row,
     };
     const save = jest.fn(async (s: unknown) => s);
+    const runJob = jest.fn();
     const service = new SubtitleSyncService(
       { findOne: jest.fn().mockResolvedValue(subtitle), save } as never,
       { findOne: jest.fn().mockResolvedValue({ id: 1, path: '/medias/movie' }) } as never,
-      { findOne: jest.fn().mockResolvedValue({ id: 1, relativePath: 'movie.mkv' }) } as never,
+      {
+        findOne: jest.fn().mockResolvedValue({
+          id: 1,
+          relativePath: 'movie.mkv',
+          streamInfo: { video: [], audio: [], subtitles: [] },
+        }),
+      } as never,
       { dispatch: jest.fn() } as never,
-      { detectStreams: jest.fn().mockResolvedValue([]) } as never,
+      { runJob } as never,
       { emit: jest.fn() } as never,
       { upsertPending: jest.fn(), upsertRunning: jest.fn(), remove: jest.fn() } as never,
       { dispatch: jest.fn() } as never,
     );
-    return { service, subtitle, save };
+    return { service, subtitle, save, runJob };
   };
 
   beforeEach(() => {
-    execFileMock.mockReset();
-    // promisify hands the callback last; every tool call fails.
-    execFileMock.mockImplementation((...args: unknown[]) => {
-      const cb = args[args.length - 1] as (e: Error) => void;
-      cb(Object.assign(new Error('exit 1'), { stderr: 'could not parse subtitle file' }));
-    });
+    readFile.mockClear();
+    writeFile.mockClear();
   });
 
   it('records the flag and the cause on the row, leaving the status alone', async () => {
-    const { service, subtitle, save } = build({ status: SubtitleStatus.DOWNLOADED });
+    const { service, subtitle, save, runJob } = build({ status: SubtitleStatus.DOWNLOADED });
+    runJob.mockRejectedValue(new Error('could not parse subtitle file'));
 
     await expect(service.syncSubtitle(1)).rejects.toThrow('Sync failed');
 
@@ -53,13 +60,14 @@ describe('SubtitleSyncService — a failed sync', () => {
   });
 
   it('clears a previous failure when a later attempt succeeds', async () => {
-    const { service, subtitle } = build({
+    const { service, subtitle, runJob } = build({
       status: SubtitleStatus.DOWNLOADED,
       syncFailed: true,
       errorMessage: 'the previous run',
     });
-    execFileMock.mockImplementation((...args: unknown[]) => {
-      (args[args.length - 1] as (e: null, out: string, err: string) => void)(null, '', '');
+    runJob.mockResolvedValue({
+      type: 'SubtitleSync',
+      subtitle: { format: 'srt', text: '1\n00:00:01,000 --> 00:00:02,000\nok\n' },
     });
 
     await service.syncSubtitle(1);
@@ -68,5 +76,6 @@ describe('SubtitleSyncService — a failed sync', () => {
     expect(subtitle.errorMessage).toBeNull();
     expect(subtitle.status).toBe(SubtitleStatus.SYNCED);
     expect(subtitle.synced).toBe(true);
+    expect(writeFile).toHaveBeenCalled();
   });
 });

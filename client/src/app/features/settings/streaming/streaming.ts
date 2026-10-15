@@ -67,7 +67,6 @@ export class StreamingSettingsComponent implements OnInit {
   /** When embedded subtitles are extracted to WebVTT. Extraction reads the
    *  whole container, so this only picks where that read happens — every mode
    *  still extracts on demand for a track nobody prepared. */
-  readonly subtitlePrewarm = signal<'off' | 'playback' | 'import'>('playback');
   /** Tonemap algorithms the server reports as runnable on this host.
    *  When the list has a single entry (`['auto']` — e.g. macOS, or a
    *  Linux box with no OpenCL stack and no Intel iGPU), we hide the
@@ -97,10 +96,6 @@ export class StreamingSettingsComponent implements OnInit {
       this.throttleThresholdSeconds.set(all['streaming_throttle_threshold_seconds'] ?? '90');
       this.autoQualityMode.set(
         all['streaming_auto_quality_mode'] === 'abr' ? 'abr' : 'directplay',
-      );
-      const prewarm = all['streaming_subtitle_prewarm'];
-      this.subtitlePrewarm.set(
-        prewarm === 'off' || prewarm === 'import' ? prewarm : 'playback',
       );
       this.tonemapAlgosAvailable.set(algos.available ?? ['auto']);
       this.gpus.set(gpusResp.gpus ?? []);
@@ -143,7 +138,6 @@ export class StreamingSettingsComponent implements OnInit {
         streaming_ffmpeg_slots: this.ffmpegSlots(),
         streaming_gpu_render_node: this.gpuRenderNode(),
         streaming_auto_quality_mode: this.autoQualityMode(),
-        streaming_subtitle_prewarm: this.subtitlePrewarm(),
         streaming_auto_crop_enabled: String(this.autoCropEnabled()),
         streaming_throttle_enabled: String(this.throttleEnabled()),
         streaming_throttle_threshold_seconds: this.throttleThresholdSeconds(),

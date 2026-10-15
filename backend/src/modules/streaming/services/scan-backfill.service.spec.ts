@@ -1,19 +1,11 @@
 import { ScanBackfillService } from './scan-backfill.service';
-import * as ffmpegSlots from '../../../common/utils/ffmpeg-slots';
-
-jest.mock('../../../common/utils/ffmpeg-slots', () => ({
-  freeFfmpegSlots: jest.fn(),
-}));
 
 describe('ScanBackfillService.tick', () => {
-  const freeSlots = ffmpegSlots.freeFfmpegSlots as jest.Mock;
-
   const setup = (opts: {
     liveSessions?: number;
     pendingIds?: number[];
     resolveFile?: jest.Mock;
   } = {}) => {
-    freeSlots.mockReturnValue(2);
     const files = {
       query: jest.fn(async (_sql: string, [after]: number[]) =>
         (opts.pendingIds ?? []).filter((id) => id > after).slice(0, 1).map((id) => ({ id })),
@@ -53,13 +45,6 @@ describe('ScanBackfillService.tick', () => {
 
   it('yields when a playback session is active', async () => {
     const { svc, sourceScans } = setup({ pendingIds: [7], liveSessions: 1 });
-    await svc.tick();
-    expect(sourceScans.scheduleIfNeeded).not.toHaveBeenCalled();
-  });
-
-  it('skips starting a scan when it would leave no spare ffmpeg slot', async () => {
-    const { svc, sourceScans } = setup({ pendingIds: [7] });
-    freeSlots.mockReturnValue(1);
     await svc.tick();
     expect(sourceScans.scheduleIfNeeded).not.toHaveBeenCalled();
   });

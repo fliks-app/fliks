@@ -20,6 +20,7 @@ import { LibraryUserAccess } from '../libraries/entities/library-user-access.ent
 import { Library } from '../libraries/entities/library.entity';
 import { ImageService } from '../images/image.service';
 import { EventsService } from '../scheduler/events.service';
+import { EngineService } from '../engine/engine.service';
 
 /** API shape: user without password hash, with role name instead of relation. */
 export type PublicUser = Omit<User, 'passwordHash' | 'userRole'> & {
@@ -45,6 +46,7 @@ export class UsersService implements OnModuleInit {
     private readonly caslAbilityFactory: CaslAbilityFactory,
     private readonly imageService: ImageService,
     private readonly events: EventsService,
+    private readonly engine: EngineService,
   ) {}
 
   async onModuleInit() {
@@ -247,6 +249,7 @@ export class UsersService implements OnModuleInit {
     // commandable remote-control target until it happens to drop on its own.
     const roleChanging = dto.roleId !== undefined && dto.roleId !== target.roleId;
     const enabledChanging = dto.enabled !== undefined && dto.enabled !== target.enabled;
+    const adminChanging = dto.isAdmin !== undefined && dto.isAdmin !== target.isAdmin;
 
     // Manager-only fields
     if (isManager) {
@@ -345,6 +348,10 @@ export class UsersService implements OnModuleInit {
       }
     }
 
+    if (dto.enabled === false || roleChanging || adminChanging || dto.libraryIds !== undefined) {
+      void this.engine.revokeOwner(targetId);
+    }
+
     return this.findOne(targetId);
   }
 
@@ -386,5 +393,6 @@ export class UsersService implements OnModuleInit {
     const user = await this.userRepo.findOne({ where: { id } });
     if (!user) throw new NotFoundException(`User #${id} not found`);
     await this.userRepo.remove(user);
+    void this.engine.revokeOwner(id);
   }
 }

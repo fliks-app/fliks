@@ -1,12 +1,36 @@
 #!/usr/bin/env bash
-# Usage: scripts/bump-engine.sh <version>   (e.g. 0.1.1) — rewrites engine.lock from the release's .sha256 assets.
+# Usage: scripts/bump-engine.sh <version>          rewrite engine.lock, the Dockerfile engine image and the generated schema (e.g. 0.1.1)
+#        scripts/bump-engine.sh --schema <version> regenerate the schema only, from that release (CI)
+#        scripts/bump-engine.sh --local <checkout> regenerate the schema from <checkout>/openapi.json
 set -euo pipefail
-v="${1:?usage: bump-engine.sh <version>}"
-v="${v#v}"
 cd "$(dirname "$0")/.."
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
+schema=backend/src/modules/engine/schema.d.ts
 
+# gen_schema <openapi.json> <label>: the label is the engine version, or `local`.
+gen_schema() {
+    (cd backend && npx --no-install openapi-typescript "$1" --default-non-nullable=false -o "$tmp/schema.d.ts" >/dev/null)
+    { echo "// Generated from fliks-engine openapi.json ($2). Do not edit: run scripts/bump-engine.sh."; cat "$tmp/schema.d.ts"; } > "$schema"
+}
+
+release_schema() {
+    gh release download "v$1" -R fliks-app/engine -p openapi.json -D "$tmp"
+    gen_schema "$tmp/openapi.json" "v$1"
+}
+
+case "${1:?usage: bump-engine.sh <version> | --schema <version> | --local <checkout>}" in
+--local)
+    gen_schema "$(realpath "${2:?checkout path}")/openapi.json" local
+    exit 0
+    ;;
+--schema)
+    release_schema "${2#v}"
+    exit 0
+    ;;
+esac
+
+v="${1#v}"
 gh release download "v$v" -R fliks-app/engine -p 'fliks-engine-*.sha256' -D "$tmp"
 
 {
@@ -18,4 +42,6 @@ gh release download "v$v" -R fliks-app/engine -p 'fliks-engine-*.sha256' -D "$tm
     done
 } > engine.lock.new
 mv engine.lock.new engine.lock
+sed -i "s|^ARG ENGINE_IMAGE=.*|ARG ENGINE_IMAGE=ghcr.io/fliks-app/engine:$v|" Dockerfile
 cat engine.lock
+release_schema "$v"

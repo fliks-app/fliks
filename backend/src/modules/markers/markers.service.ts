@@ -14,6 +14,7 @@ import { Command } from '../scheduler/entities/command.entity';
 import { EventsService } from '../scheduler/events.service';
 import { ActivityRegistryService } from '../scheduler/activity-registry.service';
 import { SettingsService } from '../settings/settings.service';
+import type { JobPriority } from '../engine/engine.service';
 import { IntroDetectionService } from './intro-detection.service';
 import { CreateMarkerDto } from './dto/create-marker.dto';
 import { UpdateMarkerDto } from './dto/update-marker.dto';
@@ -175,6 +176,7 @@ export class MarkersService {
       season.mediaId,
       season.seasonNumber,
       season.media?.title ?? `media #${season.mediaId}`,
+      trigger === 'manual' ? 'high' : 'low',
     ).catch((err) =>
       this.log.error(
         `IntroDetection #${cmd.id} crashed: ${(err as Error).message}`,
@@ -248,7 +250,7 @@ export class MarkersService {
           this.activityRegistry.upsertRunning(activityId, 'IntroDetection', subject, current, total)
       : undefined;
     try {
-      return await this.detectIntrosAndOutros(seasonId, onProgress);
+      return await this.detectIntrosAndOutros(seasonId, onProgress, 'normal');
     } finally {
       this.inFlight.delete(seasonId);
       if (subject) this.activityRegistry.remove(activityId);
@@ -287,14 +289,20 @@ export class MarkersService {
   /** Shared: detect intros + outros for a season, mark episodes as scanned. */
   private async detectIntrosAndOutros(
     seasonId: number,
-    onProgress?: (current: number, total: number, message: string) => void,
+    onProgress: ((current: number, total: number, message: string) => void) | undefined,
+    priority: JobPriority,
   ): Promise<{ introsDetected: number; outrosDetected: number }> {
-    const intros = await this.detector.detectSeasonIntros(seasonId, onProgress);
+    const intros = await this.detector.detectSeasonIntros(
+      seasonId,
+      onProgress,
+      priority,
+    );
     let outrosDetected = 0;
     try {
       const outros = await this.detector.detectSeasonOutros(
         seasonId,
         onProgress,
+        priority,
       );
       outrosDetected = outros.outrosDetected;
     } catch (err) {
@@ -318,6 +326,7 @@ export class MarkersService {
     mediaId: number,
     seasonNumber: number,
     mediaTitle: string,
+    priority: JobPriority,
   ): Promise<void> {
     this.inFlight.add(seasonId);
     const activityId = `IntroDetection:${seasonId}`;
@@ -348,7 +357,7 @@ export class MarkersService {
         this.activityRegistry.upsertRunning(activityId, 'IntroDetection', subject, current, total);
       };
 
-      const result = await this.detectIntrosAndOutros(seasonId, onProgress);
+      const result = await this.detectIntrosAndOutros(seasonId, onProgress, priority);
       await this.commandRepo.update(cmdId, {
         status: 'completed',
         endedOn: new Date(),

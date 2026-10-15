@@ -255,8 +255,8 @@ export class MediaService {
 
   // -- Rescan + analyse + file enrichment -------------------------------------
 
-  rescanFiles(mediaId: number, options?: { skipWarmup?: boolean }) {
-    return this.rescan.rescanFiles(mediaId, options);
+  rescanFiles(mediaId: number) {
+    return this.rescan.rescanFiles(mediaId);
   }
 
   analyzeMedia(mediaId: number, opts: AnalyzeMediaDto) {

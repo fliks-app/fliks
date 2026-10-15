@@ -16,6 +16,15 @@ function pick(raw: Record<string, unknown>): CmcdSnapshot | null {
   return Object.keys(out).length ? out : null;
 }
 
+/** CMCD from its raw text: the `CMCD` query value, or the `CMCD-*` header values joined by commas. */
+export function readCmcdRaw(raw: string): CmcdSnapshot | null {
+  try {
+    return pick(fromCmcdQuery(`CMCD=${encodeURIComponent(raw)}`));
+  } catch {
+    return null;
+  }
+}
+
 /** CMCD off the `CMCD` query param, else the `CMCD-*` headers; null when absent or malformed. */
 export function readCmcd(req: Req): CmcdSnapshot | null {
   try {

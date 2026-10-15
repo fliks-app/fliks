@@ -672,7 +672,7 @@ export class SchedulerService implements OnModuleInit {
     );
   }
 
-  /** Shared rescan loop — skip subtitle warmup to avoid queue flooding. */
+  /** Shared rescan loop. */
   private async rescanMediaList(
     mediaList: { id: number; title: string; type?: string }[],
     commandName: string,
@@ -713,9 +713,7 @@ export class SchedulerService implements OnModuleInit {
         );
         this.activityRegistry.upsertRunning(childId, commandName, subject);
         try {
-          const result = await this.mediaService.rescanFiles(media.id, {
-            skipWarmup: true,
-          });
+          const result = await this.mediaService.rescanFiles(media.id);
           totalUpdated += result.added + result.removed + result.updated;
         } catch (e) {
           skipped++;

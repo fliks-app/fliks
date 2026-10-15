@@ -6,8 +6,6 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { execFile } from 'child_process';
-import { promisify } from 'util';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { SubtitleFile } from './entities/subtitle-file.entity';
@@ -15,8 +13,8 @@ import { Media } from '../media/entities/media.entity';
 import { MediaFile } from '../media/entities/media-file.entity';
 import { SubtitleProviderType, SubtitleStatus } from '../../common/enums';
 import { NotificationsService } from '../notifications/notifications.service';
-import { FfprobeService } from '../media-probe/ffprobe.service';
 import { EventsService } from '../scheduler/events.service';
+import { EngineService } from '../engine/engine.service';
 import { ActivityRegistryService } from '../scheduler/activity-registry.service';
 import { MediaServersService } from '../media-servers/media-servers.service';
 import { resolveSubtitleAbsolutePath } from './subtitle-path.util';
@@ -25,13 +23,6 @@ import {
   type MediaProgressSubject,
 } from '../../common/utils/media-progress-subject.util';
 
-const execFileAsync = promisify(execFile);
-const SYNC_TOOL_TIMEOUT_MS = 900_000;
-const SYNC_TOOL_MAX_BUFFER = 1 << 24;
-const SYNC_EXEC_OPTS = {
-  timeout: SYNC_TOOL_TIMEOUT_MS,
-  maxBuffer: SYNC_TOOL_MAX_BUFFER,
-};
 const MAX_CONCURRENT = 2;
 
 export interface SyncOptions {
@@ -71,7 +62,7 @@ export class SubtitleSyncService {
     @InjectRepository(MediaFile)
     private readonly mediaFileRepo: Repository<MediaFile>,
     private readonly notifications: NotificationsService,
-    private readonly ffprobe: FfprobeService,
+    private readonly engine: EngineService,
     private readonly events: EventsService,
     private readonly activityRegistry: ActivityRegistryService,
     private readonly mediaServers: MediaServersService,
@@ -203,17 +194,28 @@ export class SubtitleSyncService {
       throw new BadRequestException('Cannot sync an embedded subtitle');
     }
 
-    const mediaFilePath = await this.resolveMediaFilePath(
-      subtitle.mediaId,
-      subtitle.mediaFileId,
-    );
+    const mediaFile = await this.mediaFileRepo.findOne({
+      where: { id: subtitle.mediaFileId },
+    });
+    if (!mediaFile) {
+      throw new NotFoundException(`MediaFile #${subtitle.mediaFileId} not found`);
+    }
+    const info = mediaFile.streamInfo;
+    if (!info) {
+      throw new Error('No probe data for this file; rescan the media first');
+    }
 
     const mediaForSub = await this.mediaRepo.findOne({
       where: { id: subtitle.mediaId },
       relations: ['library'],
     });
+    if (!mediaForSub?.path) {
+      throw new NotFoundException(
+        `Media #${subtitle.mediaId} not found or has no root path`,
+      );
+    }
     const subPath = resolveSubtitleAbsolutePath(
-      mediaForSub?.path ?? null,
+      mediaForSub.path,
       subtitle.relativePath,
     );
     if (!subPath) {
@@ -221,52 +223,11 @@ export class SubtitleSyncService {
         'Subtitle has no resolvable file path (check media root folder and relative path)',
       );
     }
+    const mediaFilePath = path.join(mediaForSub.path, mediaFile.relativePath);
 
-    // Parse reference: 'auto', 'audio:3', 'subtitle:5', 'file:/path/to/sub.srt', or absolute path
-    let refPath = mediaFilePath;
-    let refStreamIndex: number | null = null;
-    if (options.reference && options.reference !== 'auto') {
-      const streamMatch = /^(audio|subtitle):(\d+)$/.exec(options.reference);
-      const fileMatch = /^file:(.+)$/.exec(options.reference);
-      if (streamMatch) {
-        refStreamIndex = Number(streamMatch[2]);
-      } else if (fileMatch) {
-        const raw = fileMatch[1];
-        if (path.isAbsolute(raw)) {
-          refPath = raw;
-        } else {
-          const abs = resolveSubtitleAbsolutePath(
-            mediaForSub?.path ?? null,
-            raw,
-          );
-          if (!abs) {
-            throw new BadRequestException(
-              `Invalid reference subtitle path: ${raw}`,
-            );
-          }
-          refPath = abs;
-        }
-      } else {
-        refPath = options.reference;
-      }
-    }
-
-    const buildFfsubsyncArgs = (ref: string, streamIdx: number | null) => {
-      const args = [ref, '-i', subPath, '-o', subPath];
-      if (streamIdx != null) {
-        args.push('--reference-stream', `stream:${streamIdx}`);
-      }
-      if (options.maxOffsetSeconds != null) {
-        args.push('--max-offset-seconds', String(options.maxOffsetSeconds));
-      }
-      if (options.noFixFramerate) {
-        args.push('--no-fix-framerate');
-      }
-      if (options.goldenSectionSearch) {
-        args.push('--gss');
-      }
-      return args;
-    };
+    const format = subtitleFormat(subPath);
+    const text = await fs.readFile(subPath, 'utf-8');
+    const reference = syncReference(options.reference, mediaForSub.path);
 
     // A fresh attempt owns the outcome: a success below has to clear what the
     // last failure recorded.
@@ -274,75 +235,31 @@ export class SubtitleSyncService {
     subtitle.errorMessage = null;
 
     try {
-      await execFileAsync(
-        'ffsubsync',
-        buildFfsubsyncArgs(refPath, refStreamIndex),
-        SYNC_EXEC_OPTS,
-      );
+      const result = await this.engine.runJob({
+        kind: {
+          type: 'SubtitleSync',
+          info,
+          subtitle: { format, text },
+          reference,
+          maxOffsetSeconds: options.maxOffsetSeconds,
+          noFixFramerate: options.noFixFramerate,
+          gss: options.goldenSectionSearch,
+        },
+        media: { mediaFileId: mediaFile.id, path: mediaFilePath },
+        priority: options.automatic ? 'low' : 'high',
+      });
+      await fs.writeFile(subPath, result.subtitle.text, 'utf-8');
       subtitle.synced = true;
       subtitle.status = SubtitleStatus.SYNCED;
-    } catch (err: any) {
-      this.logger.warn(
-        `ffsubsync failed for ${subPath}: ${err.stderr || err.message || err}`,
-      );
-
-      // If auto mode failed with "Unable to detect speech", retry with first audio stream
-      if (
-        refStreamIndex == null &&
-        /unable to detect speech/i.test(err.stderr || '')
-      ) {
-        const streams = await this.ffprobe.detectStreams(mediaFilePath);
-        const firstAudio = streams.find((s) => s.type === 'audio');
-        if (firstAudio) {
-          this.logger.log(
-            `Retrying ffsubsync with explicit audio stream:${firstAudio.streamIndex}`,
-          );
-          try {
-            await execFileAsync(
-              'ffsubsync',
-              buildFfsubsyncArgs(refPath, firstAudio.streamIndex),
-              SYNC_EXEC_OPTS,
-            );
-            subtitle.synced = true;
-            subtitle.status = SubtitleStatus.SYNCED;
-            const saved = await this.repo.save(subtitle);
-            if (saved.synced) {
-              void this.notifications.dispatch('subtitle.synced', {
-                language: saved.language,
-                subtitleId: saved.id,
-              });
-              this.events.emit({
-                type: 'subtitle.synced',
-                subtitleId: saved.id,
-                language: saved.language,
-                mediaId: saved.mediaId,
-                automatic: options.automatic,
-              });
-            }
-            return saved;
-          } catch (retryErr: any) {
-            this.logger.warn(
-              `ffsubsync retry also failed: ${retryErr.stderr || retryErr.message}`,
-            );
-          }
-        }
-      }
-
-      // Fallback to alass
-      try {
-        await execFileAsync('alass', [refPath, subPath, subPath], SYNC_EXEC_OPTS);
-        subtitle.synced = true;
-        subtitle.status = SubtitleStatus.SYNCED;
-      } catch (alassErr: any) {
-        const detail = `ffsubsync stderr: ${err.stderr || '(none)'}\nalass stderr: ${alassErr.stderr || '(none)'}\nalass stdout: ${alassErr.stdout || '(none)'}\nalass message: ${alassErr.message || alassErr}`;
-        this.logger.error(`Subtitle sync failed for #${id}:\n${detail}`);
-        // Saved before the throw: the caller only reports the failure to the
-        // in-memory sync queue, which no page outlives.
-        subtitle.syncFailed = true;
-        subtitle.errorMessage = detail.slice(0, 2000);
-        await this.repo.save(subtitle);
-        throw new Error(`Sync failed: ${(alassErr as Error).message}`);
-      }
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      this.logger.error(`Subtitle sync failed for #${id}: ${detail}`);
+      // Saved before the throw: the caller only reports the failure to the
+      // in-memory sync queue, which no page outlives.
+      subtitle.syncFailed = true;
+      subtitle.errorMessage = detail.slice(0, 2000);
+      await this.repo.save(subtitle);
+      throw new Error(`Sync failed: ${detail}`);
     }
 
     const saved = await this.repo.save(subtitle);
@@ -374,25 +291,6 @@ export class SubtitleSyncService {
     return saved;
   }
 
-  private async resolveMediaFilePath(
-    mediaId: number,
-    mediaFileId: number,
-  ): Promise<string> {
-    const media = await this.mediaRepo.findOne({ where: { id: mediaId } });
-    if (!media?.path) {
-      throw new NotFoundException(
-        `Media #${mediaId} not found or has no root path`,
-      );
-    }
-    const mediaFile = await this.mediaFileRepo.findOne({
-      where: { id: mediaFileId },
-    });
-    if (!mediaFile) {
-      throw new NotFoundException(`MediaFile #${mediaFileId} not found`);
-    }
-    return path.join(media.path, mediaFile.relativePath);
-  }
-
   async reencodeToUtf8(id: number): Promise<void> {
     const subtitle = await this.repo.findOne({ where: { id } });
     if (!subtitle) throw new NotFoundException(`SubtitleFile #${id} not found`);
@@ -412,4 +310,34 @@ export class SubtitleSyncService {
     const content = buffer.toString('utf-8');
     await fs.writeFile(abs, content, 'utf-8');
   }
+}
+
+const SUBTITLE_FORMATS = ['srt', 'sub', 'ass', 'ssa', 'vtt'] as const;
+type SidecarFormat = (typeof SUBTITLE_FORMATS)[number];
+
+function subtitleFormat(filePath: string): SidecarFormat {
+  const ext = path.extname(filePath).slice(1).toLowerCase();
+  if ((SUBTITLE_FORMATS as readonly string[]).includes(ext)) {
+    return ext as SidecarFormat;
+  }
+  throw new BadRequestException(`Cannot sync a .${ext || 'unknown'} subtitle`);
+}
+
+function syncReference(reference: string | undefined, mediaRoot: string) {
+  if (!reference || reference === 'auto') return { type: 'auto' as const };
+  const stream = /^(audio|subtitle):(\d+)$/.exec(reference);
+  if (stream) {
+    const index = Number(stream[2]);
+    return stream[1] === 'audio'
+      ? { type: 'audioStream' as const, index }
+      : { type: 'subtitleStream' as const, index };
+  }
+  const raw = /^file:(.+)$/.exec(reference)?.[1] ?? reference;
+  const abs = path.isAbsolute(raw)
+    ? raw
+    : resolveSubtitleAbsolutePath(mediaRoot, raw);
+  if (!abs) {
+    throw new BadRequestException(`Invalid reference subtitle path: ${raw}`);
+  }
+  return { type: 'file' as const, path: abs };
 }

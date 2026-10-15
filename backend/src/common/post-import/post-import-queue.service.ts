@@ -172,7 +172,7 @@ export class PostImportQueueService {
     );
 
     try {
-      await this.mediaRescan.finalizeImportedFile(file, absPath, file.media);
+      await this.mediaRescan.finalizeImportedFile(file, absPath);
     } catch (e) {
       this.logger.warn(
         `PostImport: enrichment failed for file #${mediaFileId}, ${(e as Error).message}`,

@@ -10,12 +10,11 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Repository } from 'typeorm';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { execFile } from 'child_process';
-import { promisify } from 'util';
 import { SubtitleFile } from './entities/subtitle-file.entity';
 import { Media } from '../media/entities/media.entity';
 import { SettingsService } from '../settings/settings.service';
 import { EventsService } from '../scheduler/events.service';
+import { EngineService } from '../engine/engine.service';
 import { SubtitleTranslationSettingsCache } from './subtitle-translation-settings-cache.service';
 import {
   TranslationPayloadTooLargeError,
@@ -33,8 +32,6 @@ import { resolveSubtitleAbsolutePath } from './subtitle-path.util';
 import { isImageBasedSubtitleCodec } from '../../common/constants/subtitle-codecs';
 import { SubtitleProviderType, SubtitleStatus } from '../../common/enums';
 import { normalizeLanguageCode } from '../../common/constants/app-languages';
-
-const execFileAsync = promisify(execFile);
 
 /** A blank or missing translation both fall back to the source text. */
 export function mergeTranslated(source: string, translated: string): string {
@@ -66,7 +63,6 @@ export function translationErrorMessage(err: unknown): string {
 @Injectable()
 export class SubtitleTranslationService implements OnModuleInit {
   private readonly log = new Logger(SubtitleTranslationService.name);
-  private readonly tmpDir = '/tmp/fliks-translate';
 
   /** Percentage of each run in flight, keyed by placeholder id. Lives here, not
    *  in the row: it is only true while this process is the one translating. */
@@ -92,9 +88,8 @@ export class SubtitleTranslationService implements OnModuleInit {
     private readonly translationSettings: SubtitleTranslationSettingsCache,
     private readonly translationProviders: TranslationProviderService,
     private readonly translationFactory: TranslationProviderFactory,
-  ) {
-    fs.mkdir(this.tmpDir, { recursive: true }).catch(() => {});
-  }
+    private readonly engine: EngineService,
+  ) {}
 
   /** No run survives a restart, so any PROCESSING row is a corpse: it would
    *  otherwise claim its language forever and hide its own actions. */
@@ -271,15 +266,11 @@ export class SubtitleTranslationService implements OnModuleInit {
     maxConcurrency: number,
   ): Promise<void> {
     const media = await this.mediaRepo.findOne({ where: { id: source.mediaId } });
-    const base = path.join(
-      this.tmpDir,
-      `tr-${source.id}-${process.hrtime.bigint()}`,
-    );
     try {
       if (!media?.path) throw new Error('media root folder not set');
       const videoPath = path.join(media.path, source.mediaFile.relativePath);
 
-      const srtIn = await this.loadSourceSrt(media.path, source, videoPath, base);
+      const srtIn = await this.loadSourceSrt(media.path, source, videoPath);
       const cues = parseSrt(srtIn);
       if (cues.length === 0) throw new Error('source subtitle has no text');
 
@@ -402,49 +393,50 @@ export class SubtitleTranslationService implements OnModuleInit {
       });
     } finally {
       this.progress.delete(placeholderId);
-      await this.cleanupTemp(base);
     }
   }
 
-  /** Read the source subtitle as SRT: convert on-disk non-SRT files and extract
-   *  embedded text tracks with ffmpeg so parsing is always uniform. */
+  /** Read the source subtitle as SRT. An SRT sidecar is read here; anything else
+   *  is one engine ffmpeg run. */
   private async loadSourceSrt(
     mediaRoot: string,
     source: SubtitleFile,
     videoPath: string,
-    base: string,
   ): Promise<string> {
+    const info = source.mediaFile?.streamInfo;
     if (source.relativePath) {
       const absolute = resolveSubtitleAbsolutePath(mediaRoot, source.relativePath);
       if (!absolute) throw new Error('source subtitle path is invalid');
       if (source.codec === 'subrip' || /\.srt$/i.test(absolute)) {
         return fs.readFile(absolute, 'utf-8');
       }
-      const out = `${base}.src.srt`;
-      await execFileAsync('ffmpeg', ['-y', '-i', absolute, '-f', 'srt', out], {
-        timeout: 120_000,
+      const { srt } = await this.engine.runJob({
+        kind: {
+          type: 'SubtitleToSrt',
+          info: info ?? { video: [], audio: [], subtitles: [] },
+          source: { type: 'file', path: absolute },
+        },
+        media: { mediaFileId: source.mediaFileId, path: videoPath },
+        priority: 'high',
       });
-      return fs.readFile(out, 'utf-8');
+      return srt;
     }
-    // Embedded text track: extract the selected stream to SRT.
-    const out = `${base}.src.srt`;
-    await execFileAsync(
-      'ffmpeg',
-      ['-y', '-i', videoPath, '-map', `0:${source.streamIndex}`, '-f', 'srt', out],
-      { timeout: 120_000 },
-    );
-    return fs.readFile(out, 'utf-8');
-  }
-
-  private async cleanupTemp(base: string): Promise<void> {
-    const dir = path.dirname(base);
-    const prefix = path.basename(base);
-    const entries = await fs.readdir(dir).catch(() => [] as string[]);
-    await Promise.all(
-      entries
-        .filter((e) => e.startsWith(prefix))
-        .map((e) => fs.rm(path.join(dir, e), { force: true }).catch(() => {})),
-    );
+    if (!info) {
+      throw new Error('No probe data for this file; rescan the media first');
+    }
+    if (source.streamIndex == null) {
+      throw new Error('embedded subtitle has no stream index');
+    }
+    const { srt } = await this.engine.runJob({
+      kind: {
+        type: 'SubtitleToSrt',
+        info,
+        source: { type: 'stream', index: source.streamIndex },
+      },
+      media: { mediaFileId: source.mediaFile.id, path: videoPath },
+      priority: 'high',
+    });
+    return srt;
   }
 
   private async exists(p: string): Promise<boolean> {

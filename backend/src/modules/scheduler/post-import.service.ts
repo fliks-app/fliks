@@ -282,7 +282,7 @@ export class PostImportService implements OnModuleInit, OnModuleDestroy {
     }
     return this.thumbnails.generateForFile(file, file.media, subject, {
       force,
-      skipTracking: true,
+      priority: force ? 'normal' : 'low',
     });
   }
 }

@@ -1,0 +1,115 @@
+@if (loading()) {
+  <div class="flex justify-center py-16"><span class="loading loading-spinner loading-lg"></span></div>
+} @else {
+  <div class="space-y-6 max-w-xl">
+    <h2 class="text-xl font-semibold">{{ 'settings.engine.title' | translate }}</h2>
+    <p class="text-base-content/60">{{ 'settings.engine.description' | translate }}</p>
+
+    @if (status() === 'down') {
+      <div role="alert" class="alert alert-error">
+        <span>{{ 'settings.engine.status_down_message' | translate }}</span>
+      </div>
+    }
+    @if (mismatch()) {
+      <div role="alert" class="alert alert-warning">
+        <span>{{ 'settings.engine.gateway_mismatch' | translate: { url: processUrl() } }}</span>
+      </div>
+    }
+
+    <div class="form-control">
+      <label class="label"><span class="label-text font-medium">{{ 'settings.engine.url' | translate }}</span></label>
+      <input
+        type="url"
+        class="input input-bordered w-full"
+        [placeholder]="'settings.engine.url_placeholder' | translate"
+        [ngModel]="url()"
+        (ngModelChange)="url.set($event)"
+      />
+      <label class="label"><span class="label-text-alt text-base-content/50">{{ 'settings.engine.url_help' | translate }}</span></label>
+    </div>
+
+    <div class="form-control">
+      <label class="label"><span class="label-text font-medium">{{ 'settings.engine.token' | translate }}</span></label>
+      <input
+        type="password"
+        class="input input-bordered w-full"
+        autocomplete="off"
+        [placeholder]="'settings.engine.token_placeholder' | translate"
+        [ngModel]="token()"
+        (ngModelChange)="token.set($event)"
+      />
+      <label class="label"><span class="label-text-alt text-base-content/50">{{ 'settings.engine.token_help' | translate }}</span></label>
+    </div>
+
+    <div class="divider">{{ 'settings.engine.path_mappings_title' | translate }}</div>
+    <p class="text-sm text-base-content/60">{{ 'settings.engine.path_mappings_help' | translate }}</p>
+
+    @for (row of pathMappings(); track $index) {
+      <div class="flex flex-col gap-2 sm:flex-row sm:items-end">
+        <div class="form-control flex-1">
+          <label class="label py-0"><span class="label-text">{{ 'settings.engine.path_from' | translate }}</span></label>
+          <input
+            type="text"
+            class="input input-bordered w-full"
+            [ngModel]="row.from"
+            (ngModelChange)="updateMapping($index, 'from', $event)"
+          />
+        </div>
+        <div class="form-control flex-1">
+          <label class="label py-0"><span class="label-text">{{ 'settings.engine.path_to' | translate }}</span></label>
+          <input
+            type="text"
+            class="input input-bordered w-full"
+            [ngModel]="row.to"
+            (ngModelChange)="updateMapping($index, 'to', $event)"
+          />
+        </div>
+        <button
+          type="button"
+          class="btn btn-ghost btn-sm"
+          [disabled]="pathMappings().length <= 1"
+          (click)="removeMapping($index)"
+        >
+          {{ 'settings.engine.remove_mapping' | translate }}
+        </button>
+      </div>
+    }
+    <button type="button" class="btn btn-outline btn-sm" (click)="addMapping()">
+      {{ 'settings.engine.add_mapping' | translate }}
+    </button>
+
+    <div class="form-control">
+      <label class="label"><span class="label-text font-medium">{{ 'settings.engine.probe_path' | translate }}</span></label>
+      <input
+        type="text"
+        class="input input-bordered w-full"
+        [placeholder]="'settings.engine.probe_path_placeholder' | translate"
+        [ngModel]="probePath()"
+        (ngModelChange)="probePath.set($event)"
+      />
+      <label class="label"><span class="label-text-alt text-base-content/50">{{ 'settings.engine.probe_path_help' | translate }}</span></label>
+    </div>
+
+    <div class="form-control">
+      <label class="label"><span class="label-text font-medium">{{ 'settings.engine.status' | translate }}</span></label>
+      <p class="text-base-content/80">
+        {{ ('settings.engine.status_' + status()) | translate }}
+      </p>
+    </div>
+
+    @if (testResult()) {
+      <div class="rounded-lg bg-base-200 p-3 text-sm whitespace-pre-line">{{ testResult() }}</div>
+    }
+
+    <div class="card-actions justify-end gap-2">
+      <button type="button" class="btn btn-outline" [disabled]="testing() || saving()" (click)="testConnection()">
+        @if (testing()) { <span class="loading loading-spinner loading-xs"></span> }
+        {{ 'settings.engine.test' | translate }}
+      </button>
+      <button type="button" class="btn btn-primary" [disabled]="saving() || testing()" (click)="save()">
+        @if (saving()) { <span class="loading loading-spinner loading-xs"></span> }
+        {{ 'common.save' | translate }}
+      </button>
+    </div>
+  </div>
+}

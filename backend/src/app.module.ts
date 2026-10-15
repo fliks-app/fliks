@@ -31,6 +31,7 @@ import { PluginsModule } from './modules/plugins/plugins.module';
 import { PluginHostModule } from './modules/plugins/host/plugin-host.module';
 import { LiveTvModule } from './modules/livetv/livetv.module';
 import { CommonModule } from './common/common.module';
+import { EngineModule } from './modules/engine/engine.module';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'path';
 
@@ -78,6 +79,7 @@ import { join } from 'path';
       },
     }),
     CommonModule,
+    EngineModule,
     EventsModule,
     AuthModule,
     UsersModule,

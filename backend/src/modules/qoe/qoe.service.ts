@@ -11,6 +11,7 @@ import { QoeAggregator, mergeSummaries, type StallLast } from './core/aggregate'
 import { readCmcd } from './core/cmcd';
 import { diagnose } from './core/diagnose';
 import type {
+  CmcdSnapshot,
   QoeDiagnosis,
   QoeEvent,
   QoePipeline,
@@ -406,10 +407,19 @@ export class QoeService implements OnModuleInit, OnModuleDestroy {
     segmentDurationS: number,
     waitedMs: number | null,
   ): void {
+    this.observeServed(session, readCmcd(req), segmentDurationS, waitedMs);
+  }
+
+  /** A segment served by someone else (the engine): its CMCD, if any, and the production wait. */
+  observeServed(
+    session: SessionRef | null,
+    cmcd: CmcdSnapshot | null,
+    segmentDurationS: number,
+    waitedMs: number | null,
+  ): void {
     if (!session || !this.enabledFlag) return;
     const t = this.track(session);
     if (!t) return;
-    const cmcd = readCmcd(req);
     if (cmcd) t.agg.addCmcd(cmcd);
     t.agg.addSegment({
       segmentDurationS,

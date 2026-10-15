@@ -35,10 +35,7 @@ function buildHarness() {
     discoverExternalSubtitles: jest.fn().mockResolvedValue(0),
   };
   const embeddedSubtitle = { detectAndStore: jest.fn().mockResolvedValue(undefined) };
-  const subtitleStream = {
-    clearMediaFileSubtitleCache: jest.fn().mockResolvedValue(undefined),
-    warmupCache: jest.fn().mockResolvedValue(undefined),
-  };
+  const engine = { invalidate: jest.fn().mockResolvedValue(undefined), runJob: jest.fn() };
   const thumbnailService = {};
   const mediaServers = { dispatch: jest.fn() };
   const metadata = { refreshSeriesEpisodes: jest.fn().mockResolvedValue(undefined) };
@@ -54,7 +51,7 @@ function buildHarness() {
   wired.ffprobe = ffprobe;
   wired.subtitles = subtitles;
   wired.embeddedSubtitle = embeddedSubtitle;
-  wired.subtitleStream = subtitleStream;
+  wired.engine = engine;
   wired.thumbnailService = thumbnailService;
   wired.mediaServers = mediaServers;
   wired.metadata = metadata;
@@ -69,7 +66,7 @@ function buildHarness() {
     ffprobe,
     subtitles,
     embeddedSubtitle,
-    subtitleStream,
+    engine,
     mediaServers,
     metadata,
     log,
@@ -195,7 +192,7 @@ describe('MediaRescanService.rescanFiles — quality from probe results', () => 
     h.mediaRepo.findOne.mockResolvedValue(movieMedia({ files: [dbFile] }));
     h.ffprobe.detectMediaFileInfo.mockResolvedValue({ video: [], audio: [], subtitles: [] });
 
-    await h.service.rescanFiles(8, { skipWarmup: true });
+    await h.service.rescanFiles(8);
 
     expect(dbFile.quality).toBe('WEBDL-1080p');
   });
@@ -218,7 +215,7 @@ describe('MediaRescanService.rescanFiles — quality from probe results', () => 
       subtitles: [],
     });
 
-    await h.service.rescanFiles(8, { skipWarmup: true });
+    await h.service.rescanFiles(8);
 
     expect((dbFile.streamInfo as any).timestampBreakSeconds).toBe(32.8);
   });
@@ -231,7 +228,7 @@ describe('MediaRescanService.rescanFiles — quality from probe results', () => 
     h.mediaRepo.findOne.mockResolvedValue(movieMedia({ files: [] }));
     h.ffprobe.detectMediaFileInfo.mockResolvedValue({ video: [], audio: [], subtitles: [] });
 
-    await h.service.rescanFiles(8, { skipWarmup: true });
+    await h.service.rescanFiles(8);
 
     expect(fs.existsSync(cacheDir)).toBe(true);
   });
@@ -243,7 +240,7 @@ describe('MediaRescanService.rescanFiles — quality from probe results', () => 
     h.mediaRepo.findOne.mockResolvedValue(movieMedia({ files: [] }));
     h.ffprobe.detectMediaFileInfo.mockResolvedValue({ video: [], audio: [], subtitles: [] });
 
-    await h.service.rescanFiles(8, { skipWarmup: true });
+    await h.service.rescanFiles(8);
 
     expect(h.mediaFileRepo.save).toHaveBeenCalledWith(
       expect.objectContaining({ relativePath: filename, quality: 'WEBDL-480p' }),
@@ -301,7 +298,7 @@ describe('MediaRescanService.rescanFiles - bonus folders and sample files', () =
       subtitles: [],
     });
 
-    const res = await h.service.rescanFiles(8, { skipWarmup: true });
+    const res = await h.service.rescanFiles(8);
 
     expect(res.added).toBe(0);
     expect(res.removed).toBe(0);
@@ -354,7 +351,7 @@ describe('MediaRescanService.rescanFiles - a movie with no folder of its own', (
       subtitles: [],
     });
 
-    const res = await h.service.rescanFiles(11, { skipWarmup: true });
+    const res = await h.service.rescanFiles(11);
 
     expect(res.added).toBe(0);
     expect(h.mediaFileRepo.save).not.toHaveBeenCalledWith(

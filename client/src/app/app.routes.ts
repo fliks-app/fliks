@@ -454,6 +454,7 @@ export const routes: Routes = [
           { path: 'schedulers', loadComponent: () => import('./features/settings/schedulers/schedulers').then((m) => m.SchedulersComponent) },
           { path: 'auto-approval', loadComponent: () => import('./features/settings/auto-approval/auto-approval').then((m) => m.AutoApprovalSettingsComponent) },
           { path: 'streaming', loadComponent: () => import('./features/settings/streaming/streaming').then((m) => m.StreamingSettingsComponent) },
+          { path: 'engine', loadComponent: () => import('./features/settings/engine/engine').then((m) => m.EngineSettingsComponent) },
           {
             path: 'live-tv',
             loadComponent: () =>

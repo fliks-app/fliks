@@ -1,0 +1,397 @@
+{
+ "engine": {
+  "sessionId": "1b2ff52994404b2d9bcfa2fe10172b08",
+  "profileHash": "f3b773a92b75476c~i1b2ff529",
+  "playPath": "/api/stream/1/master.m3u8?sid=1b2ff52994404b2d9bcfa2fe10172b08",
+  "decision": {
+   "response": {
+    "mediaFileId": 1,
+    "playMethod": "Transcode",
+    "playUrl": "/api/stream/1/master.m3u8",
+    "contentType": "application/vnd.apple.mpegurl",
+    "transcodeReasons": [
+     {
+      "flag": "ContainerNotSupported",
+      "message": "Container \"mkv\" not supported"
+     },
+     {
+      "flag": "VideoQualityReduced",
+      "message": "Reduced-quality rung selected (360p)"
+     }
+    ],
+    "videoCopyStream": false,
+    "audioCopyStream": true,
+    "outputVideoCodec": "h264",
+    "outputAudioCodec": "aac",
+    "audioPlan": {
+     "mode": "copy",
+     "codec": "aac",
+     "channels": 2,
+     "profile": "LC"
+    },
+    "outputContainer": "hls",
+    "quality": "360p",
+    "hwAccel": "none",
+    "tonemapping": false,
+    "clientTonemap": false,
+    "dolbyVision": false,
+    "transcodeBitrateByQuality": {
+     "1080p": {
+      "videoBitrateBps": 2732969,
+      "audioBitrateBps": 192000,
+      "totalBitrateBps": 2924969
+     },
+     "144p": {
+      "videoBitrateBps": 200000,
+      "audioBitrateBps": 48000,
+      "totalBitrateBps": 248000
+     },
+     "2160p": {
+      "videoBitrateBps": 2732969,
+      "audioBitrateBps": 192000,
+      "totalBitrateBps": 2924969
+     },
+     "240p": {
+      "videoBitrateBps": 500000,
+      "audioBitrateBps": 64000,
+      "totalBitrateBps": 564000
+     },
+     "360p": {
+      "videoBitrateBps": 1000000,
+      "audioBitrateBps": 64000,
+      "totalBitrateBps": 1064000
+     },
+     "480p": {
+      "videoBitrateBps": 2000000,
+      "audioBitrateBps": 96000,
+      "totalBitrateBps": 2096000
+     },
+     "720p": {
+      "videoBitrateBps": 2732969,
+      "audioBitrateBps": 128000,
+      "totalBitrateBps": 2860969
+     },
+     "eco-1080p": {
+      "videoBitrateBps": 2732969,
+      "audioBitrateBps": 192000,
+      "totalBitrateBps": 2924969
+     },
+     "eco-2160p": {
+      "videoBitrateBps": 2732969,
+      "audioBitrateBps": 192000,
+      "totalBitrateBps": 2924969
+     },
+     "eco-720p": {
+      "videoBitrateBps": 1500000,
+      "audioBitrateBps": 128000,
+      "totalBitrateBps": 1628000
+     }
+    },
+    "qualities": [
+     {
+      "id": "720p",
+      "label": "720p",
+      "height": 720,
+      "width": 1280,
+      "totalBitrateBps": 2860969,
+      "isRemux": false
+     },
+     {
+      "id": "eco-720p",
+      "label": "720p",
+      "height": 720,
+      "width": 1280,
+      "totalBitrateBps": 1628000,
+      "isRemux": false,
+      "lowBandwidth": true
+     },
+     {
+      "id": "480p",
+      "label": "480p",
+      "height": 480,
+      "width": 854,
+      "totalBitrateBps": 2096000,
+      "isRemux": false
+     },
+     {
+      "id": "360p",
+      "label": "360p",
+      "height": 360,
+      "width": 640,
+      "totalBitrateBps": 1064000,
+      "isRemux": false
+     },
+     {
+      "id": "240p",
+      "label": "240p",
+      "height": 240,
+      "width": 426,
+      "totalBitrateBps": 564000,
+      "isRemux": false
+     },
+     {
+      "id": "144p",
+      "label": "144p",
+      "height": 144,
+      "width": 256,
+      "totalBitrateBps": 248000,
+      "isRemux": false
+     }
+    ],
+    "audioTracks": [
+     {
+      "index": 0,
+      "language": "und",
+      "codec": "aac",
+      "channels": 2,
+      "copy": true,
+      "outputCodec": "aac",
+      "outputChannels": 2,
+      "bitrateBps": 64000,
+      "sampleRate": 44100,
+      "reasonFlags": []
+     }
+    ],
+    "source": {
+     "container": "mkv",
+     "videoCodec": "h264",
+     "videoProfile": "high",
+     "videoLevel": 31,
+     "videoBitRate": 2732969,
+     "formatBitRate": 2732969,
+     "videoBitDepth": 8,
+     "width": 1280,
+     "height": 720,
+     "frameRate": "24",
+     "audioCodec": "aac",
+     "audioChannels": 2,
+     "audioChannelLayout": "stereo",
+     "audioSampleRate": 44100,
+     "audioLanguage": "und",
+     "durationSeconds": 10.023
+    }
+   },
+   "useHdrLadder": false,
+   "videoVariant": {
+    "codec": "h264",
+    "bitDepth": 8,
+    "hdr": null
+   },
+   "muxFlavour": "fmp4",
+   "audioPlans": [
+    {
+     "mode": "copy",
+     "codec": "aac",
+     "channels": 2,
+     "profile": "LC"
+    }
+   ],
+   "transcodeTonemapping": false
+  },
+  "hints": {
+   "probeStale": false,
+   "scanMissing": false
+  },
+  "playbackClockOffsetS": 0,
+  "qoePipeline": {
+   "source": {
+    "codec": "h264",
+    "width": 1280,
+    "height": 720,
+    "hdr": null
+   },
+   "output": {
+    "codec": "h264",
+    "hdr": null,
+    "quality": "360p",
+    "bitrate": null,
+    "requested": "360p"
+   },
+   "decode": {
+    "hw": false,
+    "kind": "cpu",
+    "name": null
+   },
+   "encode": {
+    "hw": false,
+    "kind": "cpu",
+    "name": "libx264"
+   },
+   "tonemap": null,
+   "burnIn": null,
+   "crop": false,
+   "audioTranscode": false
+  }
+ },
+ "host": {
+  "mediaFileId": 1,
+  "playMethod": "Transcode",
+  "playUrl": "/api/stream/1/master.m3u8?sid=1b2ff52994404b2d9bcfa2fe10172b08",
+  "contentType": "application/vnd.apple.mpegurl",
+  "transcodeReasons": [
+   {
+    "flag": "ContainerNotSupported",
+    "message": "Container \"mkv\" not supported"
+   },
+   {
+    "flag": "VideoQualityReduced",
+    "message": "Reduced-quality rung selected (360p)"
+   }
+  ],
+  "videoCopyStream": false,
+  "audioCopyStream": true,
+  "outputVideoCodec": "h264",
+  "outputAudioCodec": "aac",
+  "audioPlan": {
+   "mode": "copy",
+   "codec": "aac",
+   "channels": 2,
+   "profile": "LC"
+  },
+  "outputContainer": "hls",
+  "quality": "360p",
+  "hwAccel": "none",
+  "tonemapping": false,
+  "clientTonemap": false,
+  "dolbyVision": false,
+  "transcodeBitrateByQuality": {
+   "1080p": {
+    "videoBitrateBps": 2732969,
+    "audioBitrateBps": 192000,
+    "totalBitrateBps": 2924969
+   },
+   "144p": {
+    "videoBitrateBps": 200000,
+    "audioBitrateBps": 48000,
+    "totalBitrateBps": 248000
+   },
+   "2160p": {
+    "videoBitrateBps": 2732969,
+    "audioBitrateBps": 192000,
+    "totalBitrateBps": 2924969
+   },
+   "240p": {
+    "videoBitrateBps": 500000,
+    "audioBitrateBps": 64000,
+    "totalBitrateBps": 564000
+   },
+   "360p": {
+    "videoBitrateBps": 1000000,
+    "audioBitrateBps": 64000,
+    "totalBitrateBps": 1064000
+   },
+   "480p": {
+    "videoBitrateBps": 2000000,
+    "audioBitrateBps": 96000,
+    "totalBitrateBps": 2096000
+   },
+   "720p": {
+    "videoBitrateBps": 2732969,
+    "audioBitrateBps": 128000,
+    "totalBitrateBps": 2860969
+   },
+   "eco-1080p": {
+    "videoBitrateBps": 2732969,
+    "audioBitrateBps": 192000,
+    "totalBitrateBps": 2924969
+   },
+   "eco-2160p": {
+    "videoBitrateBps": 2732969,
+    "audioBitrateBps": 192000,
+    "totalBitrateBps": 2924969
+   },
+   "eco-720p": {
+    "videoBitrateBps": 1500000,
+    "audioBitrateBps": 128000,
+    "totalBitrateBps": 1628000
+   }
+  },
+  "qualities": [
+   {
+    "id": "720p",
+    "label": "720p",
+    "height": 720,
+    "width": 1280,
+    "totalBitrateBps": 2860969,
+    "isRemux": false
+   },
+   {
+    "id": "eco-720p",
+    "label": "720p",
+    "height": 720,
+    "width": 1280,
+    "totalBitrateBps": 1628000,
+    "isRemux": false,
+    "lowBandwidth": true
+   },
+   {
+    "id": "480p",
+    "label": "480p",
+    "height": 480,
+    "width": 854,
+    "totalBitrateBps": 2096000,
+    "isRemux": false
+   },
+   {
+    "id": "360p",
+    "label": "360p",
+    "height": 360,
+    "width": 640,
+    "totalBitrateBps": 1064000,
+    "isRemux": false
+   },
+   {
+    "id": "240p",
+    "label": "240p",
+    "height": 240,
+    "width": 426,
+    "totalBitrateBps": 564000,
+    "isRemux": false
+   },
+   {
+    "id": "144p",
+    "label": "144p",
+    "height": 144,
+    "width": 256,
+    "totalBitrateBps": 248000,
+    "isRemux": false
+   }
+  ],
+  "audioTracks": [
+   {
+    "index": 0,
+    "language": "und",
+    "codec": "aac",
+    "channels": 2,
+    "copy": true,
+    "outputCodec": "aac",
+    "outputChannels": 2,
+    "bitrateBps": 64000,
+    "sampleRate": 44100,
+    "reasonFlags": []
+   }
+  ],
+  "source": {
+   "container": "mkv",
+   "videoCodec": "h264",
+   "videoProfile": "high",
+   "videoLevel": 31,
+   "videoBitRate": 2732969,
+   "formatBitRate": 2732969,
+   "videoBitDepth": 8,
+   "width": 1280,
+   "height": 720,
+   "frameRate": "24",
+   "audioCodec": "aac",
+   "audioChannels": 2,
+   "audioChannelLayout": "stereo",
+   "audioSampleRate": 44100,
+   "audioLanguage": "und",
+   "durationSeconds": 10.023
+  },
+  "tonemapAlgo": null,
+  "durationSeconds": 10.023,
+  "sessionId": "1b2ff52994404b2d9bcfa2fe10172b08",
+  "profileHash": "f3b773a92b75476c~i1b2ff529"
+ }
+}

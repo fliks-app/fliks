@@ -8,6 +8,7 @@ import {
 } from '../../settings/settings.service';
 import { User } from '../../users/entities/user.entity';
 import { foldGroupKey } from '../parsing/group-key';
+import { EngineService } from '../../engine/engine.service';
 
 /** Groups a provider ships that must never be visible by default, across the app's
  *  languages (en/fr/es/de/it/pt). Heuristic, not exhaustive; excludes "Adult Swim". */
@@ -40,6 +41,7 @@ export class LiveTvAccessService {
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
     private readonly settings: SettingsService,
+    private readonly engine: EngineService,
   ) {}
 
   private async readGroupSet(key: string): Promise<string[]> {
@@ -413,6 +415,7 @@ export class LiveTvAccessService {
       }
       // A grant is an admin confirmation the group still matters, same as restricting it.
       await this.clearVanished(groups);
+      void this.engine.revokeOwner(userId);
       return { groups, ignored };
     });
   }

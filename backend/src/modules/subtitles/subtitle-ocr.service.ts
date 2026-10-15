@@ -9,13 +9,11 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { execFile } from 'child_process';
-import { promisify } from 'util';
 import { SubtitleFile } from './entities/subtitle-file.entity';
 import { Media } from '../media/entities/media.entity';
-import { MediaFile } from '../media/entities/media-file.entity';
 import { SettingsService } from '../settings/settings.service';
 import { EventsService } from '../scheduler/events.service';
+import { EngineService } from '../engine/engine.service';
 import { cleanSubtitle } from './subtitle-cleaner';
 import { relativePathUnderMediaRoot } from '../../common/utils/media-path.util';
 import { assertSafeLangSuffix } from './subtitle-path.util';
@@ -25,47 +23,6 @@ import {
 } from '../../common/constants/subtitle-codecs';
 import { SubtitleProviderType, SubtitleStatus } from '../../common/enums';
 import { normalizeLanguageCode } from '../../common/constants/app-languages';
-
-const execFileAsync = promisify(execFile);
-// pgsrip/subtile-ocr batch the whole track through Tesseract in one call —
-// a dense 2h+ track can take past 10 minutes, so this needs real headroom.
-const OCR_TOOL_TIMEOUT_MS = 1_800_000;
-// Demuxing a bitmap track out of a 40 GB remux on a NAS is minutes, not seconds.
-const EXTRACT_TIMEOUT_MS = 900_000;
-
-/** execFile's `timeout` option kills the child but throws the same generic
- *  "Command failed" message as a real crash — call this out explicitly so
- *  the OCR failure log says what actually happened. */
-async function execFileOrTimeout(
-  command: string,
-  args: string[],
-  options: { timeout: number; maxBuffer?: number },
-) {
-  const start = Date.now();
-  try {
-    return await execFileAsync(command, args, options);
-  } catch (err: any) {
-    if (err?.killed) {
-      const elapsed = Math.round((Date.now() - start) / 1000);
-      throw new Error(
-        `${command} timed out after ${elapsed}s (limit ${Math.round(options.timeout / 1000)}s)`,
-      );
-    }
-    throw err;
-  }
-}
-
-/** ISO 639-1 → tesseract (ISO 639-2/T) traineddata names, for subtile-ocr's
- *  `-l`. All packs ship via `tesseract-ocr-all`. Falls back to `eng`.
- *  (pgsrip derives its own language from the staged .sup filename.) */
-const TESSERACT_LANG: Record<string, string> = {
-  en: 'eng', fr: 'fra', es: 'spa', de: 'deu', it: 'ita', pt: 'por',
-  nl: 'nld', sv: 'swe', da: 'dan', no: 'nor', fi: 'fin', pl: 'pol',
-  cs: 'ces', sk: 'slk', hu: 'hun', ro: 'ron', el: 'ell', ru: 'rus',
-  uk: 'ukr', bg: 'bul', sr: 'srp', hr: 'hrv', tr: 'tur', ar: 'ara',
-  he: 'heb', fa: 'fas', hi: 'hin', th: 'tha', vi: 'vie', id: 'ind',
-  ja: 'jpn', ko: 'kor', zh: 'chi_sim',
-};
 
 /**
  * Turns an image-based (burn-required) subtitle track into a servable SRT by
@@ -78,13 +35,6 @@ const TESSERACT_LANG: Record<string, string> = {
 @Injectable()
 export class SubtitleOcrService implements OnModuleInit {
   private readonly log = new Logger(SubtitleOcrService.name);
-  private readonly tmpDir = '/tmp/fliks-ocr';
-
-  // OCR is CPU-heavy (ffmpeg extract + tesseract). A library-wide sweep can
-  // claim a PROCESSING row for every image track at once; this gate keeps the
-  // number of heavy runs actually executing in parallel bounded.
-  private ocrActive = 0;
-  private readonly ocrWaiters: Array<() => void> = [];
 
   /** No run survives a restart, so any PROCESSING row is a corpse: it would
    *  otherwise cover its language forever and hide its own actions. */
@@ -104,13 +54,10 @@ export class SubtitleOcrService implements OnModuleInit {
     private readonly repo: Repository<SubtitleFile>,
     @InjectRepository(Media)
     private readonly mediaRepo: Repository<Media>,
-    @InjectRepository(MediaFile)
-    private readonly mediaFileRepo: Repository<MediaFile>,
     private readonly settings: SettingsService,
     private readonly events: EventsService,
-  ) {
-    fs.mkdir(this.tmpDir, { recursive: true }).catch(() => {});
-  }
+    private readonly engine: EngineService,
+  ) {}
 
   /**
    * Manual trigger: OCR a single image-based subtitle. Returns the PROCESSING
@@ -175,26 +122,6 @@ export class SubtitleOcrService implements OnModuleInit {
     return placeholder;
   }
 
-  /** Max OCR runs allowed to execute their heavy stage at once. */
-  private async ocrConcurrencyLimit(): Promise<number> {
-    const raw = Number(
-      (await this.settings.get('subtitle_ocr_max_concurrency')) ?? '1',
-    );
-    return Number.isFinite(raw) && raw >= 1 ? Math.floor(raw) : 1;
-  }
-
-  private async acquireOcrSlot(limit: number): Promise<void> {
-    while (this.ocrActive >= limit) {
-      await new Promise<void>((resolve) => this.ocrWaiters.push(resolve));
-    }
-    this.ocrActive++;
-  }
-
-  private releaseOcrSlot(): void {
-    this.ocrActive = Math.max(0, this.ocrActive - 1);
-    this.ocrWaiters.shift()?.();
-  }
-
   private async runOcr(
     placeholderId: number,
     source: SubtitleFile,
@@ -207,19 +134,8 @@ export class SubtitleOcrService implements OnModuleInit {
       media = await this.mediaRepo.findOne({ where: { id: source.mediaId } });
       if (!media?.path) throw new Error('media root folder not set');
       const videoPath = path.join(media.path, source.mediaFile.relativePath);
-      const limit = await this.ocrConcurrencyLimit();
-      await this.acquireOcrSlot(limit);
-      let srt: string;
-      try {
-        srt = await this.extractAndOcr(
-          videoPath,
-          source.streamIndex as number,
-          source.codec ?? '',
-          source.language,
-        );
-      } finally {
-        this.releaseOcrSlot();
-      }
+
+      const srt = await this.ocrViaEngine(source, videoPath, automatic);
 
       const removeHiTags =
         (await this.settings.get('subtitle_remove_hi_tags')) === 'true';
@@ -299,95 +215,35 @@ export class SubtitleOcrService implements OnModuleInit {
     }
   }
 
-  /** Extract the bitmap stream and OCR it to an SRT string (per codec). */
-  private async extractAndOcr(
-    videoPath: string,
-    streamIndex: number,
-    codec: string,
-    language: string,
+  private async ocrViaEngine(
+    source: SubtitleFile,
+    absoluteVideoPath: string,
+    automatic?: boolean,
   ): Promise<string> {
-    const lower = (language ?? '').toLowerCase();
-    // pgsrip filters out tracks whose language doesn't intersect `--language`
-    // and picks the tesseract pack from the language baked into the .sup
-    // filename — so the filename and `--language` must carry the same IETF
-    // code. These tracks are usually untagged ('und'); default to English.
-    const ietf = lower.length === 2 ? lower : 'en';
-    // subtile-ocr wants the tesseract (alpha-3) pack name instead.
-    const tess = TESSERACT_LANG[lower] ?? 'eng';
-    const base = path.join(this.tmpDir, `ocr-${streamIndex}-${process.hrtime.bigint()}`);
-
-    try {
-      if (codec === 'hdmv_pgs_subtitle') {
-        const sup = `${base}.${ietf}.sup`;
-        await execFileOrTimeout('ffmpeg', [
-          '-y', '-i', videoPath, '-map', `0:${streamIndex}`, '-c:s', 'copy', sup,
-        ], { timeout: EXTRACT_TIMEOUT_MS });
-        const { stdout, stderr } = await execFileOrTimeout(
-          'pgsrip',
-          ['--language', ietf, sup],
-          { timeout: OCR_TOOL_TIMEOUT_MS, maxBuffer: 1 << 24 },
-        );
-        // pgsrip names the output "<base>.<lang>.srt" (babelfish's own form),
-        // so find it by prefix rather than reconstructing the exact name.
-        const srt = await this.readProducedSrt(base);
-        if (srt == null) {
-          throw new Error(
-            `pgsrip produced no SRT for language "${ietf}" — ${(stderr || stdout || '').trim().slice(0, 300)}`,
-          );
-        }
-        return srt;
-      }
-
-      if (codec === 'dvd_subtitle') {
-        // ffmpeg carries no vobsub muxer, so mkvextract writes the paired
-        // .idx/.sub. Its track IDs match ffmpeg's stream index (both number
-        // Matroska tracks 0-based in file order), so streamIndex selects it.
-        // mkvextract only reads Matroska, so a non-mkv source can't be OCR'd.
-        if (!/\.(mkv|mka|webm)$/i.test(videoPath)) {
-          throw new Error('VobSub OCR requires a Matroska (.mkv) source');
-        }
-        try {
-          await execFileOrTimeout('mkvextract', [
-            'tracks', videoPath, `${streamIndex}:${base}.idx`,
-          ], { timeout: EXTRACT_TIMEOUT_MS });
-        } catch (err) {
-          // mkvextract exits non-zero on warnings too; only fatal when the
-          // VobSub pair it should have written is missing.
-          if (!(await this.exists(`${base}.sub`))) throw err;
-        }
-        // subtile-ocr reads the .idx (+ paired .sub) and writes "<base>.srt".
-        await execFileOrTimeout('subtile-ocr', [
-          '-l', tess, '-o', `${base}.srt`, `${base}.idx`,
-        ], { timeout: OCR_TOOL_TIMEOUT_MS, maxBuffer: 1 << 24 });
-        return await fs.readFile(`${base}.srt`, 'utf-8');
-      }
-
-      throw new Error(`OCR not supported for codec "${codec}"`);
-    } finally {
-      await this.cleanupTemp(base);
+    const info = source.mediaFile?.streamInfo;
+    if (!info) {
+      throw new Error('No probe data for this file; rescan the media first');
     }
-  }
-
-  /** Read the SRT pgsrip produced for `base`, located by prefix (its name
-   *  carries a language tag in babelfish's form). Null when none was written. */
-  private async readProducedSrt(base: string): Promise<string | null> {
-    const dir = path.dirname(base);
-    const prefix = path.basename(base);
-    const entries = await fs.readdir(dir).catch(() => [] as string[]);
-    const match = entries.find((e) => e.startsWith(prefix) && e.endsWith('.srt'));
-    return match ? fs.readFile(path.join(dir, match), 'utf-8') : null;
-  }
-
-  /** Remove every temp artefact staged under `base` (sup/idx/sub/srt/pngs). */
-  private async cleanupTemp(base: string): Promise<void> {
-    const dir = path.dirname(base);
-    const prefix = path.basename(base);
-    const entries = await fs.readdir(dir).catch(() => [] as string[]);
-    await Promise.all(
-      entries
-        .filter((e) => e.startsWith(prefix))
-        .map((e) => fs.rm(path.join(dir, e), { force: true }).catch(() => {})),
-    );
+    if (!this.engine.engineFeatures.includes('subtitle-ocr')) {
+      throw new Error('The engine has no subtitle-ocr feature');
+    }
+    const language = /^[a-zA-Z]{2}$/.test(source.language)
+      ? source.language.toLowerCase()
+      : undefined;
+    const { srt } = await this.engine.runJob({
+      kind: {
+        type: 'SubtitleOcr',
+        info,
+        streamIndex: source.streamIndex as number,
+        language,
+      },
+      media: {
+        mediaFileId: source.mediaFile.id,
+        path: absoluteVideoPath,
+      },
+      priority: automatic ? 'low' : 'high',
+    });
+    return srt;
   }
 
   private async exists(p: string): Promise<boolean> {

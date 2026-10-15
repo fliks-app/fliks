@@ -1,5 +1,8 @@
-const execFileMock = jest.fn();
-jest.mock('child_process', () => ({ execFile: execFileMock }));
+const readFile = jest.fn(async () =>
+  Buffer.from('1\n00:00:10,000 --> 00:00:12,000\nsync me\n'),
+);
+const writeFile = jest.fn(async () => undefined);
+jest.mock('fs/promises', () => ({ readFile, writeFile }));
 
 import { SubtitleSyncService } from './subtitle-sync.service';
 import { SubtitleProviderType } from '../../common/enums';
@@ -8,11 +11,8 @@ import { SubtitleProviderType } from '../../common/enums';
 // client can read it from.
 describe('SubtitleSyncService queue visibility', () => {
   beforeEach(() => {
-    execFileMock.mockReset();
-    execFileMock.mockImplementation((...args: unknown[]) => {
-      const cb = args[args.length - 1] as (e: null, out: string, err: string) => void;
-      cb(null, '', '');
-    });
+    readFile.mockClear();
+    writeFile.mockClear();
   });
 
   it('registers the queued sync as running, then clears it on completion', async () => {
@@ -36,7 +36,11 @@ describe('SubtitleSyncService queue visibility', () => {
         .mockResolvedValue({ id: 1, path: '/medias/movie', title: 'Movie' }),
     };
     const mediaFileRepo = {
-      findOne: jest.fn().mockResolvedValue({ id: 1, relativePath: 'movie.mkv' }),
+      findOne: jest.fn().mockResolvedValue({
+        id: 1,
+        relativePath: 'movie.mkv',
+        streamInfo: { video: [], audio: [], subtitles: [] },
+      }),
     };
     const activityRegistry = {
       upsertPending: jest.fn(),
@@ -48,7 +52,12 @@ describe('SubtitleSyncService queue visibility', () => {
       mediaRepo as never,
       mediaFileRepo as never,
       { dispatch: jest.fn() } as never,
-      { detectStreams: jest.fn().mockResolvedValue([]) } as never,
+      {
+        runJob: jest.fn().mockResolvedValue({
+          type: 'SubtitleSync',
+          subtitle: { format: 'srt', text: '1\n00:00:01,000 --> 00:00:02,000\nok\n' },
+        }),
+      } as never,
       { emit: jest.fn() } as never,
       activityRegistry as never,
       { dispatch: jest.fn() } as never,

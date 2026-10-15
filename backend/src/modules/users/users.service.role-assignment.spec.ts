@@ -26,6 +26,7 @@ function makeService(target: Partial<User>) {
     new CaslAbilityFactory(),
     {} as never,
     { dropConnectionsForUser: jest.fn() } as never,
+    { revokeOwner: jest.fn() } as never,
   );
   return { service, userRepo };
 }
