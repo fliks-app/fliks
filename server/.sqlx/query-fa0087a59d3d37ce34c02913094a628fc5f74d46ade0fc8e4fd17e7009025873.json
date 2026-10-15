@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE playlists SET visibility = 'private' WHERE \"ownerId\" = $1 AND visibility <> 'private'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "fa0087a59d3d37ce34c02913094a628fc5f74d46ade0fc8e4fd17e7009025873"
+}

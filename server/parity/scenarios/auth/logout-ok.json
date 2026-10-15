@@ -2,7 +2,7 @@
   "capture": {
     "rt": "$.steps[0].body.refreshToken"
   },
-  "deviation": null,
+  "deviation": "F18",
   "engine": "up",
   "ignore": [
     "$..accessToken",
@@ -89,8 +89,12 @@
         "refreshToken": "{rt}"
       },
       "expect": {
-        "body": {},
-        "status": 201
+        "body": {
+          "error": "Unauthorized",
+          "message": "Refresh token already rotated",
+          "statusCode": 401
+        },
+        "status": 401
       },
       "method": "POST",
       "path": "/api/auth/refresh"

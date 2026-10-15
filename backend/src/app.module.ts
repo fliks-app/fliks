@@ -24,7 +24,6 @@ import { MarkersModule } from './modules/markers/markers.module';
 import { PersonsModule } from './modules/persons/persons.module';
 import { ImageModule } from './modules/images/image.module';
 import { ImportsModule } from './modules/imports/imports.module';
-import { FilesystemModule } from './modules/filesystem/filesystem.module';
 import { SetupChecklistModule } from './modules/setup-checklist/setup-checklist.module';
 import { CountsModule } from './modules/counts/counts.module';
 import { PluginsModule } from './modules/plugins/plugins.module';
@@ -32,6 +31,7 @@ import { PluginHostModule } from './modules/plugins/host/plugin-host.module';
 import { LiveTvModule } from './modules/livetv/livetv.module';
 import { CommonModule } from './common/common.module';
 import { EngineModule } from './modules/engine/engine.module';
+import { BridgeModule } from './modules/bridge/bridge.module';
 
 @Module({
   imports: [
@@ -56,6 +56,7 @@ import { EngineModule } from './modules/engine/engine.module';
     }),
     CommonModule,
     EngineModule,
+    BridgeModule,
     EventsModule,
     AuthModule,
     UsersModule,
@@ -79,7 +80,6 @@ import { EngineModule } from './modules/engine/engine.module';
     ImageModule,
     MarkersModule,
     ImportsModule,
-    FilesystemModule,
     SetupChecklistModule,
     CountsModule,
     PluginsModule,

@@ -1,0 +1,39 @@
+{
+  "deviation": "F10",
+  "name": "users-manager-sets-is-admin-forbidden",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "manager",
+      "body": {
+        "isAdmin": true
+      },
+      "expect": {
+        "body": {
+          "message": "Forbidden",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "PUT",
+      "path": "/api/users/2"
+    },
+    {
+      "as": "manager",
+      "body": {
+        "isAdmin": true,
+        "password": "longenough1",
+        "username": "newadmin"
+      },
+      "expect": {
+        "body": {
+          "message": "Forbidden",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "POST",
+      "path": "/api/users"
+    }
+  ]
+}

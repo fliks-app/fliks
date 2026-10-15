@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE pairing_requests SET status = 'denied', \"approvedByUserId\" = $2 WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "2d2de2bedd55577cf01471a78c754ef45b6bee261e750f54b42da2b89ce916c4"
+}

@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE roles SET name = COALESCE($2, name), permissions = COALESCE($3, permissions),\n               \"isDefault\" = COALESCE($4, \"isDefault\"), \"updatedAt\" = now() WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Varchar",
+        "Text",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "5ce0c9be12a19aa6ad3151b801fd424adba5f45a42d36f36f1eda88bcaf71207"
+}

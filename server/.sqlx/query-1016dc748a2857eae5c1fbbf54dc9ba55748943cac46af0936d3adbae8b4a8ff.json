@@ -1,0 +1,47 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO app_settings (\"key\", \"value\") VALUES ($1, $2)\n           ON CONFLICT (\"key\") DO UPDATE SET \"value\" = EXCLUDED.\"value\", \"updatedAt\" = now()\n           RETURNING \"id\", \"createdAt\" AS created_at, \"updatedAt\" AS updated_at, \"key\", \"value\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 2,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 3,
+        "name": "key",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "value",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "1016dc748a2857eae5c1fbbf54dc9ba55748943cac46af0936d3adbae8b4a8ff"
+}

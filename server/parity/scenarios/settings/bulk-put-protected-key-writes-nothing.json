@@ -1,0 +1,55 @@
+{
+  "deviation": "C2",
+  "name": "settings-bulk-put-protected-key-writes-nothing",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "parity_flag": "on",
+          "parity_json": "{\"a\":1}",
+          "parity_null": null
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/settings"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "data": {
+          "a_key": "1",
+          "engine_url": "http://x",
+          "parity_flag": "off",
+          "z_key": "2"
+        }
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "\"engine_url\" is managed by its own endpoint: PUT /engine/remote",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PUT",
+      "path": "/api/settings"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "parity_flag": "on",
+          "parity_json": "{\"a\":1}",
+          "parity_null": null
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/settings"
+    }
+  ],
+  "strictMessage": true
+}

@@ -10,15 +10,15 @@ fn migration_for_version(version: i64) -> Option<&'static sqlx::migrate::Migrati
 }
 
 async fn table_exists(pool: &PgPool, name: &str) -> Result<bool, MigrateError> {
-    let exists: bool = sqlx::query_scalar(
-        "SELECT EXISTS (
+    let exists = sqlx::query_scalar!(
+        r#"SELECT EXISTS (
             SELECT 1
             FROM information_schema.tables
             WHERE table_schema = 'public'
               AND table_name = $1
-        )",
+        ) AS "exists!""#,
+        name
     )
-    .bind(name)
     .fetch_one(pool)
     .await
     .map_err(MigrateError::Execute)?;
@@ -32,6 +32,7 @@ pub async fn adopt_typeorm(pool: &PgPool) -> Result<(), MigrateError> {
     }
 
     let has_ledger = table_exists(pool, "migrations").await?;
+    // The legacy ledger tables are not in the migrated schema, so these two stay runtime queries.
     let typeorm_rows: Vec<(i64, String)> = if has_ledger {
         sqlx::query_as("SELECT timestamp, name FROM migrations ORDER BY timestamp")
             .fetch_all(pool)
@@ -42,8 +43,8 @@ pub async fn adopt_typeorm(pool: &PgPool) -> Result<(), MigrateError> {
     };
 
     if typeorm_rows.is_empty() {
-        let others: bool = sqlx::query_scalar(
-            "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name <> 'migrations')",
+        let others = sqlx::query_scalar!(
+            r#"SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name <> 'migrations') AS "others!""#,
         )
         .fetch_one(pool)
         .await

@@ -41,7 +41,7 @@ export class SettingsService {
     this.changeListeners.push(listener);
   }
 
-  private notifyChange(key: string, origin?: string): void {
+  notifyChange(key: string, origin?: string): void {
     for (const l of this.changeListeners) {
       try {
         l(key, origin);

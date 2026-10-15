@@ -1,0 +1,49 @@
+{
+  "deviation": "F10",
+  "name": "users-last-admin-protected",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "enabled": false
+      },
+      "expect": {
+        "body": {
+          "error": "Conflict",
+          "statusCode": 409
+        },
+        "status": 409
+      },
+      "method": "PUT",
+      "path": "/api/users/1"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "isAdmin": false
+      },
+      "expect": {
+        "body": {
+          "error": "Conflict",
+          "statusCode": 409
+        },
+        "status": 409
+      },
+      "method": "PUT",
+      "path": "/api/users/1"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Conflict",
+          "statusCode": 409
+        },
+        "status": 409
+      },
+      "method": "DELETE",
+      "path": "/api/users/1"
+    }
+  ]
+}

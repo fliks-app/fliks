@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO library_user_access (\"userId\", \"libraryId\")\n           SELECT $1, l FROM unnest($2::int[]) WITH ORDINALITY AS t(l, n) ORDER BY n\n           ON CONFLICT DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4Array"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "8f58f0abe3d2fde4ff96f7384db9e7547cedc0205feec08a1b8d55bc7391c6c3"
+}

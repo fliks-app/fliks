@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Logger,
@@ -24,6 +25,7 @@ import { Command } from '../scheduler/entities/command.entity';
 import { runAuditedCommand } from '../scheduler/command-audit.util';
 import { ImportRadarrService, ApiImportResult } from './radarr.service';
 import { ImportSonarrService } from './sonarr.service';
+import { SettingsService } from '../settings/settings.service';
 import { SeerrService } from './seerr.service';
 import { SeerrRequestImportService } from './seerr-request-import.service';
 import { DiskImportService } from './disk-import.service';
@@ -43,9 +45,21 @@ export class ImportsController {
     private readonly seerrImporter: SeerrRequestImportService,
     private readonly diskImport: DiskImportService,
     private readonly events: EventsService,
+    private readonly settings: SettingsService,
     @InjectRepository(Command)
     private readonly commandRepo: Repository<Command>,
   ) {}
+
+  /** The key the client omits when the stored one is not returned by GET /api/settings. */
+  private async resolveApiKey(
+    provided: string | undefined,
+    settingKey: string,
+  ): Promise<string> {
+    if (provided?.trim()) return provided;
+    const stored = await this.settings.get(settingKey);
+    if (!stored) throw new BadRequestException('apiKey is required');
+    return stored;
+  }
 
   // ---------------------------------------------------------------------------
   // Radarr
@@ -53,22 +67,28 @@ export class ImportsController {
 
   @Post('radarr/test')
   @CheckPolicies((ability) => ability.can(Action.Manage, 'Settings'))
-  testRadarrConnection(@Body() dto: TestConnectionDto) {
-    return this.importRadarrService.testConnection(dto.url, dto.apiKey);
+  async testRadarrConnection(@Body() dto: TestConnectionDto) {
+    return this.importRadarrService.testConnection(
+      dto.url,
+      await this.resolveApiKey(dto.apiKey, 'radarr_api_key'),
+    );
   }
 
   @Post('radarr/preview')
   @CheckPolicies((ability) => ability.can(Action.Manage, 'Settings'))
-  previewRadarr(@Body() dto: PreviewImportDto) {
-    return this.importRadarrService.previewRootFolders(dto.url, dto.apiKey);
+  async previewRadarr(@Body() dto: PreviewImportDto) {
+    return this.importRadarrService.previewRootFolders(
+      dto.url,
+      await this.resolveApiKey(dto.apiKey, 'radarr_api_key'),
+    );
   }
 
   @Post('radarr')
   @CheckPolicies((ability) => ability.can(Action.Create, 'Settings'))
-  importRadarrApi(@Body() dto: ImportApiDto): Promise<ApiImportResult> {
+  async importRadarrApi(@Body() dto: ImportApiDto): Promise<ApiImportResult> {
     return this.importRadarrService.importFromApi(
       dto.url,
-      dto.apiKey,
+      await this.resolveApiKey(dto.apiKey, 'radarr_api_key'),
       dto.mode ?? 'skip',
       dto.importSubtitles ?? false,
       dto.pathMappings,
@@ -82,22 +102,28 @@ export class ImportsController {
 
   @Post('sonarr/test')
   @CheckPolicies((ability) => ability.can(Action.Manage, 'Settings'))
-  testSonarrConnection(@Body() dto: TestConnectionDto) {
-    return this.importSonarrService.testConnection(dto.url, dto.apiKey);
+  async testSonarrConnection(@Body() dto: TestConnectionDto) {
+    return this.importSonarrService.testConnection(
+      dto.url,
+      await this.resolveApiKey(dto.apiKey, 'sonarr_api_key'),
+    );
   }
 
   @Post('sonarr/preview')
   @CheckPolicies((ability) => ability.can(Action.Manage, 'Settings'))
-  previewSonarr(@Body() dto: PreviewImportDto) {
-    return this.importSonarrService.previewRootFolders(dto.url, dto.apiKey);
+  async previewSonarr(@Body() dto: PreviewImportDto) {
+    return this.importSonarrService.previewRootFolders(
+      dto.url,
+      await this.resolveApiKey(dto.apiKey, 'sonarr_api_key'),
+    );
   }
 
   @Post('sonarr')
   @CheckPolicies((ability) => ability.can(Action.Create, 'Settings'))
-  importSonarrApi(@Body() dto: ImportApiDto): Promise<ApiImportResult> {
+  async importSonarrApi(@Body() dto: ImportApiDto): Promise<ApiImportResult> {
     return this.importSonarrService.importFromApi(
       dto.url,
-      dto.apiKey,
+      await this.resolveApiKey(dto.apiKey, 'sonarr_api_key'),
       dto.mode ?? 'skip',
       dto.importSubtitles ?? false,
       dto.pathMappings,
@@ -111,8 +137,11 @@ export class ImportsController {
 
   @Post('seerr/test')
   @CheckPolicies((ability) => ability.can(Action.Manage, 'Settings'))
-  testSeerr(@Body() dto: TestConnectionDto) {
-    return this.seerr.testConnection(dto.url, dto.apiKey);
+  async testSeerr(@Body() dto: TestConnectionDto) {
+    return this.seerr.testConnection(
+      dto.url,
+      await this.resolveApiKey(dto.apiKey, 'seerr_api_key'),
+    );
   }
 
   /**

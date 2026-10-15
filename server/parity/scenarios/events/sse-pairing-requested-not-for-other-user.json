@@ -1,0 +1,65 @@
+{
+  "deviation": "F13",
+  "ignore": [
+    "$..connectionId",
+    "$..pairingId",
+    "$..requestedAt",
+    "$..expiresAt"
+  ],
+  "name": "events-sse-pairing-requested-not-for-other-user",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "other",
+      "expect": {
+        "body": [
+          {
+            "data": {
+              "type": "sse.connected"
+            },
+            "event": ""
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/system/events?device=d1",
+      "sse": {
+        "after": [
+          {
+            "as": "anon",
+            "body": {
+              "deviceName": "TV",
+              "userId": 2
+            },
+            "expect": {
+              "status": 0
+            },
+            "headers": {
+              "X-Device-Id": "tv-1"
+            },
+            "method": "POST",
+            "path": "/api/auth/pairing/request"
+          }
+        ],
+        "events": 2,
+        "timeoutMs": 2500
+      }
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": [
+          {
+            "deviceId": "tv-1",
+            "deviceName": "TV",
+            "systemName": null
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/auth/pairing/pending"
+    }
+  ]
+}

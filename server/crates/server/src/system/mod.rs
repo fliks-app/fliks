@@ -13,8 +13,6 @@ pub async fn liveness() -> Json<Liveness> {
     Json(Liveness { ok: true })
 }
 
-pub const LIVENESS: &str = "/api/system/liveness";
-
 pub fn router() -> Router {
-    Router::new().route(LIVENESS, get(liveness))
+    Router::new().route("/api/system/liveness", get(liveness))
 }

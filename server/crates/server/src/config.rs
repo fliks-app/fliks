@@ -1,9 +1,13 @@
 //! Environment configuration; defaults and parsing follow `docs/spec/config.md`.
+use crate::auth_token::{positive_int_or, ttl_secs};
 use sqlx::postgres::PgConnectOptions;
 use std::path::PathBuf;
 
 const DEFAULT_PORT: u16 = 4849;
 const DEFAULT_NEST_CMD: &str = "node dist/main";
+const DEFAULT_JWT_EXPIRATION_SECS: u64 = 3600;
+const DEFAULT_STREAM_TOKEN_TTL_SECS: u64 = 12 * 3600;
+const DEFAULT_REFRESH_TOKEN_TTL_DAYS: i64 = 60;
 
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -14,6 +18,10 @@ pub struct Config {
     pub cast_dir: PathBuf,
     pub conf_dir: Option<PathBuf>,
     pub jwt_secret: Option<String>,
+    /// `JWT_EXPIRATION` in whole seconds (`ms()` grammar, unitless is milliseconds).
+    pub jwt_ttl_secs: u64,
+    pub stream_token_ttl_secs: u64,
+    pub refresh_token_ttl_days: i64,
     pub engine_url: String,
     pub engine_token: String,
     pub nest_url: Option<String>,
@@ -67,6 +75,20 @@ impl Config {
             cast_dir: text("FLIKS_CAST_DIR").map_or_else(|| "public".into(), PathBuf::from),
             conf_dir: text("FLIKS_CONF_DIR").map(PathBuf::from),
             jwt_secret: get("JWT_SECRET").filter(|v| !v.is_empty()),
+            jwt_ttl_secs: ttl_secs(
+                "JWT_EXPIRATION",
+                get("JWT_EXPIRATION").as_deref(),
+                DEFAULT_JWT_EXPIRATION_SECS,
+            ),
+            stream_token_ttl_secs: ttl_secs(
+                "STREAM_TOKEN_TTL",
+                get("STREAM_TOKEN_TTL").as_deref(),
+                DEFAULT_STREAM_TOKEN_TTL_SECS,
+            ),
+            refresh_token_ttl_days: positive_int_or(
+                get("REFRESH_TOKEN_TTL_DAYS").as_deref(),
+                DEFAULT_REFRESH_TOKEN_TTL_DAYS,
+            ),
             engine_url: get("FLIKS_ENGINE_URL").unwrap_or_default(),
             engine_token: get("FLIKS_ENGINE_TOKEN").unwrap_or_default(),
             nest_url: text("FLIKS_NEST_URL"),
@@ -106,6 +128,32 @@ mod tests {
         assert_eq!(c.db.get_username(), "fliks");
         assert_eq!(c.bridge_token.len(), 64);
         assert!(c.nest_url.is_none() && c.cors_origin.is_none() && c.jwt_secret.is_none());
+        assert_eq!(
+            (
+                c.jwt_ttl_secs,
+                c.stream_token_ttl_secs,
+                c.refresh_token_ttl_days
+            ),
+            (3600, 43_200, 60)
+        );
+    }
+
+    #[test]
+    fn token_lifetimes_use_the_ms_grammar() {
+        let c = cfg(&[
+            ("JWT_EXPIRATION", "3600"),
+            ("STREAM_TOKEN_TTL", "2 days"),
+            ("REFRESH_TOKEN_TTL_DAYS", "14"),
+        ]);
+        assert_eq!(
+            (
+                c.jwt_ttl_secs,
+                c.stream_token_ttl_secs,
+                c.refresh_token_ttl_days
+            ),
+            (3, 172_800, 14)
+        );
+        assert_eq!(cfg(&[("JWT_EXPIRATION", "15m")]).jwt_ttl_secs, 900);
     }
 
     #[test]

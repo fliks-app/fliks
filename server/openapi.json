@@ -10,6 +10,308 @@
     "version": "1"
   },
   "paths": {
+    "/api/auth/cast-info": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "cast_info",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "login",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/auth/logout": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "logout",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/auth/me": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "me",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/auth/pairing/pending": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "pairing_pending",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/auth/pairing/request": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "pairing_request",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/auth/pairing/status": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "pairing_status",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/auth/pairing/{id}/approve": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "pairing_approve",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/auth/pairing/{id}/deny": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "pairing_deny",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/auth/refresh": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "refresh",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/auth/register": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "register",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/auth/stream-token": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "stream_token",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/auth/users-public": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "users_public",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/fs/browse": {
+      "get": {
+        "tags": [
+          "fs"
+        ],
+        "operationId": "browse",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/roles": {
+      "get": {
+        "tags": [
+          "roles"
+        ],
+        "operationId": "list",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "roles"
+        ],
+        "operationId": "create",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/roles/permissions": {
+      "get": {
+        "tags": [
+          "roles"
+        ],
+        "operationId": "permissions",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/roles/{id}": {
+      "get": {
+        "tags": [
+          "roles"
+        ],
+        "operationId": "get",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "roles"
+        ],
+        "operationId": "update",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "roles"
+        ],
+        "operationId": "remove",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/settings": {
+      "get": {
+        "tags": [
+          "settings"
+        ],
+        "operationId": "list",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "settings"
+        ],
+        "operationId": "put_bulk",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/settings/{key}": {
+      "get": {
+        "tags": [
+          "settings"
+        ],
+        "operationId": "get_one",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "settings"
+        ],
+        "operationId": "put_one",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/system/liveness": {
       "get": {
         "tags": [
@@ -27,6 +329,102 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/api/users": {
+      "get": {
+        "tags": [
+          "users"
+        ],
+        "operationId": "list",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "users"
+        ],
+        "operationId": "create",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/users/me/avatar": {
+      "post": {
+        "tags": [
+          "users"
+        ],
+        "operationId": "set_avatar",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "users"
+        ],
+        "operationId": "clear_avatar",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/users/{id}": {
+      "get": {
+        "tags": [
+          "users"
+        ],
+        "operationId": "get_one",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "users"
+        ],
+        "operationId": "update",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "users"
+        ],
+        "operationId": "remove",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/users/{id}/stats": {
+      "get": {
+        "tags": [
+          "users"
+        ],
+        "operationId": "stats",
+        "responses": {
+          "200": {
+            "description": ""
           }
         }
       }

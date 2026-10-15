@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM playlist_shares WHERE \"playlistId\" IN (SELECT id FROM playlists WHERE \"ownerId\" = $1)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c284235c16231aca2774afa6d733fbdae5632623ce60063f007e99ec2bc4bb3e"
+}

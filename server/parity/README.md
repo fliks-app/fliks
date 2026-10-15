@@ -18,6 +18,15 @@ PARITY_TARGET=http://127.0.0.1:4850 PARITY_RECORD=1 PARITY_ENGINE=up cargo test 
 cargo test -p fliks-server --test parity -- --ignored --nocapture 2>&1 | tail -40   # replay on :4849; PARITY_FILTER=<substring>
 ```
 
+Replay target (Rust in front of Nest on :4849, run from `backend/` after `npm run build`; DB reset as in the template step above):
+
+```bash
+export DB_NAME=fliks_parity PORT=4849 JWT_SECRET=parity-secret FLIKS_PLUGINS_DISABLED=1 FLIKS_CONF_DIR=/tmp/fliks-parity/conf
+export FLIKS_CAST_DIR=$PWD/../backend/public   # from server/; without it bootstrap-cast-receiver-static fails unless cwd has public/
+# engine up: also FLIKS_ENGINE_URL / FLIKS_ENGINE_TOKEN of a running engine, and PARITY_HOST_TOKEN for the runner
+(cd ../backend && exec "$CARGO_TARGET_DIR"/debug/fliks-server)
+```
+
 - Actors log in as `<name>` / `<name>-pass` (`admin user readonly other manager`); `engine` sends Bearer `PARITY_HOST_TOKEN`.
 - Step extras: `headers`, `auth` (`bearer|query`), `multipart`, `sse` (`events`, `timeoutMs`, `after` sub-steps); scenario `unordered` (paths whose arrays are compared as sets).
 - `"engine": "up"|"down"` on a scenario needs that engine state (`PARITY_ENGINE`, default `up`; others are skipped).

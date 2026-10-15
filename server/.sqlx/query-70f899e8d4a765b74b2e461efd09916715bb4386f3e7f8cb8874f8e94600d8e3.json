@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO role_default_libraries (\"roleId\", \"libraryId\")\n           SELECT $1, id FROM libraries WHERE id = ANY($2)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4Array"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "70f899e8d4a765b74b2e461efd09916715bb4386f3e7f8cb8874f8e94600d8e3"
+}
