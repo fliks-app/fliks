@@ -21,7 +21,10 @@ use axum::{
 use fliks_domain::acl::{Action, Subject};
 use serde_json::{Value, json};
 use sqlx::{PgPool, Row, types::Json as Jsonb};
-use std::path::PathBuf;
+use std::{
+    path::{Path, PathBuf},
+    sync::OnceLock,
+};
 
 const AVATAR_MAX: usize = 5 * 1024 * 1024;
 const BCRYPT_COST: u32 = 12;
@@ -430,7 +433,7 @@ pub async fn stats(
 }
 
 /// `FLIKS_DATA_DIR`, else the deprecated `FLIKS_IMAGES_DIR`, else `./images` when present, else `./data`.
-fn data_dir() -> PathBuf {
+fn intended_data_dir() -> PathBuf {
     let env = |k| {
         std::env::var(k)
             .ok()
@@ -448,6 +451,26 @@ fn data_dir() -> PathBuf {
                 PathBuf::from("data")
             }
         })
+}
+
+/// Nest's `getDataDir`: the first candidate a `.probe` file can be written to, else the temp fallback; resolved once.
+fn data_dir() -> &'static Path {
+    static DIR: OnceLock<PathBuf> = OnceLock::new();
+    DIR.get_or_init(|| {
+        let fallback = std::env::temp_dir().join("fliks-data");
+        let writable = |d: &Path| {
+            let probe = d.join(".probe");
+            std::fs::create_dir_all(d).is_ok()
+                && std::fs::File::create(&probe).is_ok()
+                && std::fs::remove_file(probe).is_ok()
+        };
+        let dir = intended_data_dir();
+        if writable(&dir) {
+            return dir;
+        }
+        tracing::warn!(dir = %dir.display(), "data directory not writable: avatars go to {}", fallback.display());
+        fallback
+    })
 }
 
 fn avatar_path(id: i32, suffix: &str) -> PathBuf {
