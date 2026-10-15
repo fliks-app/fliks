@@ -34,17 +34,13 @@ actor NodeManager {
 
         logger.info("Starting Node.js backend on port \(config.port)...")
 
+        guard let engine = Paths.engineBinary else { throw NodeError.missingEngine }
         let proc = Process()
-        if let engine = Paths.engineBinary {
-            proc.executableURL = engine
-            // The engine owns the public port; Node listens on port + 1 behind it.
-            proc.arguments = ["--supervise", "--public-listen", "0.0.0.0:\(config.port)",
-                              "--upstream", "http://127.0.0.1:\(config.port + 1)",
-                              "--", Paths.nodeBinary.path, "dist/main.js"]
-        } else {
-            proc.executableURL = Paths.nodeBinary
-            proc.arguments = ["dist/main.js"]
-        }
+        proc.executableURL = engine
+        // The engine owns the public port; fliks-server listens on port + 1 behind it and spawns Nest.
+        proc.arguments = ["--supervise", "--public-listen", "0.0.0.0:\(config.port)",
+                          "--upstream", "http://127.0.0.1:\(config.port + 1)",
+                          "--", engine.deletingLastPathComponent().appendingPathComponent("fliks-server").path]
         proc.currentDirectoryURL = Paths.dataDir
         proc.environment = config.asEnvironment
 
@@ -181,7 +177,7 @@ actor NodeManager {
     /// Poll the backend's HTTP endpoint until it responds.
     private func waitForHTTPReady(port: UInt16, timeout: TimeInterval) async throws {
         let deadline = Date().addingTimeInterval(timeout)
-        let url = URL(string: "http://localhost:\(port)/api")!
+        let url = URL(string: "http://localhost:\(port)/api/system/liveness")!
 
         while Date() < deadline {
             do {
@@ -224,6 +220,9 @@ struct BackendEnvironment {
             "FLIKS_CONF_DIR": Paths.confDir.path,
             "PATH": "\(ffmpegBin):\(pgBin):\(nodeBin):\(systemPath)",
             "UV_THREADPOOL_SIZE": "16",
+            // Two variables, not FLIKS_NEST_CMD: the bundle path contains a space.
+            "FLIKS_NODE_BIN": Paths.nodeBinary.path,
+            "FLIKS_NEST_ENTRY": Paths.effectiveBackendDist.appendingPathComponent("main.js").path,
         ]
         // API keys baked at build time via SWIFT_ACTIVE_COMPILATION_CONDITIONS.
         env["TMDB_API_KEY"] = BuildConfig.tmdbApiKey
@@ -236,8 +235,12 @@ struct BackendEnvironment {
 
 enum NodeError: LocalizedError {
     case timeout
+    case missingEngine
 
     var errorDescription: String? {
-        "Backend did not become ready in time"
+        switch self {
+        case .timeout: "Backend did not become ready in time"
+        case .missingEngine: "fliks-engine is missing from the app bundle"
+        }
     }
 }
