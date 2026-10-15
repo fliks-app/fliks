@@ -22,11 +22,11 @@ tower-http = { version = "0.6", features = ["cors", "fs", "trace"] }
 tracing = "0.1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal"] }
 sqlx = { version = "0.8", features = ["postgres", "runtime-tokio", "macros", "json", "chrono", "migrate"] }
-fliks-engine-core = { git = "https://github.com/fliks-app/engine", tag = "v0.3.1" }
+fliks-engine-core = { git = "https://github.com/fliks-app/engine", tag = "v0.3.2" }
 utoipa = "5"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 getrandom = "0.3"
-fliks-engine = { git = "https://github.com/fliks-app/engine", tag = "v0.3.1" }
+fliks-engine = { git = "https://github.com/fliks-app/engine", tag = "v0.3.2" }
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }
