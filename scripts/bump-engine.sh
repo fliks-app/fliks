@@ -3,6 +3,7 @@
 #        scripts/bump-engine.sh --schema <version> regenerate the schema only, from that release (CI)
 #        scripts/bump-engine.sh --local <checkout> regenerate the schema from <checkout>/openapi.json and
 #                                          patch the server's engine crates to <checkout> (untracked server/.cargo/config.toml)
+#                                          (needs `cargo update -p fliks-engine-core -p fliks-engine`; never commit the patched Cargo.lock)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 tmp="$(mktemp -d)"
