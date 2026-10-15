@@ -1,0 +1,101 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n             ps.id, ps.\"mediaId\" AS \"media_id!\", ps.\"mediaFileId\" AS media_file_id,\n             ps.\"episodeId\" AS episode_id,\n             ps.\"positionSeconds\" AS position_seconds, ps.\"durationSeconds\" AS duration_seconds,\n             ps.\"lastPlayedAt\" AS last_played_at,\n             m.title AS media_title, m.\"posterUrl\" AS poster_url, m.\"fanartUrl\" AS fanart_url,\n             'movie'::text AS \"media_type!\",\n             NULL::text AS still_url, NULL::text AS episode_label,\n             CASE WHEN ps.\"durationSeconds\" > 0\n                  THEN ROUND((ps.\"positionSeconds\" / ps.\"durationSeconds\") * 100)\n                  ELSE 0 END AS \"progress_percent!\"\n           FROM playback_states ps\n           JOIN media m ON m.id = ps.\"mediaId\"\n           WHERE ps.\"userId\" = $1\n             AND ps.completed = false\n             AND ps.\"hiddenFromContinueWatching\" = false\n             AND ps.\"positionSeconds\" >= 5\n             AND m.type = 'movie' AND m.\"libraryId\" = ANY($2)\n           ORDER BY ps.\"lastPlayedAt\" DESC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "media_id!",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 2,
+        "name": "media_file_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "episode_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 4,
+        "name": "position_seconds",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 5,
+        "name": "duration_seconds",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 6,
+        "name": "last_played_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 7,
+        "name": "media_title",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 8,
+        "name": "poster_url",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 9,
+        "name": "fanart_url",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 10,
+        "name": "media_type!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 11,
+        "name": "still_url",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 12,
+        "name": "episode_label",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 13,
+        "name": "progress_percent!",
+        "type_info": "Float8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4Array"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      true,
+      false,
+      true,
+      false,
+      false,
+      true,
+      true,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "db6fb376c4e54cbccfbe1fc06cc87cea8c0f422c48d9d6ec9f07ad5a5fe3170b"
+}

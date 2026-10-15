@@ -1,0 +1,96 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, \"createdAt\" AS created_at, \"updatedAt\" AS updated_at,\n                  \"positionSeconds\" AS position_seconds, \"durationSeconds\" AS duration_seconds,\n                  completed, \"hiddenFromContinueWatching\" AS hidden_from_continue_watching,\n                  \"lastPlayedAt\" AS last_played_at, \"playedAt\" AS played_at,\n                  \"userId\" AS user_id, \"mediaId\" AS media_id, \"mediaFileId\" AS media_file_id,\n                  \"episodeId\" AS episode_id\n           FROM playback_states\n           WHERE \"userId\" = $1 AND \"mediaId\" = $2 AND \"episodeId\" IS NOT DISTINCT FROM $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 2,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 3,
+        "name": "position_seconds",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 4,
+        "name": "duration_seconds",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 5,
+        "name": "completed",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 6,
+        "name": "hidden_from_continue_watching",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 7,
+        "name": "last_played_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 8,
+        "name": "played_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 9,
+        "name": "user_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 10,
+        "name": "media_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 11,
+        "name": "media_file_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 12,
+        "name": "episode_id",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "2eee5cfd63900065bfd0d6805b8dd382fb8f42760ddf7029907efeea6c70f649"
+}

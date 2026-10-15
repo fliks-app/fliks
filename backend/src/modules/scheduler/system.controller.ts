@@ -39,7 +39,6 @@ import {
   LiveSessionRegistry,
 } from '../streaming/live-session.service';
 import { StreamLifetime } from '../streaming/lifetime-constants';
-import { PlaybackService } from '../playback/playback.service';
 import { EngineService, type SessionSnapshot } from '../engine/engine.service';
 import { QoeService, type QoeLiveSummary } from '../qoe/qoe.service';
 import { MediaFile } from '../media/entities/media-file.entity';
@@ -206,7 +205,6 @@ export class SystemController {
     private readonly hardware: HostHardwareService,
     private readonly liveSessions: LiveSessionRegistry,
     private readonly liveTvSessions: LiveTvSessionService,
-    private readonly playbackService: PlaybackService,
     @InjectRepository(MediaFile)
     private readonly mediaFileRepo: Repository<MediaFile>,
     @InjectRepository(Episode)

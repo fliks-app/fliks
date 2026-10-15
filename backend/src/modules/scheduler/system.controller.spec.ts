@@ -47,9 +47,6 @@ describe('SystemController.activeStreams recency filter', () => {
     const liveSessions = {
       list: jest.fn().mockReturnValue(snapshots),
     };
-    const playbackService = {
-      getState: jest.fn().mockResolvedValue(null),
-    };
     const mediaFileRepo = {
       findByIds: jest.fn().mockResolvedValue([]),
     };
@@ -64,7 +61,6 @@ describe('SystemController.activeStreams recency filter', () => {
       { hwAccel: 'none' } as never, // hardware
       liveSessions as never,
       { listForActivity: () => [] } as never, // liveTvSessions
-      playbackService as never,
       mediaFileRepo as never,
       {} as never, // episodeRepo
       {} as never, // requestRepo
@@ -149,7 +145,6 @@ describe('SystemController.sendPlayerCommand', () => {
       {} as never, // hardware
       liveSessions as never,
       { listForActivity: () => [] } as never, // liveTvSessions
-      {} as never,
       {} as never,
       {} as never,
       {} as never,
@@ -251,7 +246,6 @@ describe('SystemController with the engine', () => {
       { hwAccel: 'vaapi' } as never,
       liveSessions as never,
       { listForActivity: () => [] } as never,
-      {} as never,
       { findByIds: jest.fn().mockResolvedValue([]) } as never,
       {} as never, {} as never, {} as never,
       { liveSummary: () => null } as never,
@@ -361,7 +355,6 @@ describe('SystemController.restart', () => {
 
   function makeController() {
     return new SystemController(
-      {} as never,
       {} as never,
       {} as never,
       {} as never,

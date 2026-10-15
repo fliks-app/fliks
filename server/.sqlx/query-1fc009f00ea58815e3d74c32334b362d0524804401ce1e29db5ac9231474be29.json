@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE playback_states\n               SET completed = false, \"positionSeconds\" = 0, \"lastPlayedAt\" = now()\n               WHERE \"userId\" = $1 AND \"mediaId\" = $2\n                 AND \"episodeId\" IN (SELECT id FROM episodes WHERE \"seasonId\" = $3)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1fc009f00ea58815e3d74c32334b362d0524804401ce1e29db5ac9231474be29"
+}

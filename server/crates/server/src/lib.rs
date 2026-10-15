@@ -13,6 +13,7 @@ pub mod nest;
 pub mod paths;
 pub mod presence;
 pub mod remote;
+pub mod playback;
 pub mod roles;
 pub mod settings;
 pub mod state;

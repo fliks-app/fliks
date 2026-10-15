@@ -14,7 +14,6 @@ import { LikesService } from './likes.service';
 import { LikesController } from './likes.controller';
 import { PlaylistsModule } from '../playlists/playlists.module';
 import { StreamingModule } from '../streaming/streaming.module';
-import { PlaybackModule } from '../playback/playback.module';
 import { LibrariesModule } from '../libraries/libraries.module';
 import { EventsModule } from '../scheduler/events.module';
 import { AuthModule } from '../auth/auth.module';
@@ -34,7 +33,6 @@ import { UsersModule } from '../users/users.module';
     ]),
     PlaylistsModule,
     StreamingModule,
-    PlaybackModule,
     LibrariesModule,
     EventsModule,
     AuthModule,

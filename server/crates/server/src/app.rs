@@ -1,5 +1,5 @@
 use crate::http::{layers, static_files};
-use crate::{auth, events, fs, remote, roles, settings, state::AppState, system, users};
+use crate::{auth, events, fs, playback, remote, roles, settings, state::AppState, system, users};
 use axum::{Router, extract::Request, response::Response, routing::any, routing::any_service};
 use fliks_engine::gateway::{self, RouteTable, Upstream};
 use std::path::PathBuf;
@@ -59,7 +59,23 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         remote::grant_code,
         remote::grant_claim,
         remote::grants,
-        remote::revoke
+        remote::revoke,
+        playback::recommendations,
+        playback::dismiss,
+        playback::dismissed_count,
+        playback::dismissed_reset,
+        playback::watched_ids,
+        playback::continue_watching,
+        playback::history,
+        playback::watched_episodes,
+        playback::episode_progress,
+        playback::resume_info,
+        playback::get_state,
+        playback::delete_state,
+        playback::hide,
+        playback::toggle_watched,
+        playback::toggle_series_watched,
+        playback::toggle_season_watched
     )
 )]
 pub struct ApiDoc;
@@ -106,6 +122,7 @@ fn api() -> Router<AppState> {
         .merge(users::router())
         .merge(events::router())
         .merge(remote::router())
+        .merge(playback::router())
 }
 
 async fn internal_404(req: Request) -> Response {

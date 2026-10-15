@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE playback_states\n                   SET completed = $2, \"lastPlayedAt\" = now(), \"positionSeconds\" = $3,\n                       \"durationSeconds\" = $4, \"mediaFileId\" = COALESCE($5, \"mediaFileId\")\n                   WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Bool",
+        "Float8",
+        "Float8",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d11db81a39a78166e1629bc0190525a8c0933d2491f71285c462795dabdbb3e3"
+}
