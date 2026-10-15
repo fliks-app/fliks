@@ -5,7 +5,7 @@
   },
   "deviation": null,
   "ignore": [
-    "$..code",
+    "$.code",
     "$..createdAt"
   ],
   "name": "remote-grant-revoke-ok",

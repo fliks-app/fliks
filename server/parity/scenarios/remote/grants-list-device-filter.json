@@ -4,7 +4,7 @@
   },
   "deviation": null,
   "ignore": [
-    "$..code",
+    "$.code",
     "$..createdAt"
   ],
   "name": "remote-grants-list-device-filter",
