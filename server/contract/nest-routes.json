@@ -1,0 +1,4795 @@
+[
+  {
+    "method": "POST",
+    "path": "/api/auth/cast-info",
+    "controller": "AuthController",
+    "handler": "castInfo",
+    "file": "src/modules/auth/auth.controller.ts",
+    "line": 162,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "POST",
+    "path": "/api/auth/login",
+    "controller": "AuthController",
+    "handler": "login",
+    "file": "src/modules/auth/auth.controller.ts",
+    "line": 40,
+    "guards": [],
+    "policies": "",
+    "body": "LoginDto"
+  },
+  {
+    "method": "POST",
+    "path": "/api/auth/logout",
+    "controller": "AuthController",
+    "handler": "logout",
+    "file": "src/modules/auth/auth.controller.ts",
+    "line": 88,
+    "guards": [],
+    "policies": "",
+    "httpCode": 204
+  },
+  {
+    "method": "GET",
+    "path": "/api/auth/me",
+    "controller": "AuthController",
+    "handler": "getProfile",
+    "file": "src/modules/auth/auth.controller.ts",
+    "line": 138,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "POST",
+    "path": "/api/auth/pairing/:pairingId/approve",
+    "controller": "PairingController",
+    "handler": "approve",
+    "file": "src/modules/auth/pairing/pairing.controller.ts",
+    "line": 89,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": "",
+    "httpCode": 204
+  },
+  {
+    "method": "POST",
+    "path": "/api/auth/pairing/:pairingId/deny",
+    "controller": "PairingController",
+    "handler": "deny",
+    "file": "src/modules/auth/pairing/pairing.controller.ts",
+    "line": 97,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": "",
+    "httpCode": 204
+  },
+  {
+    "method": "GET",
+    "path": "/api/auth/pairing/pending",
+    "controller": "PairingController",
+    "handler": "pending",
+    "file": "src/modules/auth/pairing/pairing.controller.ts",
+    "line": 82,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "POST",
+    "path": "/api/auth/pairing/request",
+    "controller": "PairingController",
+    "handler": "request",
+    "file": "src/modules/auth/pairing/pairing.controller.ts",
+    "line": 35,
+    "guards": [],
+    "policies": "",
+    "body": "PairingRequestDto"
+  },
+  {
+    "method": "GET",
+    "path": "/api/auth/pairing/status",
+    "controller": "PairingController",
+    "handler": "status",
+    "file": "src/modules/auth/pairing/pairing.controller.ts",
+    "line": 56,
+    "guards": [],
+    "policies": ""
+  },
+  {
+    "method": "POST",
+    "path": "/api/auth/refresh",
+    "controller": "AuthController",
+    "handler": "refresh",
+    "file": "src/modules/auth/auth.controller.ts",
+    "line": 68,
+    "guards": [],
+    "policies": ""
+  },
+  {
+    "method": "POST",
+    "path": "/api/auth/register",
+    "controller": "AuthController",
+    "handler": "register",
+    "file": "src/modules/auth/auth.controller.ts",
+    "line": 133,
+    "guards": [],
+    "policies": "",
+    "body": "RegisterDto"
+  },
+  {
+    "method": "POST",
+    "path": "/api/auth/stream-token",
+    "controller": "AuthController",
+    "handler": "streamToken",
+    "file": "src/modules/auth/auth.controller.ts",
+    "line": 178,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "GET",
+    "path": "/api/auth/users-public",
+    "controller": "AuthController",
+    "handler": "publicUsers",
+    "file": "src/modules/auth/auth.controller.ts",
+    "line": 152,
+    "guards": [],
+    "policies": ""
+  },
+  {
+    "method": "GET",
+    "path": "/api/auto-approval-rules",
+    "controller": "AutoApprovalRulesController",
+    "handler": "findAll",
+    "file": "src/modules/requests/auto-approval-rules.controller.ts",
+    "line": 41,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, 'Settings')"
+  },
+  {
+    "method": "POST",
+    "path": "/api/auto-approval-rules",
+    "controller": "AutoApprovalRulesController",
+    "handler": "create",
+    "file": "src/modules/requests/auto-approval-rules.controller.ts",
+    "line": 30,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, 'Settings')",
+    "body": "CreateAutoApprovalRuleDto"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/auto-approval-rules/:id",
+    "controller": "AutoApprovalRulesController",
+    "handler": "remove",
+    "file": "src/modules/requests/auto-approval-rules.controller.ts",
+    "line": 69,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, 'Settings')"
+  },
+  {
+    "method": "GET",
+    "path": "/api/auto-approval-rules/:id",
+    "controller": "AutoApprovalRulesController",
+    "handler": "findOne",
+    "file": "src/modules/requests/auto-approval-rules.controller.ts",
+    "line": 47,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, 'Settings')"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/auto-approval-rules/:id",
+    "controller": "AutoApprovalRulesController",
+    "handler": "update",
+    "file": "src/modules/requests/auto-approval-rules.controller.ts",
+    "line": 55,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, 'Settings')",
+    "body": "CreateAutoApprovalRuleDto"
+  },
+  {
+    "method": "GET",
+    "path": "/api/commands",
+    "controller": "CommandsController",
+    "handler": "list",
+    "file": "src/modules/scheduler/commands.controller.ts",
+    "line": 33,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, 'Settings')"
+  },
+  {
+    "method": "POST",
+    "path": "/api/commands",
+    "controller": "CommandsController",
+    "handler": "trigger",
+    "file": "src/modules/scheduler/commands.controller.ts",
+    "line": 41,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, 'Settings')",
+    "body": "TriggerCommandDto"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/commands/history",
+    "controller": "CommandsController",
+    "handler": "clearHistory",
+    "file": "src/modules/scheduler/commands.controller.ts",
+    "line": 47,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, 'Settings')"
+  },
+  {
+    "method": "GET",
+    "path": "/api/commands/schedulers",
+    "controller": "CommandsController",
+    "handler": "schedulers",
+    "file": "src/modules/scheduler/commands.controller.ts",
+    "line": 27,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, 'Settings')"
+  },
+  {
+    "method": "GET",
+    "path": "/api/counts",
+    "controller": "CountsController",
+    "handler": "get",
+    "file": "src/modules/counts/counts.controller.ts",
+    "line": 17,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "GET",
+    "path": "/api/custom-formats",
+    "controller": "CustomFormatsController",
+    "handler": "findAll",
+    "file": "src/modules/profiles/custom-formats.controller.ts",
+    "line": 38,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, 'Settings')"
+  },
+  {
+    "method": "POST",
+    "path": "/api/custom-formats",
+    "controller": "CustomFormatsController",
+    "handler": "create",
+    "file": "src/modules/profiles/custom-formats.controller.ts",
+    "line": 26,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, 'Settings')",
+    "body": "CreateCustomFormatDto"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/custom-formats/:id",
+    "controller": "CustomFormatsController",
+    "handler": "remove",
+    "file": "src/modules/profiles/custom-formats.controller.ts",
+    "line": 59,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, 'Settings')"
+  },
+  {
+    "method": "GET",
+    "path": "/api/custom-formats/:id",
+    "controller": "CustomFormatsController",
+    "handler": "findOne",
+    "file": "src/modules/profiles/custom-formats.controller.ts",
+    "line": 44,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, 'Settings')"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/custom-formats/:id",
+    "controller": "CustomFormatsController",
+    "handler": "update",
+    "file": "src/modules/profiles/custom-formats.controller.ts",
+    "line": 50,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, 'Settings')",
+    "body": "CreateCustomFormatDto"
+  },
+  {
+    "method": "POST",
+    "path": "/api/custom-formats/test",
+    "controller": "CustomFormatsController",
+    "handler": "testRelease",
+    "file": "src/modules/profiles/custom-formats.controller.ts",
+    "line": 32,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, 'Settings')",
+    "body": "TestCustomFormatDto"
+  },
+  {
+    "method": "GET",
+    "path": "/api/engine/remote",
+    "controller": "EngineRemoteController",
+    "handler": "getRemote",
+    "file": "src/modules/engine/engine-remote.controller.ts",
+    "line": 90,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, 'Settings')"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/engine/remote",
+    "controller": "EngineRemoteController",
+    "handler": "putRemote",
+    "file": "src/modules/engine/engine-remote.controller.ts",
+    "line": 96,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, 'Settings')",
+    "body": "PutEngineRemoteDto"
+  },
+  {
+    "method": "POST",
+    "path": "/api/engine/remote/test",
+    "controller": "EngineRemoteController",
+    "handler": "testRemote",
+    "file": "src/modules/engine/engine-remote.controller.ts",
+    "line": 111,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, 'Settings')",
+    "body": "TestEngineRemoteDto"
+  },
+  {
+    "method": "GET",
+    "path": "/api/fs/browse",
+    "controller": "FilesystemController",
+    "handler": "browse",
+    "file": "src/modules/filesystem/filesystem.controller.ts",
+    "line": 16,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, 'Settings')"
+  },
+  {
+    "method": "GET",
+    "path": "/api/images/:type/:id",
+    "controller": "ImageController",
+    "handler": "serveWithoutVariant",
+    "file": "src/modules/images/image.controller.ts",
+    "line": 35,
+    "guards": [],
+    "policies": ""
+  },
+  {
+    "method": "GET",
+    "path": "/api/images/:type/:id/:variant",
+    "controller": "ImageController",
+    "handler": "serveWithVariant",
+    "file": "src/modules/images/image.controller.ts",
+    "line": 24,
+    "guards": [],
+    "policies": ""
+  },
+  {
+    "method": "POST",
+    "path": "/api/imports/library/:libraryId/orphans/scan",
+    "controller": "ImportsController",
+    "handler": "scanOrphans",
+    "file": "src/modules/imports/imports.controller.ts",
+    "line": 172,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Create, Media)"
+  },
+  {
+    "method": "POST",
+    "path": "/api/imports/library/orphans/relink",
+    "controller": "ImportsController",
+    "handler": "relinkOrphans",
+    "file": "src/modules/imports/imports.controller.ts",
+    "line": 206,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Create, Media)",
+    "body": "RelinkOrphansDto"
+  },
+  {
+    "method": "POST",
+    "path": "/api/imports/library/orphans/relink-batch",
+    "controller": "ImportsController",
+    "handler": "relinkOrphansBatch",
+    "file": "src/modules/imports/imports.controller.ts",
+    "line": 189,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Create, Media)",
+    "body": "RelinkOrphansBatchDto"
+  },
+  {
+    "method": "POST",
+    "path": "/api/imports/orphans/preview",
+    "controller": "ImportsController",
+    "handler": "previewOrphans",
+    "file": "src/modules/imports/imports.controller.ts",
+    "line": 178,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Create, Media)",
+    "body": "PreviewOrphansDto"
+  },
+  {
+    "method": "POST",
+    "path": "/api/imports/radarr",
+    "controller": "ImportsController",
+    "handler": "importRadarrApi",
+    "file": "src/modules/imports/imports.controller.ts",
+    "line": 66,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Create, 'Settings')",
+    "body": "ImportApiDto"
+  },
+  {
+    "method": "POST",
+    "path": "/api/imports/radarr/preview",
+    "controller": "ImportsController",
+    "handler": "previewRadarr",
+    "file": "src/modules/imports/imports.controller.ts",
+    "line": 60,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, 'Settings')",
+    "body": "PreviewImportDto"
+  },
+  {
+    "method": "POST",
+    "path": "/api/imports/radarr/test",
+    "controller": "ImportsController",
+    "handler": "testRadarrConnection",
+    "file": "src/modules/imports/imports.controller.ts",
+    "line": 54,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, 'Settings')",
+    "body": "TestConnectionDto"
+  },
+  {
+    "method": "POST",
+    "path": "/api/imports/seerr/import-requests",
+    "controller": "ImportsController",
+    "handler": "importSeerrRequests",
+    "file": "src/modules/imports/imports.controller.ts",
+    "line": 124,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, 'Settings')"
+  },
+  {
+    "method": "POST",
+    "path": "/api/imports/seerr/test",
+    "controller": "ImportsController",
+    "handler": "testSeerr",
+    "file": "src/modules/imports/imports.controller.ts",
+    "line": 112,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, 'Settings')",
+    "body": "TestConnectionDto"
+  },
+  {
+    "method": "POST",
+    "path": "/api/imports/sonarr",
+    "controller": "ImportsController",
+    "handler": "importSonarrApi",
+    "file": "src/modules/imports/imports.controller.ts",
+    "line": 95,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Create, 'Settings')",
+    "body": "ImportApiDto"
+  },
+  {
+    "method": "POST",
+    "path": "/api/imports/sonarr/preview",
+    "controller": "ImportsController",
+    "handler": "previewSonarr",
+    "file": "src/modules/imports/imports.controller.ts",
+    "line": 89,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, 'Settings')",
+    "body": "PreviewImportDto"
+  },
+  {
+    "method": "POST",
+    "path": "/api/imports/sonarr/test",
+    "controller": "ImportsController",
+    "handler": "testSonarrConnection",
+    "file": "src/modules/imports/imports.controller.ts",
+    "line": 83,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, 'Settings')",
+    "body": "TestConnectionDto"
+  },
+  {
+    "method": "GET",
+    "path": "/api/libraries",
+    "controller": "LibrariesController",
+    "handler": "findAll",
+    "file": "src/modules/libraries/libraries.controller.ts",
+    "line": 39,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, 'Settings')"
+  },
+  {
+    "method": "POST",
+    "path": "/api/libraries",
+    "controller": "LibrariesController",
+    "handler": "create",
+    "file": "src/modules/libraries/libraries.controller.ts",
+    "line": 51,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, 'Settings')",
+    "body": "CreateLibraryDto"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/libraries/:id",
+    "controller": "LibrariesController",
+    "handler": "remove",
+    "file": "src/modules/libraries/libraries.controller.ts",
+    "line": 63,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, 'Settings')"
+  },
+  {
+    "method": "GET",
+    "path": "/api/libraries/:id",
+    "controller": "LibrariesController",
+    "handler": "findOne",
+    "file": "src/modules/libraries/libraries.controller.ts",
+    "line": 45,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, 'Settings')"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/libraries/:id",
+    "controller": "LibrariesController",
+    "handler": "update",
+    "file": "src/modules/libraries/libraries.controller.ts",
+    "line": 57,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, 'Settings')",
+    "body": "UpdateLibraryDto"
+  },
+  {
+    "method": "GET",
+    "path": "/api/libraries/:id/access",
+    "controller": "LibrariesController",
+    "handler": "getAccess",
+    "file": "src/modules/libraries/libraries.controller.ts",
+    "line": 69,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, 'Settings')"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/libraries/:id/access",
+    "controller": "LibrariesController",
+    "handler": "setAccess",
+    "file": "src/modules/libraries/libraries.controller.ts",
+    "line": 75,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, 'Settings')",
+    "body": "AssignLibraryAccessDto"
+  },
+  {
+    "method": "GET",
+    "path": "/api/libraries/mine",
+    "controller": "LibrariesController",
+    "handler": "findMine",
+    "file": "src/modules/libraries/libraries.controller.ts",
+    "line": 32,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, Library)"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/likes",
+    "controller": "LikesController",
+    "handler": "unlike",
+    "file": "src/modules/social/likes.controller.ts",
+    "line": 40,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": "",
+    "body": "LikeTargetDto"
+  },
+  {
+    "method": "GET",
+    "path": "/api/likes",
+    "controller": "LikesController",
+    "handler": "mine",
+    "file": "src/modules/social/likes.controller.ts",
+    "line": 25,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "POST",
+    "path": "/api/likes",
+    "controller": "LikesController",
+    "handler": "like",
+    "file": "src/modules/social/likes.controller.ts",
+    "line": 35,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": "",
+    "body": "LikeTargetDto"
+  },
+  {
+    "method": "GET",
+    "path": "/api/likes/state/:mediaId",
+    "controller": "LikesController",
+    "handler": "state",
+    "file": "src/modules/social/likes.controller.ts",
+    "line": 30,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "GET",
+    "path": "/api/livetv/admin/access/restricted-groups",
+    "controller": "LiveTvAccessController",
+    "handler": "restrictedGroups",
+    "file": "src/modules/livetv/controllers/livetv-access.controller.ts",
+    "line": 28,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "PUT",
+    "path": "/api/livetv/admin/access/restricted-groups",
+    "controller": "LiveTvAccessController",
+    "handler": "setRestrictedGroups",
+    "file": "src/modules/livetv/controllers/livetv-access.controller.ts",
+    "line": 37,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "",
+    "body": "SetRestrictedGroupsDto"
+  },
+  {
+    "method": "GET",
+    "path": "/api/livetv/admin/access/users",
+    "controller": "LiveTvAccessController",
+    "handler": "listUserAccess",
+    "file": "src/modules/livetv/controllers/livetv-access.controller.ts",
+    "line": 44,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "GET",
+    "path": "/api/livetv/admin/access/users/:userId",
+    "controller": "LiveTvAccessController",
+    "handler": "grants",
+    "file": "src/modules/livetv/controllers/livetv-access.controller.ts",
+    "line": 49,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "PUT",
+    "path": "/api/livetv/admin/access/users/:userId",
+    "controller": "LiveTvAccessController",
+    "handler": "setGrants",
+    "file": "src/modules/livetv/controllers/livetv-access.controller.ts",
+    "line": 55,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "",
+    "body": "SetGroupAccessDto"
+  },
+  {
+    "method": "GET",
+    "path": "/api/livetv/admin/channels",
+    "controller": "LivetvAdminController",
+    "handler": "listChannels",
+    "file": "src/modules/livetv/controllers/livetv-admin.controller.ts",
+    "line": 108,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "",
+    "query": "LiveTvAdminChannelsQueryDto"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/livetv/admin/channels/:id",
+    "controller": "LivetvAdminController",
+    "handler": "updateChannel",
+    "file": "src/modules/livetv/controllers/livetv-admin.controller.ts",
+    "line": 123,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "",
+    "body": "UpdateLiveTvChannelDto"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/livetv/admin/channels/bulk",
+    "controller": "LivetvAdminController",
+    "handler": "bulkUpdateChannels",
+    "file": "src/modules/livetv/controllers/livetv-admin.controller.ts",
+    "line": 113,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "",
+    "body": "BulkUpdateChannelsDto"
+  },
+  {
+    "method": "POST",
+    "path": "/api/livetv/admin/channels/merge",
+    "controller": "LivetvAdminController",
+    "handler": "mergeChannels",
+    "file": "src/modules/livetv/controllers/livetv-admin.controller.ts",
+    "line": 118,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "",
+    "body": "MergeChannelsDto"
+  },
+  {
+    "method": "GET",
+    "path": "/api/livetv/admin/guide-sources",
+    "controller": "LivetvAdminController",
+    "handler": "listGuideSources",
+    "file": "src/modules/livetv/controllers/livetv-admin.controller.ts",
+    "line": 132,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "POST",
+    "path": "/api/livetv/admin/guide-sources",
+    "controller": "LivetvAdminController",
+    "handler": "createGuideSource",
+    "file": "src/modules/livetv/controllers/livetv-admin.controller.ts",
+    "line": 137,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "",
+    "body": "CreateLiveTvGuideSourceDto"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/livetv/admin/guide-sources/:id",
+    "controller": "LivetvAdminController",
+    "handler": "removeGuideSource",
+    "file": "src/modules/livetv/controllers/livetv-admin.controller.ts",
+    "line": 150,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/livetv/admin/guide-sources/:id",
+    "controller": "LivetvAdminController",
+    "handler": "updateGuideSource",
+    "file": "src/modules/livetv/controllers/livetv-admin.controller.ts",
+    "line": 142,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "",
+    "body": "UpdateLiveTvGuideSourceDto"
+  },
+  {
+    "method": "POST",
+    "path": "/api/livetv/admin/guide-sources/:id/sync",
+    "controller": "LivetvAdminController",
+    "handler": "syncGuideSource",
+    "file": "src/modules/livetv/controllers/livetv-admin.controller.ts",
+    "line": 155,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "GET",
+    "path": "/api/livetv/admin/guide/match-report",
+    "controller": "LivetvAdminController",
+    "handler": "matchReport",
+    "file": "src/modules/livetv/controllers/livetv-admin.controller.ts",
+    "line": 160,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "",
+    "query": "LiveTvMatchReportQueryDto"
+  },
+  {
+    "method": "GET",
+    "path": "/api/livetv/admin/sources",
+    "controller": "LivetvAdminController",
+    "handler": "listSources",
+    "file": "src/modules/livetv/controllers/livetv-admin.controller.ts",
+    "line": 53,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "POST",
+    "path": "/api/livetv/admin/sources",
+    "controller": "LivetvAdminController",
+    "handler": "createSource",
+    "file": "src/modules/livetv/controllers/livetv-admin.controller.ts",
+    "line": 63,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "",
+    "body": "CreateLiveTvSourceDto"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/livetv/admin/sources/:id",
+    "controller": "LivetvAdminController",
+    "handler": "removeSource",
+    "file": "src/modules/livetv/controllers/livetv-admin.controller.ts",
+    "line": 94,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/livetv/admin/sources/:id",
+    "controller": "LivetvAdminController",
+    "handler": "updateSource",
+    "file": "src/modules/livetv/controllers/livetv-admin.controller.ts",
+    "line": 89,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "",
+    "body": "UpdateLiveTvSourceDto"
+  },
+  {
+    "method": "POST",
+    "path": "/api/livetv/admin/sources/:id/sync",
+    "controller": "LivetvAdminController",
+    "handler": "syncSource",
+    "file": "src/modules/livetv/controllers/livetv-admin.controller.ts",
+    "line": 99,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "POST",
+    "path": "/api/livetv/admin/sources/playlist",
+    "controller": "LivetvAdminController",
+    "handler": "uploadPlaylist",
+    "file": "src/modules/livetv/controllers/livetv-admin.controller.ts",
+    "line": 73,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "",
+    "upload": "FileInterceptor"
+  },
+  {
+    "method": "POST",
+    "path": "/api/livetv/admin/sources/test",
+    "controller": "LivetvAdminController",
+    "handler": "testSource",
+    "file": "src/modules/livetv/controllers/livetv-admin.controller.ts",
+    "line": 58,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "",
+    "body": "TestLiveTvSourceDto"
+  },
+  {
+    "method": "GET",
+    "path": "/api/livetv/channels",
+    "controller": "LivetvController",
+    "handler": "listChannels",
+    "file": "src/modules/livetv/controllers/livetv.controller.ts",
+    "line": 62,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, LiveTvChannel)",
+    "query": "LiveTvChannelsQueryDto"
+  },
+  {
+    "method": "GET",
+    "path": "/api/livetv/channels/:id/logo",
+    "controller": "LivetvController",
+    "handler": "serveLogo",
+    "file": "src/modules/livetv/controllers/livetv.controller.ts",
+    "line": 75,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, LiveTvChannel)"
+  },
+  {
+    "method": "POST",
+    "path": "/api/livetv/channels/:id/play",
+    "controller": "LivetvController",
+    "handler": "play",
+    "file": "src/modules/livetv/controllers/livetv.controller.ts",
+    "line": 139,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard",
+      "SessionTokenGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, LiveTvChannel)",
+    "body": "PlayChannelDto"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/livetv/channels/:id/prefs",
+    "controller": "LivetvController",
+    "handler": "setPrefs",
+    "file": "src/modules/livetv/controllers/livetv.controller.ts",
+    "line": 189,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard",
+      "SessionTokenGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, LiveTvChannel)",
+    "body": "SetChannelPrefsDto"
+  },
+  {
+    "method": "GET",
+    "path": "/api/livetv/channels/on-now",
+    "controller": "LivetvController",
+    "handler": "onNow",
+    "file": "src/modules/livetv/controllers/livetv.controller.ts",
+    "line": 102,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, LiveTvChannel)",
+    "query": "LiveTvOnNowQueryDto"
+  },
+  {
+    "method": "GET",
+    "path": "/api/livetv/guide",
+    "controller": "LivetvController",
+    "handler": "guideWindow",
+    "file": "src/modules/livetv/controllers/livetv.controller.ts",
+    "line": 113,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, LiveTvChannel)",
+    "query": "LiveTvGuideQueryDto"
+  },
+  {
+    "method": "GET",
+    "path": "/api/livetv/programs/:id",
+    "controller": "LivetvController",
+    "handler": "program",
+    "file": "src/modules/livetv/controllers/livetv.controller.ts",
+    "line": 127,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, LiveTvChannel)"
+  },
+  {
+    "method": "GET",
+    "path": "/api/livetv/search",
+    "controller": "LivetvController",
+    "handler": "search",
+    "file": "src/modules/livetv/controllers/livetv.controller.ts",
+    "line": 133,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, LiveTvChannel)",
+    "query": "LiveTvSearchQueryDto"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/livetv/sessions/:sessionId",
+    "controller": "LivetvController",
+    "handler": "leave",
+    "file": "src/modules/livetv/controllers/livetv.controller.ts",
+    "line": 160,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard",
+      "SessionTokenGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, LiveTvChannel)"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/livetv/sessions/:sessionId/state",
+    "controller": "LivetvController",
+    "handler": "heartbeat",
+    "file": "src/modules/livetv/controllers/livetv.controller.ts",
+    "line": 169,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard",
+      "SessionTokenGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, LiveTvChannel)"
+  },
+  {
+    "method": "GET",
+    "path": "/api/livetv/status",
+    "controller": "LivetvController",
+    "handler": "status",
+    "file": "src/modules/livetv/controllers/livetv.controller.ts",
+    "line": 56,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, LiveTvChannel)"
+  },
+  {
+    "method": "POST",
+    "path": "/api/markers",
+    "controller": "MarkersController",
+    "handler": "create",
+    "file": "src/modules/markers/markers.controller.ts",
+    "line": 50,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, Media)",
+    "body": "CreateMarkerDto"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/markers/:id",
+    "controller": "MarkersController",
+    "handler": "remove",
+    "file": "src/modules/markers/markers.controller.ts",
+    "line": 62,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, Media)"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/markers/:id",
+    "controller": "MarkersController",
+    "handler": "update",
+    "file": "src/modules/markers/markers.controller.ts",
+    "line": 56,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, Media)",
+    "body": "UpdateMarkerDto"
+  },
+  {
+    "method": "GET",
+    "path": "/api/markers/episode/:episodeId",
+    "controller": "MarkersController",
+    "handler": "listForEpisode",
+    "file": "src/modules/markers/markers.controller.ts",
+    "line": 26,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, Media)"
+  },
+  {
+    "method": "GET",
+    "path": "/api/markers/season/:seasonId",
+    "controller": "MarkersController",
+    "handler": "listForSeason",
+    "file": "src/modules/markers/markers.controller.ts",
+    "line": 32,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, Media)"
+  },
+  {
+    "method": "POST",
+    "path": "/api/markers/season/:seasonId/detect",
+    "controller": "MarkersController",
+    "handler": "detectSeason",
+    "file": "src/modules/markers/markers.controller.ts",
+    "line": 38,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, Media)"
+  },
+  {
+    "method": "POST",
+    "path": "/api/markers/series/:mediaId/detect-all",
+    "controller": "MarkersController",
+    "handler": "detectSeries",
+    "file": "src/modules/markers/markers.controller.ts",
+    "line": 44,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, Media)"
+  },
+  {
+    "method": "GET",
+    "path": "/api/media",
+    "controller": "MediaController",
+    "handler": "findAll",
+    "file": "src/modules/media/media.controller.ts",
+    "line": 119,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, Media)",
+    "query": "SearchMediaDto"
+  },
+  {
+    "method": "POST",
+    "path": "/api/media",
+    "controller": "MediaController",
+    "handler": "create",
+    "file": "src/modules/media/media.controller.ts",
+    "line": 113,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Create, Media)",
+    "body": "CreateMediaDto"
+  },
+  {
+    "method": "GET",
+    "path": "/api/media-servers",
+    "controller": "MediaServersController",
+    "handler": "findAll",
+    "file": "src/modules/media-servers/media-servers.controller.ts",
+    "line": 53,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, 'Settings')"
+  },
+  {
+    "method": "POST",
+    "path": "/api/media-servers",
+    "controller": "MediaServersController",
+    "handler": "create",
+    "file": "src/modules/media-servers/media-servers.controller.ts",
+    "line": 47,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, 'Settings')",
+    "body": "CreateMediaServerDto"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/media-servers/:id",
+    "controller": "MediaServersController",
+    "handler": "remove",
+    "file": "src/modules/media-servers/media-servers.controller.ts",
+    "line": 74,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, 'Settings')"
+  },
+  {
+    "method": "GET",
+    "path": "/api/media-servers/:id",
+    "controller": "MediaServersController",
+    "handler": "findOne",
+    "file": "src/modules/media-servers/media-servers.controller.ts",
+    "line": 59,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, 'Settings')"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/media-servers/:id",
+    "controller": "MediaServersController",
+    "handler": "update",
+    "file": "src/modules/media-servers/media-servers.controller.ts",
+    "line": 65,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, 'Settings')",
+    "body": "CreateMediaServerDto"
+  },
+  {
+    "method": "POST",
+    "path": "/api/media-servers/:id/import-watch-history",
+    "controller": "MediaServersController",
+    "handler": "importWatchHistory",
+    "file": "src/modules/media-servers/media-servers.controller.ts",
+    "line": 86,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, 'Settings')"
+  },
+  {
+    "method": "POST",
+    "path": "/api/media-servers/:id/test",
+    "controller": "MediaServersController",
+    "handler": "test",
+    "file": "src/modules/media-servers/media-servers.controller.ts",
+    "line": 80,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, 'Settings')"
+  },
+  {
+    "method": "GET",
+    "path": "/api/media-servers/types",
+    "controller": "MediaServersController",
+    "handler": "getTypes",
+    "file": "src/modules/media-servers/media-servers.controller.ts",
+    "line": 41,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, 'Settings')"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/media/:id",
+    "controller": "MediaController",
+    "handler": "remove",
+    "file": "src/modules/media/media.controller.ts",
+    "line": 955,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Delete, Media)"
+  },
+  {
+    "method": "GET",
+    "path": "/api/media/:id",
+    "controller": "MediaController",
+    "handler": "findOne",
+    "file": "src/modules/media/media.controller.ts",
+    "line": 887,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, Media)"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/media/:id",
+    "controller": "MediaController",
+    "handler": "update",
+    "file": "src/modules/media/media.controller.ts",
+    "line": 944,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Update, Media)",
+    "body": "UpdateMediaDto"
+  },
+  {
+    "method": "POST",
+    "path": "/api/media/:id/analyze",
+    "controller": "MediaController",
+    "handler": "analyzeMedia",
+    "file": "src/modules/media/media.controller.ts",
+    "line": 554,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Update, Media)",
+    "body": "AnalyzeMediaDto"
+  },
+  {
+    "method": "GET",
+    "path": "/api/media/:id/cast",
+    "controller": "MediaController",
+    "handler": "getCast",
+    "file": "src/modules/media/media.controller.ts",
+    "line": 924,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, Media)"
+  },
+  {
+    "method": "GET",
+    "path": "/api/media/:id/collection",
+    "controller": "MediaController",
+    "handler": "getCollection",
+    "file": "src/modules/media/media.controller.ts",
+    "line": 914,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, Media)"
+  },
+  {
+    "method": "GET",
+    "path": "/api/media/:id/crew",
+    "controller": "MediaController",
+    "handler": "getCrew",
+    "file": "src/modules/media/media.controller.ts",
+    "line": 934,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, Media)"
+  },
+  {
+    "method": "POST",
+    "path": "/api/media/:id/episodes/:episodeId/refresh",
+    "controller": "MediaController",
+    "handler": "refreshEpisodeMetadata",
+    "file": "src/modules/media/media.controller.ts",
+    "line": 436,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Update, Media)"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/media/:id/files/:fileId",
+    "controller": "MediaController",
+    "handler": "deleteFile",
+    "file": "src/modules/media/media.controller.ts",
+    "line": 227,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Delete, Media)"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/media/:id/files/:fileId/companions",
+    "controller": "MediaController",
+    "handler": "deleteCompanion",
+    "file": "src/modules/media/media.controller.ts",
+    "line": 287,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Delete, Media)"
+  },
+  {
+    "method": "GET",
+    "path": "/api/media/:id/files/:fileId/companions",
+    "controller": "MediaController",
+    "handler": "listCompanions",
+    "file": "src/modules/media/media.controller.ts",
+    "line": 243,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, Media)"
+  },
+  {
+    "method": "GET",
+    "path": "/api/media/:id/files/:fileId/companions/download",
+    "controller": "MediaController",
+    "handler": "downloadCompanion",
+    "file": "src/modules/media/media.controller.ts",
+    "line": 254,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, Media)"
+  },
+  {
+    "method": "POST",
+    "path": "/api/media/:id/files/:fileId/companions/edl",
+    "controller": "MediaController",
+    "handler": "importEdl",
+    "file": "src/modules/media/media.controller.ts",
+    "line": 271,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Update, Media)",
+    "upload": "FileInterceptor"
+  },
+  {
+    "method": "POST",
+    "path": "/api/media/:id/identify",
+    "controller": "MediaController",
+    "handler": "identify",
+    "file": "src/modules/media/media.controller.ts",
+    "line": 329,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Update, Media)",
+    "body": "IdentifyMediaDto"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/media/:id/library",
+    "controller": "MediaController",
+    "handler": "updateLibrary",
+    "file": "src/modules/media/media.controller.ts",
+    "line": 300,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Update, Media)"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/media/:id/profiles",
+    "controller": "MediaController",
+    "handler": "updateProfiles",
+    "file": "src/modules/media/media.controller.ts",
+    "line": 311,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) =>\n      ability.can(Action.Grab, Media) || ability.can(Action.Update, Media)",
+    "body": "UpdateMediaProfilesDto"
+  },
+  {
+    "method": "POST",
+    "path": "/api/media/:id/refresh",
+    "controller": "MediaController",
+    "handler": "refreshMetadata",
+    "file": "src/modules/media/media.controller.ts",
+    "line": 386,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Update, Media)"
+  },
+  {
+    "method": "POST",
+    "path": "/api/media/:id/rescan",
+    "controller": "MediaController",
+    "handler": "rescanFiles",
+    "file": "src/modules/media/media.controller.ts",
+    "line": 485,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Update, Media)"
+  },
+  {
+    "method": "GET",
+    "path": "/api/media/:id/similar",
+    "controller": "MediaController",
+    "handler": "getSimilar",
+    "file": "src/modules/media/media.controller.ts",
+    "line": 899,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, Media)"
+  },
+  {
+    "method": "GET",
+    "path": "/api/media/:id/streams/:mediaFileId",
+    "controller": "MediaController",
+    "handler": "getStreams",
+    "file": "src/modules/media/media.controller.ts",
+    "line": 836,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, Media)"
+  },
+  {
+    "method": "GET",
+    "path": "/api/media/:id/subtitles",
+    "controller": "MediaController",
+    "handler": "getSubtitles",
+    "file": "src/modules/media/media.controller.ts",
+    "line": 576,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, SubtitleFile)"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/media/:id/subtitles/:subtitleId",
+    "controller": "MediaController",
+    "handler": "deleteSubtitle",
+    "file": "src/modules/media/media.controller.ts",
+    "line": 807,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Delete, SubtitleFile)"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/media/:id/subtitles/:subtitleId/language",
+    "controller": "MediaController",
+    "handler": "setSubtitleLanguage",
+    "file": "src/modules/media/media.controller.ts",
+    "line": 729,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Update, SubtitleFile)"
+  },
+  {
+    "method": "POST",
+    "path": "/api/media/:id/subtitles/:subtitleId/ocr",
+    "controller": "MediaController",
+    "handler": "ocrSubtitle",
+    "file": "src/modules/media/media.controller.ts",
+    "line": 701,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Create, SubtitleFile)"
+  },
+  {
+    "method": "POST",
+    "path": "/api/media/:id/subtitles/:subtitleId/post-process",
+    "controller": "MediaController",
+    "handler": "postProcessSubtitle",
+    "file": "src/modules/media/media.controller.ts",
+    "line": 859,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Create, SubtitleFile)"
+  },
+  {
+    "method": "POST",
+    "path": "/api/media/:id/subtitles/:subtitleId/sync",
+    "controller": "MediaController",
+    "handler": "syncSubtitle",
+    "file": "src/modules/media/media.controller.ts",
+    "line": 818,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Create, SubtitleFile)"
+  },
+  {
+    "method": "POST",
+    "path": "/api/media/:id/subtitles/:subtitleId/translate",
+    "controller": "MediaController",
+    "handler": "translateSubtitle",
+    "file": "src/modules/media/media.controller.ts",
+    "line": 713,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Create, SubtitleFile)"
+  },
+  {
+    "method": "POST",
+    "path": "/api/media/:id/subtitles/:subtitleId/upgrade",
+    "controller": "MediaController",
+    "handler": "upgradeSubtitle",
+    "file": "src/modules/media/media.controller.ts",
+    "line": 875,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Create, SubtitleFile)"
+  },
+  {
+    "method": "POST",
+    "path": "/api/media/:id/subtitles/:subtitleId/validate",
+    "controller": "MediaController",
+    "handler": "validateSubtitle",
+    "file": "src/modules/media/media.controller.ts",
+    "line": 741,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Update, SubtitleFile)"
+  },
+  {
+    "method": "POST",
+    "path": "/api/media/:id/subtitles/auto",
+    "controller": "MediaController",
+    "handler": "autoSubtitle",
+    "file": "src/modules/media/media.controller.ts",
+    "line": 650,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Create, SubtitleFile)"
+  },
+  {
+    "method": "POST",
+    "path": "/api/media/:id/subtitles/download",
+    "controller": "MediaController",
+    "handler": "downloadSubtitle",
+    "file": "src/modules/media/media.controller.ts",
+    "line": 752,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Create, SubtitleFile)"
+  },
+  {
+    "method": "GET",
+    "path": "/api/media/:id/subtitles/search",
+    "controller": "MediaController",
+    "handler": "searchSubtitles",
+    "file": "src/modules/media/media.controller.ts",
+    "line": 592,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, SubtitleFile)"
+  },
+  {
+    "method": "POST",
+    "path": "/api/media/:id/subtitles/search-missing",
+    "controller": "MediaController",
+    "handler": "searchMissingSubtitles",
+    "file": "src/modules/media/media.controller.ts",
+    "line": 690,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Create, SubtitleFile)"
+  },
+  {
+    "method": "POST",
+    "path": "/api/media/:id/subtitles/upload",
+    "controller": "MediaController",
+    "handler": "uploadSubtitle",
+    "file": "src/modules/media/media.controller.ts",
+    "line": 770,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Create, SubtitleFile)",
+    "upload": "FileInterceptor"
+  },
+  {
+    "method": "GET",
+    "path": "/api/media/:id/tracking",
+    "controller": "MediaController",
+    "handler": "tracking",
+    "file": "src/modules/media/media.controller.ts",
+    "line": 217,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, Media)"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/media/bulk",
+    "controller": "MediaController",
+    "handler": "bulkUpdate",
+    "file": "src/modules/media/media.controller.ts",
+    "line": 211,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Update, Media)",
+    "body": "BulkUpdateMediaDto"
+  },
+  {
+    "method": "GET",
+    "path": "/api/media/calendar",
+    "controller": "MediaController",
+    "handler": "calendar",
+    "file": "src/modules/media/media.controller.ts",
+    "line": 203,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, Media)",
+    "query": "CalendarQueryDto"
+  },
+  {
+    "method": "GET",
+    "path": "/api/media/collections",
+    "controller": "MediaController",
+    "handler": "collections",
+    "file": "src/modules/media/media.controller.ts",
+    "line": 188,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, Media)"
+  },
+  {
+    "method": "GET",
+    "path": "/api/media/counts",
+    "controller": "MediaController",
+    "handler": "counts",
+    "file": "src/modules/media/media.controller.ts",
+    "line": 147,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, Media)"
+  },
+  {
+    "method": "GET",
+    "path": "/api/media/counts-by-library",
+    "controller": "MediaController",
+    "handler": "countsByLibrary",
+    "file": "src/modules/media/media.controller.ts",
+    "line": 155,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, Media)"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/media/episodes/:episodeId",
+    "controller": "MediaController",
+    "handler": "patchEpisode",
+    "file": "src/modules/media/media.controller.ts",
+    "line": 993,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Update, Media)",
+    "body": "PatchMonitoredDto"
+  },
+  {
+    "method": "GET",
+    "path": "/api/media/genres",
+    "controller": "MediaController",
+    "handler": "genres",
+    "file": "src/modules/media/media.controller.ts",
+    "line": 173,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, Media)"
+  },
+  {
+    "method": "POST",
+    "path": "/api/media/import",
+    "controller": "MediaController",
+    "handler": "importMedia",
+    "file": "src/modules/media/media.controller.ts",
+    "line": 107,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Create, Media)",
+    "body": "ImportMediaDto"
+  },
+  {
+    "method": "POST",
+    "path": "/api/media/import/tmdb",
+    "controller": "MediaController",
+    "handler": "importFromTmdb",
+    "file": "src/modules/media/media.controller.ts",
+    "line": 101,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Create, Media)",
+    "body": "ImportTmdbDto"
+  },
+  {
+    "method": "GET",
+    "path": "/api/media/qualities",
+    "controller": "MediaController",
+    "handler": "qualityDefinitions",
+    "file": "src/modules/media/media.controller.ts",
+    "line": 163,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, Media)"
+  },
+  {
+    "method": "GET",
+    "path": "/api/media/recently-added",
+    "controller": "MediaController",
+    "handler": "recentlyAdded",
+    "file": "src/modules/media/media.controller.ts",
+    "line": 127,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, Media)",
+    "query": "RecentlyAddedDto"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/media/seasons/:seasonId",
+    "controller": "MediaController",
+    "handler": "patchSeason",
+    "file": "src/modules/media/media.controller.ts",
+    "line": 981,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Update, Media)",
+    "body": "PatchSeasonDto"
+  },
+  {
+    "method": "GET",
+    "path": "/api/media/sync-queue",
+    "controller": "MediaController",
+    "handler": "getSyncQueue",
+    "file": "src/modules/media/media.controller.ts",
+    "line": 853,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, SubtitleFile)"
+  },
+  {
+    "method": "GET",
+    "path": "/api/metadata/:provider/movie/:externalId",
+    "controller": "MetadataProvidersController",
+    "handler": "getMovieDetails",
+    "file": "src/modules/metadata-providers/metadata-providers.controller.ts",
+    "line": 170,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "GET",
+    "path": "/api/metadata/:provider/tv/:externalId",
+    "controller": "MetadataProvidersController",
+    "handler": "getTvDetails",
+    "file": "src/modules/metadata-providers/metadata-providers.controller.ts",
+    "line": 181,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "GET",
+    "path": "/api/metadata/:provider/tv/:externalId/season-stubs",
+    "controller": "MetadataProvidersController",
+    "handler": "getSeasonStubs",
+    "file": "src/modules/metadata-providers/metadata-providers.controller.ts",
+    "line": 205,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "GET",
+    "path": "/api/metadata/:provider/tv/:externalId/seasons",
+    "controller": "MetadataProvidersController",
+    "handler": "getTvSeasons",
+    "file": "src/modules/metadata-providers/metadata-providers.controller.ts",
+    "line": 192,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "GET",
+    "path": "/api/metadata/discover/movie",
+    "controller": "MetadataProvidersController",
+    "handler": "discoverMovies",
+    "file": "src/modules/metadata-providers/metadata-providers.controller.ts",
+    "line": 128,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "GET",
+    "path": "/api/metadata/discover/tv",
+    "controller": "MetadataProvidersController",
+    "handler": "discoverTv",
+    "file": "src/modules/metadata-providers/metadata-providers.controller.ts",
+    "line": 142,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "GET",
+    "path": "/api/metadata/genres/movie",
+    "controller": "MetadataProvidersController",
+    "handler": "movieGenres",
+    "file": "src/modules/metadata-providers/metadata-providers.controller.ts",
+    "line": 118,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "GET",
+    "path": "/api/metadata/genres/tv",
+    "controller": "MetadataProvidersController",
+    "handler": "tvGenres",
+    "file": "src/modules/metadata-providers/metadata-providers.controller.ts",
+    "line": 123,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "GET",
+    "path": "/api/metadata/movie/:tmdbId",
+    "controller": "MetadataProvidersController",
+    "handler": "getMovieDetailsTmdb",
+    "file": "src/modules/metadata-providers/metadata-providers.controller.ts",
+    "line": 218,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "GET",
+    "path": "/api/metadata/popular/movie",
+    "controller": "MetadataProvidersController",
+    "handler": "popularMovies",
+    "file": "src/modules/metadata-providers/metadata-providers.controller.ts",
+    "line": 96,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "GET",
+    "path": "/api/metadata/popular/tv",
+    "controller": "MetadataProvidersController",
+    "handler": "popularTv",
+    "file": "src/modules/metadata-providers/metadata-providers.controller.ts",
+    "line": 156,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "GET",
+    "path": "/api/metadata/search/movie",
+    "controller": "MetadataProvidersController",
+    "handler": "searchMovie",
+    "file": "src/modules/metadata-providers/metadata-providers.controller.ts",
+    "line": 52,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "GET",
+    "path": "/api/metadata/search/tv",
+    "controller": "MetadataProvidersController",
+    "handler": "searchTv",
+    "file": "src/modules/metadata-providers/metadata-providers.controller.ts",
+    "line": 69,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "GET",
+    "path": "/api/metadata/trending/movie",
+    "controller": "MetadataProvidersController",
+    "handler": "trendingMovies",
+    "file": "src/modules/metadata-providers/metadata-providers.controller.ts",
+    "line": 88,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "GET",
+    "path": "/api/metadata/trending/tv",
+    "controller": "MetadataProvidersController",
+    "handler": "trendingTv",
+    "file": "src/modules/metadata-providers/metadata-providers.controller.ts",
+    "line": 108,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "GET",
+    "path": "/api/metadata/tv/:tmdbId",
+    "controller": "MetadataProvidersController",
+    "handler": "getTvDetailsTmdb",
+    "file": "src/modules/metadata-providers/metadata-providers.controller.ts",
+    "line": 223,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "GET",
+    "path": "/api/metadata/tv/:tmdbId/seasons",
+    "controller": "MetadataProvidersController",
+    "handler": "getTvSeasonsTmdb",
+    "file": "src/modules/metadata-providers/metadata-providers.controller.ts",
+    "line": 230,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "GET",
+    "path": "/api/metadata/upcoming/movie",
+    "controller": "MetadataProvidersController",
+    "handler": "upcomingMovies",
+    "file": "src/modules/metadata-providers/metadata-providers.controller.ts",
+    "line": 102,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "GET",
+    "path": "/api/metadata/upcoming/tv",
+    "controller": "MetadataProvidersController",
+    "handler": "upcomingTv",
+    "file": "src/modules/metadata-providers/metadata-providers.controller.ts",
+    "line": 162,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "GET",
+    "path": "/api/notifications",
+    "controller": "NotificationsController",
+    "handler": "findAll",
+    "file": "src/modules/notifications/notifications.controller.ts",
+    "line": 36,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, 'Settings')"
+  },
+  {
+    "method": "POST",
+    "path": "/api/notifications",
+    "controller": "NotificationsController",
+    "handler": "create",
+    "file": "src/modules/notifications/notifications.controller.ts",
+    "line": 28,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, 'Settings')",
+    "body": "CreateNotificationConnectionDto"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/notifications/:id",
+    "controller": "NotificationsController",
+    "handler": "remove",
+    "file": "src/modules/notifications/notifications.controller.ts",
+    "line": 64,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, 'Settings')"
+  },
+  {
+    "method": "GET",
+    "path": "/api/notifications/:id",
+    "controller": "NotificationsController",
+    "handler": "findOne",
+    "file": "src/modules/notifications/notifications.controller.ts",
+    "line": 49,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, 'Settings')"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/notifications/:id",
+    "controller": "NotificationsController",
+    "handler": "update",
+    "file": "src/modules/notifications/notifications.controller.ts",
+    "line": 55,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, 'Settings')",
+    "body": "CreateNotificationConnectionDto"
+  },
+  {
+    "method": "POST",
+    "path": "/api/notifications/:id/test",
+    "controller": "NotificationsController",
+    "handler": "test",
+    "file": "src/modules/notifications/notifications.controller.ts",
+    "line": 70,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, 'Settings')"
+  },
+  {
+    "method": "GET",
+    "path": "/api/notifications/events",
+    "controller": "NotificationsController",
+    "handler": "events",
+    "file": "src/modules/notifications/notifications.controller.ts",
+    "line": 43,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, 'Settings')"
+  },
+  {
+    "method": "GET",
+    "path": "/api/persons/:id",
+    "controller": "PersonsController",
+    "handler": "findOne",
+    "file": "src/modules/persons/persons.controller.ts",
+    "line": 13,
+    "guards": [],
+    "policies": ""
+  },
+  {
+    "method": "GET",
+    "path": "/api/persons/:id/provider-credits",
+    "controller": "PersonsController",
+    "handler": "getProviderCredits",
+    "file": "src/modules/persons/persons.controller.ts",
+    "line": 18,
+    "guards": [],
+    "policies": ""
+  },
+  {
+    "method": "GET",
+    "path": "/api/persons/search",
+    "controller": "PersonsController",
+    "handler": "search",
+    "file": "src/modules/persons/persons.controller.ts",
+    "line": 8,
+    "guards": [],
+    "policies": ""
+  },
+  {
+    "method": "GET",
+    "path": "/api/playback/continue-watching",
+    "controller": "PlaybackController",
+    "handler": "continueWatching",
+    "file": "src/modules/playback/playback.controller.ts",
+    "line": 121,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/playback/hide/:mediaId",
+    "controller": "PlaybackController",
+    "handler": "hideFromContinueWatching",
+    "file": "src/modules/playback/playback.controller.ts",
+    "line": 497,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "GET",
+    "path": "/api/playback/history",
+    "controller": "PlaybackController",
+    "handler": "history",
+    "file": "src/modules/playback/playback.controller.ts",
+    "line": 136,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "GET",
+    "path": "/api/playback/media/:mediaId",
+    "controller": "PlaybackController",
+    "handler": "getMediaResumeInfo",
+    "file": "src/modules/playback/playback.controller.ts",
+    "line": 172,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "GET",
+    "path": "/api/playback/media/:mediaId/episode-progress",
+    "controller": "PlaybackController",
+    "handler": "getEpisodeProgress",
+    "file": "src/modules/playback/playback.controller.ts",
+    "line": 162,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "POST",
+    "path": "/api/playback/media/:mediaId/seasons/:seasonId/toggle-watched",
+    "controller": "PlaybackController",
+    "handler": "toggleSeasonWatched",
+    "file": "src/modules/playback/playback.controller.ts",
+    "line": 468,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/playback/media/:mediaId/state",
+    "controller": "PlaybackController",
+    "handler": "deleteState",
+    "file": "src/modules/playback/playback.controller.ts",
+    "line": 485,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "GET",
+    "path": "/api/playback/media/:mediaId/state",
+    "controller": "PlaybackController",
+    "handler": "getState",
+    "file": "src/modules/playback/playback.controller.ts",
+    "line": 182,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "PUT",
+    "path": "/api/playback/media/:mediaId/state",
+    "controller": "PlaybackController",
+    "handler": "updateState",
+    "file": "src/modules/playback/playback.controller.ts",
+    "line": 205,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "SessionTokenGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "POST",
+    "path": "/api/playback/media/:mediaId/toggle-series-watched",
+    "controller": "PlaybackController",
+    "handler": "toggleSeriesWatched",
+    "file": "src/modules/playback/playback.controller.ts",
+    "line": 453,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "POST",
+    "path": "/api/playback/media/:mediaId/toggle-watched",
+    "controller": "PlaybackController",
+    "handler": "toggleWatched",
+    "file": "src/modules/playback/playback.controller.ts",
+    "line": 434,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "GET",
+    "path": "/api/playback/media/:mediaId/watched-episodes",
+    "controller": "PlaybackController",
+    "handler": "getWatchedEpisodeIds",
+    "file": "src/modules/playback/playback.controller.ts",
+    "line": 152,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "GET",
+    "path": "/api/playback/recommendations",
+    "controller": "PlaybackController",
+    "handler": "recommendations",
+    "file": "src/modules/playback/playback.controller.ts",
+    "line": 65,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "POST",
+    "path": "/api/playback/recommendations/:mediaId/dismiss",
+    "controller": "PlaybackController",
+    "handler": "dismissRecommendation",
+    "file": "src/modules/playback/playback.controller.ts",
+    "line": 92,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": "",
+    "httpCode": 204
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/playback/recommendations/dismissed",
+    "controller": "PlaybackController",
+    "handler": "resetDismissals",
+    "file": "src/modules/playback/playback.controller.ts",
+    "line": 109,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "GET",
+    "path": "/api/playback/recommendations/dismissed/count",
+    "controller": "PlaybackController",
+    "handler": "dismissalsCount",
+    "file": "src/modules/playback/playback.controller.ts",
+    "line": 103,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "POST",
+    "path": "/api/playback/sessions/:sessionId/events",
+    "controller": "PlaybackController",
+    "handler": "postQoeEvents",
+    "file": "src/modules/playback/playback.controller.ts",
+    "line": 409,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "SessionTokenGuard"
+    ],
+    "policies": "",
+    "httpCode": 204
+  },
+  {
+    "method": "GET",
+    "path": "/api/playback/watched-ids",
+    "controller": "PlaybackController",
+    "handler": "watchedIds",
+    "file": "src/modules/playback/playback.controller.ts",
+    "line": 114,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "GET",
+    "path": "/api/playlists",
+    "controller": "PlaylistsController",
+    "handler": "findMine",
+    "file": "src/modules/playlists/playlists.controller.ts",
+    "line": 38,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, Playlist)"
+  },
+  {
+    "method": "POST",
+    "path": "/api/playlists",
+    "controller": "PlaylistsController",
+    "handler": "create",
+    "file": "src/modules/playlists/playlists.controller.ts",
+    "line": 44,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Create, Playlist)",
+    "body": "CreatePlaylistDto"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/playlists/:id",
+    "controller": "PlaylistsController",
+    "handler": "remove",
+    "file": "src/modules/playlists/playlists.controller.ts",
+    "line": 66,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Delete, Playlist)"
+  },
+  {
+    "method": "GET",
+    "path": "/api/playlists/:id",
+    "controller": "PlaylistsController",
+    "handler": "findOne",
+    "file": "src/modules/playlists/playlists.controller.ts",
+    "line": 50,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, Playlist)"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/playlists/:id",
+    "controller": "PlaylistsController",
+    "handler": "update",
+    "file": "src/modules/playlists/playlists.controller.ts",
+    "line": 56,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Update, Playlist)",
+    "body": "UpdatePlaylistDto"
+  },
+  {
+    "method": "GET",
+    "path": "/api/playlists/:id/items",
+    "controller": "PlaylistsController",
+    "handler": "getItems",
+    "file": "src/modules/playlists/playlists.controller.ts",
+    "line": 72,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, Playlist)"
+  },
+  {
+    "method": "POST",
+    "path": "/api/playlists/:id/items",
+    "controller": "PlaylistsController",
+    "handler": "addItem",
+    "file": "src/modules/playlists/playlists.controller.ts",
+    "line": 78,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Update, Playlist)",
+    "body": "AddPlaylistItemDto"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/playlists/:id/items/:itemId",
+    "controller": "PlaylistsController",
+    "handler": "removeItem",
+    "file": "src/modules/playlists/playlists.controller.ts",
+    "line": 108,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Update, Playlist)"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/playlists/:id/items/by-media/:mediaId",
+    "controller": "PlaylistsController",
+    "handler": "removeItemsByMedia",
+    "file": "src/modules/playlists/playlists.controller.ts",
+    "line": 98,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Update, Playlist)"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/playlists/:id/items/order",
+    "controller": "PlaylistsController",
+    "handler": "reorder",
+    "file": "src/modules/playlists/playlists.controller.ts",
+    "line": 88,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Update, Playlist)",
+    "body": "ReorderPlaylistItemsDto"
+  },
+  {
+    "method": "GET",
+    "path": "/api/playlists/:id/members",
+    "controller": "PlaylistsController",
+    "handler": "getMembers",
+    "file": "src/modules/playlists/playlists.controller.ts",
+    "line": 130,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, Playlist)"
+  },
+  {
+    "method": "POST",
+    "path": "/api/playlists/:id/members",
+    "controller": "PlaylistsController",
+    "handler": "addMember",
+    "file": "src/modules/playlists/playlists.controller.ts",
+    "line": 136,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Update, Playlist)",
+    "body": "AddPlaylistMemberDto"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/playlists/:id/members/:userId",
+    "controller": "PlaylistsController",
+    "handler": "removeMember",
+    "file": "src/modules/playlists/playlists.controller.ts",
+    "line": 146,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Update, Playlist)"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/playlists/:id/save",
+    "controller": "PlaylistsController",
+    "handler": "unsave",
+    "file": "src/modules/playlists/playlists.controller.ts",
+    "line": 124,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, Playlist)"
+  },
+  {
+    "method": "POST",
+    "path": "/api/playlists/:id/save",
+    "controller": "PlaylistsController",
+    "handler": "save",
+    "file": "src/modules/playlists/playlists.controller.ts",
+    "line": 118,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, Playlist)"
+  },
+  {
+    "method": "GET",
+    "path": "/api/plugins",
+    "controller": "PluginsController",
+    "handler": "list",
+    "file": "src/modules/plugins/plugins.controller.ts",
+    "line": 28,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, 'Settings')"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/plugins/:pluginId",
+    "controller": "PluginsController",
+    "handler": "uninstall",
+    "file": "src/modules/plugins/plugins.controller.ts",
+    "line": 81,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, 'Settings')",
+    "httpCode": 204
+  },
+  {
+    "method": "ALL",
+    "path": "/api/plugins/:pluginId/*splat",
+    "controller": "PluginProxyController",
+    "handler": "proxy",
+    "file": "src/modules/plugins/proxy/plugin-proxy.controller.ts",
+    "line": 54,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PluginRouteGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "POST",
+    "path": "/api/plugins/:pluginId/disable",
+    "controller": "PluginsController",
+    "handler": "disable",
+    "file": "src/modules/plugins/plugins.controller.ts",
+    "line": 58,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, 'Settings')"
+  },
+  {
+    "method": "POST",
+    "path": "/api/plugins/:pluginId/enable",
+    "controller": "PluginsController",
+    "handler": "enable",
+    "file": "src/modules/plugins/plugins.controller.ts",
+    "line": 74,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, 'Settings')"
+  },
+  {
+    "method": "POST",
+    "path": "/api/plugins/:pluginId/events/test",
+    "controller": "PluginsController",
+    "handler": "testEventDelivery",
+    "file": "src/modules/plugins/plugins.controller.ts",
+    "line": 66,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, 'Settings')"
+  },
+  {
+    "method": "GET",
+    "path": "/api/plugins/:pluginId/export",
+    "controller": "PluginBackupController",
+    "handler": "export",
+    "file": "src/modules/plugins/plugin-backup.controller.ts",
+    "line": 15,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, 'Settings')"
+  },
+  {
+    "method": "POST",
+    "path": "/api/plugins/:pluginId/import",
+    "controller": "PluginBackupController",
+    "handler": "import",
+    "file": "src/modules/plugins/plugin-backup.controller.ts",
+    "line": 21,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, 'Settings')"
+  },
+  {
+    "method": "GET",
+    "path": "/api/plugins/:pluginId/logo",
+    "controller": "PluginLogoController",
+    "handler": "logo",
+    "file": "src/modules/plugins/plugin-logo.controller.ts",
+    "line": 16,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, 'Settings')"
+  },
+  {
+    "method": "POST",
+    "path": "/api/plugins/:pluginId/restart",
+    "controller": "PluginsController",
+    "handler": "restart",
+    "file": "src/modules/plugins/plugins.controller.ts",
+    "line": 50,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, 'Settings')",
+    "httpCode": 204
+  },
+  {
+    "method": "POST",
+    "path": "/api/plugins/import/confirm",
+    "controller": "PluginImportController",
+    "handler": "confirm",
+    "file": "src/modules/plugins/plugin-import.controller.ts",
+    "line": 29,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, 'Settings')",
+    "body": "ConfirmImportDto"
+  },
+  {
+    "method": "POST",
+    "path": "/api/plugins/import/inspect",
+    "controller": "PluginImportController",
+    "handler": "inspect",
+    "file": "src/modules/plugins/plugin-import.controller.ts",
+    "line": 17,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, 'Settings')",
+    "upload": "FileInterceptor"
+  },
+  {
+    "method": "GET",
+    "path": "/api/plugins/metrics",
+    "controller": "PluginsController",
+    "handler": "metrics",
+    "file": "src/modules/plugins/plugins.controller.ts",
+    "line": 36,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, 'Settings')"
+  },
+  {
+    "method": "GET",
+    "path": "/api/plugins/sources",
+    "controller": "PluginSourcesController",
+    "handler": "list",
+    "file": "src/modules/plugins/plugin-sources.controller.ts",
+    "line": 65,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, 'Settings')"
+  },
+  {
+    "method": "POST",
+    "path": "/api/plugins/sources",
+    "controller": "PluginSourcesController",
+    "handler": "create",
+    "file": "src/modules/plugins/plugin-sources.controller.ts",
+    "line": 72,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, 'Settings')",
+    "body": "CreatePluginSourceDto"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/plugins/sources/:id",
+    "controller": "PluginSourcesController",
+    "handler": "remove",
+    "file": "src/modules/plugins/plugin-sources.controller.ts",
+    "line": 100,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, 'Settings')",
+    "httpCode": 204
+  },
+  {
+    "method": "PUT",
+    "path": "/api/plugins/sources/:id",
+    "controller": "PluginSourcesController",
+    "handler": "update",
+    "file": "src/modules/plugins/plugin-sources.controller.ts",
+    "line": 83,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, 'Settings')",
+    "body": "UpdatePluginSourceDto"
+  },
+  {
+    "method": "GET",
+    "path": "/api/plugins/sources/:id/catalog",
+    "controller": "PluginSourcesController",
+    "handler": "getCatalog",
+    "file": "src/modules/plugins/plugin-sources.controller.ts",
+    "line": 108,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, 'Settings')"
+  },
+  {
+    "method": "POST",
+    "path": "/api/plugins/sources/:id/inspect",
+    "controller": "PluginSourcesController",
+    "handler": "inspect",
+    "file": "src/modules/plugins/plugin-sources.controller.ts",
+    "line": 131,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, 'Settings')",
+    "body": "InspectFromCatalogDto"
+  },
+  {
+    "method": "POST",
+    "path": "/api/plugins/sources/:id/refresh",
+    "controller": "PluginSourcesController",
+    "handler": "refresh",
+    "file": "src/modules/plugins/plugin-sources.controller.ts",
+    "line": 123,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, 'Settings')"
+  },
+  {
+    "method": "GET",
+    "path": "/api/plugins/ui",
+    "controller": "PluginUiController",
+    "handler": "list",
+    "file": "src/modules/plugins/plugin-ui.controller.ts",
+    "line": 100,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "GET",
+    "path": "/api/profiles/language",
+    "controller": "ProfilesController",
+    "handler": "findAllLanguage",
+    "file": "src/modules/profiles/profiles.controller.ts",
+    "line": 73,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, LanguageProfile)"
+  },
+  {
+    "method": "POST",
+    "path": "/api/profiles/language",
+    "controller": "ProfilesController",
+    "handler": "createLanguage",
+    "file": "src/modules/profiles/profiles.controller.ts",
+    "line": 67,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Create, LanguageProfile)",
+    "body": "CreateLanguageProfileDto"
+  },
+  {
+    "method": "GET",
+    "path": "/api/profiles/language-definitions",
+    "controller": "ProfilesController",
+    "handler": "languageDefinitions",
+    "file": "src/modules/profiles/profiles.controller.ts",
+    "line": 61,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, LanguageProfile)"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/profiles/language/:id",
+    "controller": "ProfilesController",
+    "handler": "removeLanguage",
+    "file": "src/modules/profiles/profiles.controller.ts",
+    "line": 94,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Delete, LanguageProfile)"
+  },
+  {
+    "method": "GET",
+    "path": "/api/profiles/language/:id",
+    "controller": "ProfilesController",
+    "handler": "findOneLanguage",
+    "file": "src/modules/profiles/profiles.controller.ts",
+    "line": 79,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, LanguageProfile)"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/profiles/language/:id",
+    "controller": "ProfilesController",
+    "handler": "updateLanguage",
+    "file": "src/modules/profiles/profiles.controller.ts",
+    "line": 85,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Update, LanguageProfile)",
+    "body": "CreateLanguageProfileDto"
+  },
+  {
+    "method": "GET",
+    "path": "/api/profiles/quality",
+    "controller": "ProfilesController",
+    "handler": "findAllQuality",
+    "file": "src/modules/profiles/profiles.controller.ts",
+    "line": 34,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, QualityProfile)"
+  },
+  {
+    "method": "POST",
+    "path": "/api/profiles/quality",
+    "controller": "ProfilesController",
+    "handler": "createQuality",
+    "file": "src/modules/profiles/profiles.controller.ts",
+    "line": 28,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Create, QualityProfile)",
+    "body": "CreateQualityProfileDto"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/profiles/quality/:id",
+    "controller": "ProfilesController",
+    "handler": "removeQuality",
+    "file": "src/modules/profiles/profiles.controller.ts",
+    "line": 55,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Delete, QualityProfile)"
+  },
+  {
+    "method": "GET",
+    "path": "/api/profiles/quality/:id",
+    "controller": "ProfilesController",
+    "handler": "findOneQuality",
+    "file": "src/modules/profiles/profiles.controller.ts",
+    "line": 40,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, QualityProfile)"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/profiles/quality/:id",
+    "controller": "ProfilesController",
+    "handler": "updateQuality",
+    "file": "src/modules/profiles/profiles.controller.ts",
+    "line": 46,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Update, QualityProfile)",
+    "body": "CreateQualityProfileDto"
+  },
+  {
+    "method": "GET",
+    "path": "/api/quality-definitions",
+    "controller": "QualityDefinitionsController",
+    "handler": "findAll",
+    "file": "src/modules/profiles/quality-definitions.controller.ts",
+    "line": 14,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, 'Settings')"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/quality-definitions",
+    "controller": "QualityDefinitionsController",
+    "handler": "updateAll",
+    "file": "src/modules/profiles/quality-definitions.controller.ts",
+    "line": 26,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Update, 'Settings')",
+    "body": "UpdateQualityDefinitionsDto"
+  },
+  {
+    "method": "POST",
+    "path": "/api/quality-definitions/reset",
+    "controller": "QualityDefinitionsController",
+    "handler": "getDefaults",
+    "file": "src/modules/profiles/quality-definitions.controller.ts",
+    "line": 20,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Update, 'Settings')"
+  },
+  {
+    "method": "POST",
+    "path": "/api/remote/:targetId/command",
+    "controller": "RemoteController",
+    "handler": "sendCommand",
+    "file": "src/modules/remote/remote.controller.ts",
+    "line": 111,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard",
+      "SessionTokenGuard"
+    ],
+    "policies": "() => true",
+    "body": "RemoteCommandDto",
+    "httpCode": 202
+  },
+  {
+    "method": "GET",
+    "path": "/api/remote/commands",
+    "controller": "RemoteController",
+    "handler": "drainCommands",
+    "file": "src/modules/remote/remote.controller.ts",
+    "line": 56,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard",
+      "SessionTokenGuard"
+    ],
+    "policies": "() => true"
+  },
+  {
+    "method": "GET",
+    "path": "/api/remote/grants",
+    "controller": "RemoteController",
+    "handler": "listGrants",
+    "file": "src/modules/remote/remote.controller.ts",
+    "line": 87,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard",
+      "SessionTokenGuard"
+    ],
+    "policies": "() => true"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/remote/grants/:id",
+    "controller": "RemoteController",
+    "handler": "revokeGrant",
+    "file": "src/modules/remote/remote.controller.ts",
+    "line": 101,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard",
+      "SessionTokenGuard"
+    ],
+    "policies": "() => true",
+    "httpCode": 204
+  },
+  {
+    "method": "POST",
+    "path": "/api/remote/grants/claim",
+    "controller": "RemoteController",
+    "handler": "claimGrant",
+    "file": "src/modules/remote/remote.controller.ts",
+    "line": 76,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard",
+      "SessionTokenGuard"
+    ],
+    "policies": "() => true",
+    "body": "ClaimGrantDto"
+  },
+  {
+    "method": "POST",
+    "path": "/api/remote/grants/code",
+    "controller": "RemoteController",
+    "handler": "createGrantCode",
+    "file": "src/modules/remote/remote.controller.ts",
+    "line": 66,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard",
+      "SessionTokenGuard"
+    ],
+    "policies": "() => true",
+    "body": "CreateGrantCodeDto"
+  },
+  {
+    "method": "POST",
+    "path": "/api/remote/register",
+    "controller": "RemoteController",
+    "handler": "register",
+    "file": "src/modules/remote/remote.controller.ts",
+    "line": 47,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard",
+      "SessionTokenGuard"
+    ],
+    "policies": "() => true",
+    "body": "RemoteRegisterDto"
+  },
+  {
+    "method": "GET",
+    "path": "/api/remote/targets",
+    "controller": "RemoteController",
+    "handler": "listTargets",
+    "file": "src/modules/remote/remote.controller.ts",
+    "line": 36,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard",
+      "SessionTokenGuard"
+    ],
+    "policies": "() => true"
+  },
+  {
+    "method": "GET",
+    "path": "/api/requests",
+    "controller": "RequestsController",
+    "handler": "findAll",
+    "file": "src/modules/requests/requests.controller.ts",
+    "line": 39,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, FliksRequest)",
+    "query": "ListRequestsDto"
+  },
+  {
+    "method": "POST",
+    "path": "/api/requests",
+    "controller": "RequestsController",
+    "handler": "create",
+    "file": "src/modules/requests/requests.controller.ts",
+    "line": 33,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Create, FliksRequest)",
+    "body": "CreateRequestDto"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/requests/:id",
+    "controller": "RequestsController",
+    "handler": "remove",
+    "file": "src/modules/requests/requests.controller.ts",
+    "line": 71,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Delete, FliksRequest)"
+  },
+  {
+    "method": "GET",
+    "path": "/api/requests/:id",
+    "controller": "RequestsController",
+    "handler": "findOne",
+    "file": "src/modules/requests/requests.controller.ts",
+    "line": 55,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, FliksRequest)"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/requests/:id",
+    "controller": "RequestsController",
+    "handler": "update",
+    "file": "src/modules/requests/requests.controller.ts",
+    "line": 61,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Update, FliksRequest)",
+    "body": "UpdateRequestDto"
+  },
+  {
+    "method": "POST",
+    "path": "/api/requests/:id/approve",
+    "controller": "RequestsController",
+    "handler": "approve",
+    "file": "src/modules/requests/requests.controller.ts",
+    "line": 77,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Approve, FliksRequest)"
+  },
+  {
+    "method": "GET",
+    "path": "/api/requests/:id/comments",
+    "controller": "RequestsController",
+    "handler": "getComments",
+    "file": "src/modules/requests/requests.controller.ts",
+    "line": 104,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, FliksRequest)"
+  },
+  {
+    "method": "POST",
+    "path": "/api/requests/:id/comments",
+    "controller": "RequestsController",
+    "handler": "addComment",
+    "file": "src/modules/requests/requests.controller.ts",
+    "line": 94,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, FliksRequest)",
+    "body": "CreateCommentDto"
+  },
+  {
+    "method": "POST",
+    "path": "/api/requests/:id/decline",
+    "controller": "RequestsController",
+    "handler": "decline",
+    "file": "src/modules/requests/requests.controller.ts",
+    "line": 83,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Decline, FliksRequest)",
+    "body": "DeclineRequestDto"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/requests/comments/:commentId",
+    "controller": "RequestsController",
+    "handler": "removeComment",
+    "file": "src/modules/requests/requests.controller.ts",
+    "line": 113,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, FliksRequest)"
+  },
+  {
+    "method": "GET",
+    "path": "/api/requests/title-state",
+    "controller": "RequestsController",
+    "handler": "titleState",
+    "file": "src/modules/requests/requests.controller.ts",
+    "line": 46,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Create, FliksRequest)"
+  },
+  {
+    "method": "GET",
+    "path": "/api/roles",
+    "controller": "RolesController",
+    "handler": "findAll",
+    "file": "src/modules/roles/roles.controller.ts",
+    "line": 26,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, Role)"
+  },
+  {
+    "method": "POST",
+    "path": "/api/roles",
+    "controller": "RolesController",
+    "handler": "create",
+    "file": "src/modules/roles/roles.controller.ts",
+    "line": 44,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, Role)",
+    "body": "CreateRoleDto"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/roles/:id",
+    "controller": "RolesController",
+    "handler": "remove",
+    "file": "src/modules/roles/roles.controller.ts",
+    "line": 56,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, Role)"
+  },
+  {
+    "method": "GET",
+    "path": "/api/roles/:id",
+    "controller": "RolesController",
+    "handler": "findOne",
+    "file": "src/modules/roles/roles.controller.ts",
+    "line": 38,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, Role)"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/roles/:id",
+    "controller": "RolesController",
+    "handler": "update",
+    "file": "src/modules/roles/roles.controller.ts",
+    "line": 50,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, Role)",
+    "body": "UpdateRoleDto"
+  },
+  {
+    "method": "GET",
+    "path": "/api/roles/permissions",
+    "controller": "RolesController",
+    "handler": "getPermissions",
+    "file": "src/modules/roles/roles.controller.ts",
+    "line": 32,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, Role)"
+  },
+  {
+    "method": "GET",
+    "path": "/api/settings",
+    "controller": "SettingsController",
+    "handler": "getAll",
+    "file": "src/modules/settings/settings.controller.ts",
+    "line": 26,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, 'Settings')"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/settings",
+    "controller": "SettingsController",
+    "handler": "setBulk",
+    "file": "src/modules/settings/settings.controller.ts",
+    "line": 45,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, 'Settings')",
+    "body": "SetBulkDto"
+  },
+  {
+    "method": "GET",
+    "path": "/api/settings/:key",
+    "controller": "SettingsController",
+    "handler": "getOne",
+    "file": "src/modules/settings/settings.controller.ts",
+    "line": 32,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, 'Settings')"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/settings/:key",
+    "controller": "SettingsController",
+    "handler": "setOne",
+    "file": "src/modules/settings/settings.controller.ts",
+    "line": 38,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, 'Settings')",
+    "body": "SetSettingDto"
+  },
+  {
+    "method": "GET",
+    "path": "/api/setup-checklist",
+    "controller": "SetupChecklistController",
+    "handler": "list",
+    "file": "src/modules/setup-checklist/setup-checklist.controller.ts",
+    "line": 24,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, 'Settings')"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/setup-checklist/:key/dismiss",
+    "controller": "SetupChecklistController",
+    "handler": "undismiss",
+    "file": "src/modules/setup-checklist/setup-checklist.controller.ts",
+    "line": 37,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, 'Settings')"
+  },
+  {
+    "method": "POST",
+    "path": "/api/setup-checklist/:key/dismiss",
+    "controller": "SetupChecklistController",
+    "handler": "dismiss",
+    "file": "src/modules/setup-checklist/setup-checklist.controller.ts",
+    "line": 30,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, 'Settings')"
+  },
+  {
+    "method": "GET",
+    "path": "/api/social/connectable",
+    "controller": "SocialController",
+    "handler": "connectable",
+    "file": "src/modules/social/social.controller.ts",
+    "line": 33,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/social/follow/:userId",
+    "controller": "SocialController",
+    "handler": "unfollow",
+    "file": "src/modules/social/social.controller.ts",
+    "line": 91,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "POST",
+    "path": "/api/social/follow/:userId",
+    "controller": "SocialController",
+    "handler": "follow",
+    "file": "src/modules/social/social.controller.ts",
+    "line": 86,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "POST",
+    "path": "/api/social/recommend",
+    "controller": "SocialController",
+    "handler": "recommend",
+    "file": "src/modules/social/social.controller.ts",
+    "line": 52,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": "",
+    "body": "RecommendContentDto"
+  },
+  {
+    "method": "GET",
+    "path": "/api/social/recommendations",
+    "controller": "SocialController",
+    "handler": "followingRecommendations",
+    "file": "src/modules/social/social.controller.ts",
+    "line": 38,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "POST",
+    "path": "/api/social/recommendations/:id/dismiss",
+    "controller": "SocialController",
+    "handler": "dismissRecommendation",
+    "file": "src/modules/social/social.controller.ts",
+    "line": 73,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "GET",
+    "path": "/api/social/recommendations/received",
+    "controller": "SocialController",
+    "handler": "receivedRecommendations",
+    "file": "src/modules/social/social.controller.ts",
+    "line": 59,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "GET",
+    "path": "/api/social/recommendations/sent",
+    "controller": "SocialController",
+    "handler": "sentRecommendations",
+    "file": "src/modules/social/social.controller.ts",
+    "line": 68,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "GET",
+    "path": "/api/social/requests",
+    "controller": "SocialController",
+    "handler": "requests",
+    "file": "src/modules/social/social.controller.ts",
+    "line": 81,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "POST",
+    "path": "/api/social/requests/:userId/accept",
+    "controller": "SocialController",
+    "handler": "accept",
+    "file": "src/modules/social/social.controller.ts",
+    "line": 96,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "POST",
+    "path": "/api/social/requests/:userId/reject",
+    "controller": "SocialController",
+    "handler": "reject",
+    "file": "src/modules/social/social.controller.ts",
+    "line": 101,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "GET",
+    "path": "/api/social/search",
+    "controller": "SocialController",
+    "handler": "search",
+    "file": "src/modules/social/social.controller.ts",
+    "line": 28,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "GET",
+    "path": "/api/social/users/:userId/followers",
+    "controller": "SocialController",
+    "handler": "followers",
+    "file": "src/modules/social/social.controller.ts",
+    "line": 106,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "GET",
+    "path": "/api/social/users/:userId/following",
+    "controller": "SocialController",
+    "handler": "following",
+    "file": "src/modules/social/social.controller.ts",
+    "line": 111,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "GET",
+    "path": "/api/social/users/:userId/profile",
+    "controller": "SocialController",
+    "handler": "profile",
+    "file": "src/modules/social/social.controller.ts",
+    "line": 116,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "GET",
+    "path": "/api/social/users/:userId/stats",
+    "controller": "SocialController",
+    "handler": "stats",
+    "file": "src/modules/social/social.controller.ts",
+    "line": 121,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "GET",
+    "path": "/api/stream/:mediaFileId/edl",
+    "controller": "StreamingController",
+    "handler": "edl",
+    "file": "src/modules/streaming/streaming.controller.ts",
+    "line": 159,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "POST",
+    "path": "/api/stream/:mediaFileId/playback-info",
+    "controller": "StreamingController",
+    "handler": "playbackInfo",
+    "file": "src/modules/streaming/streaming.controller.ts",
+    "line": 124,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": "",
+    "body": "DeviceProfileDto"
+  },
+  {
+    "method": "GET",
+    "path": "/api/stream/info/effective-settings",
+    "controller": "StreamingController",
+    "handler": "effectiveSettingsInfo",
+    "file": "src/modules/streaming/streaming.controller.ts",
+    "line": 101,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "GET",
+    "path": "/api/stream/info/gpus",
+    "controller": "StreamingController",
+    "handler": "gpusInfo",
+    "file": "src/modules/streaming/streaming.controller.ts",
+    "line": 118,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "GET",
+    "path": "/api/stream/info/hw-accel",
+    "controller": "StreamingController",
+    "handler": "hwAccelInfo",
+    "file": "src/modules/streaming/streaming.controller.ts",
+    "line": 89,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "GET",
+    "path": "/api/stream/info/qualities/:mediaFileId",
+    "controller": "StreamingController",
+    "handler": "downloadQualities",
+    "file": "src/modules/streaming/streaming.controller.ts",
+    "line": 74,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "GET",
+    "path": "/api/stream/info/tonemap-algos",
+    "controller": "StreamingController",
+    "handler": "tonemapAlgosInfo",
+    "file": "src/modules/streaming/streaming.controller.ts",
+    "line": 95,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/stream/sessions/:sessionId",
+    "controller": "StreamingController",
+    "handler": "stopLiveSession",
+    "file": "src/modules/streaming/streaming.controller.ts",
+    "line": 179,
+    "guards": [
+      "JwtOrApiKeyGuard"
+    ],
+    "policies": "",
+    "httpCode": 204
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/subtitles/blacklist",
+    "controller": "SubtitleActivityController",
+    "handler": "clearBlacklist",
+    "file": "src/modules/subtitles/subtitle-activity.controller.ts",
+    "line": 326,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Delete, SubtitleFile)"
+  },
+  {
+    "method": "GET",
+    "path": "/api/subtitles/blacklist",
+    "controller": "SubtitleActivityController",
+    "handler": "getBlacklist",
+    "file": "src/modules/subtitles/subtitle-activity.controller.ts",
+    "line": 295,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, SubtitleFile)"
+  },
+  {
+    "method": "POST",
+    "path": "/api/subtitles/blacklist",
+    "controller": "SubtitleActivityController",
+    "handler": "addToBlacklist",
+    "file": "src/modules/subtitles/subtitle-activity.controller.ts",
+    "line": 304,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Create, SubtitleFile)"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/subtitles/blacklist/:id",
+    "controller": "SubtitleActivityController",
+    "handler": "removeFromBlacklist",
+    "file": "src/modules/subtitles/subtitle-activity.controller.ts",
+    "line": 320,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Delete, SubtitleFile)"
+  },
+  {
+    "method": "GET",
+    "path": "/api/subtitles/health",
+    "controller": "SubtitleActivityController",
+    "handler": "health",
+    "file": "src/modules/subtitles/subtitle-activity.controller.ts",
+    "line": 183,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, SubtitleFile)"
+  },
+  {
+    "method": "GET",
+    "path": "/api/subtitles/history",
+    "controller": "SubtitleActivityController",
+    "handler": "history",
+    "file": "src/modules/subtitles/subtitle-activity.controller.ts",
+    "line": 59,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, SubtitleFile)"
+  },
+  {
+    "method": "GET",
+    "path": "/api/subtitles/missing",
+    "controller": "SubtitleActivityController",
+    "handler": "missing",
+    "file": "src/modules/subtitles/subtitle-activity.controller.ts",
+    "line": 222,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, SubtitleFile)"
+  },
+  {
+    "method": "GET",
+    "path": "/api/subtitles/providers",
+    "controller": "SubtitlesController",
+    "handler": "findAll",
+    "file": "src/modules/subtitles/subtitles.controller.ts",
+    "line": 59,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, SubtitleProvider)"
+  },
+  {
+    "method": "POST",
+    "path": "/api/subtitles/providers",
+    "controller": "SubtitlesController",
+    "handler": "create",
+    "file": "src/modules/subtitles/subtitles.controller.ts",
+    "line": 51,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Create, SubtitleProvider)",
+    "body": "CreateSubtitleProviderDto"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/subtitles/providers/:id",
+    "controller": "SubtitlesController",
+    "handler": "remove",
+    "file": "src/modules/subtitles/subtitles.controller.ts",
+    "line": 80,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Delete, SubtitleProvider)"
+  },
+  {
+    "method": "GET",
+    "path": "/api/subtitles/providers/:id",
+    "controller": "SubtitlesController",
+    "handler": "findOne",
+    "file": "src/modules/subtitles/subtitles.controller.ts",
+    "line": 65,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, SubtitleProvider)"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/subtitles/providers/:id",
+    "controller": "SubtitlesController",
+    "handler": "update",
+    "file": "src/modules/subtitles/subtitles.controller.ts",
+    "line": 71,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Update, SubtitleProvider)",
+    "body": "UpdateSubtitleProviderDto"
+  },
+  {
+    "method": "GET",
+    "path": "/api/subtitles/providers/:id/stats",
+    "controller": "SubtitlesController",
+    "handler": "getStats",
+    "file": "src/modules/subtitles/subtitles.controller.ts",
+    "line": 92,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, SubtitleProvider)"
+  },
+  {
+    "method": "POST",
+    "path": "/api/subtitles/providers/:id/test",
+    "controller": "SubtitlesController",
+    "handler": "testProvider",
+    "file": "src/modules/subtitles/subtitles.controller.ts",
+    "line": 86,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, SubtitleProvider)"
+  },
+  {
+    "method": "GET",
+    "path": "/api/subtitles/providers/rate-limits",
+    "controller": "SubtitlesController",
+    "handler": "getRateLimits",
+    "file": "src/modules/subtitles/subtitles.controller.ts",
+    "line": 35,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, SubtitleProvider)"
+  },
+  {
+    "method": "POST",
+    "path": "/api/subtitles/providers/test-connection",
+    "controller": "SubtitlesController",
+    "handler": "testConnection",
+    "file": "src/modules/subtitles/subtitles.controller.ts",
+    "line": 41,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Update, SubtitleProvider)",
+    "body": "TestSubtitleProviderDto"
+  },
+  {
+    "method": "GET",
+    "path": "/api/subtitles/stats",
+    "controller": "SubtitleActivityController",
+    "handler": "stats",
+    "file": "src/modules/subtitles/subtitle-activity.controller.ts",
+    "line": 121,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, SubtitleFile)"
+  },
+  {
+    "method": "GET",
+    "path": "/api/subtitles/translation-providers",
+    "controller": "TranslationProvidersController",
+    "handler": "findAll",
+    "file": "src/modules/subtitles/translation-providers.controller.ts",
+    "line": 58,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, TranslationProvider)"
+  },
+  {
+    "method": "POST",
+    "path": "/api/subtitles/translation-providers",
+    "controller": "TranslationProvidersController",
+    "handler": "create",
+    "file": "src/modules/subtitles/translation-providers.controller.ts",
+    "line": 52,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Create, TranslationProvider)",
+    "body": "CreateTranslationProviderDto"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/subtitles/translation-providers/:id",
+    "controller": "TranslationProvidersController",
+    "handler": "remove",
+    "file": "src/modules/subtitles/translation-providers.controller.ts",
+    "line": 79,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Delete, TranslationProvider)"
+  },
+  {
+    "method": "GET",
+    "path": "/api/subtitles/translation-providers/:id",
+    "controller": "TranslationProvidersController",
+    "handler": "findOne",
+    "file": "src/modules/subtitles/translation-providers.controller.ts",
+    "line": 64,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, TranslationProvider)"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/subtitles/translation-providers/:id",
+    "controller": "TranslationProvidersController",
+    "handler": "update",
+    "file": "src/modules/subtitles/translation-providers.controller.ts",
+    "line": 70,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Update, TranslationProvider)",
+    "body": "UpdateTranslationProviderDto"
+  },
+  {
+    "method": "POST",
+    "path": "/api/subtitles/translation-providers/:id/test",
+    "controller": "TranslationProvidersController",
+    "handler": "testProvider",
+    "file": "src/modules/subtitles/translation-providers.controller.ts",
+    "line": 85,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, TranslationProvider)"
+  },
+  {
+    "method": "GET",
+    "path": "/api/subtitles/translation-providers/available",
+    "controller": "TranslationProvidersController",
+    "handler": "listAvailable",
+    "file": "src/modules/subtitles/translation-providers.controller.ts",
+    "line": 34,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Create, SubtitleFile)"
+  },
+  {
+    "method": "POST",
+    "path": "/api/subtitles/translation-providers/models",
+    "controller": "TranslationProvidersController",
+    "handler": "listModels",
+    "file": "src/modules/subtitles/translation-providers.controller.ts",
+    "line": 46,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, TranslationProvider)",
+    "body": "TestTranslationProviderDto"
+  },
+  {
+    "method": "POST",
+    "path": "/api/subtitles/translation-providers/test-connection",
+    "controller": "TranslationProvidersController",
+    "handler": "testConnection",
+    "file": "src/modules/subtitles/translation-providers.controller.ts",
+    "line": 40,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, TranslationProvider)",
+    "body": "TestTranslationProviderDto"
+  },
+  {
+    "method": "GET",
+    "path": "/api/system/activity",
+    "controller": "SystemController",
+    "handler": "activity",
+    "file": "src/modules/scheduler/system.controller.ts",
+    "line": 298,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, 'Settings')"
+  },
+  {
+    "method": "POST",
+    "path": "/api/system/backup",
+    "controller": "SystemController",
+    "handler": "createBackup",
+    "file": "src/modules/scheduler/system.controller.ts",
+    "line": 365,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Create, 'Settings')"
+  },
+  {
+    "method": "GET",
+    "path": "/api/system/backups",
+    "controller": "SystemController",
+    "handler": "listBackups",
+    "file": "src/modules/scheduler/system.controller.ts",
+    "line": 371,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, 'Settings')"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/system/backups/:name",
+    "controller": "SystemController",
+    "handler": "deleteBackup",
+    "file": "src/modules/scheduler/system.controller.ts",
+    "line": 390,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, 'Settings')"
+  },
+  {
+    "method": "GET",
+    "path": "/api/system/backups/:name",
+    "controller": "SystemController",
+    "handler": "downloadBackup",
+    "file": "src/modules/scheduler/system.controller.ts",
+    "line": 383,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, 'Settings')"
+  },
+  {
+    "method": "GET",
+    "path": "/api/system/events",
+    "controller": "SystemController",
+    "handler": "events",
+    "file": "src/modules/scheduler/system.controller.ts",
+    "line": 234,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard",
+      "SessionTokenGuard"
+    ],
+    "policies": "() => true",
+    "sse": true
+  },
+  {
+    "method": "GET",
+    "path": "/api/system/health",
+    "controller": "SystemController",
+    "handler": "health",
+    "file": "src/modules/scheduler/system.controller.ts",
+    "line": 254,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, 'Settings')"
+  },
+  {
+    "method": "GET",
+    "path": "/api/system/liveness",
+    "controller": "LivenessController",
+    "handler": "liveness",
+    "file": "src/modules/scheduler/liveness.controller.ts",
+    "line": 7,
+    "guards": [],
+    "policies": ""
+  },
+  {
+    "method": "GET",
+    "path": "/api/system/logs",
+    "controller": "SystemController",
+    "handler": "getLogs",
+    "file": "src/modules/scheduler/system.controller.ts",
+    "line": 397,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, 'Settings')"
+  },
+  {
+    "method": "GET",
+    "path": "/api/system/qoe/sessions",
+    "controller": "QoeAdminController",
+    "handler": "sessions",
+    "file": "src/modules/qoe/qoe-admin.controller.ts",
+    "line": 34,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, 'Settings')"
+  },
+  {
+    "method": "GET",
+    "path": "/api/system/qoe/sessions/:sessionId",
+    "controller": "QoeAdminController",
+    "handler": "session",
+    "file": "src/modules/qoe/qoe-admin.controller.ts",
+    "line": 57,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, 'Settings')"
+  },
+  {
+    "method": "GET",
+    "path": "/api/system/qoe/summary",
+    "controller": "QoeAdminController",
+    "handler": "summary",
+    "file": "src/modules/qoe/qoe-admin.controller.ts",
+    "line": 65,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, 'Settings')"
+  },
+  {
+    "method": "POST",
+    "path": "/api/system/restart",
+    "controller": "SystemController",
+    "handler": "restart",
+    "file": "src/modules/scheduler/system.controller.ts",
+    "line": 267,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, 'Settings')"
+  },
+  {
+    "method": "POST",
+    "path": "/api/system/restore",
+    "controller": "SystemController",
+    "handler": "restore",
+    "file": "src/modules/scheduler/system.controller.ts",
+    "line": 377,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Create, 'Settings')"
+  },
+  {
+    "method": "GET",
+    "path": "/api/system/stats",
+    "controller": "SystemController",
+    "handler": "stats",
+    "file": "src/modules/scheduler/system.controller.ts",
+    "line": 321,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, 'Settings')"
+  },
+  {
+    "method": "GET",
+    "path": "/api/system/streams",
+    "controller": "SystemController",
+    "handler": "activeStreams",
+    "file": "src/modules/scheduler/system.controller.ts",
+    "line": 415,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, 'Settings')"
+  },
+  {
+    "method": "POST",
+    "path": "/api/system/streams/:sessionId/command",
+    "controller": "SystemController",
+    "handler": "sendPlayerCommand",
+    "file": "src/modules/scheduler/system.controller.ts",
+    "line": 763,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, 'Settings')"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/system/transcode-cache",
+    "controller": "SystemController",
+    "handler": "purgeAllTranscodeCache",
+    "file": "src/modules/scheduler/system.controller.ts",
+    "line": 718,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, 'Settings')"
+  },
+  {
+    "method": "GET",
+    "path": "/api/system/transcode-cache",
+    "controller": "SystemController",
+    "handler": "transcodeCacheStats",
+    "file": "src/modules/scheduler/system.controller.ts",
+    "line": 704,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, 'Settings')"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/system/transcode-cache/:mediaFileId",
+    "controller": "SystemController",
+    "handler": "purgeTranscodeCache",
+    "file": "src/modules/scheduler/system.controller.ts",
+    "line": 734,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, 'Settings')"
+  },
+  {
+    "method": "GET",
+    "path": "/api/system/update",
+    "controller": "SystemController",
+    "handler": "update",
+    "file": "src/modules/scheduler/system.controller.ts",
+    "line": 289,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, 'Settings')"
+  },
+  {
+    "method": "GET",
+    "path": "/api/system/version",
+    "controller": "SystemController",
+    "handler": "version",
+    "file": "src/modules/scheduler/system.controller.ts",
+    "line": 283,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "() => true"
+  },
+  {
+    "method": "GET",
+    "path": "/api/users",
+    "controller": "UsersController",
+    "handler": "findAll",
+    "file": "src/modules/users/users.controller.ts",
+    "line": 38,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, User)"
+  },
+  {
+    "method": "POST",
+    "path": "/api/users",
+    "controller": "UsersController",
+    "handler": "create",
+    "file": "src/modules/users/users.controller.ts",
+    "line": 45,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, User)",
+    "body": "CreateUserDto"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/users/:id",
+    "controller": "UsersController",
+    "handler": "remove",
+    "file": "src/modules/users/users.controller.ts",
+    "line": 98,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, User)"
+  },
+  {
+    "method": "GET",
+    "path": "/api/users/:id",
+    "controller": "UsersController",
+    "handler": "findOne",
+    "file": "src/modules/users/users.controller.ts",
+    "line": 73,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Read, User)"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/users/:id",
+    "controller": "UsersController",
+    "handler": "update",
+    "file": "src/modules/users/users.controller.ts",
+    "line": 87,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Update, User)",
+    "body": "UpdateUserDto"
+  },
+  {
+    "method": "GET",
+    "path": "/api/users/:id/stats",
+    "controller": "UsersController",
+    "handler": "getStats",
+    "file": "src/modules/users/users.controller.ts",
+    "line": 80,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Manage, User)"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/users/me/avatar",
+    "controller": "UsersController",
+    "handler": "clearAvatar",
+    "file": "src/modules/users/users.controller.ts",
+    "line": 66,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "AnyAuthenticatedUser"
+  },
+  {
+    "method": "POST",
+    "path": "/api/users/me/avatar",
+    "controller": "UsersController",
+    "handler": "setAvatar",
+    "file": "src/modules/users/users.controller.ts",
+    "line": 53,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "AnyAuthenticatedUser",
+    "upload": "FileInterceptor"
+  },
+  {
+    "method": "POST",
+    "path": "/engine/resolve",
+    "controller": "EngineResolverController",
+    "handler": "resolve",
+    "file": "src/modules/engine/engine-resolver.controller.ts",
+    "line": 39,
+    "guards": [
+      "EngineHostGuard"
+    ],
+    "policies": "",
+    "body": "ResolveRequestDto",
+    "httpCode": 200
+  }
+]
