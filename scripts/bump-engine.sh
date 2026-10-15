@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# Usage: scripts/bump-engine.sh <version>          rewrite engine.lock, the Dockerfile engine image and the generated schema (e.g. 0.1.1)
+# Usage: scripts/bump-engine.sh <version>          rewrite engine.lock, the Dockerfile engine image, the server's engine tags and the generated schema (e.g. 0.1.1)
 #        scripts/bump-engine.sh --schema <version> regenerate the schema only, from that release (CI)
-#        scripts/bump-engine.sh --local <checkout> regenerate the schema from <checkout>/openapi.json
+#        scripts/bump-engine.sh --local <checkout> regenerate the schema from <checkout>/openapi.json and
+#                                          patch the server's engine crates to <checkout> (untracked server/.cargo/config.toml)
+#                                          (needs `cargo update -p fliks-engine-core -p fliks-engine`; never commit the patched Cargo.lock)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 tmp="$(mktemp -d)"
@@ -21,7 +23,14 @@ release_schema() {
 
 case "${1:?usage: bump-engine.sh <version> | --schema <version> | --local <checkout>}" in
 --local)
-    gen_schema "$(realpath "${2:?checkout path}")/openapi.json" local
+    co="$(realpath "${2:?checkout path}")"
+    gen_schema "$co/openapi.json" local
+    mkdir -p server/.cargo
+    cat > server/.cargo/config.toml <<EOT
+[patch."https://github.com/fliks-app/engine"]
+fliks-engine-core = { path = "$co/crates/core" }
+fliks-engine = { path = "$co/crates/engine" }
+EOT
     exit 0
     ;;
 --schema)
@@ -43,5 +52,7 @@ gh release download "v$v" -R fliks-app/engine -p 'fliks-engine-*.sha256' -D "$tm
 } > engine.lock.new
 mv engine.lock.new engine.lock
 sed -i "s|^ARG ENGINE_IMAGE=.*|ARG ENGINE_IMAGE=ghcr.io/fliks-app/engine:$v|" Dockerfile
+sed -i -E "s|(fliks-engine(-core)? = \{ git = [^}]*tag = )\"v[^\"]*\"|\1\"v$v\"|" server/crates/server/Cargo.toml
+(cd server && cargo update -p fliks-engine-core -p fliks-engine)
 cat engine.lock
 release_schema "$v"
