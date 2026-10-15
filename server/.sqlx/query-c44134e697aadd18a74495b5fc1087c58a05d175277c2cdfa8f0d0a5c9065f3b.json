@@ -1,0 +1,106 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT rdl.\"roleId\" AS role_id,\n                  l.id, l.\"createdAt\" AS created_at, l.\"updatedAt\" AS updated_at, l.name, l.icon, l.color,\n                  l.\"mediaTypes\" AS \"media_types: Json<Vec<String>>\", l.\"preferredProvider\" AS preferred_provider,\n                  l.\"metadataLanguage\" AS metadata_language, l.\"metadataRegion\" AS metadata_region,\n                  l.\"defaultQualityProfileId\" AS default_quality_profile_id,\n                  l.\"defaultLanguageProfileId\" AS default_language_profile_id, l.path, l.label\n           FROM role_default_libraries rdl JOIN libraries l ON l.id = rdl.\"libraryId\"\n           WHERE rdl.\"roleId\" = ANY($1) ORDER BY l.id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "role_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 2,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 3,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 4,
+        "name": "name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 5,
+        "name": "icon",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 6,
+        "name": "color",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 7,
+        "name": "media_types: Json<Vec<String>>",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 8,
+        "name": "preferred_provider",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 9,
+        "name": "metadata_language",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 10,
+        "name": "metadata_region",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 11,
+        "name": "default_quality_profile_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 12,
+        "name": "default_language_profile_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 13,
+        "name": "path",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 14,
+        "name": "label",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4Array"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "c44134e697aadd18a74495b5fc1087c58a05d175277c2cdfa8f0d0a5c9065f3b"
+}
