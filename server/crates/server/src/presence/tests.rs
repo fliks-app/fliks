@@ -44,7 +44,7 @@ fn snap(sid: &str, owner: Option<&str>, opened: f64, beat: f64) -> SessionSnapsh
 }
 
 fn resync(snaps: Vec<SessionSnapshot>) -> Feed {
-    Feed::Resync(Arc::new(snaps))
+    Feed::Resync(Arc::new(snaps), now_ms())
 }
 
 #[test]
@@ -133,14 +133,12 @@ fn resync_adds_unknown_drops_orphans_and_keeps_newer_or_listed() {
     p.restore(&snap("kept", None, 100.0, 100.0));
     p.heartbeat("kept", &beat);
     p.restore(&snap("orphan", None, 100.0, 100.0));
-    p.restore(&snap("fresh", None, now_ms() + 60_000.0, 0.0));
-    apply(
-        &p,
-        &resync(vec![
-            snap("kept", None, 100.0, 100.0),
-            snap("new", Some("1"), 5.0, 6.0),
-        ]),
-    );
+    p.restore(&snap("fresh", None, 500.0, 500.0));
+    let snaps = vec![
+        snap("kept", None, 100.0, 100.0),
+        snap("new", Some("1"), 5.0, 6.0),
+    ];
+    apply(&p, &Feed::Resync(Arc::new(snaps), 400.0));
     let mut ids: Vec<_> = p.list().into_iter().map(|s| s.session_id).collect();
     ids.sort();
     assert_eq!(ids, ["fresh", "kept", "new"]);

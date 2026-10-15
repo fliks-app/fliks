@@ -1,5 +1,5 @@
 //! Keeps presence in step with the engine's feed (`presence.md` rules 13-17).
-use super::{Presence, now_ms};
+use super::Presence;
 use crate::engine::{Engine, Feed};
 use fliks_engine_core::api::EngineEvent;
 use tokio::sync::broadcast::{Receiver, error::RecvError};
@@ -26,7 +26,7 @@ pub(super) async fn run(mut rx: Receiver<Feed>, presence: Presence, on_lag: impl
 
 pub(super) fn apply(presence: &Presence, feed: &Feed) {
     match feed {
-        Feed::Resync(snaps) => presence.resync(snaps, now_ms()),
+        Feed::Resync(snaps, listed_at) => presence.resync(snaps, *listed_at),
         Feed::Event(ev) => match &**ev {
             EngineEvent::SessionOpened { session } => {
                 presence.restore(session);

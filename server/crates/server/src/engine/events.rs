@@ -10,7 +10,8 @@ use tokio::time::{Instant, sleep, timeout_at};
 /// comes first (the sessions the engine holds now), then the events that follow it.
 #[derive(Debug, Clone)]
 pub enum Feed {
-    Resync(Arc<Vec<SessionSnapshot>>),
+    /// With the epoch ms taken just before the listing: anything opened after it may be unlisted.
+    Resync(Arc<Vec<SessionSnapshot>>, f64),
     Event(Arc<EngineEvent>),
 }
 
@@ -122,8 +123,12 @@ impl Engine {
 
     /// The sessions the engine holds now go to the subscribers, then the waiting jobs are re-checked.
     async fn resync(&self) -> Result<(), super::EngineError> {
+        let listed_at = crate::presence::now_ms();
         let sessions = self.list_sessions(&SessionFilter::default()).await?;
-        let _ = self.inner.feed.send(Feed::Resync(Arc::new(sessions)));
+        let _ = self
+            .inner
+            .feed
+            .send(Feed::Resync(Arc::new(sessions), listed_at));
         self.resync_jobs().await;
         Ok(())
     }
