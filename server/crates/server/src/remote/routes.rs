@@ -458,7 +458,9 @@ pub async fn grant_claim(
         db::delete(&st.db, grant.id).await?;
         return Ok((StatusCode::CREATED, Json(one(&st, existing).await?)));
     }
-    db::set_grantee(&st.db, grant.id, me).await?;
+    if !db::set_grantee(&st.db, grant.id, me).await? {
+        return Err(AppError::not_found("remote.error_unknown_code"));
+    }
     grant.grantee_user_id = Some(me);
     announce(&st, &[Some(me), Some(grant.owner_user_id)]);
     Ok((StatusCode::CREATED, Json(one(&st, grant).await?)))

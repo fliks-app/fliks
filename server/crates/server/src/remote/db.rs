@@ -219,15 +219,17 @@ pub async fn find(db: &PgPool, id: i32) -> sqlx::Result<Option<Grant>> {
     .await
 }
 
-pub async fn set_grantee(db: &PgPool, id: i32, grantee: i32) -> sqlx::Result<()> {
+/// False when a concurrent claim took the code first (single use, spec rule 26).
+pub async fn set_grantee(db: &PgPool, id: i32, grantee: i32) -> sqlx::Result<bool> {
     sqlx::query!(
-        r#"UPDATE remote_control_grants SET code = NULL, "granteeUserId" = $1, "updatedAt" = now() WHERE id = $2"#,
+        r#"UPDATE remote_control_grants SET code = NULL, "granteeUserId" = $1, "updatedAt" = now()
+           WHERE id = $2 AND "granteeUserId" IS NULL"#,
         grantee,
         id
     )
     .execute(db)
     .await
-    .map(drop)
+    .map(|r| r.rows_affected() == 1)
 }
 
 pub async fn delete(db: &PgPool, id: i32) -> sqlx::Result<()> {
