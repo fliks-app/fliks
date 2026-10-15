@@ -1,4 +1,4 @@
-use sqlx::migrate::Migrator;
+use sqlx::migrate::{Migrate, Migrator};
 use sqlx::postgres::PgPool;
 
 pub use sqlx::migrate::MigrateError;
@@ -35,30 +35,15 @@ pub async fn adopt_typeorm(pool: &PgPool) -> Result<(), MigrateError> {
         return Ok(());
     }
 
-    let typeorm_rows: Vec<(i64, String)> = sqlx::query_as(
-        "SELECT timestamp, name FROM migrations ORDER BY timestamp",
-    )
-    .fetch_all(pool)
-    .await
-    .map_err(MigrateError::Execute)?;
+    let typeorm_rows: Vec<(i64, String)> =
+        sqlx::query_as("SELECT timestamp, name FROM migrations ORDER BY timestamp")
+            .fetch_all(pool)
+            .await
+            .map_err(MigrateError::Execute)?;
 
     let mut tx = pool.begin().await.map_err(MigrateError::Execute)?;
 
-    sqlx::query(
-        r#"
-CREATE TABLE _sqlx_migrations (
-    version BIGINT PRIMARY KEY,
-    description TEXT NOT NULL,
-    installed_on TIMESTAMPTZ NOT NULL DEFAULT now(),
-    success BOOLEAN NOT NULL,
-    checksum BYTEA NOT NULL,
-    execution_time BIGINT NOT NULL
-);
-        "#,
-    )
-    .execute(&mut *tx)
-    .await
-    .map_err(MigrateError::Execute)?;
+    tx.ensure_migrations_table().await?;
 
     for (timestamp, name) in typeorm_rows {
         let Some(migration) = migration_for_version(timestamp) else {
@@ -152,7 +137,9 @@ mod tests {
         assert_eq!(rows[1].2, 0);
         assert_eq!(rows[1].3.as_slice(), playback.checksum.as_ref());
 
-        adopt_typeorm(&pool).await.expect("second adopt is idempotent");
+        adopt_typeorm(&pool)
+            .await
+            .expect("second adopt is idempotent");
 
         let count: i64 = sqlx::query_scalar("SELECT COUNT(*)::bigint FROM _sqlx_migrations")
             .fetch_one(&pool)
@@ -174,15 +161,11 @@ mod tests {
 
         assert!(adopt_typeorm(&pool).await.is_err());
 
-        let ledger_exists = table_exists(&pool, "_sqlx_migrations")
-            .await
-            .expect("existence check");
-        if ledger_exists {
-            let count: i64 = sqlx::query_scalar("SELECT COUNT(*)::bigint FROM _sqlx_migrations")
-                .fetch_one(&pool)
-                .await?;
-            assert_eq!(count, 0);
-        }
+        assert!(
+            !table_exists(&pool, "_sqlx_migrations")
+                .await
+                .expect("existence check")
+        );
 
         Ok(())
     }

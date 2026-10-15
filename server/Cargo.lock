@@ -655,6 +655,7 @@ dependencies = [
  "axum",
  "fliks-engine",
  "fliks-engine-core",
+ "serde_json",
  "sqlx",
  "tokio",
 ]
