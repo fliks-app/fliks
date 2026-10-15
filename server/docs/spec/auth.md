@@ -178,8 +178,9 @@ Registered in `docs/bridge.md` (plan §6.4), added S1, removed S2:
 
 - `POST /internal/bridge/emit` (Nest): broadcast `pairing.requested` (audience `null`, payload above).
 - `POST /internal/bridge/drop-connections` (Nest): logout needs `(userId, targetId)` scoped drop (rule 50); users.md needs `(userId)` account-wide drop. Payload shape is for `bridge.md`.
+- `POST /internal/auth/stream-token` (Rust-owned, internal, not under `/api`): body `{"userId": int}`, `Authorization: Bearer $FLIKS_BRIDGE_TOKEN`; answers 2xx `{"streamToken": string}` signed per rule 5 (claims `sub`, `username`, `scope: 'stream'`, TTL `STREAM_TOKEN_TTL`). Nest live TV play calls it; removed with S7 (plan §6.4, §15.1).
 
-Allowed duplication kept in Nest until S9 (list in `bridge.md` as "auth verify in Nest until S9", plan §10 S1): `jwt.strategy.ts`, guards, CASL factory, `PoliciesGuard`, `current-user` decorator, `jwt-secret.ts`. Additionally `AuthService.generateStreamToken` is called by the live TV controller `[ts:src/modules/livetv/controllers/livetv.controller.ts:153]` (S7), so a stream-token mint stays in Nest until S7 (O6).
+Allowed duplication kept in Nest until S9 (list in `bridge.md` as "auth verify in Nest until S9", plan §10 S1): `jwt.strategy.ts`, guards, CASL factory, `PoliciesGuard`, `current-user` decorator, `jwt-secret.ts`. Nest no longer signs: the live TV controller `[ts:src/modules/livetv/controllers/livetv.controller.ts:153]` (S7) mints through the Rust-owned route above (O6).
 
 ## Deletes in Nest
 
@@ -195,7 +196,7 @@ Delete whole files:
 - `backend/src/modules/auth/strategies/api-key.strategy.ts` (comment-only, no importer; optional)
 
 Partial:
-- `backend/src/modules/auth/auth.service.ts`: keep only `generateStreamToken` (+ its `ConfigService`, `JwtService` deps) until S7; delete `:49`–`:59`, `:61`–`:121`, `:123`–`:171`, `:173`–`:224`, `:226`–`:234`, `:283`–`:323` (`signTokenFor` `:295`–`:303` is dead already: no caller).
+- `backend/src/modules/auth/auth.service.ts`: `generateStreamToken` (+ its `ConfigService`, `JwtService` deps) goes too once live TV calls the internal stream-token route (O6); delete `:49`–`:59`, `:61`–`:121`, `:123`–`:171`, `:173`–`:224`, `:226`–`:234`, `:283`–`:323` (`signTokenFor` `:295`–`:303` is dead already: no caller).
 - `backend/src/modules/auth/auth.module.ts`: drop `AuthController`, `PairingController`, `PairingService`, `RefreshTokenService`, `SettingsModule`/`EventsModule` imports and the `PairingRequest`/`RefreshToken` forFeature entries; keep `JwtModule`, `JwtStrategy`, `CaslAbilityFactory`, `PoliciesGuard` and exports.
 
 Keep (Nest still guards its routes): `strategies/jwt.strategy.ts`, `guards/*`, `casl/**` (incl. specs), `decorators/current-user.decorator.ts`, `auth.constants.ts`, `request-cookie.util.ts`, `common/utils/jwt-secret.ts`.
@@ -217,7 +218,7 @@ Parity scenarios (`server/parity/scenarios/auth/`, `as` per plan §5.3): `auth-l
 - O3. Refresh rotation and pairing claim are non-atomic in Nest. Keep for parity or use conditional `UPDATE ... WHERE "revokedAt" IS NULL RETURNING` (stricter; a concurrent duplicate would land in the 30 s grace branch)?
 - O4. `pairing.requested` is broadcast to every SSE client with `userId`, `deviceName`, `deviceId`; keep (client filters) or target the user (`emitToUser`)? Not in F1-F7.
 - O5. Time of day of the daily F6 prune.
-- O6. Live TV (S7) needs a stream token: keep `AuthService.generateStreamToken` in Nest until S7 (second signer, same secret and claims) or call a Rust bridge?
+- O6. Decided (plan §6.4, §15.1): Nest live TV mints through `POST /internal/auth/stream-token` on fliks-server; `AuthService.generateStreamToken` is deleted from Nest.
 - O7. The parity runner cannot age DB rows; accept Rust-only tests for the 30 s grace and replay (as written) or add a seed/SQL step?
 - O8. `JWT_EXPIRATION`/`STREAM_TOKEN_TTL` accept the full `ms` grammar (bare number = milliseconds, `3600` = 3.6 s): replicate or validate at boot (deviation)? Rule 48 (F7) needs a single parsed value either way.
 - O9. First-boot secret race: confirm fliks-server creates `.jwt-secret` before spawning Nest (and whether it passes `JWT_SECRET` to the child instead).
