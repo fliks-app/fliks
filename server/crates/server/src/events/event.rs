@@ -333,6 +333,8 @@ pub enum SseEvent {
             skip_serializing_if = "Option::is_none"
         )]
         subtitle_id: Option<Option<String>>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        quality_id: Option<String>,
     },
     #[serde(rename = "remote.state")]
     RemoteState {
@@ -540,7 +542,7 @@ mod tests {
             json!({"type":"seerr.import.completed","users":1,"usersCreated":0,"imported":2,"updated":3,"skipped":4}),
             json!({"type":"seerr.import.failed","error":"e"}),
             json!({"type":"pairing.requested","userId":1,"pairingId":"p","deviceName":"n","deviceId":"d"}),
-            json!({"type":"remote.command","cmdId":"c","expiresAt":10,"byTargetId":null,"action":"seek","positionSeconds":12.5,"subtitleId":null}),
+            json!({"type":"remote.command","cmdId":"c","expiresAt":10,"byTargetId":null,"action":"seek","positionSeconds":12.5,"subtitleId":null,"qualityId":"q"}),
             json!({"type":"remote.state","targetId":"t","sessionId":"s","mediaId":null,"mediaFileId":1,"episodeId":null,
                 "mediaTitle":null,"episodeLabel":null,"posterUrl":null,"fanartUrl":null,"positionSeconds":1,"durationSeconds":2,
                 "state":"playing","volume":null,"muted":null,"supportsVolume":true,"subtitleId":null,"quality":null,
