@@ -13,6 +13,10 @@ pub async fn liveness() -> Json<Liveness> {
     Json(Liveness { ok: true })
 }
 
-pub fn router() -> Router {
-    Router::new().route("/api/system/liveness", get(liveness))
+/// Other methods go to `fallback` so Nest answers them itself instead of a 405.
+pub fn router(fallback: Router) -> Router {
+    Router::new().route(
+        "/api/system/liveness",
+        get(liveness).fallback_service(fallback),
+    )
 }

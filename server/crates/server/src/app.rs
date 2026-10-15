@@ -1,3 +1,4 @@
+use crate::http::{layers, static_files};
 use crate::system;
 use axum::{Router, http::StatusCode, routing::any, routing::any_service};
 use fliks_engine::gateway::{self, RouteTable, Upstream};
@@ -12,17 +13,6 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
 #[openapi(info(title = "Fliks", version = "1"), paths(system::liveness))]
 pub struct ApiDoc;
 
-// Orchestrator wires at merge: `crate::http::static_files::router(client_dir, cast_dir)`;
-// with `client_dir == None` only `/cast` must be mounted.
-fn client_router(_client_dir: Option<PathBuf>, _cast_dir: PathBuf) -> Router {
-    Router::new()
-}
-
-// Orchestrator wires at merge: `crate::http::layers::apply(router, cors_origin, body_limit_bytes)`.
-fn apply_layers(router: Router, _cors_origin: Option<String>, _body_limit_bytes: usize) -> Router {
-    router
-}
-
 /// Rust-owned routes and static files get the layers; the forwarded paths do not, as Nest sets its own CORS headers.
 pub fn router(
     nest: Upstream,
@@ -35,16 +25,14 @@ pub fn router(
         nest,
         None,
     );
-    let local = system::router()
+    let local = system::router(forwarder.clone())
         .route("/internal", any(StatusCode::NOT_FOUND))
         .route("/internal/", any(StatusCode::NOT_FOUND))
         .route("/internal/{*rest}", any(StatusCode::NOT_FOUND))
-        .fallback_service(client_router(client_dir, cast_dir));
+        .fallback_service(static_files::router(client_dir, cast_dir));
+    let local = layers::apply(local, cors_origin, BODY_LIMIT_BYTES);
     // Nest's only unprefixed route is `/engine/resolve` (bootstrap.md rule 1).
     ["/api", "/api/", "/api/{*rest}", "/engine/resolve"]
         .into_iter()
-        .fold(
-            apply_layers(local, cors_origin, BODY_LIMIT_BYTES),
-            |r, p| r.route(p, any_service(forwarder.clone())),
-        )
+        .fold(local, |r, p| r.route(p, any_service(forwarder.clone())))
 }

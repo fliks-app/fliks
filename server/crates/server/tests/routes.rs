@@ -67,6 +67,7 @@ async fn unprefixed_engine_resolve_and_unknown_api_paths_forward_but_internal_do
         ("/engine/resolve", true),
         ("/api/unknown/thing", true),
         ("/api", true),
+        ("/api/system/liveness", true),
         ("/internal/bridge/emit", false),
         ("/internal", false),
     ] {

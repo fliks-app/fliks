@@ -33,6 +33,7 @@ async fn fake_nest() {
 struct Server {
     child: Child,
     base: String,
+    nest_port: u16,
 }
 
 impl Drop for Server {
@@ -95,13 +96,20 @@ fn db_env(pool: &PgPool) -> Vec<(&'static str, String)> {
     ]
 }
 
-async fn start(pool: &PgPool, conf: &std::path::Path, nest_url: Option<&str>) -> Server {
+async fn start(
+    pool: &PgPool,
+    conf: &std::path::Path,
+    nest_url: Option<&str>,
+    extra_env: &[(&str, &std::path::Path)],
+) -> Server {
     let port = free_port();
+    let nest_port = free_port();
     let exe = std::env::current_exe().unwrap();
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_fliks-server"));
     cmd.envs(db_env(pool))
         .env("PORT", port.to_string())
-        .env("FLIKS_NEST_PORT", free_port().to_string())
+        .env("FLIKS_NEST_PORT", nest_port.to_string())
+        .envs(extra_env.iter().copied())
         .env("FLIKS_CONF_DIR", conf)
         .env("FLIKS_ENGINE_BACKOFF_MS", "100")
         .env("FAKE_NEST", "1")
@@ -117,13 +125,17 @@ async fn start(pool: &PgPool, conf: &std::path::Path, nest_url: Option<&str>) ->
     let child = cmd.spawn().unwrap();
     let base = format!("http://127.0.0.1:{port}");
     eventually(&format!("{base}/api/system/liveness"), |r| r.0 == 200).await;
-    Server { child, base }
+    Server {
+        child,
+        base,
+        nest_port,
+    }
 }
 
 #[sqlx::test(migrations = false)]
 async fn fallback_internal_liveness_restart_and_shutdown(pool: PgPool) {
     let conf = std::env::temp_dir().join(format!("fliks-topology-{}", std::process::id()));
-    let s = start(&pool, &conf, None).await;
+    let s = start(&pool, &conf, None, &[]).await;
     let b = &s.base;
 
     // Boot ran the migrations and created the JWT secret Nest would read.
@@ -201,11 +213,46 @@ async fn fallback_internal_liveness_restart_and_shutdown(pool: PgPool) {
 #[sqlx::test(migrations = false)]
 async fn nest_url_spawns_nothing(pool: PgPool) {
     let conf = std::env::temp_dir().join(format!("fliks-topology-url-{}", std::process::id()));
-    let s = start(&pool, &conf, Some("http://127.0.0.1:1")).await;
+    let s = start(&pool, &conf, Some("http://127.0.0.1:1"), &[]).await;
     // Nothing listens upstream: forwarding is attempted (502) and no fake Nest was spawned.
     assert_eq!(
         get_text(&format!("{}/api/pid", s.base)).await.unwrap().0,
         502
     );
     std::fs::remove_dir_all(conf).ok();
+}
+
+#[sqlx::test(migrations = false)]
+async fn nest_url_leaves_the_nest_port_unbound(pool: PgPool) {
+    let conf = std::env::temp_dir().join(format!("fliks-topology-port-{}", std::process::id()));
+    let s = start(&pool, &conf, Some("http://127.0.0.1:1"), &[]).await;
+    assert!(std::net::TcpStream::connect(("127.0.0.1", s.nest_port)).is_err());
+    std::fs::remove_dir_all(conf).ok();
+}
+
+#[sqlx::test(migrations = false)]
+async fn rust_serves_the_spa_and_the_cast_receiver(pool: PgPool) {
+    let root = std::env::temp_dir().join(format!("fliks-topology-static-{}", std::process::id()));
+    let (client, cast) = (root.join("client"), root.join("cast"));
+    std::fs::create_dir_all(&client).unwrap();
+    std::fs::create_dir_all(&cast).unwrap();
+    std::fs::write(client.join("index.html"), "<html>spa</html>").unwrap();
+    std::fs::write(cast.join("cast-receiver.html"), "cast").unwrap();
+    let env = [
+        ("SERVE_STATIC_PATH", client.as_path()),
+        ("FLIKS_CAST_DIR", cast.as_path()),
+    ];
+    let s = start(&pool, &root.join("conf"), Some("http://127.0.0.1:1"), &env).await;
+    let base = &s.base;
+    assert_eq!(
+        get_text(&format!("{base}/some/spa/route")).await.unwrap(),
+        (200, "<html>spa</html>".into())
+    );
+    assert_eq!(
+        get_text(&format!("{base}/cast/cast-receiver.html"))
+            .await
+            .unwrap(),
+        (200, "cast".into())
+    );
+    std::fs::remove_dir_all(root).ok();
 }

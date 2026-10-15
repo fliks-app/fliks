@@ -99,6 +99,7 @@ Planned for S0 strangler topology (phase-2 plan §9.5 lists them; defaults from 
 
 | Variable | Default (§4.3) |
 |---|---|
+| `PORT` | `4849` (set by the engine); not Nest's `4848` |
 | `FLIKS_NEST_URL` | none |
 | `FLIKS_NEST_CMD` | `` `node dist/main` `` |
 | `FLIKS_NODE_BIN` | none |
