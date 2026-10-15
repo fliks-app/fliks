@@ -62,7 +62,6 @@ struct Conn {
 }
 
 struct Polled {
-    user: i32,
     identity: Identity,
     since: i64,
     seq: u64,
@@ -79,7 +78,8 @@ struct Claim {
 #[derive(Default)]
 struct Inner {
     conns: HashMap<String, Conn>,
-    polled: HashMap<String, Polled>,
+    /// Keyed by owner and `polled:<targetId>` (F14): another account cannot take a device over.
+    polled: HashMap<(i32, String), Polled>,
     claims: HashMap<String, Claim>,
     replay: Replay,
     seq: u64,
@@ -235,11 +235,11 @@ impl Hub {
         let _ = self.0.bus.send(Arc::new(Bus::Domain(ev)));
     }
 
-    /// To exactly one connection or polled target; false when it is gone or its queue is full. A
-    /// caller must not fall back to `emit_to_user` for `remote.command`.
-    pub fn emit_to_connection(&self, connection_id: &str, ev: SseEvent) -> bool {
+    /// To exactly one connection or polled target of `owner`; false when it is gone or its queue is
+    /// full. A caller must not fall back to `emit_to_user` for `remote.command`.
+    pub fn emit_to_connection(&self, owner: i32, connection_id: &str, ev: SseEvent) -> bool {
         let mut g = self.lock();
-        if let Some(p) = g.polled.get_mut(connection_id) {
+        if let Some(p) = g.polled.get_mut(&(owner, connection_id.to_owned())) {
             if p.queue.len() >= POLLED_QUEUE_MAX {
                 tracing::warn!(
                     "Dropped {}: queue full for polled target {}",
@@ -251,7 +251,7 @@ impl Hub {
             p.queue.push(ev);
             return true;
         }
-        if !g.conns.contains_key(connection_id) {
+        if !g.conns.get(connection_id).is_some_and(|c| c.user == owner) {
             tracing::warn!(
                 "Dropped {}: SSE connection {connection_id} is gone",
                 name(&ev)
@@ -323,7 +323,8 @@ impl Hub {
     /// changed). Each closed stream with a target announces itself like a normal teardown.
     pub fn drop_connections_for_user(&self, user: i32) {
         let mut announces = 0;
-        let (mut sse, mut polled) = (0, 0);
+        let mut sse = 0;
+        let polled;
         {
             let mut g = self.lock();
             let ids: Vec<String> = g
@@ -336,16 +337,9 @@ impl Hub {
                 announces += self.close_locked(&mut g, &id) as usize;
                 sse += 1;
             }
-            let keys: Vec<String> = g
-                .polled
-                .iter()
-                .filter(|(_, p)| p.user == user)
-                .map(|(k, _)| k.clone())
-                .collect();
-            for k in keys {
-                g.polled.remove(&k);
-                polled += 1;
-            }
+            let before = g.polled.len();
+            g.polled.retain(|(owner, _), _| *owner != user);
+            polled = before - g.polled.len();
             if polled > 0 {
                 self.dispatch(
                     &mut g,
@@ -381,9 +375,10 @@ impl Hub {
                 announces += self.close_locked(&mut g, &id) as usize;
                 sse += 1;
             }
-            let key = format!("polled:{target_id}");
-            if g.polled.get(&key).is_some_and(|p| p.user == user) {
-                g.polled.remove(&key);
+            if g.polled
+                .remove(&(user, format!("polled:{target_id}")))
+                .is_some()
+            {
                 polled += 1;
                 self.dispatch(
                     &mut g,
@@ -415,7 +410,12 @@ impl Hub {
         g.conns
             .get(id)
             .and_then(|c| c.identity.target_id.clone())
-            .or_else(|| g.polled.get(id).and_then(|p| p.identity.target_id.clone()))
+            .or_else(|| {
+                g.polled
+                    .iter()
+                    .find(|((_, key), _)| key == id)
+                    .and_then(|(_, p)| p.identity.target_id.clone())
+            })
     }
 
     /// Targets owned by `user`, newest first.
@@ -454,12 +454,12 @@ impl Hub {
             keys.sort();
             for (_, key) in keys {
                 let p = &g.polled[&key];
+                let user = key.0;
                 if now.saturating_duration_since(p.last_poll) > POLLED_TARGET_TTL {
                     tracing::info!(
                         "Polled target {} stopped polling",
                         p.identity.target_id.as_deref().unwrap_or_default()
                     );
-                    let user = p.user;
                     g.polled.remove(&key);
                     self.dispatch(
                         &mut g,
@@ -469,10 +469,10 @@ impl Hub {
                     expired.push(user);
                     continue;
                 }
-                if owner.is_none_or(|u| p.user == u) && p.identity.target().is_some() {
+                if owner.is_none_or(|u| user == u) && p.identity.target().is_some() {
                     rows.push(Target {
-                        connection_id: key,
-                        user_id: p.user,
+                        connection_id: key.1,
+                        user_id: user,
                         identity: p.identity.clone(),
                         since: p.since,
                     });
@@ -508,7 +508,7 @@ impl Hub {
             tracing::warn!("Refused a polled-target registration with no target id (user {user})");
             return;
         };
-        let key = format!("polled:{target}");
+        let key = (user, format!("polled:{target}"));
         let first = {
             let mut g = self.lock();
             let existing = g.polled.remove(&key);
@@ -523,7 +523,6 @@ impl Hub {
             g.polled.insert(
                 key,
                 Polled {
-                    user,
                     identity,
                     since,
                     seq,
@@ -541,10 +540,7 @@ impl Hub {
     /// The pending commands, each at most once; `None` for an unknown target or another owner.
     pub fn drain_commands(&self, user: i32, target_id: &str) -> Option<Vec<SseEvent>> {
         let mut g = self.lock();
-        let p = g.polled.get_mut(&format!("polled:{target_id}"))?;
-        if p.user != user {
-            return None;
-        }
+        let p = g.polled.get_mut(&(user, format!("polled:{target_id}")))?;
         p.last_poll = Instant::now();
         Some(std::mem::take(&mut p.queue))
     }
@@ -761,8 +757,9 @@ mod tests {
         hub.emit_to_users(&[], SseEvent::StalledRemoved { title: "t".into() });
         hub.emit_to_users(&[1, 2], SseEvent::CommandStarted { name: "n".into() });
         hub.emit_raw("plugin.x.y", serde_json::json!({"k": 1}), Some(&[2]));
-        assert!(hub.emit_to_connection(&ida, SseEvent::ActivityChanged {}));
-        assert!(!hub.emit_to_connection("nope", SseEvent::ActivityChanged {}));
+        assert!(hub.emit_to_connection(1, &ida, SseEvent::ActivityChanged {}));
+        assert!(!hub.emit_to_connection(2, &ida, SseEvent::ActivityChanged {}));
+        assert!(!hub.emit_to_connection(1, "nope", SseEvent::ActivityChanged {}));
         hub.emit(SseEvent::SeerrImportStarted {});
         assert_eq!(
             got(&mut a),
@@ -785,7 +782,7 @@ mod tests {
         let mut rx = hub.subscribe();
         let c = hub.connect(1, Identity::default());
         hub.emit_to_users(&[], SseEvent::QueueUpdated {});
-        hub.emit_to_connection(&c.id, SseEvent::ActivityChanged {});
+        hub.emit_to_connection(1, &c.id, SseEvent::ActivityChanged {});
         hub.emit_domain(super::super::DomainEvent::SettingsChanged { key: "k".into() });
         let kinds: Vec<_> = (0..3)
             .map(|_| match &*rx.try_recv().unwrap() {
@@ -871,9 +868,9 @@ mod tests {
         assert_eq!(hub.target_id_for(Some(key)).as_deref(), Some("tv#native"));
         assert!(!hub.has_connection(key));
         for _ in 0..POLLED_QUEUE_MAX {
-            assert!(hub.emit_to_connection(key, SseEvent::QueueUpdated {}));
+            assert!(hub.emit_to_connection(1, key, SseEvent::QueueUpdated {}));
         }
-        assert!(!hub.emit_to_connection(key, SseEvent::QueueUpdated {}));
+        assert!(!hub.emit_to_connection(1, key, SseEvent::QueueUpdated {}));
         assert!(hub.drain_commands(2, "tv#native").is_none());
         assert_eq!(
             hub.drain_commands(1, "tv#native").unwrap().len(),
@@ -884,6 +881,19 @@ mod tests {
         assert!(hub.collect(Some(1), later).is_empty());
         assert_eq!(got(&mut watcher), [CHANGED]);
         assert!(hub.drain_commands(1, "tv#native").is_none());
+    }
+
+    #[test]
+    fn a_polled_device_is_per_account() {
+        let hub = Hub::new();
+        hub.register_polled_target(1, at("dev#native"));
+        hub.register_polled_target(2, at("dev#native"));
+        let key = hub.resolve_target(1, "dev#native").unwrap();
+        assert!(hub.emit_to_connection(1, &key, SseEvent::QueueUpdated {}));
+        assert!(hub.drain_commands(2, "dev#native").unwrap().is_empty());
+        assert_eq!(hub.drain_commands(1, "dev#native").unwrap().len(), 1);
+        hub.drop_connections_for_target(2, "dev#native");
+        assert!(hub.list_for_user(2).is_empty() && hub.list_for_user(1).len() == 1);
     }
 
     #[test]
