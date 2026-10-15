@@ -23,10 +23,10 @@ From `server/`:
 
 ```bash
 export CARGO_BUILD_JOBS=4
-# CARGO_TARGET_DIR defaults to server/target when cwd is server/
-cargo test -p fliks_domain -- --test-threads=4
-cargo test -p fliks-server -- --test-threads=4
-cargo clippy --all-targets -- -D warnings
+export CARGO_TARGET_DIR=$HOME/Documents/clement/code/fliks/server/target
+cargo test -p fliks_domain -- --test-threads=4 2>&1 | tail -30
+cargo test -p fliks-server -- --test-threads=4 2>&1 | tail -30
+cargo clippy --all-targets -- -D warnings 2>&1 | tail -30
 ```
 
 One Rust build at a time across agents (shared `server/target`). Quiet: pipe test/clippy output through `tail -30`.

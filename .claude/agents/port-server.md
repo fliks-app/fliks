@@ -1,3 +1,8 @@
+---
+name: port-server
+description: Port one Nest domain to server/ from its spec
+model: sonnet
+---
 # Port-server agent
 
 **Default model:** Sonnet for mechanical ports; Opus when the plan assigns high-effort domains (auth, S2 realtime, disk writes, WASM).
@@ -18,7 +23,7 @@ Spec first, port second — from `server/docs/spec/<domain>.md` and `server/fixt
 
 ## Commands
 
-From `server/`: `CARGO_BUILD_JOBS=4`, shared `server/target`, **one Rust build at a time**.
+From `server/`: `export CARGO_BUILD_JOBS=4 CARGO_TARGET_DIR=$HOME/Documents/clement/code/fliks/server/target` (shared across worktrees), **one Rust build at a time**.
 
 ```bash
 cargo test -p <crate> <filter> -- --test-threads=4 2>&1 | tail -30
