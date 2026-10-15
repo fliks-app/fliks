@@ -69,7 +69,7 @@ async function bootstrap() {
     },
   );
 
-  app.setGlobalPrefix('api', { exclude: ['engine/resolve'] });
+  app.setGlobalPrefix('api', { exclude: ['engine/resolve', 'internal/bridge/{*path}'] });
   app.useGlobalPipes(
     new TolerantValidationPipe({
       whitelist: true,
