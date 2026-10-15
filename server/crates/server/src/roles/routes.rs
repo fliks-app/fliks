@@ -108,7 +108,7 @@ fn forbidden() -> AppError {
     AppError::bare(StatusCode::FORBIDDEN)
 }
 
-/// F12: only strings from `GET /roles/permissions` are storable; `manage:all` needs an admin.
+/// F12: added strings must come from `GET /roles/permissions`; adding `manage:all` needs an admin.
 async fn check_permissions(st: &AppState, a: &Authed, perms: &[String]) -> Res<()> {
     let mut known = None;
     for p in perms {
@@ -209,10 +209,16 @@ pub async fn update(
 ) -> Res<Json<db::Role>> {
     a.require(Action::Manage, Subject::Role)?;
     let dto = Dto::parse(body, false)?;
-    if let Some(p) = &dto.permissions {
-        check_permissions(&st, &a, p).await?;
-    }
     let role = one(&st, id).await?;
+    if let Some(p) = &dto.permissions {
+        // Grants already on the role (e.g. from a since-removed plugin) may be resent unchecked.
+        let added: Vec<String> = p
+            .iter()
+            .filter(|x| !role.permissions.contains(x))
+            .cloned()
+            .collect();
+        check_permissions(&st, &a, &added).await?;
+    }
     let name = dto.name.filter(|n| *n != role.name);
     if let Some(n) = &name
         && db::name_taken(&st.db, n).await?

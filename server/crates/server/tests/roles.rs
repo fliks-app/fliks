@@ -395,3 +395,29 @@ async fn f12_permissions_are_validated(pool: PgPool) {
         201
     );
 }
+
+#[sqlx::test(migrations = false)]
+async fn f12_only_checks_added_permissions(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    sqlx::query(r#"UPDATE roles SET permissions = '["media.read","plugin:gone:x"]' WHERE id = 3"#)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let ed = Some(c.editor.as_str());
+    let put = |p: Value| {
+        call(
+            &c,
+            "PUT",
+            "/api/roles/3",
+            ed,
+            Some(json!({"permissions": p})),
+        )
+    };
+    let (s, b) = put(json!(["media.read", "plugin:gone:x", "livetv.read"])).await;
+    assert_eq!(
+        (s, b["permissions"].clone()),
+        (200, json!(["media.read", "plugin:gone:x", "livetv.read"]))
+    );
+    let (s, b) = put(json!(["plugin:gone:x", "plugin:new:y"])).await;
+    assert_eq!((s, b), (400, bad(&["permissions contains invalid values"])));
+}

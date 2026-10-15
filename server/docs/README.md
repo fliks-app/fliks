@@ -29,7 +29,7 @@ Decided behaviour for the Rust port (security fixes F, correctness fixes C; D3).
 | F9 | password change revokes nothing | revokes every other refresh-token family of the user and drops their SSE connections; the caller keeps its session | none |
 | F10 | `users.manage` alone can set `isAdmin`, reset/delete an admin, delete the last admin | only an admin may set `isAdmin` or modify/delete an admin; the last enabled admin cannot be deleted, disabled or demoted (409) | admin user pages show the error |
 | F11 | a user can raise their own quota fields | quota fields writable only with `users.manage` | none |
-| F12 | `roles.manage` can store any permission string, incl. `manage:all` | permissions validated against `GET /roles/permissions`; granting `manage:all` requires admin | none |
+| F12 | `roles.manage` can store any permission string, incl. `manage:all` | permissions a request adds (not already on the role) validated against `GET /roles/permissions`; granting `manage:all` requires admin | none |
 | F13 | `pairing.requested` broadcast to every SSE client | sent only to the target user's connections | none |
 | F14 | polled remote targets keyed by `deviceId` only (another account takes them over) | keyed by `(userId, deviceId)` | none |
 | F15 | an approved pairing stays claimable after `expiresAt` until the hourly cleanup | claim checks `expiresAt` | none |
