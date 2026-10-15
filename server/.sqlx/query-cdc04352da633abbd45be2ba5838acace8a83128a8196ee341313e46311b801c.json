@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT \"pluginId\", \"manifest\" FROM plugin_packages",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "pluginId",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "manifest",
+        "type_info": "Jsonb"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "cdc04352da633abbd45be2ba5838acace8a83128a8196ee341313e46311b801c"
+}

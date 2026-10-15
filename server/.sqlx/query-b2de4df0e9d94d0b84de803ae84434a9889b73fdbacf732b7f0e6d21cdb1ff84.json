@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM content_recommendations WHERE \"senderId\" = $1 OR \"recipientId\" = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b2de4df0e9d94d0b84de803ae84434a9889b73fdbacf732b7f0e6d21cdb1ff84"
+}

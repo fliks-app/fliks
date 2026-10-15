@@ -15,12 +15,11 @@ use axum::{
 use chrono::{DateTime, Utc};
 use fliks_domain::acl::{Action, Permissions, Subject};
 use serde::Serialize;
-use sqlx::{PgPool, Row, postgres::PgRow, types::Json};
+use sqlx::{PgPool, types::Json};
 
 /// A `users` row without `passwordHash`; enums are read as text and JSON columns as typed lists.
-#[derive(Debug, Clone, Serialize, sqlx::FromRow)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-#[sqlx(rename_all = "camelCase")]
 pub struct UserRow {
     pub id: i32,
     #[serde(with = "iso_ms")]
@@ -72,44 +71,99 @@ pub struct RoleRow {
     pub is_default: bool,
 }
 
-/// Every `UserRow` column, enums cast to text; reuse in any query that returns a `UserRow`.
-pub const USER_COLUMNS: &str = r#"u."id", u."createdAt", u."updatedAt", u."username", u."email", u."roleId",
-    u."mediaServerType"::text AS "mediaServerType", u."mediaServerId", u."avatar", u."lastLogin",
-    u."isAdmin", u."enabled", u."requirePasswordChange", u."movieQuotaLimit", u."seriesQuotaLimit",
-    u."quotaPeriodDays", u."libraryOrder", u."hiddenLibraryIds", u."profileVisibility"::text AS "profileVisibility",
-    u."shareTastes", u."shareRecommendations", u."shareWatchHistory", u."shareLikes", u."shareStats",
-    u."shareDisabled", u."hideSpoilers", u."edlEnabled", u."edlAutoSkipCommercials",
-    u."spoilerHideStills", u."spoilerHideOverviews", u."spoilerHideTitles""#;
-
 /// The user (if any) of `id` with its role, only when enabled: one query, no caching.
 pub async fn load_enabled(
     db: &PgPool,
     id: i32,
 ) -> Result<Option<(UserRow, Option<RoleRow>)>, sqlx::Error> {
-    let sql = format!(
-        r#"SELECT {USER_COLUMNS}, r."id" AS "roleRowId", r."createdAt" AS "roleCreatedAt",
-              r."updatedAt" AS "roleUpdatedAt", r."name" AS "roleName",
-              r."permissions" AS "rolePermissions", r."isDefault" AS "roleIsDefault"
-           FROM users u LEFT JOIN roles r ON r."id" = u."roleId"
-           WHERE u."id" = $1 AND u."enabled" = true LIMIT 1"#
-    );
-    let Some(row) = sqlx::query(&sql).bind(id).fetch_optional(db).await? else {
-        return Ok(None);
-    };
-    let user = <UserRow as sqlx::FromRow<PgRow>>::from_row(&row)?;
-    let role = match row.try_get::<Option<i32>, _>("roleRowId")? {
-        None => None,
-        Some(id) => Some(RoleRow {
-            id,
-            created_at: row.try_get("roleCreatedAt")?,
-            updated_at: row.try_get("roleUpdatedAt")?,
-            name: row.try_get("roleName")?,
-            permissions: serde_json::from_str(&row.try_get::<String, _>("rolePermissions")?)
-                .unwrap_or_default(),
-            is_default: row.try_get("roleIsDefault")?,
-        }),
-    };
-    Ok(Some((user, role)))
+    Ok(load_users(db, Some(id), true).await?.pop())
+}
+
+/// The users (all, or one by id) with their role, optionally only enabled ones, ordered by username.
+pub async fn load_users(
+    db: impl sqlx::PgExecutor<'_>,
+    id: Option<i32>,
+    enabled_only: bool,
+) -> Result<Vec<(UserRow, Option<RoleRow>)>, sqlx::Error> {
+    let rows = sqlx::query!(
+        r#"SELECT
+        u."id", u."createdAt" AS created_at, u."updatedAt" AS updated_at,
+        u."username" AS username, u."email" AS email, u."roleId" AS role_id,
+        u."mediaServerType"::text AS "media_server_type!",
+        u."mediaServerId" AS media_server_id, u."avatar" AS avatar,
+        u."lastLogin" AS last_login, u."isAdmin" AS is_admin, u."enabled" AS enabled,
+        u."requirePasswordChange" AS require_password_change,
+        u."movieQuotaLimit" AS movie_quota_limit, u."seriesQuotaLimit" AS series_quota_limit,
+        u."quotaPeriodDays" AS quota_period_days,
+        u."libraryOrder" AS "library_order: Json<Vec<i32>>",
+        u."hiddenLibraryIds" AS "hidden_library_ids: Json<Vec<i32>>",
+        u."profileVisibility"::text AS "profile_visibility!",
+        u."shareTastes" AS share_tastes, u."shareRecommendations" AS share_recommendations,
+        u."shareWatchHistory" AS share_watch_history, u."shareLikes" AS share_likes,
+        u."shareStats" AS share_stats, u."shareDisabled" AS share_disabled,
+        u."hideSpoilers" AS hide_spoilers, u."edlEnabled" AS edl_enabled,
+        u."edlAutoSkipCommercials" AS edl_auto_skip_commercials,
+        u."spoilerHideStills" AS spoiler_hide_stills,
+        u."spoilerHideOverviews" AS spoiler_hide_overviews,
+        u."spoilerHideTitles" AS spoiler_hide_titles,
+        r."id" AS "role_row_id?", r."createdAt" AS "role_created_at?", r."updatedAt" AS "role_updated_at?",
+        r."name" AS "role_name?", r."permissions" AS "role_permissions?", r."isDefault" AS "role_is_default?"
+    FROM users u LEFT JOIN roles r ON r."id" = u."roleId"
+    WHERE ($1::int IS NULL OR u."id" = $1) AND (NOT $2 OR u."enabled")
+    ORDER BY u."username" ASC"#,
+        id,
+        enabled_only
+    )
+    .fetch_all(db)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| {
+            let role = r.role_row_id.map(|id| RoleRow {
+                id,
+                created_at: r.role_created_at.unwrap_or_default(),
+                updated_at: r.role_updated_at.unwrap_or_default(),
+                name: r.role_name.unwrap_or_default(),
+                permissions: serde_json::from_str(&r.role_permissions.unwrap_or_default())
+                    .unwrap_or_default(),
+                is_default: r.role_is_default.unwrap_or_default(),
+            });
+            let user = UserRow {
+                id: r.id,
+                created_at: r.created_at,
+                updated_at: r.updated_at,
+                username: r.username,
+                email: r.email,
+                role_id: r.role_id,
+                media_server_type: r.media_server_type,
+                media_server_id: r.media_server_id,
+                avatar: r.avatar,
+                last_login: r.last_login,
+                is_admin: r.is_admin,
+                enabled: r.enabled,
+                require_password_change: r.require_password_change,
+                movie_quota_limit: r.movie_quota_limit,
+                series_quota_limit: r.series_quota_limit,
+                quota_period_days: r.quota_period_days,
+                library_order: r.library_order,
+                hidden_library_ids: r.hidden_library_ids,
+                profile_visibility: r.profile_visibility,
+                share_tastes: r.share_tastes,
+                share_recommendations: r.share_recommendations,
+                share_watch_history: r.share_watch_history,
+                share_likes: r.share_likes,
+                share_stats: r.share_stats,
+                share_disabled: r.share_disabled,
+                hide_spoilers: r.hide_spoilers,
+                edl_enabled: r.edl_enabled,
+                edl_auto_skip_commercials: r.edl_auto_skip_commercials,
+                spoiler_hide_stills: r.spoiler_hide_stills,
+                spoiler_hide_overviews: r.spoiler_hide_overviews,
+                spoiler_hide_titles: r.spoiler_hide_titles,
+            };
+            (user, role)
+        })
+        .collect())
 }
 
 /// An authenticated, enabled user. Plain `Authed` refuses `scope` tokens (F8); see `StreamAuthed`.

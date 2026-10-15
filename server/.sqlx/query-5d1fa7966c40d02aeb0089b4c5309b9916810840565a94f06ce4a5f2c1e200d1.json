@@ -1,0 +1,239 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n        u.\"id\", u.\"createdAt\" AS created_at, u.\"updatedAt\" AS updated_at,\n        u.\"username\" AS username, u.\"email\" AS email, u.\"roleId\" AS role_id,\n        u.\"mediaServerType\"::text AS \"media_server_type!\",\n        u.\"mediaServerId\" AS media_server_id, u.\"avatar\" AS avatar,\n        u.\"lastLogin\" AS last_login, u.\"isAdmin\" AS is_admin, u.\"enabled\" AS enabled,\n        u.\"requirePasswordChange\" AS require_password_change,\n        u.\"movieQuotaLimit\" AS movie_quota_limit, u.\"seriesQuotaLimit\" AS series_quota_limit,\n        u.\"quotaPeriodDays\" AS quota_period_days,\n        u.\"libraryOrder\" AS \"library_order: Json<Vec<i32>>\",\n        u.\"hiddenLibraryIds\" AS \"hidden_library_ids: Json<Vec<i32>>\",\n        u.\"profileVisibility\"::text AS \"profile_visibility!\",\n        u.\"shareTastes\" AS share_tastes, u.\"shareRecommendations\" AS share_recommendations,\n        u.\"shareWatchHistory\" AS share_watch_history, u.\"shareLikes\" AS share_likes,\n        u.\"shareStats\" AS share_stats, u.\"shareDisabled\" AS share_disabled,\n        u.\"hideSpoilers\" AS hide_spoilers, u.\"edlEnabled\" AS edl_enabled,\n        u.\"edlAutoSkipCommercials\" AS edl_auto_skip_commercials,\n        u.\"spoilerHideStills\" AS spoiler_hide_stills,\n        u.\"spoilerHideOverviews\" AS spoiler_hide_overviews,\n        u.\"spoilerHideTitles\" AS spoiler_hide_titles,\n        r.\"id\" AS \"role_row_id?\", r.\"createdAt\" AS \"role_created_at?\", r.\"updatedAt\" AS \"role_updated_at?\",\n        r.\"name\" AS \"role_name?\", r.\"permissions\" AS \"role_permissions?\", r.\"isDefault\" AS \"role_is_default?\"\n    FROM users u LEFT JOIN roles r ON r.\"id\" = u.\"roleId\"\n    WHERE ($1::int IS NULL OR u.\"id\" = $1) AND (NOT $2 OR u.\"enabled\")\n    ORDER BY u.\"username\" ASC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 2,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 3,
+        "name": "username",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "email",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 5,
+        "name": "role_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 6,
+        "name": "media_server_type!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "media_server_id",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 8,
+        "name": "avatar",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 9,
+        "name": "last_login",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 10,
+        "name": "is_admin",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 11,
+        "name": "enabled",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 12,
+        "name": "require_password_change",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 13,
+        "name": "movie_quota_limit",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 14,
+        "name": "series_quota_limit",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 15,
+        "name": "quota_period_days",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 16,
+        "name": "library_order: Json<Vec<i32>>",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 17,
+        "name": "hidden_library_ids: Json<Vec<i32>>",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 18,
+        "name": "profile_visibility!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 19,
+        "name": "share_tastes",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 20,
+        "name": "share_recommendations",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 21,
+        "name": "share_watch_history",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 22,
+        "name": "share_likes",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 23,
+        "name": "share_stats",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 24,
+        "name": "share_disabled",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 25,
+        "name": "hide_spoilers",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 26,
+        "name": "edl_enabled",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 27,
+        "name": "edl_auto_skip_commercials",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 28,
+        "name": "spoiler_hide_stills",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 29,
+        "name": "spoiler_hide_overviews",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 30,
+        "name": "spoiler_hide_titles",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 31,
+        "name": "role_row_id?",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 32,
+        "name": "role_created_at?",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 33,
+        "name": "role_updated_at?",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 34,
+        "name": "role_name?",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 35,
+        "name": "role_permissions?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 36,
+        "name": "role_is_default?",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Bool"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      null,
+      true,
+      true,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      null,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "5d1fa7966c40d02aeb0089b4c5309b9916810840565a94f06ce4a5f2c1e200d1"
+}
