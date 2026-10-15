@@ -1,0 +1,19 @@
+{
+  "deviation": "F10",
+  "name": "users-manager-deletes-admin-forbidden",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "manager",
+      "expect": {
+        "body": {
+          "message": "Forbidden",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "DELETE",
+      "path": "/api/users/1"
+    }
+  ]
+}
