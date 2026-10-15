@@ -57,6 +57,7 @@ pub fn router(
 /// Ported domain routers are merged here, one `.merge(...)` per domain.
 fn api() -> Router<AppState> {
     Router::new()
+        .merge(crate::auth::router())
         .merge(crate::roles::router())
         .merge(crate::settings::router())
         .merge(crate::fs::router())

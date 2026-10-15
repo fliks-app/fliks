@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO users (username, email, \"passwordHash\", \"roleId\", \"isAdmin\", \"mediaServerType\")\n           VALUES ($1, $2, $3, $4, false, 'local') RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "6cec208a416d79935bdf8d2b93afcc2f3c96f23364b4685504851ccd74f67155"
+}

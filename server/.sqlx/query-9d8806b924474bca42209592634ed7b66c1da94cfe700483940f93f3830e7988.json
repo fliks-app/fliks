@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM pairing_requests WHERE \"expiresAt\" < $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9d8806b924474bca42209592634ed7b66c1da94cfe700483940f93f3830e7988"
+}

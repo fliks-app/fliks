@@ -32,9 +32,10 @@ Decided behaviour for the Rust port (security fixes F, correctness fixes C; D3).
 | F12 | `roles.manage` can store any permission string, incl. `manage:all` | permissions a request adds (not already on the role) validated against `GET /roles/permissions`; granting `manage:all` requires admin | none |
 | F13 | `pairing.requested` broadcast to every SSE client | sent only to the target user's connections | none |
 | F14 | polled remote targets keyed by `deviceId` only (another account takes them over) | keyed by `(userId, deviceId)` | none |
-| F15 | an approved pairing stays claimable after `expiresAt` until the hourly cleanup | claim checks `expiresAt` | none |
+| F15 | an approved pairing stays claimable after `expiresAt` until the hourly cleanup | claim checks `expiresAt`: an unclaimed approval past it is flipped to `expired` and polls answer `{status:"expired"}` | none: clients already stop on `expired` |
 | F16 | Nest accepts HS256, HS384 and HS512 and a token without `exp` (valid forever) | only HS256 is accepted and `exp` is required: a token without `exp` or signed HS384/HS512 is 401; Fliks only ever signs HS256 with `exp` | none |
 | F17 | a deleted user's open SSE connections stay open | dropped on delete | none |
+| F18 | logout left the refresh token valid, and a replay after the 30 s grace revoked nothing: both revokes matched `"revokedAt" = NULL` | logout revokes the presented refresh token; a replay revokes every live refresh token of the user | none |
 
 Not done (user decision 2026-10-15): login rate limiting/lockout.
 
