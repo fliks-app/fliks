@@ -1,0 +1,27 @@
+{
+  "deviation": null,
+  "name": "remote-targets-empty",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": [
+          {
+            "deviceName": "Living room",
+            "formFactor": "tv",
+            "nowPlaying": null,
+            "ownerUsername": null,
+            "systemName": null,
+            "targetId": "dev-1#native",
+            "tvPlatform": null,
+            "userAgent": null
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/remote/targets"
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "deviation": null,
+  "name": "bootstrap-internal-routes-not-served",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "anon",
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Cannot GET /internal/events",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "GET",
+      "path": "/internal/events"
+    }
+  ]
+}

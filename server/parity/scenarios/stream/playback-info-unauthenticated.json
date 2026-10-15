@@ -1,0 +1,38 @@
+{
+  "deviation": null,
+  "engine": "up",
+  "name": "stream-playback-info-unauthenticated",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "anon",
+      "body": {
+        "deviceName": "Parity",
+        "deviceType": "desktop",
+        "directPlayProfiles": [
+          {
+            "audioCodecs": [
+              "aac"
+            ],
+            "containers": [
+              "mkv",
+              "mp4"
+            ],
+            "videoCodecs": [
+              "h264"
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "POST",
+      "path": "/api/stream/1/playback-info"
+    }
+  ]
+}

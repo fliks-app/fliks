@@ -1,0 +1,39 @@
+{
+  "deviation": null,
+  "engine": "up",
+  "name": "stream-playback-info-non-integer-id",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "deviceName": "Parity",
+        "deviceType": "desktop",
+        "directPlayProfiles": [
+          {
+            "audioCodecs": [
+              "aac"
+            ],
+            "containers": [
+              "mkv",
+              "mp4"
+            ],
+            "videoCodecs": [
+              "h264"
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Validation failed (numeric string is expected)",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/stream/abc/playback-info"
+    }
+  ]
+}

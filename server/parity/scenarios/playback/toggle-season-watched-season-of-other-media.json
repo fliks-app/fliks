@@ -1,0 +1,47 @@
+{
+  "deviation": "C6",
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastPlayedAt",
+    "$..playedAt"
+  ],
+  "name": "playback-toggle-season-watched-season-of-other-media",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "watched": true
+      },
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "not_found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "POST",
+      "path": "/api/playback/media/18/seasons/3/toggle-watched"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": [],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/playback/media/18/watched-episodes"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": [],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/playback/media/19/watched-episodes"
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "deviation": null,
+  "name": "playback-watched-ids-unauthenticated",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "anon",
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "GET",
+      "path": "/api/playback/watched-ids"
+    }
+  ]
+}

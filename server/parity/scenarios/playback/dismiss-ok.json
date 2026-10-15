@@ -1,0 +1,95 @@
+{
+  "deviation": null,
+  "name": "playback-dismiss-ok",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "status": 204
+      },
+      "method": "POST",
+      "path": "/api/playback/recommendations/3/dismiss"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "status": 204
+      },
+      "method": "POST",
+      "path": "/api/playback/recommendations/3/dismiss"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "count": 1
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/playback/recommendations/dismissed/count"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": [
+          {
+            "becauseTitle": "Parity Movie 02",
+            "media": {
+              "additionalFanartUrls": [],
+              "available": true,
+              "fanartUrl": null,
+              "genres": [
+                "Drama"
+              ],
+              "id": 4,
+              "posterUrl": null,
+              "title": "Parity Movie 04",
+              "type": "movie",
+              "year": 2020
+            },
+            "score": 1
+          },
+          {
+            "becauseTitle": "Parity Movie 02",
+            "media": {
+              "additionalFanartUrls": [],
+              "available": true,
+              "fanartUrl": null,
+              "genres": [
+                "Drama"
+              ],
+              "id": 5,
+              "posterUrl": null,
+              "title": "Parity Movie 05",
+              "type": "movie",
+              "year": 2020
+            },
+            "score": 1
+          },
+          {
+            "becauseTitle": "Parity Movie 02",
+            "media": {
+              "additionalFanartUrls": [],
+              "available": true,
+              "fanartUrl": null,
+              "genres": [
+                "Drama"
+              ],
+              "id": 6,
+              "posterUrl": null,
+              "title": "Parity Movie 06",
+              "type": "movie",
+              "year": 2020
+            },
+            "score": 1
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/playback/recommendations?limit=3"
+    }
+  ]
+}

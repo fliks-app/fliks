@@ -1,0 +1,390 @@
+{
+  "capture": {
+    "sid": "$.steps[0].body.sessionId"
+  },
+  "deviation": null,
+  "engine": "up",
+  "ignore": [
+    "$.sessionId",
+    "$.playUrl",
+    "$..hwAccel",
+    "$.profileHash",
+    "$.tonemapAlgo",
+    "$.items[*].sessionIds",
+    "$.items[*].sessionId",
+    "$.items[*].lastSeenAt",
+    "$.items[*].startedAt",
+    "$.items[*].endedAt",
+    "$.sessionIds",
+    "$.lastSeenAt",
+    "$.startedAt",
+    "$.endedAt",
+    "$.sessions[*].sessionId",
+    "$.sessions[*].startedAt",
+    "$.sessions[*].lastSeenAt",
+    "$.sessions[*].endedAt",
+    "$.events[*].sessionId",
+    "$.events[*].at",
+    "$.events[*].data.serverLoad"
+  ],
+  "name": "qoe-session-detail-after-playback",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "deviceName": "Parity",
+        "deviceType": "desktop",
+        "directPlayProfiles": [
+          {
+            "audioCodecs": [
+              "aac"
+            ],
+            "containers": [
+              "mkv",
+              "mp4"
+            ],
+            "videoCodecs": [
+              "h264"
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "body": {
+          "audioCopyStream": true,
+          "audioPlan": {
+            "channels": 1,
+            "codec": "aac",
+            "mode": "copy",
+            "profile": "LC"
+          },
+          "audioTracks": [
+            {
+              "bitrateBps": 192000,
+              "channels": 1,
+              "codec": "aac",
+              "copy": true,
+              "index": 0,
+              "language": "eng",
+              "outputChannels": 1,
+              "outputCodec": "aac",
+              "reasonFlags": [],
+              "sampleRate": 48000
+            }
+          ],
+          "clientTonemap": false,
+          "contentType": "video/x-matroska",
+          "dolbyVision": false,
+          "durationSeconds": 3.021,
+          "mediaFileId": 1,
+          "outputAudioCodec": "aac",
+          "outputContainer": "mkv",
+          "outputVideoCodec": "h264",
+          "playMethod": "DirectPlay",
+          "qualities": [
+            {
+              "height": 90,
+              "id": "original",
+              "isRemux": false,
+              "label": "144p",
+              "totalBitrateBps": 193941,
+              "width": 160
+            }
+          ],
+          "quality": "original",
+          "source": {
+            "audioChannelLayout": "mono",
+            "audioChannels": 1,
+            "audioCodec": "aac",
+            "audioLanguage": "eng",
+            "audioSampleRate": 48000,
+            "container": "mkv",
+            "durationSeconds": 3.021,
+            "formatBitRate": 193941,
+            "frameRate": "24",
+            "height": 90,
+            "videoBitDepth": 8,
+            "videoBitRate": 193941,
+            "videoCodec": "h264",
+            "videoLevel": 10,
+            "videoProfile": "high",
+            "width": 160
+          },
+          "tonemapping": false,
+          "transcodeReasons": [],
+          "videoCopyStream": true
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/stream/1/playback-info"
+    },
+    {
+      "as": "user",
+      "body": {
+        "events": [
+          {
+            "at": 1,
+            "type": "stall"
+          }
+        ],
+        "playbackId": "pb-1",
+        "sentAt": 1
+      },
+      "expect": {
+        "status": 204
+      },
+      "method": "POST",
+      "path": "/api/playback/sessions/{sid}/events"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "status": 204
+      },
+      "method": "DELETE",
+      "path": "/api/stream/sessions/{sid}"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "items": [
+            {
+              "appVersion": null,
+              "avgBandwidthBps": null,
+              "avgVariantBitrate": null,
+              "cmcd": false,
+              "cmcdClaimed": false,
+              "confidence": "low",
+              "decodedFrames": null,
+              "decoderName": null,
+              "deviceLabel": null,
+              "droppedFrames": null,
+              "engine": null,
+              "errorCount": 0,
+              "height": null,
+              "hwDecoder": null,
+              "mediaFileId": 1,
+              "mediaTitle": "Parity Movie 01",
+              "medianTranscodeSpeed": null,
+              "minBandwidthBps": null,
+              "pipeline": {
+                "audioTranscode": null,
+                "burnIn": null,
+                "crop": null,
+                "decode": null,
+                "encode": null,
+                "output": null,
+                "source": {
+                  "codec": "h264",
+                  "hdr": null,
+                  "height": 90,
+                  "width": 160
+                },
+                "tonemap": null
+              },
+              "playMethod": "directplay",
+              "playbackConfidence": "low",
+              "playbackId": "pb-1",
+              "playbackVerdict": "unknown",
+              "quality": null,
+              "reasons": [
+                "qoe.reason.too_little_data"
+              ],
+              "recoveryReloads": 0,
+              "stallCount": 0,
+              "stallMs": 0,
+              "systemName": null,
+              "transcodeReasons": [],
+              "userId": 2,
+              "verdict": "unknown",
+              "videoCodec": null,
+              "watchedMs": 0,
+              "width": null
+            }
+          ],
+          "total": 1
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/system/qoe/sessions"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "appVersion": null,
+          "avgBandwidthBps": null,
+          "avgVariantBitrate": null,
+          "cmcd": false,
+          "cmcdClaimed": false,
+          "confidence": "low",
+          "decodedFrames": null,
+          "decoderName": null,
+          "deviceLabel": null,
+          "droppedFrames": null,
+          "engine": null,
+          "errorCount": 0,
+          "events": [
+            {
+              "data": {
+                "cause": "unknown",
+                "causeConfidence": "low",
+                "causeEvidence": {},
+                "causeHints": [],
+                "causeReason": "qoe.stall.unknown",
+                "position": null
+              },
+              "id": 1,
+              "type": "stall"
+            }
+          ],
+          "height": null,
+          "hwDecoder": null,
+          "mediaFileId": 1,
+          "mediaTitle": "Parity Movie 01",
+          "medianTranscodeSpeed": null,
+          "minBandwidthBps": null,
+          "pipeline": {
+            "audioTranscode": null,
+            "burnIn": null,
+            "crop": null,
+            "decode": null,
+            "encode": null,
+            "output": null,
+            "source": {
+              "codec": "h264",
+              "hdr": null,
+              "height": 90,
+              "width": 160
+            },
+            "tonemap": null
+          },
+          "playMethod": "directplay",
+          "playbackConfidence": "low",
+          "playbackId": "pb-1",
+          "playbackVerdict": "unknown",
+          "quality": null,
+          "reasons": [
+            "qoe.reason.too_little_data"
+          ],
+          "recoveryReloads": 0,
+          "sessions": [
+            {
+              "appVersion": null,
+              "avgBandwidthBps": null,
+              "avgVariantBitrate": null,
+              "cmcd": false,
+              "cmcdClaimed": false,
+              "cmcdThroughputBps": null,
+              "confidence": "low",
+              "decodedFrames": null,
+              "decoderName": null,
+              "deviceLabel": null,
+              "droppedFrames": null,
+              "engine": null,
+              "errorCount": 0,
+              "height": null,
+              "hwDecoder": null,
+              "mediaFileId": 1,
+              "mediaTitle": "Parity Movie 01",
+              "medianTranscodeSpeed": null,
+              "minBandwidthBps": null,
+              "pipeline": {
+                "audioTranscode": null,
+                "burnIn": null,
+                "crop": null,
+                "decode": null,
+                "encode": null,
+                "output": null,
+                "source": {
+                  "codec": "h264",
+                  "hdr": null,
+                  "height": 90,
+                  "width": 160
+                },
+                "tonemap": null
+              },
+              "playMethod": "directplay",
+              "playbackConfidence": "low",
+              "playbackId": "pb-1",
+              "playbackVerdict": "unknown",
+              "quality": null,
+              "reasons": [
+                "qoe.reason.too_little_data"
+              ],
+              "recoveryReloads": 0,
+              "sampleCount": 0,
+              "stallBandwidthBps": null,
+              "stallBufferAheadS": null,
+              "stallCauseMs": {
+                "device": 0,
+                "network": 0,
+                "server": 0,
+                "unknown": 0.5
+              },
+              "stallCount": 0,
+              "stallMs": 0,
+              "stallReasonMs": {
+                "qoe.stall.unknown": 0.5
+              },
+              "systemName": null,
+              "transcodeReasons": [],
+              "unrecoveredError": false,
+              "userId": 2,
+              "verdict": "unknown",
+              "videoCodec": null,
+              "watchedMs": 0,
+              "width": null
+            }
+          ],
+          "stallCount": 0,
+          "stallMs": 0,
+          "systemName": null,
+          "transcodeReasons": [],
+          "userId": 2,
+          "verdict": "unknown",
+          "videoCodec": null,
+          "watchedMs": 0,
+          "width": null
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/system/qoe/sessions/{sid}"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "byDevice": [
+            {
+              "avgDroppedPct": null,
+              "device": null,
+              "engine": null,
+              "hwDecoderPct": null,
+              "sessions": 1,
+              "stallSessions": 0,
+              "systemName": null,
+              "topVerdict": "unknown"
+            }
+          ],
+          "byVerdict": {
+            "device": 0,
+            "error": 0,
+            "network": 0,
+            "ok": 0,
+            "server": 0,
+            "unknown": 1
+          }
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/system/qoe/summary"
+    }
+  ]
+}

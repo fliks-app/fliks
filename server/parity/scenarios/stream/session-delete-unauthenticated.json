@@ -1,0 +1,20 @@
+{
+  "deviation": null,
+  "engine": "up",
+  "name": "stream-session-delete-unauthenticated",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "anon",
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "DELETE",
+      "path": "/api/stream/sessions/nosuch"
+    }
+  ]
+}

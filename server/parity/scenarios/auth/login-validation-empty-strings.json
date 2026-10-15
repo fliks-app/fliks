@@ -1,0 +1,27 @@
+{
+  "deviation": null,
+  "name": "auth-login-validation-empty-strings",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "anon",
+      "body": {
+        "password": "",
+        "username": ""
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "username should not be empty",
+            "password should not be empty"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/auth/login"
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "deviation": null,
+  "name": "playback-hide-ok",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "status": 200
+      },
+      "method": "DELETE",
+      "path": "/api/playback/hide/18"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": [
+          {
+            "durationSeconds": 3600,
+            "episodeId": null,
+            "episodeLabel": null,
+            "fanartUrl": null,
+            "id": 1,
+            "lastPlayedAt": "2026-01-02T00:00:00.000Z",
+            "mediaFileId": 1,
+            "mediaId": 1,
+            "mediaTitle": "Parity Movie 01",
+            "mediaType": "movie",
+            "positionSeconds": 1200,
+            "posterUrl": null,
+            "progressPercent": 33,
+            "stillUrl": null
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/playback/continue-watching"
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "deviation": null,
+  "name": "remote-targets-other-user-sees-none",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "deviceId": "dev-1",
+        "formFactor": "tv",
+        "name": "Living room"
+      },
+      "expect": {
+        "body": {
+          "targetId": "dev-1#native"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/remote/register"
+    },
+    {
+      "as": "other",
+      "expect": {
+        "body": [],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/remote/targets"
+    }
+  ]
+}

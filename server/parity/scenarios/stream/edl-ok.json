@@ -1,0 +1,19 @@
+{
+  "deviation": null,
+  "engine": "up",
+  "name": "stream-edl-ok",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "ranges": []
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/stream/1/edl"
+    }
+  ]
+}

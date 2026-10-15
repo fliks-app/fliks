@@ -1,0 +1,167 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "roles-delete-ok",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "defaultLibraryIds": [
+          1
+        ],
+        "isDefault": false,
+        "name": "Editor",
+        "permissions": [
+          "media.read",
+          "media.edit"
+        ]
+      },
+      "expect": {
+        "body": {
+          "defaultLibraries": [
+            {
+              "color": "#3b82f6",
+              "icon": "film",
+              "id": 1,
+              "label": null,
+              "mediaTypes": [
+                "movie"
+              ],
+              "metadataLanguage": null,
+              "metadataRegion": null,
+              "name": "Movies",
+              "path": "/tmp/fliks-parity/media/movies",
+              "preferredProvider": null
+            }
+          ],
+          "defaultLibraryIds": [
+            1
+          ],
+          "id": 5,
+          "isDefault": false,
+          "name": "Editor",
+          "permissions": [
+            "media.read",
+            "media.edit"
+          ]
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/roles"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "status": 200
+      },
+      "method": "DELETE",
+      "path": "/api/roles/5"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "defaultLibraries": [],
+            "defaultLibraryIds": [],
+            "id": 1,
+            "isDefault": false,
+            "name": "Admin",
+            "permissions": [
+              "media.read",
+              "media.create",
+              "media.edit",
+              "media.delete",
+              "media.grab",
+              "livetv.read",
+              "requests.create",
+              "requests.manage",
+              "subtitles.manage",
+              "settings.access",
+              "users.manage",
+              "roles.manage"
+            ]
+          },
+          {
+            "defaultLibraries": [],
+            "defaultLibraryIds": [],
+            "id": 4,
+            "isDefault": false,
+            "name": "Manager",
+            "permissions": [
+              "media.read",
+              "users.manage"
+            ]
+          },
+          {
+            "defaultLibraries": [],
+            "defaultLibraryIds": [],
+            "id": 3,
+            "isDefault": false,
+            "name": "Readonly",
+            "permissions": [
+              "media.read",
+              "livetv.read"
+            ]
+          },
+          {
+            "defaultLibraries": [
+              {
+                "color": "#3b82f6",
+                "defaultLanguageProfileId": null,
+                "defaultQualityProfileId": null,
+                "icon": "film",
+                "id": 1,
+                "label": null,
+                "mediaTypes": [
+                  "movie"
+                ],
+                "metadataLanguage": null,
+                "metadataRegion": null,
+                "name": "Movies",
+                "path": "/tmp/fliks-parity/media/movies",
+                "preferredProvider": null
+              },
+              {
+                "color": "#10b981",
+                "defaultLanguageProfileId": null,
+                "defaultQualityProfileId": null,
+                "icon": "tv",
+                "id": 2,
+                "label": null,
+                "mediaTypes": [
+                  "series"
+                ],
+                "metadataLanguage": null,
+                "metadataRegion": null,
+                "name": "Series",
+                "path": "/tmp/fliks-parity/media/series",
+                "preferredProvider": null
+              }
+            ],
+            "defaultLibraryIds": [
+              1,
+              2
+            ],
+            "id": 2,
+            "isDefault": true,
+            "name": "User",
+            "permissions": [
+              "media.read",
+              "livetv.read",
+              "requests.create"
+            ]
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/roles"
+    }
+  ]
+}

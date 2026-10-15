@@ -1,0 +1,19 @@
+{
+  "deviation": null,
+  "name": "settings-get-key-null-row",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "key": "parity_null",
+          "value": null
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/settings/parity_null"
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "deviation": null,
+  "name": "users-list-forbidden-readonly",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "readonly",
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "GET",
+      "path": "/api/users"
+    }
+  ]
+}

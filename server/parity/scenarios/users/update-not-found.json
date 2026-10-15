@@ -1,0 +1,23 @@
+{
+  "deviation": null,
+  "name": "users-update-not-found",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "email": "x@parity.test"
+      },
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "User #999 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "PUT",
+      "path": "/api/users/999"
+    }
+  ]
+}

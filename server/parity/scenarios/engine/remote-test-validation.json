@@ -1,0 +1,26 @@
+{
+  "deviation": null,
+  "engine": "up",
+  "name": "engine-remote-test-validation",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "url": "http://127.0.0.1:9"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "token must be a string"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/engine/remote/test"
+    }
+  ]
+}

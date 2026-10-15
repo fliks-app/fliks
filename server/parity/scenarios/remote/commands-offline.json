@@ -1,0 +1,20 @@
+{
+  "deviation": null,
+  "name": "remote-commands-offline",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "remote.error_device_offline",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "GET",
+      "path": "/api/remote/commands?targetId=nope"
+    }
+  ]
+}

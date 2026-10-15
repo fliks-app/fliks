@@ -1,0 +1,25 @@
+{
+  "deviation": null,
+  "name": "users-create-forbidden",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "email": "new@parity.test",
+        "password": "longenough1",
+        "username": "newuser"
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "POST",
+      "path": "/api/users"
+    }
+  ]
+}

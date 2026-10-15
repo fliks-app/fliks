@@ -1,0 +1,29 @@
+{
+  "deviation": null,
+  "name": "roles-permissions-ok",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          "media.read",
+          "media.create",
+          "media.edit",
+          "media.delete",
+          "media.grab",
+          "livetv.read",
+          "requests.create",
+          "requests.manage",
+          "subtitles.manage",
+          "settings.access",
+          "users.manage",
+          "roles.manage"
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/roles/permissions"
+    }
+  ]
+}

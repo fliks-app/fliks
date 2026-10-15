@@ -1,0 +1,40 @@
+{
+  "deviation": null,
+  "engine": "down",
+  "name": "engine-remote-put-disconnect-engine-down",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "pathMappings": [],
+        "token": "",
+        "url": ""
+      },
+      "expect": {
+        "body": {
+          "pathMappings": [],
+          "processUrl": "",
+          "status": "off",
+          "token": "",
+          "url": ""
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/engine/remote"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "key": "engine_url",
+          "value": ""
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/settings/engine_url"
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "deviation": null,
+  "name": "remote-grant-code-validation",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "deviceId": "dev-1"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "deviceName must be shorter than or equal to 80 characters",
+            "deviceName must be a string"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/remote/grants/code"
+    }
+  ]
+}

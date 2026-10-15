@@ -1,0 +1,39 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "settings-put-key-create",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "value": "v"
+      },
+      "expect": {
+        "body": {
+          "id": 4,
+          "key": "fresh_key",
+          "value": "v"
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/settings/fresh_key"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "key": "fresh_key",
+          "value": "v"
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/settings/fresh_key"
+    }
+  ]
+}

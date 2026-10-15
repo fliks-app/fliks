@@ -1,0 +1,31 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..connectionId"
+  ],
+  "name": "events-sse-query-token",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "auth": "query",
+      "expect": {
+        "body": [
+          {
+            "data": {
+              "type": "sse.connected"
+            },
+            "event": ""
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/system/events",
+      "sse": {
+        "events": 1,
+        "timeoutMs": 3000
+      }
+    }
+  ]
+}

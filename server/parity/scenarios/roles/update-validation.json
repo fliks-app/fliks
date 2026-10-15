@@ -1,0 +1,25 @@
+{
+  "deviation": null,
+  "name": "roles-update-validation",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "permissions": "media.read"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "permissions must be an array"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PUT",
+      "path": "/api/roles/3"
+    }
+  ]
+}

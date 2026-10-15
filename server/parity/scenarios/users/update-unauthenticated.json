@@ -1,0 +1,22 @@
+{
+  "deviation": null,
+  "name": "users-update-unauthenticated",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "anon",
+      "body": {
+        "email": "x@parity.test"
+      },
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "PUT",
+      "path": "/api/users/2"
+    }
+  ]
+}

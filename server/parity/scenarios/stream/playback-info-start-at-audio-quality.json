@@ -1,0 +1,174 @@
+{
+  "capture": {
+    "sid": "$.steps[0].body.sessionId"
+  },
+  "deviation": null,
+  "engine": "up",
+  "ignore": [
+    "$.sessionId",
+    "$.playUrl",
+    "$..hwAccel",
+    "$.profileHash",
+    "$.tonemapAlgo"
+  ],
+  "name": "stream-playback-info-start-at-audio-quality",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "deviceName": "Parity",
+        "deviceType": "desktop",
+        "directPlayProfiles": [
+          {
+            "audioCodecs": [
+              "aac"
+            ],
+            "containers": [
+              "mkv",
+              "mp4"
+            ],
+            "videoCodecs": [
+              "hevc"
+            ]
+          }
+        ],
+        "supportsDirectPlay": false
+      },
+      "expect": {
+        "body": {
+          "audioCopyStream": true,
+          "audioPlan": {
+            "channels": 1,
+            "codec": "aac",
+            "mode": "copy",
+            "profile": "LC"
+          },
+          "audioTracks": [
+            {
+              "bitrateBps": 48000,
+              "channels": 1,
+              "codec": "aac",
+              "copy": true,
+              "index": 0,
+              "language": "eng",
+              "outputChannels": 1,
+              "outputCodec": "aac",
+              "reasonFlags": [],
+              "sampleRate": 48000
+            }
+          ],
+          "clientTonemap": false,
+          "contentType": "application/vnd.apple.mpegurl",
+          "dolbyVision": false,
+          "durationSeconds": 3.021,
+          "mediaFileId": 1,
+          "outputAudioCodec": "aac",
+          "outputContainer": "hls",
+          "outputVideoCodec": "hevc",
+          "playMethod": "Transcode",
+          "qualities": [
+            {
+              "height": 144,
+              "id": "144p",
+              "isRemux": false,
+              "label": "144p",
+              "totalBitrateBps": 241941,
+              "width": 256
+            }
+          ],
+          "quality": "144p",
+          "source": {
+            "audioChannelLayout": "mono",
+            "audioChannels": 1,
+            "audioCodec": "aac",
+            "audioLanguage": "eng",
+            "audioSampleRate": 48000,
+            "container": "mkv",
+            "durationSeconds": 3.021,
+            "formatBitRate": 193941,
+            "frameRate": "24",
+            "height": 90,
+            "videoBitDepth": 8,
+            "videoBitRate": 193941,
+            "videoCodec": "h264",
+            "videoLevel": 10,
+            "videoProfile": "high",
+            "width": 160
+          },
+          "tonemapping": false,
+          "transcodeBitrateByQuality": {
+            "1080p": {
+              "audioBitrateBps": 192000,
+              "totalBitrateBps": 385941,
+              "videoBitrateBps": 193941
+            },
+            "144p": {
+              "audioBitrateBps": 48000,
+              "totalBitrateBps": 241941,
+              "videoBitrateBps": 193941
+            },
+            "2160p": {
+              "audioBitrateBps": 192000,
+              "totalBitrateBps": 385941,
+              "videoBitrateBps": 193941
+            },
+            "240p": {
+              "audioBitrateBps": 64000,
+              "totalBitrateBps": 257941,
+              "videoBitrateBps": 193941
+            },
+            "360p": {
+              "audioBitrateBps": 64000,
+              "totalBitrateBps": 257941,
+              "videoBitrateBps": 193941
+            },
+            "480p": {
+              "audioBitrateBps": 96000,
+              "totalBitrateBps": 289941,
+              "videoBitrateBps": 193941
+            },
+            "720p": {
+              "audioBitrateBps": 128000,
+              "totalBitrateBps": 321941,
+              "videoBitrateBps": 193941
+            },
+            "eco-1080p": {
+              "audioBitrateBps": 192000,
+              "totalBitrateBps": 385941,
+              "videoBitrateBps": 193941
+            },
+            "eco-2160p": {
+              "audioBitrateBps": 192000,
+              "totalBitrateBps": 385941,
+              "videoBitrateBps": 193941
+            },
+            "eco-720p": {
+              "audioBitrateBps": 128000,
+              "totalBitrateBps": 321941,
+              "videoBitrateBps": 193941
+            }
+          },
+          "transcodeReasons": [
+            {
+              "flag": "VideoCodecNotSupported",
+              "message": "Codec \"h264\" not supported"
+            }
+          ],
+          "videoCopyStream": false
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/stream/1/playback-info?startAt=1&audioStreamIndex=0&startQuality=144p"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "status": 204
+      },
+      "method": "DELETE",
+      "path": "/api/stream/sessions/{sid}"
+    }
+  ]
+}

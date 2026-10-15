@@ -1,0 +1,44 @@
+{
+  "capture": {
+    "st": "$.steps[0].body.streamToken"
+  },
+  "deviation": null,
+  "ignore": [
+    "$..streamToken",
+    "$..expiresAt"
+  ],
+  "name": "playback-heartbeat-stream-token-forbidden",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": {},
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/auth/stream-token"
+    },
+    {
+      "as": "anon",
+      "body": {
+        "durationSeconds": 3600,
+        "mediaFileId": 1,
+        "positionSeconds": 600
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "session_token_required",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "headers": {
+        "Authorization": "Bearer {st}"
+      },
+      "method": "PUT",
+      "path": "/api/playback/media/1/state"
+    }
+  ]
+}

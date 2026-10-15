@@ -1,0 +1,23 @@
+{
+  "deviation": null,
+  "name": "remote-grant-code-unauthenticated",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "anon",
+      "body": {
+        "deviceId": "d",
+        "deviceName": "n"
+      },
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "POST",
+      "path": "/api/remote/grants/code"
+    }
+  ]
+}

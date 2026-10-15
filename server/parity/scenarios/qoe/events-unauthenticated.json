@@ -1,0 +1,29 @@
+{
+  "deviation": null,
+  "name": "qoe-events-unauthenticated",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "anon",
+      "body": {
+        "events": [
+          {
+            "at": 1,
+            "type": "play"
+          }
+        ],
+        "playbackId": "p1",
+        "sentAt": 1
+      },
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "POST",
+      "path": "/api/playback/sessions/nosuch/events"
+    }
+  ]
+}

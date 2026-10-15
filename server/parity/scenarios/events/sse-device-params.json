@@ -1,0 +1,30 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..connectionId"
+  ],
+  "name": "events-sse-device-params",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": [
+          {
+            "data": {
+              "type": "sse.connected"
+            },
+            "event": ""
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/system/events?device=d1&ff=1&tvPlatform=tizen&name=Phone",
+      "sse": {
+        "events": 1,
+        "timeoutMs": 3000
+      }
+    }
+  ]
+}

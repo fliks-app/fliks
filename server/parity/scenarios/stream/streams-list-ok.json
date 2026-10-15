@@ -1,0 +1,17 @@
+{
+  "deviation": null,
+  "engine": "up",
+  "name": "stream-streams-list-ok",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": [],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/system/streams"
+    }
+  ]
+}

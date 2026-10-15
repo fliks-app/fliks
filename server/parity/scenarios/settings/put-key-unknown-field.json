@@ -1,0 +1,26 @@
+{
+  "deviation": null,
+  "name": "settings-put-key-unknown-field",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "value": "a",
+        "x": 1
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "property x should not exist"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PUT",
+      "path": "/api/settings/parity_flag"
+    }
+  ]
+}

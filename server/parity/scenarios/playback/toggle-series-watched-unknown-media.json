@@ -1,0 +1,21 @@
+{
+  "deviation": null,
+  "name": "playback-toggle-series-watched-unknown-media",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "watched": true
+      },
+      "expect": {
+        "body": {
+          "watched": true
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/playback/media/999/toggle-series-watched"
+    }
+  ]
+}

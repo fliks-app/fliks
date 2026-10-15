@@ -1,0 +1,51 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..connectionId"
+  ],
+  "name": "events-sse-receives-remote-targets-changed",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": [
+          {
+            "data": {
+              "type": "sse.connected"
+            },
+            "event": ""
+          },
+          {
+            "data": {
+              "type": "remote.targets_changed"
+            },
+            "event": ""
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/system/events?device=d1",
+      "sse": {
+        "after": [
+          {
+            "as": "user",
+            "body": {
+              "deviceId": "dev-1",
+              "formFactor": "tv",
+              "name": "Living room"
+            },
+            "expect": {
+              "status": 0
+            },
+            "method": "POST",
+            "path": "/api/remote/register"
+          }
+        ],
+        "events": 2,
+        "timeoutMs": 4000
+      }
+    }
+  ]
+}

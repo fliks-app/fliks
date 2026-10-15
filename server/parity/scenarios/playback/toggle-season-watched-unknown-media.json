@@ -1,0 +1,23 @@
+{
+  "deviation": "C1",
+  "name": "playback-toggle-season-watched-unknown-media",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "watched": true
+      },
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "not_found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "POST",
+      "path": "/api/playback/media/999/seasons/1/toggle-watched"
+    }
+  ]
+}

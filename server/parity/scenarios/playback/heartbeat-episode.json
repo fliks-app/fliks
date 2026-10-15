@@ -1,0 +1,72 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastPlayedAt",
+    "$..playedAt"
+  ],
+  "name": "playback-heartbeat-episode",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "durationSeconds": 1800,
+        "episodeId": 2,
+        "mediaFileId": 19,
+        "positionSeconds": 300
+      },
+      "expect": {
+        "body": {
+          "state": {
+            "completed": false,
+            "durationSeconds": 1800,
+            "episode": {
+              "id": 2
+            },
+            "episodeId": 2,
+            "hiddenFromContinueWatching": false,
+            "id": 5,
+            "media": {
+              "id": 18,
+              "path": null
+            },
+            "mediaFile": {
+              "id": 19
+            },
+            "mediaFileId": 19,
+            "mediaId": 18,
+            "positionSeconds": 300,
+            "user": {
+              "id": 2
+            },
+            "userId": 2
+          }
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/playback/media/18/state"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "completed": false,
+          "durationSeconds": 1800,
+          "episodeId": 2,
+          "hiddenFromContinueWatching": false,
+          "id": 5,
+          "mediaFileId": 19,
+          "mediaId": 18,
+          "positionSeconds": 300,
+          "userId": 2
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/playback/media/18/state?episodeId=2"
+    }
+  ]
+}

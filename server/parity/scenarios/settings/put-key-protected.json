@@ -1,0 +1,24 @@
+{
+  "deviation": null,
+  "name": "settings-put-key-protected",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "value": "x"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "\"engine_token\" is managed by its own endpoint: PUT /engine/remote",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PUT",
+      "path": "/api/settings/engine_token"
+    }
+  ],
+  "strictMessage": true
+}

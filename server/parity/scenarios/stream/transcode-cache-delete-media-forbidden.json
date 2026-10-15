@@ -1,0 +1,21 @@
+{
+  "deviation": null,
+  "engine": "up",
+  "name": "stream-transcode-cache-delete-media-forbidden",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "DELETE",
+      "path": "/api/system/transcode-cache/1"
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "deviation": null,
+  "name": "playback-toggle-season-watched-unauthenticated",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "anon",
+      "body": {
+        "watched": true
+      },
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "POST",
+      "path": "/api/playback/media/18/seasons/1/toggle-watched"
+    }
+  ]
+}

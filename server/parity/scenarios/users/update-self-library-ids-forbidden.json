@@ -1,0 +1,25 @@
+{
+  "deviation": null,
+  "name": "users-update-self-library-ids-forbidden",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "libraryIds": [
+          1
+        ]
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Only users with users.manage permission can change library access",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "PUT",
+      "path": "/api/users/2"
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "deviation": null,
+  "engine": "up",
+  "ignore": [
+    "$.url",
+    "$.token",
+    "$.processUrl"
+  ],
+  "name": "engine-remote-get-ok",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "pathMappings": [],
+          "status": "up"
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/engine/remote"
+    }
+  ]
+}

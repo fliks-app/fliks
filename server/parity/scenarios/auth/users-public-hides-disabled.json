@@ -1,0 +1,91 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "auth-users-public-hides-disabled",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "enabled": false
+      },
+      "expect": {
+        "body": {
+          "avatar": null,
+          "edlAutoSkipCommercials": true,
+          "edlEnabled": true,
+          "email": "readonly@parity.test",
+          "enabled": false,
+          "hiddenLibraryIds": [],
+          "hideSpoilers": false,
+          "id": 3,
+          "isAdmin": false,
+          "lastLogin": null,
+          "libraryIds": [
+            1
+          ],
+          "libraryOrder": [],
+          "mediaServerId": null,
+          "mediaServerType": "local",
+          "movieQuotaLimit": 0,
+          "permissions": [
+            "media.read",
+            "livetv.read"
+          ],
+          "profileVisibility": "private",
+          "quotaPeriodDays": 7,
+          "requirePasswordChange": false,
+          "role": "Readonly",
+          "roleId": 3,
+          "seriesQuotaLimit": 0,
+          "shareDisabled": false,
+          "shareLikes": false,
+          "shareRecommendations": false,
+          "shareStats": false,
+          "shareTastes": false,
+          "shareWatchHistory": false,
+          "spoilerHideOverviews": true,
+          "spoilerHideStills": true,
+          "spoilerHideTitles": true,
+          "username": "readonly"
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/users/3"
+    },
+    {
+      "as": "anon",
+      "expect": {
+        "body": [
+          {
+            "avatar": null,
+            "id": 1,
+            "username": "admin"
+          },
+          {
+            "avatar": null,
+            "id": 5,
+            "username": "manager"
+          },
+          {
+            "avatar": "/api/users/4/avatar?v=1767225600000",
+            "id": 4,
+            "username": "other"
+          },
+          {
+            "avatar": null,
+            "id": 2,
+            "username": "user"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/auth/users-public"
+    }
+  ]
+}

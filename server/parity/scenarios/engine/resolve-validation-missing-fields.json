@@ -1,0 +1,26 @@
+{
+  "deviation": null,
+  "engine": "up",
+  "name": "engine-resolve-validation-missing-fields",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "engine",
+      "body": {},
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "mediaId should not be null or undefined",
+            "credential must be a string",
+            "purpose must be one of the following values: stream, download, sprite, subtitle, live"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/engine/resolve"
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "deviation": null,
+  "name": "remote-register-ok",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "deviceId": "dev-1",
+        "formFactor": "tv",
+        "name": "Living room"
+      },
+      "expect": {
+        "body": {
+          "targetId": "dev-1#native"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/remote/register"
+    }
+  ]
+}

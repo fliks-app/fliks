@@ -1,0 +1,22 @@
+{
+  "deviation": null,
+  "name": "auth-me-bad-bearer",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "anon",
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "headers": {
+        "Authorization": "Bearer nope"
+      },
+      "method": "GET",
+      "path": "/api/auth/me"
+    }
+  ]
+}

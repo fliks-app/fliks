@@ -1,0 +1,39 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..cmdId"
+  ],
+  "name": "remote-command-ok",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "deviceId": "dev-1",
+        "formFactor": "tv",
+        "name": "Living room"
+      },
+      "expect": {
+        "body": {
+          "targetId": "dev-1#native"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/remote/register"
+    },
+    {
+      "as": "user",
+      "body": {
+        "action": "seek",
+        "positionSeconds": 12
+      },
+      "expect": {
+        "body": {},
+        "status": 202
+      },
+      "method": "POST",
+      "path": "/api/remote/dev-1%23native/command"
+    }
+  ]
+}

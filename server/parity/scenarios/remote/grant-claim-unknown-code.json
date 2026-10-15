@@ -1,0 +1,23 @@
+{
+  "deviation": null,
+  "name": "remote-grant-claim-unknown-code",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "other",
+      "body": {
+        "code": "ZZZZZZ"
+      },
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "remote.error_unknown_code",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "POST",
+      "path": "/api/remote/grants/claim"
+    }
+  ]
+}

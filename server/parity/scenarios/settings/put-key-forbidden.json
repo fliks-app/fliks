@@ -1,0 +1,23 @@
+{
+  "deviation": null,
+  "name": "settings-put-key-forbidden",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "value": "x"
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "PUT",
+      "path": "/api/settings/parity_flag"
+    }
+  ]
+}

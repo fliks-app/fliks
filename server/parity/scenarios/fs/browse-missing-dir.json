@@ -1,0 +1,20 @@
+{
+  "deviation": null,
+  "name": "fs-browse-missing-dir",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Cannot read \"/tmp/fliks-parity/nope\": ENOENT: no such file or directory, scandir '/tmp/fliks-parity/nope'",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "GET",
+      "path": "/api/fs/browse?path=/tmp/fliks-parity/nope"
+    }
+  ]
+}

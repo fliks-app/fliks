@@ -1,0 +1,68 @@
+{
+  "deviation": null,
+  "name": "playback-recommendations-filtered",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": [
+          {
+            "becauseTitle": "Parity Movie 02",
+            "media": {
+              "additionalFanartUrls": [],
+              "available": true,
+              "fanartUrl": null,
+              "genres": [
+                "Drama"
+              ],
+              "id": 3,
+              "posterUrl": null,
+              "title": "Parity Movie 03",
+              "type": "movie",
+              "year": 2020
+            },
+            "score": 1
+          },
+          {
+            "becauseTitle": "Parity Movie 02",
+            "media": {
+              "additionalFanartUrls": [],
+              "available": true,
+              "fanartUrl": null,
+              "genres": [
+                "Drama"
+              ],
+              "id": 4,
+              "posterUrl": null,
+              "title": "Parity Movie 04",
+              "type": "movie",
+              "year": 2020
+            },
+            "score": 1
+          },
+          {
+            "becauseTitle": "Parity Movie 02",
+            "media": {
+              "additionalFanartUrls": [],
+              "available": true,
+              "fanartUrl": null,
+              "genres": [
+                "Drama"
+              ],
+              "id": 5,
+              "posterUrl": null,
+              "title": "Parity Movie 05",
+              "type": "movie",
+              "year": 2020
+            },
+            "score": 1
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/playback/recommendations?libraryId=1&limit=3"
+    }
+  ]
+}

@@ -1,0 +1,62 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastPlayedAt",
+    "$..playedAt"
+  ],
+  "name": "playback-toggle-watched-removes-from-auto-playlist",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "value": "x"
+      },
+      "expect": {
+        "body": {
+          "id": 1,
+          "key": "parity_flag",
+          "value": "x"
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/settings/parity_flag"
+    },
+    {
+      "as": "user",
+      "body": {
+        "mediaFileId": 3
+      },
+      "expect": {
+        "body": {
+          "completed": true,
+          "durationSeconds": 3.021,
+          "episode": null,
+          "episodeId": null,
+          "hiddenFromContinueWatching": false,
+          "id": 5,
+          "media": {
+            "id": 3,
+            "path": null
+          },
+          "mediaFile": {
+            "id": 3
+          },
+          "mediaFileId": 3,
+          "mediaId": 3,
+          "positionSeconds": 0,
+          "user": {
+            "id": 2
+          },
+          "userId": 2
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/playback/media/3/toggle-watched"
+    }
+  ]
+}

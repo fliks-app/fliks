@@ -1,0 +1,26 @@
+{
+  "deviation": null,
+  "name": "settings-bulk-put-protected-key",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "data": {
+          "engine_url": "http://x"
+        }
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "\"engine_url\" is managed by its own endpoint: PUT /engine/remote",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PUT",
+      "path": "/api/settings"
+    }
+  ],
+  "strictMessage": true
+}

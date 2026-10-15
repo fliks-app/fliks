@@ -1,0 +1,16 @@
+{
+  "deviation": null,
+  "name": "playback-recommendations-empty-for-no-library",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "readonly",
+      "expect": {
+        "body": [],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/playback/recommendations?libraryId=2"
+    }
+  ]
+}

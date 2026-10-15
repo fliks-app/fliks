@@ -1,0 +1,22 @@
+{
+  "deviation": null,
+  "name": "bootstrap-cors-native-origin",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "anon",
+      "expect": {
+        "headers": {
+          "access-control-allow-origin": "capacitor://localhost"
+        },
+        "status": 204
+      },
+      "headers": {
+        "Access-Control-Request-Method": "POST",
+        "Origin": "capacitor://localhost"
+      },
+      "method": "OPTIONS",
+      "path": "/api/auth/login"
+    }
+  ]
+}

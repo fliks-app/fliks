@@ -1,0 +1,22 @@
+{
+  "deviation": null,
+  "name": "remote-grant-claim-unauthenticated",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "anon",
+      "body": {
+        "code": "ZZZZZZ"
+      },
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "POST",
+      "path": "/api/remote/grants/claim"
+    }
+  ]
+}

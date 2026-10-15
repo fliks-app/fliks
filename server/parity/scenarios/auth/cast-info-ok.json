@@ -1,0 +1,20 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$.token",
+    "$.streamBaseUrl"
+  ],
+  "name": "auth-cast-info-ok",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": {},
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/auth/cast-info"
+    }
+  ]
+}

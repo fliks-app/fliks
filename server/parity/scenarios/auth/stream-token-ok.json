@@ -1,0 +1,20 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$.streamToken",
+    "$.expiresAt"
+  ],
+  "name": "auth-stream-token-ok",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": {},
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/auth/stream-token"
+    }
+  ]
+}

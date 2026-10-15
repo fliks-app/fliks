@@ -1,0 +1,120 @@
+{
+  "deviation": null,
+  "name": "roles-list-manager",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "manager",
+      "expect": {
+        "body": [
+          {
+            "createdAt": "2026-01-01T00:00:00.000Z",
+            "defaultLibraries": [],
+            "defaultLibraryIds": [],
+            "id": 1,
+            "isDefault": false,
+            "name": "Admin",
+            "permissions": [
+              "media.read",
+              "media.create",
+              "media.edit",
+              "media.delete",
+              "media.grab",
+              "livetv.read",
+              "requests.create",
+              "requests.manage",
+              "subtitles.manage",
+              "settings.access",
+              "users.manage",
+              "roles.manage"
+            ],
+            "updatedAt": "2026-01-01T00:00:00.000Z"
+          },
+          {
+            "createdAt": "2026-01-01T00:00:00.000Z",
+            "defaultLibraries": [],
+            "defaultLibraryIds": [],
+            "id": 4,
+            "isDefault": false,
+            "name": "Manager",
+            "permissions": [
+              "media.read",
+              "users.manage"
+            ],
+            "updatedAt": "2026-01-01T00:00:00.000Z"
+          },
+          {
+            "createdAt": "2026-01-01T00:00:00.000Z",
+            "defaultLibraries": [],
+            "defaultLibraryIds": [],
+            "id": 3,
+            "isDefault": false,
+            "name": "Readonly",
+            "permissions": [
+              "media.read",
+              "livetv.read"
+            ],
+            "updatedAt": "2026-01-01T00:00:00.000Z"
+          },
+          {
+            "createdAt": "2026-01-01T00:00:00.000Z",
+            "defaultLibraries": [
+              {
+                "color": "#3b82f6",
+                "createdAt": "2026-01-01T00:00:00.000Z",
+                "defaultLanguageProfileId": null,
+                "defaultQualityProfileId": null,
+                "icon": "film",
+                "id": 1,
+                "label": null,
+                "mediaTypes": [
+                  "movie"
+                ],
+                "metadataLanguage": null,
+                "metadataRegion": null,
+                "name": "Movies",
+                "path": "/tmp/fliks-parity/media/movies",
+                "preferredProvider": null,
+                "updatedAt": "2026-01-01T00:00:00.000Z"
+              },
+              {
+                "color": "#10b981",
+                "createdAt": "2026-01-01T00:00:00.000Z",
+                "defaultLanguageProfileId": null,
+                "defaultQualityProfileId": null,
+                "icon": "tv",
+                "id": 2,
+                "label": null,
+                "mediaTypes": [
+                  "series"
+                ],
+                "metadataLanguage": null,
+                "metadataRegion": null,
+                "name": "Series",
+                "path": "/tmp/fliks-parity/media/series",
+                "preferredProvider": null,
+                "updatedAt": "2026-01-01T00:00:00.000Z"
+              }
+            ],
+            "defaultLibraryIds": [
+              1,
+              2
+            ],
+            "id": 2,
+            "isDefault": true,
+            "name": "User",
+            "permissions": [
+              "media.read",
+              "livetv.read",
+              "requests.create"
+            ],
+            "updatedAt": "2026-01-01T00:00:00.000Z"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/roles"
+    }
+  ]
+}

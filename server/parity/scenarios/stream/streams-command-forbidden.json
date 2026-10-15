@@ -1,0 +1,24 @@
+{
+  "deviation": null,
+  "engine": "up",
+  "name": "stream-streams-command-forbidden",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "action": "stop"
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "POST",
+      "path": "/api/system/streams/nosuch/command"
+    }
+  ]
+}

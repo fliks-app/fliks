@@ -1,0 +1,33 @@
+{
+  "deviation": null,
+  "engine": "up",
+  "name": "engine-remote-put-bad-mappings",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "pathMappings": [
+          {
+            "from": 1
+          }
+        ],
+        "token": "",
+        "url": ""
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "pathMappings.0.from must be a string",
+            "pathMappings.0.to must be a string"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PUT",
+      "path": "/api/engine/remote"
+    }
+  ]
+}

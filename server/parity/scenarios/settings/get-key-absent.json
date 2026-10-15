@@ -1,0 +1,19 @@
+{
+  "deviation": null,
+  "name": "settings-get-key-absent",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "key": "nope",
+          "value": null
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/settings/nope"
+    }
+  ]
+}

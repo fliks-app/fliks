@@ -1,0 +1,23 @@
+{
+  "deviation": null,
+  "name": "bootstrap-unknown-route-404-no-store",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "anon",
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Cannot GET /api/does-not-exist",
+          "statusCode": 404
+        },
+        "headers": {
+          "cache-control": "no-store, no-cache, must-revalidate"
+        },
+        "status": 404
+      },
+      "method": "GET",
+      "path": "/api/does-not-exist"
+    }
+  ]
+}

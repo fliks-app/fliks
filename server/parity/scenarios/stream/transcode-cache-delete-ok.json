@@ -1,0 +1,21 @@
+{
+  "deviation": null,
+  "engine": "up",
+  "name": "stream-transcode-cache-delete-ok",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "bytes": 0,
+          "entries": 0,
+          "ok": true
+        },
+        "status": 200
+      },
+      "method": "DELETE",
+      "path": "/api/system/transcode-cache"
+    }
+  ]
+}

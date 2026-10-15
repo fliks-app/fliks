@@ -1,0 +1,24 @@
+{
+  "deviation": null,
+  "name": "auth-pairing-request-missing-device-id",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "anon",
+      "body": {
+        "deviceName": "TV",
+        "userId": 2
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Missing X-Device-Id header",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/auth/pairing/request"
+    }
+  ]
+}

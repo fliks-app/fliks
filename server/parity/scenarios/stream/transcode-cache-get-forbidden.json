@@ -1,0 +1,21 @@
+{
+  "deviation": null,
+  "engine": "up",
+  "name": "stream-transcode-cache-get-forbidden",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "GET",
+      "path": "/api/system/transcode-cache"
+    }
+  ]
+}

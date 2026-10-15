@@ -1,0 +1,21 @@
+{
+  "deviation": null,
+  "engine": "up",
+  "name": "stream-qualities-unknown-file",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "MediaFile #999 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "GET",
+      "path": "/api/stream/info/qualities/999"
+    }
+  ]
+}

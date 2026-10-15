@@ -1,0 +1,29 @@
+{
+  "deviation": "F1",
+  "engine": "up",
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "auth-register-ok",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "anon",
+      "body": {
+        "email": "n@parity.test",
+        "password": "pw",
+        "username": "newbie"
+      },
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "POST",
+      "path": "/api/auth/register"
+    }
+  ]
+}

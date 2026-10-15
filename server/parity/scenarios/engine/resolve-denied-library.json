@@ -1,0 +1,92 @@
+{
+  "capture": {
+    "jwt": "$.steps[0].body.accessToken"
+  },
+  "deviation": null,
+  "engine": "up",
+  "ignore": [
+    "$..accessToken",
+    "$..refreshToken",
+    "$..accessTokenExpiresAt",
+    "$..refreshTokenExpiresAt",
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastLogin"
+  ],
+  "name": "engine-resolve-denied-library",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "anon",
+      "body": {
+        "password": "readonly-pass",
+        "username": "readonly"
+      },
+      "expect": {
+        "body": {
+          "user": {
+            "avatar": null,
+            "edlAutoSkipCommercials": true,
+            "edlEnabled": true,
+            "email": "readonly@parity.test",
+            "enabled": true,
+            "features": [
+              "deviceProfileExtensions",
+              "hlsSubtitleRequest",
+              "muxedAudioRendition"
+            ],
+            "hiddenLibraryIds": [],
+            "hideSpoilers": false,
+            "id": 3,
+            "isAdmin": false,
+            "libraryIds": [],
+            "libraryOrder": [],
+            "mediaServerId": null,
+            "mediaServerType": "local",
+            "movieQuotaLimit": 0,
+            "permissions": [
+              "media.read",
+              "livetv.read"
+            ],
+            "profileVisibility": "private",
+            "quotaPeriodDays": 7,
+            "requirePasswordChange": false,
+            "role": "Readonly",
+            "roleId": 3,
+            "seriesQuotaLimit": 0,
+            "shareDisabled": false,
+            "shareLikes": false,
+            "shareRecommendations": false,
+            "shareStats": false,
+            "shareTastes": false,
+            "shareWatchHistory": false,
+            "spoilerHideOverviews": true,
+            "spoilerHideStills": true,
+            "spoilerHideTitles": true,
+            "username": "readonly"
+          }
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/auth/login"
+    },
+    {
+      "as": "engine",
+      "body": {
+        "credential": "Bearer {jwt}",
+        "mediaId": 19,
+        "purpose": "stream"
+      },
+      "expect": {
+        "body": {
+          "allow": false,
+          "ttlS": 60
+        },
+        "status": 200
+      },
+      "method": "POST",
+      "path": "/engine/resolve"
+    }
+  ]
+}

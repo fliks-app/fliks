@@ -1,0 +1,31 @@
+{
+  "deviation": null,
+  "name": "auth-pairing-request-validation",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "anon",
+      "body": {
+        "userId": "x"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "userId must be an integer number",
+            "deviceName must be shorter than or equal to 80 characters",
+            "deviceName should not be empty",
+            "deviceName must be a string"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "headers": {
+        "X-Device-Id": "dev-1"
+      },
+      "method": "POST",
+      "path": "/api/auth/pairing/request"
+    }
+  ]
+}

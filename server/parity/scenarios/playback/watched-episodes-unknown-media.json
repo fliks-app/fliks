@@ -1,0 +1,16 @@
+{
+  "deviation": null,
+  "name": "playback-watched-episodes-unknown-media",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": [],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/playback/media/999/watched-episodes"
+    }
+  ]
+}

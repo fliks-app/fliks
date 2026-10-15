@@ -1,0 +1,25 @@
+{
+  "deviation": null,
+  "name": "users-create-duplicate",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "email": "new@parity.test",
+        "password": "longenough1",
+        "username": "user"
+      },
+      "expect": {
+        "body": {
+          "error": "Conflict",
+          "message": "Username already taken",
+          "statusCode": 409
+        },
+        "status": 409
+      },
+      "method": "POST",
+      "path": "/api/users"
+    }
+  ]
+}

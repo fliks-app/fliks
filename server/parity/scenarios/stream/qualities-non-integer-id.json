@@ -1,0 +1,21 @@
+{
+  "deviation": null,
+  "engine": "up",
+  "name": "stream-qualities-non-integer-id",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Validation failed (numeric string is expected)",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "GET",
+      "path": "/api/stream/info/qualities/abc"
+    }
+  ]
+}

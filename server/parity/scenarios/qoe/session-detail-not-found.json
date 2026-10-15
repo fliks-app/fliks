@@ -1,0 +1,21 @@
+{
+  "deviation": null,
+  "name": "qoe-session-detail-not-found",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "qoe_session_not_found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "GET",
+      "path": "/api/system/qoe/sessions/nosuch"
+    }
+  ],
+  "strictMessage": true
+}

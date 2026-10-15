@@ -1,0 +1,23 @@
+{
+  "deviation": "F1",
+  "name": "auth-register-duplicate",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "anon",
+      "body": {
+        "password": "pw",
+        "username": "user"
+      },
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "POST",
+      "path": "/api/auth/register"
+    }
+  ]
+}

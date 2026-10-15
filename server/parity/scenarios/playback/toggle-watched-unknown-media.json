@@ -1,0 +1,21 @@
+{
+  "deviation": "C1",
+  "name": "playback-toggle-watched-unknown-media",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {},
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "not_found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "POST",
+      "path": "/api/playback/media/999/toggle-watched"
+    }
+  ]
+}

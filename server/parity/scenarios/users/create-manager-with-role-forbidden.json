@@ -1,0 +1,26 @@
+{
+  "deviation": null,
+  "name": "users-create-manager-with-role-forbidden",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "manager",
+      "body": {
+        "email": "new@parity.test",
+        "password": "longenough1",
+        "roleId": 2,
+        "username": "newuser"
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Only users with roles.manage permission can assign a role",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "POST",
+      "path": "/api/users"
+    }
+  ]
+}

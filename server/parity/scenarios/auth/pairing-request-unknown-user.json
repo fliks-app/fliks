@@ -1,0 +1,27 @@
+{
+  "deviation": null,
+  "name": "auth-pairing-request-unknown-user",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "anon",
+      "body": {
+        "deviceName": "TV",
+        "userId": 999
+      },
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "User not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "headers": {
+        "X-Device-Id": "dev-1"
+      },
+      "method": "POST",
+      "path": "/api/auth/pairing/request"
+    }
+  ]
+}

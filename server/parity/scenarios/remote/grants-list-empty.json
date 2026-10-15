@@ -1,0 +1,19 @@
+{
+  "deviation": null,
+  "name": "remote-grants-list-empty",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "held": [],
+          "issued": []
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/remote/grants"
+    }
+  ]
+}

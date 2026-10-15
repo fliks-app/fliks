@@ -1,0 +1,39 @@
+{
+  "deviation": null,
+  "engine": "up",
+  "name": "stream-playback-info-unknown-file",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "deviceName": "Parity",
+        "deviceType": "desktop",
+        "directPlayProfiles": [
+          {
+            "audioCodecs": [
+              "aac"
+            ],
+            "containers": [
+              "mkv",
+              "mp4"
+            ],
+            "videoCodecs": [
+              "h264"
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "MediaFile #999 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "POST",
+      "path": "/api/stream/999/playback-info"
+    }
+  ]
+}

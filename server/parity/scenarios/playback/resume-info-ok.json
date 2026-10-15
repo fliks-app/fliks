@@ -1,0 +1,21 @@
+{
+  "deviation": null,
+  "name": "playback-resume-info-ok",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "durationSeconds": 3600,
+          "episodeId": null,
+          "mediaFileId": 1,
+          "positionSeconds": 1200
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/playback/media/1"
+    }
+  ]
+}

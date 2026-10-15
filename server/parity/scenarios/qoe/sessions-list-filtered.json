@@ -1,0 +1,19 @@
+{
+  "deviation": null,
+  "name": "qoe-sessions-list-filtered",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "items": [],
+          "total": 0
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/system/qoe/sessions?days=7&verdict=ok&userId=2&device=tv&device=web&limit=5&offset=0"
+    }
+  ]
+}

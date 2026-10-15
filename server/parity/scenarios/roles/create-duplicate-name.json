@@ -1,0 +1,31 @@
+{
+  "deviation": null,
+  "name": "roles-create-duplicate-name",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "defaultLibraryIds": [
+          1
+        ],
+        "isDefault": false,
+        "name": "User",
+        "permissions": [
+          "media.read",
+          "media.edit"
+        ]
+      },
+      "expect": {
+        "body": {
+          "error": "Conflict",
+          "message": "Role name already exists",
+          "statusCode": 409
+        },
+        "status": 409
+      },
+      "method": "POST",
+      "path": "/api/roles"
+    }
+  ]
+}

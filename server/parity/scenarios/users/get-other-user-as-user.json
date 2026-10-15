@@ -1,0 +1,19 @@
+{
+  "deviation": "F2",
+  "name": "users-get-other-user-as-user",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "message": "Forbidden",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "GET",
+      "path": "/api/users/4"
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "deviation": null,
+  "name": "remote-command-unauthenticated",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "anon",
+      "body": {
+        "action": "play"
+      },
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "POST",
+      "path": "/api/remote/dev-1%23native/command"
+    }
+  ]
+}

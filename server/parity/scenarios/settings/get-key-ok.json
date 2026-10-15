@@ -1,0 +1,19 @@
+{
+  "deviation": null,
+  "name": "settings-get-key-ok",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "key": "parity_flag",
+          "value": "on"
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/settings/parity_flag"
+    }
+  ]
+}

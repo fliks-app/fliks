@@ -1,0 +1,88 @@
+{
+  "capture": {
+    "code": "$.steps[0].body.code"
+  },
+  "deviation": null,
+  "ignore": [
+    "$..code",
+    "$..createdAt"
+  ],
+  "name": "remote-grant-claim-ok",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "deviceId": "dev-1",
+        "deviceName": "Living room"
+      },
+      "expect": {
+        "body": {
+          "expiresIn": 600,
+          "id": 1
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/remote/grants/code"
+    },
+    {
+      "as": "other",
+      "body": {
+        "code": "{code}"
+      },
+      "expect": {
+        "body": {
+          "deviceId": "dev-1",
+          "deviceName": "Living room",
+          "granteeUsername": "other",
+          "id": 1,
+          "ownerUsername": "user"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/remote/grants/claim"
+    },
+    {
+      "as": "other",
+      "expect": {
+        "body": {
+          "held": [
+            {
+              "deviceId": "dev-1",
+              "deviceName": "Living room",
+              "granteeUsername": "other",
+              "id": 1,
+              "ownerUsername": "user"
+            }
+          ],
+          "issued": []
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/remote/grants"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "held": [],
+          "issued": [
+            {
+              "deviceId": "dev-1",
+              "deviceName": "Living room",
+              "granteeUsername": "other",
+              "id": 1,
+              "ownerUsername": "user"
+            }
+          ]
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/remote/grants"
+    }
+  ]
+}

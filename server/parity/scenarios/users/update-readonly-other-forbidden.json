@@ -1,0 +1,22 @@
+{
+  "deviation": null,
+  "name": "users-update-readonly-other-forbidden",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "readonly",
+      "body": {
+        "email": "x@parity.test"
+      },
+      "expect": {
+        "body": {
+          "message": "Forbidden",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "PUT",
+      "path": "/api/users/2"
+    }
+  ]
+}

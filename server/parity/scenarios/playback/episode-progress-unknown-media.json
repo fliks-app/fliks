@@ -1,0 +1,16 @@
+{
+  "deviation": null,
+  "name": "playback-episode-progress-unknown-media",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": {},
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/playback/media/999/episode-progress"
+    }
+  ]
+}

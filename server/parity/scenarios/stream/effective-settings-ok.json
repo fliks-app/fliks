@@ -1,0 +1,28 @@
+{
+  "deviation": null,
+  "engine": "up",
+  "ignore": [
+    "$.ffmpegSlotsAuto",
+    "$.pauseCapability",
+    "$.gpuRenderNode"
+  ],
+  "name": "stream-effective-settings-ok",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "cacheMaxGb": 20,
+          "cacheTtlHours": 4,
+          "ffmpegSlots": null,
+          "tonemapAlgo": "auto",
+          "tonemapCurve": "mobius"
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/stream/info/effective-settings"
+    }
+  ]
+}

@@ -1,0 +1,52 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastPlayedAt",
+    "$..playedAt"
+  ],
+  "name": "playback-toggle-series-watched-ok",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "watched": true
+      },
+      "expect": {
+        "body": {
+          "watched": true
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/playback/media/18/toggle-series-watched"
+    },
+    {
+      "as": "user",
+      "body": {
+        "watched": false
+      },
+      "expect": {
+        "body": {
+          "watched": false
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/playback/media/18/toggle-series-watched"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": [
+          2
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/playback/watched-ids"
+    }
+  ]
+}

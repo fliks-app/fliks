@@ -1,0 +1,95 @@
+{
+  "capture": {
+    "jwt": "$.steps[0].body.accessToken"
+  },
+  "deviation": null,
+  "engine": "up",
+  "ignore": [
+    "$..accessToken",
+    "$..refreshToken",
+    "$..accessTokenExpiresAt",
+    "$..refreshTokenExpiresAt",
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastLogin"
+  ],
+  "name": "engine-resolve-stream-cookie",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "anon",
+      "body": {
+        "password": "user-pass",
+        "username": "user"
+      },
+      "expect": {
+        "body": {
+          "user": {
+            "avatar": null,
+            "edlAutoSkipCommercials": true,
+            "edlEnabled": true,
+            "email": "user@parity.test",
+            "enabled": true,
+            "features": [
+              "deviceProfileExtensions",
+              "hlsSubtitleRequest",
+              "muxedAudioRendition"
+            ],
+            "hiddenLibraryIds": [],
+            "hideSpoilers": false,
+            "id": 2,
+            "isAdmin": false,
+            "libraryIds": [],
+            "libraryOrder": [],
+            "mediaServerId": null,
+            "mediaServerType": "local",
+            "movieQuotaLimit": 0,
+            "permissions": [
+              "media.read",
+              "livetv.read",
+              "requests.create"
+            ],
+            "profileVisibility": "private",
+            "quotaPeriodDays": 7,
+            "requirePasswordChange": false,
+            "role": "User",
+            "roleId": 2,
+            "seriesQuotaLimit": 0,
+            "shareDisabled": false,
+            "shareLikes": false,
+            "shareRecommendations": false,
+            "shareStats": false,
+            "shareTastes": false,
+            "shareWatchHistory": false,
+            "spoilerHideOverviews": true,
+            "spoilerHideStills": true,
+            "spoilerHideTitles": true,
+            "username": "user"
+          }
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/auth/login"
+    },
+    {
+      "as": "engine",
+      "body": {
+        "credential": "fliks_access={jwt}",
+        "mediaId": 1,
+        "purpose": "stream"
+      },
+      "expect": {
+        "body": {
+          "allow": true,
+          "ownerId": "2",
+          "path": "/tmp/fliks-parity/media/movies/Parity Movie 01 (2020)/Parity Movie 01 (2020).mkv",
+          "ttlS": 60
+        },
+        "status": 200
+      },
+      "method": "POST",
+      "path": "/engine/resolve"
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "deviation": "C1",
+  "name": "remote-commands-missing-target-id",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "validation",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "GET",
+      "path": "/api/remote/commands"
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "deviation": null,
+  "engine": "up",
+  "name": "stream-playback-info-validation-bad-device-type",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "deviceName": "Parity",
+        "deviceType": "toaster",
+        "directPlayProfiles": [
+          {
+            "audioCodecs": [
+              "aac"
+            ],
+            "containers": [
+              "mkv",
+              "mp4"
+            ],
+            "videoCodecs": [
+              "h264"
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "deviceType must be one of the following values: mobile, desktop"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/stream/1/playback-info"
+    }
+  ]
+}

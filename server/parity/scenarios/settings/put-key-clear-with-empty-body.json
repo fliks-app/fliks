@@ -1,0 +1,37 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "settings-put-key-clear-with-empty-body",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {},
+      "expect": {
+        "body": {
+          "id": 1,
+          "key": "parity_flag",
+          "value": null
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/settings/parity_flag"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "key": "parity_flag",
+          "value": null
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/settings/parity_flag"
+    }
+  ]
+}

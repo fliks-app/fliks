@@ -1,0 +1,21 @@
+{
+  "deviation": null,
+  "engine": "up",
+  "ignore": [
+    "$.gpus",
+    "$.defaultNode"
+  ],
+  "name": "stream-gpus-ok",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": {},
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/stream/info/gpus"
+    }
+  ]
+}

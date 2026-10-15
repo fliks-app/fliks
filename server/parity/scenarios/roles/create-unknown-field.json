@@ -1,0 +1,34 @@
+{
+  "deviation": null,
+  "name": "roles-create-unknown-field",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "defaultLibraryIds": [
+          1
+        ],
+        "foo": 1,
+        "isDefault": false,
+        "name": "Editor",
+        "permissions": [
+          "media.read",
+          "media.edit"
+        ]
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "property foo should not exist"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/roles"
+    }
+  ]
+}

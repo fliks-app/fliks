@@ -1,0 +1,34 @@
+{
+  "deviation": null,
+  "name": "fs-browse-nested",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "current": "/tmp/fliks-parity/media/series/Parity Series A",
+          "entries": [
+            {
+              "isDirectory": true,
+              "name": "Season 01",
+              "path": "/tmp/fliks-parity/media/series/Parity Series A/Season 01"
+            },
+            {
+              "isDirectory": true,
+              "name": "Season 02",
+              "path": "/tmp/fliks-parity/media/series/Parity Series A/Season 02"
+            }
+          ],
+          "parent": "/tmp/fliks-parity/media/series"
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/fs/browse?path=/tmp/fliks-parity/media/series/Parity%20Series%20A"
+    }
+  ],
+  "unordered": [
+    "$.entries"
+  ]
+}

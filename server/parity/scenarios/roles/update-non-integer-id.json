@@ -1,0 +1,21 @@
+{
+  "deviation": null,
+  "name": "roles-update-non-integer-id",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {},
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Validation failed (numeric string is expected)",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PUT",
+      "path": "/api/roles/abc"
+    }
+  ]
+}

@@ -1,0 +1,49 @@
+{
+  "deviation": null,
+  "name": "playback-continue-watching-ok",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": [
+          {
+            "durationSeconds": 1800,
+            "episodeId": 1,
+            "episodeLabel": "S01E01 - Episode 1",
+            "fanartUrl": null,
+            "id": 3,
+            "lastPlayedAt": "2026-01-04T00:00:00.000Z",
+            "mediaFileId": 18,
+            "mediaId": 18,
+            "mediaTitle": "Parity Series A",
+            "mediaType": "series",
+            "positionSeconds": 600,
+            "posterUrl": null,
+            "progressPercent": 33,
+            "stillUrl": null
+          },
+          {
+            "durationSeconds": 3600,
+            "episodeId": null,
+            "episodeLabel": null,
+            "fanartUrl": null,
+            "id": 1,
+            "lastPlayedAt": "2026-01-02T00:00:00.000Z",
+            "mediaFileId": 1,
+            "mediaId": 1,
+            "mediaTitle": "Parity Movie 01",
+            "mediaType": "movie",
+            "positionSeconds": 1200,
+            "posterUrl": null,
+            "progressPercent": 33,
+            "stillUrl": null
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/playback/continue-watching"
+    }
+  ]
+}

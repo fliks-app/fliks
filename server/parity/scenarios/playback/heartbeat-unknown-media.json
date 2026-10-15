@@ -1,0 +1,23 @@
+{
+  "deviation": null,
+  "name": "playback-heartbeat-unknown-media",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "durationSeconds": 3600,
+        "mediaFileId": 999,
+        "positionSeconds": 600
+      },
+      "expect": {
+        "body": {
+          "state": null
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/playback/media/999/state"
+    }
+  ]
+}

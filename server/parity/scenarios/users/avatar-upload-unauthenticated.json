@@ -1,0 +1,25 @@
+{
+  "deviation": null,
+  "name": "users-avatar-upload-unauthenticated",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "anon",
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "POST",
+      "multipart": {
+        "contentType": "image/jpeg",
+        "field": "file",
+        "file": "assets/avatar.jpg",
+        "filename": "avatar.jpg"
+      },
+      "path": "/api/users/me/avatar"
+    }
+  ]
+}

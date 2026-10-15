@@ -1,0 +1,23 @@
+{
+  "deviation": null,
+  "engine": "down",
+  "name": "engine-remote-get-engine-off",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "pathMappings": [],
+          "processUrl": "",
+          "status": "off",
+          "token": "",
+          "url": ""
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/engine/remote"
+    }
+  ]
+}

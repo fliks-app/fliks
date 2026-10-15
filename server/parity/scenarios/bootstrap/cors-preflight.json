@@ -1,0 +1,23 @@
+{
+  "deviation": null,
+  "name": "bootstrap-cors-preflight",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "anon",
+      "expect": {
+        "headers": {
+          "access-control-allow-credentials": "true",
+          "access-control-allow-origin": "http://localhost:4200"
+        },
+        "status": 204
+      },
+      "headers": {
+        "Access-Control-Request-Method": "POST",
+        "Origin": "http://localhost:4200"
+      },
+      "method": "OPTIONS",
+      "path": "/api/auth/login"
+    }
+  ]
+}

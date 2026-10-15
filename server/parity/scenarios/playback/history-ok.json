@@ -1,0 +1,37 @@
+{
+  "deviation": null,
+  "name": "playback-history-ok",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "data": [
+            {
+              "completed": true,
+              "durationSeconds": 3600,
+              "episodeId": null,
+              "episodeLabel": null,
+              "fanartUrl": null,
+              "id": 2,
+              "lastPlayedAt": "2026-01-03T00:00:00.000Z",
+              "mediaFileId": 2,
+              "mediaId": 2,
+              "mediaTitle": "Parity Movie 02",
+              "mediaType": "movie",
+              "positionSeconds": 3500,
+              "posterUrl": null,
+              "progressPercent": 97,
+              "stillUrl": null
+            }
+          ],
+          "total": 1
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/playback/history"
+    }
+  ]
+}

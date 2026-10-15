@@ -1,0 +1,23 @@
+{
+  "deviation": null,
+  "engine": "up",
+  "name": "stream-streams-command-unauthenticated",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "anon",
+      "body": {
+        "action": "stop"
+      },
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "POST",
+      "path": "/api/system/streams/nosuch/command"
+    }
+  ]
+}

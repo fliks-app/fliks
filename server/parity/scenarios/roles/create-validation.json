@@ -1,0 +1,26 @@
+{
+  "deviation": null,
+  "name": "roles-create-validation",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "name": "x"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "each value in permissions must be a string",
+            "permissions must be an array"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/roles"
+    }
+  ]
+}

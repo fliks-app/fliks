@@ -1,0 +1,23 @@
+{
+  "deviation": null,
+  "name": "auth-pairing-status-unknown",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "anon",
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Pairing request not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "headers": {
+        "X-Device-Id": "dev-1"
+      },
+      "method": "GET",
+      "path": "/api/auth/pairing/status?pairingId=nope"
+    }
+  ]
+}
