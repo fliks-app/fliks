@@ -493,12 +493,7 @@ async fn adopting_a_typeorm_database_matches_a_fresh_one(pool: PgPool) {
     let fresh = PgPool::connect_with(pool.connect_options().as_ref().clone().database(fresh_db))
         .await
         .unwrap();
-    for m in MIGRATOR
-        .iter()
-        .filter(|m| m.version <= LAST_TYPEORM_VERSION)
-    {
-        sqlx::raw_sql(m.sql.as_ref()).execute(&fresh).await.unwrap();
-    }
+    fliks_server::db::migrate(&fresh).await.unwrap();
 
     let adopted: Vec<(String,)> = rows(&pool, SCHEMA).await;
     let built: Vec<(String,)> = rows(&fresh, SCHEMA).await;
