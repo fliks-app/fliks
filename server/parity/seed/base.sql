@@ -3449,7 +3449,7 @@ COPY public.users (id, "createdAt", "updatedAt", username, email, "passwordHash"
 1	2026-01-01 00:00:00+00	2026-01-01 00:00:00+00	admin	admin@parity.test	$2b$10$mrdWC15ycA2Rj3R4TkCrmOjREitArik5RyYlTj321tduIJEg6L3j.	\N	local	\N	\N	\N	t	t	f	0	0	7	[]	[]	private	f	f	f	f	f	f	f	t	t	t	t	t
 2	2026-01-01 00:00:00+00	2026-01-01 00:00:00+00	user	user@parity.test	$2b$10$eruz5MPbynE0zGJakNz.Megq1Chq0fpuEs3fxZjRiqKstt50S3WjK	2	local	\N	\N	\N	f	t	f	0	0	7	[]	[]	private	f	f	f	f	f	f	f	t	t	t	t	t
 3	2026-01-01 00:00:00+00	2026-01-01 00:00:00+00	readonly	readonly@parity.test	$2b$10$.yaNcwA9gwTu4YyRScgESeSOn1XxH53H8H41ix4KFH0IQg1Lr5Of.	3	local	\N	\N	\N	f	t	f	0	0	7	[]	[]	private	f	f	f	f	f	f	f	t	t	t	t	t
-4	2026-01-01 00:00:00+00	2026-01-01 00:00:00+00	other	other@parity.test	$2b$10$NELnurd6YNZvN22qu743I.4Hbhm3lp8C2E2fPV8X2M2NII1434f2y	2	local	\N	\N	\N	f	t	f	0	0	7	[]	[]	private	f	f	f	f	f	f	f	t	t	t	t	t
+4	2026-01-01 00:00:00+00	2026-01-01 00:00:00+00	other	other@parity.test	$2b$10$NELnurd6YNZvN22qu743I.4Hbhm3lp8C2E2fPV8X2M2NII1434f2y	2	local	\N	/api/users/4/avatar?v=1767225600000	\N	f	t	f	0	0	7	[]	[]	private	f	f	f	f	f	f	f	t	t	t	t	t
 5	2026-01-01 00:00:00+00	2026-01-01 00:00:00+00	manager	manager@parity.test	$2b$10$Ut70hjOYdk4JkkYE2.atA.RDi56Nkj1YW6RUYwjPu3bafFozSqCX6	4	local	\N	\N	\N	f	t	f	0	0	7	[]	[]	private	f	f	f	f	f	f	f	t	t	t	t	t
 \.
 

@@ -36,12 +36,12 @@ INSERT INTO roles (id, name, permissions, "isDefault") VALUES
  (2, 'User', '["media.read","livetv.read","requests.create"]', true),
  (3, 'Readonly', '["media.read","livetv.read"]', false),
  (4, 'Manager', '["media.read","users.manage"]', false);
-INSERT INTO users (id, username, email, "passwordHash", "roleId", "isAdmin") VALUES
- (1, 'admin', 'admin@parity.test', '$H_ADMIN', NULL, true),
- (2, 'user', 'user@parity.test', '$H_USER', 2, false),
- (3, 'readonly', 'readonly@parity.test', '$H_READONLY', 3, false),
- (4, 'other', 'other@parity.test', '$H_OTHER', 2, false),
- (5, 'manager', 'manager@parity.test', '$H_MANAGER', 4, false);
+INSERT INTO users (id, username, email, "passwordHash", "roleId", "isAdmin", avatar) VALUES
+ (1, 'admin', 'admin@parity.test', '$H_ADMIN', NULL, true, NULL),
+ (2, 'user', 'user@parity.test', '$H_USER', 2, false, NULL),
+ (3, 'readonly', 'readonly@parity.test', '$H_READONLY', 3, false, NULL),
+ (4, 'other', 'other@parity.test', '$H_OTHER', 2, false, '/api/users/4/avatar?v=1767225600000'),
+ (5, 'manager', 'manager@parity.test', '$H_MANAGER', 4, false, NULL);
 INSERT INTO libraries (id, name, icon, color, "mediaTypes", path) VALUES
  (1, 'Movies', 'film', '#3b82f6', '["movie"]', '/tmp/fliks-parity/media/movies'),
  (2, 'Series', 'tv', '#10b981', '["series"]', '/tmp/fliks-parity/media/series');
