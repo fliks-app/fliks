@@ -5,7 +5,7 @@ use crate::{
     events::DomainEvent,
     http::{AppError, auth::Authed, validate::ValidJson},
     images::paths::{Target as Art, Variant},
-    ingest::{load_media, naming_formats},
+    ingest::load_media,
     libraries::accessible_library_ids,
     metadata::{
         Provider,
@@ -143,9 +143,9 @@ pub async fn import_title(
         },
     )
     .await?;
-    let formats = naming_formats(&st.db).await?;
+    let format = folder_format(&st.db, &imp.media_type).await?;
     let d = &found.details;
-    let folder = folder_name(&formats, &imp.media_type, d);
+    let folder = folder_name(&format, &imp.media_type, d);
     let folder = validate_folder_name(&folder)
         .map_err(|_| AppError::bad_request(format!("Invalid folder name for \"{}\"", d.title)))?
         .to_owned();
@@ -213,12 +213,29 @@ pub async fn import_title(
     Ok(id)
 }
 
-fn folder_name(f: &naming::NamingFormats, media_type: &str, d: &Details) -> String {
+/// The stored folder format, else the import's own default (not the naming service's, rule 13).
+async fn folder_format(db: &sqlx::PgPool, media_type: &str) -> Result<String, sqlx::Error> {
+    let (key, default) = if media_type == "movie" {
+        (
+            "naming_movie_folder_format",
+            "{Original Title} ({Release Year})",
+        )
+    } else {
+        ("naming_series_folder_format", "{Series Title}")
+    };
+    let stored = sqlx::query_scalar!(r#"SELECT value FROM app_settings WHERE key = $1"#, key)
+        .fetch_optional(db)
+        .await?
+        .flatten();
+    Ok(stored.unwrap_or_else(|| default.to_owned()))
+}
+
+fn folder_name(format: &str, media_type: &str, d: &Details) -> String {
     let year = d.year.filter(|y| y.is_finite()).map(|y| y as i64);
     let tmdb_id = d.tmdb_id.map(i64::from);
     if media_type == "movie" {
         naming::apply_movie_folder_format(
-            &f.movie_folder,
+            format,
             &MovieFolder {
                 title: d.title.clone(),
                 original_title: d.original_title.clone(),
@@ -228,7 +245,7 @@ fn folder_name(f: &naming::NamingFormats, media_type: &str, d: &Details) -> Stri
         )
     } else {
         naming::apply_series_folder_format(
-            &f.series_folder,
+            format,
             &SeriesFolder {
                 series_title: d.title.clone(),
                 original_title: d.original_title.clone(),
