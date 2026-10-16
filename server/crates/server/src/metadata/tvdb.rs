@@ -387,7 +387,7 @@ impl Tvdb {
             for (k, tv) in [("series", true), ("movie", false)] {
                 let w = get(r, k);
                 if !w.is_null() {
-                    return Ok(Some((id_string(get(w, "id")), tv)));
+                    return Ok(id_string(get(w, "id")).map(|i| (i, tv)));
                 }
             }
         }
@@ -395,8 +395,13 @@ impl Tvdb {
     }
 }
 
-fn id_string(v: &Value) -> String {
-    v.as_str().map_or_else(|| v.to_string(), str::to_owned)
+/// JS `String(n)` of an id; a missing one is no id.
+fn id_string(v: &Value) -> Option<String> {
+    match v {
+        Value::Null => None,
+        Value::String(s) => Some(s.clone()),
+        other => Some(other.to_string()),
+    }
 }
 
 pub fn infer_department(chars: &[Value]) -> String {

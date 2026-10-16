@@ -1,4 +1,4 @@
-//! Identify and refresh (rules 46-58): provider data through the metadata seam, rows written here.
+//! Identify and refresh (rules 46-58): provider data from the metadata service, rows written here.
 use super::{already_running, body::Body, entity_or_404, gate, subject};
 use crate::{
     events::{DomainEvent, SseEvent},
@@ -523,7 +523,11 @@ async fn refresh_one_episode(st: &AppState, episode: i32) -> Result<(), AppError
     };
     sqlx::query!(
         r#"UPDATE episodes SET title = COALESCE($2, title), overview = COALESCE($3, overview),
-             "airDate" = COALESCE($4::text::date, "airDate"), runtime = COALESCE($5, runtime) WHERE id = $1"#,
+             "airDate" = COALESCE($4::text::date, "airDate"), runtime = COALESCE($5, runtime)
+           WHERE id = $1 AND (title IS DISTINCT FROM COALESCE($2, title)
+             OR overview IS DISTINCT FROM COALESCE($3, overview)
+             OR "airDate" IS DISTINCT FROM COALESCE($4::text::date, "airDate")
+             OR runtime IS DISTINCT FROM COALESCE($5, runtime))"#,
         episode,
         Some(ep.title.clone()).filter(|t| !t.is_empty()),
         ep.overview.clone().filter(|o| !o.is_empty()),

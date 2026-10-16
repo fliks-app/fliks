@@ -327,6 +327,7 @@ pub async fn import(st: &AppState, l: Lookup) -> Result<Found, AppError> {
         vec![]
     };
     if details.tmdb_id.is_none_or(|t| t == 0)
+        && st.metadata.available(Provider::Tmdb)
         && let Some(tvdb) = details.tvdb_id.filter(|t| *t != 0)
     {
         let cross = st
@@ -380,7 +381,7 @@ async fn load(st: &AppState, id: i32) -> Result<Row, AppError> {
     .ok_or_else(|| AppError::not_found(format!("Media #{id} not found")))
 }
 
-type Resolved2 = (Provider, String);
+type Source = (Provider, String);
 
 async fn set_external(st: &AppState, id: i32, p: Provider, ext: i32) -> Result<(), sqlx::Error> {
     match p {
@@ -424,9 +425,10 @@ async fn external_id_for(
         Provider::Tvdb => {
             if let Some(imdb) = imdb
                 && let Some((id, _)) = found(Provider::Tvdb, "imdb", imdb).await?
+                && let Ok(n) = id.parse()
             {
                 tracing::info!("crossRef: {label} - found tvdbId={id} via IMDB");
-                set_external(st, m.id, p, id.parse().unwrap_or_default()).await?;
+                set_external(st, m.id, p, n).await?;
                 return Ok(Some(id));
             }
             if let Some(tmdb) = m.tmdb_id.filter(|t| *t != 0) {
@@ -441,16 +443,18 @@ async fn external_id_for(
         Provider::Tmdb => {
             if let Some(imdb) = imdb
                 && let Some((id, _)) = found(Provider::Tmdb, "imdb", imdb).await?
+                && let Ok(n) = id.parse()
             {
                 tracing::info!("crossRef: {label} - found tmdbId={id} via IMDB");
-                set_external(st, m.id, p, id.parse().unwrap_or_default()).await?;
+                set_external(st, m.id, p, n).await?;
                 return Ok(Some(id));
             }
             if let Some(tvdb) = m.tvdb_id.filter(|t| *t != 0)
                 && let Some((id, _)) = found(Provider::Tmdb, "tvdb", &tvdb.to_string()).await?
+                && let Ok(n) = id.parse()
             {
                 tracing::info!("crossRef: {label} - found tmdbId={id} via TVDB");
-                set_external(st, m.id, p, id.parse().unwrap_or_default()).await?;
+                set_external(st, m.id, p, n).await?;
                 return Ok(Some(id));
             }
         }
@@ -468,7 +472,7 @@ async fn try_preferred(
     pref: &str,
     origin: &str,
     lang: &Resolved,
-) -> Result<Option<Resolved2>, AppError> {
+) -> Result<Option<Source>, AppError> {
     let label = m.label();
     tracing::info!("resolveProvider: {label} - {origin} prefers {pref}");
     let Some(p) = Provider::parse(pref).filter(|p| st.metadata.available(*p)) else {
@@ -488,7 +492,7 @@ async fn resolve_provider(
     lib: Option<&Lib>,
     lang: &Resolved,
     season_pref: Option<&str>,
-) -> Result<Resolved2, AppError> {
+) -> Result<Source, AppError> {
     let label = m.label();
     if let Some(pref) = season_pref.filter(|p| !p.is_empty()) {
         return try_preferred(st, m, pref, "season", lang).await?.ok_or_else(|| {
@@ -539,7 +543,7 @@ async fn resolve_provider(
 /// `fetchSingleSeason`: TMDB's single-season endpoint, else the provider's full list (cached per run).
 async fn single_season(
     st: &AppState,
-    (p, ext): &Resolved2,
+    (p, ext): &Source,
     number: i32,
     lang: &Resolved,
     cache: &mut HashMap<String, Vec<SeasonDetails>>,
@@ -571,7 +575,7 @@ async fn seasons_of(
     m: &Row,
     lib: Option<&Lib>,
     lang: &Resolved,
-    media: &Resolved2,
+    media: &Source,
 ) -> Result<Vec<SeasonDetails>, AppError> {
     let mut seasons = read_seasons(st, media.0, &media.1, lang).await?;
     let overridden: Vec<(i32, String)> = sqlx::query!(
@@ -737,15 +741,21 @@ async fn persist_metadata_row(st: &AppState, media_id: i32, d: &Details) -> Resu
         set("videos"),
         set("keywords"),
     ];
-    let updated = sqlx::query!(
-        r#"UPDATE media_metadata SET budget = COALESCE($2, budget), revenue = COALESCE($3, revenue),
-             tagline = COALESCE($4, tagline), popularity = COALESCE($5, popularity),
-             "voteCount" = COALESCE($6, "voteCount"), "originalLanguage" = COALESCE($7, "originalLanguage"),
-             "productionCountries" = CASE WHEN $8 THEN $12 ELSE "productionCountries" END,
-             "productionCompanies" = CASE WHEN $9 THEN $13 ELSE "productionCompanies" END,
-             videos = CASE WHEN $10 THEN $14 ELSE videos END,
-             keywords = CASE WHEN $11 THEN $15 ELSE keywords END
-           WHERE "mediaId" = $1"#,
+    sqlx::query!(
+        r#"INSERT INTO media_metadata ("mediaId", budget, revenue, tagline, popularity, "voteCount",
+             "originalLanguage", "productionCountries", "productionCompanies", videos, keywords)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+           ON CONFLICT ("mediaId") DO UPDATE SET
+             budget = COALESCE(EXCLUDED.budget, media_metadata.budget),
+             revenue = COALESCE(EXCLUDED.revenue, media_metadata.revenue),
+             tagline = COALESCE(EXCLUDED.tagline, media_metadata.tagline),
+             popularity = COALESCE(EXCLUDED.popularity, media_metadata.popularity),
+             "voteCount" = COALESCE(EXCLUDED."voteCount", media_metadata."voteCount"),
+             "originalLanguage" = COALESCE(EXCLUDED."originalLanguage", media_metadata."originalLanguage"),
+             "productionCountries" = CASE WHEN $12 THEN EXCLUDED."productionCountries" ELSE media_metadata."productionCountries" END,
+             "productionCompanies" = CASE WHEN $13 THEN EXCLUDED."productionCompanies" ELSE media_metadata."productionCompanies" END,
+             videos = CASE WHEN $14 THEN EXCLUDED.videos ELSE media_metadata.videos END,
+             keywords = CASE WHEN $15 THEN EXCLUDED.keywords ELSE media_metadata.keywords END"#,
         media_id,
         budget,
         revenue,
@@ -753,39 +763,17 @@ async fn persist_metadata_row(st: &AppState, media_id: i32, d: &Details) -> Resu
         popularity,
         votes,
         language,
-        flags[0],
-        flags[1],
-        flags[2],
-        flags[3],
         countries,
         companies,
         videos,
-        keywords
+        keywords,
+        flags[0],
+        flags[1],
+        flags[2],
+        flags[3]
     )
     .execute(&st.db)
-    .await?
-    .rows_affected();
-    if updated == 0 {
-        sqlx::query!(
-            r#"INSERT INTO media_metadata ("mediaId", budget, revenue, tagline, popularity, "voteCount",
-                 "originalLanguage", "productionCountries", "productionCompanies", videos, keywords)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-               ON CONFLICT ("mediaId") DO NOTHING"#,
-            media_id,
-            budget,
-            revenue,
-            tagline,
-            popularity,
-            votes,
-            language,
-            countries,
-            companies,
-            videos,
-            keywords
-        )
-        .execute(&st.db)
-        .await?;
-    }
+    .await?;
     Ok(())
 }
 
@@ -897,6 +885,13 @@ async fn replace_credits(
     let person = |c: &Value| ext(c).and_then(|e| people.get(&e)).map(|p| p.id);
     let text = |c: &Value, k: &str| s(c, k).unwrap_or_default();
     let mut tx = st.db.begin().await?;
+    // Two writers of one media's credits queue here instead of interleaving their rows.
+    sqlx::query!(
+        "SELECT 1 AS one FROM media WHERE id = $1 FOR UPDATE",
+        media_id
+    )
+    .fetch_optional(&mut *tx)
+    .await?;
     sqlx::query!(r#"DELETE FROM media_cast WHERE "mediaId" = $1"#, media_id)
         .execute(&mut *tx)
         .await?;
@@ -959,26 +954,19 @@ async fn merge_departments(
                 .insert(s(c, "department").unwrap_or_default());
         }
     }
-    for (e, new) in wanted {
-        let Some(p) = people.get(&e) else { continue };
-        let mut merged: BTreeSet<String> = sqlx::query_scalar!(
-            r#"SELECT departments AS "d!: Value" FROM persons WHERE id = $1"#,
-            p.id
-        )
-        .fetch_optional(&st.db)
-        .await?
-        .and_then(|v| serde_json::from_value::<Vec<String>>(v).ok())
-        .unwrap_or_default()
+    let rows: Vec<Value> = wanted
         .into_iter()
+        .filter_map(|(e, new)| Some(json!({"id": people.get(&e)?.id, "depts": new})))
         .collect();
-        merged.extend(new);
-        sqlx::query!(
-            "UPDATE persons SET departments = $2 WHERE id = $1",
-            p.id,
-            json!(merged.into_iter().collect::<Vec<_>>())
-        )
-        .execute(&st.db)
-        .await?;
-    }
+    sqlx::query!(
+        r#"UPDATE persons p SET departments = (
+             SELECT COALESCE(jsonb_agg(d ORDER BY d COLLATE "C"), '[]'::jsonb)
+             FROM (SELECT jsonb_array_elements_text(p.departments) AS d
+                   UNION SELECT jsonb_array_elements_text(x.depts)) t)
+           FROM jsonb_to_recordset($1::jsonb) AS x(id int, depts jsonb) WHERE p.id = x.id"#,
+        Value::Array(rows)
+    )
+    .execute(&st.db)
+    .await?;
     Ok(())
 }

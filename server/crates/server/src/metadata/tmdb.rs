@@ -538,7 +538,7 @@ impl Tmdb {
                 ]),
             )
             .await?;
-        let first = |k: &str| arr(&d, k).first().map(|m| id_string(get(m, "id")));
+        let first = |k: &str| arr(&d, k).first().and_then(|m| id_string(get(m, "id")));
         Ok(first("movie_results")
             .map(|i| (i, false))
             .or_else(|| first("tv_results").map(|i| (i, true))))
@@ -619,11 +619,12 @@ impl Tmdb {
     }
 }
 
-/// JS `String(n)` of an id.
-fn id_string(v: &Value) -> String {
+/// JS `String(n)` of an id; a missing one is no id.
+fn id_string(v: &Value) -> Option<String> {
     match v {
-        Value::String(s) => s.clone(),
-        other => other.to_string(),
+        Value::Null => None,
+        Value::String(s) => Some(s.clone()),
+        other => Some(other.to_string()),
     }
 }
 
