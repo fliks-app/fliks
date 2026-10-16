@@ -392,6 +392,10 @@ impl Lane {
                 if rt.sh.era.load(Ordering::SeqCst) == era {
                     rt.crash(self, &why);
                 }
+                // The epoch callback interrupts at the call's deadline: that is a timeout (504).
+                if trap.downcast_ref::<Trap>() == Some(&Trap::Interrupt) {
+                    return Err(CallError::Timeout);
+                }
                 Err(CallError::Crashed(why))
             }
             Err(_) => {
