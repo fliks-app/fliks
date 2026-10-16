@@ -25,6 +25,7 @@ describe('CountsService.getCounts', () => {
     };
     const libraries = {
       getAccessibleLibraryIds: jest.fn().mockResolvedValue([1, 2]),
+      getCountsByLibrary: mediaService.getCountsByLibrary,
     };
     const pluginCounts = new PluginCountsCacheService();
     const service = new CountsService(

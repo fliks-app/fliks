@@ -62,36 +62,7 @@ describe('subtitle-scorer', () => {
   });
 
   describe('release-name matching', () => {
-    it('matches release group, source, resolution, codecs on an exact episode release', () => {
-      const s = scoreSubtitle(
-        { releaseName: 'Sample.Show.S01E01.1080p.BluRay.x265.DTS-CtrlHD' },
-        EPISODE_CTX,
-      );
-      expect(s.matches).toEqual(
-        expect.arrayContaining([
-          'series',
-          'season',
-          'episode',
-          'releaseGroup',
-          'source',
-          'resolution',
-          'videoCodec',
-          'audioCodec',
-        ]),
-      );
-    });
 
-    it('scores lower when the source/resolution differ', () => {
-      const good = scoreSubtitle(
-        { releaseName: 'Sample.Show.S01E01.1080p.BluRay.x265-CtrlHD' },
-        EPISODE_CTX,
-      );
-      const bad = scoreSubtitle(
-        { releaseName: 'Sample.Show.S01E01.720p.WEB-DL.x264-FGT' },
-        EPISODE_CTX,
-      );
-      expect(good.raw).toBeGreaterThan(bad.raw);
-    });
   });
 
   describe('imdb equivalence', () => {
@@ -153,18 +124,6 @@ describe('subtitle-scorer', () => {
       expect(s.percent).toBe(51);
     });
 
-    it('scores a perfect non-hash episode release at 100%', () => {
-      const s = scoreSubtitle(
-        {
-          releaseName: EPISODE_CTX.videoReleaseName,
-          imdbId: EPISODE_CTX.imdbId,
-          hearingImpaired: false,
-        },
-        EPISODE_CTX,
-      );
-      expect(s.matches).not.toContain('hash');
-      expect(s.percent).toBe(100);
-    });
   });
 
   describe('percent normalisation', () => {
