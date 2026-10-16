@@ -28,7 +28,13 @@ async fn media_dir_to_remove(st: &AppState, m: &MediaRow) -> Result<Option<PathB
     }
     let root = match fsx::Root::open(lib) {
         Ok(r) => r,
-        Err(_) => return Ok(None),
+        Err(e) => {
+            tracing::warn!(
+                "Media #{}: library root unavailable ({e}), folder kept",
+                m.id
+            );
+            return Ok(None);
+        }
     };
     let roots: Vec<PathBuf> = sqlx::query_scalar!(
         r#"SELECT path AS "path!" FROM libraries WHERE path IS NOT NULL AND path <> ''"#
