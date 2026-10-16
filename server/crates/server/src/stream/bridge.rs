@@ -34,19 +34,25 @@ pub async fn sprite(
     let file = resolve_file(&st, None, i64::from(r.media_file_id)).await?;
     let title = file.media_title.clone().unwrap_or_default();
     let subject = subject_of(&st, &file, &title).await?;
-    let meta = sprite::generate(
-        &st,
-        sprite::SpriteJob {
-            file_id: file.id,
-            path: &file.absolute,
-            info: file.info.as_ref(),
-            title: &title,
-            subject,
-            force: r.force,
-            priority: r.priority.unwrap_or(JobPriority::Low),
-        },
-    )
-    .await;
+    // Detached: Nest giving up on the call must not leave the activity row behind.
+    let meta = tokio::spawn(async move {
+        sprite::generate(
+            &st,
+            sprite::SpriteJob {
+                file_id: file.id,
+                path: &file.absolute,
+                info: file.info.as_ref(),
+                title: &title,
+                subject,
+                force: r.force,
+                priority: r.priority.unwrap_or(JobPriority::Low),
+            },
+        )
+        .await
+    })
+    .await
+    .ok()
+    .flatten();
     Ok(meta.map(Json).ok_or(StatusCode::NO_CONTENT))
 }
 
@@ -59,7 +65,11 @@ pub async fn source(
     let r = parse(&st, &h, &body)?;
     let file = resolve_file(&st, None, i64::from(r.media_file_id)).await?;
     let priority = r.priority.unwrap_or(JobPriority::Low);
-    scan::schedule_if_needed(&st, file.id, &file.absolute, file.info, priority).await;
+    // Detached: Nest giving up on the call must not leave the file marked as scanning.
+    let _ = tokio::spawn(async move {
+        scan::schedule_if_needed(&st, file.id, &file.absolute, file.info, priority).await;
+    })
+    .await;
     Ok(StatusCode::NO_CONTENT)
 }
 
