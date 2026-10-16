@@ -299,10 +299,10 @@ pub fn normalize_settings(
         merge_secrets(existing, &mut out, secret_keys(typ));
         return Ok(out);
     }
-    if let Some(legacy) = out.remove("webhookUrl") {
-        if !truthy(out.get("url")) {
-            out.insert("url".into(), legacy);
-        }
+    if let Some(legacy) = out.remove("webhookUrl")
+        && !truthy(out.get("url"))
+    {
+        out.insert("url".into(), legacy);
     }
     merge_secrets(existing, &mut out, secret_keys(typ));
     if typ == "gotify" && !truthy(out.get("token")) {
@@ -360,9 +360,8 @@ fn effective_endpoint(typ: &str, settings: &Value, stored: Option<&Map<String, V
 /// `CreateNotificationConnectionDto` validation (class-validator messages, same order); `stored`
 /// is the saved settings of the connection being updated when its type is unchanged.
 pub fn validate(body: &Value, stored: Option<&Map<String, Value>>) -> Vec<String> {
-    let Some(obj) = body.as_object() else {
-        return vec![];
-    };
+    let empty = Map::new();
+    let obj = body.as_object().unwrap_or(&empty);
     let mut msgs: Vec<String> = obj
         .keys()
         .filter(|k| !["name", "type", "settings", "events", "enabled"].contains(&k.as_str()))

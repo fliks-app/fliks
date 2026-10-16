@@ -1,6 +1,7 @@
 use crate::http::{layers, static_files};
 use crate::{
-    auth, events, fs, images, libraries, media, playback, qoe, remote, roles, settings,
+    auth, events, fs, images, libraries, media, notifications, playback, qoe, remote, roles,
+    settings,
     state::AppState, system, users,
 };
 use axum::{
@@ -127,7 +128,14 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         media::media_collection,
         media::media_cast,
         media::media_crew,
-        media::media_streams
+        media::media_streams,
+        notifications::list,
+        notifications::create,
+        notifications::events,
+        notifications::get_one,
+        notifications::update,
+        notifications::remove,
+        notifications::test
     )
 )]
 pub struct ApiDoc;
@@ -187,6 +195,7 @@ fn api() -> Router<AppState> {
         .merge(libraries::router())
         .merge(images::router())
         .merge(media::router())
+        .merge(notifications::router())
 }
 
 async fn preflight_here(State(cors): State<Router>, req: Request, next: Next) -> Response {

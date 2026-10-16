@@ -13,6 +13,7 @@ pub mod jwt_secret;
 pub mod libraries;
 pub mod media;
 pub mod nest;
+pub mod notifications;
 pub mod paths;
 pub mod playback;
 pub mod presence;
