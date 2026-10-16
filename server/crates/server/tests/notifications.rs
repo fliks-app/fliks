@@ -673,8 +673,8 @@ async fn c16_a_silent_receiver_times_out_after_10s(pool: PgPool) {
         .fetch_one(&c.pool)
         .await
         .unwrap();
-    tokio::time::pause();
-    let t = tokio::time::Instant::now();
+    // Real clock: a paused one auto-advances during sqlx I/O and can fire the pool timeouts.
+    let t = std::time::Instant::now();
     let (s, b) = admin(&c, "POST", &format!("/api/notifications/{id}/test"), None).await;
     assert_eq!(
         (s, b),
