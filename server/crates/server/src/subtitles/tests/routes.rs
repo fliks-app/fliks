@@ -905,3 +905,60 @@ async fn upload_validates_cleans_and_names_the_file(pool: PgPool) {
     assert!(!c.root.parent().unwrap().join("tmp.srt").exists());
     let _ = ok(json!({}));
 }
+
+#[sqlx::test]
+async fn missing_lists_uncovered_languages_and_activity_follows_library_access(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (_, m) = call(&c, "GET", "/api/subtitles/missing", &c.reader, None).await;
+    assert_eq!(m["total"], 2);
+    assert_eq!(
+        (
+            m["data"][0]["language"].clone(),
+            m["data"][0]["mediaTitle"].clone(),
+            m["data"][0]["episodeLabel"].clone()
+        ),
+        (json!("en"), json!("Movie"), Value::Null)
+    );
+    sqlx::query(r#"INSERT INTO subtitle_files ("mediaId", "mediaFileId", language, "providerType", status, score) VALUES ($1, $2, 'en', 'disk', 'downloaded', 100), ($1, $2, 'fr', 'disk', 'failed', 100)"#).bind(c.media).bind(c.file).execute(&c.pool).await.unwrap();
+    let (_, m) = call(&c, "GET", "/api/subtitles/missing", &c.admin, None).await;
+    assert_eq!(
+        (m["total"].clone(), m["data"][0]["language"].clone()),
+        (json!(1), json!("fr")),
+        "a failed row never covers"
+    );
+    let (_, m) = call(
+        &c,
+        "GET",
+        "/api/subtitles/missing?page=5&limit=1",
+        &c.admin,
+        None,
+    )
+    .await;
+    assert_eq!(
+        (m["total"].clone(), m["data"].clone()),
+        (json!(0), json!([])),
+        "past the end the total is 0"
+    );
+    // F50: rows of media outside the reader's libraries are not listed.
+    sqlx::query(r#"INSERT INTO subtitle_files ("mediaId", language, "providerType", status, score) VALUES ($1, 'de', 'disk', 'downloaded', 100)"#).bind(c.other_media).execute(&c.pool).await.unwrap();
+    let (_, h) = call(&c, "GET", "/api/subtitles/history", &c.reader, None).await;
+    assert_eq!(h["total"], 2);
+    let (_, h) = call(&c, "GET", "/api/subtitles/history", &c.admin, None).await;
+    assert_eq!(h["total"], 3);
+    assert_eq!(h["data"][0]["mediaTitle"], "Other");
+    assert_eq!(
+        call(&c, "GET", "/api/subtitles/health", &c.reader, None)
+            .await
+            .0,
+        403,
+        "F51"
+    );
+    let (s, v) = call(&c, "GET", "/api/subtitles/health", &c.admin, None).await;
+    assert_eq!((s, v), (200, json!([])));
+    assert_eq!(
+        call(&c, "GET", "/api/subtitles/missing", "bad", None)
+            .await
+            .0,
+        401
+    );
+}

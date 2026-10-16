@@ -58,8 +58,11 @@ impl Seen {
     }
 }
 
+type Dynamic = Arc<dyn Fn(&Seen) -> Reply + Send + Sync>;
+
 #[derive(Default)]
 struct State_ {
+    dynamic: Vec<(String, String, Dynamic)>,
     rules: Vec<(String, String, VecDeque<Reply>)>,
     seen: Vec<Seen>,
 }
@@ -77,35 +80,53 @@ async fn handle(
     headers: HeaderMap,
     body: Bytes,
 ) -> Response {
-    let r = {
-        let mut st = s.lock().unwrap();
-        st.seen.push(Seen {
-            method: method.to_string(),
-            path: uri.path().to_owned(),
-            query: uri.query().unwrap_or("").to_owned(),
-            headers: headers
-                .iter()
-                .map(|(k, v)| (k.to_string(), v.to_str().unwrap_or("").to_owned()))
-                .collect(),
-            body: body.to_vec(),
-        });
-        st.rules
-            .iter_mut()
-            .find(|(m, p, _)| *m == method.as_str() && *p == uri.path())
-            .map(|(_, _, q)| {
-                if q.len() > 1 {
-                    q.pop_front().unwrap()
-                } else {
-                    q.front().cloned().unwrap()
-                }
-            })
+    let seen = Seen {
+        method: method.to_string(),
+        path: uri.path().to_owned(),
+        query: uri.query().unwrap_or("").to_owned(),
+        headers: headers
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_str().unwrap_or("").to_owned()))
+            .collect(),
+        body: body.to_vec(),
     };
+    let (dynamic, r) = {
+        let mut st = s.lock().unwrap();
+        st.seen.push(seen.clone());
+        let dynamic = st
+            .dynamic
+            .iter()
+            .find(|(m, p, _)| *m == method.as_str() && *p == uri.path())
+            .map(|(_, _, f)| f.clone());
+        let r = if dynamic.is_some() {
+            None
+        } else {
+            st.rules
+                .iter_mut()
+                .find(|(m, p, _)| *m == method.as_str() && *p == uri.path())
+                .map(|(_, _, q)| {
+                    if q.len() > 1 {
+                        q.pop_front().unwrap()
+                    } else {
+                        q.front().cloned().unwrap()
+                    }
+                })
+        };
+        (dynamic, r)
+    };
+    if let Some(f) = dynamic {
+        return render(f(&seen)).await;
+    }
     let Some(r) = r else {
         return Response::builder()
             .status(404)
             .body("no rule".into())
             .unwrap();
     };
+    render(r).await
+}
+
+async fn render(r: Reply) -> Response {
     if r.delay_ms > 0 {
         tokio::time::sleep(Duration::from_millis(r.delay_ms)).await;
     }
@@ -134,6 +155,21 @@ impl Stub {
             .unwrap()
             .rules
             .push((method.into(), path.into(), replies.into()));
+        self
+    }
+
+    /// A reply computed from the request.
+    pub fn on_fn(
+        &self,
+        method: &str,
+        path: &str,
+        f: impl Fn(&Seen) -> Reply + Send + Sync + 'static,
+    ) -> &Self {
+        self.state
+            .lock()
+            .unwrap()
+            .dynamic
+            .push((method.into(), path.into(), Arc::new(f)));
         self
     }
 

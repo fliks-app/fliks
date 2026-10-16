@@ -52,11 +52,7 @@ pub const MAX_BODY: usize = 10 * 1024 * 1024;
 
 pub async fn body_bytes(mut res: Response, cap: usize) -> Result<Vec<u8>, String> {
     let mut out = Vec::new();
-    while let Some(chunk) = res
-        .chunk()
-        .await
-        .map_err(|e| crate::outbound::error_text(e))?
-    {
+    while let Some(chunk) = res.chunk().await.map_err(crate::outbound::error_text)? {
         out.extend_from_slice(&chunk);
         if out.len() > cap {
             return Err("Response body is too large".into());

@@ -27,6 +27,7 @@ use serde_json::{Value, json};
 use std::collections::HashMap;
 
 type Res<T> = Result<T, AppError>;
+type Upload2 = (String, Vec<u8>);
 
 pub fn policy(a: &Authed, action: Action) -> Res<()> {
     a.require(action, Subject::SubtitleFile)
@@ -272,8 +273,7 @@ pub async fn upload(
         AppError::bad_request("No file uploaded")
     };
     let mut mp = multipart.map_err(|e| bad(&e))?;
-    let (mut file, mut fields): (Option<(String, Vec<u8>)>, HashMap<String, String>) =
-        (None, HashMap::new());
+    let (mut file, mut fields): (Option<Upload2>, HashMap<String, String>) = (None, HashMap::new());
     while let Some(mut field) = mp.next_field().await.map_err(|e| {
         if e.status() == StatusCode::PAYLOAD_TOO_LARGE {
             too_large()

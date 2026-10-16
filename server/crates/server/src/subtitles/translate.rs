@@ -394,7 +394,7 @@ async fn load_source_srt(
             let bytes = std::fs::read(&abs).map_err(|e| other(e.to_string()))?;
             return Ok(decode_text(&bytes));
         }
-        let info = info.unwrap_or_else(|| empty_info());
+        let info = info.unwrap_or_else(empty_info);
         let r = st
             .engine
             .run_job(

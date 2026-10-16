@@ -95,6 +95,8 @@ pub fn parse_results(html: &str, target: Option<&str>, iso: &str) -> Vec<Candida
         LazyLock::new(|| regex::Regex::new(r#"href="([^"]+)""#).expect("static"));
     static ANCHOR: LazyLock<regex::Regex> =
         LazyLock::new(|| regex::Regex::new(r"(?i)<a[^>]*>([\s\S]*?)</a>").expect("static"));
+    static HI: LazyLock<regex::Regex> =
+        LazyLock::new(|| regex::Regex::new(r"(?i)hi-subtitle").expect("static"));
     static LEAD: LazyLock<regex::Regex> =
         LazyLock::new(|| regex::Regex::new(r"(?i)^\s*subtitle\s*").expect("static"));
     let Some(tbody) = TABLE.captures(html) else {
@@ -129,9 +131,7 @@ pub fn parse_results(html: &str, target: Option<&str>, iso: &str) -> Vec<Candida
         if release.is_empty() {
             continue;
         }
-        let hi = regex::Regex::new(r"(?i)hi-subtitle")
-            .expect("static")
-            .is_match(cells[3]);
+        let hi = HI.is_match(cells[3]);
         out.push(candidate(
             T,
             "YIFY",

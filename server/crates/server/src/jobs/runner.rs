@@ -45,7 +45,7 @@ impl Drop for Claim {
     }
 }
 
-/// One timer per job Rust schedules; the subtitle ticks stay Nest's (rule 31). Timers die with the runtime.
+/// One timer per job Rust schedules; the subtitle ticks are `subtitles::spawn`'s (rule 31). Timers die with the runtime.
 pub fn spawn(st: &AppState) {
     let tz = cron::server_tz();
     for &(name, expr, _) in names::CORE

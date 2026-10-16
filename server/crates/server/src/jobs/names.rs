@@ -35,10 +35,10 @@ pub const TRIGGER_ONLY: [&str; 7] = [
     "DetectMissingMarkers",
 ];
 
-/// Core names whose body Nest still holds (rules 30, 31).
+/// Core names whose body Nest still holds (rule 30).
 pub const BRIDGED: [&str; 1] = ["RefreshPluginSources"];
 
-/// Their ticks stay Nest's (rule 31).
+/// Their tick is the subtitle tick (`subtitles::spawn`), not the runner's (rule 31).
 pub const SUBTITLE: [&str; 2] = ["SubtitleSearch", "SubtitleUpgrade"];
 
 /// Housekeeping tick of rule 26: not listed, not triggerable.
