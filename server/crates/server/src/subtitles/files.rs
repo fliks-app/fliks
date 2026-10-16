@@ -111,6 +111,10 @@ impl MediaCtx {
         let m = lib_root
             .media_dir(self.folder_name.as_deref())
             .map_err(|_| AppError::bad_request(no_root))?;
+        // F45: a folder name that is a symlink out of the library is no media directory.
+        if !lib_root.contains(&m, true) {
+            return Err(AppError::bad_request(no_root));
+        }
         let mc = fsx::Root::open(&m.to_string_lossy()).map_err(|_| missing_disk())?;
         Ok(Dirs { m, mc })
     }

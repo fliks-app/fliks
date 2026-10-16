@@ -6,6 +6,7 @@ pub mod ocr;
 pub mod postprocess;
 pub mod providers;
 pub mod routes_activity;
+pub mod routes_media;
 pub mod routes_providers;
 pub mod scheduler;
 pub mod secrets;
@@ -115,7 +116,6 @@ impl Default for Shared {
         Self::new(Bases::default())
     }
 }
-pub mod routes_media;
 
 use crate::state::AppState;
 use axum::{
@@ -305,9 +305,4 @@ pub async fn sweep(db: &sqlx::PgPool) -> sqlx::Result<u64> {
         tracing::warn!("Marked {n} interrupted subtitle run(s) as failed on startup");
     }
     Ok(n)
-}
-
-/// The 6 h tick of the search and upgrade passes.
-pub fn spawn(st: &AppState) {
-    scheduler::spawn_tick(st);
 }

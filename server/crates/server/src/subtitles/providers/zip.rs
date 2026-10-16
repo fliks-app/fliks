@@ -78,6 +78,9 @@ fn read(e: &Entry<'_>) -> Result<Option<Vec<u8>>, String> {
         return Err("Subtitle file in the archive is too large".into());
     }
     match e.method {
+        0 if e.data.len() > MAX_EXTRACTED => {
+            Err("Subtitle file in the archive is too large".into())
+        }
         0 => Ok(Some(e.data.to_vec())),
         8 => decompress_to_vec_with_limit(e.data, MAX_EXTRACTED)
             .map(Some)
@@ -103,11 +106,12 @@ pub fn extract_subtitle(zip: &[u8], fallback_first: bool) -> Result<Vec<u8>, Str
             return Ok(d);
         }
     }
-    if fallback_first
-        && let Some(e) = all.first()
-        && let Some(d) = read(e)?
-    {
-        return Ok(d);
+    if fallback_first {
+        for e in &all {
+            if let Some(d) = read(e)? {
+                return Ok(d);
+            }
+        }
     }
     Err(NO_SUBTITLE.into())
 }

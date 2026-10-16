@@ -178,8 +178,11 @@ impl Post for HttpPost<'_> {
     }
 }
 
-async fn json_of(r: Response) -> Value {
-    r.json().await.unwrap_or(Value::Null)
+/// A 2xx body that is not JSON is an error, as `res.json()` throws.
+async fn json_of(r: Response) -> Result<Value, TranslationError> {
+    r.json()
+        .await
+        .map_err(|e| TranslationError::Other(format!("Error: {}", e.without_url())))
 }
 
 /// Gemini joins the `text` of every part.
@@ -233,7 +236,7 @@ async fn listing(
             .collect();
         return Err(format!("{label} model list failed ({status}): {body}"));
     }
-    Ok(json_of(res).await)
+    json_of(res).await.map_err(|e| e.to_string())
 }
 
 pub enum ListError {
@@ -386,7 +389,7 @@ impl Driver for Engine<'_> {
                 TranslationError::TooLarge(m) => BatchError::TooLarge(m),
                 other => BatchError::Other(other),
             })?;
-        let data = json_of(res).await;
+        let data = json_of(res).await.map_err(BatchError::Other)?;
         if self.kind == "gemini" {
             let cand = &data["candidates"][0];
             if cand["finishReason"] == "MAX_TOKENS" {
@@ -493,7 +496,7 @@ pub async fn translate(
         let mut p = probe.post(body);
         async move {
             let res = post_with_retry(&mut p, label).await?;
-            let data = json_of(res).await;
+            let data = json_of(res).await?;
             Ok(if gemini {
                 join_parts(&data["candidates"][0]["content"]["parts"])
             } else {
@@ -565,7 +568,7 @@ async fn libre(
             secret: cfg.api_key.clone(),
         };
         let res = post_with_retry(&mut p, "LibreTranslate").await?;
-        let data = json_of(res).await;
+        let data = json_of(res).await?;
         let arr: Option<Vec<String>> = match &data["translatedText"] {
             Value::Array(a) => Some(
                 a.iter()

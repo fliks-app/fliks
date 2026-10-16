@@ -2,7 +2,7 @@
 use super::{
     files::{self, FileRow, MediaCtx},
     model::{self, Inserted, New},
-    providers::{Provider, Query},
+    providers::{Provider, Query, redact},
 };
 use crate::{http::AppError, state::AppState};
 use chrono::{DateTime, Utc};
@@ -50,15 +50,6 @@ pub struct Search {
     pub video_release_name: Option<String>,
     pub forced: Option<bool>,
     pub hi_mode: Option<HiMode>,
-}
-
-/// Settings secrets that must not travel in an error text (F54).
-fn redact(msg: &str, settings: &Value) -> String {
-    ["apiKey", "password"]
-        .iter()
-        .filter_map(|k| settings.get(*k).and_then(Value::as_str))
-        .filter(|s| !s.is_empty())
-        .fold(msg.to_owned(), |m, s| m.replace(s, "***"))
 }
 
 fn record_stat(
@@ -162,14 +153,22 @@ pub async fn clean_options(st: &AppState, ads: bool) -> Result<CleanOptions, App
     let exclusions = crate::settings::setting_value(&st.db, "subtitle_custom_exclusions")
         .await?
         .unwrap_or_default();
+    let custom_exclusions: Vec<String> = exclusions
+        .split('\n')
+        .filter(|l| !l.trim().is_empty())
+        .map(str::to_owned)
+        .collect();
+    let (_, skipped) = fliks_domain::subtitle_clean::compile_exclusions(&custom_exclusions);
+    if skipped > 0 {
+        tracing::warn!(
+            skipped,
+            "subtitle exclusion patterns skipped (invalid regex)"
+        );
+    }
     Ok(CleanOptions {
         remove_ads: ads,
         remove_hi_tags,
-        custom_exclusions: exclusions
-            .split('\n')
-            .filter(|l| !l.trim().is_empty())
-            .map(str::to_owned)
-            .collect(),
+        custom_exclusions,
     })
 }
 
@@ -231,6 +230,14 @@ pub async fn download(
     };
     let ms = start.elapsed().as_millis() as i64;
     let bytes = match got {
+        Ok(b) if b.len() > UPLOAD_MAX_BYTES => {
+            let e = "Subtitle file is too large".to_owned();
+            record_stat(st, provider.id, "download", ms, 0, Some(e.clone()));
+            return Err(AppError::bad_request(format!(
+                "Download failed ({}): {e}",
+                provider.name
+            )));
+        }
         Ok(b) => {
             record_stat(st, provider.id, "download", ms, 1, None);
             b
@@ -308,14 +315,7 @@ pub async fn upgrade(st: &AppState, id: i32, c: Option<&Candidate>) -> Result<Sa
     saved.new.status = "upgraded".into();
     saved.new.locked = old.locked;
     saved.new.tags = Some(old.tags.clone());
-    if let (Some(stored), Some(media)) = (
-        old.file_path.as_deref(),
-        files::load_media(&st.db, media_id).await?,
-    ) && let Ok(dirs) = media.dirs(files::NO_ROOT_ADD)
-        && let Err(e) = dirs.unlink(stored)
-    {
-        tracing::warn!("Could not delete subtitle {stored}: {e}");
-    }
+    super::sidecars::unlink_unless_shared(st, &old).await?;
     sqlx::query("DELETE FROM subtitle_files WHERE id = $1")
         .bind(id)
         .execute(&st.db)
@@ -339,10 +339,7 @@ pub async fn upload(
     episode_id: Option<i32>,
     up: Upload,
 ) -> Result<Saved, AppError> {
-    let ext = match up.name.rfind('.') {
-        Some(i) if i > 0 => up.name[i..].to_lowercase(),
-        _ => String::new(),
-    };
+    let ext = fliks_domain::subtitle_name::ext(&up.name);
     if !fliks_domain::subtitle_name::SUBTITLE_EXTS.contains(&ext.as_str()) {
         return Err(AppError::bad_request(format!(
             "Unsupported subtitle format: {ext}"
@@ -405,6 +402,11 @@ pub async fn set_language(st: &AppState, id: i32, language: &str) -> Result<Valu
         return Err(AppError::bad_request("Language is required"));
     }
     let lang = normalize_language_code(Some(language));
+    if !fliks_domain::subtitle_path::is_language_code(&lang) {
+        return Err(AppError::bad_request(vec![
+            "language must match /^[a-z]{2,3}$/ regular expression",
+        ]));
+    }
     sqlx::query("UPDATE subtitle_files SET language = $2 WHERE id = $1")
         .bind(id)
         .bind(&lang)

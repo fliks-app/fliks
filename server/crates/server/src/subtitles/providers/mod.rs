@@ -216,7 +216,22 @@ impl<'a> Provider<'a> {
         }
     }
 
+    /// The probe verdict, its detail masked (F54) and logged (rule 40).
     pub async fn test(&self) -> TestResult {
+        let mut r = self.probe().await;
+        r.detail = r.detail.map(|d| redact(&d, &self.settings));
+        match (&r.ok, &r.detail) {
+            (true, _) => tracing::info!("Subtitle provider {} test passed", self.kind),
+            (false, d) => tracing::warn!(
+                "Subtitle provider {} test failed: {}",
+                self.kind,
+                d.as_deref().unwrap_or("")
+            ),
+        }
+        r
+    }
+
+    async fn probe(&self) -> TestResult {
         let (sh, s) = (self.sh, &self.settings);
         match self.kind {
             "opensubtitles" => opensubtitles::test(sh, s).await,
@@ -236,7 +251,19 @@ pub fn setting<'a>(s: &'a Value, key: &str) -> Option<&'a str> {
 
 /// Transport errors as the text a provider failure shows (never the URL, F54).
 pub fn net(e: reqwest::Error) -> String {
+    if e.is_timeout() {
+        return "timeout".into();
+    }
     crate::outbound::error_text(e)
+}
+
+/// Settings secrets that must not travel in an error text (F54).
+pub fn redact(msg: &str, settings: &Value) -> String {
+    ["apiKey", "password"]
+        .iter()
+        .filter_map(|k| settings.get(*k).and_then(Value::as_str))
+        .filter(|s| !s.is_empty())
+        .fold(msg.to_owned(), |m, s| m.replace(s, "***"))
 }
 
 /// `<prefix>: <status>`, or `none` when the request was skipped (`res?.status` prints `undefined`).

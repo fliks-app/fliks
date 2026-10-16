@@ -127,15 +127,6 @@ pub async fn enqueue(st: &AppState, id: i32, options: Options) -> Result<Value, 
         .bind(id)
         .execute(&st.db)
         .await?;
-    {
-        let q = st.subtitles.sync.lock();
-        if let Some(live) =
-            q.0.iter()
-                .find(|i| i.subtitle_id == id && matches!(i.status, "queued" | "running"))
-        {
-            return Ok(live.json());
-        }
-    }
     let media = files::load_media(&st.db, row.media_id.unwrap_or(0)).await?;
     let ep = match row.episode_id {
         Some(e) => episode_of(st, e).await,
@@ -165,7 +156,14 @@ pub async fn enqueue(st: &AppState, id: i32, options: Options) -> Result<Value, 
     };
     let out = item.json();
     {
+        // The duplicate check and the push share one lock: two requests cannot both queue.
         let mut q = st.subtitles.sync.lock();
+        if let Some(live) =
+            q.0.iter()
+                .find(|i| i.subtitle_id == id && matches!(i.status, "queued" | "running"))
+        {
+            return Ok(live.json());
+        }
         q.0.push(item);
         while q.0.len() > KEEP && matches!(q.0[0].status, "completed" | "failed") {
             q.0.remove(0);
@@ -209,30 +207,53 @@ pub fn pump(st: &AppState) {
         );
         let st = st.clone();
         tokio::spawn(async move {
+            let mut slot = Slot {
+                st: st.clone(),
+                id,
+                result: None,
+            };
             let res = do_sync(&st, id, &options).await;
-            {
-                let mut q = st.subtitles.sync.lock();
-                if let Some(item) =
-                    q.0.iter_mut()
-                        .find(|i| i.subtitle_id == id && i.status == "running")
-                {
-                    match &res {
-                        Ok(()) => item.status = "completed",
-                        Err(e) => {
-                            item.status = "failed";
-                            item.error = Some(e.clone());
-                        }
-                    }
-                    item.completed_at = Some(now_ms());
-                }
-                q.1 -= 1;
-            }
-            if let Err(e) = res {
+            if let Err(e) = &res {
                 tracing::warn!("Sync failed for subtitle #{id}: {e}");
             }
-            st.hub.activity().remove(&activity_id(id));
-            pump(&st);
+            slot.result = Some(res);
         });
+    }
+}
+
+/// A running slot: whatever way the task ends, a panic included, the item settles, the slot and the
+/// activity row are freed and the queue moves on.
+struct Slot {
+    st: AppState,
+    id: i32,
+    result: Option<Result<(), String>>,
+}
+
+impl Drop for Slot {
+    fn drop(&mut self) {
+        {
+            let mut q = self.st.subtitles.sync.lock();
+            let res = self
+                .result
+                .take()
+                .unwrap_or_else(|| Err("Sync task panicked".into()));
+            if let Some(item) =
+                q.0.iter_mut()
+                    .find(|i| i.subtitle_id == self.id && i.status == "running")
+            {
+                match res {
+                    Ok(()) => item.status = "completed",
+                    Err(e) => {
+                        item.status = "failed";
+                        item.error = Some(e);
+                    }
+                }
+                item.completed_at = Some(now_ms());
+            }
+            q.1 = q.1.saturating_sub(1);
+        }
+        self.st.hub.activity().remove(&activity_id(self.id));
+        pump(&self.st);
     }
 }
 

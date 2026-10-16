@@ -205,7 +205,9 @@ impl Limiter {
                 .filter(|v| !v.is_empty())
             {
                 if let Ok(n) = v.trim().parse::<f64>() {
-                    backoff = n;
+                    if n.is_finite() && n >= 0.0 {
+                        backoff = n;
+                    }
                 } else if let Ok(d) = httpdate::parse_http_date(v.trim()) {
                     let ms = d
                         .duration_since(std::time::UNIX_EPOCH)

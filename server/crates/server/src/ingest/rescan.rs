@@ -342,19 +342,23 @@ pub async fn rescan_files(
         }
     }
 
-    let (missing, dupes) = crate::subtitles::sidecars::reconcile_after_rescan(st, media_id).await;
-    c.subtitle_removed_missing = missing as i64;
-    c.subtitle_removed_duplicates = dupes as i64;
-    crate::subtitles::sidecars::discover_external(st, media_id).await;
-    for (file, episode) in sqlx::query_as::<_, (i32, Option<i32>)>(
-        r#"SELECT id, "episodeId" FROM media_files WHERE "mediaId" = $1 ORDER BY id"#,
-    )
-    .bind(media_id)
-    .fetch_all(&st.db)
-    .await
-    .unwrap_or_default()
-    {
-        crate::subtitles::embedded::detect_and_store(st, media_id, file, episode).await;
+    // C51: an interrupted walk proves nothing about what is on disk.
+    if w.complete {
+        let (missing, dupes) =
+            crate::subtitles::sidecars::reconcile_after_rescan(st, media_id).await;
+        c.subtitle_removed_missing = missing as i64;
+        c.subtitle_removed_duplicates = dupes as i64;
+        crate::subtitles::sidecars::discover_external(st, media_id).await;
+        for (file, episode) in sqlx::query_as::<_, (i32, Option<i32>)>(
+            r#"SELECT id, "episodeId" FROM media_files WHERE "mediaId" = $1 ORDER BY id"#,
+        )
+        .bind(media_id)
+        .fetch_all(&st.db)
+        .await
+        .unwrap_or_default()
+        {
+            crate::subtitles::embedded::detect_and_store(st, media_id, file, episode).await;
+        }
     }
     tracing::info!(
         "Rescan: media #{media_id} done (added {}, removed {}, updated {})",

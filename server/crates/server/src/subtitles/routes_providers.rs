@@ -106,13 +106,17 @@ fn validate(v: Value, create: bool) -> Res<Body> {
         }
     };
     let priority = match present("priority") {
-        Some(Value::Number(n)) if n.as_f64().is_some_and(|f| f >= 0.0) => {
-            n.as_f64().map(|f| f as i32)
-        }
-        Some(Value::Number(_)) => {
-            msgs.push("priority must not be less than 0".into());
-            None
-        }
+        Some(Value::Number(n)) => match int32(n) {
+            Some(i) if i >= 0 => Some(i),
+            Some(_) => {
+                msgs.push("priority must not be less than 0".into());
+                None
+            }
+            None => {
+                msgs.push("priority must be an integer number".into());
+                None
+            }
+        },
         None => None,
         _ => {
             msgs.push("priority must not be less than 0".into());
@@ -130,6 +134,12 @@ fn validate(v: Value, create: bool) -> Res<Body> {
         enabled,
         priority,
     })
+}
+
+/// A JSON number that is integral (`1.0` counts) and fits an int32.
+pub(super) fn int32(n: &serde_json::Number) -> Option<i32> {
+    let f = n.as_f64()?;
+    (f.fract() == 0.0 && f >= f64::from(i32::MIN) && f <= f64::from(i32::MAX)).then_some(f as i32)
 }
 
 async fn find(st: &AppState, id: i32) -> Res<ProviderRow> {
@@ -189,9 +199,7 @@ pub async fn test_connection(
     };
     let id = match obj.get("id") {
         None | Some(Value::Null) => None,
-        Some(Value::Number(n)) if n.as_i64().is_some() => {
-            n.as_i64().and_then(|i| i32::try_from(i).ok())
-        }
+        Some(Value::Number(n)) if int32(n).is_some() => int32(n),
         _ => {
             msgs.push("id must be an integer number".into());
             None
@@ -341,7 +349,7 @@ pub async fn stats(State(st): State<AppState>, a: Authed, id: Id) -> Res<Json<Ve
     policy(&a, Action::Read)?;
     let PathParams(id) = id?;
     let tz = crate::jobs::server_tz();
-    let since = (Utc::now().with_timezone(&tz) - chrono::Duration::days(30)).with_timezone(&Utc);
+    let since = window_start(tz, Utc::now());
     let rows: Vec<StatRow> = sqlx::query_as(
         r#"SELECT DATE(s."queryDate") AS date, COUNT(*) AS queries, AVG(s."responseTimeMs")::int AS avg,
                   SUM(s."resultCount")::int AS total,
@@ -353,25 +361,52 @@ pub async fn stats(State(st): State<AppState>, a: Authed, id: Id) -> Res<Json<Ve
     .bind(since)
     .fetch_all(&st.db)
     .await?;
-    // Nest's instant: the pg `date` read as local midnight of the server zone.
-    let instant = |d: NaiveDate| -> DateTime<Utc> {
-        d.and_hms_opt(0, 0, 0)
-            .and_then(|n| tz.from_local_datetime(&n).earliest())
-            .map_or_else(
-                || Utc.from_utc_datetime(&d.and_hms_opt(0, 0, 0).unwrap_or_default()),
-                |t| t.with_timezone(&Utc),
-            )
-    };
     Ok(Json(
         rows.iter()
             .map(|r| {
-                json!({"date": iso(instant(r.date)), "queries": r.queries.to_string(), "avgResponseMs": r.avg,
+                json!({"date": iso(local_midnight(tz, r.date)), "queries": r.queries.to_string(), "avgResponseMs": r.avg,
                     "totalResults": r.total, "errors": r.errors})
             })
             .collect(),
     ))
 }
 
+/// `setDate(-30)`: 30 calendar days at the same local time, not 720 hours across a DST change.
+fn window_start(tz: chrono_tz::Tz, now: DateTime<Utc>) -> DateTime<Utc> {
+    let local = now.with_timezone(&tz).naive_local() - chrono::Days::new(30);
+    tz.from_local_datetime(&local).earliest().map_or_else(
+        || now - chrono::Duration::days(30),
+        |t| t.with_timezone(&Utc),
+    )
+}
+
+/// Nest's instant: the pg `date` read as local midnight of the server zone.
+fn local_midnight(tz: chrono_tz::Tz, d: NaiveDate) -> DateTime<Utc> {
+    let midnight = d.and_hms_opt(0, 0, 0).unwrap_or_default();
+    tz.from_local_datetime(&midnight).earliest().map_or_else(
+        || Utc.from_utc_datetime(&midnight),
+        |t| t.with_timezone(&Utc),
+    )
+}
+
 fn iso(t: DateTime<Utc>) -> String {
     t.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn stats_dates_are_local_midnights_and_the_window_is_30_calendar_days() {
+        let paris: chrono_tz::Tz = "Europe/Paris".parse().unwrap();
+        let day = NaiveDate::from_ymd_opt(2026, 7, 1).unwrap();
+        assert_eq!(iso(local_midnight(paris, day)), "2026-06-30T22:00:00.000Z");
+        let now = Utc.with_ymd_and_hms(2026, 11, 2, 12, 0, 0).unwrap();
+        // 30 days back crosses the end of DST: the local time of day is kept (13:00 CET -> 12:00 CEST).
+        assert_eq!(
+            window_start(paris, now),
+            Utc.with_ymd_and_hms(2026, 10, 3, 11, 0, 0).unwrap()
+        );
+    }
 }

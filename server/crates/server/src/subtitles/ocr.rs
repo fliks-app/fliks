@@ -44,18 +44,6 @@ pub async fn start(
             "Subtitle #{subtitle_id} not found"
         )));
     };
-    // C63: one run per source track.
-    let busy: Option<i32> = sqlx::query_scalar(
-        r#"SELECT id FROM subtitle_files WHERE "mediaFileId" = $1 AND "providerType" = 'ocr'
-           AND status = 'processing' AND "sourceStreamIndex" = $2 LIMIT 1"#,
-    )
-    .bind(file_id)
-    .bind(stream)
-    .fetch_optional(&st.db)
-    .await?;
-    if busy.is_some() {
-        return Err(AppError::conflict("errors.already_running"));
-    }
     let language = match language.filter(|l| !l.trim().is_empty()) {
         Some(l) => normalize_language_code(Some(l)),
         None => source.language.clone(),
@@ -74,7 +62,25 @@ pub async fn start(
         source_stream_index: Some(stream),
         ..New::default()
     };
-    let inserted = model::insert(&st.db, &new).await?;
+    // C63: one run per source track, decided under an advisory lock so two requests cannot both pass.
+    let mut tx = st.db.begin().await?;
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtext($1))")
+        .bind(format!("ocr:{file_id}:{stream}"))
+        .execute(&mut *tx)
+        .await?;
+    let busy: Option<i32> = sqlx::query_scalar(
+        r#"SELECT id FROM subtitle_files WHERE "mediaFileId" = $1 AND "providerType" = 'ocr'
+           AND status = 'processing' AND "sourceStreamIndex" = $2 LIMIT 1"#,
+    )
+    .bind(file_id)
+    .bind(stream)
+    .fetch_optional(&mut *tx)
+    .await?;
+    if busy.is_some() {
+        return Err(AppError::conflict("errors.already_running"));
+    }
+    let inserted = model::insert(&mut *tx, &new).await?;
+    tx.commit().await?;
     events::list_changed(st, media_id).await;
     let (st2, placeholder) = (st.clone(), inserted.id);
     let mut src = source;
@@ -205,24 +211,20 @@ async fn try_run(
     let rel = dirs
         .write_sidecar_ocr(&file.relative_path, &suffix, cleaned.as_bytes())
         .map_err(|e| e.text())?;
-    let still_there: Option<i32> =
-        sqlx::query_scalar("SELECT id FROM subtitle_files WHERE id = $1")
-            .bind(placeholder)
-            .fetch_optional(&st.db)
-            .await
-            .map_err(sql)?;
-    if still_there.is_none() {
-        // C61: the placeholder was deleted while the run went on.
+    // C61: one statement; no row back means the placeholder was deleted, so the file goes too.
+    let attached: Option<i32> = sqlx::query_scalar(
+        r#"UPDATE subtitle_files SET "filePath" = $2, "hearingImpaired" = $3, status = 'downloaded' WHERE id = $1 RETURNING id"#,
+    )
+    .bind(placeholder)
+    .bind(&rel)
+    .bind(hi)
+    .fetch_optional(&st.db)
+    .await
+    .map_err(sql)?;
+    if attached.is_none() {
         let _ = dirs.unlink(&rel);
         return Err("the subtitle was removed during the run".into());
     }
-    sqlx::query(r#"UPDATE subtitle_files SET "filePath" = $2, "hearingImpaired" = $3, status = 'downloaded' WHERE id = $1"#)
-        .bind(placeholder)
-        .bind(&rel)
-        .bind(hi)
-        .execute(&st.db)
-        .await
-        .map_err(sql)?;
     tracing::info!("OCR end (ok) - sub #{placeholder} -> {rel}");
     if super::service::flag_on(st, "subtitle_ocr_delete_source")
         .await

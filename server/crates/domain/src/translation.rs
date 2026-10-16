@@ -11,6 +11,8 @@ pub const REQUEST_TIMEOUT_MS: u64 = 240_000;
 pub const REGISTER_PROBE_MAX_OUTPUT_TOKENS: u64 = 500;
 const CHARS_PER_TOKEN: usize = 4;
 const MARKER_TOKENS: u64 = 4;
+/// Terminal upstream bodies are cut here (F57); the quota and size tests read the whole body.
+pub const UPSTREAM_TEXT: usize = 300;
 const MAX_ATTEMPTS: u32 = 4;
 const QUOTA_RETRY_MS: u64 = 20_000;
 const MAX_CONSECUTIVE_MISMATCHES: u32 = 3;
@@ -356,7 +358,8 @@ pub async fn post_with_retry<P: Post>(p: &mut P, label: &str) -> Result<P::Resp,
                 || rx!(i r"context[_ ]length|too large|max_tokens").is_match(err))
         {
             return Err(TranslationError::TooLarge(format!(
-                "{label} rejected the request as too large: {err}"
+                "{label} rejected the request as too large: {}",
+                slice16(err, UPSTREAM_TEXT)
             )));
         }
         let retryable = matches!(reply.status, 429 | 500 | 502 | 503 | 504);
@@ -390,15 +393,17 @@ pub async fn post_with_retry<P: Post>(p: &mut P, label: &str) -> Result<P::Resp,
             });
             return Err(TranslationError::RateLimit {
                 message: format!(
-                    "{label} quota/rate limit exceeded (scope={}{delay}): {err}",
-                    scope.as_str()
+                    "{label} quota/rate limit exceeded (scope={}{delay}): {}",
+                    scope.as_str(),
+                    slice16(err, UPSTREAM_TEXT)
                 ),
                 scope,
             });
         }
         return Err(TranslationError::Other(format!(
-            "{label} API error {}: {err}",
-            reply.status
+            "{label} API error {}: {}",
+            reply.status,
+            slice16(err, UPSTREAM_TEXT)
         )));
     }
     Err(TranslationError::Other(format!(

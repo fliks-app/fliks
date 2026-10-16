@@ -27,7 +27,6 @@ use serde_json::{Value, json};
 use std::collections::HashMap;
 
 type Res<T> = Result<T, AppError>;
-type Upload2 = (String, Vec<u8>);
 
 pub fn policy(a: &Authed, action: Action) -> Res<()> {
     a.require(action, Subject::SubtitleFile)
@@ -87,14 +86,6 @@ pub async fn list(State(st): State<AppState>, a: Authed, id: One) -> Res<Json<Ve
     ))
 }
 
-fn video_release_name(rel: &str) -> Option<String> {
-    let last = rel.rsplit('/').next().unwrap_or(rel);
-    Some(match last.rfind('.') {
-        Some(i) if i > 0 && !last[i..].contains(['.']) => last[..i].to_owned(),
-        _ => last.to_owned(),
-    })
-}
-
 #[utoipa::path(get, path = "/api/media/{id}/subtitles/search", responses((status = 200)))]
 pub async fn search(
     State(st): State<AppState>,
@@ -133,7 +124,7 @@ pub async fn search(
             language: q.get("language").cloned().unwrap_or_else(|| "en".into()),
             moviehash: file.and_then(|f| f.osdb_hash.clone()),
         },
-        video_release_name: file.and_then(|f| video_release_name(&f.relative_path)),
+        video_release_name: file.map(|f| super::scheduler::base_name(&f.relative_path)),
         ..Search::default()
     };
     let results = service::search(&st, &search).await?;
@@ -273,7 +264,8 @@ pub async fn upload(
         AppError::bad_request("No file uploaded")
     };
     let mut mp = multipart.map_err(|e| bad(&e))?;
-    let (mut file, mut fields): (Option<Upload2>, HashMap<String, String>) = (None, HashMap::new());
+    let mut file = None;
+    let mut fields = HashMap::<String, String>::new();
     while let Some(mut field) = mp.next_field().await.map_err(|e| {
         if e.status() == StatusCode::PAYLOAD_TOO_LARGE {
             too_large()
@@ -523,7 +515,8 @@ pub async fn sync_queue(State(st): State<AppState>, a: Authed) -> Res<Json<Vec<V
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct TranslateBody {
-    target_language: String,
+    #[serde(default)]
+    target_language: Option<String>,
     #[serde(default)]
     provider_id: Option<i32>,
 }
@@ -541,6 +534,6 @@ pub async fn translate(
     let b: TranslateBody = from_value(body.0)?;
     Ok((
         StatusCode::CREATED,
-        Json(super::translate::start(&st, sub, &b.target_language, b.provider_id).await?),
+        Json(super::translate::start(&st, sub, b.target_language.as_deref(), b.provider_id).await?),
     ))
 }

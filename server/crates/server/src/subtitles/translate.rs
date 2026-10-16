@@ -29,25 +29,34 @@ pub struct Gate {
     freed: Notify,
 }
 
+/// A running slot of the gate, freed on drop.
+pub struct Permit<'a>(&'a Gate);
+
+impl Drop for Permit<'_> {
+    fn drop(&mut self) {
+        let mut a = self.0.active.lock().unwrap_or_else(|e| e.into_inner());
+        *a = a.saturating_sub(1);
+        drop(a);
+        self.0.freed.notify_one();
+    }
+}
+
 impl Gate {
-    async fn acquire(&self, limit: usize) {
+    async fn acquire(&self, limit: usize) -> Permit<'_> {
         loop {
+            let waiting = self.freed.notified();
+            tokio::pin!(waiting);
+            // Registered before the check, so a release in between is not lost.
+            waiting.as_mut().enable();
             {
                 let mut a = self.active.lock().unwrap_or_else(|e| e.into_inner());
                 if *a < limit {
                     *a += 1;
-                    return;
+                    return Permit(self);
                 }
             }
-            self.freed.notified().await;
+            waiting.await;
         }
-    }
-
-    fn release(&self) {
-        let mut a = self.active.lock().unwrap_or_else(|e| e.into_inner());
-        *a = a.saturating_sub(1);
-        drop(a);
-        self.freed.notify_one();
     }
 }
 
@@ -66,7 +75,7 @@ fn translation_error_message(e: &TranslationError) -> String {
 pub async fn start(
     st: &AppState,
     subtitle_id: i32,
-    target_language: &str,
+    target_language: Option<&str>,
     provider_id: Option<i32>,
 ) -> Result<Value, AppError> {
     if !flag_on(st, "subtitle_translation_enabled").await? {
@@ -98,7 +107,7 @@ pub async fn start(
     if source.file_path.as_deref().is_none_or(str::is_empty) && source.stream_index.is_none() {
         return Err(AppError::bad_request("errors.subtitle_no_readable_text"));
     }
-    let target = normalize_language_code(Some(target_language));
+    let target = normalize_language_code(target_language);
     if target == "und" {
         return Err(AppError::bad_request("errors.target_language_required"));
     }
@@ -290,6 +299,8 @@ async fn try_run(
             overview: media.overview.clone(),
         },
     };
+    // F49: the viewers of the media only, resolved once; events go out in order.
+    let viewers = events::viewers_for_media(st, source.media_id.unwrap_or(0)).await;
     let on = |done: usize, total: usize| {
         let pct = if total > 0 {
             (done as f64 / total as f64 * 100.0).round() as i32
@@ -298,20 +309,18 @@ async fn try_run(
         };
         st.subtitles
             .set_translation_progress(placeholder, Some(pct));
-        let (st2, media) = (st.clone(), source.media_id.unwrap_or(0));
-        // F49: the viewers of the media only.
-        tokio::spawn(async move {
-            let ev = SseEvent::SubtitleTranslationProgress {
+        st.hub.emit_to_users(
+            &viewers,
+            SseEvent::SubtitleTranslationProgress {
                 subtitle_id: placeholder.into(),
-                media_id: media.into(),
+                media_id: source.media_id.unwrap_or(0).into(),
                 progress: i64::from(pct).into(),
-            };
-            events::emit(&st2, media, ev).await;
-        });
+            },
+        );
     };
     let texts: Vec<String> = cues.iter().map(|c| c.text.clone()).collect();
     on(0, texts.len());
-    st.subtitles.gate.acquire(max).await;
+    let permit = st.subtitles.gate.acquire(max).await;
     let mut progress = |d, t| on(d, t);
     let translated = engines::translate(
         &st.subtitles,
@@ -322,7 +331,7 @@ async fn try_run(
         &mut progress,
     )
     .await;
-    st.subtitles.gate.release();
+    drop(permit);
     let translated = translated?;
     let out: Vec<Cue> = cues
         .iter()
@@ -345,22 +354,20 @@ async fn try_run(
     let rel = dirs
         .write_sidecar(&file.relative_path, &suffix, ".srt", cleaned.as_bytes())
         .map_err(|e| other(&e.text()))?;
-    let alive: Option<i32> = sqlx::query_scalar("SELECT id FROM subtitle_files WHERE id = $1")
-        .bind(placeholder)
-        .fetch_optional(&st.db)
-        .await
-        .map_err(|e| other(&e))?;
-    if alive.is_none() {
+    // C61: one statement; no row back means the placeholder was deleted, so the file goes too.
+    let attached: Option<i32> = sqlx::query_scalar(
+        r#"UPDATE subtitle_files SET "filePath" = $2, "hearingImpaired" = $3, status = 'downloaded' WHERE id = $1 RETURNING id"#,
+    )
+    .bind(placeholder)
+    .bind(&rel)
+    .bind(hi)
+    .fetch_optional(&st.db)
+    .await
+    .map_err(|e| other(&e))?;
+    if attached.is_none() {
         let _ = dirs.unlink(&rel);
         return Err(other(&"the subtitle was removed during the run"));
     }
-    sqlx::query(r#"UPDATE subtitle_files SET "filePath" = $2, "hearingImpaired" = $3, status = 'downloaded' WHERE id = $1"#)
-        .bind(placeholder)
-        .bind(&rel)
-        .bind(hi)
-        .execute(&st.db)
-        .await
-        .map_err(|e| other(&e))?;
     tracing::info!("Translate end (ok) - sub #{placeholder} [{target}] -> {rel}");
     Ok(media.title.clone())
 }

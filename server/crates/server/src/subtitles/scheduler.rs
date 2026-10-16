@@ -93,8 +93,12 @@ async fn language_items(st: &AppState, media: &MediaCtx) -> Vec<LanguageItem> {
             .await
             .ok()
             .flatten();
-    v.and_then(|v| serde_json::from_value(v).ok())
-        .unwrap_or_default()
+    // Item by item: one malformed entry does not hide the others.
+    v.and_then(|v| v.as_array().cloned())
+        .into_iter()
+        .flatten()
+        .filter_map(|i| serde_json::from_value(i).ok())
+        .collect()
 }
 
 fn servable(rows: &[Row]) -> Vec<Servable<'_>> {
@@ -109,12 +113,10 @@ fn servable(rows: &[Row]) -> Vec<Servable<'_>> {
         .collect()
 }
 
-fn base_name(rel: &str) -> String {
+/// The file name without its last extension.
+pub fn base_name(rel: &str) -> String {
     let last = rel.rsplit('/').next().unwrap_or(rel);
-    match last.rfind('.') {
-        Some(i) if i > 0 => last[..i].to_owned(),
-        _ => last.to_owned(),
-    }
+    last[..last.len() - fliks_domain::subtitle_name::ext(last).len()].to_owned()
 }
 
 fn tag(ep: &Option<(i32, i32, i32, Option<String>)>) -> String {
@@ -217,7 +219,7 @@ async fn do_search_missing(
         };
         match one.await {
             Ok(Some((provider, score))) => {
-                events::notify(st, "subtitle.downloaded", json!({"title": media.title, "language": item.iso_code, "provider": provider, "score": score})).await;
+                events::notify(st, "subtitle.downloaded", json!({"title": media.title, "language": item.iso_code, "provider": provider, "score": score as i64})).await;
                 crate::media_servers::dispatch_detached(st, "subtitle.downloaded");
                 downloaded.push(item.iso_code.clone());
                 tracing::info!(
@@ -525,7 +527,7 @@ async fn upgrade_batch(st: &AppState, rows: &[Row], opts: &Opts) -> Result<(), S
     Ok(())
 }
 
-/// The 6 h tick: each due pass holds its name's claim for its whole run (C-DRIFT-1).
+/// The 6 h tick: each due pass holds its name's claim for its whole run (C110).
 pub fn spawn_tick(st: &AppState) {
     let last = std::sync::Arc::new(Mutex::new((0i64, 0i64)));
     let st = st.clone();
@@ -536,7 +538,7 @@ pub fn spawn_tick(st: &AppState) {
     });
 }
 
-async fn tick(st: &AppState, last: &Mutex<(i64, i64)>) {
+pub(crate) async fn tick(st: &AppState, last: &Mutex<(i64, i64)>) {
     let now = chrono::Utc::now().timestamp_millis();
     let search_interval = number(setting(st, "subtitle_search_interval").await, 360.0) * 60_000.0;
     let upgrade_interval = number(setting(st, "subtitle_upgrade_interval").await, 720.0) * 60_000.0;

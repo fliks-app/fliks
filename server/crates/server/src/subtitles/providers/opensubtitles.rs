@@ -222,6 +222,7 @@ pub async fn download(sh: &Shared, s: &Value, c: &Candidate) -> Result<Vec<u8>, 
         Some(r) if r.status().is_success() => r,
         Some(r) => {
             let text = body_text(r).await.unwrap_or_default();
+            let text: String = text.chars().take(300).collect();
             return Err(format!("OpenSubtitles download failed: {text}"));
         }
         None => return Err("OpenSubtitles download failed: rate-limited".into()),

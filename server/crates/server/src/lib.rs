@@ -107,7 +107,7 @@ pub async fn serve(cfg: Config) -> Result<(), BoxError> {
     let nest = nest::spawn(&cfg, &secret);
     auth::spawn_jobs(db);
     jobs::spawn(&state);
-    subtitles::spawn(&state);
+    subtitles::scheduler::spawn_tick(&state);
     tracing::info!("listening on {}", listener.local_addr()?);
     let served = axum::serve(
         listener,

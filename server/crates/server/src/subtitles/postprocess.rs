@@ -78,9 +78,7 @@ pub async fn apply(
     } else {
         (0.0, 0.0)
     };
-    let ext = stored
-        .rfind('.')
-        .map_or(String::new(), |i| stored[i..].to_lowercase());
+    let ext = fliks_domain::subtitle_name::ext(&stored);
     if ext == ".sup" || ext == ".sub" {
         return Err(AppError::bad_request(format!(
             "Cannot post-process a {ext} subtitle"
@@ -120,7 +118,10 @@ pub async fn apply(
         .filter(|i| *i > 0)
         .map_or(name.as_str(), |i| &name[..i])
         .to_owned();
-    if converted && stem_target_exists(&abs, &format!("{stem}.srt")) {
+    if converted
+        && name != format!("{stem}.srt")
+        && stem_target_exists(&abs, &format!("{stem}.srt"))
+    {
         return Err(AppError::conflict("Target subtitle already exists"));
     }
     dirs.rewrite(&stored, out.as_bytes())?;

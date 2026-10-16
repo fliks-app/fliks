@@ -17,7 +17,7 @@ pub struct SubtitleName {
 }
 
 /// `path.extname` lowercased (a leading dot is not an extension).
-fn ext(name: &str) -> String {
+pub fn ext(name: &str) -> String {
     match name.rfind('.') {
         Some(i) if i > 0 => name[i..].to_lowercase(),
         _ => String::new(),

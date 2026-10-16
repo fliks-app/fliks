@@ -200,7 +200,9 @@ async fn probe_body(st: &AppState, v: Value) -> Res<Probe> {
     };
     let id = match obj.get("id") {
         None | Some(Value::Null) => None,
-        Some(n) if n.as_i64().is_some() => n.as_i64().and_then(|i| i32::try_from(i).ok()),
+        Some(Value::Number(n)) if super::routes_providers::int32(n).is_some() => {
+            super::routes_providers::int32(n)
+        }
         _ => {
             msgs.push("id must be an integer number".into());
             None
@@ -292,6 +294,9 @@ pub async fn create(
     let engine = b.engine.unwrap_or_default();
     engines::validate_url_fields(&engine, &settings)?;
     let mut tx = st.db.begin().await?;
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtext('translation_providers_default'))")
+        .execute(&mut *tx)
+        .await?;
     let row: Row = sqlx::query_as(&format!(
         r#"INSERT INTO translation_providers (name, engine, enabled, "isDefault", settings)
            VALUES ($1, $2::text::translation_providers_engine_enum, $3, $4, $5) RETURNING {COLS}"#
@@ -339,6 +344,9 @@ pub async fn update(
     let PathParams(id) = id?;
     let b = validate(body.0, false)?;
     let mut tx = st.db.begin().await?;
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtext('translation_providers_default'))")
+        .execute(&mut *tx)
+        .await?;
     let cur: Row = sqlx::query_as(&format!(
         "SELECT {COLS} FROM translation_providers WHERE id = $1 FOR UPDATE"
     ))
@@ -390,6 +398,9 @@ pub async fn remove(State(st): State<AppState>, a: Authed, id: Id) -> Res<Status
     policy(&a, Action::Delete)?;
     let PathParams(id) = id?;
     let mut tx = st.db.begin().await?;
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtext('translation_providers_default'))")
+        .execute(&mut *tx)
+        .await?;
     let cur: Row = sqlx::query_as(&format!(
         "SELECT {COLS} FROM translation_providers WHERE id = $1 FOR UPDATE"
     ))

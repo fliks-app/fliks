@@ -87,9 +87,13 @@ async fn series_id(sh: &Shared, title: &str) -> Result<Option<String>, String> {
         })
         .or_else(|| rows.first());
     let id = hit
-        .and_then(|h| h["ID"].as_str())
+        .map(|h| match &h["ID"] {
+            Value::String(s) => s.clone(),
+            Value::Number(n) => n.to_string(),
+            _ => String::new(),
+        })
         .filter(|i| !i.is_empty() && i.bytes().all(|b| b.is_ascii_digit()));
-    Ok(id.map(str::to_owned))
+    Ok(id)
 }
 
 async fn episode(sh: &Shared, q: &Query) -> Result<Vec<Candidate>, String> {

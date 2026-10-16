@@ -321,7 +321,7 @@ async fn resolve_file(
     Ok(absolute)
 }
 
-/// An external subtitle's file, `realpath`ed; only the lexical containment is checked (no symlink rule).
+/// An external subtitle's file: under the media directory by realpath, a regular file, never a link.
 async fn subtitle_on_disk(
     st: &AppState,
     user: &UserRow,
@@ -347,11 +347,17 @@ async fn subtitle_on_disk(
         .stored
         .filter(|s| !s.trim().is_empty())
         .ok_or(Fail::Denied)?;
-    let root = media_root(row.library_path, row.folder).ok_or(Fail::Denied)?;
-    let absolute = lexical_resolve(&root, stored.trim());
-    if !absolute.starts_with(&root) {
-        return Err(Fail::Denied);
-    }
+    // F52: the real parent stays under the media directory and the file is a regular one.
+    let media_id: Option<i32> =
+        sqlx::query_scalar(r#"SELECT "mediaId" FROM subtitle_files WHERE id = $1"#)
+            .bind(id)
+            .fetch_one(&st.db)
+            .await?;
+    let media = crate::subtitles::files::load_media(&st.db, media_id.ok_or(Fail::Denied)?)
+        .await?
+        .ok_or(Fail::Denied)?;
+    let dirs = media.dirs("no root").map_err(|_| Fail::Denied)?;
+    let absolute = dirs.resolve_file(stored.trim()).map_err(|_| Fail::Denied)?;
     tokio::fs::canonicalize(&absolute)
         .await
         .map_err(|_| Fail::Denied)

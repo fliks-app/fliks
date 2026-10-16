@@ -19,13 +19,6 @@ fn norm(p: &str) -> String {
     p.replace('\\', "/")
 }
 
-fn ext_of(name: &str) -> String {
-    match name.rfind('.') {
-        Some(i) if i > 0 => name[i..].to_lowercase(),
-        _ => String::new(),
-    }
-}
-
 async fn dirs_of(st: &AppState, media_id: i32) -> Option<(MediaCtx, Dirs)> {
     let media = files::load_media(&st.db, media_id).await.ok().flatten()?;
     let dirs = media.dirs("no root").ok()?;
@@ -76,13 +69,11 @@ pub async fn discover_external(st: &AppState, media_id: i32) -> usize {
             .filter_map(|e| e.file_name().into_string().ok())
             .collect();
         for entry in &entries {
-            let ext = ext_of(entry);
+            let ext = fliks_domain::subtitle_name::ext(entry);
             if !SUBTITLE_EXTS.contains(&ext.as_str()) {
                 continue;
             }
-            let stem = &entry[..entry.len() - ext.len().min(entry.len())];
             let stem_as_written = entry.rfind('.').map_or(entry.as_str(), |i| &entry[..i]);
-            let _ = stem;
             let image = external_image_codec(
                 &ext,
                 entries
@@ -161,10 +152,14 @@ pub async fn reconcile_after_rescan(st: &AppState, media_id: i32) -> (usize, usi
     let rows = model::of_media(&st.db, media_id).await.unwrap_or_default();
     for r in rows.iter().filter(|r| is_external(r)) {
         let stored = r.file_path.as_deref().unwrap_or_default();
+        // Gone: no path, an unresolvable or non-regular one, or NotFound; any other error keeps the row.
         let gone = stored.trim().is_empty()
-            || dirs
-                .resolve(stored)
-                .is_none_or(|abs| fs::metadata(abs).is_err());
+            || match dirs.resolve_file(stored) {
+                Err(_) => true,
+                Ok(abs) => {
+                    matches!(fs::symlink_metadata(abs), Err(e) if e.kind() == std::io::ErrorKind::NotFound)
+                }
+            };
         if gone && remove_row(st, r.id).await {
             missing += 1;
         }
@@ -291,6 +286,24 @@ pub async fn delete_files_on_disk(st: &AppState, media_id: i32, file_id: i32) {
     }
 }
 
+/// Unlinks a row's sidecar unless another row lists the same file (C64); a failure is logged.
+pub async fn unlink_unless_shared(st: &AppState, row: &Row) -> Result<(), AppError> {
+    let (Some(stored), Some(media_id)) = (row.file_path.as_deref(), row.media_id) else {
+        return Ok(());
+    };
+    let Some((_, dirs)) = dirs_of(st, media_id).await else {
+        return Ok(());
+    };
+    let shared = model::of_media(&st.db, media_id)
+        .await?
+        .iter()
+        .any(|o| o.id != row.id && o.file_path.as_deref().map(norm) == Some(norm(stored)));
+    if !shared && let Err(e) = dirs.unlink(stored) {
+        tracing::warn!("Could not delete subtitle {stored}: {e}");
+    }
+    Ok(())
+}
+
 /// `deleteSubtitle`: the sidecar goes (a failure is logged), then the row.
 pub async fn delete_subtitle(st: &AppState, id: i32) -> Result<(), AppError> {
     let row = model::by_id(&st.db, id)
@@ -299,17 +312,7 @@ pub async fn delete_subtitle(st: &AppState, id: i32) -> Result<(), AppError> {
     if row.is_embedded() {
         return Err(AppError::bad_request("Cannot delete an embedded subtitle"));
     }
-    if let (Some(stored), Some(media_id)) = (row.file_path.as_deref(), row.media_id)
-        && let Some((_, dirs)) = dirs_of(st, media_id).await
-    {
-        let shared = model::of_media(&st.db, media_id)
-            .await?
-            .iter()
-            .any(|o| o.id != id && o.file_path.as_deref().map(norm) == Some(norm(stored)));
-        if !shared && let Err(e) = dirs.unlink(stored) {
-            tracing::warn!("Could not delete subtitle {stored}: {e}");
-        }
-    }
+    unlink_unless_shared(st, &row).await?;
     sqlx::query("DELETE FROM subtitle_files WHERE id = $1")
         .bind(id)
         .execute(&st.db)

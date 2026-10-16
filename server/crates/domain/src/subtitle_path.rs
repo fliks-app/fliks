@@ -12,6 +12,11 @@ pub fn sidecar_lang_suffix(lang: &str, forced: bool, hearing_impaired: bool) -> 
     }
 }
 
+/// `^[a-z]{2,3}$`: a stored language code.
+pub fn is_language_code(s: &str) -> bool {
+    rx!(r"^[a-z]{2,3}$").is_match(s)
+}
+
 /// `^[a-z]{2,3}(\.(forced|hi))?$`: the only suffixes a generated name may carry.
 pub fn is_safe_lang_suffix(suffix: &str) -> bool {
     rx!(r"^[a-z]{2,3}(\.(forced|hi))?$").is_match(suffix)

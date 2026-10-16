@@ -223,12 +223,17 @@ impl New {
         }
         for (k, v) in [
             ("translationEngine", &self.translation_engine),
-            ("translationModel", &self.translation_model),
             ("translationProviderName", &self.translation_provider_name),
         ] {
             if let Some(v) = v {
                 put(k, json!(v));
             }
+        }
+        // An engine without a model saves `translationModel: null` (the LibreTranslate case).
+        match (&self.translation_model, &self.translation_engine) {
+            (Some(v), _) => put("translationModel", json!(v)),
+            (None, Some(_)) => put("translationModel", Value::Null),
+            _ => {}
         }
         Value::Object(m)
     }
