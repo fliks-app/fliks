@@ -64,7 +64,7 @@ createServer(async (req, res) => {
       createdMs: 1,
       result: {
         type: 'Fingerprint',
-        fingerprint: { hashes: [id, id + 1, id + 2], durationSeconds: 10, baseOffsetSec: body.kind.window.type === 'head' ? 0 : 5 },
+        fingerprint: { hashes: [id, id + 1, id + 2], durationSeconds: 10, baseOffsetSec: body.kind.window?.type === 'head' ? 0 : 5 },
       },
     });
   }
