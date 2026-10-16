@@ -73,10 +73,13 @@ async fn body_limit(State(limit): State<usize>, req: Request, next: Next) -> Res
     }
 }
 
+pub fn is_preflight(req: &Request) -> bool {
+    req.method() == Method::OPTIONS && req.headers().contains_key(ACCESS_CONTROL_REQUEST_METHOD)
+}
+
 /// Express `cors` answers preflights 204 (`optionsSuccessStatus`); tower-http answers 200.
 async fn preflight_204(req: Request, next: Next) -> Response {
-    let preflight = req.method() == Method::OPTIONS
-        && req.headers().contains_key(ACCESS_CONTROL_REQUEST_METHOD);
+    let preflight = is_preflight(&req);
     let mut res = next.run(req).await;
     if preflight {
         *res.status_mut() = StatusCode::NO_CONTENT;
