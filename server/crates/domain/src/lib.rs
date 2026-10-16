@@ -10,6 +10,7 @@ pub mod media;
 pub mod metadata;
 pub mod naming;
 pub mod nfo;
+pub mod net;
 pub mod notifications;
 pub mod persons;
 pub mod profiles;
