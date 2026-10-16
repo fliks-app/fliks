@@ -174,7 +174,7 @@ Env: `FLIKS_ENGINE_URL`, `FLIKS_ENGINE_TOKEN`, `FLIKS_HOST_URL`, `PORT`, `FLIKS_
 
 - B1. `POST /engine/resolve` (Nest, purpose `live` only): Rust's resolver forwards `live` requests (needs `mediaId` = viewer session id and the user, i.e. the credential or an already resolved user id) and returns Nest's `{allow, ownerId?, ttlS}`; removed S7. Wire shape and auth (bridge bearer vs. host token) not fixed by the plan.
 - B2. `PUT /internal/engine/livetv-config` (Rust): Nest's live TV module hands its `LiveTvConfig` (rule 23) to the config owner; removed S7.
-- B3. Nest keeps a read-only engine client (hello/adopt, jobs for imports/subtitles/markers, live calls, `revokeOwner`, `invalidate`) until S5/S7; it must not push config nor serve the resolver. See open questions 1-3.
+- B3. Nest keeps a read-only engine client (hello/adopt, jobs for subtitles until S6 (the import and marker jobs moved in S5), live calls, `revokeOwner`, `invalidate`) until S7; it must not push config nor serve the resolver. See open questions 1-3.
 
 ## Deletes in Nest
 
