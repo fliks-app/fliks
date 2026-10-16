@@ -4,7 +4,7 @@ Rust app replacing Nest (`backend/`). Plan: `~/Documents/clement/code/fliks-hand
 
 ## Crates
 
-- `crates/domain` (`fliks_domain`): pure logic — serde, serde_json, chrono, regex, fancy-regex, regress, unicode-normalization only. No tokio, sqlx, fs, axum.
+- `crates/domain` (`fliks_domain`): pure logic — serde, serde_json, chrono, regex, fancy-regex, regress, unicode-normalization, encoding_rs only. No tokio, sqlx, fs, axum.
 - `crates/server` (`fliks-server`): axum binary, sqlx, engine git deps, HTTP and DB.
 
 ## Rules (§0 condensed)

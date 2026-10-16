@@ -298,10 +298,15 @@ async fn try_run(
         };
         st.subtitles
             .set_translation_progress(placeholder, Some(pct));
-        st.hub.emit(SseEvent::SubtitleTranslationProgress {
-            subtitle_id: placeholder.into(),
-            media_id: source.media_id.unwrap_or(0).into(),
-            progress: i64::from(pct).into(),
+        let (st2, media) = (st.clone(), source.media_id.unwrap_or(0));
+        // F49: the viewers of the media only.
+        tokio::spawn(async move {
+            let ev = SseEvent::SubtitleTranslationProgress {
+                subtitle_id: placeholder.into(),
+                media_id: media.into(),
+                progress: i64::from(pct).into(),
+            };
+            events::emit(&st2, media, ev).await;
         });
     };
     let texts: Vec<String> = cues.iter().map(|c| c.text.clone()).collect();
