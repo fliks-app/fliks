@@ -5,6 +5,7 @@ pub mod edl;
 mod js;
 pub mod language;
 pub mod media;
+pub mod notifications;
 pub mod qoe;
 pub mod recommend;
 pub mod release;
