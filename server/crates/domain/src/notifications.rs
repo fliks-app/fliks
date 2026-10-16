@@ -63,9 +63,9 @@ fn truthy(v: Option<&Value>) -> bool {
 
 /// `Number.prototype.toString`.
 fn js_number(n: &Number) -> String {
-    const SAFE: i64 = 1 << 53;
+    const SAFE: u64 = 1 << 53;
     match n.as_i64() {
-        Some(i) if i.abs() <= SAFE => return i.to_string(),
+        Some(i) if i.unsigned_abs() <= SAFE => return i.to_string(),
         _ => {}
     }
     let f = n.as_f64().unwrap_or(0.0);

@@ -136,3 +136,11 @@ fn vocabulary() {
     assert_eq!(subscribable().count(), 17);
     assert!(is_event("health.issue") && !is_event("request"));
 }
+
+#[test]
+fn numbers_print_like_js() {
+    let t = |v: Value| format_message("grab.started", &obj(&json!({"title": v})));
+    assert_eq!(t(json!(i64::MIN)), "Grabbing: -9223372036854776000");
+    assert_eq!(t(json!(1u64 << 60)), "Grabbing: 1152921504606847000");
+    assert_eq!(t(json!(1.5)), "Grabbing: 1.5");
+}
