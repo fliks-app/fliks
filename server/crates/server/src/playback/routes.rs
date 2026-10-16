@@ -49,7 +49,7 @@ pub fn router() -> Router<AppState> {
         .route("/api/playback/media/{mediaId}", get(resume_info))
         .route(
             "/api/playback/media/{mediaId}/state",
-            get(get_state).delete(delete_state),
+            get(get_state).put(super::heartbeat).delete(delete_state),
         )
         .route("/api/playback/hide/{mediaId}", delete(hide))
         .route(

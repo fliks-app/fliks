@@ -320,6 +320,23 @@
           }
         }
       },
+      "put": {
+        "tags": [
+          "playback"
+        ],
+        "operationId": "heartbeat",
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "400": {
+            "description": ""
+          },
+          "403": {
+            "description": ""
+          }
+        }
+      },
       "delete": {
         "tags": [
           "playback"

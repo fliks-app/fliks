@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE playback_states\n               SET \"positionSeconds\" = $2,\n                   \"durationSeconds\" = CASE WHEN $3::float8 > 0 THEN $3 ELSE \"durationSeconds\" END,\n                   completed = $4, \"hiddenFromContinueWatching\" = false, \"lastPlayedAt\" = now(),\n                   \"playedAt\" = CASE WHEN $5 THEN now() ELSE \"playedAt\" END, \"mediaFileId\" = $6\n               WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Float8",
+        "Float8",
+        "Bool",
+        "Bool",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a5205c53743f11c8201a1f9696b4006e59a91cb1987955371bb7ac5717774a0d"
+}

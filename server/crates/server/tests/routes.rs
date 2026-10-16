@@ -183,7 +183,7 @@ async fn forwarded_methods_on_owned_paths_skip_the_rust_layers() {
     assert!(post.headers().contains_key(FORWARDED));
     assert!(!post.headers().contains_key("access-control-allow-origin"));
     assert!(!post.headers().contains_key("vary"));
-    let put = Request::put("/api/playback/media/1/state")
+    let put = Request::patch("/api/playback/media/1/state")
         .header("origin", "http://localhost:4200")
         .body(Body::empty())
         .unwrap();
