@@ -594,3 +594,26 @@ async fn m1786600_backfills_the_search_vector_and_keeps_it_current(pool: PgPool)
     .unwrap();
     assert!(b);
 }
+
+#[sqlx::test(migrations = false)]
+async fn m1786700_iso_ms_ignores_the_session_time_zone(pool: PgPool) {
+    apply_until(&pool, 1_786_800_000_000).await;
+    let mut c = pool.acquire().await.unwrap();
+    sqlx::raw_sql("SET TIME ZONE 'Europe/Paris'")
+        .execute(&mut *c)
+        .await
+        .unwrap();
+    let got: (String, String) = sqlx::query_as(
+        "SELECT iso_ms('2026-01-02 03:04:05.6789'::timestamp), iso_ms('2026-01-02 03:04:05.6789+01'::timestamptz)",
+    )
+    .fetch_one(&mut *c)
+    .await
+    .unwrap();
+    assert_eq!(
+        got,
+        (
+            "2026-01-02T03:04:05.678Z".into(),
+            "2026-01-02T02:04:05.678Z".into()
+        )
+    );
+}

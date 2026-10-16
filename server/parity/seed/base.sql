@@ -249,11 +249,22 @@ CREATE TYPE public.users_profilevisibility_enum AS ENUM (
 
 
 --
+-- Name: iso_ms(timestamp without time zone); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.iso_ms(timestamp without time zone) RETURNS text
+    LANGUAGE sql STABLE PARALLEL SAFE
+    AS $_$
+  SELECT to_char($1, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')
+$_$;
+
+
+--
 -- Name: iso_ms(timestamp with time zone); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.iso_ms(timestamp with time zone) RETURNS text
-    LANGUAGE sql IMMUTABLE PARALLEL SAFE
+    LANGUAGE sql STABLE PARALLEL SAFE
     AS $_$
   SELECT to_char($1 AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')
 $_$;
@@ -2943,7 +2954,7 @@ COPY public._sqlx_migrations (version, description, installed_on, success, check
 1786400000000	pg trgm	2026-01-01 00:00:00+00	t	\\x5364f2aab2a907ef12aa2aeb5b6a24d04f8839b7f5835c35ba52f29c0568cbb0c8435ce0f60e1f3b1546e43b8abe8360	0
 1786500000000	updated at trigger	2026-01-01 00:00:00+00	t	\\xa08d5738eee946976096dae99719b149c27748ba8250460ae2bcf7be938e642c694351c72dac35289c99f018ddb18cca	0
 1786600000000	media search vector	2026-01-01 00:00:00+00	t	\\xcfeecff428f67c3a7cb5a9ce90f642cb107559291054384f27b83488ebe418331f87814468e5c0692ac0d5c4b2d0970e	0
-1786700000000	iso ms function	2026-01-01 00:00:00+00	t	\\x99db328d8be62eaa154e748b8b9b4a6be34163940ce6bdbfc7786876a7e32a1564f4051508334a9b0f4829102a690035	0
+1786700000000	iso ms function	2026-01-01 00:00:00+00	t	\\x941e1bc6e1fedf78b23d8612b99132fdd779c547bd2b625b5d113fcb821c19d2e6670f4d8d4813783cb3aade40dd8d98	0
 \.
 
 
