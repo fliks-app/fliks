@@ -4,7 +4,8 @@
     "$..createdAt",
     "$..updatedAt",
     "$..startedOn",
-    "$..endedOn"
+    "$..endedOn",
+    "$..connectionId"
   ],
   "name": "markers-detect-season-already-running-400",
   "seed": "markers",
@@ -40,6 +41,43 @@
       },
       "method": "POST",
       "path": "/api/markers/season/3/detect"
+    },
+    {
+      "as": "admin",
+      "method": "GET",
+      "path": "/api/system/events",
+      "expect": {
+        "status": 200
+      },
+      "sse": {
+        "events": 999,
+        "timeoutMs": 4000
+      },
+      "ignoreBody": true
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "data": [
+            {
+              "body": {
+                "mediaId": 19,
+                "seasonId": 3,
+                "seasonNumber": 1
+              },
+              "id": 1,
+              "name": "IntroDetection",
+              "status": "completed",
+              "trigger": "manual"
+            }
+          ],
+          "total": 1
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/commands"
     }
   ]
 }

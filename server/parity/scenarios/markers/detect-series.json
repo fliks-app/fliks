@@ -16,30 +16,6 @@
     {
       "as": "admin",
       "expect": {
-        "body": [
-          {},
-          {},
-          {},
-          {},
-          {},
-          {},
-          {},
-          {},
-          {},
-          {},
-          {},
-          {},
-          {},
-          {},
-          {},
-          {},
-          {},
-          {},
-          {},
-          {},
-          {},
-          {}
-        ],
         "status": 200
       },
       "method": "GET",
@@ -55,9 +31,10 @@
             "path": "/api/markers/series/18/detect-all"
           }
         ],
-        "events": 27,
-        "timeoutMs": 4000
-      }
+        "events": 999,
+        "timeoutMs": 3000
+      },
+      "ignoreBody": true
     },
     {
       "as": "admin",

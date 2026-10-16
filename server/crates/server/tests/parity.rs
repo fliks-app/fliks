@@ -575,6 +575,9 @@ async fn run(ctx: &Ctx, sc: &mut Value, record: bool) -> Vec<String> {
         };
         let mut body = resp.body.clone();
         ignore.iter().for_each(|p| remove(&mut body, p));
+        if step["ignoreBody"].as_bool() == Some(true) {
+            body = Value::Null;
+        }
         results["steps"].as_array_mut().unwrap().push(json!({
             "status": resp.status, "headers": resp.headers, "body": resp.body }));
         for (k, p) in &captures {

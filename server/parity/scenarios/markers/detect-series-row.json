@@ -4,7 +4,8 @@
     "$..createdAt",
     "$..updatedAt",
     "$..startedOn",
-    "$..endedOn"
+    "$..endedOn",
+    "$..connectionId"
   ],
   "name": "markers-detect-series-row",
   "seed": "markers",
@@ -40,6 +41,54 @@
       },
       "method": "POST",
       "path": "/api/markers/series/18/detect-all"
+    },
+    {
+      "as": "admin",
+      "method": "GET",
+      "path": "/api/system/events",
+      "expect": {
+        "status": 200
+      },
+      "sse": {
+        "events": 999,
+        "timeoutMs": 3000
+      },
+      "ignoreBody": true
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "data": [
+            {
+              "body": {
+                "mediaId": 18,
+                "seasonId": 2,
+                "seasonNumber": 2
+              },
+              "id": 2,
+              "name": "IntroDetection",
+              "status": "completed",
+              "trigger": "manual"
+            },
+            {
+              "body": {
+                "mediaId": 18,
+                "seasonId": 1,
+                "seasonNumber": 1
+              },
+              "id": 1,
+              "name": "IntroDetection",
+              "status": "completed",
+              "trigger": "manual"
+            }
+          ],
+          "total": 2
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/commands"
     }
   ]
 }

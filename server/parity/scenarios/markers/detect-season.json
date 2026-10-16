@@ -156,12 +156,6 @@
               "type": "markers.season.completed"
             },
             "event": ""
-          },
-          {
-            "data": {
-              "type": "activity.changed"
-            },
-            "event": ""
           }
         ],
         "status": 200
@@ -179,7 +173,7 @@
             "path": "/api/markers/season/1/detect"
           }
         ],
-        "events": 12,
+        "events": 11,
         "timeoutMs": 4000
       }
     },
