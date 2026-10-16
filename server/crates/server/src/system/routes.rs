@@ -155,7 +155,7 @@ pub async fn stats(State(st): State<AppState>, a: Authed) -> Result<Json<Value>,
 #[utoipa::path(post, path = "/api/system/backup", responses((status = 201)))]
 pub async fn backup_create(State(st): State<AppState>, a: Authed) -> Result<Response, AppError> {
     admin(&a)?;
-    let made = backup::create(&st.cfg, &backup::dir()).await?;
+    let made = detached(async move { backup::create(&st.cfg, &backup::dir()).await }).await?;
     Ok((StatusCode::CREATED, Json(made)).into_response())
 }
 
@@ -180,8 +180,17 @@ pub async fn backup_restore(
         )));
     }
     let path = backup::locate(&backup::dir(), &name).await?;
-    backup::restore(&st.cfg, &st.db, &path, &name).await?;
+    detached(async move { backup::restore(&st.cfg, &st.db, &path, &name).await }).await?;
     Ok(StatusCode::CREATED)
+}
+
+/// A client that goes away must not kill `pg_dump` / `psql` halfway (a dropped handler would).
+async fn detached<T: Send + 'static>(
+    work: impl Future<Output = Result<T, AppError>> + Send + 'static,
+) -> Result<T, AppError> {
+    tokio::spawn(work)
+        .await
+        .map_err(|e| AppError::internal(e.to_string()))?
 }
 
 /// Express `res.download`: `send`'s Range, `Last-Modified` and length, plus a weak ETag and the attachment name.

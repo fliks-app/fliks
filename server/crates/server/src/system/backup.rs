@@ -124,18 +124,28 @@ pub async fn create(cfg: &Config, dir: &Path) -> Result<Made, AppError> {
     let path = dir.join(&filename);
     let file =
         create_private(&path).map_err(|e| internal(format!("cannot write the backup: {e}")))?;
+    let mut partial = Partial(Some(&path));
     let mut args = conn_args(cfg);
     args.extend(["--clean", "--if-exists", "--no-owner", "--no-privileges"].map(String::from));
-    if let Err(e) = run_tool(cfg, "pg_dump", &args, file.into()).await {
-        let _ = tokio::fs::remove_file(&path).await;
-        return Err(e);
-    }
+    run_tool(cfg, "pg_dump", &args, file.into()).await?;
     let size = tokio::fs::metadata(&path)
         .await
         .map_err(|e| internal(e.to_string()))?
         .len();
+    partial.0 = None;
     tracing::info!("Backup created: {filename} ({size} bytes)");
     Ok(Made { filename, size })
+}
+
+/// Removes an unfinished dump, also when the future is dropped mid-run (shutdown).
+struct Partial<'a>(Option<&'a Path>);
+
+impl Drop for Partial<'_> {
+    fn drop(&mut self) {
+        if let Some(p) = self.0 {
+            let _ = std::fs::remove_file(p);
+        }
+    }
 }
 
 /// F38: a `0700` directory (when created here) and `0600` files.
