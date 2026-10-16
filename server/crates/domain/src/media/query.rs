@@ -42,13 +42,12 @@ pub fn js_parse_int(s: &str) -> Option<i64> {
     let end = digits
         .find(|c: char| !c.is_ascii_digit())
         .unwrap_or(digits.len());
-    let n: i64 = digits[..end].parse().ok()?;
+    if end == 0 {
+        return None;
+    }
+    // JS keeps a huge value finite: saturate rather than read it as NaN.
+    let n: i64 = digits[..end].parse().unwrap_or(i64::MAX);
     Some(if neg { -n } else { n })
-}
-
-/// A numeric SQL literal as Postgres reads it: halves round away from zero.
-pub fn round_half_away(x: f64) -> f64 {
-    x.round()
 }
 
 // validator.js `isISO8601` (non-strict), as class-validator's `IsDateString` uses it.
@@ -84,6 +83,7 @@ mod tests {
     fn parse_int_and_dates() {
         assert_eq!(js_parse_int("12abc"), Some(12));
         assert_eq!(js_parse_int("abc"), None);
+        assert_eq!(js_parse_int("99999999999999999999"), Some(i64::MAX));
         for ok in [
             "2026-03-01",
             "20260301",
