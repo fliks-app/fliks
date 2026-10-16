@@ -54,8 +54,10 @@ fn scalar<'a>(q: &'a [(String, String)], key: &str) -> Option<&'a str> {
 pub(super) fn int(v: Option<&str>) -> Option<i64> {
     let s = v.filter(|s| !s.is_empty())?.trim();
     let radix = |p: &str, r| {
-        s.strip_prefix(p)
-            .and_then(|d| u64::from_str_radix(d, r).ok())
+        let (head, digits) = (s.get(..2)?, s.get(2..)?);
+        (head.eq_ignore_ascii_case(p) && !digits.starts_with('+'))
+            .then(|| u64::from_str_radix(digits, r).ok())
+            .flatten()
     };
     let n = if s.is_empty() {
         0.0
@@ -65,6 +67,18 @@ pub(super) fn int(v: Option<&str>) -> Option<i64> {
         s.parse::<f64>().ok()?
     };
     n.is_finite().then(|| n.trunc() as i64)
+}
+
+/// Repeated, not comma-joined: a user agent contains commas. A lone empty value is no filter.
+pub(super) fn devices(q: &[(String, String)]) -> Vec<String> {
+    if scalar(q, "device") == Some("") {
+        return vec![];
+    }
+    q.iter()
+        .filter(|(k, v)| k == "device" && v.encode_utf16().count() <= 512)
+        .map(|(_, v)| v.clone())
+        .take(50)
+        .collect()
 }
 
 fn days(q: &[(String, String)]) -> i64 {
@@ -94,13 +108,7 @@ pub async fn sessions(
     // An id outside the int column range matches nothing instead of failing the query.
     let user_id =
         int(scalar(&q, "userId")).map(|n| n.clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32);
-    // Repeated, not comma-joined: a user agent contains commas.
-    let devices: Vec<String> = q
-        .iter()
-        .filter(|(k, v)| k == "device" && v.chars().count() <= 512)
-        .map(|(_, v)| v.clone())
-        .take(50)
-        .collect();
+    let devices = devices(&q);
     let page = store::page(
         &st.db,
         &store::PageFilter {

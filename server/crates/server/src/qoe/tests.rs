@@ -314,7 +314,24 @@ fn query_numbers_follow_js_number() {
         (Some(5), Some(7), Some(1000), Some(-2), Some(16))
     );
     assert_eq!((n("abc"), n("Infinity"), n("1,5")), (None, None, None));
+    assert_eq!(
+        (n("0X1f"), n("0B11"), n("0x+1"), n("0x")),
+        (Some(31), Some(3), None, None)
+    );
     assert_eq!((routes::int(Some("")), routes::int(None)), (None, None));
+}
+
+#[test]
+fn devices_are_repeated_values_and_a_lone_empty_one_is_no_filter() {
+    let q = |v: &[&str]| -> Vec<(String, String)> {
+        v.iter().map(|d| ("device".into(), (*d).into())).collect()
+    };
+    assert!(routes::devices(&q(&[""])).is_empty());
+    assert_eq!(routes::devices(&q(&["", "a,b"])), ["", "a,b"]);
+    assert_eq!(
+        routes::devices(&q(&[&"é".repeat(512), &"😀".repeat(257)])).len(),
+        1
+    );
 }
 
 #[test]
