@@ -1,0 +1,14 @@
+{
+  "status": "success",
+  "data": [
+    {
+      "tvdb_id": "81190",
+      "name": "Only On TVDB",
+      "overview": "x",
+      "year": "2010",
+      "image_url": null,
+      "genres": [],
+      "remote_ids": []
+    }
+  ]
+}

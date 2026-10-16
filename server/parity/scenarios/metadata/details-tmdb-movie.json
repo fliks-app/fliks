@@ -1,0 +1,118 @@
+{
+  "deviation": null,
+  "engine": "down",
+  "name": "metadata-details-tmdb-movie",
+  "seed": "metadata",
+  "steps": [
+    {
+      "expect": {
+        "body": {
+          "ok": true
+        },
+        "status": 200
+      },
+      "method": "POST",
+      "path": "/__reset",
+      "stub": true
+    },
+    {
+      "as": "readonly",
+      "expect": {
+        "body": {
+          "additionalFanartUrls": [
+            "https://image.tmdb.org/t/p/original/b3.jpg",
+            "https://image.tmdb.org/t/p/original/b2.jpg",
+            "https://image.tmdb.org/t/p/original/b4.jpg"
+          ],
+          "alternativeTitles": [
+            "Matrix",
+            "Matrix 1"
+          ],
+          "budget": 63000000,
+          "cast": [
+            {
+              "avatarUrl": "https://image.tmdb.org/t/p/w185/keanu.jpg",
+              "character": "Neo",
+              "externalId": 6384,
+              "name": "Keanu Reeves",
+              "order": 0
+            },
+            {
+              "avatarUrl": null,
+              "character": "Morpheus",
+              "externalId": 2975,
+              "name": "Laurence Fishburne",
+              "order": 1
+            }
+          ],
+          "crew": [
+            {
+              "avatarUrl": null,
+              "department": "Directing",
+              "externalId": 9339,
+              "job": "Director",
+              "name": "Lana Wachowski"
+            }
+          ],
+          "digitalRelease": "1999-09-21",
+          "episodeCount": null,
+          "fanartUrl": "https://image.tmdb.org/t/p/original/back1001.jpg",
+          "genreIds": [
+            28,
+            878
+          ],
+          "genres": [
+            "Action",
+            "Science Fiction"
+          ],
+          "imdbId": "tt0133093",
+          "inCinemas": "1999-03-31",
+          "keywords": [
+            "hacker",
+            "dystopia"
+          ],
+          "logoUrl": "https://image.tmdb.org/t/p/original/logo_en.png",
+          "mediaType": "movie",
+          "originalLanguage": "en",
+          "originalTitle": "The Matrix (orig)",
+          "overview": "Overview of The Matrix",
+          "physicalRelease": "2000-01-01",
+          "popularity": 75.5,
+          "posterUrl": "https://image.tmdb.org/t/p/w500/poster1001.jpg",
+          "productionCompanies": [
+            "Warner Bros."
+          ],
+          "productionCountries": [
+            "United States of America"
+          ],
+          "provider": "tmdb",
+          "rating": 7.5,
+          "releaseDate": "1999-03-30",
+          "revenue": null,
+          "runtime": 136,
+          "seasonCount": null,
+          "status": "released",
+          "tagline": "Welcome to the Real World.",
+          "title": "The Matrix",
+          "tmdbCollectionId": 2344,
+          "tmdbCollectionName": "The Matrix Collection",
+          "tmdbId": 1001,
+          "tvdbId": null,
+          "videos": [
+            {
+              "key": "vKQi3bBA1y8",
+              "name": "Official Trailer",
+              "site": "YouTube",
+              "type": "Trailer"
+            }
+          ],
+          "voteCount": 25000,
+          "year": 1999
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/metadata/tmdb/movie/1001"
+    }
+  ]
+}

@@ -1,0 +1,85 @@
+{
+  "deviation": "C31",
+  "engine": "down",
+  "ignore": [
+    "$..metadataRefreshedAt",
+    "$..updatedAt"
+  ],
+  "name": "persons-credits-404-fallback",
+  "seed": "metadata",
+  "steps": [
+    {
+      "expect": {
+        "body": {
+          "ok": true
+        },
+        "status": 200
+      },
+      "method": "POST",
+      "path": "/__reset",
+      "stub": true
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "cast": [
+            {
+              "character": "Role",
+              "externalId": 81189,
+              "mediaId": 18,
+              "mediaType": "series",
+              "posterUrl": null,
+              "rating": 0,
+              "releaseDate": "2008-01-01",
+              "title": "Breaking Bad"
+            }
+          ],
+          "crew": [
+            {
+              "department": "Director",
+              "externalId": 169,
+              "job": "Director",
+              "mediaId": null,
+              "mediaType": "movie",
+              "posterUrl": null,
+              "rating": 0,
+              "releaseDate": "1999-01-01",
+              "title": "The Matrix"
+            }
+          ],
+          "provider": "tvdb"
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/persons/7/provider-credits"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "cast": [],
+          "crew": [],
+          "person": {
+            "avatarUrl": null,
+            "biography": "English bio.",
+            "birthday": "1970-01-02",
+            "createdAt": "2026-01-01T00:00:00.000Z",
+            "deathday": null,
+            "departments": [],
+            "id": 7,
+            "knownForDepartment": "Acting",
+            "name": "Clara 404",
+            "placeOfBirth": "Lyon",
+            "provider": "tvdb",
+            "tmdbId": 777
+          }
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/persons/7"
+    }
+  ]
+}

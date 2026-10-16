@@ -1,0 +1,242 @@
+{
+  "deviation": null,
+  "engine": "down",
+  "name": "metadata-details-legacy-tmdb",
+  "seed": "metadata",
+  "steps": [
+    {
+      "expect": {
+        "body": {
+          "ok": true
+        },
+        "status": 200
+      },
+      "method": "POST",
+      "path": "/__reset",
+      "stub": true
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "additionalFanartUrls": [
+            "https://image.tmdb.org/t/p/original/b3.jpg",
+            "https://image.tmdb.org/t/p/original/b2.jpg",
+            "https://image.tmdb.org/t/p/original/b4.jpg"
+          ],
+          "alternativeTitles": [
+            "Matrix",
+            "Matrix 1"
+          ],
+          "budget": 63000000,
+          "cast": [
+            {
+              "avatarUrl": "https://image.tmdb.org/t/p/w185/keanu.jpg",
+              "character": "Neo",
+              "externalId": 6384,
+              "name": "Keanu Reeves",
+              "order": 0
+            },
+            {
+              "avatarUrl": null,
+              "character": "Morpheus",
+              "externalId": 2975,
+              "name": "Laurence Fishburne",
+              "order": 1
+            }
+          ],
+          "crew": [
+            {
+              "avatarUrl": null,
+              "department": "Directing",
+              "externalId": 9339,
+              "job": "Director",
+              "name": "Lana Wachowski"
+            }
+          ],
+          "digitalRelease": "1999-09-21",
+          "episodeCount": null,
+          "fanartUrl": "https://image.tmdb.org/t/p/original/back1001.jpg",
+          "genreIds": [
+            28,
+            878
+          ],
+          "genres": [
+            "Action",
+            "Science Fiction"
+          ],
+          "imdbId": "tt0133093",
+          "inCinemas": "1999-03-31",
+          "keywords": [
+            "hacker",
+            "dystopia"
+          ],
+          "logoUrl": "https://image.tmdb.org/t/p/original/logo_en.png",
+          "mediaType": "movie",
+          "originalLanguage": "en",
+          "originalTitle": "The Matrix (orig)",
+          "overview": "Overview of The Matrix",
+          "physicalRelease": "2000-01-01",
+          "popularity": 75.5,
+          "posterUrl": "https://image.tmdb.org/t/p/w500/poster1001.jpg",
+          "productionCompanies": [
+            "Warner Bros."
+          ],
+          "productionCountries": [
+            "United States of America"
+          ],
+          "provider": "tmdb",
+          "rating": 7.5,
+          "releaseDate": "1999-03-30",
+          "revenue": null,
+          "runtime": 136,
+          "seasonCount": null,
+          "status": "released",
+          "tagline": "Welcome to the Real World.",
+          "title": "The Matrix",
+          "tmdbCollectionId": 2344,
+          "tmdbCollectionName": "The Matrix Collection",
+          "tmdbId": 1001,
+          "tvdbId": null,
+          "videos": [
+            {
+              "key": "vKQi3bBA1y8",
+              "name": "Official Trailer",
+              "site": "YouTube",
+              "type": "Trailer"
+            }
+          ],
+          "voteCount": 25000,
+          "year": 1999
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/metadata/movie/1001"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "additionalFanartUrls": [
+            "https://image.tmdb.org/t/p/original/bb2.jpg"
+          ],
+          "alternativeTitles": [
+            "Breaking Bad (US)"
+          ],
+          "budget": null,
+          "cast": [
+            {
+              "avatarUrl": "https://image.tmdb.org/t/p/w185/bc.jpg",
+              "character": "Walter White",
+              "externalId": 17419,
+              "name": "Bryan Cranston",
+              "order": 0
+            }
+          ],
+          "crew": [],
+          "digitalRelease": null,
+          "episodeCount": 5,
+          "fanartUrl": null,
+          "genreIds": [
+            18
+          ],
+          "genres": [
+            "Drama"
+          ],
+          "imdbId": "tt0903747",
+          "inCinemas": null,
+          "keywords": [
+            "drug dealer"
+          ],
+          "logoUrl": null,
+          "mediaType": "series",
+          "originalLanguage": "en",
+          "originalTitle": "Breaking Bad (orig)",
+          "overview": "Overview of Breaking Bad",
+          "physicalRelease": null,
+          "popularity": 90.1,
+          "posterUrl": "https://image.tmdb.org/t/p/w500/poster2000.jpg",
+          "productionCompanies": [
+            "AMC",
+            "Gran Via"
+          ],
+          "productionCountries": [
+            "US"
+          ],
+          "provider": "tmdb",
+          "rating": 8.1,
+          "releaseDate": "2008-01-20",
+          "revenue": null,
+          "runtime": 47,
+          "seasonCount": 3,
+          "status": "ended",
+          "tagline": null,
+          "title": "Breaking Bad",
+          "tmdbCollectionId": null,
+          "tmdbCollectionName": null,
+          "tmdbId": 2000,
+          "tvdbId": 81189,
+          "videos": [],
+          "voteCount": 12000,
+          "year": 2008
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/metadata/tv/2000"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "airDate": null,
+            "episodeCount": 1,
+            "episodes": [
+              {
+                "airDate": "2008-01-20",
+                "episodeNumber": 1,
+                "overview": null,
+                "runtime": 47,
+                "stillUrl": "https://image.tmdb.org/t/p/w780/still0.jpg",
+                "title": "Episode 1"
+              }
+            ],
+            "overview": null,
+            "posterUrl": null,
+            "seasonNumber": 0
+          },
+          {
+            "airDate": "2008-01-20",
+            "episodeCount": 2,
+            "episodes": [
+              {
+                "airDate": "2008-01-20",
+                "episodeNumber": 1,
+                "overview": null,
+                "runtime": 47,
+                "stillUrl": "https://image.tmdb.org/t/p/w780/still0.jpg",
+                "title": "Episode 1"
+              },
+              {
+                "airDate": "2008-01-20",
+                "episodeNumber": 2,
+                "overview": null,
+                "runtime": 47,
+                "stillUrl": null,
+                "title": "Episode 2"
+              }
+            ],
+            "overview": "Season 1 overview",
+            "posterUrl": "https://image.tmdb.org/t/p/w500/s1.jpg",
+            "seasonNumber": 1
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/metadata/tv/2000/seasons"
+    }
+  ]
+}

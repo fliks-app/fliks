@@ -1,0 +1,49 @@
+{
+  "page": 1,
+  "results": [
+    {
+      "id": 1001,
+      "title": "The Matrix",
+      "original_title": "The Matrix (orig)",
+      "overview": "Overview of The Matrix",
+      "release_date": "1999-03-30",
+      "poster_path": "/poster1001.jpg",
+      "backdrop_path": "/back1001.jpg",
+      "vote_average": 7.5,
+      "genre_ids": [
+        28,
+        878
+      ]
+    },
+    {
+      "id": 603001,
+      "title": "Matrix Reloaded",
+      "original_title": "Matrix Reloaded (orig)",
+      "overview": "Overview of Matrix Reloaded",
+      "release_date": "2003-05-15",
+      "poster_path": "/poster603001.jpg",
+      "backdrop_path": "/back603001.jpg",
+      "vote_average": 7.5,
+      "genre_ids": [
+        28,
+        878
+      ]
+    },
+    {
+      "id": 603002,
+      "title": "No Date",
+      "original_title": "No Date (orig)",
+      "overview": "Overview of No Date",
+      "release_date": "",
+      "poster_path": "/poster603002.jpg",
+      "backdrop_path": "/back603002.jpg",
+      "vote_average": 7.5,
+      "genre_ids": [
+        28,
+        878
+      ]
+    }
+  ],
+  "total_pages": 1,
+  "total_results": 3
+}

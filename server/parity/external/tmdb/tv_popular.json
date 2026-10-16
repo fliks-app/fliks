@@ -1,0 +1,33 @@
+{
+  "page": 1,
+  "results": [
+    {
+      "id": 2000,
+      "name": "Breaking Bad",
+      "original_name": "Breaking Bad (orig)",
+      "overview": "Overview of Breaking Bad",
+      "first_air_date": "2008-01-20",
+      "poster_path": "/poster2000.jpg",
+      "backdrop_path": null,
+      "vote_average": 8.1,
+      "genre_ids": [
+        18
+      ]
+    },
+    {
+      "id": 1396,
+      "name": "Better Call",
+      "original_name": "Better Call (orig)",
+      "overview": "Overview of Better Call",
+      "first_air_date": "2015-02-08",
+      "poster_path": "/poster1396.jpg",
+      "backdrop_path": null,
+      "vote_average": 8.1,
+      "genre_ids": [
+        18
+      ]
+    }
+  ],
+  "total_pages": 1,
+  "total_results": 2
+}

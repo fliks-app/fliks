@@ -1,0 +1,232 @@
+{
+  "deviation": null,
+  "engine": "down",
+  "name": "metadata-trending-day-window",
+  "seed": "metadata",
+  "steps": [
+    {
+      "expect": {
+        "body": {
+          "ok": true
+        },
+        "status": 200
+      },
+      "method": "POST",
+      "path": "/__reset",
+      "stub": true
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "existingMediaId": 1,
+            "existingMediaType": "movie",
+            "fanartUrl": "https://image.tmdb.org/t/p/original/back1001.jpg",
+            "genreIds": [
+              28,
+              878
+            ],
+            "genres": [],
+            "mediaType": "movie",
+            "originalTitle": "The Matrix (orig)",
+            "overview": "Overview of The Matrix",
+            "posterUrl": "https://image.tmdb.org/t/p/w500/poster1001.jpg",
+            "provider": "tmdb",
+            "rating": 7.5,
+            "title": "The Matrix",
+            "tmdbId": 1001,
+            "year": 1999
+          },
+          {
+            "existingMediaId": null,
+            "existingMediaType": null,
+            "fanartUrl": "https://image.tmdb.org/t/p/original/back603001.jpg",
+            "genreIds": [
+              28,
+              878
+            ],
+            "genres": [],
+            "mediaType": "movie",
+            "originalTitle": "Matrix Reloaded (orig)",
+            "overview": "Overview of Matrix Reloaded",
+            "posterUrl": "https://image.tmdb.org/t/p/w500/poster603001.jpg",
+            "provider": "tmdb",
+            "rating": 7.5,
+            "title": "Matrix Reloaded",
+            "tmdbId": 603001,
+            "year": 2003
+          },
+          {
+            "existingMediaId": null,
+            "existingMediaType": null,
+            "fanartUrl": "https://image.tmdb.org/t/p/original/back603002.jpg",
+            "genreIds": [
+              28,
+              878
+            ],
+            "genres": [],
+            "mediaType": "movie",
+            "originalTitle": "No Date (orig)",
+            "overview": "Overview of No Date",
+            "posterUrl": "https://image.tmdb.org/t/p/w500/poster603002.jpg",
+            "provider": "tmdb",
+            "rating": 7.5,
+            "title": "No Date",
+            "tmdbId": 603002,
+            "year": null
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/metadata/trending/movie?window=day"
+    },
+    {
+      "expect": {
+        "body": {
+          "hits": 1
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/__hits?prefix=/tmdb/3/trending/movie/day",
+      "stub": true
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "existingMediaId": 1,
+            "existingMediaType": "movie",
+            "fanartUrl": "https://image.tmdb.org/t/p/original/back1001.jpg",
+            "genreIds": [
+              28,
+              878
+            ],
+            "genres": [],
+            "mediaType": "movie",
+            "originalTitle": "The Matrix (orig)",
+            "overview": "Overview of The Matrix",
+            "posterUrl": "https://image.tmdb.org/t/p/w500/poster1001.jpg",
+            "provider": "tmdb",
+            "rating": 7.5,
+            "title": "The Matrix",
+            "tmdbId": 1001,
+            "year": 1999
+          },
+          {
+            "existingMediaId": null,
+            "existingMediaType": null,
+            "fanartUrl": "https://image.tmdb.org/t/p/original/back603001.jpg",
+            "genreIds": [
+              28,
+              878
+            ],
+            "genres": [],
+            "mediaType": "movie",
+            "originalTitle": "Matrix Reloaded (orig)",
+            "overview": "Overview of Matrix Reloaded",
+            "posterUrl": "https://image.tmdb.org/t/p/w500/poster603001.jpg",
+            "provider": "tmdb",
+            "rating": 7.5,
+            "title": "Matrix Reloaded",
+            "tmdbId": 603001,
+            "year": 2003
+          },
+          {
+            "existingMediaId": null,
+            "existingMediaType": null,
+            "fanartUrl": "https://image.tmdb.org/t/p/original/back603002.jpg",
+            "genreIds": [
+              28,
+              878
+            ],
+            "genres": [],
+            "mediaType": "movie",
+            "originalTitle": "No Date (orig)",
+            "overview": "Overview of No Date",
+            "posterUrl": "https://image.tmdb.org/t/p/w500/poster603002.jpg",
+            "provider": "tmdb",
+            "rating": 7.5,
+            "title": "No Date",
+            "tmdbId": 603002,
+            "year": null
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/metadata/trending/movie?window=DAY"
+    },
+    {
+      "expect": {
+        "body": {
+          "hits": 1
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/__hits?prefix=/tmdb/3/trending/movie/week",
+      "stub": true
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "existingMediaId": 18,
+            "existingMediaType": "series",
+            "fanartUrl": null,
+            "genreIds": [
+              18
+            ],
+            "genres": [],
+            "mediaType": "series",
+            "originalTitle": "Breaking Bad (orig)",
+            "overview": "Overview of Breaking Bad",
+            "posterUrl": "https://image.tmdb.org/t/p/w500/poster2000.jpg",
+            "provider": "tmdb",
+            "rating": 8.1,
+            "title": "Breaking Bad",
+            "tmdbId": 2000,
+            "year": 2008
+          },
+          {
+            "existingMediaId": null,
+            "existingMediaType": null,
+            "fanartUrl": null,
+            "genreIds": [
+              18
+            ],
+            "genres": [],
+            "mediaType": "series",
+            "originalTitle": "Better Call (orig)",
+            "overview": "Overview of Better Call",
+            "posterUrl": "https://image.tmdb.org/t/p/w500/poster1396.jpg",
+            "provider": "tmdb",
+            "rating": 8.1,
+            "title": "Better Call",
+            "tmdbId": 1396,
+            "year": 2015
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/metadata/trending/tv?window=day"
+    },
+    {
+      "expect": {
+        "body": {
+          "hits": 1
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/__hits?prefix=/tmdb/3/trending/tv/day",
+      "stub": true
+    }
+  ]
+}

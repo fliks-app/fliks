@@ -1,0 +1,51 @@
+{
+  "deviation": null,
+  "engine": "down",
+  "name": "metadata-genres-movie",
+  "seed": "metadata",
+  "steps": [
+    {
+      "expect": {
+        "body": {
+          "ok": true
+        },
+        "status": 200
+      },
+      "method": "POST",
+      "path": "/__reset",
+      "stub": true
+    },
+    {
+      "as": "readonly",
+      "expect": {
+        "body": [
+          {
+            "id": 28,
+            "name": "Action"
+          },
+          {
+            "id": 878,
+            "name": "Science Fiction"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/metadata/genres/movie"
+    },
+    {
+      "as": "readonly",
+      "expect": {
+        "body": [
+          {
+            "id": 18,
+            "name": "Drama"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/metadata/genres/tv"
+    }
+  ]
+}

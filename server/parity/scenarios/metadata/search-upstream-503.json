@@ -1,0 +1,89 @@
+{
+  "deviation": null,
+  "engine": "down",
+  "name": "metadata-search-upstream-503",
+  "seed": "metadata",
+  "steps": [
+    {
+      "expect": {
+        "body": {
+          "ok": true
+        },
+        "status": 200
+      },
+      "method": "POST",
+      "path": "/__reset",
+      "stub": true
+    },
+    {
+      "body": {
+        "prefix": "/tmdb/3/search",
+        "status": 500
+      },
+      "expect": {
+        "body": {
+          "ok": true
+        },
+        "status": 200
+      },
+      "method": "POST",
+      "path": "/__fail",
+      "stub": true
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Service Unavailable",
+          "message": "Metadata search failed on tmdb: HTTP 500 — scripted failure",
+          "statusCode": 503
+        },
+        "status": 503
+      },
+      "method": "GET",
+      "path": "/api/metadata/search/movie?q=matrix"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Service Unavailable",
+          "message": "Metadata search failed on tmdb: HTTP 500 — scripted failure",
+          "statusCode": 503
+        },
+        "status": 503
+      },
+      "method": "GET",
+      "path": "/api/metadata/search/tv?q=breaking"
+    },
+    {
+      "expect": {
+        "body": {
+          "ok": true
+        },
+        "status": 200
+      },
+      "method": "POST",
+      "path": "/__reset",
+      "stub": true
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "id": 28,
+            "name": "Action"
+          },
+          {
+            "id": 878,
+            "name": "Science Fiction"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/metadata/genres/movie"
+    }
+  ]
+}

@@ -1,0 +1,621 @@
+{
+  "deviation": "F22",
+  "engine": "down",
+  "ignore": [
+    "$..metadataRefreshedAt"
+  ],
+  "name": "persons-detail-fresh",
+  "seed": "metadata",
+  "steps": [
+    {
+      "expect": {
+        "body": {
+          "ok": true
+        },
+        "status": 200
+      },
+      "method": "POST",
+      "path": "/__reset",
+      "stub": true
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "cast": [
+            {
+              "character": "Lead",
+              "createdAt": "2026-01-01T00:00:00.000Z",
+              "id": 1,
+              "media": {
+                "addedById": null,
+                "additionalFanartUrls": [],
+                "alternativeTitles": [],
+                "createdAt": "2026-01-01T00:00:00.000Z",
+                "digitalRelease": null,
+                "fanartUrl": null,
+                "folderName": "Parity Movie 01 (2020)",
+                "genres": [
+                  "Drama"
+                ],
+                "id": 1,
+                "imdbId": null,
+                "inCinemas": null,
+                "languageProfile": null,
+                "languageProfileId": null,
+                "library": {
+                  "color": "#3b82f6",
+                  "createdAt": "2026-01-01T00:00:00.000Z",
+                  "defaultLanguageProfileId": null,
+                  "defaultQualityProfileId": null,
+                  "icon": "film",
+                  "id": 1,
+                  "label": null,
+                  "mediaTypes": [
+                    "movie"
+                  ],
+                  "metadataLanguage": null,
+                  "metadataRegion": null,
+                  "name": "Movies",
+                  "path": "/tmp/fliks-parity/media/movies",
+                  "preferredProvider": null,
+                  "updatedAt": "2026-01-01T00:00:00.000Z"
+                },
+                "libraryId": 1,
+                "logoUrl": null,
+                "metadata": null,
+                "minimumAvailability": "released",
+                "monitored": true,
+                "originalTitle": null,
+                "overview": "Synthetic movie 1",
+                "path": "/tmp/fliks-parity/media/movies/Parity Movie 01 (2020)",
+                "physicalRelease": null,
+                "posterUrl": null,
+                "preferredProvider": null,
+                "qualityProfile": null,
+                "qualityProfileId": null,
+                "rating": 7.5,
+                "releaseDate": "2020-01-01",
+                "runtime": 90,
+                "status": "released",
+                "title": "Parity Movie 01",
+                "tmdbCollectionId": null,
+                "tmdbCollectionName": null,
+                "tmdbId": 1001,
+                "tvdbId": null,
+                "type": "movie",
+                "updatedAt": "2026-01-01T00:00:00.000Z",
+                "year": 2020
+              },
+              "order": 0,
+              "person": {
+                "avatarUrl": "/api/images/person/1",
+                "biography": "Fresh bio",
+                "birthday": "1979-04-12",
+                "createdAt": "2026-01-01T00:00:00.000Z",
+                "deathday": null,
+                "departments": [
+                  "Acting"
+                ],
+                "id": 1,
+                "knownForDepartment": "Acting",
+                "name": "Claire Danes",
+                "placeOfBirth": "New York",
+                "provider": "tmdb",
+                "tmdbId": 101,
+                "updatedAt": "2026-01-01T00:00:00.000Z"
+              },
+              "updatedAt": "2026-01-01T00:00:00.000Z"
+            },
+            {
+              "character": "Second",
+              "createdAt": "2026-01-01T00:00:00.000Z",
+              "id": 3,
+              "media": {
+                "addedById": null,
+                "additionalFanartUrls": [],
+                "alternativeTitles": [],
+                "createdAt": "2026-01-01T00:00:00.000Z",
+                "digitalRelease": null,
+                "fanartUrl": null,
+                "folderName": "Parity Movie 02 (2020)",
+                "genres": [
+                  "Drama"
+                ],
+                "id": 2,
+                "imdbId": null,
+                "inCinemas": null,
+                "languageProfile": null,
+                "languageProfileId": null,
+                "library": {
+                  "color": "#3b82f6",
+                  "createdAt": "2026-01-01T00:00:00.000Z",
+                  "defaultLanguageProfileId": null,
+                  "defaultQualityProfileId": null,
+                  "icon": "film",
+                  "id": 1,
+                  "label": null,
+                  "mediaTypes": [
+                    "movie"
+                  ],
+                  "metadataLanguage": null,
+                  "metadataRegion": null,
+                  "name": "Movies",
+                  "path": "/tmp/fliks-parity/media/movies",
+                  "preferredProvider": null,
+                  "updatedAt": "2026-01-01T00:00:00.000Z"
+                },
+                "libraryId": 1,
+                "logoUrl": null,
+                "metadata": null,
+                "minimumAvailability": "released",
+                "monitored": true,
+                "originalTitle": null,
+                "overview": "Synthetic movie 2",
+                "path": "/tmp/fliks-parity/media/movies/Parity Movie 02 (2020)",
+                "physicalRelease": null,
+                "posterUrl": null,
+                "preferredProvider": null,
+                "qualityProfile": null,
+                "qualityProfileId": null,
+                "rating": 7.5,
+                "releaseDate": "2020-01-01",
+                "runtime": 90,
+                "status": "released",
+                "title": "Parity Movie 02",
+                "tmdbCollectionId": null,
+                "tmdbCollectionName": null,
+                "tmdbId": 1002,
+                "tvdbId": null,
+                "type": "movie",
+                "updatedAt": "2026-01-01T00:00:00.000Z",
+                "year": 2020
+              },
+              "order": 0,
+              "person": {
+                "avatarUrl": "/api/images/person/1",
+                "biography": "Fresh bio",
+                "birthday": "1979-04-12",
+                "createdAt": "2026-01-01T00:00:00.000Z",
+                "deathday": null,
+                "departments": [
+                  "Acting"
+                ],
+                "id": 1,
+                "knownForDepartment": "Acting",
+                "name": "Claire Danes",
+                "placeOfBirth": "New York",
+                "provider": "tmdb",
+                "tmdbId": 101,
+                "updatedAt": "2026-01-01T00:00:00.000Z"
+              },
+              "updatedAt": "2026-01-01T00:00:00.000Z"
+            },
+            {
+              "character": "Guest",
+              "createdAt": "2026-01-01T00:00:00.000Z",
+              "id": 2,
+              "media": {
+                "addedById": null,
+                "additionalFanartUrls": [],
+                "alternativeTitles": [],
+                "createdAt": "2026-01-01T00:00:00.000Z",
+                "digitalRelease": null,
+                "fanartUrl": null,
+                "folderName": "Parity Series A",
+                "genres": [
+                  "Drama"
+                ],
+                "id": 18,
+                "imdbId": null,
+                "inCinemas": null,
+                "languageProfile": null,
+                "languageProfileId": null,
+                "library": {
+                  "color": "#10b981",
+                  "createdAt": "2026-01-01T00:00:00.000Z",
+                  "defaultLanguageProfileId": null,
+                  "defaultQualityProfileId": null,
+                  "icon": "tv",
+                  "id": 2,
+                  "label": null,
+                  "mediaTypes": [
+                    "series"
+                  ],
+                  "metadataLanguage": null,
+                  "metadataRegion": null,
+                  "name": "Series",
+                  "path": "/tmp/fliks-parity/media/series",
+                  "preferredProvider": "tvdb",
+                  "updatedAt": "2026-01-01T00:00:00.000Z"
+                },
+                "libraryId": 2,
+                "logoUrl": null,
+                "metadata": null,
+                "minimumAvailability": "released",
+                "monitored": true,
+                "originalTitle": null,
+                "overview": "Synthetic series A",
+                "path": "/tmp/fliks-parity/media/series/Parity Series A",
+                "physicalRelease": null,
+                "posterUrl": null,
+                "preferredProvider": null,
+                "qualityProfile": null,
+                "qualityProfileId": null,
+                "rating": 8,
+                "releaseDate": null,
+                "runtime": 30,
+                "status": "continuing",
+                "title": "Parity Series A",
+                "tmdbCollectionId": null,
+                "tmdbCollectionName": null,
+                "tmdbId": 2000,
+                "tvdbId": 81189,
+                "type": "series",
+                "updatedAt": "2026-01-01T00:00:00.000Z",
+                "year": 2021
+              },
+              "order": 1,
+              "person": {
+                "avatarUrl": "/api/images/person/1",
+                "biography": "Fresh bio",
+                "birthday": "1979-04-12",
+                "createdAt": "2026-01-01T00:00:00.000Z",
+                "deathday": null,
+                "departments": [
+                  "Acting"
+                ],
+                "id": 1,
+                "knownForDepartment": "Acting",
+                "name": "Claire Danes",
+                "placeOfBirth": "New York",
+                "provider": "tmdb",
+                "tmdbId": 101,
+                "updatedAt": "2026-01-01T00:00:00.000Z"
+              },
+              "updatedAt": "2026-01-01T00:00:00.000Z"
+            }
+          ],
+          "crew": [
+            {
+              "createdAt": "2026-01-01T00:00:00.000Z",
+              "department": "Directing",
+              "id": 1,
+              "job": "Director",
+              "media": {
+                "addedById": null,
+                "additionalFanartUrls": [],
+                "alternativeTitles": [],
+                "createdAt": "2026-01-01T00:00:00.000Z",
+                "digitalRelease": null,
+                "fanartUrl": null,
+                "folderName": "Parity Movie 03 (2020)",
+                "genres": [
+                  "Drama"
+                ],
+                "id": 3,
+                "imdbId": null,
+                "inCinemas": null,
+                "languageProfile": null,
+                "languageProfileId": null,
+                "library": {
+                  "color": "#3b82f6",
+                  "createdAt": "2026-01-01T00:00:00.000Z",
+                  "defaultLanguageProfileId": null,
+                  "defaultQualityProfileId": null,
+                  "icon": "film",
+                  "id": 1,
+                  "label": null,
+                  "mediaTypes": [
+                    "movie"
+                  ],
+                  "metadataLanguage": null,
+                  "metadataRegion": null,
+                  "name": "Movies",
+                  "path": "/tmp/fliks-parity/media/movies",
+                  "preferredProvider": null,
+                  "updatedAt": "2026-01-01T00:00:00.000Z"
+                },
+                "libraryId": 1,
+                "logoUrl": null,
+                "metadata": null,
+                "minimumAvailability": "released",
+                "monitored": true,
+                "originalTitle": null,
+                "overview": "Synthetic movie 3",
+                "path": "/tmp/fliks-parity/media/movies/Parity Movie 03 (2020)",
+                "physicalRelease": null,
+                "posterUrl": null,
+                "preferredProvider": null,
+                "qualityProfile": null,
+                "qualityProfileId": null,
+                "rating": 7.5,
+                "releaseDate": "2020-01-01",
+                "runtime": 90,
+                "status": "released",
+                "title": "Parity Movie 03",
+                "tmdbCollectionId": null,
+                "tmdbCollectionName": null,
+                "tmdbId": 1003,
+                "tvdbId": null,
+                "type": "movie",
+                "updatedAt": "2026-01-01T00:00:00.000Z",
+                "year": 2020
+              },
+              "person": {
+                "avatarUrl": "/api/images/person/1",
+                "biography": "Fresh bio",
+                "birthday": "1979-04-12",
+                "createdAt": "2026-01-01T00:00:00.000Z",
+                "deathday": null,
+                "departments": [
+                  "Acting"
+                ],
+                "id": 1,
+                "knownForDepartment": "Acting",
+                "name": "Claire Danes",
+                "placeOfBirth": "New York",
+                "provider": "tmdb",
+                "tmdbId": 101,
+                "updatedAt": "2026-01-01T00:00:00.000Z"
+              },
+              "updatedAt": "2026-01-01T00:00:00.000Z"
+            },
+            {
+              "createdAt": "2026-01-01T00:00:00.000Z",
+              "department": "Writing",
+              "id": 2,
+              "job": "Writer",
+              "media": {
+                "addedById": null,
+                "additionalFanartUrls": [],
+                "alternativeTitles": [],
+                "createdAt": "2026-01-01T00:00:00.000Z",
+                "digitalRelease": null,
+                "fanartUrl": null,
+                "folderName": "Parity Series B",
+                "genres": [
+                  "Drama"
+                ],
+                "id": 19,
+                "imdbId": null,
+                "inCinemas": null,
+                "languageProfile": null,
+                "languageProfileId": null,
+                "library": {
+                  "color": "#10b981",
+                  "createdAt": "2026-01-01T00:00:00.000Z",
+                  "defaultLanguageProfileId": null,
+                  "defaultQualityProfileId": null,
+                  "icon": "tv",
+                  "id": 2,
+                  "label": null,
+                  "mediaTypes": [
+                    "series"
+                  ],
+                  "metadataLanguage": null,
+                  "metadataRegion": null,
+                  "name": "Series",
+                  "path": "/tmp/fliks-parity/media/series",
+                  "preferredProvider": "tvdb",
+                  "updatedAt": "2026-01-01T00:00:00.000Z"
+                },
+                "libraryId": 2,
+                "logoUrl": null,
+                "metadata": null,
+                "minimumAvailability": "released",
+                "monitored": true,
+                "originalTitle": null,
+                "overview": "Synthetic series B",
+                "path": "/tmp/fliks-parity/media/series/Parity Series B",
+                "physicalRelease": null,
+                "posterUrl": null,
+                "preferredProvider": null,
+                "qualityProfile": null,
+                "qualityProfileId": null,
+                "rating": 8,
+                "releaseDate": null,
+                "runtime": 30,
+                "status": "continuing",
+                "title": "Parity Series B",
+                "tmdbCollectionId": null,
+                "tmdbCollectionName": null,
+                "tmdbId": 1001,
+                "tvdbId": null,
+                "type": "series",
+                "updatedAt": "2026-01-01T00:00:00.000Z",
+                "year": 2021
+              },
+              "person": {
+                "avatarUrl": "/api/images/person/1",
+                "biography": "Fresh bio",
+                "birthday": "1979-04-12",
+                "createdAt": "2026-01-01T00:00:00.000Z",
+                "deathday": null,
+                "departments": [
+                  "Acting"
+                ],
+                "id": 1,
+                "knownForDepartment": "Acting",
+                "name": "Claire Danes",
+                "placeOfBirth": "New York",
+                "provider": "tmdb",
+                "tmdbId": 101,
+                "updatedAt": "2026-01-01T00:00:00.000Z"
+              },
+              "updatedAt": "2026-01-01T00:00:00.000Z"
+            }
+          ],
+          "person": {
+            "avatarUrl": "/api/images/person/1",
+            "biography": "Fresh bio",
+            "birthday": "1979-04-12",
+            "createdAt": "2026-01-01T00:00:00.000Z",
+            "deathday": null,
+            "departments": [
+              "Acting"
+            ],
+            "id": 1,
+            "knownForDepartment": "Acting",
+            "name": "Claire Danes",
+            "placeOfBirth": "New York",
+            "provider": "tmdb",
+            "tmdbId": 101,
+            "updatedAt": "2026-01-01T00:00:00.000Z"
+          }
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/persons/1"
+    },
+    {
+      "expect": {
+        "body": {
+          "hits": 0
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/__hits?prefix=/tmdb/3/person",
+      "stub": true
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "cast": [],
+          "crew": [],
+          "person": {
+            "avatarUrl": null,
+            "biography": "Director",
+            "birthday": null,
+            "createdAt": "2026-01-01T00:00:00.000Z",
+            "deathday": "2022-09-13",
+            "departments": [
+              "Directing"
+            ],
+            "id": 4,
+            "knownForDepartment": "Directing",
+            "name": "Jean-Luc Godard",
+            "placeOfBirth": null,
+            "provider": "tmdb",
+            "tmdbId": 104,
+            "updatedAt": "2026-01-01T00:00:00.000Z"
+          }
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/persons/4"
+    },
+    {
+      "as": "readonly",
+      "expect": {
+        "body": {
+          "cast": [
+            {
+              "character": "Neo",
+              "createdAt": "2026-01-01T00:00:00.000Z",
+              "id": 4,
+              "media": {
+                "addedById": null,
+                "additionalFanartUrls": [],
+                "alternativeTitles": [],
+                "createdAt": "2026-01-01T00:00:00.000Z",
+                "digitalRelease": null,
+                "fanartUrl": null,
+                "folderName": "Parity Movie 01 (2020)",
+                "genres": [
+                  "Drama"
+                ],
+                "id": 1,
+                "imdbId": null,
+                "inCinemas": null,
+                "languageProfile": null,
+                "languageProfileId": null,
+                "library": {
+                  "color": "#3b82f6",
+                  "createdAt": "2026-01-01T00:00:00.000Z",
+                  "defaultLanguageProfileId": null,
+                  "defaultQualityProfileId": null,
+                  "icon": "film",
+                  "id": 1,
+                  "label": null,
+                  "mediaTypes": [
+                    "movie"
+                  ],
+                  "metadataLanguage": null,
+                  "metadataRegion": null,
+                  "name": "Movies",
+                  "preferredProvider": null,
+                  "updatedAt": "2026-01-01T00:00:00.000Z"
+                },
+                "libraryId": 1,
+                "logoUrl": null,
+                "metadata": null,
+                "minimumAvailability": "released",
+                "monitored": true,
+                "originalTitle": null,
+                "overview": "Synthetic movie 1",
+                "physicalRelease": null,
+                "posterUrl": null,
+                "preferredProvider": null,
+                "qualityProfile": null,
+                "qualityProfileId": null,
+                "rating": 7.5,
+                "releaseDate": "2020-01-01",
+                "runtime": 90,
+                "status": "released",
+                "title": "Parity Movie 01",
+                "tmdbCollectionId": null,
+                "tmdbCollectionName": null,
+                "tmdbId": 1001,
+                "tvdbId": null,
+                "type": "movie",
+                "updatedAt": "2026-01-01T00:00:00.000Z",
+                "year": 2020
+              },
+              "order": 0,
+              "person": {
+                "avatarUrl": null,
+                "biography": "Fresh bio",
+                "birthday": null,
+                "createdAt": "2026-01-01T00:00:00.000Z",
+                "deathday": null,
+                "departments": [],
+                "id": 9,
+                "knownForDepartment": "Acting",
+                "name": "Shared Id",
+                "placeOfBirth": null,
+                "provider": "tmdb",
+                "tmdbId": 603,
+                "updatedAt": "2026-01-01T00:00:00.000Z"
+              },
+              "updatedAt": "2026-01-01T00:00:00.000Z"
+            }
+          ],
+          "crew": [],
+          "person": {
+            "avatarUrl": null,
+            "biography": "Fresh bio",
+            "birthday": null,
+            "createdAt": "2026-01-01T00:00:00.000Z",
+            "deathday": null,
+            "departments": [],
+            "id": 9,
+            "knownForDepartment": "Acting",
+            "name": "Shared Id",
+            "placeOfBirth": null,
+            "provider": "tmdb",
+            "tmdbId": 603,
+            "updatedAt": "2026-01-01T00:00:00.000Z"
+          }
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/persons/9"
+    }
+  ]
+}

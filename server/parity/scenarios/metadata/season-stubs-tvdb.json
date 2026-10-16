@@ -1,0 +1,37 @@
+{
+  "deviation": null,
+  "engine": "down",
+  "name": "metadata-season-stubs-tvdb",
+  "seed": "metadata",
+  "steps": [
+    {
+      "expect": {
+        "body": {
+          "ok": true
+        },
+        "status": 200
+      },
+      "method": "POST",
+      "path": "/__reset",
+      "stub": true
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "episodeCount": 1,
+            "seasonNumber": 0
+          },
+          {
+            "episodeCount": 2,
+            "seasonNumber": 1
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/metadata/tvdb/tv/81189/season-stubs"
+    }
+  ]
+}

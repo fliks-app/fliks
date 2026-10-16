@@ -1,0 +1,49 @@
+{
+  "deviation": "C31",
+  "engine": "down",
+  "ignore": [
+    "$..metadataRefreshedAt",
+    "$..updatedAt"
+  ],
+  "name": "persons-detail-tvdb",
+  "seed": "metadata",
+  "steps": [
+    {
+      "expect": {
+        "body": {
+          "ok": true
+        },
+        "status": 200
+      },
+      "method": "POST",
+      "path": "/__reset",
+      "stub": true
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "cast": [],
+          "crew": [],
+          "person": {
+            "avatarUrl": null,
+            "biography": "Bio en.",
+            "birthday": null,
+            "createdAt": "2026-01-01T00:00:00.000Z",
+            "deathday": null,
+            "departments": [],
+            "id": 6,
+            "knownForDepartment": "Writing",
+            "name": "Tvdb Actor",
+            "placeOfBirth": null,
+            "provider": "tvdb",
+            "tmdbId": 5555
+          }
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/persons/6"
+    }
+  ]
+}

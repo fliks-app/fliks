@@ -1,0 +1,71 @@
+{
+  "deviation": null,
+  "engine": "down",
+  "name": "metadata-seasons-tmdb",
+  "seed": "metadata",
+  "steps": [
+    {
+      "expect": {
+        "body": {
+          "ok": true
+        },
+        "status": 200
+      },
+      "method": "POST",
+      "path": "/__reset",
+      "stub": true
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "airDate": null,
+            "episodeCount": 1,
+            "episodes": [
+              {
+                "airDate": "2008-01-20",
+                "episodeNumber": 1,
+                "overview": null,
+                "runtime": 47,
+                "stillUrl": "https://image.tmdb.org/t/p/w780/still0.jpg",
+                "title": "Episode 1"
+              }
+            ],
+            "overview": null,
+            "posterUrl": null,
+            "seasonNumber": 0
+          },
+          {
+            "airDate": "2008-01-20",
+            "episodeCount": 2,
+            "episodes": [
+              {
+                "airDate": "2008-01-20",
+                "episodeNumber": 1,
+                "overview": null,
+                "runtime": 47,
+                "stillUrl": "https://image.tmdb.org/t/p/w780/still0.jpg",
+                "title": "Episode 1"
+              },
+              {
+                "airDate": "2008-01-20",
+                "episodeNumber": 2,
+                "overview": null,
+                "runtime": 47,
+                "stillUrl": null,
+                "title": "Episode 2"
+              }
+            ],
+            "overview": "Season 1 overview",
+            "posterUrl": "https://image.tmdb.org/t/p/w500/s1.jpg",
+            "seasonNumber": 1
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/metadata/tmdb/tv/2000/seasons"
+    }
+  ]
+}

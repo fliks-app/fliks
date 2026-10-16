@@ -1,0 +1,36 @@
+{
+  "cast": [
+    {
+      "id": 1002,
+      "media_type": "movie",
+      "title": "Parity Movie 02",
+      "character": "Self",
+      "poster_path": "/p2.jpg",
+      "backdrop_path": null,
+      "release_date": "2020-01-01",
+      "vote_average": 7.5
+    },
+    {
+      "id": 424242,
+      "media_type": "movie",
+      "title": "Unowned",
+      "character": "X",
+      "poster_path": null,
+      "backdrop_path": null,
+      "release_date": null
+    }
+  ],
+  "crew": [
+    {
+      "id": 2000,
+      "media_type": "tv",
+      "name": "Parity Series B",
+      "job": "Writer",
+      "department": "Writing",
+      "poster_path": null,
+      "backdrop_path": null,
+      "first_air_date": "2019-05-05",
+      "vote_average": 0
+    }
+  ]
+}

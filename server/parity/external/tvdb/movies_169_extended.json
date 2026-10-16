@@ -1,0 +1,63 @@
+{
+  "status": "success",
+  "data": {
+    "id": 169,
+    "name": "The Matrix",
+    "image": "https://artworks.thetvdb.com/mp.jpg",
+    "status": {
+      "name": "Released"
+    },
+    "runtime": 136,
+    "budget": "63000000",
+    "boxOffice": "0",
+    "first_release": {
+      "date": "1999-03-31"
+    },
+    "releases": [
+      {
+        "country": "usa",
+        "date": "1999-03-31",
+        "detail": "Theatrical"
+      },
+      {
+        "country": "usa",
+        "date": "1999-09-21",
+        "detail": "Digital"
+      }
+    ],
+    "originalLanguage": "eng",
+    "originalCountry": "usa",
+    "genres": [
+      {
+        "name": "Action"
+      }
+    ],
+    "translations": {
+      "nameTranslations": [],
+      "overviewTranslations": []
+    },
+    "remoteIds": [
+      {
+        "id": "603",
+        "sourceName": "TheMovieDB.com"
+      }
+    ],
+    "artworks": [],
+    "trailers": [],
+    "tagOptions": [],
+    "aliases": [],
+    "companies": {
+      "production": [
+        {
+          "name": "Warner"
+        }
+      ],
+      "studio": [
+        {
+          "name": "Village"
+        }
+      ]
+    },
+    "characters": []
+  }
+}

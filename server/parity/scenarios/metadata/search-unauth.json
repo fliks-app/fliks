@@ -1,0 +1,31 @@
+{
+  "deviation": null,
+  "engine": "down",
+  "name": "metadata-search-unauth",
+  "seed": "metadata",
+  "steps": [
+    {
+      "expect": {
+        "body": {
+          "ok": true
+        },
+        "status": 200
+      },
+      "method": "POST",
+      "path": "/__reset",
+      "stub": true
+    },
+    {
+      "as": "anon",
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "GET",
+      "path": "/api/metadata/search/movie?q=matrix"
+    }
+  ]
+}

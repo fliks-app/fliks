@@ -1,0 +1,56 @@
+{
+  "deviation": null,
+  "engine": "down",
+  "name": "metadata-search-fallback",
+  "seed": "metadata",
+  "steps": [
+    {
+      "expect": {
+        "body": {
+          "ok": true
+        },
+        "status": 200
+      },
+      "method": "POST",
+      "path": "/__reset",
+      "stub": true
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "existingMediaId": null,
+            "existingMediaType": null,
+            "genres": [],
+            "imdbId": null,
+            "mediaType": "movie",
+            "originalTitle": "Only On TVDB",
+            "overview": "x",
+            "posterUrl": null,
+            "provider": "tvdb",
+            "rating": 0,
+            "title": "Only On TVDB",
+            "tmdbId": 0,
+            "tvdbId": 81190,
+            "year": 2010
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/metadata/search/movie?q=tvdbfallback"
+    },
+    {
+      "expect": {
+        "body": {
+          "hits": 1
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/__hits?prefix=/tvdb/v4/search",
+      "stub": true
+    }
+  ]
+}

@@ -1,0 +1,75 @@
+{
+  "deviation": "C28",
+  "engine": "down",
+  "name": "persons-credits-upstream-fail",
+  "seed": "metadata",
+  "steps": [
+    {
+      "expect": {
+        "body": {
+          "ok": true
+        },
+        "status": 200
+      },
+      "method": "POST",
+      "path": "/__reset",
+      "stub": true
+    },
+    {
+      "body": {
+        "prefix": "/tmdb/3/person",
+        "status": 500
+      },
+      "expect": {
+        "body": {
+          "ok": true
+        },
+        "status": 200
+      },
+      "method": "POST",
+      "path": "/__fail",
+      "stub": true
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Service Unavailable",
+          "statusCode": 503
+        },
+        "status": 503
+      },
+      "method": "GET",
+      "path": "/api/persons/8/provider-credits"
+    },
+    {
+      "expect": {
+        "body": {
+          "ok": true
+        },
+        "status": 200
+      },
+      "method": "POST",
+      "path": "/__reset",
+      "stub": true
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "id": 28,
+            "name": "Action"
+          },
+          {
+            "id": 878,
+            "name": "Science Fiction"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/metadata/genres/movie"
+    }
+  ]
+}
