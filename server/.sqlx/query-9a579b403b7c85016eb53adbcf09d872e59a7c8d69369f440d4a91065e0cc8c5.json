@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE persons SET name = COALESCE($2, name), \"avatarUrl\" = COALESCE($3, \"avatarUrl\"),\n  biography = COALESCE($4, biography), birthday = COALESCE($5::text::date, birthday),\n  deathday = COALESCE($6::text::date, deathday), \"placeOfBirth\" = COALESCE($7, \"placeOfBirth\"),\n  \"knownForDepartment\" = COALESCE($8, \"knownForDepartment\"), \"metadataRefreshedAt\" = now()\nWHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Varchar",
+        "Varchar",
+        "Text",
+        "Text",
+        "Text",
+        "Varchar",
+        "Varchar"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9a579b403b7c85016eb53adbcf09d872e59a7c8d69369f440d4a91065e0cc8c5"
+}

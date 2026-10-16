@@ -1,7 +1,8 @@
 //! Shared handler state (`State<AppState>`); no DI container, plain fields.
 use crate::{
-    auth_token::Jwt, bridge::Bridge, config::Config, engine::Engine, events::Hub, nest,
-    playback::Debounce, presence::Presence, qoe::Qoe, stream,
+    auth_token::Jwt, bridge::Bridge, config::Config, engine::Engine, events::Hub,
+    images::ImageStore, metadata::Metadata, nest, playback::Debounce, presence::Presence, qoe::Qoe,
+    stream,
 };
 use sqlx::PgPool;
 use std::sync::Arc;
@@ -20,6 +21,8 @@ pub struct AppState {
     pub stream: Arc<stream::Shared>,
     pub ingest: Arc<crate::ingest::Shared>,
     pub seams: crate::seams::Seams,
+    pub metadata: Arc<Metadata>,
+    pub images: Arc<ImageStore>,
 }
 
 impl AppState {
@@ -42,6 +45,8 @@ impl AppState {
             stream: Arc::default(),
             ingest: Arc::default(),
             seams: crate::seams::Seams::default(),
+            metadata: Arc::new(Metadata::new(db.clone(), &cfg.metadata)),
+            images: Arc::new(ImageStore::new(&cfg.metadata.tmdb_image_url)),
             cfg: Arc::new(cfg),
             db,
         }

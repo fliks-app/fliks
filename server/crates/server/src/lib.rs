@@ -1,4 +1,5 @@
 pub mod app;
+pub mod atomic_file;
 pub mod auth;
 pub mod auth_token;
 pub mod bridge;
@@ -16,10 +17,12 @@ pub mod libraries;
 pub mod markers;
 pub mod media;
 pub mod media_servers;
+pub mod metadata;
 pub mod nest;
 pub mod notifications;
 pub mod outbound;
 pub mod paths;
+pub mod persons;
 pub mod playback;
 pub mod playlists;
 pub mod presence;

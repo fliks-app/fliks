@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT mc.\"mediaId\" AS media_id, jsonb_build_object('id', mc.id, 'createdAt', iso_ms(mc.\"createdAt\"),\n  'updatedAt', iso_ms(mc.\"updatedAt\"), 'job', mc.job, 'department', mc.department) AS \"json!: Value\"\nFROM media_crew mc WHERE mc.\"personId\" = $1 ORDER BY mc.id ASC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "media_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "json!: Value",
+        "type_info": "Jsonb"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      true,
+      null
+    ]
+  },
+  "hash": "fa3211603289f0102de7d15743b0c82c7546b16dbb53489663740dcfb35dacf1"
+}

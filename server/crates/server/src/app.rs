@@ -1,8 +1,8 @@
 use crate::http::{layers, static_files};
 use crate::{
-    auth, events, fs, images, importers, libraries, markers, media, media_servers, notifications,
-    playback, playlists, profiles, qoe, remote, roles, settings, social, state::AppState, system,
-    users,
+    auth, events, fs, images, importers, libraries, markers, media, media_servers, metadata,
+    notifications, persons, playback, playlists, profiles, qoe, remote, roles, settings, social,
+    state::AppState, system, users,
 };
 use axum::{
     Router,
@@ -216,6 +216,28 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         crate::ingest::disk::preview,
         crate::ingest::disk::relink_batch,
         crate::ingest::disk::relink
+        metadata::search_movie,
+        metadata::search_tv,
+        metadata::trending_movie,
+        metadata::popular_movie,
+        metadata::upcoming_movie,
+        metadata::trending_tv,
+        metadata::popular_tv,
+        metadata::upcoming_tv,
+        metadata::genres_movie,
+        metadata::genres_tv,
+        metadata::discover_movie,
+        metadata::discover_tv,
+        metadata::details_movie,
+        metadata::details_tv,
+        metadata::seasons,
+        metadata::season_stubs,
+        metadata::legacy_movie,
+        metadata::legacy_tv,
+        metadata::legacy_seasons,
+        persons::search,
+        persons::detail,
+        persons::provider_credits
     )
 )]
 pub struct ApiDoc;
@@ -292,6 +314,8 @@ fn api() -> Router<AppState> {
         .merge(importers::router())
         .merge(media_servers::router())
         .merge(markers::router())
+        .merge(metadata::router())
+        .merge(persons::router())
 }
 
 async fn preflight_here(State(cors): State<Router>, req: Request, next: Next) -> Response {

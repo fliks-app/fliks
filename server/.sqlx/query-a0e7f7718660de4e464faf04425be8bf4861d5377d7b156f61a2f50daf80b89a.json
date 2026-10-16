@@ -1,0 +1,35 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id AS \"id!\", (type::text = 'series') AS \"series!\", \"tmdbId\" AS \"ext!\" FROM media\n                   WHERE \"tmdbId\" = ANY($1) AND \"libraryId\" = ANY($2) ORDER BY id ASC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "series!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 2,
+        "name": "ext!",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4Array",
+        "Int4Array"
+      ]
+    },
+    "nullable": [
+      false,
+      null,
+      true
+    ]
+  },
+  "hash": "a0e7f7718660de4e464faf04425be8bf4861d5377d7b156f61a2f50daf80b89a"
+}

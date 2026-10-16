@@ -91,6 +91,7 @@ pub async fn detail(db: &PgPool, id: i32, see_paths: bool) -> Result<Option<Valu
     let Some(mut media) = items(db, &[id], see_paths).await?.pop() else {
         return Ok(None);
     };
+    let metadata = metadata(db, &[id]).await?.remove(&id);
     let extra = sqlx::query!(
         r#"SELECT
   COALESCE((SELECT jsonb_agg(
@@ -106,13 +107,7 @@ pub async fn detail(db: &PgPool, id: i32, see_paths: bool) -> Result<Option<Valu
             ORDER BY e."episodeNumber", e.id)
           FROM episodes e WHERE e."seasonId" = s.id), '[]'::jsonb))
       ORDER BY (s."seasonNumber" = 0), s."seasonNumber", s.id)
-    FROM seasons s WHERE s."mediaId" = $1), '[]'::jsonb) AS "seasons!: Value",
-  (SELECT jsonb_build_object('id', mm.id, 'createdAt', iso_ms(mm."createdAt"), 'updatedAt', iso_ms(mm."updatedAt"),
-      'budget', mm.budget::text, 'revenue', mm.revenue::text, 'tagline', mm.tagline, 'popularity', mm.popularity,
-      'voteCount', mm."voteCount", 'originalLanguage', mm."originalLanguage",
-      'productionCountries', mm."productionCountries", 'productionCompanies', mm."productionCompanies",
-      'videos', mm.videos, 'keywords', mm.keywords)
-    FROM media_metadata mm WHERE mm."mediaId" = $1) AS "metadata: Value""#,
+    FROM seasons s WHERE s."mediaId" = $1), '[]'::jsonb) AS "seasons!: Value""#,
         id
     )
     .fetch_one(db)
@@ -121,7 +116,50 @@ pub async fn detail(db: &PgPool, id: i32, see_paths: bool) -> Result<Option<Valu
         obj.remove("sizeOnDisk");
         obj.remove("episodeStats");
         obj.insert("seasons".into(), extra.seasons);
-        obj.insert("metadata".into(), extra.metadata.unwrap_or(Value::Null));
+        obj.insert("metadata".into(), metadata.unwrap_or(Value::Null));
     }
     Ok(Some(media))
+}
+
+/// The `media_metadata` rows of `ids` (`media-query.md` rule 31), by media id.
+pub async fn metadata(db: &PgPool, ids: &[i32]) -> Result<HashMap<i32, Value>, sqlx::Error> {
+    let rows = sqlx::query!(
+        r#"SELECT mm."mediaId" AS "media_id!",
+  jsonb_build_object('id', mm.id, 'createdAt', iso_ms(mm."createdAt"), 'updatedAt', iso_ms(mm."updatedAt"),
+      'budget', mm.budget::text, 'revenue', mm.revenue::text, 'tagline', mm.tagline, 'popularity', mm.popularity,
+      'voteCount', mm."voteCount", 'originalLanguage', mm."originalLanguage",
+      'productionCountries', mm."productionCountries", 'productionCompanies', mm."productionCompanies",
+      'videos', mm.videos, 'keywords', mm.keywords) AS "json!: Value"
+FROM media_metadata mm WHERE mm."mediaId" = ANY($1)"#,
+        ids
+    )
+    .fetch_all(db)
+    .await?;
+    Ok(rows.into_iter().map(|r| (r.media_id, r.json)).collect())
+}
+
+/// `Media` rows of credits (`persons.md` rule 17): the list shape without files, sizes and stats, plus metadata.
+pub async fn credit_media(
+    db: &PgPool,
+    ids: &[i32],
+    see_paths: bool,
+) -> Result<HashMap<i32, Value>, sqlx::Error> {
+    let mut meta = metadata(db, ids).await?;
+    let mut out = HashMap::new();
+    for mut m in items(db, ids, see_paths).await? {
+        let Some(obj) = m.as_object_mut() else {
+            continue;
+        };
+        for k in ["files", "sizeOnDisk", "episodeStats"] {
+            obj.remove(k);
+        }
+        let id = obj
+            .get("id")
+            .and_then(Value::as_i64)
+            .and_then(|n| i32::try_from(n).ok());
+        let Some(id) = id else { continue };
+        obj.insert("metadata".into(), meta.remove(&id).unwrap_or(Value::Null));
+        out.insert(id, m);
+    }
+    Ok(out)
 }

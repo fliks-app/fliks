@@ -314,6 +314,14 @@ async fn send(ctx: &Ctx, step: &Value, vars: &HashMap<String, Value>) -> Result<
     let mut step = step.clone();
     step.as_object_mut().map(|o| o.remove("expect"));
     subst(&mut step, vars)?;
+    if let Some(ms) = step["sleepMs"].as_u64() {
+        tokio::time::sleep(Duration::from_millis(ms)).await;
+        return Ok(Resp {
+            status: 200,
+            headers: Map::new(),
+            body: Value::Null,
+        });
+    }
     let mut path = step["path"]
         .as_str()
         .ok_or("step without path")?
@@ -349,7 +357,13 @@ async fn send(ctx: &Ctx, step: &Value, vars: &HashMap<String, Value>) -> Result<
     }
     let method = Method::from_bytes(step["method"].as_str().unwrap_or("GET").as_bytes())
         .map_err(|e| e.to_string())?;
-    let mut req = ctx.http.request(method, format!("{}{path}", ctx.target));
+    // `"stub": true` talks to the external-API stub (PARITY_STUB, parity/external/stub.py) instead of the app.
+    let base = if step["stub"].as_bool() == Some(true) {
+        env("PARITY_STUB", "http://127.0.0.1:4890")
+    } else {
+        ctx.target.clone()
+    };
+    let mut req = ctx.http.request(method, format!("{base}{path}"));
     for (k, v) in headers {
         req = req.header(k, v);
     }
@@ -421,7 +435,11 @@ async fn send(ctx: &Ctx, step: &Value, vars: &HashMap<String, Value>) -> Result<
             Value::Array(events)
         }
         _ => {
-            let text = r.text().await.map_err(|e| e.to_string())?;
+            // the app serves the stub's image host under `FLIKS_TMDB_IMAGE_URL`; Nest answered the real one
+            let text = r.text().await.map_err(|e| e.to_string())?.replace(
+                &format!("{}/img/t/p", env("PARITY_STUB", "http://127.0.0.1:4890")),
+                "https://image.tmdb.org/t/p",
+            );
             if text.is_empty() {
                 Value::Null
             } else {
