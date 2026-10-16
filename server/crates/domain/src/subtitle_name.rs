@@ -96,9 +96,8 @@ fn base_lower(p: &str) -> String {
     b[..b.len() - e.len()].to_lowercase()
 }
 
-/// The video a sidecar belongs to: the longest dot-prefix of its name equal to a video base name,
-/// else the lone video of its directory (only for a media with its own folder). `files` are the
-/// media's `(relativePath, sits in the sidecar's directory)`; the index is returned.
+/// Index in `files` (`(relativePath, in the sidecar's dir)`) of the video whose base name is the
+/// longest dot-prefix of `entry`, else the lone video of its dir when the media has its own folder.
 pub fn match_subtitle_video(
     entry: &str,
     files: &[(&str, bool)],
