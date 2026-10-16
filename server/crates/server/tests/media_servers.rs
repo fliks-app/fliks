@@ -746,7 +746,7 @@ async fn import_guards_and_failures(pool: PgPool) {
     );
     assert!(matches!(&ev[3], SseEvent::CommandCompleted { status, .. } if status == "failed"));
     // C42: a running import refuses a second one until it ends
-    let claim = c.st.seams.watch_history.claim(id as i32).unwrap();
+    let claim = c.st.busy.watch_history.claim(id as i32).unwrap();
     let (s, b) = call(
         &c,
         "POST",

@@ -1,9 +1,9 @@
 //! Detection orchestration and the intro / outro passes (`docs/spec/markers.md` rules 7-22, 24).
 use super::db::{self, CommandRow, EpisodeFile, ScanSeason, SeasonInfo};
 use crate::{
+    busy::Claim,
     events::{Num, SseEvent, Subject},
     http::AppError,
-    seams::Claim,
     state::AppState,
 };
 use fliks_domain::media::path::{join, resolve};
@@ -278,7 +278,7 @@ pub async fn detect_season(
     season: i32,
     trigger: &'static str,
 ) -> Result<CommandRow, AppError> {
-    let claim = st.seams.marker_seasons.claim(season).ok_or_else(|| {
+    let claim = st.busy.marker_seasons.claim(season).ok_or_else(|| {
         AppError::bad_request(format!("Detection already running for season #{season}"))
     })?;
     let info = db::season_info(&st.db, season)
@@ -375,7 +375,7 @@ pub async fn run_detection_inline(
 ) -> Result<(i64, i64), String> {
     let id = activity_id(season);
     let activity = st.hub.activity();
-    let Some(_claim) = st.seams.marker_seasons.claim(season) else {
+    let Some(_claim) = st.busy.marker_seasons.claim(season) else {
         if subject.is_some() {
             activity.remove(&id);
         }

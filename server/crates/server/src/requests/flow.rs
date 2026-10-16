@@ -246,7 +246,11 @@ pub async fn ensure_media(
     spec: ImportSpec,
     added_by: Option<i32>,
 ) -> Res<Option<i32>> {
-    let media_id = match st.requests.import_from_tmdb(spec.clone(), added_by).await {
+    let media_id = match st
+        .requests
+        .import_from_tmdb(st, spec.clone(), added_by)
+        .await
+    {
         Ok(id) => id,
         Err(e) if e.status != 409 => return Err(e.into()),
         Err(_) => {
@@ -278,7 +282,7 @@ pub async fn ensure_media(
 
 fn notify(st: &AppState, event: &'static str, payload: Value) {
     if let Value::Object(m) = payload {
-        st.requests.notify(event, m);
+        st.requests.notify(st, event, m);
     }
 }
 
@@ -431,7 +435,7 @@ pub async fn create(st: &AppState, a: &Authed, mut dto: CreateRequest) -> Res<Va
 async fn art_wait(st: &AppState, id: i32, media_type: &str, tmdb_id: i32) -> Option<Art> {
     let (st, media_type) = (st.clone(), media_type.to_owned());
     let task = tokio::spawn(async move {
-        match st.requests.request_art(&media_type, tmdb_id).await {
+        match st.requests.request_art(&st, &media_type, tmdb_id).await {
             Ok(art) if art.poster.is_none() && art.fanart.is_none() => None,
             Ok(art) => {
                 match db::set_art(&st.db, id, art.poster.as_deref(), art.fanart.as_deref()).await {
@@ -590,7 +594,7 @@ pub async fn approve(st: &AppState, a: &Authed, id: i32) -> Res<Value> {
     let existing = db::media_by_tmdb(&st.db, row.tmdb_id, &row.media_type).await?;
     if existing.is_none() {
         st.requests
-            .assert_import_target(&row.media_type, row.library_id)
+            .assert_import_target(st, &row.media_type, row.library_id)
             .await?;
     }
     if !db::claim_approval(&st.db, id, a.user.id, None).await? {
@@ -638,12 +642,12 @@ async fn approve_delete(st: &AppState, a: &Authed, row: &db::Req) -> Res<Value> 
         return Err(AppError::conflict("Request is not pending"));
     }
     if let Some(m) = media {
-        match st.requests.remove_media(m.id).await {
+        match st.requests.remove_media(st, m.id).await {
             Ok(removed) => {
                 if let Some(path) = removed.disk_path {
                     let st = st.clone();
                     tokio::spawn(async move {
-                        if let Err(e) = st.requests.delete_media_folder(&path).await {
+                        if let Err(e) = st.requests.delete_media_folder(&st, &path).await {
                             tracing::error!(
                                 "Media file deletion failed after delete request #{id} — title=\"{}\" path=\"{path}\" error={e}",
                                 removed.title

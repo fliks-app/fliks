@@ -8,10 +8,10 @@ No public route. The store is an in-process Rust module (`images::store`) with t
 
 | Function | Args | Returns | Nest origin |
 |---|---|---|---|
-| `download_and_store` | `url: &str`, `kind: ImageType`, `id: IdKey` (`i64` or the `request` string key `movie-603`), `variant: Option<Variant>` | `Option<String>`: `/api/images/...?v=<hash>` or `None` | `downloadAndStore` `[ts:src/modules/images/image.service.ts:135-151]` |
-| `store_from_disk` | `abs_path: &Path`, same | same | `storeFromDisk` `[ts:src/modules/images/image.service.ts:287-303]` |
-| `has_image` | `kind`, `id`, `variant` | `bool` (full file exists) | `hasImage` `[ts:src/modules/images/image.service.ts:477-483]` |
-| `api_path` / `disk_path` | `kind`, `id`, `variant`, `size` | `String` / `PathBuf` | `getApiPath` / `getDiskPath` `[ts:src/modules/images/image.service.ts:424-461]`, `[ts:src/modules/images/image.service.ts:489-513]`; one module shared with `images.md` rule 7 |
+| `ImageStore::download_and_store` | `url: &str`, `t: &Target` (`Target::media(id, variant)`, `Target::request(kind, tmdb_id, variant)`, `person`, `episode`, `season`, `livetv`) | `Option<String>`: `/api/images/...?v=<hash>` or `None` | `downloadAndStore` `[ts:src/modules/images/image.service.ts:135-151]` |
+| `ImageStore::store_from_disk` | `abs: &Path`, `t: &Target` | same | `storeFromDisk` `[ts:src/modules/images/image.service.ts:287-303]` |
+| `ImageStore::has_image` | `t: &Target` | `bool` (full file exists) | `hasImage` `[ts:src/modules/images/image.service.ts:477-483]` |
+| `Target::api_path` / `Target::file` (`disk_path`) | `root`, `size` | `String` / `PathBuf` | `getApiPath` / `getDiskPath` `[ts:src/modules/images/image.service.ts:424-461]`, `[ts:src/modules/images/image.service.ts:489-513]`; one module shared with `images.md` rule 7 |
 
 `ImageType` = `media | person | episode | season | request | user | livetv` `[ts:src/modules/images/image.service.ts:47-55]`; `Variant` = `poster | fanart | fanart-<N≥1> | logo` `[ts:src/modules/images/image.service.ts:56-62]`; `ImageSize` = `thumb | medium | full`. Not ported, no callers outside the module (`grep -rn "deleteImages\|storeAvatar" backend/src` = only `image.service.ts`): `deleteImages` `[ts:src/modules/images/image.service.ts:396-417]`, `storeAvatar` `[ts:src/modules/images/image.service.ts:469-474]` (avatars are `users.md` rules 32-33, Rust since S1).
 

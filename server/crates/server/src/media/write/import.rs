@@ -37,11 +37,21 @@ pub async fn resolve_target(
     library_id: Option<i32>,
 ) -> Result<Target, AppError> {
     let libs = accessible_library_ids(&st.db, a).await?;
+    resolve_target_in(st, &libs, media_type, library_id).await
+}
+
+/// `resolveImportTarget` among `libs` (every library for a request approval, which has no caller ACL).
+pub async fn resolve_target_in(
+    st: &AppState,
+    libs: &[i32],
+    media_type: &str,
+    library_id: Option<i32>,
+) -> Result<Target, AppError> {
     let rows = sqlx::query!(
         r#"SELECT id, name, path, "mediaTypes" AS types, "defaultQualityProfileId" AS dq,
                   "defaultLanguageProfileId" AS dl
            FROM libraries WHERE id = ANY($1) ORDER BY name ASC, id ASC"#,
-        &libs
+        libs
     )
     .fetch_all(&st.db)
     .await?;
@@ -192,8 +202,7 @@ pub async fn import_title(
         }
     });
     if let Some(m) = load_media(&st.db, id).await? {
-        st.seams
-            .lifecycle
+        crate::requests::Lifecycle::of(st)
             .on_media_imported(m.lifecycle_ref(), imp.added_by)
             .await;
     }
@@ -385,6 +394,41 @@ async fn prepare(
         added_by: Some(a.user.id),
         monitored_seasons: seasons,
     })
+}
+
+pub async fn all_library_ids(db: &sqlx::PgPool) -> Result<Vec<i32>, sqlx::Error> {
+    sqlx::query_scalar!(r#"SELECT id AS "id!" FROM libraries ORDER BY id"#)
+        .fetch_all(db)
+        .await
+}
+
+/// `importFromTmdb` for a request approval (rules 11, 25): no caller ACL, the requester is `addedBy`.
+pub async fn import_for_request(
+    st: &AppState,
+    media_type: &str,
+    tmdb_id: i32,
+    profiles: (Option<i32>, Option<i32>),
+    library_id: Option<i32>,
+    added_by: Option<i32>,
+    seasons: Option<Vec<i32>>,
+) -> Result<i32, AppError> {
+    if !st.metadata.available(Provider::Tmdb) {
+        return Err(AppError::bad_request("TMDB API key is not configured"));
+    }
+    duplicate(st, media_type, false, tmdb_id).await?;
+    let all = all_library_ids(&st.db).await?;
+    let target = resolve_target_in(st, &all, media_type, library_id).await?;
+    let imp = Import {
+        media_type: media_type.to_owned(),
+        library_id: target.id,
+        quality_profile_id: resolve_profile(&st.db, false, profiles.0, target.default_quality)
+            .await?,
+        language_profile_id: resolve_profile(&st.db, true, profiles.1, target.default_language)
+            .await?,
+        added_by,
+        monitored_seasons: seasons,
+    };
+    import_title(st, Some("tmdb".into()), tmdb_id.to_string(), imp).await
 }
 
 /// `POST /api/media/import/tmdb` (rules 10-13).

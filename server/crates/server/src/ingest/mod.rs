@@ -84,8 +84,8 @@ impl MediaRow {
         )
     }
 
-    pub fn lifecycle_ref(&self) -> crate::seams::MediaRef {
-        crate::seams::MediaRef {
+    pub fn lifecycle_ref(&self) -> crate::requests::MediaRef {
+        crate::requests::MediaRef {
             id: self.id,
             media_type: self.media_type.clone(),
             tmdb_id: self.tmdb_id,

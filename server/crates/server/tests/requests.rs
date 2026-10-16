@@ -4,14 +4,14 @@ use axum::{Router, body::Body, http::Request};
 use fliks_server::{
     app,
     config::Config,
-    events::{Bus, DomainEvent, Hub},
+    events::{Bus, DomainEvent},
     requests::{Art, Fut, ImportSpec, Lifecycle, MediaRef, PortError, Ports, Removed, TitleFacts},
     state::AppState,
 };
 use serde_json::{Map, Value, json};
 use sqlx::PgPool;
 use std::sync::{
-    Arc, Mutex, OnceLock, Weak,
+    Arc, Mutex,
     atomic::{AtomicUsize, Ordering},
 };
 use tokio::sync::broadcast::Receiver;
@@ -21,9 +21,6 @@ const SECRET: &str = "0123456789abcdef0123456789abcdef";
 
 #[derive(Default)]
 struct Fake {
-    pool: OnceLock<PgPool>,
-    hub: OnceLock<Hub>,
-    me: OnceLock<Weak<Fake>>,
     facts: Mutex<Option<TitleFacts>>,
     facts_calls: AtomicUsize,
     import_err: Mutex<Option<PortError>>,
@@ -34,16 +31,6 @@ struct Fake {
 }
 
 impl Fake {
-    /// Built per call: a stored one would make the fake own itself and keep the pool open.
-    fn lc(&self) -> Lifecycle {
-        let me = self.me.get().unwrap().upgrade().unwrap();
-        Lifecycle::new(
-            self.pool.get().unwrap().clone(),
-            self.hub.get().unwrap().clone(),
-            me,
-        )
-    }
-
     fn notified(&self, event: &str) -> Vec<Value> {
         let all = self.notified.lock().unwrap();
         all.iter()
@@ -61,35 +48,47 @@ fn err(status: u16, message: &str) -> PortError {
 }
 
 impl Ports for Fake {
-    fn title_facts<'a>(&'a self, _: &'a str, _: i32) -> Fut<'a, Result<TitleFacts, String>> {
+    fn title_facts<'a>(
+        &'a self,
+        _: &'a AppState,
+        _: &'a str,
+        _: i32,
+    ) -> Fut<'a, Result<TitleFacts, String>> {
         self.facts_calls.fetch_add(1, Ordering::SeqCst);
         let f = self.facts.lock().unwrap().clone();
         Box::pin(async move { f.ok_or_else(|| "TMDB down".to_owned()) })
     }
-    fn request_art<'a>(&'a self, _: &'a str, _: i32) -> Fut<'a, Result<Art, String>> {
+    fn request_art<'a>(
+        &'a self,
+        _: &'a AppState,
+        _: &'a str,
+        _: i32,
+    ) -> Fut<'a, Result<Art, String>> {
         let a = self.art.lock().unwrap().clone();
         Box::pin(async move { a.ok_or_else(|| "no art".to_owned()) })
     }
     fn assert_import_target<'a>(
         &'a self,
+        _: &'a AppState,
         _: &'a str,
         _: Option<i32>,
     ) -> Fut<'a, Result<(), PortError>> {
         Box::pin(async { Ok(()) })
     }
     /// `importFromTmdb`: 409 for a known title, else a media row and the lifecycle hook.
-    fn import_from_tmdb(
-        &self,
+    fn import_from_tmdb<'a>(
+        &'a self,
+        st: &'a AppState,
         spec: ImportSpec,
         added_by: Option<i32>,
-    ) -> Fut<'_, Result<i32, PortError>> {
+    ) -> Fut<'a, Result<i32, PortError>> {
         self.imports.lock().unwrap().push((spec.clone(), added_by));
         let forced = self.import_err.lock().unwrap().clone();
         Box::pin(async move {
             if let Some(e) = forced {
                 return Err(e);
             }
-            let pool = self.pool.get().unwrap();
+            let pool = &st.db;
             let known: Option<i32> = sqlx::query_scalar(
                 r#"SELECT id FROM media WHERE "tmdbId" = $1 AND type::text = $2"#,
             )
@@ -129,18 +128,22 @@ impl Ports for Fake {
                 tmdb_id: Some(spec.tmdb_id),
                 monitored: false,
             };
-            self.lc().on_media_imported(media, added_by).await;
+            Lifecycle::of(st).on_media_imported(media, added_by).await;
             Ok(id)
         })
     }
     /// `MediaService.remove`: the hook runs in the delete's transaction.
-    fn remove_media(&self, media_id: i32) -> Fut<'_, Result<Removed, PortError>> {
+    fn remove_media<'a>(
+        &'a self,
+        st: &'a AppState,
+        media_id: i32,
+    ) -> Fut<'a, Result<Removed, PortError>> {
         let forced = self.remove_err.lock().unwrap().clone();
         Box::pin(async move {
             if let Some(e) = forced {
                 return Err(e);
             }
-            let pool = self.pool.get().unwrap();
+            let pool = &st.db;
             let (media_type, tmdb_id): (String, Option<i32>) =
                 sqlx::query_as(r#"SELECT type::text, "tmdbId" FROM media WHERE id = $1"#)
                     .bind(media_id)
@@ -154,7 +157,10 @@ impl Ports for Fake {
                 tmdb_id,
                 monitored: true,
             };
-            self.lc().on_media_removed(&mut tx, &media).await.unwrap();
+            Lifecycle::of(st)
+                .on_media_removed(&mut tx, &media)
+                .await
+                .unwrap();
             sqlx::query("DELETE FROM media WHERE id = $1")
                 .bind(media_id)
                 .execute(&mut *tx)
@@ -167,10 +173,14 @@ impl Ports for Fake {
             })
         })
     }
-    fn delete_media_folder<'a>(&'a self, _: &'a str) -> Fut<'a, Result<(), String>> {
+    fn delete_media_folder<'a>(
+        &'a self,
+        _: &'a AppState,
+        _: &'a str,
+    ) -> Fut<'a, Result<(), String>> {
         Box::pin(async { Ok(()) })
     }
-    fn notify(&self, event: &'static str, payload: Map<String, Value>) {
+    fn notify(&self, _: &AppState, event: &'static str, payload: Map<String, Value>) {
         self.notified
             .lock()
             .unwrap()
@@ -199,9 +209,6 @@ async fn ctx(pool: PgPool) -> Ctx {
     let fake = Arc::new(Fake::default());
     let mut st = AppState::new(pool.clone(), Config::from_lookup(|_| None), SECRET);
     st.requests = fake.clone();
-    fake.pool.set(pool.clone()).unwrap();
-    fake.hub.set(st.hub.clone()).ok().unwrap();
-    fake.me.set(Arc::downgrade(&fake)).ok().unwrap();
     for (id, name, types) in [
         (MOVIES, "Movies", r#"["movie"]"#),
         (SERIES, "Series", r#"["series"]"#),

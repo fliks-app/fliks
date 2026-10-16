@@ -20,12 +20,12 @@ pub struct AppState {
     pub debounce: Arc<Debounce>,
     pub stream: Arc<stream::Shared>,
     pub ingest: Arc<crate::ingest::Shared>,
-    pub seams: crate::seams::Seams,
+    pub busy: crate::busy::Busy,
     pub metadata: Arc<Metadata>,
     pub images: Arc<ImageStore>,
     pub system: Arc<system::Shared>,
     pub jobs: Arc<Running>,
-    /// The S5 services the request flows call; the integration replaces `requests::Unwired`.
+    /// The media services the request flows call.
     pub requests: Arc<dyn Ports>,
 }
 
@@ -48,12 +48,12 @@ impl AppState {
             debounce: Arc::default(),
             stream: Arc::default(),
             ingest: Arc::default(),
-            seams: crate::seams::Seams::default(),
+            busy: crate::busy::Busy::default(),
             metadata: Arc::new(Metadata::new(db.clone(), &cfg.metadata)),
             images: Arc::new(ImageStore::new(&cfg.metadata.tmdb_image_url)),
             system: Arc::default(),
             jobs: Arc::default(),
-            requests: Arc::new(crate::requests::Unwired),
+            requests: Arc::new(crate::requests::Services),
             cfg: Arc::new(cfg),
             db,
         }

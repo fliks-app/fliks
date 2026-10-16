@@ -19,7 +19,7 @@ use serde_json::{Value, json};
 use std::{collections::HashMap, path::PathBuf};
 
 /// Rule 70: the folder a media delete may remove, `Err` with the reason it is kept.
-async fn media_dir_to_remove(st: &AppState, m: &MediaRow) -> Result<Option<PathBuf>, String> {
+pub async fn media_dir_to_remove(st: &AppState, m: &MediaRow) -> Result<Option<PathBuf>, String> {
     let (Some(lib), Some(folder)) = (m.library_path.as_deref(), m.folder_name.as_deref()) else {
         return Ok(None);
     };
@@ -75,8 +75,7 @@ pub async fn remove_media(
     .fetch_all(&st.db)
     .await?;
     let mut tx = st.db.begin().await?;
-    st.seams
-        .lifecycle
+    crate::requests::Lifecycle::of(st)
         .on_media_removed(&mut tx, &media.lifecycle_ref())
         .await?;
     sqlx::query!("DELETE FROM media WHERE id = $1", id)

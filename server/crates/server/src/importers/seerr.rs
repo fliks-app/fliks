@@ -46,7 +46,7 @@ pub(super) async fn test(st: &AppState, a: Authed, body: Value) -> Res<Json<Valu
 pub(super) async fn start(st: AppState, a: Authed) -> Res<(StatusCode, Json<Value>)> {
     a.require(Action::Manage, Subject::Settings)?;
     let claim = st
-        .seams
+        .busy
         .seerr
         .claim(())
         .ok_or_else(|| AppError::conflict("Import already running"))?;

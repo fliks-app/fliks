@@ -270,8 +270,7 @@ pub async fn update(
         });
     }
     if let Some(after) = load_media(&st.db, id).await? {
-        st.seams
-            .lifecycle
+        crate::requests::Lifecycle::of(&st)
             .on_media_monitor_change(after.lifecycle_ref(), before.monitored)
             .await;
     }
@@ -616,8 +615,7 @@ pub async fn patch_season(
     tx.commit().await?;
     let now = monitored.unwrap_or(was);
     if let Some(media) = load_media(&st.db, media_id).await? {
-        st.seams
-            .lifecycle
+        crate::requests::Lifecycle::of(&st)
             .on_season_monitor_change(media.lifecycle_ref(), number, was, now)
             .await;
     }

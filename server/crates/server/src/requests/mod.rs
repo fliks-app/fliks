@@ -5,6 +5,7 @@ mod flow;
 mod lifecycle;
 mod routes;
 mod rules;
+mod services;
 #[cfg(test)]
 mod tests;
 
@@ -22,6 +23,7 @@ pub use rules::{
     __path_rule_create, __path_rule_get, __path_rule_list, __path_rule_remove, __path_rule_update,
     rule_create, rule_get, rule_list, rule_remove, rule_update,
 };
+pub use services::Services;
 
 pub type Fut<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
@@ -65,74 +67,50 @@ pub struct Removed {
     pub disk_path: Option<String>,
 }
 
-/// What the request flows need from the S5 services that are not in this module: TMDB and the
-/// image store, `importFromTmdb`, `MediaService.remove` and the notifications.
+/// What the request flows need from the media services: TMDB and the image store, `importFromTmdb`,
+/// `MediaService.remove` and the notifications. `Services` is the real one; tests substitute a fake.
 pub trait Ports: Send + Sync {
     /// TMDB details of a title; an error fails the auto-approval criteria that need them closed.
     fn title_facts<'a>(
         &'a self,
+        st: &'a AppState,
         media_type: &'a str,
         tmdb_id: i32,
     ) -> Fut<'a, Result<TitleFacts, String>>;
     /// Stores the art of a title (`request/<mediaType>-<tmdbId>`) unless already stored; best effort.
-    fn request_art<'a>(&'a self, media_type: &'a str, tmdb_id: i32)
-    -> Fut<'a, Result<Art, String>>;
+    fn request_art<'a>(
+        &'a self,
+        st: &'a AppState,
+        media_type: &'a str,
+        tmdb_id: i32,
+    ) -> Fut<'a, Result<Art, String>>;
     /// `resolveImportTarget`: 400 when the title has no library to land in.
     fn assert_import_target<'a>(
         &'a self,
+        st: &'a AppState,
         media_type: &'a str,
         library_id: Option<i32>,
     ) -> Fut<'a, Result<(), PortError>>;
     /// `importFromTmdb` (it calls `Lifecycle::on_media_imported` itself); answers the media id.
-    fn import_from_tmdb(
-        &self,
+    fn import_from_tmdb<'a>(
+        &'a self,
+        st: &'a AppState,
         spec: ImportSpec,
         added_by: Option<i32>,
-    ) -> Fut<'_, Result<i32, PortError>>;
+    ) -> Fut<'a, Result<i32, PortError>>;
     /// `MediaService.remove` (it calls `Lifecycle::on_media_removed` itself).
-    fn remove_media(&self, media_id: i32) -> Fut<'_, Result<Removed, PortError>>;
-    fn delete_media_folder<'a>(&'a self, path: &'a str) -> Fut<'a, Result<(), String>>;
-    /// `NotificationsService.dispatch`: fire and forget.
-    fn notify(&self, event: &'static str, payload: Map<String, Value>);
-}
-
-/// Until the S5 integration wires the real services: TMDB is not configured.
-pub struct Unwired;
-
-impl Ports for Unwired {
-    fn title_facts<'a>(&'a self, _: &'a str, _: i32) -> Fut<'a, Result<TitleFacts, String>> {
-        Box::pin(async { Err("TMDB API key is not configured".into()) })
-    }
-    fn request_art<'a>(&'a self, _: &'a str, _: i32) -> Fut<'a, Result<Art, String>> {
-        Box::pin(async { Err("TMDB API key is not configured".into()) })
-    }
-    fn assert_import_target<'a>(
+    fn remove_media<'a>(
         &'a self,
-        _: &'a str,
-        _: Option<i32>,
-    ) -> Fut<'a, Result<(), PortError>> {
-        Box::pin(async { Ok(()) })
-    }
-    fn import_from_tmdb(&self, _: ImportSpec, _: Option<i32>) -> Fut<'_, Result<i32, PortError>> {
-        Box::pin(async {
-            Err(PortError {
-                status: 400,
-                message: "TMDB API key is not configured".into(),
-            })
-        })
-    }
-    fn remove_media(&self, _: i32) -> Fut<'_, Result<Removed, PortError>> {
-        Box::pin(async {
-            Err(PortError {
-                status: 503,
-                message: "Media removal is not available".into(),
-            })
-        })
-    }
-    fn delete_media_folder<'a>(&'a self, _: &'a str) -> Fut<'a, Result<(), String>> {
-        Box::pin(async { Ok(()) })
-    }
-    fn notify(&self, _: &'static str, _: Map<String, Value>) {}
+        st: &'a AppState,
+        media_id: i32,
+    ) -> Fut<'a, Result<Removed, PortError>>;
+    fn delete_media_folder<'a>(
+        &'a self,
+        st: &'a AppState,
+        path: &'a str,
+    ) -> Fut<'a, Result<(), String>>;
+    /// `NotificationsService.dispatch`: fire and forget.
+    fn notify(&self, st: &AppState, event: &'static str, payload: Map<String, Value>);
 }
 
 pub fn router() -> Router<AppState> {

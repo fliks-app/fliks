@@ -455,7 +455,7 @@ async fn a_route_run_reports_progress_and_releases_the_season(pool: PgPool) {
         assert!(progress.contains(&m.to_owned()), "{m} in {progress:?}");
     }
     assert!(
-        c.st.seams.marker_seasons.claim(c.season).is_some(),
+        c.st.busy.marker_seasons.claim(c.season).is_some(),
         "released"
     );
     assert_eq!(c.st.hub.activity().list(1, 50).total, 0);
@@ -479,7 +479,7 @@ async fn an_engine_without_the_feature_fails_the_command_and_releases(pool: PgPo
 #[sqlx::test(migrations = false)]
 async fn a_running_season_is_refused(pool: PgPool) {
     let c = ctx(pool, true).await;
-    let _held = c.st.seams.marker_seasons.claim(c.season).unwrap();
+    let _held = c.st.busy.marker_seasons.claim(c.season).unwrap();
     let (s, body) = call(
         &c,
         "POST",

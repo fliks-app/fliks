@@ -1,14 +1,14 @@
 //! The request lifecycle (`requests.md` rules 32-42): what happens to requests when the media side moves.
-use super::{Ports, db};
+use super::db;
 use crate::{
-    events::{Bus, DomainEvent, Hub, SseEvent},
+    events::{Bus, DomainEvent, SseEvent},
     http::AppError,
     profiles,
     state::AppState,
 };
 use serde_json::json;
-use sqlx::{PgConnection, PgPool};
-use std::{collections::HashSet, sync::Arc};
+use sqlx::PgConnection;
+use std::collections::HashSet;
 use tokio::sync::broadcast::error::RecvError;
 
 type Res<T> = Result<T, AppError>;
@@ -25,9 +25,7 @@ pub struct MediaRef {
 /// Handed to the media write side, which calls the hooks as plain calls (rule 42).
 #[derive(Clone)]
 pub struct Lifecycle {
-    db: PgPool,
-    hub: Hub,
-    ports: Arc<dyn Ports>,
+    st: AppState,
 }
 
 fn warn(hook: &str, r: Res<()>) {
@@ -37,12 +35,8 @@ fn warn(hook: &str, r: Res<()>) {
 }
 
 impl Lifecycle {
-    pub fn new(db: PgPool, hub: Hub, ports: Arc<dyn Ports>) -> Self {
-        Self { db, hub, ports }
-    }
-
     pub fn of(st: &AppState) -> Self {
-        Self::new(st.db.clone(), st.hub.clone(), st.requests.clone())
+        Self { st: st.clone() }
     }
 
     /// After the media row is committed, before the import returns.
@@ -90,24 +84,25 @@ impl Lifecycle {
         let Some(tmdb_id) = media.tmdb_id else {
             return Ok(());
         };
-        let open = db::in_flight_by_title(&self.db, tmdb_id, &media.media_type).await?;
-        let Some(row) = db::media_by_id(&self.db, media.id).await? else {
+        let open = db::in_flight_by_title(&self.st.db, tmdb_id, &media.media_type).await?;
+        let Some(row) = db::media_by_id(&self.st.db, media.id).await? else {
             return Ok(());
         };
         let have = (row.quality_profile_id, row.language_profile_id);
         let mut touched = false;
         for r in open {
             let want = (r.quality_profile_id, r.language_profile_id);
-            if !profiles::envelope_covers(&self.db, have, want).await? {
+            if !profiles::envelope_covers(&self.st.db, have, want).await? {
                 continue;
             }
-            db::adopt(&self.db, r.id, media.id, added_by.filter(|u| *u != 0)).await?;
+            db::adopt(&self.st.db, r.id, media.id, added_by.filter(|u| *u != 0)).await?;
             let seasons = r.scope().filter(|_| media.media_type == "series");
-            db::monitor_scope(&self.db, media.id, seasons).await?;
+            db::monitor_scope(&self.st.db, media.id, seasons).await?;
             touched = true;
         }
         if touched {
-            self.hub
+            self.st
+                .hub
                 .emit_domain(DomainEvent::MediaAcquisitionRequested {
                     media_ids: vec![i64::from(media.id)],
                     reason: "media-imported".into(),
@@ -118,15 +113,16 @@ impl Lifecycle {
 
     /// `acquisition.grabbed`: approved requests of the media start processing (rule 37).
     pub async fn mark_in_progress(&self, media_id: i32, season: Option<i32>) -> Res<()> {
-        for r in db::linked(&self.db, media_id, None, &["approved"]).await? {
+        for r in db::linked(&self.st.db, media_id, None, &["approved"]).await? {
             if let Some(s) = season
                 && r.scope()
                     .is_some_and(|scope| !scope.contains(&i64::from(s)))
             {
                 continue;
             }
-            db::set_status(&self.db, r.id, "processing").await?;
-            self.ports.notify(
+            db::set_status(&self.st.db, r.id, "processing").await?;
+            self.st.requests.notify(
+                &self.st,
                 "request.processing",
                 obj(json!({"title": r.title, "mediaType": r.media_type})),
             );
@@ -136,22 +132,22 @@ impl Lifecycle {
 
     /// `import.complete`: requests whose scope is now on disk become available (rule 41).
     pub async fn on_import_complete(&self, media_id: i32) -> Res<()> {
-        let active = db::linked(&self.db, media_id, None, &["approved", "processing"]).await?;
+        let active = db::linked(&self.st.db, media_id, None, &["approved", "processing"]).await?;
         if active.is_empty() {
             return Ok(());
         }
-        let Some(media) = db::media_by_id(&self.db, media_id).await? else {
+        let Some(media) = db::media_by_id(&self.st.db, media_id).await? else {
             return Ok(());
         };
         let eps = if media.media_type == "series" {
-            db::episodes(&self.db, media_id).await?
+            db::episodes(&self.st.db, media_id).await?
         } else {
             vec![]
         };
         let files = if media.media_type == "series" {
             0
         } else {
-            db::file_count(&self.db, media_id).await?
+            db::file_count(&self.st.db, media_id).await?
         };
         for r in active {
             let covered = if media.media_type == "movie" {
@@ -162,8 +158,9 @@ impl Lifecycle {
             if !covered {
                 continue;
             }
-            db::set_status(&self.db, r.id, "available").await?;
-            self.ports.notify(
+            db::set_status(&self.st.db, r.id, "available").await?;
+            self.st.requests.notify(
+                &self.st,
                 "request.available",
                 obj(json!({"title": r.title, "mediaType": r.media_type})),
             );
@@ -173,24 +170,24 @@ impl Lifecycle {
 
     /// Declines the active ADD requests of the media and unlinks it (rules 38, 40).
     async fn decline_linked(&self, media_id: i32, reason: &str) -> Res<()> {
-        for r in db::linked(&self.db, media_id, Some("add"), &db::IN_FLIGHT).await? {
-            db::decline_unlink(&self.db, r.id, reason).await?;
+        for r in db::linked(&self.st.db, media_id, Some("add"), &db::IN_FLIGHT).await? {
+            db::decline_unlink(&self.st.db, r.id, reason).await?;
         }
         Ok(())
     }
 
     /// Rule 39: a request scoped to the season is declined, a wider one loses it.
     async fn season_unmonitored(&self, media_id: i32, season: i64) -> Res<()> {
-        for r in db::linked(&self.db, media_id, None, &db::IN_FLIGHT).await? {
+        for r in db::linked(&self.st.db, media_id, None, &db::IN_FLIGHT).await? {
             let Some(scope) = r.scope().filter(|s| s.contains(&season)) else {
                 continue;
             };
             let rest: Vec<i64> = scope.iter().copied().filter(|n| *n != season).collect();
             if rest.is_empty() {
                 let reason = format!("Season {season} was unmonitored");
-                db::decline_unlink(&self.db, r.id, &reason).await?;
+                db::decline_unlink(&self.st.db, r.id, &reason).await?;
             } else {
-                db::trim_seasons(&self.db, r.id, &rest).await?;
+                db::trim_seasons(&self.st.db, r.id, &rest).await?;
             }
         }
         Ok(())

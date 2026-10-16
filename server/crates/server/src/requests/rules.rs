@@ -105,7 +105,11 @@ pub async fn should_auto_approve(
         .iter()
         .any(|r| reads_metadata(&r.criteria.0, scoped.is_some()))
     {
-        match st.requests.title_facts(&dto.media_type, dto.tmdb_id).await {
+        match st
+            .requests
+            .title_facts(st, &dto.media_type, dto.tmdb_id)
+            .await
+        {
             Ok(f) => Some(f),
             Err(e) => {
                 tracing::warn!(

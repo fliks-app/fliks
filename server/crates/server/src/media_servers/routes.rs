@@ -291,7 +291,7 @@ pub async fn import_watch_history(
         ));
     }
     let claim = st
-        .seams
+        .busy
         .watch_history
         .claim(server.id)
         .ok_or_else(|| AppError::conflict("Import already running"))?;

@@ -45,7 +45,6 @@ No new temporary bridge: each gap below is a Nest caller that loses a function w
 
 | Until | Gap | Spec |
 |---|---|---|
-| S5 (requests) | Request lifecycle hooks (`requests.md` rules 36-42: `on_media_imported`, `on_media_removed`, `on_media_monitor_change`, `on_season_monitor_change`) are the no-op `seams::Unwired` until the requests module is wired: approved requests are not marked available, and a deleted title's request stays | `requests.md`, `media-write.md` |
 | S6 | Subtitle callees reached from S5 code stay in Nest and are skipped: `carryOver` (a superseded file's sidecars stay), `deleteSubtitleFilesOnDisk` (a deleted file leaves its sidecar subtitles), `deleteSubtitle` (companion delete of a tracked subtitle answers 501), `reconcileSubtitleFilesAfterRescan` / `discoverExternalSubtitles` / `embeddedSubtitle.detectAndStore` (rescan leaves subtitle rows stale), `syncSubtitle`, `subtitleScheduler.onMediaFileImported` (no automatic subtitle search after an import) | `ingest.md`, `media-write.md` |
 | S6 | `subtitle.synced`, `subtitle.downloaded`, `subtitle.upgraded` trigger no Emby refresh | `media-servers.md` |
 | S6 | Subtitle scorer: release-name and episode credit score 0 (`parseReleaseAttributes`, `parseSeasonEpisode` stubbed) | `release.md` |
