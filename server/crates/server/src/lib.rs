@@ -18,6 +18,7 @@ pub mod paths;
 pub mod playback;
 pub mod playlists;
 pub mod presence;
+pub mod profiles;
 pub mod qoe;
 pub mod remote;
 pub mod roles;
@@ -57,6 +58,8 @@ pub async fn serve(cfg: Config) -> Result<(), BoxError> {
     let pool = connect(&cfg).await?;
     db::migrate(&pool).await?;
     roles::seed(&pool).await?;
+    profiles::seed_quality_definitions(&pool).await?;
+    profiles::warn_invalid_regexes(&pool).await?;
     users::seed_admin(&pool)
         .await
         .map_err(|e| format!("seed admin: {e:?}"))?;

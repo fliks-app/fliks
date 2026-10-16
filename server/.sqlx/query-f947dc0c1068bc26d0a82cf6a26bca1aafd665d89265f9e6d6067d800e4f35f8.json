@@ -1,0 +1,76 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE quality_profiles SET name = $2, cutoff = $3, items = $4,\n        \"upgradeAllowed\" = COALESCE($5, \"upgradeAllowed\"),\n        \"resolutionUpgradeOnly\" = COALESCE($6, \"resolutionUpgradeOnly\"),\n        \"minCustomFormatScore\" = COALESCE($7, \"minCustomFormatScore\")\n        WHERE id = $1\n        RETURNING id, \"createdAt\" AS created_at, \"updatedAt\" AS updated_at, name, cutoff,\n        items AS \"items: Json<Value>\", \"upgradeAllowed\" AS upgrade_allowed,\n        \"resolutionUpgradeOnly\" AS resolution_upgrade_only,\n        \"minCustomFormatScore\" AS min_custom_format_score",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 2,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 3,
+        "name": "name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "cutoff",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 5,
+        "name": "items: Json<Value>",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 6,
+        "name": "upgrade_allowed",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 7,
+        "name": "resolution_upgrade_only",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 8,
+        "name": "min_custom_format_score",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Varchar",
+        "Int4",
+        "Jsonb",
+        "Bool",
+        "Bool",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "f947dc0c1068bc26d0a82cf6a26bca1aafd665d89265f9e6d6067d800e4f35f8"
+}

@@ -1,0 +1,55 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE custom_formats SET name = $2, score = COALESCE($3, 0), specs = $4 WHERE id = $1\n        RETURNING id, \"createdAt\" AS created_at, \"updatedAt\" AS updated_at, name, score,\n        specs AS \"specs: Json<Value>\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 2,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 3,
+        "name": "name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "score",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 5,
+        "name": "specs: Json<Value>",
+        "type_info": "Jsonb"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Varchar",
+        "Int4",
+        "Jsonb"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "40f878a674ba3ca543c565094f51e492c7d7da68506a59f9da6681d38de98353"
+}

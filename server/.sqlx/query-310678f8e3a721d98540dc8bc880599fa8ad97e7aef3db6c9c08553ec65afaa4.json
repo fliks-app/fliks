@@ -1,0 +1,62 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, \"createdAt\" AS created_at, \"updatedAt\" AS updated_at, \"qualityId\" AS quality_id,\n        title, \"minSize\" AS min_size, \"preferredSize\" AS preferred_size, \"maxSize\" AS max_size\n        FROM quality_definitions ORDER BY \"qualityId\" ASC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 2,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 3,
+        "name": "quality_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 4,
+        "name": "title",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 5,
+        "name": "min_size",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 6,
+        "name": "preferred_size",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 7,
+        "name": "max_size",
+        "type_info": "Float8"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "310678f8e3a721d98540dc8bc880599fa8ad97e7aef3db6c9c08553ec65afaa4"
+}

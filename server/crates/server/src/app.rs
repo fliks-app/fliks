@@ -1,7 +1,7 @@
 use crate::http::{layers, static_files};
 use crate::{
-    auth, events, fs, images, libraries, media, notifications, playback, playlists, qoe, remote,
-    roles, settings, social, state::AppState, system, users,
+    auth, events, fs, images, libraries, media, notifications, playback, playlists, profiles, qoe,
+    remote, roles, settings, social, state::AppState, system, users,
 };
 use axum::{
     Router,
@@ -169,7 +169,27 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         playlists::add_member,
         playlists::remove_member,
         playlists::save,
-        playlists::unsave
+        playlists::unsave,
+        profiles::quality_list,
+        profiles::quality_create,
+        profiles::quality_get,
+        profiles::quality_update,
+        profiles::quality_delete,
+        profiles::language_definitions,
+        profiles::language_list,
+        profiles::language_create,
+        profiles::language_get,
+        profiles::language_update,
+        profiles::language_delete,
+        profiles::format_list,
+        profiles::format_create,
+        profiles::format_test,
+        profiles::format_get,
+        profiles::format_update,
+        profiles::format_delete,
+        profiles::definitions_list,
+        profiles::definitions_reset,
+        profiles::definitions_update
     )
 )]
 pub struct ApiDoc;
@@ -232,6 +252,7 @@ fn api() -> Router<AppState> {
         .merge(notifications::router())
         .merge(social::router())
         .merge(playlists::router())
+        .merge(profiles::router())
 }
 
 async fn preflight_here(State(cors): State<Router>, req: Request, next: Next) -> Response {

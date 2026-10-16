@@ -1,0 +1,54 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO language_profiles (name, \"audioLanguages\", \"subtitleLanguages\")\n        VALUES ($1, $2, $3)\n        RETURNING id, \"createdAt\" AS created_at, \"updatedAt\" AS updated_at, name,\n        \"audioLanguages\" AS \"audio_languages: Json<Value>\",\n        \"subtitleLanguages\" AS \"subtitle_languages: Json<Value>\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 2,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 3,
+        "name": "name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "audio_languages: Json<Value>",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 5,
+        "name": "subtitle_languages: Json<Value>",
+        "type_info": "Jsonb"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Jsonb",
+        "Jsonb"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "7c51bb150b48880b458874455d36d2726f4e8e62cca8c43a308236a620d8a681"
+}
