@@ -1,0 +1,127 @@
+//! `Media` entities as JSON (`media-query.md` rules 30-32): built in SQL, absolute paths added or removed in Rust (F22).
+use fliks_domain::media::path::media_path;
+use serde_json::Value;
+use sqlx::PgPool;
+use std::collections::HashMap;
+
+/// `MLI` for `ids`, in that order; `sizeOnDisk` and `episodeStats` included, `watched`/`progressPercent` not.
+pub async fn items(db: &PgPool, ids: &[i32], see_paths: bool) -> Result<Vec<Value>, sqlx::Error> {
+    let rows = sqlx::query!(
+        r#"SELECT media.id AS "id!", l.path AS lib_path, media."folderName" AS folder_name,
+  (jsonb_build_object(
+    'id', media.id, 'createdAt', iso_ms(media."createdAt"), 'updatedAt', iso_ms(media."updatedAt"),
+    'title', media.title, 'originalTitle', media."originalTitle", 'alternativeTitles', media."alternativeTitles",
+    'year', media.year, 'type', media.type::text, 'tmdbId', media."tmdbId", 'imdbId', media."imdbId",
+    'tvdbId', media."tvdbId", 'overview', media.overview, 'status', media.status::text,
+    'monitored', media.monitored, 'preferredProvider', media."preferredProvider", 'folderName', media."folderName",
+    'posterUrl', media."posterUrl", 'fanartUrl', media."fanartUrl", 'logoUrl', media."logoUrl")
+  || jsonb_build_object(
+    'additionalFanartUrls', to_jsonb(media."additionalFanartUrls"),
+    'metadataRefreshedAt', iso_ms(media."metadataRefreshedAt"), 'rating', media.rating, 'genres', media.genres,
+    'tmdbCollectionId', media."tmdbCollectionId", 'tmdbCollectionName', media."tmdbCollectionName",
+    'runtime', media.runtime, 'releaseDate', media."releaseDate", 'inCinemas', media."inCinemas",
+    'digitalRelease', media."digitalRelease", 'physicalRelease', media."physicalRelease",
+    'minimumAvailability', media."minimumAvailability")
+  || jsonb_build_object(
+    'libraryId', media."libraryId", 'qualityProfileId', media."qualityProfileId",
+    'languageProfileId', media."languageProfileId", 'addedById', media."addedById")
+  || jsonb_build_object(
+    'library', CASE WHEN l.id IS NULL THEN 'null'::jsonb ELSE
+      jsonb_build_object('id', l.id, 'createdAt', iso_ms(l."createdAt"), 'updatedAt', iso_ms(l."updatedAt"),
+        'name', l.name, 'icon', l.icon, 'color', l.color, 'mediaTypes', l."mediaTypes",
+        'preferredProvider', l."preferredProvider", 'path', l.path, 'label', l.label,
+        'metadataLanguage', l."metadataLanguage", 'metadataRegion', l."metadataRegion",
+        'defaultQualityProfileId', l."defaultQualityProfileId", 'defaultLanguageProfileId', l."defaultLanguageProfileId") END,
+    'qualityProfile', CASE WHEN qp.id IS NULL THEN 'null'::jsonb ELSE
+      jsonb_build_object('id', qp.id, 'createdAt', iso_ms(qp."createdAt"), 'updatedAt', iso_ms(qp."updatedAt"),
+        'name', qp.name, 'cutoff', qp.cutoff, 'items', qp.items, 'upgradeAllowed', qp."upgradeAllowed",
+        'resolutionUpgradeOnly', qp."resolutionUpgradeOnly", 'minCustomFormatScore', qp."minCustomFormatScore") END,
+    'languageProfile', CASE WHEN lp.id IS NULL THEN 'null'::jsonb ELSE
+      jsonb_build_object('id', lp.id, 'createdAt', iso_ms(lp."createdAt"), 'updatedAt', iso_ms(lp."updatedAt"),
+        'name', lp.name, 'audioLanguages', lp."audioLanguages", 'subtitleLanguages', lp."subtitleLanguages") END,
+    'files', COALESCE((SELECT jsonb_agg(
+        jsonb_build_object('id', f.id, 'createdAt', iso_ms(f."createdAt"), 'updatedAt', iso_ms(f."updatedAt"),
+          'relativePath', f."relativePath", 'size', f.size, 'quality', f.quality, 'language', f.language,
+          'streamInfo', f."streamInfo", 'osdbHash', f."osdbHash", 'osdbBytesize', f."osdbBytesize",
+          'mediaId', f."mediaId", 'episodeId', f."episodeId") ORDER BY f.id)
+      FROM media_files f WHERE f."mediaId" = media.id), '[]'::jsonb),
+    'sizeOnDisk', COALESCE((SELECT SUM(f.size) FROM media_files f WHERE f."mediaId" = media.id), 0))
+  || CASE WHEN media.type = 'series' AND st.total > 0 THEN
+       jsonb_build_object('episodeStats', jsonb_build_object('totalEpisodes', st.total, 'downloadedEpisodes', st.downloaded))
+     ELSE '{}'::jsonb END) AS "json!: Value"
+FROM media
+LEFT JOIN libraries l ON l.id = media."libraryId"
+LEFT JOIN quality_profiles qp ON qp.id = media."qualityProfileId"
+LEFT JOIN language_profiles lp ON lp.id = media."languageProfileId"
+LEFT JOIN LATERAL (
+  SELECT COUNT(e.id) AS total,
+         COUNT(e.id) FILTER (WHERE (e."hasFile" = true OR EXISTS (
+           SELECT 1 FROM episodes cov WHERE cov."seasonId" = e."seasonId" AND cov."hasFile" = true
+             AND cov."endEpisodeNumber" IS NOT NULL AND e."episodeNumber" > cov."episodeNumber"
+             AND e."episodeNumber" <= cov."endEpisodeNumber"))) AS downloaded
+  FROM seasons s JOIN episodes e ON e."seasonId" = s.id
+  WHERE s."mediaId" = media.id AND s."seasonNumber" > 0) st ON media.type = 'series'
+WHERE media.id = ANY($1)"#,
+        ids
+    )
+    .fetch_all(db)
+    .await?;
+    let mut by_id: HashMap<i32, _> = rows.into_iter().map(|r| (r.id, r)).collect();
+    Ok(ids
+        .iter()
+        .filter_map(|id| by_id.remove(id))
+        .map(|r| {
+            let mut v = r.json;
+            let Some(obj) = v.as_object_mut() else {
+                return v;
+            };
+            if see_paths {
+                let path = media_path(r.lib_path.as_deref(), r.folder_name.as_deref());
+                obj.insert("path".into(), path.into());
+            } else if let Some(lib) = obj.get_mut("library").and_then(Value::as_object_mut) {
+                lib.remove("path");
+            }
+            v
+        })
+        .collect())
+}
+
+/// `MD`: the `MLI` shape without the derived fields, plus seasons (specials last) and metadata.
+pub async fn detail(db: &PgPool, id: i32, see_paths: bool) -> Result<Option<Value>, sqlx::Error> {
+    let Some(mut media) = items(db, &[id], see_paths).await?.pop() else {
+        return Ok(None);
+    };
+    let extra = sqlx::query!(
+        r#"SELECT
+  COALESCE((SELECT jsonb_agg(
+      jsonb_build_object('id', s.id, 'createdAt', iso_ms(s."createdAt"), 'updatedAt', iso_ms(s."updatedAt"),
+        'seasonNumber', s."seasonNumber", 'monitored', s.monitored, 'preferredProvider', s."preferredProvider",
+        'posterUrl', s."posterUrl", 'overview', s.overview, 'airDate', s."airDate", 'mediaId', s."mediaId",
+        'episodes', COALESCE((SELECT jsonb_agg(
+            jsonb_build_object('id', e.id, 'createdAt', iso_ms(e."createdAt"), 'updatedAt', iso_ms(e."updatedAt"),
+              'episodeNumber', e."episodeNumber", 'endEpisodeNumber', e."endEpisodeNumber", 'title', e.title,
+              'overview', e.overview, 'airDate', e."airDate", 'runtime', e.runtime, 'monitored', e.monitored,
+              'hasFile', (e."hasFile" OR EXISTS (SELECT 1 FROM media_files f WHERE f."mediaId" = $1 AND f."episodeId" = e.id)),
+              'stillUrl', e."stillUrl", 'markersScannedAt', iso_ms(e."markersScannedAt"), 'seasonId', e."seasonId")
+            ORDER BY e."episodeNumber", e.id)
+          FROM episodes e WHERE e."seasonId" = s.id), '[]'::jsonb))
+      ORDER BY (s."seasonNumber" = 0), s."seasonNumber", s.id)
+    FROM seasons s WHERE s."mediaId" = $1), '[]'::jsonb) AS "seasons!: Value",
+  (SELECT jsonb_build_object('id', mm.id, 'createdAt', iso_ms(mm."createdAt"), 'updatedAt', iso_ms(mm."updatedAt"),
+      'budget', mm.budget::text, 'revenue', mm.revenue::text, 'tagline', mm.tagline, 'popularity', mm.popularity,
+      'voteCount', mm."voteCount", 'originalLanguage', mm."originalLanguage",
+      'productionCountries', mm."productionCountries", 'productionCompanies', mm."productionCompanies",
+      'videos', mm.videos, 'keywords', mm.keywords)
+    FROM media_metadata mm WHERE mm."mediaId" = $1) AS "metadata: Value""#,
+        id
+    )
+    .fetch_one(db)
+    .await?;
+    if let Some(obj) = media.as_object_mut() {
+        obj.remove("sizeOnDisk");
+        obj.remove("episodeStats");
+        obj.insert("seasons".into(), extra.seasons);
+        obj.insert("metadata".into(), extra.metadata.unwrap_or(Value::Null));
+    }
+    Ok(Some(media))
+}

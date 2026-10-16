@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT jsonb_build_object('id', mc.id, 'createdAt', iso_ms(mc.\"createdAt\"), 'updatedAt', iso_ms(mc.\"updatedAt\"),\n  'job', mc.job, 'department', mc.department,\n  'person', jsonb_build_object('id', p.id, 'createdAt', iso_ms(p.\"createdAt\"), 'updatedAt', iso_ms(p.\"updatedAt\"),\n    'provider', p.provider, 'tmdbId', p.\"tmdbId\", 'name', p.name, 'avatarUrl', p.\"avatarUrl\", 'biography', p.biography,\n    'birthday', p.birthday, 'deathday', p.deathday, 'placeOfBirth', p.\"placeOfBirth\",\n    'knownForDepartment', p.\"knownForDepartment\", 'departments', p.departments,\n    'metadataRefreshedAt', iso_ms(p.\"metadataRefreshedAt\"))) AS \"json!: Value\"\nFROM media_crew mc JOIN persons p ON p.id = mc.\"personId\" WHERE mc.\"mediaId\" = $1 ORDER BY mc.id ASC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "json!: Value",
+        "type_info": "Jsonb"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "c0a03ef26728c728985424a73f4b081478a5fd9b13c5e5ed8a9ed264075235f0"
+}

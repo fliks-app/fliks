@@ -11,6 +11,7 @@ pub mod http;
 pub mod images;
 pub mod jwt_secret;
 pub mod libraries;
+pub mod media;
 pub mod nest;
 pub mod paths;
 pub mod playback;

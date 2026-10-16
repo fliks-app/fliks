@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT m.type::text AS \"kind!\", m.monitored, qp.id AS \"profile_id?\", qp.cutoff AS \"cutoff?\"\n           FROM media m LEFT JOIN quality_profiles qp ON qp.id = m.\"qualityProfileId\" WHERE m.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "kind!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "monitored",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 2,
+        "name": "profile_id?",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "cutoff?",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      null,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "a40cb30c6fc55835df8f260d75f9ee8afe0176a2694899b36c5620e367edf013"
+}

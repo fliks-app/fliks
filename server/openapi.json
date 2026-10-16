@@ -341,6 +341,201 @@
         }
       }
     },
+    "/api/media": {
+      "get": {
+        "tags": [
+          "media"
+        ],
+        "operationId": "find",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/media/calendar": {
+      "get": {
+        "tags": [
+          "media"
+        ],
+        "operationId": "calendar_entries",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/media/collections": {
+      "get": {
+        "tags": [
+          "media"
+        ],
+        "operationId": "collection_list",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/media/counts": {
+      "get": {
+        "tags": [
+          "media"
+        ],
+        "operationId": "count",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/media/counts-by-library": {
+      "get": {
+        "tags": [
+          "media"
+        ],
+        "operationId": "count_by_library",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/media/genres": {
+      "get": {
+        "tags": [
+          "media"
+        ],
+        "operationId": "genre_list",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/media/qualities": {
+      "get": {
+        "tags": [
+          "media"
+        ],
+        "operationId": "quality_table",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/media/recently-added": {
+      "get": {
+        "tags": [
+          "media"
+        ],
+        "operationId": "recent",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/media/{id}": {
+      "get": {
+        "tags": [
+          "media"
+        ],
+        "operationId": "get_media",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/media/{id}/cast": {
+      "get": {
+        "tags": [
+          "media"
+        ],
+        "operationId": "media_cast",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/media/{id}/collection": {
+      "get": {
+        "tags": [
+          "media"
+        ],
+        "operationId": "media_collection",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/media/{id}/crew": {
+      "get": {
+        "tags": [
+          "media"
+        ],
+        "operationId": "media_crew",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/media/{id}/similar": {
+      "get": {
+        "tags": [
+          "media"
+        ],
+        "operationId": "similar_media",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/media/{id}/streams/{mediaFileId}": {
+      "get": {
+        "tags": [
+          "media"
+        ],
+        "operationId": "media_streams",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/media/{id}/tracking": {
+      "get": {
+        "tags": [
+          "media"
+        ],
+        "operationId": "track",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/playback/continue-watching": {
       "get": {
         "tags": [

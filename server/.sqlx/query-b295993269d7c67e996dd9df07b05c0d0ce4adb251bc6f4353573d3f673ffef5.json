@@ -1,0 +1,75 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT m.id AS \"id!\", m.title AS \"title!\", m.year, m.\"posterUrl\" AS poster_url, m.\"fanartUrl\" AS fanart_url,\n       m.rating, m.genres, meta.keywords AS \"keywords?\",\n       EXISTS (SELECT 1 FROM media_files f WHERE f.\"mediaId\" = m.id) AS \"has_file!\"\nFROM media m LEFT JOIN media_metadata meta ON meta.\"mediaId\" = m.id\nWHERE m.\"libraryId\" = $1 AND m.type = 'movie' AND m.id != $2\n  AND ((cardinality($3::text[]) > 0 AND jsonb_exists_any(m.genres, $3))\n       OR (cardinality($4::text[]) > 0 AND jsonb_exists_any(meta.keywords, $4))\n       OR m.id = ANY($5))\n  AND ($6::int IS NULL OR m.\"tmdbCollectionId\" IS NULL OR m.\"tmdbCollectionId\" != $6)\nORDER BY m.id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "title!",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "year",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "poster_url",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "fanart_url",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 5,
+        "name": "rating",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 6,
+        "name": "genres",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 7,
+        "name": "keywords?",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 8,
+        "name": "has_file!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "TextArray",
+        "TextArray",
+        "Int4Array",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      null
+    ]
+  },
+  "hash": "b295993269d7c67e996dd9df07b05c0d0ce4adb251bc6f4353573d3f673ffef5"
+}
