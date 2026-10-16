@@ -72,8 +72,13 @@ pub async fn stats(
             return Err(user_not_found(target));
         }
     }
-    user_stats(&st.db, target)
+    let mut stats = user_stats(&st.db, target)
         .await?
-        .map(Json)
-        .ok_or_else(|| user_not_found(target))
+        .ok_or_else(|| user_not_found(target))?;
+    if a.user.id != target {
+        stats["activity"]
+            .as_object_mut()
+            .map(|m| m.remove("lastActiveAt"));
+    }
+    Ok(Json(stats))
 }

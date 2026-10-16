@@ -354,3 +354,20 @@ async fn opted_out_and_disabled_members_leave_every_social_list(pool: PgPool) {
         ["d"]
     );
 }
+
+#[sqlx::test(migrations = false)]
+async fn stats_hide_last_login_from_other_viewers(pool: PgPool) {
+    let c = ctx(pool).await;
+    c.sql(r#"UPDATE users SET "shareStats" = true, "profileVisibility" = 'public', "lastLogin" = now() WHERE id = 3"#).await;
+    let (s, other) = c
+        .call(1, "GET", "/api/social/users/3/stats", json!({}))
+        .await;
+    assert_eq!(s, 200);
+    assert!(other["activity"].get("lastActiveAt").is_none());
+    assert!(other["activity"]["memberSince"].is_string());
+    assert_eq!(other["requests"]["pending"], 0);
+    let (_, own) = c
+        .call(2, "GET", "/api/social/users/3/stats", json!({}))
+        .await;
+    assert!(own["activity"]["lastActiveAt"].is_string());
+}

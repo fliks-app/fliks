@@ -51,6 +51,7 @@ Decided behaviour for the Rust port (security fixes F, correctness fixes C; D3).
 | F30 | Discord payloads allowed `@everyone`/role/user mentions from request titles | Discord body adds `allowed_mentions: {parse: []}` | none |
 | F32 | `POST /api/likes` and `POST /api/social/recommend` accepted a season/episode of another media and media outside the caller's libraries (201) | 404 `Media\|Season\|Episode #<id> not found`, as for unknown ids (user decision 2026-10-16) | none |
 | F33 | `social/requests`, the recommendation cards and the follow lists listed opted-out (`shareDisabled`) and disabled members | they are omitted from every social list (the F23 filter, one predicate; `social.md` rule 57; user decision 2026-10-16) | none |
+| F34 | `GET /api/social/users/:id/stats` returned the target's last login (`activity.lastActiveAt`) to any viewer allowed by `shareStats` | `lastActiveAt` omitted for a non-self viewer; request counts stay under `shareStats` (`social.md` rule 58; user decision 2026-10-16) | none: the profile Statistics tab does not read it |
 
 Not done (user decision 2026-10-15): login rate limiting/lockout.
 
