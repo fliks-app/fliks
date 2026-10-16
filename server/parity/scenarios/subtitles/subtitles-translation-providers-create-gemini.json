@@ -1,0 +1,43 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..date",
+    "$..queuedAt"
+  ],
+  "name": "subtitles-translation-providers-create-gemini",
+  "seed": "subtitles",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "engine": "gemini",
+        "name": "G2",
+        "settings": {
+          "apiKey": "k2",
+          "model": "gemini-x"
+        }
+      },
+      "expect": {
+        "body": {
+          "enabled": true,
+          "engine": "gemini",
+          "id": 4,
+          "isDefault": false,
+          "name": "G2",
+          "settings": {
+            "model": "gemini-x",
+            "secretsSet": [
+              "apiKey"
+            ]
+          }
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/subtitles/translation-providers"
+    }
+  ],
+  "strictMessage": true
+}

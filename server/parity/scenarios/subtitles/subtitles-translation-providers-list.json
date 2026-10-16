@@ -1,0 +1,87 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..date",
+    "$..queuedAt"
+  ],
+  "name": "subtitles-translation-providers-list",
+  "seed": "subtitles",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "enabled": true,
+            "engine": "gemini",
+            "id": 1,
+            "isDefault": true,
+            "name": "Gemini",
+            "settings": {
+              "model": "gemini-3.5-flash-lite",
+              "secretsSet": [
+                "apiKey"
+              ]
+            }
+          },
+          {
+            "enabled": false,
+            "engine": "libretranslate",
+            "id": 3,
+            "isDefault": false,
+            "name": "Libre",
+            "settings": {
+              "secretsSet": [],
+              "url": "http://127.0.0.1:1"
+            }
+          },
+          {
+            "enabled": true,
+            "engine": "openai",
+            "id": 2,
+            "isDefault": false,
+            "name": "Local",
+            "settings": {
+              "baseUrl": "http://127.0.0.1:1/v1",
+              "model": "m",
+              "secretsSet": [
+                "apiKey"
+              ]
+            }
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/subtitles/translation-providers"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "GET",
+      "path": "/api/subtitles/translation-providers"
+    },
+    {
+      "as": "anon",
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "GET",
+      "path": "/api/subtitles/translation-providers"
+    }
+  ],
+  "strictMessage": true
+}

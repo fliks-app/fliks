@@ -479,7 +479,7 @@ async fn upgrade_batch(st: &AppState, rows: &[Row], opts: &Opts) -> Result<(), S
             let Some(better) = better else {
                 return Ok::<Option<(String, f64)>, AppError>(None);
             };
-            let up = service::upgrade(st, sub.id, &better.candidate).await?;
+            let up = service::upgrade(st, sub.id, Some(&better.candidate)).await?;
             if opts.auto_sync {
                 sync::do_sync(
                     st,

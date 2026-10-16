@@ -1,0 +1,97 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..date",
+    "$..queuedAt"
+  ],
+  "name": "subtitles-translation-providers-test-connection-missing-key",
+  "seed": "subtitles",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "engine": "gemini",
+        "settings": {}
+      },
+      "expect": {
+        "body": {
+          "error": "Gemini API key is not set",
+          "ok": false
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/subtitles/translation-providers/test-connection"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "engine": "openai",
+        "settings": {
+          "model": "m"
+        }
+      },
+      "expect": {
+        "body": {
+          "error": "An OpenAI-compatible base URL and model are required",
+          "ok": false
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/subtitles/translation-providers/test-connection"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "engine": "libretranslate"
+      },
+      "expect": {
+        "body": {
+          "error": "The LibreTranslate URL is not set",
+          "ok": false
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/subtitles/translation-providers/test-connection"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "engine": "x"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "engine must be one of the following values: gemini, openai, libretranslate"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/subtitles/translation-providers/test-connection"
+    },
+    {
+      "as": "user",
+      "body": {
+        "engine": "gemini"
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "POST",
+      "path": "/api/subtitles/translation-providers/test-connection"
+    }
+  ],
+  "strictMessage": true
+}

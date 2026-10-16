@@ -1,0 +1,101 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..date",
+    "$..queuedAt"
+  ],
+  "name": "subtitles-media-set-language",
+  "seed": "subtitles",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "language": "fre"
+      },
+      "expect": {
+        "body": {
+          "codec": "subrip",
+          "episodeId": null,
+          "errorMessage": null,
+          "forced": false,
+          "hashMatched": false,
+          "hearingImpaired": true,
+          "id": 4,
+          "language": "fr",
+          "locked": false,
+          "mediaFileId": 1,
+          "mediaId": 1,
+          "providerFileId": "99",
+          "providerType": "opensubtitles",
+          "relativePath": "Parity Movie 01 (2020).en.hi.srt",
+          "score": 55,
+          "sourceStreamIndex": null,
+          "status": "downloaded",
+          "streamIndex": null,
+          "syncFailed": false,
+          "syncOffset": null,
+          "synced": false,
+          "tags": [],
+          "translationEngine": null,
+          "translationModel": null,
+          "translationProviderId": null,
+          "translationProviderName": null
+        },
+        "status": 200
+      },
+      "method": "PATCH",
+      "path": "/api/media/1/subtitles/4/language"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "language": "  "
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Language is required",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PATCH",
+      "path": "/api/media/1/subtitles/4/language"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "language": "en"
+      },
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Subtitle #999 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "PATCH",
+      "path": "/api/media/1/subtitles/999/language"
+    },
+    {
+      "as": "user",
+      "body": {
+        "language": "en"
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "PATCH",
+      "path": "/api/media/1/subtitles/4/language"
+    }
+  ],
+  "strictMessage": true
+}

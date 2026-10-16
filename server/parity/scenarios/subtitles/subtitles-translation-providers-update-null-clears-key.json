@@ -1,0 +1,39 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..date",
+    "$..queuedAt"
+  ],
+  "name": "subtitles-translation-providers-update-null-clears-key",
+  "seed": "subtitles",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "settings": {
+          "apiKey": null,
+          "model": "m"
+        }
+      },
+      "expect": {
+        "body": {
+          "enabled": true,
+          "engine": "gemini",
+          "id": 1,
+          "isDefault": true,
+          "name": "Gemini",
+          "settings": {
+            "model": "m",
+            "secretsSet": []
+          }
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/subtitles/translation-providers/1"
+    }
+  ],
+  "strictMessage": true
+}

@@ -1,0 +1,52 @@
+{
+  "deviation": [
+    "F51"
+  ],
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..date",
+    "$..queuedAt",
+    "$.id"
+  ],
+  "name": "subtitles-deviation-f51-health-and-provider-test",
+  "seed": "subtitles",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "GET",
+      "path": "/api/subtitles/health"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "POST",
+      "path": "/api/subtitles/providers/1/test"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/subtitles/health"
+    }
+  ],
+  "strictMessage": true
+}

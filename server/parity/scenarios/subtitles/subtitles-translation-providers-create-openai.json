@@ -1,0 +1,43 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..date",
+    "$..queuedAt"
+  ],
+  "name": "subtitles-translation-providers-create-openai",
+  "seed": "subtitles",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "enabled": false,
+        "engine": "openai",
+        "name": "O2",
+        "settings": {
+          "baseUrl": "http://127.0.0.1:1/v1",
+          "model": "m"
+        }
+      },
+      "expect": {
+        "body": {
+          "enabled": false,
+          "engine": "openai",
+          "id": 4,
+          "isDefault": false,
+          "name": "O2",
+          "settings": {
+            "baseUrl": "http://127.0.0.1:1/v1",
+            "model": "m",
+            "secretsSet": []
+          }
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/subtitles/translation-providers"
+    }
+  ],
+  "strictMessage": true
+}

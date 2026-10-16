@@ -1,0 +1,56 @@
+{
+  "deviation": [
+    "F57"
+  ],
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..date",
+    "$..queuedAt",
+    "$.id"
+  ],
+  "name": "subtitles-deviation-f57-translation-url-scheme",
+  "seed": "subtitles",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "engine": "openai",
+        "name": "F",
+        "settings": {
+          "baseUrl": "file:///etc",
+          "model": "m"
+        }
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "The OpenAI-compatible base URL must be an http(s) URL",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/subtitles/translation-providers"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "engine": "libretranslate",
+        "settings": {
+          "url": "gopher://x"
+        }
+      },
+      "expect": {
+        "body": {
+          "error": "The LibreTranslate URL must be an http(s) URL",
+          "ok": false
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/subtitles/translation-providers/test-connection"
+    }
+  ],
+  "strictMessage": true
+}

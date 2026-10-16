@@ -1,0 +1,60 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..date",
+    "$..queuedAt"
+  ],
+  "name": "subtitles-media-search-missing-unknown-file",
+  "seed": "subtitles",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "mediaFileId": 9999
+      },
+      "expect": {
+        "body": {
+          "downloaded": []
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/media/1/subtitles/search-missing"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "mediaFileId": 1
+      },
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Media #9999 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "POST",
+      "path": "/api/media/9999/subtitles/search-missing"
+    },
+    {
+      "as": "user",
+      "body": {
+        "mediaFileId": 1
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "POST",
+      "path": "/api/media/1/subtitles/search-missing"
+    }
+  ],
+  "strictMessage": true
+}

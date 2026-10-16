@@ -1,0 +1,144 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..date",
+    "$..queuedAt"
+  ],
+  "name": "subtitles-media-translate-validation",
+  "seed": "subtitles",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "targetLanguage": "fr"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "errors.translation_disabled",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/media/1/subtitles/4/translate"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "value": "true"
+      },
+      "expect": {
+        "body": {
+          "id": 4,
+          "key": "subtitle_translation_enabled",
+          "value": "true"
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/settings/subtitle_translation_enabled"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "targetLanguage": "en"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "errors.source_target_language_same",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/media/1/subtitles/4/translate"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "targetLanguage": ""
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "errors.target_language_required",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/media/1/subtitles/4/translate"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "targetLanguage": "fr"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "errors.subtitle_needs_ocr",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/media/1/subtitles/2/translate"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "providerId": 3,
+        "targetLanguage": "fr"
+      },
+      "expect": {
+        "body": {
+          "error": "Conflict",
+          "message": "errors.translation_provider_disabled",
+          "statusCode": 409
+        },
+        "status": 409
+      },
+      "method": "POST",
+      "path": "/api/media/1/subtitles/4/translate"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "providerId": 999,
+        "targetLanguage": "fr"
+      },
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "TranslationProvider #999 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "POST",
+      "path": "/api/media/1/subtitles/4/translate"
+    },
+    {
+      "as": "user",
+      "body": {
+        "targetLanguage": "fr"
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "POST",
+      "path": "/api/media/1/subtitles/4/translate"
+    }
+  ],
+  "strictMessage": true
+}

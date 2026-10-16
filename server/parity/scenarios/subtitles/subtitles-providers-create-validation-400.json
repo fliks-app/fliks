@@ -1,0 +1,88 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..date",
+    "$..queuedAt"
+  ],
+  "name": "subtitles-providers-create-validation-400",
+  "seed": "subtitles",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "name": "x",
+        "type": "nope"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "type must be one of the following values: opensubtitles, subscene, sous_titres_eu, subdl, subsynchro, supersubtitles, whisper, yify, gestdown, embedded, radarr, sonarr, disk, ocr, translated"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/subtitles/providers"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "name": "x",
+        "priority": -1,
+        "type": "yify"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "priority must not be less than 0"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/subtitles/providers"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "type": "yify"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "name must be a string"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/subtitles/providers"
+    },
+    {
+      "as": "user",
+      "body": {
+        "name": "x",
+        "type": "yify"
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "POST",
+      "path": "/api/subtitles/providers"
+    }
+  ],
+  "strictMessage": true
+}

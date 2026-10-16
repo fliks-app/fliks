@@ -1,0 +1,62 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..date",
+    "$..queuedAt"
+  ],
+  "name": "subtitles-translation-providers-available-subtitles-manage",
+  "seed": "subtitles",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "engine": "gemini",
+            "id": 1,
+            "isDefault": true,
+            "name": "Gemini"
+          },
+          {
+            "engine": "openai",
+            "id": 2,
+            "isDefault": false,
+            "name": "Local"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/subtitles/translation-providers/available"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "GET",
+      "path": "/api/subtitles/translation-providers/available"
+    },
+    {
+      "as": "readonly",
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "GET",
+      "path": "/api/subtitles/translation-providers/available"
+    }
+  ],
+  "strictMessage": true
+}

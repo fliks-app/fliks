@@ -1,0 +1,69 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..date",
+    "$..queuedAt"
+  ],
+  "name": "subtitles-providers-create-opensubtitles",
+  "seed": "subtitles",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "enabled": false,
+        "name": "OS2",
+        "priority": 3,
+        "settings": {
+          "apiKey": "k",
+          "password": "p",
+          "username": "x"
+        },
+        "type": "opensubtitles"
+      },
+      "expect": {
+        "body": {
+          "enabled": false,
+          "id": 4,
+          "name": "OS2",
+          "priority": 3,
+          "settings": {
+            "secretsSet": [
+              "password",
+              "apiKey"
+            ],
+            "username": "x"
+          },
+          "type": "opensubtitles"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/subtitles/providers"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "name": "Y2",
+        "type": "yify"
+      },
+      "expect": {
+        "body": {
+          "enabled": true,
+          "id": 5,
+          "name": "Y2",
+          "priority": 25,
+          "settings": {
+            "secretsSet": []
+          },
+          "type": "yify"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/subtitles/providers"
+    }
+  ],
+  "strictMessage": true
+}

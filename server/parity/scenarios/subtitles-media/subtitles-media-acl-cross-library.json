@@ -1,0 +1,56 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..date",
+    "$..queuedAt"
+  ],
+  "name": "subtitles-media-acl-cross-library",
+  "seed": "subtitles",
+  "steps": [
+    {
+      "as": "readonly",
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Media #18 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "GET",
+      "path": "/api/media/18/subtitles"
+    },
+    {
+      "as": "readonly",
+      "body": {
+        "mediaFileId": 1
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "POST",
+      "path": "/api/media/18/subtitles/search-missing"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Media #9999 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "GET",
+      "path": "/api/media/9999/subtitles"
+    }
+  ],
+  "strictMessage": true
+}

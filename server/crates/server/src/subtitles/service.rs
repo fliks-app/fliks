@@ -278,7 +278,7 @@ pub async fn download(
 }
 
 /// `upgradeSubtitle` (rule 17): the replacement is saved before the old file and row go.
-pub async fn upgrade(st: &AppState, id: i32, c: &Candidate) -> Result<Saved, AppError> {
+pub async fn upgrade(st: &AppState, id: i32, c: Option<&Candidate>) -> Result<Saved, AppError> {
     let old = model::by_id(&st.db, id)
         .await?
         .ok_or_else(|| AppError::not_found(format!("SubtitleFile #{id} not found")))?;
@@ -294,6 +294,8 @@ pub async fn upgrade(st: &AppState, id: i32, c: &Candidate) -> Result<Saved, App
         old.media_file_id
             .ok_or_else(|| AppError::not_found("MediaFile #0 not found"))?,
     );
+    // A missing `searchResult` is 400 only after the row checks, as Nest reached them first.
+    let c = c.ok_or_else(|| AppError::bad_request("searchResult should not be empty"))?;
     let mut saved = download(st, media_id, file_id, old.episode_id, c).await?;
     sqlx::query(
         "UPDATE subtitle_files SET status = 'upgraded', locked = $2, tags = $3 WHERE id = $1",

@@ -1,0 +1,66 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..date",
+    "$..queuedAt"
+  ],
+  "name": "subtitles-translation-providers-update-keeps-key",
+  "seed": "subtitles",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "settings": {
+          "apiKey": "",
+          "model": "other"
+        }
+      },
+      "expect": {
+        "body": {
+          "enabled": true,
+          "engine": "gemini",
+          "id": 1,
+          "isDefault": true,
+          "name": "Gemini",
+          "settings": {
+            "model": "other",
+            "secretsSet": [
+              "apiKey"
+            ]
+          }
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/subtitles/translation-providers/1"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "name": "Renamed"
+      },
+      "expect": {
+        "body": {
+          "enabled": true,
+          "engine": "openai",
+          "id": 2,
+          "isDefault": false,
+          "name": "Renamed",
+          "settings": {
+            "baseUrl": "http://127.0.0.1:1/v1",
+            "model": "m",
+            "secretsSet": [
+              "apiKey"
+            ]
+          }
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/subtitles/translation-providers/2"
+    }
+  ],
+  "strictMessage": true
+}

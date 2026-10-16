@@ -1,0 +1,87 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..date",
+    "$..queuedAt"
+  ],
+  "name": "subtitles-translation-providers-default-switch",
+  "seed": "subtitles",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "isDefault": true
+      },
+      "expect": {
+        "body": {
+          "enabled": true,
+          "engine": "openai",
+          "id": 2,
+          "isDefault": true,
+          "name": "Local",
+          "settings": {
+            "baseUrl": "http://127.0.0.1:1/v1",
+            "model": "m",
+            "secretsSet": [
+              "apiKey"
+            ]
+          }
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/subtitles/translation-providers/2"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "enabled": true,
+            "engine": "openai",
+            "id": 2,
+            "isDefault": true,
+            "name": "Local",
+            "settings": {
+              "baseUrl": "http://127.0.0.1:1/v1",
+              "model": "m",
+              "secretsSet": [
+                "apiKey"
+              ]
+            }
+          },
+          {
+            "enabled": true,
+            "engine": "gemini",
+            "id": 1,
+            "isDefault": false,
+            "name": "Gemini",
+            "settings": {
+              "model": "gemini-3.5-flash-lite",
+              "secretsSet": [
+                "apiKey"
+              ]
+            }
+          },
+          {
+            "enabled": false,
+            "engine": "libretranslate",
+            "id": 3,
+            "isDefault": false,
+            "name": "Libre",
+            "settings": {
+              "secretsSet": [],
+              "url": "http://127.0.0.1:1"
+            }
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/subtitles/translation-providers"
+    }
+  ],
+  "strictMessage": true
+}

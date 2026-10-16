@@ -379,7 +379,8 @@ pub async fn validate(
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct UpgradeBody {
-    search_result: Candidate,
+    #[serde(default)]
+    search_result: Option<Candidate>,
 }
 
 #[utoipa::path(post, path = "/api/media/{id}/subtitles/{subtitleId}/upgrade", responses((status = 201)))]
@@ -393,7 +394,7 @@ pub async fn upgrade(
     let PathParams((id, sub)) = ids?;
     gate_subtitle(&st, &a, id, sub).await?;
     let b: UpgradeBody = from_value(body.0)?;
-    let saved = service::upgrade(&st, sub, &b.search_result).await?;
+    let saved = service::upgrade(&st, sub, b.search_result.as_ref()).await?;
     Ok((StatusCode::CREATED, Json(saved.json())))
 }
 

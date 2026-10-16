@@ -1,0 +1,70 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..date",
+    "$..queuedAt"
+  ],
+  "name": "subtitles-blacklist-read-acl",
+  "seed": "subtitles",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "data": [
+            {
+              "id": 2,
+              "language": null,
+              "mediaId": null,
+              "providerFileId": "/subtitle/9.zip",
+              "providerType": "subdl",
+              "reason": null,
+              "sourceTitle": null
+            },
+            {
+              "id": 1,
+              "language": "en",
+              "mediaId": 1,
+              "providerFileId": "123",
+              "providerType": "opensubtitles",
+              "reason": "out of sync",
+              "sourceTitle": "Bad.Release"
+            }
+          ],
+          "total": 2
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/subtitles/blacklist"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "DELETE",
+      "path": "/api/subtitles/blacklist/1"
+    },
+    {
+      "as": "anon",
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "GET",
+      "path": "/api/subtitles/blacklist"
+    }
+  ],
+  "strictMessage": true
+}

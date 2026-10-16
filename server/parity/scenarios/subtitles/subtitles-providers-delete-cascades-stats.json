@@ -1,0 +1,57 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..date",
+    "$..queuedAt"
+  ],
+  "name": "subtitles-providers-delete-cascades-stats",
+  "seed": "subtitles",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "status": 200
+      },
+      "method": "DELETE",
+      "path": "/api/subtitles/providers/1"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/subtitles/providers/1/stats"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "SubtitleProvider #1 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "DELETE",
+      "path": "/api/subtitles/providers/1"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "DELETE",
+      "path": "/api/subtitles/providers/2"
+    }
+  ],
+  "strictMessage": true
+}

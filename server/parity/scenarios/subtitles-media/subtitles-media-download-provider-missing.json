@@ -1,0 +1,53 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..date",
+    "$..queuedAt"
+  ],
+  "name": "subtitles-media-download-provider-missing",
+  "seed": "subtitles",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "mediaFileId": 1,
+        "searchResult": {
+          "language": "en",
+          "providerFileId": "1",
+          "providerName": "Subdl",
+          "providerType": "subdl"
+        }
+      },
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "No matching provider found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "POST",
+      "path": "/api/media/1/subtitles/download"
+    },
+    {
+      "as": "user",
+      "body": {
+        "mediaFileId": 1,
+        "searchResult": {}
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "POST",
+      "path": "/api/media/1/subtitles/download"
+    }
+  ],
+  "strictMessage": true
+}

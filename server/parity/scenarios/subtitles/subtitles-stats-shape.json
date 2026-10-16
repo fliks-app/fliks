@@ -1,0 +1,198 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..date",
+    "$..queuedAt"
+  ],
+  "name": "subtitles-stats-shape",
+  "seed": "subtitles",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "byProvider": {
+            "disk": 3,
+            "ocr": 1,
+            "opensubtitles": 1
+          },
+          "byStatus": {
+            "downloaded": 4,
+            "failed": 1
+          },
+          "recent": [
+            {
+              "episodeId": null,
+              "episodeNumber": null,
+              "episodeTitle": null,
+              "id": 8,
+              "language": "en",
+              "mediaId": 1,
+              "mediaTitle": "Parity Movie 01",
+              "mediaType": "movie",
+              "providerType": "disk",
+              "score": 100,
+              "seasonNumber": null,
+              "status": "downloaded"
+            },
+            {
+              "episodeId": null,
+              "episodeNumber": null,
+              "episodeTitle": null,
+              "id": 6,
+              "language": "de",
+              "mediaId": 2,
+              "mediaTitle": "Parity Movie 02",
+              "mediaType": "movie",
+              "providerType": "disk",
+              "score": 100,
+              "seasonNumber": null,
+              "status": "downloaded"
+            },
+            {
+              "episodeId": null,
+              "episodeNumber": null,
+              "episodeTitle": null,
+              "id": 5,
+              "language": "fr",
+              "mediaId": 1,
+              "mediaTitle": "Parity Movie 01",
+              "mediaType": "movie",
+              "providerType": "ocr",
+              "score": 100,
+              "seasonNumber": null,
+              "status": "failed"
+            },
+            {
+              "episodeId": null,
+              "episodeNumber": null,
+              "episodeTitle": null,
+              "id": 4,
+              "language": "en",
+              "mediaId": 1,
+              "mediaTitle": "Parity Movie 01",
+              "mediaType": "movie",
+              "providerType": "opensubtitles",
+              "score": 55,
+              "seasonNumber": null,
+              "status": "downloaded"
+            },
+            {
+              "episodeId": null,
+              "episodeNumber": null,
+              "episodeTitle": null,
+              "id": 3,
+              "language": "fr",
+              "mediaId": 1,
+              "mediaTitle": "Parity Movie 01",
+              "mediaType": "movie",
+              "providerType": "disk",
+              "score": 100,
+              "seasonNumber": null,
+              "status": "downloaded"
+            }
+          ],
+          "total": 5
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/subtitles/stats"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "byProvider": {
+            "disk": 3,
+            "ocr": 1,
+            "opensubtitles": 1
+          },
+          "byStatus": {
+            "downloaded": 4,
+            "failed": 1
+          },
+          "recent": [
+            {
+              "episodeId": null,
+              "episodeNumber": null,
+              "episodeTitle": null,
+              "id": 8,
+              "language": "en",
+              "mediaId": 1,
+              "mediaTitle": "Parity Movie 01",
+              "mediaType": "movie",
+              "providerType": "disk",
+              "score": 100,
+              "seasonNumber": null,
+              "status": "downloaded"
+            },
+            {
+              "episodeId": null,
+              "episodeNumber": null,
+              "episodeTitle": null,
+              "id": 6,
+              "language": "de",
+              "mediaId": 2,
+              "mediaTitle": "Parity Movie 02",
+              "mediaType": "movie",
+              "providerType": "disk",
+              "score": 100,
+              "seasonNumber": null,
+              "status": "downloaded"
+            },
+            {
+              "episodeId": null,
+              "episodeNumber": null,
+              "episodeTitle": null,
+              "id": 5,
+              "language": "fr",
+              "mediaId": 1,
+              "mediaTitle": "Parity Movie 01",
+              "mediaType": "movie",
+              "providerType": "ocr",
+              "score": 100,
+              "seasonNumber": null,
+              "status": "failed"
+            },
+            {
+              "episodeId": null,
+              "episodeNumber": null,
+              "episodeTitle": null,
+              "id": 4,
+              "language": "en",
+              "mediaId": 1,
+              "mediaTitle": "Parity Movie 01",
+              "mediaType": "movie",
+              "providerType": "opensubtitles",
+              "score": 55,
+              "seasonNumber": null,
+              "status": "downloaded"
+            },
+            {
+              "episodeId": null,
+              "episodeNumber": null,
+              "episodeTitle": null,
+              "id": 3,
+              "language": "fr",
+              "mediaId": 1,
+              "mediaTitle": "Parity Movie 01",
+              "mediaType": "movie",
+              "providerType": "disk",
+              "score": 100,
+              "seasonNumber": null,
+              "status": "downloaded"
+            }
+          ],
+          "total": 5
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/subtitles/stats"
+    }
+  ],
+  "strictMessage": true
+}

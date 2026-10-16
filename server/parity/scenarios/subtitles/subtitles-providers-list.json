@@ -1,0 +1,140 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..date",
+    "$..queuedAt"
+  ],
+  "name": "subtitles-providers-list",
+  "seed": "subtitles",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "enabled": false,
+            "id": 1,
+            "name": "OpenSubtitles",
+            "priority": 1,
+            "settings": {
+              "secretsSet": [
+                "password",
+                "apiKey"
+              ],
+              "username": "u"
+            },
+            "type": "opensubtitles"
+          },
+          {
+            "enabled": false,
+            "id": 2,
+            "name": "Subdl",
+            "priority": 5,
+            "settings": {
+              "secretsSet": [
+                "apiKey"
+              ]
+            },
+            "type": "subdl"
+          },
+          {
+            "enabled": false,
+            "id": 3,
+            "name": "YIFY",
+            "priority": 25,
+            "settings": {
+              "secretsSet": []
+            },
+            "type": "yify"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/subtitles/providers"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": [
+          {
+            "enabled": false,
+            "id": 1,
+            "name": "OpenSubtitles",
+            "priority": 1,
+            "settings": {
+              "secretsSet": [
+                "password",
+                "apiKey"
+              ],
+              "username": "u"
+            },
+            "type": "opensubtitles"
+          },
+          {
+            "enabled": false,
+            "id": 2,
+            "name": "Subdl",
+            "priority": 5,
+            "settings": {
+              "secretsSet": [
+                "apiKey"
+              ]
+            },
+            "type": "subdl"
+          },
+          {
+            "enabled": false,
+            "id": 3,
+            "name": "YIFY",
+            "priority": 25,
+            "settings": {
+              "secretsSet": []
+            },
+            "type": "yify"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/subtitles/providers"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "enabled": false,
+          "id": 1,
+          "name": "OpenSubtitles",
+          "priority": 1,
+          "settings": {
+            "secretsSet": [
+              "password",
+              "apiKey"
+            ],
+            "username": "u"
+          },
+          "type": "opensubtitles"
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/subtitles/providers/1"
+    },
+    {
+      "as": "anon",
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "GET",
+      "path": "/api/subtitles/providers"
+    }
+  ],
+  "strictMessage": true
+}
