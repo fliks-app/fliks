@@ -325,6 +325,10 @@ impl ImageStore {
 
     /// `/api/images/...?v=<hash>`, or `None` when nothing could be stored.
     pub async fn download_and_store(&self, url: &str, t: &Target) -> Option<String> {
+        if !t.is_valid() {
+            tracing::warn!("image {}: no such target", t.api_path());
+            return None;
+        }
         let shown = redacted(url);
         self.serialized(
             t,
@@ -334,6 +338,10 @@ impl ImageStore {
     }
 
     pub async fn store_from_disk(&self, abs: &Path, t: &Target) -> Option<String> {
+        if !t.is_valid() {
+            tracing::warn!("image {}: no such target", t.api_path());
+            return None;
+        }
         let shown = abs.display().to_string();
         let mtime = match tokio::fs::metadata(abs).await.and_then(|m| m.modified()) {
             Ok(m) => m,
@@ -353,7 +361,7 @@ impl ImageStore {
     }
 
     pub fn has_image(&self, t: &Target) -> bool {
-        t.file(self.root(), Size::Full).is_file()
+        t.is_valid() && t.file(self.root(), Size::Full).is_file()
     }
 }
 

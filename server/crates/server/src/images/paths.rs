@@ -171,6 +171,19 @@ impl Target {
         Self::new(Kind::Livetv, id, Some(Variant::Logo))
     }
 
+    /// `false` for an id the route rules reject (negative, non-canonical): such a target has no file.
+    pub fn is_valid(&self) -> bool {
+        let v = self.variant.map(|v| v.to_string());
+        disk_path(
+            Path::new(""),
+            self.kind.name(),
+            &self.id,
+            v.as_deref(),
+            "full",
+        )
+        .is_some()
+    }
+
     pub fn file(&self, root: &Path, size: Size) -> PathBuf {
         let v = self.variant.map(|v| v.to_string());
         disk_path(root, self.kind.name(), &self.id, v.as_deref(), size.name())
@@ -197,6 +210,14 @@ impl Target {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_negative_id_has_no_target() {
+        assert!(!Target::media(-1, Variant::Poster).is_valid());
+        assert!(!Target::person(-5).is_valid());
+        assert!(!Target::request(MediaKind::Movie, -603, Variant::Poster).is_valid());
+        assert!(Target::person(5).is_valid());
+    }
 
     #[test]
     fn ids_and_variants() {

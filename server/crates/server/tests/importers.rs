@@ -528,6 +528,60 @@ async fn sonarr_import_needs_v4_and_refreshes_new_series(pool: PgPool) {
     );
 }
 
+#[sqlx::test(migrations = false)]
+async fn sonarr_import_writes_sidecar_subtitles(pool: PgPool) {
+    let c = ctx(pool).await;
+    let root = std::env::temp_dir().join(format!("s5-sonarr-subs-{}", std::process::id()));
+    let season = root.join("Parity Series A/Season 01");
+    std::fs::create_dir_all(&season).unwrap();
+    for name in [
+        "Parity Series A - S01E01.mkv",
+        "Parity Series A - S01E01.en.srt",
+        "Parity Series A - S01E01.fr.forced.srt",
+        "Other - S01E02.en.srt",
+    ] {
+        std::fs::write(season.join(name), b"x").unwrap();
+    }
+    sqlx::query("UPDATE libraries SET path = $1 WHERE id = 2")
+        .bind(root.to_str().unwrap())
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    sqlx::query(r#"INSERT INTO media (id, title, year, type, "tmdbId", status, "folderName", "libraryId") VALUES (70, 'Parity Series A', 2021, 'series', 2000, 'continuing', 'Parity Series A', 2)"#)
+        .execute(&c.pool).await.unwrap();
+    sqlx::query(r#"INSERT INTO media_files (id, "mediaId", "relativePath", size, quality) VALUES (80, 70, 'Season 01/Parity Series A - S01E01.mkv', 1, 'x')"#)
+        .execute(&c.pool).await.unwrap();
+    let mut body = import_body(&c, "sonarr", "ok", 2);
+    body["importSubtitles"] = json!(true);
+    body["mode"] = json!("update");
+    let (s, b) = post(&c, "/api/imports/sonarr", &c.admin, body).await;
+    assert_eq!((s, &b["subtitlesImported"]), (201, &json!(2)), "{b}");
+    let rows: Vec<(String, bool, String, Option<String>)> = sqlx::query_as(
+        r#"SELECT language, forced, "providerType"::text, "filePath" FROM subtitle_files ORDER BY id"#,
+    )
+    .fetch_all(&c.pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        rows,
+        [
+            (
+                "en".into(),
+                false,
+                "sonarr".into(),
+                Some("Season 01/Parity Series A - S01E01.en.srt".into())
+            ),
+            (
+                "fr".into(),
+                true,
+                "sonarr".into(),
+                Some("Season 01/Parity Series A - S01E01.fr.forced.srt".into())
+            )
+        ]
+    );
+    std::fs::remove_dir_all(&root).unwrap();
+}
+
 async fn wait_command(c: &Ctx, name: &str) -> String {
     for _ in 0..80 {
         let st: Option<String> = sqlx::query_scalar(

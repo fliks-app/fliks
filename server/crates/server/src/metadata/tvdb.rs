@@ -18,6 +18,8 @@ const ART_BACKGROUND: i64 = 3;
 const ART_CLEARLOGO_SERIES: i64 = 23;
 const ART_CLEARLOGO_MOVIE: i64 = 25;
 const EPISODE_TRANSLATION_CONCURRENCY: usize = 8;
+/// 50 000 episodes: far above any series, stops an upstream that never returns a short page.
+const MAX_EPISODE_PAGES: u32 = 100;
 /// Valid 30 days, refreshed after 25.
 const TOKEN_TTL: Duration = Duration::from_secs(25 * 24 * 3600);
 
@@ -161,7 +163,7 @@ impl Tvdb {
     /// Every episode, following the 500-per-page cursor (a full page asks for the next).
     async fn all_episodes(&self, id: i64) -> Result<Vec<Value>, Upstream> {
         let mut all = vec![];
-        for page in 0.. {
+        for page in 0..MAX_EPISODE_PAGES {
             let d = self
                 .data(
                     &format!("/series/{id}/episodes/default"),
