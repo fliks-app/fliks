@@ -33,6 +33,12 @@
       "path": "/api/media-servers/6/import-watch-history"
     },
     {
+      "expect": {
+        "status": 200
+      },
+      "sleepMs": 600
+    },
+    {
       "as": "admin",
       "expect": {
         "body": [
