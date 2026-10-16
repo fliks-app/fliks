@@ -11,7 +11,6 @@ import { Command } from '../scheduler/entities/command.entity';
 import { AuthModule } from '../auth/auth.module';
 import { SettingsModule } from '../settings/settings.module';
 import { LibrariesModule } from '../libraries/libraries.module';
-import { MarkersModule } from '../markers/markers.module';
 import { PluginsModule } from '../plugins/plugins.module';
 import { PlaybackModule } from '../playback/playback.module';
 import { QoeModule } from '../qoe/qoe.module';
@@ -30,7 +29,6 @@ import { MediaProbeModule } from '../media-probe/media-probe.module';
     AuthModule,
     SettingsModule,
     LibrariesModule,
-    MarkersModule,
     PluginsModule,
     QoeModule,
     forwardRef(() => PlaybackModule),

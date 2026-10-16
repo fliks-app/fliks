@@ -30,7 +30,6 @@ describe('CountsService.getCounts', () => {
     const service = new CountsService(
       requestRepo as never,
       caslAbilityFactory as never,
-      mediaService as never,
       libraries as never,
       pluginCounts,
     );

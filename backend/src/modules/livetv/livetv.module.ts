@@ -17,7 +17,6 @@ import { LiveTvCapacityService } from './services/livetv-capacity.service';
 import { LiveTvSessionService } from './services/livetv-session.service';
 import { LiveTvSchedulerService } from './services/livetv-scheduler.service';
 import { LiveTvAccessService } from './services/livetv-access.service';
-import { LiveTvLogoService } from './services/livetv-logo.service';
 import { LivetvController } from './controllers/livetv.controller';
 import { LivetvAdminController } from './controllers/livetv-admin.controller';
 import { LiveTvAccessController } from './controllers/livetv-access.controller';
@@ -27,7 +26,6 @@ import { SettingsModule } from '../settings/settings.module';
 import { QoeModule } from '../qoe/qoe.module';
 import { StreamingModule } from '../streaming/streaming.module';
 import { ScheduledJobRegistryModule } from '../scheduler/scheduled-job-registry.module';
-import { ImageModule } from '../images/image.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
@@ -50,7 +48,6 @@ import { NotificationsModule } from '../notifications/notifications.module';
     StreamingModule,
     QoeModule,
     ScheduledJobRegistryModule,
-    ImageModule,
     NotificationsModule,
   ],
   controllers: [
@@ -66,7 +63,6 @@ import { NotificationsModule } from '../notifications/notifications.module';
     LiveTvSessionService,
     LiveTvSchedulerService,
     LiveTvAccessService,
-    LiveTvLogoService,
   ],
   exports: [
     LiveTvSourcesService,
@@ -74,7 +70,6 @@ import { NotificationsModule } from '../notifications/notifications.module';
     LiveTvGuideService,
     LiveTvSessionService,
     LiveTvAccessService,
-    LiveTvLogoService,
   ],
 })
 export class LiveTvModule {}

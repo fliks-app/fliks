@@ -10,7 +10,6 @@ import { MediaFile } from '../media/entities/media-file.entity';
 import { AuthModule } from '../auth/auth.module';
 import { SettingsModule } from '../settings/settings.module';
 import { NotificationsModule } from '../notifications/notifications.module';
-import { MediaServersModule } from '../media-servers/media-servers.module';
 import { SubtitlesService } from './subtitles.service';
 import { SubtitleProviderService } from './subtitle-provider.service';
 import { SubtitleSyncService } from './subtitle-sync.service';
@@ -41,7 +40,6 @@ import { MediaProbeModule } from '../media-probe/media-probe.module';
     AuthModule,
     SettingsModule,
     NotificationsModule,
-    MediaServersModule,
   ],
   controllers: [
     SubtitlesController,

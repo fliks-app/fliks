@@ -1,7 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { ModuleRef } from '@nestjs/core';
 import { LibrariesService } from '../../libraries/libraries.service';
-import { MediaService } from '../../media/media.service';
 import type { User } from '../../users/entities/user.entity';
 
 /** The only two object guards a manifest may declare — never a free-form expression. */
@@ -33,19 +31,10 @@ export function parsePositiveInt(raw: string): number | null {
 
 @Injectable()
 export class PluginObjectGuardsService {
-  constructor(
-    private readonly libraries: LibrariesService,
-    private readonly moduleRef: ModuleRef,
-  ) {}
-
-  /** Resolved lazily, at call time: a static import/DI edge here would close a
-   *  module cycle back through the plugins module. */
-  private mediaService(): MediaService {
-    return this.moduleRef.get(MediaService, { strict: false });
-  }
+  constructor(private readonly libraries: LibrariesService) {}
 
   /** The captured route param is attacker-controlled text; a value that isn't a
-   *  strict positive integer never reaches `LibrariesService`/`MediaService`. */
+   *  strict positive integer never reaches `LibrariesService`. */
   async check(guard: ObjectGuardName, rawValue: string, user: User): Promise<boolean> {
     const id = parsePositiveInt(rawValue);
     if (id === null) return false;
@@ -54,7 +43,7 @@ export class PluginObjectGuardsService {
     if (guard === 'libraryAccessible') return accessibleLibraryIds.includes(id);
 
     try {
-      await this.mediaService().assertAccessible(id, accessibleLibraryIds);
+      await this.libraries.assertMediaAccessible(id, accessibleLibraryIds);
       return true;
     } catch {
       return false;

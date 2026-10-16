@@ -32,12 +32,11 @@ Rust bridge auth: `Authorization: Bearer $FLIKS_BRIDGE_TOKEN`, constant-time com
 
 ## Allowed duplication
 
-- Library ACL verify in Nest until S8 (`LibrariesService.getAccessibleLibraryIds`, `MediaService.assertAccessible`; they stay for the write routes, `counts.service.ts` and the plugin guards, read queries only), duplicated by `libraries::accessible_library_ids` / `assert_media_accessible`, the single Rust implementation every route uses; both read the same tables live, so no endpoint. Images path table (`ImageService.getDiskPath`) in Nest until S5, duplicated by `images::disk_path`.
+- Library ACL verify in Nest until S8 (`LibrariesService.getAccessibleLibraryIds`, `assertMediaAccessible`, `getCountsByLibrary`, kept for `counts.service.ts` and the plugin guards, read queries only), duplicated by `libraries::accessible_library_ids` / `assert_media_accessible`, the single Rust implementation every route uses; both read the same tables live, so no endpoint. The live TV logo route reads the data directory's `livetv/` files itself until S7 (`images::disk_path` is the Rust table).
 - Auth verify in Nest until S9: `jwt.strategy.ts`, guards, CASL factory, `PoliciesGuard`, `current-user` decorator, `jwt-secret.ts` (Nest still authenticates its own routes; Rust signs).
-- Release quality parsing in Nest until S5: `quality.parser.ts` and `app-qualities.ts` stay for imports; the Rust copy (`fliks_domain::release::parsing::quality`) shares the `release-quality` and `app-qualities` vectors.
-- Media detail hydration in Nest until S5 (`findOne`: the write routes return `MD` and `Media.path`), counts by library in Nest (`getCountsByLibrary` for `/api/counts`, S8), episode coverage SQL in Nest until S5 (`onDiskSql`, used by acquisition).
-- `GET /api/media/sync-queue` is an explicit forward from Rust to Nest until S6 (`app.rs`), so `/api/media/{id}` does not answer 400 for it.
-- Livetv path of `ImageService.getDiskPath` (Nest logo-serving route) until S7 (`image-store.md` rule 20).
+- Nest files kept for S6/S7 code that still imports them: the ffprobe wrapper (`modules/media-probe`, embedded subtitle detection and the `MediaFile.streamInfo` type) until S6, `common/utils/media-path.util.ts` and `atomic-file.ts` until S6, `modules/media-tools/fps.ts` until S7 (live TV presence), `modules/media/edl` until S7 (the playback-info DTO type). Rust has its own implementations; each file goes with its last importer.
+- `GET /api/media/sync-queue` and the `/api/media/:id/subtitles*` routes are forwarded from Rust to Nest until S6: `MediaSubtitlesController` (`modules/subtitles`, registered by the scheduler module) keeps the handlers the deleted `MediaController` held.
+- Live TV logo files: `LiveTvController.serveLogo` reads `<data dir>/livetv/<id>[-size].png` itself until S7 (`image-store.md` rule 20; `images::disk_path` is the Rust table).
 
 ## Known gaps until Sn
 

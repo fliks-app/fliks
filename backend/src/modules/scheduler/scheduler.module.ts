@@ -1,4 +1,4 @@
-import { Module, forwardRef } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ScheduleModule } from '@nestjs/schedule';
 import { Command } from './entities/command.entity';
@@ -6,25 +6,20 @@ import { FliksRequest } from '../requests/entities/request.entity';
 import { Media } from '../media/entities/media.entity';
 import { MediaFile } from '../media/entities/media-file.entity';
 import { Episode } from '../media/entities/episode.entity';
-import { NamingService } from './naming.service';
 import { LogBufferModule } from './log-buffer.module';
-import { MetadataProvidersModule } from '../metadata-providers/metadata-providers.module';
 import { NotificationsModule } from '../notifications/notifications.module';
-import { MediaModule } from '../media/media.module';
 import { AuthModule } from '../auth/auth.module';
 import { SubtitleSchedulerService } from './subtitle-scheduler.service';
 import { JobsBridgeController } from './jobs-bridge.controller';
-import { PostImportService } from './post-import.service';
+import { MediaSubtitlesController } from '../subtitles/media-subtitles.controller';
+import { LibrariesModule } from '../libraries/libraries.module';
 import { SubtitlesModule } from '../subtitles/subtitles.module';
 import { SettingsModule } from '../settings/settings.module';
-import { MediaServersModule } from '../media-servers/media-servers.module';
 import { StreamingModule } from '../streaming/streaming.module';
 import { SubtitleFile } from '../subtitles/entities/subtitle-file.entity';
-import { MarkersModule } from '../markers/markers.module';
 import { Library } from '../libraries/entities/library.entity';
 import { PluginsModule } from '../plugins/plugins.module';
 import { ScheduledJobRegistryModule } from './scheduled-job-registry.module';
-import { LibraryIngestModule } from '../../common/library-ingest/library-ingest.module';
 import { LiveTvModule } from '../livetv/livetv.module';
 import { QoeModule } from '../qoe/qoe.module';
 
@@ -40,25 +35,22 @@ import { QoeModule } from '../qoe/qoe.module';
       SubtitleFile,
       Library,
     ]),
-    MetadataProvidersModule,
     NotificationsModule,
-    forwardRef(() => MediaModule),
     AuthModule,
+    LibrariesModule,
     SubtitlesModule,
     SettingsModule,
-    MediaServersModule,
     StreamingModule,
-    MarkersModule,
     LogBufferModule,
     // Imported directly so the jobs bridge can reach the plugin job and catalog services.
     PluginsModule,
     ScheduledJobRegistryModule,
-    forwardRef(() => LibraryIngestModule),
     LiveTvModule,
     QoeModule,
   ],
-  controllers: [JobsBridgeController],
-  providers: [NamingService, SubtitleSchedulerService, PostImportService],
-  exports: [NamingService, LogBufferModule, SubtitleSchedulerService],
+  // `MediaSubtitlesController` lives here because it needs `SubtitleSchedulerService`; it moves with S6.
+  controllers: [JobsBridgeController, MediaSubtitlesController],
+  providers: [SubtitleSchedulerService],
+  exports: [LogBufferModule, SubtitleSchedulerService],
 })
 export class FliksSchedulerModule {}

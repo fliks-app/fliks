@@ -36,7 +36,6 @@ describe('LivetvController — channel logo', () => {
       {} as never,
       {} as never,
       {} as never,
-      { getDiskPath } as never,
       {} as never,
     );
     const res = {} as Response;
@@ -57,7 +56,6 @@ describe('LivetvController — QoE heartbeat', () => {
       {} as never,
       {} as never,
       { qoeRef: jest.fn().mockReturnValue(ref) } as never,
-      {} as never,
       {} as never,
       { recordSample } as never,
     );

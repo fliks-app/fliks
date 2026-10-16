@@ -119,7 +119,6 @@ function setup(sourceOverrides: Record<string, unknown> = {}) {
     ),
   };
   const settings = { get: jest.fn().mockResolvedValue(null) };
-  const logos = { cacheLogos: jest.fn().mockResolvedValue(undefined) };
   const access = {
     restrictAdultGroups: jest.fn().mockResolvedValue([]),
     expireVanishedGroups: jest.fn().mockResolvedValue([]),
@@ -136,7 +135,6 @@ function setup(sourceOverrides: Record<string, unknown> = {}) {
     streamRepo as never,
     dataSource as never,
     settings as never,
-    logos as never,
     access as never,
     notifications as never,
     activityRegistry as never,
@@ -151,7 +149,6 @@ function setup(sourceOverrides: Record<string, unknown> = {}) {
     streamRepo,
     managerQuery,
     settings,
-    logos,
     access,
     notifications,
     activityRegistry,

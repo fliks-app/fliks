@@ -22,7 +22,6 @@ describe('SubtitleSchedulerService.tryOcrFirst — flag matching', () => {
       { get: () => Promise.resolve('true') } as never,
       {} as never,
       { ocrSubtitle } as never,
-      { dispatch: jest.fn() } as never,
       { upsertRunning: jest.fn(), remove: jest.fn() } as never,
     );
     return service;
