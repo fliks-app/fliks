@@ -777,6 +777,8 @@ async fn parity() {
         if seed != logged_in {
             ctx.tokens = login_all(&ctx.http, &ctx.target).await;
             logged_in = seed.to_owned();
+            // the logins wrote refresh tokens: start the scenario from the pristine seed again
+            reset_db(&db, &template(&base_tpl, seed));
         }
         // untagged scenarios are recorded with the engine up only
         let rec = record && (sc["engine"].is_string() || engine == "up");

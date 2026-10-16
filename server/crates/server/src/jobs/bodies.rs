@@ -4,6 +4,7 @@ use crate::{
     events::{Hub, Num, SseEvent, Subject},
     ingest::rescan::rescan_files,
     markers::{self, ScanSeason},
+    metadata::Provider,
     state::AppState,
     stream::{self, sprite},
     system::backup,
@@ -58,8 +59,8 @@ async fn backup_job(st: &AppState) -> Outcome {
     Ok(())
 }
 
-fn tmdb_configured(job: &str) -> bool {
-    let set = std::env::var("TMDB_API_KEY").is_ok_and(|k| !k.trim().is_empty());
+fn tmdb_configured(st: &AppState, job: &str) -> bool {
+    let set = st.metadata.available(Provider::Tmdb);
     if !set {
         tracing::warn!("{job}: TMDB_API_KEY not configured");
     }
@@ -112,7 +113,7 @@ async fn identified_media(db: &PgPool) -> sqlx::Result<(Vec<MediaRow>, usize)> {
 
 async fn refresh_metadata(st: &AppState) -> Outcome {
     const JOB: &str = "RefreshMetadata";
-    if !tmdb_configured(JOB) {
+    if !tmdb_configured(st, JOB) {
         return Ok(());
     }
     let (identified, total) = identified_media(&st.db).await.map_err(|e| e.to_string())?;
@@ -150,7 +151,7 @@ async fn refresh_metadata(st: &AppState) -> Outcome {
 
 async fn refresh_missing(st: &AppState) -> Outcome {
     const JOB: &str = "RefreshMissingMetadata";
-    if !tmdb_configured(JOB) {
+    if !tmdb_configured(st, JOB) {
         return Ok(());
     }
     let months =

@@ -193,8 +193,8 @@ pub async fn execute<E: Display>(
     });
 }
 
-/// The one audit lifecycle for in-process work (`fliks_server::jobs::run_audited`): other domains call this,
-/// never a copy. Without a row the work does not run and the answer is `false`.
+/// Every in-process audited job runs here, so its `commands` row and events follow one lifecycle.
+/// Without a row the work does not run and the answer is `false`.
 pub async fn run_audited<E: Display>(
     st: &AppState,
     name: &str,

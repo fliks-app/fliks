@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE persons p SET departments = (\n             SELECT COALESCE(jsonb_agg(d ORDER BY d COLLATE \"C\"), '[]'::jsonb)\n             FROM (SELECT jsonb_array_elements_text(p.departments) AS d\n                   UNION SELECT jsonb_array_elements_text(x.depts)) t)\n           FROM jsonb_to_recordset($1::jsonb) AS x(id int, depts jsonb) WHERE p.id = x.id",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Jsonb"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "44839c4dcc3aca2a666c6abb3bfe6146c1eec5aed05a1c1f2666d9333b9a14fa"
+}
