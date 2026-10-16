@@ -42,7 +42,7 @@
         @if (tokenCleared()) {
           <span class="label-text-alt text-warning">
             {{ 'common.secret_will_clear' | translate }}
-            <button type="button" class="link link-hover font-medium" (click)="tokenCleared.set(false)">
+            <button type="button" class="link link-hover font-medium" [disabled]="saving()" (click)="tokenCleared.set(false)">
               {{ 'common.secret_keep' | translate }}
             </button>
           </span>
@@ -50,6 +50,7 @@
           <button
             type="button"
             class="link link-hover label-text-alt self-start text-base-content/60"
+            [disabled]="saving()"
             (click)="tokenCleared.set(true)"
           >
             {{ 'common.secret_clear' | translate }}
