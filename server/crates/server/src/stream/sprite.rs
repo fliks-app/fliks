@@ -65,19 +65,6 @@ pub async fn generate(st: &AppState, job: SpriteJob<'_>) -> Option<SpriteMeta> {
     }
 }
 
-/// The engine's sprites and any the host made before the engine took over.
-pub async fn delete_for_file(st: &AppState, file_id: i32) {
-    st.engine.invalidate(file_id as u32).await;
-    let dir = crate::paths::cache_dir()
-        .join("thumbnails")
-        .join(file_id.to_string());
-    if let Err(e) = tokio::fs::remove_dir_all(&dir).await
-        && e.kind() != std::io::ErrorKind::NotFound
-    {
-        tracing::warn!("Sprite cleanup failed for file #{file_id}: {e}");
-    }
-}
-
 /// Sprites used to sit directly in the data dir, next to the avatars.
 pub(super) fn spawn_legacy_cleanup() {
     if crate::paths::cache_dir() == crate::paths::data_dir() {

@@ -11,7 +11,7 @@ mod preroll;
 mod qoe;
 mod routes;
 mod scan;
-pub mod sprite;
+mod sprite;
 mod system;
 
 pub use file::{ResolvedFile, resolve_file};
