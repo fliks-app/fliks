@@ -129,7 +129,7 @@ none (no periodic job; `tokensPerMinute` windows and the slot gate are in-proces
 
 ## Bridges
 
-none. Known gap until S6: `subtitle-translation.service.ts` runs inside Nest until S6 and still reads providers from the same tables, so nothing needs a bridge; the Nest `subtitle.failed` notification and SSE emit through the existing S2/S4 bridges. No new temporary bridge is proposed.
+none. Resolved in S6: translation runs in Rust (`subtitles::translate`), reads the providers from the same tables and emits `subtitle.*` and notifications natively. No bridge.
 
 ## Deletes in Nest
 
