@@ -104,7 +104,7 @@ pub async fn list_likes(
            LEFT JOIN episodes e ON e.id = l."episodeId"
            LEFT JOIN seasons es ON es.id = e."seasonId"
            WHERE l."userId" = $1
-           ORDER BY l."createdAt" DESC, l.id DESC
+           ORDER BY l."createdAt" DESC, l.id
            LIMIT $2"#,
         user,
         limit.unwrap_or(LIKES_LIMIT)

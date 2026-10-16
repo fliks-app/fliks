@@ -89,8 +89,5 @@
       "method": "GET",
       "path": "/api/likes"
     }
-  ],
-  "unordered": [
-    "$"
   ]
 }

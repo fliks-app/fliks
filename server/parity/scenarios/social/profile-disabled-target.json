@@ -101,8 +101,5 @@
       "method": "GET",
       "path": "/api/social/users/abc/profile"
     }
-  ],
-  "unordered": [
-    "$.likes"
   ]
 }

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT cr.id, cr.message, cr.\"createdAt\" AS created_at, cr.\"seasonId\" AS season_id,\n                  cr.\"episodeId\" AS episode_id,\n                  m.id AS \"media_id?\", m.type::text AS media_type, m.title AS \"title?\",\n                  m.\"posterUrl\" AS poster_url, m.\"fanartUrl\" AS fanart_url, m.\"libraryId\" AS library_id,\n                  s.\"seasonNumber\" AS \"season_number?\", e.\"episodeNumber\" AS \"episode_number?\",\n                  e.title AS episode_title, e.\"stillUrl\" AS still_url,\n                  es.\"seasonNumber\" AS \"episode_season_number?\",\n                  u.id AS other_id, u.username AS other_username, u.avatar AS other_avatar\n           FROM content_recommendations cr\n           JOIN users u ON u.id = CASE WHEN $2 THEN cr.\"senderId\" ELSE cr.\"recipientId\" END\n           LEFT JOIN media m ON m.id = cr.\"mediaId\"\n           LEFT JOIN seasons s ON s.id = cr.\"seasonId\"\n           LEFT JOIN episodes e ON e.id = cr.\"episodeId\"\n           LEFT JOIN seasons es ON es.id = e.\"seasonId\"\n           WHERE (CASE WHEN $2 THEN cr.\"recipientId\" ELSE cr.\"senderId\" END) = $1\n             AND ($3 OR cr.\"dismissedAt\" IS NULL)\n           ORDER BY cr.\"createdAt\" DESC, cr.id DESC\n           LIMIT $4",
+  "query": "SELECT cr.id, cr.message, cr.\"createdAt\" AS created_at, cr.\"seasonId\" AS season_id,\n                  cr.\"episodeId\" AS episode_id,\n                  m.id AS \"media_id?\", m.type::text AS media_type, m.title AS \"title?\",\n                  m.\"posterUrl\" AS poster_url, m.\"fanartUrl\" AS fanart_url, m.\"libraryId\" AS library_id,\n                  s.\"seasonNumber\" AS \"season_number?\", e.\"episodeNumber\" AS \"episode_number?\",\n                  e.title AS episode_title, e.\"stillUrl\" AS still_url,\n                  es.\"seasonNumber\" AS \"episode_season_number?\",\n                  u.id AS other_id, u.username AS other_username, u.avatar AS other_avatar\n           FROM content_recommendations cr\n           JOIN users u ON u.id = CASE WHEN $2 THEN cr.\"senderId\" ELSE cr.\"recipientId\" END\n           LEFT JOIN media m ON m.id = cr.\"mediaId\"\n           LEFT JOIN seasons s ON s.id = cr.\"seasonId\"\n           LEFT JOIN episodes e ON e.id = cr.\"episodeId\"\n           LEFT JOIN seasons es ON es.id = e.\"seasonId\"\n           WHERE (CASE WHEN $2 THEN cr.\"recipientId\" ELSE cr.\"senderId\" END) = $1\n             AND ($3 OR cr.\"dismissedAt\" IS NULL)\n           ORDER BY cr.\"createdAt\" DESC, cr.id\n           LIMIT $4",
   "describe": {
     "columns": [
       {
@@ -129,5 +129,5 @@
       true
     ]
   },
-  "hash": "4b72b062df3979faa41f30a664a424545afc3d5ef8391ce3f42602e628c4fbc8"
+  "hash": "b4d70e746cefac1f386024ae82a7094b5557fe6b434d66fa300d7dc8ac196980"
 }

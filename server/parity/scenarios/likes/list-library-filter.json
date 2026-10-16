@@ -126,8 +126,5 @@
       "method": "GET",
       "path": "/api/likes?libraryId=99"
     }
-  ],
-  "unordered": [
-    "$"
   ]
 }

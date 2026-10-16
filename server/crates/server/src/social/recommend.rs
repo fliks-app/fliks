@@ -283,7 +283,7 @@ async fn cards(
            LEFT JOIN seasons es ON es.id = e."seasonId"
            WHERE (CASE WHEN $2 THEN cr."recipientId" ELSE cr."senderId" END) = $1
              AND ($3 OR cr."dismissedAt" IS NULL)
-           ORDER BY cr."createdAt" DESC, cr.id DESC
+           ORDER BY cr."createdAt" DESC, cr.id
            LIMIT $4"#,
         a.user.id,
         received,
