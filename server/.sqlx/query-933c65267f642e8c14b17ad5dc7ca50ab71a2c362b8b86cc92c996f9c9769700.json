@@ -1,0 +1,109 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n             ps.id, ps.\"mediaId\" AS \"media_id!\", ps.\"mediaFileId\" AS media_file_id,\n             ps.\"episodeId\" AS episode_id,\n             ps.\"positionSeconds\" AS position_seconds, ps.\"durationSeconds\" AS duration_seconds,\n             ps.completed,\n             ps.\"lastPlayedAt\" AS last_played_at,\n             m.title AS media_title, m.type::text AS \"media_type!\",\n             m.\"posterUrl\" AS poster_url, m.\"fanartUrl\" AS fanart_url, e.\"stillUrl\" AS still_url,\n             CASE WHEN ps.\"durationSeconds\" > 0\n                  THEN ROUND((ps.\"positionSeconds\" / ps.\"durationSeconds\") * 100)\n                  ELSE 0 END AS \"progress_percent!\",\n             CASE WHEN ps.\"episodeId\" IS NOT NULL\n                  THEN 'S' || LPAD(s.\"seasonNumber\"::text, 2, '0') || 'E' || LPAD(e.\"episodeNumber\"::text, 2, '0')\n                       || COALESCE(' - ' || e.title, '')\n                  ELSE NULL END AS episode_label\n           FROM playback_states ps\n           JOIN media m ON m.id = ps.\"mediaId\"\n           LEFT JOIN episodes e ON e.id = ps.\"episodeId\"\n           LEFT JOIN seasons s ON s.id = e.\"seasonId\"\n           WHERE ps.\"userId\" = $1 AND ps.\"playedAt\" IS NOT NULL\n             AND m.\"libraryId\" = ANY($4)\n           ORDER BY ps.\"playedAt\" DESC\n           LIMIT $2 OFFSET $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "media_id!",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 2,
+        "name": "media_file_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "episode_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 4,
+        "name": "position_seconds",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 5,
+        "name": "duration_seconds",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 6,
+        "name": "completed",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 7,
+        "name": "last_played_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 8,
+        "name": "media_title",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 9,
+        "name": "media_type!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 10,
+        "name": "poster_url",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 11,
+        "name": "fanart_url",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 12,
+        "name": "still_url",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 13,
+        "name": "progress_percent!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 14,
+        "name": "episode_label",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int8",
+        "Int8",
+        "Int4Array"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      true,
+      false,
+      true,
+      false,
+      false,
+      false,
+      null,
+      true,
+      true,
+      true,
+      null,
+      null
+    ]
+  },
+  "hash": "933c65267f642e8c14b17ad5dc7ca50ab71a2c362b8b86cc92c996f9c9769700"
+}

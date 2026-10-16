@@ -2,8 +2,8 @@ import { Logger } from '@nestjs/common';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { parseEdl } from '../../src/modules/streaming/edl/edl-parser';
-import { edlPathFor, readEdlSidecar, resetEdlSidecarState, shiftRanges } from '../../src/modules/streaming/edl/edl-sidecar';
+import { parseEdl } from '../../src/modules/media/edl/edl-parser';
+import { edlPathFor, readEdlSidecar, resetEdlSidecarState, shiftRanges } from '../../src/modules/media/edl/edl-sidecar';
 import { emit, mulberry32, pick, ri } from './_util';
 
 Logger.overrideLogger(false);

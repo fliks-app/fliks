@@ -8,7 +8,7 @@ jest.mock('fs/promises', () => {
   const actual = jest.requireActual('fs/promises');
   return { ...actual, open: jest.fn(actual.open) };
 });
-import { MAX_EDL_BYTES } from '../../streaming/edl/edl-sidecar';
+import { MAX_EDL_BYTES } from '../edl/edl-sidecar';
 import { MediaCompanionsService } from './media-companions.service';
 import { SubtitlesService } from '../../subtitles/subtitles.service';
 

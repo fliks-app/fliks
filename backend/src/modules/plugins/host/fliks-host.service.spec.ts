@@ -4,7 +4,6 @@ import * as os from 'os';
 import * as path from 'path';
 import { FliksHostImpl } from './fliks-host.service';
 import { PluginCountsCacheService } from './plugin-counts-cache.service';
-import { DownloadProgressCacheService } from '../../scheduler/download-progress-cache.service';
 import {
   MediaStatus,
   MediaType,
@@ -155,7 +154,7 @@ interface Harness {
   };
   sseAudience: { recipientsForMedia: jest.Mock; viewersForMedia: jest.Mock };
   countsCache: PluginCountsCacheService;
-  progressCache: DownloadProgressCacheService;
+  progressCache: { current: jest.Mock };
 }
 
 function makeHarness(pluginId: string | null = 'test.plugin'): Harness {
@@ -209,7 +208,7 @@ function makeHarness(pluginId: string | null = 'test.plugin'): Harness {
     viewersForMedia: jest.fn().mockResolvedValue([9]),
   };
   const countsCache = new PluginCountsCacheService();
-  const progressCache = new DownloadProgressCacheService();
+  const progressCache = { current: jest.fn().mockResolvedValue(undefined) };
 
   // Fakes stand in for 19 constructor params — a plain unit test of the class,
   // not a DI-resolved instance (the DI graph itself is proven by the boot check).
@@ -1879,7 +1878,7 @@ describe('FliksHostImpl', () => {
         mediaId: 1,
         downloads: [{ ref: 'live', seasonNumber: 4, episodeNumber: 1, progress: 0.3, state: 'active' }],
       });
-      h.progressCache.record([9], h.events.emitToUsers.mock.calls[0][1]);
+      h.progressCache.current.mockResolvedValue(h.events.emitToUsers.mock.calls[0][1]);
       h.events.emitToUsers.mockClear();
 
       await h.host['events.publish']([

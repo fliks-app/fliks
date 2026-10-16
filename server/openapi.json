@@ -179,6 +179,44 @@
         }
       }
     },
+    "/api/engine/remote": {
+      "get": {
+        "tags": [
+          "crate::engine::remote"
+        ],
+        "operationId": "get_remote",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "crate::engine::remote"
+        ],
+        "summary": "Saves the three keys, then both processes reconnect: Rust here, Nest through the settings bridge.",
+        "operationId": "put_remote",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/engine/remote/test": {
+      "post": {
+        "tags": [
+          "crate::engine::remote"
+        ],
+        "operationId": "test_remote",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/fs/browse": {
       "get": {
         "tags": [
@@ -187,6 +225,349 @@
         "operationId": "browse",
         "responses": {
           "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/playback/continue-watching": {
+      "get": {
+        "tags": [
+          "playback"
+        ],
+        "operationId": "continue_watching",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/playback/hide/{mediaId}": {
+      "delete": {
+        "tags": [
+          "playback"
+        ],
+        "operationId": "hide",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/playback/history": {
+      "get": {
+        "tags": [
+          "playback"
+        ],
+        "operationId": "history",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/playback/media/{mediaId}": {
+      "get": {
+        "tags": [
+          "playback"
+        ],
+        "operationId": "resume_info",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/playback/media/{mediaId}/episode-progress": {
+      "get": {
+        "tags": [
+          "playback"
+        ],
+        "operationId": "episode_progress",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/playback/media/{mediaId}/seasons/{seasonId}/toggle-watched": {
+      "post": {
+        "tags": [
+          "playback"
+        ],
+        "operationId": "toggle_season_watched",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/playback/media/{mediaId}/state": {
+      "get": {
+        "tags": [
+          "playback"
+        ],
+        "operationId": "get_state",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "playback"
+        ],
+        "operationId": "heartbeat",
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "400": {
+            "description": ""
+          },
+          "403": {
+            "description": ""
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "playback"
+        ],
+        "operationId": "delete_state",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/playback/media/{mediaId}/toggle-series-watched": {
+      "post": {
+        "tags": [
+          "playback"
+        ],
+        "operationId": "toggle_series_watched",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/playback/media/{mediaId}/toggle-watched": {
+      "post": {
+        "tags": [
+          "playback"
+        ],
+        "operationId": "toggle_watched",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/playback/media/{mediaId}/watched-episodes": {
+      "get": {
+        "tags": [
+          "playback"
+        ],
+        "operationId": "watched_episodes",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/playback/recommendations": {
+      "get": {
+        "tags": [
+          "playback"
+        ],
+        "operationId": "recommendations",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/playback/recommendations/dismissed": {
+      "delete": {
+        "tags": [
+          "playback"
+        ],
+        "operationId": "dismissed_reset",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/playback/recommendations/dismissed/count": {
+      "get": {
+        "tags": [
+          "playback"
+        ],
+        "operationId": "dismissed_count",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/playback/recommendations/{mediaId}/dismiss": {
+      "post": {
+        "tags": [
+          "playback"
+        ],
+        "operationId": "dismiss",
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/playback/sessions/{sessionId}/events": {
+      "post": {
+        "tags": [
+          "qoe"
+        ],
+        "operationId": "events",
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "403": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/playback/watched-ids": {
+      "get": {
+        "tags": [
+          "playback"
+        ],
+        "operationId": "watched_ids",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/remote/commands": {
+      "get": {
+        "tags": [
+          "remote"
+        ],
+        "operationId": "commands",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/remote/grants": {
+      "get": {
+        "tags": [
+          "remote"
+        ],
+        "operationId": "grants",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/remote/grants/claim": {
+      "post": {
+        "tags": [
+          "remote"
+        ],
+        "operationId": "grant_claim",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/remote/grants/code": {
+      "post": {
+        "tags": [
+          "remote"
+        ],
+        "operationId": "grant_code",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/remote/grants/{id}": {
+      "delete": {
+        "tags": [
+          "remote"
+        ],
+        "operationId": "revoke",
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/remote/register": {
+      "post": {
+        "tags": [
+          "remote"
+        ],
+        "operationId": "register",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/remote/targets": {
+      "get": {
+        "tags": [
+          "remote"
+        ],
+        "operationId": "targets",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/remote/{targetId}/command": {
+      "post": {
+        "tags": [
+          "remote"
+        ],
+        "operationId": "command",
+        "responses": {
+          "202": {
             "description": ""
           }
         }
@@ -312,6 +693,138 @@
         }
       }
     },
+    "/api/stream/info/effective-settings": {
+      "get": {
+        "tags": [
+          "crate::stream"
+        ],
+        "operationId": "effective_settings",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/stream/info/gpus": {
+      "get": {
+        "tags": [
+          "crate::stream"
+        ],
+        "operationId": "gpus",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/stream/info/hw-accel": {
+      "get": {
+        "tags": [
+          "crate::stream"
+        ],
+        "operationId": "hw_accel",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/stream/info/qualities/{mediaFileId}": {
+      "get": {
+        "tags": [
+          "crate::stream"
+        ],
+        "operationId": "qualities",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/stream/info/tonemap-algos": {
+      "get": {
+        "tags": [
+          "crate::stream"
+        ],
+        "operationId": "tonemap_algos",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/stream/sessions/{sessionId}": {
+      "delete": {
+        "tags": [
+          "crate::stream"
+        ],
+        "summary": "Explicit stop from the client: ends the presence and the engine session; 204 for an unknown sid.",
+        "operationId": "delete_session",
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/stream/{mediaFileId}/edl": {
+      "get": {
+        "tags": [
+          "crate::stream"
+        ],
+        "summary": "Sidecar ranges on the container timeline (the direct-play clock), for original-file downloads.",
+        "operationId": "edl",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/stream/{mediaFileId}/playback-info": {
+      "post": {
+        "tags": [
+          "crate::stream"
+        ],
+        "operationId": "playback_info",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/system/activity": {
+      "get": {
+        "tags": [
+          "events"
+        ],
+        "operationId": "activity",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/system/events": {
+      "get": {
+        "tags": [
+          "events"
+        ],
+        "operationId": "events",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/system/liveness": {
       "get": {
         "tags": [
@@ -329,6 +842,111 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/api/system/qoe/sessions": {
+      "get": {
+        "tags": [
+          "qoe"
+        ],
+        "operationId": "sessions",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/system/qoe/sessions/{sessionId}": {
+      "get": {
+        "tags": [
+          "qoe"
+        ],
+        "operationId": "session",
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "404": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/system/qoe/summary": {
+      "get": {
+        "tags": [
+          "qoe"
+        ],
+        "operationId": "summary",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/system/streams": {
+      "get": {
+        "tags": [
+          "crate::stream"
+        ],
+        "operationId": "streams",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/system/streams/{sessionId}/command": {
+      "post": {
+        "tags": [
+          "crate::stream"
+        ],
+        "operationId": "command",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/system/transcode-cache": {
+      "get": {
+        "tags": [
+          "crate::stream"
+        ],
+        "operationId": "stats",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "crate::stream"
+        ],
+        "operationId": "purge_all",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/system/transcode-cache/{mediaFileId}": {
+      "delete": {
+        "tags": [
+          "crate::stream"
+        ],
+        "operationId": "purge_file",
+        "responses": {
+          "200": {
+            "description": ""
           }
         }
       }
@@ -422,6 +1040,19 @@
           "users"
         ],
         "operationId": "stats",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/engine/resolve": {
+      "post": {
+        "tags": [
+          "crate::engine::resolve"
+        ],
+        "operationId": "resolve",
         "responses": {
           "200": {
             "description": ""

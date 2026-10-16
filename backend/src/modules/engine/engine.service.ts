@@ -8,22 +8,15 @@ import {
 } from '@nestjs/common';
 import { SettingsService } from '../settings/settings.service';
 import {
-  ENGINE_PATH_MAPPINGS_KEY,
   ENGINE_TOKEN_KEY,
   ENGINE_URL_KEY,
   engineUrlsDiffer,
-  parsePathMappings,
-  type EnginePathMapping,
 } from './engine-remote-config';
-import { createHash, randomBytes, timingSafeEqual } from 'crypto';
 import { createEngineClient, type EngineClient } from './engine-client';
 import type { components } from './schema';
-import type { StreamingSettings } from '../streaming/streaming-settings-cache.service';
-import { engineLifetime } from '../streaming/lifetime-constants';
 
 export type { EngineClient };
 export type Capabilities = components['schemas']['CapabilitiesResponse'];
-export type EngineStreamingConfig = components['schemas']['StreamingConfig'];
 export type ProbeResult = components['schemas']['ProbeResult'];
 export type OpenSessionRequest = components['schemas']['OpenSessionRequest'];
 export type OpenSessionResponse = components['schemas']['OpenSessionResponse'];
@@ -83,15 +76,6 @@ export class JobError extends Error {
 }
 
 export const MIN_ENGINE_PROTOCOL = 1;
-/** Where the engine reaches the resolver. FLIKS_HOST_URL for a remote engine; the loopback
- *  default is the one acceptable one: the host is local whenever the engine is supervised. */
-export function hostUrl(): string {
-  return (
-    process.env.FLIKS_HOST_URL ||
-    `http://127.0.0.1:${Number(process.env.PORT) || 4848}`
-  );
-}
-
 export const REQUIRED_FEATURES = ['probe', 'capabilities'];
 /** The engine runs playback (sessions, data plane, events) only when it announces all three. */
 export const RUNTIME_FEATURES = ['sessions', 'serve', 'events'];
@@ -104,39 +88,6 @@ const POLL_MS = 10_000;
 const CAPABILITIES_TIMEOUT_MS = 5 * 60_000;
 const DEFAULT_RENDER_NODE = '/dev/dri/renderD128';
 
-export type EngineConnectionTestResult =
-  | { ok: false; error: string }
-  | {
-      ok: true;
-      engineVersion: string;
-      protocolVersion: number;
-      probeOk?: boolean;
-      probeError?: string;
-    };
-
-function unreachableMessage(url: string): string {
-  return `The streaming engine at ${url} did not answer`;
-}
-
-export function toEngineStreaming(
-  ss: StreamingSettings,
-): EngineStreamingConfig {
-  return {
-    segmentDuration: ss.segmentDuration,
-    qsvPreset: ss.qsvPreset,
-    tonemapAlgo: ss.tonemapAlgo,
-    tonemapCurve: ss.tonemapCurve,
-    cacheMaxBytes: ss.cacheMaxBytes,
-    cacheTtlMs: ss.cacheTtlMs,
-    ffmpegSlots: ss.ffmpegSlots,
-    autoQualityMode: ss.autoQualityMode,
-    autoCropEnabled: ss.autoCropEnabled,
-    gpuRenderNode: ss.gpuRenderNode,
-    throttleEnabled: ss.throttleEnabled,
-    throttleThresholdSeconds: ss.throttleThresholdSeconds,
-  };
-}
-
 @Injectable()
 export class EngineService implements OnModuleInit, OnModuleDestroy {
   private readonly log = new Logger(EngineService.name);
@@ -145,21 +96,13 @@ export class EngineService implements OnModuleInit, OnModuleDestroy {
   private candidate: EngineClient | null = null;
   private instanceId = '';
   private features: string[] = [];
-  /** Random per boot: the engine presents it to the resolver as its Bearer. */
-  readonly hostToken = randomBytes(32).toString('hex');
   private delay = HELLO_RETRY_MS;
   private timer?: NodeJS.Timeout;
   private listeners: (() => void)[] = [];
   private readonly jobWaiters = new Map<string, JobWaiter[]>();
-  private revision = 0;
-  private lastPushed = '';
-  private streaming?: EngineStreamingConfig;
-  private livetv?: LiveTvConfig;
-  private pushing: Promise<unknown> = Promise.resolve();
   private reachable = false;
   private storedUrl = '';
   private storedToken = '';
-  private pathMappings: EnginePathMapping[] = [];
   /** Bumped by reconfigure so an in-flight handshake cannot adopt afterwards. */
   private epoch = 0;
   protected sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -222,9 +165,6 @@ export class EngineService implements OnModuleInit, OnModuleDestroy {
     if (!this.settings) return;
     this.storedUrl = (await this.settings.get(ENGINE_URL_KEY)) ?? '';
     this.storedToken = (await this.settings.get(ENGINE_TOKEN_KEY)) ?? '';
-    this.pathMappings = parsePathMappings(
-      await this.settings.get(ENGINE_PATH_MAPPINGS_KEY),
-    );
   }
 
   private async init(notify = false): Promise<void> {
@@ -245,7 +185,6 @@ export class EngineService implements OnModuleInit, OnModuleDestroy {
   /** Drops the live client and reconnects from stored settings or env. */
   async reconfigure(): Promise<void> {
     this.epoch++;
-    const epoch = this.epoch;
     clearTimeout(this.timer);
     this.timer = undefined;
     this.client = null;
@@ -253,59 +192,6 @@ export class EngineService implements OnModuleInit, OnModuleDestroy {
     this.reachable = false;
     this.ready = this.init(true);
     await this.ready;
-    if (epoch !== this.epoch || !this.client) return;
-    await this.push();
-  }
-
-  /** One-shot hello (and optional probe) without adopting the engine. */
-  async testConnection(
-    url: string,
-    token: string,
-    probePath?: string,
-  ): Promise<EngineConnectionTestResult> {
-    const targetUrl = url.trim() || this.configuredUrl();
-    const targetToken = token.trim() || this.effectiveToken();
-    if (!targetUrl || !targetToken) {
-      return { ok: false, error: 'Engine URL and token are required' };
-    }
-    const client = createEngineClient(targetUrl, targetToken);
-    try {
-      const { data, response } = await client.GET('/v1/hello');
-      if (!data || !response.ok) {
-        return { ok: false, error: unreachableMessage(targetUrl) };
-      }
-      const base = {
-        ok: true as const,
-        engineVersion: data.engineVersion,
-        protocolVersion: data.protocolVersion,
-      };
-      const path = probePath?.trim();
-      if (!path) return base;
-      try {
-        const probe = await client.POST('/v1/probe', {
-          body: { media: { mediaFileId: 0, path } },
-        });
-        if (!probe.response.ok) {
-          return {
-            ...base,
-            probeOk: false,
-            probeError: `probe -> ${probe.response.status}`,
-          };
-        }
-        if (probe.data && probe.data.ok === false) {
-          return {
-            ...base,
-            probeOk: false,
-            probeError: probe.data.error ?? 'Probe failed',
-          };
-        }
-        return { ...base, probeOk: true };
-      } catch {
-        return { ...base, probeOk: false, probeError: 'Probe did not answer' };
-      }
-    } catch {
-      return { ok: false, error: unreachableMessage(targetUrl) };
-    }
   }
 
   /** Handshake: retries while the engine starts, then keeps going in the background. */
@@ -320,9 +206,7 @@ export class EngineService implements OnModuleInit, OnModuleDestroy {
       const data = await this.hello();
       if (epoch !== this.epoch) return;
       if (data) {
-        if ((await this.adopt(data, notify, epoch)) && epoch === this.epoch) {
-          this.schedule(POLL_MS);
-        }
+        if (this.adopt(data, notify, epoch)) this.schedule(POLL_MS);
         return;
       }
       await this.sleep(HELLO_RETRY_MS);
@@ -354,11 +238,11 @@ export class EngineService implements OnModuleInit, OnModuleDestroy {
   }
 
   /** Validates the engine and takes it as the current instance; false when it is refused. */
-  private async adopt(
+  private adopt(
     data: NonNullable<Awaited<ReturnType<EngineService['hello']>>>,
     notify: boolean,
     epoch = this.epoch,
-  ): Promise<boolean> {
+  ): boolean {
     if (epoch !== this.epoch) return false;
     const client = this.candidate;
     if (!client) return false;
@@ -372,10 +256,6 @@ export class EngineService implements OnModuleInit, OnModuleDestroy {
       this.client = null;
       return false;
     }
-    const { data: cfg } = await client.GET('/v1/config');
-    if (epoch !== this.epoch) return false;
-    this.revision = cfg?.revision ?? 0;
-    this.lastPushed = '';
     this.instanceId = data.instanceId;
     this.features = data.features;
     this.client = client;
@@ -416,61 +296,7 @@ export class EngineService implements OnModuleInit, OnModuleDestroy {
     }
     if (connected)
       this.log.log('engine restarted: reloading config and capabilities');
-    try {
-      if ((await this.adopt(data, true, epoch)) && epoch === this.epoch) {
-        this.schedule(POLL_MS);
-      }
-    } catch {
-      if (epoch === this.epoch) this.schedule(POLL_MS);
-    }
-  }
-
-  /** Pushes the streaming settings; a no-op when nothing changed since the last push. */
-  pushStreaming(streaming: EngineStreamingConfig): Promise<void> {
-    this.streaming = streaming;
-    return this.push();
-  }
-
-  /** Remembers the live TV settings; they go out with the streaming ones, which the engine needs first. */
-  pushLivetv(livetv: LiveTvConfig): Promise<void> {
-    this.livetv = livetv;
-    return this.push();
-  }
-
-  /** PUT /v1/config with the next revision, one at a time so two callers never race the revision. */
-  private push(): Promise<void> {
-    const run = this.pushing.then(async () => {
-      const { streaming, livetv } = this;
-      if (!this.client || !streaming) return;
-      const key = JSON.stringify({ streaming, livetv, pathMappings: this.pathMappings });
-      if (key === this.lastPushed) return;
-      const { response } = await this.client.PUT('/v1/config', {
-        body: {
-          revision: this.revision + 1,
-          hostUrl: hostUrl(),
-          hostToken: this.hostToken,
-          streaming,
-          ...(livetv && { livetv }),
-          ...(this.pathMappings.length && { pathMappings: this.pathMappings }),
-          lifetime: engineLifetime(),
-        },
-      });
-      if (!response.ok) throw new Error(`PUT /v1/config -> ${response.status}`);
-      this.revision++;
-      this.lastPushed = key;
-      this.log.log(`config pushed (revision ${this.revision})`);
-    });
-    this.pushing = run.catch(() => undefined);
-    return run;
-  }
-
-  /** Constant-time check of the `Authorization` header the engine sends to the resolver. */
-  isHostAuth(header: string | undefined): boolean {
-    const digest = (v: string) => createHash('sha256').update(v).digest();
-    return timingSafeEqual(
-      digest(header ?? ''),
-      digest(`Bearer ${this.hostToken}`),
-    );
+    if (this.adopt(data, true, epoch)) this.schedule(POLL_MS);
   }
 
   /** Kills the owner's engine sessions and purges their resolver cache, best effort: the 60 s TTL bounds a miss. */

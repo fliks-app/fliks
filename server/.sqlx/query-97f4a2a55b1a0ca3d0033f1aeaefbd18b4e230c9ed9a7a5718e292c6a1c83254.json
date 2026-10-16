@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM remote_control_grants WHERE \"granteeUserId\" IS NULL AND \"codeExpiresAt\" < now()",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "97f4a2a55b1a0ca3d0033f1aeaefbd18b4e230c9ed9a7a5718e292c6a1c83254"
+}

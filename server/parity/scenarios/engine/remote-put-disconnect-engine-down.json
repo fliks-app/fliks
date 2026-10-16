@@ -1,5 +1,5 @@
 {
-  "deviation": null,
+  "deviation": "F5",
   "engine": "down",
   "name": "engine-remote-put-disconnect-engine-down",
   "seed": "base",
@@ -16,7 +16,6 @@
           "pathMappings": [],
           "processUrl": "",
           "status": "off",
-          "token": "",
           "url": ""
         },
         "status": 200

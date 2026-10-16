@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE playback_qoe_sessions SET \"lastSeenAt\" = now() - interval '31 days'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "41018a73504d7a8e3225a82b835cc68e19c53a5245d22596c251a8b32d7c6b14"
+}

@@ -1,0 +1,79 @@
+{
+  "deviation": "F14",
+  "ignore": [
+    "$..cmdId",
+    "$..expiresAt"
+  ],
+  "name": "remote-polled-target-keyed-by-user-and-device",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "manager",
+      "body": {
+        "deviceId": "dev-f14",
+        "formFactor": "tv",
+        "name": "Living room"
+      },
+      "expect": {
+        "body": {
+          "targetId": "dev-f14#native"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/remote/register"
+    },
+    {
+      "as": "readonly",
+      "body": {
+        "deviceId": "dev-f14",
+        "formFactor": "tv",
+        "name": "Bedroom"
+      },
+      "expect": {
+        "body": {
+          "targetId": "dev-f14#native"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/remote/register"
+    },
+    {
+      "as": "manager",
+      "body": {
+        "action": "play"
+      },
+      "expect": {
+        "body": {},
+        "status": 202
+      },
+      "method": "POST",
+      "path": "/api/remote/dev-f14%23native/command"
+    },
+    {
+      "as": "readonly",
+      "expect": {
+        "body": [],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/remote/commands?targetId=dev-f14%23native"
+    },
+    {
+      "as": "manager",
+      "expect": {
+        "body": [
+          {
+            "action": "play",
+            "byTargetId": null,
+            "type": "remote.command"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/remote/commands?targetId=dev-f14%23native"
+    }
+  ]
+}

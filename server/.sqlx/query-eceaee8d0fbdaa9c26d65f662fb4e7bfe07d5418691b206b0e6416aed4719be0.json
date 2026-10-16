@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT \"mediaFileId\" AS media_file_id, \"filePath\" AS file_path, \"streamIndex\" AS stream_index,\n                  codec\n           FROM subtitle_files WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "media_file_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "file_path",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "stream_index",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "codec",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "eceaee8d0fbdaa9c26d65f662fb4e7bfe07d5418691b206b0e6416aed4719be0"
+}

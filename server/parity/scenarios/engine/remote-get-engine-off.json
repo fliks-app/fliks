@@ -1,5 +1,5 @@
 {
-  "deviation": null,
+  "deviation": "F5",
   "engine": "down",
   "name": "engine-remote-get-engine-off",
   "seed": "base",
@@ -11,7 +11,6 @@
           "pathMappings": [],
           "processUrl": "",
           "status": "off",
-          "token": "",
           "url": ""
         },
         "status": 200

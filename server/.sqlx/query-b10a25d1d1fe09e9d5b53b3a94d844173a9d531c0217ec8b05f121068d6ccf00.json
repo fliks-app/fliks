@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE remote_control_grants SET code = NULL, \"granteeUserId\" = $1, \"updatedAt\" = now()\n           WHERE id = $2 AND \"granteeUserId\" IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b10a25d1d1fe09e9d5b53b3a94d844173a9d531c0217ec8b05f121068d6ccf00"
+}

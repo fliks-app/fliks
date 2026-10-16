@@ -1,0 +1,65 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT (ARRAY_AGG(s.\"deviceLabel\" ORDER BY s.\"lastSeenAt\" DESC) FILTER (WHERE s.\"deviceLabel\" IS NOT NULL))[1] AS \"device\",\n                  (ARRAY_AGG(s.\"systemName\" ORDER BY s.\"lastSeenAt\" DESC) FILTER (WHERE s.\"systemName\" IS NOT NULL))[1] AS \"system_name\",\n                  (ARRAY_AGG(s.\"engine\" ORDER BY s.\"lastSeenAt\" DESC) FILTER (WHERE s.\"engine\" IS NOT NULL))[1] AS \"engine\",\n                  (ARRAY_AGG(s.\"hwDecoder\" ORDER BY s.\"lastSeenAt\" DESC) FILTER (WHERE s.\"hwDecoder\" IS NOT NULL))[1] AS \"hw\",\n                  MAX(s.\"playbackVerdict\") AS \"verdict\", SUM(s.\"stallCount\") AS \"stalls\",\n                  SUM(CASE WHEN s.\"droppedFrames\" IS NOT NULL AND s.\"decodedFrames\" IS NOT NULL THEN s.\"droppedFrames\" END) AS \"dropped\",\n                  SUM(CASE WHEN s.\"droppedFrames\" IS NOT NULL AND s.\"decodedFrames\" IS NOT NULL THEN s.\"decodedFrames\" END) AS \"decoded\"\n           FROM playback_qoe_sessions s\n           WHERE s.\"lastSeenAt\" >= $1\n           GROUP BY COALESCE(s.\"userId\"::text || ':' || s.\"playbackId\", s.\"sessionId\")\n           HAVING MAX(s.\"lastSeenAt\") >= $2\n           ORDER BY MAX(s.\"lastSeenAt\") DESC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "device",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "system_name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "engine",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "hw",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 4,
+        "name": "verdict",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "stalls",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 6,
+        "name": "dropped",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 7,
+        "name": "decoded",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Timestamptz",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "3953a8b55e660027847731b1c87c1f7d9d51aae86e1df51edf761f298e335472"
+}

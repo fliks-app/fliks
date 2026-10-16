@@ -46,7 +46,7 @@ import { CheckPolicies } from '../auth/casl/check-policies.decorator';
 import { Action } from '../auth/casl/actions.enum';
 import { Media } from './entities/media.entity';
 import { SubtitlesService, SUBTITLE_UPLOAD_MAX_BYTES } from '../subtitles/subtitles.service';
-import { MAX_EDL_BYTES } from '../streaming/edl/edl-sidecar';
+import { MAX_EDL_BYTES } from './edl/edl-sidecar';
 import { SubtitleOcrService } from '../subtitles/subtitle-ocr.service';
 import { SubtitleTranslationService } from '../subtitles/subtitle-translation.service';
 import { SubtitleSyncService } from '../subtitles/subtitle-sync.service';
@@ -337,10 +337,9 @@ export class MediaController {
     const activityId = `Identify:${id}`;
     // Refused and reserved before the ids are written: a second identify would
     // otherwise commit its ids under the first walk and answer 409.
-    if (this.activityRegistry.has(activityId)) {
+    if (!(await this.activityRegistry.claim(activityId, 'Identify'))) {
       throw new ConflictException('errors.already_running');
     }
-    this.activityRegistry.upsertRunning(activityId, 'Identify');
     let media: Awaited<ReturnType<MediaService['identify']>>;
     try {
       media = await this.mediaService.identify(id, dto);
@@ -396,14 +395,12 @@ export class MediaController {
 
     this.eventsService.emit({ type: 'metadata.started', mediaId: id, title });
     const activityId = `RefreshMetadata:${id}`;
-    if (this.activityRegistry.has(activityId)) {
-      throw new ConflictException('errors.already_running');
-    }
-    this.activityRegistry.upsertRunning(
+    const claimed = await this.activityRegistry.claim(
       activityId,
       'RefreshMetadata',
       buildMediaProgressSubject(media),
     );
+    if (!claimed) throw new ConflictException('errors.already_running');
     // Fire-and-forget so the client doesn't sit waiting on TMDB + image
     // downloads. SSE event signals completion.
     void this.mediaService.refreshMetadata(id).then(
@@ -447,14 +444,12 @@ export class MediaController {
 
     this.eventsService.emit({ type: 'metadata.started', mediaId: id, title });
     const activityId = `RefreshEpisodeMetadata:${episodeId}`;
-    if (this.activityRegistry.has(activityId)) {
-      throw new ConflictException('errors.already_running');
-    }
-    this.activityRegistry.upsertRunning(
+    const claimed = await this.activityRegistry.claim(
       activityId,
       'RefreshEpisodeMetadata',
       buildMediaProgressSubject(media),
     );
+    if (!claimed) throw new ConflictException('errors.already_running');
     void this.mediaService.refreshEpisodeMetadata(id, episodeId).then(
       () => {
         this.activityRegistry.remove(activityId);
@@ -501,14 +496,12 @@ export class MediaController {
     });
 
     const activityId = `Rescan:${id}`;
-    if (this.activityRegistry.has(activityId)) {
-      throw new ConflictException('errors.already_running');
-    }
-    this.activityRegistry.upsertRunning(
+    const claimed = await this.activityRegistry.claim(
       activityId,
       'Rescan',
       buildMediaProgressSubject(media),
     );
+    if (!claimed) throw new ConflictException('errors.already_running');
     // Fire-and-forget: don't await.
     void this.mediaService.rescanFiles(id).then(
       (result) => {

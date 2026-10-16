@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM playback_states\n           WHERE \"userId\" = $1\n             AND \"episodeId\" IN (SELECT id FROM episodes WHERE \"seasonId\" = $2 AND \"hasFile\")",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b0932de18d9359f205e8ba48fa9f2b4fa4293a5712da6a026407afd796dc3a31"
+}

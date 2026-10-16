@@ -229,7 +229,7 @@ function methodVerb(requestMethod: RequestMethod): string {
 async function collectRoutes(): Promise<RouteRecord[]> {
   const classIndex = buildClassIndex();
   const app = await NestFactory.create(AppModule, { preview: true, logger: false });
-  app.setGlobalPrefix('api', { exclude: ['engine/resolve', 'internal/bridge/{*path}'] });
+  app.setGlobalPrefix('api', { exclude: ['engine/resolve', 'internal/bridge/{*path}', 'internal/plugins/{*path}'] });
 
   const appConfig = (app as unknown as { config: ApplicationConfig }).config;
   const routePathFactory = new RoutePathFactory(appConfig);

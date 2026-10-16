@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM playback_qoe_sessions WHERE \"lastSeenAt\" < $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c4afd9a296e923ada38d39e820f69372f2dce925ce70fd294eb92bff78bb4f5a"
+}

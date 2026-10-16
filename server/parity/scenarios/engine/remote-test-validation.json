@@ -1,5 +1,5 @@
 {
-  "deviation": null,
+  "deviation": "F5",
   "engine": "up",
   "name": "engine-remote-test-validation",
   "seed": "base",
@@ -11,13 +11,10 @@
       },
       "expect": {
         "body": {
-          "error": "Bad Request",
-          "message": [
-            "token must be a string"
-          ],
-          "statusCode": 400
+          "error": "The streaming engine at http://127.0.0.1:9 did not answer",
+          "ok": false
         },
-        "status": 400
+        "status": 201
       },
       "method": "POST",
       "path": "/api/engine/remote/test"

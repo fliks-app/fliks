@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO recommendation_dismissals (\"userId\", \"mediaId\") VALUES ($1, $2)\n           ON CONFLICT DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "de4e8109359a6455777e61608c0273cd6e65bcba3d137fdfe280a50c6e10c4d3"
+}

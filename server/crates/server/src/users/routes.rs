@@ -21,10 +21,7 @@ use axum::{
 use fliks_domain::acl::{Action, Subject};
 use serde_json::{Value, json};
 use sqlx::{PgPool, types::Json as Jsonb};
-use std::{
-    path::{Path, PathBuf},
-    sync::OnceLock,
-};
+use std::path::PathBuf;
 
 const AVATAR_MAX: usize = 5 * 1024 * 1024;
 const BCRYPT_COST: u32 = 12;
@@ -78,12 +75,6 @@ async fn hash(password: String) -> Result<String, AppError> {
 fn revoke_in_background(st: &AppState, id: i32) {
     let engine = st.engine.clone();
     tokio::spawn(async move { engine.revoke_owner(id).await });
-}
-
-async fn drop_connections(st: &AppState, id: i32) {
-    if let Err(e) = st.bridge.drop_connections(id, None).await {
-        tracing::warn!(user = id, error = %e, "dropping SSE connections failed");
-    }
 }
 
 async fn public(db: &PgPool, id: i32) -> Result<Json<PublicUser>, AppError> {
@@ -339,7 +330,7 @@ pub async fn update(
     tx.commit().await?;
 
     if role_changing || enabled_changing || password_changed {
-        drop_connections(&st, id).await;
+        st.hub.drop_connections_for_user(id);
     }
     if password_changed {
         // F9: the caller keeps working on its access token until it expires.
@@ -374,7 +365,7 @@ pub async fn remove(
         .await?;
     tx.commit().await?;
     // F17
-    drop_connections(&st, id).await;
+    st.hub.drop_connections_for_user(id);
     revoke_in_background(&st, id);
     Ok(())
 }
@@ -429,49 +420,10 @@ pub async fn stats(
     })))
 }
 
-/// `FLIKS_DATA_DIR`, else the deprecated `FLIKS_IMAGES_DIR`, else `./images` when present, else `./data`.
-fn intended_data_dir() -> PathBuf {
-    let env = |k| {
-        std::env::var(k)
-            .ok()
-            .map(|v| v.trim().to_owned())
-            .filter(|v| !v.is_empty())
-    };
-    env("FLIKS_DATA_DIR")
-        .or_else(|| env("FLIKS_IMAGES_DIR"))
-        .map(PathBuf::from)
-        .unwrap_or_else(|| {
-            let legacy = PathBuf::from("images");
-            if legacy.exists() {
-                legacy
-            } else {
-                PathBuf::from("data")
-            }
-        })
-}
-
-/// Nest's `getDataDir`: the first candidate a `.probe` file can be written to, else the temp fallback; resolved once.
-fn data_dir() -> &'static Path {
-    static DIR: OnceLock<PathBuf> = OnceLock::new();
-    DIR.get_or_init(|| {
-        let fallback = std::env::temp_dir().join("fliks-data");
-        let writable = |d: &Path| {
-            let probe = d.join(".probe");
-            std::fs::create_dir_all(d).is_ok()
-                && std::fs::File::create(&probe).is_ok()
-                && std::fs::remove_file(probe).is_ok()
-        };
-        let dir = intended_data_dir();
-        if writable(&dir) {
-            return dir;
-        }
-        tracing::warn!(dir = %dir.display(), "data directory not writable: avatars go to {}", fallback.display());
-        fallback
-    })
-}
-
 fn avatar_path(id: i32, suffix: &str) -> PathBuf {
-    data_dir().join("users").join(format!("{id}{suffix}"))
+    crate::paths::data_dir()
+        .join("users")
+        .join(format!("{id}{suffix}"))
 }
 
 async fn set_avatar_url(db: &PgPool, id: i32, url: Option<String>) -> Result<(), AppError> {

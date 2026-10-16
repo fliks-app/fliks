@@ -27,7 +27,7 @@ import { RequestLifecycleService } from '../../requests/request-lifecycle.servic
 import { MediaQueryService } from './media-query.service';
 import { MediaMetadataService } from './media-metadata.service';
 import { VIDEO_EXTS } from '../../../common/constants/video-extensions';
-import { resolveEdlPath } from '../../streaming/edl/edl-sidecar';
+import { resolveEdlPath } from '../edl/edl-sidecar';
 import { ThumbnailService } from '../../streaming/thumbnail.service';
 import { SubtitlesService } from '../../subtitles/subtitles.service';
 

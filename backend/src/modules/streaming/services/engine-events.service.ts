@@ -5,12 +5,7 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { EngineService, type EngineEvent } from '../../engine/engine.service';
-import { readCmcdRaw } from '../../qoe/core/cmcd';
-import { QoeService } from '../../qoe/qoe.service';
-import { StreamingSettingsCache } from '../streaming-settings-cache.service';
 import { LiveSessionRegistry } from '../live-session.service';
-import { servedRungBitrate } from '../served-rung';
-import { realSegmentSeconds } from '../../media-tools/fps';
 import { jobKeyOf, restorePresence } from './engine-presence';
 
 const MIN_BACKOFF_MS = 500;
@@ -68,8 +63,6 @@ export class EngineEventsService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly engine: EngineService,
     private readonly liveSessions: LiveSessionRegistry,
-    private readonly qoe: QoeService,
-    private readonly settings: StreamingSettingsCache,
   ) {}
 
   onModuleInit(): void {
@@ -184,33 +177,6 @@ export class EngineEventsService implements OnModuleInit, OnModuleDestroy {
       case 'BgJobDone':
         this.engine.jobEnded(ev.jobId, ev);
         break;
-      case 'PipelineChanged': {
-        const live = this.liveSessions.peek(ev.sessionId);
-        if (!live) break;
-        if (live.kind === 'transcode') {
-          this.qoe.noteServedRung(
-            live,
-            ev.quality,
-            servedRungBitrate({ ...live, quality: ev.quality }),
-          );
-        }
-        this.qoe.noteHwAccel(live, ev.hwAccel);
-        break;
-      }
-      case 'SegmentServed': {
-        const live = this.liveSessions.peek(ev.sessionId);
-        if (!live) break;
-        this.qoe.observeServed(
-          live,
-          ev.cmcdRaw ? readCmcdRaw(ev.cmcdRaw) : null,
-          realSegmentSeconds(
-            this.settings.segmentDuration,
-            live.sourceFps ?? undefined,
-          ),
-          ev.waitedMs,
-        );
-        break;
-      }
     }
   }
 }

@@ -87,6 +87,10 @@ fn no_openapi_operation_is_in_the_nest_manifest() {
     let doc = serde_json::to_value(ApiDoc::openapi()).unwrap();
     for r in routes {
         let (method, path) = (r["method"].as_str().unwrap(), r["path"].as_str().unwrap());
+        // Nest keeps the live delegate Rust calls over the bridge (bridge.md).
+        if (method, path) == ("POST", "/engine/resolve") {
+            continue;
+        }
         let ops = &doc["paths"][openapi_path(path)];
         assert!(
             !ops[method.to_lowercase()].is_object() && !(method == "ALL" && ops.is_object()),
@@ -123,7 +127,7 @@ async fn methods_rust_does_not_own_on_owned_paths_are_forwarded() {
 }
 
 #[tokio::test]
-async fn unprefixed_engine_resolve_and_unknown_api_paths_forward_but_internal_does_not() {
+async fn unknown_api_paths_forward_but_internal_does_not() {
     let router = app::router(
         state(),
         fake_nest().await,
@@ -132,7 +136,6 @@ async fn unprefixed_engine_resolve_and_unknown_api_paths_forward_but_internal_do
         None,
     );
     for (path, forwarded) in [
-        ("/engine/resolve", true),
         ("/api/unknown/thing", true),
         ("/api", true),
         ("/api/system/liveness", true),
@@ -180,4 +183,27 @@ async fn forwarded_methods_on_owned_paths_skip_the_rust_layers() {
     assert!(post.headers().contains_key(FORWARDED));
     assert!(!post.headers().contains_key("access-control-allow-origin"));
     assert!(!post.headers().contains_key("vary"));
+    let put = Request::patch("/api/playback/media/1/state")
+        .header("origin", "http://localhost:4200")
+        .body(Body::empty())
+        .unwrap();
+    let put = router.clone().oneshot(put).await.unwrap();
+    assert!(put.headers().contains_key(FORWARDED));
+    assert!(!put.headers().contains_key("access-control-allow-origin"));
+    // A preflight on a fully owned path stays with the Rust CORS layer.
+    let preflight = Request::options("/api/auth/login")
+        .header("origin", "http://localhost:4200")
+        .header("access-control-request-method", "POST")
+        .body(Body::empty())
+        .unwrap();
+    let preflight = router.clone().oneshot(preflight).await.unwrap();
+    assert_eq!(preflight.status(), 204);
+    assert!(!preflight.headers().contains_key(FORWARDED));
+    assert_eq!(
+        preflight.headers()["access-control-allow-origin"],
+        "http://localhost:4200"
+    );
+    let req = Request::get("/engine/resolve").body(Body::empty()).unwrap();
+    let res = router.clone().oneshot(req).await.unwrap();
+    assert!(res.headers().contains_key(FORWARDED), "GET /engine/resolve");
 }

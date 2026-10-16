@@ -34,10 +34,29 @@
         type="password"
         class="input input-bordered w-full"
         autocomplete="off"
-        [placeholder]="'settings.engine.token_placeholder' | translate"
+        [placeholder]="tokenStored() && !tokenCleared() ? secretMask : ('settings.engine.token_placeholder' | translate)"
         [ngModel]="token()"
-        (ngModelChange)="token.set($event)"
+        (ngModelChange)="onTokenInput($event)"
       />
+      @if (tokenStored()) {
+        @if (tokenCleared()) {
+          <span class="label-text-alt text-warning">
+            {{ 'common.secret_will_clear' | translate }}
+            <button type="button" class="link link-hover font-medium" [disabled]="saving()" (click)="tokenCleared.set(false)">
+              {{ 'common.secret_keep' | translate }}
+            </button>
+          </span>
+        } @else {
+          <button
+            type="button"
+            class="link link-hover label-text-alt self-start text-base-content/60"
+            [disabled]="saving()"
+            (click)="tokenCleared.set(true)"
+          >
+            {{ 'common.secret_clear' | translate }}
+          </button>
+        }
+      }
       <label class="label"><span class="label-text-alt text-base-content/50">{{ 'settings.engine.token_help' | translate }}</span></label>
     </div>
 

@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO playback_states\n                     (\"userId\", \"mediaId\", \"mediaFileId\", \"episodeId\", \"positionSeconds\",\n                      \"durationSeconds\", completed, \"lastPlayedAt\")\n                   VALUES ($1, $2, $3, $4, $5, $6, true, now())",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Int4",
+        "Int4",
+        "Float8",
+        "Float8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3a664f8beab14c2e75ba4f9acc73af4f08fa7ee2be2ff44e97e60d4c1873d0f9"
+}

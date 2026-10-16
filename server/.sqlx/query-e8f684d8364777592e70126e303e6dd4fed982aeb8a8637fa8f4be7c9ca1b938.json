@@ -1,0 +1,292 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT * FROM playback_qoe_sessions WHERE \"sessionId\" = $1 LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "sessionId",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "playbackId",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "userId",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "mediaFileId",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 4,
+        "name": "mediaTitle",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 5,
+        "name": "startedAt",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 6,
+        "name": "lastSeenAt",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 7,
+        "name": "endedAt",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 8,
+        "name": "deviceLabel",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 9,
+        "name": "systemName",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 10,
+        "name": "appVersion",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 11,
+        "name": "engine",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 12,
+        "name": "cmcd",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 13,
+        "name": "cmcdClaimed",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 14,
+        "name": "playMethod",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 15,
+        "name": "quality",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 16,
+        "name": "transcodeReasons",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 17,
+        "name": "videoCodec",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 18,
+        "name": "width",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 19,
+        "name": "height",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 20,
+        "name": "decoderName",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 21,
+        "name": "hwDecoder",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 22,
+        "name": "watchedMs",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 23,
+        "name": "stallCount",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 24,
+        "name": "stallMs",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 25,
+        "name": "droppedFrames",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 26,
+        "name": "decodedFrames",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 27,
+        "name": "avgBandwidthBps",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 28,
+        "name": "minBandwidthBps",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 29,
+        "name": "avgVariantBitrate",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 30,
+        "name": "recoveryReloads",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 31,
+        "name": "errorCount",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 32,
+        "name": "medianTranscodeSpeed",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 33,
+        "name": "stallBufferAheadS",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 34,
+        "name": "stallBandwidthBps",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 35,
+        "name": "cmcdThroughputBps",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 36,
+        "name": "unrecoveredError",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 37,
+        "name": "sampleCount",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 38,
+        "name": "stallCauseMs",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 39,
+        "name": "stallReasonMs",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 40,
+        "name": "pipeline",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 41,
+        "name": "verdict",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 42,
+        "name": "confidence",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 43,
+        "name": "reasons",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 44,
+        "name": "playbackVerdict",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 45,
+        "name": "playbackConfidence",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false,
+      true,
+      true,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false,
+      true,
+      true,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "e8f684d8364777592e70126e303e6dd4fed982aeb8a8637fa8f4be7c9ca1b938"
+}

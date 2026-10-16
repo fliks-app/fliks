@@ -1,8 +1,17 @@
 use crate::http::{layers, static_files};
-use crate::{auth, fs, roles, settings, state::AppState, system, users};
-use axum::{Router, extract::Request, response::Response, routing::any, routing::any_service};
+use crate::{
+    auth, events, fs, playback, qoe, remote, roles, settings, state::AppState, system, users,
+};
+use axum::{
+    Router,
+    extract::{Request, State},
+    middleware::{Next, from_fn_with_state},
+    response::{IntoResponse, Response},
+    routing::{any, any_service},
+};
 use fliks_engine::gateway::{self, RouteTable, Upstream};
 use std::path::PathBuf;
+use tower::ServiceExt;
 use utoipa::OpenApi;
 
 /// Nest's default JSON limit (`bootstrap.md` rule 10).
@@ -38,6 +47,12 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         settings::get_one,
         settings::put_one,
         fs::browse,
+        events::events,
+        events::activity,
+        qoe::sessions,
+        qoe::session,
+        qoe::summary,
+        qoe::events,
         users::list,
         users::create,
         users::get_one,
@@ -45,7 +60,49 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         users::remove,
         users::stats,
         users::set_avatar,
-        users::clear_avatar
+        users::clear_avatar,
+        crate::engine::remote::get_remote,
+        crate::engine::remote::put_remote,
+        crate::engine::remote::test_remote,
+        crate::engine::resolve::resolve,
+        remote::targets,
+        remote::register,
+        remote::commands,
+        remote::command,
+        remote::grant_code,
+        remote::grant_claim,
+        remote::grants,
+        remote::revoke,
+        playback::recommendations,
+        playback::dismiss,
+        playback::dismissed_count,
+        playback::dismissed_reset,
+        playback::watched_ids,
+        playback::continue_watching,
+        playback::history,
+        playback::watched_episodes,
+        playback::episode_progress,
+        playback::resume_info,
+        playback::get_state,
+        playback::heartbeat,
+        playback::delete_state,
+        playback::hide,
+        playback::toggle_watched,
+        playback::toggle_series_watched,
+        playback::toggle_season_watched,
+        crate::stream::playback_info,
+        crate::stream::qualities,
+        crate::stream::hw_accel,
+        crate::stream::tonemap_algos,
+        crate::stream::effective_settings,
+        crate::stream::gpus,
+        crate::stream::edl,
+        crate::stream::delete_session,
+        crate::stream::streams,
+        crate::stream::command,
+        crate::stream::stats,
+        crate::stream::purge_all,
+        crate::stream::purge_file
     )
 )]
 pub struct ApiDoc;
@@ -69,15 +126,19 @@ pub fn router(
         .route("/internal/", any(internal_404))
         .route("/internal/{*rest}", any(internal_404))
         .fallback_service(static_files::router(client_dir, cast_dir));
+    // Preflights of owned paths stay with the Rust CORS layer, so they answer while Nest is down.
+    let cors = layers::apply(Router::new(), cors_origin.clone(), BODY_LIMIT_BYTES);
+    let unowned = forwarder
+        .clone()
+        .layer(from_fn_with_state(cors, preflight_here));
     // Merged after the layers so Nest answers the methods Rust does not own, unlayered instead of a 405.
     let local = layers::apply(local, cors_origin, BODY_LIMIT_BYTES);
     let local = ApiDoc::openapi()
         .paths
         .paths
         .keys()
-        .fold(local, |r, p| r.route(p, any_service(forwarder.clone())));
-    // Nest's only unprefixed route is `/engine/resolve` (bootstrap.md rule 1).
-    ["/api", "/api/", "/api/{*rest}", "/engine/resolve"]
+        .fold(local, |r, p| r.route(p, any_service(unowned.clone())));
+    ["/api", "/api/", "/api/{*rest}"]
         .into_iter()
         .fold(local, |r, p| r.route(p, any_service(forwarder.clone())))
 }
@@ -89,7 +150,20 @@ fn api() -> Router<AppState> {
         .merge(crate::roles::router())
         .merge(crate::settings::router())
         .merge(crate::fs::router())
+        .merge(crate::engine::router())
         .merge(users::router())
+        .merge(events::router())
+        .merge(remote::router())
+        .merge(playback::router())
+        .merge(qoe::router())
+        .merge(crate::stream::router())
+}
+
+async fn preflight_here(State(cors): State<Router>, req: Request, next: Next) -> Response {
+    if layers::is_preflight(&req) {
+        return cors.oneshot(req).await.into_response();
+    }
+    next.run(req).await
 }
 
 async fn internal_404(req: Request) -> Response {

@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT EXISTS (SELECT 1 FROM library_user_access WHERE \"userId\" = $1 AND \"libraryId\" = $2) AS \"granted!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "granted!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "6eb60ebff6f3d909bc70c303be114877fe21bb97ba2eb2ab478ec95059ad1cb9"
+}
