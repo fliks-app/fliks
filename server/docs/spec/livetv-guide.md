@@ -111,7 +111,7 @@ Rust: `quick-xml` `Reader` over the sniffed decoder (plan §10 S7), lenient (`ch
 
 ## Events
 
-None emitted or consumed. Activity registry: `LiveTvGuideSync:<id>` (rule 32, new). `commands` rows for the two guide jobs via `run_audited`.
+None emitted or consumed. Activity registry: `LiveTvGuideSync:<id>` (rule 32, new). `commands` rows for the two guide jobs written by the S5 job runner (`livetv-sources.md` rule 46).
 
 ## Settings keys
 
