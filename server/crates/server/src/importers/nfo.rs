@@ -20,7 +20,7 @@ pub fn read_nfo_file(path: &Path) -> Option<NfoData> {
 pub fn read_for_video_file(video: &Path) -> Option<NfoData> {
     let dir = video.parent()?;
     let mut candidates = vec![
-        dir.join(video.file_stem()?).with_extension("nfo"),
+        video.with_extension("nfo"),
         dir.join("movie.nfo"),
         dir.join("tvshow.nfo"),
     ];
@@ -50,13 +50,13 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("s5imp-nfo-{}", std::process::id()));
         let season = dir.join("Season 1");
         std::fs::create_dir_all(&season).unwrap();
-        std::fs::write(season.join("ep.nfo"), "<e><title>Ep</title></e>").unwrap();
+        std::fs::write(season.join("Show.S01E01.nfo"), "<e><title>Ep</title></e>").unwrap();
         std::fs::write(
             dir.join("tvshow.nfo"),
             "<t><title>Show</title><uniqueid type='tvdb'>5</uniqueid></t>",
         )
         .unwrap();
-        let got = read_for_video_file(&season.join("ep.mkv")).unwrap();
+        let got = read_for_video_file(&season.join("Show.S01E01.mkv")).unwrap();
         assert_eq!((got.title.as_deref(), got.tvdb_id), (Some("Ep"), Some(5)));
         assert!(read_for_video_file(&dir.join("lone.mkv")).is_some());
         assert!(read_nfo_file(&dir.join("missing.nfo")).is_none());
