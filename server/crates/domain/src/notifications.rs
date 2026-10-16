@@ -1,5 +1,5 @@
 //! Notification vocabulary, message formatting, channel requests and settings rules (`docs/spec/notifications.md`).
-use crate::js::{is_ws, trim};
+use crate::js::trim;
 use serde_json::{Map, Number, Value, json};
 
 pub const TYPES: [&str; 5] = ["discord", "slack", "webhook", "gotify", "ntfy"];
@@ -326,7 +326,6 @@ pub fn redact(typ: &str, settings: &Map<String, Value>) -> Map<String, Value> {
 }
 
 fn is_http_url(s: &str) -> bool {
-    let s = s.trim_start_matches(is_ws);
     s.get(..7)
         .is_some_and(|p| p.eq_ignore_ascii_case("http://"))
         || s.get(..8)
