@@ -302,7 +302,8 @@ pub async fn restore(cfg: &Config, db: &PgPool, path: &Path, name: &str) -> Resu
     tracing::warn!("Restoring backup: {name}");
     let roles = screen(path).await?;
     if !roles.is_empty() {
-        let mut args = conn_args(cfg);
+        let mut args = vec!["-X".to_owned()];
+        args.extend(conn_args(cfg));
         args.extend(["-v", "ON_ERROR_STOP=1", "-c"].map(String::from));
         args.push(create_roles_sql(&roles));
         run_tool(cfg, "psql", &args, Stdio::null()).await?;
