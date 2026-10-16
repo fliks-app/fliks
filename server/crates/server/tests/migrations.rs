@@ -431,7 +431,7 @@ async fn m1785600_skips_unexpected_setting_shapes(pool: PgPool) {
 }
 
 const TYPEORM_VERSIONS: i64 = 81;
-const SQL_FILES: i64 = 83;
+const SQL_FILES: i64 = 85;
 const LAST_TYPEORM_VERSION: i64 = 1_786_300_000_000;
 
 #[sqlx::test(migrations = false)]
@@ -481,7 +481,7 @@ async fn adopting_a_typeorm_database_matches_a_fresh_one(pool: PgPool) {
         "a TypeORM migration re-ran"
     );
     let new_rows = ledger.iter().filter(|r| r.0 > LAST_TYPEORM_VERSION);
-    assert!(new_rows.clone().count() == 2 && new_rows.into_iter().all(|r| r.1 > 0));
+    assert!(new_rows.clone().count() == 4 && new_rows.into_iter().all(|r| r.1 > 0));
 
     let fresh_db = "fliks_p7_fresh";
     for stmt in [
@@ -560,4 +560,37 @@ async fn migrate_enables_pg_trgm(pool: PgPool) {
         .await
         .unwrap();
     assert_eq!(sim, 1.0);
+}
+
+#[sqlx::test(migrations = false)]
+async fn m1786600_backfills_the_search_vector_and_keeps_it_current(pool: PgPool) {
+    apply_until(&pool, 1_786_600_000_000).await;
+    sql(
+        &pool,
+        r#"INSERT INTO media (id, title, overview, type, "updatedAt") VALUES (1, 'Les Évadés', 'Un banquier', 'movie', '2026-01-01')"#,
+    )
+    .await;
+    apply_only(&pool, 1_786_600_000_000).await;
+    let got: Vec<(bool, String)> = rows(
+        &pool,
+        r#"SELECT "searchVector" IS NOT NULL, to_char("updatedAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD') FROM media"#,
+    )
+    .await;
+    assert_eq!(got, vec![(true, "2026-01-01".to_string())]);
+
+    sql(&pool, r#"UPDATE media SET title = 'Zorro' WHERE id = 1"#).await;
+    let (weighted,): (bool,) =
+        sqlx::query_as(r#"SELECT "searchVector"::text LIKE '%''zorro'':1A%' FROM media"#)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert!(weighted);
+    sql(&pool, r#"INSERT INTO media (id, title, "originalTitle", type) VALUES (2, 'x', 'Original', 'movie')"#).await;
+    let (b,): (bool,) = sqlx::query_as(
+        r#"SELECT "searchVector"::text LIKE '%''original'':2B%' FROM media WHERE id = 2"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert!(b);
 }
