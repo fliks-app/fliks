@@ -2,7 +2,7 @@
 use super::{
     db::Ep,
     lifecycle::scope_covered,
-    rules::{Ctx, matches},
+    rules::{Ctx, matches, reads_metadata},
 };
 use serde_json::json;
 
@@ -141,4 +141,19 @@ fn nothing_to_check_is_not_covered() {
     let mut e = ep(1, 1, None, false, true);
     e.season_monitored = false;
     assert!(!scope_covered(None, &[e]), "unmonitored season");
+}
+
+#[test]
+fn only_the_criteria_that_need_tmdb_read_metadata() {
+    assert!(!reads_metadata(
+        &json!({"mediaType": "series", "userIds": [1]}),
+        false
+    ));
+    assert!(reads_metadata(&json!({"genreIds": [16]}), true));
+    assert!(reads_metadata(&json!({"yearFrom": 2000}), true));
+    assert!(reads_metadata(&json!({"maxSeasons": 2}), false));
+    assert!(
+        !reads_metadata(&json!({"maxSeasons": 2}), true),
+        "a requested scope is the count"
+    );
 }

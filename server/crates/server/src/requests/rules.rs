@@ -3,6 +3,7 @@ use super::{
     db,
     dto::{self, CreateRequest},
     flow::Res,
+    services,
 };
 use crate::{
     http::{
@@ -85,7 +86,7 @@ pub fn matches(c: &Value, ctx: &Ctx) -> bool {
     true
 }
 
-fn reads_metadata(c: &Value, has_seasons: bool) -> bool {
+pub(super) fn reads_metadata(c: &Value, has_seasons: bool) -> bool {
     !ints(c, "genreIds").is_empty()
         || c["yearFrom"].as_i64().is_some()
         || c["yearTo"].as_i64().is_some()
@@ -108,11 +109,7 @@ pub async fn should_auto_approve(
         .iter()
         .any(|r| reads_metadata(&r.criteria.0, scoped.is_some()))
     {
-        match st
-            .requests
-            .title_facts(st, &dto.media_type, dto.tmdb_id)
-            .await
-        {
+        match services::title_facts(st, &dto.media_type, dto.tmdb_id).await {
             Ok(f) => Some(f),
             Err(e) => {
                 tracing::warn!(

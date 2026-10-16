@@ -5,7 +5,7 @@ mod flow;
 mod lifecycle;
 mod routes;
 mod rules;
-mod services;
+pub mod services;
 #[cfg(test)]
 mod tests;
 
@@ -14,8 +14,6 @@ use axum::{
     Router,
     routing::{get, post},
 };
-use serde_json::{Map, Value};
-use std::{future::Future, pin::Pin};
 
 pub use lifecycle::{Lifecycle, MediaRef, spawn};
 pub use routes::*;
@@ -23,9 +21,6 @@ pub use rules::{
     __path_rule_create, __path_rule_get, __path_rule_list, __path_rule_remove, __path_rule_update,
     rule_create, rule_get, rule_list, rule_remove, rule_update,
 };
-pub use services::Services;
-
-pub type Fut<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
 /// A failure of a service owned by another milestone, with the HTTP status Nest answered.
 #[derive(Debug, Clone)]
@@ -60,57 +55,12 @@ pub struct ImportSpec {
     pub seasons: Option<Vec<i64>>,
 }
 
-/// The media a delete request removed: its title and the folder to purge, when it has one.
-#[derive(Debug, Clone)]
+/// The media a delete request removed: its title, the folder to purge when it has one, and the media
+/// lock that stays held until that folder is gone.
 pub struct Removed {
     pub title: String,
     pub disk_path: Option<String>,
-}
-
-/// What the request flows need from the media services: TMDB and the image store, `importFromTmdb`,
-/// `MediaService.remove` and the notifications. `Services` is the real one; tests substitute a fake.
-pub trait Ports: Send + Sync {
-    /// TMDB details of a title; an error fails the auto-approval criteria that need them closed.
-    fn title_facts<'a>(
-        &'a self,
-        st: &'a AppState,
-        media_type: &'a str,
-        tmdb_id: i32,
-    ) -> Fut<'a, Result<TitleFacts, String>>;
-    /// Stores the art of a title (`request/<mediaType>-<tmdbId>`) unless already stored; best effort.
-    fn request_art<'a>(
-        &'a self,
-        st: &'a AppState,
-        media_type: &'a str,
-        tmdb_id: i32,
-    ) -> Fut<'a, Result<Art, String>>;
-    /// `resolveImportTarget`: 400 when the title has no library to land in.
-    fn assert_import_target<'a>(
-        &'a self,
-        st: &'a AppState,
-        media_type: &'a str,
-        library_id: Option<i32>,
-    ) -> Fut<'a, Result<(), PortError>>;
-    /// `importFromTmdb` (it calls `Lifecycle::on_media_imported` itself); answers the media id.
-    fn import_from_tmdb<'a>(
-        &'a self,
-        st: &'a AppState,
-        spec: ImportSpec,
-        added_by: Option<i32>,
-    ) -> Fut<'a, Result<i32, PortError>>;
-    /// `MediaService.remove` (it calls `Lifecycle::on_media_removed` itself).
-    fn remove_media<'a>(
-        &'a self,
-        st: &'a AppState,
-        media_id: i32,
-    ) -> Fut<'a, Result<Removed, PortError>>;
-    fn delete_media_folder<'a>(
-        &'a self,
-        st: &'a AppState,
-        path: &'a str,
-    ) -> Fut<'a, Result<(), String>>;
-    /// `NotificationsService.dispatch`: fire and forget.
-    fn notify(&self, st: &AppState, event: &'static str, payload: Map<String, Value>);
+    pub lock: tokio::sync::OwnedMutexGuard<()>,
 }
 
 pub fn router() -> Router<AppState> {

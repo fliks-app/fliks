@@ -1,197 +1,128 @@
-//! `/api/requests/*` and the request lifecycle (`docs/spec/requests.md`) through the real router, with a fake for
-//! the S5 services the flows call (TMDB, import, removal, notifications).
-use axum::{Router, body::Body, http::Request};
+//! `/api/requests/*` and the request lifecycle (`docs/spec/requests.md`) through the real router, with a loopback
+//! stub for TMDB and the image host and a local listener for the webhook notifications.
+use axum::{
+    Json, Router,
+    body::Body,
+    extract::{Path, State},
+    http::{Request, StatusCode},
+    response::{IntoResponse, Response},
+    routing::{get, post},
+};
 use fliks_server::{
     app,
     config::Config,
     events::{Bus, DomainEvent},
-    requests::{Art, Fut, ImportSpec, Lifecycle, MediaRef, PortError, Ports, Removed, TitleFacts},
+    images::ImageStore,
+    requests::{Lifecycle, MediaRef, TitleFacts},
     state::AppState,
 };
-use serde_json::{Map, Value, json};
+use serde_json::{Value, json};
 use sqlx::PgPool;
-use std::sync::{
-    Arc, Mutex,
-    atomic::{AtomicUsize, Ordering},
+use std::{
+    collections::HashSet,
+    sync::{Arc, Mutex},
+    time::Duration,
 };
 use tokio::sync::broadcast::Receiver;
 use tower::ServiceExt;
 
 const SECRET: &str = "0123456789abcdef0123456789abcdef";
 
+/// TMDB for any id: the details follow `facts` (a plain title without), `down` ids answer 503.
 #[derive(Default)]
-struct Fake {
+struct Tmdb {
     facts: Mutex<Option<TitleFacts>>,
-    facts_calls: AtomicUsize,
-    import_err: Mutex<Option<PortError>>,
-    imports: Mutex<Vec<(ImportSpec, Option<i32>)>>,
-    remove_err: Mutex<Option<PortError>>,
-    art: Mutex<Option<Art>>,
-    notified: Mutex<Vec<(String, Value)>>,
+    down: Mutex<HashSet<i32>>,
 }
 
-impl Fake {
-    fn notified(&self, event: &str) -> Vec<Value> {
-        let all = self.notified.lock().unwrap();
-        all.iter()
-            .filter(|(e, _)| e == event)
-            .map(|(_, p)| p.clone())
-            .collect()
+impl Tmdb {
+    fn seasons(&self) -> i32 {
+        let f = self.facts.lock().unwrap();
+        f.as_ref().and_then(|f| f.season_count).unwrap_or(3)
     }
 }
 
-fn err(status: u16, message: &str) -> PortError {
-    PortError {
-        status,
-        message: message.into(),
-    }
+fn unavailable() -> Response {
+    StatusCode::SERVICE_UNAVAILABLE.into_response()
 }
 
-impl Ports for Fake {
-    fn title_facts<'a>(
-        &'a self,
-        _: &'a AppState,
-        _: &'a str,
-        _: i32,
-    ) -> Fut<'a, Result<TitleFacts, String>> {
-        self.facts_calls.fetch_add(1, Ordering::SeqCst);
-        let f = self.facts.lock().unwrap().clone();
-        Box::pin(async move { f.ok_or_else(|| "TMDB down".to_owned()) })
+async fn details(State(t): State<Arc<Tmdb>>, Path((kind, id)): Path<(String, i32)>) -> Response {
+    if t.down.lock().unwrap().contains(&id) {
+        return unavailable();
     }
-    fn request_art<'a>(
-        &'a self,
-        _: &'a AppState,
-        _: &'a str,
-        _: i32,
-    ) -> Fut<'a, Result<Art, String>> {
-        let a = self.art.lock().unwrap().clone();
-        Box::pin(async move { a.ok_or_else(|| "no art".to_owned()) })
+    let facts = t.facts.lock().unwrap().clone().unwrap_or_default();
+    let genres: Vec<Value> = facts
+        .genre_ids
+        .iter()
+        .map(|g| json!({"id": g, "name": format!("g{g}")}))
+        .collect();
+    let date = facts
+        .year
+        .map_or("2020-01-01".into(), |y| format!("{y}-01-01"));
+    let mut body = json!({
+        "id": id, "overview": "o", "genres": genres, "poster_path": "/p.jpg", "status": "Released",
+        "runtime": 100, "credits": {"cast": [], "crew": []},
+    });
+    if kind == "movie" {
+        body["title"] = json!(format!("Movie {id}"));
+        body["release_date"] = json!(date);
+    } else {
+        body["name"] = json!(format!("Series {id}"));
+        body["first_air_date"] = json!(date);
+        body["number_of_seasons"] = json!(t.seasons());
+        body["seasons"] = (1..=t.seasons())
+            .map(|n| json!({"season_number": n, "episode_count": 1}))
+            .collect();
     }
-    fn assert_import_target<'a>(
-        &'a self,
-        _: &'a AppState,
-        _: &'a str,
-        _: Option<i32>,
-    ) -> Fut<'a, Result<(), PortError>> {
-        Box::pin(async { Ok(()) })
+    Json(body).into_response()
+}
+
+async fn season(State(t): State<Arc<Tmdb>>, Path((id, n)): Path<(i32, i32)>) -> Response {
+    if t.down.lock().unwrap().contains(&id) {
+        return unavailable();
     }
-    /// `importFromTmdb`: 409 for a known title, else a media row and the lifecycle hook.
-    fn import_from_tmdb<'a>(
-        &'a self,
-        st: &'a AppState,
-        spec: ImportSpec,
-        added_by: Option<i32>,
-    ) -> Fut<'a, Result<i32, PortError>> {
-        self.imports.lock().unwrap().push((spec.clone(), added_by));
-        let forced = self.import_err.lock().unwrap().clone();
-        Box::pin(async move {
-            if let Some(e) = forced {
-                return Err(e);
-            }
-            let pool = &st.db;
-            let known: Option<i32> = sqlx::query_scalar(
-                r#"SELECT id FROM media WHERE "tmdbId" = $1 AND type::text = $2"#,
-            )
-            .bind(spec.tmdb_id)
-            .bind(&spec.media_type)
-            .fetch_optional(pool)
-            .await
-            .unwrap();
-            if known.is_some() {
-                return Err(err(409, "This title is already in the library"));
-            }
-            let id: i32 = sqlx::query_scalar(
-                r#"INSERT INTO media (title, type, "tmdbId", "libraryId", "qualityProfileId", "languageProfileId", monitored)
-                VALUES ('Imported', $1::text::media_type_enum, $2, $3, $4, $5, false) RETURNING id"#,
-            )
-            .bind(&spec.media_type)
-            .bind(spec.tmdb_id)
-            .bind(spec.library_id)
-            .bind(spec.quality_profile_id)
-            .bind(spec.language_profile_id)
-            .fetch_one(pool)
-            .await
-            .unwrap();
-            if spec.media_type == "series" {
-                for n in 1..=3 {
-                    sqlx::query(r#"INSERT INTO seasons ("seasonNumber", "mediaId", monitored) VALUES ($1, $2, false)"#)
-                        .bind(n)
-                        .bind(id)
-                        .execute(pool)
-                        .await
-                        .unwrap();
-                }
-            }
-            let media = MediaRef {
-                id,
-                media_type: spec.media_type,
-                tmdb_id: Some(spec.tmdb_id),
-                monitored: false,
-            };
-            Lifecycle::of(st).on_media_imported(media, added_by).await;
-            Ok(id)
-        })
-    }
-    /// `MediaService.remove`: the hook runs in the delete's transaction.
-    fn remove_media<'a>(
-        &'a self,
-        st: &'a AppState,
-        media_id: i32,
-    ) -> Fut<'a, Result<Removed, PortError>> {
-        let forced = self.remove_err.lock().unwrap().clone();
-        Box::pin(async move {
-            if let Some(e) = forced {
-                return Err(e);
-            }
-            let pool = &st.db;
-            let (media_type, tmdb_id): (String, Option<i32>) =
-                sqlx::query_as(r#"SELECT type::text, "tmdbId" FROM media WHERE id = $1"#)
-                    .bind(media_id)
-                    .fetch_one(pool)
-                    .await
-                    .unwrap();
-            let mut tx = pool.begin().await.unwrap();
-            let media = MediaRef {
-                id: media_id,
-                media_type,
-                tmdb_id,
-                monitored: true,
-            };
-            Lifecycle::of(st)
-                .on_media_removed(&mut tx, &media)
-                .await
-                .unwrap();
-            sqlx::query("DELETE FROM media WHERE id = $1")
-                .bind(media_id)
-                .execute(&mut *tx)
-                .await
-                .unwrap();
-            tx.commit().await.unwrap();
-            Ok(Removed {
-                title: "Imported".into(),
-                disk_path: None,
-            })
-        })
-    }
-    fn delete_media_folder<'a>(
-        &'a self,
-        _: &'a AppState,
-        _: &'a str,
-    ) -> Fut<'a, Result<(), String>> {
-        Box::pin(async { Ok(()) })
-    }
-    fn notify(&self, _: &AppState, event: &'static str, payload: Map<String, Value>) {
-        self.notified
-            .lock()
-            .unwrap()
-            .push((event.into(), Value::Object(payload)));
-    }
+    Json(json!({
+        "season_number": n,
+        "episodes": [{"episode_number": 1, "name": "E1", "air_date": "2020-01-01", "runtime": 40}],
+    }))
+    .into_response()
+}
+
+async fn poster() -> impl IntoResponse {
+    let img = image::RgbImage::from_fn(60, 90, |x, y| {
+        image::Rgb([(x % 256) as u8, (y % 256) as u8, 3])
+    });
+    let mut out = vec![];
+    image::DynamicImage::ImageRgb8(img)
+        .write_to(
+            &mut std::io::Cursor::new(&mut out),
+            image::ImageFormat::Jpeg,
+        )
+        .unwrap();
+    ([("content-type", "image/jpeg")], out)
+}
+
+/// The webhook the notification connection posts to.
+#[derive(Default)]
+struct Hook(Mutex<Vec<Value>>);
+
+async fn capture(State(h): State<Arc<Hook>>, Json(b): Json<Value>) -> StatusCode {
+    h.0.lock().unwrap().push(b);
+    StatusCode::OK
+}
+
+async fn serve(router: Router) -> String {
+    let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", l.local_addr().unwrap());
+    tokio::spawn(async { axum::serve(l, router).await.unwrap() });
+    base
 }
 
 struct Ctx {
     app: Router,
     st: AppState,
-    fake: Arc<Fake>,
+    tmdb: Arc<Tmdb>,
+    hook: Arc<Hook>,
     rx: Receiver<Arc<Bus>>,
     admin: String,
     user: String,
@@ -205,10 +136,57 @@ const MOVIES: i32 = 1;
 const SERIES: i32 = 2;
 
 async fn ctx(pool: PgPool) -> Ctx {
+    ctx_with_key(pool, true).await
+}
+
+async fn ctx_with_key(pool: PgPool, tmdb_key: bool) -> Ctx {
     fliks_server::db::migrate(&pool).await.unwrap();
-    let fake = Arc::new(Fake::default());
-    let mut st = AppState::new(pool.clone(), Config::from_lookup(|_| None), SECRET);
-    st.requests = fake.clone();
+    let tmdb = Arc::new(Tmdb::default());
+    let base = serve(
+        Router::new()
+            .route("/tmdb/3/{kind}/{id}", get(details))
+            .route("/tmdb/3/tv/{id}/season/{n}", get(season))
+            .route("/img/t/p/{*file}", get(poster))
+            .with_state(tmdb.clone()),
+    )
+    .await;
+    let hook = Arc::new(Hook::default());
+    let hook_base = serve(
+        Router::new()
+            .route("/hook", post(capture))
+            .with_state(hook.clone()),
+    )
+    .await;
+    let cfg = Config::from_lookup(|k| match k {
+        "TMDB_API_KEY" if tmdb_key => Some("tmdb-test-key".into()),
+        "FLIKS_TMDB_API_URL" => Some(format!("{base}/tmdb/3")),
+        "FLIKS_TMDB_IMAGE_URL" => Some(format!("{base}/img/t/p")),
+        _ => None,
+    });
+    let mut st = AppState::new(pool.clone(), cfg, SECRET);
+    let data = std::env::temp_dir().join(format!(
+        "fliks-requests-{}",
+        fliks_server::config::random_hex(6)
+    ));
+    st.images = Arc::new(ImageStore::with_root(data, &format!("{base}/img/t/p")));
+    sqlx::query(
+        r#"INSERT INTO notification_connections (name, type, settings, events, enabled)
+           VALUES ('hook', 'webhook', $1, $2, true)"#,
+    )
+    .bind(json!({"url": format!("{hook_base}/hook")}))
+    .bind(json!([
+        "request.created",
+        "request.approved",
+        "request.declined",
+        "request.processing",
+        "request.available",
+        "request.delete.created",
+        "request.delete.approved",
+        "request.delete.declined"
+    ]))
+    .execute(&pool)
+    .await
+    .unwrap();
     for (id, name, types) in [
         (MOVIES, "Movies", r#"["movie"]"#),
         (SERIES, "Series", r#"["series"]"#),
@@ -279,7 +257,8 @@ async fn ctx(pool: PgPool) -> Ctx {
         app,
         rx: st.hub.subscribe(),
         st,
-        fake,
+        tmdb,
+        hook,
         validator: toks.pop().unwrap(),
         other: toks.pop().unwrap(),
         user: toks.pop().unwrap(),
@@ -371,16 +350,15 @@ async fn create_with_sole_library_and_no_rule_stays_pending(pool: PgPool) {
     );
     assert_eq!(r["libraryId"], MOVIES);
     assert!(r["approvedBy"].is_null() && r["media"].is_null());
-    assert_eq!(
-        c.fake.imports.lock().unwrap().len(),
-        0,
+    assert!(
+        c.imports().await.is_empty(),
         "pending requests import nothing"
     );
     assert!(
         matches!(&domain(&mut c)[..], [DomainEvent::RequestCreated { kind, .. }] if kind == "add")
     );
     assert_eq!(
-        c.fake.notified("request.created")[0],
+        c.notified("request.created").await[0],
         json!({"title": "Movie 10", "mediaType": "movie"})
     );
 }
@@ -391,7 +369,7 @@ async fn auto_approval_by_user_role_and_library_imports_before_inserting(pool: P
     rule(&c, json!({"userIds": [999]})).await;
     let (s, _) = call(&c, "POST", "/api/requests", &c.user, movie(11)).await;
     assert_eq!(s, 201);
-    assert_eq!(c.fake.imports.lock().unwrap().len(), 0, "no rule matches");
+    assert!(c.imports().await.is_empty(), "no rule matches");
     rule(&c, json!({"mediaType": "movie", "libraryIds": [MOVIES]})).await;
     let _ = domain(&mut c);
     let (s, r) = call(&c, "POST", "/api/requests", &c.user, movie(12)).await;
@@ -399,14 +377,22 @@ async fn auto_approval_by_user_role_and_library_imports_before_inserting(pool: P
     assert_eq!(r["status"], "approved");
     assert_eq!(r["approvedBy"]["username"], "user");
     assert_eq!(r["media"]["tmdbId"], 12);
-    let imports = c.fake.imports.lock().unwrap().clone();
+    let imports = c.imports().await;
     assert_eq!(imports.len(), 1);
     assert_eq!(
-        (imports[0].0.library_id, imports[0].1),
+        imports[0],
         (Some(MOVIES), r["userId"].as_i64().map(|u| u as i32)),
         "the persisted destination and the requester as importer"
     );
-    let ev = domain(&mut c);
+    let ev: Vec<DomainEvent> = domain(&mut c)
+        .into_iter()
+        .filter(|e| {
+            matches!(
+                e,
+                DomainEvent::RequestCreated { .. } | DomainEvent::RequestApproved { .. }
+            )
+        })
+        .collect();
     assert!(matches!(
         &ev[..],
         [
@@ -417,25 +403,21 @@ async fn auto_approval_by_user_role_and_library_imports_before_inserting(pool: P
             }
         ]
     ));
-    assert_eq!(c.fake.notified("request.approved").len(), 1);
+    assert_eq!(c.notified("request.approved").await.len(), 1);
 }
 
 #[sqlx::test(migrations = false)]
-async fn metadata_is_fetched_only_when_a_rule_reads_it_and_fails_closed(pool: PgPool) {
+async fn a_metadata_rule_fails_closed_when_tmdb_is_unavailable(pool: PgPool) {
     let c = ctx(pool).await;
-    rule(&c, json!({"mediaType": "series"})).await;
-    let (s, _) = call(&c, "POST", "/api/requests", &c.user, series(20, json!([1]))).await;
-    assert_eq!(s, 201);
-    assert_eq!(c.fake.facts_calls.load(Ordering::SeqCst), 0);
     rule(&c, json!({"genreIds": [16]})).await;
+    c.tmdb.down.lock().unwrap().insert(21);
     let (s, r) = call(&c, "POST", "/api/requests", &c.user, movie(21)).await;
     assert_eq!(s, 201, "{r}");
-    assert_eq!(c.fake.facts_calls.load(Ordering::SeqCst), 1);
     assert_eq!(
         r["status"], "pending",
         "a failed lookup cannot match a genre criterion"
     );
-    *c.fake.facts.lock().unwrap() = Some(TitleFacts {
+    *c.tmdb.facts.lock().unwrap() = Some(TitleFacts {
         genre_ids: vec![16, 18],
         year: Some(2010),
         season_count: Some(2),
@@ -445,10 +427,26 @@ async fn metadata_is_fetched_only_when_a_rule_reads_it_and_fails_closed(pool: Pg
 }
 
 #[sqlx::test(migrations = false)]
+async fn without_a_tmdb_key_an_approval_is_refused_and_a_metadata_rule_fails_closed(pool: PgPool) {
+    let c = ctx_with_key(pool, false).await;
+    rule(&c, json!({"genreIds": [16]})).await;
+    let (s, r) = call(&c, "POST", "/api/requests", &c.user, movie(23)).await;
+    assert_eq!((s, r["status"].clone()), (201, json!("pending")));
+    rule(&c, json!({})).await;
+    let (s, r) = call(&c, "POST", "/api/requests", &c.user, movie(24)).await;
+    assert_eq!(
+        (s, r["message"].clone()),
+        (400, json!("TMDB API key is not configured"))
+    );
+    let (_, list) = call(&c, "GET", "/api/requests?tmdbId=24", &c.admin, json!(null)).await;
+    assert_eq!(list["total"], 0, "the failed import aborted the create");
+}
+
+#[sqlx::test(migrations = false)]
 async fn max_seasons_counts_the_requested_scope_else_the_show(pool: PgPool) {
     let c = ctx(pool).await;
     rule(&c, json!({"mediaType": "series", "maxSeasons": 2})).await;
-    *c.fake.facts.lock().unwrap() = Some(TitleFacts {
+    *c.tmdb.facts.lock().unwrap() = Some(TitleFacts {
         genre_ids: vec![],
         year: None,
         season_count: Some(5),
@@ -487,9 +485,9 @@ async fn max_seasons_counts_the_requested_scope_else_the_show(pool: PgPool) {
 async fn a_failed_import_aborts_the_create(pool: PgPool) {
     let c = ctx(pool).await;
     rule(&c, json!({})).await;
-    *c.fake.import_err.lock().unwrap() = Some(err(400, "TMDB API key is not configured"));
+    c.tmdb.down.lock().unwrap().insert(40);
     let (s, _) = call(&c, "POST", "/api/requests", &c.user, movie(40)).await;
-    assert_eq!(s, 400);
+    assert_eq!(s, 500, "TMDB answering 503 is Nest's generic 500");
     let (_, list) = call(&c, "GET", "/api/requests", &c.admin, json!(null)).await;
     assert_eq!(list["total"], 0, "nothing inserted");
 }
@@ -675,7 +673,7 @@ async fn delete_request_approve_removes_the_media_and_resolves_every_duplicate(p
         .await
         .unwrap();
     assert_eq!(open, 0, "the duplicate is done with it");
-    assert_eq!(c.fake.notified("request.delete.approved").len(), 1);
+    assert_eq!(c.notified("request.delete.approved").await.len(), 1);
     assert!(
         domain(&mut c)
             .iter()
@@ -691,7 +689,16 @@ async fn delete_request_rolls_back_when_the_removal_fails(pool: PgPool) {
     let del = json!({"mediaType": "movie", "kind": "delete", "tmdbId": 72, "title": "M"});
     let (_, a) = call(&c, "POST", "/api/requests", &c.user, del).await;
     let id = rid(&a);
-    *c.fake.remove_err.lock().unwrap() = Some(err(500, "boom"));
+    q(
+        &c.pool(),
+        "CREATE FUNCTION refuse_delete() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'boom'; END $$",
+    )
+    .await;
+    q(
+        &c.pool(),
+        "CREATE TRIGGER refuse BEFORE DELETE ON media FOR EACH ROW EXECUTE FUNCTION refuse_delete()",
+    )
+    .await;
     let (s, _) = call(
         &c,
         "POST",
@@ -712,7 +719,7 @@ async fn delete_request_rolls_back_when_the_removal_fails(pool: PgPool) {
     .await;
     assert_eq!(d["status"], "declined");
     assert_eq!(
-        c.fake.notified("request.delete.declined")[0],
+        c.notified("request.delete.declined").await[0],
         json!({"title": "M", "reason": "keep"})
     );
 }
@@ -737,7 +744,7 @@ async fn approve_imports_for_the_requester_links_and_announces_once(pool: PgPool
         (json!("approved"), json!("admin"))
     );
     assert_eq!(r["media"]["tmdbId"], 80);
-    let imports = c.fake.imports.lock().unwrap().clone();
+    let imports = c.imports().await;
     assert_eq!(
         imports[0].1,
         a["userId"].as_i64().map(|u| u as i32),
@@ -752,7 +759,7 @@ async fn approve_imports_for_the_requester_links_and_announces_once(pool: PgPool
         .collect();
     assert_eq!(reasons, ["media-imported", "request-approved"]);
     assert_eq!(
-        c.fake.notified("request.approved").last().unwrap(),
+        c.notified("request.approved").await.last().unwrap(),
         &json!({"title": "Movie 80"})
     );
     let (s, _) = call(
@@ -771,7 +778,7 @@ async fn approve_rolls_back_on_an_import_error(pool: PgPool) {
     let c = ctx(pool).await;
     let (_, a) = call(&c, "POST", "/api/requests", &c.user, movie(81)).await;
     let id = rid(&a);
-    *c.fake.import_err.lock().unwrap() = Some(err(503, "down"));
+    c.tmdb.down.lock().unwrap().insert(81);
     let (s, _) = call(
         &c,
         "POST",
@@ -780,7 +787,7 @@ async fn approve_rolls_back_on_an_import_error(pool: PgPool) {
         json!(null),
     )
     .await;
-    assert_eq!(s, 503);
+    assert_eq!(s, 500);
     let (_, r) = call(
         &c,
         "GET",
@@ -1041,7 +1048,7 @@ async fn grabs_move_approved_requests_to_processing_by_season(pool: PgPool) {
         .await
         .unwrap();
     assert_eq!(st, ["processing", "approved", "processing"]);
-    assert_eq!(c.fake.notified("request.processing").len(), 2);
+    assert_eq!(c.notified("request.processing").await.len(), 2);
 }
 
 async fn episode(
@@ -1084,7 +1091,7 @@ async fn import_complete_makes_requests_available_when_the_scope_is_on_disk(pool
         ["available", "processing", "processing", "processing"],
         "season 2 lacks E2, season 3 is unmonitored (nothing to check is not delivered), the whole show lacks season 2"
     );
-    assert_eq!(c.fake.notified("request.available").len(), 1);
+    assert_eq!(c.notified("request.available").await.len(), 1);
 }
 
 #[sqlx::test(migrations = false)]
@@ -1138,29 +1145,23 @@ async fn wait_status(c: &Ctx, id: i64, want: &str) {
 #[sqlx::test(migrations = false)]
 async fn art_lands_in_the_response_and_a_failure_is_swallowed(pool: PgPool) {
     let c = ctx(pool).await;
+    c.tmdb.down.lock().unwrap().insert(100);
     let (s, r) = call(&c, "POST", "/api/requests", &c.user, movie(100)).await;
     assert_eq!(
         (s, r["posterUrl"].clone()),
         (201, Value::Null),
         "a failed prefetch leaves the art empty"
     );
-    *c.fake.art.lock().unwrap() = Some(Art {
-        poster: Some("/api/images/request/movie-101/poster?v=1".into()),
-        fanart: None,
-    });
+    c.tmdb.down.lock().unwrap().remove(&100);
     let (_, r) = call(&c, "POST", "/api/requests", &c.user, movie(101)).await;
-    assert_eq!(
-        (r["posterUrl"].clone(), r["fanartUrl"].clone()),
-        (
-            json!("/api/images/request/movie-101/poster?v=1"),
-            Value::Null
-        )
+    let poster = r["posterUrl"].as_str().unwrap().to_owned();
+    assert!(
+        poster.starts_with("/api/images/request/movie-101/poster?v="),
+        "{poster}"
     );
+    assert_eq!(r["fanartUrl"], Value::Null, "the stub has no backdrop");
     let (_, l) = call(&c, "GET", "/api/requests?tmdbId=101", &c.admin, json!(null)).await;
-    assert_eq!(
-        l["data"][0]["posterUrl"], "/api/images/request/movie-101/poster?v=1",
-        "stored too"
-    );
+    assert_eq!(l["data"][0]["posterUrl"], poster.as_str(), "stored too");
 }
 
 #[sqlx::test(migrations = false)]
@@ -1225,11 +1226,45 @@ async fn two_approvals_cannot_both_import(pool: PgPool) {
     let mut codes = [x.0, y.0];
     codes.sort_unstable();
     assert_eq!(codes, [201, 409]);
-    assert_eq!(c.fake.imports.lock().unwrap().len(), 1);
+    assert_eq!(c.imports().await.len(), 1);
 }
 
 impl Ctx {
     fn pool(&self) -> PgPool {
         self.st.db.clone()
+    }
+
+    /// The payloads the webhook received for `event`, once the first one arrived.
+    async fn notified(&self, event: &str) -> Vec<Value> {
+        let mine = || -> Vec<Value> {
+            self.hook
+                .0
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|b| b["event"] == event)
+                .map(|b| {
+                    let mut p = b.clone();
+                    p.as_object_mut().unwrap().remove("event");
+                    p
+                })
+                .collect()
+        };
+        for _ in 0..40 {
+            if !mine().is_empty() {
+                tokio::time::sleep(Duration::from_millis(150)).await;
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        mine()
+    }
+
+    /// `(libraryId, addedById)` of every media a request imported.
+    async fn imports(&self) -> Vec<(Option<i32>, Option<i32>)> {
+        sqlx::query_as(r#"SELECT "libraryId", "addedById" FROM media ORDER BY id"#)
+            .fetch_all(&self.st.db)
+            .await
+            .unwrap()
     }
 }

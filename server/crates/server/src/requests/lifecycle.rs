@@ -1,5 +1,5 @@
 //! The request lifecycle (`requests.md` rules 32-42): what happens to requests when the media side moves.
-use super::db;
+use super::{db, services};
 use crate::{
     events::{Bus, DomainEvent, SseEvent},
     http::AppError,
@@ -121,7 +121,7 @@ impl Lifecycle {
                 continue;
             }
             if db::set_status(&self.st.db, r.id, "processing", &["approved"]).await? {
-                self.st.requests.notify(
+                services::notify(
                     &self.st,
                     "request.processing",
                     obj(json!({"title": r.title, "mediaType": r.media_type})),
@@ -160,7 +160,7 @@ impl Lifecycle {
                 continue;
             }
             if db::set_status(&self.st.db, r.id, "available", &["approved", "processing"]).await? {
-                self.st.requests.notify(
+                services::notify(
                     &self.st,
                     "request.available",
                     obj(json!({"title": r.title, "mediaType": r.media_type})),
