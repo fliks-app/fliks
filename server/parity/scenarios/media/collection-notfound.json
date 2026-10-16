@@ -1,0 +1,20 @@
+{
+  "deviation": null,
+  "name": "media-collection-notfound",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Media #999999 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "GET",
+      "path": "/api/media/999999/collection"
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "deviation": null,
+  "name": "media-calendar-month",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": [],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/calendar"
+    }
+  ]
+}

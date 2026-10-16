@@ -1,0 +1,19 @@
+{
+  "deviation": null,
+  "name": "media-similar-limit-fraction",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": [],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/3/similar?limit=0.5"
+    }
+  ],
+  "unordered": [
+    "$"
+  ]
+}

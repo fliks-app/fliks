@@ -1,0 +1,130 @@
+{
+  "deviation": null,
+  "name": "media-list-filter-letter-lower",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "data": [
+            {
+              "addedById": 2,
+              "additionalFanartUrls": [],
+              "alternativeTitles": [],
+              "createdAt": "2026-01-22T00:00:00.000Z",
+              "digitalRelease": null,
+              "fanartUrl": null,
+              "files": [
+                {
+                  "createdAt": "2026-02-03T04:00:00.000Z",
+                  "episodeId": null,
+                  "id": 56,
+                  "language": null,
+                  "mediaId": 21,
+                  "osdbBytesize": null,
+                  "osdbHash": null,
+                  "quality": "Bluray-720p",
+                  "relativePath": "alpha test (2020)/alpha test (2020).720.mkv",
+                  "size": 1000056,
+                  "streamInfo": null,
+                  "updatedAt": "2026-01-01T00:00:00.000Z"
+                },
+                {
+                  "createdAt": "2026-02-05T04:00:00.000Z",
+                  "episodeId": null,
+                  "id": 30,
+                  "language": "en",
+                  "mediaId": 21,
+                  "osdbBytesize": 12345678901,
+                  "osdbHash": "8e245d9679d31e12",
+                  "quality": "WEBDL-1080p",
+                  "relativePath": "alpha test (2020)/alpha test (2020).mkv",
+                  "size": 1000030,
+                  "streamInfo": {
+                    "audio": [],
+                    "subtitles": [],
+                    "video": []
+                  },
+                  "updatedAt": "2026-01-01T00:00:00.000Z"
+                }
+              ],
+              "folderName": "alpha test (2020)",
+              "genres": [
+                "Comedy"
+              ],
+              "id": 21,
+              "imdbId": "tt0000021",
+              "inCinemas": null,
+              "languageProfile": null,
+              "languageProfileId": null,
+              "library": {
+                "color": "#3b82f6",
+                "createdAt": "2026-01-01T00:00:00.000Z",
+                "defaultLanguageProfileId": 1,
+                "defaultQualityProfileId": 1,
+                "icon": "film",
+                "id": 1,
+                "label": null,
+                "mediaTypes": [
+                  "movie"
+                ],
+                "metadataLanguage": null,
+                "metadataRegion": null,
+                "name": "Movies",
+                "path": "/tmp/fliks-parity/media/movies",
+                "preferredProvider": null,
+                "updatedAt": "2026-01-01T00:00:00.000Z"
+              },
+              "libraryId": 1,
+              "logoUrl": null,
+              "metadataRefreshedAt": null,
+              "minimumAvailability": "released",
+              "monitored": true,
+              "originalTitle": "Alpha Original",
+              "overview": "A comedy about impossible things",
+              "path": "/tmp/fliks-parity/media/movies/alpha test (2020)",
+              "physicalRelease": null,
+              "posterUrl": "/api/images/21/poster",
+              "preferredProvider": null,
+              "progressPercent": 0,
+              "qualityProfile": {
+                "createdAt": "2026-01-01T00:00:00.000Z",
+                "cutoff": 18,
+                "id": 1,
+                "items": [],
+                "minCustomFormatScore": 0,
+                "name": "Parity HD",
+                "resolutionUpgradeOnly": false,
+                "updatedAt": "2026-01-01T00:00:00.000Z",
+                "upgradeAllowed": false
+              },
+              "qualityProfileId": 1,
+              "rating": 6,
+              "releaseDate": null,
+              "runtime": null,
+              "sizeOnDisk": 2000086,
+              "status": "released",
+              "title": "alpha test",
+              "tmdbCollectionId": null,
+              "tmdbCollectionName": null,
+              "tmdbId": 3021,
+              "tvdbId": null,
+              "type": "movie",
+              "updatedAt": "2026-01-01T00:00:00.000Z",
+              "watched": false,
+              "year": 2015
+            }
+          ],
+          "total": 1
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media?letter=a"
+    }
+  ],
+  "unordered": [
+    "$.data[*].files"
+  ]
+}

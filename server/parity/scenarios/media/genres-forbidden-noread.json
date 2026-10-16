@@ -1,0 +1,20 @@
+{
+  "deviation": null,
+  "name": "media-genres-forbidden-noread",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "noread",
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "GET",
+      "path": "/api/media/genres"
+    }
+  ]
+}

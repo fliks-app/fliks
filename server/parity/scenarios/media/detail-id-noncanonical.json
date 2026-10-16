@@ -1,0 +1,33 @@
+{
+  "deviation": "C20",
+  "name": "media-detail-id-noncanonical",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Validation failed (numeric string is expected)",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "GET",
+      "path": "/api/media/%207%20"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Validation failed (numeric string is expected)",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "GET",
+      "path": "/api/media/1e1"
+    }
+  ]
+}

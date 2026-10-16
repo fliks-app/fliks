@@ -1,0 +1,25 @@
+{
+  "deviation": null,
+  "name": "media-list-validation-bad-status",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "status must be one of the following values: tba, announced, released, ended, continuing, deleted"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "GET",
+      "path": "/api/media?status=bogus"
+    }
+  ],
+  "unordered": [
+    "$.data[*].files"
+  ]
+}

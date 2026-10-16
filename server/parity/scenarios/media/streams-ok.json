@@ -1,0 +1,24 @@
+{
+  "deviation": null,
+  "engine": "up",
+  "name": "media-streams-ok",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "codec": "aac",
+            "language": "und",
+            "streamIndex": 1,
+            "type": "audio"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/1/streams/1"
+    }
+  ]
+}

@@ -1,0 +1,91 @@
+{
+  "deviation": null,
+  "name": "media-cast-ok",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "character": "Hero",
+            "createdAt": "2026-01-01T00:00:00.000Z",
+            "id": 1,
+            "order": 0,
+            "person": {
+              "avatarUrl": "/api/persons/1/avatar",
+              "biography": "Biography of Alice",
+              "birthday": "1980-02-03",
+              "createdAt": "2026-01-01T00:00:00.000Z",
+              "deathday": null,
+              "departments": [
+                "Acting"
+              ],
+              "id": 1,
+              "knownForDepartment": "Acting",
+              "metadataRefreshedAt": "2026-01-05T10:00:00.000Z",
+              "name": "Alice Actor",
+              "placeOfBirth": "Paris",
+              "provider": "tmdb",
+              "tmdbId": 101,
+              "updatedAt": "2026-01-01T00:00:00.000Z"
+            },
+            "updatedAt": "2026-01-01T00:00:00.000Z"
+          },
+          {
+            "character": "Villain",
+            "createdAt": "2026-01-01T00:00:00.000Z",
+            "id": 2,
+            "order": 1,
+            "person": {
+              "avatarUrl": null,
+              "biography": null,
+              "birthday": null,
+              "createdAt": "2026-01-01T00:00:00.000Z",
+              "deathday": null,
+              "departments": [],
+              "id": 2,
+              "knownForDepartment": null,
+              "metadataRefreshedAt": null,
+              "name": "Bob Actor",
+              "placeOfBirth": null,
+              "provider": "tmdb",
+              "tmdbId": 102,
+              "updatedAt": "2026-01-01T00:00:00.000Z"
+            },
+            "updatedAt": "2026-01-01T00:00:00.000Z"
+          },
+          {
+            "character": "Cameo",
+            "createdAt": "2026-01-01T00:00:00.000Z",
+            "id": 3,
+            "order": 1,
+            "person": {
+              "avatarUrl": null,
+              "biography": null,
+              "birthday": "1970-07-08",
+              "createdAt": "2026-01-01T00:00:00.000Z",
+              "deathday": "2020-01-02",
+              "departments": [
+                "Directing",
+                "Writing"
+              ],
+              "id": 3,
+              "knownForDepartment": "Directing",
+              "metadataRefreshedAt": null,
+              "name": "Carol Director",
+              "placeOfBirth": "Lyon",
+              "provider": "tmdb",
+              "tmdbId": 103,
+              "updatedAt": "2026-01-01T00:00:00.000Z"
+            },
+            "updatedAt": "2026-01-01T00:00:00.000Z"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/3/cast"
+    }
+  ]
+}

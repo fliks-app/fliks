@@ -1,0 +1,103 @@
+{
+  "deviation": null,
+  "name": "media-list-search-null-vector",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "data": [
+            {
+              "addedById": null,
+              "additionalFanartUrls": [],
+              "alternativeTitles": [],
+              "createdAt": "2026-01-25T00:00:00.000Z",
+              "digitalRelease": null,
+              "fanartUrl": null,
+              "files": [
+                {
+                  "createdAt": "2026-02-01T09:00:00.000Z",
+                  "episodeId": null,
+                  "id": 33,
+                  "language": "en",
+                  "mediaId": 24,
+                  "osdbBytesize": null,
+                  "osdbHash": null,
+                  "quality": "WEBDL-1080p",
+                  "relativePath": "L'Impossible (2020)/L'Impossible (2020).mkv",
+                  "size": 1000033,
+                  "streamInfo": null,
+                  "updatedAt": "2026-01-01T00:00:00.000Z"
+                }
+              ],
+              "folderName": "L'Impossible (2020)",
+              "genres": [
+                "Drama",
+                "Thriller"
+              ],
+              "id": 24,
+              "imdbId": null,
+              "inCinemas": null,
+              "languageProfile": null,
+              "languageProfileId": null,
+              "library": {
+                "color": "#3b82f6",
+                "createdAt": "2026-01-01T00:00:00.000Z",
+                "defaultLanguageProfileId": 1,
+                "defaultQualityProfileId": 1,
+                "icon": "film",
+                "id": 1,
+                "label": null,
+                "mediaTypes": [
+                  "movie"
+                ],
+                "metadataLanguage": null,
+                "metadataRegion": null,
+                "name": "Movies",
+                "path": "/tmp/fliks-parity/media/movies",
+                "preferredProvider": null,
+                "updatedAt": "2026-01-01T00:00:00.000Z"
+              },
+              "libraryId": 1,
+              "logoUrl": null,
+              "metadataRefreshedAt": null,
+              "minimumAvailability": "released",
+              "monitored": true,
+              "originalTitle": "Lo Imposible",
+              "overview": "Une famille survit au tsunami",
+              "path": "/tmp/fliks-parity/media/movies/L'Impossible (2020)",
+              "physicalRelease": null,
+              "posterUrl": "/api/images/24/poster",
+              "preferredProvider": null,
+              "progressPercent": 0,
+              "qualityProfile": null,
+              "qualityProfileId": null,
+              "rating": 7.6,
+              "releaseDate": null,
+              "runtime": null,
+              "sizeOnDisk": 1000033,
+              "status": "released",
+              "title": "L'Impossible",
+              "tmdbCollectionId": null,
+              "tmdbCollectionName": null,
+              "tmdbId": 3024,
+              "tvdbId": null,
+              "type": "movie",
+              "updatedAt": "2026-01-01T00:00:00.000Z",
+              "watched": false,
+              "year": 2012
+            }
+          ],
+          "total": 1
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media?q=L%27Impossible&sortBy=title"
+    }
+  ],
+  "unordered": [
+    "$.data[*].files"
+  ]
+}

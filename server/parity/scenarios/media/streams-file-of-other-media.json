@@ -1,0 +1,20 @@
+{
+  "deviation": null,
+  "name": "media-streams-file-of-other-media",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "MediaFile #2 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "GET",
+      "path": "/api/media/1/streams/2"
+    }
+  ]
+}

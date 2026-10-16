@@ -1,0 +1,259 @@
+{
+  "deviation": null,
+  "name": "media-detail-series",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "addedById": null,
+          "additionalFanartUrls": [],
+          "alternativeTitles": [],
+          "createdAt": "2026-02-13T00:00:00.000Z",
+          "digitalRelease": null,
+          "fanartUrl": null,
+          "files": [
+            {
+              "createdAt": "2026-02-04T17:00:00.000Z",
+              "episodeId": 13,
+              "id": 57,
+              "language": "en",
+              "mediaId": 43,
+              "osdbBytesize": null,
+              "osdbHash": null,
+              "quality": "WEBDL-720p",
+              "relativePath": "Season 01/e13.mkv",
+              "size": 1000057,
+              "streamInfo": null,
+              "updatedAt": "2026-01-01T00:00:00.000Z"
+            }
+          ],
+          "folderName": "Series Multi (2020)",
+          "genres": [
+            "Drama",
+            "Crime"
+          ],
+          "id": 43,
+          "imdbId": null,
+          "inCinemas": null,
+          "languageProfile": null,
+          "languageProfileId": null,
+          "library": {
+            "color": "#10b981",
+            "createdAt": "2026-01-01T00:00:00.000Z",
+            "defaultLanguageProfileId": null,
+            "defaultQualityProfileId": null,
+            "icon": "tv",
+            "id": 2,
+            "label": null,
+            "mediaTypes": [
+              "series"
+            ],
+            "metadataLanguage": null,
+            "metadataRegion": null,
+            "name": "Series",
+            "path": "/tmp/fliks-parity/media/series",
+            "preferredProvider": null,
+            "updatedAt": "2026-01-01T00:00:00.000Z"
+          },
+          "libraryId": 2,
+          "logoUrl": null,
+          "metadata": null,
+          "metadataRefreshedAt": null,
+          "minimumAvailability": "released",
+          "monitored": true,
+          "originalTitle": null,
+          "overview": null,
+          "path": "/tmp/fliks-parity/media/series/Series Multi (2020)",
+          "physicalRelease": null,
+          "posterUrl": null,
+          "preferredProvider": null,
+          "qualityProfile": {
+            "createdAt": "2026-01-01T00:00:00.000Z",
+            "cutoff": 18,
+            "id": 1,
+            "items": [],
+            "minCustomFormatScore": 0,
+            "name": "Parity HD",
+            "resolutionUpgradeOnly": false,
+            "updatedAt": "2026-01-01T00:00:00.000Z",
+            "upgradeAllowed": false
+          },
+          "qualityProfileId": 1,
+          "rating": 7,
+          "releaseDate": null,
+          "runtime": null,
+          "seasons": [
+            {
+              "airDate": "2022-01-01",
+              "createdAt": "2026-01-01T00:00:00.000Z",
+              "episodes": [
+                {
+                  "airDate": "2000-01-01",
+                  "createdAt": "2026-01-01T00:00:00.000Z",
+                  "endEpisodeNumber": 2,
+                  "episodeNumber": 1,
+                  "hasFile": true,
+                  "id": 13,
+                  "markersScannedAt": "2026-01-10T00:00:00.000Z",
+                  "monitored": true,
+                  "overview": null,
+                  "runtime": 45,
+                  "seasonId": 7,
+                  "stillUrl": "/api/images/43/still-1",
+                  "title": "Episode 1",
+                  "updatedAt": "2026-01-01T00:00:00.000Z"
+                },
+                {
+                  "airDate": "2000-01-01",
+                  "createdAt": "2026-01-01T00:00:00.000Z",
+                  "endEpisodeNumber": null,
+                  "episodeNumber": 2,
+                  "hasFile": false,
+                  "id": 14,
+                  "markersScannedAt": null,
+                  "monitored": true,
+                  "overview": null,
+                  "runtime": null,
+                  "seasonId": 7,
+                  "stillUrl": null,
+                  "title": "Episode 2",
+                  "updatedAt": "2026-01-01T00:00:00.000Z"
+                },
+                {
+                  "airDate": "2000-01-01",
+                  "createdAt": "2026-01-01T00:00:00.000Z",
+                  "endEpisodeNumber": null,
+                  "episodeNumber": 3,
+                  "hasFile": false,
+                  "id": 15,
+                  "markersScannedAt": null,
+                  "monitored": false,
+                  "overview": null,
+                  "runtime": null,
+                  "seasonId": 7,
+                  "stillUrl": null,
+                  "title": "Episode 3",
+                  "updatedAt": "2026-01-01T00:00:00.000Z"
+                },
+                {
+                  "airDate": "2099-01-01",
+                  "createdAt": "2026-01-01T00:00:00.000Z",
+                  "endEpisodeNumber": null,
+                  "episodeNumber": 4,
+                  "hasFile": false,
+                  "id": 16,
+                  "markersScannedAt": null,
+                  "monitored": true,
+                  "overview": null,
+                  "runtime": null,
+                  "seasonId": 7,
+                  "stillUrl": null,
+                  "title": "Episode 4",
+                  "updatedAt": "2026-01-01T00:00:00.000Z"
+                }
+              ],
+              "id": 7,
+              "mediaId": 43,
+              "monitored": true,
+              "overview": "Season one overview",
+              "posterUrl": "/api/images/43/season-1",
+              "preferredProvider": null,
+              "seasonNumber": 1,
+              "updatedAt": "2026-01-01T00:00:00.000Z"
+            },
+            {
+              "airDate": null,
+              "createdAt": "2026-01-01T00:00:00.000Z",
+              "episodes": [
+                {
+                  "airDate": "2000-01-01",
+                  "createdAt": "2026-01-01T00:00:00.000Z",
+                  "endEpisodeNumber": null,
+                  "episodeNumber": 1,
+                  "hasFile": false,
+                  "id": 18,
+                  "markersScannedAt": null,
+                  "monitored": true,
+                  "overview": null,
+                  "runtime": null,
+                  "seasonId": 9,
+                  "stillUrl": null,
+                  "title": "Episode 1",
+                  "updatedAt": "2026-01-01T00:00:00.000Z"
+                },
+                {
+                  "airDate": "2000-01-01",
+                  "createdAt": "2026-01-01T00:00:00.000Z",
+                  "endEpisodeNumber": null,
+                  "episodeNumber": 2,
+                  "hasFile": false,
+                  "id": 19,
+                  "markersScannedAt": null,
+                  "monitored": true,
+                  "overview": null,
+                  "runtime": null,
+                  "seasonId": 9,
+                  "stillUrl": null,
+                  "title": "Episode 2",
+                  "updatedAt": "2026-01-01T00:00:00.000Z"
+                }
+              ],
+              "id": 9,
+              "mediaId": 43,
+              "monitored": false,
+              "overview": null,
+              "posterUrl": null,
+              "preferredProvider": null,
+              "seasonNumber": 2,
+              "updatedAt": "2026-01-01T00:00:00.000Z"
+            },
+            {
+              "airDate": null,
+              "createdAt": "2026-01-01T00:00:00.000Z",
+              "episodes": [
+                {
+                  "airDate": "2000-01-01",
+                  "createdAt": "2026-01-01T00:00:00.000Z",
+                  "endEpisodeNumber": null,
+                  "episodeNumber": 1,
+                  "hasFile": false,
+                  "id": 17,
+                  "markersScannedAt": null,
+                  "monitored": true,
+                  "overview": null,
+                  "runtime": null,
+                  "seasonId": 8,
+                  "stillUrl": null,
+                  "title": "Special",
+                  "updatedAt": "2026-01-01T00:00:00.000Z"
+                }
+              ],
+              "id": 8,
+              "mediaId": 43,
+              "monitored": true,
+              "overview": null,
+              "posterUrl": null,
+              "preferredProvider": null,
+              "seasonNumber": 0,
+              "updatedAt": "2026-01-01T00:00:00.000Z"
+            }
+          ],
+          "status": "continuing",
+          "title": "Series Multi",
+          "tmdbCollectionId": null,
+          "tmdbCollectionName": null,
+          "tmdbId": 4043,
+          "tvdbId": null,
+          "type": "series",
+          "updatedAt": "2026-01-01T00:00:00.000Z",
+          "year": 2022
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/43"
+    }
+  ]
+}

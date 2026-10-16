@@ -1,0 +1,185 @@
+{
+  "deviation": null,
+  "name": "media-qualities-ok",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "id": 1,
+            "name": "WORKPRINT",
+            "rank": 5,
+            "resolution": 0,
+            "source": "workprint"
+          },
+          {
+            "id": 2,
+            "name": "CAM",
+            "rank": 8,
+            "resolution": 0,
+            "source": "cam"
+          },
+          {
+            "id": 3,
+            "name": "TELESYNC",
+            "rank": 10,
+            "resolution": 0,
+            "source": "telesync"
+          },
+          {
+            "id": 4,
+            "name": "TELECINE",
+            "rank": 12,
+            "resolution": 0,
+            "source": "telecine"
+          },
+          {
+            "id": 5,
+            "name": "DVD",
+            "rank": 18,
+            "resolution": 480,
+            "source": "dvd"
+          },
+          {
+            "id": 6,
+            "name": "DVD-R",
+            "rank": 20,
+            "resolution": 480,
+            "source": "dvd"
+          },
+          {
+            "id": 7,
+            "name": "SDTV",
+            "rank": 22,
+            "resolution": 480,
+            "source": "sdtv"
+          },
+          {
+            "id": 8,
+            "name": "WEBDL-480p",
+            "rank": 28,
+            "resolution": 480,
+            "source": "web"
+          },
+          {
+            "id": 9,
+            "name": "WEBRip-480p",
+            "rank": 28,
+            "resolution": 480,
+            "source": "web"
+          },
+          {
+            "id": 10,
+            "name": "Bluray-480p",
+            "rank": 30,
+            "resolution": 480,
+            "source": "bluray"
+          },
+          {
+            "id": 11,
+            "name": "HDTV-720p",
+            "rank": 40,
+            "resolution": 720,
+            "source": "hdtv"
+          },
+          {
+            "id": 12,
+            "name": "WEBDL-720p",
+            "rank": 45,
+            "resolution": 720,
+            "source": "web"
+          },
+          {
+            "id": 13,
+            "name": "WEBRip-720p",
+            "rank": 45,
+            "resolution": 720,
+            "source": "web"
+          },
+          {
+            "id": 14,
+            "name": "Bluray-720p",
+            "rank": 50,
+            "resolution": 720,
+            "source": "bluray"
+          },
+          {
+            "id": 15,
+            "name": "HDTV-1080p",
+            "rank": 55,
+            "resolution": 1080,
+            "source": "hdtv"
+          },
+          {
+            "id": 16,
+            "name": "WEBDL-1080p",
+            "rank": 62,
+            "resolution": 1080,
+            "source": "web"
+          },
+          {
+            "id": 17,
+            "name": "WEBRip-1080p",
+            "rank": 60,
+            "resolution": 1080,
+            "source": "web"
+          },
+          {
+            "id": 18,
+            "name": "Bluray-1080p",
+            "rank": 68,
+            "resolution": 1080,
+            "source": "bluray"
+          },
+          {
+            "id": 19,
+            "name": "Remux-1080p",
+            "rank": 72,
+            "resolution": 1080,
+            "source": "remux"
+          },
+          {
+            "id": 20,
+            "name": "HDTV-2160p",
+            "rank": 75,
+            "resolution": 2160,
+            "source": "hdtv"
+          },
+          {
+            "id": 21,
+            "name": "WEBDL-2160p",
+            "rank": 82,
+            "resolution": 2160,
+            "source": "web"
+          },
+          {
+            "id": 22,
+            "name": "WEBRip-2160p",
+            "rank": 80,
+            "resolution": 2160,
+            "source": "web"
+          },
+          {
+            "id": 23,
+            "name": "Bluray-2160p",
+            "rank": 88,
+            "resolution": 2160,
+            "source": "bluray"
+          },
+          {
+            "id": 24,
+            "name": "Remux-2160p",
+            "rank": 95,
+            "resolution": 2160,
+            "source": "remux"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/qualities"
+    }
+  ]
+}

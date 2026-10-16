@@ -249,6 +249,33 @@ CREATE TYPE public.users_profilevisibility_enum AS ENUM (
 
 
 --
+-- Name: iso_ms(timestamp with time zone); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.iso_ms(timestamp with time zone) RETURNS text
+    LANGUAGE sql IMMUTABLE PARALLEL SAFE
+    AS $_$
+  SELECT to_char($1 AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')
+$_$;
+
+
+--
+-- Name: media_search_vector_update(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.media_search_vector_update() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  NEW."searchVector" :=
+    setweight(to_tsvector('french', COALESCE(NEW.title, '')), 'A') ||
+    setweight(to_tsvector('french', COALESCE(NEW."originalTitle", '')), 'B') ||
+    setweight(to_tsvector('french', COALESCE(NEW.overview, '')), 'C');
+  RETURN NEW;
+END $$;
+
+
+--
 -- Name: set_updated_at(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -2915,6 +2942,8 @@ COPY public._sqlx_migrations (version, description, installed_on, success, check
 1786300000000	create-playback-qoe	2026-01-01 00:00:00+00	t	\\xe5e4e8991f47690862b8d28d5e8b63acb95506c8288faf97d8d6d97e2cedb18dffe15ce35e842e97064976fa12d03cea	0
 1786400000000	pg trgm	2026-01-01 00:00:00+00	t	\\x5364f2aab2a907ef12aa2aeb5b6a24d04f8839b7f5835c35ba52f29c0568cbb0c8435ce0f60e1f3b1546e43b8abe8360	0
 1786500000000	updated at trigger	2026-01-01 00:00:00+00	t	\\xa08d5738eee946976096dae99719b149c27748ba8250460ae2bcf7be938e642c694351c72dac35289c99f018ddb18cca	0
+1786600000000	media search vector	2026-01-01 00:00:00+00	t	\\xcfeecff428f67c3a7cb5a9ce90f642cb107559291054384f27b83488ebe418331f87814468e5c0692ac0d5c4b2d0970e	0
+1786700000000	iso ms function	2026-01-01 00:00:00+00	t	\\x99db328d8be62eaa154e748b8b9b4a6be34163940ce6bdbfc7786876a7e32a1564f4051508334a9b0f4829102a690035	0
 \.
 
 
@@ -3103,26 +3132,26 @@ COPY public.livetv_user_channel_prefs (id, "createdAt", "updatedAt", favorite, h
 --
 
 COPY public.media (id, "createdAt", "updatedAt", title, "originalTitle", year, type, "tmdbId", "imdbId", "tvdbId", overview, status, monitored, "preferredProvider", "folderName", "posterUrl", "metadataRefreshedAt", "fanartUrl", rating, genres, runtime, "releaseDate", "inCinemas", "digitalRelease", "physicalRelease", "minimumAvailability", "searchVector", "libraryId", "qualityProfileId", "languageProfileId", "addedById", "alternativeTitles", "tmdbCollectionId", "tmdbCollectionName", "additionalFanartUrls", "logoUrl") FROM stdin;
-1	2026-01-01 00:00:00+00	2026-01-01 00:00:00+00	Parity Movie 01	\N	2020	movie	1001	\N	\N	Synthetic movie 1	released	t	\N	Parity Movie 01 (2020)	\N	\N	\N	7.5	["Drama"]	90	2020-01-01	\N	\N	\N	released	\N	1	\N	\N	\N	[]	\N	\N	{}	\N
-2	2026-01-01 00:00:00+00	2026-01-01 00:00:00+00	Parity Movie 02	\N	2020	movie	1002	\N	\N	Synthetic movie 2	released	t	\N	Parity Movie 02 (2020)	\N	\N	\N	7.5	["Drama"]	90	2020-01-01	\N	\N	\N	released	\N	1	\N	\N	\N	[]	\N	\N	{}	\N
-3	2026-01-01 00:00:00+00	2026-01-01 00:00:00+00	Parity Movie 03	\N	2020	movie	1003	\N	\N	Synthetic movie 3	released	t	\N	Parity Movie 03 (2020)	\N	\N	\N	7.5	["Drama"]	90	2020-01-01	\N	\N	\N	released	\N	1	\N	\N	\N	[]	\N	\N	{}	\N
-4	2026-01-01 00:00:00+00	2026-01-01 00:00:00+00	Parity Movie 04	\N	2020	movie	1004	\N	\N	Synthetic movie 4	released	t	\N	Parity Movie 04 (2020)	\N	\N	\N	7.5	["Drama"]	90	2020-01-01	\N	\N	\N	released	\N	1	\N	\N	\N	[]	\N	\N	{}	\N
-5	2026-01-01 00:00:00+00	2026-01-01 00:00:00+00	Parity Movie 05	\N	2020	movie	1005	\N	\N	Synthetic movie 5	released	t	\N	Parity Movie 05 (2020)	\N	\N	\N	7.5	["Drama"]	90	2020-01-01	\N	\N	\N	released	\N	1	\N	\N	\N	[]	\N	\N	{}	\N
-6	2026-01-01 00:00:00+00	2026-01-01 00:00:00+00	Parity Movie 06	\N	2020	movie	1006	\N	\N	Synthetic movie 6	released	t	\N	Parity Movie 06 (2020)	\N	\N	\N	7.5	["Drama"]	90	2020-01-01	\N	\N	\N	released	\N	1	\N	\N	\N	[]	\N	\N	{}	\N
-7	2026-01-01 00:00:00+00	2026-01-01 00:00:00+00	Parity Movie 07	\N	2020	movie	1007	\N	\N	Synthetic movie 7	released	t	\N	Parity Movie 07 (2020)	\N	\N	\N	7.5	["Drama"]	90	2020-01-01	\N	\N	\N	released	\N	1	\N	\N	\N	[]	\N	\N	{}	\N
-8	2026-01-01 00:00:00+00	2026-01-01 00:00:00+00	Parity Movie 08	\N	2020	movie	1008	\N	\N	Synthetic movie 8	released	t	\N	Parity Movie 08 (2020)	\N	\N	\N	7.5	["Drama"]	90	2020-01-01	\N	\N	\N	released	\N	1	\N	\N	\N	[]	\N	\N	{}	\N
-9	2026-01-01 00:00:00+00	2026-01-01 00:00:00+00	Parity Movie 09	\N	2020	movie	1009	\N	\N	Synthetic movie 9	released	t	\N	Parity Movie 09 (2020)	\N	\N	\N	7.5	["Drama"]	90	2020-01-01	\N	\N	\N	released	\N	1	\N	\N	\N	[]	\N	\N	{}	\N
-10	2026-01-01 00:00:00+00	2026-01-01 00:00:00+00	Parity Movie 10	\N	2020	movie	1010	\N	\N	Synthetic movie 10	released	t	\N	Parity Movie 10 (2020)	\N	\N	\N	7.5	["Drama"]	90	2020-01-01	\N	\N	\N	released	\N	1	\N	\N	\N	[]	\N	\N	{}	\N
-11	2026-01-01 00:00:00+00	2026-01-01 00:00:00+00	Parity Movie 11	\N	2020	movie	1011	\N	\N	Synthetic movie 11	released	t	\N	Parity Movie 11 (2020)	\N	\N	\N	7.5	["Drama"]	90	2020-01-01	\N	\N	\N	released	\N	1	\N	\N	\N	[]	\N	\N	{}	\N
-12	2026-01-01 00:00:00+00	2026-01-01 00:00:00+00	Parity Movie 12	\N	2020	movie	1012	\N	\N	Synthetic movie 12	released	t	\N	Parity Movie 12 (2020)	\N	\N	\N	7.5	["Drama"]	90	2020-01-01	\N	\N	\N	released	\N	1	\N	\N	\N	[]	\N	\N	{}	\N
-13	2026-01-01 00:00:00+00	2026-01-01 00:00:00+00	Parity Movie 13	\N	2020	movie	1013	\N	\N	Synthetic movie 13	released	t	\N	Parity Movie 13 (2020)	\N	\N	\N	7.5	["Drama"]	90	2020-01-01	\N	\N	\N	released	\N	1	\N	\N	\N	[]	\N	\N	{}	\N
-14	2026-01-01 00:00:00+00	2026-01-01 00:00:00+00	Parity Movie 14	\N	2020	movie	1014	\N	\N	Synthetic movie 14	released	t	\N	Parity Movie 14 (2020)	\N	\N	\N	7.5	["Drama"]	90	2020-01-01	\N	\N	\N	released	\N	1	\N	\N	\N	[]	\N	\N	{}	\N
-15	2026-01-01 00:00:00+00	2026-01-01 00:00:00+00	Parity Movie 15	\N	2020	movie	1015	\N	\N	Synthetic movie 15	released	t	\N	Parity Movie 15 (2020)	\N	\N	\N	7.5	["Drama"]	90	2020-01-01	\N	\N	\N	released	\N	1	\N	\N	\N	[]	\N	\N	{}	\N
-16	2026-01-01 00:00:00+00	2026-01-01 00:00:00+00	Parity Movie 16	\N	2020	movie	1016	\N	\N	Synthetic movie 16	released	t	\N	Parity Movie 16 (2020)	\N	\N	\N	7.5	["Drama"]	90	2020-01-01	\N	\N	\N	released	\N	1	\N	\N	\N	[]	\N	\N	{}	\N
-17	2026-01-01 00:00:00+00	2026-01-01 00:00:00+00	Parity Movie 17	\N	2020	movie	1017	\N	\N	Synthetic movie 17	released	t	\N	Parity Movie 17 (2020)	\N	\N	\N	7.5	["Drama"]	90	2020-01-01	\N	\N	\N	released	\N	1	\N	\N	\N	[]	\N	\N	{}	\N
-18	2026-01-01 00:00:00+00	2026-01-01 00:00:00+00	Parity Series A	\N	2021	series	2000	\N	\N	Synthetic series A	continuing	t	\N	Parity Series A	\N	\N	\N	8	["Drama"]	30	\N	\N	\N	\N	released	\N	2	\N	\N	\N	[]	\N	\N	{}	\N
-19	2026-01-01 00:00:00+00	2026-01-01 00:00:00+00	Parity Series B	\N	2021	series	2001	\N	\N	Synthetic series B	continuing	t	\N	Parity Series B	\N	\N	\N	8	["Drama"]	30	\N	\N	\N	\N	released	\N	2	\N	\N	\N	[]	\N	\N	{}	\N
-20	2026-01-01 00:00:00+00	2026-01-01 00:00:00+00	Parity Series C	\N	2021	series	2002	\N	\N	Synthetic series C	continuing	t	\N	Parity Series C	\N	\N	\N	8	["Drama"]	30	\N	\N	\N	\N	released	\N	2	\N	\N	\N	[]	\N	\N	{}	\N
+1	2026-01-01 00:00:00+00	2026-01-01 00:00:00+00	Parity Movie 01	\N	2020	movie	1001	\N	\N	Synthetic movie 1	released	t	\N	Parity Movie 01 (2020)	\N	\N	\N	7.5	["Drama"]	90	2020-01-01	\N	\N	\N	released	'01':3A '1':6C 'mov':2A,5C 'parity':1A 'synthetic':4C	1	\N	\N	\N	[]	\N	\N	{}	\N
+2	2026-01-01 00:00:00+00	2026-01-01 00:00:00+00	Parity Movie 02	\N	2020	movie	1002	\N	\N	Synthetic movie 2	released	t	\N	Parity Movie 02 (2020)	\N	\N	\N	7.5	["Drama"]	90	2020-01-01	\N	\N	\N	released	'02':3A '2':6C 'mov':2A,5C 'parity':1A 'synthetic':4C	1	\N	\N	\N	[]	\N	\N	{}	\N
+3	2026-01-01 00:00:00+00	2026-01-01 00:00:00+00	Parity Movie 03	\N	2020	movie	1003	\N	\N	Synthetic movie 3	released	t	\N	Parity Movie 03 (2020)	\N	\N	\N	7.5	["Drama"]	90	2020-01-01	\N	\N	\N	released	'03':3A '3':6C 'mov':2A,5C 'parity':1A 'synthetic':4C	1	\N	\N	\N	[]	\N	\N	{}	\N
+4	2026-01-01 00:00:00+00	2026-01-01 00:00:00+00	Parity Movie 04	\N	2020	movie	1004	\N	\N	Synthetic movie 4	released	t	\N	Parity Movie 04 (2020)	\N	\N	\N	7.5	["Drama"]	90	2020-01-01	\N	\N	\N	released	'04':3A '4':6C 'mov':2A,5C 'parity':1A 'synthetic':4C	1	\N	\N	\N	[]	\N	\N	{}	\N
+5	2026-01-01 00:00:00+00	2026-01-01 00:00:00+00	Parity Movie 05	\N	2020	movie	1005	\N	\N	Synthetic movie 5	released	t	\N	Parity Movie 05 (2020)	\N	\N	\N	7.5	["Drama"]	90	2020-01-01	\N	\N	\N	released	'05':3A '5':6C 'mov':2A,5C 'parity':1A 'synthetic':4C	1	\N	\N	\N	[]	\N	\N	{}	\N
+6	2026-01-01 00:00:00+00	2026-01-01 00:00:00+00	Parity Movie 06	\N	2020	movie	1006	\N	\N	Synthetic movie 6	released	t	\N	Parity Movie 06 (2020)	\N	\N	\N	7.5	["Drama"]	90	2020-01-01	\N	\N	\N	released	'06':3A '6':6C 'mov':2A,5C 'parity':1A 'synthetic':4C	1	\N	\N	\N	[]	\N	\N	{}	\N
+7	2026-01-01 00:00:00+00	2026-01-01 00:00:00+00	Parity Movie 07	\N	2020	movie	1007	\N	\N	Synthetic movie 7	released	t	\N	Parity Movie 07 (2020)	\N	\N	\N	7.5	["Drama"]	90	2020-01-01	\N	\N	\N	released	'07':3A '7':6C 'mov':2A,5C 'parity':1A 'synthetic':4C	1	\N	\N	\N	[]	\N	\N	{}	\N
+8	2026-01-01 00:00:00+00	2026-01-01 00:00:00+00	Parity Movie 08	\N	2020	movie	1008	\N	\N	Synthetic movie 8	released	t	\N	Parity Movie 08 (2020)	\N	\N	\N	7.5	["Drama"]	90	2020-01-01	\N	\N	\N	released	'08':3A '8':6C 'mov':2A,5C 'parity':1A 'synthetic':4C	1	\N	\N	\N	[]	\N	\N	{}	\N
+9	2026-01-01 00:00:00+00	2026-01-01 00:00:00+00	Parity Movie 09	\N	2020	movie	1009	\N	\N	Synthetic movie 9	released	t	\N	Parity Movie 09 (2020)	\N	\N	\N	7.5	["Drama"]	90	2020-01-01	\N	\N	\N	released	'09':3A '9':6C 'mov':2A,5C 'parity':1A 'synthetic':4C	1	\N	\N	\N	[]	\N	\N	{}	\N
+10	2026-01-01 00:00:00+00	2026-01-01 00:00:00+00	Parity Movie 10	\N	2020	movie	1010	\N	\N	Synthetic movie 10	released	t	\N	Parity Movie 10 (2020)	\N	\N	\N	7.5	["Drama"]	90	2020-01-01	\N	\N	\N	released	'10':3A,6C 'mov':2A,5C 'parity':1A 'synthetic':4C	1	\N	\N	\N	[]	\N	\N	{}	\N
+11	2026-01-01 00:00:00+00	2026-01-01 00:00:00+00	Parity Movie 11	\N	2020	movie	1011	\N	\N	Synthetic movie 11	released	t	\N	Parity Movie 11 (2020)	\N	\N	\N	7.5	["Drama"]	90	2020-01-01	\N	\N	\N	released	'11':3A,6C 'mov':2A,5C 'parity':1A 'synthetic':4C	1	\N	\N	\N	[]	\N	\N	{}	\N
+12	2026-01-01 00:00:00+00	2026-01-01 00:00:00+00	Parity Movie 12	\N	2020	movie	1012	\N	\N	Synthetic movie 12	released	t	\N	Parity Movie 12 (2020)	\N	\N	\N	7.5	["Drama"]	90	2020-01-01	\N	\N	\N	released	'12':3A,6C 'mov':2A,5C 'parity':1A 'synthetic':4C	1	\N	\N	\N	[]	\N	\N	{}	\N
+13	2026-01-01 00:00:00+00	2026-01-01 00:00:00+00	Parity Movie 13	\N	2020	movie	1013	\N	\N	Synthetic movie 13	released	t	\N	Parity Movie 13 (2020)	\N	\N	\N	7.5	["Drama"]	90	2020-01-01	\N	\N	\N	released	'13':3A,6C 'mov':2A,5C 'parity':1A 'synthetic':4C	1	\N	\N	\N	[]	\N	\N	{}	\N
+14	2026-01-01 00:00:00+00	2026-01-01 00:00:00+00	Parity Movie 14	\N	2020	movie	1014	\N	\N	Synthetic movie 14	released	t	\N	Parity Movie 14 (2020)	\N	\N	\N	7.5	["Drama"]	90	2020-01-01	\N	\N	\N	released	'14':3A,6C 'mov':2A,5C 'parity':1A 'synthetic':4C	1	\N	\N	\N	[]	\N	\N	{}	\N
+15	2026-01-01 00:00:00+00	2026-01-01 00:00:00+00	Parity Movie 15	\N	2020	movie	1015	\N	\N	Synthetic movie 15	released	t	\N	Parity Movie 15 (2020)	\N	\N	\N	7.5	["Drama"]	90	2020-01-01	\N	\N	\N	released	'15':3A,6C 'mov':2A,5C 'parity':1A 'synthetic':4C	1	\N	\N	\N	[]	\N	\N	{}	\N
+16	2026-01-01 00:00:00+00	2026-01-01 00:00:00+00	Parity Movie 16	\N	2020	movie	1016	\N	\N	Synthetic movie 16	released	t	\N	Parity Movie 16 (2020)	\N	\N	\N	7.5	["Drama"]	90	2020-01-01	\N	\N	\N	released	'16':3A,6C 'mov':2A,5C 'parity':1A 'synthetic':4C	1	\N	\N	\N	[]	\N	\N	{}	\N
+17	2026-01-01 00:00:00+00	2026-01-01 00:00:00+00	Parity Movie 17	\N	2020	movie	1017	\N	\N	Synthetic movie 17	released	t	\N	Parity Movie 17 (2020)	\N	\N	\N	7.5	["Drama"]	90	2020-01-01	\N	\N	\N	released	'17':3A,6C 'mov':2A,5C 'parity':1A 'synthetic':4C	1	\N	\N	\N	[]	\N	\N	{}	\N
+18	2026-01-01 00:00:00+00	2026-01-01 00:00:00+00	Parity Series A	\N	2021	series	2000	\N	\N	Synthetic series A	continuing	t	\N	Parity Series A	\N	\N	\N	8	["Drama"]	30	\N	\N	\N	\N	released	'a':3A,6C 'parity':1A 'ser':2A,5C 'synthetic':4C	2	\N	\N	\N	[]	\N	\N	{}	\N
+19	2026-01-01 00:00:00+00	2026-01-01 00:00:00+00	Parity Series B	\N	2021	series	2001	\N	\N	Synthetic series B	continuing	t	\N	Parity Series B	\N	\N	\N	8	["Drama"]	30	\N	\N	\N	\N	released	'b':3A,6C 'parity':1A 'ser':2A,5C 'synthetic':4C	2	\N	\N	\N	[]	\N	\N	{}	\N
+20	2026-01-01 00:00:00+00	2026-01-01 00:00:00+00	Parity Series C	\N	2021	series	2002	\N	\N	Synthetic series C	continuing	t	\N	Parity Series C	\N	\N	\N	8	["Drama"]	30	\N	\N	\N	\N	released	'parity':1A 'ser':2A,4C 'synthetic':3C	2	\N	\N	\N	[]	\N	\N	{}	\N
 \.
 
 
@@ -4855,6 +4884,13 @@ CREATE INDEX idx_episodes_season_hasfile_end ON public.episodes USING btree ("se
 
 
 --
+-- Name: idx_media_search_vector; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_media_search_vector ON public.media USING gin ("searchVector");
+
+
+--
 -- Name: idx_playback_user_episode; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -4866,6 +4902,13 @@ CREATE UNIQUE INDEX idx_playback_user_episode ON public.playback_states USING bt
 --
 
 CREATE UNIQUE INDEX idx_playback_user_movie ON public.playback_states USING btree ("userId", "mediaId") WHERE ("episodeId" IS NULL);
+
+
+--
+-- Name: media media_search_vector; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER media_search_vector BEFORE INSERT OR UPDATE OF title, "originalTitle", overview ON public.media FOR EACH ROW EXECUTE FUNCTION public.media_search_vector_update();
 
 
 --

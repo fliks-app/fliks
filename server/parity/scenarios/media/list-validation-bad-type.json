@@ -1,0 +1,25 @@
+{
+  "deviation": null,
+  "name": "media-list-validation-bad-type",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "type must be one of the following values: movie, series"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "GET",
+      "path": "/api/media?type=bogus"
+    }
+  ],
+  "unordered": [
+    "$.data[*].files"
+  ]
+}

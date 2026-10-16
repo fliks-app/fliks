@@ -1,0 +1,81 @@
+{
+  "deviation": null,
+  "name": "media-tracking-series-specials-last",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "hasProfile": false,
+          "seasons": [
+            {
+              "episodes": [
+                {
+                  "endEpisodeNumber": null,
+                  "episodeId": 27,
+                  "episodeNumber": 1,
+                  "monitored": true,
+                  "seasonNumber": 1,
+                  "state": "no-profile",
+                  "title": "Episode 1"
+                },
+                {
+                  "endEpisodeNumber": null,
+                  "episodeId": 28,
+                  "episodeNumber": 2,
+                  "monitored": false,
+                  "seasonNumber": 1,
+                  "state": "unmonitored",
+                  "title": "Episode 2"
+                },
+                {
+                  "endEpisodeNumber": 4,
+                  "episodeId": 29,
+                  "episodeNumber": 3,
+                  "monitored": true,
+                  "seasonNumber": 1,
+                  "state": "no-profile",
+                  "title": "Episode 3"
+                }
+              ],
+              "seasonNumber": 1
+            },
+            {
+              "episodes": [
+                {
+                  "endEpisodeNumber": null,
+                  "episodeId": 32,
+                  "episodeNumber": 1,
+                  "monitored": true,
+                  "seasonNumber": 2,
+                  "state": "no-profile",
+                  "title": "Episode 1"
+                }
+              ],
+              "seasonNumber": 2
+            },
+            {
+              "episodes": [
+                {
+                  "endEpisodeNumber": null,
+                  "episodeId": 31,
+                  "episodeNumber": 1,
+                  "monitored": true,
+                  "seasonNumber": 0,
+                  "state": "no-profile",
+                  "title": "Calendar Special"
+                }
+              ],
+              "seasonNumber": 0
+            }
+          ],
+          "type": "series"
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/47/tracking"
+    }
+  ]
+}

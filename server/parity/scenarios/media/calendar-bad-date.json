@@ -1,0 +1,37 @@
+{
+  "deviation": "C1",
+  "name": "media-calendar-bad-date",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "start must be a valid ISO 8601 date string"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "GET",
+      "path": "/api/media/calendar?start=2026-02-30&end=2026-03-31"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "start must be a valid ISO 8601 date string"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "GET",
+      "path": "/api/media/calendar?start=2026-03&end=2026-03-31"
+    }
+  ]
+}

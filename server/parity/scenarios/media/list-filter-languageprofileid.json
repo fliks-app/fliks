@@ -1,0 +1,107 @@
+{
+  "deviation": null,
+  "name": "media-list-filter-languageprofileid",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "data": [
+            {
+              "addedById": null,
+              "additionalFanartUrls": [],
+              "alternativeTitles": [],
+              "createdAt": "2026-02-11T00:00:00.000Z",
+              "digitalRelease": null,
+              "fanartUrl": null,
+              "files": [
+                {
+                  "createdAt": "2026-02-05T00:00:00.000Z",
+                  "episodeId": null,
+                  "id": 49,
+                  "language": "en",
+                  "mediaId": 41,
+                  "osdbBytesize": null,
+                  "osdbHash": null,
+                  "quality": "WEBDL-1080p",
+                  "relativePath": "Language Profile Movie (2020)/Language Profile Movie (2020).mkv",
+                  "size": 1000049,
+                  "streamInfo": null,
+                  "updatedAt": "2026-01-01T00:00:00.000Z"
+                }
+              ],
+              "folderName": "Language Profile Movie (2020)",
+              "genres": null,
+              "id": 41,
+              "imdbId": null,
+              "inCinemas": null,
+              "languageProfile": {
+                "audioLanguages": [],
+                "createdAt": "2026-01-01T00:00:00.000Z",
+                "id": 1,
+                "name": "Toutes les langues (défaut)",
+                "subtitleLanguages": [],
+                "updatedAt": "2026-01-01T00:00:00.000Z"
+              },
+              "languageProfileId": 1,
+              "library": {
+                "color": "#3b82f6",
+                "createdAt": "2026-01-01T00:00:00.000Z",
+                "defaultLanguageProfileId": 1,
+                "defaultQualityProfileId": 1,
+                "icon": "film",
+                "id": 1,
+                "label": null,
+                "mediaTypes": [
+                  "movie"
+                ],
+                "metadataLanguage": null,
+                "metadataRegion": null,
+                "name": "Movies",
+                "path": "/tmp/fliks-parity/media/movies",
+                "preferredProvider": null,
+                "updatedAt": "2026-01-01T00:00:00.000Z"
+              },
+              "libraryId": 1,
+              "logoUrl": null,
+              "metadataRefreshedAt": null,
+              "minimumAvailability": "released",
+              "monitored": true,
+              "originalTitle": null,
+              "overview": null,
+              "path": "/tmp/fliks-parity/media/movies/Language Profile Movie (2020)",
+              "physicalRelease": null,
+              "posterUrl": null,
+              "preferredProvider": null,
+              "progressPercent": 0,
+              "qualityProfile": null,
+              "qualityProfileId": null,
+              "rating": null,
+              "releaseDate": null,
+              "runtime": null,
+              "sizeOnDisk": 1000049,
+              "status": "released",
+              "title": "Language Profile Movie",
+              "tmdbCollectionId": null,
+              "tmdbCollectionName": null,
+              "tmdbId": 3041,
+              "tvdbId": null,
+              "type": "movie",
+              "updatedAt": "2026-01-01T00:00:00.000Z",
+              "watched": false,
+              "year": 2020
+            }
+          ],
+          "total": 1
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media?languageProfileId=1"
+    }
+  ],
+  "unordered": [
+    "$.data[*].files"
+  ]
+}

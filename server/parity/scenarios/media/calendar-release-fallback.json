@@ -1,0 +1,43 @@
+{
+  "deviation": null,
+  "name": "media-calendar-release-fallback",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "date": "2026-03-12",
+            "event": "release",
+            "fanartUrl": null,
+            "hasFile": true,
+            "id": 49,
+            "mediaId": 49,
+            "posterUrl": null,
+            "status": "released",
+            "title": "Cal Movie Release Only",
+            "type": "movie",
+            "year": 2026
+          },
+          {
+            "date": "2026-03-15",
+            "event": "release",
+            "fanartUrl": null,
+            "hasFile": true,
+            "id": 50,
+            "mediaId": 50,
+            "posterUrl": null,
+            "status": "released",
+            "title": "Cal Movie Release Inside Cinema Outside",
+            "type": "movie",
+            "year": 2026
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/calendar?start=2026-03-12&end=2026-03-15&type=movie"
+    }
+  ]
+}

@@ -4,7 +4,7 @@ set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 mig="$here/../../migrations"
 probe="${FLIKS_ENGINE_FIXTURES:-$HOME/Documents/clement/code/fliks-engine/fixtures/probe}"
-db=fliks_parity_tpl
+db=${PARITY_TPL:-fliks_parity_tpl}
 
 # psql inside the container: credentials never leave it
 sql() { docker exec -i fliks-postgres-1 sh -c 'PGOPTIONS="-c client_min_messages=warning" psql -U "$POSTGRES_USER" -v ON_ERROR_STOP=1 -q "$@"' _ "$@"; }

@@ -1,0 +1,85 @@
+{
+  "deviation": null,
+  "name": "media-calendar-readonly-scope",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "readonly",
+      "expect": {
+        "body": [
+          {
+            "date": "2026-03-05",
+            "event": "cinema",
+            "fanartUrl": null,
+            "hasFile": true,
+            "id": 48,
+            "mediaId": 48,
+            "posterUrl": null,
+            "status": "released",
+            "title": "Cal Movie Cinema Digital",
+            "type": "movie",
+            "year": 2026
+          },
+          {
+            "date": "2026-03-12",
+            "event": "release",
+            "fanartUrl": null,
+            "hasFile": true,
+            "id": 49,
+            "mediaId": 49,
+            "posterUrl": null,
+            "status": "released",
+            "title": "Cal Movie Release Only",
+            "type": "movie",
+            "year": 2026
+          },
+          {
+            "date": "2026-03-15",
+            "event": "release",
+            "fanartUrl": null,
+            "hasFile": true,
+            "id": 50,
+            "mediaId": 50,
+            "posterUrl": null,
+            "status": "released",
+            "title": "Cal Movie Release Inside Cinema Outside",
+            "type": "movie",
+            "year": 2026
+          },
+          {
+            "date": "2026-03-20",
+            "event": "digital",
+            "fanartUrl": null,
+            "hasFile": true,
+            "id": 48,
+            "mediaId": 48,
+            "posterUrl": null,
+            "status": "released",
+            "title": "Cal Movie Cinema Digital",
+            "type": "movie",
+            "year": 2026
+          },
+          {
+            "date": "2026-03-25",
+            "event": "physical",
+            "fanartUrl": null,
+            "hasFile": true,
+            "id": 29,
+            "mediaId": 29,
+            "posterUrl": null,
+            "status": "announced",
+            "title": "Unmonitored Movie",
+            "type": "movie",
+            "year": 2023
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/calendar?start=2026-03-01&end=2026-03-31"
+    }
+  ],
+  "unordered": [
+    "$"
+  ]
+}

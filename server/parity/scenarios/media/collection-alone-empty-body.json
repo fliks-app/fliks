@@ -1,0 +1,15 @@
+{
+  "deviation": null,
+  "name": "media-collection-alone-empty-body",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/34/collection"
+    }
+  ]
+}

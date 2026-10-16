@@ -1,0 +1,103 @@
+{
+  "deviation": null,
+  "name": "media-list-search-original-title",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "data": [
+            {
+              "addedById": null,
+              "additionalFanartUrls": [],
+              "alternativeTitles": [],
+              "createdAt": "2026-01-26T00:00:00.000Z",
+              "digitalRelease": null,
+              "fanartUrl": null,
+              "files": [
+                {
+                  "createdAt": "2026-02-02T22:00:00.000Z",
+                  "episodeId": null,
+                  "id": 34,
+                  "language": "en",
+                  "mediaId": 25,
+                  "osdbBytesize": null,
+                  "osdbHash": null,
+                  "quality": "WEBDL-1080p",
+                  "relativePath": "Les Évadés (2020)/Les Évadés (2020).mkv",
+                  "size": 1000034,
+                  "streamInfo": null,
+                  "updatedAt": "2026-01-01T00:00:00.000Z"
+                }
+              ],
+              "folderName": "Les Évadés (2020)",
+              "genres": [
+                "Drama",
+                "Crime"
+              ],
+              "id": 25,
+              "imdbId": null,
+              "inCinemas": null,
+              "languageProfile": null,
+              "languageProfileId": null,
+              "library": {
+                "color": "#3b82f6",
+                "createdAt": "2026-01-01T00:00:00.000Z",
+                "defaultLanguageProfileId": 1,
+                "defaultQualityProfileId": 1,
+                "icon": "film",
+                "id": 1,
+                "label": null,
+                "mediaTypes": [
+                  "movie"
+                ],
+                "metadataLanguage": null,
+                "metadataRegion": null,
+                "name": "Movies",
+                "path": "/tmp/fliks-parity/media/movies",
+                "preferredProvider": null,
+                "updatedAt": "2026-01-01T00:00:00.000Z"
+              },
+              "libraryId": 1,
+              "logoUrl": null,
+              "metadataRefreshedAt": null,
+              "minimumAvailability": "released",
+              "monitored": true,
+              "originalTitle": "The Shawshank Redemption",
+              "overview": "Un banquier condamné s'évade de prison",
+              "path": "/tmp/fliks-parity/media/movies/Les Évadés (2020)",
+              "physicalRelease": null,
+              "posterUrl": null,
+              "preferredProvider": null,
+              "progressPercent": 0,
+              "qualityProfile": null,
+              "qualityProfileId": null,
+              "rating": 8.7,
+              "releaseDate": null,
+              "runtime": null,
+              "sizeOnDisk": 1000034,
+              "status": "released",
+              "title": "Les Évadés",
+              "tmdbCollectionId": null,
+              "tmdbCollectionName": null,
+              "tmdbId": 3025,
+              "tvdbId": null,
+              "type": "movie",
+              "updatedAt": "2026-01-01T00:00:00.000Z",
+              "watched": false,
+              "year": 1994
+            }
+          ],
+          "total": 1
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media?q=shawshank&sortBy=title"
+    }
+  ],
+  "unordered": [
+    "$.data[*].files"
+  ]
+}

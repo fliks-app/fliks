@@ -1,0 +1,23 @@
+{
+  "deviation": null,
+  "name": "media-tracking-movie-no-profile",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "hasProfile": false,
+          "movie": {
+            "monitored": true,
+            "state": "no-profile"
+          },
+          "type": "movie"
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/1/tracking"
+    }
+  ]
+}

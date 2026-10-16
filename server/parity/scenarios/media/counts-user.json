@@ -1,0 +1,19 @@
+{
+  "deviation": null,
+  "name": "media-counts-user",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "movies": 41,
+          "series": 8
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/counts"
+    }
+  ]
+}

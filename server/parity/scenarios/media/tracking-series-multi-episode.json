@@ -1,0 +1,92 @@
+{
+  "deviation": null,
+  "name": "media-tracking-series-multi-episode",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "hasProfile": true,
+          "seasons": [
+            {
+              "episodes": [
+                {
+                  "currentQuality": "720p",
+                  "endEpisodeNumber": 2,
+                  "episodeId": 13,
+                  "episodeNumber": 1,
+                  "monitored": true,
+                  "seasonNumber": 1,
+                  "state": "below",
+                  "targetQuality": "1080p",
+                  "title": "Episode 1"
+                },
+                {
+                  "endEpisodeNumber": null,
+                  "episodeId": 15,
+                  "episodeNumber": 3,
+                  "monitored": false,
+                  "seasonNumber": 1,
+                  "state": "unmonitored",
+                  "title": "Episode 3"
+                },
+                {
+                  "endEpisodeNumber": null,
+                  "episodeId": 16,
+                  "episodeNumber": 4,
+                  "monitored": true,
+                  "seasonNumber": 1,
+                  "state": "missing",
+                  "title": "Episode 4"
+                }
+              ],
+              "seasonNumber": 1
+            },
+            {
+              "episodes": [
+                {
+                  "endEpisodeNumber": null,
+                  "episodeId": 18,
+                  "episodeNumber": 1,
+                  "monitored": true,
+                  "seasonNumber": 2,
+                  "state": "missing",
+                  "title": "Episode 1"
+                },
+                {
+                  "endEpisodeNumber": null,
+                  "episodeId": 19,
+                  "episodeNumber": 2,
+                  "monitored": true,
+                  "seasonNumber": 2,
+                  "state": "missing",
+                  "title": "Episode 2"
+                }
+              ],
+              "seasonNumber": 2
+            },
+            {
+              "episodes": [
+                {
+                  "endEpisodeNumber": null,
+                  "episodeId": 17,
+                  "episodeNumber": 1,
+                  "monitored": true,
+                  "seasonNumber": 0,
+                  "state": "missing",
+                  "title": "Special"
+                }
+              ],
+              "seasonNumber": 0
+            }
+          ],
+          "type": "series"
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/43/tracking"
+    }
+  ]
+}

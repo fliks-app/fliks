@@ -1,0 +1,25 @@
+{
+  "deviation": null,
+  "name": "media-tracking-movie-below",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "hasProfile": true,
+          "movie": {
+            "currentQuality": "720p",
+            "monitored": true,
+            "state": "below",
+            "targetQuality": "1080p"
+          },
+          "type": "movie"
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/36/tracking"
+    }
+  ]
+}

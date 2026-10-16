@@ -3,24 +3,79 @@ use reqwest::{Client, Method, multipart};
 use serde_json::{Map, Value, json};
 use std::{collections::HashMap, fs, path::Path, process::Command, time::Duration};
 
-const ACTORS: [&str; 5] = ["admin", "user", "readonly", "other", "manager"];
+const ACTORS: [&str; 6] = ["admin", "user", "readonly", "other", "manager", "noread"];
 const MEDIA_ROOT: &str = "/tmp/fliks-parity";
 
 fn env(k: &str, d: &str) -> String {
     std::env::var(k).unwrap_or_else(|_| d.into())
 }
 
-/// Recreates `fliks_parity` from the template; the psql runs inside the container so no credentials are needed.
-fn reset_db() {
-    let out = Command::new("docker")
-        .args(["exec", "fliks-postgres-1", "sh", "-c"])
-        .arg(r#"psql -U "$POSTGRES_USER" -v ON_ERROR_STOP=1 -q -d postgres -c 'DROP DATABASE IF EXISTS fliks_parity WITH (FORCE)' -c 'CREATE DATABASE fliks_parity TEMPLATE fliks_parity_tpl'"#)
-        .output()
+/// Runs psql inside the container so no credentials are needed; `sql` is fed on stdin when given.
+fn psql(args: &[&str], sql: Option<&[u8]>) {
+    use std::io::Write;
+    use std::process::Stdio;
+    let mut child = Command::new("docker")
+        .args(["exec", "-i", "fliks-postgres-1", "sh", "-c"])
+        .arg(r#"psql -U "$POSTGRES_USER" -v ON_ERROR_STOP=1 -q "$@""#)
+        .arg("_")
+        .args(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
         .expect("docker");
+    let mut stdin = child.stdin.take().expect("stdin");
+    if let Some(sql) = sql {
+        stdin.write_all(sql).expect("psql stdin");
+    }
+    drop(stdin);
+    let out = child.wait_with_output().expect("docker");
     assert!(
         out.status.success(),
-        "reset_db: {}",
+        "psql {args:?}: {}",
         String::from_utf8_lossy(&out.stderr)
+    );
+}
+
+/// Template DB of a scenario `seed`: `base` is the committed dump, any other name is `seed/<name>.sql` applied on top.
+fn template(base_tpl: &str, seed: &str) -> String {
+    if seed == "base" {
+        return base_tpl.into();
+    }
+    format!("{base_tpl}_{}", seed.replace('-', "_"))
+}
+
+fn build_seed_template(base_tpl: &str, seed: &str) {
+    let name = template(base_tpl, seed);
+    let dir = std::env::var("CARGO_MANIFEST_DIR").expect("run through cargo test");
+    let delta = fs::read(Path::new(&dir).join(format!("../../parity/seed/{seed}.sql")))
+        .unwrap_or_else(|e| panic!("seed {seed}: {e}"));
+    psql(
+        &[
+            "-d",
+            "postgres",
+            "-c",
+            &format!("DROP DATABASE IF EXISTS {name} WITH (FORCE)"),
+            "-c",
+            &format!("CREATE DATABASE {name} TEMPLATE {base_tpl}"),
+        ],
+        None,
+    );
+    psql(&["-d", &name], Some(&delta));
+}
+
+/// Recreates the scenario database from its seed template.
+fn reset_db(db: &str, tpl: &str) {
+    psql(
+        &[
+            "-d",
+            "postgres",
+            "-c",
+            &format!("DROP DATABASE IF EXISTS {db} WITH (FORCE)"),
+            "-c",
+            &format!("CREATE DATABASE {db} TEMPLATE {tpl}"),
+        ],
+        None,
     );
 }
 
@@ -514,7 +569,32 @@ async fn parity() {
     let record = env("PARITY_RECORD", "") == "1";
     let filter = env("PARITY_FILTER", "");
     let http = Client::new();
-    reset_db();
+    let (db, base_tpl) = (
+        env("PARITY_DB", "fliks_parity"),
+        env("PARITY_TPL", "fliks_parity_tpl"),
+    );
+    let engine = env("PARITY_ENGINE", "up");
+    let (mut ok, mut failed, mut skipped, mut dev) = (0, 0, 0, vec![]);
+    let mut files = vec![];
+    collect(
+        &Path::new(&std::env::var("CARGO_MANIFEST_DIR").expect("run through cargo test"))
+            .join("../../parity/scenarios"),
+        &mut files,
+    );
+    let mut seeds: Vec<String> = vec!["base".into()];
+    let selected: Vec<_> = files
+        .iter()
+        .filter(|f| f.to_string_lossy().contains(&filter))
+        .collect();
+    for f in &selected {
+        let sc: Value = serde_json::from_str(&fs::read_to_string(f).unwrap()).unwrap_or_default();
+        let seed = sc["seed"].as_str().unwrap_or("base").to_string();
+        if !seeds.contains(&seed) {
+            build_seed_template(&base_tpl, &seed);
+            seeds.push(seed);
+        }
+    }
+    reset_db(&db, &template(&base_tpl, seeds.last().expect("seed")));
     let mut tokens = HashMap::new();
     for a in ACTORS {
         let r = http
@@ -524,10 +604,12 @@ async fn parity() {
             .await
             .unwrap_or_else(|e| panic!("login {a}: {e}"));
         let v: Value = r.json().await.unwrap_or_default();
-        let t = v["accessToken"]
-            .as_str()
-            .unwrap_or_else(|| panic!("login {a}: {v}"));
-        tokens.insert(a.to_string(), t.to_string());
+        // seeds beyond `base` add actors (noread); a missing one only matters to the scenarios that use it
+        match v["accessToken"].as_str() {
+            Some(t) => tokens.insert(a.to_string(), t.to_string()),
+            None if a == "noread" => None,
+            None => panic!("login {a}: {v}"),
+        };
     }
     let ctx = Ctx {
         http,
@@ -535,18 +617,7 @@ async fn parity() {
         tokens,
     };
 
-    let mut files = vec![];
-    collect(
-        &Path::new(&std::env::var("CARGO_MANIFEST_DIR").expect("run through cargo test"))
-            .join("../../parity/scenarios"),
-        &mut files,
-    );
-    let engine = env("PARITY_ENGINE", "up");
-    let (mut ok, mut failed, mut skipped, mut dev) = (0, 0, 0, vec![]);
-    for f in files
-        .iter()
-        .filter(|f| f.to_string_lossy().contains(&filter))
-    {
+    for f in selected {
         let mut sc: Value = serde_json::from_str(&fs::read_to_string(f).unwrap())
             .unwrap_or_else(|e| panic!("{f:?}: {e}"));
         let name = sc["name"].as_str().unwrap_or("?").to_string();
@@ -554,7 +625,10 @@ async fn parity() {
             skipped += 1;
             continue;
         }
-        reset_db();
+        reset_db(
+            &db,
+            &template(&base_tpl, sc["seed"].as_str().unwrap_or("base")),
+        );
         // untagged scenarios are recorded with the engine up only
         let rec = record && (sc["engine"].is_string() || engine == "up");
         let errs = run(&ctx, &mut sc, rec).await;

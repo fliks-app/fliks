@@ -1,0 +1,20 @@
+{
+  "deviation": null,
+  "name": "media-streams-badid",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Validation failed (numeric string is expected)",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "GET",
+      "path": "/api/media/abc/streams/1"
+    }
+  ]
+}

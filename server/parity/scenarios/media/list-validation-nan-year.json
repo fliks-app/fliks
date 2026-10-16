@@ -1,0 +1,25 @@
+{
+  "deviation": null,
+  "name": "media-list-validation-nan-year",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "year must be a number conforming to the specified constraints"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "GET",
+      "path": "/api/media?year=abc"
+    }
+  ],
+  "unordered": [
+    "$.data[*].files"
+  ]
+}

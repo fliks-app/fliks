@@ -1,0 +1,19 @@
+{
+  "deviation": null,
+  "name": "media-recently-added-limit-zero",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": [],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/recently-added?limit=0"
+    }
+  ],
+  "unordered": [
+    "$[*].files"
+  ]
+}

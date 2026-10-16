@@ -1,0 +1,117 @@
+{
+  "deviation": "C11",
+  "name": "media-list-filter-cutoffunmet-series-shadowed",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "data": [
+            {
+              "addedById": null,
+              "additionalFanartUrls": [],
+              "alternativeTitles": [],
+              "createdAt": "2026-02-13T00:00:00.000Z",
+              "digitalRelease": null,
+              "episodeStats": {
+                "downloadedEpisodes": 2,
+                "totalEpisodes": 6
+              },
+              "fanartUrl": null,
+              "files": [
+                {
+                  "createdAt": "2026-02-04T17:00:00.000Z",
+                  "episodeId": 13,
+                  "id": 57,
+                  "language": "en",
+                  "mediaId": 43,
+                  "osdbBytesize": null,
+                  "osdbHash": null,
+                  "quality": "WEBDL-720p",
+                  "relativePath": "Season 01/e13.mkv",
+                  "size": 1000057,
+                  "streamInfo": null,
+                  "updatedAt": "2026-01-01T00:00:00.000Z"
+                }
+              ],
+              "folderName": "Series Multi (2020)",
+              "genres": [
+                "Drama",
+                "Crime"
+              ],
+              "id": 43,
+              "imdbId": null,
+              "inCinemas": null,
+              "languageProfile": null,
+              "languageProfileId": null,
+              "library": {
+                "color": "#10b981",
+                "createdAt": "2026-01-01T00:00:00.000Z",
+                "defaultLanguageProfileId": null,
+                "defaultQualityProfileId": null,
+                "icon": "tv",
+                "id": 2,
+                "label": null,
+                "mediaTypes": [
+                  "series"
+                ],
+                "metadataLanguage": null,
+                "metadataRegion": null,
+                "name": "Series",
+                "path": "/tmp/fliks-parity/media/series",
+                "preferredProvider": null,
+                "updatedAt": "2026-01-01T00:00:00.000Z"
+              },
+              "libraryId": 2,
+              "logoUrl": null,
+              "metadataRefreshedAt": null,
+              "minimumAvailability": "released",
+              "monitored": true,
+              "originalTitle": null,
+              "overview": null,
+              "path": "/tmp/fliks-parity/media/series/Series Multi (2020)",
+              "physicalRelease": null,
+              "posterUrl": null,
+              "preferredProvider": null,
+              "progressPercent": 0,
+              "qualityProfile": {
+                "createdAt": "2026-01-01T00:00:00.000Z",
+                "cutoff": 18,
+                "id": 1,
+                "items": [],
+                "minCustomFormatScore": 0,
+                "name": "Parity HD",
+                "resolutionUpgradeOnly": false,
+                "updatedAt": "2026-01-01T00:00:00.000Z",
+                "upgradeAllowed": false
+              },
+              "qualityProfileId": 1,
+              "rating": 7,
+              "releaseDate": null,
+              "runtime": null,
+              "sizeOnDisk": 1000057,
+              "status": "continuing",
+              "title": "Series Multi",
+              "tmdbCollectionId": null,
+              "tmdbCollectionName": null,
+              "tmdbId": 4043,
+              "tvdbId": null,
+              "type": "series",
+              "updatedAt": "2026-01-01T00:00:00.000Z",
+              "watched": false,
+              "year": 2022
+            }
+          ],
+          "total": 1
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media?type=series&cutoffUnmet=true&limit=0"
+    }
+  ],
+  "unordered": [
+    "$.data[*].files"
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "deviation": null,
+  "name": "media-similar-director-only",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "fanartUrl": null,
+            "genres": [
+              "Thriller"
+            ],
+            "hasFile": true,
+            "id": 11,
+            "posterUrl": null,
+            "rating": 7.5,
+            "title": "Parity Movie 11",
+            "year": 2021
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/23/similar"
+    }
+  ]
+}

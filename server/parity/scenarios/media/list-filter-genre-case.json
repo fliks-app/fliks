@@ -1,0 +1,106 @@
+{
+  "deviation": null,
+  "name": "media-list-filter-genre-case",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "data": [
+            {
+              "addedById": null,
+              "additionalFanartUrls": [],
+              "alternativeTitles": [],
+              "createdAt": "2026-01-27T00:00:00.000Z",
+              "digitalRelease": null,
+              "fanartUrl": null,
+              "files": [
+                {
+                  "createdAt": "2026-02-04T11:00:00.000Z",
+                  "episodeId": null,
+                  "id": 35,
+                  "language": "en",
+                  "mediaId": 26,
+                  "osdbBytesize": null,
+                  "osdbHash": null,
+                  "quality": "WEBDL-1080p",
+                  "relativePath": "Zeta Alpha Alpha (2020)/Zeta Alpha Alpha (2020).mkv",
+                  "size": 1000035,
+                  "streamInfo": {
+                    "audio": [],
+                    "subtitles": [],
+                    "video": []
+                  },
+                  "updatedAt": "2026-01-01T00:00:00.000Z"
+                }
+              ],
+              "folderName": "Zeta Alpha Alpha (2020)",
+              "genres": [
+                "drama"
+              ],
+              "id": 26,
+              "imdbId": null,
+              "inCinemas": null,
+              "languageProfile": null,
+              "languageProfileId": null,
+              "library": {
+                "color": "#3b82f6",
+                "createdAt": "2026-01-01T00:00:00.000Z",
+                "defaultLanguageProfileId": 1,
+                "defaultQualityProfileId": 1,
+                "icon": "film",
+                "id": 1,
+                "label": null,
+                "mediaTypes": [
+                  "movie"
+                ],
+                "metadataLanguage": null,
+                "metadataRegion": null,
+                "name": "Movies",
+                "path": "/tmp/fliks-parity/media/movies",
+                "preferredProvider": null,
+                "updatedAt": "2026-01-01T00:00:00.000Z"
+              },
+              "libraryId": 1,
+              "logoUrl": null,
+              "metadataRefreshedAt": null,
+              "minimumAvailability": "released",
+              "monitored": true,
+              "originalTitle": null,
+              "overview": null,
+              "path": "/tmp/fliks-parity/media/movies/Zeta Alpha Alpha (2020)",
+              "physicalRelease": null,
+              "posterUrl": null,
+              "preferredProvider": null,
+              "progressPercent": 0,
+              "qualityProfile": null,
+              "qualityProfileId": null,
+              "rating": 5.5,
+              "releaseDate": null,
+              "runtime": null,
+              "sizeOnDisk": 1000035,
+              "status": "released",
+              "title": "Zeta Alpha Alpha",
+              "tmdbCollectionId": null,
+              "tmdbCollectionName": null,
+              "tmdbId": 3026,
+              "tvdbId": null,
+              "type": "movie",
+              "updatedAt": "2026-01-01T00:00:00.000Z",
+              "watched": false,
+              "year": 2018
+            }
+          ],
+          "total": 1
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media?genre=drama"
+    }
+  ],
+  "unordered": [
+    "$.data[*].files"
+  ]
+}

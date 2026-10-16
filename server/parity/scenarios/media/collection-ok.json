@@ -1,0 +1,46 @@
+{
+  "deviation": null,
+  "name": "media-collection-ok",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "id": 500,
+          "items": [
+            {
+              "fanartUrl": null,
+              "genres": [
+                "Drama"
+              ],
+              "hasFile": true,
+              "id": 32,
+              "posterUrl": "/api/images/32/poster",
+              "rating": 7,
+              "title": "Collection Alpha 1",
+              "year": 2010
+            },
+            {
+              "fanartUrl": null,
+              "genres": [
+                "Drama",
+                "Action"
+              ],
+              "hasFile": true,
+              "id": 33,
+              "posterUrl": "/api/images/33/poster",
+              "rating": 7.2,
+              "title": "Collection Alpha 2",
+              "year": 2012
+            }
+          ],
+          "name": "Alpha Collection"
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/32/collection"
+    }
+  ]
+}

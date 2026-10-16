@@ -1,0 +1,179 @@
+{
+  "deviation": null,
+  "name": "media-list-filter-letter-hash",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "data": [
+            {
+              "addedById": 2,
+              "additionalFanartUrls": [],
+              "alternativeTitles": [],
+              "createdAt": "2026-01-23T00:00:00.000Z",
+              "digitalRelease": null,
+              "fanartUrl": null,
+              "files": [
+                {
+                  "createdAt": "2026-02-02T12:00:00.000Z",
+                  "episodeId": null,
+                  "id": 31,
+                  "language": "en",
+                  "mediaId": 22,
+                  "osdbBytesize": null,
+                  "osdbHash": null,
+                  "quality": "WEBDL-1080p",
+                  "relativePath": "12 Angry Men (2020)/12 Angry Men (2020).mkv",
+                  "size": 1000031,
+                  "streamInfo": null,
+                  "updatedAt": "2026-01-01T00:00:00.000Z"
+                }
+              ],
+              "folderName": "12 Angry Men (2020)",
+              "genres": [
+                "Drama"
+              ],
+              "id": 22,
+              "imdbId": "tt0050083",
+              "inCinemas": null,
+              "languageProfile": null,
+              "languageProfileId": null,
+              "library": {
+                "color": "#3b82f6",
+                "createdAt": "2026-01-01T00:00:00.000Z",
+                "defaultLanguageProfileId": 1,
+                "defaultQualityProfileId": 1,
+                "icon": "film",
+                "id": 1,
+                "label": null,
+                "mediaTypes": [
+                  "movie"
+                ],
+                "metadataLanguage": null,
+                "metadataRegion": null,
+                "name": "Movies",
+                "path": "/tmp/fliks-parity/media/movies",
+                "preferredProvider": null,
+                "updatedAt": "2026-01-01T00:00:00.000Z"
+              },
+              "libraryId": 1,
+              "logoUrl": null,
+              "metadataRefreshedAt": null,
+              "minimumAvailability": "released",
+              "monitored": true,
+              "originalTitle": null,
+              "overview": "Twelve jurors decide a verdict",
+              "path": "/tmp/fliks-parity/media/movies/12 Angry Men (2020)",
+              "physicalRelease": null,
+              "posterUrl": "/api/images/22/poster",
+              "preferredProvider": null,
+              "progressPercent": 0,
+              "qualityProfile": null,
+              "qualityProfileId": null,
+              "rating": 9,
+              "releaseDate": null,
+              "runtime": null,
+              "sizeOnDisk": 1000031,
+              "status": "released",
+              "title": "12 Angry Men",
+              "tmdbCollectionId": null,
+              "tmdbCollectionName": null,
+              "tmdbId": 3022,
+              "tvdbId": null,
+              "type": "movie",
+              "updatedAt": "2026-01-01T00:00:00.000Z",
+              "watched": false,
+              "year": 1957
+            },
+            {
+              "addedById": null,
+              "additionalFanartUrls": [],
+              "alternativeTitles": [],
+              "createdAt": "2026-01-24T00:00:00.000Z",
+              "digitalRelease": null,
+              "fanartUrl": null,
+              "files": [
+                {
+                  "createdAt": "2026-02-04T01:00:00.000Z",
+                  "episodeId": null,
+                  "id": 32,
+                  "language": "en",
+                  "mediaId": 23,
+                  "osdbBytesize": null,
+                  "osdbHash": null,
+                  "quality": "WEBDL-1080p",
+                  "relativePath": "Éclair (2020)/Éclair (2020).mkv",
+                  "size": 1000032,
+                  "streamInfo": null,
+                  "updatedAt": "2026-01-01T00:00:00.000Z"
+                }
+              ],
+              "folderName": "Éclair (2020)",
+              "genres": null,
+              "id": 23,
+              "imdbId": null,
+              "inCinemas": null,
+              "languageProfile": null,
+              "languageProfileId": null,
+              "library": {
+                "color": "#3b82f6",
+                "createdAt": "2026-01-01T00:00:00.000Z",
+                "defaultLanguageProfileId": 1,
+                "defaultQualityProfileId": 1,
+                "icon": "film",
+                "id": 1,
+                "label": null,
+                "mediaTypes": [
+                  "movie"
+                ],
+                "metadataLanguage": null,
+                "metadataRegion": null,
+                "name": "Movies",
+                "path": "/tmp/fliks-parity/media/movies",
+                "preferredProvider": null,
+                "updatedAt": "2026-01-01T00:00:00.000Z"
+              },
+              "libraryId": 1,
+              "logoUrl": null,
+              "metadataRefreshedAt": null,
+              "minimumAvailability": "released",
+              "monitored": true,
+              "originalTitle": null,
+              "overview": null,
+              "path": "/tmp/fliks-parity/media/movies/Éclair (2020)",
+              "physicalRelease": null,
+              "posterUrl": null,
+              "preferredProvider": null,
+              "progressPercent": 0,
+              "qualityProfile": null,
+              "qualityProfileId": null,
+              "rating": null,
+              "releaseDate": null,
+              "runtime": null,
+              "sizeOnDisk": 1000032,
+              "status": "released",
+              "title": "Éclair",
+              "tmdbCollectionId": null,
+              "tmdbCollectionName": null,
+              "tmdbId": 3023,
+              "tvdbId": null,
+              "type": "movie",
+              "updatedAt": "2026-01-01T00:00:00.000Z",
+              "watched": false,
+              "year": null
+            }
+          ],
+          "total": 2
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media?letter=%23"
+    }
+  ],
+  "unordered": [
+    "$.data[*].files"
+  ]
+}

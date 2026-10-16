@@ -1,0 +1,19 @@
+{
+  "deviation": null,
+  "name": "media-calendar-unauthenticated",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "anon",
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "GET",
+      "path": "/api/media/calendar"
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "deviation": null,
+  "name": "media-list-page-beyond-end",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "data": [],
+          "total": 50
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media?page=9"
+    }
+  ],
+  "unordered": [
+    "$.data[*].files"
+  ]
+}

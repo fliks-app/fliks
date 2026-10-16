@@ -1,0 +1,19 @@
+{
+  "deviation": null,
+  "name": "media-counts-readonly",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "readonly",
+      "expect": {
+        "body": {
+          "movies": 40,
+          "series": 0
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/counts"
+    }
+  ]
+}

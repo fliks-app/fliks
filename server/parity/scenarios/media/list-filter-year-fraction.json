@@ -1,0 +1,25 @@
+{
+  "deviation": "C1",
+  "name": "media-list-filter-year-fraction",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "year must be an integer number"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "GET",
+      "path": "/api/media?year=2020.5"
+    }
+  ],
+  "unordered": [
+    "$.data[*].files"
+  ]
+}

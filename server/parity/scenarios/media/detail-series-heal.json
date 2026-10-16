@@ -1,0 +1,408 @@
+{
+  "deviation": null,
+  "name": "media-detail-series-heal",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "addedById": null,
+          "additionalFanartUrls": [],
+          "alternativeTitles": [],
+          "createdAt": "2026-01-19T00:00:00.000Z",
+          "digitalRelease": null,
+          "fanartUrl": null,
+          "files": [
+            {
+              "createdAt": "2026-02-03T12:00:00.000Z",
+              "episodeId": 1,
+              "id": 18,
+              "language": "en",
+              "mediaId": 18,
+              "osdbBytesize": null,
+              "osdbHash": null,
+              "quality": "WEBDL-1080p",
+              "relativePath": "Season 01/Parity Series A - S01E01.mkv",
+              "size": 73237,
+              "streamInfo": {
+                "audio": [
+                  {
+                    "channelLayout": "mono",
+                    "channels": 1,
+                    "codec": "aac",
+                    "endSeconds": 3.021,
+                    "isDefault": false,
+                    "language": "eng",
+                    "profile": "LC",
+                    "sampleRate": 48000,
+                    "startTimeSeconds": 0,
+                    "streamIndex": 1
+                  }
+                ],
+                "chapters": [],
+                "durationSeconds": 3.021,
+                "formatBitRate": 193941,
+                "formatName": "matroska,webm",
+                "formatStartSeconds": 0,
+                "subtitles": [],
+                "video": [
+                  {
+                    "avgFrameRate": "24/1",
+                    "bitDepth": 8,
+                    "codec": "h264",
+                    "colorRange": "tv",
+                    "displayAspectRatio": "16:9",
+                    "dvBlPresent": false,
+                    "dvElPresent": false,
+                    "dvRpuPresent": false,
+                    "endSeconds": 3,
+                    "firstFrameSeconds": 0,
+                    "frameRate": "24",
+                    "hdr10Plus": false,
+                    "height": 90,
+                    "level": 10,
+                    "pixelFormat": "yuv420p",
+                    "profile": "High",
+                    "reorderFrames": 2,
+                    "startTimeSeconds": 0,
+                    "streamIndex": 0,
+                    "width": 160
+                  }
+                ]
+              },
+              "updatedAt": "2026-01-01T00:00:00.000Z"
+            },
+            {
+              "createdAt": "2026-02-05T01:00:00.000Z",
+              "episodeId": 2,
+              "id": 19,
+              "language": "en",
+              "mediaId": 18,
+              "osdbBytesize": null,
+              "osdbHash": null,
+              "quality": "WEBDL-1080p",
+              "relativePath": "Season 01/Parity Series A - S01E02.mkv",
+              "size": 73237,
+              "streamInfo": {
+                "audio": [
+                  {
+                    "channelLayout": "mono",
+                    "channels": 1,
+                    "codec": "aac",
+                    "endSeconds": 3.021,
+                    "isDefault": false,
+                    "language": "eng",
+                    "profile": "LC",
+                    "sampleRate": 48000,
+                    "startTimeSeconds": 0,
+                    "streamIndex": 1
+                  }
+                ],
+                "chapters": [],
+                "durationSeconds": 3.021,
+                "formatBitRate": 193941,
+                "formatName": "matroska,webm",
+                "formatStartSeconds": 0,
+                "subtitles": [],
+                "video": [
+                  {
+                    "avgFrameRate": "24/1",
+                    "bitDepth": 8,
+                    "codec": "h264",
+                    "colorRange": "tv",
+                    "displayAspectRatio": "16:9",
+                    "dvBlPresent": false,
+                    "dvElPresent": false,
+                    "dvRpuPresent": false,
+                    "endSeconds": 3,
+                    "firstFrameSeconds": 0,
+                    "frameRate": "24",
+                    "hdr10Plus": false,
+                    "height": 90,
+                    "level": 10,
+                    "pixelFormat": "yuv420p",
+                    "profile": "High",
+                    "reorderFrames": 2,
+                    "startTimeSeconds": 0,
+                    "streamIndex": 0,
+                    "width": 160
+                  }
+                ]
+              },
+              "updatedAt": "2026-01-01T00:00:00.000Z"
+            },
+            {
+              "createdAt": "2026-02-02T09:00:00.000Z",
+              "episodeId": 3,
+              "id": 20,
+              "language": "en",
+              "mediaId": 18,
+              "osdbBytesize": null,
+              "osdbHash": null,
+              "quality": "WEBDL-1080p",
+              "relativePath": "Season 02/Parity Series A - S02E01.mkv",
+              "size": 73237,
+              "streamInfo": {
+                "audio": [
+                  {
+                    "channelLayout": "mono",
+                    "channels": 1,
+                    "codec": "aac",
+                    "endSeconds": 3.021,
+                    "isDefault": false,
+                    "language": "eng",
+                    "profile": "LC",
+                    "sampleRate": 48000,
+                    "startTimeSeconds": 0,
+                    "streamIndex": 1
+                  }
+                ],
+                "chapters": [],
+                "durationSeconds": 3.021,
+                "formatBitRate": 193941,
+                "formatName": "matroska,webm",
+                "formatStartSeconds": 0,
+                "subtitles": [],
+                "video": [
+                  {
+                    "avgFrameRate": "24/1",
+                    "bitDepth": 8,
+                    "codec": "h264",
+                    "colorRange": "tv",
+                    "displayAspectRatio": "16:9",
+                    "dvBlPresent": false,
+                    "dvElPresent": false,
+                    "dvRpuPresent": false,
+                    "endSeconds": 3,
+                    "firstFrameSeconds": 0,
+                    "frameRate": "24",
+                    "hdr10Plus": false,
+                    "height": 90,
+                    "level": 10,
+                    "pixelFormat": "yuv420p",
+                    "profile": "High",
+                    "reorderFrames": 2,
+                    "startTimeSeconds": 0,
+                    "streamIndex": 0,
+                    "width": 160
+                  }
+                ]
+              },
+              "updatedAt": "2026-01-01T00:00:00.000Z"
+            },
+            {
+              "createdAt": "2026-02-03T22:00:00.000Z",
+              "episodeId": 4,
+              "id": 21,
+              "language": "en",
+              "mediaId": 18,
+              "osdbBytesize": null,
+              "osdbHash": null,
+              "quality": "WEBDL-1080p",
+              "relativePath": "Season 02/Parity Series A - S02E02.mkv",
+              "size": 73237,
+              "streamInfo": {
+                "audio": [
+                  {
+                    "channelLayout": "mono",
+                    "channels": 1,
+                    "codec": "aac",
+                    "endSeconds": 3.021,
+                    "isDefault": false,
+                    "language": "eng",
+                    "profile": "LC",
+                    "sampleRate": 48000,
+                    "startTimeSeconds": 0,
+                    "streamIndex": 1
+                  }
+                ],
+                "chapters": [],
+                "durationSeconds": 3.021,
+                "formatBitRate": 193941,
+                "formatName": "matroska,webm",
+                "formatStartSeconds": 0,
+                "subtitles": [],
+                "video": [
+                  {
+                    "avgFrameRate": "24/1",
+                    "bitDepth": 8,
+                    "codec": "h264",
+                    "colorRange": "tv",
+                    "displayAspectRatio": "16:9",
+                    "dvBlPresent": false,
+                    "dvElPresent": false,
+                    "dvRpuPresent": false,
+                    "endSeconds": 3,
+                    "firstFrameSeconds": 0,
+                    "frameRate": "24",
+                    "hdr10Plus": false,
+                    "height": 90,
+                    "level": 10,
+                    "pixelFormat": "yuv420p",
+                    "profile": "High",
+                    "reorderFrames": 2,
+                    "startTimeSeconds": 0,
+                    "streamIndex": 0,
+                    "width": 160
+                  }
+                ]
+              },
+              "updatedAt": "2026-01-01T00:00:00.000Z"
+            }
+          ],
+          "folderName": "Parity Series A",
+          "genres": [
+            "Drama"
+          ],
+          "id": 18,
+          "imdbId": null,
+          "inCinemas": null,
+          "languageProfile": null,
+          "languageProfileId": null,
+          "library": {
+            "color": "#10b981",
+            "createdAt": "2026-01-01T00:00:00.000Z",
+            "defaultLanguageProfileId": null,
+            "defaultQualityProfileId": null,
+            "icon": "tv",
+            "id": 2,
+            "label": null,
+            "mediaTypes": [
+              "series"
+            ],
+            "metadataLanguage": null,
+            "metadataRegion": null,
+            "name": "Series",
+            "path": "/tmp/fliks-parity/media/series",
+            "preferredProvider": null,
+            "updatedAt": "2026-01-01T00:00:00.000Z"
+          },
+          "libraryId": 2,
+          "logoUrl": null,
+          "metadata": null,
+          "metadataRefreshedAt": null,
+          "minimumAvailability": "released",
+          "monitored": true,
+          "originalTitle": null,
+          "overview": "Synthetic series A",
+          "path": "/tmp/fliks-parity/media/series/Parity Series A",
+          "physicalRelease": null,
+          "posterUrl": null,
+          "preferredProvider": null,
+          "qualityProfile": null,
+          "qualityProfileId": null,
+          "rating": 8,
+          "releaseDate": null,
+          "runtime": 30,
+          "seasons": [
+            {
+              "airDate": null,
+              "createdAt": "2026-01-01T00:00:00.000Z",
+              "episodes": [
+                {
+                  "airDate": null,
+                  "createdAt": "2026-01-01T00:00:00.000Z",
+                  "endEpisodeNumber": null,
+                  "episodeNumber": 1,
+                  "hasFile": true,
+                  "id": 1,
+                  "markersScannedAt": null,
+                  "monitored": true,
+                  "overview": null,
+                  "runtime": null,
+                  "seasonId": 1,
+                  "stillUrl": null,
+                  "title": "Episode 1",
+                  "updatedAt": "2026-01-01T00:00:00.000Z"
+                },
+                {
+                  "airDate": null,
+                  "createdAt": "2026-01-01T00:00:00.000Z",
+                  "endEpisodeNumber": null,
+                  "episodeNumber": 2,
+                  "hasFile": true,
+                  "id": 2,
+                  "markersScannedAt": null,
+                  "monitored": true,
+                  "overview": null,
+                  "runtime": null,
+                  "seasonId": 1,
+                  "stillUrl": null,
+                  "title": "Episode 2",
+                  "updatedAt": "2026-01-01T00:00:00.000Z"
+                }
+              ],
+              "id": 1,
+              "mediaId": 18,
+              "monitored": true,
+              "overview": null,
+              "posterUrl": null,
+              "preferredProvider": null,
+              "seasonNumber": 1,
+              "updatedAt": "2026-01-01T00:00:00.000Z"
+            },
+            {
+              "airDate": null,
+              "createdAt": "2026-01-01T00:00:00.000Z",
+              "episodes": [
+                {
+                  "airDate": null,
+                  "createdAt": "2026-01-01T00:00:00.000Z",
+                  "endEpisodeNumber": null,
+                  "episodeNumber": 1,
+                  "hasFile": true,
+                  "id": 3,
+                  "markersScannedAt": null,
+                  "monitored": true,
+                  "overview": null,
+                  "runtime": null,
+                  "seasonId": 2,
+                  "stillUrl": null,
+                  "title": "Episode 1",
+                  "updatedAt": "2026-01-01T00:00:00.000Z"
+                },
+                {
+                  "airDate": null,
+                  "createdAt": "2026-01-01T00:00:00.000Z",
+                  "endEpisodeNumber": null,
+                  "episodeNumber": 2,
+                  "hasFile": true,
+                  "id": 4,
+                  "markersScannedAt": null,
+                  "monitored": true,
+                  "overview": null,
+                  "runtime": null,
+                  "seasonId": 2,
+                  "stillUrl": null,
+                  "title": "Episode 2",
+                  "updatedAt": "2026-01-01T00:00:00.000Z"
+                }
+              ],
+              "id": 2,
+              "mediaId": 18,
+              "monitored": true,
+              "overview": null,
+              "posterUrl": null,
+              "preferredProvider": null,
+              "seasonNumber": 2,
+              "updatedAt": "2026-01-01T00:00:00.000Z"
+            }
+          ],
+          "status": "continuing",
+          "title": "Parity Series A",
+          "tmdbCollectionId": null,
+          "tmdbCollectionName": null,
+          "tmdbId": 2000,
+          "tvdbId": null,
+          "type": "series",
+          "updatedAt": "2026-01-01T00:00:00.000Z",
+          "year": 2021
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/18"
+    }
+  ]
+}

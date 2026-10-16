@@ -1,0 +1,42 @@
+{
+  "deviation": null,
+  "name": "media-similar-limit",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "fanartUrl": null,
+            "genres": [],
+            "hasFile": true,
+            "id": 5,
+            "posterUrl": "/api/images/5/poster",
+            "rating": null,
+            "title": "Parity Movie 05",
+            "year": null
+          },
+          {
+            "fanartUrl": null,
+            "genres": [
+              "Action"
+            ],
+            "hasFile": true,
+            "id": 13,
+            "posterUrl": null,
+            "rating": 7.5,
+            "title": "Parity Movie 13",
+            "year": null
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/3/similar?limit=2"
+    }
+  ],
+  "unordered": [
+    "$"
+  ]
+}
