@@ -2,7 +2,7 @@
 use super::db::{Disk, not_found};
 use crate::http::AppError;
 use sqlx::PgConnection;
-use std::{ffi::CString, io, path::Path};
+use std::{io, path::Path};
 
 /// Strips bidi marks and zero-width characters, then trims like JS `trim()` (Rust also trims U+0085).
 pub fn sanitize(raw: &str) -> String {
@@ -13,27 +13,45 @@ pub fn sanitize(raw: &str) -> String {
         .to_owned()
 }
 
-/// `f_bfree * f_bsize` (root-reserved blocks count as free), off the async runtime.
+/// `(free, total)` bytes: `f_bfree * f_bsize` (root-reserved blocks count as free) and `f_blocks * f_bsize`.
+#[cfg(unix)]
+fn space(path: String) -> Option<(i64, i64)> {
+    let c = std::ffi::CString::new(path).ok()?;
+    // SAFETY: `s` is fully written by a successful `statvfs`, which is checked before it is read.
+    let mut s: libc::statvfs = unsafe { std::mem::zeroed() };
+    (unsafe { libc::statvfs(c.as_ptr(), &mut s) } == 0).then(|| {
+        let size = s.f_bsize as i64;
+        (s.f_bfree as i64 * size, s.f_blocks as i64 * size)
+    })
+}
+
+/// `(free, total)` bytes, free ignoring per-user quotas like the unix `f_bfree`.
+#[cfg(windows)]
+fn space(path: String) -> Option<(i64, i64)> {
+    use std::os::windows::ffi::OsStrExt;
+    let w: Vec<u16> = std::ffi::OsStr::new(&path).encode_wide().chain([0]).collect();
+    let (mut total, mut free) = (0u64, 0u64);
+    // SAFETY: `w` is NUL-terminated; the out-pointers are valid and the null one is optional.
+    let ok = unsafe {
+        windows_sys::Win32::Storage::FileSystem::GetDiskFreeSpaceExW(
+            w.as_ptr(),
+            std::ptr::null_mut(),
+            &mut total,
+            &mut free,
+        )
+    };
+    (ok != 0).then_some((free as i64, total as i64))
+}
+
+/// Disk space of `path`, off the async runtime.
 pub async fn disk(path: &str) -> Disk {
     let path = path.to_owned();
-    let stat = tokio::task::spawn_blocking(move || {
-        let c = CString::new(path).ok()?;
-        // SAFETY: `s` is fully written by a successful `statvfs`, which is checked before it is read.
-        let mut s: libc::statvfs = unsafe { std::mem::zeroed() };
-        (unsafe { libc::statvfs(c.as_ptr(), &mut s) } == 0).then_some(s)
-    })
-    .await
-    .ok()
-    .flatten();
-    match stat {
-        Some(s) => {
-            let size = s.f_bsize as i64;
-            Disk {
-                free_space: s.f_bfree as i64 * size,
-                total_space: s.f_blocks as i64 * size,
-                accessible: true,
-            }
-        }
+    match tokio::task::spawn_blocking(move || space(path)).await.ok().flatten() {
+        Some((free_space, total_space)) => Disk {
+            free_space,
+            total_space,
+            accessible: true,
+        },
         None => Disk {
             free_space: -1,
             total_space: -1,

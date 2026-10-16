@@ -35,7 +35,6 @@ bcrypt = "0.17"
 sha2 = "0.10"
 base64 = "0.22"
 subtle = "2"
-libc = "0.2"
 tower = { version = "0.5", features = ["util"] }
 percent-encoding = "2"
 fliks-engine = { git = "https://github.com/fliks-app/engine", tag = "v0.3.2" }
@@ -44,3 +43,9 @@ fliks-engine = { git = "https://github.com/fliks-app/engine", tag = "v0.3.2" }
 reqwest = { version = "0.12", default-features = false, features = ["json", "multipart"] }
 tokio = { version = "1", features = ["time", "test-util"] }
 tokio-stream = "0.1"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem"] }
