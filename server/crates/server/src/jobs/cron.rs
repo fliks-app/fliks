@@ -101,9 +101,8 @@ mod tests {
         cases: Vec<Case>,
     }
 
-    /// Recorded from Nest's `cron-parser` 5.5 (`backend/test/server-vectors/cron-next.ts`).
-    /// `cron-parser` skips or shifts fires on a transition day; `croner` fires every valid local time
-    /// (`scheduler.md` Q1). Only windows crossing a transition may differ.
+    /// `cron-parser` 5.5 skips some fires on a DST change day where `croner` fires each valid local
+    /// time (`scheduler.md` Q1), so only windows crossing a transition may differ.
     fn dst_window(
         tz: Tz,
         from: DateTime<Utc>,

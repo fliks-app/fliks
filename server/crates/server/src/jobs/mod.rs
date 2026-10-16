@@ -1,6 +1,5 @@
-//! The scheduler (`docs/spec/scheduler.md`): the `commands` table, the cron runner, the core jobs and
-//! `/api/commands*`. Other domains audit their work through `run_audited` and plug their bodies in
-//! through `JobWork`.
+//! The scheduler (`docs/spec/scheduler.md`): `commands` rows, cron runner, core jobs, /api/commands*.
+//! Other domains audit work through `run_audited` and plug their bodies in through `JobWork`.
 mod audit;
 mod bodies;
 mod cron;
