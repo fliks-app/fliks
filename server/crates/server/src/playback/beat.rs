@@ -185,7 +185,7 @@ fn record_qoe(st: &AppState, user: i32, s: &LiveSession, qoe: &Value) {
     st.qoe.record_sample(&sref, &sample);
     if let (Some(rung), Some(q)) = (rung, s.quality.as_deref())
         && q != "auto"
-        && q.chars().count() <= 32
+        && q.encode_utf16().count() <= 32
     {
         st.qoe
             .update_pipeline_output(&s.session_id, Some(q), Some(rung));
