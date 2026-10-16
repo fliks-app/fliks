@@ -23,7 +23,7 @@ fn data<T: for<'de> Deserialize<'de>>(i: &Value) -> T {
 
 #[test]
 fn naming_reproduces_expected() {
-    replay("naming", 2193, |i| {
+    replay("naming", 2321, |i| {
         let s = |k: &str| i[k].as_str().unwrap();
         match s("fn") {
             "getFormats" => {
