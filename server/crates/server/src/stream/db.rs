@@ -1,4 +1,5 @@
 //! The reads and writes playback-info makes outside the media tables: markers and the saved position.
+use crate::playback::find_state;
 use serde::Serialize;
 use sqlx::PgPool;
 
@@ -48,20 +49,10 @@ pub async fn resume_position(
     media: i32,
     episode: Option<i32>,
 ) -> sqlx::Result<Option<f64>> {
-    let row = sqlx::query!(
-        r#"SELECT "positionSeconds" AS position, completed FROM playback_states
-           WHERE "userId" = $1 AND "mediaId" = $2
-             AND ("episodeId" = $3 OR ($3::int IS NULL AND "episodeId" IS NULL))
-           LIMIT 1"#,
-        user,
-        media,
-        episode
-    )
-    .fetch_optional(db)
-    .await?;
-    Ok(row
-        .filter(|r| !r.completed && r.position > 10.0)
-        .map(|r| r.position))
+    Ok(find_state(db, user, media, episode)
+        .await?
+        .filter(|r| !r.completed && r.position_seconds > 10.0)
+        .map(|r| r.position_seconds))
 }
 
 /// Ensures the history row exists and bumps `lastPlayedAt`; never sets `playedAt`.
@@ -72,22 +63,11 @@ pub async fn mark_started(
     file: i32,
     episode: Option<i32>,
 ) -> sqlx::Result<()> {
-    let found = sqlx::query_scalar!(
-        r#"SELECT id FROM playback_states
-           WHERE "userId" = $1 AND "mediaId" = $2
-             AND ("episodeId" = $3 OR ($3::int IS NULL AND "episodeId" IS NULL))
-           LIMIT 1"#,
-        user,
-        media,
-        episode
-    )
-    .fetch_optional(db)
-    .await?;
-    match found {
-        Some(id) => {
+    match find_state(db, user, media, episode).await? {
+        Some(row) => {
             sqlx::query!(
                 r#"UPDATE playback_states SET "lastPlayedAt" = now(), "updatedAt" = now() WHERE id = $1"#,
-                id
+                row.id
             )
             .execute(db)
             .await?;

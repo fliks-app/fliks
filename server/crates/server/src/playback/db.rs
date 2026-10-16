@@ -12,14 +12,14 @@ const CONTINUE_MAX: usize = 20;
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StateRow {
-    id: i32,
+    pub(crate) id: i32,
     #[serde(with = "iso_ms")]
     created_at: DateTime<Utc>,
     #[serde(with = "iso_ms")]
     updated_at: DateTime<Utc>,
-    position_seconds: f64,
+    pub(crate) position_seconds: f64,
     duration_seconds: Option<f64>,
-    completed: bool,
+    pub(crate) completed: bool,
     hidden_from_continue_watching: bool,
     #[serde(with = "iso_ms")]
     last_played_at: DateTime<Utc>,
