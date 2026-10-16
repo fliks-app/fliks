@@ -105,7 +105,7 @@ impl Request {
         let fields = Fields::new();
         for (n, v) in &self.headers {
             fields
-                .append(n, &v.as_bytes().to_vec())
+                .append(n, v.as_bytes())
                 .map_err(|e| Error::Other(format!("header {n}: {e:?}")))?;
         }
         // A known length, so receivers that refuse chunked bodies still accept it.
