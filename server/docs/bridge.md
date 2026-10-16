@@ -1,6 +1,6 @@
 # Bridge registry
 
-Temporary HTTP endpoints between `fliks-server` and Nest during the strangler. Each row is added in the milestone that needs it and removed when the bridge is deleted. Planned list: phase-2 plan §6.4.
+Temporary HTTP endpoints between `fliks-server` and Nest during the strangler. Each row is added in the milestone that needs it and removed when the bridge is deleted. Planned list: phase-2 plan §6.4. A feature whose caller or callee moves later may stay broken instead of getting a bridge (plan §0 rule 2): see "Known gaps until Sn".
 
 Auth: `Authorization: Bearer $FLIKS_BRIDGE_TOKEN` (random per boot; constant-time compare). Nest serves bridges under `/internal` (no `api` prefix). Public fallback must 404 `/internal/**`.
 
@@ -36,3 +36,20 @@ Rust bridge auth: `Authorization: Bearer $FLIKS_BRIDGE_TOKEN`, constant-time com
 - Release quality parsing in Nest until S5: `quality.parser.ts` and `app-qualities.ts` stay for imports; the Rust copy (`fliks_domain::release::quality`) shares the `release-quality` and `app-qualities` vectors.
 - Media detail hydration in Nest until S5 (`findOne`: the write routes return `MD` and `Media.path`), counts by library in Nest (`getCountsByLibrary` for `/api/counts`, S8), episode coverage SQL in Nest until S5 (`onDiskSql`, used by acquisition).
 - `GET /api/media/sync-queue` is an explicit forward from Rust to Nest until S6 (`app.rs`), so `/api/media/{id}` does not answer 400 for it.
+- Livetv path of `ImageService.getDiskPath` (Nest logo-serving route) until S7 (`image-store.md` rule 20).
+
+## Known gaps until Sn
+
+No new temporary bridge: each gap below is a Nest caller that loses a function when its callee moves to Rust, or the reverse. The release gate allows none. `POST /internal/ingest` (plan §6.4) is dropped: known gap until S8.
+
+| Until | Gap | Spec |
+|---|---|---|
+| S6 | Subtitle callees reached from S5 code stay in Nest and are skipped: `carryOver` (a superseded file's sidecars stay), `deleteSubtitleFilesOnDisk` (a deleted file leaves its sidecar subtitles), `deleteSubtitle` (companion delete of a tracked subtitle answers 501), `reconcileSubtitleFilesAfterRescan` / `discoverExternalSubtitles` / `embeddedSubtitle.detectAndStore` (rescan leaves subtitle rows stale), `syncSubtitle`, `subtitleScheduler.onMediaFileImported` (no automatic subtitle search after an import) | `ingest.md`, `media-write.md` |
+| S6 | `subtitle.synced`, `subtitle.downloaded`, `subtitle.upgraded` trigger no Emby refresh | `media-servers.md` |
+| S6 | Subtitle scorer: release-name and episode credit score 0 (`parseReleaseAttributes`, `parseSeasonEpisode` stubbed) | `release.md` |
+| S7 | Nest live TV logo cache stops caching new logos from S5 | `image-store.md` |
+| S7 | `LiveTv*` command rows left `running` by a Nest-only crash stay `running` until the next `fliks-server` boot | `scheduler.md` |
+| S8 | Plugin `library.ingest` throws `unavailable until S8`; plugin imports fail (`POST /internal/ingest` dropped) | `ingest.md`, `media-write.md` |
+| S8 | Plugin host loses its profile and scoring reads (`releases.score`, `releases.match`, `buildWant`, `scoringWindowFor`, `buildAcquisitionTarget`, `filesForEpisode`/`filesForSeasonPack`): plugin acquisition (search, grab, upgrade) does not work between S5 and S8 | `profiles.md`, `release.md` |
+| S8 | `download.complete` triggers no Emby refresh (Nest plugin host) | `media-servers.md` |
+| S9 | `GET /api/system/logs` shows only `fliks-server`'s own events; Nest and plugin-child lines stay on stdout | `system.md` |
