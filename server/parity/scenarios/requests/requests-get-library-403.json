@@ -1,0 +1,58 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "requests-get-library-403",
+  "seed": "requests",
+  "steps": [
+    {
+      "as": "validator",
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "You do not have access to this request's target library",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "GET",
+      "path": "/api/requests/2"
+    },
+    {
+      "as": "other",
+      "expect": {
+        "body": {
+          "approvedBy": null,
+          "approvedById": null,
+          "comments": [],
+          "declinedReason": null,
+          "fanartUrl": null,
+          "id": 2,
+          "kind": "add",
+          "languageProfileId": null,
+          "libraryId": 2,
+          "media": null,
+          "mediaId": null,
+          "mediaType": "series",
+          "posterUrl": null,
+          "qualityProfileId": null,
+          "seasons": null,
+          "status": "approved",
+          "title": "Requested Series",
+          "tmdbId": 9002,
+          "user": {
+            "avatar": "/api/users/4/avatar?v=1767225600000",
+            "id": 4,
+            "username": "other"
+          },
+          "userId": 4
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/requests/2"
+    }
+  ]
+}

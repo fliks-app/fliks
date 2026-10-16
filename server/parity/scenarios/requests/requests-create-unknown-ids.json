@@ -1,0 +1,70 @@
+{
+  "deviation": "C-REQ-1",
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "requests-create-unknown-ids",
+  "seed": "requests",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "libraryId": 99,
+        "mediaType": "movie",
+        "title": "x",
+        "tmdbId": 9500
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Library #99 not found",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/requests"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "libraryId": 1,
+        "mediaType": "movie",
+        "qualityProfileId": 99,
+        "title": "x",
+        "tmdbId": 9500
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Quality profile #99 not found",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/requests"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "languageProfileId": 99,
+        "libraryId": 1,
+        "mediaType": "movie",
+        "title": "x",
+        "tmdbId": 9500
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Language profile #99 not found",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/requests"
+    }
+  ]
+}

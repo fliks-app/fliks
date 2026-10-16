@@ -1,0 +1,30 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "requests-create-delete-kind-duplicate-409",
+  "seed": "requests",
+  "steps": [
+    {
+      "as": "other",
+      "body": {
+        "kind": "delete",
+        "mediaType": "movie",
+        "title": "Dup",
+        "tmdbId": 1003
+      },
+      "expect": {
+        "body": {
+          "error": "Conflict",
+          "message": "A deletion request for this title is already pending",
+          "statusCode": 409
+        },
+        "status": 409
+      },
+      "method": "POST",
+      "path": "/api/requests"
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "requests-create-delete-kind-not-in-library-400",
+  "seed": "requests",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "kind": "delete",
+        "mediaType": "movie",
+        "title": "Nope",
+        "tmdbId": 424242
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "This title is not in the library and cannot be deleted",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/requests"
+    }
+  ]
+}

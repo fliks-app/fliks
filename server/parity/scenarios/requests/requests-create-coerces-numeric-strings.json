@@ -1,0 +1,60 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "requests-create-coerces-numeric-strings",
+  "seed": "requests",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "libraryId": "2",
+        "mediaType": "series",
+        "seasons": [
+          "2"
+        ],
+        "title": "",
+        "tmdbId": 9101
+      },
+      "expect": {
+        "body": {
+          "approvedBy": null,
+          "approvedById": null,
+          "declinedReason": null,
+          "fanartUrl": null,
+          "id": 11,
+          "kind": "add",
+          "languageProfile": null,
+          "languageProfileId": null,
+          "library": {
+            "id": 2
+          },
+          "libraryId": 2,
+          "media": null,
+          "mediaId": null,
+          "mediaType": "series",
+          "posterUrl": null,
+          "qualityProfile": null,
+          "qualityProfileId": null,
+          "seasons": [
+            2
+          ],
+          "status": "pending",
+          "title": "",
+          "tmdbId": 9101,
+          "user": {
+            "avatar": null,
+            "id": 2,
+            "username": "user"
+          },
+          "userId": 2
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/requests"
+    }
+  ]
+}

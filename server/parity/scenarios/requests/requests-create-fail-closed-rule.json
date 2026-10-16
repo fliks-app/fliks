@@ -1,0 +1,54 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "requests-create-fail-closed-rule",
+  "seed": "requests",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "mediaType": "series",
+        "title": "Anime",
+        "tmdbId": 9200
+      },
+      "expect": {
+        "body": {
+          "approvedBy": null,
+          "approvedById": null,
+          "declinedReason": null,
+          "fanartUrl": null,
+          "id": 11,
+          "kind": "add",
+          "languageProfile": null,
+          "languageProfileId": null,
+          "library": {
+            "id": 2
+          },
+          "libraryId": 2,
+          "media": null,
+          "mediaId": null,
+          "mediaType": "series",
+          "posterUrl": null,
+          "qualityProfile": null,
+          "qualityProfileId": null,
+          "seasons": null,
+          "status": "pending",
+          "title": "Anime",
+          "tmdbId": 9200,
+          "user": {
+            "avatar": null,
+            "id": 2,
+            "username": "user"
+          },
+          "userId": 2
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/requests"
+    }
+  ]
+}

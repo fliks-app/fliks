@@ -1,0 +1,212 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "auto-approval-rules-crud",
+  "seed": "requests",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "criteria": {
+              "genreIds": [
+                16
+              ],
+              "maxSeasons": 3,
+              "mediaType": "series",
+              "yearFrom": 2000
+            },
+            "enabled": true,
+            "id": 3,
+            "name": "Anime series"
+          },
+          {
+            "criteria": {},
+            "enabled": false,
+            "id": 1,
+            "name": "Disabled everything"
+          },
+          {
+            "criteria": {
+              "userIds": [
+                999
+              ]
+            },
+            "enabled": true,
+            "id": 2,
+            "name": "Nobody"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/auto-approval-rules"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "criteria": {
+          "mediaType": "movie",
+          "userIds": [
+            2
+          ],
+          "yearFrom": 2000
+        },
+        "name": " Movies for all "
+      },
+      "expect": {
+        "body": {
+          "criteria": {
+            "mediaType": "movie",
+            "userIds": [
+              2
+            ],
+            "yearFrom": 2000
+          },
+          "enabled": true,
+          "id": 4,
+          "name": "Movies for all"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/auto-approval-rules"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "criteria": {
+            "mediaType": "movie",
+            "userIds": [
+              2
+            ],
+            "yearFrom": 2000
+          },
+          "enabled": true,
+          "id": 4,
+          "name": "Movies for all"
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/auto-approval-rules/4"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "criteria": {
+          "genreIds": [
+            16
+          ],
+          "libraryIds": [
+            1
+          ],
+          "maxSeasons": 2
+        },
+        "enabled": false,
+        "name": "Renamed"
+      },
+      "expect": {
+        "body": {
+          "criteria": {
+            "genreIds": [
+              16
+            ],
+            "libraryIds": [
+              1
+            ],
+            "maxSeasons": 2
+          },
+          "enabled": false,
+          "id": 4,
+          "name": "Renamed"
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/auto-approval-rules/4"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "criteria": {
+              "genreIds": [
+                16
+              ],
+              "maxSeasons": 3,
+              "mediaType": "series",
+              "yearFrom": 2000
+            },
+            "enabled": true,
+            "id": 3,
+            "name": "Anime series"
+          },
+          {
+            "criteria": {},
+            "enabled": false,
+            "id": 1,
+            "name": "Disabled everything"
+          },
+          {
+            "criteria": {
+              "userIds": [
+                999
+              ]
+            },
+            "enabled": true,
+            "id": 2,
+            "name": "Nobody"
+          },
+          {
+            "criteria": {
+              "genreIds": [
+                16
+              ],
+              "libraryIds": [
+                1
+              ],
+              "maxSeasons": 2
+            },
+            "enabled": false,
+            "id": 4,
+            "name": "Renamed"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/auto-approval-rules"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "status": 200
+      },
+      "method": "DELETE",
+      "path": "/api/auto-approval-rules/4"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Rule #4 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "GET",
+      "path": "/api/auto-approval-rules/4"
+    }
+  ],
+  "unordered": [
+    "$"
+  ]
+}

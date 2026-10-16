@@ -1,0 +1,26 @@
+{
+  "deviation": "C-REQ-1",
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "requests-title-state-bad-media-type",
+  "seed": "requests",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "mediaType must be one of the following values: movie, series"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "GET",
+      "path": "/api/requests/title-state?tmdbId=9001&mediaType=foo"
+    }
+  ]
+}

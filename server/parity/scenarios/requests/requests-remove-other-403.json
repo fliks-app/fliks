@@ -1,0 +1,23 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "requests-remove-other-403",
+  "seed": "requests",
+  "steps": [
+    {
+      "as": "other",
+      "expect": {
+        "body": {
+          "message": "Forbidden",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "DELETE",
+      "path": "/api/requests/1"
+    }
+  ]
+}

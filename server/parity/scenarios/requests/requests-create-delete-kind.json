@@ -1,0 +1,132 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "requests-create-delete-kind",
+  "seed": "requests",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "kind": "delete",
+        "mediaType": "movie",
+        "title": "Remove 1",
+        "tmdbId": 1001
+      },
+      "expect": {
+        "body": {
+          "approvedBy": null,
+          "approvedById": null,
+          "declinedReason": null,
+          "fanartUrl": null,
+          "id": 11,
+          "kind": "delete",
+          "library": {
+            "id": 1
+          },
+          "libraryId": 1,
+          "media": {
+            "id": 1,
+            "path": null
+          },
+          "mediaId": 1,
+          "mediaType": "movie",
+          "posterUrl": null,
+          "seasons": null,
+          "status": "pending",
+          "title": "Remove 1",
+          "tmdbId": 1001,
+          "user": {
+            "avatar": null,
+            "id": 2,
+            "username": "user"
+          },
+          "userId": 2
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/requests"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "data": [
+            {
+              "approvedBy": null,
+              "approvedById": null,
+              "declinedReason": null,
+              "fanartUrl": null,
+              "id": 11,
+              "kind": "delete",
+              "languageProfileId": null,
+              "libraryId": 1,
+              "media": {
+                "addedById": null,
+                "additionalFanartUrls": [],
+                "alternativeTitles": [],
+                "digitalRelease": null,
+                "fanartUrl": null,
+                "folderName": "Parity Movie 01 (2020)",
+                "genres": [
+                  "Drama"
+                ],
+                "id": 1,
+                "imdbId": null,
+                "inCinemas": null,
+                "languageProfileId": null,
+                "libraryId": 1,
+                "logoUrl": null,
+                "metadataRefreshedAt": null,
+                "minimumAvailability": "released",
+                "monitored": true,
+                "originalTitle": null,
+                "overview": "Synthetic movie 1",
+                "path": null,
+                "physicalRelease": null,
+                "posterUrl": null,
+                "preferredProvider": null,
+                "qualityProfileId": null,
+                "rating": 7.5,
+                "releaseDate": "2020-01-01",
+                "runtime": 90,
+                "status": "released",
+                "title": "Parity Movie 01",
+                "tmdbCollectionId": null,
+                "tmdbCollectionName": null,
+                "tmdbId": 1001,
+                "tvdbId": null,
+                "type": "movie",
+                "year": 2020
+              },
+              "mediaId": 1,
+              "mediaType": "movie",
+              "posterUrl": null,
+              "qualityProfileId": null,
+              "seasons": null,
+              "status": "pending",
+              "title": "Remove 1",
+              "tmdbId": 1001,
+              "user": {
+                "avatar": null,
+                "id": 2,
+                "username": "user"
+              },
+              "userId": 2
+            }
+          ],
+          "total": 1
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/requests?kind=delete&tmdbId=1001&mediaType=movie"
+    }
+  ],
+  "unordered": [
+    "$.data"
+  ]
+}

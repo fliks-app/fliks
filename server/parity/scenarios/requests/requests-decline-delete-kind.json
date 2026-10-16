@@ -1,0 +1,132 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "requests-decline-delete-kind",
+  "seed": "requests",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "reason": "keep it"
+      },
+      "expect": {
+        "body": {
+          "approvedBy": {
+            "avatar": null,
+            "id": 1,
+            "username": "admin"
+          },
+          "approvedById": 1,
+          "declinedReason": "keep it",
+          "fanartUrl": null,
+          "id": 9,
+          "kind": "delete",
+          "languageProfileId": null,
+          "libraryId": 1,
+          "mediaId": 3,
+          "mediaType": "movie",
+          "posterUrl": null,
+          "qualityProfileId": null,
+          "seasons": null,
+          "status": "declined",
+          "title": "Parity Movie 03",
+          "tmdbId": 1003,
+          "user": {
+            "avatar": null,
+            "id": 2,
+            "username": "user"
+          },
+          "userId": 2
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/requests/9/decline"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "data": [
+            {
+              "approvedBy": {
+                "avatar": null,
+                "id": 1,
+                "username": "admin"
+              },
+              "approvedById": 1,
+              "declinedReason": "keep it",
+              "fanartUrl": null,
+              "id": 9,
+              "kind": "delete",
+              "languageProfileId": null,
+              "libraryId": 1,
+              "media": {
+                "addedById": null,
+                "additionalFanartUrls": [],
+                "alternativeTitles": [],
+                "digitalRelease": null,
+                "fanartUrl": null,
+                "folderName": "Parity Movie 03 (2020)",
+                "genres": [
+                  "Drama"
+                ],
+                "id": 3,
+                "imdbId": null,
+                "inCinemas": null,
+                "languageProfileId": null,
+                "libraryId": 1,
+                "logoUrl": null,
+                "metadataRefreshedAt": null,
+                "minimumAvailability": "released",
+                "monitored": true,
+                "originalTitle": null,
+                "overview": "Synthetic movie 3",
+                "path": null,
+                "physicalRelease": null,
+                "posterUrl": null,
+                "preferredProvider": null,
+                "qualityProfileId": null,
+                "rating": 7.5,
+                "releaseDate": "2020-01-01",
+                "runtime": 90,
+                "status": "released",
+                "title": "Parity Movie 03",
+                "tmdbCollectionId": null,
+                "tmdbCollectionName": null,
+                "tmdbId": 1003,
+                "tvdbId": null,
+                "type": "movie",
+                "year": 2020
+              },
+              "mediaId": 3,
+              "mediaType": "movie",
+              "posterUrl": null,
+              "qualityProfileId": null,
+              "seasons": null,
+              "status": "declined",
+              "title": "Parity Movie 03",
+              "tmdbId": 1003,
+              "user": {
+                "avatar": null,
+                "id": 2,
+                "username": "user"
+              },
+              "userId": 2
+            }
+          ],
+          "total": 1
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/requests?kind=delete"
+    }
+  ],
+  "unordered": [
+    "$.data"
+  ]
+}

@@ -1,0 +1,103 @@
+{
+  "deviation": "F-REQ-1",
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "requests-get-media-paths-hidden",
+  "seed": "requests",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "approvedBy": {
+            "avatar": null,
+            "id": 1,
+            "username": "admin"
+          },
+          "approvedById": 1,
+          "comments": [],
+          "declinedReason": null,
+          "fanartUrl": null,
+          "id": 6,
+          "kind": "add",
+          "languageProfileId": null,
+          "libraryId": 1,
+          "media": {
+            "addedById": null,
+            "additionalFanartUrls": [],
+            "alternativeTitles": [],
+            "digitalRelease": null,
+            "fanartUrl": null,
+            "folderName": "Parity Movie 01 (2020)",
+            "genres": [
+              "Drama"
+            ],
+            "id": 1,
+            "imdbId": null,
+            "inCinemas": null,
+            "languageProfile": null,
+            "languageProfileId": null,
+            "library": {
+              "color": "#3b82f6",
+              "defaultLanguageProfileId": null,
+              "defaultQualityProfileId": null,
+              "icon": "film",
+              "id": 1,
+              "label": null,
+              "mediaTypes": [
+                "movie"
+              ],
+              "metadataLanguage": null,
+              "metadataRegion": null,
+              "name": "Movies",
+              "preferredProvider": null
+            },
+            "libraryId": 1,
+            "logoUrl": null,
+            "metadata": null,
+            "metadataRefreshedAt": null,
+            "minimumAvailability": "released",
+            "monitored": true,
+            "originalTitle": null,
+            "overview": "Synthetic movie 1",
+            "physicalRelease": null,
+            "posterUrl": null,
+            "preferredProvider": null,
+            "qualityProfile": null,
+            "qualityProfileId": null,
+            "rating": 7.5,
+            "releaseDate": "2020-01-01",
+            "runtime": 90,
+            "status": "released",
+            "title": "Parity Movie 01",
+            "tmdbCollectionId": null,
+            "tmdbCollectionName": null,
+            "tmdbId": 1001,
+            "tvdbId": null,
+            "type": "movie",
+            "year": 2020
+          },
+          "mediaId": 1,
+          "mediaType": "movie",
+          "posterUrl": null,
+          "qualityProfileId": null,
+          "seasons": null,
+          "status": "available",
+          "title": "Parity Movie 01",
+          "tmdbId": 1001,
+          "user": {
+            "avatar": null,
+            "id": 2,
+            "username": "user"
+          },
+          "userId": 2
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/requests/6"
+    }
+  ]
+}

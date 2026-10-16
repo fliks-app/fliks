@@ -1,0 +1,59 @@
+{
+  "deviation": "C-REQ-1",
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "requests-update-unknown-ids",
+  "seed": "requests",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "qualityProfileId": 99
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Quality profile #99 not found",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PATCH",
+      "path": "/api/requests/1"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "languageProfileId": 99
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Language profile #99 not found",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PATCH",
+      "path": "/api/requests/1"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "libraryId": 99
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Library #99 not found",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PATCH",
+      "path": "/api/requests/1"
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "requests-comment-add-forbidden-403",
+  "seed": "requests",
+  "steps": [
+    {
+      "as": "other",
+      "body": {
+        "message": "x"
+      },
+      "expect": {
+        "body": {
+          "message": "Forbidden",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "POST",
+      "path": "/api/requests/1/comments"
+    },
+    {
+      "as": "other",
+      "expect": {
+        "body": {
+          "message": "Forbidden",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "GET",
+      "path": "/api/requests/1/comments"
+    }
+  ]
+}

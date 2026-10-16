@@ -1,0 +1,52 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "auto-approval-rules-null-criteria-kept",
+  "seed": "requests",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "criteria": {
+          "userIds": null,
+          "yearFrom": 2000.0
+        },
+        "name": "n"
+      },
+      "expect": {
+        "body": {
+          "criteria": {
+            "userIds": null,
+            "yearFrom": 2000
+          },
+          "enabled": true,
+          "id": 4,
+          "name": "n"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/auto-approval-rules"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "criteria": {
+            "userIds": null,
+            "yearFrom": 2000
+          },
+          "enabled": true,
+          "id": 4,
+          "name": "n"
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/auto-approval-rules/4"
+    }
+  ]
+}

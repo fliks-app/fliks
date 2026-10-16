@@ -1,0 +1,31 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "requests-update-validation-400",
+  "seed": "requests",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "extra": 1,
+        "qualityProfileId": "x"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "property extra should not exist",
+            "qualityProfileId must be an integer number"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PATCH",
+      "path": "/api/requests/1"
+    }
+  ]
+}

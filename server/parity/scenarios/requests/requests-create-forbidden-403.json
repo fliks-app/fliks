@@ -1,0 +1,29 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "requests-create-forbidden-403",
+  "seed": "requests",
+  "steps": [
+    {
+      "as": "readonly",
+      "body": {
+        "mediaType": "movie",
+        "title": "t",
+        "tmdbId": 9400
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "POST",
+      "path": "/api/requests"
+    }
+  ]
+}

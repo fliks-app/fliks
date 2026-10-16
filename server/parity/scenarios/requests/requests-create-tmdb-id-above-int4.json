@@ -1,0 +1,31 @@
+{
+  "deviation": "C-REQ-1",
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "requests-create-tmdb-id-above-int4",
+  "seed": "requests",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "mediaType": "movie",
+        "title": "x",
+        "tmdbId": 2147483648
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "tmdbId must not be greater than 2147483647"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/requests"
+    }
+  ]
+}

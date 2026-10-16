@@ -1,0 +1,26 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "requests-update-other-403",
+  "seed": "requests",
+  "steps": [
+    {
+      "as": "other",
+      "body": {
+        "qualityProfileId": 1
+      },
+      "expect": {
+        "body": {
+          "message": "Forbidden",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "PATCH",
+      "path": "/api/requests/1"
+    }
+  ]
+}

@@ -1,0 +1,158 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "requests-get-own",
+  "seed": "requests",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "approvedBy": null,
+          "approvedById": null,
+          "comments": [
+            {
+              "id": 1,
+              "message": "First comment",
+              "requestId": 1,
+              "user": {
+                "avatar": null,
+                "id": 2,
+                "username": "user"
+              },
+              "userId": 2
+            },
+            {
+              "id": 2,
+              "message": "Admin reply",
+              "requestId": 1,
+              "user": {
+                "avatar": null,
+                "id": 1,
+                "username": "admin"
+              },
+              "userId": 1
+            }
+          ],
+          "declinedReason": null,
+          "fanartUrl": null,
+          "id": 1,
+          "kind": "add",
+          "languageProfileId": null,
+          "libraryId": 1,
+          "media": null,
+          "mediaId": null,
+          "mediaType": "movie",
+          "posterUrl": null,
+          "qualityProfileId": null,
+          "seasons": null,
+          "status": "pending",
+          "title": "Requested Movie",
+          "tmdbId": 9001,
+          "user": {
+            "avatar": null,
+            "id": 2,
+            "username": "user"
+          },
+          "userId": 2
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/requests/1"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "approvedBy": null,
+          "approvedById": null,
+          "comments": [],
+          "declinedReason": null,
+          "fanartUrl": null,
+          "id": 9,
+          "kind": "delete",
+          "languageProfileId": null,
+          "libraryId": 1,
+          "media": {
+            "addedById": null,
+            "additionalFanartUrls": [],
+            "alternativeTitles": [],
+            "digitalRelease": null,
+            "fanartUrl": null,
+            "folderName": "Parity Movie 03 (2020)",
+            "genres": [
+              "Drama"
+            ],
+            "id": 3,
+            "imdbId": null,
+            "inCinemas": null,
+            "languageProfile": null,
+            "languageProfileId": null,
+            "library": {
+              "color": "#3b82f6",
+              "defaultLanguageProfileId": null,
+              "defaultQualityProfileId": null,
+              "icon": "film",
+              "id": 1,
+              "label": null,
+              "mediaTypes": [
+                "movie"
+              ],
+              "metadataLanguage": null,
+              "metadataRegion": null,
+              "name": "Movies",
+              "path": "/tmp/fliks-parity/media/movies",
+              "preferredProvider": null
+            },
+            "libraryId": 1,
+            "logoUrl": null,
+            "metadata": null,
+            "metadataRefreshedAt": null,
+            "minimumAvailability": "released",
+            "monitored": true,
+            "originalTitle": null,
+            "overview": "Synthetic movie 3",
+            "path": "/tmp/fliks-parity/media/movies/Parity Movie 03 (2020)",
+            "physicalRelease": null,
+            "posterUrl": null,
+            "preferredProvider": null,
+            "qualityProfile": null,
+            "qualityProfileId": null,
+            "rating": 7.5,
+            "releaseDate": "2020-01-01",
+            "runtime": 90,
+            "status": "released",
+            "title": "Parity Movie 03",
+            "tmdbCollectionId": null,
+            "tmdbCollectionName": null,
+            "tmdbId": 1003,
+            "tvdbId": null,
+            "type": "movie",
+            "year": 2020
+          },
+          "mediaId": 3,
+          "mediaType": "movie",
+          "posterUrl": null,
+          "qualityProfileId": null,
+          "seasons": null,
+          "status": "pending",
+          "title": "Parity Movie 03",
+          "tmdbId": 1003,
+          "user": {
+            "avatar": null,
+            "id": 2,
+            "username": "user"
+          },
+          "userId": 2
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/requests/9"
+    }
+  ]
+}
