@@ -1,5 +1,5 @@
 //! `/api/metadata/*` (`docs/spec/metadata.md` rules 1-16, 38-39).
-use super::{MediaKind, MetadataFetch, Provider, Upstream};
+use super::{MediaKind, Provider, Upstream};
 use crate::{
     http::{
         AppError,

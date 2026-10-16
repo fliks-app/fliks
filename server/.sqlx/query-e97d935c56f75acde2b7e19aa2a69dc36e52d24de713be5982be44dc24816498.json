@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE media_metadata SET budget = COALESCE($2, budget), revenue = COALESCE($3, revenue),\n             tagline = COALESCE($4, tagline), popularity = COALESCE($5, popularity),\n             \"voteCount\" = COALESCE($6, \"voteCount\"), \"originalLanguage\" = COALESCE($7, \"originalLanguage\"),\n             \"productionCountries\" = CASE WHEN $8 THEN $12 ELSE \"productionCountries\" END,\n             \"productionCompanies\" = CASE WHEN $9 THEN $13 ELSE \"productionCompanies\" END,\n             videos = CASE WHEN $10 THEN $14 ELSE videos END,\n             keywords = CASE WHEN $11 THEN $15 ELSE keywords END\n           WHERE \"mediaId\" = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int8",
+        "Int8",
+        "Varchar",
+        "Float8",
+        "Int4",
+        "Varchar",
+        "Bool",
+        "Bool",
+        "Bool",
+        "Bool",
+        "Jsonb",
+        "Jsonb",
+        "Jsonb",
+        "Jsonb"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e97d935c56f75acde2b7e19aa2a69dc36e52d24de713be5982be44dc24816498"
+}

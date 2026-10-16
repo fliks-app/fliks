@@ -304,5 +304,7 @@ async fn settled(st: &AppState, media_id: i32) {
             }
         }
     }
-    st.seams.markers.auto_detect_missing(media_id).await;
+    if let Err(e) = crate::markers::auto_detect_missing(st, media_id).await {
+        tracing::warn!("Post-import[media #{media_id}]: marker detection failed: {e}");
+    }
 }

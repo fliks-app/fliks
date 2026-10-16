@@ -347,9 +347,7 @@ pub async fn rescan_files(
         c.updated
     );
     if c.added + c.removed + c.updated > 0 {
-        st.seams
-            .media_servers
-            .dispatch("library.rescan", media.title.clone(), media.path());
+        crate::media_servers::dispatch_detached(st, "library.rescan");
     }
     if slots_created && let Err(e) = crate::media::write::refresh_series_episodes(st, &media).await
     {
@@ -490,10 +488,8 @@ pub async fn enrich_from_disk(st: &AppState, file_id: i32) -> Result<(), AppErro
     )
     .fetch_one(&st.db)
     .await?;
-    if let Some(media) = load_media(&st.db, m.id).await? {
-        st.seams
-            .media_servers
-            .dispatch("library.rescan", media.title.clone(), media.path());
+    if load_media(&st.db, m.id).await?.is_some() {
+        crate::media_servers::dispatch_detached(st, "library.rescan");
     }
     Ok(())
 }

@@ -9,7 +9,7 @@ use crate::state::AppState;
 use axum::{Router, routing::get, routing::post};
 use utoipa::OpenApi;
 
-pub use dispatch::dispatch;
+pub use dispatch::{dispatch, dispatch_detached};
 
 /// The routes of this domain, merged into the API document by `app::openapi`.
 #[derive(OpenApi)]

@@ -9,6 +9,7 @@ use crate::{
         auth::Authed,
         validate::{PathParams, ValidJson, from_value, int_param},
     },
+    jobs::{Trigger, run_audited},
     state::AppState,
 };
 use axum::{
@@ -301,13 +302,11 @@ pub async fn import_watch_history(
     });
     tokio::spawn(async move {
         let _claim = claim;
-        let (db, hub) = (st.db.clone(), st.hub.clone());
-        let job_name = server_name.clone();
-        let job_hub = hub.clone();
-        let job = Box::pin(async move {
-            match import::import_server(&db, &server).await {
+        let (job_state, job_name) = (st.clone(), server_name.clone());
+        let ran = run_audited(&st, "ImportWatchHistory", Trigger::Manual, async move {
+            match import::import_server(&job_state.db, &server).await {
                 Ok(s) => {
-                    job_hub.emit(SseEvent::WatchHistoryImportCompleted {
+                    job_state.hub.emit(SseEvent::WatchHistoryImportCompleted {
                         server_id,
                         server_name: job_name,
                         users: s.users,
@@ -319,7 +318,7 @@ pub async fn import_watch_history(
                 }
                 Err(error) => {
                     tracing::error!("Watch-history import failed: {error}");
-                    job_hub.emit(SseEvent::WatchHistoryImportFailed {
+                    job_state.hub.emit(SseEvent::WatchHistoryImportFailed {
                         server_id,
                         server_name: job_name,
                         error: error.clone(),
@@ -327,15 +326,10 @@ pub async fn import_watch_history(
                     Err(error)
                 }
             }
-        });
-        if st
-            .seams
-            .runner
-            .run("ImportWatchHistory", "manual", job)
-            .await
-            .is_err()
-        {
-            hub.emit(SseEvent::WatchHistoryImportFailed {
+        })
+        .await;
+        if !ran {
+            st.hub.emit(SseEvent::WatchHistoryImportFailed {
                 server_id,
                 server_name,
                 error: String::new(),

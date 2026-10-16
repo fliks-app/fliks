@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT provider, \"tmdbId\" AS tmdb_id, \"metadataRefreshedAt\" AS refreshed FROM persons WHERE id = $1",
+  "query": "SELECT provider, \"tmdbId\" AS tmdb_id, name, \"metadataRefreshedAt\" AS refreshed FROM persons WHERE id = $1",
   "describe": {
     "columns": [
       {
@@ -15,6 +15,11 @@
       },
       {
         "ordinal": 2,
+        "name": "name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
         "name": "refreshed",
         "type_info": "Timestamptz"
       }
@@ -27,8 +32,9 @@
     "nullable": [
       false,
       false,
+      false,
       true
     ]
   },
-  "hash": "f41cc88dab71987cd53700c8ba9e041401a5d00a36a5a574767e69fca2554bdf"
+  "hash": "f0956ac1d704e7c2e4719b45d129da4796ee729979e2290e324c2d20d2899d0f"
 }

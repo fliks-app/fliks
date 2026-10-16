@@ -1,9 +1,9 @@
 use crate::{
     http::{AppError, auth::Authed},
-    images::{ImageSink, paths::Target},
+    images::{ImageStore, paths::Target},
     libraries::{accessible_library_ids, paths_visible},
     media::hydrate,
-    metadata::{Credits, MetadataFetch, Provider, Upstream},
+    metadata::{Credits, Metadata, Provider, Upstream},
     state::AppState,
 };
 use fliks_domain::{
@@ -20,6 +20,7 @@ pub struct Person {
     pub id: i32,
     pub provider: String,
     pub tmdb_id: i32,
+    pub name: String,
     pub refreshed_ms: Option<i64>,
 }
 
@@ -29,7 +30,7 @@ fn not_found(id: i32) -> AppError {
 
 pub async fn find(db: &PgPool, id: i32) -> Result<Person, AppError> {
     sqlx::query!(
-        r#"SELECT provider, "tmdbId" AS tmdb_id, "metadataRefreshedAt" AS refreshed FROM persons WHERE id = $1"#,
+        r#"SELECT provider, "tmdbId" AS tmdb_id, name, "metadataRefreshedAt" AS refreshed FROM persons WHERE id = $1"#,
         id
     )
     .fetch_optional(db)
@@ -38,6 +39,7 @@ pub async fn find(db: &PgPool, id: i32) -> Result<Person, AppError> {
         id,
         provider: r.provider,
         tmdb_id: r.tmdb_id,
+        name: r.name,
         refreshed_ms: r.refreshed.map(|t| t.timestamp_millis()),
     })
     .ok_or_else(|| not_found(id))
@@ -90,14 +92,13 @@ ORDER BY ts_rank(p."searchVector", to_tsquery('simple', $1)) DESC, p.name ASC, p
 }
 
 /// Rule 11: the stored provider (TMDB when its key is missing); a 404 asks the other one and pins the row to it.
-async fn call_provider<M, T, Fut>(
-    md: &M,
+async fn call_provider<T, Fut>(
+    md: &Metadata,
     db: &PgPool,
     p: &mut Person,
     call: impl Fn(Provider) -> Fut,
 ) -> Result<(T, Provider), (Provider, Upstream)>
 where
-    M: MetadataFetch,
     Fut: std::future::Future<Output = Result<T, Upstream>>,
 {
     let primary = md.resolve(Some(&p.provider));
@@ -125,10 +126,10 @@ where
     Ok((v, other))
 }
 
-async fn try_refresh<M: MetadataFetch, I: ImageSink>(
+async fn try_refresh(
     db: &PgPool,
-    md: &M,
-    images: &I,
+    md: &Metadata,
+    images: &ImageStore,
     lang: &Resolved,
     p: &mut Person,
 ) -> Result<(), String> {
@@ -162,10 +163,10 @@ WHERE id = $1"#,
 }
 
 /// Rules 9-15: refresh a person unseen for 7 days; every failure is swallowed and the stored row served.
-pub async fn ensure_details_loaded<M: MetadataFetch, I: ImageSink>(
+pub async fn ensure_details_loaded(
     db: &PgPool,
-    md: &M,
-    images: &I,
+    md: &Metadata,
+    images: &ImageStore,
     lang: &Resolved,
     p: &mut Person,
 ) {
@@ -242,7 +243,7 @@ FROM media_cast mc WHERE mc."personId" = $1 ORDER BY mc."order" ASC, mc.id ASC"#
 pub async fn detail(st: &AppState, a: &Authed, id: i32) -> Result<Value, AppError> {
     let mut p = find(&st.db, id).await?;
     let lang = st.metadata.lang.resolve(None).await?;
-    ensure_details_loaded(&st.db, &*st.metadata, &*st.images, &lang, &mut p).await;
+    ensure_details_loaded(&st.db, &st.metadata, &st.images, &lang, &mut p).await;
     let person = person_json(&st.db, id).await?;
     let (cast, crew) = tokio::try_join!(
         credit_rows(st, a, id, &person, false),

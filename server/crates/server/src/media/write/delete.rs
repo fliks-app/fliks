@@ -91,9 +91,7 @@ pub async fn remove_media(
         tmdb_id: media.tmdb_id.map(i64::from),
         media_type: media.media_type.clone(),
     });
-    st.seams
-        .media_servers
-        .dispatch("media.deleted", media.title.clone(), media.path());
+    crate::media_servers::dispatch_detached(st, "media.deleted");
     Ok(media)
 }
 
@@ -210,9 +208,7 @@ pub async fn delete_media_file(
     if let Some(ep) = f.episode {
         clear_has_file(&st.db, ep).await?;
     }
-    st.seams
-        .media_servers
-        .dispatch("file.deleted", media.title.clone(), media.path());
+    crate::media_servers::dispatch_detached(st, "file.deleted");
     Ok(())
 }
 

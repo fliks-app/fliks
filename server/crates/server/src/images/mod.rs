@@ -25,7 +25,7 @@ use tower_http::services::ServeFile;
 pub mod paths;
 pub mod store;
 
-pub use store::{ImageSink, ImageStore};
+pub use store::ImageStore;
 
 pub fn router() -> Router<AppState> {
     Router::new()

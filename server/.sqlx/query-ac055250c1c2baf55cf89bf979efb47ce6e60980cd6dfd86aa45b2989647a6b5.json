@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT \"seasonNumber\" AS n, \"preferredProvider\" AS \"pref!\" FROM seasons\n           WHERE \"mediaId\" = $1 AND \"preferredProvider\" IS NOT NULL AND \"preferredProvider\" <> ''\n           ORDER BY id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "n",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "pref!",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      true
+    ]
+  },
+  "hash": "ac055250c1c2baf55cf89bf979efb47ce6e60980cd6dfd86aa45b2989647a6b5"
+}

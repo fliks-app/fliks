@@ -468,7 +468,7 @@ impl Tmdb {
             .collect())
     }
 
-    async fn season(&self, id: i64, n: i64, lang: &Resolved) -> Result<Value, Upstream> {
+    pub async fn season(&self, id: i64, n: i64, lang: &Resolved) -> Result<Value, Upstream> {
         let s = self
             .get(
                 &format!("/tv/{id}/season/{n}"),

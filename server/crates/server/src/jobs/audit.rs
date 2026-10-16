@@ -182,15 +182,21 @@ pub async fn execute<E: Display>(
 }
 
 /// The one audit lifecycle for in-process work (`fliks_server::jobs::run_audited`): other domains call this,
-/// never a copy. Without a row the work does not run.
+/// never a copy. Without a row the work does not run and the answer is `false`.
 pub async fn run_audited<E: Display>(
     st: &AppState,
     name: &str,
     trigger: Trigger,
     work: impl Future<Output = Result<(), E>>,
-) {
+) -> bool {
     match insert_running(&st.db, name, trigger).await {
-        Ok(id) => execute(st, id, name, "error", work).await,
-        Err(e) => tracing::error!("Command {name}: cannot insert its row: {e}"),
+        Ok(id) => {
+            execute(st, id, name, "error", work).await;
+            true
+        }
+        Err(e) => {
+            tracing::error!("Command {name}: cannot insert its row: {e}");
+            false
+        }
     }
 }

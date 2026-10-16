@@ -41,6 +41,24 @@ pub fn read_for_video_file(video: &Path) -> Option<NfoData> {
     merged
 }
 
+/// `read_for_video_file` off the async threads.
+pub async fn for_video(video: &Path) -> Option<NfoData> {
+    let video = video.to_path_buf();
+    tokio::task::spawn_blocking(move || read_for_video_file(&video))
+        .await
+        .ok()
+        .flatten()
+}
+
+/// `read_nfo_file` off the async threads.
+pub async fn file(path: &Path) -> Option<NfoData> {
+    let path = path.to_path_buf();
+    tokio::task::spawn_blocking(move || read_nfo_file(&path))
+        .await
+        .ok()
+        .flatten()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

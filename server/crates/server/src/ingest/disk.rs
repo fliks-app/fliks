@@ -13,9 +13,9 @@ use crate::{
         auth::Authed,
         validate::{PathParams, ValidJson},
     },
+    importers::nfo,
     libraries::{accessible_library_ids, paths_visible},
     media::write::{self as mw, body::Body},
-    seams::Nfo,
     state::AppState,
 };
 use axum::{Json, Router, extract::State, http::StatusCode, routing::post};
@@ -29,6 +29,7 @@ use fliks_domain::{
         self, MovieFolder, SeriesFolder, is_special_file, parse_episode_numbers,
         validate_folder_name,
     },
+    nfo::NfoData,
     release::parsing::{quality::parse_release_quality, title::extract_media_title},
 };
 use serde::Serialize;
@@ -105,7 +106,7 @@ struct Group {
     folder_name: String,
     guess_title: String,
     guess_year: Option<i64>,
-    nfo: Option<Nfo>,
+    nfo: Option<NfoData>,
     suggested_provider: String,
     files: Vec<FileEntry>,
 }
@@ -247,7 +248,7 @@ async fn scan_under(
     }
     for g in &mut groups {
         let sample = PathBuf::from(&g.files[0].file_path);
-        g.nfo = st.seams.nfo.for_video(&sample).await;
+        g.nfo = nfo::for_video(&sample).await;
         let ex = extract_media_title(&file_name(&sample));
         g.guess_title = g
             .nfo
@@ -258,7 +259,6 @@ async fn scan_under(
             .nfo
             .as_ref()
             .and_then(|n| n.year)
-            .map(i64::from)
             .or(ex.year.map(i64::from));
     }
     progress(st, &key, root, total, total);
@@ -965,11 +965,7 @@ async fn confirm_import(
                 present += o.already_present.len() as i64;
                 errors.extend(o.errors);
                 if !o.imported.is_empty() {
-                    st.seams.media_servers.dispatch(
-                        "library.rescan",
-                        media.title.clone(),
-                        media.path(),
-                    );
+                    crate::media_servers::dispatch_detached(st, "library.rescan");
                 }
             }
             Err(e) => errors.push(format!("{name}: {e}")),
@@ -1153,18 +1149,16 @@ async fn find_or_create_unmatched(
     };
     let root_movie = d.folder_name.is_empty();
     let art_base = (!series).then(|| split_ext(&file_name(&sample)).0.to_owned());
-    let read_nfo = async || -> Option<Nfo> {
-        let nfo = &st.seams.nfo;
+    let read_nfo = async || -> Option<NfoData> {
         if series {
-            match nfo.file(&art_dir.join("tvshow.nfo")).await {
+            match nfo::file(&art_dir.join("tvshow.nfo")).await {
                 Some(n) => Some(n),
-                None => nfo.for_video(&sample).await,
+                None => nfo::for_video(&sample).await,
             }
         } else if root_movie {
-            nfo.file(&art_dir.join(format!("{}.nfo", art_base.clone().unwrap_or_default())))
-                .await
+            nfo::file(&art_dir.join(format!("{}.nfo", art_base.clone().unwrap_or_default()))).await
         } else {
-            nfo.for_video(&sample).await
+            nfo::for_video(&sample).await
         }
     };
     let guessed = d
@@ -1184,7 +1178,10 @@ async fn find_or_create_unmatched(
         Some(t) if !t.is_empty() && guessed == d.folder_name => t,
         _ => guessed,
     };
-    let year = d.year.or(transfer_nfo.as_ref().and_then(|n| n.year));
+    let year = d.year.or(transfer_nfo
+        .as_ref()
+        .and_then(|n| n.year)
+        .and_then(|y| i32::try_from(y).ok()));
     let folder = if d.transfer.is_some() {
         let f = naming_formats(&st.db).await?;
         let named = if series {

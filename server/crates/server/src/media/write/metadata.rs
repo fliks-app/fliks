@@ -7,8 +7,9 @@ use crate::{
         auth::Authed,
         validate::{PathParams, ValidJson},
     },
+    images::paths::{Target, Variant},
     ingest::{MediaRow, load_media, rescan::rescan_files},
-    seams::{Details, Found, SeasonDetails},
+    metadata::service::{self, Details, Found, SeasonDetails},
     state::AppState,
 };
 use axum::{Json, extract::State, http::StatusCode};
@@ -19,20 +20,17 @@ use std::collections::HashSet;
 
 /// `downloadMediaImages` (rule 58): local URLs replace the provider's when the store succeeded.
 pub async fn download_media_images(st: &AppState, id: i32, d: &Details) {
-    let img = &st.seams.images;
-    let one = async |url: &Option<String>, v: &'static str| match url {
-        Some(u) if !u.is_empty() => img.download(u, "media", id, Some(v)).await,
+    let one = async |url: &Option<String>, v: Variant| match url {
+        Some(u) if !u.is_empty() => st.images.download_and_store(u, &Target::media(id, v)).await,
         _ => None,
     };
-    let poster = one(&d.poster_url, "poster").await;
-    let fanart = one(&d.fanart_url, "fanart").await;
-    let logo = one(&d.logo_url, "logo").await;
+    let poster = one(&d.poster_url, Variant::Poster).await;
+    let fanart = one(&d.fanart_url, Variant::Fanart).await;
+    let logo = one(&d.logo_url, Variant::Logo).await;
     let mut extra = vec![];
     for (i, u) in d.additional_fanart_urls.iter().enumerate() {
-        if let Some(l) = img
-            .download(u, "media", id, Some(&format!("fanart-{}", i + 1)))
-            .await
-        {
+        let t = Target::media(id, Variant::FanartN(i as u32 + 1));
+        if let Some(l) = st.images.download_and_store(u, &t).await {
             extra.push(l);
         }
     }
@@ -60,7 +58,11 @@ pub async fn download_season_images(
     poster: Option<String>,
 ) {
     for (ep, url) in stills {
-        if let Some(local) = st.seams.images.download(&url, "episode", ep, None).await {
+        if let Some(local) = st
+            .images
+            .download_and_store(&url, &Target::episode(ep))
+            .await
+        {
             let _ = sqlx::query!(
                 r#"UPDATE episodes SET "stillUrl" = $2 WHERE id = $1"#,
                 ep,
@@ -71,7 +73,10 @@ pub async fn download_season_images(
         }
     }
     if let Some(p) = poster.filter(|p| !p.is_empty())
-        && let Some(local) = st.seams.images.download(&p, "season", season, None).await
+        && let Some(local) = st
+            .images
+            .download_and_store(&p, &Target::season(season))
+            .await
     {
         let _ = sqlx::query!(
             r#"UPDATE seasons SET "posterUrl" = $2 WHERE id = $1"#,
@@ -218,8 +223,8 @@ async fn count_episodes(st: &AppState, media_id: i32) -> Result<i64, sqlx::Error
 
 /// Rescan and relink entry point: the bare rows a walk invented gain titles and stills.
 pub async fn refresh_series_episodes(st: &AppState, media: &MediaRow) -> Result<i64, AppError> {
-    let found = st.seams.metadata.for_media(media.id).await?;
-    apply_seasons(st, media.id, &found.seasons).await
+    let seasons = service::seasons_for_media(st, media.id).await?;
+    apply_seasons(st, media.id, &seasons).await
 }
 
 /// `refreshMetadata` (rule 53).
@@ -227,7 +232,7 @@ pub async fn refresh_metadata(st: &AppState, id: i32, defer_kick: bool) -> Resul
     let media = load_media(&st.db, id)
         .await?
         .ok_or_else(|| crate::libraries::media_not_found(id))?;
-    let found = st.seams.metadata.for_media(id).await?;
+    let found = service::for_media(st, id).await?;
     let d = &found.details;
     sqlx::query!(
         r#"UPDATE media SET title = $2, "originalTitle" = $3, "alternativeTitles" = $4,
@@ -267,7 +272,7 @@ pub async fn refresh_metadata(st: &AppState, id: i32, defer_kick: bool) -> Resul
     .execute(&st.db)
     .await?;
     download_media_images(st, id, d).await;
-    st.seams.metadata.persist_credits(id, d.clone()).await?;
+    service::persist_credits(st, id, d).await?;
     if media.is_series() {
         let inserted = apply_seasons(st, id, &found.seasons).await?;
         if inserted > 0 && !defer_kick {
@@ -513,7 +518,7 @@ pub async fn refresh_episode(
 }
 
 async fn refresh_one_episode(st: &AppState, episode: i32) -> Result<(), AppError> {
-    let Some(ep) = st.seams.metadata.episode(episode).await? else {
+    let Some(ep) = service::episode(st, episode).await? else {
         return Ok(());
     };
     sqlx::query!(
@@ -528,7 +533,10 @@ async fn refresh_one_episode(st: &AppState, episode: i32) -> Result<(), AppError
     .execute(&st.db)
     .await?;
     if let Some(s) = ep.still_url.filter(|s| !s.is_empty())
-        && let Some(local) = st.seams.images.download(&s, "episode", episode, None).await
+        && let Some(local) = st
+            .images
+            .download_and_store(&s, &Target::episode(episode))
+            .await
     {
         sqlx::query!(
             r#"UPDATE episodes SET "stillUrl" = $2 WHERE id = $1"#,

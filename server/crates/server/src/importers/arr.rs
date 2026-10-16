@@ -326,10 +326,10 @@ pub(super) async fn import(
         }
     }
     if !new_series.is_empty() {
-        let metadata = st.seams.metadata.clone();
+        let st = st.clone();
         tokio::spawn(async move {
             for id in new_series {
-                if let Err(e) = metadata.refresh(id).await {
+                if let Err(e) = crate::media::write::refresh_metadata(&st, id, false).await {
                     tracing::warn!(media_id = id, error = %e, "metadata refresh after Sonarr import");
                 }
             }

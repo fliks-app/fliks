@@ -24,22 +24,6 @@ const JPEG_QUALITY: u8 = 90;
 /// sharp's default input limit (16383 x 16383).
 const MAX_PIXELS: u64 = 268_402_689;
 
-/// What the import, refresh, request and person code needs from the image store.
-pub trait ImageSink: Send + Sync {
-    /// `/api/images/...?v=<hash>`, or `None` when nothing could be stored.
-    fn download_and_store(
-        &self,
-        url: &str,
-        t: &Target,
-    ) -> impl Future<Output = Option<String>> + Send;
-    fn store_from_disk(
-        &self,
-        abs: &Path,
-        t: &Target,
-    ) -> impl Future<Output = Option<String>> + Send;
-    fn has_image(&self, t: &Target) -> bool;
-}
-
 pub struct ImageStore {
     /// `None` is the shared data directory, resolved on first use.
     root: Option<PathBuf>,
@@ -338,10 +322,9 @@ impl ImageStore {
         }
         stored
     }
-}
 
-impl ImageSink for ImageStore {
-    async fn download_and_store(&self, url: &str, t: &Target) -> Option<String> {
+    /// `/api/images/...?v=<hash>`, or `None` when nothing could be stored.
+    pub async fn download_and_store(&self, url: &str, t: &Target) -> Option<String> {
         let shown = redacted(url);
         self.serialized(
             t,
@@ -350,7 +333,7 @@ impl ImageSink for ImageStore {
         .await
     }
 
-    async fn store_from_disk(&self, abs: &Path, t: &Target) -> Option<String> {
+    pub async fn store_from_disk(&self, abs: &Path, t: &Target) -> Option<String> {
         let shown = abs.display().to_string();
         let mtime = match tokio::fs::metadata(abs).await.and_then(|m| m.modified()) {
             Ok(m) => m,
@@ -369,7 +352,7 @@ impl ImageSink for ImageStore {
         self.serialized(t, self.run(t, &key, read, &shown)).await
     }
 
-    fn has_image(&self, t: &Target) -> bool {
+    pub fn has_image(&self, t: &Target) -> bool {
         t.file(self.root(), Size::Full).is_file()
     }
 }

@@ -21,3 +21,9 @@ pub async fn dispatch(st: &AppState, event: &str) {
     }))
     .await;
 }
+
+/// Fire-and-forget `dispatch` for the media services.
+pub fn dispatch_detached(st: &AppState, event: &'static str) {
+    let st = st.clone();
+    tokio::spawn(async move { dispatch(&st, event).await });
+}

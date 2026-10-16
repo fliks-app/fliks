@@ -3,6 +3,7 @@ mod http;
 mod language;
 mod map;
 mod routes;
+pub mod service;
 pub mod tmdb;
 pub mod tvdb;
 mod types;
@@ -16,57 +17,10 @@ use crate::config::MetadataConfig;
 use fliks_domain::metadata::language::Resolved;
 use serde_json::Value;
 use sqlx::PgPool;
-use std::{future::Future, time::Duration};
+use std::time::Duration;
 
 const TMDB_TIMEOUT: Duration = Duration::from_secs(10);
 const TVDB_TIMEOUT: Duration = Duration::from_secs(15);
-
-/// What the import, refresh, request and person code needs from the providers.
-pub trait MetadataFetch: Send + Sync {
-    fn details(
-        &self,
-        p: Provider,
-        kind: MediaKind,
-        id: i64,
-        lang: &Resolved,
-    ) -> impl Future<Output = Result<Value, Upstream>> + Send;
-    fn season_stubs(
-        &self,
-        p: Provider,
-        id: i64,
-        lang: &Resolved,
-    ) -> impl Future<Output = Result<Vec<Value>, Upstream>> + Send;
-    fn seasons(
-        &self,
-        p: Provider,
-        id: i64,
-        lang: &Resolved,
-    ) -> impl Future<Output = Result<Vec<Value>, Upstream>> + Send;
-    /// `(external id, is series)` of an IMDb or TVDB id.
-    fn find_by_external_id(
-        &self,
-        p: Provider,
-        source: &str,
-        id: &str,
-        lang: &Resolved,
-    ) -> impl Future<Output = Result<Option<(String, bool)>, Upstream>> + Send;
-    fn person_details(
-        &self,
-        p: Provider,
-        id: i64,
-        lang: &Resolved,
-    ) -> impl Future<Output = Result<PersonDetails, Upstream>> + Send;
-    fn person_credits(
-        &self,
-        p: Provider,
-        id: i64,
-        lang: &Resolved,
-    ) -> impl Future<Output = Result<Credits, Upstream>> + Send;
-    /// The provider named, if its key is configured, else TMDB (`registry.resolve`).
-    fn resolve(&self, name: Option<&str>) -> Provider;
-    /// The other provider when it is configured.
-    fn fallback(&self, p: Provider) -> Option<Provider>;
-}
 
 pub struct Metadata {
     pub lang: LanguageCache,
@@ -107,10 +61,8 @@ impl Metadata {
             Provider::Tvdb => self.tvdb.search(tv, query, year, lang).await,
         }
     }
-}
 
-impl MetadataFetch for Metadata {
-    async fn details(
+    pub async fn details(
         &self,
         p: Provider,
         kind: MediaKind,
@@ -123,7 +75,7 @@ impl MetadataFetch for Metadata {
         }
     }
 
-    async fn season_stubs(
+    pub async fn season_stubs(
         &self,
         p: Provider,
         id: i64,
@@ -135,14 +87,19 @@ impl MetadataFetch for Metadata {
         }
     }
 
-    async fn seasons(&self, p: Provider, id: i64, lang: &Resolved) -> Result<Vec<Value>, Upstream> {
+    pub async fn seasons(
+        &self,
+        p: Provider,
+        id: i64,
+        lang: &Resolved,
+    ) -> Result<Vec<Value>, Upstream> {
         match p {
             Provider::Tmdb => self.tmdb.seasons(id, lang).await,
             Provider::Tvdb => self.tvdb.seasons(id, lang).await,
         }
     }
 
-    async fn find_by_external_id(
+    pub async fn find_by_external_id(
         &self,
         p: Provider,
         source: &str,
@@ -155,7 +112,7 @@ impl MetadataFetch for Metadata {
         }
     }
 
-    async fn person_details(
+    pub async fn person_details(
         &self,
         p: Provider,
         id: i64,
@@ -167,7 +124,7 @@ impl MetadataFetch for Metadata {
         }
     }
 
-    async fn person_credits(
+    pub async fn person_credits(
         &self,
         p: Provider,
         id: i64,
@@ -179,14 +136,16 @@ impl MetadataFetch for Metadata {
         }
     }
 
-    fn resolve(&self, name: Option<&str>) -> Provider {
+    /// The provider named, if its key is configured, else TMDB (`registry.resolve`).
+    pub fn resolve(&self, name: Option<&str>) -> Provider {
         match name.and_then(Provider::parse) {
             Some(p) if self.available(p) => p,
             _ => Provider::Tmdb,
         }
     }
 
-    fn fallback(&self, p: Provider) -> Option<Provider> {
+    /// The other provider when it is configured.
+    pub fn fallback(&self, p: Provider) -> Option<Provider> {
         let other = match p {
             Provider::Tmdb => Provider::Tvdb,
             Provider::Tvdb => Provider::Tmdb,

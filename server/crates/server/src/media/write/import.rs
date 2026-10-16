@@ -4,15 +4,20 @@ use super::{body::Body, entity_or_404, metadata, resolve_profile};
 use crate::{
     events::DomainEvent,
     http::{AppError, auth::Authed, validate::ValidJson},
+    images::paths::{Target as Art, Variant},
     ingest::{load_media, naming_formats},
     libraries::accessible_library_ids,
-    seams::{Details, Lookup, Nfo},
+    metadata::{
+        Provider,
+        service::{self, Details, Lookup},
+    },
     state::AppState,
 };
 use axum::{Json, extract::State, http::StatusCode};
 use fliks_domain::{
     acl::{Action, Subject},
     naming::{self, MovieFolder, SeriesFolder, validate_folder_name},
+    nfo::NfoData,
 };
 use serde_json::{Value, json};
 use sqlx::PgConnection;
@@ -128,16 +133,16 @@ pub async fn import_title(
     external_id: String,
     imp: Import,
 ) -> Result<i32, AppError> {
-    let found = st
-        .seams
-        .metadata
-        .import(Lookup {
+    let found = service::import(
+        st,
+        Lookup {
             media_type: imp.media_type.clone(),
             provider,
             external_id,
             library_id: imp.library_id,
-        })
-        .await?;
+        },
+    )
+    .await?;
     let formats = naming_formats(&st.db).await?;
     let d = &found.details;
     let folder = folder_name(&formats, &imp.media_type, d);
@@ -201,7 +206,7 @@ pub async fn import_title(
     });
     let (st2, details) = (st.clone(), d.clone());
     tokio::spawn(async move {
-        if let Err(e) = st2.seams.metadata.persist_credits(id, details).await {
+        if let Err(e) = service::persist_credits(&st2, id, &details).await {
             tracing::warn!("cast/metadata persist of media #{id} failed: {e}");
         }
     });
@@ -376,7 +381,7 @@ pub async fn import_tmdb(
     let b = Body::new(v, &TMDB_FIELDS)?;
     let c = common(&b)?;
     let tmdb = b.required(b.id("tmdbId")?, "tmdbId", "must be an integer number")?;
-    if !st.seams.metadata.tmdb_configured() {
+    if !st.metadata.available(Provider::Tmdb) {
         return Err(AppError::bad_request("TMDB API key is not configured"));
     }
     duplicate(&st, &c.media_type, false, tmdb).await?;
@@ -444,7 +449,7 @@ pub struct Unmatched {
     pub language_profile_id: Option<i32>,
     pub library_default_quality: Option<i32>,
     pub library_default_language: Option<i32>,
-    pub nfo: Option<Nfo>,
+    pub nfo: Option<NfoData>,
     pub artwork: Artwork,
 }
 
@@ -490,11 +495,11 @@ pub async fn create_unmatched(st: &AppState, u: Unmatched, added_by: i32) -> Res
            RETURNING id"#,
         title,
         original,
-        u.year.or(nfo.year),
+        u.year.or(nfo.year.and_then(|y| i32::try_from(y).ok())),
         u.media_type,
         nfo.plot,
         json!(nfo.genres.clone().unwrap_or_default()),
-        nfo.runtime,
+        nfo.runtime.and_then(|r| i32::try_from(r).ok()),
         nfo.rating,
         nfo.premiered,
         u.library_id,
@@ -518,18 +523,17 @@ pub async fn create_unmatched(st: &AppState, u: Unmatched, added_by: i32) -> Res
 
 /// Rule 20: copies found beside the files go to the data dir (never a library write).
 async fn store_local_artwork(st: &AppState, id: i32, a: &Artwork) {
-    let images = &st.seams.images;
     let mut urls: [Option<String>; 3] = Default::default();
     for (i, (p, v)) in [
-        (&a.poster, "poster"),
-        (&a.fanart, "fanart"),
-        (&a.logo, "logo"),
+        (&a.poster, Variant::Poster),
+        (&a.fanart, Variant::Fanart),
+        (&a.logo, Variant::Logo),
     ]
     .into_iter()
     .enumerate()
     {
         if let Some(p) = p {
-            urls[i] = images.store_from_disk(p, "media", id, v).await;
+            urls[i] = st.images.store_from_disk(p, &Art::media(id, v)).await;
             if urls[i].is_none() {
                 tracing::warn!("local {v} of media #{id} not stored: \"{}\"", p.display());
             }

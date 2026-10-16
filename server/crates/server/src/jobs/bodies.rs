@@ -1,10 +1,9 @@
 //! The job bodies of `scheduler.md` rules 22-31: loops, progress events, activity rows and logs.
-use super::{
-    names,
-    work::{SeasonScan, WorkError},
-};
+use super::names;
 use crate::{
     events::{Hub, Num, SseEvent, Subject},
+    ingest::rescan::rescan_files,
+    markers::{self, ScanSeason},
     state::AppState,
     stream::{self, sprite},
     system::backup,
@@ -203,9 +202,8 @@ async fn refresh_loop(
         if chatty {
             tracing::info!("{job}: refreshing \"{}\" ({}/{total})", m.title, i + 1);
         }
-        match st.work.refresh_metadata(m.id).await {
-            Ok(()) => updated += 1,
-            Err(e @ WorkError::Unavailable(_)) => return Err(e.to_string()),
+        match crate::media::write::refresh_metadata(st, m.id, false).await {
+            Ok(_) => updated += 1,
             Err(e) => tracing::warn!("{job}: failed for \"{}\": {e}", m.title),
         }
     }
@@ -249,9 +247,11 @@ async fn rescan(st: &AppState, job: &str, select: &str) -> Outcome {
         running(hub, job, job, None, i, total, None);
         hub.activity()
             .upsert_running(&child(*id), job, Some(subject), None, None, None);
-        match st.work.rescan(*id).await {
+        let guard = st.ingest.media.lock(*id).await;
+        let scanned = rescan_files(st, &guard, *id).await;
+        drop(guard);
+        match scanned {
             Ok(r) => changes += r.added + r.removed + r.updated,
-            Err(e @ WorkError::Unavailable(_)) => return Err(e.to_string()),
             Err(e) => {
                 skipped += 1;
                 tracing::warn!("{job}: skipped \"{title}\": {e}");
@@ -395,15 +395,13 @@ async fn file_subjects(db: &PgPool, ids: &[i32]) -> sqlx::Result<HashMap<i32, Su
 }
 
 async fn markers(st: &AppState, job: &str, only_missing: bool) -> Outcome {
-    let seasons = st
-        .work
-        .seasons_for_scan(only_missing)
+    let seasons = markers::list_seasons_for_scan(st, only_missing, None)
         .await
         .map_err(|e| e.to_string())?;
     let total = seasons.len();
     tracing::info!("{job}: started — {total} season(s) to scan");
-    let child = |s: &SeasonScan| format!("IntroDetection:{}", s.season_id);
-    let subject = |s: &SeasonScan| Subject {
+    let child = |s: &ScanSeason| format!("IntroDetection:{}", s.id);
+    let subject = |s: &ScanSeason| Subject {
         season_number: Some(i64::from(s.season_number)),
         ..media_subject(s.media_id, &s.media_title, "series")
     };
@@ -431,9 +429,8 @@ async fn markers(st: &AppState, job: &str, only_missing: bool) -> Outcome {
             Some(subject.clone()),
         );
         running(&st.hub, job, job, None, i, total, None);
-        match st.work.detect_markers(s.season_id, subject).await {
-            Ok(n) => detected += n,
-            Err(e @ WorkError::Unavailable(_)) => return Err(e.to_string()),
+        match markers::run_detection_inline(st, s.id, Some(subject)).await {
+            Ok((intros, outros)) => detected += intros + outros,
             Err(e) => {
                 skipped += 1;
                 tracing::warn!(

@@ -1,18 +1,8 @@
 //! Shared handler state (`State<AppState>`); no DI container, plain fields.
 use crate::{
-    auth_token::Jwt,
-    bridge::Bridge,
-    config::Config,
-    engine::Engine,
-    events::Hub,
-    images::ImageStore,
-    jobs::{JobWork, Running, Unwired},
-    metadata::Metadata,
-    nest,
-    playback::Debounce,
-    presence::Presence,
-    qoe::Qoe,
-    stream, system,
+    auth_token::Jwt, bridge::Bridge, config::Config, engine::Engine, events::Hub,
+    images::ImageStore, jobs::Running, metadata::Metadata, nest, playback::Debounce,
+    presence::Presence, qoe::Qoe, stream, system,
 };
 use sqlx::PgPool;
 use std::sync::Arc;
@@ -35,8 +25,6 @@ pub struct AppState {
     pub images: Arc<ImageStore>,
     pub system: Arc<system::Shared>,
     pub jobs: Arc<Running>,
-    /// The media, rescan and markers bodies of the scheduler's jobs; integration replaces `Unwired`.
-    pub work: Arc<dyn JobWork>,
 }
 
 impl AppState {
@@ -63,7 +51,6 @@ impl AppState {
             images: Arc::new(ImageStore::new(&cfg.metadata.tmdb_image_url)),
             system: Arc::default(),
             jobs: Arc::default(),
-            work: Arc::new(Unwired),
             cfg: Arc::new(cfg),
             db,
         }

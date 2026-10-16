@@ -3,6 +3,7 @@ use super::{dto, fetch};
 use crate::{
     events::SseEvent,
     http::{AppError, auth::Authed},
+    jobs::{Trigger, run_audited},
     outbound::{LIST_TIMEOUT, TEST_TIMEOUT, base_url, error_text},
     state::AppState,
     users::imported_user,
@@ -53,7 +54,7 @@ pub(super) async fn start(st: AppState, a: Authed) -> Res<(StatusCode, Json<Valu
     tokio::spawn(async move {
         let _claim = claim;
         let job_state = st.clone();
-        let job = Box::pin(async move {
+        let ran = run_audited(&st, "ImportSeerrRequests", Trigger::Manual, async move {
             match import(&job_state.db).await {
                 Ok(s) => {
                     job_state.hub.emit(SseEvent::SeerrImportCompleted {
@@ -73,14 +74,9 @@ pub(super) async fn start(st: AppState, a: Authed) -> Res<(StatusCode, Json<Valu
                     Err(error)
                 }
             }
-        });
-        if st
-            .seams
-            .runner
-            .run("ImportSeerrRequests", "manual", job)
-            .await
-            .is_err()
-        {
+        })
+        .await;
+        if !ran {
             st.hub.emit(SseEvent::SeerrImportFailed {
                 error: String::new(),
             });
