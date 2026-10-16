@@ -29,7 +29,10 @@ fn space(path: String) -> Option<(i64, i64)> {
 #[cfg(windows)]
 fn space(path: String) -> Option<(i64, i64)> {
     use std::os::windows::ffi::OsStrExt;
-    let w: Vec<u16> = std::ffi::OsStr::new(&path).encode_wide().chain([0]).collect();
+    let w: Vec<u16> = std::ffi::OsStr::new(&path)
+        .encode_wide()
+        .chain([0])
+        .collect();
     let (mut total, mut free) = (0u64, 0u64);
     // SAFETY: `w` is NUL-terminated; the out-pointers are valid and the null one is optional.
     let ok = unsafe {
@@ -46,7 +49,11 @@ fn space(path: String) -> Option<(i64, i64)> {
 /// Disk space of `path`, off the async runtime.
 pub async fn disk(path: &str) -> Disk {
     let path = path.to_owned();
-    match tokio::task::spawn_blocking(move || space(path)).await.ok().flatten() {
+    match tokio::task::spawn_blocking(move || space(path))
+        .await
+        .ok()
+        .flatten()
+    {
         Some((free_space, total_space)) => Disk {
             free_space,
             total_space,
