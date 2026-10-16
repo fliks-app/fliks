@@ -453,7 +453,6 @@ fn collect(dir: &Path, out: &mut Vec<std::path::PathBuf>) {
     }
 }
 
-/// Runs one scenario; in record mode fills each step's `expect` from the live response.
 /// Scenario `fs`: rebuilds `s5-ingest/work` under the media root (`{path, from}` copies a generated
 /// file, `{path, text}` writes one, `{dir}` makes a directory, `{link, to}` a symlink).
 fn fs_setup(sc: &Value) {
@@ -530,6 +529,7 @@ async fn fs_check(sc: &Value) -> Vec<String> {
     errs
 }
 
+/// Runs one scenario; in record mode fills each step's `expect` from the live response.
 async fn run(ctx: &Ctx, sc: &mut Value, record: bool) -> Vec<String> {
     fs_setup(sc);
     let ignore: Vec<Vec<Seg>> = sc["ignore"]
