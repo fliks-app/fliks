@@ -2161,6 +2161,7 @@
       "field_token": "Token",
       "field_token_optional": "(facoltativo)",
       "token_hint": "Lascia vuoto per mantenere il token salvato.",
+      "webhook_url_hint": "Lascia vuoto per mantenere l'URL salvato.",
       "field_topic": "Topic",
       "field_events": "Eventi trigger",
       "field_enabled": "Connessione attiva",

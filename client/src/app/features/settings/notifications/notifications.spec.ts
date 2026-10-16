@@ -280,4 +280,22 @@ describe('NotificationsSettingsComponent — provider tokens', () => {
     expect(c.formToken()).toBe('');
     expect(settingsOf(c)).not.toHaveProperty('token');
   });
+
+  it('shows a stored discord webhook as set and keeps it while the field stays blank', async () => {
+    const c = await createComponent();
+    c.openEdit({
+      id: 3,
+      name: 'Discord',
+      type: 'discord',
+      enabled: true,
+      events: [],
+      settings: { secretsSet: ['webhookUrl'] },
+    });
+    expect(c.webhookUrlStored()).toBe(true);
+    expect(c.formWebhookUrl()).toBe('');
+    expect(settingsOf(c)).toEqual({ webhookUrl: '' });
+
+    c.openCreate();
+    expect(c.webhookUrlStored()).toBe(false);
+  });
 });

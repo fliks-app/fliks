@@ -120,8 +120,13 @@
           class="input input-bordered input-sm w-full"
           [ngModel]="formWebhookUrl()"
           (ngModelChange)="formWebhookUrl.set($event)"
-          placeholder="https://..."
+          [placeholder]="webhookUrlIsSecret() && webhookUrlStored() ? secretMask : 'https://...'"
         />
+        @if (webhookUrlIsSecret() && webhookUrlStored()) {
+          <span class="label-text-alt text-base-content/50">
+            {{ 'settings.notifications.webhook_url_hint' | translate }}
+          </span>
+        }
       </label>
 
       @if (supportsToken()) {
