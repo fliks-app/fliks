@@ -1,0 +1,89 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "custom-formats-delete",
+  "seed": "profiles",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "status": 200
+      },
+      "method": "DELETE",
+      "path": "/api/custom-formats/2"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Custom format #2 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "GET",
+      "path": "/api/custom-formats/2"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Custom format #2 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "DELETE",
+      "path": "/api/custom-formats/2"
+    },
+    {
+      "as": "settings",
+      "expect": {
+        "status": 200
+      },
+      "method": "DELETE",
+      "path": "/api/custom-formats/3"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "id": 4,
+            "name": "Broken negated regex",
+            "score": 7,
+            "specs": [
+              {
+                "negate": true,
+                "required": false,
+                "type": "title_regex",
+                "value": "("
+              }
+            ]
+          },
+          {
+            "id": 1,
+            "name": "Remux regex",
+            "score": 50,
+            "specs": [
+              {
+                "negate": false,
+                "required": false,
+                "type": "title_regex",
+                "value": "remux"
+              }
+            ]
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/custom-formats"
+    }
+  ]
+}

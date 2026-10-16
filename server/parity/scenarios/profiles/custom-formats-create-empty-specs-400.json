@@ -1,0 +1,111 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "custom-formats-create-empty-specs-400",
+  "seed": "profiles",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "name": "New CF",
+        "score": 25,
+        "specs": []
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "specs should not be empty"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/custom-formats"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "name": "x"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "specs should not be empty",
+            "specs must be an array"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/custom-formats"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "name": "",
+        "score": 25,
+        "specs": [
+          {
+            "negate": false,
+            "type": "title_regex",
+            "value": "web[-. ]?dl"
+          },
+          {
+            "required": true,
+            "type": "source",
+            "value": "bluray"
+          },
+          {
+            "negate": null,
+            "type": "language",
+            "value": "fr"
+          }
+        ]
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "name should not be empty"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/custom-formats"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "name": "New CF",
+        "score": 25,
+        "specs": [
+          {
+            "type": "source",
+            "value": ""
+          }
+        ]
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "specs.0.value should not be empty"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/custom-formats"
+    }
+  ]
+}

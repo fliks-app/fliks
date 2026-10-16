@@ -1,0 +1,105 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "custom-formats-test-validation-400",
+  "seed": "profiles",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {},
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "title should not be empty",
+            "title must be a string"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/custom-formats/test"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "title": ""
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "title should not be empty"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/custom-formats/test"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "freeleech": "yes",
+        "title": "x"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "freeleech must be a boolean value"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/custom-formats/test"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "flags": [
+          "a"
+        ],
+        "title": "x"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "property flags should not exist"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/custom-formats/test"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "downloadVolumeFactor": "0",
+        "title": "x"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "downloadVolumeFactor must be a number conforming to the specified constraints"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/custom-formats/test"
+    }
+  ]
+}

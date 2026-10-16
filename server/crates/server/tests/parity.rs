@@ -3,7 +3,9 @@ use reqwest::{Client, Method, multipart};
 use serde_json::{Map, Value, json};
 use std::{collections::HashMap, fs, path::Path, process::Command, time::Duration};
 
-const ACTORS: [&str; 6] = ["admin", "user", "readonly", "other", "manager", "noread"];
+const ACTORS: [&str; 7] = [
+    "admin", "user", "readonly", "other", "manager", "noread", "settings",
+];
 const MEDIA_ROOT: &str = "/tmp/fliks-parity";
 
 fn env(k: &str, d: &str) -> String {
@@ -606,10 +608,10 @@ async fn parity() {
             .await
             .unwrap_or_else(|e| panic!("login {a}: {e}"));
         let v: Value = r.json().await.unwrap_or_default();
-        // seeds beyond `base` add actors (noread); a missing one only matters to the scenarios that use it
+        // seeds beyond `base` add actors (noread, settings); a missing one only matters to the scenarios that use it
         match v["accessToken"].as_str() {
             Some(t) => tokens.insert(a.to_string(), t.to_string()),
-            None if a == "noread" => None,
+            None if a == "noread" || a == "settings" => None,
             None => panic!("login {a}: {v}"),
         };
     }

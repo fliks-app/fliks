@@ -1,0 +1,665 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "profiles-language-definitions",
+  "seed": "profiles",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "id": 1,
+            "iso639_2": [
+              "eng"
+            ],
+            "isoCode": "en",
+            "name": "English"
+          },
+          {
+            "id": 2,
+            "iso639_2": [
+              "fre",
+              "fra"
+            ],
+            "isoCode": "fr",
+            "name": "French"
+          },
+          {
+            "id": 3,
+            "iso639_2": [
+              "ger",
+              "deu"
+            ],
+            "isoCode": "de",
+            "name": "German"
+          },
+          {
+            "id": 4,
+            "iso639_2": [
+              "spa"
+            ],
+            "isoCode": "es",
+            "name": "Spanish"
+          },
+          {
+            "id": 5,
+            "iso639_2": [
+              "ita"
+            ],
+            "isoCode": "it",
+            "name": "Italian"
+          },
+          {
+            "id": 6,
+            "iso639_2": [
+              "por"
+            ],
+            "isoCode": "pt",
+            "name": "Portuguese"
+          },
+          {
+            "id": 7,
+            "iso639_2": [
+              "jpn"
+            ],
+            "isoCode": "ja",
+            "name": "Japanese"
+          },
+          {
+            "id": 8,
+            "iso639_2": [
+              "kor"
+            ],
+            "isoCode": "ko",
+            "name": "Korean"
+          },
+          {
+            "id": 9,
+            "iso639_2": [
+              "zho",
+              "chi"
+            ],
+            "isoCode": "zh",
+            "name": "Chinese"
+          },
+          {
+            "id": 10,
+            "iso639_2": [
+              "rus"
+            ],
+            "isoCode": "ru",
+            "name": "Russian"
+          },
+          {
+            "id": 11,
+            "iso639_2": [
+              "ara"
+            ],
+            "isoCode": "ar",
+            "name": "Arabic"
+          },
+          {
+            "id": 12,
+            "iso639_2": [
+              "nld",
+              "dut"
+            ],
+            "isoCode": "nl",
+            "name": "Dutch"
+          },
+          {
+            "id": 13,
+            "iso639_2": [
+              "pol"
+            ],
+            "isoCode": "pl",
+            "name": "Polish"
+          },
+          {
+            "id": 14,
+            "iso639_2": [
+              "tur"
+            ],
+            "isoCode": "tr",
+            "name": "Turkish"
+          },
+          {
+            "id": 15,
+            "iso639_2": [
+              "swe"
+            ],
+            "isoCode": "sv",
+            "name": "Swedish"
+          },
+          {
+            "id": 16,
+            "iso639_2": [
+              "dan"
+            ],
+            "isoCode": "da",
+            "name": "Danish"
+          },
+          {
+            "id": 17,
+            "iso639_2": [
+              "nor"
+            ],
+            "isoCode": "no",
+            "name": "Norwegian"
+          },
+          {
+            "id": 18,
+            "iso639_2": [
+              "fin"
+            ],
+            "isoCode": "fi",
+            "name": "Finnish"
+          },
+          {
+            "id": 19,
+            "iso639_2": [
+              "hin"
+            ],
+            "isoCode": "hi",
+            "name": "Hindi"
+          },
+          {
+            "id": 20,
+            "iso639_2": [
+              "ces",
+              "cze"
+            ],
+            "isoCode": "cs",
+            "name": "Czech"
+          },
+          {
+            "id": 21,
+            "iso639_2": [
+              "ron",
+              "rum"
+            ],
+            "isoCode": "ro",
+            "name": "Romanian"
+          },
+          {
+            "id": 22,
+            "iso639_2": [
+              "hun"
+            ],
+            "isoCode": "hu",
+            "name": "Hungarian"
+          },
+          {
+            "id": 23,
+            "iso639_2": [
+              "tha"
+            ],
+            "isoCode": "th",
+            "name": "Thai"
+          },
+          {
+            "id": 24,
+            "iso639_2": [
+              "vie"
+            ],
+            "isoCode": "vi",
+            "name": "Vietnamese"
+          },
+          {
+            "id": 25,
+            "iso639_2": [
+              "heb"
+            ],
+            "isoCode": "he",
+            "name": "Hebrew"
+          },
+          {
+            "id": 26,
+            "iso639_2": [
+              "ell",
+              "gre"
+            ],
+            "isoCode": "el",
+            "name": "Greek"
+          },
+          {
+            "id": 27,
+            "iso639_2": [
+              "ukr"
+            ],
+            "isoCode": "uk",
+            "name": "Ukrainian"
+          },
+          {
+            "id": 28,
+            "iso639_2": [
+              "bul"
+            ],
+            "isoCode": "bg",
+            "name": "Bulgarian"
+          },
+          {
+            "id": 29,
+            "iso639_2": [
+              "hrv"
+            ],
+            "isoCode": "hr",
+            "name": "Croatian"
+          },
+          {
+            "id": 30,
+            "iso639_2": [
+              "srp"
+            ],
+            "isoCode": "sr",
+            "name": "Serbian"
+          },
+          {
+            "id": 31,
+            "iso639_2": [
+              "slv"
+            ],
+            "isoCode": "sl",
+            "name": "Slovenian"
+          },
+          {
+            "id": 32,
+            "iso639_2": [
+              "slk",
+              "slo"
+            ],
+            "isoCode": "sk",
+            "name": "Slovak"
+          },
+          {
+            "id": 33,
+            "iso639_2": [
+              "cat"
+            ],
+            "isoCode": "ca",
+            "name": "Catalan"
+          },
+          {
+            "id": 34,
+            "iso639_2": [
+              "eus",
+              "baq"
+            ],
+            "isoCode": "eu",
+            "name": "Basque"
+          },
+          {
+            "id": 35,
+            "iso639_2": [
+              "glg"
+            ],
+            "isoCode": "gl",
+            "name": "Galician"
+          },
+          {
+            "id": 36,
+            "iso639_2": [
+              "ind"
+            ],
+            "isoCode": "id",
+            "name": "Indonesian"
+          },
+          {
+            "id": 37,
+            "iso639_2": [
+              "msa",
+              "may"
+            ],
+            "isoCode": "ms",
+            "name": "Malay"
+          },
+          {
+            "id": 99,
+            "isoCode": "xx",
+            "name": "Unknown"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/profiles/language-definitions"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": [
+          {
+            "id": 1,
+            "iso639_2": [
+              "eng"
+            ],
+            "isoCode": "en",
+            "name": "English"
+          },
+          {
+            "id": 2,
+            "iso639_2": [
+              "fre",
+              "fra"
+            ],
+            "isoCode": "fr",
+            "name": "French"
+          },
+          {
+            "id": 3,
+            "iso639_2": [
+              "ger",
+              "deu"
+            ],
+            "isoCode": "de",
+            "name": "German"
+          },
+          {
+            "id": 4,
+            "iso639_2": [
+              "spa"
+            ],
+            "isoCode": "es",
+            "name": "Spanish"
+          },
+          {
+            "id": 5,
+            "iso639_2": [
+              "ita"
+            ],
+            "isoCode": "it",
+            "name": "Italian"
+          },
+          {
+            "id": 6,
+            "iso639_2": [
+              "por"
+            ],
+            "isoCode": "pt",
+            "name": "Portuguese"
+          },
+          {
+            "id": 7,
+            "iso639_2": [
+              "jpn"
+            ],
+            "isoCode": "ja",
+            "name": "Japanese"
+          },
+          {
+            "id": 8,
+            "iso639_2": [
+              "kor"
+            ],
+            "isoCode": "ko",
+            "name": "Korean"
+          },
+          {
+            "id": 9,
+            "iso639_2": [
+              "zho",
+              "chi"
+            ],
+            "isoCode": "zh",
+            "name": "Chinese"
+          },
+          {
+            "id": 10,
+            "iso639_2": [
+              "rus"
+            ],
+            "isoCode": "ru",
+            "name": "Russian"
+          },
+          {
+            "id": 11,
+            "iso639_2": [
+              "ara"
+            ],
+            "isoCode": "ar",
+            "name": "Arabic"
+          },
+          {
+            "id": 12,
+            "iso639_2": [
+              "nld",
+              "dut"
+            ],
+            "isoCode": "nl",
+            "name": "Dutch"
+          },
+          {
+            "id": 13,
+            "iso639_2": [
+              "pol"
+            ],
+            "isoCode": "pl",
+            "name": "Polish"
+          },
+          {
+            "id": 14,
+            "iso639_2": [
+              "tur"
+            ],
+            "isoCode": "tr",
+            "name": "Turkish"
+          },
+          {
+            "id": 15,
+            "iso639_2": [
+              "swe"
+            ],
+            "isoCode": "sv",
+            "name": "Swedish"
+          },
+          {
+            "id": 16,
+            "iso639_2": [
+              "dan"
+            ],
+            "isoCode": "da",
+            "name": "Danish"
+          },
+          {
+            "id": 17,
+            "iso639_2": [
+              "nor"
+            ],
+            "isoCode": "no",
+            "name": "Norwegian"
+          },
+          {
+            "id": 18,
+            "iso639_2": [
+              "fin"
+            ],
+            "isoCode": "fi",
+            "name": "Finnish"
+          },
+          {
+            "id": 19,
+            "iso639_2": [
+              "hin"
+            ],
+            "isoCode": "hi",
+            "name": "Hindi"
+          },
+          {
+            "id": 20,
+            "iso639_2": [
+              "ces",
+              "cze"
+            ],
+            "isoCode": "cs",
+            "name": "Czech"
+          },
+          {
+            "id": 21,
+            "iso639_2": [
+              "ron",
+              "rum"
+            ],
+            "isoCode": "ro",
+            "name": "Romanian"
+          },
+          {
+            "id": 22,
+            "iso639_2": [
+              "hun"
+            ],
+            "isoCode": "hu",
+            "name": "Hungarian"
+          },
+          {
+            "id": 23,
+            "iso639_2": [
+              "tha"
+            ],
+            "isoCode": "th",
+            "name": "Thai"
+          },
+          {
+            "id": 24,
+            "iso639_2": [
+              "vie"
+            ],
+            "isoCode": "vi",
+            "name": "Vietnamese"
+          },
+          {
+            "id": 25,
+            "iso639_2": [
+              "heb"
+            ],
+            "isoCode": "he",
+            "name": "Hebrew"
+          },
+          {
+            "id": 26,
+            "iso639_2": [
+              "ell",
+              "gre"
+            ],
+            "isoCode": "el",
+            "name": "Greek"
+          },
+          {
+            "id": 27,
+            "iso639_2": [
+              "ukr"
+            ],
+            "isoCode": "uk",
+            "name": "Ukrainian"
+          },
+          {
+            "id": 28,
+            "iso639_2": [
+              "bul"
+            ],
+            "isoCode": "bg",
+            "name": "Bulgarian"
+          },
+          {
+            "id": 29,
+            "iso639_2": [
+              "hrv"
+            ],
+            "isoCode": "hr",
+            "name": "Croatian"
+          },
+          {
+            "id": 30,
+            "iso639_2": [
+              "srp"
+            ],
+            "isoCode": "sr",
+            "name": "Serbian"
+          },
+          {
+            "id": 31,
+            "iso639_2": [
+              "slv"
+            ],
+            "isoCode": "sl",
+            "name": "Slovenian"
+          },
+          {
+            "id": 32,
+            "iso639_2": [
+              "slk",
+              "slo"
+            ],
+            "isoCode": "sk",
+            "name": "Slovak"
+          },
+          {
+            "id": 33,
+            "iso639_2": [
+              "cat"
+            ],
+            "isoCode": "ca",
+            "name": "Catalan"
+          },
+          {
+            "id": 34,
+            "iso639_2": [
+              "eus",
+              "baq"
+            ],
+            "isoCode": "eu",
+            "name": "Basque"
+          },
+          {
+            "id": 35,
+            "iso639_2": [
+              "glg"
+            ],
+            "isoCode": "gl",
+            "name": "Galician"
+          },
+          {
+            "id": 36,
+            "iso639_2": [
+              "ind"
+            ],
+            "isoCode": "id",
+            "name": "Indonesian"
+          },
+          {
+            "id": 37,
+            "iso639_2": [
+              "msa",
+              "may"
+            ],
+            "isoCode": "ms",
+            "name": "Malay"
+          },
+          {
+            "id": 99,
+            "isoCode": "xx",
+            "name": "Unknown"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/profiles/language-definitions"
+    },
+    {
+      "as": "anon",
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "GET",
+      "path": "/api/profiles/language-definitions"
+    }
+  ]
+}

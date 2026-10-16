@@ -1,0 +1,1051 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "quality-definitions-reset-defaults",
+  "seed": "profiles",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "id": 1,
+            "maxSize": 1500,
+            "minSize": 0,
+            "preferredSize": 700,
+            "qualityId": 1,
+            "title": "WORKPRINT"
+          },
+          {
+            "id": 2,
+            "maxSize": 1500,
+            "minSize": 0,
+            "preferredSize": 700,
+            "qualityId": 2,
+            "title": "CAM"
+          },
+          {
+            "id": 3,
+            "maxSize": 1500,
+            "minSize": 0,
+            "preferredSize": 700,
+            "qualityId": 3,
+            "title": "TELESYNC"
+          },
+          {
+            "id": 4,
+            "maxSize": 1500,
+            "minSize": 0,
+            "preferredSize": 700,
+            "qualityId": 4,
+            "title": "TELECINE"
+          },
+          {
+            "id": 5,
+            "maxSize": 1500,
+            "minSize": 0,
+            "preferredSize": 800,
+            "qualityId": 5,
+            "title": "DVD"
+          },
+          {
+            "id": 6,
+            "maxSize": 1500,
+            "minSize": 0,
+            "preferredSize": 800,
+            "qualityId": 6,
+            "title": "DVD-R"
+          },
+          {
+            "id": 7,
+            "maxSize": 1500,
+            "minSize": 0,
+            "preferredSize": 800,
+            "qualityId": 7,
+            "title": "SDTV"
+          },
+          {
+            "id": 8,
+            "maxSize": 1500,
+            "minSize": 0,
+            "preferredSize": 800,
+            "qualityId": 8,
+            "title": "WEBDL-480p"
+          },
+          {
+            "id": 9,
+            "maxSize": 1500,
+            "minSize": 0,
+            "preferredSize": 800,
+            "qualityId": 9,
+            "title": "WEBRip-480p"
+          },
+          {
+            "id": 10,
+            "maxSize": 1500,
+            "minSize": 0,
+            "preferredSize": 800,
+            "qualityId": 10,
+            "title": "Bluray-480p"
+          },
+          {
+            "id": 11,
+            "maxSize": 2500,
+            "minSize": 150,
+            "preferredSize": 1200,
+            "qualityId": 11,
+            "title": "HDTV-720p"
+          },
+          {
+            "id": 12,
+            "maxSize": 3000,
+            "minSize": 150,
+            "preferredSize": 1500,
+            "qualityId": 12,
+            "title": "WEBDL-720p"
+          },
+          {
+            "id": 13,
+            "maxSize": 3000,
+            "minSize": 150,
+            "preferredSize": 1500,
+            "qualityId": 13,
+            "title": "WEBRip-720p"
+          },
+          {
+            "id": 14,
+            "maxSize": 5000,
+            "minSize": 250,
+            "preferredSize": 2500,
+            "qualityId": 14,
+            "title": "Bluray-720p"
+          },
+          {
+            "id": 15,
+            "maxSize": 4000,
+            "minSize": 250,
+            "preferredSize": 2000,
+            "qualityId": 15,
+            "title": "HDTV-1080p"
+          },
+          {
+            "id": 16,
+            "maxSize": 5000,
+            "minSize": 250,
+            "preferredSize": 3000,
+            "qualityId": 16,
+            "title": "WEBDL-1080p"
+          },
+          {
+            "id": 17,
+            "maxSize": 5000,
+            "minSize": 250,
+            "preferredSize": 3000,
+            "qualityId": 17,
+            "title": "WEBRip-1080p"
+          },
+          {
+            "id": 18,
+            "maxSize": 10000,
+            "minSize": 400,
+            "preferredSize": 5000,
+            "qualityId": 18,
+            "title": "Bluray-1080p"
+          },
+          {
+            "id": 19,
+            "maxSize": 30000,
+            "minSize": 8000,
+            "preferredSize": 18000,
+            "qualityId": 19,
+            "title": "Remux-1080p"
+          },
+          {
+            "id": 20,
+            "maxSize": 8000,
+            "minSize": 600,
+            "preferredSize": 4000,
+            "qualityId": 20,
+            "title": "HDTV-2160p"
+          },
+          {
+            "id": 21,
+            "maxSize": 12000,
+            "minSize": 600,
+            "preferredSize": 6000,
+            "qualityId": 21,
+            "title": "WEBDL-2160p"
+          },
+          {
+            "id": 22,
+            "maxSize": 12000,
+            "minSize": 600,
+            "preferredSize": 6000,
+            "qualityId": 22,
+            "title": "WEBRip-2160p"
+          },
+          {
+            "id": 23,
+            "maxSize": 25000,
+            "minSize": 1000,
+            "preferredSize": 12000,
+            "qualityId": 23,
+            "title": "Bluray-2160p"
+          },
+          {
+            "id": 24,
+            "maxSize": 60000,
+            "minSize": 15000,
+            "preferredSize": 35000,
+            "qualityId": 24,
+            "title": "Remux-2160p"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/quality-definitions"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "items": [
+          {
+            "maxSize": 33,
+            "minSize": 11,
+            "preferredSize": 22,
+            "qualityId": 18
+          },
+          {
+            "maxSize": 0,
+            "minSize": 0,
+            "preferredSize": 5.5,
+            "qualityId": 16,
+            "title": "Renamed"
+          },
+          {
+            "maxSize": 3,
+            "minSize": 1,
+            "preferredSize": 2,
+            "qualityId": 777
+          },
+          {
+            "maxSize": 33,
+            "minSize": 12,
+            "preferredSize": 22,
+            "qualityId": 18
+          }
+        ]
+      },
+      "expect": {
+        "body": [
+          {
+            "id": 1,
+            "maxSize": 1500,
+            "minSize": 0,
+            "preferredSize": 700,
+            "qualityId": 1,
+            "title": "WORKPRINT"
+          },
+          {
+            "id": 2,
+            "maxSize": 1500,
+            "minSize": 0,
+            "preferredSize": 700,
+            "qualityId": 2,
+            "title": "CAM"
+          },
+          {
+            "id": 3,
+            "maxSize": 1500,
+            "minSize": 0,
+            "preferredSize": 700,
+            "qualityId": 3,
+            "title": "TELESYNC"
+          },
+          {
+            "id": 4,
+            "maxSize": 1500,
+            "minSize": 0,
+            "preferredSize": 700,
+            "qualityId": 4,
+            "title": "TELECINE"
+          },
+          {
+            "id": 5,
+            "maxSize": 1500,
+            "minSize": 0,
+            "preferredSize": 800,
+            "qualityId": 5,
+            "title": "DVD"
+          },
+          {
+            "id": 6,
+            "maxSize": 1500,
+            "minSize": 0,
+            "preferredSize": 800,
+            "qualityId": 6,
+            "title": "DVD-R"
+          },
+          {
+            "id": 7,
+            "maxSize": 1500,
+            "minSize": 0,
+            "preferredSize": 800,
+            "qualityId": 7,
+            "title": "SDTV"
+          },
+          {
+            "id": 8,
+            "maxSize": 1500,
+            "minSize": 0,
+            "preferredSize": 800,
+            "qualityId": 8,
+            "title": "WEBDL-480p"
+          },
+          {
+            "id": 9,
+            "maxSize": 1500,
+            "minSize": 0,
+            "preferredSize": 800,
+            "qualityId": 9,
+            "title": "WEBRip-480p"
+          },
+          {
+            "id": 10,
+            "maxSize": 1500,
+            "minSize": 0,
+            "preferredSize": 800,
+            "qualityId": 10,
+            "title": "Bluray-480p"
+          },
+          {
+            "id": 11,
+            "maxSize": 2500,
+            "minSize": 150,
+            "preferredSize": 1200,
+            "qualityId": 11,
+            "title": "HDTV-720p"
+          },
+          {
+            "id": 12,
+            "maxSize": 3000,
+            "minSize": 150,
+            "preferredSize": 1500,
+            "qualityId": 12,
+            "title": "WEBDL-720p"
+          },
+          {
+            "id": 13,
+            "maxSize": 3000,
+            "minSize": 150,
+            "preferredSize": 1500,
+            "qualityId": 13,
+            "title": "WEBRip-720p"
+          },
+          {
+            "id": 14,
+            "maxSize": 5000,
+            "minSize": 250,
+            "preferredSize": 2500,
+            "qualityId": 14,
+            "title": "Bluray-720p"
+          },
+          {
+            "id": 15,
+            "maxSize": 4000,
+            "minSize": 250,
+            "preferredSize": 2000,
+            "qualityId": 15,
+            "title": "HDTV-1080p"
+          },
+          {
+            "id": 16,
+            "maxSize": 0,
+            "minSize": 0,
+            "preferredSize": 5.5,
+            "qualityId": 16,
+            "title": "Renamed"
+          },
+          {
+            "id": 17,
+            "maxSize": 5000,
+            "minSize": 250,
+            "preferredSize": 3000,
+            "qualityId": 17,
+            "title": "WEBRip-1080p"
+          },
+          {
+            "id": 18,
+            "maxSize": 33,
+            "minSize": 12,
+            "preferredSize": 22,
+            "qualityId": 18,
+            "title": "Bluray-1080p"
+          },
+          {
+            "id": 19,
+            "maxSize": 30000,
+            "minSize": 8000,
+            "preferredSize": 18000,
+            "qualityId": 19,
+            "title": "Remux-1080p"
+          },
+          {
+            "id": 20,
+            "maxSize": 8000,
+            "minSize": 600,
+            "preferredSize": 4000,
+            "qualityId": 20,
+            "title": "HDTV-2160p"
+          },
+          {
+            "id": 21,
+            "maxSize": 12000,
+            "minSize": 600,
+            "preferredSize": 6000,
+            "qualityId": 21,
+            "title": "WEBDL-2160p"
+          },
+          {
+            "id": 22,
+            "maxSize": 12000,
+            "minSize": 600,
+            "preferredSize": 6000,
+            "qualityId": 22,
+            "title": "WEBRip-2160p"
+          },
+          {
+            "id": 23,
+            "maxSize": 25000,
+            "minSize": 1000,
+            "preferredSize": 12000,
+            "qualityId": 23,
+            "title": "Bluray-2160p"
+          },
+          {
+            "id": 24,
+            "maxSize": 60000,
+            "minSize": 15000,
+            "preferredSize": 35000,
+            "qualityId": 24,
+            "title": "Remux-2160p"
+          }
+        ],
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/quality-definitions"
+    },
+    {
+      "as": "admin",
+      "body": {},
+      "expect": {
+        "body": [
+          {
+            "id": 1,
+            "maxSize": 1500,
+            "minSize": 0,
+            "preferredSize": 700,
+            "qualityId": 1,
+            "title": "WORKPRINT"
+          },
+          {
+            "id": 2,
+            "maxSize": 1500,
+            "minSize": 0,
+            "preferredSize": 700,
+            "qualityId": 2,
+            "title": "CAM"
+          },
+          {
+            "id": 3,
+            "maxSize": 1500,
+            "minSize": 0,
+            "preferredSize": 700,
+            "qualityId": 3,
+            "title": "TELESYNC"
+          },
+          {
+            "id": 4,
+            "maxSize": 1500,
+            "minSize": 0,
+            "preferredSize": 700,
+            "qualityId": 4,
+            "title": "TELECINE"
+          },
+          {
+            "id": 5,
+            "maxSize": 1500,
+            "minSize": 0,
+            "preferredSize": 800,
+            "qualityId": 5,
+            "title": "DVD"
+          },
+          {
+            "id": 6,
+            "maxSize": 1500,
+            "minSize": 0,
+            "preferredSize": 800,
+            "qualityId": 6,
+            "title": "DVD-R"
+          },
+          {
+            "id": 7,
+            "maxSize": 1500,
+            "minSize": 0,
+            "preferredSize": 800,
+            "qualityId": 7,
+            "title": "SDTV"
+          },
+          {
+            "id": 8,
+            "maxSize": 1500,
+            "minSize": 0,
+            "preferredSize": 800,
+            "qualityId": 8,
+            "title": "WEBDL-480p"
+          },
+          {
+            "id": 9,
+            "maxSize": 1500,
+            "minSize": 0,
+            "preferredSize": 800,
+            "qualityId": 9,
+            "title": "WEBRip-480p"
+          },
+          {
+            "id": 10,
+            "maxSize": 1500,
+            "minSize": 0,
+            "preferredSize": 800,
+            "qualityId": 10,
+            "title": "Bluray-480p"
+          },
+          {
+            "id": 11,
+            "maxSize": 2500,
+            "minSize": 150,
+            "preferredSize": 1200,
+            "qualityId": 11,
+            "title": "HDTV-720p"
+          },
+          {
+            "id": 12,
+            "maxSize": 3000,
+            "minSize": 150,
+            "preferredSize": 1500,
+            "qualityId": 12,
+            "title": "WEBDL-720p"
+          },
+          {
+            "id": 13,
+            "maxSize": 3000,
+            "minSize": 150,
+            "preferredSize": 1500,
+            "qualityId": 13,
+            "title": "WEBRip-720p"
+          },
+          {
+            "id": 14,
+            "maxSize": 5000,
+            "minSize": 250,
+            "preferredSize": 2500,
+            "qualityId": 14,
+            "title": "Bluray-720p"
+          },
+          {
+            "id": 15,
+            "maxSize": 4000,
+            "minSize": 250,
+            "preferredSize": 2000,
+            "qualityId": 15,
+            "title": "HDTV-1080p"
+          },
+          {
+            "id": 16,
+            "maxSize": 5000,
+            "minSize": 250,
+            "preferredSize": 3000,
+            "qualityId": 16,
+            "title": "Renamed"
+          },
+          {
+            "id": 17,
+            "maxSize": 5000,
+            "minSize": 250,
+            "preferredSize": 3000,
+            "qualityId": 17,
+            "title": "WEBRip-1080p"
+          },
+          {
+            "id": 18,
+            "maxSize": 10000,
+            "minSize": 400,
+            "preferredSize": 5000,
+            "qualityId": 18,
+            "title": "Bluray-1080p"
+          },
+          {
+            "id": 19,
+            "maxSize": 30000,
+            "minSize": 8000,
+            "preferredSize": 18000,
+            "qualityId": 19,
+            "title": "Remux-1080p"
+          },
+          {
+            "id": 20,
+            "maxSize": 8000,
+            "minSize": 600,
+            "preferredSize": 4000,
+            "qualityId": 20,
+            "title": "HDTV-2160p"
+          },
+          {
+            "id": 21,
+            "maxSize": 12000,
+            "minSize": 600,
+            "preferredSize": 6000,
+            "qualityId": 21,
+            "title": "WEBDL-2160p"
+          },
+          {
+            "id": 22,
+            "maxSize": 12000,
+            "minSize": 600,
+            "preferredSize": 6000,
+            "qualityId": 22,
+            "title": "WEBRip-2160p"
+          },
+          {
+            "id": 23,
+            "maxSize": 25000,
+            "minSize": 1000,
+            "preferredSize": 12000,
+            "qualityId": 23,
+            "title": "Bluray-2160p"
+          },
+          {
+            "id": 24,
+            "maxSize": 60000,
+            "minSize": 15000,
+            "preferredSize": 35000,
+            "qualityId": 24,
+            "title": "Remux-2160p"
+          }
+        ],
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/quality-definitions/reset"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "id": 1,
+            "maxSize": 1500,
+            "minSize": 0,
+            "preferredSize": 700,
+            "qualityId": 1,
+            "title": "WORKPRINT"
+          },
+          {
+            "id": 2,
+            "maxSize": 1500,
+            "minSize": 0,
+            "preferredSize": 700,
+            "qualityId": 2,
+            "title": "CAM"
+          },
+          {
+            "id": 3,
+            "maxSize": 1500,
+            "minSize": 0,
+            "preferredSize": 700,
+            "qualityId": 3,
+            "title": "TELESYNC"
+          },
+          {
+            "id": 4,
+            "maxSize": 1500,
+            "minSize": 0,
+            "preferredSize": 700,
+            "qualityId": 4,
+            "title": "TELECINE"
+          },
+          {
+            "id": 5,
+            "maxSize": 1500,
+            "minSize": 0,
+            "preferredSize": 800,
+            "qualityId": 5,
+            "title": "DVD"
+          },
+          {
+            "id": 6,
+            "maxSize": 1500,
+            "minSize": 0,
+            "preferredSize": 800,
+            "qualityId": 6,
+            "title": "DVD-R"
+          },
+          {
+            "id": 7,
+            "maxSize": 1500,
+            "minSize": 0,
+            "preferredSize": 800,
+            "qualityId": 7,
+            "title": "SDTV"
+          },
+          {
+            "id": 8,
+            "maxSize": 1500,
+            "minSize": 0,
+            "preferredSize": 800,
+            "qualityId": 8,
+            "title": "WEBDL-480p"
+          },
+          {
+            "id": 9,
+            "maxSize": 1500,
+            "minSize": 0,
+            "preferredSize": 800,
+            "qualityId": 9,
+            "title": "WEBRip-480p"
+          },
+          {
+            "id": 10,
+            "maxSize": 1500,
+            "minSize": 0,
+            "preferredSize": 800,
+            "qualityId": 10,
+            "title": "Bluray-480p"
+          },
+          {
+            "id": 11,
+            "maxSize": 2500,
+            "minSize": 150,
+            "preferredSize": 1200,
+            "qualityId": 11,
+            "title": "HDTV-720p"
+          },
+          {
+            "id": 12,
+            "maxSize": 3000,
+            "minSize": 150,
+            "preferredSize": 1500,
+            "qualityId": 12,
+            "title": "WEBDL-720p"
+          },
+          {
+            "id": 13,
+            "maxSize": 3000,
+            "minSize": 150,
+            "preferredSize": 1500,
+            "qualityId": 13,
+            "title": "WEBRip-720p"
+          },
+          {
+            "id": 14,
+            "maxSize": 5000,
+            "minSize": 250,
+            "preferredSize": 2500,
+            "qualityId": 14,
+            "title": "Bluray-720p"
+          },
+          {
+            "id": 15,
+            "maxSize": 4000,
+            "minSize": 250,
+            "preferredSize": 2000,
+            "qualityId": 15,
+            "title": "HDTV-1080p"
+          },
+          {
+            "id": 16,
+            "maxSize": 0,
+            "minSize": 0,
+            "preferredSize": 5.5,
+            "qualityId": 16,
+            "title": "Renamed"
+          },
+          {
+            "id": 17,
+            "maxSize": 5000,
+            "minSize": 250,
+            "preferredSize": 3000,
+            "qualityId": 17,
+            "title": "WEBRip-1080p"
+          },
+          {
+            "id": 18,
+            "maxSize": 33,
+            "minSize": 12,
+            "preferredSize": 22,
+            "qualityId": 18,
+            "title": "Bluray-1080p"
+          },
+          {
+            "id": 19,
+            "maxSize": 30000,
+            "minSize": 8000,
+            "preferredSize": 18000,
+            "qualityId": 19,
+            "title": "Remux-1080p"
+          },
+          {
+            "id": 20,
+            "maxSize": 8000,
+            "minSize": 600,
+            "preferredSize": 4000,
+            "qualityId": 20,
+            "title": "HDTV-2160p"
+          },
+          {
+            "id": 21,
+            "maxSize": 12000,
+            "minSize": 600,
+            "preferredSize": 6000,
+            "qualityId": 21,
+            "title": "WEBDL-2160p"
+          },
+          {
+            "id": 22,
+            "maxSize": 12000,
+            "minSize": 600,
+            "preferredSize": 6000,
+            "qualityId": 22,
+            "title": "WEBRip-2160p"
+          },
+          {
+            "id": 23,
+            "maxSize": 25000,
+            "minSize": 1000,
+            "preferredSize": 12000,
+            "qualityId": 23,
+            "title": "Bluray-2160p"
+          },
+          {
+            "id": 24,
+            "maxSize": 60000,
+            "minSize": 15000,
+            "preferredSize": 35000,
+            "qualityId": 24,
+            "title": "Remux-2160p"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/quality-definitions"
+    },
+    {
+      "as": "settings",
+      "expect": {
+        "body": [
+          {
+            "id": 1,
+            "maxSize": 1500,
+            "minSize": 0,
+            "preferredSize": 700,
+            "qualityId": 1,
+            "title": "WORKPRINT"
+          },
+          {
+            "id": 2,
+            "maxSize": 1500,
+            "minSize": 0,
+            "preferredSize": 700,
+            "qualityId": 2,
+            "title": "CAM"
+          },
+          {
+            "id": 3,
+            "maxSize": 1500,
+            "minSize": 0,
+            "preferredSize": 700,
+            "qualityId": 3,
+            "title": "TELESYNC"
+          },
+          {
+            "id": 4,
+            "maxSize": 1500,
+            "minSize": 0,
+            "preferredSize": 700,
+            "qualityId": 4,
+            "title": "TELECINE"
+          },
+          {
+            "id": 5,
+            "maxSize": 1500,
+            "minSize": 0,
+            "preferredSize": 800,
+            "qualityId": 5,
+            "title": "DVD"
+          },
+          {
+            "id": 6,
+            "maxSize": 1500,
+            "minSize": 0,
+            "preferredSize": 800,
+            "qualityId": 6,
+            "title": "DVD-R"
+          },
+          {
+            "id": 7,
+            "maxSize": 1500,
+            "minSize": 0,
+            "preferredSize": 800,
+            "qualityId": 7,
+            "title": "SDTV"
+          },
+          {
+            "id": 8,
+            "maxSize": 1500,
+            "minSize": 0,
+            "preferredSize": 800,
+            "qualityId": 8,
+            "title": "WEBDL-480p"
+          },
+          {
+            "id": 9,
+            "maxSize": 1500,
+            "minSize": 0,
+            "preferredSize": 800,
+            "qualityId": 9,
+            "title": "WEBRip-480p"
+          },
+          {
+            "id": 10,
+            "maxSize": 1500,
+            "minSize": 0,
+            "preferredSize": 800,
+            "qualityId": 10,
+            "title": "Bluray-480p"
+          },
+          {
+            "id": 11,
+            "maxSize": 2500,
+            "minSize": 150,
+            "preferredSize": 1200,
+            "qualityId": 11,
+            "title": "HDTV-720p"
+          },
+          {
+            "id": 12,
+            "maxSize": 3000,
+            "minSize": 150,
+            "preferredSize": 1500,
+            "qualityId": 12,
+            "title": "WEBDL-720p"
+          },
+          {
+            "id": 13,
+            "maxSize": 3000,
+            "minSize": 150,
+            "preferredSize": 1500,
+            "qualityId": 13,
+            "title": "WEBRip-720p"
+          },
+          {
+            "id": 14,
+            "maxSize": 5000,
+            "minSize": 250,
+            "preferredSize": 2500,
+            "qualityId": 14,
+            "title": "Bluray-720p"
+          },
+          {
+            "id": 15,
+            "maxSize": 4000,
+            "minSize": 250,
+            "preferredSize": 2000,
+            "qualityId": 15,
+            "title": "HDTV-1080p"
+          },
+          {
+            "id": 16,
+            "maxSize": 5000,
+            "minSize": 250,
+            "preferredSize": 3000,
+            "qualityId": 16,
+            "title": "Renamed"
+          },
+          {
+            "id": 17,
+            "maxSize": 5000,
+            "minSize": 250,
+            "preferredSize": 3000,
+            "qualityId": 17,
+            "title": "WEBRip-1080p"
+          },
+          {
+            "id": 18,
+            "maxSize": 10000,
+            "minSize": 400,
+            "preferredSize": 5000,
+            "qualityId": 18,
+            "title": "Bluray-1080p"
+          },
+          {
+            "id": 19,
+            "maxSize": 30000,
+            "minSize": 8000,
+            "preferredSize": 18000,
+            "qualityId": 19,
+            "title": "Remux-1080p"
+          },
+          {
+            "id": 20,
+            "maxSize": 8000,
+            "minSize": 600,
+            "preferredSize": 4000,
+            "qualityId": 20,
+            "title": "HDTV-2160p"
+          },
+          {
+            "id": 21,
+            "maxSize": 12000,
+            "minSize": 600,
+            "preferredSize": 6000,
+            "qualityId": 21,
+            "title": "WEBDL-2160p"
+          },
+          {
+            "id": 22,
+            "maxSize": 12000,
+            "minSize": 600,
+            "preferredSize": 6000,
+            "qualityId": 22,
+            "title": "WEBRip-2160p"
+          },
+          {
+            "id": 23,
+            "maxSize": 25000,
+            "minSize": 1000,
+            "preferredSize": 12000,
+            "qualityId": 23,
+            "title": "Bluray-2160p"
+          },
+          {
+            "id": 24,
+            "maxSize": 60000,
+            "minSize": 15000,
+            "preferredSize": 35000,
+            "qualityId": 24,
+            "title": "Remux-2160p"
+          }
+        ],
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/quality-definitions/reset"
+    }
+  ]
+}

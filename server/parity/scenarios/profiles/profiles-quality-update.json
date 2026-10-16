@@ -1,0 +1,187 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "profiles-quality-update",
+  "seed": "profiles",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "cutoff": 17,
+        "items": [
+          {
+            "allowed": true,
+            "groupId": null,
+            "qualityId": 17,
+            "qualityName": "WEBRip-1080p",
+            "resolution": 1080,
+            "sortOrder": 1,
+            "source": "web"
+          }
+        ],
+        "name": "Renamed"
+      },
+      "expect": {
+        "body": {
+          "cutoff": 17,
+          "id": 1,
+          "items": [
+            {
+              "allowed": true,
+              "quality": {
+                "id": 17,
+                "name": "WEBRip-1080p",
+                "resolution": 1080,
+                "source": "web"
+              },
+              "sortOrder": 1
+            }
+          ],
+          "minCustomFormatScore": 10,
+          "name": "Renamed",
+          "resolutionUpgradeOnly": false,
+          "upgradeAllowed": true
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/profiles/quality/1"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "cutoff": 17,
+          "id": 1,
+          "items": [
+            {
+              "allowed": true,
+              "quality": {
+                "id": 17,
+                "name": "WEBRip-1080p",
+                "resolution": 1080,
+                "source": "web"
+              },
+              "sortOrder": 1
+            }
+          ],
+          "minCustomFormatScore": 10,
+          "name": "Renamed",
+          "resolutionUpgradeOnly": false,
+          "upgradeAllowed": true
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/profiles/quality/1"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "cutoff": 16,
+        "items": [
+          {
+            "allowed": true,
+            "groupId": 2,
+            "qualityId": 16,
+            "qualityName": "WEBDL-1080p",
+            "resolution": 1080,
+            "sortOrder": 1,
+            "source": "web"
+          },
+          {
+            "allowed": false,
+            "groupId": null,
+            "qualityId": 18,
+            "qualityName": "Bluray-1080p",
+            "resolution": 1080,
+            "sortOrder": 2,
+            "source": "bluray"
+          }
+        ],
+        "minCustomFormatScore": null,
+        "name": "New HD",
+        "resolutionUpgradeOnly": true,
+        "upgradeAllowed": null
+      },
+      "expect": {
+        "body": {
+          "cutoff": 16,
+          "id": 2,
+          "items": [
+            {
+              "allowed": true,
+              "groupId": 2,
+              "quality": {
+                "id": 16,
+                "name": "WEBDL-1080p",
+                "resolution": 1080,
+                "source": "web"
+              },
+              "sortOrder": 1
+            },
+            {
+              "allowed": false,
+              "quality": {
+                "id": 18,
+                "name": "Bluray-1080p",
+                "resolution": 1080,
+                "source": "bluray"
+              },
+              "sortOrder": 2
+            }
+          ],
+          "minCustomFormatScore": 0,
+          "name": "New HD",
+          "resolutionUpgradeOnly": true,
+          "upgradeAllowed": false
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/profiles/quality/2"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "cutoff": 16,
+          "id": 2,
+          "items": [
+            {
+              "allowed": true,
+              "groupId": 2,
+              "quality": {
+                "id": 16,
+                "name": "WEBDL-1080p",
+                "resolution": 1080,
+                "source": "web"
+              },
+              "sortOrder": 1
+            },
+            {
+              "allowed": false,
+              "quality": {
+                "id": 18,
+                "name": "Bluray-1080p",
+                "resolution": 1080,
+                "source": "bluray"
+              },
+              "sortOrder": 2
+            }
+          ],
+          "minCustomFormatScore": 0,
+          "name": "New HD",
+          "resolutionUpgradeOnly": true,
+          "upgradeAllowed": false
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/profiles/quality/2"
+    }
+  ]
+}

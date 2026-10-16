@@ -1,0 +1,153 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "profiles-language-update-resets-arrays",
+  "seed": "profiles",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "name": "Only name"
+      },
+      "expect": {
+        "body": {
+          "audioLanguages": [],
+          "id": 2,
+          "name": "Only name",
+          "subtitleLanguages": []
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/profiles/language/2"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "audioLanguages": [],
+          "id": 2,
+          "name": "Only name",
+          "subtitleLanguages": []
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/profiles/language/2"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "audioLanguages": [
+          {
+            "isoCode": "de",
+            "name": "German"
+          }
+        ],
+        "name": "New LP",
+        "subtitleLanguages": [
+          {
+            "forced": false,
+            "hi": false,
+            "isoCode": "de",
+            "name": "German"
+          },
+          {
+            "forced": true,
+            "hearingImpaired": "require",
+            "hi": true,
+            "isoCode": "fr",
+            "name": "French"
+          },
+          {
+            "forced": false,
+            "hearingImpaired": null,
+            "hi": false,
+            "isoCode": "en",
+            "name": "English"
+          }
+        ]
+      },
+      "expect": {
+        "body": {
+          "audioLanguages": [
+            {
+              "isoCode": "de",
+              "name": "German"
+            }
+          ],
+          "id": 3,
+          "name": "New LP",
+          "subtitleLanguages": [
+            {
+              "forced": false,
+              "hi": false,
+              "isoCode": "de",
+              "name": "German"
+            },
+            {
+              "forced": true,
+              "hearingImpaired": "require",
+              "hi": true,
+              "isoCode": "fr",
+              "name": "French"
+            },
+            {
+              "forced": false,
+              "hearingImpaired": null,
+              "hi": false,
+              "isoCode": "en",
+              "name": "English"
+            }
+          ]
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/profiles/language/3"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "audioLanguages": [
+            {
+              "isoCode": "de",
+              "name": "German"
+            }
+          ],
+          "id": 3,
+          "name": "New LP",
+          "subtitleLanguages": [
+            {
+              "forced": false,
+              "hi": false,
+              "isoCode": "de",
+              "name": "German"
+            },
+            {
+              "forced": true,
+              "hearingImpaired": "require",
+              "hi": true,
+              "isoCode": "fr",
+              "name": "French"
+            },
+            {
+              "forced": false,
+              "hearingImpaired": null,
+              "hi": false,
+              "isoCode": "en",
+              "name": "English"
+            }
+          ]
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/profiles/language/3"
+    }
+  ]
+}

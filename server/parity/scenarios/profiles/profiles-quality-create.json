@@ -1,0 +1,211 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "profiles-quality-create",
+  "seed": "profiles",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "cutoff": 16,
+        "items": [
+          {
+            "allowed": true,
+            "groupId": 2,
+            "qualityId": 16,
+            "qualityName": "WEBDL-1080p",
+            "resolution": 1080,
+            "sortOrder": 1,
+            "source": "web"
+          },
+          {
+            "allowed": false,
+            "groupId": null,
+            "qualityId": 18,
+            "qualityName": "Bluray-1080p",
+            "resolution": 1080,
+            "sortOrder": 2,
+            "source": "bluray"
+          }
+        ],
+        "minCustomFormatScore": 3,
+        "name": "New HD",
+        "resolutionUpgradeOnly": true,
+        "upgradeAllowed": true
+      },
+      "expect": {
+        "body": {
+          "cutoff": 16,
+          "id": 3,
+          "items": [
+            {
+              "allowed": true,
+              "groupId": 2,
+              "quality": {
+                "id": 16,
+                "name": "WEBDL-1080p",
+                "resolution": 1080,
+                "source": "web"
+              },
+              "sortOrder": 1
+            },
+            {
+              "allowed": false,
+              "quality": {
+                "id": 18,
+                "name": "Bluray-1080p",
+                "resolution": 1080,
+                "source": "bluray"
+              },
+              "sortOrder": 2
+            }
+          ],
+          "minCustomFormatScore": 3,
+          "name": "New HD",
+          "resolutionUpgradeOnly": true,
+          "upgradeAllowed": true
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/profiles/quality"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "cutoff": 1,
+        "items": [],
+        "name": "Min"
+      },
+      "expect": {
+        "body": {
+          "cutoff": 1,
+          "id": 4,
+          "items": [],
+          "minCustomFormatScore": 0,
+          "name": "Min",
+          "resolutionUpgradeOnly": false,
+          "upgradeAllowed": false
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/profiles/quality"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "cutoff": 1,
+            "id": 4,
+            "items": [],
+            "minCustomFormatScore": 0,
+            "name": "Min",
+            "resolutionUpgradeOnly": false,
+            "upgradeAllowed": false
+          },
+          {
+            "cutoff": 16,
+            "id": 3,
+            "items": [
+              {
+                "allowed": true,
+                "groupId": 2,
+                "quality": {
+                  "id": 16,
+                  "name": "WEBDL-1080p",
+                  "resolution": 1080,
+                  "source": "web"
+                },
+                "sortOrder": 1
+              },
+              {
+                "allowed": false,
+                "quality": {
+                  "id": 18,
+                  "name": "Bluray-1080p",
+                  "resolution": 1080,
+                  "source": "bluray"
+                },
+                "sortOrder": 2
+              }
+            ],
+            "minCustomFormatScore": 3,
+            "name": "New HD",
+            "resolutionUpgradeOnly": true,
+            "upgradeAllowed": true
+          },
+          {
+            "cutoff": 18,
+            "id": 1,
+            "items": [
+              {
+                "allowed": true,
+                "groupId": 1,
+                "quality": {
+                  "id": 16,
+                  "name": "WEBDL-1080p",
+                  "resolution": 1080,
+                  "source": "web"
+                },
+                "sortOrder": 1
+              },
+              {
+                "allowed": true,
+                "groupId": 1,
+                "quality": {
+                  "id": 17,
+                  "name": "WEBRip-1080p",
+                  "resolution": 1080,
+                  "source": "web"
+                },
+                "sortOrder": 2
+              },
+              {
+                "allowed": true,
+                "quality": {
+                  "id": 18,
+                  "name": "Bluray-1080p",
+                  "resolution": 1080,
+                  "source": "bluray"
+                },
+                "sortOrder": 3
+              }
+            ],
+            "minCustomFormatScore": 10,
+            "name": "Parity HD",
+            "resolutionUpgradeOnly": false,
+            "upgradeAllowed": true
+          },
+          {
+            "cutoff": 5,
+            "id": 2,
+            "items": [
+              {
+                "allowed": true,
+                "quality": {
+                  "id": 5,
+                  "name": "DVD",
+                  "resolution": 480,
+                  "source": "dvd"
+                },
+                "sortOrder": 1
+              }
+            ],
+            "minCustomFormatScore": 0,
+            "name": "Parity SD",
+            "resolutionUpgradeOnly": true,
+            "upgradeAllowed": false
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/profiles/quality"
+    }
+  ]
+}

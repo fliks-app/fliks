@@ -1,0 +1,74 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "profiles-language-get-404",
+  "seed": "profiles",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "LanguageProfile #999 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "GET",
+      "path": "/api/profiles/language/999"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Validation failed (numeric string is expected)",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "GET",
+      "path": "/api/profiles/language/abc"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "audioLanguages": [
+            {
+              "isoCode": "fr",
+              "name": "French"
+            },
+            {
+              "isoCode": "en",
+              "name": "English"
+            }
+          ],
+          "id": 2,
+          "name": "Parity FR",
+          "subtitleLanguages": [
+            {
+              "forced": false,
+              "hearingImpaired": "prefer",
+              "hi": false,
+              "isoCode": "fr",
+              "name": "French"
+            },
+            {
+              "forced": true,
+              "hi": false,
+              "isoCode": "en",
+              "name": "English"
+            }
+          ]
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/profiles/language/2"
+    }
+  ]
+}

@@ -1,0 +1,129 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "custom-formats-create-bad-regex-400",
+  "seed": "profiles",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "name": "New CF",
+        "score": 25,
+        "specs": [
+          {
+            "type": "title_regex",
+            "value": "ok"
+          },
+          {
+            "type": "title_regex",
+            "value": "("
+          }
+        ]
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Invalid regular expression: (",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/custom-formats"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "name": "New CF",
+        "score": 25,
+        "specs": [
+          {
+            "type": "title_regex",
+            "value": "["
+          }
+        ]
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Invalid regular expression: [",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/custom-formats"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "id": 4,
+            "name": "Broken negated regex",
+            "score": 7,
+            "specs": [
+              {
+                "negate": true,
+                "required": false,
+                "type": "title_regex",
+                "value": "("
+              }
+            ]
+          },
+          {
+            "id": 3,
+            "name": "Freeleech only",
+            "score": 5,
+            "specs": [
+              {
+                "negate": false,
+                "required": true,
+                "type": "release_flag",
+                "value": "freeleech"
+              },
+              {
+                "negate": false,
+                "required": false,
+                "type": "resolution",
+                "value": "1080"
+              }
+            ]
+          },
+          {
+            "id": 2,
+            "name": "No CAM",
+            "score": -100,
+            "specs": [
+              {
+                "negate": true,
+                "required": false,
+                "type": "source",
+                "value": "cam"
+              }
+            ]
+          },
+          {
+            "id": 1,
+            "name": "Remux regex",
+            "score": 50,
+            "specs": [
+              {
+                "negate": false,
+                "required": false,
+                "type": "title_regex",
+                "value": "remux"
+              }
+            ]
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/custom-formats"
+    }
+  ]
+}

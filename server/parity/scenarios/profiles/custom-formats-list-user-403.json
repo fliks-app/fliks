@@ -1,0 +1,147 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "custom-formats-list-user-403",
+  "seed": "profiles",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "GET",
+      "path": "/api/custom-formats"
+    },
+    {
+      "as": "readonly",
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "GET",
+      "path": "/api/custom-formats"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "GET",
+      "path": "/api/custom-formats/1"
+    },
+    {
+      "as": "user",
+      "body": {
+        "name": "New CF",
+        "score": 25,
+        "specs": [
+          {
+            "negate": false,
+            "type": "title_regex",
+            "value": "web[-. ]?dl"
+          },
+          {
+            "required": true,
+            "type": "source",
+            "value": "bluray"
+          },
+          {
+            "negate": null,
+            "type": "language",
+            "value": "fr"
+          }
+        ]
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "POST",
+      "path": "/api/custom-formats"
+    },
+    {
+      "as": "user",
+      "body": {
+        "name": "New CF",
+        "score": 25,
+        "specs": [
+          {
+            "negate": false,
+            "type": "title_regex",
+            "value": "web[-. ]?dl"
+          },
+          {
+            "required": true,
+            "type": "source",
+            "value": "bluray"
+          },
+          {
+            "negate": null,
+            "type": "language",
+            "value": "fr"
+          }
+        ]
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "PUT",
+      "path": "/api/custom-formats/1"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "DELETE",
+      "path": "/api/custom-formats/1"
+    },
+    {
+      "as": "user",
+      "body": {
+        "title": "x"
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "POST",
+      "path": "/api/custom-formats/test"
+    }
+  ]
+}

@@ -1,0 +1,124 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "custom-formats-create-bad-type-400",
+  "seed": "profiles",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "name": "New CF",
+        "score": 25,
+        "specs": [
+          {
+            "type": "nope",
+            "value": "x"
+          }
+        ]
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "specs.0.type must be one of the following values: title_regex, source, resolution, language, release_flag, release_group, edition, video_codec, audio_codec"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/custom-formats"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "name": "New CF",
+        "score": 25,
+        "specs": [
+          {
+            "extra": 1,
+            "type": "source",
+            "value": "x"
+          }
+        ]
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "specs.0.property extra should not exist"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/custom-formats"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "name": "New CF",
+        "score": "1",
+        "specs": [
+          {
+            "negate": false,
+            "type": "title_regex",
+            "value": "web[-. ]?dl"
+          },
+          {
+            "required": true,
+            "type": "source",
+            "value": "bluray"
+          },
+          {
+            "negate": null,
+            "type": "language",
+            "value": "fr"
+          }
+        ]
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "score must be a number conforming to the specified constraints"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/custom-formats"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "name": "New CF",
+        "score": 25,
+        "specs": [
+          {
+            "negate": "no",
+            "type": "source",
+            "value": "x"
+          }
+        ]
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "specs.0.negate must be a boolean value"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/custom-formats"
+    }
+  ]
+}

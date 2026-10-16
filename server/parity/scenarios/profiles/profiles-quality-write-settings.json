@@ -1,0 +1,124 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "profiles-quality-write-settings",
+  "seed": "profiles",
+  "steps": [
+    {
+      "as": "settings",
+      "body": {
+        "cutoff": 1,
+        "items": [],
+        "name": "Min"
+      },
+      "expect": {
+        "body": {
+          "cutoff": 1,
+          "id": 3,
+          "items": [],
+          "minCustomFormatScore": 0,
+          "name": "Min",
+          "resolutionUpgradeOnly": false,
+          "upgradeAllowed": false
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/profiles/quality"
+    },
+    {
+      "as": "settings",
+      "body": {
+        "cutoff": 1,
+        "items": [],
+        "name": "Min"
+      },
+      "expect": {
+        "body": {
+          "cutoff": 1,
+          "id": 2,
+          "items": [],
+          "minCustomFormatScore": 0,
+          "name": "Min",
+          "resolutionUpgradeOnly": true,
+          "upgradeAllowed": false
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/profiles/quality/2"
+    },
+    {
+      "as": "settings",
+      "expect": {
+        "status": 200
+      },
+      "method": "DELETE",
+      "path": "/api/profiles/quality/2"
+    },
+    {
+      "as": "settings",
+      "expect": {
+        "body": [
+          {
+            "cutoff": 1,
+            "id": 3,
+            "items": [],
+            "minCustomFormatScore": 0,
+            "name": "Min",
+            "resolutionUpgradeOnly": false,
+            "upgradeAllowed": false
+          },
+          {
+            "cutoff": 18,
+            "id": 1,
+            "items": [
+              {
+                "allowed": true,
+                "groupId": 1,
+                "quality": {
+                  "id": 16,
+                  "name": "WEBDL-1080p",
+                  "resolution": 1080,
+                  "source": "web"
+                },
+                "sortOrder": 1
+              },
+              {
+                "allowed": true,
+                "groupId": 1,
+                "quality": {
+                  "id": 17,
+                  "name": "WEBRip-1080p",
+                  "resolution": 1080,
+                  "source": "web"
+                },
+                "sortOrder": 2
+              },
+              {
+                "allowed": true,
+                "quality": {
+                  "id": 18,
+                  "name": "Bluray-1080p",
+                  "resolution": 1080,
+                  "source": "bluray"
+                },
+                "sortOrder": 3
+              }
+            ],
+            "minCustomFormatScore": 10,
+            "name": "Parity HD",
+            "resolutionUpgradeOnly": false,
+            "upgradeAllowed": true
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/profiles/quality"
+    }
+  ]
+}

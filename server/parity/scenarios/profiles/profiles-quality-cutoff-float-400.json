@@ -1,0 +1,108 @@
+{
+  "deviation": "C1",
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "profiles-quality-cutoff-float-400",
+  "seed": "profiles",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "cutoff": 16.5,
+        "items": [
+          {
+            "allowed": true,
+            "groupId": 2,
+            "qualityId": 16,
+            "qualityName": "WEBDL-1080p",
+            "resolution": 1080,
+            "sortOrder": 1,
+            "source": "web"
+          },
+          {
+            "allowed": false,
+            "groupId": null,
+            "qualityId": 18,
+            "qualityName": "Bluray-1080p",
+            "resolution": 1080,
+            "sortOrder": 2,
+            "source": "bluray"
+          }
+        ],
+        "minCustomFormatScore": 3,
+        "name": "New HD",
+        "resolutionUpgradeOnly": true,
+        "upgradeAllowed": true
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "cutoff must be an integer number"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/profiles/quality"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "cutoff": 16,
+        "items": [
+          {
+            "allowed": true,
+            "groupId": 2,
+            "qualityId": 16,
+            "qualityName": "WEBDL-1080p",
+            "resolution": 1080,
+            "sortOrder": 1,
+            "source": "web"
+          },
+          {
+            "allowed": false,
+            "groupId": null,
+            "qualityId": 18,
+            "qualityName": "Bluray-1080p",
+            "resolution": 1080,
+            "sortOrder": 2,
+            "source": "bluray"
+          }
+        ],
+        "minCustomFormatScore": 1.5,
+        "name": "New HD",
+        "resolutionUpgradeOnly": true,
+        "upgradeAllowed": true
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "minCustomFormatScore must be an integer number"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/profiles/quality"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Validation failed (numeric string is expected)",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "GET",
+      "path": "/api/profiles/quality/99999999999"
+    }
+  ]
+}

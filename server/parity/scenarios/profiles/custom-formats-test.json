@@ -1,0 +1,177 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "custom-formats-test",
+  "seed": "profiles",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "title": "Movie.2020.1080p.BluRay.REMUX.x264-GRP"
+      },
+      "expect": {
+        "body": [
+          {
+            "formatId": 4,
+            "formatName": "Broken negated regex",
+            "matched": true,
+            "score": 7
+          },
+          {
+            "formatId": 3,
+            "formatName": "Freeleech only",
+            "matched": false,
+            "score": 0
+          },
+          {
+            "formatId": 2,
+            "formatName": "No CAM",
+            "matched": true,
+            "score": -100
+          },
+          {
+            "formatId": 1,
+            "formatName": "Remux regex",
+            "matched": true,
+            "score": 50
+          }
+        ],
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/custom-formats/test"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "freeleech": true,
+        "title": "Movie.2020.1080p.WEB-DL.FRENCH-GRP"
+      },
+      "expect": {
+        "body": [
+          {
+            "formatId": 4,
+            "formatName": "Broken negated regex",
+            "matched": true,
+            "score": 7
+          },
+          {
+            "formatId": 3,
+            "formatName": "Freeleech only",
+            "matched": true,
+            "score": 5
+          },
+          {
+            "formatId": 2,
+            "formatName": "No CAM",
+            "matched": true,
+            "score": -100
+          },
+          {
+            "formatId": 1,
+            "formatName": "Remux regex",
+            "matched": false,
+            "score": 0
+          }
+        ],
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/custom-formats/test"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "downloadVolumeFactor": 0.5,
+        "title": "Movie.2020.720p.CAM"
+      },
+      "expect": {
+        "body": [
+          {
+            "formatId": 4,
+            "formatName": "Broken negated regex",
+            "matched": true,
+            "score": 7
+          },
+          {
+            "formatId": 3,
+            "formatName": "Freeleech only",
+            "matched": false,
+            "score": 0
+          },
+          {
+            "formatId": 2,
+            "formatName": "No CAM",
+            "matched": false,
+            "score": 0
+          },
+          {
+            "formatId": 1,
+            "formatName": "Remux regex",
+            "matched": false,
+            "score": 0
+          }
+        ],
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/custom-formats/test"
+    },
+    {
+      "as": "settings",
+      "body": {
+        "downloadVolumeFactor": 0,
+        "title": "x"
+      },
+      "expect": {
+        "body": [
+          {
+            "formatId": 4,
+            "formatName": "Broken negated regex",
+            "matched": true,
+            "score": 7
+          },
+          {
+            "formatId": 3,
+            "formatName": "Freeleech only",
+            "matched": false,
+            "score": 0
+          },
+          {
+            "formatId": 2,
+            "formatName": "No CAM",
+            "matched": true,
+            "score": -100
+          },
+          {
+            "formatId": 1,
+            "formatName": "Remux regex",
+            "matched": false,
+            "score": 0
+          }
+        ],
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/custom-formats/test"
+    },
+    {
+      "as": "anon",
+      "body": {
+        "title": "x"
+      },
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "POST",
+      "path": "/api/custom-formats/test"
+    }
+  ]
+}

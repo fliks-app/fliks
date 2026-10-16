@@ -1,0 +1,188 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "custom-formats-update",
+  "seed": "profiles",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "name": "New CF",
+        "specs": [
+          {
+            "negate": false,
+            "type": "title_regex",
+            "value": "web[-. ]?dl"
+          },
+          {
+            "required": true,
+            "type": "source",
+            "value": "bluray"
+          },
+          {
+            "negate": null,
+            "type": "language",
+            "value": "fr"
+          }
+        ]
+      },
+      "expect": {
+        "body": {
+          "id": 1,
+          "name": "New CF",
+          "score": 0,
+          "specs": [
+            {
+              "negate": false,
+              "type": "title_regex",
+              "value": "web[-. ]?dl"
+            },
+            {
+              "required": true,
+              "type": "source",
+              "value": "bluray"
+            },
+            {
+              "negate": null,
+              "type": "language",
+              "value": "fr"
+            }
+          ]
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/custom-formats/1"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "id": 1,
+          "name": "New CF",
+          "score": 0,
+          "specs": [
+            {
+              "negate": false,
+              "type": "title_regex",
+              "value": "web[-. ]?dl"
+            },
+            {
+              "required": true,
+              "type": "source",
+              "value": "bluray"
+            },
+            {
+              "negate": null,
+              "type": "language",
+              "value": "fr"
+            }
+          ]
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/custom-formats/1"
+    },
+    {
+      "as": "settings",
+      "body": {
+        "name": "New CF",
+        "score": 9,
+        "specs": [
+          {
+            "negate": false,
+            "type": "title_regex",
+            "value": "web[-. ]?dl"
+          },
+          {
+            "required": true,
+            "type": "source",
+            "value": "bluray"
+          },
+          {
+            "negate": null,
+            "type": "language",
+            "value": "fr"
+          }
+        ]
+      },
+      "expect": {
+        "body": {
+          "id": 3,
+          "name": "New CF",
+          "score": 9,
+          "specs": [
+            {
+              "negate": false,
+              "type": "title_regex",
+              "value": "web[-. ]?dl"
+            },
+            {
+              "required": true,
+              "type": "source",
+              "value": "bluray"
+            },
+            {
+              "negate": null,
+              "type": "language",
+              "value": "fr"
+            }
+          ]
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/custom-formats/3"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "name": "New CF",
+        "score": 25,
+        "specs": [
+          {
+            "type": "title_regex",
+            "value": "("
+          }
+        ]
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Invalid regular expression: (",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PUT",
+      "path": "/api/custom-formats/1"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "name": "New CF",
+        "score": 25,
+        "specs": [
+          {
+            "type": "title_regex",
+            "value": "("
+          }
+        ]
+      },
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Custom format #999 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "PUT",
+      "path": "/api/custom-formats/999"
+    }
+  ]
+}
