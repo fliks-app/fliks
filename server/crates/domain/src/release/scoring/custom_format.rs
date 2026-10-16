@@ -44,13 +44,9 @@ fn norm(value: Option<&str>) -> String {
         .to_lowercase()
 }
 
-/// JS `parseInt(s, 10)`: leading decimal digits (after an optional sign), `None` for NaN.
+/// JS `parseInt(value, 10)` of a `norm`ed value: its leading digits, `None` for NaN.
 fn parse_int(s: &str) -> Option<i64> {
-    let digits: String = s
-        .trim_start()
-        .chars()
-        .take_while(char::is_ascii_digit)
-        .collect();
+    let digits: String = s.chars().take_while(char::is_ascii_digit).collect();
     digits.parse().ok()
 }
 

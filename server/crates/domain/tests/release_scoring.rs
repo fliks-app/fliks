@@ -125,8 +125,7 @@ impl ScorerDeps for Deps {
 
 fn title_matches(release: &str, expected: &[String], when: WhenUnreadable) -> bool {
     let index = index_title_expectations(expected);
-    !index.vacuous && matches_indexed_expectation(&release_title_tokens(release), &index, when)
-        || index.vacuous
+    matches_indexed_expectation(&release_title_tokens(release), &index, when)
 }
 
 fn run(i: &Value) -> Value {
