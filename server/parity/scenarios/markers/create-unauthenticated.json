@@ -1,0 +1,31 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..startedOn",
+    "$..endedOn"
+  ],
+  "name": "markers-create-unauthenticated",
+  "seed": "markers",
+  "steps": [
+    {
+      "as": "anon",
+      "body": {
+        "endSeconds": 30,
+        "episodeId": 1,
+        "startSeconds": 1,
+        "type": "intro"
+      },
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "POST",
+      "path": "/api/markers"
+    }
+  ]
+}

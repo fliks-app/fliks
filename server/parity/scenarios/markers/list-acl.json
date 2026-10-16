@@ -1,0 +1,39 @@
+{
+  "deviation": "F43",
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..startedOn",
+    "$..endedOn"
+  ],
+  "name": "markers-list-acl",
+  "seed": "markers",
+  "steps": [
+    {
+      "as": "readonly",
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Episode #1 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "GET",
+      "path": "/api/markers/episode/1"
+    },
+    {
+      "as": "readonly",
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Season #1 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "GET",
+      "path": "/api/markers/season/1"
+    }
+  ]
+}

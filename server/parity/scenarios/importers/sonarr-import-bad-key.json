@@ -1,0 +1,40 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..searchVector"
+  ],
+  "name": "imports-sonarr-import-bad-key",
+  "seed": "importers",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "apiKey": "wrong",
+        "pathMappings": [
+          {
+            "localLibraryId": 2,
+            "remotePath": "/data/tv"
+          },
+          {
+            "ignore": true,
+            "remotePath": "/data/ignored"
+          }
+        ],
+        "targetLibraryId": 2,
+        "url": "http://127.0.0.1:4880/sonarr/ok"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Sonarr API returned 401: Unauthorized",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/imports/sonarr"
+    }
+  ]
+}

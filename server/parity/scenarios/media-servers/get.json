@@ -1,0 +1,48 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "media-servers-get",
+  "seed": "media-servers",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "apiKey": "parity-key",
+          "enabled": true,
+          "events": [
+            "library.rescan",
+            "media.deleted"
+          ],
+          "id": 1,
+          "name": "Emby Main",
+          "type": "emby",
+          "url": "http://127.0.0.1:4882/ok"
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media-servers/1"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "apiKey": "plex-key",
+          "enabled": true,
+          "events": [],
+          "id": 3,
+          "name": "Plex Box",
+          "type": "plex",
+          "url": "http://127.0.0.1:4882/ok"
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media-servers/3"
+    }
+  ]
+}

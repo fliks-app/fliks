@@ -1,0 +1,23 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "media-servers-test-bad-key",
+  "seed": "media-servers",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "message": "Request failed with status code 401",
+          "ok": false
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/media-servers/4/test"
+    }
+  ]
+}

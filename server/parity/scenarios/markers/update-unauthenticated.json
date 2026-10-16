@@ -1,0 +1,28 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..startedOn",
+    "$..endedOn"
+  ],
+  "name": "markers-update-unauthenticated",
+  "seed": "markers",
+  "steps": [
+    {
+      "as": "anon",
+      "body": {
+        "startSeconds": 1
+      },
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "PUT",
+      "path": "/api/markers/1"
+    }
+  ]
+}

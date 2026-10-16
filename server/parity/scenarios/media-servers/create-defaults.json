@@ -1,0 +1,36 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "media-servers-create-defaults",
+  "seed": "media-servers",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "apiKey": null,
+        "enabled": null,
+        "events": null,
+        "name": "",
+        "type": "jellyfin",
+        "url": "x"
+      },
+      "expect": {
+        "body": {
+          "apiKey": "",
+          "enabled": true,
+          "events": [],
+          "id": 7,
+          "name": "",
+          "type": "jellyfin",
+          "url": "x"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/media-servers"
+    }
+  ]
+}

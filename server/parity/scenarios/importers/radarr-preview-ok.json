@@ -1,0 +1,42 @@
+{
+  "deviation": null,
+  "name": "imports-radarr-preview-ok",
+  "seed": "importers",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "url": "http://127.0.0.1:4880/radarr/ok"
+      },
+      "expect": {
+        "body": {
+          "localLibraries": [
+            {
+              "id": 1,
+              "name": "Movies",
+              "path": "/tmp/fliks-parity/media/movies"
+            },
+            {
+              "id": 2,
+              "name": "Series",
+              "path": "/tmp/fliks-parity/media/series"
+            }
+          ],
+          "remoteRootFolders": [
+            {
+              "remotePath": "/data/movies",
+              "suggestedLocalLibraryId": 1
+            },
+            {
+              "remotePath": "/data/ignored",
+              "suggestedLocalLibraryId": null
+            }
+          ]
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/imports/radarr/preview"
+    }
+  ]
+}

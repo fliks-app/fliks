@@ -1,0 +1,163 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..connectionId",
+    "$..createdAt",
+    "$..endedOn",
+    "$..id",
+    "$..startedOn",
+    "$..updatedAt",
+    "$[*].data",
+    "$[*].event"
+  ],
+  "name": "markers-detect-series",
+  "seed": "markers",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {},
+          {},
+          {},
+          {},
+          {},
+          {},
+          {},
+          {},
+          {},
+          {},
+          {},
+          {},
+          {},
+          {},
+          {},
+          {},
+          {},
+          {},
+          {},
+          {},
+          {},
+          {}
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/system/events",
+      "sse": {
+        "after": [
+          {
+            "as": "admin",
+            "expect": {
+              "status": 0
+            },
+            "method": "POST",
+            "path": "/api/markers/series/18/detect-all"
+          }
+        ],
+        "events": 27,
+        "timeoutMs": 4000
+      }
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "confidence": 1,
+            "endSeconds": 9.5,
+            "episodeId": 1,
+            "manual": true,
+            "startSeconds": 8.5,
+            "type": "outro"
+          },
+          {
+            "confidence": 0.9,
+            "endSeconds": 40,
+            "episodeId": 1,
+            "manual": false,
+            "startSeconds": 10,
+            "type": "intro"
+          },
+          {
+            "confidence": 0.8,
+            "endSeconds": 2.86,
+            "episodeId": 2,
+            "manual": false,
+            "startSeconds": 2.41,
+            "type": "outro"
+          },
+          {
+            "confidence": 1,
+            "endSeconds": 41,
+            "episodeId": 2,
+            "manual": true,
+            "startSeconds": 12,
+            "type": "intro"
+          },
+          {
+            "confidence": 0.8,
+            "endSeconds": 2.86,
+            "episodeId": 13,
+            "manual": false,
+            "startSeconds": 2.41,
+            "type": "outro"
+          },
+          {
+            "confidence": 0.9,
+            "endSeconds": 40,
+            "episodeId": 13,
+            "manual": false,
+            "startSeconds": 10,
+            "type": "intro"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/markers/season/1"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "confidence": 0.8,
+            "endSeconds": 2.86,
+            "episodeId": 3,
+            "manual": false,
+            "startSeconds": 2.41,
+            "type": "outro"
+          },
+          {
+            "confidence": 0.9,
+            "endSeconds": 40,
+            "episodeId": 3,
+            "manual": false,
+            "startSeconds": 10,
+            "type": "intro"
+          },
+          {
+            "confidence": 0.8,
+            "endSeconds": 2.86,
+            "episodeId": 4,
+            "manual": false,
+            "startSeconds": 2.41,
+            "type": "outro"
+          },
+          {
+            "confidence": 0.9,
+            "endSeconds": 40,
+            "episodeId": 4,
+            "manual": false,
+            "startSeconds": 10,
+            "type": "intro"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/markers/season/2"
+    }
+  ]
+}

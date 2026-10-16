@@ -1,0 +1,78 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "media-servers-list",
+  "seed": "media-servers",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "apiKey": "wrong",
+            "enabled": true,
+            "events": [],
+            "id": 4,
+            "name": "Emby Bad Key",
+            "type": "emby",
+            "url": "http://127.0.0.1:4882/401"
+          },
+          {
+            "apiKey": "parity-key",
+            "enabled": true,
+            "events": [
+              "library.rescan",
+              "media.deleted"
+            ],
+            "id": 1,
+            "name": "Emby Main",
+            "type": "emby",
+            "url": "http://127.0.0.1:4882/ok"
+          },
+          {
+            "apiKey": "parity-key",
+            "enabled": true,
+            "events": [],
+            "id": 5,
+            "name": "Emby No Users",
+            "type": "emby",
+            "url": "http://127.0.0.1:4882/nousers"
+          },
+          {
+            "apiKey": "parity-key",
+            "enabled": true,
+            "events": [],
+            "id": 6,
+            "name": "Emby Slow",
+            "type": "emby",
+            "url": "http://127.0.0.1:4882/slow"
+          },
+          {
+            "apiKey": "parity-key",
+            "enabled": false,
+            "events": [],
+            "id": 2,
+            "name": "Emby Spare",
+            "type": "emby",
+            "url": "http://127.0.0.1:4882/ok/"
+          },
+          {
+            "apiKey": "plex-key",
+            "enabled": true,
+            "events": [],
+            "id": 3,
+            "name": "Plex Box",
+            "type": "plex",
+            "url": "http://127.0.0.1:4882/ok"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media-servers"
+    }
+  ]
+}

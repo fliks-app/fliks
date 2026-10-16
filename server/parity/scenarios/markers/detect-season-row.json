@@ -1,0 +1,32 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..startedOn",
+    "$..endedOn"
+  ],
+  "name": "markers-detect-season-row",
+  "seed": "markers",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "body": {
+            "mediaId": 18,
+            "seasonId": 7,
+            "seasonNumber": 0
+          },
+          "id": 1,
+          "name": "IntroDetection",
+          "status": "queued",
+          "trigger": "manual"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/markers/season/7/detect"
+    }
+  ]
+}

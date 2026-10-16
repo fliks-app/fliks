@@ -1,0 +1,35 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "media-servers-test-ok",
+  "seed": "media-servers",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "message": "Connecte a Parity Emby",
+          "ok": true
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/media-servers/1/test"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "message": "Connecte a Parity Emby",
+          "ok": true
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/media-servers/2/test"
+    }
+  ]
+}

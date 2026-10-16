@@ -1,5 +1,5 @@
 // Emby stand-in for parity (no dependencies): `node emby-stub.mjs [port]`, default 4882.
-// The first path segment picks the mode: ok, 401, 500, slow, redirect, nousers, big.
+// The first path segment picks the mode: ok, 401, 500, slow (`/Users` waits 3 s), redirect, nousers, big.
 // `GET /__hits` lists the Library/Refresh calls, `DELETE /__hits` clears them.
 import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
@@ -59,6 +59,6 @@ createServer((req, res) => {
     const set = items[uid]?.[resume ? 'resume' : q.get('IsPlayed') ? 'played' : 'resumable'] ?? [];
     send(res, 200, { Items: set.slice(offset, offset + limit), TotalRecordCount: set.length });
   };
-  if (mode === 'slow') return setTimeout(respond, 20000);
+  if (mode === 'slow' && path === '/Users') return setTimeout(respond, 3000);
   respond();
 }).listen(port, '0.0.0.0', () => console.log(`emby stub on ${port}`));

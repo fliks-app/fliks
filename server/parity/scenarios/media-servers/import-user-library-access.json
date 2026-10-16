@@ -1,0 +1,89 @@
+{
+  "deviation": "C43",
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..connectionId"
+  ],
+  "name": "media-servers-import-user-library-access",
+  "seed": "media-servers",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "data": {
+              "type": "sse.connected"
+            },
+            "event": ""
+          },
+          {
+            "data": {
+              "serverId": 1,
+              "serverName": "Emby Main",
+              "type": "watch-history.import.started"
+            },
+            "event": ""
+          },
+          {
+            "data": {
+              "name": "ImportWatchHistory",
+              "type": "command.started"
+            },
+            "event": ""
+          },
+          {
+            "data": {
+              "imported": 6,
+              "serverId": 1,
+              "serverName": "Emby Main",
+              "skipped": 6,
+              "type": "watch-history.import.completed",
+              "users": 2,
+              "usersCreated": 1
+            },
+            "event": ""
+          },
+          {
+            "data": {
+              "name": "ImportWatchHistory",
+              "status": "completed",
+              "type": "command.completed"
+            },
+            "event": ""
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/system/events?device=ms",
+      "sse": {
+        "after": [
+          {
+            "as": "admin",
+            "method": "POST",
+            "path": "/api/media-servers/1/import-watch-history"
+          }
+        ],
+        "events": 5,
+        "timeoutMs": 15000
+      }
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/libraries/1/access"
+    }
+  ]
+}

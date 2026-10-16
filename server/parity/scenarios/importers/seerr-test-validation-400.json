@@ -1,0 +1,27 @@
+{
+  "deviation": null,
+  "name": "imports-seerr-test-validation-400",
+  "seed": "importers",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "apiKey": 3
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "url should not be empty",
+            "url must be a string",
+            "apiKey must be a string"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/imports/seerr/test"
+    }
+  ]
+}

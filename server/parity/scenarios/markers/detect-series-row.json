@@ -1,0 +1,45 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..startedOn",
+    "$..endedOn"
+  ],
+  "name": "markers-detect-series-row",
+  "seed": "markers",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "body": {
+              "mediaId": 18,
+              "seasonId": 1,
+              "seasonNumber": 1
+            },
+            "id": 1,
+            "name": "IntroDetection",
+            "status": "queued",
+            "trigger": "manual"
+          },
+          {
+            "body": {
+              "mediaId": 18,
+              "seasonId": 2,
+              "seasonNumber": 2
+            },
+            "id": 2,
+            "name": "IntroDetection",
+            "status": "queued",
+            "trigger": "manual"
+          }
+        ],
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/markers/series/18/detect-all"
+    }
+  ]
+}

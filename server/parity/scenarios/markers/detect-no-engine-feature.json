@@ -1,0 +1,44 @@
+{
+  "deviation": null,
+  "engine": "down",
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..startedOn",
+    "$..endedOn"
+  ],
+  "name": "markers-detect-no-engine-feature",
+  "seed": "markers",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "status": 0
+      },
+      "method": "GET",
+      "path": "/api/system/events",
+      "sse": {
+        "after": [
+          {
+            "as": "admin",
+            "expect": {
+              "status": 0
+            },
+            "method": "POST",
+            "path": "/api/markers/season/1/detect"
+          }
+        ],
+        "events": 4,
+        "timeoutMs": 4000
+      }
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "status": 0
+      },
+      "method": "GET",
+      "path": "/api/commands"
+    }
+  ]
+}

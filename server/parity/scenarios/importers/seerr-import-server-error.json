@@ -1,0 +1,87 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..searchVector",
+    "$..connectionId"
+  ],
+  "name": "imports-seerr-import-server-error",
+  "seed": "importers",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "value": "http://127.0.0.1:4880/seerr/500"
+      },
+      "expect": {
+        "body": {
+          "id": 8,
+          "key": "seerr_url",
+          "value": "http://127.0.0.1:4880/seerr/500"
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/settings/seerr_url"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "data": {
+              "type": "sse.connected"
+            },
+            "event": ""
+          },
+          {
+            "data": {
+              "type": "seerr.import.started"
+            },
+            "event": ""
+          },
+          {
+            "data": {
+              "name": "ImportSeerrRequests",
+              "type": "command.started"
+            },
+            "event": ""
+          },
+          {
+            "data": {
+              "error": "Request failed with status code 500",
+              "type": "seerr.import.failed"
+            },
+            "event": ""
+          },
+          {
+            "data": {
+              "name": "ImportSeerrRequests",
+              "status": "failed",
+              "type": "command.completed"
+            },
+            "event": ""
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/system/events",
+      "sse": {
+        "after": [
+          {
+            "as": "admin",
+            "expect": {
+              "status": 0
+            },
+            "method": "POST",
+            "path": "/api/imports/seerr/import-requests"
+          }
+        ],
+        "events": 5,
+        "timeoutMs": 8000
+      }
+    }
+  ]
+}

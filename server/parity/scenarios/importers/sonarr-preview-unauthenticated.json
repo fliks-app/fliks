@@ -1,0 +1,22 @@
+{
+  "deviation": null,
+  "name": "imports-sonarr-preview-unauthenticated",
+  "seed": "importers",
+  "steps": [
+    {
+      "as": "anon",
+      "body": {
+        "url": "http://127.0.0.1:4880/sonarr/ok"
+      },
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "POST",
+      "path": "/api/imports/sonarr/preview"
+    }
+  ]
+}

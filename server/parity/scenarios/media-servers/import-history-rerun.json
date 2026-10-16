@@ -1,0 +1,248 @@
+{
+  "deviation": "C44",
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..connectionId",
+    "$..addedAt",
+    "$..lastPlayedAt",
+    "$..playedAt"
+  ],
+  "name": "media-servers-import-history-rerun",
+  "seed": "media-servers",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "data": {
+              "type": "sse.connected"
+            },
+            "event": ""
+          },
+          {
+            "data": {
+              "serverId": 1,
+              "serverName": "Emby Main",
+              "type": "watch-history.import.started"
+            },
+            "event": ""
+          },
+          {
+            "data": {
+              "name": "ImportWatchHistory",
+              "type": "command.started"
+            },
+            "event": ""
+          },
+          {
+            "data": {
+              "imported": 6,
+              "serverId": 1,
+              "serverName": "Emby Main",
+              "skipped": 6,
+              "type": "watch-history.import.completed",
+              "users": 2,
+              "usersCreated": 1
+            },
+            "event": ""
+          },
+          {
+            "data": {
+              "name": "ImportWatchHistory",
+              "status": "completed",
+              "type": "command.completed"
+            },
+            "event": ""
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/system/events?device=ms",
+      "sse": {
+        "after": [
+          {
+            "as": "admin",
+            "method": "POST",
+            "path": "/api/media-servers/1/import-watch-history"
+          }
+        ],
+        "events": 5,
+        "timeoutMs": 15000
+      }
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "data": {
+              "type": "sse.connected"
+            },
+            "event": ""
+          },
+          {
+            "data": {
+              "serverId": 1,
+              "serverName": "Emby Main",
+              "type": "watch-history.import.started"
+            },
+            "event": ""
+          },
+          {
+            "data": {
+              "name": "ImportWatchHistory",
+              "type": "command.started"
+            },
+            "event": ""
+          },
+          {
+            "data": {
+              "imported": 6,
+              "serverId": 1,
+              "serverName": "Emby Main",
+              "skipped": 6,
+              "type": "watch-history.import.completed",
+              "users": 2,
+              "usersCreated": 0
+            },
+            "event": ""
+          },
+          {
+            "data": {
+              "name": "ImportWatchHistory",
+              "status": "completed",
+              "type": "command.completed"
+            },
+            "event": ""
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/system/events?device=ms",
+      "sse": {
+        "after": [
+          {
+            "as": "admin",
+            "method": "POST",
+            "path": "/api/media-servers/1/import-watch-history"
+          }
+        ],
+        "events": 5,
+        "timeoutMs": 15000
+      }
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "data": [
+            {
+              "completed": true,
+              "durationSeconds": 1800.0,
+              "episodeId": 1,
+              "episodeLabel": "S01E01 - Episode 1",
+              "fanartUrl": null,
+              "id": 3,
+              "mediaFileId": 18,
+              "mediaId": 18,
+              "mediaTitle": "Parity Series A",
+              "mediaType": "series",
+              "positionSeconds": 0.0,
+              "posterUrl": null,
+              "progressPercent": 0.0,
+              "stillUrl": null
+            },
+            {
+              "completed": false,
+              "durationSeconds": 3600.0,
+              "episodeId": null,
+              "episodeLabel": null,
+              "fanartUrl": null,
+              "id": 10,
+              "mediaFileId": null,
+              "mediaId": 4,
+              "mediaTitle": "Parity Movie 04",
+              "mediaType": "movie",
+              "positionSeconds": 300.0,
+              "posterUrl": null,
+              "progressPercent": 8.0,
+              "stillUrl": null
+            },
+            {
+              "completed": false,
+              "durationSeconds": 3600.0,
+              "episodeId": null,
+              "episodeLabel": null,
+              "fanartUrl": null,
+              "id": 1,
+              "mediaFileId": 1,
+              "mediaId": 1,
+              "mediaTitle": "Parity Movie 01",
+              "mediaType": "movie",
+              "positionSeconds": 600.0,
+              "posterUrl": null,
+              "progressPercent": 17.0,
+              "stillUrl": null
+            },
+            {
+              "completed": true,
+              "durationSeconds": 3600.0,
+              "episodeId": null,
+              "episodeLabel": null,
+              "fanartUrl": null,
+              "id": 2,
+              "mediaFileId": 2,
+              "mediaId": 2,
+              "mediaTitle": "Parity Movie 02",
+              "mediaType": "movie",
+              "positionSeconds": 3500.0,
+              "posterUrl": null,
+              "progressPercent": 97.0,
+              "stillUrl": null
+            },
+            {
+              "completed": true,
+              "durationSeconds": 1800.0,
+              "episodeId": null,
+              "episodeLabel": null,
+              "fanartUrl": null,
+              "id": 7,
+              "mediaFileId": null,
+              "mediaId": 3,
+              "mediaTitle": "Parity Movie 03",
+              "mediaType": "movie",
+              "positionSeconds": 0.0,
+              "posterUrl": null,
+              "progressPercent": 0.0,
+              "stillUrl": null
+            },
+            {
+              "completed": true,
+              "durationSeconds": 1800.0,
+              "episodeId": 2,
+              "episodeLabel": "S01E02 - Episode 2",
+              "fanartUrl": null,
+              "id": 9,
+              "mediaFileId": null,
+              "mediaId": 18,
+              "mediaTitle": "Parity Series A",
+              "mediaType": "series",
+              "positionSeconds": 0.0,
+              "posterUrl": null,
+              "progressPercent": 0.0,
+              "stillUrl": null
+            }
+          ],
+          "total": 6
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/playback/history"
+    }
+  ]
+}

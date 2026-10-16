@@ -1,0 +1,30 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "media-servers-update-missing-name-400",
+  "seed": "media-servers",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "type": "emby",
+        "url": "u"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "name must be a string"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PUT",
+      "path": "/api/media-servers/1"
+    }
+  ]
+}

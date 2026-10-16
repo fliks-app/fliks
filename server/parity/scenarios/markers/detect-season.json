@@ -1,0 +1,275 @@
+{
+  "deviation": "C39",
+  "ignore": [
+    "$..connectionId",
+    "$..createdAt",
+    "$..endedOn",
+    "$..startedOn",
+    "$..updatedAt"
+  ],
+  "name": "markers-detect-season",
+  "seed": "markers",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "data": {
+              "type": "sse.connected"
+            },
+            "event": ""
+          },
+          {
+            "data": {
+              "name": "IntroDetection",
+              "type": "command.started"
+            },
+            "event": ""
+          },
+          {
+            "data": {
+              "command": "IntroDetection",
+              "current": 0,
+              "message": "Fingerprinting 0/2",
+              "subject": {
+                "mediaId": 18,
+                "mediaType": "series",
+                "seasonNumber": 1,
+                "title": "Parity Series A"
+              },
+              "total": 2,
+              "type": "task.progress"
+            },
+            "event": ""
+          },
+          {
+            "data": {
+              "command": "IntroDetection",
+              "current": 1,
+              "message": "Fingerprinting 1/2",
+              "subject": {
+                "mediaId": 18,
+                "mediaType": "series",
+                "seasonNumber": 1,
+                "title": "Parity Series A"
+              },
+              "total": 2,
+              "type": "task.progress"
+            },
+            "event": ""
+          },
+          {
+            "data": {
+              "command": "IntroDetection",
+              "current": 2,
+              "message": "Fingerprinting 2/2",
+              "subject": {
+                "mediaId": 18,
+                "mediaType": "series",
+                "seasonNumber": 1,
+                "title": "Parity Series A"
+              },
+              "total": 2,
+              "type": "task.progress"
+            },
+            "event": ""
+          },
+          {
+            "data": {
+              "command": "IntroDetection",
+              "current": 3,
+              "message": "Detection complete: 2 intro(s)",
+              "subject": {
+                "mediaId": 18,
+                "mediaType": "series",
+                "seasonNumber": 1,
+                "title": "Parity Series A"
+              },
+              "total": 3,
+              "type": "task.progress"
+            },
+            "event": ""
+          },
+          {
+            "data": {
+              "command": "IntroDetection",
+              "current": 0,
+              "message": "Outro fingerprinting 0/2",
+              "subject": {
+                "mediaId": 18,
+                "mediaType": "series",
+                "seasonNumber": 1,
+                "title": "Parity Series A"
+              },
+              "total": 2,
+              "type": "task.progress"
+            },
+            "event": ""
+          },
+          {
+            "data": {
+              "command": "IntroDetection",
+              "current": 1,
+              "message": "Outro fingerprinting 1/2",
+              "subject": {
+                "mediaId": 18,
+                "mediaType": "series",
+                "seasonNumber": 1,
+                "title": "Parity Series A"
+              },
+              "total": 2,
+              "type": "task.progress"
+            },
+            "event": ""
+          },
+          {
+            "data": {
+              "command": "IntroDetection",
+              "current": 2,
+              "message": "Outro fingerprinting 2/2",
+              "subject": {
+                "mediaId": 18,
+                "mediaType": "series",
+                "seasonNumber": 1,
+                "title": "Parity Series A"
+              },
+              "total": 2,
+              "type": "task.progress"
+            },
+            "event": ""
+          },
+          {
+            "data": {
+              "name": "IntroDetection",
+              "status": "completed",
+              "type": "command.completed"
+            },
+            "event": ""
+          },
+          {
+            "data": {
+              "introsDetected": 4,
+              "mediaId": 18,
+              "seasonId": 1,
+              "seasonNumber": 1,
+              "type": "markers.season.completed"
+            },
+            "event": ""
+          },
+          {
+            "data": {
+              "type": "activity.changed"
+            },
+            "event": ""
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/system/events",
+      "sse": {
+        "after": [
+          {
+            "as": "admin",
+            "expect": {
+              "status": 0
+            },
+            "method": "POST",
+            "path": "/api/markers/season/1/detect"
+          }
+        ],
+        "events": 12,
+        "timeoutMs": 4000
+      }
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "confidence": 1,
+            "endSeconds": 9.5,
+            "episodeId": 1,
+            "id": 2,
+            "manual": true,
+            "startSeconds": 8.5,
+            "type": "outro"
+          },
+          {
+            "confidence": 0.9,
+            "endSeconds": 40,
+            "episodeId": 1,
+            "id": 1,
+            "manual": false,
+            "startSeconds": 10,
+            "type": "intro"
+          },
+          {
+            "confidence": 0.8,
+            "endSeconds": 2.86,
+            "episodeId": 2,
+            "id": 7,
+            "manual": false,
+            "startSeconds": 2.41,
+            "type": "outro"
+          },
+          {
+            "confidence": 1,
+            "endSeconds": 41,
+            "episodeId": 2,
+            "id": 3,
+            "manual": true,
+            "startSeconds": 12,
+            "type": "intro"
+          },
+          {
+            "confidence": 0.8,
+            "endSeconds": 2.86,
+            "episodeId": 13,
+            "id": 8,
+            "manual": false,
+            "startSeconds": 2.41,
+            "type": "outro"
+          },
+          {
+            "confidence": 0.9,
+            "endSeconds": 40,
+            "episodeId": 13,
+            "id": 6,
+            "manual": false,
+            "startSeconds": 10,
+            "type": "intro"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/markers/season/1"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "data": [
+            {
+              "body": {
+                "mediaId": 18,
+                "seasonId": 1,
+                "seasonNumber": 1
+              },
+              "id": 1,
+              "name": "IntroDetection",
+              "status": "completed",
+              "trigger": "manual"
+            }
+          ],
+          "total": 1
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/commands"
+    }
+  ]
+}

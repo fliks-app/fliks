@@ -1,0 +1,43 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..searchVector"
+  ],
+  "name": "imports-sonarr-import-empty",
+  "seed": "importers",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "apiKey": "parity-key",
+        "pathMappings": [
+          {
+            "localLibraryId": 2,
+            "remotePath": "/data/tv"
+          },
+          {
+            "ignore": true,
+            "remotePath": "/data/ignored"
+          }
+        ],
+        "targetLibraryId": 2,
+        "url": "http://127.0.0.1:4880/sonarr/empty"
+      },
+      "expect": {
+        "body": {
+          "errors": [
+            "No series found in Sonarr"
+          ],
+          "imported": 0,
+          "qualityProfilesCreated": [],
+          "rootFoldersCreated": []
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/imports/sonarr"
+    }
+  ]
+}

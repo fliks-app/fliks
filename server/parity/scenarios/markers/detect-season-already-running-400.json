@@ -1,0 +1,45 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..startedOn",
+    "$..endedOn"
+  ],
+  "name": "markers-detect-season-already-running-400",
+  "seed": "markers",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "body": {
+            "mediaId": 19,
+            "seasonId": 3,
+            "seasonNumber": 1
+          },
+          "id": 1,
+          "name": "IntroDetection",
+          "status": "queued",
+          "trigger": "manual"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/markers/season/3/detect"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Detection already running for season #3",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/markers/season/3/detect"
+    }
+  ]
+}

@@ -1,0 +1,79 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "media-servers-update-authz",
+  "seed": "media-servers",
+  "steps": [
+    {
+      "as": "anon",
+      "body": {
+        "apiKey": "k",
+        "enabled": true,
+        "events": [
+          "library.rescan"
+        ],
+        "name": "Emby New",
+        "type": "emby",
+        "url": "http://127.0.0.1:4882/ok"
+      },
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "PUT",
+      "path": "/api/media-servers/1"
+    },
+    {
+      "as": "readonly",
+      "body": {
+        "apiKey": "k",
+        "enabled": true,
+        "events": [
+          "library.rescan"
+        ],
+        "name": "Emby New",
+        "type": "emby",
+        "url": "http://127.0.0.1:4882/ok"
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "PUT",
+      "path": "/api/media-servers/1"
+    },
+    {
+      "as": "user",
+      "body": {
+        "apiKey": "k",
+        "enabled": true,
+        "events": [
+          "library.rescan"
+        ],
+        "name": "Emby New",
+        "type": "emby",
+        "url": "http://127.0.0.1:4882/ok"
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "PUT",
+      "path": "/api/media-servers/1"
+    }
+  ]
+}

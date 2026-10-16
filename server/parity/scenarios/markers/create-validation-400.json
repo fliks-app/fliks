@@ -1,0 +1,36 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..startedOn",
+    "$..endedOn"
+  ],
+  "name": "markers-create-validation-400",
+  "seed": "markers",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "episodeId": "x",
+        "startSeconds": -1,
+        "type": "intro"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "episodeId must be an integer number",
+            "startSeconds must not be less than 0",
+            "endSeconds must not be less than 0",
+            "endSeconds must be a number conforming to the specified constraints"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/markers"
+    }
+  ]
+}

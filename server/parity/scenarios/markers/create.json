@@ -1,0 +1,55 @@
+{
+  "deviation": "C39",
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..startedOn",
+    "$..endedOn"
+  ],
+  "name": "markers-create",
+  "seed": "markers",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "endSeconds": 30,
+        "episodeId": 13,
+        "startSeconds": 5,
+        "type": "intro"
+      },
+      "expect": {
+        "body": {
+          "confidence": 1,
+          "endSeconds": 30,
+          "episodeId": 13,
+          "id": 5,
+          "manual": true,
+          "startSeconds": 5,
+          "type": "intro"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/markers"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "confidence": 1,
+            "endSeconds": 30,
+            "episodeId": 13,
+            "id": 5,
+            "manual": true,
+            "startSeconds": 5,
+            "type": "intro"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/markers/episode/13"
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "deviation": null,
+  "name": "imports-seerr-import-forbidden",
+  "seed": "importers",
+  "steps": [
+    {
+      "as": "readonly",
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "POST",
+      "path": "/api/imports/seerr/import-requests"
+    }
+  ]
+}

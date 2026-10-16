@@ -1,0 +1,23 @@
+{
+  "deviation": null,
+  "name": "imports-radarr-test-bad-key",
+  "seed": "importers",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "apiKey": "wrong",
+        "url": "http://127.0.0.1:4880/radarr/ok"
+      },
+      "expect": {
+        "body": {
+          "message": "Radarr returned 401 Unauthorized",
+          "ok": false
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/imports/radarr/test"
+    }
+  ]
+}

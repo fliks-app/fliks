@@ -1,0 +1,62 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..startedOn",
+    "$..endedOn"
+  ],
+  "name": "markers-update",
+  "seed": "markers",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "endSeconds": 44,
+        "startSeconds": 12
+      },
+      "expect": {
+        "body": {
+          "confidence": 1,
+          "endSeconds": 44,
+          "episodeId": 1,
+          "id": 1,
+          "manual": true,
+          "startSeconds": 12,
+          "type": "intro"
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/markers/1"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "confidence": 1,
+            "endSeconds": 9.5,
+            "episodeId": 1,
+            "id": 2,
+            "manual": true,
+            "startSeconds": 8.5,
+            "type": "outro"
+          },
+          {
+            "confidence": 1,
+            "endSeconds": 44,
+            "episodeId": 1,
+            "id": 1,
+            "manual": true,
+            "startSeconds": 12,
+            "type": "intro"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/markers/episode/1"
+    }
+  ]
+}

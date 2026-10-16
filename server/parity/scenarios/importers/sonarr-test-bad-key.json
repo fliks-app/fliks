@@ -1,0 +1,23 @@
+{
+  "deviation": null,
+  "name": "imports-sonarr-test-bad-key",
+  "seed": "importers",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "apiKey": "wrong",
+        "url": "http://127.0.0.1:4880/sonarr/ok"
+      },
+      "expect": {
+        "body": {
+          "message": "Sonarr returned 401 Unauthorized",
+          "ok": false
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/imports/sonarr/test"
+    }
+  ]
+}

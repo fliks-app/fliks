@@ -1,0 +1,24 @@
+{
+  "deviation": "C38",
+  "name": "imports-radarr-preview-not-array",
+  "seed": "importers",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "apiKey": "parity-key",
+        "url": "http://127.0.0.1:4880/radarr/not-array"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Cannot connect to Radarr: rootfolder response is not an array",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/imports/radarr/preview"
+    }
+  ]
+}
