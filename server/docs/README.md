@@ -39,7 +39,7 @@ Decided behaviour for the Rust port (security fixes F, correctness fixes C; D3).
 | F19 | a library `path` may be relative and `mkdir -p` ran before the conflict and in-use checks, leaving directories behind on a 400 | `path` must be absolute (400); conflict and in-use checks run first, `mkdir -p` is the last step before the `UPDATE` | none |
 | F20 | `GET /api/libraries/:id` and `:id/access` ignored the library ACL; `PUT :id/access` on an unknown library answered 200 or 500 | the ACL applies to both reads; unknown library → 404 `Library #<id> not found` | none |
 | F21 | an image `variant` such as `..%2F..%2Fx` reached `path.join`: any readable `*.jpg` fetched anonymously | `variant` must match `^(poster\|fanart\|fanart-[0-9]+\|logo)$` for media and request art, else 404 | none |
-| F22 | absolute server paths (`path`, `disk`) were serialised for every reader of a library | only for callers who can manage libraries (`settings.access`); omitted otherwise | none |
+| F22 | absolute server paths (`Media.path`, `library.path`, `disk`) were serialised for every reader (`media.read`, library readers) | present only for callers who can manage libraries (`settings.access` or `manage:all`); omitted otherwise on `GET /api/media`, `recently-added`, `GET :id`, `/api/libraries*` and `/api/roles` | client readers use `m.path ?? null` (see `client-audit.md`) |
 | F31 | remote state/stopped fan-out reached grantees of a device id under any owner (anyone could mint a code for another user's deviceId and receive its playback state) | fan-out limited to grants whose owner is the device's owner | none |
 
 Not done (user decision 2026-10-15): login rate limiting/lockout.
@@ -60,7 +60,7 @@ A 500 or a half-written request is never part of the frozen contract:
 
 | # | Today (Nest) | Rust behaviour |
 |---|---|---|
-| C1 | 500 on unvalidated input: `GET /api/remote/commands` without `targetId`, fractional `page`/`limit` on history, non-numeric `startAt` on playback-info, `null` on non-nullable user fields; `toggle-watched` and season `toggle-watched` on an unknown media | 400 with the standard validation body; unknown media → 404 `not_found` |
+| C1 | 500 on unvalidated input: non-integer or out-of-int4 media filters, `page < 1` with `limit > 0`, negative `recently-added` `limit`, calendar dates Postgres rejects, a `sortBy` naming an `Object.prototype` member (falls back to `title`), `streams` on a library without path (404); `GET /api/remote/commands` without `targetId`, fractional `page`/`limit` on history, non-numeric `startAt` on playback-info, `null` on non-nullable user fields; `toggle-watched` and season `toggle-watched` on an unknown media | 400 with the standard validation body; unknown media → 404 `not_found` |
 | C2 | writes before failing: bulk `PUT /api/settings` stops at the first protected key; non-manager `PUT /users/:id` with `libraryIds` saves the rest then 403s | validate and authorise the whole request first, write in one transaction |
 | C3 | refresh rotation and pairing claim are not atomic | one transaction with `SELECT … FOR UPDATE` |
 | C4 | recommendations ties follow Postgres scan order | score desc, then media id asc |
@@ -68,6 +68,9 @@ A 500 or a half-written request is never part of the frozen contract:
 | C6 | playback-info 500s after creating the session when the markers query fails; `toggle-season-watched` does not check the season belongs to the media | markers failure is logged and playback proceeds without markers; season not under the media → 404 |
 | C7 | static client and `/cast`: weak ETag from the mtime in ms, `; charset=UTF-8` on text types, `Vary: Origin` only, bare OPTIONS → 204; a missing `/cast/*` file answers 404 with an ENOENT message leaking the absolute path | ETag from mtime in seconds, tower-http `Vary`, bare OPTIONS → 404; missing `/cast/*` → 404 `Cannot GET <url>` (no path leak). Browser-cache only: one re-download per file after the upgrade |
 | C8 | raw-SQL / explicit updates did not touch "updatedAt" (series watched toggles, search vector refresh, leave-social playlist privacy, live TV group stamp/renumber) | a BEFORE UPDATE trigger sets "updatedAt" = now() whenever an UPDATE leaves it unchanged (migration `1786500000000_updated_at_trigger.sql`); playlists made private on leave-social move up in the owner's home row |
+| C10 | `GET /api/media?q=` ordered by the requested sort (default title) because `orderBy` replaced the relevance order | `q` without `sortBy` orders by FTS rank desc (NULL rank last), then title, then id; the search page now omits `sortBy` unless the user chose one |
+| C11 | `cutoffUnmet=true` removed items from the already paginated page (short pages, `total` unchanged) | filtered in SQL before pagination: `page`, `limit` and `total` count only the media that pass |
+| C12 | equal sort keys left list order to the database (list, recently-added, collections, similar, collection, cast, crew, calendar, files, seasons, episodes) | every list ends with `id ASC` |
 | C18 | `POST /api/system/streams/:sid/command` with an `action` outside pause/play/stop/message was relayed to the client as is | 400 |
 | C19 | live TV rows of `/api/system/streams` reported the source's name as `quality` (`"Live"` only without one) | they report `"Live"` |
 | C9 | image ids coerced by unary `+` (`007`, `0x7`, `7.0`, ` 7 ` served id 7) | canonical integers only, else 404 |
