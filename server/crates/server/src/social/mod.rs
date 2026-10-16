@@ -110,20 +110,24 @@ pub async fn follows(db: &PgPool, from: i32, to: i32) -> sqlx::Result<bool> {
     .await
 }
 
-/// The media title, or 404 `<what> #<id> not found` for the first of media, season, episode that does not exist (C1).
+/// The media title, or 404 `<what> #<id> not found` for the first of media, season, episode that is
+/// missing, outside `accessible` or not under the media (C1, F32).
 pub async fn assert_targets(
     db: &PgPool,
+    accessible: &[i32],
     media: i32,
     season: Option<i32>,
     episode: Option<i32>,
 ) -> Result<String, AppError> {
     let r = sqlx::query!(
-        r#"SELECT (SELECT title FROM media WHERE id = $1) AS title,
-                  ($2::int IS NULL OR EXISTS (SELECT 1 FROM seasons WHERE id = $2)) AS "season!",
-                  ($3::int IS NULL OR EXISTS (SELECT 1 FROM episodes WHERE id = $3)) AS "episode!""#,
+        r#"SELECT (SELECT title FROM media WHERE id = $1 AND "libraryId" = ANY($4)) AS title,
+                  ($2::int IS NULL OR EXISTS (SELECT 1 FROM seasons WHERE id = $2 AND "mediaId" = $1)) AS "season!",
+                  ($3::int IS NULL OR EXISTS (SELECT 1 FROM episodes e JOIN seasons s ON s.id = e."seasonId"
+                                              WHERE e.id = $3 AND s."mediaId" = $1)) AS "episode!""#,
         media,
         season,
-        episode
+        episode,
+        accessible
     )
     .fetch_one(db)
     .await?;

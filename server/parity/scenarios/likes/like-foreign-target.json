@@ -1,0 +1,104 @@
+{
+  "deviation": "F32",
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastLogin",
+    "$..lastActiveAt",
+    "$..lastPlayedAt",
+    "$..playedAt"
+  ],
+  "name": "likes-like-foreign-target",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "mediaId": 18,
+        "seasonId": 3
+      },
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Season #3 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "POST",
+      "path": "/api/likes"
+    },
+    {
+      "as": "user",
+      "body": {
+        "episodeId": 5,
+        "mediaId": 18
+      },
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Episode #5 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "POST",
+      "path": "/api/likes"
+    },
+    {
+      "as": "user",
+      "body": {
+        "mediaId": 1,
+        "seasonId": 1
+      },
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Season #1 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "POST",
+      "path": "/api/likes"
+    },
+    {
+      "as": "readonly",
+      "body": {
+        "mediaId": 18
+      },
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Media #18 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "POST",
+      "path": "/api/likes"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "episodeIds": [],
+          "media": true,
+          "seasonIds": []
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/likes/state/18"
+    },
+    {
+      "as": "readonly",
+      "expect": {
+        "body": [],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/likes"
+    }
+  ]
+}

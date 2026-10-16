@@ -216,7 +216,8 @@ pub async fn like_add(
     ValidJson(dto): ValidJson<TargetDto>,
 ) -> Result<StatusCode, AppError> {
     let (season, episode) = dto.ids();
-    assert_targets(&st.db, dto.media_id, season, episode).await?;
+    let accessible = accessible_library_ids(&st.db, &a).await?;
+    assert_targets(&st.db, &accessible, dto.media_id, season, episode).await?;
     sqlx::query!(
         r#"INSERT INTO likes ("userId", "mediaId", "seasonId", "episodeId")
            VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING"#,

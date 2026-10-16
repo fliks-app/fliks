@@ -178,7 +178,8 @@ pub async fn recommend(
         dto.season_id.filter(|i| *i != 0),
         dto.episode_id.filter(|i| *i != 0),
     );
-    let title = assert_targets(&st.db, dto.media_id, season, episode).await?;
+    let accessible = accessible_library_ids(&st.db, &a).await?;
+    let title = assert_targets(&st.db, &accessible, dto.media_id, season, episode).await?;
     let message = dto
         .message
         .as_deref()

@@ -13,17 +13,6 @@
   "steps": [
     {
       "as": "readonly",
-      "body": {
-        "mediaId": 18
-      },
-      "expect": {
-        "status": 201
-      },
-      "method": "POST",
-      "path": "/api/likes"
-    },
-    {
-      "as": "readonly",
       "expect": {
         "body": [],
         "status": 200

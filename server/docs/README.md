@@ -49,6 +49,7 @@ Decided behaviour for the Rust port (security fixes F, correctness fixes C; D3).
 | F28 | `settings.webhookUrl` of Discord/Slack notification connections returned in clear (the URL embeds its credential) | secret field like `token`: omitted from responses, listed under `secretsSet`; a blank or absent value on write keeps the stored one, `null` is a 400 (the URL is required, so it is replaced, never erased); a type switch drops it | notification editor shows the masked "set" state |
 | F29 | gotify token (query string) and webhook URL could reach sender errors, logs and the `test` response | sender errors never contain the request URL | none |
 | F30 | Discord payloads allowed `@everyone`/role/user mentions from request titles | Discord body adds `allowed_mentions: {parse: []}` | none |
+| F32 | `POST /api/likes` and `POST /api/social/recommend` accepted a season/episode of another media and media outside the caller's libraries (201) | 404 `Media\|Season\|Episode #<id> not found`, as for unknown ids (user decision 2026-10-16) | none |
 
 Not done (user decision 2026-10-15): login rate limiting/lockout.
 
