@@ -2,6 +2,7 @@ import { InProcessPluginHostClient } from './in-process-plugin-host-client';
 import type { FliksHostImpl } from './fliks-host.service';
 import type { PluginHostApi } from '../../../common/plugin-contract';
 import { EventsService } from '../../scheduler/events.service';
+import { loopbackEvents } from '../../scheduler/events.test-helpers';
 
 /** The 15 dotted method names `host-methods.ts` declares. */
 const PLUGIN_METHOD_NAMES: (keyof PluginHostApi)[] = [
@@ -64,7 +65,7 @@ describe('InProcessPluginHostClient', () => {
 
   describe('onEvent — the in-process push channel', () => {
     it('delivers a domain event to every subscriber, and isolates a throwing handler from the emitter and from its sibling subscribers', () => {
-      const events = new EventsService();
+      const events = loopbackEvents();
       const client = new InProcessPluginHostClient(fakeHost(), events);
       const seen: string[] = [];
 
@@ -82,7 +83,7 @@ describe('InProcessPluginHostClient', () => {
     });
 
     it('isolates a rejected async handler the same way', async () => {
-      const events = new EventsService();
+      const events = loopbackEvents();
       const client = new InProcessPluginHostClient(fakeHost(), events);
       const seen: string[] = [];
 
@@ -101,7 +102,7 @@ describe('InProcessPluginHostClient', () => {
     });
 
     it('stops delivering once unsubscribed', () => {
-      const events = new EventsService();
+      const events = loopbackEvents();
       const client = new InProcessPluginHostClient(fakeHost(), events);
       const seen: string[] = [];
 
