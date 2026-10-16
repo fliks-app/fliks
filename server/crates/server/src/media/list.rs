@@ -6,7 +6,7 @@ use super::{
 use chrono::{NaiveDate, Utc};
 use fliks_domain::{
     media::search::prefix_tsquery,
-    release::quality::{APP_QUALITIES, rank_from_quality_string},
+    release::parsing::quality::{APP_QUALITIES, rank_from_quality_string},
 };
 use serde_json::{Value, json};
 use sqlx::{PgPool, Postgres, QueryBuilder};

@@ -1,5 +1,7 @@
 //! `GET /api/media/:id/tracking` (`media-query.md` rules 39-46).
-use fliks_domain::release::quality::{AppQuality, app_quality_by_id, parse_release_quality};
+use fliks_domain::release::parsing::quality::{
+    AppQuality, app_quality_by_id, parse_release_quality,
+};
 use serde_json::{Map, Value, json};
 use sqlx::PgPool;
 use std::collections::HashMap;

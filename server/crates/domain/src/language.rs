@@ -1,4 +1,5 @@
-//! Language tag normalisation; must stay identical to the client's `normalizeLangCode`.
+//! Language tag normalisation (identical to the client's `normalizeLangCode`) and `APP_LANGUAGES`.
+use serde::Serialize;
 
 /// Codes folded after the ISO 639-2 to 639-1 step: deprecated tags, macro-language forms, Norwegian.
 const FOLDED: [(&str, &str); 17] = [
@@ -248,3 +249,76 @@ const ISO_639_2_TO_1: &[(&str, &str)] = &[
     ("zho", "zh"),
     ("zul", "zu"),
 ];
+
+/// A release/profile language (`GET /api/profiles/language-definitions` row).
+#[derive(Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppLanguage {
+    pub id: u32,
+    pub name: &'static str,
+    pub iso_code: &'static str,
+    #[serde(rename = "iso639_2", skip_serializing_if = "Option::is_none")]
+    pub iso639_2: Option<&'static [&'static str]>,
+}
+
+const fn lang(
+    id: u32,
+    name: &'static str,
+    iso_code: &'static str,
+    iso639_2: Option<&'static [&'static str]>,
+) -> AppLanguage {
+    AppLanguage {
+        id,
+        name,
+        iso_code,
+        iso639_2,
+    }
+}
+
+pub static APP_LANGUAGES: [AppLanguage; 38] = [
+    lang(1, "English", "en", Some(&["eng"])),
+    lang(2, "French", "fr", Some(&["fre", "fra"])),
+    lang(3, "German", "de", Some(&["ger", "deu"])),
+    lang(4, "Spanish", "es", Some(&["spa"])),
+    lang(5, "Italian", "it", Some(&["ita"])),
+    lang(6, "Portuguese", "pt", Some(&["por"])),
+    lang(7, "Japanese", "ja", Some(&["jpn"])),
+    lang(8, "Korean", "ko", Some(&["kor"])),
+    lang(9, "Chinese", "zh", Some(&["zho", "chi"])),
+    lang(10, "Russian", "ru", Some(&["rus"])),
+    lang(11, "Arabic", "ar", Some(&["ara"])),
+    lang(12, "Dutch", "nl", Some(&["nld", "dut"])),
+    lang(13, "Polish", "pl", Some(&["pol"])),
+    lang(14, "Turkish", "tr", Some(&["tur"])),
+    lang(15, "Swedish", "sv", Some(&["swe"])),
+    lang(16, "Danish", "da", Some(&["dan"])),
+    lang(17, "Norwegian", "no", Some(&["nor"])),
+    lang(18, "Finnish", "fi", Some(&["fin"])),
+    lang(19, "Hindi", "hi", Some(&["hin"])),
+    lang(20, "Czech", "cs", Some(&["ces", "cze"])),
+    lang(21, "Romanian", "ro", Some(&["ron", "rum"])),
+    lang(22, "Hungarian", "hu", Some(&["hun"])),
+    lang(23, "Thai", "th", Some(&["tha"])),
+    lang(24, "Vietnamese", "vi", Some(&["vie"])),
+    lang(25, "Hebrew", "he", Some(&["heb"])),
+    lang(26, "Greek", "el", Some(&["ell", "gre"])),
+    lang(27, "Ukrainian", "uk", Some(&["ukr"])),
+    lang(28, "Bulgarian", "bg", Some(&["bul"])),
+    lang(29, "Croatian", "hr", Some(&["hrv"])),
+    lang(30, "Serbian", "sr", Some(&["srp"])),
+    lang(31, "Slovenian", "sl", Some(&["slv"])),
+    lang(32, "Slovak", "sk", Some(&["slk", "slo"])),
+    lang(33, "Catalan", "ca", Some(&["cat"])),
+    lang(34, "Basque", "eu", Some(&["eus", "baq"])),
+    lang(35, "Galician", "gl", Some(&["glg"])),
+    lang(36, "Indonesian", "id", Some(&["ind"])),
+    lang(37, "Malay", "ms", Some(&["msa", "may"])),
+    lang(99, "Unknown", "xx", None),
+];
+
+pub static ENGLISH_LANGUAGE: &AppLanguage = &APP_LANGUAGES[0];
+pub static UNKNOWN_LANGUAGE: &AppLanguage = &APP_LANGUAGES[37];
+
+pub fn app_language_by_iso(iso_code: &str) -> Option<&'static AppLanguage> {
+    APP_LANGUAGES.iter().find(|l| l.iso_code == iso_code)
+}
