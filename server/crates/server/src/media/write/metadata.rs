@@ -366,12 +366,17 @@ pub async fn identify(
     {
         return Err(already_running());
     }
-    let applied = apply_identity(&st, &media, tmdb, tvdb, imdb, provider).await;
-    if let Err(e) = applied {
-        st.hub.activity().remove(&key);
-        return Err(e);
-    }
-    let body = entity_or_404(&st, &a, id).await?;
+    let applied = async {
+        apply_identity(&st, &media, tmdb, tvdb, imdb, provider).await?;
+        entity_or_404(&st, &a, id).await
+    };
+    let body = match applied.await {
+        Ok(b) => b,
+        Err(e) => {
+            st.hub.activity().remove(&key);
+            return Err(e);
+        }
+    };
     st.hub.emit(SseEvent::MetadataStarted {
         media_id: i64::from(id),
         title: media.title.clone(),
