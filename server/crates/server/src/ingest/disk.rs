@@ -470,8 +470,18 @@ fn parse_relink(v: Value, prefix: &str) -> Result<RelinkDto, AppError> {
                     &["filePath", "seasonNumber", "episodeNumber", "episodeEnd"],
                     &format!("{prefix}files.{i}."),
                 )?;
+                let path = crate::libraries::sanitize_path(&fb.required(
+                    fb.str("filePath")?,
+                    "filePath",
+                    "must be a string",
+                )?);
+                if !path.starts_with('/') {
+                    return Err(AppError::bad_request(vec![format!(
+                        "{prefix}files.{i}.filePath must be an absolute path"
+                    )]));
+                }
                 Ok(RelinkFile {
-                    path: fb.required(fb.str("filePath")?, "filePath", "must be a string")?,
+                    path,
                     season: non_negative(&fb, "seasonNumber")?,
                     episode: non_negative(&fb, "episodeNumber")?,
                     end: non_negative(&fb, "episodeEnd")?,
@@ -1273,4 +1283,21 @@ async fn find_or_create_unmatched(
         .await?
         .ok_or_else(|| AppError::bad_request("Media not found after import"))?;
     Ok((media, created, key))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_relink;
+    use serde_json::json;
+
+    fn body(path: &str) -> serde_json::Value {
+        json!({"libraryId": 1, "type": "movie", "folderName": "A", "files": [{"filePath": path}]})
+    }
+
+    #[test]
+    fn relink_file_path_is_sanitized_and_absolute() {
+        assert!(parse_relink(body("rel/a.mkv"), "").is_err());
+        let d = parse_relink(body(" \u{200B}/m/a.mkv "), "").unwrap();
+        assert_eq!(d.files[0].path, "/m/a.mkv");
+    }
 }
