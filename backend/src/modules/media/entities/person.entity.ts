@@ -1,7 +1,8 @@
-import { Entity, Column, Unique } from 'typeorm';
+import { Entity, Column, Index, Unique } from 'typeorm';
 import { BaseEntity } from '../../../common/entities/base.entity';
 
 @Entity('persons')
+@Index('idx_persons_search_vector', { synchronize: false })
 @Unique(['provider', 'tmdbId'])
 export class Person extends BaseEntity {
   /** Provider that issued {@link tmdbId}: TVDB credits store a TVDB people id
