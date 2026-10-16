@@ -206,18 +206,25 @@ async fn enrich(st: &AppState, id: i32) -> Result<(), String> {
     let Some((path, info)) = file_path(st, id).await.map_err(|e| e.to_string())? else {
         return Err("no contained path".into());
     };
-    let Some(mut info) = info else {
-        return Ok(());
-    };
-    let probed = super::probe(st, &path, !info.video.is_empty()).await?;
-    if let (Some(v), Some(p)) = (info.video.first_mut(), probed.info.video.first()) {
-        v.crop = p.crop.clone();
-    }
+    let probed = super::probe(
+        st,
+        &path,
+        info.as_ref().is_some_and(|i| !i.video.is_empty()),
+    )
+    .await?;
+    let info = info.map(|mut i| {
+        if let (Some(v), Some(p)) = (i.video.first_mut(), probed.info.video.first()) {
+            v.crop = p.crop.clone();
+        }
+        i
+    });
     let (hash, size) = probed.moviehash.unzip();
     sqlx::query!(
-        r#"UPDATE media_files SET "streamInfo" = $2, "osdbHash" = $3, "osdbBytesize" = $4 WHERE id = $1"#,
+        r#"UPDATE media_files SET "streamInfo" = COALESCE($2, "streamInfo"), "osdbHash" = $3, "osdbBytesize" = $4 WHERE id = $1"#,
         id,
-        serde_json::to_value(&info).map_err(|e| e.to_string())?,
+        info.map(|i| serde_json::to_value(&i))
+            .transpose()
+            .map_err(|e| e.to_string())?,
         hash,
         size
     )
