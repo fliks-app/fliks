@@ -138,61 +138,6 @@ describe('PlaybackController.updateState: remote.state fan-out', () => {
   });
 });
 
-describe('PlaybackController.postQoeEvents', () => {
-  function build(live: unknown, enabled = true, tracked: unknown = null) {
-    const controller = Object.create(PlaybackController.prototype) as PlaybackController;
-    const recordEvents = jest.fn();
-    Object.assign(controller, {
-      liveSessions: { peek: () => live },
-      qoe: { enabled, recordEvents, trackedSession: () => tracked },
-    });
-    return { controller, recordEvents };
-  }
-  const body = { events: [{ type: 'stall', at: 1 }, { type: 'nope', at: 1 }] };
-
-  it('records validated events for the owner', () => {
-    const { controller, recordEvents } = build({ userId: 7, attributedUserId: null });
-    controller.postQoeEvents(req, 's', body);
-    expect(recordEvents).toHaveBeenCalledWith(expect.anything(), [
-      { type: 'stall', at: expect.any(Number), position: null },
-    ], null);
-  });
-
-  it('passes a valid playbackId and drops a malformed one', () => {
-    const { controller, recordEvents } = build({ userId: 7, attributedUserId: null });
-    controller.postQoeEvents(req, 's', { ...body, playbackId: 'abc-123' });
-    expect(recordEvents.mock.calls[0][2]).toBe('abc-123');
-    controller.postQoeEvents(req, 's', { ...body, playbackId: 'x'.repeat(65) });
-    expect(recordEvents.mock.calls[1][2]).toBeNull();
-  });
-
-  it('accepts the attributed user, rejects anyone else', () => {
-    expect(() =>
-      build({ userId: 9, attributedUserId: 7 }).controller.postQoeEvents(req, 's', body),
-    ).not.toThrow();
-    expect(() =>
-      build({ userId: 9, attributedUserId: 8 }).controller.postQoeEvents(req, 's', body),
-    ).toThrow('Not your session');
-  });
-
-  it('accepts events for an ended session whose tracker is kept, for its owner only', () => {
-    const ended = { userId: 7, attributedUserId: null };
-    const ok = build(null, true, ended);
-    ok.controller.postQoeEvents(req, 's', body);
-    expect(ok.recordEvents).toHaveBeenCalledWith(ended, expect.any(Array), null);
-    expect(() =>
-      build(null, true, { userId: 9, attributedUserId: null }).controller.postQoeEvents(req, 's', body),
-    ).toThrow('Not your session');
-  });
-
-  it('ignores an unknown session and a disabled feature', () => {
-    expect(build(null).recordEvents).not.toHaveBeenCalled();
-    const off = build({ userId: 7 }, false);
-    off.controller.postQoeEvents(req, 's', body);
-    expect(off.recordEvents).not.toHaveBeenCalled();
-  });
-});
-
 describe('PlaybackController.updateState: qoe bitrate fallback', () => {
   const sample = { engine: 'webos', variantBitrate: null };
   async function beat(session: Record<string, unknown>, qoe: object = sample) {

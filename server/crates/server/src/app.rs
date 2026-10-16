@@ -1,8 +1,17 @@
 use crate::http::{layers, static_files};
-use crate::{auth, events, fs, playback, remote, roles, settings, state::AppState, system, users};
-use axum::{Router, extract::Request, response::Response, routing::any, routing::any_service};
+use crate::{
+    auth, events, fs, playback, qoe, remote, roles, settings, state::AppState, system, users,
+};
+use axum::{
+    Router,
+    extract::{Request, State},
+    middleware::{Next, from_fn_with_state},
+    response::{IntoResponse, Response},
+    routing::{any, any_service},
+};
 use fliks_engine::gateway::{self, RouteTable, Upstream};
 use std::path::PathBuf;
+use tower::ServiceExt;
 use utoipa::OpenApi;
 
 /// Nest's default JSON limit (`bootstrap.md` rule 10).
@@ -40,6 +49,10 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         fs::browse,
         events::events,
         events::activity,
+        qoe::sessions,
+        qoe::session,
+        qoe::summary,
+        qoe::events,
         users::list,
         users::create,
         users::get_one,
@@ -99,13 +112,18 @@ pub fn router(
         .route("/internal/", any(internal_404))
         .route("/internal/{*rest}", any(internal_404))
         .fallback_service(static_files::router(client_dir, cast_dir));
+    // Preflights of owned paths stay with the Rust CORS layer, so they answer while Nest is down.
+    let cors = layers::apply(Router::new(), cors_origin.clone(), BODY_LIMIT_BYTES);
+    let unowned = forwarder
+        .clone()
+        .layer(from_fn_with_state(cors, preflight_here));
     // Merged after the layers so Nest answers the methods Rust does not own, unlayered instead of a 405.
     let local = layers::apply(local, cors_origin, BODY_LIMIT_BYTES);
     let local = ApiDoc::openapi()
         .paths
         .paths
         .keys()
-        .fold(local, |r, p| r.route(p, any_service(forwarder.clone())));
+        .fold(local, |r, p| r.route(p, any_service(unowned.clone())));
     ["/api", "/api/", "/api/{*rest}"]
         .into_iter()
         .fold(local, |r, p| r.route(p, any_service(forwarder.clone())))
@@ -123,6 +141,14 @@ fn api() -> Router<AppState> {
         .merge(events::router())
         .merge(remote::router())
         .merge(playback::router())
+        .merge(qoe::router())
+}
+
+async fn preflight_here(State(cors): State<Router>, req: Request, next: Next) -> Response {
+    if layers::is_preflight(&req) {
+        return cors.oneshot(req).await.into_response();
+    }
+    next.run(req).await
 }
 
 async fn internal_404(req: Request) -> Response {

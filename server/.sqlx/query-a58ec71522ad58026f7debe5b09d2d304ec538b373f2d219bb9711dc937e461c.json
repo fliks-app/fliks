@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO playback_qoe_events (\"sessionId\", \"at\", \"type\", \"data\")\n           SELECT * FROM UNNEST($1::varchar[], $2::timestamptz[], $3::varchar[], $4::jsonb[])",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "VarcharArray",
+        "TimestamptzArray",
+        "VarcharArray",
+        "JsonbArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a58ec71522ad58026f7debe5b09d2d304ec538b373f2d219bb9711dc937e461c"
+}

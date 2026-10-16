@@ -13,6 +13,7 @@ pub mod nest;
 pub mod paths;
 pub mod playback;
 pub mod presence;
+pub mod qoe;
 pub mod remote;
 pub mod roles;
 pub mod settings;
@@ -56,11 +57,17 @@ pub async fn serve(cfg: Config) -> Result<(), BoxError> {
     let upstream = Upstream::parse(&nest::url(&cfg))?;
     let db = pool.clone();
     let state = AppState::new(pool, cfg, &secret);
-    presence::spawn(state.presence.clone(), state.engine.clone());
+    presence::spawn(
+        state.presence.clone(),
+        state.engine.clone(),
+        state.qoe.clone(),
+    );
+    qoe::spawn(&state.qoe);
     state.engine.start(state.db.clone(), state.cfg.port).await;
     remote::init(&state);
     let cfg = state.cfg.clone();
     let hub = state.hub.clone();
+    let qoe = state.qoe.clone();
     let app = app::router(
         state,
         upstream,
@@ -82,6 +89,7 @@ pub async fn serve(cfg: Config) -> Result<(), BoxError> {
         hub.shutdown();
     })
     .await;
+    qoe.flush_all().await;
     if let Some(nest) = nest {
         let _ = nest.await;
     }

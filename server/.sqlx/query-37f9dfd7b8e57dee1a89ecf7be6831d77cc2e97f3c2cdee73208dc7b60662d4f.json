@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE playback_qoe_sessions SET \"playbackVerdict\" = $1, \"playbackConfidence\" = $2\n           WHERE \"userId\" = $3 AND \"playbackId\" = $4 AND \"sessionId\" <> $5\n             AND (\"playbackVerdict\" IS DISTINCT FROM $1 OR \"playbackConfidence\" IS DISTINCT FROM $2)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Int4",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "37f9dfd7b8e57dee1a89ecf7be6831d77cc2e97f3c2cdee73208dc7b60662d4f"
+}

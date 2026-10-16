@@ -1,7 +1,7 @@
 //! Shared handler state (`State<AppState>`); no DI container, plain fields.
 use crate::{
     auth_token::Jwt, bridge::Bridge, config::Config, engine::Engine, events::Hub, nest,
-    presence::Presence,
+    presence::Presence, qoe::Qoe,
 };
 use sqlx::PgPool;
 use std::sync::Arc;
@@ -15,11 +15,17 @@ pub struct AppState {
     pub bridge: Bridge,
     pub hub: Hub,
     pub presence: Presence,
+    pub qoe: Qoe,
 }
 
 impl AppState {
     /// `jwt_secret` is the resolved secret (`jwt_secret::resolve`); TTLs and the bridge token come from `cfg`.
     pub fn new(db: PgPool, cfg: Config, jwt_secret: &str) -> Self {
+        let presence = Presence::default();
+        let qoe = Qoe::new(db.clone());
+        // Active transcodes (the engine's job set) are not counted on the host yet.
+        let sessions = presence.clone();
+        qoe.set_load_probe(move || (0, u32::try_from(sessions.size()).unwrap_or(u32::MAX)));
         Self {
             jwt: Arc::new(Jwt::new(
                 jwt_secret,
@@ -29,7 +35,8 @@ impl AppState {
             engine: Engine::new(&cfg.engine_url, &cfg.engine_token),
             bridge: Bridge::new(&nest::url(&cfg), &cfg.bridge_token),
             hub: Hub::new(),
-            presence: Presence::default(),
+            presence,
+            qoe,
             cfg: Arc::new(cfg),
             db,
         }

@@ -81,7 +81,11 @@ async fn notify(st: &AppState, keys: &[String]) {
             tracing::warn!(error = %e, ?keys, "settings-changed bridge failed: nest caches are stale");
         }
     };
-    tokio::join!(nest, st.engine.settings_changed(keys));
+    tokio::join!(
+        nest,
+        st.engine.settings_changed(keys),
+        st.qoe.settings_changed(keys)
+    );
 }
 
 /// Values the engine would reject with its whole config (plan §15.1).

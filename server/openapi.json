@@ -423,6 +423,22 @@
         }
       }
     },
+    "/api/playback/sessions/{sessionId}/events": {
+      "post": {
+        "tags": [
+          "qoe"
+        ],
+        "operationId": "events",
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "403": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/playback/watched-ids": {
       "get": {
         "tags": [
@@ -703,6 +719,48 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/api/system/qoe/sessions": {
+      "get": {
+        "tags": [
+          "qoe"
+        ],
+        "operationId": "sessions",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/system/qoe/sessions/{sessionId}": {
+      "get": {
+        "tags": [
+          "qoe"
+        ],
+        "operationId": "session",
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "404": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/system/qoe/summary": {
+      "get": {
+        "tags": [
+          "qoe"
+        ],
+        "operationId": "summary",
+        "responses": {
+          "200": {
+            "description": ""
           }
         }
       }

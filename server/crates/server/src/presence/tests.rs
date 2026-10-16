@@ -138,7 +138,8 @@ fn resync_adds_unknown_drops_orphans_and_keeps_newer_or_listed() {
         snap("kept", None, 100.0, 100.0),
         snap("new", Some("1"), 5.0, 6.0),
     ];
-    apply(&p, &Feed::Resync(Arc::new(snaps), 400.0));
+    let dropped = apply(&p, &Feed::Resync(Arc::new(snaps), 400.0));
+    assert_eq!(dropped, ["orphan"]);
     let mut ids: Vec<_> = p.list().into_iter().map(|s| s.session_id).collect();
     ids.sort();
     assert_eq!(ids, ["fresh", "kept", "new"]);
@@ -158,8 +159,10 @@ fn events_open_and_end_sessions() {
         json!({"type": "SessionEnded", "sessionId": "a", "reason": "expired"}),
     )
     .unwrap();
-    apply(&p, &Feed::Event(Arc::new(ended)));
+    let ended = Feed::Event(Arc::new(ended));
+    assert_eq!(apply(&p, &ended), ["a"]);
     assert_eq!(p.size(), 0);
+    assert!(apply(&p, &ended).is_empty());
 }
 
 #[tokio::test]
@@ -177,7 +180,7 @@ async fn a_restarted_server_rebuilds_presence_from_the_first_resync() {
     )))
     .unwrap();
     drop(tx);
-    run(rx, p.clone(), || {}).await;
+    run(rx, p.clone(), |_| {}, || {}).await;
     let live = p.list();
     assert_eq!(live.len(), 1);
     assert_eq!(
@@ -195,9 +198,14 @@ async fn a_lagged_feed_asks_the_engine_to_resync() {
     }
     drop(tx);
     let lags = std::sync::atomic::AtomicU32::new(0);
-    run(rx, Presence::default(), || {
-        lags.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-    })
+    run(
+        rx,
+        Presence::default(),
+        |_| {},
+        || {
+            lags.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        },
+    )
     .await;
     assert_eq!(lags.into_inner(), 1);
 }

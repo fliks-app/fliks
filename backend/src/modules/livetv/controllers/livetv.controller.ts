@@ -26,7 +26,6 @@ import { StreamTokenClient } from '../../bridge/stream-token.client';
 import { User } from '../../users/entities/user.entity';
 import { ImageService, ImageSize } from '../../images/image.service';
 import { QoeService } from '../../qoe/qoe.service';
-import { parseSample } from '../../qoe/core/validate';
 import { LiveTvChannel } from '../entities/livetv-channel.entity';
 import { LiveTvChannelsService } from '../services/livetv-channels.service';
 import { LiveTvGuideService } from '../services/livetv-guide.service';
@@ -178,10 +177,9 @@ export class LivetvController {
     if (!ref) throw new NotFoundException('Live TV session not found');
     if (ref.userId !== user.id)
       throw new ForbiddenException('Not your session');
-    const sample = body?.qoe != null ? parseSample(body.qoe) : null;
-    if (sample) {
+    if (body?.qoe != null) {
       const state = body.state === 'paused' ? 'paused' : 'playing';
-      this.qoe.recordSample({ ...ref, state }, sample);
+      this.qoe.recordSample({ ...ref, state }, body.qoe);
     }
     return { ok: true };
   }

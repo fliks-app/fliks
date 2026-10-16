@@ -25,7 +25,6 @@ import { MarkersModule } from '../markers/markers.module';
 import { PluginsModule } from '../plugins/plugins.module';
 import { PlaybackModule } from '../playback/playback.module';
 import { QoeModule } from '../qoe/qoe.module';
-import { QoeLoadProvider } from './qoe-load.provider';
 import { MediaProbeModule } from '../media-probe/media-probe.module';
 
 @Module({
@@ -60,7 +59,6 @@ import { MediaProbeModule } from '../media-probe/media-probe.module';
     ScanBackfillService,
     EnginePlaybackService,
     EngineEventsService,
-    QoeLoadProvider,
   ],
   exports: [
     SourceScanService,
