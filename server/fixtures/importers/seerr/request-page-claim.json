@@ -1,0 +1,42 @@
+{
+  "pageInfo": {
+    "pages": 1,
+    "pageSize": 50,
+    "results": 2,
+    "page": 1
+  },
+  "results": [
+    {
+      "id": 7,
+      "status": 1,
+      "type": "movie",
+      "createdAt": "2026-02-07T10:00:00.000Z",
+      "updatedAt": "2026-02-07T11:00:00.000Z",
+      "media": {
+        "id": 7,
+        "tmdbId": 1003,
+        "status": 1
+      },
+      "requestedBy": {
+        "id": 1,
+        "username": "seerr_alice"
+      }
+    },
+    {
+      "id": 8,
+      "status": 1,
+      "type": "movie",
+      "createdAt": "2026-02-08T10:00:00.000Z",
+      "updatedAt": "2026-02-08T11:00:00.000Z",
+      "media": {
+        "id": 8,
+        "tmdbId": 1003,
+        "status": 1
+      },
+      "requestedBy": {
+        "id": 2,
+        "username": "seerr_bob"
+      }
+    }
+  ]
+}

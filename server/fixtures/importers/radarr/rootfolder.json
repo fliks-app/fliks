@@ -1,0 +1,15 @@
+[
+  {
+    "id": 1,
+    "path": "/data/movies",
+    "freeSpace": 1
+  },
+  {
+    "id": 2,
+    "path": "/data/ignored"
+  },
+  {
+    "id": 3,
+    "path": "  "
+  }
+]

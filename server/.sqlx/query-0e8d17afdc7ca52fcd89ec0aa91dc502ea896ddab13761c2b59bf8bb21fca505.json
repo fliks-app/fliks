@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT m.id, l.path AS library_path, m.\"folderName\" AS folder_name\n           FROM media m LEFT JOIN libraries l ON l.id = m.\"libraryId\"\n           WHERE m.\"tmdbId\" = $1 AND m.type = 'series' LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "library_path",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "folder_name",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "0e8d17afdc7ca52fcd89ec0aa91dc502ea896ddab13761c2b59bf8bb21fca505"
+}

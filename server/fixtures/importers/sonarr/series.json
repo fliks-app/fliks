@@ -1,0 +1,29 @@
+[
+  {
+    "id": 21,
+    "title": "Parity Series A",
+    "tmdbId": 2000,
+    "tvdbId": 555,
+    "year": 2021,
+    "monitored": true,
+    "imdbId": "tt0002000",
+    "overview": "Series A",
+    "qualityProfileId": 1,
+    "path": "/data/tv/Parity Series A"
+  },
+  {
+    "id": 22,
+    "title": "Sonarr New Show",
+    "tmdbId": 8001,
+    "tvdbId": 556,
+    "year": 2022,
+    "monitored": true,
+    "path": "/data/tv/Sonarr New Show"
+  },
+  {
+    "id": 23,
+    "title": "Lost Show",
+    "tmdbId": 8002,
+    "path": "/elsewhere/Lost Show"
+  }
+]

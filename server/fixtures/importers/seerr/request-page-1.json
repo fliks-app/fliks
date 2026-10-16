@@ -1,0 +1,100 @@
+{
+  "pageInfo": {
+    "pages": 1,
+    "pageSize": 50,
+    "results": 5,
+    "page": 1
+  },
+  "results": [
+    {
+      "id": 1,
+      "status": 1,
+      "type": "movie",
+      "createdAt": "2026-02-01T10:00:00.000Z",
+      "updatedAt": "2026-02-01T11:00:00.000Z",
+      "media": {
+        "id": 1,
+        "tmdbId": 1001,
+        "status": 1
+      },
+      "requestedBy": {
+        "id": 1,
+        "username": "seerr_alice",
+        "displayName": "Alice"
+      }
+    },
+    {
+      "id": 2,
+      "status": 2,
+      "type": "tv",
+      "createdAt": "2026-02-02T10:00:00.000Z",
+      "updatedAt": "2026-02-02T11:00:00.000Z",
+      "media": {
+        "id": 2,
+        "tmdbId": 2000,
+        "status": 3
+      },
+      "requestedBy": {
+        "id": 2,
+        "jellyfinUsername": "seerr_bob",
+        "username": "x"
+      },
+      "seasons": [
+        {
+          "seasonNumber": 1
+        },
+        {
+          "seasonNumber": 2
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "status": 3,
+      "type": "movie",
+      "createdAt": "2026-02-03T10:00:00.000Z",
+      "updatedAt": "2026-02-03T11:00:00.000Z",
+      "media": {
+        "id": 3,
+        "tmdbId": 9001,
+        "status": 1
+      },
+      "requestedBy": {
+        "id": 1,
+        "username": "seerr_alice"
+      }
+    },
+    {
+      "id": 4,
+      "status": 4,
+      "type": "movie",
+      "createdAt": "2026-02-04T10:00:00.000Z",
+      "updatedAt": "2026-02-04T11:00:00.000Z",
+      "media": {
+        "id": 4,
+        "tmdbId": 5555,
+        "status": 1
+      },
+      "requestedBy": {
+        "id": 3,
+        "displayName": "Carol Display"
+      }
+    },
+    {
+      "id": 5,
+      "status": 2,
+      "type": "movie",
+      "createdAt": "2026-02-05T10:00:00.000Z",
+      "updatedAt": "2026-02-05T11:00:00.000Z",
+      "media": {
+        "id": 5,
+        "tmdbId": 1002,
+        "status": 5
+      },
+      "requestedBy": {
+        "id": 2,
+        "plexUsername": "seerr_bob"
+      }
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE media SET \"addedById\" = $1 WHERE id = $2 AND \"addedById\" IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "106c6aafe5ff6fd9c72a2c6129061d94a6ca2a76e699a7699d03d4b8638d3820"
+}

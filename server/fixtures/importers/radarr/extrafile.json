@@ -1,0 +1,26 @@
+[
+  {
+    "id": 1,
+    "type": "subtitle",
+    "relativePath": "Subs/Parity Movie 01.en.srt",
+    "language": {
+      "id": 1,
+      "name": "English"
+    }
+  },
+  {
+    "id": 2,
+    "type": "subtitle",
+    "relativePath": "Parity Movie 01.fr.forced.srt"
+  },
+  {
+    "id": 3,
+    "type": "other",
+    "relativePath": "Parity Movie 01.nfo"
+  },
+  {
+    "id": 4,
+    "type": "subtitle",
+    "relativePath": "Parity Movie 01.txt"
+  }
+]

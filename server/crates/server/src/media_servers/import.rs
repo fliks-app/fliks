@@ -180,11 +180,15 @@ async fn apply(
         let Some(tmdb) = tmdb_of(item.tmdb.as_deref()) else {
             return Ok(false);
         };
-        if !c.movies.contains_key(&tmdb) {
-            c.movies
-                .insert(tmdb, media_id(db, "movie", tmdb).await.map_err(sql)?);
-        }
-        let Some(media) = c.movies[&tmdb] else {
+        let media = match c.movies.get(&tmdb) {
+            Some(m) => *m,
+            None => {
+                let m = media_id(db, "movie", tmdb).await.map_err(sql)?;
+                c.movies.insert(tmdb, m);
+                m
+            }
+        };
+        let Some(media) = media else {
             return Ok(false);
         };
         return write(db, user_id, media, None, &p).await.map_err(sql);
@@ -192,21 +196,29 @@ async fn apply(
     let Some(series_emby) = &item.series_id else {
         return Ok(false);
     };
-    if !c.series_tmdb.contains_key(series_emby) {
-        let raw = conn.item(emby_user, series_emby).await.and_then(|i| i.tmdb);
-        let tmdb = raw
-            .filter(|r| !r.is_empty() && r.bytes().all(|b| b.is_ascii_digit()))
-            .and_then(|r| r.parse::<i32>().ok());
-        c.series_tmdb.insert(series_emby.clone(), tmdb);
-    }
-    let Some(tmdb) = c.series_tmdb[series_emby].filter(|t| *t != 0) else {
+    let tmdb = match c.series_tmdb.get(series_emby) {
+        Some(t) => *t,
+        None => {
+            let raw = conn.item(emby_user, series_emby).await.and_then(|i| i.tmdb);
+            let t = raw
+                .filter(|r| !r.is_empty() && r.bytes().all(|b| b.is_ascii_digit()))
+                .and_then(|r| r.parse::<i32>().ok());
+            c.series_tmdb.insert(series_emby.clone(), t);
+            t
+        }
+    };
+    let Some(tmdb) = tmdb.filter(|t| *t != 0) else {
         return Ok(false);
     };
-    if !c.series.contains_key(&tmdb) {
-        c.series
-            .insert(tmdb, media_id(db, "series", tmdb).await.map_err(sql)?);
-    }
-    let Some(series) = c.series[&tmdb] else {
+    let series = match c.series.get(&tmdb) {
+        Some(m) => *m,
+        None => {
+            let m = media_id(db, "series", tmdb).await.map_err(sql)?;
+            c.series.insert(tmdb, m);
+            m
+        }
+    };
+    let Some(series) = series else {
         return Ok(false);
     };
     let (Some(season), Some(number)) = (item.season, item.episode) else {

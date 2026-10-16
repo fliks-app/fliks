@@ -49,7 +49,7 @@ fn page(set: &[Value], q: &HashMap<String, String>) -> Value {
 /// The first path segment is the mode: ok, 401, 500, redirect, nousers, big, hit (redirect target).
 async fn stub(hits: Hits, req: Request<Body>) -> Response {
     let uri: &Uri = req.uri();
-    let q: HashMap<String, String> = uri.query().map(|q| url_pairs(q)).unwrap_or_default();
+    let q: HashMap<String, String> = uri.query().map(url_pairs).unwrap_or_default();
     let segs: Vec<&str> = uri.path().trim_matches('/').split('/').collect();
     let mode = segs[0];
     let token = req
@@ -84,6 +84,9 @@ async fn stub(hits: Hits, req: Request<Body>) -> Response {
             json_res(204, Value::Null)
         }
         ("GET", ["Users"]) if mode == "nousers" => json_res(500, json!({})),
+        ("GET", ["Users"]) if mode == "blank" => {
+            json_res(200, json!([{"Id": "b1", "Name": "  "}, {"Id": "b2"}]))
+        }
         ("GET", ["Users"]) => json_res(200, serde_json::from_str(USERS).unwrap()),
         ("GET", ["Users", _, "Items", id]) if *id != "Resume" => {
             let series: Value = serde_json::from_str(SERIES).unwrap();
@@ -598,7 +601,7 @@ async fn import_history_follows_the_resume_rules(pool: PgPool) {
         SseEvent::WatchHistoryImportCompleted {
             server_id: id,
             server_name: "emby-ok".into(),
-            users: 3,
+            users: 2,
             users_created: 1,
             imported: 6,
             skipped: 6
@@ -666,9 +669,34 @@ async fn import_pages_through_the_total(pool: PgPool) {
     let id = add_server(&c, "big", &[], true).await;
     let ev = run_import(&c, id).await;
     assert!(
-        matches!(&ev[2], SseEvent::WatchHistoryImportCompleted { users: 3, skipped, .. } if *skipped == 1100),
+        matches!(&ev[2], SseEvent::WatchHistoryImportCompleted { users: 2, skipped, .. } if *skipped == 1100),
         "{ev:?}"
     );
+}
+
+#[sqlx::test(migrations = false)]
+async fn import_skips_missing_and_blank_names(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    let id = add_server(&c, "blank", &[], true).await;
+    let ev = run_import(&c, id).await;
+    assert!(
+        matches!(
+            &ev[2],
+            SseEvent::WatchHistoryImportCompleted {
+                users: 2,
+                users_created: 0,
+                imported: 0,
+                ..
+            }
+        ),
+        "{ev:?}"
+    );
+    let n: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM users WHERE username !~ '^(admin|plain)$'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(n, 0);
 }
 
 #[sqlx::test(migrations = false)]
