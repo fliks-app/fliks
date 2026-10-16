@@ -1,45 +1,7 @@
-//! Nest's way into the sprite and source-scan jobs (`bridge.md`): the file is looked up here, the jobs run here.
+//! The sprite and source-scan jobs of one media file, run for the post-import queue and the rescans.
 use super::{file::resolve_file, scan, sprite};
 use crate::{events::Subject, http::AppError, state::AppState};
-use axum::{
-    Json,
-    body::Bytes,
-    extract::State,
-    http::{HeaderMap, StatusCode},
-};
 use fliks_engine_core::api::{JobPriority, SpriteMeta};
-use serde::Deserialize;
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct Req {
-    media_file_id: i32,
-    #[serde(default)]
-    force: bool,
-    priority: Option<JobPriority>,
-}
-
-fn parse(st: &AppState, h: &HeaderMap, body: &[u8]) -> Result<Req, AppError> {
-    st.bridge.check(h)?;
-    serde_json::from_slice(body).map_err(|e| AppError::bad_request(e.to_string()))
-}
-
-/// 200 with the sprite's metadata, 204 when none could be made (no duration, or the job failed).
-pub async fn sprite(
-    State(st): State<AppState>,
-    h: HeaderMap,
-    body: Bytes,
-) -> Result<Result<Json<SpriteMeta>, StatusCode>, AppError> {
-    let r = parse(&st, &h, &body)?;
-    let meta = sprite_file(
-        &st,
-        r.media_file_id,
-        r.force,
-        r.priority.unwrap_or(JobPriority::Low),
-    )
-    .await?;
-    Ok(meta.map(Json).ok_or(StatusCode::NO_CONTENT))
-}
 
 /// The file's seek-bar sprite, detached so a caller giving up leaves no activity row behind.
 pub async fn sprite_file(
@@ -70,17 +32,6 @@ pub async fn sprite_file(
     .await
     .ok()
     .flatten())
-}
-
-/// 204 once the scan is settled (done, not needed, or failed and logged).
-pub async fn source(
-    State(st): State<AppState>,
-    h: HeaderMap,
-    body: Bytes,
-) -> Result<StatusCode, AppError> {
-    let r = parse(&st, &h, &body)?;
-    scan_file(&st, r.media_file_id, r.priority.unwrap_or(JobPriority::Low)).await?;
-    Ok(StatusCode::NO_CONTENT)
 }
 
 /// Scans the file's source unless its current version was; detached so it is not left marked scanning.

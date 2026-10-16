@@ -1,6 +1,7 @@
 // Must be set before any I/O — libuv initializes the pool on first use.
 process.env.UV_THREADPOOL_SIZE = '16';
 
+import { GLOBAL_PREFIX_EXCLUDE } from './common/global-prefix-exclude';
 import { NestFactory, Reflector } from '@nestjs/core';
 import { ClassSerializerInterceptor, Logger } from '@nestjs/common';
 import { AppModule } from './app.module';
@@ -69,7 +70,7 @@ async function bootstrap() {
     },
   );
 
-  app.setGlobalPrefix('api', { exclude: ['engine/resolve', 'internal/bridge/{*path}', 'internal/plugins/{*path}', 'internal/jobs', 'internal/jobs/{*path}'] });
+  app.setGlobalPrefix('api', { exclude: GLOBAL_PREFIX_EXCLUDE });
   app.useGlobalPipes(
     new TolerantValidationPipe({
       whitelist: true,

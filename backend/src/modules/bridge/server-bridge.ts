@@ -1,5 +1,4 @@
-import { Agent, type Dispatcher } from 'undici';
-import type { SpriteMeta } from '../engine/engine.service';
+import type { Dispatcher } from 'undici';
 
 /** Nest to fliks-server calls (server/docs/bridge.md): base URL and bearer token come from the env fliks-server sets at spawn. */
 export function bridgeConfigured(): boolean {
@@ -49,41 +48,4 @@ export async function bridgeFetch(
   }
   if (init.raw) return res;
   return res.status === 204 ? undefined : res.json();
-}
-
-/** A sprite or scan runs to the end before the answer: far past the default 5 s. */
-const JOB_TIMEOUT_MS = 30 * 60_000;
-/** fetch's default 5-minute headers timeout would cut the job off before the abort. */
-const jobAgent = new Agent({
-  headersTimeout: JOB_TIMEOUT_MS,
-  bodyTimeout: JOB_TIMEOUT_MS,
-});
-
-/** The seek-bar sprite of a file, made by fliks-server; null when none could be made. */
-export async function bridgeGenerateSprite(
-  mediaFileId: number,
-  opts: { force?: boolean; priority?: 'low' | 'normal' | 'high' } = {},
-): Promise<SpriteMeta | null> {
-  if (!bridgeConfigured()) return null;
-  const meta = await bridgeFetch('/internal/jobs/sprite', {
-    method: 'POST',
-    body: { mediaFileId, ...opts },
-    signal: AbortSignal.timeout(JOB_TIMEOUT_MS),
-    dispatcher: jobAgent,
-  });
-  return (meta as SpriteMeta | undefined) ?? null;
-}
-
-/** Scans the file's source unless it already was, in fliks-server; settles once the scan did. */
-export async function bridgeScanSource(
-  mediaFileId: number,
-  priority?: 'low' | 'normal' | 'high',
-): Promise<void> {
-  if (!bridgeConfigured()) return;
-  await bridgeFetch('/internal/scan/source', {
-    method: 'POST',
-    body: { mediaFileId, priority },
-    signal: AbortSignal.timeout(JOB_TIMEOUT_MS),
-    dispatcher: jobAgent,
-  });
 }

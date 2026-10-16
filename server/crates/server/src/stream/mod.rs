@@ -1,12 +1,12 @@
 //! Playback control plane (`docs/spec/playback-info.md`): playback-info, `info/*`, EDL, session stop,
 //! source scans, host hardware and the admin streams and cache routes.
-mod bridge;
 mod burn_in;
 mod db;
 mod edl;
 mod file;
 mod hardware;
 mod info;
+mod media_jobs;
 mod preroll;
 mod qoe;
 mod routes;
@@ -14,10 +14,10 @@ mod scan;
 pub mod sprite;
 mod system;
 
-pub(crate) use bridge::{scan_file, sprite_file};
 pub(crate) use edl::find as edl_sidecar;
 pub use file::{ResolvedFile, extname, resolve_file};
 pub use info::__path_playback_info;
+pub(crate) use media_jobs::{scan_file, sprite_file};
 pub use routes::{
     __path_delete_session, __path_edl, __path_effective_settings, __path_gpus, __path_hw_accel,
     __path_qualities, __path_tonemap_algos,
@@ -63,8 +63,6 @@ impl Default for Shared {
 /// The control-plane routes; the engine serves every byte route under `/api/stream/:id`.
 pub fn router() -> Router<AppState> {
     Router::new()
-        .route("/internal/jobs/sprite", post(bridge::sprite))
-        .route("/internal/scan/source", post(bridge::source))
         .route(
             "/api/stream/{mediaFileId}/playback-info",
             post(info::playback_info),
