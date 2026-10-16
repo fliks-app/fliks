@@ -1,5 +1,5 @@
 //! Playlist items: list, add, remove and reorder (`docs/spec/playlists.md` rules 13-15, 28-35).
-use super::access::{Role, assert_role};
+use super::access::{Role, assert_role, not_found};
 use crate::{
     http::{
         AppError,
@@ -310,11 +310,12 @@ async fn resolve(
     Ok((targets, true))
 }
 
-async fn lock(c: &mut PgConnection, id: i32) -> sqlx::Result<()> {
+async fn lock(c: &mut PgConnection, id: i32) -> Result<(), AppError> {
     sqlx::query!("SELECT id FROM playlists WHERE id = $1 FOR UPDATE", id)
         .fetch_optional(c)
-        .await
+        .await?
         .map(drop)
+        .ok_or_else(|| not_found(id))
 }
 
 async fn touch(c: &mut PgConnection, id: i32) -> sqlx::Result<()> {

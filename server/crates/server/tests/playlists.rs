@@ -261,3 +261,36 @@ async fn auto_remove_touches_only_the_watchers_own_playlists(pool: PgPool) {
         vec![(2, 1, None), (3, 1, None), (1, 2, Some(2))]
     );
 }
+
+#[sqlx::test(migrations = false)]
+async fn playlist_deleted_while_waiting_for_the_lock_is_404(pool: PgPool) {
+    let c = ctx(pool).await;
+    c.sql(r#"INSERT INTO playlists (id, name, "ownerId") VALUES (1, 'p', 2)"#)
+        .await;
+    for (method, uri, body) in [
+        ("POST", "/api/playlists/1/items", json!({"mediaId": 1})),
+        (
+            "PUT",
+            "/api/playlists/1/items/order",
+            json!({"itemIds": []}),
+        ),
+    ] {
+        let mut tx = c.pool.begin().await.unwrap();
+        sqlx::query("SELECT id FROM playlists WHERE id = 1 FOR UPDATE")
+            .execute(&mut *tx)
+            .await
+            .unwrap();
+        let racer = async {
+            tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+            sqlx::query("DELETE FROM playlists WHERE id = 1")
+                .execute(&mut *tx)
+                .await
+                .unwrap();
+            tx.commit().await.unwrap();
+        };
+        let (call, ()) = tokio::join!(c.call(1, method, uri, body), racer);
+        assert_eq!(call.0, 404, "{method} {uri}");
+        c.sql(r#"INSERT INTO playlists (id, name, "ownerId") VALUES (1, 'p', 2)"#)
+            .await;
+    }
+}
