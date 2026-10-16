@@ -771,8 +771,18 @@ async fn updates_protect_the_marker_and_deletes_404(pool: PgPool) {
         (s, b["message"].clone()),
         (400, json!("endSeconds must be > startSeconds"))
     );
-    let (s, _) = call(&c, "PUT", &uri, &c.admin, Some(json!({"type": "intro"}))).await;
-    assert_eq!(s, 400);
+    let body = json!({"episodeId": 1, "type": null});
+    let (s, b) = call(&c, "PUT", &uri, &c.admin, Some(body)).await;
+    assert_eq!(
+        (s, b["message"].clone()),
+        (
+            400,
+            json!([
+                "property episodeId should not exist",
+                "property type should not exist"
+            ])
+        )
+    );
     let (s, b) = call(&c, "PUT", &uri, &c.admin, Some(json!({"endSeconds": 250}))).await;
     assert_eq!((s, b["endSeconds"].clone()), (200, json!(250)));
     assert_eq!(

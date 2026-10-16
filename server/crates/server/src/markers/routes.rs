@@ -208,16 +208,13 @@ pub(crate) async fn update(
 ) -> Res<Json<db::Marker>> {
     manage(&a)?;
     let id = id_of(raw)?;
+    // A present key is forbidden even when null, one message each.
+    let mut msgs: Vec<String> = ["episodeId", "type"]
+        .into_iter()
+        .filter(|k| body.get(k).is_some())
+        .map(|k| format!("property {k} should not exist"))
+        .collect();
     let raw: RawDto = from_value(body)?;
-    let mut msgs = vec![];
-    if raw.episode_id.is_some() || raw.r#type.is_some() {
-        let key = if raw.episode_id.is_some() {
-            "episodeId"
-        } else {
-            "type"
-        };
-        msgs.push(format!("property {key} should not exist"));
-    }
     let start = seconds("startSeconds", raw.start_seconds.as_ref(), true, &mut msgs);
     let end = seconds("endSeconds", raw.end_seconds.as_ref(), true, &mut msgs);
     if !msgs.is_empty() {
