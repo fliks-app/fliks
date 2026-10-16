@@ -8,6 +8,7 @@ use std::{
     collections::BTreeSet,
     path::{Path, PathBuf},
     process::Stdio,
+    sync::Arc,
 };
 use tokio::{
     io::{AsyncBufReadExt, BufReader},
@@ -305,9 +306,17 @@ GRANT USAGE ON SCHEMA public TO PUBLIC;
 END $$";
 
 /// Rules 22-25. `name` is already validated and located.
-pub async fn restore(cfg: &Config, db: &PgPool, path: &Path, name: &str) -> Result<(), AppError> {
+pub async fn restore(
+    cfg: &Config,
+    db: &PgPool,
+    running: &Arc<jobs::Running>,
+    path: &Path,
+    name: &str,
+) -> Result<(), AppError> {
+    let busy = || AppError::conflict("A command is running");
+    let _claim = running.claim(jobs::RESTORE).ok_or_else(busy)?;
     if jobs::any_active(db).await? {
-        return Err(AppError::conflict("A command is running"));
+        return Err(busy());
     }
     tracing::warn!("Restoring backup: {name}");
     let roles = screen(path).await?;

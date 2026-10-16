@@ -180,7 +180,7 @@ pub async fn backup_restore(
         )));
     }
     let path = backup::locate(&backup::dir(), &name).await?;
-    detached(async move { backup::restore(&st.cfg, &st.db, &path, &name).await }).await?;
+    detached(async move { backup::restore(&st.cfg, &st.db, &st.jobs, &path, &name).await }).await?;
     Ok(StatusCode::CREATED)
 }
 

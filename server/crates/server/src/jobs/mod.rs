@@ -14,5 +14,5 @@ pub use routes::{
     __path_clear_history, __path_list, __path_schedulers, __path_trigger, clear_history, list,
     router, schedulers, trigger,
 };
-pub use runner::{Claim, Running, spawn};
+pub use runner::{Claim, RESTORE, Running, spawn};
 pub use work::{JobWork, Rescan, SeasonScan, Unwired, Work, WorkError};

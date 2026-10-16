@@ -16,13 +16,18 @@ pub struct Claim {
     name: String,
 }
 
+/// The claim a restore holds: it excludes every job, and is refused while any job runs.
+pub const RESTORE: &str = "Restore";
+
 impl Running {
     pub fn claim(self: &Arc<Self>, name: &str) -> Option<Claim> {
-        let fresh = self
-            .0
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .insert(name.to_owned());
+        let mut set = self.0.lock().unwrap_or_else(|e| e.into_inner());
+        let free = if name == RESTORE {
+            set.is_empty()
+        } else {
+            !set.contains(RESTORE)
+        };
+        let fresh = free && set.insert(name.to_owned());
         fresh.then(|| Claim {
             set: self.clone(),
             name: name.to_owned(),
@@ -92,6 +97,18 @@ mod tests {
         assert!(r.claim("Backup").is_none());
         assert!(r.claim("RescanAll").is_some());
         drop(a);
+        assert!(r.claim("Backup").is_some());
+    }
+
+    #[test]
+    fn a_restore_excludes_every_job_and_is_refused_while_one_runs() {
+        let r = Arc::new(Running::default());
+        let job = r.claim("Backup").unwrap();
+        assert!(r.claim(RESTORE).is_none());
+        drop(job);
+        let restore = r.claim(RESTORE).unwrap();
+        assert!(r.claim(RESTORE).is_none() && r.claim("Backup").is_none());
+        drop(restore);
         assert!(r.claim("Backup").is_some());
     }
 }
