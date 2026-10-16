@@ -51,7 +51,7 @@ none. Callers (who needs which function, and when):
    pub fn max_resolution_from_quality_strings(files: &[Option<&str>]) -> u32;
    pub fn allowed_audio_language_ids(items: &[AudioLanguageItem]) -> BTreeSet<u32>;
    pub fn build_allowed_quality_ids(items: &[QualityProfileItem]) -> BTreeSet<u32>;
-   pub fn detect_video_codec(title: Option<&str>) -> Option<VideoCodecLabel>;   // "AV1" | "HEVC" | "VP9" | "x264"
+   pub fn detect_video_codec(title: Option<&str>) -> Option<&'static str>;   // "AV1" | "HEVC" | "VP9" | "x264"
    pub fn detect_codec_size_factor(title: Option<&str>) -> f64;
    pub fn compute_size_deviation(title: &str, size_bytes: f64, runtime_minutes: f64, limits: Option<&SizeLimits>) -> Option<f64>;
    pub fn resolve_search_titles(media: &SearchMedia, custom_query: Option<&str>) -> SearchTitles;   // {searchTitle, expectedTitles}

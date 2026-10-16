@@ -22,7 +22,7 @@ none. Callers, all of them in S5 and all deleted from Nest this milestone (`grep
 1. Public API (`fliks_domain::naming`, pure; fixture JSON uses the TS field names, camelCase):
    ```rust
    pub struct NamingFormats { pub movie: String, pub movie_folder: String, pub series: String, pub series_folder: String, pub season_folder: String }
-   pub const DEFAULT_FORMATS: NamingFormats;
+   pub fn default_formats() -> NamingFormats;
    pub fn formats_from_rows(rows: &[(String, Option<String>)]) -> NamingFormats;
    pub fn apply_movie_format(format: &str, d: &MovieFile) -> String;          // {title, originalTitle?, year?, quality, releaseGroup?, tmdbId?}
    pub fn apply_series_format(format: &str, d: &SeriesFile) -> String;        // {seriesTitle, season, episode, episodeTitle?, quality, releaseGroup?, airDate?}
@@ -35,7 +35,7 @@ none. Callers, all of them in S5 and all deleted from Nest this milestone (`grep
    pub fn match_special_by_title<T: HasTitle>(filename: &str, specials: &[T]) -> Option<usize>;
    ```
    and in `crates/server/src/naming.rs`: `pub async fn load_formats(pool: &PgPool) -> sqlx::Result<NamingFormats>` (rule 3). `episodeEnd` is absent (not null) when there is no range end.
-2. Defaults (`DEFAULT_FORMATS`): `movie` = `{Movie Title} ({Release Year}) {Quality Full}`; `movieFolder` = `{Movie Title} ({Release Year})`; `series` = `{Series Title} - S{season:00}E{episode:00} - {Episode Title} {Quality Full}`; `seriesFolder` = `{Series Title}`; `seasonFolder` = `Season {season:00}`. `[ts:src/modules/scheduler/naming.service.ts:13]`–`[ts:src/modules/scheduler/naming.service.ts:20]`
+2. Defaults (`default_formats()`): `movie` = `{Movie Title} ({Release Year}) {Quality Full}`; `movieFolder` = `{Movie Title} ({Release Year})`; `series` = `{Series Title} - S{season:00}E{episode:00} - {Episode Title} {Quality Full}`; `seriesFolder` = `{Series Title}`; `seasonFolder` = `Season {season:00}`. `[ts:src/modules/scheduler/naming.service.ts:13]`–`[ts:src/modules/scheduler/naming.service.ts:20]`
 3. `load_formats`: one query `SELECT key, value FROM app_settings WHERE key = ANY($1)` over the five keys `naming_movie_format`, `naming_movie_folder_format`, `naming_series_format`, `naming_series_folder_format`, `naming_season_folder_format`; each field = the stored value, else the default when the row is absent OR its value is `NULL` (`??`); an empty string is a value and is kept (a format `''` renders `''`, so a movie file becomes `<ext>` only: frozen, callers guard). Read on demand on every call, no cache (a setting edited through `PUT /api/settings` applies to the next import; `settings.md` lists the keys as "read on demand"). `[ts:src/modules/scheduler/naming.service.ts:61]`–`[ts:src/modules/scheduler/naming.service.ts:84]`
 
 ### B. Formatting
