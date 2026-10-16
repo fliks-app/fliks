@@ -675,9 +675,10 @@ async fn relink_orphans(st: &AppState, a: &Authed, d: RelinkDto) -> Result<Value
             "Reorganize needs a title with its own folder",
         ));
     }
-    if d.transfer.is_none() {
-        validated_folder(&d.folder_name, &d.media_type)?;
-    }
+    let folder = match d.transfer {
+        None => validated_folder(&d.folder_name, &d.media_type)?,
+        Some(_) => String::new(),
+    };
     let (media, created, unmatched_key) = match &d.external_id {
         Some(_) => {
             let (m, c) = find_or_import(st, a, &d).await?;
@@ -688,7 +689,16 @@ async fn relink_orphans(st: &AppState, a: &Authed, d: RelinkDto) -> Result<Value
             (m, c, Some(k))
         }
     };
-    let r = link_files(st, &d, &lib, &media, created, unmatched_key.as_deref()).await;
+    let r = link_files(
+        st,
+        &d,
+        &lib,
+        &media,
+        &folder,
+        created,
+        unmatched_key.as_deref(),
+    )
+    .await;
     if unmatched_key.is_some() {
         let mut h = st.ingest.unmatched_holders.lock().expect("holders");
         match h.get(&media.id).copied().unwrap_or(1) {
@@ -721,6 +731,7 @@ async fn link_files(
     d: &RelinkDto,
     lib: &Lib,
     media: &MediaRow,
+    folder: &str,
     created: bool,
     unmatched_key: Option<&str>,
 ) -> Result<(i64, i64, Vec<String>), AppError> {
@@ -798,7 +809,6 @@ async fn link_files(
         .await?
             > 0;
         if !has_files && current.folder_name.as_deref().unwrap_or("") != d.folder_name {
-            let folder = validated_folder(&d.folder_name, &d.media_type)?;
             sqlx::query!(
                 r#"UPDATE media SET "libraryId" = $2, "folderName" = $3 WHERE id = $1"#,
                 media.id,
