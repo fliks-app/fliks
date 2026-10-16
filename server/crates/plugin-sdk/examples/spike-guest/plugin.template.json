@@ -1,0 +1,21 @@
+{
+  "id": "spike.guest",
+  "pluginApi": 2,
+  "name": "Spike guest",
+  "fliks": ">=5.0.0 <6.0.0",
+  "author": "Fliks",
+  "description": "Stand-in component for the S8 spike measurements.",
+  "license": "MIT",
+  "logo": "logo.svg",
+  "kind": "process",
+  "runtime": "wasm",
+  "memoryMb": 64,
+  "database": { "schema": true, "coreRefs": ["media", "episodes", "seasons", "users"] },
+  "routes": [],
+  "scopes": ["config:rw"],
+  "ingestRoots": [],
+  "jobs": [
+    { "name": "spin", "cron": "0 0 1 1 *", "triggerable": true, "labelKey": "spike.job.spin" },
+    { "name": "pgsleep", "cron": "0 0 1 1 *", "triggerable": true, "labelKey": "spike.job.pgsleep" }
+  ]
+}
