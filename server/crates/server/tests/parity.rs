@@ -574,6 +574,8 @@ async fn parity() {
         env("PARITY_TPL", "fliks_parity_tpl"),
     );
     let engine = env("PARITY_ENGINE", "up");
+    // Library scenarios create directories under libs/ and list it; a leftover from a previous run breaks the listing.
+    let _ = fs::remove_dir_all(Path::new(MEDIA_ROOT).join("libs"));
     let (mut ok, mut failed, mut skipped, mut dev) = (0, 0, 0, vec![]);
     let mut files = vec![];
     collect(
