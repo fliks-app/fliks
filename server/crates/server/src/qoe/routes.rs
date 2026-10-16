@@ -28,9 +28,9 @@ use serde_json::{Value, json, to_value};
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/api/system/qoe/sessions", get(sessions))
-        .route("/api/system/qoe/sessions/{sid}", get(session))
+        .route("/api/system/qoe/sessions/{sessionId}", get(session))
         .route("/api/system/qoe/summary", get(summary))
-        .route("/api/playback/sessions/{sid}/events", post(events))
+        .route("/api/playback/sessions/{sessionId}/events", post(events))
         .route("/internal/qoe/register", post(register))
         .route("/internal/qoe/live-sample", post(live_sample))
         .route("/internal/qoe/session-ended", post(session_ended))
