@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT e.id FROM episodes e JOIN seasons s ON s.id = e.\"seasonId\"\n           WHERE s.\"mediaId\" = $1 AND s.\"seasonNumber\" = $2 AND e.\"episodeNumber\" = $3\n           ORDER BY e.id LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "ecfd1678b82c91caa66e52d0cc166da37435a7a6d181dd8b528f01b54f9d7de4"
+}

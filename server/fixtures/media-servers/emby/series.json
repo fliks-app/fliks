@@ -1,0 +1,3 @@
+{"s1":{"Id":"s1","Type":"Series","Name":"Parity Series A","ProviderIds":{"Tmdb":"2000"}},
+ "s2":{"Id":"s2","Type":"Series","Name":"Unknown Show","ProviderIds":{"Tmdb":"abc"}},
+ "s3":{"Id":"s3","Type":"Series","Name":"Not Imported","ProviderIds":{"Tmdb":"7777"}}}
