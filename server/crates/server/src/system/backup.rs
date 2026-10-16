@@ -294,6 +294,16 @@ fn create_roles_sql(roles: &BTreeSet<String>) -> String {
     format!("DO $$ BEGIN {} END $$", each.join(" "))
 }
 
+/// Rule 24: in the replay's transaction, drops `public` and every plugin schema so a dump older than
+/// the database restores into an empty schema.
+const CLEAN_SCHEMAS: &str = r"DO $$ DECLARE s text; BEGIN
+FOR s IN SELECT nspname FROM pg_namespace WHERE nspname = 'public' OR nspname LIKE 'plugin\_%' LOOP
+EXECUTE format('DROP SCHEMA %I CASCADE', s);
+END LOOP;
+CREATE SCHEMA public;
+GRANT USAGE ON SCHEMA public TO PUBLIC;
+END $$";
+
 /// Rules 22-25. `name` is already validated and located.
 pub async fn restore(cfg: &Config, db: &PgPool, path: &Path, name: &str) -> Result<(), AppError> {
     if jobs::any_active(db).await? {
@@ -310,7 +320,8 @@ pub async fn restore(cfg: &Config, db: &PgPool, path: &Path, name: &str) -> Resu
     }
     let mut args = vec!["-X".to_owned()];
     args.extend(conn_args(cfg));
-    args.extend(["--single-transaction", "-v", "ON_ERROR_STOP=1", "-f"].map(String::from));
+    args.extend(["--single-transaction", "-v", "ON_ERROR_STOP=1", "-c"].map(String::from));
+    args.extend([CLEAN_SCHEMAS.to_owned(), "-f".to_owned()]);
     args.push(path.to_string_lossy().into_owned());
     run_tool(cfg, "psql", &args, Stdio::null()).await?;
     tracing::info!("Backup restored: {name}");

@@ -401,7 +401,7 @@ async fn run(c: &Ctx, c_old: &Ctx, pool: &PgPool, role: &str) {
 
     // corrupt dump: 500 with the tool's last line, database unchanged (single transaction)
     let corrupt = c.dir.join("corrupt.sql");
-    std::fs::write(&corrupt, "DELETE FROM app_settings;\nSELECT 1/0;\n").unwrap();
+    std::fs::write(&corrupt, "SELECT 1/0;\n").unwrap();
     let (s, _, b) = call(
         c,
         "POST",
@@ -436,7 +436,11 @@ async fn run(c: &Ctx, c_old: &Ctx, pool: &PgPool, role: &str) {
         (400, json!("Backup contains psql meta-commands"))
     );
     assert!(!std::path::Path::new("/tmp/fliks-s5-pwned").exists());
-    std::fs::write(&corrupt, "\\restrict k3y\nSELECT 1;\n\\unrestrict k3y\n").unwrap();
+    std::fs::write(
+        &corrupt,
+        format!("{text}\\restrict k3y\n\\unrestrict k3y\n"),
+    )
+    .unwrap();
     assert_eq!(
         call(
             c,
@@ -453,7 +457,7 @@ async fn run(c: &Ctx, c_old: &Ctx, pool: &PgPool, role: &str) {
     // a dump granting to a plugin role the cluster lacks (rule 23)
     std::fs::write(
         &corrupt,
-        format!("GRANT SELECT ON app_settings TO {role};\n"),
+        format!("{text}GRANT SELECT ON public.app_settings TO {role};\n"),
     )
     .unwrap();
     assert_eq!(
@@ -532,7 +536,7 @@ async fn run(c: &Ctx, c_old: &Ctx, pool: &PgPool, role: &str) {
         ]
     );
 
-    // C27: a dump from one migration back is brought to today's schema
+    // C27, C98: a dump from one migration back restores into today's database, at today's schema
     let (s, _, b) = call(
         c_old,
         "POST",
@@ -549,21 +553,36 @@ async fn run(c: &Ctx, c_old: &Ctx, pool: &PgPool, role: &str) {
         .await
         .unwrap();
     assert_eq!(before, total - 1);
-    // a newer database keeps objects the old dump lacks, so the dump goes back into the old one
+    // the current database holds objects the old dump lacks (a plugin schema, the newest migration's)
+    sqlx::query("CREATE SCHEMA plugin_s5sys_stale")
+        .execute(pool)
+        .await
+        .unwrap();
+    sqlx::query("CREATE TABLE plugin_s5sys_stale.t (a int)")
+        .execute(pool)
+        .await
+        .unwrap();
     let (s, _, b) = call(
-        c_old,
+        c,
         "POST",
         "/api/system/restore",
-        &c_old.admin,
+        &c.admin,
         json!({"filename": old_name}),
     )
     .await;
     assert_eq!(s, 201, "{}", String::from_utf8_lossy(&b));
     let after: i64 = sqlx::query_scalar("SELECT count(*) FROM _sqlx_migrations")
-        .fetch_one(&c_old.st.db)
+        .fetch_one(pool)
         .await
         .unwrap();
     assert_eq!(after, total);
+    let stale: bool = sqlx::query_scalar(
+        "SELECT EXISTS (SELECT FROM pg_namespace WHERE nspname = 'plugin_s5sys_stale')",
+    )
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    assert!(!stale);
 
     // delete: 200, then 404
     let (s, _, b) = call(
