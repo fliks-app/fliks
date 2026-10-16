@@ -86,7 +86,7 @@ A 500 or a half-written request is never part of the frozen contract:
 | C18 | `POST /api/system/streams/:sid/command` with an `action` outside pause/play/stop/message was relayed to the client as is | 400 |
 | C19 | live TV rows of `/api/system/streams` reported the source's name as `quality` (`"Live"` only without one) | they report `"Live"` |
 | C13 | `GET /playlists/:id` (and the create/patch views) reported `viewer` for an editor or administrator share on a public or followed playlist | the real share role |
-| C14 | playlist reorder/add validated outside their transaction; the leave-social teardown ran as six unrelated statements | validation and writes in one transaction under a row lock on the playlist; the teardown in the transaction of the user update |
+| C14 | playlist reorder/add validated outside their transaction; the leave-social teardown ran as six unrelated statements | validation and writes in one transaction under a row lock on the playlist (add computes `MAX(position)+1` under it); the teardown in the transaction of the user update |
 | C15 | social search ordered by the database collation before `LIMIT 30` | `lower(username)` bytewise, then `id` |
 | C20 | ValidationPipe coerced ` 7 `, `1e1`, `0x10` before `ParseIntPipe` | integer path segments must be canonical (`7`, `-7`; never `007`, `+7`, ` 7 `, `0x7`) on every Rust route: `PathParams` / `int_param` → 400 |
 | C16 | notification senders had no timeout (axios `timeout: 0`) | 10 s total per request, no retry; `test` reports `timeout of 10000ms exceeded` |
@@ -94,7 +94,7 @@ A 500 or a half-written request is never part of the frozen contract:
 
 Frozen as is (decided): the heartbeat keeps its debounce entry after a failed history write and returns
 `sessionLost: false` when the engine session lives but presence cannot be rebuilt. Lists whose order comes
-from DB collation / ICU (`GET /api/settings`, `/api/fs/browse`) are compared order-insensitively by parity;
+from DB collation / ICU (`GET /api/settings`, `/api/fs/browse`, `GET /api/playlists`, the profile `playlists`) are compared order-insensitively by parity;
 Rust sorts settings by key and fs entries case-insensitively (lowercase first).
 
 ## Open divergences

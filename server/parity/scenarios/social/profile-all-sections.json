@@ -381,7 +381,7 @@
             {
               "episodeId": 1,
               "fanartUrl": null,
-              "label": "S1E1 \u00b7 Episode 1",
+              "label": "S1E1 · Episode 1",
               "mediaId": 18,
               "mediaType": "series",
               "posterUrl": null,
@@ -742,5 +742,8 @@
       "method": "GET",
       "path": "/api/social/users/4/profile"
     }
+  ],
+  "unordered": [
+    "$.playlists"
   ]
 }
