@@ -177,7 +177,10 @@ async fn serve(
     if served != size {
         h.insert("x-image-size-served", HeaderValue::from_static("full"));
     }
-    if matches!(res.status(), StatusCode::OK | StatusCode::NOT_MODIFIED) {
+    if matches!(
+        res.status(),
+        StatusCode::OK | StatusCode::PARTIAL_CONTENT | StatusCode::NOT_MODIFIED
+    ) {
         res.headers_mut()
             .insert(ETAG, HeaderValue::from_str(&etag).expect("ascii"));
     }
