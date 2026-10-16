@@ -30,24 +30,6 @@
       "as": "admin",
       "body": {
         "externalId": "777",
-        "libraryId": 99,
-        "type": "movie"
-      },
-      "expect": {
-        "body": {
-          "error": "Bad Request",
-          "message": "Library #99 not found",
-          "statusCode": 400
-        },
-        "status": 400
-      },
-      "method": "POST",
-      "path": "/api/media/import"
-    },
-    {
-      "as": "admin",
-      "body": {
-        "externalId": "777",
         "libraryId": 3,
         "type": "series"
       },

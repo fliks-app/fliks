@@ -24,10 +24,6 @@ pub struct Target {
     pub default_language: Option<i32>,
 }
 
-fn library_not_found(id: i32) -> AppError {
-    AppError::bad_request(format!("Library #{id} not found"))
-}
-
 /// Rule 14 with F46: the library (or the sole one accepting `type`) among the caller's libraries.
 pub async fn resolve_target(
     st: &AppState,
@@ -51,15 +47,8 @@ pub async fn resolve_target(
     let lib = match library_id {
         Some(id) => match rows.iter().find(|r| r.id == id) {
             Some(r) => r,
-            // F46: outside the caller's libraries reads like an unknown one, as F32.
-            None if sqlx::query_scalar!("SELECT id FROM libraries WHERE id = $1", id)
-                .fetch_optional(&st.db)
-                .await?
-                .is_some() =>
-            {
-                return Err(AppError::not_found(format!("Library #{id} not found")));
-            }
-            None => return Err(library_not_found(id)),
+            // F46: unknown and outside the caller's libraries answer alike (no existence oracle).
+            None => return Err(AppError::not_found(format!("Library #{id} not found"))),
         },
         None => {
             let ok: Vec<_> = rows.iter().filter(|r| accepts(&r.types)).collect();
