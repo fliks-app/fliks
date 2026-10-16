@@ -1,7 +1,7 @@
 //! Custom-format matcher (`custom-formats.service.ts`): conditions of one type are alternatives, types all hold.
 use crate::release::parsing::attributes::parse_release_attributes;
 use crate::release::parsing::language::parse_release_language;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -9,10 +9,15 @@ pub struct CustomFormatSpec {
     #[serde(rename = "type")]
     pub kind: String,
     pub value: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_false")]
     pub negate: bool,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_false")]
     pub required: bool,
+}
+
+/// A stored `null` (the DTO's `IsOptional` lets it through) is falsy, as in the JS matcher.
+fn null_false<'de, D: Deserializer<'de>>(d: D) -> Result<bool, D::Error> {
+    Ok(Option::<bool>::deserialize(d)?.unwrap_or(false))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
