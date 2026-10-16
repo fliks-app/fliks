@@ -139,7 +139,7 @@ fn tokenize(xml: &str) -> Vec<Element> {
         } else if rest.starts_with("<!") || rest.starts_with("<?") {
             i += rest.find('>').map_or(rest.len(), |n| n + 1);
         } else if let Some(close) = rest.strip_prefix("</") {
-            let end = close.find('>').map_or(close.len(), |n| n);
+            let end = close.find('>').unwrap_or(close.len());
             let name = close[..end]
                 .split(|c: char| c.is_whitespace() || c == '/')
                 .next()
