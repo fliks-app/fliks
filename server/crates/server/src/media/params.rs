@@ -217,7 +217,6 @@ impl Search {
             only_watched: r.flag("onlyWatched") == Some(true),
             requested_by_me: r.flag("requestedByMe") == Some(true),
         };
-        // an array of strings fails `IsString`, a lone empty `genres=` is a valid empty array
         r.finish()?;
         s.paging()?;
         Ok(s)
@@ -333,7 +332,7 @@ impl Calendar {
     }
 }
 
-/// The last value of a bare string query (`@Query('libraryId')`): a repeated key reaches the handler joined with `,`.
+/// A bare string query (`@Query('libraryId')`): a repeated key reaches the handler joined with `,`.
 pub fn bare(pairs: &Pairs, key: &str) -> Option<String> {
     let v: Vec<&str> = pairs
         .iter()

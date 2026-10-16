@@ -194,7 +194,7 @@ LIMIT $limit OFFSET $offset          -- only when limit > 0
 
 **Q-L2 (list: total)** `SELECT COUNT(*) FROM media WHERE <same where>` (Nest: `COUNT(DISTINCT(media.id))` over the joined query). `[ts:src/modules/media/media-service/media-query.service.ts:259]`
 
-**Q-L3 (list: hydrate)** (`.*` below stands for the entity columns of rule 30, never `searchVector`; a null FK column means the relation-id key is omitted) `SELECT media.*, library.*, "qualityProfile".*, "languageProfile".* FROM media LEFT JOIN libraries library ON library.id = media."libraryId" LEFT JOIN quality_profiles ... LEFT JOIN language_profiles ... WHERE media.id = ANY($page_ids)`; `SELECT * FROM media_files WHERE "mediaId" = ANY($page_ids) ORDER BY id`; reassemble in `$page_ids` order. `[ts:src/modules/media/media-service/media-query.service.ts:212-218]`
+**Q-L3 (list: hydrate)** (`.*` below stands for the entity columns of rule 30, never `searchVector`; a null FK column gives a `null` relation-id key, rule 30) `SELECT media.*, library.*, "qualityProfile".*, "languageProfile".* FROM media LEFT JOIN libraries library ON library.id = media."libraryId" LEFT JOIN quality_profiles ... LEFT JOIN language_profiles ... WHERE media.id = ANY($page_ids)`; `SELECT * FROM media_files WHERE "mediaId" = ANY($page_ids) ORDER BY id`; reassemble in `$page_ids` order. `[ts:src/modules/media/media-service/media-query.service.ts:212-218]`
 
 **Q-W (watched subquery, verbatim)** `[ts:src/modules/media/media-service/media-query.service.ts:65-86]`:
 
