@@ -53,6 +53,10 @@ Decided behaviour for the Rust port (security fixes F, correctness fixes C; D3).
 | F33 | `social/requests`, the recommendation cards and the follow lists listed opted-out (`shareDisabled`) and disabled members | they are omitted from every social list (the F23 filter, one predicate; `social.md` rule 57; user decision 2026-10-16) | none |
 | F34 | `GET /api/social/users/:id/stats` returned the target's last login (`activity.lastActiveAt`) to any viewer allowed by `shareStats` | `lastActiveAt` omitted for a non-self viewer; request counts stay under `shareStats` (`social.md` rule 58; user decision 2026-10-16) | none: the profile Statistics tab does not read it |
 | F35 | profile `followerCount`/`followingCount` counted disabled and opted-out members that the follow lists omit | both counts exclude them (the F33 predicate, `social.md` rule 59; user decision 2026-10-16) | none |
+| F65 | data-tier plugin webhook delivery resolves the host, checks it, then the HTTP client resolves again (DNS rebinding window) | resolve once, connect to the vetted address, same connector as F58 | none |
+| F66 | plugin webhook targets and catalog source URLs appear in logs, `failures[]` and `lastRefreshError` | no URL, userinfo or query in any of them (error kinds only) | none |
+| F67 | process plugins reach any address, internal included | plugin outbound HTTP refuses internal addresses unless the plugin holds the `network.internal` grant given at install consent (link-local and reserved ranges stay refused) | install sheet lists the new capability `network:internal`, shown raw until a client i18n key exists |
+| F68 | plugin `config.get` without keys returns, and `config.set` writes, every `plugin.<id>.*` key, including those of a plugin whose id extends it (`fliks` reads `fliks.download` secrets) | only keys whose longest installed owner id is the caller | none |
 
 Not done (user decision 2026-10-15): login rate limiting/lockout.
 
@@ -92,6 +96,12 @@ A 500 or a half-written request is never part of the frozen contract:
 | C18 | `POST /api/system/streams/:sid/command` with an `action` outside pause/play/stop/message was relayed to the client as is | 400 |
 | C19 | live TV rows of `/api/system/streams` reported the source's name as `quality` (`"Live"` only without one) | they report `"Live"` |
 | C20 | ValidationPipe coerced ` 7 `, `1e1`, `0x10` before `ParseIntPipe` | integer path segments must be canonical (`7`, `-7`; never `007`, `+7`, ` 7 `, `0x7`) on every Rust route: `PathParams` / `int_param` → 400 |
+| C100 | concurrent install, upgrade, enable, disable, uninstall of one plugin id race (unique-index 500) | one at a time per plugin id |
+| C101 | `PUT /plugins/sources/:id` that changes `url` or `publicKey` keeps the old `cachedCatalog` | cleared with `lastRefreshedAt` and `lastRefreshError` |
+| C102 | plugin import writes the tables, then refuses an out-of-scope settings key; an unknown table or column is a 500 | every check before any write; an unknown table or column is 400 `PLUGIN_EXPORT_MALFORMED` |
+| C103 | plugin import inserts tables in alphabetical order, so `fliks.download` (`indexer_stats` before `indexers`) fails on its foreign keys | tables inserted in foreign-key dependency order |
+| C104 | plugin ids `ui`, `metrics`, `sources`, `import` install and are then shadowed by the concrete routes | refused with `PLUGIN_BAD_ID` |
+| C105 | a proxied plugin call that times out (504) leaves the plugin process running | the instance that ran it is dropped and the timeout counts toward the circuit breaker |
 
 Frozen as is (decided): the heartbeat keeps its debounce entry after a failed history write and returns
 `sessionLost: false` when the engine session lives but presence cannot be rebuilt. Lists whose order comes
