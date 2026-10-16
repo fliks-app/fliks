@@ -109,16 +109,16 @@ pub struct ScoreOptions {
     pub max_rank_inclusive: Option<i64>,
 }
 
-/// Lookups the caller precomputed (custom-format scores, blocklist).
-pub trait ScorerDeps {
-    fn score_custom_formats(&self, title: &str, flags: &[String]) -> i64;
-    fn is_blocked(&self, title: &str, source_id: i64) -> bool;
-}
+/// Custom-format score of a release title and its flags, read from tables the caller precomputed.
+pub type FormatScore<'a> = &'a dyn Fn(&str, &[String]) -> i64;
+/// Whether the blocklist holds a release title of a source.
+pub type Blocked<'a> = &'a dyn Fn(&str, i64) -> bool;
 
 pub fn score_and_sort_releases(
     releases: Vec<ReleaseCandidate>,
     opts: &ScoreOptions,
-    deps: &dyn ScorerDeps,
+    score_custom_formats: FormatScore,
+    is_blocked: Blocked,
 ) -> Vec<ScoredRelease> {
     let rows = releases
         .into_iter()
@@ -129,8 +129,8 @@ pub fn score_and_sort_releases(
                 .get(&r.source_id)
                 .and_then(|i| i.as_deref());
             let lang = resolve_unknown_language(parse_release_language(&r.title), unknown_iso);
-            let custom_format_score = deps.score_custom_formats(&r.title, &r.flags);
-            let blocklisted = deps.is_blocked(&r.title, r.source_id);
+            let custom_format_score = score_custom_formats(&r.title, &r.flags);
+            let blocklisted = is_blocked(&r.title, r.source_id);
             let coverage = release_coverage(&r.title);
             let quality = parsed.quality;
             let rejections = compute_rejections(&RejectionInput {

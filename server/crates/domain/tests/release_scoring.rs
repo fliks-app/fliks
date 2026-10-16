@@ -112,8 +112,8 @@ struct Deps {
     blocked: Vec<(String, i64)>,
 }
 
-impl ScorerDeps for Deps {
-    fn score_custom_formats(&self, title: &str, _: &[String]) -> i64 {
+impl Deps {
+    fn score(&self, title: &str, _: &[String]) -> i64 {
         self.scores.get(title).and_then(Value::as_i64).unwrap_or(0)
     }
     fn is_blocked(&self, title: &str, source_id: i64) -> bool {
@@ -167,7 +167,10 @@ fn run(i: &Value) -> Value {
             };
             let releases: Vec<ReleaseCandidate> =
                 serde_json::from_value(i["releases"].clone()).unwrap();
-            let mut out = score_and_sort_releases(releases, &opts, &deps);
+            let mut out =
+                score_and_sort_releases(releases, &opts, &|t, f| deps.score(t, f), &|t, s| {
+                    deps.is_blocked(t, s)
+                });
             if opt("order") == Some("unspecified") {
                 assert_tiers_descend(&out);
                 out.sort_by(|a, b| a.candidate.download_url.cmp(&b.candidate.download_url));
