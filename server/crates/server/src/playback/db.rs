@@ -784,3 +784,90 @@ pub async fn toggle_season_watched(
     remove_watched_from_auto_playlists(db, user, media, Some(&inserted)).await;
     Ok(())
 }
+
+/// What a heartbeat flush records (`heartbeat.md` rule 15).
+pub struct Watch {
+    pub position: f64,
+    pub duration: f64,
+    pub file: i32,
+    pub episode: Option<i32>,
+}
+
+/// Seconds before the end, or the fraction of the runtime, from which a title counts as watched.
+pub fn completes(pos: f64, dur: f64) -> bool {
+    dur > 0.0 && (pos >= dur - 30.0 || pos >= dur * 0.9)
+}
+
+/// Upserts the viewer's row (movie row when `episode` is falsy) and returns it as `repo.save` did,
+/// `None` after an FK violation (media or file gone mid-session).
+pub async fn record_watch(
+    db: &PgPool,
+    user: i32,
+    media: i32,
+    w: &Watch,
+) -> Result<Option<Value>, AppError> {
+    let lookup = w.episode.filter(|e| *e != 0);
+    let existing = find_state(db, user, media, lookup).await?;
+    let completed = completes(w.position, w.duration);
+    let watched = w.position >= 5.0;
+    let saved = match &existing {
+        Some(e) => sqlx::query!(
+            r#"UPDATE playback_states
+               SET "positionSeconds" = $2,
+                   "durationSeconds" = CASE WHEN $3::float8 > 0 THEN $3 ELSE "durationSeconds" END,
+                   completed = $4, "hiddenFromContinueWatching" = false, "lastPlayedAt" = now(),
+                   "playedAt" = CASE WHEN $5 THEN now() ELSE "playedAt" END, "mediaFileId" = $6
+               WHERE id = $1"#,
+            e.id,
+            w.position,
+            w.duration,
+            completed,
+            watched,
+            w.file
+        )
+        .execute(db)
+        .await
+        .map(drop),
+        None => sqlx::query!(
+            r#"INSERT INTO playback_states
+                 ("userId", "mediaId", "mediaFileId", "episodeId", "positionSeconds",
+                  "durationSeconds", completed, "lastPlayedAt", "playedAt")
+               VALUES ($1, $2, $3, $4, $5, $6, $7, now(), CASE WHEN $8 THEN now() END)"#,
+            user,
+            media,
+            w.file,
+            w.episode,
+            w.position,
+            w.duration,
+            completed,
+            watched
+        )
+        .execute(db)
+        .await
+        .map(drop),
+    };
+    match saved {
+        Ok(()) => {}
+        Err(sqlx::Error::Database(d)) if d.code().as_deref() == Some("23503") => return Ok(None),
+        Err(e) => return Err(e.into()),
+    }
+    if completed && existing.as_ref().is_none_or(|e| !e.completed) {
+        let episodes = w.episode.map(|e| [e]);
+        remove_watched_from_auto_playlists(db, user, media, episodes.as_ref().map(|e| &e[..]))
+            .await;
+    }
+    let mut row = find_state(db, user, media, lookup)
+        .await?
+        .ok_or_else(|| AppError::internal("playback state vanished"))?;
+    if let Some(e) = &existing {
+        row.media_file_id = e.media_file_id;
+    }
+    let mut out = serde_json::to_value(&row).map_err(|e| AppError::internal(e.to_string()))?;
+    if existing.is_none() {
+        out["user"] = json!({"id": user});
+        out["media"] = json!({"id": media, "path": null});
+        out["episode"] = w.episode.map_or(Value::Null, |id| json!({"id": id}));
+    }
+    out["mediaFile"] = json!({"id": w.file});
+    Ok(Some(out))
+}

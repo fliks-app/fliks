@@ -84,6 +84,7 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         playback::episode_progress,
         playback::resume_info,
         playback::get_state,
+        playback::heartbeat,
         playback::delete_state,
         playback::hide,
         playback::toggle_watched,

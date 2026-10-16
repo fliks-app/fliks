@@ -2223,19 +2223,6 @@
     "policies": ""
   },
   {
-    "method": "PUT",
-    "path": "/api/playback/media/:mediaId/state",
-    "controller": "PlaybackController",
-    "handler": "updateState",
-    "file": "src/modules/playback/playback.controller.ts",
-    "line": 205,
-    "guards": [
-      "JwtOrApiKeyGuard",
-      "SessionTokenGuard"
-    ],
-    "policies": ""
-  },
-  {
     "method": "GET",
     "path": "/api/playlists",
     "controller": "PlaylistsController",

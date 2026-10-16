@@ -101,7 +101,7 @@ impl From<&LiveSession> for SessionRef {
             quality: s.quality.clone(),
             transcode_reasons: serde_json::to_value(&s.transcode_reasons)
                 .unwrap_or_else(|_| json!([])),
-            state: s.state,
+            state: s.state.clone(),
             attributed_user_id: s.attributed_user_id,
         }
     }
