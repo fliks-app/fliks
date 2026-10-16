@@ -8,7 +8,10 @@ use crate::{
 };
 use axum::{
     Json,
-    extract::{Multipart, Query, State, multipart::MultipartRejection},
+    extract::{
+        Multipart, Query, State,
+        multipart::{MultipartError, MultipartRejection},
+    },
     http::{HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
 };
@@ -618,6 +621,15 @@ fn too_large() -> AppError {
     AppError::payload_too_large("file_info.import_err_too_large")
 }
 
+/// Only a size error is 413 (multer `LIMIT_FILE_SIZE`); a malformed body is 400.
+fn multipart_error(e: MultipartError) -> AppError {
+    if e.status() == StatusCode::PAYLOAD_TOO_LARGE {
+        too_large()
+    } else {
+        bad(&format!("Multipart: {}", e.body_text()))
+    }
+}
+
 /// `POST .../companions/edl` (rules 89-92): the uploaded bytes, written atomically beside the video.
 #[utoipa::path(post, path = "/api/media/{id}/files/{fileId}/companions/edl", responses((status = 201)))]
 pub async fn companions_edl(
@@ -631,10 +643,10 @@ pub async fn companions_edl(
     let PathParams((id, file_id)) = ids?;
     let mut bytes: Option<Vec<u8>> = None;
     if let Ok(mut m) = multipart {
-        while let Some(mut field) = m.next_field().await.map_err(|_| too_large())? {
+        while let Some(mut field) = m.next_field().await.map_err(multipart_error)? {
             let is_file = field.name() == Some("file") && field.file_name().is_some();
             let mut b = vec![];
-            while let Some(c) = field.chunk().await.map_err(|_| too_large())? {
+            while let Some(c) = field.chunk().await.map_err(multipart_error)? {
                 b.extend_from_slice(&c);
                 if b.len() as u64 > MAX_EDL_BYTES {
                     return Err(too_large());
