@@ -172,24 +172,30 @@ pub async fn enqueue(st: &AppState, id: i32, options: Options) -> Result<Value, 
     st.hub
         .activity()
         .upsert_pending(&activity_id(id), "SubtitleSync", Some(subject), None);
-    pump(st);
-    Ok(out)
+    let started = pump(st);
+    Ok(started
+        .into_iter()
+        .find(|(sid, _)| *sid == id)
+        .map_or(out, |(_, v)| v))
 }
 
 /// Starts queued items while a slot is free; each item runs with its own options (C56).
-pub fn pump(st: &AppState) {
+/// Returns each started item as it looked at the start (what an enqueue answers).
+pub fn pump(st: &AppState) -> Vec<(i32, Value)> {
+    let mut started = vec![];
     loop {
         let next = {
             let mut q = st.subtitles.sync.lock();
             if q.1 >= MAX_CONCURRENT {
-                return;
+                return started;
             }
             let Some(i) = q.0.iter().position(|i| i.status == "queued") else {
-                return;
+                return started;
             };
             q.1 += 1;
             q.0[i].status = "running";
             q.0[i].started_at = Some(now_ms());
+            started.push((q.0[i].subtitle_id, q.0[i].json()));
             (
                 q.0[i].subtitle_id,
                 q.0[i].subject.clone(),

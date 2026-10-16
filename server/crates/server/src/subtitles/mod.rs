@@ -56,6 +56,22 @@ impl Default for Bases {
     }
 }
 
+impl Bases {
+    /// `FLIKS_SUBTITLE_PROVIDERS_URL` (test seam): the OpenSubtitles and Subdl bases move under it, over http.
+    pub fn from_env() -> Self {
+        let url = std::env::var("FLIKS_SUBTITLE_PROVIDERS_URL").unwrap_or_default();
+        let url = url.trim().trim_end_matches('/');
+        let mut b = Self::default();
+        if !url.is_empty() {
+            b.opensubtitles = format!("{url}/opensubtitles/api/v1");
+            b.subdl_api = format!("{url}/subdl/api/v1/subtitles");
+            b.subdl_dl = url.to_owned();
+            b.allow_http_link = true;
+        }
+        b
+    }
+}
+
 /// Process-wide subtitle state: provider limiter and token cache, in-memory queues and guards.
 pub struct Shared {
     pub limiter: Limiter,
@@ -113,7 +129,7 @@ impl Shared {
 
 impl Default for Shared {
     fn default() -> Self {
-        Self::new(Bases::default())
+        Self::new(Bases::from_env())
     }
 }
 

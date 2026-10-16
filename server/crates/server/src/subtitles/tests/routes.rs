@@ -498,31 +498,40 @@ async fn search_download_list_upgrade_post_process_and_delete(pool: PgPool) {
     assert_eq!(s, 201, "{v}");
     let mut keys: Vec<_> = v.as_object().unwrap().keys().cloned().collect();
     keys.sort();
-    assert_eq!(
-        keys,
-        [
-            "createdAt",
-            "episode",
-            "forced",
-            "hashMatched",
-            "hearingImpaired",
-            "id",
-            "language",
-            "locked",
-            "media",
-            "mediaFile",
-            "providerFileId",
-            "providerType",
-            "relativePath",
-            "score",
-            "status",
-            "syncFailed",
-            "synced",
-            "tags",
-            "updatedAt"
-        ]
-        .map(String::from)
-    );
+    // Recorded against Nest (parity `subtitles-provider-download-shape`).
+    let want = [
+        "codec",
+        "createdAt",
+        "episode",
+        "episodeId",
+        "errorMessage",
+        "forced",
+        "hashMatched",
+        "hearingImpaired",
+        "id",
+        "language",
+        "locked",
+        "media",
+        "mediaFile",
+        "mediaFileId",
+        "mediaId",
+        "providerFileId",
+        "providerType",
+        "relativePath",
+        "score",
+        "sourceStreamIndex",
+        "status",
+        "streamIndex",
+        "syncFailed",
+        "syncOffset",
+        "synced",
+        "tags",
+        "translationEngine",
+        "translationModel",
+        "translationProviderName",
+        "updatedAt",
+    ];
+    assert_eq!(keys, want.map(String::from));
     assert_eq!(
         (
             v["language"].clone(),

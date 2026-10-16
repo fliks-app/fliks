@@ -1,6 +1,6 @@
 //! `subtitle_files` rows and their JSON (`subtitles.md` rules 4-5).
 use chrono::{DateTime, Utc};
-use serde_json::{Map, Value, json};
+use serde_json::{Value, json};
 use sqlx::{FromRow, PgExecutor};
 
 /// Column list of a [`Row`]; enums read as text.
@@ -171,71 +171,51 @@ pub async fn insert(db: impl PgExecutor<'_>, n: &New) -> sqlx::Result<Inserted> 
 }
 
 impl New {
-    /// `SFnew`: the object Nest passed to `save` plus the generated and defaulted columns (rule 5).
+    /// `SFnew`: what `repo.save` returns (recorded): every column, the relation stubs, and the
+    /// translation provider id only when one is set.
     pub fn saved_json(&self, i: &Inserted) -> Value {
-        let mut m = Map::new();
-        let mut put = |k: &str, v: Value| {
-            m.insert(k.to_owned(), v);
-        };
-        put("id", json!(i.id));
-        put("createdAt", json!(iso(i.created_at)));
-        put("updatedAt", json!(iso(i.updated_at)));
-        put("media", json!({"id": self.media_id}));
-        put("mediaFile", json!({"id": self.media_file_id}));
-        put(
-            "episode",
-            self.episode_id.map_or(Value::Null, |e| json!({"id": e})),
-        );
-        put("language", json!(self.language));
-        put("forced", json!(self.forced));
-        put("hearingImpaired", json!(self.hearing_impaired));
-        put("providerType", json!(self.provider_type));
-        if let Some(v) = &self.provider_file_id {
-            put("providerFileId", json!(v));
-        }
-        if let Some(v) = &self.file_path {
-            put("relativePath", json!(v));
-        }
-        put("status", json!(self.status));
-        put("score", json!(self.score));
-        put("hashMatched", json!(self.hash_matched));
-        put("synced", json!(self.synced));
-        put("syncFailed", json!(false));
-        put("locked", json!(self.locked));
-        put(
-            "tags",
-            self.tags
-                .as_deref()
-                .and_then(|t| serde_json::from_str(t).ok())
-                .unwrap_or_else(|| json!([])),
-        );
-        if let Some(v) = self.stream_index {
-            put("streamIndex", json!(v));
-        }
-        if let Some(v) = self.source_stream_index {
-            put("sourceStreamIndex", json!(v));
-        }
-        if let Some(v) = &self.codec {
-            put("codec", json!(v));
-        }
+        let tags = self
+            .tags
+            .as_deref()
+            .and_then(|t| serde_json::from_str(t).ok())
+            .unwrap_or_else(|| json!([]));
+        let mut m = json!({
+            "id": i.id,
+            "createdAt": iso(i.created_at),
+            "updatedAt": iso(i.updated_at),
+            "media": {"id": self.media_id},
+            "mediaId": self.media_id,
+            "mediaFile": {"id": self.media_file_id},
+            "mediaFileId": self.media_file_id,
+            "episode": self.episode_id.map(|e| json!({"id": e})),
+            "episodeId": self.episode_id,
+            "language": self.language,
+            "forced": self.forced,
+            "hearingImpaired": self.hearing_impaired,
+            "providerType": self.provider_type,
+            "providerFileId": self.provider_file_id,
+            "relativePath": self.file_path,
+            "status": self.status,
+            "streamIndex": self.stream_index,
+            "sourceStreamIndex": self.source_stream_index,
+            "codec": self.codec,
+            "score": self.score,
+            "hashMatched": self.hash_matched,
+            "synced": self.synced,
+            "syncFailed": false,
+            "syncOffset": null,
+            "errorMessage": null,
+            "locked": self.locked,
+            "tags": tags,
+            "translationEngine": self.translation_engine,
+            "translationModel": self.translation_model,
+            "translationProviderName": self.translation_provider_name,
+        });
         if let Some(v) = self.translation_provider_id {
-            put("translationProvider", json!({"id": v}));
+            m["translationProvider"] = json!({"id": v});
+            m["translationProviderId"] = json!(v);
         }
-        for (k, v) in [
-            ("translationEngine", &self.translation_engine),
-            ("translationProviderName", &self.translation_provider_name),
-        ] {
-            if let Some(v) = v {
-                put(k, json!(v));
-            }
-        }
-        // An engine without a model saves `translationModel: null` (the LibreTranslate case).
-        match (&self.translation_model, &self.translation_engine) {
-            (Some(v), _) => put("translationModel", json!(v)),
-            (None, Some(_)) => put("translationModel", Value::Null),
-            _ => {}
-        }
-        Value::Object(m)
+        m
     }
 }
 

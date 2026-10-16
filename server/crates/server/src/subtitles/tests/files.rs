@@ -300,7 +300,7 @@ async fn a_sync_job_runs_end_to_end_and_a_failure_is_recorded(pool: PgPool) {
     .await;
     assert_eq!(
         (s, item["status"].clone(), item["subtitleId"].clone()),
-        (201, json!("queued"), json!(id)),
+        (201, json!("running"), json!(id)),
         "{item}"
     );
     assert_eq!(item["subject"]["title"], "Movie");
@@ -486,7 +486,7 @@ async fn an_ocr_job_runs_end_to_end_and_a_failed_run_stays_failed(pool: PgPool) 
         (201, json!("processing"), json!("ocr"), json!("fr")),
         "{ph}"
     );
-    assert!(ph.get("relativePath").is_none() && ph["sourceStreamIndex"] == 2);
+    assert!(ph["relativePath"].is_null() && ph["sourceStreamIndex"] == 2);
     let pid = ph["id"].as_i64().unwrap() as i32;
     until("ocr done", || async {
         let s: String = sqlx::query_scalar("SELECT status::text FROM subtitle_files WHERE id = $1")
@@ -837,4 +837,83 @@ async fn a_rescan_and_a_file_delete_reach_the_subtitle_hooks(pool: PgPool) {
             .join("Movie.2020.1080p.BluRay.x264-GRP.fr.srt")
             .exists()
     );
+}
+
+#[sqlx::test]
+async fn the_sync_queue_dedupes_live_items_and_runs_each_with_its_own_options(pool: PgPool) {
+    let c = ctx(pool).await;
+    let mut ids = vec![];
+    for n in ["a", "b", "c"] {
+        let stored = format!("Movie.2020.1080p.BluRay.x264-GRP.{n}.srt");
+        std::fs::write(c.dir.join(&stored), SRT).unwrap();
+        ids.push(row(&c, "en", "disk", Some(&stored), None, None).await);
+    }
+    let done = |j: &str| {
+        job_snapshot(
+            j,
+            "SubtitleSync",
+            "done",
+            json!({"type": "SubtitleSync", "subtitle": {"format": "srt", "text": SRT}}),
+            None,
+        )
+    };
+    c.fake.script(
+        "POST",
+        "/v1/jobs",
+        ["j1", "j2", "j3"].map(|j| ok(json!({"jobId": j}))).to_vec(),
+    );
+    for (j, delay) in [("j1", 400), ("j2", 400), ("j3", 0)] {
+        c.fake.script(
+            "GET",
+            &format!("/v1/jobs/{j}"),
+            vec![crate::engine::testkit::slow(delay, ok(done(j)))],
+        );
+    }
+    let enqueue = |id: i32, opts: Value| {
+        let uri = format!("/api/media/{}/subtitles/{id}/sync", c.media);
+        let (c, admin) = (&c, c.admin.clone());
+        async move { call(c, "POST", &uri, &admin, Some(opts)).await.1 }
+    };
+    let first = enqueue(ids[0], json!({"maxOffsetSeconds": 30})).await;
+    let again = enqueue(ids[0], json!({"maxOffsetSeconds": 99})).await;
+    assert_eq!((first["status"].clone(), again), (json!("running"), first));
+    assert_eq!(
+        enqueue(ids[1], json!({"maxOffsetSeconds": 30})).await["status"],
+        "running"
+    );
+    // C56: the third waits for a slot and keeps its own options, whoever frees the slot.
+    let third = enqueue(ids[2], json!({"maxOffsetSeconds": 10})).await;
+    assert_eq!(third["status"], "queued");
+    until("all synced", || async {
+        c.st.subtitles
+            .sync
+            .snapshot()
+            .iter()
+            .filter(|i| i["status"] == "completed")
+            .count()
+            == 3
+    })
+    .await;
+    // The queue item shape recorded against Nest (parity `subtitles-provider-sync-queue-shape`).
+    let first = c.st.subtitles.sync.snapshot().remove(0);
+    let mut keys: Vec<&String> = first.as_object().unwrap().keys().collect();
+    keys.sort();
+    assert_eq!(
+        keys,
+        [
+            "completedAt",
+            "queuedAt",
+            "startedAt",
+            "status",
+            "subject",
+            "subtitleId"
+        ]
+    );
+    let sent: Vec<Value> = c
+        .fake
+        .seen("POST", "/v1/jobs")
+        .iter()
+        .map(|s| s.body["kind"]["maxOffsetSeconds"].clone())
+        .collect();
+    assert_eq!(sent, [json!(30.0), json!(30.0), json!(10.0)]);
 }
