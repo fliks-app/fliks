@@ -1011,6 +1011,7 @@ name = "fliks_domain"
 version = "4.5.0"
 dependencies = [
  "chrono",
+ "encoding_rs",
  "fancy-regex",
  "regex 1.13.1",
  "regress",
