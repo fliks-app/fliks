@@ -28,13 +28,13 @@ import { SubtitlesService } from '../../subtitles/subtitles.service';
 import { EmbeddedSubtitleService } from '../../subtitles/embedded-subtitle.service';
 import { EngineService } from '../../engine/engine.service';
 import { ThumbnailService } from '../../streaming/thumbnail.service';
+import { bridgeGenerateSprite } from '../../bridge/server-bridge';
 import { MediaServersService } from '../../media-servers/media-servers.service';
 import { PostImportQueueService } from '../../../common/post-import/post-import-queue.service';
 import { MediaMetadataService } from './media-metadata.service';
 import { relativePathUnderMediaRoot } from '../../../common/utils/media-path.util';
 import { VIDEO_EXTS } from '../../../common/constants/video-extensions';
 import { isBonusDir, isSampleFile } from '../../../common/utils/bonus-content.util';
-import { buildMediaProgressSubject } from '../../../common/utils/media-progress-subject.util';
 
 type ProbeResult = Awaited<ReturnType<FfprobeService['detectMediaFileInfo']>>;
 
@@ -366,22 +366,11 @@ export class MediaRescanService {
         this.rebuildSubtitleCacheForFile(file, absPath);
       }
       if (opts.sprites) {
-        const ep = file.episode;
-        const subject = buildMediaProgressSubject(
-          media,
-          ep
-            ? {
-                seasonNumber: ep.season?.seasonNumber,
-                episodeNumber: ep.episodeNumber,
-                title: ep.title,
-              }
-            : null,
-        );
         // Background, force=true so the existing sprite/meta gets rebuilt.
-        void this.thumbnailService.generateForFile(file, media, subject, {
-          force: true,
-          priority: 'high',
-        });
+        void bridgeGenerateSprite(file.id, { force: true, priority: 'high' }).catch(
+          (err: Error) =>
+            this.log.warn(`Sprite failed for file #${file.id}: ${err.message}`),
+        );
       }
     }
   }

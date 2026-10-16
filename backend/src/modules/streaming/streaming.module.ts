@@ -6,7 +6,6 @@ import { SubtitleFile } from '../subtitles/entities/subtitle-file.entity';
 import { LiveSessionRegistry } from './live-session.service';
 import { ThumbnailService } from './thumbnail.service';
 import { StreamingSettingsCache } from './streaming-settings-cache.service';
-import { SourceScanService } from './services/source-scan.service';
 import { EngineEventsService } from './services/engine-events.service';
 import { MediaFileScan } from './entities/media-file-scan.entity';
 import { Command } from '../scheduler/entities/command.entity';
@@ -41,11 +40,9 @@ import { MediaProbeModule } from '../media-probe/media-probe.module';
     LiveSessionRegistry,
     ThumbnailService,
     StreamingSettingsCache,
-    SourceScanService,
     EngineEventsService,
   ],
   exports: [
-    SourceScanService,
     LiveSessionRegistry,
     ThumbnailService,
     EngineEventsService,

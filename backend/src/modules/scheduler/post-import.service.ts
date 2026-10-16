@@ -10,16 +10,15 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { Subscription } from 'rxjs';
 import { existsSync } from 'fs';
-import * as path from 'path';
 import { MediaFile } from '../media/entities/media-file.entity';
-import { Episode } from '../media/entities/episode.entity';
 import { EventsService } from './events.service';
+import { ThumbnailService } from '../streaming/thumbnail.service';
+import type { SpriteMeta } from '../engine/engine.service';
 import {
-  ThumbnailService,
-  type SpriteMetadata,
-} from '../streaming/thumbnail.service';
+  bridgeGenerateSprite,
+  bridgeScanSource,
+} from '../bridge/server-bridge';
 import { MarkersService } from '../markers/markers.service';
-import { SourceScanService } from '../streaming/services/source-scan.service';
 import { SettingsService } from '../settings/settings.service';
 import { PostImportQueueService } from '../../common/post-import/post-import-queue.service';
 import { ActivityRegistryService } from './activity-registry.service';
@@ -50,8 +49,6 @@ export class PostImportService implements OnModuleInit, OnModuleDestroy {
   constructor(
     @InjectRepository(MediaFile)
     private readonly mediaFileRepo: Repository<MediaFile>,
-    @InjectRepository(Episode)
-    private readonly episodeRepo: Repository<Episode>,
     private readonly events: EventsService,
     private readonly thumbnails: ThumbnailService,
     private readonly markers: MarkersService,
@@ -59,7 +56,6 @@ export class PostImportService implements OnModuleInit, OnModuleDestroy {
     @Inject(forwardRef(() => PostImportQueueService))
     private readonly postImportQueue: PostImportQueueService,
     private readonly activityRegistry: ActivityRegistryService,
-    private readonly sourceScans: SourceScanService,
   ) {}
 
   onModuleInit(): void {
@@ -132,14 +128,11 @@ export class PostImportService implements OnModuleInit, OnModuleDestroy {
   private async scanSources(mediaId: number): Promise<void> {
     const files = await this.mediaFileRepo.find({
       where: { media: { id: mediaId } },
-      relations: ['media'],
+      select: { id: true },
     });
-    for (const f of files) {
-      if (!f.media?.path || !f.relativePath) continue;
-      await this.sourceScans.scheduleIfNeeded(
-        f.id,
-        path.join(f.media.path, f.relativePath),
-        f.streamInfo,
+    for (const { id } of files) {
+      await bridgeScanSource(id).catch((err: Error) =>
+        this.log.warn(`Source scan failed for file #${id}: ${err.message}`),
       );
     }
   }
@@ -251,38 +244,21 @@ export class PostImportService implements OnModuleInit, OnModuleDestroy {
     return generated;
   }
 
-  /**
-   * Resolve the file's absolute path + progress subject from its own rows and
-   * queue generation. Shared with the bulk scheduler commands.
-   */
+  /** Queues the file's sprite in fliks-server; shared with the bulk scheduler commands. */
   async generateSprite(
     mediaFileId: number,
     force: boolean,
-  ): Promise<SpriteMetadata | null> {
-    const file = await this.mediaFileRepo.findOne({
-      where: { id: mediaFileId },
-      relations: ['media'],
-    });
-    if (!file?.media) return null;
-
-    let subject = buildMediaProgressSubject(file.media);
-    if (file.episodeId) {
-      const ep = await this.episodeRepo.findOne({
-        where: { id: file.episodeId },
-        relations: ['season'],
+  ): Promise<SpriteMeta | null> {
+    try {
+      return await bridgeGenerateSprite(mediaFileId, {
+        force,
+        priority: force ? 'normal' : 'low',
       });
-      if (ep) {
-        subject = buildMediaProgressSubject(file.media, {
-          id: ep.id,
-          seasonNumber: ep.season?.seasonNumber,
-          episodeNumber: ep.episodeNumber,
-          title: ep.title,
-        });
-      }
+    } catch (err) {
+      this.log.warn(
+        `Sprite failed for file #${mediaFileId}: ${(err as Error).message}`,
+      );
+      return null;
     }
-    return this.thumbnails.generateForFile(file, file.media, subject, {
-      force,
-      priority: force ? 'normal' : 'low',
-    });
   }
 }

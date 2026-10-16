@@ -8,12 +8,11 @@ use fliks_engine_core::api::{
 };
 use std::{path::Path, sync::Arc};
 
-/// What a sprite is made from: the file row and the media root its path hangs under.
+/// What a sprite is made from: the file and where it sits on disk.
 pub struct SpriteJob<'a> {
     pub file_id: i32,
-    pub relative_path: &'a str,
+    pub path: &'a Path,
     pub info: Option<&'a MediaInfo>,
-    pub media_path: Option<&'a str>,
     pub title: &'a str,
     pub subject: Subject,
     pub force: bool,
@@ -25,7 +24,6 @@ pub async fn generate(st: &AppState, job: SpriteJob<'_>) -> Option<SpriteMeta> {
     let info = job
         .info
         .filter(|i| i.duration_seconds.is_some_and(|d| d != 0.0))?;
-    let abs = Path::new(job.media_path.filter(|p| !p.is_empty())?).join(job.relative_path);
     let key = format!("GenerateSprite:{}", job.file_id);
     let activity = st.hub.activity();
     activity.upsert_pending(&key, "GenerateSprite", Some(job.subject.clone()), None);
@@ -46,7 +44,7 @@ pub async fn generate(st: &AppState, job: SpriteJob<'_>) -> Option<SpriteMeta> {
         kind: JobKind::Sprite { info: info.clone() },
         media: MediaRef {
             media_file_id: job.file_id as u32,
-            path: abs.to_string_lossy().into_owned(),
+            path: job.path.to_string_lossy().into_owned(),
         },
         priority: Some(job.priority),
         force: job.force,

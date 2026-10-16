@@ -503,6 +503,35 @@ async fn a_missing_scan_is_run_and_stored(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
+async fn the_sprite_bridge_runs_the_job_and_checks_the_bearer(pool: PgPool) {
+    let c = ctx(pool, true).await;
+    let sprite =
+        json!({"interval": 5, "columns": 10, "thumbWidth": 240, "thumbHeight": 135, "count": 2});
+    c.fake
+        .script("POST", "/v1/jobs", vec![ok(json!({"jobId": "j2"}))]);
+    c.fake.script("GET", "/v1/jobs/j2", vec![ok(json!({
+        "jobId": "j2", "kind": "Sprite", "mediaFileId": c.file, "priority": "low", "state": "done",
+        "pct": 100, "createdMs": 1, "result": {"type": "Sprite", "sprite": sprite},
+    }))]);
+    let body = json!({"mediaFileId": c.file});
+    let (s, _) = call(
+        &c,
+        "POST",
+        "/internal/jobs/sprite",
+        "wrong",
+        Some(body.clone()),
+    )
+    .await;
+    assert_eq!(s, 401);
+    let bridge = c.st.cfg.bridge_token.clone();
+    let (s, b) = call(&c, "POST", "/internal/jobs/sprite", &bridge, Some(body)).await;
+    assert_eq!((s, b), (200, sprite));
+    let missing = json!({"mediaFileId": c.file + 1000});
+    let (s, _) = call(&c, "POST", "/internal/scan/source", &bridge, Some(missing)).await;
+    assert_eq!(s, 404);
+}
+
+#[sqlx::test(migrations = false)]
 async fn session_stop_checks_the_owner(pool: PgPool) {
     let c = ctx(pool, true).await;
     let other: i32 =
