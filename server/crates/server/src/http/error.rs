@@ -76,6 +76,13 @@ impl AppError {
     }
 }
 
+/// The `message` as Nest's `e.message`, for logs.
+impl std::fmt::Display for AppError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.text())
+    }
+}
+
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let mut body = json!({"statusCode": self.status.as_u16(), "message": self.message});

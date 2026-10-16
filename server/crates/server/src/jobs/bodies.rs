@@ -47,7 +47,7 @@ async fn backup_job(st: &AppState) -> Outcome {
     let dir = backup::dir();
     let made = backup::create(&st.cfg, &dir)
         .await
-        .map_err(|e| format!("{e:?}"))?;
+        .map_err(|e| e.to_string())?;
     let pruned = backup::prune(&dir, backup::KEEP)
         .await
         .map_err(|e| e.to_string())?;
