@@ -32,7 +32,7 @@ describe('MediaImportService.createUnmatched', () => {
       } as any,
       {} as any, // libraries
       {} as any, // naming
-      { updateSearchVector: jest.fn().mockResolvedValue(undefined) } as any,
+      {} as any, // metadata
       {} as any, // requestLifecycle
       { emitDomain } as any,
       { storeFromDisk: jest.fn(), ...imageService } as any,

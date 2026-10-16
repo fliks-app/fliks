@@ -80,7 +80,6 @@ describe('MediaImportService — the destination library owns the provider', () 
       {
         downloadMediaImagesInBackground: jest.fn(),
         applySeasonDetails: jest.fn().mockResolvedValue(undefined),
-        updateSearchVector: jest.fn().mockResolvedValue(undefined),
         persistMediaMetadataInBackground: jest.fn(),
       } as never,
       { onMediaImported: jest.fn().mockResolvedValue(undefined) } as never,

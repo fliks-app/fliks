@@ -4,22 +4,17 @@ import { Repository } from 'typeorm';
 import { Media } from './entities/media.entity';
 import { Season } from './entities/season.entity';
 import { Episode } from './entities/episode.entity';
-import { MediaCast } from './entities/media-cast.entity';
-import { MediaCrew } from './entities/media-crew.entity';
 import { CreateMediaDto } from './dto/create-media.dto';
 import { UpdateMediaDto } from './dto/update-media.dto';
-import { SearchMediaDto } from './dto/search-media.dto';
 import { AnalyzeMediaDto } from './dto/analyze-media.dto';
 import { ImportTmdbDto } from './dto/import-tmdb.dto';
 import { ImportMediaDto } from './dto/import-media.dto';
 import { UpdateMediaProfilesDto } from './dto/update-media-profiles.dto';
 import { BulkUpdateMediaDto } from './dto/bulk-update-media.dto';
-import { CalendarQueryDto } from './dto/calendar-query.dto';
 import { MediaType } from '../../common/enums';
 import { MediaImportService } from './media-service/media-import.service';
 import { MediaMetadataService } from './media-service/media-metadata.service';
 import { MediaQueryService } from './media-service/media-query.service';
-import { MediaRelatedService } from './media-service/media-related.service';
 import { MediaMutationService } from './media-service/media-mutation.service';
 import { MediaRescanService } from './media-service/media-rescan.service';
 import { EventsService } from '../scheduler/events.service';
@@ -40,7 +35,6 @@ export class MediaService {
     private readonly imports: MediaImportService,
     private readonly metadata: MediaMetadataService,
     private readonly query: MediaQueryService,
-    private readonly related: MediaRelatedService,
     private readonly mutation: MediaMutationService,
     private readonly rescan: MediaRescanService,
     private readonly events: EventsService,
@@ -83,32 +77,8 @@ export class MediaService {
 
   // -- Reads ------------------------------------------------------------------
 
-  getCounts(accessibleLibraryIds: number[]) {
-    return this.query.getCounts(accessibleLibraryIds);
-  }
-
   getCountsByLibrary(accessibleLibraryIds: number[]) {
     return this.query.getCountsByLibrary(accessibleLibraryIds);
-  }
-
-  getGenres(accessibleLibraryIds: number[]) {
-    return this.query.getGenres(accessibleLibraryIds);
-  }
-
-  getCollections(accessibleLibraryIds: number[]) {
-    return this.query.getCollections(accessibleLibraryIds);
-  }
-
-  findAll(
-    query: SearchMediaDto,
-    userId?: number,
-    accessibleLibraryIds: number[] = [],
-  ) {
-    return this.query.findAll(query, userId, accessibleLibraryIds);
-  }
-
-  findRecentlyAdded(opts: Parameters<MediaQueryService['findRecentlyAdded']>[0]) {
-    return this.query.findRecentlyAdded(opts);
   }
 
   findByTmdbId(
@@ -123,26 +93,6 @@ export class MediaService {
     return this.query.findOne(id);
   }
 
-  findSimilar(id: number, limit?: number) {
-    return this.related.findSimilar(id, limit);
-  }
-
-  findCollection(id: number) {
-    return this.related.findCollection(id);
-  }
-
-  getTrackingStatus(id: number) {
-    return this.query.getTrackingStatus(id);
-  }
-
-  getCast(mediaId: number): Promise<MediaCast[]> {
-    return this.query.getCast(mediaId);
-  }
-
-  getCrew(mediaId: number): Promise<MediaCrew[]> {
-    return this.query.getCrew(mediaId);
-  }
-
   getMediaIdForSeason(seasonId: number) {
     return this.query.getMediaIdForSeason(seasonId);
   }
@@ -153,14 +103,6 @@ export class MediaService {
 
   assertAccessible(mediaId: number, accessibleLibraryIds: number[]) {
     return this.query.assertAccessible(mediaId, accessibleLibraryIds);
-  }
-
-  getCalendar(
-    dto: CalendarQueryDto,
-    accessibleLibraryIds: number[],
-    userId?: number,
-  ) {
-    return this.query.getCalendar(dto, accessibleLibraryIds, userId);
   }
 
   // -- Mutations --------------------------------------------------------------

@@ -449,7 +449,6 @@ export class MediaImportService {
       ...(addedByUserId ? { addedBy: { id: addedByUserId } as User } : {}),
     });
     const saved = await this.mediaRepo.save(row);
-    await this.metadata.updateSearchVector(saved.id);
     await this.storeLocalArtwork(saved.id, dto.artwork);
     this.events.emitDomain({
       type: 'media.imported',
@@ -506,7 +505,6 @@ export class MediaImportService {
   async create(dto: CreateMediaDto): Promise<Media> {
     const media = this.mediaRepo.create(dto);
     const saved = await this.mediaRepo.save(media);
-    await this.metadata.updateSearchVector(saved.id);
     const reloaded = await this.mediaRepo.findOne({ where: { id: saved.id } });
     if (!reloaded) throw new Error(`Media #${saved.id} not found after save`);
     this.events.emitDomain({
@@ -595,7 +593,6 @@ export class MediaImportService {
     const saved = await this.mediaRepo.save(row);
     this.logLibraryAdded('movie', saved);
     this.metadata.downloadMediaImagesInBackground(saved.id, details);
-    await this.metadata.updateSearchVector(saved.id);
     await this.requestLifecycle.onMediaImported(saved, addedByUserId ?? null);
     this.events.emitDomain({
       type: 'media.imported',
@@ -676,7 +673,6 @@ export class MediaImportService {
       await this.metadata.applySeasonDetails(sSaved, sd, { deferImages: true });
     }
 
-    await this.metadata.updateSearchVector(saved.id);
     await this.requestLifecycle.onMediaImported(saved, addedByUserId ?? null);
     this.events.emitDomain({
       type: 'media.imported',

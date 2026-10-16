@@ -987,26 +987,12 @@
     "policies": "(ability) => ability.can(Action.Manage, Media)"
   },
   {
-    "method": "GET",
-    "path": "/api/media",
-    "controller": "MediaController",
-    "handler": "findAll",
-    "file": "src/modules/media/media.controller.ts",
-    "line": 119,
-    "guards": [
-      "JwtOrApiKeyGuard",
-      "PoliciesGuard"
-    ],
-    "policies": "(ability) => ability.can(Action.Read, Media)",
-    "query": "SearchMediaDto"
-  },
-  {
     "method": "POST",
     "path": "/api/media",
     "controller": "MediaController",
     "handler": "create",
     "file": "src/modules/media/media.controller.ts",
-    "line": 113,
+    "line": 107,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -1126,7 +1112,7 @@
     "controller": "MediaController",
     "handler": "remove",
     "file": "src/modules/media/media.controller.ts",
-    "line": 948,
+    "line": 766,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -1134,25 +1120,12 @@
     "policies": "(ability) => ability.can(Action.Delete, Media)"
   },
   {
-    "method": "GET",
-    "path": "/api/media/:id",
-    "controller": "MediaController",
-    "handler": "findOne",
-    "file": "src/modules/media/media.controller.ts",
-    "line": 880,
-    "guards": [
-      "JwtOrApiKeyGuard",
-      "PoliciesGuard"
-    ],
-    "policies": "(ability) => ability.can(Action.Read, Media)"
-  },
-  {
     "method": "PUT",
     "path": "/api/media/:id",
     "controller": "MediaController",
     "handler": "update",
     "file": "src/modules/media/media.controller.ts",
-    "line": 937,
+    "line": 755,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -1166,7 +1139,7 @@
     "controller": "MediaController",
     "handler": "analyzeMedia",
     "file": "src/modules/media/media.controller.ts",
-    "line": 547,
+    "line": 439,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -1175,51 +1148,12 @@
     "body": "AnalyzeMediaDto"
   },
   {
-    "method": "GET",
-    "path": "/api/media/:id/cast",
-    "controller": "MediaController",
-    "handler": "getCast",
-    "file": "src/modules/media/media.controller.ts",
-    "line": 917,
-    "guards": [
-      "JwtOrApiKeyGuard",
-      "PoliciesGuard"
-    ],
-    "policies": "(ability) => ability.can(Action.Read, Media)"
-  },
-  {
-    "method": "GET",
-    "path": "/api/media/:id/collection",
-    "controller": "MediaController",
-    "handler": "getCollection",
-    "file": "src/modules/media/media.controller.ts",
-    "line": 907,
-    "guards": [
-      "JwtOrApiKeyGuard",
-      "PoliciesGuard"
-    ],
-    "policies": "(ability) => ability.can(Action.Read, Media)"
-  },
-  {
-    "method": "GET",
-    "path": "/api/media/:id/crew",
-    "controller": "MediaController",
-    "handler": "getCrew",
-    "file": "src/modules/media/media.controller.ts",
-    "line": 927,
-    "guards": [
-      "JwtOrApiKeyGuard",
-      "PoliciesGuard"
-    ],
-    "policies": "(ability) => ability.can(Action.Read, Media)"
-  },
-  {
     "method": "POST",
     "path": "/api/media/:id/episodes/:episodeId/refresh",
     "controller": "MediaController",
     "handler": "refreshEpisodeMetadata",
     "file": "src/modules/media/media.controller.ts",
-    "line": 433,
+    "line": 325,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -1232,7 +1166,7 @@
     "controller": "MediaController",
     "handler": "deleteFile",
     "file": "src/modules/media/media.controller.ts",
-    "line": 227,
+    "line": 119,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -1245,7 +1179,7 @@
     "controller": "MediaController",
     "handler": "deleteCompanion",
     "file": "src/modules/media/media.controller.ts",
-    "line": 287,
+    "line": 179,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -1258,7 +1192,7 @@
     "controller": "MediaController",
     "handler": "listCompanions",
     "file": "src/modules/media/media.controller.ts",
-    "line": 243,
+    "line": 135,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -1271,7 +1205,7 @@
     "controller": "MediaController",
     "handler": "downloadCompanion",
     "file": "src/modules/media/media.controller.ts",
-    "line": 254,
+    "line": 146,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -1284,7 +1218,7 @@
     "controller": "MediaController",
     "handler": "importEdl",
     "file": "src/modules/media/media.controller.ts",
-    "line": 271,
+    "line": 163,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -1298,7 +1232,7 @@
     "controller": "MediaController",
     "handler": "identify",
     "file": "src/modules/media/media.controller.ts",
-    "line": 329,
+    "line": 221,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -1312,7 +1246,7 @@
     "controller": "MediaController",
     "handler": "updateLibrary",
     "file": "src/modules/media/media.controller.ts",
-    "line": 300,
+    "line": 192,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -1325,7 +1259,7 @@
     "controller": "MediaController",
     "handler": "updateProfiles",
     "file": "src/modules/media/media.controller.ts",
-    "line": 311,
+    "line": 203,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -1339,7 +1273,7 @@
     "controller": "MediaController",
     "handler": "refreshMetadata",
     "file": "src/modules/media/media.controller.ts",
-    "line": 385,
+    "line": 277,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -1352,7 +1286,7 @@
     "controller": "MediaController",
     "handler": "rescanFiles",
     "file": "src/modules/media/media.controller.ts",
-    "line": 480,
+    "line": 372,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -1361,37 +1295,11 @@
   },
   {
     "method": "GET",
-    "path": "/api/media/:id/similar",
-    "controller": "MediaController",
-    "handler": "getSimilar",
-    "file": "src/modules/media/media.controller.ts",
-    "line": 892,
-    "guards": [
-      "JwtOrApiKeyGuard",
-      "PoliciesGuard"
-    ],
-    "policies": "(ability) => ability.can(Action.Read, Media)"
-  },
-  {
-    "method": "GET",
-    "path": "/api/media/:id/streams/:mediaFileId",
-    "controller": "MediaController",
-    "handler": "getStreams",
-    "file": "src/modules/media/media.controller.ts",
-    "line": 829,
-    "guards": [
-      "JwtOrApiKeyGuard",
-      "PoliciesGuard"
-    ],
-    "policies": "(ability) => ability.can(Action.Read, Media)"
-  },
-  {
-    "method": "GET",
     "path": "/api/media/:id/subtitles",
     "controller": "MediaController",
     "handler": "getSubtitles",
     "file": "src/modules/media/media.controller.ts",
-    "line": 569,
+    "line": 461,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -1404,7 +1312,7 @@
     "controller": "MediaController",
     "handler": "deleteSubtitle",
     "file": "src/modules/media/media.controller.ts",
-    "line": 800,
+    "line": 692,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -1417,7 +1325,7 @@
     "controller": "MediaController",
     "handler": "setSubtitleLanguage",
     "file": "src/modules/media/media.controller.ts",
-    "line": 722,
+    "line": 614,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -1430,7 +1338,7 @@
     "controller": "MediaController",
     "handler": "ocrSubtitle",
     "file": "src/modules/media/media.controller.ts",
-    "line": 694,
+    "line": 586,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -1443,7 +1351,7 @@
     "controller": "MediaController",
     "handler": "postProcessSubtitle",
     "file": "src/modules/media/media.controller.ts",
-    "line": 852,
+    "line": 727,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -1456,7 +1364,7 @@
     "controller": "MediaController",
     "handler": "syncSubtitle",
     "file": "src/modules/media/media.controller.ts",
-    "line": 811,
+    "line": 703,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -1469,7 +1377,7 @@
     "controller": "MediaController",
     "handler": "translateSubtitle",
     "file": "src/modules/media/media.controller.ts",
-    "line": 706,
+    "line": 598,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -1482,7 +1390,7 @@
     "controller": "MediaController",
     "handler": "upgradeSubtitle",
     "file": "src/modules/media/media.controller.ts",
-    "line": 868,
+    "line": 743,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -1495,7 +1403,7 @@
     "controller": "MediaController",
     "handler": "validateSubtitle",
     "file": "src/modules/media/media.controller.ts",
-    "line": 734,
+    "line": 626,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -1508,7 +1416,7 @@
     "controller": "MediaController",
     "handler": "autoSubtitle",
     "file": "src/modules/media/media.controller.ts",
-    "line": 643,
+    "line": 535,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -1521,7 +1429,7 @@
     "controller": "MediaController",
     "handler": "downloadSubtitle",
     "file": "src/modules/media/media.controller.ts",
-    "line": 745,
+    "line": 637,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -1534,7 +1442,7 @@
     "controller": "MediaController",
     "handler": "searchSubtitles",
     "file": "src/modules/media/media.controller.ts",
-    "line": 585,
+    "line": 477,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -1547,7 +1455,7 @@
     "controller": "MediaController",
     "handler": "searchMissingSubtitles",
     "file": "src/modules/media/media.controller.ts",
-    "line": 683,
+    "line": 575,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -1560,7 +1468,7 @@
     "controller": "MediaController",
     "handler": "uploadSubtitle",
     "file": "src/modules/media/media.controller.ts",
-    "line": 763,
+    "line": 655,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -1569,25 +1477,12 @@
     "upload": "FileInterceptor"
   },
   {
-    "method": "GET",
-    "path": "/api/media/:id/tracking",
-    "controller": "MediaController",
-    "handler": "tracking",
-    "file": "src/modules/media/media.controller.ts",
-    "line": 217,
-    "guards": [
-      "JwtOrApiKeyGuard",
-      "PoliciesGuard"
-    ],
-    "policies": "(ability) => ability.can(Action.Read, Media)"
-  },
-  {
     "method": "PATCH",
     "path": "/api/media/bulk",
     "controller": "MediaController",
     "handler": "bulkUpdate",
     "file": "src/modules/media/media.controller.ts",
-    "line": 211,
+    "line": 113,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -1596,65 +1491,12 @@
     "body": "BulkUpdateMediaDto"
   },
   {
-    "method": "GET",
-    "path": "/api/media/calendar",
-    "controller": "MediaController",
-    "handler": "calendar",
-    "file": "src/modules/media/media.controller.ts",
-    "line": 203,
-    "guards": [
-      "JwtOrApiKeyGuard",
-      "PoliciesGuard"
-    ],
-    "policies": "(ability) => ability.can(Action.Read, Media)",
-    "query": "CalendarQueryDto"
-  },
-  {
-    "method": "GET",
-    "path": "/api/media/collections",
-    "controller": "MediaController",
-    "handler": "collections",
-    "file": "src/modules/media/media.controller.ts",
-    "line": 188,
-    "guards": [
-      "JwtOrApiKeyGuard",
-      "PoliciesGuard"
-    ],
-    "policies": "(ability) => ability.can(Action.Read, Media)"
-  },
-  {
-    "method": "GET",
-    "path": "/api/media/counts",
-    "controller": "MediaController",
-    "handler": "counts",
-    "file": "src/modules/media/media.controller.ts",
-    "line": 147,
-    "guards": [
-      "JwtOrApiKeyGuard",
-      "PoliciesGuard"
-    ],
-    "policies": "(ability) => ability.can(Action.Read, Media)"
-  },
-  {
-    "method": "GET",
-    "path": "/api/media/counts-by-library",
-    "controller": "MediaController",
-    "handler": "countsByLibrary",
-    "file": "src/modules/media/media.controller.ts",
-    "line": 155,
-    "guards": [
-      "JwtOrApiKeyGuard",
-      "PoliciesGuard"
-    ],
-    "policies": "(ability) => ability.can(Action.Read, Media)"
-  },
-  {
     "method": "PATCH",
     "path": "/api/media/episodes/:episodeId",
     "controller": "MediaController",
     "handler": "patchEpisode",
     "file": "src/modules/media/media.controller.ts",
-    "line": 986,
+    "line": 804,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -1663,25 +1505,12 @@
     "body": "PatchMonitoredDto"
   },
   {
-    "method": "GET",
-    "path": "/api/media/genres",
-    "controller": "MediaController",
-    "handler": "genres",
-    "file": "src/modules/media/media.controller.ts",
-    "line": 173,
-    "guards": [
-      "JwtOrApiKeyGuard",
-      "PoliciesGuard"
-    ],
-    "policies": "(ability) => ability.can(Action.Read, Media)"
-  },
-  {
     "method": "POST",
     "path": "/api/media/import",
     "controller": "MediaController",
     "handler": "importMedia",
     "file": "src/modules/media/media.controller.ts",
-    "line": 107,
+    "line": 101,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -1695,7 +1524,7 @@
     "controller": "MediaController",
     "handler": "importFromTmdb",
     "file": "src/modules/media/media.controller.ts",
-    "line": 101,
+    "line": 95,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -1704,39 +1533,12 @@
     "body": "ImportTmdbDto"
   },
   {
-    "method": "GET",
-    "path": "/api/media/qualities",
-    "controller": "MediaController",
-    "handler": "qualityDefinitions",
-    "file": "src/modules/media/media.controller.ts",
-    "line": 163,
-    "guards": [
-      "JwtOrApiKeyGuard",
-      "PoliciesGuard"
-    ],
-    "policies": "(ability) => ability.can(Action.Read, Media)"
-  },
-  {
-    "method": "GET",
-    "path": "/api/media/recently-added",
-    "controller": "MediaController",
-    "handler": "recentlyAdded",
-    "file": "src/modules/media/media.controller.ts",
-    "line": 127,
-    "guards": [
-      "JwtOrApiKeyGuard",
-      "PoliciesGuard"
-    ],
-    "policies": "(ability) => ability.can(Action.Read, Media)",
-    "query": "RecentlyAddedDto"
-  },
-  {
     "method": "PATCH",
     "path": "/api/media/seasons/:seasonId",
     "controller": "MediaController",
     "handler": "patchSeason",
     "file": "src/modules/media/media.controller.ts",
-    "line": 974,
+    "line": 792,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -1750,7 +1552,7 @@
     "controller": "MediaController",
     "handler": "getSyncQueue",
     "file": "src/modules/media/media.controller.ts",
-    "line": 846,
+    "line": 721,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"

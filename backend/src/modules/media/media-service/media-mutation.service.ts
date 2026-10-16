@@ -25,7 +25,6 @@ import { MediaServersService } from '../../media-servers/media-servers.service';
 import { EventsService } from '../../scheduler/events.service';
 import { RequestLifecycleService } from '../../requests/request-lifecycle.service';
 import { MediaQueryService } from './media-query.service';
-import { MediaMetadataService } from './media-metadata.service';
 import { VIDEO_EXTS } from '../../../common/constants/video-extensions';
 import { resolveEdlPath } from '../edl/edl-sidecar';
 import { ThumbnailService } from '../../streaming/thumbnail.service';
@@ -49,7 +48,6 @@ export class MediaMutationService {
     private readonly profiles: ProfilesService,
     private readonly mediaServers: MediaServersService,
     private readonly query: MediaQueryService,
-    private readonly metadata: MediaMetadataService,
     @Inject(forwardRef(() => RequestLifecycleService))
     private readonly requestLifecycle: RequestLifecycleService,
     private readonly events: EventsService,
@@ -73,7 +71,6 @@ export class MediaMutationService {
         monitored: dto.monitored,
       });
     }
-    await this.metadata.updateSearchVector(saved.id);
     await this.requestLifecycle.onMediaMonitorChange(saved, wasMonitored);
     return this.query.findOne(saved.id);
   }
