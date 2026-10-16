@@ -17,12 +17,11 @@ import { RecommendContentDto } from './dto/recommend-content.dto';
 import { PlaylistsService, PlaylistView } from '../playlists/playlists.service';
 import {
   RecommendationItem,
-  RecommendationService,
-} from '../playback/recommendation.service';
-import {
-  PlaybackService,
   WatchHistoryItem,
-} from '../playback/playback.service';
+  getHistory,
+  getRecommendations,
+  getTopGenres,
+} from './playback-bridge';
 import { LibrariesService } from '../libraries/libraries.service';
 import { EventsService } from '../scheduler/events.service';
 import { UsersStatsService } from '../users/users-stats.service';
@@ -104,8 +103,6 @@ export class SocialService {
     @InjectRepository(Media)
     private readonly mediaRepo: Repository<Media>,
     private readonly playlists: PlaylistsService,
-    private readonly recommendations: RecommendationService,
-    private readonly playback: PlaybackService,
     private readonly libraries: LibrariesService,
     private readonly events: EventsService,
     private readonly likes: LikesService,
@@ -411,12 +408,12 @@ export class SocialService {
     const [playlists, topGenres, recommendations, history, likes] =
       await Promise.all([
         this.playlists.listVisibleForOwner(targetId, me, includeFollowers),
-        shown.tastes ? this.recommendations.getTopGenres(targetId) : Promise.resolve([]),
+        shown.tastes ? getTopGenres(targetId) : Promise.resolve([]),
         shown.recommendations
-          ? this.recommendations.getRecommendations(targetId, viewerAccessible, 15)
+          ? getRecommendations(targetId, viewerAccessible, 15)
           : Promise.resolve([]),
         shown.recentlyWatched
-          ? this.playback.getHistory(targetId, 1, 12, viewerAccessible)
+          ? getHistory(targetId, 1, 12, viewerAccessible)
           : Promise.resolve({ data: [], total: 0 }),
         shown.likes
           ? this.likes.listLikes(targetId, viewerAccessible, { limit: 24 })

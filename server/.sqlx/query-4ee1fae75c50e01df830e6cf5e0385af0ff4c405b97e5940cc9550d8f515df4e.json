@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT COUNT(*) AS \"cnt!\"\n           FROM playback_states ps\n           WHERE ps.\"userId\" = $1 AND ps.\"playedAt\" IS NOT NULL\n             AND EXISTS (SELECT 1 FROM media mAcl WHERE mAcl.id = ps.\"mediaId\" AND mAcl.\"libraryId\" = ANY($2))",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "cnt!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4Array"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "4ee1fae75c50e01df830e6cf5e0385af0ff4c405b97e5940cc9550d8f515df4e"
+}

@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM recommendation_dismissals WHERE \"userId\" = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0ada17702b34fbef263eab60f2e572a8f73169db91a2e525bec841965be741f5"
+}

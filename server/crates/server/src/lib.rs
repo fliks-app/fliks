@@ -11,6 +11,7 @@ pub mod http;
 pub mod jwt_secret;
 pub mod nest;
 pub mod paths;
+pub mod playback;
 pub mod presence;
 pub mod remote;
 pub mod roles;

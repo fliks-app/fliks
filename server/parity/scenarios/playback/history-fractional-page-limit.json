@@ -8,7 +8,9 @@
       "expect": {
         "body": {
           "error": "Bad Request",
-          "message": "validation",
+          "message": [
+            "page must be an integer number"
+          ],
           "statusCode": 400
         },
         "status": 400
@@ -21,7 +23,9 @@
       "expect": {
         "body": {
           "error": "Bad Request",
-          "message": "validation",
+          "message": [
+            "limit must be an integer number"
+          ],
           "statusCode": 400
         },
         "status": 400
