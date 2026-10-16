@@ -260,13 +260,13 @@ impl Ctx<'_> {
                 }
             }
             let dest = dir.join(&file);
-            if let Err(e) = fs::create_dir_all(&dir) {
-                return Err(format!("{name}: {e}"));
-            }
             if !self.root.contains(&dir, false) || !dir.starts_with(self.mdir) {
                 return Ok(Placed::Error(format!(
                     "{name}: destination outside the library root"
                 )));
+            }
+            if let Err(e) = fs::create_dir_all(&dir) {
+                return Err(format!("{name}: {e}"));
             }
             tracing::info!("Ingesting \"{}\" -> \"{}\"", src.display(), dest.display());
             let method = self.req.transfer;
