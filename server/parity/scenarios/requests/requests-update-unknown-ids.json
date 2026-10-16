@@ -1,5 +1,5 @@
 {
-  "deviation": "C-REQ-1",
+  "deviation": "C111",
   "ignore": [
     "$..createdAt",
     "$..updatedAt"

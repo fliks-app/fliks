@@ -219,7 +219,7 @@ pub fn create_request(v: Value) -> Res<CreateRequest> {
     );
     let media_type = c.one_of("mediaType", &MEDIA_TYPES, false);
     let kind = c.one_of("kind", &KINDS, true);
-    // past int4 Postgres rejected the insert (500): C-REQ-1
+    // past int4 Postgres rejected the insert (500): C111
     let tmdb_id = match o.get("tmdbId") {
         Some(v)
             if v.as_f64()
@@ -408,7 +408,7 @@ pub fn list(q: &[(String, String)]) -> Res<List> {
     })
 }
 
-/// The `tmdbId` and `mediaType` of `title-state` (`ParseIntPipe`; the enum is validated here, not in Nest: C-REQ-1).
+/// The `tmdbId` and `mediaType` of `title-state` (`ParseIntPipe`; the enum is validated here, not in Nest: C111).
 pub fn title_state(q: &[(String, String)]) -> Res<(i32, String)> {
     let one = |k: &str| q.iter().find(|(n, _)| n == k).map(|(_, v)| v.as_str());
     let tmdb = one("tmdbId")

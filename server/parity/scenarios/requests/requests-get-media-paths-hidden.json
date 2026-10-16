@@ -1,5 +1,5 @@
 {
-  "deviation": "F-REQ-1",
+  "deviation": "F70",
   "ignore": [
     "$..createdAt",
     "$..updatedAt"

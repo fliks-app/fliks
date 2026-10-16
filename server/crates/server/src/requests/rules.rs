@@ -89,7 +89,7 @@ fn reads_metadata(c: &Value, has_seasons: bool) -> bool {
         || (c["maxSeasons"].as_i64().is_some() && !has_seasons)
 }
 
-/// `shouldAutoApprove`: the first enabled rule that matches wins. An empty `seasons` is no scope (C-REQ-2).
+/// `shouldAutoApprove`: the first enabled rule that matches wins. An empty `seasons` is no scope (C112).
 pub async fn should_auto_approve(
     st: &AppState,
     a: &Authed,

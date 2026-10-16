@@ -274,7 +274,7 @@ pub async fn decline(db: &PgPool, id: i32, by: i32, reason: Option<&str>) -> sql
     Ok(())
 }
 
-/// Takes a pending row for approval; false when it is no longer pending (C-REQ-3).
+/// Takes a pending row for approval; false when it is no longer pending (C113).
 pub async fn claim_approval(
     db: &PgPool,
     id: i32,
