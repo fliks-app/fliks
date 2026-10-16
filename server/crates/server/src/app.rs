@@ -230,7 +230,7 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         crate::ingest::disk::scan,
         crate::ingest::disk::preview,
         crate::ingest::disk::relink_batch,
-        crate::ingest::disk::relink
+        crate::ingest::disk::relink,
         metadata::search_movie,
         metadata::search_tv,
         metadata::trending_movie,
