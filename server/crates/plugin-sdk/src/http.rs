@@ -108,6 +108,13 @@ impl Request {
                 .append(n, &v.as_bytes().to_vec())
                 .map_err(|e| Error::Other(format!("header {n}: {e:?}")))?;
         }
+        // A known length, so receivers that refuse chunked bodies still accept it.
+        if !self.body.is_empty() {
+            let len = self.body.len().to_string().into_bytes();
+            fields
+                .append("content-length", &len)
+                .map_err(|e| Error::Other(format!("content-length: {e:?}")))?;
+        }
         let req = OutgoingRequest::new(fields);
         let bad = |_| Error::InvalidUrl;
         req.set_method(&self.method).map_err(bad)?;
