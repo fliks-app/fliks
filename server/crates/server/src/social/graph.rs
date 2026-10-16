@@ -22,6 +22,8 @@ pub struct Brief {
     pub id: i32,
     pub username: String,
     pub avatar: Option<String>,
+    pub enabled: bool,
+    pub share_disabled: bool,
 }
 
 #[derive(Serialize)]
@@ -35,8 +37,18 @@ pub struct SocialUser {
     follows_you: bool,
 }
 
-/// `SocialUser`s in the input order, with the viewer's edges to and from each (rule 20).
-pub async fn decorate(db: &PgPool, me: i32, users: Vec<Brief>) -> sqlx::Result<Vec<SocialUser>> {
+/// F33: the one predicate deciding whether a member may appear in a social list.
+pub fn listable(enabled: bool, share_disabled: bool) -> bool {
+    enabled && !share_disabled
+}
+
+/// `SocialUser`s in the input order, with the viewer's edges to and from each (rules 20, 57).
+pub async fn decorate(
+    db: &PgPool,
+    me: i32,
+    mut users: Vec<Brief>,
+) -> sqlx::Result<Vec<SocialUser>> {
+    users.retain(|u| listable(u.enabled, u.share_disabled));
     if users.is_empty() {
         return Ok(vec![]);
     }
@@ -95,7 +107,7 @@ async fn find_users(
         .map(|s| format!("%{s}%"));
     let users = sqlx::query_as!(
         Brief,
-        r#"SELECT u.id, u.username, u.avatar FROM users u
+        r#"SELECT u.id, u.username, u.avatar, u.enabled, u."shareDisabled" AS share_disabled FROM users u
            WHERE u.enabled = true AND u."shareDisabled" = false AND u.id <> $1
              AND ($2::text IS NULL OR u.username ILIKE $2)
              AND (NOT $3 OR u."profileVisibility" = 'public' OR EXISTS (
@@ -138,7 +150,7 @@ pub async fn requests(
 ) -> Result<Json<Vec<SocialUser>>, AppError> {
     let users = sqlx::query_as!(
         Brief,
-        r#"SELECT u.id, u.username, u.avatar FROM user_follows uf
+        r#"SELECT u.id, u.username, u.avatar, u.enabled, u."shareDisabled" AS share_disabled FROM user_follows uf
            JOIN users u ON u.id = uf."followerId"
            WHERE uf."followingId" = $1 AND uf.status = 'pending'
            ORDER BY uf.id"#,
@@ -294,9 +306,9 @@ pub async fn followers(
     }
     let users = sqlx::query_as!(
         Brief,
-        r#"SELECT u.id, u.username, u.avatar FROM user_follows uf
+        r#"SELECT u.id, u.username, u.avatar, u.enabled, u."shareDisabled" AS share_disabled FROM user_follows uf
            JOIN users u ON u.id = uf."followerId"
-           WHERE uf."followingId" = $1 AND uf.status = 'accepted' AND u.enabled
+           WHERE uf."followingId" = $1 AND uf.status = 'accepted'
            ORDER BY uf.id"#,
         target
     )
@@ -316,9 +328,9 @@ pub async fn following(
     }
     let users = sqlx::query_as!(
         Brief,
-        r#"SELECT u.id, u.username, u.avatar FROM user_follows uf
+        r#"SELECT u.id, u.username, u.avatar, u.enabled, u."shareDisabled" AS share_disabled FROM user_follows uf
            JOIN users u ON u.id = uf."followingId"
-           WHERE uf."followerId" = $1 AND uf.status = 'accepted' AND u.enabled
+           WHERE uf."followerId" = $1 AND uf.status = 'accepted'
            ORDER BY uf.id"#,
         target
     )

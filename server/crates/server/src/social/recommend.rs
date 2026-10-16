@@ -275,7 +275,8 @@ async fn cards(
                   s."seasonNumber" AS "season_number?", e."episodeNumber" AS "episode_number?",
                   e.title AS episode_title, e."stillUrl" AS still_url,
                   es."seasonNumber" AS "episode_season_number?",
-                  u.id AS other_id, u.username AS other_username, u.avatar AS other_avatar
+                  u.id AS other_id, u.username AS other_username, u.avatar AS other_avatar,
+                  u.enabled AS other_enabled, u."shareDisabled" AS other_share_disabled
            FROM content_recommendations cr
            JOIN users u ON u.id = CASE WHEN $2 THEN cr."senderId" ELSE cr."recipientId" END
            LEFT JOIN media m ON m.id = cr."mediaId"
@@ -297,7 +298,9 @@ async fn cards(
         .into_iter()
         .filter_map(|r| {
             let (media_id, library_id) = (r.media_id?, r.library_id?);
-            if !accessible.contains(&library_id) {
+            if !accessible.contains(&library_id)
+                || !super::graph::listable(r.other_enabled, r.other_share_disabled)
+            {
                 return None;
             }
             let title = r.title?;

@@ -318,3 +318,39 @@ async fn leaving_social_is_one_transaction_with_the_user_update(pool: PgPool) {
     assert_eq!((vis.as_str(), follows), ("private", 0));
     assert_ne!(before, after, "C8: the made-private playlist moves up");
 }
+
+#[sqlx::test(migrations = false)]
+async fn opted_out_and_disabled_members_leave_every_social_list(pool: PgPool) {
+    let c = ctx(pool).await;
+    c.sql(r#"UPDATE users SET "profileVisibility" = 'public' WHERE id = 1"#)
+        .await;
+    c.sql(r#"INSERT INTO user_follows ("followerId","followingId",status) VALUES (2,1,'pending'), (3,1,'pending'), (4,1,'accepted')"#).await;
+    c.sql(r#"INSERT INTO user_follows ("followerId","followingId") VALUES (1,2), (1,3), (1,4)"#)
+        .await;
+    c.sql(r#"INSERT INTO content_recommendations ("senderId","recipientId","mediaId") VALUES (3,1,1), (4,1,1), (2,1,1)"#).await;
+    c.sql(r#"UPDATE users SET enabled = false WHERE id = 2"#)
+        .await;
+    c.sql(r#"UPDATE users SET "shareDisabled" = true WHERE id = 3"#)
+        .await;
+    async fn names(c: &Ctx, uri: &str) -> Vec<String> {
+        let (s, b) = c.call(0, "GET", uri, json!({})).await;
+        assert_eq!(s, 200, "{uri}");
+        let key = |u: &Value| u["username"].as_str().map(String::from);
+        let key_sender = |u: &Value| u["sender"]["username"].as_str().map(String::from);
+        b.as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|u| key(u).or_else(|| key_sender(u)))
+            .collect()
+    }
+    assert_eq!(
+        names(&c, "/api/social/requests").await,
+        Vec::<String>::new()
+    );
+    assert_eq!(names(&c, "/api/social/users/1/followers").await, ["d"]);
+    assert_eq!(names(&c, "/api/social/users/1/following").await, ["d"]);
+    assert_eq!(
+        names(&c, "/api/social/recommendations/received").await,
+        ["d"]
+    );
+}

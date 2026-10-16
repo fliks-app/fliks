@@ -1,0 +1,124 @@
+{
+  "deviation": "F33",
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastLogin",
+    "$..lastActiveAt",
+    "$..lastPlayedAt",
+    "$..playedAt"
+  ],
+  "name": "social-requests-disabled-requester",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "status": "pending"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/social/follow/4"
+    },
+    {
+      "as": "manager",
+      "expect": {
+        "body": {
+          "status": "pending"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/social/follow/4"
+    },
+    {
+      "as": "readonly",
+      "expect": {
+        "body": {
+          "status": "pending"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/social/follow/4"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "enabled": false
+      },
+      "expect": {
+        "body": {
+          "avatar": null,
+          "edlAutoSkipCommercials": true,
+          "edlEnabled": true,
+          "email": "manager@parity.test",
+          "enabled": false,
+          "hiddenLibraryIds": [],
+          "hideSpoilers": false,
+          "id": 5,
+          "isAdmin": false,
+          "libraryIds": [
+            1,
+            2
+          ],
+          "libraryOrder": [],
+          "mediaServerId": null,
+          "mediaServerType": "local",
+          "movieQuotaLimit": 0,
+          "permissions": [
+            "media.read",
+            "users.manage"
+          ],
+          "profileVisibility": "private",
+          "quotaPeriodDays": 7,
+          "requirePasswordChange": false,
+          "role": "Manager",
+          "roleId": 4,
+          "seriesQuotaLimit": 0,
+          "shareDisabled": false,
+          "shareLikes": false,
+          "shareRecommendations": false,
+          "shareStats": false,
+          "shareTastes": false,
+          "shareWatchHistory": false,
+          "spoilerHideOverviews": true,
+          "spoilerHideStills": true,
+          "spoilerHideTitles": true,
+          "username": "manager"
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/users/5"
+    },
+    {
+      "as": "other",
+      "expect": {
+        "body": [
+          {
+            "avatar": null,
+            "followsYou": false,
+            "id": 2,
+            "isFollowing": false,
+            "requested": false,
+            "username": "user"
+          },
+          {
+            "avatar": null,
+            "followsYou": false,
+            "id": 3,
+            "isFollowing": false,
+            "requested": false,
+            "username": "readonly"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/social/requests"
+    }
+  ]
+}
