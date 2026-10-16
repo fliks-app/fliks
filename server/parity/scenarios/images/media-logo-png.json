@@ -1,0 +1,21 @@
+{
+  "deviation": null,
+  "name": "images-media-logo-png",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "anon",
+      "expect": {
+        "body": "�PNG\r\n\u001a\n\u0000\u0000\u0000\rIHDR\u0000\u0000\u0000\u0002\u0000\u0000\u0000\u0002\b\u0002\u0000\u0000\u0000�Ԛs\u0000\u0000\u0000\tpHYs\u0000\u0000\u0000\u0001\u0000\u0000\u0000\u0001\u0000O%��\u0000\u0000\u0000\u0012IDATx�cd`������\u0000\u0006\u0000\u000b\"\u0001\u0004fW�\u0019\u0000\u0000\u0000\u0000IEND�B`�",
+        "headers": {
+          "cache-control": "public, max-age=86400",
+          "content-type": "image/png",
+          "x-image-size-served": null
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/images/media/1/logo"
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "deviation": null,
+  "name": "libraries-create-forbidden",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "name": "X"
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "POST",
+      "path": "/api/libraries"
+    }
+  ]
+}

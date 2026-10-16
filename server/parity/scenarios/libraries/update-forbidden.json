@@ -1,0 +1,23 @@
+{
+  "deviation": null,
+  "name": "libraries-update-forbidden",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "name": "x"
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "PATCH",
+      "path": "/api/libraries/1"
+    }
+  ]
+}

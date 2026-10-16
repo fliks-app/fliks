@@ -1,0 +1,55 @@
+{
+  "deviation": null,
+  "name": "images-request-bad-key",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "anon",
+      "expect": {
+        "body": {
+          "message": "Not Found",
+          "statusCode": 404
+        },
+        "headers": {
+          "cache-control": "no-store, no-cache, must-revalidate",
+          "x-image-size-served": null
+        },
+        "status": 404
+      },
+      "method": "GET",
+      "path": "/api/images/request/..%2Fx"
+    },
+    {
+      "as": "anon",
+      "expect": {
+        "body": {
+          "message": "Not Found",
+          "statusCode": 404
+        },
+        "headers": {
+          "cache-control": "no-store, no-cache, must-revalidate",
+          "x-image-size-served": null
+        },
+        "status": 404
+      },
+      "method": "GET",
+      "path": "/api/images/request/movie-abc"
+    },
+    {
+      "as": "anon",
+      "expect": {
+        "body": {
+          "message": "Not Found",
+          "statusCode": 404
+        },
+        "headers": {
+          "cache-control": "no-store, no-cache, must-revalidate",
+          "x-image-size-served": null
+        },
+        "status": 404
+      },
+      "method": "GET",
+      "path": "/api/images/request/movie-603x"
+    }
+  ]
+}

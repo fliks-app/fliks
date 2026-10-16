@@ -1,0 +1,21 @@
+{
+  "deviation": "F20",
+  "name": "libraries-access-get-unknown",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Library #999 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "GET",
+      "path": "/api/libraries/999/access"
+    }
+  ],
+  "strictMessage": true
+}

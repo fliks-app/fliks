@@ -1,0 +1,131 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..avatar"
+  ],
+  "name": "images-user-avatar-deleted",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "edlAutoSkipCommercials": true,
+          "edlEnabled": true,
+          "email": "user@parity.test",
+          "enabled": true,
+          "hiddenLibraryIds": [],
+          "hideSpoilers": false,
+          "id": 2,
+          "isAdmin": false,
+          "lastLogin": null,
+          "libraryIds": [
+            1,
+            2
+          ],
+          "libraryOrder": [],
+          "mediaServerId": null,
+          "mediaServerType": "local",
+          "movieQuotaLimit": 0,
+          "permissions": [
+            "media.read",
+            "livetv.read",
+            "requests.create"
+          ],
+          "profileVisibility": "private",
+          "quotaPeriodDays": 7,
+          "requirePasswordChange": false,
+          "role": "User",
+          "roleId": 2,
+          "seriesQuotaLimit": 0,
+          "shareDisabled": false,
+          "shareLikes": false,
+          "shareRecommendations": false,
+          "shareStats": false,
+          "shareTastes": false,
+          "shareWatchHistory": false,
+          "spoilerHideOverviews": true,
+          "spoilerHideStills": true,
+          "spoilerHideTitles": true,
+          "username": "user"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "multipart": {
+        "contentType": "image/jpeg",
+        "field": "file",
+        "file": "assets/avatar.jpg",
+        "filename": "avatar.jpg"
+      },
+      "path": "/api/users/me/avatar"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "edlAutoSkipCommercials": true,
+          "edlEnabled": true,
+          "email": "user@parity.test",
+          "enabled": true,
+          "hiddenLibraryIds": [],
+          "hideSpoilers": false,
+          "id": 2,
+          "isAdmin": false,
+          "lastLogin": null,
+          "libraryIds": [
+            1,
+            2
+          ],
+          "libraryOrder": [],
+          "mediaServerId": null,
+          "mediaServerType": "local",
+          "movieQuotaLimit": 0,
+          "permissions": [
+            "media.read",
+            "livetv.read",
+            "requests.create"
+          ],
+          "profileVisibility": "private",
+          "quotaPeriodDays": 7,
+          "requirePasswordChange": false,
+          "role": "User",
+          "roleId": 2,
+          "seriesQuotaLimit": 0,
+          "shareDisabled": false,
+          "shareLikes": false,
+          "shareRecommendations": false,
+          "shareStats": false,
+          "shareTastes": false,
+          "shareWatchHistory": false,
+          "spoilerHideOverviews": true,
+          "spoilerHideStills": true,
+          "spoilerHideTitles": true,
+          "username": "user"
+        },
+        "status": 200
+      },
+      "method": "DELETE",
+      "path": "/api/users/me/avatar"
+    },
+    {
+      "as": "anon",
+      "expect": {
+        "body": {
+          "message": "Not Found",
+          "statusCode": 404
+        },
+        "headers": {
+          "cache-control": "no-store, no-cache, must-revalidate",
+          "content-type": "application/json; charset=utf-8",
+          "x-image-size-served": null
+        },
+        "status": 404
+      },
+      "method": "GET",
+      "path": "/api/images/user/2"
+    }
+  ]
+}

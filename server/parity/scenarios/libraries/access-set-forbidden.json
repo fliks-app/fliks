@@ -1,0 +1,38 @@
+{
+  "deviation": null,
+  "name": "libraries-access-set-forbidden",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "userIds": []
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "PUT",
+      "path": "/api/libraries/1/access"
+    },
+    {
+      "as": "anon",
+      "body": {
+        "userIds": []
+      },
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "PUT",
+      "path": "/api/libraries/1/access"
+    }
+  ]
+}

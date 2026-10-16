@@ -1,0 +1,24 @@
+{
+  "deviation": "F21",
+  "name": "images-variant-traversal",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "anon",
+      "expect": {
+        "body": {
+          "message": "Not Found",
+          "statusCode": 404
+        },
+        "headers": {
+          "cache-control": "no-store, no-cache, must-revalidate",
+          "x-image-size-served": null
+        },
+        "status": 404
+      },
+      "method": "GET",
+      "path": "/api/images/media/1/..%2F..%2Fpersons%2F5"
+    }
+  ],
+  "strictMessage": true
+}

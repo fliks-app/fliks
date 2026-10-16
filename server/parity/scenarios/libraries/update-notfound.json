@@ -1,0 +1,40 @@
+{
+  "deviation": null,
+  "name": "libraries-update-notfound",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "name": "x"
+      },
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Library #999 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "PATCH",
+      "path": "/api/libraries/999"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "path": "/tmp/x"
+      },
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Library #999 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "PATCH",
+      "path": "/api/libraries/999"
+    }
+  ],
+  "strictMessage": true
+}

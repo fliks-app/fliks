@@ -1,0 +1,35 @@
+{
+  "deviation": "F19",
+  "name": "libraries-update-path-change-with-media-no-dir",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "path": "/tmp/fliks-parity/libs/inuse"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Path \"/tmp/fliks-parity/media/movies\" still contains 17 media item(s) \u2014 cannot change the library's root path.",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PATCH",
+      "path": "/api/libraries/1"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "GET",
+      "path": "/api/fs/browse?path=/tmp/fliks-parity/libs/inuse"
+    }
+  ]
+}

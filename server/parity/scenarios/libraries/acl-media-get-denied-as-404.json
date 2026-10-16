@@ -1,0 +1,34 @@
+{
+  "deviation": null,
+  "name": "libraries-acl-media-get-denied-as-404",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "readonly",
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Media #18 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "GET",
+      "path": "/api/media/18"
+    },
+    {
+      "as": "readonly",
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Media #9999 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "GET",
+      "path": "/api/media/9999"
+    }
+  ],
+  "strictMessage": true
+}

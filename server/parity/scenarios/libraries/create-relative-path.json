@@ -1,0 +1,38 @@
+{
+  "deviation": "F19",
+  "name": "libraries-create-relative-path",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "name": "Rel",
+        "path": "relative/dir"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/libraries"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "path": "../up"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PATCH",
+      "path": "/api/libraries/1"
+    }
+  ]
+}

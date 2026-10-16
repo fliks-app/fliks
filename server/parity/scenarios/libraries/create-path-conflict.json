@@ -1,0 +1,25 @@
+{
+  "deviation": null,
+  "name": "libraries-create-path-conflict",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "name": "Dup",
+        "path": "/tmp/fliks-parity/media/movies"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Path \"/tmp/fliks-parity/media/movies\" is already attached to another library",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/libraries"
+    }
+  ],
+  "strictMessage": true
+}

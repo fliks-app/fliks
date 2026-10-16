@@ -1,0 +1,106 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..freeSpace",
+    "$..totalSpace"
+  ],
+  "name": "libraries-update-path-clear",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "name": "Tmp",
+        "path": "/tmp/fliks-parity/libs/clear"
+      },
+      "expect": {
+        "body": {
+          "color": null,
+          "defaultLanguageProfileId": null,
+          "defaultQualityProfileId": null,
+          "disk": {
+            "accessible": true
+          },
+          "icon": null,
+          "id": 3,
+          "label": null,
+          "mediaTypes": [
+            "movie",
+            "series"
+          ],
+          "metadataLanguage": null,
+          "metadataRegion": null,
+          "name": "Tmp",
+          "path": "/tmp/fliks-parity/libs/clear",
+          "preferredProvider": null,
+          "userIds": []
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/libraries"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "path": ""
+      },
+      "expect": {
+        "body": {
+          "color": null,
+          "defaultLanguageProfileId": null,
+          "defaultQualityProfileId": null,
+          "disk": null,
+          "icon": null,
+          "id": 3,
+          "label": null,
+          "mediaTypes": [
+            "movie",
+            "series"
+          ],
+          "metadataLanguage": null,
+          "metadataRegion": null,
+          "name": "Tmp",
+          "path": null,
+          "preferredProvider": null,
+          "userIds": []
+        },
+        "status": 200
+      },
+      "method": "PATCH",
+      "path": "/api/libraries/3"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "path": ""
+      },
+      "expect": {
+        "body": {
+          "color": null,
+          "defaultLanguageProfileId": null,
+          "defaultQualityProfileId": null,
+          "disk": null,
+          "icon": null,
+          "id": 3,
+          "label": null,
+          "mediaTypes": [
+            "movie",
+            "series"
+          ],
+          "metadataLanguage": null,
+          "metadataRegion": null,
+          "name": "Tmp",
+          "path": null,
+          "preferredProvider": null,
+          "userIds": []
+        },
+        "status": 200
+      },
+      "method": "PATCH",
+      "path": "/api/libraries/3"
+    }
+  ]
+}

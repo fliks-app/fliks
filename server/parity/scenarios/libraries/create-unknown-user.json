@@ -1,0 +1,90 @@
+{
+  "deviation": "C1",
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..freeSpace",
+    "$..totalSpace"
+  ],
+  "name": "libraries-create-unknown-user",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "name": "U",
+        "userIds": [
+          999
+        ]
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/libraries"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "color": "#3b82f6",
+            "defaultLanguageProfileId": null,
+            "defaultQualityProfileId": null,
+            "disk": {
+              "accessible": true
+            },
+            "icon": "film",
+            "id": 1,
+            "label": null,
+            "mediaTypes": [
+              "movie"
+            ],
+            "metadataLanguage": null,
+            "metadataRegion": null,
+            "name": "Movies",
+            "path": "/tmp/fliks-parity/media/movies",
+            "preferredProvider": null,
+            "userIds": [
+              2,
+              3,
+              4,
+              5
+            ]
+          },
+          {
+            "color": "#10b981",
+            "defaultLanguageProfileId": null,
+            "defaultQualityProfileId": null,
+            "disk": {
+              "accessible": true
+            },
+            "icon": "tv",
+            "id": 2,
+            "label": null,
+            "mediaTypes": [
+              "series"
+            ],
+            "metadataLanguage": null,
+            "metadataRegion": null,
+            "name": "Series",
+            "path": "/tmp/fliks-parity/media/series",
+            "preferredProvider": null,
+            "userIds": [
+              2,
+              4,
+              5
+            ]
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/libraries"
+    }
+  ]
+}

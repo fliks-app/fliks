@@ -1,0 +1,43 @@
+{
+  "deviation": null,
+  "name": "libraries-access-set-validation",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {},
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "each value in userIds must be an integer number",
+            "userIds must be an array"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PUT",
+      "path": "/api/libraries/1/access"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "userIds": "x"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "each value in userIds must be an integer number",
+            "userIds must be an array"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PUT",
+      "path": "/api/libraries/1/access"
+    }
+  ]
+}

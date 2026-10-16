@@ -1,0 +1,55 @@
+{
+  "deviation": "F20",
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..freeSpace",
+    "$..totalSpace"
+  ],
+  "name": "libraries-get-outside-acl",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "name": "Readonly",
+        "permissions": [
+          "media.read",
+          "livetv.read",
+          "settings.access"
+        ]
+      },
+      "expect": {
+        "body": {
+          "defaultLibraries": [],
+          "defaultLibraryIds": [],
+          "id": 3,
+          "isDefault": false,
+          "name": "Readonly",
+          "permissions": [
+            "media.read",
+            "livetv.read",
+            "settings.access"
+          ]
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/roles/3"
+    },
+    {
+      "as": "readonly",
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Library #2 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "GET",
+      "path": "/api/libraries/2"
+    }
+  ],
+  "strictMessage": true
+}

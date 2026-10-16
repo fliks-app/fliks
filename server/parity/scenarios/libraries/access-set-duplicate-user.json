@@ -1,0 +1,39 @@
+{
+  "deviation": "C1",
+  "name": "libraries-access-set-duplicate-user",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "userIds": [
+          2,
+          2
+        ]
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PUT",
+      "path": "/api/libraries/1/access"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          2,
+          3,
+          4,
+          5
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/libraries/1/access"
+    }
+  ]
+}

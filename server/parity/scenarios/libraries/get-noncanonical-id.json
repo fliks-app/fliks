@@ -1,0 +1,21 @@
+{
+  "deviation": "C20",
+  "name": "libraries-get-noncanonical-id",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Validation failed (numeric string is expected)",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "GET",
+      "path": "/api/libraries/01"
+    }
+  ],
+  "strictMessage": true
+}

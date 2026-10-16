@@ -1,0 +1,21 @@
+{
+  "deviation": null,
+  "name": "libraries-delete-notfound",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Library #999 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "DELETE",
+      "path": "/api/libraries/999"
+    }
+  ],
+  "strictMessage": true
+}

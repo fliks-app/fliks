@@ -1,0 +1,56 @@
+{
+  "deviation": "C9",
+  "name": "images-id-noncanonical",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "anon",
+      "expect": {
+        "body": {
+          "message": "Not Found",
+          "statusCode": 404
+        },
+        "headers": {
+          "cache-control": "no-store, no-cache, must-revalidate",
+          "x-image-size-served": null
+        },
+        "status": 404
+      },
+      "method": "GET",
+      "path": "/api/images/media/01/poster"
+    },
+    {
+      "as": "anon",
+      "expect": {
+        "body": {
+          "message": "Not Found",
+          "statusCode": 404
+        },
+        "headers": {
+          "cache-control": "no-store, no-cache, must-revalidate",
+          "x-image-size-served": null
+        },
+        "status": 404
+      },
+      "method": "GET",
+      "path": "/api/images/person/0x5"
+    },
+    {
+      "as": "anon",
+      "expect": {
+        "body": {
+          "message": "Not Found",
+          "statusCode": 404
+        },
+        "headers": {
+          "cache-control": "no-store, no-cache, must-revalidate",
+          "x-image-size-served": null
+        },
+        "status": 404
+      },
+      "method": "GET",
+      "path": "/api/images/person/5.0"
+    }
+  ],
+  "strictMessage": true
+}

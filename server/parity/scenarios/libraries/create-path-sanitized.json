@@ -1,0 +1,75 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..freeSpace",
+    "$..totalSpace"
+  ],
+  "name": "libraries-create-path-sanitized",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "name": "Clean",
+        "path": "​ /tmp/fliks-parity/libs/clean ‪"
+      },
+      "expect": {
+        "body": {
+          "color": null,
+          "defaultLanguageProfileId": null,
+          "defaultQualityProfileId": null,
+          "disk": {
+            "accessible": true
+          },
+          "icon": null,
+          "id": 3,
+          "label": null,
+          "mediaTypes": [
+            "movie",
+            "series"
+          ],
+          "metadataLanguage": null,
+          "metadataRegion": null,
+          "name": "Clean",
+          "path": "/tmp/fliks-parity/libs/clean",
+          "preferredProvider": null,
+          "userIds": []
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/libraries"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "color": null,
+          "defaultLanguageProfileId": null,
+          "defaultQualityProfileId": null,
+          "disk": {
+            "accessible": true
+          },
+          "icon": null,
+          "id": 3,
+          "label": null,
+          "mediaTypes": [
+            "movie",
+            "series"
+          ],
+          "metadataLanguage": null,
+          "metadataRegion": null,
+          "name": "Clean",
+          "path": "/tmp/fliks-parity/libs/clean",
+          "preferredProvider": null,
+          "userIds": []
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/libraries/3"
+    }
+  ]
+}

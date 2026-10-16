@@ -1,0 +1,24 @@
+{
+  "deviation": null,
+  "name": "libraries-update-path-clear-with-media",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "path": "  "
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Path \"/tmp/fliks-parity/media/movies\" still contains 17 media item(s).",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PATCH",
+      "path": "/api/libraries/1"
+    }
+  ],
+  "strictMessage": true
+}

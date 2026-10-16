@@ -1,0 +1,83 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..freeSpace",
+    "$..totalSpace"
+  ],
+  "name": "libraries-update-name",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "color": null,
+        "name": "Films"
+      },
+      "expect": {
+        "body": {
+          "color": null,
+          "defaultLanguageProfileId": null,
+          "defaultQualityProfileId": null,
+          "disk": {
+            "accessible": true
+          },
+          "icon": "film",
+          "id": 1,
+          "label": null,
+          "mediaTypes": [
+            "movie"
+          ],
+          "metadataLanguage": null,
+          "metadataRegion": null,
+          "name": "Films",
+          "path": "/tmp/fliks-parity/media/movies",
+          "preferredProvider": null,
+          "userIds": [
+            2,
+            3,
+            4,
+            5
+          ]
+        },
+        "status": 200
+      },
+      "method": "PATCH",
+      "path": "/api/libraries/1"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "color": null,
+          "defaultLanguageProfileId": null,
+          "defaultQualityProfileId": null,
+          "disk": {
+            "accessible": true
+          },
+          "icon": "film",
+          "id": 1,
+          "label": null,
+          "mediaTypes": [
+            "movie"
+          ],
+          "metadataLanguage": null,
+          "metadataRegion": null,
+          "name": "Films",
+          "path": "/tmp/fliks-parity/media/movies",
+          "preferredProvider": null,
+          "userIds": [
+            2,
+            3,
+            4,
+            5
+          ]
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/libraries/1"
+    }
+  ]
+}
