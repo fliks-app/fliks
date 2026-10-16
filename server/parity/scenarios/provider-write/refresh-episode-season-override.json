@@ -75,7 +75,7 @@
             "metadataLanguage": null,
             "metadataRegion": null,
             "name": "Plain Series",
-            "path": "/tmp/fliks-parity/media/series-plain",
+            "path": "/tmp/fliks-parity/providers/series",
             "preferredProvider": null
           },
           "libraryId": 6,
@@ -85,7 +85,7 @@
           "monitored": true,
           "originalTitle": null,
           "overview": "old",
-          "path": "/tmp/fliks-parity/media/series-plain/Seasons Show",
+          "path": "/tmp/fliks-parity/providers/series/Seasons Show",
           "physicalRelease": null,
           "posterUrl": null,
           "preferredProvider": null,

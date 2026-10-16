@@ -3,16 +3,17 @@
 ALTER TABLE libraries DISABLE TRIGGER set_updated_at;
 UPDATE libraries SET "preferredProvider" = 'tvdb' WHERE id = 2;
 INSERT INTO libraries (id, "createdAt", "updatedAt", name, icon, color, "mediaTypes", path, "metadataLanguage", "metadataRegion") VALUES
- (6, '2026-01-01', '2026-01-01', 'Plain Series', 'tv', '#444444', '["series"]', '/tmp/fliks-parity/media/series-plain', NULL, NULL),
- (7, '2026-01-01', '2026-01-01', 'French Movies', 'film', '#555555', '["movie"]', '/tmp/fliks-parity/media/movies-fr', 'fr', 'FR');
+ (6, '2026-01-01', '2026-01-01', 'Plain Series', 'tv', '#444444', '["series"]', '/tmp/fliks-parity/providers/series', NULL, NULL),
+ (7, '2026-01-01', '2026-01-01', 'French Movies', 'film', '#555555', '["movie"]', '/tmp/fliks-parity/providers/movies-fr', 'fr', 'FR'),
+ (8, '2026-01-01', '2026-01-01', 'Provider Movies', 'film', '#666666', '["movie"]', '/tmp/fliks-parity/providers/movies', NULL, NULL);
 ALTER TABLE libraries ENABLE TRIGGER set_updated_at;
 UPDATE media SET "tmdbId" = NULL WHERE "tmdbId" IN (1001, 1002, 1003, 2000, 1396);
 INSERT INTO media (id, "createdAt", "updatedAt", title, year, type, "tmdbId", "tvdbId", "imdbId", overview, status, monitored, "folderName", genres, "libraryId", "preferredProvider") VALUES
- (201, '2026-01-01', '2026-01-01', 'Old Title', 1990, 'movie', 1001, NULL, NULL, 'old', 'released', true, 'Old Title (1990)', '["Old"]', 1, NULL),
+ (201, '2026-01-01', '2026-01-01', 'Old Title', 1990, 'movie', 1001, NULL, NULL, 'old', 'released', true, 'Old Title (1990)', '["Old"]', 8, NULL),
  (202, '2026-01-01', '2026-01-01', 'Seasons Show', 2008, 'series', 2000, 81190, NULL, 'old', 'continuing', true, 'Seasons Show', '[]', 6, NULL),
  (203, '2026-01-01', '2026-01-01', 'Imdb Only', 2008, 'series', NULL, NULL, 'tt0903747', 'old', 'continuing', true, 'Imdb Only', '[]', 6, NULL),
  (204, '2026-01-01', '2026-01-01', 'Tvdb Only', 2008, 'series', NULL, 81190, NULL, 'old', 'continuing', true, 'Tvdb Only', '[]', 6, 'tmdb'),
- (206, '2026-01-01', '2026-01-01', 'Strict Fail', 1999, 'movie', 1003, NULL, NULL, 'old', 'released', true, 'Strict Fail (1999)', '[]', 1, 'tvdb');
+ (206, '2026-01-01', '2026-01-01', 'Strict Fail', 1999, 'movie', 1003, NULL, NULL, 'old', 'released', true, 'Strict Fail (1999)', '[]', 8, 'tvdb');
 INSERT INTO seasons (id, "createdAt", "updatedAt", "seasonNumber", monitored, "mediaId", "preferredProvider") VALUES
  (201, '2026-01-01', '2026-01-01', 0, false, 202, NULL),
  (202, '2026-01-01', '2026-01-01', 1, true, 202, 'tvdb'),

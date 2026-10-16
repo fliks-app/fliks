@@ -699,6 +699,27 @@ async fn run(ctx: &Ctx, sc: &mut Value, record: bool) -> Vec<String> {
     errs
 }
 
+/// Logs every actor of the current database in; seeds beyond `base` add actors (noread, settings,
+/// validator) and a missing one only matters to the scenarios that use it.
+async fn login_all(http: &Client, target: &str) -> HashMap<String, String> {
+    let mut tokens = HashMap::new();
+    for a in ACTORS {
+        let r = http
+            .post(format!("{target}/api/auth/login"))
+            .json(&json!({ "username": a, "password": format!("{a}-pass") }))
+            .send()
+            .await
+            .unwrap_or_else(|e| panic!("login {a}: {e}"));
+        let v: Value = r.json().await.unwrap_or_default();
+        match v["accessToken"].as_str() {
+            Some(t) => tokens.insert(a.to_string(), t.to_string()),
+            None if matches!(a, "noread" | "settings" | "validator") => None,
+            None => panic!("login {a}: {v}"),
+        };
+    }
+    tokens
+}
+
 #[tokio::test]
 #[ignore]
 async fn parity() {
@@ -736,27 +757,12 @@ async fn parity() {
         }
     }
     reset_db(&db, &template(&base_tpl, seeds.last().expect("seed")));
-    let mut tokens = HashMap::new();
-    for a in ACTORS {
-        let r = http
-            .post(format!("{target}/api/auth/login"))
-            .json(&json!({ "username": a, "password": format!("{a}-pass") }))
-            .send()
-            .await
-            .unwrap_or_else(|e| panic!("login {a}: {e}"));
-        let v: Value = r.json().await.unwrap_or_default();
-        // seeds beyond `base` add actors (noread, settings, validator); a missing one only matters to the scenarios that use it
-        match v["accessToken"].as_str() {
-            Some(t) => tokens.insert(a.to_string(), t.to_string()),
-            None if matches!(a, "noread" | "settings" | "validator") => None,
-            None => panic!("login {a}: {v}"),
-        };
-    }
-    let ctx = Ctx {
+    let mut ctx = Ctx {
+        tokens: login_all(&http, &target).await,
         http,
         target,
-        tokens,
     };
+    let mut logged_in = seeds.last().cloned().unwrap_or_default();
 
     for f in selected {
         let mut sc: Value = serde_json::from_str(&fs::read_to_string(f).unwrap())
@@ -766,10 +772,12 @@ async fn parity() {
             skipped += 1;
             continue;
         }
-        reset_db(
-            &db,
-            &template(&base_tpl, sc["seed"].as_str().unwrap_or("base")),
-        );
+        let seed = sc["seed"].as_str().unwrap_or("base");
+        reset_db(&db, &template(&base_tpl, seed));
+        if seed != logged_in {
+            ctx.tokens = login_all(&ctx.http, &ctx.target).await;
+            logged_in = seed.to_owned();
+        }
         // untagged scenarios are recorded with the engine up only
         let rec = record && (sc["engine"].is_string() || engine == "up");
         let errs = run(&ctx, &mut sc, rec).await;

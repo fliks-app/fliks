@@ -69,22 +69,22 @@
           "languageProfile": null,
           "languageProfileId": null,
           "library": {
-            "color": "#3b82f6",
+            "color": "#666666",
             "defaultLanguageProfileId": null,
             "defaultQualityProfileId": null,
             "icon": "film",
-            "id": 1,
+            "id": 8,
             "label": null,
             "mediaTypes": [
               "movie"
             ],
             "metadataLanguage": null,
             "metadataRegion": null,
-            "name": "Movies",
-            "path": "/tmp/fliks-parity/media/movies",
+            "name": "Provider Movies",
+            "path": "/tmp/fliks-parity/providers/movies",
             "preferredProvider": null
           },
-          "libraryId": 1,
+          "libraryId": 8,
           "logoUrl": "https://image.tmdb.org/t/p/original/logo_en.png",
           "metadata": {
             "budget": "63000000",
@@ -117,7 +117,7 @@
           "monitored": true,
           "originalTitle": "The Matrix (orig)",
           "overview": "Overview of The Matrix",
-          "path": "/tmp/fliks-parity/media/movies/Old Title (1990)",
+          "path": "/tmp/fliks-parity/providers/movies/Old Title (1990)",
           "physicalRelease": "2000-01-01",
           "posterUrl": "https://image.tmdb.org/t/p/w500/poster1001.jpg",
           "preferredProvider": null,

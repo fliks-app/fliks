@@ -79,7 +79,7 @@
             "metadataLanguage": null,
             "metadataRegion": null,
             "name": "Plain Series",
-            "path": "/tmp/fliks-parity/media/series-plain",
+            "path": "/tmp/fliks-parity/providers/series",
             "preferredProvider": null
           },
           "libraryId": 6,
@@ -108,7 +108,7 @@
           "monitored": true,
           "originalTitle": "Breaking Bad (orig)",
           "overview": "Overview of Breaking Bad",
-          "path": "/tmp/fliks-parity/media/series-plain/Seasons Show",
+          "path": "/tmp/fliks-parity/providers/series/Seasons Show",
           "physicalRelease": null,
           "posterUrl": "https://image.tmdb.org/t/p/w500/poster2000.jpg",
           "preferredProvider": null,
