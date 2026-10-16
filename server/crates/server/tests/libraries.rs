@@ -272,7 +272,26 @@ async fn acl_helpers(pool: PgPool) {
             }
         }
     };
+    sqlx::query(r#"INSERT INTO roles (name, permissions) VALUES ('all', '["manage:all"]')"#)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query(r#"INSERT INTO users (username, "roleId") VALUES ('root', (SELECT id FROM roles WHERE name = 'all')), ('none', (SELECT id FROM roles WHERE name = 'lib'))"#)
+        .execute(&pool)
+        .await
+        .unwrap();
     let (admin, user) = (authed(1).await, authed(2).await);
+    let mut root = libraries::accessible_library_ids(&pool, &authed(3).await)
+        .await
+        .unwrap();
+    root.sort();
+    assert_eq!(root, vec![1, 2]);
+    assert!(
+        libraries::accessible_library_ids(&pool, &authed(4).await)
+            .await
+            .unwrap()
+            .is_empty()
+    );
     let mut all = libraries::accessible_library_ids(&pool, &admin)
         .await
         .unwrap();

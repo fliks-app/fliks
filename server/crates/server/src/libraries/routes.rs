@@ -399,9 +399,23 @@ pub async fn access_put(
     }
     replace_access(&mut tx, id, &user_ids).await?;
     tx.commit().await?;
-    for removed in before.into_iter().filter(|u| !user_ids.contains(u)) {
+    for removed in revoked(before, &user_ids) {
         let engine = st.engine.clone();
         tokio::spawn(async move { engine.revoke_owner(removed).await });
     }
     Ok(StatusCode::OK)
+}
+
+/// Rule 22: only users who lost access are revoked; kept and added ones are not.
+fn revoked(before: Vec<i32>, after: &[i32]) -> Vec<i32> {
+    before.into_iter().filter(|u| !after.contains(u)).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn revokes_only_removed_users() {
+        assert_eq!(super::revoked(vec![1, 2, 3], &[2, 4]), vec![1, 3]);
+        assert!(super::revoked(vec![], &[1]).is_empty());
+    }
 }
