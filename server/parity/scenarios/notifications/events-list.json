@@ -1,0 +1,40 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..id",
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "notifications-events-list",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          "request.created",
+          "request.approved",
+          "request.declined",
+          "request.processing",
+          "request.available",
+          "request.delete.created",
+          "request.delete.approved",
+          "request.delete.declined",
+          "grab.started",
+          "download.complete",
+          "subtitle.downloaded",
+          "subtitle.upgraded",
+          "subtitle.failed",
+          "subtitle.synced",
+          "livetv.account_expiring",
+          "livetv.account_expired",
+          "livetv.adult_guard_failed"
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/notifications/events"
+    }
+  ],
+  "strictMessage": true
+}

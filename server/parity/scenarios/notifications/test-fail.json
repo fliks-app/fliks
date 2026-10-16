@@ -1,0 +1,53 @@
+{
+  "capture": {
+    "id": "$.steps[0].body.id"
+  },
+  "deviation": null,
+  "ignore": [
+    "$..id",
+    "$..createdAt",
+    "$..updatedAt",
+    "$.message"
+  ],
+  "name": "notifications-test-fail",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "name": "Dead",
+        "settings": {
+          "url": "http://127.0.0.1:9/hook"
+        },
+        "type": "webhook"
+      },
+      "expect": {
+        "body": {
+          "enabled": true,
+          "events": [],
+          "name": "Dead",
+          "settings": {
+            "secretsSet": [],
+            "url": "http://127.0.0.1:9/hook"
+          },
+          "type": "webhook"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/notifications"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "ok": false
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/notifications/{id}/test"
+    }
+  ],
+  "strictMessage": true
+}

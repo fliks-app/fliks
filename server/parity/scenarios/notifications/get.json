@@ -1,0 +1,77 @@
+{
+  "capture": {
+    "id": "$.steps[0].body.id"
+  },
+  "deviation": null,
+  "ignore": [
+    "$..id",
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "notifications-get",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "events": [
+          "request.created",
+          "request.available"
+        ],
+        "name": "Phone",
+        "settings": {
+          "token": "tk-secret",
+          "topic": "media",
+          "url": "https://ntfy.example.test"
+        },
+        "type": "ntfy"
+      },
+      "expect": {
+        "body": {
+          "enabled": true,
+          "events": [
+            "request.created",
+            "request.available"
+          ],
+          "name": "Phone",
+          "settings": {
+            "secretsSet": [
+              "token"
+            ],
+            "topic": "media",
+            "url": "https://ntfy.example.test"
+          },
+          "type": "ntfy"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/notifications"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "enabled": true,
+          "events": [
+            "request.created",
+            "request.available"
+          ],
+          "name": "Phone",
+          "settings": {
+            "secretsSet": [
+              "token"
+            ],
+            "topic": "media",
+            "url": "https://ntfy.example.test"
+          },
+          "type": "ntfy"
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/notifications/{id}"
+    }
+  ],
+  "strictMessage": true
+}

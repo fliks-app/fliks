@@ -1,0 +1,111 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..id",
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "notifications-unauthenticated",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "anon",
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "GET",
+      "path": "/api/notifications"
+    },
+    {
+      "as": "anon",
+      "body": {
+        "name": "X",
+        "settings": {
+          "url": "https://x.test"
+        },
+        "type": "ntfy"
+      },
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "POST",
+      "path": "/api/notifications"
+    },
+    {
+      "as": "anon",
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "GET",
+      "path": "/api/notifications/events"
+    },
+    {
+      "as": "anon",
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "GET",
+      "path": "/api/notifications/1"
+    },
+    {
+      "as": "anon",
+      "body": {
+        "name": "X",
+        "settings": {
+          "url": "https://x.test"
+        },
+        "type": "ntfy"
+      },
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "PUT",
+      "path": "/api/notifications/1"
+    },
+    {
+      "as": "anon",
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "DELETE",
+      "path": "/api/notifications/1"
+    },
+    {
+      "as": "anon",
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "POST",
+      "path": "/api/notifications/1/test"
+    }
+  ],
+  "strictMessage": true
+}

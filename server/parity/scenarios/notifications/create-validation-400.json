@@ -1,0 +1,169 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..id",
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "notifications-create-validation-400",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "name": "X",
+        "settings": {
+          "url": "https://x.test"
+        },
+        "type": "teams"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "type must be one of the following values: discord, slack, webhook, gotify, ntfy"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/notifications"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "events": [
+          "request.created",
+          "nope"
+        ],
+        "name": "X",
+        "settings": {
+          "url": "https://x.test"
+        },
+        "type": "ntfy"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "each value in events must be one of the following values: request.created, request.approved, request.declined, request.processing, request.available, request.delete.created, request.delete.approved, request.delete.declined, grab.started, download.complete, health.issue, subtitle.downloaded, subtitle.upgraded, subtitle.failed, subtitle.synced, livetv.account_expiring, livetv.account_expired, livetv.adult_guard_failed"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/notifications"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "name": "X",
+        "settings": {
+          "url": "ntfy.example.test"
+        },
+        "type": "ntfy"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "ntfy requires settings.url to be an http(s) URL"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/notifications"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "name": "X",
+        "settings": {},
+        "type": "ntfy"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "ntfy requires settings.url to be an http(s) URL"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/notifications"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "extra": 1,
+        "settings": {
+          "url": "https://x.test"
+        },
+        "type": "ntfy"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "property extra should not exist",
+            "name must be a string"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/notifications"
+    },
+    {
+      "as": "admin",
+      "body": {},
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "name must be a string",
+            "type must be one of the following values: discord, slack, webhook, gotify, ntfy",
+            "settings must be an object"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/notifications"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "enabled": "yes",
+        "events": "request.created",
+        "name": "X",
+        "settings": {
+          "url": "https://x.test"
+        },
+        "type": "ntfy"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "events must be an array",
+            "enabled must be a boolean value"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/notifications"
+    }
+  ],
+  "strictMessage": true
+}

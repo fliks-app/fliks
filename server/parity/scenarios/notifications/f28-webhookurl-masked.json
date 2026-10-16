@@ -1,0 +1,157 @@
+{
+  "capture": {
+    "id": "$.steps[0].body.id"
+  },
+  "deviation": "F28",
+  "ignore": [
+    "$..id",
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "notifications-f28-webhookurl-masked",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "events": [
+          "request.created"
+        ],
+        "name": "Chat",
+        "settings": {
+          "username": "Bot",
+          "webhookUrl": "https://discord.example.test/api/webhooks/1/abc"
+        },
+        "type": "discord"
+      },
+      "expect": {
+        "body": {
+          "createdAt": "x",
+          "enabled": true,
+          "events": [
+            "request.created"
+          ],
+          "id": 1,
+          "name": "Chat",
+          "settings": {
+            "secretsSet": [
+              "webhookUrl"
+            ],
+            "username": "Bot"
+          },
+          "type": "discord",
+          "updatedAt": "x"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/notifications"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "createdAt": "x",
+            "enabled": true,
+            "events": [
+              "request.created"
+            ],
+            "id": 1,
+            "name": "Chat",
+            "settings": {
+              "secretsSet": [
+                "webhookUrl"
+              ],
+              "username": "Bot"
+            },
+            "type": "discord",
+            "updatedAt": "x"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/notifications"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "name": "Chat",
+        "settings": {
+          "secretsSet": [
+            "webhookUrl"
+          ],
+          "username": "Bot2",
+          "webhookUrl": ""
+        },
+        "type": "discord"
+      },
+      "expect": {
+        "body": {
+          "createdAt": "x",
+          "enabled": true,
+          "events": [
+            "request.created"
+          ],
+          "id": 1,
+          "name": "Chat",
+          "settings": {
+            "secretsSet": [
+              "webhookUrl"
+            ],
+            "username": "Bot2"
+          },
+          "type": "discord",
+          "updatedAt": "x"
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/notifications/{id}"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "name": "Chat",
+        "settings": {},
+        "type": "slack"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "slack requires settings.webhookUrl to be an http(s) URL"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PUT",
+      "path": "/api/notifications/{id}"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "name": "Chat",
+        "settings": {
+          "webhookUrl": null
+        },
+        "type": "discord"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "discord requires settings.webhookUrl to be an http(s) URL"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PUT",
+      "path": "/api/notifications/{id}"
+    }
+  ],
+  "strictMessage": true
+}

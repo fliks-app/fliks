@@ -1,0 +1,95 @@
+{
+  "capture": {
+    "id": "$.steps[0].body.id"
+  },
+  "deviation": null,
+  "ignore": [
+    "$..id",
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "notifications-update-validation-400",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "events": [
+          "request.created",
+          "request.available"
+        ],
+        "name": "Phone",
+        "settings": {
+          "token": "tk-secret",
+          "topic": "media",
+          "url": "https://ntfy.example.test"
+        },
+        "type": "ntfy"
+      },
+      "expect": {
+        "body": {
+          "enabled": true,
+          "events": [
+            "request.created",
+            "request.available"
+          ],
+          "name": "Phone",
+          "settings": {
+            "secretsSet": [
+              "token"
+            ],
+            "topic": "media",
+            "url": "https://ntfy.example.test"
+          },
+          "type": "ntfy"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/notifications"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "name": "P",
+        "settings": {
+          "url": "nope"
+        },
+        "type": "ntfy"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "ntfy requires settings.url to be an http(s) URL"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PUT",
+      "path": "/api/notifications/{id}"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "type": "ntfy"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "name must be a string",
+            "ntfy requires settings.url to be an http(s) URL",
+            "settings must be an object"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PUT",
+      "path": "/api/notifications/{id}"
+    }
+  ],
+  "strictMessage": true
+}
