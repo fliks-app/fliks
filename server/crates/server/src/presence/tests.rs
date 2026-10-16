@@ -61,7 +61,7 @@ fn snapshot_restores_clocks_state_and_tags_but_not_client_fields() {
     assert_eq!(s.sse_connection_id.as_deref(), Some("c1"));
     assert_eq!(s.system_name.as_deref(), Some("macOS 26"));
     assert_eq!(s.source_fps, Some(24000.0 / 1001.0));
-    assert!(s.client_tonemap && s.hdr_ladder && s.supports_volume);
+    assert!(s.client_tonemap && s.hdr_ladder && s.supports_volume == Some(true));
     assert_eq!((s.volume, s.subtitle_id, s.qualities), (None, None, None));
     assert_eq!(p.restore(&snap("a", None, 5.0, 5.0)).started_at, 1000.0);
     assert_eq!(p.size(), 1);
