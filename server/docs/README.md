@@ -36,6 +36,7 @@ Decided behaviour for the Rust port (security fixes F, correctness fixes C; D3).
 | F16 | Nest accepts HS256, HS384 and HS512 and a token without `exp` (valid forever) | only HS256 is accepted and `exp` is required: a token without `exp` or signed HS384/HS512 is 401; Fliks only ever signs HS256 with `exp` | none |
 | F17 | a deleted user's open SSE connections stay open | dropped on delete | none |
 | F18 | logout left the refresh token valid, and a replay after the 30 s grace revoked nothing: both revokes matched `"revokedAt" = NULL` | logout revokes the presented refresh token; a replay revokes every live refresh token of the user | none |
+| F31 | remote state/stopped fan-out reached grantees of a device id under any owner (anyone could mint a code for another user's deviceId and receive its playback state) | fan-out limited to grants whose owner is the device's owner | none |
 
 Not done (user decision 2026-10-15): login rate limiting/lockout.
 

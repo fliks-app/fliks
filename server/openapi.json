@@ -230,6 +230,110 @@
         }
       }
     },
+    "/api/remote/commands": {
+      "get": {
+        "tags": [
+          "remote"
+        ],
+        "operationId": "commands",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/remote/grants": {
+      "get": {
+        "tags": [
+          "remote"
+        ],
+        "operationId": "grants",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/remote/grants/claim": {
+      "post": {
+        "tags": [
+          "remote"
+        ],
+        "operationId": "grant_claim",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/remote/grants/code": {
+      "post": {
+        "tags": [
+          "remote"
+        ],
+        "operationId": "grant_code",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/remote/grants/{id}": {
+      "delete": {
+        "tags": [
+          "remote"
+        ],
+        "operationId": "revoke",
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/remote/register": {
+      "post": {
+        "tags": [
+          "remote"
+        ],
+        "operationId": "register",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/remote/targets": {
+      "get": {
+        "tags": [
+          "remote"
+        ],
+        "operationId": "targets",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/remote/{targetId}/command": {
+      "post": {
+        "tags": [
+          "remote"
+        ],
+        "operationId": "command",
+        "responses": {
+          "202": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/roles": {
       "get": {
         "tags": [

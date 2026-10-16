@@ -1,0 +1,58 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, \"createdAt\" AS created_at, \"deviceId\" AS device_id, \"ownerUserId\" AS owner_user_id,\n                  \"granteeUserId\" AS grantee_user_id, \"deviceName\" AS device_name, \"codeExpiresAt\" AS code_expires_at\n           FROM remote_control_grants WHERE code = $1 AND \"granteeUserId\" IS NULL LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 2,
+        "name": "device_id",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "owner_user_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 4,
+        "name": "grantee_user_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 5,
+        "name": "device_name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 6,
+        "name": "code_expires_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "99954d1bea05ce79d71109a8f1f45018da88ae32bf7a9a3dceb369c06ee892cc"
+}
