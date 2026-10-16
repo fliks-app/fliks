@@ -77,7 +77,8 @@ export class NotificationsSettingsComponent implements OnInit {
   readonly formWebhookUrl = signal('');
   readonly formToken = signal('');
   /** The connection stores a token the response never carries; `●●●●` stands in for it. */
-  readonly tokenStored = signal(false);
+  private readonly tokenStoredType = signal<NotificationType | null>(null);
+  readonly tokenStored = computed(() => this.tokenStoredType() === this.formType());
   readonly formTokenCleared = signal(false);
   /** The Discord/Slack type whose webhook URL is stored; a type switch drops it (F28). */
   private readonly webhookUrlStoredType = signal<NotificationType | null>(null);
@@ -136,7 +137,7 @@ export class NotificationsSettingsComponent implements OnInit {
     this.formWebhookUrl.set('');
     this.webhookUrlStoredType.set(null);
     this.formToken.set('');
-    this.tokenStored.set(false);
+    this.tokenStoredType.set(null);
     this.formTokenCleared.set(false);
     this.formTopic.set('');
     this.formEvents.set([...this.allEvents()]);
@@ -155,7 +156,8 @@ export class NotificationsSettingsComponent implements OnInit {
     const secretsSet = s[SECRETS_SET_KEY];
     const urlStored = Array.isArray(secretsSet) && secretsSet.includes('webhookUrl');
     this.webhookUrlStoredType.set(urlStored ? (nc.type as NotificationType) : null);
-    this.tokenStored.set(Array.isArray(secretsSet) && secretsSet.includes('token'));
+    const tokenStored = Array.isArray(secretsSet) && secretsSet.includes('token');
+    this.tokenStoredType.set(tokenStored ? (nc.type as NotificationType) : null);
     this.formTokenCleared.set(false);
     this.formTopic.set(String(s['topic'] ?? ''));
     this.formEvents.set([...nc.events]);
@@ -185,7 +187,7 @@ export class NotificationsSettingsComponent implements OnInit {
     }
     // These three read `url` server-side. A blank token means "unchanged"; `null` erases the
     // stored one, the way JSON Merge Patch spells removal.
-    const token = this.formTokenCleared() ? null : this.formToken().trim();
+    const token = this.formTokenCleared() && this.tokenStored() ? null : this.formToken().trim();
     if (type === 'gotify') {
       return { url: this.formWebhookUrl(), token };
     }

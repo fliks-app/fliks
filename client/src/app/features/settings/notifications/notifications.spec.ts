@@ -266,6 +266,26 @@ describe('NotificationsSettingsComponent — provider tokens', () => {
     expect(c.canClearToken()).toBe(false);
   });
 
+  it('drops the stored token mask once the type differs from the stored one', async () => {
+    const c = await createComponent();
+    c.openEdit({
+      id: 1,
+      name: 'Ntfy',
+      type: 'ntfy',
+      enabled: true,
+      events: [],
+      settings: { url: 'https://ntfy.sh', secretsSet: ['token'] },
+    });
+    c.formTokenCleared.set(true);
+    c.formType.set('webhook');
+    expect(c.tokenStored()).toBe(false);
+    expect(c.canClearToken()).toBe(false);
+    expect(settingsOf(c)).toEqual({ url: 'https://ntfy.sh' });
+
+    c.formType.set('ntfy');
+    expect(c.tokenStored()).toBe(true);
+  });
+
   it('leaves the token blank on edit, so saving keeps the stored one', async () => {
     const c = await createComponent();
     c.openEdit({
