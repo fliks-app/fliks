@@ -117,7 +117,7 @@ Listeners the bridge must trigger (all registered in Nest `onModuleInit` / const
 | L2 | `QoeService` | `qoe_enabled` | re-read flag (`!== 'false'`) | `[ts:src/modules/qoe/qoe.service.ts:263]` | S2 |
 | L3 | `LiveTvSessionService` | the 5 `livetv_*` config keys | `pushConfig()` -> engine live config | `[ts:src/modules/livetv/services/livetv-session.service.ts:136]` | S7 |
 | L4 | `SubtitleTranslationSettingsCache` | prefix `subtitle_translation_` | drop cache | `[ts:src/modules/subtitles/subtitle-translation-settings-cache.service.ts:38]` | S6 |
-| L5 | `MetadataSettingsCache` | `metadata_language`, `metadata_region` | drop cache | `[ts:src/modules/metadata-providers/metadata-settings-cache.service.ts:35]` | S3 |
+| L5 | `MetadataSettingsCache` | `metadata_language`, `metadata_region` | drop cache | `[ts:src/modules/metadata-providers/metadata-settings-cache.service.ts:35]` | S5 |
 | L6 | `PluginProcessService.onSettingChanged` | prefix `plugin.<id>.` of a running plugin (longest id wins) | `supervisor.emitConfigChanged([key])` unless `origin === id` | `[ts:src/modules/plugins/plugin-process.service.ts:66]` | S8 |
 | D1 | domain subscribers of `settings.changed` | any | plugin webhooks + process plugins | see Events | S8 |
 
