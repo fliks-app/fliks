@@ -1,6 +1,6 @@
 {
   "capture": {
-    "mid": "$.steps[1].body.id"
+    "mid": "$.steps[2].body.id"
   },
   "deviation": null,
   "engine": "down",
@@ -12,6 +12,12 @@
   "name": "provider-write-import-series-tvdb-library",
   "seed": "providers",
   "steps": [
+    {
+      "expect": {
+        "status": 200
+      },
+      "sleepMs": 800
+    },
     {
       "expect": {
         "body": {
@@ -44,7 +50,7 @@
           "genres": [
             "Drama"
           ],
-          "id": 207,
+          "id": 211,
           "imdbId": "tt3032476",
           "inCinemas": null,
           "languageProfile": {
@@ -133,7 +139,7 @@
           "genres": [
             "Drama"
           ],
-          "id": 207,
+          "id": 211,
           "imdbId": "tt3032476",
           "inCinemas": null,
           "languageProfile": {
@@ -241,7 +247,7 @@
                 }
               ],
               "id": 205,
-              "mediaId": 207,
+              "mediaId": 211,
               "monitored": true,
               "overview": null,
               "posterUrl": null,
@@ -267,7 +273,7 @@
                 }
               ],
               "id": 204,
-              "mediaId": 207,
+              "mediaId": 211,
               "monitored": false,
               "overview": null,
               "posterUrl": null,

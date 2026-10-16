@@ -11,6 +11,12 @@
   "steps": [
     {
       "expect": {
+        "status": 200
+      },
+      "sleepMs": 800
+    },
+    {
+      "expect": {
         "body": {
           "ok": true
         },
@@ -38,11 +44,11 @@
       },
       "ignoreBody": true,
       "method": "GET",
-      "path": "/api/persons/search?q=claude",
+      "path": "/api/media/201/cast",
       "poll": {
-        "path": "$[0].biography",
+        "path": "$[1].order",
         "timeoutMs": 10000,
-        "until": "Refreshed biography."
+        "until": 1
       }
     },
     {
@@ -220,15 +226,6 @@
       },
       "method": "GET",
       "path": "/api/media/201/crew"
-    },
-    {
-      "as": "admin",
-      "expect": {
-        "body": [],
-        "status": 200
-      },
-      "method": "GET",
-      "path": "/api/persons/search?q=claude"
     }
   ]
 }

@@ -1,5 +1,6 @@
 {
   "deviation": "C39",
+  "engine": "stub",
   "ignore": [
     "$..connectionId",
     "$..createdAt",

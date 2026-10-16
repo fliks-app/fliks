@@ -11,6 +11,12 @@
   "steps": [
     {
       "expect": {
+        "status": 200
+      },
+      "sleepMs": 800
+    },
+    {
+      "expect": {
         "body": {
           "ok": true
         },
@@ -99,6 +105,34 @@
         "path": "$.metadata.popularity",
         "timeoutMs": 10000,
         "until": 75.5
+      }
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "status": 200
+      },
+      "ignoreBody": true,
+      "method": "GET",
+      "path": "/api/media/201/cast",
+      "poll": {
+        "path": "$[1].order",
+        "timeoutMs": 10000,
+        "until": 1
+      }
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "status": 200
+      },
+      "ignoreBody": true,
+      "method": "GET",
+      "path": "/api/persons/search?q=claude",
+      "poll": {
+        "path": "$[0].biography",
+        "timeoutMs": 10000,
+        "until": "Refreshed biography."
       }
     },
     {

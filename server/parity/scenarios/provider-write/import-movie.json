@@ -1,6 +1,6 @@
 {
   "capture": {
-    "mid": "$.steps[1].body.id"
+    "mid": "$.steps[2].body.id"
   },
   "deviation": null,
   "engine": "down",
@@ -12,6 +12,12 @@
   "name": "provider-write-import-movie",
   "seed": "providers",
   "steps": [
+    {
+      "expect": {
+        "status": 200
+      },
+      "sleepMs": 800
+    },
     {
       "expect": {
         "body": {
@@ -46,7 +52,7 @@
             "Action",
             "Science Fiction"
           ],
-          "id": 207,
+          "id": 211,
           "imdbId": "tt0000002",
           "inCinemas": "1999-03-31",
           "languageProfile": {
@@ -137,7 +143,7 @@
             "Action",
             "Science Fiction"
           ],
-          "id": 207,
+          "id": 211,
           "imdbId": "tt0000002",
           "inCinemas": "1999-03-31",
           "languageProfile": {
@@ -198,7 +204,7 @@
           "overview": "Overview of Casablanca Redux",
           "path": "/tmp/fliks-parity/media/movies/Casablanca Redux (orig) (2001)",
           "physicalRelease": "2000-01-01",
-          "posterUrl": "/api/images/media/207/poster?v=612f4295",
+          "posterUrl": "/api/images/media/211/poster?v=612f4295",
           "preferredProvider": null,
           "qualityProfile": null,
           "qualityProfileId": null,
@@ -222,7 +228,7 @@
       "poll": {
         "path": "$.posterUrl",
         "timeoutMs": 10000,
-        "until": "/api/images/media/207/poster?v=612f4295"
+        "until": "/api/images/media/211/poster?v=612f4295"
       }
     },
     {

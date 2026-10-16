@@ -13,32 +13,6 @@
   },
   {
     "method": "GET",
-    "path": "/api/internal/jobs",
-    "controller": "JobsBridgeController",
-    "handler": "list",
-    "file": "src/modules/scheduler/jobs-bridge.controller.ts",
-    "line": 38,
-    "guards": [
-      "BridgeAuthGuard"
-    ],
-    "policies": ""
-  },
-  {
-    "method": "POST",
-    "path": "/api/internal/jobs/run",
-    "controller": "JobsBridgeController",
-    "handler": "run",
-    "file": "src/modules/scheduler/jobs-bridge.controller.ts",
-    "line": 60,
-    "guards": [
-      "BridgeAuthGuard"
-    ],
-    "policies": "",
-    "body": "RunJobDto",
-    "httpCode": 204
-  },
-  {
-    "method": "GET",
     "path": "/api/livetv/admin/access/restricted-groups",
     "controller": "LiveTvAccessController",
     "handler": "restrictedGroups",
@@ -1375,6 +1349,32 @@
     ],
     "policies": "",
     "body": "SettingsChangedDto",
+    "httpCode": 204
+  },
+  {
+    "method": "GET",
+    "path": "/internal/jobs",
+    "controller": "JobsBridgeController",
+    "handler": "list",
+    "file": "src/modules/scheduler/jobs-bridge.controller.ts",
+    "line": 38,
+    "guards": [
+      "BridgeAuthGuard"
+    ],
+    "policies": ""
+  },
+  {
+    "method": "POST",
+    "path": "/internal/jobs/run",
+    "controller": "JobsBridgeController",
+    "handler": "run",
+    "file": "src/modules/scheduler/jobs-bridge.controller.ts",
+    "line": 60,
+    "guards": [
+      "BridgeAuthGuard"
+    ],
+    "policies": "",
+    "body": "RunJobDto",
     "httpCode": 204
   },
   {

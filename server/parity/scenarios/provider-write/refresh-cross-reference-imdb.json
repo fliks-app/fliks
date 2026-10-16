@@ -11,6 +11,12 @@
   "steps": [
     {
       "expect": {
+        "status": 200
+      },
+      "sleepMs": 800
+    },
+    {
+      "expect": {
         "body": {
           "ok": true
         },

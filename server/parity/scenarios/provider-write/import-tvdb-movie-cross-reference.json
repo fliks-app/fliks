@@ -1,6 +1,6 @@
 {
   "capture": {
-    "mid": "$.steps[1].body.id"
+    "mid": "$.steps[2].body.id"
   },
   "deviation": null,
   "engine": "down",
@@ -12,6 +12,12 @@
   "name": "provider-write-import-tvdb-movie-cross-reference",
   "seed": "providers",
   "steps": [
+    {
+      "expect": {
+        "status": 200
+      },
+      "sleepMs": 800
+    },
     {
       "expect": {
         "body": {
@@ -42,7 +48,7 @@
           "genres": [
             "Action"
           ],
-          "id": 207,
+          "id": 211,
           "imdbId": null,
           "inCinemas": "1999-03-31",
           "languageProfile": {
@@ -128,7 +134,7 @@
           "genres": [
             "Action"
           ],
-          "id": 207,
+          "id": 211,
           "imdbId": null,
           "inCinemas": "1999-03-31",
           "languageProfile": {

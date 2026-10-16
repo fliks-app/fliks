@@ -1,5 +1,6 @@
 {
   "deviation": null,
+  "engine": "stub",
   "ignore": [
     "$..connectionId",
     "$..createdAt",
@@ -18,6 +19,7 @@
       "expect": {
         "status": 200
       },
+      "ignoreBody": true,
       "method": "GET",
       "path": "/api/system/events",
       "sse": {
@@ -33,8 +35,7 @@
         ],
         "events": 999,
         "timeoutMs": 3000
-      },
-      "ignoreBody": true
+      }
     },
     {
       "as": "admin",

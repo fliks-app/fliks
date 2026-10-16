@@ -178,6 +178,7 @@ A 500 or a half-written request is never part of the frozen contract:
 | C114 | 500 on unvalidated input of the requests routes: an unknown `qualityProfileId`, `languageProfileId` or `libraryId` on create and `PATCH` (foreign key violation), a `tmdbId` above int4, `GET /title-state` with a `mediaType` outside the enum, an auto-approval `criteria` that is an array (stored, then matches everyone) | 400 with the standard validation body; an unknown id answers `Quality profile #<id> not found`, `Language profile #<id> not found` or `Library #<id> not found` |
 | C115 | an auto-approval `maxSeasons` always passes for a series request with `seasons: []` (counted as 0 seasons) | an empty `seasons` is no scope: the show's season count applies |
 | C116 | two approvals of one pending request both import and notify; the approval was a read then a write | the approval claims the row with one conditional `UPDATE ... WHERE status = 'pending'`; the loser is 409 `Request is not pending` |
+| C117 | importing a TVDB title that has no TMDB id asked TMDB for one even without a TMDB key, so the import answered 500 | the lookup runs only when TMDB is configured; the title is imported with its `tmdbId` empty (201, same shape) |
 
 Frozen as is (decided): the heartbeat keeps its debounce entry after a failed history write and returns
 `sessionLost: false` when the engine session lives but presence cannot be rebuilt. Lists whose order comes

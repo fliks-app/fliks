@@ -11,6 +11,12 @@
   "steps": [
     {
       "expect": {
+        "status": 200
+      },
+      "sleepMs": 800
+    },
+    {
+      "expect": {
         "body": {
           "ok": true
         },
@@ -98,6 +104,20 @@
         "path": "$.seasons[1].episodes[0].title",
         "timeoutMs": 10000,
         "until": "Pilot"
+      }
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "status": 200
+      },
+      "ignoreBody": true,
+      "method": "GET",
+      "path": "/api/media/202/cast",
+      "poll": {
+        "path": "$[0].order",
+        "timeoutMs": 10000,
+        "until": 0
       }
     },
     {

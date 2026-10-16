@@ -11,6 +11,12 @@
   "steps": [
     {
       "expect": {
+        "status": 200
+      },
+      "sleepMs": 800
+    },
+    {
+      "expect": {
         "body": {
           "ok": true
         },
@@ -92,8 +98,8 @@
       "as": "admin",
       "expect": {
         "body": {
-          "movies": 19,
-          "series": 6
+          "movies": 20,
+          "series": 9
         },
         "status": 200
       },

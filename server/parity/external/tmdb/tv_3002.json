@@ -1,0 +1,97 @@
+{
+  "id": 3002,
+  "name": "No Tvdb Show",
+  "original_name": "No Tvdb Show (orig)",
+  "overview": "Overview of Breaking Bad",
+  "first_air_date": "2008-01-20",
+  "poster_path": "/poster2000.jpg",
+  "backdrop_path": null,
+  "vote_average": 8.1,
+  "genre_ids": [
+    18
+  ],
+  "genres": [
+    {
+      "id": 18,
+      "name": "Drama"
+    }
+  ],
+  "episode_run_time": [
+    47
+  ],
+  "status": "Ended",
+  "number_of_seasons": 3,
+  "number_of_episodes": 5,
+  "original_language": "en",
+  "origin_country": [
+    "US"
+  ],
+  "networks": [
+    {
+      "name": "AMC"
+    }
+  ],
+  "production_companies": [
+    {
+      "name": "Gran Via"
+    }
+  ],
+  "vote_count": 12000,
+  "popularity": 90.1,
+  "tagline": "",
+  "external_ids": {
+    "imdb_id": "tt903002"
+  },
+  "images": {
+    "logos": [],
+    "backdrops": [
+      {
+        "file_path": "/bb2.jpg",
+        "vote_average": 4
+      }
+    ]
+  },
+  "credits": {
+    "cast": [
+      {
+        "id": 17419,
+        "name": "Bryan Cranston",
+        "character": "Walter White",
+        "profile_path": "/bc.jpg",
+        "order": 0
+      }
+    ],
+    "crew": []
+  },
+  "videos": {
+    "results": []
+  },
+  "keywords": {
+    "results": [
+      {
+        "id": 3,
+        "name": "drug dealer"
+      }
+    ]
+  },
+  "alternative_titles": {
+    "results": [
+      {
+        "name": "Breaking Bad (US)"
+      }
+    ]
+  },
+  "seasons": [
+    {
+      "season_number": 0,
+      "episode_count": 1
+    },
+    {
+      "season_number": 1,
+      "episode_count": 2
+    },
+    {
+      "season_number": 2
+    }
+  ]
+}
