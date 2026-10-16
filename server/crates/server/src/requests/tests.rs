@@ -23,7 +23,7 @@ fn an_empty_criteria_matches_everything() {
     assert!(matches(&json!({}), &ctx()));
     assert!(
         !matches(&json!([]), &ctx()),
-        "array criteria fail closed (C111)"
+        "array criteria fail closed (C114)"
     );
 }
 

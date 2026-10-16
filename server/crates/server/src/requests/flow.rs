@@ -219,7 +219,7 @@ pub async fn title_state(st: &AppState, tmdb_id: i32, media_type: &str) -> Res<V
     }))
 }
 
-/// C111: ids Postgres would reject as a foreign key violation answer 400 instead of 500.
+/// C114: ids Postgres would reject as a foreign key violation answer 400 instead of 500.
 async fn assert_exist(st: &AppState, q: Option<i32>, l: Option<i32>, lib: Option<i32>) -> Res<()> {
     if let Some(lib) = lib
         && !db::library_exists(&st.db, lib).await?

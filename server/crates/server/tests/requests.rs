@@ -477,7 +477,7 @@ async fn max_seasons_counts_the_requested_scope_else_the_show(pool: PgPool) {
     let (_, r) = call(&c, "POST", "/api/requests", &c.user, series(32, json!([]))).await;
     assert_eq!(
         r["status"], "pending",
-        "an empty scope is the whole show of 5 seasons (C112)"
+        "an empty scope is the whole show of 5 seasons (C115)"
     );
     let (_, r) = call(&c, "POST", "/api/requests", &c.user, movie(33)).await;
     assert_eq!(r["status"], "pending", "the rule is for series");
