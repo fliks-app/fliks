@@ -103,6 +103,9 @@ A 500 or a half-written request is never part of the frozen contract:
 | C104 | plugin ids `ui`, `metrics`, `sources`, `import` install and are then shadowed by the concrete routes | refused with `PLUGIN_BAD_ID` |
 | C105 | a proxied plugin call that times out (504) leaves the plugin process running | the instance that ran it is dropped and the timeout counts toward the circuit breaker |
 | C106 | a plugin route that a core route shadows (`GET /logo`, `GET /export`, `POST /import`, `/enable`, `/disable`, `/restart`, `/events/test`) is accepted and unreachable | refused at registration (`invalid-route-path`) when its path is literally one of them; param and splat patterns stay legal |
+| C107 | the catalog `zipUrl` fetch follows no redirect, so a GitHub Release asset cannot install | follows https to https redirects, at most 5 hops; the first hop and hops to the `zipUrl` host stay trusted as in Nest, a hop to another host goes through the outbound guard; the signed sha256 stays the gate |
+| C108 | a process plugin has no network grant (it reaches any address) and an upgrade needs no consent for it | an upgrade from a `pluginApi` 1 package with the same id and `verifiedByKeyId` carries `network.internal` forward and auto-update installs it; any later new request fails closed |
+| C109 | Postgres unreachable during a plugin's start or health is a crash: ladder, breaker `failed`, admin restart | not a crash and not counted: the plugin is `degraded`, retried with backoff, `ready` again when the database returns |
 
 Frozen as is (decided): the heartbeat keeps its debounce entry after a failed history write and returns
 `sessionLost: false` when the engine session lives but presence cannot be rebuilt. Lists whose order comes
