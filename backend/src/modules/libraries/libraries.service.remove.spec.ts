@@ -29,7 +29,6 @@ describe('LibrariesService.remove', () => {
       mediaRepo as never,
       {} as never,
       { get: () => mediaService } as never,
-      {} as never,
     );
 
     await service.remove(5);
@@ -42,7 +41,6 @@ describe('LibrariesService.remove', () => {
     const repo = { findOne: async () => null };
     const service = new LibrariesService(
       repo as never,
-      {} as never,
       {} as never,
       {} as never,
       {} as never,
