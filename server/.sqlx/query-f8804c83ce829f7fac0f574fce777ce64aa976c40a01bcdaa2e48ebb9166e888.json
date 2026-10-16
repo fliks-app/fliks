@@ -1,0 +1,58 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, name, icon, color, \"mediaTypes\" AS \"media_types: Json<Vec<String>>\",\n        \"defaultQualityProfileId\" AS default_quality_profile_id,\n        \"defaultLanguageProfileId\" AS default_language_profile_id\n        FROM libraries WHERE id = ANY($1) ORDER BY name COLLATE \"C\", id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "icon",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "color",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "media_types: Json<Vec<String>>",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 5,
+        "name": "default_quality_profile_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 6,
+        "name": "default_language_profile_id",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4Array"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "f8804c83ce829f7fac0f574fce777ce64aa976c40a01bcdaa2e48ebb9166e888"
+}

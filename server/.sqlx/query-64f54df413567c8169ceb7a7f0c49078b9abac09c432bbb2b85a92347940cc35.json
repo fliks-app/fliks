@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO libraries (name, icon, color, \"mediaTypes\", \"preferredProvider\", \"metadataLanguage\",\n        \"metadataRegion\", \"defaultQualityProfileId\", \"defaultLanguageProfileId\")\n        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Jsonb",
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "64f54df413567c8169ceb7a7f0c49078b9abac09c432bbb2b85a92347940cc35"
+}
