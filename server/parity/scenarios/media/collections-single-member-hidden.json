@@ -1,0 +1,16 @@
+{
+  "deviation": null,
+  "name": "media-collections-single-member-hidden",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": [],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/collections?libraryId=2"
+    }
+  ]
+}

@@ -1,0 +1,236 @@
+{
+  "deviation": "F22",
+  "name": "media-list-filter-onlywatched",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "data": [
+            {
+              "addedById": null,
+              "additionalFanartUrls": [],
+              "alternativeTitles": [],
+              "createdAt": "2026-01-03T00:00:00.000Z",
+              "digitalRelease": null,
+              "fanartUrl": "/api/images/2/fanart",
+              "files": [
+                {
+                  "createdAt": "2026-02-04T02:00:00.000Z",
+                  "episodeId": null,
+                  "id": 2,
+                  "language": "en",
+                  "mediaId": 2,
+                  "osdbBytesize": null,
+                  "osdbHash": null,
+                  "quality": "WEBDL-1080p",
+                  "relativePath": "Parity Movie 02 (2020).mp4",
+                  "size": 74465,
+                  "streamInfo": {
+                    "audio": [
+                      {
+                        "bitRate": 64628,
+                        "channelLayout": "mono",
+                        "channels": 1,
+                        "codec": "aac",
+                        "endSeconds": 3,
+                        "isDefault": true,
+                        "language": "eng",
+                        "profile": "LC",
+                        "sampleRate": 48000,
+                        "startTimeSeconds": 0,
+                        "streamIndex": 1
+                      }
+                    ],
+                    "chapters": [],
+                    "durationSeconds": 3,
+                    "formatBitRate": 198573,
+                    "formatName": "mov,mp4,m4a,3gp,3g2,mj2",
+                    "formatStartSeconds": 0,
+                    "subtitles": [],
+                    "video": [
+                      {
+                        "avgFrameRate": "24/1",
+                        "bitDepth": 8,
+                        "bitRate": 124082,
+                        "codec": "h264",
+                        "displayAspectRatio": "16:9",
+                        "dvBlPresent": false,
+                        "dvElPresent": false,
+                        "dvRpuPresent": false,
+                        "endSeconds": 3,
+                        "firstFrameSeconds": 0,
+                        "frameRate": "24",
+                        "hdr10Plus": false,
+                        "height": 90,
+                        "level": 10,
+                        "pixelFormat": "yuv420p",
+                        "profile": "High",
+                        "reorderFrames": 2,
+                        "startTimeSeconds": 0,
+                        "streamIndex": 0,
+                        "width": 160
+                      }
+                    ]
+                  },
+                  "updatedAt": "2026-01-01T00:00:00.000Z"
+                }
+              ],
+              "folderName": "Parity Movie 02 (2020)",
+              "genres": [
+                "Action",
+                "Drama"
+              ],
+              "id": 2,
+              "imdbId": null,
+              "inCinemas": null,
+              "languageProfile": null,
+              "languageProfileId": null,
+              "library": {
+                "color": "#3b82f6",
+                "createdAt": "2026-01-01T00:00:00.000Z",
+                "defaultLanguageProfileId": 1,
+                "defaultQualityProfileId": 1,
+                "icon": "film",
+                "id": 1,
+                "label": null,
+                "mediaTypes": [
+                  "movie"
+                ],
+                "metadataLanguage": null,
+                "metadataRegion": null,
+                "name": "Movies",
+                "preferredProvider": null,
+                "updatedAt": "2026-01-01T00:00:00.000Z"
+              },
+              "libraryId": 1,
+              "logoUrl": null,
+              "metadataRefreshedAt": null,
+              "minimumAvailability": "released",
+              "monitored": true,
+              "originalTitle": null,
+              "overview": "Synthetic movie 2",
+              "physicalRelease": null,
+              "posterUrl": "/api/images/2/poster",
+              "preferredProvider": null,
+              "progressPercent": 0,
+              "qualityProfile": null,
+              "qualityProfileId": null,
+              "rating": 8,
+              "releaseDate": "2020-01-01",
+              "runtime": 90,
+              "sizeOnDisk": 74465,
+              "status": "released",
+              "title": "Parity Movie 02",
+              "tmdbCollectionId": null,
+              "tmdbCollectionName": null,
+              "tmdbId": 1002,
+              "tvdbId": null,
+              "type": "movie",
+              "updatedAt": "2026-01-01T00:00:00.000Z",
+              "watched": true,
+              "year": 2019
+            },
+            {
+              "addedById": null,
+              "additionalFanartUrls": [],
+              "alternativeTitles": [],
+              "createdAt": "2026-02-14T00:00:00.000Z",
+              "digitalRelease": null,
+              "episodeStats": {
+                "downloadedEpisodes": 2,
+                "totalEpisodes": 3
+              },
+              "fanartUrl": null,
+              "files": [
+                {
+                  "createdAt": "2026-02-02T01:00:00.000Z",
+                  "episodeId": 20,
+                  "id": 58,
+                  "language": "en",
+                  "mediaId": 44,
+                  "osdbBytesize": null,
+                  "osdbHash": null,
+                  "quality": "Bluray-1080p",
+                  "relativePath": "Season 01/e20.mkv",
+                  "size": 1000058,
+                  "streamInfo": null,
+                  "updatedAt": "2026-01-01T00:00:00.000Z"
+                }
+              ],
+              "folderName": "Series Watched (2020)",
+              "genres": null,
+              "id": 44,
+              "imdbId": null,
+              "inCinemas": null,
+              "languageProfile": null,
+              "languageProfileId": null,
+              "library": {
+                "color": "#10b981",
+                "createdAt": "2026-01-01T00:00:00.000Z",
+                "defaultLanguageProfileId": null,
+                "defaultQualityProfileId": null,
+                "icon": "tv",
+                "id": 2,
+                "label": null,
+                "mediaTypes": [
+                  "series"
+                ],
+                "metadataLanguage": null,
+                "metadataRegion": null,
+                "name": "Series",
+                "preferredProvider": null,
+                "updatedAt": "2026-01-01T00:00:00.000Z"
+              },
+              "libraryId": 2,
+              "logoUrl": null,
+              "metadataRefreshedAt": null,
+              "minimumAvailability": "released",
+              "monitored": true,
+              "originalTitle": null,
+              "overview": null,
+              "physicalRelease": null,
+              "posterUrl": null,
+              "preferredProvider": null,
+              "progressPercent": 0,
+              "qualityProfile": {
+                "createdAt": "2026-01-01T00:00:00.000Z",
+                "cutoff": 18,
+                "id": 1,
+                "items": [],
+                "minCustomFormatScore": 0,
+                "name": "Parity HD",
+                "resolutionUpgradeOnly": false,
+                "updatedAt": "2026-01-01T00:00:00.000Z",
+                "upgradeAllowed": false
+              },
+              "qualityProfileId": 1,
+              "rating": null,
+              "releaseDate": null,
+              "runtime": null,
+              "sizeOnDisk": 1000058,
+              "status": "ended",
+              "title": "Series Watched",
+              "tmdbCollectionId": null,
+              "tmdbCollectionName": null,
+              "tmdbId": 4044,
+              "tvdbId": null,
+              "type": "series",
+              "updatedAt": "2026-01-01T00:00:00.000Z",
+              "watched": true,
+              "year": 2022
+            }
+          ],
+          "total": 2
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media?onlyWatched=true"
+    }
+  ],
+  "unordered": [
+    "$.data[*].files"
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "deviation": null,
+  "name": "media-list-unauthenticated",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "anon",
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "GET",
+      "path": "/api/media"
+    }
+  ],
+  "unordered": [
+    "$.data[*].files"
+  ]
+}

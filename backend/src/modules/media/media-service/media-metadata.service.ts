@@ -272,7 +272,6 @@ export class MediaMetadataService {
       }
     }
 
-    await this.updateSearchVector(media.id);
 
     await this.mediaRepo.update(media.id, {
       metadataRefreshedAt: new Date(),
@@ -1234,16 +1233,5 @@ export class MediaMetadataService {
         // Skip failed person detail fetches
       }
     }
-  }
-
-  async updateSearchVector(mediaId: number): Promise<void> {
-    await this.dataSource.query(
-      `UPDATE media SET "searchVector" =
-        setweight(to_tsvector('french', COALESCE(title, '')), 'A') ||
-        setweight(to_tsvector('french', COALESCE("originalTitle", '')), 'B') ||
-        setweight(to_tsvector('french', COALESCE(overview, '')), 'C')
-      WHERE id = $1`,
-      [mediaId],
-    );
   }
 }

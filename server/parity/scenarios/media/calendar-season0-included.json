@@ -1,0 +1,33 @@
+{
+  "deviation": null,
+  "name": "media-calendar-season0-included",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "date": "2026-03-07",
+            "episodeNumber": 1,
+            "episodeTitle": "Calendar Special",
+            "event": "airing",
+            "fanartUrl": null,
+            "hasFile": false,
+            "id": 31,
+            "mediaId": 47,
+            "posterUrl": null,
+            "seasonNumber": 0,
+            "status": "continuing",
+            "title": "Series Calendar",
+            "type": "series",
+            "year": 2026
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/calendar?start=2026-03-07&end=2026-03-07"
+    }
+  ]
+}

@@ -1,0 +1,65 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..freeSpace",
+    "$..totalSpace"
+  ],
+  "name": "libraries-create-mkdir-nested",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "name": "Deep",
+        "path": "/tmp/fliks-parity/libs/a/b/c"
+      },
+      "expect": {
+        "body": {
+          "color": null,
+          "defaultLanguageProfileId": null,
+          "defaultQualityProfileId": null,
+          "disk": {
+            "accessible": true
+          },
+          "icon": null,
+          "id": 3,
+          "label": null,
+          "mediaTypes": [
+            "movie",
+            "series"
+          ],
+          "metadataLanguage": null,
+          "metadataRegion": null,
+          "name": "Deep",
+          "path": "/tmp/fliks-parity/libs/a/b/c",
+          "preferredProvider": null,
+          "userIds": []
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/libraries"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "current": "/tmp/fliks-parity/libs/a/b",
+          "entries": [
+            {
+              "isDirectory": true,
+              "name": "c",
+              "path": "/tmp/fliks-parity/libs/a/b/c"
+            }
+          ],
+          "parent": "/tmp/fliks-parity/libs/a"
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/fs/browse?path=/tmp/fliks-parity/libs/a/b"
+    }
+  ]
+}

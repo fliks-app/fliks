@@ -50,7 +50,6 @@ describe('MediaImportService — season monitoring scope on import', () => {
       {
         downloadMediaImagesInBackground: jest.fn(),
         applySeasonDetails: jest.fn().mockResolvedValue(undefined),
-        updateSearchVector: jest.fn().mockResolvedValue(undefined),
         persistMediaMetadataInBackground: jest.fn(),
       } as any,
       { onMediaImported: jest.fn().mockResolvedValue(undefined) } as any,

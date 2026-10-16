@@ -1,0 +1,26 @@
+{
+  "deviation": null,
+  "name": "media-collections-library",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "count": 2,
+            "id": 500,
+            "name": "Alpha Collection",
+            "posters": [
+              "/api/images/32/poster",
+              "/api/images/33/poster"
+            ]
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/collections?libraryId=1"
+    }
+  ]
+}

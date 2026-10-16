@@ -1,0 +1,16 @@
+{
+  "deviation": null,
+  "name": "media-similar-series-empty",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": [],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/18/similar"
+    }
+  ]
+}

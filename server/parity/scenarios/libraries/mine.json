@@ -1,0 +1,98 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..freeSpace",
+    "$..totalSpace"
+  ],
+  "name": "libraries-mine",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "color": "#3b82f6",
+            "defaultLanguageProfileId": null,
+            "defaultQualityProfileId": null,
+            "icon": "film",
+            "id": 1,
+            "mediaTypes": [
+              "movie"
+            ],
+            "name": "Movies"
+          },
+          {
+            "color": "#10b981",
+            "defaultLanguageProfileId": null,
+            "defaultQualityProfileId": null,
+            "icon": "tv",
+            "id": 2,
+            "mediaTypes": [
+              "series"
+            ],
+            "name": "Series"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/libraries/mine"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": [
+          {
+            "color": "#3b82f6",
+            "defaultLanguageProfileId": null,
+            "defaultQualityProfileId": null,
+            "icon": "film",
+            "id": 1,
+            "mediaTypes": [
+              "movie"
+            ],
+            "name": "Movies"
+          },
+          {
+            "color": "#10b981",
+            "defaultLanguageProfileId": null,
+            "defaultQualityProfileId": null,
+            "icon": "tv",
+            "id": 2,
+            "mediaTypes": [
+              "series"
+            ],
+            "name": "Series"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/libraries/mine"
+    },
+    {
+      "as": "readonly",
+      "expect": {
+        "body": [
+          {
+            "color": "#3b82f6",
+            "defaultLanguageProfileId": null,
+            "defaultQualityProfileId": null,
+            "icon": "film",
+            "id": 1,
+            "mediaTypes": [
+              "movie"
+            ],
+            "name": "Movies"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/libraries/mine"
+    }
+  ]
+}

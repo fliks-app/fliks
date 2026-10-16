@@ -1,0 +1,159 @@
+{
+  "deviation": null,
+  "name": "media-similar-excludes-collection",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "fanartUrl": null,
+            "genres": [
+              "Drama"
+            ],
+            "hasFile": true,
+            "id": 6,
+            "posterUrl": "/api/images/6/poster",
+            "rating": 9,
+            "title": "Parity Movie 06",
+            "year": 2017
+          },
+          {
+            "fanartUrl": null,
+            "genres": [
+              "Drama"
+            ],
+            "hasFile": true,
+            "id": 10,
+            "posterUrl": null,
+            "rating": 8,
+            "title": "Parity Movie 10",
+            "year": 2019
+          },
+          {
+            "fanartUrl": null,
+            "genres": [
+              "Drama"
+            ],
+            "hasFile": true,
+            "id": 1,
+            "posterUrl": "/api/images/1/poster",
+            "rating": 7.5,
+            "title": "Parity Movie 01",
+            "year": 2020
+          },
+          {
+            "fanartUrl": null,
+            "genres": [
+              "Drama"
+            ],
+            "hasFile": true,
+            "id": 22,
+            "posterUrl": "/api/images/22/poster",
+            "rating": 9,
+            "title": "12 Angry Men",
+            "year": 1957
+          },
+          {
+            "fanartUrl": null,
+            "genres": [
+              "Drama",
+              "Thriller"
+            ],
+            "hasFile": true,
+            "id": 24,
+            "posterUrl": "/api/images/24/poster",
+            "rating": 7.6,
+            "title": "L'Impossible",
+            "year": 2012
+          },
+          {
+            "fanartUrl": null,
+            "genres": [
+              "Comedy",
+              "Drama"
+            ],
+            "hasFile": true,
+            "id": 8,
+            "posterUrl": "/api/images/8/poster",
+            "rating": 6,
+            "title": "Parity Movie 08",
+            "year": 2016
+          },
+          {
+            "fanartUrl": "/api/images/2/fanart",
+            "genres": [
+              "Action",
+              "Drama"
+            ],
+            "hasFile": true,
+            "id": 2,
+            "posterUrl": "/api/images/2/poster",
+            "rating": 8,
+            "title": "Parity Movie 02",
+            "year": 2019
+          },
+          {
+            "fanartUrl": null,
+            "genres": [
+              "Comedy",
+              "Drama"
+            ],
+            "hasFile": true,
+            "id": 27,
+            "posterUrl": null,
+            "rating": 6.5,
+            "title": "Unidentified Movie",
+            "year": 2019
+          },
+          {
+            "fanartUrl": null,
+            "genres": [
+              "Action",
+              "Drama"
+            ],
+            "hasFile": true,
+            "id": 17,
+            "posterUrl": null,
+            "rating": 7.5,
+            "title": "Parity Movie 17",
+            "year": 2020
+          },
+          {
+            "fanartUrl": null,
+            "genres": [
+              "Drama",
+              "Crime"
+            ],
+            "hasFile": true,
+            "id": 15,
+            "posterUrl": null,
+            "rating": 9,
+            "title": "Parity Movie 15",
+            "year": 2022
+          },
+          {
+            "fanartUrl": null,
+            "genres": [
+              "Drama",
+              "Crime"
+            ],
+            "hasFile": true,
+            "id": 25,
+            "posterUrl": null,
+            "rating": 8.7,
+            "title": "Les Évadés",
+            "year": 1994
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/32/similar"
+    }
+  ],
+  "unordered": [
+    "$"
+  ]
+}

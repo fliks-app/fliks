@@ -1,0 +1,139 @@
+{
+  "deviation": null,
+  "name": "media-detail-movie-metadata-free",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "addedById": null,
+          "additionalFanartUrls": [],
+          "alternativeTitles": [],
+          "createdAt": "2026-01-05T00:00:00.000Z",
+          "digitalRelease": null,
+          "fanartUrl": "/api/images/4/fanart",
+          "files": [
+            {
+              "createdAt": "2026-02-02T23:00:00.000Z",
+              "episodeId": null,
+              "id": 4,
+              "language": "en",
+              "mediaId": 4,
+              "osdbBytesize": null,
+              "osdbHash": null,
+              "quality": "WEBDL-1080p",
+              "relativePath": "Parity Movie 04 (2020).mp4",
+              "size": 74465,
+              "streamInfo": {
+                "audio": [
+                  {
+                    "bitRate": 64628,
+                    "channelLayout": "mono",
+                    "channels": 1,
+                    "codec": "aac",
+                    "endSeconds": 3,
+                    "isDefault": true,
+                    "language": "eng",
+                    "profile": "LC",
+                    "sampleRate": 48000,
+                    "startTimeSeconds": 0,
+                    "streamIndex": 1
+                  }
+                ],
+                "chapters": [],
+                "durationSeconds": 3,
+                "formatBitRate": 198573,
+                "formatName": "mov,mp4,m4a,3gp,3g2,mj2",
+                "formatStartSeconds": 0,
+                "subtitles": [],
+                "video": [
+                  {
+                    "avgFrameRate": "24/1",
+                    "bitDepth": 8,
+                    "bitRate": 124082,
+                    "codec": "h264",
+                    "displayAspectRatio": "16:9",
+                    "dvBlPresent": false,
+                    "dvElPresent": false,
+                    "dvRpuPresent": false,
+                    "endSeconds": 3,
+                    "firstFrameSeconds": 0,
+                    "frameRate": "24",
+                    "hdr10Plus": false,
+                    "height": 90,
+                    "level": 10,
+                    "pixelFormat": "yuv420p",
+                    "profile": "High",
+                    "reorderFrames": 2,
+                    "startTimeSeconds": 0,
+                    "streamIndex": 0,
+                    "width": 160
+                  }
+                ]
+              },
+              "updatedAt": "2026-01-01T00:00:00.000Z"
+            }
+          ],
+          "folderName": "Parity Movie 04 (2020)",
+          "genres": [
+            "Comedy"
+          ],
+          "id": 4,
+          "imdbId": null,
+          "inCinemas": null,
+          "languageProfile": null,
+          "languageProfileId": null,
+          "library": {
+            "color": "#3b82f6",
+            "createdAt": "2026-01-01T00:00:00.000Z",
+            "defaultLanguageProfileId": 1,
+            "defaultQualityProfileId": 1,
+            "icon": "film",
+            "id": 1,
+            "label": null,
+            "mediaTypes": [
+              "movie"
+            ],
+            "metadataLanguage": null,
+            "metadataRegion": null,
+            "name": "Movies",
+            "path": "/tmp/fliks-parity/media/movies",
+            "preferredProvider": null,
+            "updatedAt": "2026-01-01T00:00:00.000Z"
+          },
+          "libraryId": 1,
+          "logoUrl": null,
+          "metadata": null,
+          "metadataRefreshedAt": null,
+          "minimumAvailability": "released",
+          "monitored": true,
+          "originalTitle": null,
+          "overview": "Synthetic movie 4",
+          "path": "/tmp/fliks-parity/media/movies/Parity Movie 04 (2020)",
+          "physicalRelease": null,
+          "posterUrl": "/api/images/4/poster",
+          "preferredProvider": null,
+          "qualityProfile": null,
+          "qualityProfileId": null,
+          "rating": 6,
+          "releaseDate": "2020-01-01",
+          "runtime": 90,
+          "seasons": [],
+          "status": "released",
+          "title": "Parity Movie 04",
+          "tmdbCollectionId": null,
+          "tmdbCollectionName": null,
+          "tmdbId": 1004,
+          "tvdbId": null,
+          "type": "movie",
+          "updatedAt": "2026-01-01T00:00:00.000Z",
+          "year": 2018
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/4"
+    }
+  ]
+}

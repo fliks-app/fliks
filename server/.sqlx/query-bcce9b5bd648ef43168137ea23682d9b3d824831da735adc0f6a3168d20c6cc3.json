@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT \"personId\" AS \"person_id!\" FROM media_crew WHERE \"mediaId\" = $1 AND job = 'Director' AND \"personId\" IS NOT NULL",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "person_id!",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "bcce9b5bd648ef43168137ea23682d9b3d824831da735adc0f6a3168d20c6cc3"
+}

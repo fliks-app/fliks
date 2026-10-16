@@ -1,0 +1,102 @@
+{
+  "deviation": null,
+  "name": "libraries-create-validation",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {},
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "name must be a string"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/libraries"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "evil": 1,
+        "name": "x"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "property evil should not exist"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/libraries"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "mediaTypes": [
+          "music"
+        ],
+        "name": "x"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "each value in mediaTypes must be one of the following values: movie, series"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/libraries"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "name": 5
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "name must be a string"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/libraries"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "name": "x",
+        "userIds": [
+          "a"
+        ]
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "each value in userIds must be an integer number"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/libraries"
+    }
+  ]
+}

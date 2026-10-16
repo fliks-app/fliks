@@ -1,0 +1,25 @@
+{
+  "deviation": null,
+  "name": "media-list-validation-array-q",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "q must be a string"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "GET",
+      "path": "/api/media?q=a&q=b"
+    }
+  ],
+  "unordered": [
+    "$.data[*].files"
+  ]
+}

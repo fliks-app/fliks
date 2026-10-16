@@ -41,6 +41,19 @@ pub struct Role {
     pub default_library_ids: Vec<i32>,
 }
 
+impl Role {
+    /// F22: default libraries carry `path` only for callers who can manage libraries.
+    pub fn json(self, paths: bool) -> Value {
+        let mut v = serde_json::to_value(self).expect("role serialises");
+        if !paths {
+            for l in v["defaultLibraries"].as_array_mut().into_iter().flatten() {
+                l.as_object_mut().map(|o| o.remove("path"));
+            }
+        }
+        v
+    }
+}
+
 struct RoleRow {
     id: i32,
     created_at: DateTime<Utc>,

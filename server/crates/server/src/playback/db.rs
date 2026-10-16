@@ -101,28 +101,6 @@ fn fk(e: sqlx::Error) -> AppError {
     }
 }
 
-pub async fn accessible_libraries(
-    db: &PgPool,
-    user: i32,
-    sees_all: bool,
-) -> sqlx::Result<Vec<i32>> {
-    if sees_all {
-        sqlx::query_scalar!("SELECT id FROM libraries")
-            .fetch_all(db)
-            .await
-    } else {
-        Ok(sqlx::query_scalar!(
-            r#"SELECT "libraryId" FROM library_user_access WHERE "userId" = $1"#,
-            user
-        )
-        .fetch_all(db)
-        .await?
-        .into_iter()
-        .flatten()
-        .collect())
-    }
-}
-
 /// The movie row when `episode` is `None`.
 pub async fn find_state(
     db: &PgPool,

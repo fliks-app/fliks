@@ -1,0 +1,16 @@
+{
+  "deviation": null,
+  "name": "media-collections-library-outside-acl",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "readonly",
+      "expect": {
+        "body": [],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/collections?libraryId=2"
+    }
+  ]
+}

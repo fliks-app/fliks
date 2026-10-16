@@ -122,6 +122,7 @@ async fn self_and_other_access(pool: PgPool) {
     assert_eq!(c.call("GET", "/api/users", &ta, None).await.0, 403);
     assert_eq!(c.call("GET", "/api/users", &tm, None).await.0, 200);
     assert_eq!(c.call("GET", "/api/users/me", &tm, None).await.0, 400);
+    assert_eq!(c.call("GET", "/api/users/007", &tm, None).await.0, 400);
     assert_eq!(c.call("GET", "/api/users/9999", &tm, None).await.0, 404);
     assert_eq!(
         c.call("DELETE", &format!("/api/users/{b}"), &ta, None)

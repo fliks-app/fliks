@@ -1,0 +1,20 @@
+{
+  "deviation": "C1",
+  "name": "media-streams-library-no-path",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "MediaFile #50 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "GET",
+      "path": "/api/media/42/streams/50"
+    }
+  ]
+}

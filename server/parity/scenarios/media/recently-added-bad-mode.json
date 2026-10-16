@@ -1,0 +1,25 @@
+{
+  "deviation": null,
+  "name": "media-recently-added-bad-mode",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "mode must be one of the following values: media, file, both"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "GET",
+      "path": "/api/media/recently-added?mode=x"
+    }
+  ],
+  "unordered": [
+    "$[*].files"
+  ]
+}

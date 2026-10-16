@@ -1,6 +1,7 @@
 use crate::http::{layers, static_files};
 use crate::{
-    auth, events, fs, playback, qoe, remote, roles, settings, state::AppState, system, users,
+    auth, events, fs, images, libraries, media, playback, qoe, remote, roles, settings,
+    state::AppState, system, users,
 };
 use axum::{
     Router,
@@ -102,7 +103,31 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         crate::stream::command,
         crate::stream::stats,
         crate::stream::purge_all,
-        crate::stream::purge_file
+        crate::stream::purge_file,
+        libraries::mine,
+        libraries::list,
+        libraries::get_one,
+        libraries::create,
+        libraries::update,
+        libraries::access_get,
+        libraries::access_put,
+        images::without_variant,
+        images::with_variant,
+        media::find,
+        media::recent,
+        media::count,
+        media::count_by_library,
+        media::quality_table,
+        media::genre_list,
+        media::collection_list,
+        media::calendar_entries,
+        media::track,
+        media::get_media,
+        media::similar_media,
+        media::media_collection,
+        media::media_cast,
+        media::media_crew,
+        media::media_streams
     )
 )]
 pub struct ApiDoc;
@@ -133,6 +158,8 @@ pub fn router(
         .layer(from_fn_with_state(cors, preflight_here));
     // Merged after the layers so Nest answers the methods Rust does not own, unlayered instead of a 405.
     let local = layers::apply(local, cors_origin, BODY_LIMIT_BYTES);
+    // axum would send this literal to `/api/media/{id}` (400); it stays Nest's until subtitles move.
+    let local = local.route("/api/media/sync-queue", any_service(unowned.clone()));
     let local = ApiDoc::openapi()
         .paths
         .paths
@@ -157,6 +184,9 @@ fn api() -> Router<AppState> {
         .merge(playback::router())
         .merge(qoe::router())
         .merge(crate::stream::router())
+        .merge(libraries::router())
+        .merge(images::router())
+        .merge(media::router())
 }
 
 async fn preflight_here(State(cors): State<Router>, req: Request, next: Next) -> Response {

@@ -4,5 +4,7 @@ pub mod burn_in;
 pub mod edl;
 mod js;
 pub mod language;
+pub mod media;
 pub mod qoe;
 pub mod recommend;
+pub mod release;

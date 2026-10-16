@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT m.\"tmdbCollectionId\" AS \"id!\",\n       m.\"tmdbCollectionName\" AS \"name!\",\n       COUNT(*)::int          AS \"count!\",\n       COALESCE(\n         (ARRAY_AGG(m.\"posterUrl\" ORDER BY m.id)\n          FILTER (WHERE m.\"posterUrl\" IS NOT NULL))[1:4],\n         ARRAY[]::text[]\n       ) AS \"posters!\"\nFROM media m\nWHERE m.\"libraryId\" = ANY($1)\n  AND m.\"tmdbCollectionId\" IS NOT NULL\n  AND m.\"tmdbCollectionName\" IS NOT NULL\nGROUP BY m.\"tmdbCollectionId\", m.\"tmdbCollectionName\"\nHAVING COUNT(*) >= 2\nORDER BY m.\"tmdbCollectionName\" ASC, m.\"tmdbCollectionId\" ASC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "name!",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "count!",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "posters!",
+        "type_info": "VarcharArray"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4Array"
+      ]
+    },
+    "nullable": [
+      true,
+      true,
+      null,
+      null
+    ]
+  },
+  "hash": "17163bd4744143ac68dc5b05ff0c0282bb080b460860784407069276bfcbde5a"
+}

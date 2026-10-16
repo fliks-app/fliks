@@ -1,0 +1,35 @@
+{
+  "deviation": null,
+  "name": "media-tracking-series-no-profile",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "hasProfile": false,
+          "seasons": [
+            {
+              "episodes": [
+                {
+                  "endEpisodeNumber": null,
+                  "episodeId": 26,
+                  "episodeNumber": 1,
+                  "monitored": true,
+                  "seasonNumber": 1,
+                  "state": "no-profile",
+                  "title": "Episode 1"
+                }
+              ],
+              "seasonNumber": 1
+            }
+          ],
+          "type": "series"
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/46/tracking"
+    }
+  ]
+}

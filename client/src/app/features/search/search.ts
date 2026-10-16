@@ -555,7 +555,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   /** Map the panel sort to the local sortBy/sortOrder, or null for the default
-   *  (keeps the title relevance order — the panel default has no local column). */
+   *  (the panel default has no local column: the server then ranks by relevance). */
   private mapPanelSort(): { sortBy: string; sortOrder: 'ASC' | 'DESC' } | null {
     const s = this.state.discoverSort();
     if (s === 'primary_release_date.desc') return { sortBy: 'year', sortOrder: 'DESC' };
@@ -668,8 +668,11 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     else void this.ensureDiscoverGenres();
     const type: MediaType | undefined = ct === 'all' ? undefined : ct;
     const sort = this.mapPanelSort();
-    const localParams: SearchParams = { q, limit: 20, sortBy: sort?.sortBy ?? 'title' };
-    if (sort) localParams.sortOrder = sort.sortOrder;
+    const localParams: SearchParams = { q, limit: 20 };
+    if (sort) {
+      localParams.sortBy = sort.sortBy;
+      localParams.sortOrder = sort.sortOrder;
+    }
     if (type) localParams.type = type;
     const genres = this.state.selectedGenreNames();
     if (genres.length) localParams.genres = genres;

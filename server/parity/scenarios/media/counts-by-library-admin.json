@@ -1,0 +1,20 @@
+{
+  "deviation": null,
+  "name": "media-counts-by-library-admin",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "1": 40,
+          "2": 9,
+          "3": 1
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/counts-by-library"
+    }
+  ]
+}

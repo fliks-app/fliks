@@ -1,0 +1,91 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..freeSpace",
+    "$..totalSpace"
+  ],
+  "name": "libraries-update-path-set",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "name": "Tmp"
+      },
+      "expect": {
+        "body": {
+          "color": null,
+          "defaultLanguageProfileId": null,
+          "defaultQualityProfileId": null,
+          "disk": null,
+          "icon": null,
+          "id": 3,
+          "label": null,
+          "mediaTypes": [
+            "movie",
+            "series"
+          ],
+          "metadataLanguage": null,
+          "metadataRegion": null,
+          "name": "Tmp",
+          "path": null,
+          "preferredProvider": null,
+          "userIds": []
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/libraries"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "path": "/tmp/fliks-parity/libs/set"
+      },
+      "expect": {
+        "body": {
+          "color": null,
+          "defaultLanguageProfileId": null,
+          "defaultQualityProfileId": null,
+          "disk": {
+            "accessible": true
+          },
+          "icon": null,
+          "id": 3,
+          "label": null,
+          "mediaTypes": [
+            "movie",
+            "series"
+          ],
+          "metadataLanguage": null,
+          "metadataRegion": null,
+          "name": "Tmp",
+          "path": "/tmp/fliks-parity/libs/set",
+          "preferredProvider": null,
+          "userIds": []
+        },
+        "status": 200
+      },
+      "method": "PATCH",
+      "path": "/api/libraries/3"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "path": "/tmp/fliks-parity/media/series"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Path \"/tmp/fliks-parity/media/series\" is already attached to another library",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PATCH",
+      "path": "/api/libraries/3"
+    }
+  ]
+}

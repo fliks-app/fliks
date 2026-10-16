@@ -1,0 +1,25 @@
+{
+  "deviation": "C1",
+  "name": "media-recently-added-limit-negative",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "limit must not be less than 0"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "GET",
+      "path": "/api/media/recently-added?limit=-1"
+    }
+  ],
+  "unordered": [
+    "$[*].files"
+  ]
+}

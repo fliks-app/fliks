@@ -1,0 +1,39 @@
+{
+  "deviation": null,
+  "name": "images-bad-type",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "anon",
+      "expect": {
+        "body": {
+          "message": "Not Found",
+          "statusCode": 404
+        },
+        "headers": {
+          "cache-control": "no-store, no-cache, must-revalidate",
+          "x-image-size-served": null
+        },
+        "status": 404
+      },
+      "method": "GET",
+      "path": "/api/images/livetv/1"
+    },
+    {
+      "as": "anon",
+      "expect": {
+        "body": {
+          "message": "Not Found",
+          "statusCode": 404
+        },
+        "headers": {
+          "cache-control": "no-store, no-cache, must-revalidate",
+          "x-image-size-served": null
+        },
+        "status": 404
+      },
+      "method": "GET",
+      "path": "/api/images/foo/1"
+    }
+  ]
+}

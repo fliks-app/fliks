@@ -1,0 +1,22 @@
+{
+  "deviation": "C1",
+  "name": "libraries-update-null-name",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "name": null
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PATCH",
+      "path": "/api/libraries/1"
+    }
+  ]
+}

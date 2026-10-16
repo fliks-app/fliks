@@ -22,7 +22,6 @@ import { NamingService } from '../scheduler/naming.service';
 import { MediaImportService } from './media-service/media-import.service';
 import { MediaMetadataService } from './media-service/media-metadata.service';
 import { MediaQueryService } from './media-service/media-query.service';
-import { MediaRelatedService } from './media-service/media-related.service';
 import { MediaMutationService } from './media-service/media-mutation.service';
 import { MediaRescanService } from './media-service/media-rescan.service';
 import { MediaCompanionsService } from './media-service/media-companions.service';
@@ -70,7 +69,6 @@ import { MediaProbeModule } from '../media-probe/media-probe.module';
     MediaImportService,
     MediaMetadataService,
     MediaQueryService,
-    MediaRelatedService,
     MediaMutationService,
     MediaRescanService,
     MediaCompanionsService,

@@ -1,0 +1,23 @@
+{
+  "deviation": null,
+  "name": "media-tracking-movie-missing",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "hasProfile": true,
+          "movie": {
+            "monitored": true,
+            "state": "missing"
+          },
+          "type": "movie"
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/30/tracking"
+    }
+  ]
+}

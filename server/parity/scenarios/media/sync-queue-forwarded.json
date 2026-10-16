@@ -1,0 +1,16 @@
+{
+  "deviation": null,
+  "name": "media-sync-queue-forwarded",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": [],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/sync-queue"
+    }
+  ]
+}

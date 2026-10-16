@@ -1,0 +1,138 @@
+{
+  "deviation": null,
+  "name": "media-detail-movie",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "addedById": null,
+          "additionalFanartUrls": [],
+          "alternativeTitles": [],
+          "createdAt": "2026-01-02T00:00:00.000Z",
+          "digitalRelease": null,
+          "fanartUrl": null,
+          "files": [
+            {
+              "createdAt": "2026-02-02T13:00:00.000Z",
+              "episodeId": null,
+              "id": 1,
+              "language": "en",
+              "mediaId": 1,
+              "osdbBytesize": null,
+              "osdbHash": null,
+              "quality": "WEBDL-1080p",
+              "relativePath": "Parity Movie 01 (2020).mkv",
+              "size": 73237,
+              "streamInfo": {
+                "audio": [
+                  {
+                    "channelLayout": "mono",
+                    "channels": 1,
+                    "codec": "aac",
+                    "endSeconds": 3.021,
+                    "isDefault": false,
+                    "language": "eng",
+                    "profile": "LC",
+                    "sampleRate": 48000,
+                    "startTimeSeconds": 0,
+                    "streamIndex": 1
+                  }
+                ],
+                "chapters": [],
+                "durationSeconds": 3.021,
+                "formatBitRate": 193941,
+                "formatName": "matroska,webm",
+                "formatStartSeconds": 0,
+                "subtitles": [],
+                "video": [
+                  {
+                    "avgFrameRate": "24/1",
+                    "bitDepth": 8,
+                    "codec": "h264",
+                    "colorRange": "tv",
+                    "displayAspectRatio": "16:9",
+                    "dvBlPresent": false,
+                    "dvElPresent": false,
+                    "dvRpuPresent": false,
+                    "endSeconds": 3,
+                    "firstFrameSeconds": 0,
+                    "frameRate": "24",
+                    "hdr10Plus": false,
+                    "height": 90,
+                    "level": 10,
+                    "pixelFormat": "yuv420p",
+                    "profile": "High",
+                    "reorderFrames": 2,
+                    "startTimeSeconds": 0,
+                    "streamIndex": 0,
+                    "width": 160
+                  }
+                ]
+              },
+              "updatedAt": "2026-01-01T00:00:00.000Z"
+            }
+          ],
+          "folderName": "Parity Movie 01 (2020)",
+          "genres": [
+            "Drama"
+          ],
+          "id": 1,
+          "imdbId": null,
+          "inCinemas": null,
+          "languageProfile": null,
+          "languageProfileId": null,
+          "library": {
+            "color": "#3b82f6",
+            "createdAt": "2026-01-01T00:00:00.000Z",
+            "defaultLanguageProfileId": 1,
+            "defaultQualityProfileId": 1,
+            "icon": "film",
+            "id": 1,
+            "label": null,
+            "mediaTypes": [
+              "movie"
+            ],
+            "metadataLanguage": null,
+            "metadataRegion": null,
+            "name": "Movies",
+            "path": "/tmp/fliks-parity/media/movies",
+            "preferredProvider": null,
+            "updatedAt": "2026-01-01T00:00:00.000Z"
+          },
+          "libraryId": 1,
+          "logoUrl": null,
+          "metadata": null,
+          "metadataRefreshedAt": null,
+          "minimumAvailability": "released",
+          "monitored": true,
+          "originalTitle": null,
+          "overview": "Synthetic movie 1",
+          "path": "/tmp/fliks-parity/media/movies/Parity Movie 01 (2020)",
+          "physicalRelease": null,
+          "posterUrl": "/api/images/1/poster",
+          "preferredProvider": null,
+          "qualityProfile": null,
+          "qualityProfileId": null,
+          "rating": 7.5,
+          "releaseDate": "2020-01-01",
+          "runtime": 90,
+          "seasons": [],
+          "status": "released",
+          "title": "Parity Movie 01",
+          "tmdbCollectionId": null,
+          "tmdbCollectionName": null,
+          "tmdbId": 1001,
+          "tvdbId": null,
+          "type": "movie",
+          "updatedAt": "2026-01-01T00:00:00.000Z",
+          "year": 2020
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/1"
+    }
+  ]
+}

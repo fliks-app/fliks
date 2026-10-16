@@ -1,0 +1,25 @@
+{
+  "deviation": null,
+  "name": "media-tracking-8k-file",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "hasProfile": true,
+          "movie": {
+            "currentQuality": "WORKPRINT",
+            "monitored": true,
+            "state": "below",
+            "targetQuality": "1080p"
+          },
+          "type": "movie"
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/39/tracking"
+    }
+  ]
+}

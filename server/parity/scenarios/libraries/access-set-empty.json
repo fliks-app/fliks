@@ -1,0 +1,27 @@
+{
+  "deviation": null,
+  "name": "libraries-access-set-empty",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "userIds": []
+      },
+      "expect": {
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/libraries/1/access"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/libraries/1/access"
+    }
+  ]
+}

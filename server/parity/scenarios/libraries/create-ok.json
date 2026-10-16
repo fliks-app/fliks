@@ -1,0 +1,162 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..freeSpace",
+    "$..totalSpace"
+  ],
+  "name": "libraries-create-ok",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "icon": "star",
+        "mediaTypes": [
+          "series"
+        ],
+        "name": "Anime",
+        "path": "/tmp/fliks-parity/libs/anime",
+        "userIds": [
+          2
+        ]
+      },
+      "expect": {
+        "body": {
+          "color": null,
+          "defaultLanguageProfileId": null,
+          "defaultQualityProfileId": null,
+          "disk": {
+            "accessible": true
+          },
+          "icon": "star",
+          "id": 3,
+          "label": null,
+          "mediaTypes": [
+            "series"
+          ],
+          "metadataLanguage": null,
+          "metadataRegion": null,
+          "name": "Anime",
+          "path": "/tmp/fliks-parity/libs/anime",
+          "preferredProvider": null,
+          "userIds": [
+            2
+          ]
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/libraries"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "color": null,
+            "defaultLanguageProfileId": null,
+            "defaultQualityProfileId": null,
+            "disk": {
+              "accessible": true
+            },
+            "icon": "star",
+            "id": 3,
+            "label": null,
+            "mediaTypes": [
+              "series"
+            ],
+            "metadataLanguage": null,
+            "metadataRegion": null,
+            "name": "Anime",
+            "path": "/tmp/fliks-parity/libs/anime",
+            "preferredProvider": null,
+            "userIds": [
+              2
+            ]
+          },
+          {
+            "color": "#3b82f6",
+            "defaultLanguageProfileId": null,
+            "defaultQualityProfileId": null,
+            "disk": {
+              "accessible": true
+            },
+            "icon": "film",
+            "id": 1,
+            "label": null,
+            "mediaTypes": [
+              "movie"
+            ],
+            "metadataLanguage": null,
+            "metadataRegion": null,
+            "name": "Movies",
+            "path": "/tmp/fliks-parity/media/movies",
+            "preferredProvider": null,
+            "userIds": [
+              2,
+              3,
+              4,
+              5
+            ]
+          },
+          {
+            "color": "#10b981",
+            "defaultLanguageProfileId": null,
+            "defaultQualityProfileId": null,
+            "disk": {
+              "accessible": true
+            },
+            "icon": "tv",
+            "id": 2,
+            "label": null,
+            "mediaTypes": [
+              "series"
+            ],
+            "metadataLanguage": null,
+            "metadataRegion": null,
+            "name": "Series",
+            "path": "/tmp/fliks-parity/media/series",
+            "preferredProvider": null,
+            "userIds": [
+              2,
+              4,
+              5
+            ]
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/libraries"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "current": "/tmp/fliks-parity/libs",
+          "entries": [
+            {
+              "isDirectory": true,
+              "name": "a",
+              "path": "/tmp/fliks-parity/libs/a"
+            },
+            {
+              "isDirectory": true,
+              "name": "anime",
+              "path": "/tmp/fliks-parity/libs/anime"
+            }
+          ],
+          "parent": "/tmp/fliks-parity"
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/fs/browse?path=/tmp/fliks-parity/libs"
+    }
+  ],
+  "unordered": [
+    "$.entries"
+  ]
+}

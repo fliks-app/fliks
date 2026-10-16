@@ -1,0 +1,19 @@
+{
+  "deviation": null,
+  "name": "media-tracking-unauthenticated",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "anon",
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "GET",
+      "path": "/api/media/1/tracking"
+    }
+  ]
+}

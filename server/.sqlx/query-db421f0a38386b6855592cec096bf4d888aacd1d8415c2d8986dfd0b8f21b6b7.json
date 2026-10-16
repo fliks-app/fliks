@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT m.\"libraryId\" AS \"library_id!\", COUNT(*)::int AS \"count!\" FROM media m\n           WHERE m.\"libraryId\" IS NOT NULL AND m.\"libraryId\" = ANY($1) GROUP BY m.\"libraryId\" ORDER BY m.\"libraryId\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "library_id!",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "count!",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4Array"
+      ]
+    },
+    "nullable": [
+      true,
+      null
+    ]
+  },
+  "hash": "db421f0a38386b6855592cec096bf4d888aacd1d8415c2d8986dfd0b8f21b6b7"
+}

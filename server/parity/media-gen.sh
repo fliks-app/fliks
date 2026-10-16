@@ -31,3 +31,16 @@ for s in A B C; do
     done
   done
 done
+
+# Artwork read by /api/images (`FLIKS_DATA_DIR=$root/data`).
+img="$root/data"
+mkdir -p "$img"
+[ -s "$root/assets/art.jpg" ] || ffmpeg -v error -y -f lavfi -i "color=c=red:s=2x2" -frames:v 1 "$root/assets/art.jpg"
+[ -s "$root/assets/art.png" ] || ffmpeg -v error -y -f lavfi -i "color=c=blue:s=2x2" -frames:v 1 "$root/assets/art.png"
+for f in media/1/{poster,poster-thumb,fanart,fanart-1}.jpg media/2/poster.jpg persons/5.jpg episodes/3.jpg seasons/2.jpg \
+  requests/movie-603/poster.jpg; do
+  mkdir -p "$img/$(dirname "$f")"
+  [ -s "$img/$f" ] || cp "$root/assets/art.jpg" "$img/$f"
+done
+mkdir -p "$img/media/1"
+[ -s "$img/media/1/logo.png" ] || cp "$root/assets/art.png" "$img/media/1/logo.png"

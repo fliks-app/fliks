@@ -6,7 +6,7 @@ use crate::{
     http::{
         AppError,
         auth::{Authed, UserRow},
-        validate::{PathParams, ValidJson},
+        validate::{PathParams, ValidJson, int_param},
     },
     state::AppState,
 };
@@ -47,18 +47,6 @@ fn forbidden() -> AppError {
 }
 
 /// `ParseIntPipe` on the raw segment, after the policy check as Nest's guards run before pipes.
-fn parse_id(raw: &str) -> Result<i32, AppError> {
-    let digits = raw.strip_prefix('-').unwrap_or(raw);
-    if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
-        return Err(AppError::bad_request(
-            "Validation failed (numeric string is expected)",
-        ));
-    }
-    // Beyond the column range no row exists, so it is the same 404 as any unknown id.
-    raw.parse::<i32>()
-        .map_err(|_| AppError::not_found(format!("User #{raw} not found")))
-}
-
 async fn body<T: serde::de::DeserializeOwned>(req: Request) -> Result<T, AppError> {
     let ValidJson(dto) = ValidJson::<T>::from_request(req, &()).await?;
     Ok(dto)
@@ -168,7 +156,7 @@ pub async fn get_one(
     PathParams(id): PathParams<String>,
 ) -> Result<Json<PublicUser>, AppError> {
     a.require(Action::Read, Subject::User)?;
-    let id = parse_id(&id)?;
+    let id = int_param(&id)?;
     if a.user.id != id && !a.perms.can(Action::Manage, &Subject::User) {
         return Err(forbidden());
     }
@@ -183,7 +171,7 @@ pub async fn update(
     req: Request,
 ) -> Result<Json<PublicUser>, AppError> {
     a.require(Action::Update, Subject::User)?;
-    let id = parse_id(&id)?;
+    let id = int_param(&id)?;
     let dto: UpdateUser = body(req).await?;
     dto.validate()?;
     let is_self = a.user.id == id;
@@ -349,7 +337,7 @@ pub async fn remove(
     PathParams(id): PathParams<String>,
 ) -> Result<(), AppError> {
     a.require(Action::Manage, Subject::User)?;
-    let id = parse_id(&id)?;
+    let id = int_param(&id)?;
     let mut tx = st.db.begin().await?;
     let target = db::lock_user(&mut tx, id)
         .await?
@@ -377,7 +365,7 @@ pub async fn stats(
     PathParams(id): PathParams<String>,
 ) -> Result<Json<Value>, AppError> {
     a.require(Action::Manage, Subject::User)?;
-    let id = parse_id(&id)?;
+    let id = int_param(&id)?;
     let user = sqlx::query!(
         r#"SELECT "lastLogin", "createdAt" FROM users WHERE id = $1"#,
         id

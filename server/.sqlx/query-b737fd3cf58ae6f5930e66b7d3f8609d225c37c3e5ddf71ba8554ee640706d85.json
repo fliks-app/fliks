@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, \"seasonNumber\" AS season_number FROM seasons WHERE \"mediaId\" = $1\n           ORDER BY (\"seasonNumber\" = 0), \"seasonNumber\", id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "season_number",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "b737fd3cf58ae6f5930e66b7d3f8609d225c37c3e5ddf71ba8554ee640706d85"
+}

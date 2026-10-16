@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT \"tmdbCollectionId\" AS collection_id, \"tmdbCollectionName\" AS collection_name, \"libraryId\" AS library_id\n           FROM media WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "collection_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "collection_name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "library_id",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "7f9793b68bfeb22642e719ff7d32999a51f2aa841a6b91982f65e7cfd460de81"
+}

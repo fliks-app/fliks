@@ -1,0 +1,22 @@
+{
+  "deviation": null,
+  "name": "media-list-filter-libraryid-outside-acl",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "readonly",
+      "expect": {
+        "body": {
+          "data": [],
+          "total": 0
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media?libraryId=2"
+    }
+  ],
+  "unordered": [
+    "$.data[*].files"
+  ]
+}

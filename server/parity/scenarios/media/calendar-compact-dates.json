@@ -1,0 +1,100 @@
+{
+  "deviation": null,
+  "name": "media-calendar-compact-dates",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "date": "2026-03-03",
+            "episodeNumber": 1,
+            "episodeTitle": "Episode 1",
+            "event": "airing",
+            "fanartUrl": null,
+            "hasFile": true,
+            "id": 27,
+            "mediaId": 47,
+            "posterUrl": null,
+            "seasonNumber": 1,
+            "status": "continuing",
+            "title": "Series Calendar",
+            "type": "series",
+            "year": 2026
+          },
+          {
+            "date": "2026-03-07",
+            "episodeNumber": 1,
+            "episodeTitle": "Calendar Special",
+            "event": "airing",
+            "fanartUrl": null,
+            "hasFile": false,
+            "id": 31,
+            "mediaId": 47,
+            "posterUrl": null,
+            "seasonNumber": 0,
+            "status": "continuing",
+            "title": "Series Calendar",
+            "type": "series",
+            "year": 2026
+          },
+          {
+            "date": "2026-03-10",
+            "episodeNumber": 2,
+            "episodeTitle": "Episode 2",
+            "event": "airing",
+            "fanartUrl": null,
+            "hasFile": false,
+            "id": 28,
+            "mediaId": 47,
+            "posterUrl": null,
+            "seasonNumber": 1,
+            "status": "continuing",
+            "title": "Series Calendar",
+            "type": "series",
+            "year": 2026
+          },
+          {
+            "date": "2026-03-17",
+            "episodeNumber": 4,
+            "episodeTitle": "Episode 4",
+            "event": "airing",
+            "fanartUrl": null,
+            "hasFile": true,
+            "id": 30,
+            "mediaId": 47,
+            "posterUrl": null,
+            "seasonNumber": 1,
+            "status": "continuing",
+            "title": "Series Calendar",
+            "type": "series",
+            "year": 2026
+          },
+          {
+            "date": "2026-03-17",
+            "episodeNumber": 3,
+            "episodeTitle": "Episode 3",
+            "event": "airing",
+            "fanartUrl": null,
+            "hasFile": true,
+            "id": 29,
+            "mediaId": 47,
+            "posterUrl": null,
+            "seasonNumber": 1,
+            "status": "continuing",
+            "title": "Series Calendar",
+            "type": "series",
+            "year": 2026
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/calendar?start=20260301&end=20260331"
+    }
+  ],
+  "unordered": [
+    "$"
+  ]
+}

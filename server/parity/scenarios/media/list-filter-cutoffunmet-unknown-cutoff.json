@@ -1,0 +1,22 @@
+{
+  "deviation": "C11",
+  "name": "media-list-filter-cutoffunmet-unknown-cutoff",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "data": [],
+          "total": 0
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media?qualityProfileId=2&cutoffUnmet=true"
+    }
+  ],
+  "unordered": [
+    "$.data[*].files"
+  ]
+}

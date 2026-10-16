@@ -1,0 +1,168 @@
+{
+  "deviation": null,
+  "name": "media-list-validation-bad-boolean-array",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "data": [
+            {
+              "addedById": null,
+              "additionalFanartUrls": [],
+              "alternativeTitles": [],
+              "createdAt": "2026-02-16T00:00:00.000Z",
+              "digitalRelease": null,
+              "episodeStats": {
+                "downloadedEpisodes": 0,
+                "totalEpisodes": 1
+              },
+              "fanartUrl": null,
+              "files": [],
+              "folderName": "Series No Files (2020)",
+              "genres": null,
+              "id": 46,
+              "imdbId": null,
+              "inCinemas": null,
+              "languageProfile": null,
+              "languageProfileId": null,
+              "library": {
+                "color": "#10b981",
+                "createdAt": "2026-01-01T00:00:00.000Z",
+                "defaultLanguageProfileId": null,
+                "defaultQualityProfileId": null,
+                "icon": "tv",
+                "id": 2,
+                "label": null,
+                "mediaTypes": [
+                  "series"
+                ],
+                "metadataLanguage": null,
+                "metadataRegion": null,
+                "name": "Series",
+                "path": "/tmp/fliks-parity/media/series",
+                "preferredProvider": null,
+                "updatedAt": "2026-01-01T00:00:00.000Z"
+              },
+              "libraryId": 2,
+              "logoUrl": null,
+              "metadataRefreshedAt": null,
+              "minimumAvailability": "released",
+              "monitored": false,
+              "originalTitle": null,
+              "overview": null,
+              "path": "/tmp/fliks-parity/media/series/Series No Files (2020)",
+              "physicalRelease": null,
+              "posterUrl": null,
+              "preferredProvider": null,
+              "progressPercent": 0,
+              "qualityProfile": null,
+              "qualityProfileId": null,
+              "rating": null,
+              "releaseDate": null,
+              "runtime": null,
+              "sizeOnDisk": 0,
+              "status": "ended",
+              "title": "Series No Files",
+              "tmdbCollectionId": null,
+              "tmdbCollectionName": null,
+              "tmdbId": 4046,
+              "tvdbId": null,
+              "type": "series",
+              "updatedAt": "2026-01-01T00:00:00.000Z",
+              "watched": false,
+              "year": 2019
+            },
+            {
+              "addedById": null,
+              "additionalFanartUrls": [],
+              "alternativeTitles": [],
+              "createdAt": "2026-01-30T00:00:00.000Z",
+              "digitalRelease": null,
+              "fanartUrl": null,
+              "files": [
+                {
+                  "createdAt": "2026-02-04T21:00:00.000Z",
+                  "episodeId": null,
+                  "id": 38,
+                  "language": "en",
+                  "mediaId": 29,
+                  "osdbBytesize": null,
+                  "osdbHash": null,
+                  "quality": "WEBDL-1080p",
+                  "relativePath": "Unmonitored Movie (2020)/Unmonitored Movie (2020).mkv",
+                  "size": 1000038,
+                  "streamInfo": null,
+                  "updatedAt": "2026-01-01T00:00:00.000Z"
+                }
+              ],
+              "folderName": "Unmonitored Movie (2020)",
+              "genres": [
+                "Horror"
+              ],
+              "id": 29,
+              "imdbId": null,
+              "inCinemas": null,
+              "languageProfile": null,
+              "languageProfileId": null,
+              "library": {
+                "color": "#3b82f6",
+                "createdAt": "2026-01-01T00:00:00.000Z",
+                "defaultLanguageProfileId": 1,
+                "defaultQualityProfileId": 1,
+                "icon": "film",
+                "id": 1,
+                "label": null,
+                "mediaTypes": [
+                  "movie"
+                ],
+                "metadataLanguage": null,
+                "metadataRegion": null,
+                "name": "Movies",
+                "path": "/tmp/fliks-parity/media/movies",
+                "preferredProvider": null,
+                "updatedAt": "2026-01-01T00:00:00.000Z"
+              },
+              "libraryId": 1,
+              "logoUrl": null,
+              "metadataRefreshedAt": null,
+              "minimumAvailability": "released",
+              "monitored": false,
+              "originalTitle": null,
+              "overview": null,
+              "path": "/tmp/fliks-parity/media/movies/Unmonitored Movie (2020)",
+              "physicalRelease": "2026-03-25",
+              "posterUrl": null,
+              "preferredProvider": null,
+              "progressPercent": 0,
+              "qualityProfile": null,
+              "qualityProfileId": null,
+              "rating": 4,
+              "releaseDate": null,
+              "runtime": null,
+              "sizeOnDisk": 1000038,
+              "status": "announced",
+              "title": "Unmonitored Movie",
+              "tmdbCollectionId": null,
+              "tmdbCollectionName": null,
+              "tmdbId": 3029,
+              "tvdbId": null,
+              "type": "movie",
+              "updatedAt": "2026-01-01T00:00:00.000Z",
+              "watched": false,
+              "year": 2023
+            }
+          ],
+          "total": 2
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media?monitored=true&monitored=true"
+    }
+  ],
+  "unordered": [
+    "$.data[*].files"
+  ]
+}

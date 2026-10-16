@@ -1,0 +1,20 @@
+{
+  "deviation": null,
+  "name": "media-tracking-outside-acl",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Media #42 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "GET",
+      "path": "/api/media/42/tracking"
+    }
+  ]
+}

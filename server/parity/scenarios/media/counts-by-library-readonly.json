@@ -1,0 +1,18 @@
+{
+  "deviation": null,
+  "name": "media-counts-by-library-readonly",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "readonly",
+      "expect": {
+        "body": {
+          "1": 40
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/counts-by-library"
+    }
+  ]
+}

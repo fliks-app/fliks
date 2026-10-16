@@ -1,0 +1,354 @@
+{
+  "deviation": null,
+  "name": "media-list-filter-genres-repeated",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "data": [
+            {
+              "addedById": null,
+              "additionalFanartUrls": [],
+              "alternativeTitles": [],
+              "createdAt": "2026-02-03T00:00:00.000Z",
+              "digitalRelease": null,
+              "fanartUrl": null,
+              "files": [
+                {
+                  "createdAt": "2026-02-01T02:00:00.000Z",
+                  "episodeId": null,
+                  "id": 41,
+                  "language": "en",
+                  "mediaId": 33,
+                  "osdbBytesize": null,
+                  "osdbHash": null,
+                  "quality": "WEBDL-1080p",
+                  "relativePath": "Collection Alpha 2 (2020)/Collection Alpha 2 (2020).mkv",
+                  "size": 1000041,
+                  "streamInfo": null,
+                  "updatedAt": "2026-01-01T00:00:00.000Z"
+                }
+              ],
+              "folderName": "Collection Alpha 2 (2020)",
+              "genres": [
+                "Drama",
+                "Action"
+              ],
+              "id": 33,
+              "imdbId": null,
+              "inCinemas": null,
+              "languageProfile": null,
+              "languageProfileId": null,
+              "library": {
+                "color": "#3b82f6",
+                "createdAt": "2026-01-01T00:00:00.000Z",
+                "defaultLanguageProfileId": 1,
+                "defaultQualityProfileId": 1,
+                "icon": "film",
+                "id": 1,
+                "label": null,
+                "mediaTypes": [
+                  "movie"
+                ],
+                "metadataLanguage": null,
+                "metadataRegion": null,
+                "name": "Movies",
+                "path": "/tmp/fliks-parity/media/movies",
+                "preferredProvider": null,
+                "updatedAt": "2026-01-01T00:00:00.000Z"
+              },
+              "libraryId": 1,
+              "logoUrl": null,
+              "metadataRefreshedAt": null,
+              "minimumAvailability": "released",
+              "monitored": true,
+              "originalTitle": null,
+              "overview": null,
+              "path": "/tmp/fliks-parity/media/movies/Collection Alpha 2 (2020)",
+              "physicalRelease": null,
+              "posterUrl": "/api/images/33/poster",
+              "preferredProvider": null,
+              "progressPercent": 0,
+              "qualityProfile": null,
+              "qualityProfileId": null,
+              "rating": 7.2,
+              "releaseDate": "2012-06-01",
+              "runtime": null,
+              "sizeOnDisk": 1000041,
+              "status": "released",
+              "title": "Collection Alpha 2",
+              "tmdbCollectionId": 500,
+              "tmdbCollectionName": "Alpha Collection",
+              "tmdbId": 3033,
+              "tvdbId": null,
+              "type": "movie",
+              "updatedAt": "2026-01-01T00:00:00.000Z",
+              "watched": false,
+              "year": 2012
+            },
+            {
+              "addedById": null,
+              "additionalFanartUrls": [],
+              "alternativeTitles": [],
+              "createdAt": "2026-01-03T00:00:00.000Z",
+              "digitalRelease": null,
+              "fanartUrl": "/api/images/2/fanart",
+              "files": [
+                {
+                  "createdAt": "2026-02-04T02:00:00.000Z",
+                  "episodeId": null,
+                  "id": 2,
+                  "language": "en",
+                  "mediaId": 2,
+                  "osdbBytesize": null,
+                  "osdbHash": null,
+                  "quality": "WEBDL-1080p",
+                  "relativePath": "Parity Movie 02 (2020).mp4",
+                  "size": 74465,
+                  "streamInfo": {
+                    "audio": [
+                      {
+                        "bitRate": 64628,
+                        "channelLayout": "mono",
+                        "channels": 1,
+                        "codec": "aac",
+                        "endSeconds": 3,
+                        "isDefault": true,
+                        "language": "eng",
+                        "profile": "LC",
+                        "sampleRate": 48000,
+                        "startTimeSeconds": 0,
+                        "streamIndex": 1
+                      }
+                    ],
+                    "chapters": [],
+                    "durationSeconds": 3,
+                    "formatBitRate": 198573,
+                    "formatName": "mov,mp4,m4a,3gp,3g2,mj2",
+                    "formatStartSeconds": 0,
+                    "subtitles": [],
+                    "video": [
+                      {
+                        "avgFrameRate": "24/1",
+                        "bitDepth": 8,
+                        "bitRate": 124082,
+                        "codec": "h264",
+                        "displayAspectRatio": "16:9",
+                        "dvBlPresent": false,
+                        "dvElPresent": false,
+                        "dvRpuPresent": false,
+                        "endSeconds": 3,
+                        "firstFrameSeconds": 0,
+                        "frameRate": "24",
+                        "hdr10Plus": false,
+                        "height": 90,
+                        "level": 10,
+                        "pixelFormat": "yuv420p",
+                        "profile": "High",
+                        "reorderFrames": 2,
+                        "startTimeSeconds": 0,
+                        "streamIndex": 0,
+                        "width": 160
+                      }
+                    ]
+                  },
+                  "updatedAt": "2026-01-01T00:00:00.000Z"
+                }
+              ],
+              "folderName": "Parity Movie 02 (2020)",
+              "genres": [
+                "Action",
+                "Drama"
+              ],
+              "id": 2,
+              "imdbId": null,
+              "inCinemas": null,
+              "languageProfile": null,
+              "languageProfileId": null,
+              "library": {
+                "color": "#3b82f6",
+                "createdAt": "2026-01-01T00:00:00.000Z",
+                "defaultLanguageProfileId": 1,
+                "defaultQualityProfileId": 1,
+                "icon": "film",
+                "id": 1,
+                "label": null,
+                "mediaTypes": [
+                  "movie"
+                ],
+                "metadataLanguage": null,
+                "metadataRegion": null,
+                "name": "Movies",
+                "path": "/tmp/fliks-parity/media/movies",
+                "preferredProvider": null,
+                "updatedAt": "2026-01-01T00:00:00.000Z"
+              },
+              "libraryId": 1,
+              "logoUrl": null,
+              "metadataRefreshedAt": null,
+              "minimumAvailability": "released",
+              "monitored": true,
+              "originalTitle": null,
+              "overview": "Synthetic movie 2",
+              "path": "/tmp/fliks-parity/media/movies/Parity Movie 02 (2020)",
+              "physicalRelease": null,
+              "posterUrl": "/api/images/2/poster",
+              "preferredProvider": null,
+              "progressPercent": 0,
+              "qualityProfile": null,
+              "qualityProfileId": null,
+              "rating": 8,
+              "releaseDate": "2020-01-01",
+              "runtime": 90,
+              "sizeOnDisk": 74465,
+              "status": "released",
+              "title": "Parity Movie 02",
+              "tmdbCollectionId": null,
+              "tmdbCollectionName": null,
+              "tmdbId": 1002,
+              "tvdbId": null,
+              "type": "movie",
+              "updatedAt": "2026-01-01T00:00:00.000Z",
+              "watched": false,
+              "year": 2019
+            },
+            {
+              "addedById": null,
+              "additionalFanartUrls": [],
+              "alternativeTitles": [],
+              "createdAt": "2026-01-18T00:00:00.000Z",
+              "digitalRelease": null,
+              "fanartUrl": null,
+              "files": [
+                {
+                  "createdAt": "2026-02-01T23:00:00.000Z",
+                  "episodeId": null,
+                  "id": 17,
+                  "language": "en",
+                  "mediaId": 17,
+                  "osdbBytesize": null,
+                  "osdbHash": null,
+                  "quality": "WEBDL-1080p",
+                  "relativePath": "Parity Movie 17 (2020).mkv",
+                  "size": 73237,
+                  "streamInfo": {
+                    "audio": [
+                      {
+                        "channelLayout": "mono",
+                        "channels": 1,
+                        "codec": "aac",
+                        "endSeconds": 3.021,
+                        "isDefault": false,
+                        "language": "eng",
+                        "profile": "LC",
+                        "sampleRate": 48000,
+                        "startTimeSeconds": 0,
+                        "streamIndex": 1
+                      }
+                    ],
+                    "chapters": [],
+                    "durationSeconds": 3.021,
+                    "formatBitRate": 193941,
+                    "formatName": "matroska,webm",
+                    "formatStartSeconds": 0,
+                    "subtitles": [],
+                    "video": [
+                      {
+                        "avgFrameRate": "24/1",
+                        "bitDepth": 8,
+                        "codec": "h264",
+                        "colorRange": "tv",
+                        "displayAspectRatio": "16:9",
+                        "dvBlPresent": false,
+                        "dvElPresent": false,
+                        "dvRpuPresent": false,
+                        "endSeconds": 3,
+                        "firstFrameSeconds": 0,
+                        "frameRate": "24",
+                        "hdr10Plus": false,
+                        "height": 90,
+                        "level": 10,
+                        "pixelFormat": "yuv420p",
+                        "profile": "High",
+                        "reorderFrames": 2,
+                        "startTimeSeconds": 0,
+                        "streamIndex": 0,
+                        "width": 160
+                      }
+                    ]
+                  },
+                  "updatedAt": "2026-01-01T00:00:00.000Z"
+                }
+              ],
+              "folderName": "Parity Movie 17 (2020)",
+              "genres": [
+                "Action",
+                "Drama"
+              ],
+              "id": 17,
+              "imdbId": null,
+              "inCinemas": null,
+              "languageProfile": null,
+              "languageProfileId": null,
+              "library": {
+                "color": "#3b82f6",
+                "createdAt": "2026-01-01T00:00:00.000Z",
+                "defaultLanguageProfileId": 1,
+                "defaultQualityProfileId": 1,
+                "icon": "film",
+                "id": 1,
+                "label": null,
+                "mediaTypes": [
+                  "movie"
+                ],
+                "metadataLanguage": null,
+                "metadataRegion": null,
+                "name": "Movies",
+                "path": "/tmp/fliks-parity/media/movies",
+                "preferredProvider": null,
+                "updatedAt": "2026-01-01T00:00:00.000Z"
+              },
+              "libraryId": 1,
+              "logoUrl": null,
+              "metadataRefreshedAt": null,
+              "minimumAvailability": "released",
+              "monitored": true,
+              "originalTitle": null,
+              "overview": "Synthetic movie 17",
+              "path": "/tmp/fliks-parity/media/movies/Parity Movie 17 (2020)",
+              "physicalRelease": null,
+              "posterUrl": null,
+              "preferredProvider": null,
+              "progressPercent": 0,
+              "qualityProfile": null,
+              "qualityProfileId": null,
+              "rating": 7.5,
+              "releaseDate": "2020-01-01",
+              "runtime": 90,
+              "sizeOnDisk": 73237,
+              "status": "released",
+              "title": "Parity Movie 17",
+              "tmdbCollectionId": null,
+              "tmdbCollectionName": null,
+              "tmdbId": 1017,
+              "tvdbId": null,
+              "type": "movie",
+              "updatedAt": "2026-01-01T00:00:00.000Z",
+              "watched": false,
+              "year": 2020
+            }
+          ],
+          "total": 3
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media?genres=Action&genres=Drama"
+    }
+  ],
+  "unordered": [
+    "$.data[*].files"
+  ]
+}

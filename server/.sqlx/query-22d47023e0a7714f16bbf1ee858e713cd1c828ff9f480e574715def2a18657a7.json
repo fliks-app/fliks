@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT DISTINCT \"mediaId\" AS \"media_id!\" FROM media_crew\n               WHERE \"personId\" = ANY($1) AND job = 'Director' AND \"mediaId\" != $2 AND \"mediaId\" IS NOT NULL",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "media_id!",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4Array",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "22d47023e0a7714f16bbf1ee858e713cd1c828ff9f480e574715def2a18657a7"
+}

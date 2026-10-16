@@ -1,5 +1,5 @@
 {
-  "deviation": null,
+  "deviation": "F22",
   "name": "roles-list-manager",
   "seed": "base",
   "steps": [
@@ -73,7 +73,6 @@
                 "metadataLanguage": null,
                 "metadataRegion": null,
                 "name": "Movies",
-                "path": "/tmp/fliks-parity/media/movies",
                 "preferredProvider": null,
                 "updatedAt": "2026-01-01T00:00:00.000Z"
               },
@@ -91,7 +90,6 @@
                 "metadataLanguage": null,
                 "metadataRegion": null,
                 "name": "Series",
-                "path": "/tmp/fliks-parity/media/series",
                 "preferredProvider": null,
                 "updatedAt": "2026-01-01T00:00:00.000Z"
               }

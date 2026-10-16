@@ -1,0 +1,221 @@
+//! Similar titles, collection, cast and crew (`media-query.md` rules 52-58).
+use crate::http::AppError;
+use crate::libraries::media_not_found;
+use fliks_domain::media::similarity::{MIN_SCORE, Signals, score_similarity};
+use serde_json::{Value, json};
+use sqlx::PgPool;
+use std::collections::HashSet;
+
+fn strings(v: Option<Value>) -> Vec<String> {
+    match v {
+        Some(Value::Array(a)) => a
+            .into_iter()
+            .filter_map(|x| x.as_str().map(str::to_owned))
+            .collect(),
+        _ => vec![],
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn item(
+    id: i32,
+    title: &str,
+    year: Option<i32>,
+    poster: Option<String>,
+    fanart: Option<String>,
+    rating: Option<f64>,
+    genres: Vec<String>,
+    has_file: bool,
+) -> Value {
+    json!({"id": id, "title": title, "year": year, "posterUrl": poster, "fanartUrl": fanart, "rating": rating,
+        "genres": genres, "hasFile": has_file})
+}
+
+pub async fn similar(db: &PgPool, id: i32, limit: usize) -> Result<Vec<Value>, AppError> {
+    let Some(src) = sqlx::query!(
+        r#"SELECT m.type::text AS "kind!", m."libraryId" AS library_id, m.genres, m.year, m."tmdbCollectionId" AS collection_id,
+                  mm.keywords AS "keywords?"
+           FROM media m LEFT JOIN media_metadata mm ON mm."mediaId" = m.id WHERE m.id = $1"#,
+        id
+    )
+    .fetch_optional(db)
+    .await?
+    else {
+        return Err(media_not_found(id));
+    };
+    let Some(library) = src.library_id.filter(|_| src.kind == "movie") else {
+        return Ok(vec![]);
+    };
+    let genres = strings(src.genres.clone());
+    let keywords = strings(src.keywords.clone());
+    let directors = sqlx::query_scalar!(
+        r#"SELECT "personId" AS "person_id!" FROM media_crew WHERE "mediaId" = $1 AND job = 'Director' AND "personId" IS NOT NULL"#,
+        id
+    )
+    .fetch_all(db)
+    .await?;
+    let same_director: Vec<i32> = if directors.is_empty() {
+        vec![]
+    } else {
+        sqlx::query_scalar!(
+            r#"SELECT DISTINCT "mediaId" AS "media_id!" FROM media_crew
+               WHERE "personId" = ANY($1) AND job = 'Director' AND "mediaId" != $2 AND "mediaId" IS NOT NULL"#,
+            &directors,
+            id
+        )
+        .fetch_all(db)
+        .await?
+    };
+    if genres.is_empty() && keywords.is_empty() && same_director.is_empty() {
+        return Ok(vec![]);
+    }
+    let rows = sqlx::query!(
+        r#"SELECT m.id AS "id!", m.title AS "title!", m.year, m."posterUrl" AS poster_url, m."fanartUrl" AS fanart_url,
+       m.rating, m.genres, meta.keywords AS "keywords?",
+       EXISTS (SELECT 1 FROM media_files f WHERE f."mediaId" = m.id) AS "has_file!"
+FROM media m LEFT JOIN media_metadata meta ON meta."mediaId" = m.id
+WHERE m."libraryId" = $1 AND m.type = 'movie' AND m.id != $2
+  AND ((cardinality($3::text[]) > 0 AND jsonb_exists_any(m.genres, $3))
+       OR (cardinality($4::text[]) > 0 AND jsonb_exists_any(meta.keywords, $4))
+       OR m.id = ANY($5))
+  AND ($6::int IS NULL OR m."tmdbCollectionId" IS NULL OR m."tmdbCollectionId" != $6)
+ORDER BY m.id"#,
+        library,
+        id,
+        &genres,
+        &keywords,
+        &same_director,
+        src.collection_id
+    )
+    .fetch_all(db)
+    .await?;
+    let directors: HashSet<i32> = same_director.into_iter().collect();
+    let src_year = src.year.map(i64::from);
+    let mut scored: Vec<_> = rows
+        .into_iter()
+        .map(|r| {
+            let (g, k) = (strings(r.genres.clone()), strings(r.keywords.clone()));
+            let score = score_similarity(
+                Signals {
+                    genres: &genres,
+                    year: src_year,
+                    keywords: &keywords,
+                },
+                Signals {
+                    genres: &g,
+                    year: r.year.map(i64::from),
+                    keywords: &k,
+                },
+                directors.contains(&r.id),
+            );
+            (score, r, g)
+        })
+        .filter(|(s, _, _)| *s >= MIN_SCORE)
+        .collect();
+    scored.sort_by(|a, b| {
+        b.0.partial_cmp(&a.0)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then(
+                b.1.rating
+                    .unwrap_or(0.0)
+                    .partial_cmp(&a.1.rating.unwrap_or(0.0))
+                    .unwrap_or(std::cmp::Ordering::Equal),
+            )
+    });
+    Ok(scored
+        .into_iter()
+        .take(limit)
+        .map(|(_, r, g)| {
+            item(
+                r.id,
+                &r.title,
+                r.year,
+                r.poster_url,
+                r.fanart_url,
+                r.rating,
+                g,
+                r.has_file,
+            )
+        })
+        .collect())
+}
+
+/// `None` is the 200-with-empty-body answer: no collection, or the movie is alone in it.
+pub async fn collection(db: &PgPool, id: i32) -> Result<Option<Value>, AppError> {
+    let Some(src) = sqlx::query!(
+        r#"SELECT "tmdbCollectionId" AS collection_id, "tmdbCollectionName" AS collection_name, "libraryId" AS library_id
+           FROM media WHERE id = $1"#,
+        id
+    )
+    .fetch_optional(db)
+    .await?
+    else {
+        return Err(media_not_found(id));
+    };
+    let (Some(collection), Some(library)) = (src.collection_id, src.library_id) else {
+        return Ok(None);
+    };
+    let rows = sqlx::query!(
+        r#"SELECT m.id AS "id!", m.title AS "title!", m.year, m."posterUrl" AS poster_url, m."fanartUrl" AS fanart_url,
+       m.rating, m.genres, EXISTS (SELECT 1 FROM media_files f WHERE f."mediaId" = m.id) AS "has_file!"
+FROM media m WHERE m."libraryId" = $1 AND m."tmdbCollectionId" = $2
+ORDER BY m."releaseDate" ASC NULLS LAST, m.year ASC NULLS LAST, m.id ASC"#,
+        library,
+        collection
+    )
+    .fetch_all(db)
+    .await?;
+    if rows.len() < 2 {
+        return Ok(None);
+    }
+    let items: Vec<Value> = rows
+        .into_iter()
+        .map(|r| {
+            item(
+                r.id,
+                &r.title,
+                r.year,
+                r.poster_url,
+                r.fanart_url,
+                r.rating,
+                strings(r.genres),
+                r.has_file,
+            )
+        })
+        .collect();
+    Ok(Some(
+        json!({"id": collection, "name": src.collection_name.unwrap_or_default(), "items": items}),
+    ))
+}
+
+pub async fn cast(db: &PgPool, id: i32) -> Result<Vec<Value>, sqlx::Error> {
+    sqlx::query_scalar!(
+        r#"SELECT jsonb_build_object('id', mc.id, 'createdAt', iso_ms(mc."createdAt"), 'updatedAt', iso_ms(mc."updatedAt"),
+  'character', mc.character, 'order', mc."order",
+  'person', jsonb_build_object('id', p.id, 'createdAt', iso_ms(p."createdAt"), 'updatedAt', iso_ms(p."updatedAt"),
+    'provider', p.provider, 'tmdbId', p."tmdbId", 'name', p.name, 'avatarUrl', p."avatarUrl", 'biography', p.biography,
+    'birthday', p.birthday, 'deathday', p.deathday, 'placeOfBirth', p."placeOfBirth",
+    'knownForDepartment', p."knownForDepartment", 'departments', p.departments,
+    'metadataRefreshedAt', iso_ms(p."metadataRefreshedAt"))) AS "json!: Value"
+FROM media_cast mc JOIN persons p ON p.id = mc."personId" WHERE mc."mediaId" = $1 ORDER BY mc."order" ASC, mc.id ASC"#,
+        id
+    )
+    .fetch_all(db)
+    .await
+}
+
+pub async fn crew(db: &PgPool, id: i32) -> Result<Vec<Value>, sqlx::Error> {
+    sqlx::query_scalar!(
+        r#"SELECT jsonb_build_object('id', mc.id, 'createdAt', iso_ms(mc."createdAt"), 'updatedAt', iso_ms(mc."updatedAt"),
+  'job', mc.job, 'department', mc.department,
+  'person', jsonb_build_object('id', p.id, 'createdAt', iso_ms(p."createdAt"), 'updatedAt', iso_ms(p."updatedAt"),
+    'provider', p.provider, 'tmdbId', p."tmdbId", 'name', p.name, 'avatarUrl', p."avatarUrl", 'biography', p.biography,
+    'birthday', p.birthday, 'deathday', p.deathday, 'placeOfBirth', p."placeOfBirth",
+    'knownForDepartment', p."knownForDepartment", 'departments', p.departments,
+    'metadataRefreshedAt', iso_ms(p."metadataRefreshedAt"))) AS "json!: Value"
+FROM media_crew mc JOIN persons p ON p.id = mc."personId" WHERE mc."mediaId" = $1 ORDER BY mc.id ASC"#,
+        id
+    )
+    .fetch_all(db)
+    .await
+}

@@ -49,7 +49,6 @@ describe('MediaMutationService monitoring cascade', () => {
   let episodeRepo: ReturnType<typeof fakeRepoWithBuilder>;
   let mediaRepo: { save: jest.Mock };
   let query: { findOne: jest.Mock };
-  let metadata: { updateSearchVector: jest.Mock };
   let requestLifecycle: {
     onMediaMonitorChange: jest.Mock;
     onSeasonMonitorChange: jest.Mock;
@@ -67,7 +66,6 @@ describe('MediaMutationService monitoring cascade', () => {
     episodeRepo = fakeRepoWithBuilder(episodeRecorders);
     mediaRepo = { save: jest.fn(async (m: unknown) => m) };
     query = { findOne: jest.fn() };
-    metadata = { updateSearchVector: jest.fn() };
     requestLifecycle = {
       onMediaMonitorChange: jest.fn(),
       onSeasonMonitorChange: jest.fn(),
@@ -82,7 +80,6 @@ describe('MediaMutationService monitoring cascade', () => {
       {} as never,
       {} as never,
       query as never,
-      metadata as never,
       requestLifecycle as never,
       { emitDomain: jest.fn() } as never,
       { deleteForFile: jest.fn() } as never,
@@ -186,7 +183,6 @@ describe('MediaMutationService remove disk cleanup', () => {
       {} as never,
       mediaServers as never,
       query as never,
-      {} as never,
       requestLifecycle as never,
       { emitDomain: jest.fn() } as never,
       { deleteForFile: jest.fn() } as never,
@@ -278,7 +274,6 @@ describe('MediaMutationService deleteMediaFile cache cleanup', () => {
       { dispatch: jest.fn() } as never,
       {} as never,
       {} as never,
-      {} as never,
       { emitDomain: jest.fn() } as never,
       thumbnails as never,
       {} as never,
@@ -305,7 +300,6 @@ describe('MediaMutationService deleteMediaFile EDL sidecar', () => {
       {} as never,
       {} as never,
       { dispatch: jest.fn() } as never,
-      {} as never,
       {} as never,
       {} as never,
       { emitDomain: jest.fn() } as never,

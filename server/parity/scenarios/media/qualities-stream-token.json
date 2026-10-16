@@ -1,0 +1,38 @@
+{
+  "capture": {
+    "st": "$.steps[0].body.streamToken"
+  },
+  "deviation": "F8",
+  "ignore": [
+    "$..streamToken",
+    "$..expiresAt"
+  ],
+  "name": "media-qualities-stream-token",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": {},
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/auth/stream-token"
+    },
+    {
+      "as": "anon",
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "headers": {
+        "Authorization": "Bearer {st}"
+      },
+      "method": "GET",
+      "path": "/api/media/qualities"
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "deviation": "C1",
+  "name": "media-detail-id-out-of-range",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Validation failed (numeric string is expected)",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "GET",
+      "path": "/api/media/99999999999"
+    }
+  ]
+}

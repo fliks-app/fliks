@@ -1,0 +1,23 @@
+{
+  "deviation": null,
+  "name": "media-tracking-unknown-cutoff",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "hasProfile": true,
+          "movie": {
+            "monitored": true,
+            "state": "no-profile"
+          },
+          "type": "movie"
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/40/tracking"
+    }
+  ]
+}

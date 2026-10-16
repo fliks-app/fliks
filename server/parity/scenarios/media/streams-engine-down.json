@@ -1,0 +1,17 @@
+{
+  "deviation": null,
+  "engine": "down",
+  "name": "media-streams-engine-down",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": [],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/1/streams/1"
+    }
+  ]
+}

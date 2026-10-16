@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT COUNT(*) FILTER (WHERE type = 'movie') AS \"movies!\", COUNT(*) FILTER (WHERE type = 'series') AS \"series!\"\n           FROM media WHERE \"libraryId\" = ANY($1)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "movies!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "series!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4Array"
+      ]
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "b33baa94e88d970389bb084d7e90e6f1d03f10dd676a10bf57025eab934a1098"
+}

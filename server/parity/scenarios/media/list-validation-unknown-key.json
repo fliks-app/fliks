@@ -1,0 +1,25 @@
+{
+  "deviation": null,
+  "name": "media-list-validation-unknown-key",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "property foo should not exist"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "GET",
+      "path": "/api/media?foo=1"
+    }
+  ],
+  "unordered": [
+    "$.data[*].files"
+  ]
+}

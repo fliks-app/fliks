@@ -5,6 +5,7 @@ use crate::{
         auth::Authed,
         validate::{PathParams, ValidJson},
     },
+    libraries::accessible_library_ids,
     state::AppState,
 };
 use axum::{
@@ -14,7 +15,6 @@ use axum::{
     response::{IntoResponse, Response},
     routing::{delete, get, post},
 };
-use fliks_domain::acl::{Action, Subject};
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
 
@@ -142,11 +142,6 @@ fn scope(accessible: Vec<i32>, q: &[(String, String)]) -> Vec<i32> {
     }
 }
 
-async fn libraries(st: &AppState, a: &Authed) -> Result<Vec<i32>, AppError> {
-    let all = a.user.is_admin || a.perms.can(Action::Manage, &Subject::All);
-    Ok(db::accessible_libraries(&st.db, a.user.id, all).await?)
-}
-
 /// `parseInt(episodeId)` when non-empty; NaN and 0 select the movie row (rule 5).
 fn episode_param(q: &[(String, String)]) -> Option<i32> {
     param(q, "episodeId")
@@ -165,7 +160,7 @@ pub async fn recommendations(
     a: Authed,
     Query(q): Q,
 ) -> Result<Response, AppError> {
-    let libs = scope(libraries(&st, &a).await?, &q);
+    let libs = scope(accessible_library_ids(&st.db, &a).await?, &q);
     let items = recommend::recommendations(&st.db, a.user.id, &libs, limit_param(&q)).await?;
     Ok(Json(items).into_response())
 }
@@ -205,7 +200,7 @@ pub async fn watched_ids(
     State(st): State<AppState>,
     a: Authed,
 ) -> Result<Json<Vec<i32>>, AppError> {
-    let libs = libraries(&st, &a).await?;
+    let libs = accessible_library_ids(&st.db, &a).await?;
     Ok(Json(db::watched_media_ids(&st.db, a.user.id, &libs).await?))
 }
 
@@ -215,7 +210,7 @@ pub async fn continue_watching(
     a: Authed,
     Query(q): Q,
 ) -> Result<Json<Vec<db::ContinueItem>>, AppError> {
-    let libs = scope(libraries(&st, &a).await?, &q);
+    let libs = scope(accessible_library_ids(&st.db, &a).await?, &q);
     Ok(Json(db::continue_watching(&st.db, a.user.id, &libs).await?))
 }
 
@@ -226,7 +221,7 @@ pub async fn history(
     Query(q): Q,
 ) -> Result<Json<db::History>, AppError> {
     let (page, limit) = history_window(&q)?;
-    let libs = libraries(&st, &a).await?;
+    let libs = accessible_library_ids(&st.db, &a).await?;
     Ok(Json(
         db::history(&st.db, a.user.id, page, limit, &libs).await?,
     ))

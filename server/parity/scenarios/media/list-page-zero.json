@@ -1,0 +1,25 @@
+{
+  "deviation": "C1",
+  "name": "media-list-page-zero",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "page must not be less than 1"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "GET",
+      "path": "/api/media?page=0"
+    }
+  ],
+  "unordered": [
+    "$.data[*].files"
+  ]
+}

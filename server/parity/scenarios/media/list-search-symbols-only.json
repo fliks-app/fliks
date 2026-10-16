@@ -1,0 +1,22 @@
+{
+  "deviation": null,
+  "name": "media-list-search-symbols-only",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "data": [],
+          "total": 0
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media?q=!!!&sortBy=title"
+    }
+  ],
+  "unordered": [
+    "$.data[*].files"
+  ]
+}

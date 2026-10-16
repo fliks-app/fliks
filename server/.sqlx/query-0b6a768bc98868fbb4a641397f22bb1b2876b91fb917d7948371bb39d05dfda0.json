@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT \"libraryId\" AS \"library_id!\" FROM library_user_access\n           WHERE \"userId\" = $1 AND \"libraryId\" IS NOT NULL ORDER BY id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "library_id!",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "0b6a768bc98868fbb4a641397f22bb1b2876b91fb917d7948371bb39d05dfda0"
+}

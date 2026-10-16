@@ -5,6 +5,7 @@ use crate::{
         auth::Authed,
         validate::{PathParams, ValidJson, from_value},
     },
+    libraries::paths_visible,
     state::AppState,
 };
 use axum::{Json, extract::State, http::StatusCode};
@@ -150,9 +151,16 @@ async fn grantable(st: &AppState) -> Res<Vec<String>> {
 }
 
 #[utoipa::path(get, path = "/api/roles", responses((status = 200)))]
-pub(crate) async fn list(State(st): State<AppState>, a: Authed) -> Res<Json<Vec<db::Role>>> {
+pub(crate) async fn list(State(st): State<AppState>, a: Authed) -> Res<Json<Vec<Value>>> {
     a.require(Action::Read, Subject::Role)?;
-    Ok(Json(db::list(&st.db).await?))
+    let paths = paths_visible(&a.perms);
+    Ok(Json(
+        db::list(&st.db)
+            .await?
+            .into_iter()
+            .map(|r| r.json(paths))
+            .collect(),
+    ))
 }
 
 #[utoipa::path(get, path = "/api/roles/permissions", responses((status = 200)))]
@@ -172,9 +180,9 @@ pub(crate) async fn get(
     State(st): State<AppState>,
     a: Authed,
     PathParams(id): PathParams<i32>,
-) -> Res<Json<db::Role>> {
+) -> Res<Json<Value>> {
     a.require(Action::Read, Subject::Role)?;
-    Ok(Json(one(&st, id).await?))
+    Ok(Json(one(&st, id).await?.json(paths_visible(&a.perms))))
 }
 
 const NAME_TAKEN: &str = "Role name already exists";
@@ -201,7 +209,7 @@ pub(crate) async fn create(
     }
     let id = db::insert(&st.db, &name, &perms, is_default).await?;
     db::set_libraries(&st.db, id, &dto.default_library_ids.unwrap_or_default()).await?;
-    let mut role = serde_json::to_value(one(&st, id).await?).unwrap_or_default();
+    let mut role = one(&st, id).await?.json(paths_visible(&a.perms));
     // Nest returns the freshly loaded libraries here without their profile-id columns (recorded `roles-create-ok`).
     for lib in role["defaultLibraries"]
         .as_array_mut()
@@ -222,7 +230,7 @@ pub(crate) async fn update(
     a: Authed,
     PathParams(id): PathParams<i32>,
     ValidJson(body): ValidJson<Value>,
-) -> Res<Json<db::Role>> {
+) -> Res<Json<Value>> {
     a.require(Action::Manage, Subject::Role)?;
     let dto = Dto::parse(body, false)?;
     let role = one(&st, id).await?;
@@ -255,7 +263,7 @@ pub(crate) async fn update(
     if let Some(ids) = &dto.default_library_ids {
         db::set_libraries(&st.db, id, ids).await?;
     }
-    Ok(Json(one(&st, id).await?))
+    Ok(Json(one(&st, id).await?.json(paths_visible(&a.perms))))
 }
 
 #[utoipa::path(delete, path = "/api/roles/{id}", responses((status = 200)))]

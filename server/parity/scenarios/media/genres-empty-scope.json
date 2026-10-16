@@ -1,0 +1,16 @@
+{
+  "deviation": null,
+  "name": "media-genres-empty-scope",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": [],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/genres?libraryId=3"
+    }
+  ]
+}

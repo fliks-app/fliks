@@ -1,0 +1,49 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..freeSpace",
+    "$..totalSpace"
+  ],
+  "name": "libraries-update-path-same",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "path": "/tmp/fliks-parity/media/movies"
+      },
+      "expect": {
+        "body": {
+          "color": "#3b82f6",
+          "defaultLanguageProfileId": null,
+          "defaultQualityProfileId": null,
+          "disk": {
+            "accessible": true
+          },
+          "icon": "film",
+          "id": 1,
+          "label": null,
+          "mediaTypes": [
+            "movie"
+          ],
+          "metadataLanguage": null,
+          "metadataRegion": null,
+          "name": "Movies",
+          "path": "/tmp/fliks-parity/media/movies",
+          "preferredProvider": null,
+          "userIds": [
+            2,
+            3,
+            4,
+            5
+          ]
+        },
+        "status": 200
+      },
+      "method": "PATCH",
+      "path": "/api/libraries/1"
+    }
+  ]
+}

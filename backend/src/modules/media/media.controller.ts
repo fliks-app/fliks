@@ -28,18 +28,14 @@ import { FileTooLargeFilter } from '../../common/filters/file-too-large.filter';
 import { MediaCompanionsService } from './media-service/media-companions.service';
 import { CreateMediaDto } from './dto/create-media.dto';
 import { UpdateMediaDto } from './dto/update-media.dto';
-import { SearchMediaDto } from './dto/search-media.dto';
 import { IdentifyMediaDto } from './dto/identify-media.dto';
 import { AnalyzeMediaDto } from './dto/analyze-media.dto';
 import { ImportTmdbDto } from './dto/import-tmdb.dto';
 import { ImportMediaDto } from './dto/import-media.dto';
 import { UpdateMediaProfilesDto } from './dto/update-media-profiles.dto';
 import { BulkUpdateMediaDto } from './dto/bulk-update-media.dto';
-import { CalendarQueryDto } from './dto/calendar-query.dto';
-import { RecentlyAddedDto } from './dto/recently-added.dto';
 import { PatchMonitoredDto } from './dto/patch-monitored.dto';
 import { PatchSeasonDto } from './dto/patch-season.dto';
-import { APP_QUALITIES } from '../../common/constants/app-qualities';
 import { JwtOrApiKeyGuard } from '../auth/guards/jwt-or-api-key.guard';
 import { PoliciesGuard } from '../auth/casl/policies.guard';
 import { CheckPolicies } from '../auth/casl/check-policies.decorator';
@@ -50,7 +46,6 @@ import { MAX_EDL_BYTES } from './edl/edl-sidecar';
 import { SubtitleOcrService } from '../subtitles/subtitle-ocr.service';
 import { SubtitleTranslationService } from '../subtitles/subtitle-translation.service';
 import { SubtitleSyncService } from '../subtitles/subtitle-sync.service';
-import { FfprobeService } from '../media-probe/ffprobe.service';
 import { SubtitleFile } from '../subtitles/entities/subtitle-file.entity';
 import { EventsService } from '../scheduler/events.service';
 import { ActivityRegistryService } from '../scheduler/activity-registry.service';
@@ -71,7 +66,6 @@ export class MediaController {
     private readonly subtitleOcr: SubtitleOcrService,
     private readonly subtitleTranslation: SubtitleTranslationService,
     private readonly subtitleSync: SubtitleSyncService,
-    private readonly ffprobe: FfprobeService,
     private readonly eventsService: EventsService,
     private readonly subtitleScheduler: SubtitleSchedulerService,
     private readonly libraries: LibrariesService,
@@ -116,112 +110,10 @@ export class MediaController {
     return this.mediaService.create(dto);
   }
 
-  @Get()
-  @CheckPolicies((ability) => ability.can(Action.Read, Media))
-  async findAll(@Query() query: SearchMediaDto, @CurrentUser() user: User) {
-    const accessibleLibraryIds =
-      await this.libraries.getAccessibleLibraryIds(user);
-    return this.mediaService.findAll(query, user?.id, accessibleLibraryIds);
-  }
-
-  @Get('recently-added')
-  @CheckPolicies((ability) => ability.can(Action.Read, Media))
-  async recentlyAdded(
-    @Query() query: RecentlyAddedDto,
-    @CurrentUser() user: User,
-  ) {
-    const accessibleLibraryIds =
-      await this.libraries.getAccessibleLibraryIds(user);
-    return this.mediaService.findRecentlyAdded({
-      libraryId: query.libraryId,
-      limit: query.limit ?? 20,
-      mode: query.mode ?? 'file',
-      excludeWatched: query.excludeWatched,
-      requestedByMe: query.requestedByMe,
-      userId:
-        query.excludeWatched || query.requestedByMe ? user?.id : undefined,
-      accessibleLibraryIds,
-    });
-  }
-
-  @Get('counts')
-  @CheckPolicies((ability) => ability.can(Action.Read, Media))
-  async counts(@CurrentUser() user: User) {
-    const accessibleLibraryIds =
-      await this.libraries.getAccessibleLibraryIds(user);
-    return this.mediaService.getCounts(accessibleLibraryIds);
-  }
-
-  @Get('counts-by-library')
-  @CheckPolicies((ability) => ability.can(Action.Read, Media))
-  async countsByLibrary(@CurrentUser() user: User) {
-    const accessibleLibraryIds =
-      await this.libraries.getAccessibleLibraryIds(user);
-    return this.mediaService.getCountsByLibrary(accessibleLibraryIds);
-  }
-
-  @Get('qualities')
-  @CheckPolicies((ability) => ability.can(Action.Read, Media))
-  qualityDefinitions() {
-    return APP_QUALITIES;
-  }
-
-  /** Distinct genres present in a library, each with item count + the
-   *  poster URLs of up to 4 sample items (rendered as a mosaic on the
-   *  library Genres tab). When `libraryId` is omitted the user's whole
-   *  accessible scope is aggregated. */
-  @Get('genres')
-  @CheckPolicies((ability) => ability.can(Action.Read, Media))
-  async genres(
-    @CurrentUser() user: User,
-    @Query('libraryId') libraryIdRaw?: string,
-  ) {
-    const accessible = await this.libraries.getAccessibleLibraryIds(user);
-    let libraryIds = accessible;
-    const libraryId = libraryIdRaw ? parseInt(libraryIdRaw, 10) : null;
-    if (libraryId && Number.isFinite(libraryId)) {
-      libraryIds = accessible.includes(libraryId) ? [libraryId] : [];
-    }
-    return this.mediaService.getGenres(libraryIds);
-  }
-
-  @Get('collections')
-  @CheckPolicies((ability) => ability.can(Action.Read, Media))
-  async collections(
-    @CurrentUser() user: User,
-    @Query('libraryId') libraryIdRaw?: string,
-  ) {
-    const accessible = await this.libraries.getAccessibleLibraryIds(user);
-    let libraryIds = accessible;
-    const libraryId = libraryIdRaw ? parseInt(libraryIdRaw, 10) : null;
-    if (libraryId && Number.isFinite(libraryId)) {
-      libraryIds = accessible.includes(libraryId) ? [libraryId] : [];
-    }
-    return this.mediaService.getCollections(libraryIds);
-  }
-
-  @Get('calendar')
-  @CheckPolicies((ability) => ability.can(Action.Read, Media))
-  async calendar(@Query() query: CalendarQueryDto, @CurrentUser() user: User) {
-    const accessibleLibraryIds =
-      await this.libraries.getAccessibleLibraryIds(user);
-    return this.mediaService.getCalendar(query, accessibleLibraryIds, user?.id);
-  }
-
   @Patch('bulk')
   @CheckPolicies((ability) => ability.can(Action.Update, Media))
   bulkUpdate(@Body() dto: BulkUpdateMediaDto) {
     return this.mediaService.bulkUpdate(dto);
-  }
-
-  @Get(':id/tracking')
-  @CheckPolicies((ability) => ability.can(Action.Read, Media))
-  async tracking(
-    @Param('id', ParseIntPipe) id: number,
-    @CurrentUser() user: User,
-  ) {
-    await this.assertMediaAccessible(id, user);
-    return this.mediaService.getTrackingStatus(id);
   }
 
   @Delete(':id/files/:fileId')
@@ -826,23 +718,6 @@ export class MediaController {
     return this.subtitleSync.enqueueSyncSubtitle(subtitleId, body ?? {});
   }
 
-  @Get(':id/streams/:mediaFileId')
-  @CheckPolicies((ability) => ability.can(Action.Read, Media))
-  async getStreams(
-    @Param('id', ParseIntPipe) id: number,
-    @Param('mediaFileId', ParseIntPipe) mediaFileId: number,
-    @CurrentUser() user: User,
-  ) {
-    await this.assertMediaAccessible(id, user);
-    const media = await this.mediaService.findOne(id);
-    const file = media.files?.find((f) => f.id === mediaFileId);
-    if (!file)
-      throw new NotFoundException(`MediaFile #${mediaFileId} not found`);
-    const path = require('path');
-    const videoPath = path.join(media.path, file.relativePath);
-    return this.ffprobe.detectStreams(videoPath);
-  }
-
   @Get('sync-queue')
   @CheckPolicies((ability) => ability.can(Action.Read, SubtitleFile))
   getSyncQueue() {
@@ -875,63 +750,6 @@ export class MediaController {
   ) {
     await this.assertSubtitleAccessible(id, subtitleId, user);
     return this.subtitlesService.upgradeSubtitle(subtitleId, body.searchResult);
-  }
-
-  @Get(':id')
-  @CheckPolicies((ability) => ability.can(Action.Read, Media))
-  async findOne(
-    @Param('id', ParseIntPipe) id: number,
-    @CurrentUser() user: User,
-  ) {
-    const accessibleLibraryIds =
-      await this.libraries.getAccessibleLibraryIds(user);
-    await this.mediaService.assertAccessible(id, accessibleLibraryIds);
-    return this.mediaService.findOne(id);
-  }
-
-  @Get(':id/similar')
-  @CheckPolicies((ability) => ability.can(Action.Read, Media))
-  async getSimilar(
-    @Param('id', ParseIntPipe) id: number,
-    @CurrentUser() user: User,
-    @Query('limit') limit?: string,
-  ) {
-    await this.assertMediaAccessible(id, user);
-    const parsed = Number(limit);
-    return this.mediaService.findSimilar(
-      id,
-      Number.isFinite(parsed) && parsed > 0 ? Math.min(parsed, 30) : undefined,
-    );
-  }
-
-  @Get(':id/collection')
-  @CheckPolicies((ability) => ability.can(Action.Read, Media))
-  async getCollection(
-    @Param('id', ParseIntPipe) id: number,
-    @CurrentUser() user: User,
-  ) {
-    await this.assertMediaAccessible(id, user);
-    return this.mediaService.findCollection(id);
-  }
-
-  @Get(':id/cast')
-  @CheckPolicies((ability) => ability.can(Action.Read, Media))
-  async getCast(
-    @Param('id', ParseIntPipe) id: number,
-    @CurrentUser() user: User,
-  ) {
-    await this.assertMediaAccessible(id, user);
-    return this.mediaService.getCast(id);
-  }
-
-  @Get(':id/crew')
-  @CheckPolicies((ability) => ability.can(Action.Read, Media))
-  async getCrew(
-    @Param('id', ParseIntPipe) id: number,
-    @CurrentUser() user: User,
-  ) {
-    await this.assertMediaAccessible(id, user);
-    return this.mediaService.getCrew(id);
   }
 
   @Put(':id')

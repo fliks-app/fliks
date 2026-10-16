@@ -108,3 +108,13 @@ Dependent on the decisions above (none applied):
 - F5: `C/features/settings/engine/engine.ts` + `engine.html` (stored indicator, keep/clear, no token prefill), `C/core/services/api/engine-remote-api.service.ts` (type `token?` + `secretsSet`), `C/features/settings/data-imports/data-imports.ts` + template (same pattern, gates on `*Stored`), `C/features/plugin-view/plugin-view.ts` + `plugin-view.html` (pass `secretsSet`, skip blank secrets on save).
 - F1 (optional cleanup): delete unused `register()` at `C/core/services/auth.service.ts:613-617`.
 - F2, F4, F6, F7: no client change.
+
+## F22 absolute paths only for library managers
+
+`Media.path` and `library.path` are omitted from `GET /api/media`, `recently-added` and `GET /api/media/:id` unless the caller holds `settings.access` or `manage:all`.
+
+| client | call site | behaviour | verdict |
+|---|---|---|---|
+| Angular media detail | `C/features/media-detail/media-detail.ts:1548`, `media-detail.html:165,288` (`m.path ?? null`) | identify modal and file-info panel take `null` | OK: the file panel shows only the relative path |
+| Angular media card | `C/shared/components/media-card/media-card.ts:630` (`m.path ?? null`) | identify modal | OK |
+| Angular settings | `C/features/settings/libraries/*`, `data-imports.html:573,649` read `lib.path` from `/api/libraries`, which already requires `settings.access` | unchanged | OK |

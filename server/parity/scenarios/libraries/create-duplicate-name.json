@@ -1,0 +1,24 @@
+{
+  "deviation": "C1",
+  "name": "libraries-create-duplicate-name",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "name": "Movies"
+      },
+      "expect": {
+        "body": {
+          "error": "Conflict",
+          "message": "Library name already taken",
+          "statusCode": 409
+        },
+        "status": 409
+      },
+      "method": "POST",
+      "path": "/api/libraries"
+    }
+  ],
+  "strictMessage": true
+}

@@ -1,0 +1,283 @@
+{
+  "deviation": null,
+  "name": "media-genres-library-garbage",
+  "seed": "media-query",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "count": 6,
+            "genre": "Action",
+            "posters": [
+              "/api/images/2/poster",
+              "/api/images/3/poster",
+              "/api/images/7/poster",
+              "/api/images/33/poster"
+            ]
+          },
+          {
+            "count": 7,
+            "genre": "Comedy",
+            "posters": [
+              "/api/images/4/poster",
+              "/api/images/8/poster",
+              "/api/images/21/poster"
+            ]
+          },
+          {
+            "count": 3,
+            "genre": "Crime",
+            "posters": []
+          },
+          {
+            "count": 17,
+            "genre": "Drama",
+            "posters": [
+              "/api/images/1/poster",
+              "/api/images/2/poster",
+              "/api/images/6/poster",
+              "/api/images/8/poster"
+            ]
+          },
+          {
+            "count": 2,
+            "genre": "Horror",
+            "posters": []
+          },
+          {
+            "count": 3,
+            "genre": "Sci-Fi",
+            "posters": [
+              "/api/images/7/poster"
+            ]
+          },
+          {
+            "count": 3,
+            "genre": "Thriller",
+            "posters": [
+              "/api/images/3/poster",
+              "/api/images/24/poster"
+            ]
+          },
+          {
+            "count": 1,
+            "genre": "drama",
+            "posters": []
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/genres?libraryId=abc"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "count": 6,
+            "genre": "Action",
+            "posters": [
+              "/api/images/2/poster",
+              "/api/images/3/poster",
+              "/api/images/7/poster",
+              "/api/images/33/poster"
+            ]
+          },
+          {
+            "count": 7,
+            "genre": "Comedy",
+            "posters": [
+              "/api/images/4/poster",
+              "/api/images/8/poster",
+              "/api/images/21/poster"
+            ]
+          },
+          {
+            "count": 3,
+            "genre": "Crime",
+            "posters": []
+          },
+          {
+            "count": 17,
+            "genre": "Drama",
+            "posters": [
+              "/api/images/1/poster",
+              "/api/images/2/poster",
+              "/api/images/6/poster",
+              "/api/images/8/poster"
+            ]
+          },
+          {
+            "count": 2,
+            "genre": "Horror",
+            "posters": []
+          },
+          {
+            "count": 3,
+            "genre": "Sci-Fi",
+            "posters": [
+              "/api/images/7/poster"
+            ]
+          },
+          {
+            "count": 3,
+            "genre": "Thriller",
+            "posters": [
+              "/api/images/3/poster",
+              "/api/images/24/poster"
+            ]
+          },
+          {
+            "count": 1,
+            "genre": "drama",
+            "posters": []
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/genres?libraryId=0"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "count": 6,
+            "genre": "Action",
+            "posters": [
+              "/api/images/2/poster",
+              "/api/images/3/poster",
+              "/api/images/7/poster",
+              "/api/images/33/poster"
+            ]
+          },
+          {
+            "count": 6,
+            "genre": "Comedy",
+            "posters": [
+              "/api/images/4/poster",
+              "/api/images/8/poster",
+              "/api/images/21/poster"
+            ]
+          },
+          {
+            "count": 2,
+            "genre": "Crime",
+            "posters": []
+          },
+          {
+            "count": 13,
+            "genre": "Drama",
+            "posters": [
+              "/api/images/1/poster",
+              "/api/images/2/poster",
+              "/api/images/6/poster",
+              "/api/images/8/poster"
+            ]
+          },
+          {
+            "count": 2,
+            "genre": "Horror",
+            "posters": []
+          },
+          {
+            "count": 2,
+            "genre": "Sci-Fi",
+            "posters": [
+              "/api/images/7/poster"
+            ]
+          },
+          {
+            "count": 3,
+            "genre": "Thriller",
+            "posters": [
+              "/api/images/3/poster",
+              "/api/images/24/poster"
+            ]
+          },
+          {
+            "count": 1,
+            "genre": "drama",
+            "posters": []
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/genres?libraryId=1abc"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "count": 6,
+            "genre": "Action",
+            "posters": [
+              "/api/images/2/poster",
+              "/api/images/3/poster",
+              "/api/images/7/poster",
+              "/api/images/33/poster"
+            ]
+          },
+          {
+            "count": 6,
+            "genre": "Comedy",
+            "posters": [
+              "/api/images/4/poster",
+              "/api/images/8/poster",
+              "/api/images/21/poster"
+            ]
+          },
+          {
+            "count": 2,
+            "genre": "Crime",
+            "posters": []
+          },
+          {
+            "count": 13,
+            "genre": "Drama",
+            "posters": [
+              "/api/images/1/poster",
+              "/api/images/2/poster",
+              "/api/images/6/poster",
+              "/api/images/8/poster"
+            ]
+          },
+          {
+            "count": 2,
+            "genre": "Horror",
+            "posters": []
+          },
+          {
+            "count": 2,
+            "genre": "Sci-Fi",
+            "posters": [
+              "/api/images/7/poster"
+            ]
+          },
+          {
+            "count": 3,
+            "genre": "Thriller",
+            "posters": [
+              "/api/images/3/poster",
+              "/api/images/24/poster"
+            ]
+          },
+          {
+            "count": 1,
+            "genre": "drama",
+            "posters": []
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/genres?libraryId=1&libraryId=2"
+    }
+  ]
+}
