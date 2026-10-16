@@ -200,8 +200,10 @@ pub async fn follow(
             me.id,
             target
         )
-        .fetch_one(&st.db)
-        .await?;
+        .fetch_optional(&st.db)
+        .await?
+        // A concurrent unfollow removed the edge: same outcome as follow then unfollow.
+        .unwrap_or_else(|| status.to_owned());
         return Ok((StatusCode::CREATED, Json(json!({"status": existing}))));
     }
     let (user_id, username, avatar) = (me.id.into(), me.username.clone(), me.avatar.clone());
