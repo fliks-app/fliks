@@ -1,0 +1,23 @@
+{
+  "deviation": null,
+  "name": "commands-trigger-forbidden",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "readonly",
+      "body": {
+        "name": "RescanAll"
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "POST",
+      "path": "/api/commands"
+    }
+  ]
+}

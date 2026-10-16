@@ -87,9 +87,9 @@ Read via `readEnvPositiveInt(name, fallback)` in `[ts:src/modules/streaming/life
 | `SERVE_STATIC_PATH` | none (when set, second `ServeStaticModule` root at `/`) | string, truthiness (empty = unset) `[ts:src/app.module.ts:51]` | `[ts:src/app.module.ts:48]`, `[ts:src/app.module.ts:51]` |
 | `FLIKS_GITHUB_REPO` | `'fliks-app/fliks'` | string as-is (`??`) `[ts:src/modules/scheduler/update-check.service.ts:5]` | `[ts:src/modules/scheduler/update-check.service.ts:5]` |
 | `FLIKS_DISABLE_UPDATE_CHECK` | `''` (disabled when `1`, `true`, or `yes`, case-insensitive) | `.trim().toLowerCase()` in `1`/`true`/`yes` `[ts:src/modules/scheduler/update-check.service.ts:10]`–`[ts:src/modules/scheduler/update-check.service.ts:11]` | `[ts:src/modules/scheduler/update-check.service.ts:10]` |
-| `FLIKS_SUPERVISED` | none (truthy → supervisor) | truthiness (empty = unset) `[ts:src/modules/scheduler/system.controller.ts:141]` | `[ts:src/modules/scheduler/system.controller.ts:141]` |
-| `pm_id` | none (truthy → pm2) | truthiness `[ts:src/modules/scheduler/system.controller.ts:142]` | `[ts:src/modules/scheduler/system.controller.ts:142]` |
-| `INVOCATION_ID` | none (truthy → systemd) | truthiness `[ts:src/modules/scheduler/system.controller.ts:143]` | `[ts:src/modules/scheduler/system.controller.ts:143]` |
+| `FLIKS_SUPERVISED` | none (truthy → supervisor) | truthiness (empty = unset) `[ts:src/modules/scheduler/system.controller.ts:52]` | `[ts:src/modules/scheduler/system.controller.ts:52]` |
+| `pm_id` | none (truthy → pm2) | truthiness `[ts:src/modules/scheduler/system.controller.ts:53]` | `[ts:src/modules/scheduler/system.controller.ts:53]` |
+| `INVOCATION_ID` | none (truthy → systemd) | truthiness `[ts:src/modules/scheduler/system.controller.ts:54]` | `[ts:src/modules/scheduler/system.controller.ts:54]` |
 
 Bootstrap sets `UV_THREADPOOL_SIZE` to `'16'` before imports (`[ts:src/main.ts:2]`); it is not read from the environment.
 

@@ -1,0 +1,48 @@
+{
+  "deviation": "C22",
+  "ignore": [
+    "$..id",
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "commands-trigger-twice",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "name": "Backup"
+      },
+      "expect": {
+        "body": {
+          "name": "Backup",
+          "status": "queued",
+          "trigger": "manual",
+          "body": null,
+          "startedOn": null,
+          "endedOn": null
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/commands"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "name": "Backup"
+      },
+      "expect": {
+        "body": {
+          "error": "Conflict",
+          "message": "Command \"Backup\" is already running",
+          "statusCode": 409
+        },
+        "status": 409
+      },
+      "method": "POST",
+      "path": "/api/commands"
+    }
+  ],
+  "strictMessage": true
+}

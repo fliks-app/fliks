@@ -6,18 +6,14 @@ import { FliksRequest } from '../requests/entities/request.entity';
 import { Media } from '../media/entities/media.entity';
 import { MediaFile } from '../media/entities/media-file.entity';
 import { Episode } from '../media/entities/episode.entity';
-import { SchedulerService } from './scheduler.service';
 import { NamingService } from './naming.service';
-import { BackupService } from './backup.service';
 import { LogBufferModule } from './log-buffer.module';
-import { UpdateCheckService } from './update-check.service';
-import { CommandsController } from './commands.controller';
-import { SystemController } from './system.controller';
 import { MetadataProvidersModule } from '../metadata-providers/metadata-providers.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { MediaModule } from '../media/media.module';
 import { AuthModule } from '../auth/auth.module';
 import { SubtitleSchedulerService } from './subtitle-scheduler.service';
+import { JobsBridgeController } from './jobs-bridge.controller';
 import { PostImportService } from './post-import.service';
 import { SubtitlesModule } from '../subtitles/subtitles.module';
 import { SettingsModule } from '../settings/settings.module';
@@ -54,28 +50,15 @@ import { QoeModule } from '../qoe/qoe.module';
     StreamingModule,
     MarkersModule,
     LogBufferModule,
-    // Imported directly so SchedulerService can inject PluginJobsService for
-    // the merged job listing.
+    // Imported directly so the jobs bridge can reach the plugin job and catalog services.
     PluginsModule,
     ScheduledJobRegistryModule,
     forwardRef(() => LibraryIngestModule),
     LiveTvModule,
     QoeModule,
   ],
-  controllers: [CommandsController, SystemController],
-  providers: [
-    SchedulerService,
-    NamingService,
-    BackupService,
-    UpdateCheckService,
-    SubtitleSchedulerService,
-    PostImportService,
-  ],
-  exports: [
-    SchedulerService,
-    NamingService,
-    LogBufferModule,
-    SubtitleSchedulerService,
-  ],
+  controllers: [JobsBridgeController],
+  providers: [NamingService, SubtitleSchedulerService, PostImportService],
+  exports: [NamingService, LogBufferModule, SubtitleSchedulerService],
 })
 export class FliksSchedulerModule {}

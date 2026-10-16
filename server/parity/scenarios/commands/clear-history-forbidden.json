@@ -1,0 +1,20 @@
+{
+  "deviation": null,
+  "name": "commands-clear-history-forbidden",
+  "seed": "commands",
+  "steps": [
+    {
+      "as": "readonly",
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "DELETE",
+      "path": "/api/commands/history"
+    }
+  ]
+}

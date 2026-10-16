@@ -27,8 +27,33 @@ export function makeRuntimeDir(): string {
   return mkdtempSync(join(tmpdir(), 'plugin-sup-rt-'));
 }
 
-export function newLogBuffer(): LogBufferService {
-  return new LogBufferService();
+/** The logger the supervisor writes to, with what it logged kept for assertions. */
+class RecordingLog extends LogBufferService {
+  private readonly entries: { level: string; message: string }[] = [];
+
+  log(message: any): void {
+    this.entries.push({ level: 'log', message: String(message) });
+  }
+
+  warn(message: any): void {
+    this.entries.push({ level: 'warn', message: String(message) });
+  }
+
+  error(message: any): void {
+    this.entries.push({ level: 'error', message: String(message) });
+  }
+
+  getEntries(opts: { level?: string; q?: string }) {
+    return this.entries.filter(
+      (e) =>
+        (!opts.level || e.level === opts.level) &&
+        (!opts.q || e.message.toLowerCase().includes(opts.q.toLowerCase())),
+    );
+  }
+}
+
+export function newLogBuffer(): RecordingLog {
+  return new RecordingLog();
 }
 
 /** Resolves the next time `sup` reaches `target`; rejects (real timer) if it never does. */

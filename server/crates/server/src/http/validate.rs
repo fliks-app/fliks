@@ -118,6 +118,23 @@ pub fn int_param(raw: &str) -> Result<i32, AppError> {
         .map_err(|_| AppError::bad_request("Validation failed (numeric string is expected)"))
 }
 
+/// A query integer: absent or empty is `None`, a non-canonical string is 400 (C1), a huge one saturates.
+pub fn int_query(raw: Option<&String>) -> Result<Option<i64>, AppError> {
+    let Some(s) = raw.filter(|s| !s.is_empty()) else {
+        return Ok(None);
+    };
+    if !canonical(s) {
+        return Err(AppError::bad_request(
+            "Validation failed (numeric string is expected)",
+        ));
+    }
+    Ok(Some(s.parse().unwrap_or(if s.starts_with('-') {
+        i64::MIN
+    } else {
+        i64::MAX
+    })))
+}
+
 fn canonical(s: &str) -> bool {
     let digits = s.strip_prefix('-').unwrap_or(s);
     match digits.as_bytes() {

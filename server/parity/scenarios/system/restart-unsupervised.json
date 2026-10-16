@@ -1,0 +1,22 @@
+{
+  "deviation": null,
+  "engine": "down",
+  "name": "system-restart-unsupervised",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "No process supervisor detected",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/system/restart"
+    }
+  ],
+  "strictMessage": true
+}

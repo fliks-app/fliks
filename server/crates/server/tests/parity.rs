@@ -584,13 +584,26 @@ async fn run(ctx: &Ctx, sc: &mut Value, record: bool) -> Vec<String> {
     let n = sc["steps"].as_array().map_or(0, |s| s.len());
     for i in 0..n {
         let step = sc["steps"][i].clone();
-        let resp = match send(ctx, &step, &vars).await {
+        let mut resp = match send(ctx, &step, &vars).await {
             Ok(r) => r,
             Err(e) => {
                 errs.push(format!("step {i}: {e}"));
                 break;
             }
         };
+        // `poll: {path, until, timeoutMs}` repeats the step until the body holds the value (background jobs).
+        if let Some(p) = step["poll"].as_object() {
+            let (path, until) = (parse_path(p["path"].as_str().unwrap_or("$")), &p["until"]);
+            let limit =
+                Duration::from_millis(p.get("timeoutMs").and_then(Value::as_u64).unwrap_or(5000));
+            let started = std::time::Instant::now();
+            while select(&resp.body, &path) != Some(until) && started.elapsed() < limit {
+                tokio::time::sleep(Duration::from_millis(100)).await;
+                if let Ok(r) = send(ctx, &step, &vars).await {
+                    resp = r;
+                }
+            }
+        }
         let mut body = resp.body.clone();
         ignore.iter().for_each(|p| remove(&mut body, p));
         if step["ignoreBody"].as_bool() == Some(true) {

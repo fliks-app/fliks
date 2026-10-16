@@ -1,0 +1,31 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..id",
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "commands-trigger-created",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "name": "RefreshMissingMetadata"
+      },
+      "expect": {
+        "body": {
+          "body": null,
+          "endedOn": null,
+          "name": "RefreshMissingMetadata",
+          "startedOn": null,
+          "status": "queued",
+          "trigger": "manual"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/commands"
+    }
+  ]
+}

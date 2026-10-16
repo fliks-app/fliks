@@ -1,0 +1,24 @@
+{
+  "deviation": null,
+  "name": "system-restore-missing",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "filename": "missing.sql"
+      },
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Backup \"missing.sql\" not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "POST",
+      "path": "/api/system/restore"
+    }
+  ],
+  "strictMessage": true
+}

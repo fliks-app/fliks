@@ -11,7 +11,7 @@ mod preroll;
 mod qoe;
 mod routes;
 mod scan;
-mod sprite;
+pub mod sprite;
 mod system;
 
 pub(crate) use bridge::{scan_file, sprite_file};

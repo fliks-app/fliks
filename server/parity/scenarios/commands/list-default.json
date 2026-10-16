@@ -1,0 +1,101 @@
+{
+  "deviation": "C12",
+  "name": "commands-list-default",
+  "seed": "commands",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "data": [
+            {
+              "body": {
+                "mediaId": 1,
+                "seasonId": 1,
+                "seasonNumber": 1
+              },
+              "createdAt": "2026-10-05T08:00:00.000Z",
+              "endedOn": "2026-10-05T08:00:02.000Z",
+              "id": 7,
+              "name": "IntroDetection",
+              "startedOn": "2026-10-05T08:00:00.000Z",
+              "status": "completed",
+              "trigger": "auto",
+              "updatedAt": "2026-10-05T08:00:00.000Z"
+            },
+            {
+              "body": null,
+              "createdAt": "2026-10-04T12:00:00.000Z",
+              "endedOn": "2026-10-04T12:00:04.000Z",
+              "id": 6,
+              "name": "RefreshMetadata",
+              "startedOn": "2026-10-04T12:00:00.000Z",
+              "status": "completed",
+              "trigger": "scheduled",
+              "updatedAt": "2026-10-04T12:00:00.000Z"
+            },
+            {
+              "body": null,
+              "createdAt": "2026-10-04T12:00:00.000Z",
+              "endedOn": "2026-10-04T12:00:03.000Z",
+              "id": 5,
+              "name": "Backup",
+              "startedOn": "2026-10-04T12:00:00.000Z",
+              "status": "completed",
+              "trigger": "scheduled",
+              "updatedAt": "2026-10-04T12:00:00.000Z"
+            },
+            {
+              "body": null,
+              "createdAt": "2026-10-03T10:00:00.000Z",
+              "endedOn": null,
+              "id": 4,
+              "name": "DetectMarkers",
+              "startedOn": null,
+              "status": "queued",
+              "trigger": "manual",
+              "updatedAt": "2026-10-03T10:00:00.000Z"
+            },
+            {
+              "body": null,
+              "createdAt": "2026-10-02T10:00:00.000Z",
+              "endedOn": null,
+              "id": 3,
+              "name": "RescanAll",
+              "startedOn": "2026-10-02T10:00:00.000Z",
+              "status": "running",
+              "trigger": "manual",
+              "updatedAt": "2026-10-02T10:00:00.000Z"
+            },
+            {
+              "body": null,
+              "createdAt": "2026-10-01T10:00:00.000Z",
+              "endedOn": "2026-10-01T10:00:09.000Z",
+              "id": 2,
+              "name": "RefreshMetadata",
+              "startedOn": "2026-10-01T10:00:00.000Z",
+              "status": "failed",
+              "trigger": "manual",
+              "updatedAt": "2026-10-01T10:00:00.000Z"
+            },
+            {
+              "body": null,
+              "createdAt": "2025-01-01T10:00:00.000Z",
+              "endedOn": "2025-01-01T10:00:05.000Z",
+              "id": 1,
+              "name": "Backup",
+              "startedOn": "2025-01-01T10:00:00.000Z",
+              "status": "completed",
+              "trigger": "scheduled",
+              "updatedAt": "2025-01-01T10:00:00.000Z"
+            }
+          ],
+          "total": 7
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/commands"
+    }
+  ]
+}

@@ -14,5 +14,6 @@ pub mod persons;
 pub mod profiles;
 pub mod qoe;
 pub mod recommend;
+pub mod refresh;
 pub mod release;
 pub mod subtitle_name;

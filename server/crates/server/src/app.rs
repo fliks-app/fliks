@@ -1,6 +1,6 @@
 use crate::http::{layers, static_files};
 use crate::{
-    auth, events, fs, images, importers, libraries, markers, media, media_servers, metadata,
+    auth, events, fs, images, importers, jobs, libraries, markers, media, media_servers, metadata,
     notifications, persons, playback, playlists, profiles, qoe, remote, roles, settings, social,
     state::AppState, system, users,
 };
@@ -25,6 +25,21 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
     info(title = "Fliks", version = "1"),
     paths(
         system::liveness,
+        system::health,
+        system::restart,
+        system::version,
+        system::update,
+        system::stats,
+        system::backup_create,
+        system::backup_list,
+        system::backup_restore,
+        system::backup_download,
+        system::backup_delete,
+        system::log_list,
+        jobs::schedulers,
+        jobs::list,
+        jobs::trigger,
+        jobs::clear_history,
         auth::login,
         auth::refresh,
         auth::logout,
@@ -316,6 +331,8 @@ fn api() -> Router<AppState> {
         .merge(markers::router())
         .merge(metadata::router())
         .merge(persons::router())
+        .merge(system::api())
+        .merge(jobs::router())
 }
 
 async fn preflight_here(State(cors): State<Router>, req: Request, next: Next) -> Response {

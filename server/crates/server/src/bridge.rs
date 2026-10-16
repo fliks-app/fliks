@@ -2,6 +2,7 @@
 //! `FLIKS_BRIDGE_TOKEN`; also checks the token of the Rust-side bridges. Removed at S9.
 use crate::http::AppError;
 use axum::http::{HeaderMap, StatusCode, header::AUTHORIZATION};
+use serde::Deserialize;
 use serde_json::{Value, json};
 use std::time::Duration;
 use subtle::ConstantTimeEq;
@@ -17,9 +18,22 @@ impl std::fmt::Display for BridgeError {
 
 impl std::error::Error for BridgeError {}
 
+/// One entry of Nest's `GET /internal/jobs` (`scheduler.md` Bridges).
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BridgedJob {
+    pub name: String,
+    pub cron: String,
+    pub triggerable: bool,
+    pub label_key: String,
+    pub plugin_id: Option<String>,
+}
+
 #[derive(Clone)]
 pub struct Bridge {
     http: reqwest::Client,
+    /// No total timeout: `jobs/run` is held open until the job ends, which can take hours.
+    long: reqwest::Client,
     base: String,
     token: String,
 }
@@ -31,6 +45,10 @@ impl Bridge {
             http: reqwest::Client::builder()
                 .connect_timeout(Duration::from_secs(2))
                 .timeout(Duration::from_secs(5))
+                .build()
+                .expect("reqwest client"),
+            long: reqwest::Client::builder()
+                .connect_timeout(Duration::from_secs(2))
                 .build()
                 .expect("reqwest client"),
             base: base.trim_end_matches('/').to_owned(),
@@ -63,6 +81,49 @@ impl Bridge {
             body["origin"] = o.into();
         }
         self.post("settings-changed", body).await
+    }
+
+    /// `None` when Nest is unreachable or answers anything but a job list.
+    pub async fn jobs(&self) -> Option<Vec<BridgedJob>> {
+        #[derive(Deserialize)]
+        struct List {
+            jobs: Vec<BridgedJob>,
+        }
+        let res = self
+            .http
+            .get(format!("{}/internal/jobs", self.base))
+            .bearer_auth(&self.token)
+            .send()
+            .await
+            .inspect_err(|e| tracing::warn!("jobs bridge unreachable: {e}"))
+            .ok()?;
+        res.error_for_status()
+            .inspect_err(|e| tracing::warn!("jobs bridge refused the listing: {e}"))
+            .ok()?
+            .json::<List>()
+            .await
+            .inspect_err(|e| tracing::warn!("jobs bridge answered an unreadable listing: {e}"))
+            .ok()
+            .map(|l| l.jobs)
+    }
+
+    /// Status and `message` of `POST /internal/jobs/run`, answered when the job ends (declared plugin jobs at once).
+    pub async fn run_job(&self, name: &str) -> Result<(StatusCode, Option<String>), BridgeError> {
+        let res = self
+            .long
+            .post(format!("{}/internal/jobs/run", self.base))
+            .bearer_auth(&self.token)
+            .json(&json!({ "name": name }))
+            .send()
+            .await
+            .map_err(|e| BridgeError(format!("jobs/run: {}", e.without_url())))?;
+        let status = res.status();
+        let message = res
+            .json::<Value>()
+            .await
+            .ok()
+            .and_then(|v| v["message"].as_str().map(str::to_owned));
+        Ok((status, message))
     }
 
     async fn post(&self, endpoint: &str, body: Value) -> Result<(), BridgeError> {
