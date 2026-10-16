@@ -114,12 +114,15 @@ pub enum RemoteAction {
     Browse,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+/// Nest stores and relays any non-empty heartbeat `state` string verbatim.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum PlayState {
     Playing,
     Paused,
     Buffering,
+    #[serde(untagged)]
+    Other(String),
 }
 
 /// One rung of a remote target's quality ladder.

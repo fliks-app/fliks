@@ -70,9 +70,10 @@ fn index(b: &Value, k: &str) -> Option<Option<i32>> {
     nullable(b, k, |v| v.as_i64().and_then(|n| i32::try_from(n).ok()))
 }
 
+/// `if (payload.state)`: any non-empty string, kept verbatim.
 fn play_state(b: &Value) -> Option<PlayState> {
-    b.get("state")
-        .and_then(|v| serde_json::from_value(v.clone()).ok())
+    let s = b.get("state")?.as_str().filter(|s| !s.is_empty())?;
+    serde_json::from_value(Value::from(s)).ok()
 }
 
 fn presence_beat(b: &Value, sse: Option<String>) -> Beat {
@@ -212,7 +213,7 @@ fn emit_state(st: &AppState, user: i32, s: &LiveSession, media: i32, b: &Value) 
             fanart_url: s.fanart_url.clone(),
             position_seconds: Num(s.position),
             duration_seconds: Num(num(b, "durationSeconds").unwrap_or(0.0)),
-            state: s.state,
+            state: s.state.clone(),
             volume: s.volume.map(Num),
             muted: s.muted,
             supports_volume: s.supports_volume,

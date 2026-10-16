@@ -198,8 +198,8 @@ impl LiveSession {
         if let Some(v) = b.position {
             self.position = v;
         }
-        if let Some(v) = b.state {
-            self.state = v;
+        if let Some(v) = &b.state {
+            self.state = v.clone();
         }
         macro_rules! set {
             ($($f:ident),*) => {$(if let Some(v) = &b.$f { self.$f = v.clone(); })*};
