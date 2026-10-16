@@ -213,26 +213,6 @@
     "body": "TestCustomFormatDto"
   },
   {
-    "method": "GET",
-    "path": "/api/images/:type/:id",
-    "controller": "ImageController",
-    "handler": "serveWithoutVariant",
-    "file": "src/modules/images/image.controller.ts",
-    "line": 35,
-    "guards": [],
-    "policies": ""
-  },
-  {
-    "method": "GET",
-    "path": "/api/images/:type/:id/:variant",
-    "controller": "ImageController",
-    "handler": "serveWithVariant",
-    "file": "src/modules/images/image.controller.ts",
-    "line": 24,
-    "guards": [],
-    "policies": ""
-  },
-  {
     "method": "POST",
     "path": "/api/imports/library/:libraryId/orphans/scan",
     "controller": "ImportsController",
@@ -399,111 +379,17 @@
     "body": "TestConnectionDto"
   },
   {
-    "method": "GET",
-    "path": "/api/libraries",
-    "controller": "LibrariesController",
-    "handler": "findAll",
-    "file": "src/modules/libraries/libraries.controller.ts",
-    "line": 39,
-    "guards": [
-      "JwtOrApiKeyGuard",
-      "PoliciesGuard"
-    ],
-    "policies": "(ability) => ability.can(Action.Read, 'Settings')"
-  },
-  {
-    "method": "POST",
-    "path": "/api/libraries",
-    "controller": "LibrariesController",
-    "handler": "create",
-    "file": "src/modules/libraries/libraries.controller.ts",
-    "line": 51,
-    "guards": [
-      "JwtOrApiKeyGuard",
-      "PoliciesGuard"
-    ],
-    "policies": "(ability) => ability.can(Action.Manage, 'Settings')",
-    "body": "CreateLibraryDto"
-  },
-  {
     "method": "DELETE",
     "path": "/api/libraries/:id",
     "controller": "LibrariesController",
     "handler": "remove",
     "file": "src/modules/libraries/libraries.controller.ts",
-    "line": 63,
+    "line": 19,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
     ],
     "policies": "(ability) => ability.can(Action.Manage, 'Settings')"
-  },
-  {
-    "method": "GET",
-    "path": "/api/libraries/:id",
-    "controller": "LibrariesController",
-    "handler": "findOne",
-    "file": "src/modules/libraries/libraries.controller.ts",
-    "line": 45,
-    "guards": [
-      "JwtOrApiKeyGuard",
-      "PoliciesGuard"
-    ],
-    "policies": "(ability) => ability.can(Action.Read, 'Settings')"
-  },
-  {
-    "method": "PATCH",
-    "path": "/api/libraries/:id",
-    "controller": "LibrariesController",
-    "handler": "update",
-    "file": "src/modules/libraries/libraries.controller.ts",
-    "line": 57,
-    "guards": [
-      "JwtOrApiKeyGuard",
-      "PoliciesGuard"
-    ],
-    "policies": "(ability) => ability.can(Action.Manage, 'Settings')",
-    "body": "UpdateLibraryDto"
-  },
-  {
-    "method": "GET",
-    "path": "/api/libraries/:id/access",
-    "controller": "LibrariesController",
-    "handler": "getAccess",
-    "file": "src/modules/libraries/libraries.controller.ts",
-    "line": 69,
-    "guards": [
-      "JwtOrApiKeyGuard",
-      "PoliciesGuard"
-    ],
-    "policies": "(ability) => ability.can(Action.Manage, 'Settings')"
-  },
-  {
-    "method": "PUT",
-    "path": "/api/libraries/:id/access",
-    "controller": "LibrariesController",
-    "handler": "setAccess",
-    "file": "src/modules/libraries/libraries.controller.ts",
-    "line": 75,
-    "guards": [
-      "JwtOrApiKeyGuard",
-      "PoliciesGuard"
-    ],
-    "policies": "(ability) => ability.can(Action.Manage, 'Settings')",
-    "body": "AssignLibraryAccessDto"
-  },
-  {
-    "method": "GET",
-    "path": "/api/libraries/mine",
-    "controller": "LibrariesController",
-    "handler": "findMine",
-    "file": "src/modules/libraries/libraries.controller.ts",
-    "line": 32,
-    "guards": [
-      "JwtOrApiKeyGuard",
-      "PoliciesGuard"
-    ],
-    "policies": "(ability) => ability.can(Action.Read, Library)"
   },
   {
     "method": "DELETE",

@@ -230,6 +230,117 @@
         }
       }
     },
+    "/api/images/{kind}/{id}": {
+      "get": {
+        "tags": [
+          "images"
+        ],
+        "operationId": "without_variant",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/images/{kind}/{id}/{variant}": {
+      "get": {
+        "tags": [
+          "images"
+        ],
+        "operationId": "with_variant",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/libraries": {
+      "get": {
+        "tags": [
+          "libraries"
+        ],
+        "operationId": "list",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "libraries"
+        ],
+        "operationId": "create",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/libraries/mine": {
+      "get": {
+        "tags": [
+          "libraries"
+        ],
+        "operationId": "mine",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/libraries/{id}": {
+      "get": {
+        "tags": [
+          "libraries"
+        ],
+        "operationId": "get_one",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "libraries"
+        ],
+        "operationId": "update",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/libraries/{id}/access": {
+      "get": {
+        "tags": [
+          "libraries"
+        ],
+        "operationId": "access_get",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "libraries"
+        ],
+        "operationId": "access_put",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/playback/continue-watching": {
       "get": {
         "tags": [

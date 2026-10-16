@@ -31,4 +31,5 @@ Rust bridge auth: `Authorization: Bearer $FLIKS_BRIDGE_TOKEN`, constant-time com
 ## Allowed duplication
 
 - Users stats SQL (`UsersStatsService`) in Nest until S4 (social profile stats), duplicated by the Rust `GET /api/users/:id/stats`.
+- Library ACL verify in Nest until S8 (`LibrariesService.getAccessibleLibraryIds`, `MediaService.assertAccessible`), duplicated by `libraries::accessible_library_ids` / `assert_media_accessible`; both read the same tables live, so no endpoint. Images path table (`ImageService.getDiskPath`) in Nest until S5, duplicated by `images::disk_path`.
 - Auth verify in Nest until S9: `jwt.strategy.ts`, guards, CASL factory, `PoliciesGuard`, `current-user` decorator, `jwt-secret.ts` (Nest still authenticates its own routes; Rust signs).

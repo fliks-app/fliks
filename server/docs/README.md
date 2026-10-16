@@ -36,6 +36,10 @@ Decided behaviour for the Rust port (security fixes F, correctness fixes C; D3).
 | F16 | Nest accepts HS256, HS384 and HS512 and a token without `exp` (valid forever) | only HS256 is accepted and `exp` is required: a token without `exp` or signed HS384/HS512 is 401; Fliks only ever signs HS256 with `exp` | none |
 | F17 | a deleted user's open SSE connections stay open | dropped on delete | none |
 | F18 | logout left the refresh token valid, and a replay after the 30 s grace revoked nothing: both revokes matched `"revokedAt" = NULL` | logout revokes the presented refresh token; a replay revokes every live refresh token of the user | none |
+| F19 | a library `path` may be relative and `mkdir -p` ran before the conflict and in-use checks, leaving directories behind on a 400 | `path` must be absolute (400); conflict and in-use checks run first, `mkdir -p` is the last step before the `UPDATE` | none |
+| F20 | `GET /api/libraries/:id` and `:id/access` ignored the library ACL; `PUT :id/access` on an unknown library answered 200 or 500 | the ACL applies to both reads; unknown library → 404 `Library #<id> not found` | none |
+| F21 | an image `variant` such as `..%2F..%2Fx` reached `path.join`: any readable `*.jpg` fetched anonymously | `variant` must match `^(poster\|fanart\|fanart-[0-9]+\|logo)$` for media and request art, else 404 | none |
+| F22 | absolute server paths (`path`, `disk`) were serialised for every reader of a library | only for callers who can manage libraries (`settings.access`); omitted otherwise | none |
 | F31 | remote state/stopped fan-out reached grantees of a device id under any owner (anyone could mint a code for another user's deviceId and receive its playback state) | fan-out limited to grants whose owner is the device's owner | none |
 
 Not done (user decision 2026-10-15): login rate limiting/lockout.
@@ -66,6 +70,9 @@ A 500 or a half-written request is never part of the frozen contract:
 | C8 | raw-SQL / explicit updates did not touch "updatedAt" (series watched toggles, search vector refresh, leave-social playlist privacy, live TV group stamp/renumber) | a BEFORE UPDATE trigger sets "updatedAt" = now() whenever an UPDATE leaves it unchanged (migration `1786500000000_updated_at_trigger.sql`); playlists made private on leave-social move up in the owner's home row |
 | C18 | `POST /api/system/streams/:sid/command` with an `action` outside pause/play/stop/message was relayed to the client as is | 400 |
 | C19 | live TV rows of `/api/system/streams` reported the source's name as `quality` (`"Live"` only without one) | they report `"Live"` |
+| C9 | image ids coerced by unary `+` (`007`, `0x7`, `7.0`, ` 7 ` served id 7) | canonical integers only, else 404 |
+| C12 | lists without a tie-break (libraries, `userIds`) | final `id ASC` |
+| C20 | ValidationPipe coerced ` 7 `, `1e1`, `0x10` before `ParseIntPipe` | integer path segments must be canonical (`7`, `-7`; never `007`, `+7`, ` 7 `, `0x7`) on every Rust route: `PathParams` / `int_param` → 400 |
 
 Frozen as is (decided): the heartbeat keeps its debounce entry after a failed history write and returns
 `sessionLost: false` when the engine session lives but presence cannot be rebuilt. Lists whose order comes

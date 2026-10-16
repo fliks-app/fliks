@@ -119,7 +119,6 @@
         },
         "headers": {
           "cache-control": "no-store, no-cache, must-revalidate",
-          "content-type": "application/json; charset=utf-8",
           "x-image-size-served": null
         },
         "status": 404
