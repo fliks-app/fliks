@@ -463,7 +463,7 @@ pub async fn command(
     }
     if cmd.action == PlayerAction::Stop {
         if let Some(stopped) = st.presence.stop(&sid) {
-            st.qoe.session_ended(&stopped.session_id);
+            st.qoe.end_session(&stopped.session_id).await;
         }
         if st.engine.runtime() {
             tokio::spawn(async move {

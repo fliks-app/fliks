@@ -138,7 +138,7 @@ pub async fn delete_session(
         st.hub.emit_to_user(uid, SseEvent::RemoteTargetsChanged {});
     }
     if let Some(stopped) = st.presence.stop(&sid) {
-        st.qoe.session_ended(&stopped.session_id);
+        st.qoe.end_session(&stopped.session_id).await;
     }
     if st.engine.runtime()
         && let Err(e) = st.engine.delete_session(&sid, None).await
