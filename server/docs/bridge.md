@@ -43,6 +43,7 @@ No new temporary bridge: each gap below is a Nest caller that loses a function w
 
 | Until | Gap | Spec |
 |---|---|---|
+| S5 (integration) | `server/s5-ingest` calls the services of the sibling S5 branches through `seams::Seams` (`Unwired` until the integration wires them): metadata providers (`import`, `for_media`, `episode`, `persist_credits`: imports, identify and refresh fail with 503 after their synchronous checks), image store (no artwork stored), NFO reader (no `.nfo` read: guesses come from file names), request lifecycle hooks (no-op), media-server notifications (no-op), markers auto-detection after an import (no-op) | `ingest.md`, `media-write.md` |
 | S6 | Subtitle callees reached from S5 code stay in Nest and are skipped: `carryOver` (a superseded file's sidecars stay), `deleteSubtitleFilesOnDisk` (a deleted file leaves its sidecar subtitles), `deleteSubtitle` (companion delete of a tracked subtitle answers 501), `reconcileSubtitleFilesAfterRescan` / `discoverExternalSubtitles` / `embeddedSubtitle.detectAndStore` (rescan leaves subtitle rows stale), `syncSubtitle`, `subtitleScheduler.onMediaFileImported` (no automatic subtitle search after an import) | `ingest.md`, `media-write.md` |
 | S6 | `subtitle.synced`, `subtitle.downloaded`, `subtitle.upgraded` trigger no Emby refresh | `media-servers.md` |
 | S6 | Subtitle scorer: release-name and episode credit score 0 (`parseReleaseAttributes`, `parseSeasonEpisode` stubbed) | `release.md` |
