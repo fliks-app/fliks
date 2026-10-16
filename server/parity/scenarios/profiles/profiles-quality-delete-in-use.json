@@ -3,7 +3,8 @@
   "ignore": [
     "$..createdAt",
     "$..updatedAt",
-    "$..disk"
+    "$..freeSpace",
+    "$..totalSpace"
   ],
   "name": "profiles-quality-delete-in-use",
   "seed": "profiles",
