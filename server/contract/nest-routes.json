@@ -3270,104 +3270,6 @@
     "policies": ""
   },
   {
-    "method": "GET",
-    "path": "/api/stream/:mediaFileId/edl",
-    "controller": "StreamingController",
-    "handler": "edl",
-    "file": "src/modules/streaming/streaming.controller.ts",
-    "line": 159,
-    "guards": [
-      "JwtOrApiKeyGuard"
-    ],
-    "policies": ""
-  },
-  {
-    "method": "POST",
-    "path": "/api/stream/:mediaFileId/playback-info",
-    "controller": "StreamingController",
-    "handler": "playbackInfo",
-    "file": "src/modules/streaming/streaming.controller.ts",
-    "line": 124,
-    "guards": [
-      "JwtOrApiKeyGuard"
-    ],
-    "policies": "",
-    "body": "DeviceProfileDto"
-  },
-  {
-    "method": "GET",
-    "path": "/api/stream/info/effective-settings",
-    "controller": "StreamingController",
-    "handler": "effectiveSettingsInfo",
-    "file": "src/modules/streaming/streaming.controller.ts",
-    "line": 101,
-    "guards": [
-      "JwtOrApiKeyGuard"
-    ],
-    "policies": ""
-  },
-  {
-    "method": "GET",
-    "path": "/api/stream/info/gpus",
-    "controller": "StreamingController",
-    "handler": "gpusInfo",
-    "file": "src/modules/streaming/streaming.controller.ts",
-    "line": 118,
-    "guards": [
-      "JwtOrApiKeyGuard"
-    ],
-    "policies": ""
-  },
-  {
-    "method": "GET",
-    "path": "/api/stream/info/hw-accel",
-    "controller": "StreamingController",
-    "handler": "hwAccelInfo",
-    "file": "src/modules/streaming/streaming.controller.ts",
-    "line": 89,
-    "guards": [
-      "JwtOrApiKeyGuard"
-    ],
-    "policies": ""
-  },
-  {
-    "method": "GET",
-    "path": "/api/stream/info/qualities/:mediaFileId",
-    "controller": "StreamingController",
-    "handler": "downloadQualities",
-    "file": "src/modules/streaming/streaming.controller.ts",
-    "line": 74,
-    "guards": [
-      "JwtOrApiKeyGuard"
-    ],
-    "policies": ""
-  },
-  {
-    "method": "GET",
-    "path": "/api/stream/info/tonemap-algos",
-    "controller": "StreamingController",
-    "handler": "tonemapAlgosInfo",
-    "file": "src/modules/streaming/streaming.controller.ts",
-    "line": 95,
-    "guards": [
-      "JwtOrApiKeyGuard"
-    ],
-    "policies": ""
-  },
-  {
-    "method": "DELETE",
-    "path": "/api/stream/sessions/:sessionId",
-    "controller": "StreamingController",
-    "handler": "stopLiveSession",
-    "file": "src/modules/streaming/streaming.controller.ts",
-    "line": 179,
-    "guards": [
-      "JwtOrApiKeyGuard"
-    ],
-    "policies": "",
-    "httpCode": 204
-  },
-  {
     "method": "DELETE",
     "path": "/api/subtitles/blacklist",
     "controller": "SubtitleActivityController",
@@ -3831,71 +3733,6 @@
   },
   {
     "method": "GET",
-    "path": "/api/system/streams",
-    "controller": "SystemController",
-    "handler": "activeStreams",
-    "file": "src/modules/scheduler/system.controller.ts",
-    "line": 415,
-    "guards": [
-      "JwtOrApiKeyGuard",
-      "PoliciesGuard"
-    ],
-    "policies": "(ability) => ability.can(Action.Read, 'Settings')"
-  },
-  {
-    "method": "POST",
-    "path": "/api/system/streams/:sessionId/command",
-    "controller": "SystemController",
-    "handler": "sendPlayerCommand",
-    "file": "src/modules/scheduler/system.controller.ts",
-    "line": 763,
-    "guards": [
-      "JwtOrApiKeyGuard",
-      "PoliciesGuard"
-    ],
-    "policies": "(ability) => ability.can(Action.Manage, 'Settings')"
-  },
-  {
-    "method": "DELETE",
-    "path": "/api/system/transcode-cache",
-    "controller": "SystemController",
-    "handler": "purgeAllTranscodeCache",
-    "file": "src/modules/scheduler/system.controller.ts",
-    "line": 718,
-    "guards": [
-      "JwtOrApiKeyGuard",
-      "PoliciesGuard"
-    ],
-    "policies": "(ability) => ability.can(Action.Manage, 'Settings')"
-  },
-  {
-    "method": "GET",
-    "path": "/api/system/transcode-cache",
-    "controller": "SystemController",
-    "handler": "transcodeCacheStats",
-    "file": "src/modules/scheduler/system.controller.ts",
-    "line": 704,
-    "guards": [
-      "JwtOrApiKeyGuard",
-      "PoliciesGuard"
-    ],
-    "policies": "(ability) => ability.can(Action.Read, 'Settings')"
-  },
-  {
-    "method": "DELETE",
-    "path": "/api/system/transcode-cache/:mediaFileId",
-    "controller": "SystemController",
-    "handler": "purgeTranscodeCache",
-    "file": "src/modules/scheduler/system.controller.ts",
-    "line": 734,
-    "guards": [
-      "JwtOrApiKeyGuard",
-      "PoliciesGuard"
-    ],
-    "policies": "(ability) => ability.can(Action.Manage, 'Settings')"
-  },
-  {
-    "method": "GET",
     "path": "/api/system/update",
     "controller": "SystemController",
     "handler": "update",
@@ -3975,5 +3812,19 @@
     "policies": "",
     "body": "SettingsChangedDto",
     "httpCode": 204
+  },
+  {
+    "method": "POST",
+    "path": "/internal/plugins/pre-roll",
+    "controller": "PreRollBridgeController",
+    "handler": "ask",
+    "file": "src/modules/plugins/plugin-pre-roll-bridge.controller.ts",
+    "line": 46,
+    "guards": [
+      "BridgeAuthGuard"
+    ],
+    "policies": "",
+    "body": "PreRollAskDto",
+    "httpCode": 200
   }
 ]
