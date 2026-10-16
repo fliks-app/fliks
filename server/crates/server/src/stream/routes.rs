@@ -1,5 +1,5 @@
 //! `info/*`, `:id/edl` and the session stop (spec rules 25-30).
-use super::{edl, engine_err, file::resolve_file, qoe::qoe_session_ended};
+use super::{edl, engine_err, file::resolve_file};
 use crate::{
     events::SseEvent,
     http::{AppError, auth::StreamAuthed, validate::PathParams},
@@ -138,7 +138,7 @@ pub async fn delete_session(
         st.hub.emit_to_user(uid, SseEvent::RemoteTargetsChanged {});
     }
     if let Some(stopped) = st.presence.stop(&sid) {
-        qoe_session_ended(&st, &stopped);
+        st.qoe.session_ended(&stopped.session_id);
     }
     if st.engine.runtime()
         && let Err(e) = st.engine.delete_session(&sid, None).await

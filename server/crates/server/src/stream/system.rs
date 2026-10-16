@@ -1,8 +1,5 @@
 //! `/api/system/streams*` and `/api/system/transcode-cache*` (spec rules 32-37).
-use super::{
-    engine_err,
-    qoe::{qoe_live_summary, qoe_session_ended},
-};
+use super::engine_err;
 use crate::{
     events::{SseEvent, event::PlayerAction},
     http::{
@@ -98,7 +95,7 @@ fn resolution_label(w: u32, h: u32) -> Option<String> {
 }
 
 /// The decision's bitrates of the rung served; none for remux, direct play and an unknown rung.
-fn served_rung<'a>(
+pub(super) fn served_rung<'a>(
     mode: SessionKind,
     quality: &str,
     hdr_ladder: bool,
@@ -329,7 +326,7 @@ async fn live_tv_rows(st: &AppState, host_hw: &str) -> Vec<ActiveStream> {
                 LiveMode::Transcode => SessionKind::Transcode,
             };
             ActiveStream {
-                qoe: qoe_live_summary(st, &s.session_id),
+                qoe: live_summary(st, &s.session_id),
                 session_id: s.session_id,
                 user_id: s.owner_id.and_then(|o| o.parse().ok()),
                 username: tag("username"),
@@ -397,7 +394,7 @@ pub async fn streams(
     let mut rows: Vec<ActiveStream> = live
         .iter()
         .map(|s| {
-            let qoe = qoe_live_summary(&st, &s.live.session_id);
+            let qoe = live_summary(&st, &s.live.session_id);
             row_of(
                 s,
                 &host_hw,
@@ -466,7 +463,7 @@ pub async fn command(
     }
     if cmd.action == PlayerAction::Stop {
         if let Some(stopped) = st.presence.stop(&sid) {
-            qoe_session_ended(&st, &stopped);
+            st.qoe.session_ended(&stopped.session_id);
         }
         if st.engine.runtime() {
             tokio::spawn(async move {
@@ -547,4 +544,10 @@ pub async fn purge_file(
         return Ok(Json(json!({"ok": true, "entries": 0, "bytes": 0})));
     };
     Ok(Json(purge(&st, Some(file), owner).await?))
+}
+
+fn live_summary(st: &AppState, sid: &str) -> Option<Value> {
+    st.qoe
+        .live_summary(sid)
+        .and_then(|s| serde_json::to_value(s).ok())
 }

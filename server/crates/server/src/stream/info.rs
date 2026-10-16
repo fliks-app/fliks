@@ -3,9 +3,7 @@
 use super::{
     burn_in, db, edl,
     file::{ResolvedFile, resolve_file},
-    hardware, preroll,
-    qoe::qoe_register,
-    scan,
+    hardware, preroll, scan,
 };
 use crate::{
     engine::{EngineError, enc},
@@ -15,6 +13,7 @@ use crate::{
         validate::{PathParams, ValidJson, from_value},
     },
     presence::{Facts, LiveSession, Tags, kind_of, now_ms, parse_source_fps, to_tags},
+    qoe::SessionRef,
     state::AppState,
 };
 use axum::{
@@ -307,7 +306,16 @@ async fn run(
         },
         now_ms(),
     ));
-    qoe_register(st, &live, open.qoe_pipeline.as_ref());
+    let live_ref = SessionRef::from(&live);
+    st.qoe.register(&live_ref);
+    // The engine's report and the domain's are one JSON shape.
+    if let Some(p) = open
+        .qoe_pipeline
+        .as_ref()
+        .and_then(|p| serde_json::from_value(serde_json::to_value(p).ok()?).ok())
+    {
+        st.qoe.set_pipeline(&live_ref, p);
+    }
     rescan_hint(st, &open, &file);
     let fps = file
         .info
