@@ -303,10 +303,13 @@ pub async fn claim_approval(
     Ok(r.rows_affected() == 1)
 }
 
-pub async fn rollback_to_pending(db: &PgPool, id: i32) -> sqlx::Result<()> {
+/// Gives back the approval `by` claimed, unless the row moved on since.
+pub async fn rollback_to_pending(db: &PgPool, id: i32, by: i32) -> sqlx::Result<()> {
     sqlx::query!(
-        r#"UPDATE requests SET status = 'pending', "approvedById" = NULL WHERE id = $1"#,
-        id
+        r#"UPDATE requests SET status = 'pending', "approvedById" = NULL
+           WHERE id = $1 AND status = 'approved' AND "approvedById" = $2"#,
+        id,
+        by
     )
     .execute(db)
     .await?;
@@ -414,7 +417,8 @@ pub async fn trim_seasons(db: &PgPool, id: i32, seasons: &[i64]) -> sqlx::Result
 /// Declines the rows and unlinks the media (`declineActiveLinkedRequests`, `onSeasonMonitorChange`).
 pub async fn decline_unlink(db: &PgPool, id: i32, reason: &str) -> sqlx::Result<()> {
     sqlx::query!(
-        r#"UPDATE requests SET status = 'declined', "declinedReason" = $2, "mediaId" = NULL WHERE id = $1"#,
+        r#"UPDATE requests SET status = 'declined', "declinedReason" = $2, "mediaId" = NULL
+           WHERE id = $1 AND status IN ('pending', 'approved', 'processing')"#,
         id,
         reason
     )

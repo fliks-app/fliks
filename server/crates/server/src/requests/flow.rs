@@ -612,7 +612,7 @@ pub async fn approve(st: &AppState, a: &Authed, id: i32) -> Res<Value> {
     let media = match ensure_media(st, spec, row.user_id).await {
         Ok(m) => m,
         Err(e) => {
-            db::rollback_to_pending(&st.db, id).await?;
+            db::rollback_to_pending(&st.db, id, a.user.id).await?;
             return Err(e);
         }
     };
@@ -658,7 +658,7 @@ async fn approve_delete(st: &AppState, a: &Authed, row: &db::Req) -> Res<Value> 
                 }
             }
             Err(e) => {
-                db::rollback_to_pending(&st.db, id).await?;
+                db::rollback_to_pending(&st.db, id, a.user.id).await?;
                 return Err(e.into());
             }
         }
