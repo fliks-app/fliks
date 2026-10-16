@@ -70,6 +70,7 @@ Decided behaviour for the Rust port (security fixes F, correctness fixes C; D3).
 | F46 | write routes trusted ids: import into any library, `PATCH :id/library` to any library, `bulk` on any media, episode refresh of another media's episode | the caller's library ACL: unknown or inaccessible library/media → 404 (as F32), `bulk` all or nothing | none |
 | F47 | in-place relink registered any file the process could read (`folderName = ../../etc`), a move relocated a symlink into the library, an in-place `reorganize` moved any writable file | contained, regular video file, sources resolved through symlinks; `reorganize` without `transfer` only moves files under the library root (else an `errors[]` entry) | none |
 | F48 | disk-import routes: no library ACL on `orphans/scan` and `relink` (and the path returned to anyone), `preview` and transfers read any directory | `scan` and `relink` apply the library ACL (404), F22 on `libraryPath`; `preview` and relink with `transfer` need `settings.access`; relative `preview` paths 400 | none (the wizard is admin-only) |
+| F-REQ-1 | `GET /api/requests/:id` serialised the absolute server paths of its media (`media.path`, `media.library.path`) to the requester | present only for callers who can manage libraries, omitted otherwise (F22) | none: clients read `m.path ?? null` |
 
 Not done (user decision 2026-10-15): login rate limiting/lockout.
 
@@ -172,6 +173,9 @@ A 500 or a half-written request is never part of the frozen contract:
 | C97 | on a DST-change day `cron-parser` skips or shifts some local fires (`0 04 * * *` Paris on 2026-03-29 never fires) | `croner` fires every valid local time, so `nextRun` of `GET /api/commands/schedulers` and the real fires differ from Nest on those days only |
 | C98 | `pg_dump --clean` only drops the objects the dump knows, so an older dump failed on the objects a later migration added (500, rolled back) | the replay's transaction first drops `public` and every `plugin_*` schema and recreates `public`: the restore replaces the whole database content (also the plugin schemas the dump lacks), then the migrations run |
 | C99 | `dropSeasonsAbsentFromProvider` with an empty provider season list (a failed or truncated fetch) deleted every season of the media with its episodes, playback states and markers | an empty list drops nothing |
+| C-REQ-1 | 500 on unvalidated input of the requests routes: an unknown `qualityProfileId`, `languageProfileId` or `libraryId` on create and `PATCH` (foreign key violation), a `tmdbId` above int4, `GET /title-state` with a `mediaType` outside the enum, an auto-approval `criteria` that is an array (stored, then matches everyone) | 400 with the standard validation body; an unknown id answers `Quality profile #<id> not found`, `Language profile #<id> not found` or `Library #<id> not found` |
+| C-REQ-2 | an auto-approval `maxSeasons` always passes for a series request with `seasons: []` (counted as 0 seasons) | an empty `seasons` is no scope: the show's season count applies |
+| C-REQ-3 | two approvals of one pending request both import and notify; the approval was a read then a write | the approval claims the row with one conditional `UPDATE ... WHERE status = 'pending'`; the loser is 409 `Request is not pending` |
 
 Frozen as is (decided): the heartbeat keeps its debounce entry after a failed history write and returns
 `sessionLost: false` when the engine session lives but presence cannot be rebuilt. Lists whose order comes

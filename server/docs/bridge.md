@@ -56,4 +56,5 @@ No new temporary bridge: each gap below is a Nest caller that loses a function w
 | S8 | Plugin `library.ingest` throws `unavailable until S8`; plugin imports fail (`POST /internal/ingest` dropped) | `ingest.md`, `media-write.md` |
 | S8 | Plugin host loses its profile and scoring reads (`releases.score`, `releases.match`, `buildWant`, `scoringWindowFor`, `buildAcquisitionTarget`, `filesForEpisode`/`filesForSeasonPack`): plugin acquisition (search, grab, upgrade) does not work between S5 and S8 | `profiles.md`, `release.md` |
 | S8 | `download.complete` triggers no Emby refresh (Nest plugin host) | `media-servers.md` |
+| S8 | The plugin host's `requests.markInProgress` has no callee (the Nest lifecycle is gone): a request moves to `processing` only through the `acquisition.grabbed` domain event, which Rust consumes from `POST /internal/events` | `requests.md` |
 | S9 | `GET /api/system/logs` shows only `fliks-server`'s own events; Nest and plugin-child lines stay on stdout | `system.md` |
