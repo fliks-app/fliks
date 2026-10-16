@@ -14,3 +14,6 @@ fancy-regex.workspace = true
 regress.workspace = true
 unicode-normalization.workspace = true
 encoding_rs = "0.8"
+quick-xml = "0.38"
+url = "2"
+percent-encoding = "2"
