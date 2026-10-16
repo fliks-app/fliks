@@ -1,0 +1,50 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastLogin",
+    "$..lastActiveAt",
+    "$..lastPlayedAt",
+    "$..playedAt",
+    "$..path"
+  ],
+  "name": "playlists-members-add-self",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "role": "viewer",
+        "userId": 2
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Cannot change your own role",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/playlists/1/members"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "role": "viewer",
+        "userId": 1
+      },
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Playlist #1 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "POST",
+      "path": "/api/playlists/1/members"
+    }
+  ]
+}

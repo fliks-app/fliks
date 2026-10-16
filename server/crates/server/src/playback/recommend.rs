@@ -5,16 +5,23 @@ use fliks_domain::recommend::{
 use sqlx::{PgPool, types::Json};
 use std::collections::HashSet;
 
-/// The user's 15 most recent completed states; a state without media still uses a slot.
-async fn window(db: &PgPool, user: i32) -> sqlx::Result<Vec<Option<HistoryMedia>>> {
+/// The user's 15 most recent completed states, only those in `libs` when given; a state without
+/// media still uses a slot unless scoped.
+async fn window(
+    db: &PgPool,
+    user: i32,
+    libs: Option<&[i32]>,
+) -> sqlx::Result<Vec<Option<HistoryMedia>>> {
     let rows = sqlx::query!(
         r#"SELECT m.id AS "id?", m.title AS "title?", m.genres AS "genres?: Json<Vec<String>>"
            FROM playback_states ps
            LEFT JOIN media m ON m.id = ps."mediaId"
            WHERE ps."userId" = $1 AND ps.completed = true
+             AND ($2::int[] IS NULL OR m."libraryId" = ANY($2))
            ORDER BY ps."lastPlayedAt" DESC
            LIMIT 15"#,
-        user
+        user,
+        libs
     )
     .fetch_all(db)
     .await?;
@@ -30,8 +37,14 @@ async fn window(db: &PgPool, user: i32) -> sqlx::Result<Vec<Option<HistoryMedia>
         .collect())
 }
 
-pub async fn top_genres(db: &PgPool, user: i32, limit: usize) -> sqlx::Result<Vec<GenreWeight>> {
-    let taste = Taste::from_history(&window(db, user).await?);
+/// Top genres of the user's history inside `libs` (the viewer's libraries, F25).
+pub async fn top_genres(
+    db: &PgPool,
+    user: i32,
+    limit: usize,
+    libs: &[i32],
+) -> sqlx::Result<Vec<GenreWeight>> {
+    let taste = Taste::from_history(&window(db, user, Some(libs)).await?);
     Ok(taste.map(|t| t.top_genres(limit)).unwrap_or_default())
 }
 
@@ -44,7 +57,7 @@ pub async fn recommendations(
     if libs.is_empty() {
         return Ok(vec![]);
     }
-    let Some(taste) = Taste::from_history(&window(db, user).await?) else {
+    let Some(taste) = Taste::from_history(&window(db, user, None).await?) else {
         return Ok(vec![]);
     };
     let mut excluded: HashSet<i32> = taste.kept_ids().map(|id| id as i32).collect();

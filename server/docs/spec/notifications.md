@@ -108,16 +108,16 @@ Manifest lines: `[ts:src/modules/notifications/notifications.controller.ts:28]`,
 21. **Bridge `POST /internal/notifications/dispatch`** (Rust endpoint, Nest→Rust; loopback only, `Authorization: Bearer $FLIKS_BRIDGE_TOKEN`, constant-time compare; not under `/api`, public fallback 404s `/internal/**`). Shape is not fixed by Nest `[assumed]` (plan §6.4 names the endpoint only):
    - Request: `Content-Type: application/json`, body `{"event": <one of the 18 vocabulary strings>, "payload": <JSON object>}`; both required; `payload` may be `{}`; no other keys (unknown key = 400).
    - 204, empty body: returned after the dispatch finished, i.e. after every matching sender settled (success or failure), exactly the resolution point of Nest's `dispatch` promise; per-connection failures never change the status (they are logged, rule 11).
-   - 400 `{"message": <string>, "error": "Bad Request", "statusCode": 400}` for a missing/non-string `event`, an event outside the vocabulary, or a non-object `payload`; 401 (missing/wrong bridge token, auth rule 14 body); 500 only when the connections SELECT fails (the same condition under which Nest's `dispatch` rejects).
-   - Client behaviour (Nest side): fire-and-forget callers (`void dispatch`) do not await the HTTP call and catch/log its failure (today an SELECT failure is an unhandled rejection); the plugin host awaits it and propagates a failure to the plugin like today.
+   - 400 `{"message": <string[]>, "error": "Bad Request", "statusCode": 400}` (a malformed JSON body: `message` a string) for a missing/non-string `event`, an event outside the vocabulary, or a non-object `payload`; 401 (missing/wrong bridge token, auth rule 14 body); 500 only when the connections SELECT fails (the same condition under which Nest's `dispatch` rejects).
+   - Client behaviour (Nest side): `dispatch` catches and logs any failure (fire-and-forget callers `void dispatch(...)`, today an SELECT failure is an unhandled rejection); `dispatchStrict` rethrows and is what the plugin host awaits, so a failure reaches the plugin like today. The HTTP call has a 15 s abort (senders are bounded by 10 s).
    - Removed: when its last caller (plugin host, S8) moves; the livetv (S7) and subtitles (S6) callers disappear earlier.
 22. Plugin host path: the awaited `notifications.dispatch` host method (`grab.started`) resolves after all senders settled (`Promise.allSettled`); the `event` string is NOT validated at runtime today, so a plugin can inject any string (e.g. `request.created`) and an unknown string falls to the `default` message (rule 16). The bridge validation of rule 21 and C17 (rule 29) close this. `[ts:src/modules/plugins/host/fliks-host.service.ts:1042]`–`[ts:src/modules/plugins/host/fliks-host.service.ts:1050]`
 23. The `notifications` module has no timers, no settings keys, no SSE events and no domain events (it emits none and subscribes to none: callers invoke it directly, hub spec "Not subscribers").
 
 ### E. Deviations decided for the port (plan §15.3)
 
-24. [new] F28: `settings.webhookUrl` of `discord` and `slack` is a secret field with `token` (F5 `secretsSet` convention): omitted from every response, `secretsSet` lists it when non-empty (`["webhookUrl"]`, `["token"]` or both), a blank or absent value on write keeps the stored one, explicit `null` erases it, an echoed `secretsSet` is stripped; `settings.url` of the other types stays in clear. The DTO endpoint constraint (rule 4) then applies to the effective value (stored one when the write omits it); `create` still requires a valid endpoint. Client: the notification editor shows the masked "set" state like for `token`.
-25. [new] F28 corollary: a `type` switch on update (rule 7) drops the stored `webhookUrl` too.
+24. [new] F28: `settings.webhookUrl` of `discord` and `slack` is a secret field with `token` (F5 `secretsSet` convention): omitted from every response, `secretsSet` lists it when non-empty (`["webhookUrl"]`, `["token"]` or both), a blank or absent value on write keeps the stored one, an echoed `secretsSet` is stripped; `settings.url` of the other types stays in clear. The DTO endpoint constraint (rule 4) applies to the effective value (the stored one when the write leaves it blank or absent, none for `null`), so the required URL can be replaced but never erased (`null` → 400); `create` still requires a valid endpoint. Client: the notification editor shows the masked "set" state like for `token`, with no clear action.
+25. [new] F28 corollary: a `type` switch on update (rule 7) drops the stored `webhookUrl` too. The web editor mirrors it: the stored-secret mask and hints (token, `webhookUrl`) show only while the form type is the connection's stored type.
 26. [new] F29: sender errors, logs and the `test` response never contain the request URL (gotify token in the query, Discord/Slack webhook secret): HTTP status errors keep `Request failed with status code <n>`, transport errors use the OS/DNS text without the URL (`connect ECONNREFUSED`, `getaddrinfo ENOTFOUND <host>` forms are not reproduced byte for byte, free text), a timeout reports `timeout of 10000ms exceeded`.
 27. [new] C16: every sender request has a 10 s total timeout; no retry (as Nest); `test` reports the timeout as `{ok: false, message}`; `dispatch` still returns only after every sender settled, so it is bounded by 10 s.
 28. [new] F30: Discord payloads are `{"username": ..., "content": MSG, "allowed_mentions": {"parse": []}}` (no `@everyone`/role/user mention injection); other channels unchanged.
@@ -141,7 +141,7 @@ none. Each connection carries its own configuration in `settings`: `url` | `webh
 
 ## Jobs/timers
 
-none (no retry queue, no timeout, no periodic job; senders are one-shot, rule 12).
+none (no retry queue, no periodic job; senders are one-shot with a 10 s timeout, rule 12, C16).
 
 ## Bridges
 
@@ -167,7 +167,7 @@ Vector set `notifications` (plan §5.2: "`formatMessage` per event × channel"),
 - Channel config: discord with/without `username`; webhook with/without token; gotify trailing slash, token needing encoding (`a b&c`), missing url/token (`url and token required`); ntfy trailing slash, empty topic → `fliks`, token present/absent/non-string, missing url (`url not configured`); discord/slack/webhook missing endpoint (`webhookUrl not configured`, `webhookUrl not configured`, `url not configured`).
 - `normalize-*` (from the spec, names kept): legacy `webhookUrl` folded for webhook/gotify/ntfy; discord/slack stay on `webhookUrl`; `url` wins when both; trimmed endpoint and topic; gotify without token 400; blank token keeps the stored one; `null` erases it (ntfy) / 400 (gotify); `secretsSet` marker never persisted (ntfy and discord); provider switch drops the token; normalize on update.
 - `validate-*`: ntfy without endpoint, either key accepted, blank endpoint, scheme-less endpoint (messages of rule 4); every one of the 18 events validates; unknown event rejected; subscribable list = 17 and storable.
-- `redact-*`: token present → `secretsSet:['token']`; none → `[]`; endpoint/topic kept; discord/slack `webhookUrl` omitted and listed in `secretsSet` (F28, deviation vectors); blank write keeps it, `null` erases it.
+- `redact-*`: token present → `secretsSet:['token']`; none → `[]`; endpoint/topic kept; discord/slack `webhookUrl` omitted and listed in `secretsSet` (F28, deviation vectors); blank write keeps it, `null` fails validation (400).
 - Deviation cases: Discord body carries `allowed_mentions: {parse: []}` (F30); error texts of a failing gotify/discord send contain no URL and no token (F29); out-of-vocabulary event on the bridge → 400 (C17).
 
 Rust integration tests (axum mock receiver, no external network) cover transport behaviour the vectors cannot: non-2xx → `Request failed with status code <n>`, closed port, redirect handling, no URL/token in logged or returned error text (F29), a receiver that never answers → timeout after 10 s with `ok:false` (C16; the test uses a paused clock).
@@ -176,6 +176,6 @@ Parity scenarios (`server/parity/scenarios/notifications/`, recorded on the seed
 
 ## Open questions (left open by plan §15.3)
 
-Q1. Redirect policy of the senders (rule 12): axios follows redirects (and `follow-redirects` rewrites POST to GET on 301/302); reqwest follows up to 10 with the same rewrite. Confirm "followed, as Nest" or disable (SSRF-adjacent). S4.
+Q1. Redirect policy of the senders (rule 12): axios follows redirects (and `follow-redirects` rewrites POST to GET on 301/302); reqwest follows up to 10 with the same rewrite. Implemented "followed, as Nest" (reqwest default; an integration test pins it); disabling is one `redirect(Policy::none())`. TLS: reqwest `rustls-tls-webpki-roots` (ring provider, bundled Mozilla roots), so https works on a minimal Docker image, macOS and Windows without a system store or OpenSSL. S4.
 Q2. Fire-and-forget callers drop notifications silently when Rust is down or restarting (bridge failure is only logged); acceptable (today a restart loses in-flight ones too), confirm. S4.
 Q3. Discord content is still not truncated or escaped (rule 15): a 2000+ char payload is delivered as is and rejected by Discord with a 400 (WARN). F30 only neutralises mentions. Freeze unless a fix is wanted. S4.

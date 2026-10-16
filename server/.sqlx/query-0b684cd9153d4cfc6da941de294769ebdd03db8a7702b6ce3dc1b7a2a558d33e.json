@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE content_recommendations SET \"dismissedAt\" = now()\n           WHERE id = $1 AND \"recipientId\" = $2 AND \"dismissedAt\" IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0b684cd9153d4cfc6da941de294769ebdd03db8a7702b6ce3dc1b7a2a558d33e"
+}

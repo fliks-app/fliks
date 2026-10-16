@@ -10,8 +10,6 @@ import { RequestsModule } from './modules/requests/requests.module';
 import { FliksSchedulerModule } from './modules/scheduler/scheduler.module';
 import { EventsModule } from './modules/scheduler/events.module';
 import { LibrariesModule } from './modules/libraries/libraries.module';
-import { PlaylistsModule } from './modules/playlists/playlists.module';
-import { SocialModule } from './modules/social/social.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { SettingsModule } from './modules/settings/settings.module';
 import { SubtitlesModule } from './modules/subtitles/subtitles.module';
@@ -66,8 +64,6 @@ import { BridgeModule } from './modules/bridge/bridge.module';
     RequestsModule,
     FliksSchedulerModule,
     LibrariesModule,
-    PlaylistsModule,
-    SocialModule,
     NotificationsModule,
     SettingsModule,
     SubtitlesModule,

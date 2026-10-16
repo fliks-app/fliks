@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE playlist_items pi SET position = (t.n - 1)::int\n           FROM unnest($1::int[]) WITH ORDINALITY AS t(id, n) WHERE pi.id = t.id",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4Array"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "54ceccd113932f305550769edc1cfe6774137708855b4240fbe441e6367a7d97"
+}

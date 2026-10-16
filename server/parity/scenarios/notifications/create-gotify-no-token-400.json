@@ -1,0 +1,54 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..id",
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "notifications-create-gotify-no-token-400",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "name": "G",
+        "settings": {
+          "url": "https://g.example.test"
+        },
+        "type": "gotify"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "gotify requires a non-empty settings.token",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/notifications"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "name": "G",
+        "settings": {
+          "token": "",
+          "url": "https://g.example.test"
+        },
+        "type": "gotify"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "gotify requires a non-empty settings.token",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/notifications"
+    }
+  ],
+  "strictMessage": true
+}

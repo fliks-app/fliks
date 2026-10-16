@@ -19,7 +19,7 @@ use axum::{
     routing::{get, post},
 };
 use fliks_domain::acl::{Action, Subject};
-use serde_json::{Value, json};
+use serde_json::Value;
 use sqlx::{PgPool, types::Json as Jsonb};
 use std::path::PathBuf;
 
@@ -310,7 +310,7 @@ pub async fn update(
         .execute(&mut *tx)
         .await?;
     if dto.share_disabled == Some(true) && !target.share_disabled {
-        db::social_teardown(&mut tx, id).await?;
+        crate::social::leave_social(&mut tx, id).await?;
     }
     if let Some(ids) = &dto.library_ids {
         db::replace_library_access(&mut tx, id, ids).await?;
@@ -366,46 +366,10 @@ pub async fn stats(
 ) -> Result<Json<Value>, AppError> {
     a.require(Action::Manage, Subject::User)?;
     let id = int_param(&id)?;
-    let user = sqlx::query!(
-        r#"SELECT "lastLogin", "createdAt" FROM users WHERE id = $1"#,
-        id
-    )
-    .fetch_optional(&st.db)
-    .await?
-    .ok_or_else(|| not_found(id))?;
-    let (last_login, created) = (user.lastLogin, user.createdAt);
-    let p = sqlx::query!(
-        r#"SELECT ROUND(COALESCE(SUM(CASE WHEN ps."playedAt" IS NOT NULL THEN ps."positionSeconds" ELSE 0 END), 0)::numeric)::bigint AS "total_watch_time_seconds!",
-                  COUNT(DISTINCT CASE WHEN ps.completed AND media.type = 'movie' THEN ps."mediaId" END) AS "movies_watched!",
-                  COUNT(DISTINCT CASE WHEN ps.completed AND media.type = 'series' THEN ps."mediaId" END) AS "series_started!",
-                  COUNT(DISTINCT CASE WHEN ps.completed AND ps."episodeId" IS NOT NULL THEN ps."episodeId" END) AS "episodes_watched!",
-                  MAX(ps."lastPlayedAt") AS last_played_at
-           FROM playback_states ps LEFT JOIN media ON media.id = ps."mediaId"
-           WHERE ps."userId" = $1"#,
-        id
-    )
-    .fetch_one(&st.db)
-    .await?;
-    let counts = sqlx::query!(
-        r#"SELECT r.status::text AS "status!", COUNT(*) AS "count!" FROM requests r WHERE r."userId" = $1 GROUP BY r.status"#,
-        id
-    )
-    .fetch_all(&st.db)
-    .await?;
-    let n = |s: &str| counts.iter().find(|c| c.status == s).map_or(0, |c| c.count);
-    let iso =
-        |d: chrono::DateTime<chrono::Utc>| d.to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-    Ok(Json(json!({
-        "playback": {
-            "totalWatchTimeSeconds": p.total_watch_time_seconds,
-            "moviesWatched": p.movies_watched,
-            "seriesStarted": p.series_started,
-            "episodesWatched": p.episodes_watched,
-            "lastPlayedAt": p.last_played_at.map(iso),
-        },
-        "requests": {"pending": n("pending"), "approved": n("approved"), "declined": n("declined")},
-        "activity": {"lastActiveAt": last_login.map(iso), "memberSince": iso(created)},
-    })))
+    crate::social::user_stats(&st.db, id)
+        .await?
+        .map(Json)
+        .ok_or_else(|| not_found(id))
 }
 
 fn avatar_path(id: i32, suffix: &str) -> PathBuf {

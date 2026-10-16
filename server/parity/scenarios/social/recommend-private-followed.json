@@ -1,0 +1,92 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastLogin",
+    "$..lastActiveAt",
+    "$..lastPlayedAt",
+    "$..playedAt"
+  ],
+  "name": "social-recommend-private-followed",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "status": "pending"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/social/follow/4"
+    },
+    {
+      "as": "user",
+      "body": {
+        "mediaId": 3,
+        "recipientId": 4
+      },
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "User #4 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "POST",
+      "path": "/api/social/recommend"
+    },
+    {
+      "as": "other",
+      "expect": {
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/social/requests/2/accept"
+    },
+    {
+      "as": "user",
+      "body": {
+        "mediaId": 3,
+        "recipientId": 4
+      },
+      "expect": {
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/social/recommend"
+    },
+    {
+      "as": "other",
+      "expect": {
+        "body": [
+          {
+            "episodeId": null,
+            "fanartUrl": null,
+            "id": 1,
+            "label": null,
+            "liked": false,
+            "mediaId": 3,
+            "mediaType": "movie",
+            "message": null,
+            "posterUrl": null,
+            "seasonId": null,
+            "sender": {
+              "avatar": null,
+              "id": 2,
+              "username": "user"
+            },
+            "stillUrl": null,
+            "title": "Parity Movie 03"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/social/recommendations/received"
+    }
+  ]
+}

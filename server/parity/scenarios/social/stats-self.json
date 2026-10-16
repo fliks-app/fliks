@@ -1,0 +1,87 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastLogin",
+    "$..lastActiveAt",
+    "$..lastPlayedAt",
+    "$..playedAt"
+  ],
+  "name": "social-stats-self",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "activity": {
+            "memberSince": "2026-01-01T00:00:00.000Z"
+          },
+          "playback": {
+            "episodesWatched": 0,
+            "moviesWatched": 1,
+            "seriesStarted": 0,
+            "totalWatchTimeSeconds": 3500
+          },
+          "requests": {
+            "approved": 0,
+            "declined": 0,
+            "pending": 1
+          }
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/social/users/2/stats"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "activity": {
+            "memberSince": "2026-01-01T00:00:00.000Z"
+          },
+          "playback": {
+            "episodesWatched": 0,
+            "moviesWatched": 0,
+            "seriesStarted": 0,
+            "totalWatchTimeSeconds": 0
+          },
+          "requests": {
+            "approved": 0,
+            "declined": 0,
+            "pending": 0
+          }
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/social/users/1/stats"
+    },
+    {
+      "as": "other",
+      "expect": {
+        "body": {
+          "activity": {
+            "memberSince": "2026-01-01T00:00:00.000Z"
+          },
+          "playback": {
+            "episodesWatched": 0,
+            "moviesWatched": 0,
+            "seriesStarted": 0,
+            "totalWatchTimeSeconds": 0
+          },
+          "requests": {
+            "approved": 1,
+            "declined": 0,
+            "pending": 0
+          }
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/social/users/4/stats"
+    }
+  ]
+}

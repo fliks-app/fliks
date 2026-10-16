@@ -1,0 +1,151 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastLogin",
+    "$..lastActiveAt",
+    "$..lastPlayedAt",
+    "$..playedAt",
+    "$..path"
+  ],
+  "name": "playlists-patch-editor",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "profileVisibility": "public"
+      },
+      "expect": {
+        "body": {
+          "avatar": "/api/users/4/avatar?v=1767225600000",
+          "edlAutoSkipCommercials": true,
+          "edlEnabled": true,
+          "email": "other@parity.test",
+          "enabled": true,
+          "hiddenLibraryIds": [],
+          "hideSpoilers": false,
+          "id": 4,
+          "isAdmin": false,
+          "libraryIds": [
+            1,
+            2
+          ],
+          "libraryOrder": [],
+          "mediaServerId": null,
+          "mediaServerType": "local",
+          "movieQuotaLimit": 0,
+          "permissions": [
+            "media.read",
+            "livetv.read",
+            "requests.create"
+          ],
+          "profileVisibility": "public",
+          "quotaPeriodDays": 7,
+          "requirePasswordChange": false,
+          "role": "User",
+          "roleId": 2,
+          "seriesQuotaLimit": 0,
+          "shareDisabled": false,
+          "shareLikes": false,
+          "shareRecommendations": false,
+          "shareStats": false,
+          "shareTastes": false,
+          "shareWatchHistory": false,
+          "spoilerHideOverviews": true,
+          "spoilerHideStills": true,
+          "spoilerHideTitles": true,
+          "username": "other"
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/users/4"
+    },
+    {
+      "as": "user",
+      "body": {
+        "role": "editor",
+        "userId": 4
+      },
+      "expect": {
+        "body": [
+          {
+            "avatar": null,
+            "role": "owner",
+            "userId": 2,
+            "username": "user"
+          },
+          {
+            "avatar": "/api/users/4/avatar?v=1767225600000",
+            "role": "editor",
+            "userId": 4,
+            "username": "other"
+          }
+        ],
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/playlists/1/members"
+    },
+    {
+      "as": "other",
+      "body": {
+        "name": "nope"
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Insufficient playlist role",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "PATCH",
+      "path": "/api/playlists/1"
+    },
+    {
+      "as": "user",
+      "body": {
+        "role": "viewer",
+        "userId": 4
+      },
+      "expect": {
+        "body": [
+          {
+            "avatar": null,
+            "role": "owner",
+            "userId": 2,
+            "username": "user"
+          },
+          {
+            "avatar": "/api/users/4/avatar?v=1767225600000",
+            "role": "viewer",
+            "userId": 4,
+            "username": "other"
+          }
+        ],
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/playlists/1/members"
+    },
+    {
+      "as": "other",
+      "body": {
+        "name": "nope"
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Insufficient playlist role",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "PATCH",
+      "path": "/api/playlists/1"
+    }
+  ]
+}

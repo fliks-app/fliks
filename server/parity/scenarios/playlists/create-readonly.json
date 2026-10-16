@@ -1,0 +1,65 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastLogin",
+    "$..lastActiveAt",
+    "$..lastPlayedAt",
+    "$..playedAt",
+    "$..path"
+  ],
+  "name": "playlists-create-readonly",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "readonly",
+      "body": {
+        "name": "RO list"
+      },
+      "expect": {
+        "body": {
+          "autoDownload": false,
+          "autoPlay": false,
+          "autoRemoveWatched": false,
+          "coverImageUrl": null,
+          "id": 2,
+          "itemCount": 0,
+          "name": "RO list",
+          "ownerId": 3,
+          "posters": [],
+          "role": "owner",
+          "saved": false,
+          "visibility": "private"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/playlists"
+    },
+    {
+      "as": "readonly",
+      "expect": {
+        "body": [
+          {
+            "autoDownload": false,
+            "autoPlay": false,
+            "autoRemoveWatched": false,
+            "coverImageUrl": null,
+            "id": 2,
+            "itemCount": 0,
+            "name": "RO list",
+            "ownerId": 3,
+            "posters": [],
+            "role": "owner",
+            "saved": false,
+            "visibility": "private"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/playlists"
+    }
+  ]
+}

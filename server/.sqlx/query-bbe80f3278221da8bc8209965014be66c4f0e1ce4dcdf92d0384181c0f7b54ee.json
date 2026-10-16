@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT l.\"seasonId\" AS season_id, l.\"episodeId\" AS episode_id\n           FROM likes l WHERE l.\"userId\" = $1 AND l.\"mediaId\" = $2 ORDER BY l.id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "season_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "episode_id",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      true,
+      true
+    ]
+  },
+  "hash": "bbe80f3278221da8bc8209965014be66c4f0e1ce4dcdf92d0384181c0f7b54ee"
+}

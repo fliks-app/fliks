@@ -1,0 +1,75 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..id",
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "notifications-create-webhook-legacy-url",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "enabled": false,
+        "name": "Hook",
+        "settings": {
+          "token": " t ",
+          "webhookUrl": "  https://hook.example.test/in  "
+        },
+        "type": "webhook"
+      },
+      "expect": {
+        "body": {
+          "enabled": false,
+          "events": [],
+          "name": "Hook",
+          "settings": {
+            "secretsSet": [
+              "token"
+            ],
+            "url": "https://hook.example.test/in"
+          },
+          "type": "webhook"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/notifications"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "events": [
+          "download.complete"
+        ],
+        "name": "Gotify",
+        "settings": {
+          "token": "g",
+          "url": "https://gotify.example.test/"
+        },
+        "type": "gotify"
+      },
+      "expect": {
+        "body": {
+          "enabled": true,
+          "events": [
+            "download.complete"
+          ],
+          "name": "Gotify",
+          "settings": {
+            "secretsSet": [
+              "token"
+            ],
+            "url": "https://gotify.example.test/"
+          },
+          "type": "gotify"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/notifications"
+    }
+  ],
+  "strictMessage": true
+}

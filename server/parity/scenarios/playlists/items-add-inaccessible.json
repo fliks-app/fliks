@@ -1,0 +1,194 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastLogin",
+    "$..lastActiveAt",
+    "$..lastPlayedAt",
+    "$..playedAt",
+    "$..path"
+  ],
+  "name": "playlists-items-add-inaccessible",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "readonly",
+      "body": {
+        "name": "RO"
+      },
+      "expect": {
+        "body": {
+          "autoDownload": false,
+          "autoPlay": false,
+          "autoRemoveWatched": false,
+          "coverImageUrl": null,
+          "id": 2,
+          "itemCount": 0,
+          "name": "RO",
+          "ownerId": 3,
+          "posters": [],
+          "role": "owner",
+          "saved": false,
+          "visibility": "private"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/playlists"
+    },
+    {
+      "as": "readonly",
+      "body": {
+        "mediaId": 18
+      },
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Media #18 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "POST",
+      "path": "/api/playlists/2/items"
+    },
+    {
+      "as": "readonly",
+      "body": {
+        "episodeId": 1
+      },
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Series #18 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "POST",
+      "path": "/api/playlists/2/items"
+    },
+    {
+      "as": "readonly",
+      "body": {
+        "seasonId": 1
+      },
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Series #18 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "POST",
+      "path": "/api/playlists/2/items"
+    },
+    {
+      "as": "readonly",
+      "body": {
+        "mediaId": 9999
+      },
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Media #9999 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "POST",
+      "path": "/api/playlists/2/items"
+    },
+    {
+      "as": "readonly",
+      "body": {
+        "mediaId": 1
+      },
+      "expect": {
+        "body": {
+          "added": 1
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/playlists/2/items"
+    },
+    {
+      "as": "readonly",
+      "expect": {
+        "body": [
+          {
+            "addedById": 3,
+            "episode": null,
+            "itemId": 4,
+            "media": {
+              "addedById": null,
+              "additionalFanartUrls": [],
+              "alternativeTitles": [],
+              "digitalRelease": null,
+              "fanartUrl": null,
+              "folderName": "Parity Movie 01 (2020)",
+              "genres": [
+                "Drama"
+              ],
+              "id": 1,
+              "imdbId": null,
+              "inCinemas": null,
+              "languageProfile": null,
+              "languageProfileId": null,
+              "library": {
+                "color": "#3b82f6",
+                "defaultLanguageProfileId": null,
+                "defaultQualityProfileId": null,
+                "icon": "film",
+                "id": 1,
+                "label": null,
+                "mediaTypes": [
+                  "movie"
+                ],
+                "metadataLanguage": null,
+                "metadataRegion": null,
+                "name": "Movies",
+                "path": "/tmp/fliks-parity/media/movies",
+                "preferredProvider": null
+              },
+              "libraryId": 1,
+              "logoUrl": null,
+              "metadata": null,
+              "metadataRefreshedAt": null,
+              "minimumAvailability": "released",
+              "monitored": true,
+              "originalTitle": null,
+              "overview": "Synthetic movie 1",
+              "path": "/tmp/fliks-parity/media/movies/Parity Movie 01 (2020)",
+              "physicalRelease": null,
+              "posterUrl": null,
+              "preferredProvider": null,
+              "qualityProfile": null,
+              "qualityProfileId": null,
+              "rating": 7.5,
+              "releaseDate": "2020-01-01",
+              "runtime": 90,
+              "status": "released",
+              "title": "Parity Movie 01",
+              "tmdbCollectionId": null,
+              "tmdbCollectionName": null,
+              "tmdbId": 1001,
+              "tvdbId": null,
+              "type": "movie",
+              "year": 2020
+            },
+            "position": 0,
+            "progressPercent": 8,
+            "watched": false
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/playlists/2/items"
+    }
+  ]
+}

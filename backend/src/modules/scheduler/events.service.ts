@@ -232,14 +232,14 @@ export type SseEvent =
   // Remote control - that target stopped playing. Definitive, so a controller
   // never has to tell a closed player apart from a lagging report.
   | { type: 'remote.stopped'; targetId: string }
-  // Social — delivered to the target user (see SocialService).
+  // Social — delivered to the target user (emitted by the fliks-server social routes).
   | {
       type: 'social.followed' | 'social.follow_request' | 'social.follow_accepted';
       userId: number;
       username: string;
       avatar: string | null;
     }
-  // A member recommended content to this user (see SocialService.recommend).
+  // A member recommended content to this user (fliks-server social recommend).
   | {
       type: 'social.content_recommended';
       userId: number;

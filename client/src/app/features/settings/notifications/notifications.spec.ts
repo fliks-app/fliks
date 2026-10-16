@@ -266,6 +266,26 @@ describe('NotificationsSettingsComponent — provider tokens', () => {
     expect(c.canClearToken()).toBe(false);
   });
 
+  it('drops the stored token mask once the type differs from the stored one', async () => {
+    const c = await createComponent();
+    c.openEdit({
+      id: 1,
+      name: 'Ntfy',
+      type: 'ntfy',
+      enabled: true,
+      events: [],
+      settings: { url: 'https://ntfy.sh', secretsSet: ['token'] },
+    });
+    c.formTokenCleared.set(true);
+    c.formType.set('webhook');
+    expect(c.tokenStored()).toBe(false);
+    expect(c.canClearToken()).toBe(false);
+    expect(settingsOf(c)).toEqual({ url: 'https://ntfy.sh' });
+
+    c.formType.set('ntfy');
+    expect(c.tokenStored()).toBe(true);
+  });
+
   it('leaves the token blank on edit, so saving keeps the stored one', async () => {
     const c = await createComponent();
     c.openEdit({
@@ -279,5 +299,26 @@ describe('NotificationsSettingsComponent — provider tokens', () => {
 
     expect(c.formToken()).toBe('');
     expect(settingsOf(c)).not.toHaveProperty('token');
+  });
+
+  it('shows a stored discord webhook as set and keeps it while the field stays blank', async () => {
+    const c = await createComponent();
+    c.openEdit({
+      id: 3,
+      name: 'Discord',
+      type: 'discord',
+      enabled: true,
+      events: [],
+      settings: { secretsSet: ['webhookUrl'] },
+    });
+    expect(c.webhookUrlStored()).toBe(true);
+    expect(c.formWebhookUrl()).toBe('');
+    expect(settingsOf(c)).toEqual({ webhookUrl: '' });
+
+    c.formType.set('slack');
+    expect(c.webhookUrlStored()).toBe(false);
+
+    c.openCreate();
+    expect(c.webhookUrlStored()).toBe(false);
   });
 });

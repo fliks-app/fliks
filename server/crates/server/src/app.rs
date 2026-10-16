@@ -1,7 +1,7 @@
 use crate::http::{layers, static_files};
 use crate::{
-    auth, events, fs, images, libraries, media, playback, qoe, remote, roles, settings,
-    state::AppState, system, users,
+    auth, events, fs, images, libraries, media, notifications, playback, playlists, qoe, remote,
+    roles, settings, social, state::AppState, system, users,
 };
 use axum::{
     Router,
@@ -127,7 +127,49 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         media::media_collection,
         media::media_cast,
         media::media_crew,
-        media::media_streams
+        media::media_streams,
+        notifications::list,
+        notifications::create,
+        notifications::events,
+        notifications::get_one,
+        notifications::update,
+        notifications::remove,
+        notifications::test,
+        social::likes_list,
+        social::like_state,
+        social::like_add,
+        social::like_remove,
+        social::search,
+        social::connectable,
+        social::following_popular,
+        social::recommend,
+        social::received,
+        social::sent,
+        social::dismiss,
+        social::requests,
+        social::follow,
+        social::unfollow,
+        social::accept,
+        social::reject,
+        social::followers,
+        social::following,
+        social::profile,
+        social::stats,
+        playlists::list,
+        playlists::create,
+        playlists::get_one,
+        playlists::update,
+        playlists::remove,
+        playlists::items,
+        playlists::add_item,
+        playlists::remove_item,
+        playlists::remove_by_media,
+        playlists::reorder,
+        playlists::members,
+        playlists::add_member,
+        playlists::remove_member,
+        playlists::save,
+        playlists::unsave
     )
 )]
 pub struct ApiDoc;
@@ -187,6 +229,9 @@ fn api() -> Router<AppState> {
         .merge(libraries::router())
         .merge(images::router())
         .merge(media::router())
+        .merge(notifications::router())
+        .merge(social::router())
+        .merge(playlists::router())
 }
 
 async fn preflight_here(State(cors): State<Router>, req: Request, next: Next) -> Response {

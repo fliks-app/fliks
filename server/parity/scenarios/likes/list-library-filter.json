@@ -1,0 +1,130 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastLogin",
+    "$..lastActiveAt",
+    "$..lastPlayedAt",
+    "$..playedAt"
+  ],
+  "name": "likes-list-library-filter",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": [
+          {
+            "episodeId": null,
+            "fanartUrl": null,
+            "label": null,
+            "mediaId": 1,
+            "mediaType": "movie",
+            "posterUrl": null,
+            "seasonId": null,
+            "stillUrl": null,
+            "title": "Parity Movie 01"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/likes?libraryId=1"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": [
+          {
+            "episodeId": null,
+            "fanartUrl": null,
+            "label": null,
+            "mediaId": 18,
+            "mediaType": "series",
+            "posterUrl": null,
+            "seasonId": null,
+            "stillUrl": null,
+            "title": "Parity Series A"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/likes?libraryId=2"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": [
+          {
+            "episodeId": null,
+            "fanartUrl": null,
+            "label": null,
+            "mediaId": 1,
+            "mediaType": "movie",
+            "posterUrl": null,
+            "seasonId": null,
+            "stillUrl": null,
+            "title": "Parity Movie 01"
+          },
+          {
+            "episodeId": null,
+            "fanartUrl": null,
+            "label": null,
+            "mediaId": 18,
+            "mediaType": "series",
+            "posterUrl": null,
+            "seasonId": null,
+            "stillUrl": null,
+            "title": "Parity Series A"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/likes?libraryId=abc"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": [
+          {
+            "episodeId": null,
+            "fanartUrl": null,
+            "label": null,
+            "mediaId": 1,
+            "mediaType": "movie",
+            "posterUrl": null,
+            "seasonId": null,
+            "stillUrl": null,
+            "title": "Parity Movie 01"
+          },
+          {
+            "episodeId": null,
+            "fanartUrl": null,
+            "label": null,
+            "mediaId": 18,
+            "mediaType": "series",
+            "posterUrl": null,
+            "seasonId": null,
+            "stillUrl": null,
+            "title": "Parity Series A"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/likes?libraryId=0"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": [],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/likes?libraryId=99"
+    }
+  ]
+}

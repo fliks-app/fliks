@@ -100,7 +100,7 @@ function makeStack() {
     { scoreRelease: jest.fn() },
     { markInProgress: jest.fn() },
     libraryIngestService,
-    { dispatch: jest.fn() },
+    { dispatch: jest.fn(), dispatchStrict: jest.fn() },
     { dispatch: jest.fn() },
     settings,
     {

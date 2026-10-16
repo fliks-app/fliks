@@ -1,0 +1,49 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT u.id, u.username, u.avatar, u.enabled, u.\"shareDisabled\" AS share_disabled FROM users u\n           WHERE u.enabled = true AND u.\"shareDisabled\" = false AND u.id <> $1\n             AND ($2::text IS NULL OR u.username ILIKE $2)\n             AND (NOT $3 OR u.\"profileVisibility\" = 'public' OR EXISTS (\n                   SELECT 1 FROM user_follows f\n                   WHERE f.\"followerId\" = $1 AND f.\"followingId\" = u.id AND f.status = 'accepted'))\n           ORDER BY lower(u.username) COLLATE \"C\", u.id\n           LIMIT $4",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "username",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "avatar",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "enabled",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 4,
+        "name": "share_disabled",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Text",
+        "Bool",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "747ca2854b21ffda7179f92a72ec444c20ddb44ffcd525006e260c30f8ec7392"
+}

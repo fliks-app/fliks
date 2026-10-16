@@ -1,0 +1,39 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..id",
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "notifications-update-404",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "events": [
+          "request.created",
+          "request.available"
+        ],
+        "name": "Phone",
+        "settings": {
+          "token": "tk-secret",
+          "topic": "media",
+          "url": "https://ntfy.example.test"
+        },
+        "type": "ntfy"
+      },
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Notification connection #9999 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "PUT",
+      "path": "/api/notifications/9999"
+    }
+  ],
+  "strictMessage": true
+}

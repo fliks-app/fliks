@@ -1,0 +1,666 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastLogin",
+    "$..lastActiveAt",
+    "$..lastPlayedAt",
+    "$..playedAt"
+  ],
+  "name": "social-profile-sections-flag-shareRecommendations",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "profileVisibility": "public"
+      },
+      "expect": {
+        "body": {
+          "avatar": "/api/users/4/avatar?v=1767225600000",
+          "edlAutoSkipCommercials": true,
+          "edlEnabled": true,
+          "email": "other@parity.test",
+          "enabled": true,
+          "hiddenLibraryIds": [],
+          "hideSpoilers": false,
+          "id": 4,
+          "isAdmin": false,
+          "libraryIds": [
+            1,
+            2
+          ],
+          "libraryOrder": [],
+          "mediaServerId": null,
+          "mediaServerType": "local",
+          "movieQuotaLimit": 0,
+          "permissions": [
+            "media.read",
+            "livetv.read",
+            "requests.create"
+          ],
+          "profileVisibility": "public",
+          "quotaPeriodDays": 7,
+          "requirePasswordChange": false,
+          "role": "User",
+          "roleId": 2,
+          "seriesQuotaLimit": 0,
+          "shareDisabled": false,
+          "shareLikes": false,
+          "shareRecommendations": false,
+          "shareStats": false,
+          "shareTastes": false,
+          "shareWatchHistory": false,
+          "spoilerHideOverviews": true,
+          "spoilerHideStills": true,
+          "spoilerHideTitles": true,
+          "username": "other"
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/users/4"
+    },
+    {
+      "as": "other",
+      "body": {
+        "mediaFileId": 4
+      },
+      "expect": {
+        "body": {
+          "completed": true,
+          "durationSeconds": 3.0,
+          "episode": null,
+          "episodeId": null,
+          "hiddenFromContinueWatching": false,
+          "id": 5,
+          "media": {
+            "id": 4,
+            "path": null
+          },
+          "mediaFile": {
+            "id": 4
+          },
+          "mediaFileId": 4,
+          "mediaId": 4,
+          "positionSeconds": 0.0,
+          "user": {
+            "id": 4
+          },
+          "userId": 4
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/playback/media/4/toggle-watched"
+    },
+    {
+      "as": "other",
+      "body": {
+        "mediaFileId": 5
+      },
+      "expect": {
+        "body": {
+          "completed": true,
+          "durationSeconds": 3.021,
+          "episode": null,
+          "episodeId": null,
+          "hiddenFromContinueWatching": false,
+          "id": 6,
+          "media": {
+            "id": 5,
+            "path": null
+          },
+          "mediaFile": {
+            "id": 5
+          },
+          "mediaFileId": 5,
+          "mediaId": 5,
+          "positionSeconds": 0.0,
+          "user": {
+            "id": 4
+          },
+          "userId": 4
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/playback/media/5/toggle-watched"
+    },
+    {
+      "as": "other",
+      "body": {
+        "mediaFileId": 6
+      },
+      "expect": {
+        "body": {
+          "completed": true,
+          "durationSeconds": 3.0,
+          "episode": null,
+          "episodeId": null,
+          "hiddenFromContinueWatching": false,
+          "id": 7,
+          "media": {
+            "id": 6,
+            "path": null
+          },
+          "mediaFile": {
+            "id": 6
+          },
+          "mediaFileId": 6,
+          "mediaId": 6,
+          "positionSeconds": 0.0,
+          "user": {
+            "id": 4
+          },
+          "userId": 4
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/playback/media/6/toggle-watched"
+    },
+    {
+      "as": "other",
+      "body": {
+        "durationSeconds": 1800,
+        "mediaFileId": 9,
+        "positionSeconds": 600
+      },
+      "expect": {
+        "body": {
+          "state": {
+            "completed": false,
+            "durationSeconds": 1800.0,
+            "episode": null,
+            "episodeId": null,
+            "hiddenFromContinueWatching": false,
+            "id": 8,
+            "media": {
+              "id": 9,
+              "path": null
+            },
+            "mediaFile": {
+              "id": 9
+            },
+            "mediaFileId": 9,
+            "mediaId": 9,
+            "positionSeconds": 600.0,
+            "user": {
+              "id": 4
+            },
+            "userId": 4
+          }
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/playback/media/9/state"
+    },
+    {
+      "as": "other",
+      "body": {
+        "mediaId": 3
+      },
+      "expect": {
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/likes"
+    },
+    {
+      "as": "other",
+      "body": {
+        "name": "Pub list"
+      },
+      "expect": {
+        "body": {
+          "autoDownload": false,
+          "autoPlay": false,
+          "autoRemoveWatched": false,
+          "coverImageUrl": null,
+          "id": 2,
+          "itemCount": 0,
+          "name": "Pub list",
+          "ownerId": 4,
+          "posters": [],
+          "role": "owner",
+          "saved": false,
+          "visibility": "private"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/playlists"
+    },
+    {
+      "as": "other",
+      "body": {
+        "visibility": "public"
+      },
+      "expect": {
+        "body": {
+          "autoDownload": false,
+          "autoPlay": false,
+          "autoRemoveWatched": false,
+          "coverImageUrl": null,
+          "id": 2,
+          "itemCount": 0,
+          "name": "Pub list",
+          "ownerId": 4,
+          "posters": [],
+          "role": "owner",
+          "saved": false,
+          "visibility": "public"
+        },
+        "status": 200
+      },
+      "method": "PATCH",
+      "path": "/api/playlists/2"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "avatar": "/api/users/4/avatar?v=1767225600000",
+          "followerCount": 0,
+          "followingCount": 0,
+          "followsYou": false,
+          "id": 4,
+          "isFollowing": false,
+          "isSelf": false,
+          "likes": [],
+          "playlists": [
+            {
+              "autoDownload": false,
+              "autoPlay": false,
+              "autoRemoveWatched": false,
+              "coverImageUrl": null,
+              "id": 2,
+              "itemCount": 0,
+              "name": "Pub list",
+              "ownerId": 4,
+              "posters": [],
+              "role": "viewer",
+              "saved": false,
+              "visibility": "public"
+            }
+          ],
+          "recentlyWatched": [],
+          "recommendations": [],
+          "requested": false,
+          "shown": {
+            "likes": false,
+            "playlists": true,
+            "recentlyWatched": false,
+            "recommendations": false,
+            "stats": false,
+            "tastes": false
+          },
+          "topGenres": [],
+          "username": "other",
+          "visibility": "public"
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/social/users/4/profile"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "shareRecommendations": true
+      },
+      "expect": {
+        "body": {
+          "avatar": "/api/users/4/avatar?v=1767225600000",
+          "edlAutoSkipCommercials": true,
+          "edlEnabled": true,
+          "email": "other@parity.test",
+          "enabled": true,
+          "hiddenLibraryIds": [],
+          "hideSpoilers": false,
+          "id": 4,
+          "isAdmin": false,
+          "libraryIds": [
+            1,
+            2
+          ],
+          "libraryOrder": [],
+          "mediaServerId": null,
+          "mediaServerType": "local",
+          "movieQuotaLimit": 0,
+          "permissions": [
+            "media.read",
+            "livetv.read",
+            "requests.create"
+          ],
+          "profileVisibility": "public",
+          "quotaPeriodDays": 7,
+          "requirePasswordChange": false,
+          "role": "User",
+          "roleId": 2,
+          "seriesQuotaLimit": 0,
+          "shareDisabled": false,
+          "shareLikes": false,
+          "shareRecommendations": true,
+          "shareStats": false,
+          "shareTastes": false,
+          "shareWatchHistory": false,
+          "spoilerHideOverviews": true,
+          "spoilerHideStills": true,
+          "spoilerHideTitles": true,
+          "username": "other"
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/users/4"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "avatar": "/api/users/4/avatar?v=1767225600000",
+          "followerCount": 0,
+          "followingCount": 0,
+          "followsYou": false,
+          "id": 4,
+          "isFollowing": false,
+          "isSelf": false,
+          "likes": [],
+          "playlists": [
+            {
+              "autoDownload": false,
+              "autoPlay": false,
+              "autoRemoveWatched": false,
+              "coverImageUrl": null,
+              "id": 2,
+              "itemCount": 0,
+              "name": "Pub list",
+              "ownerId": 4,
+              "posters": [],
+              "role": "viewer",
+              "saved": false,
+              "visibility": "public"
+            }
+          ],
+          "recentlyWatched": [],
+          "recommendations": [
+            {
+              "becauseTitle": "",
+              "media": {
+                "additionalFanartUrls": [],
+                "available": true,
+                "fanartUrl": null,
+                "genres": [
+                  "Drama"
+                ],
+                "id": 1,
+                "posterUrl": null,
+                "title": "Parity Movie 01",
+                "type": "movie",
+                "year": 2020
+              },
+              "score": 1.83
+            },
+            {
+              "becauseTitle": "",
+              "media": {
+                "additionalFanartUrls": [],
+                "available": true,
+                "fanartUrl": null,
+                "genres": [
+                  "Drama"
+                ],
+                "id": 2,
+                "posterUrl": null,
+                "title": "Parity Movie 02",
+                "type": "movie",
+                "year": 2020
+              },
+              "score": 1.83
+            },
+            {
+              "becauseTitle": "",
+              "media": {
+                "additionalFanartUrls": [],
+                "available": true,
+                "fanartUrl": null,
+                "genres": [
+                  "Drama"
+                ],
+                "id": 3,
+                "posterUrl": null,
+                "title": "Parity Movie 03",
+                "type": "movie",
+                "year": 2020
+              },
+              "score": 1.83
+            },
+            {
+              "becauseTitle": "",
+              "media": {
+                "additionalFanartUrls": [],
+                "available": true,
+                "fanartUrl": null,
+                "genres": [
+                  "Drama"
+                ],
+                "id": 7,
+                "posterUrl": null,
+                "title": "Parity Movie 07",
+                "type": "movie",
+                "year": 2020
+              },
+              "score": 1.83
+            },
+            {
+              "becauseTitle": "",
+              "media": {
+                "additionalFanartUrls": [],
+                "available": true,
+                "fanartUrl": null,
+                "genres": [
+                  "Drama"
+                ],
+                "id": 8,
+                "posterUrl": null,
+                "title": "Parity Movie 08",
+                "type": "movie",
+                "year": 2020
+              },
+              "score": 1.83
+            },
+            {
+              "becauseTitle": "",
+              "media": {
+                "additionalFanartUrls": [],
+                "available": true,
+                "fanartUrl": null,
+                "genres": [
+                  "Drama"
+                ],
+                "id": 10,
+                "posterUrl": null,
+                "title": "Parity Movie 10",
+                "type": "movie",
+                "year": 2020
+              },
+              "score": 1.83
+            },
+            {
+              "becauseTitle": "",
+              "media": {
+                "additionalFanartUrls": [],
+                "available": true,
+                "fanartUrl": null,
+                "genres": [
+                  "Drama"
+                ],
+                "id": 11,
+                "posterUrl": null,
+                "title": "Parity Movie 11",
+                "type": "movie",
+                "year": 2020
+              },
+              "score": 1.83
+            },
+            {
+              "becauseTitle": "",
+              "media": {
+                "additionalFanartUrls": [],
+                "available": true,
+                "fanartUrl": null,
+                "genres": [
+                  "Drama"
+                ],
+                "id": 12,
+                "posterUrl": null,
+                "title": "Parity Movie 12",
+                "type": "movie",
+                "year": 2020
+              },
+              "score": 1.83
+            },
+            {
+              "becauseTitle": "",
+              "media": {
+                "additionalFanartUrls": [],
+                "available": true,
+                "fanartUrl": null,
+                "genres": [
+                  "Drama"
+                ],
+                "id": 13,
+                "posterUrl": null,
+                "title": "Parity Movie 13",
+                "type": "movie",
+                "year": 2020
+              },
+              "score": 1.83
+            },
+            {
+              "becauseTitle": "",
+              "media": {
+                "additionalFanartUrls": [],
+                "available": true,
+                "fanartUrl": null,
+                "genres": [
+                  "Drama"
+                ],
+                "id": 14,
+                "posterUrl": null,
+                "title": "Parity Movie 14",
+                "type": "movie",
+                "year": 2020
+              },
+              "score": 1.83
+            },
+            {
+              "becauseTitle": "",
+              "media": {
+                "additionalFanartUrls": [],
+                "available": true,
+                "fanartUrl": null,
+                "genres": [
+                  "Drama"
+                ],
+                "id": 15,
+                "posterUrl": null,
+                "title": "Parity Movie 15",
+                "type": "movie",
+                "year": 2020
+              },
+              "score": 1.83
+            },
+            {
+              "becauseTitle": "",
+              "media": {
+                "additionalFanartUrls": [],
+                "available": true,
+                "fanartUrl": null,
+                "genres": [
+                  "Drama"
+                ],
+                "id": 18,
+                "posterUrl": null,
+                "title": "Parity Series A",
+                "type": "series",
+                "year": 2021
+              },
+              "score": 1.83
+            },
+            {
+              "becauseTitle": "",
+              "media": {
+                "additionalFanartUrls": [],
+                "available": true,
+                "fanartUrl": null,
+                "genres": [
+                  "Drama"
+                ],
+                "id": 19,
+                "posterUrl": null,
+                "title": "Parity Series B",
+                "type": "series",
+                "year": 2021
+              },
+              "score": 1.83
+            },
+            {
+              "becauseTitle": "",
+              "media": {
+                "additionalFanartUrls": [],
+                "available": true,
+                "fanartUrl": null,
+                "genres": [
+                  "Drama"
+                ],
+                "id": 20,
+                "posterUrl": null,
+                "title": "Parity Series C",
+                "type": "series",
+                "year": 2021
+              },
+              "score": 1.83
+            },
+            {
+              "becauseTitle": "",
+              "media": {
+                "additionalFanartUrls": [],
+                "available": true,
+                "fanartUrl": null,
+                "genres": [
+                  "Drama"
+                ],
+                "id": 16,
+                "posterUrl": null,
+                "title": "Parity Movie 16",
+                "type": "movie",
+                "year": 2020
+              },
+              "score": 1.83
+            }
+          ],
+          "requested": false,
+          "shown": {
+            "likes": false,
+            "playlists": true,
+            "recentlyWatched": false,
+            "recommendations": true,
+            "stats": false,
+            "tastes": false
+          },
+          "topGenres": [],
+          "username": "other",
+          "visibility": "public"
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/social/users/4/profile"
+    }
+  ]
+}

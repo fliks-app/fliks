@@ -1,0 +1,710 @@
+{
+  "deviation": "F26",
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastLogin",
+    "$..lastActiveAt",
+    "$..lastPlayedAt",
+    "$..playedAt"
+  ],
+  "name": "social-leave-social",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "profileVisibility": "public"
+      },
+      "expect": {
+        "body": {
+          "avatar": null,
+          "edlAutoSkipCommercials": true,
+          "edlEnabled": true,
+          "email": "user@parity.test",
+          "enabled": true,
+          "hiddenLibraryIds": [],
+          "hideSpoilers": false,
+          "id": 2,
+          "isAdmin": false,
+          "libraryIds": [
+            1,
+            2
+          ],
+          "libraryOrder": [],
+          "mediaServerId": null,
+          "mediaServerType": "local",
+          "movieQuotaLimit": 0,
+          "permissions": [
+            "media.read",
+            "livetv.read",
+            "requests.create"
+          ],
+          "profileVisibility": "public",
+          "quotaPeriodDays": 7,
+          "requirePasswordChange": false,
+          "role": "User",
+          "roleId": 2,
+          "seriesQuotaLimit": 0,
+          "shareDisabled": false,
+          "shareLikes": false,
+          "shareRecommendations": false,
+          "shareStats": false,
+          "shareTastes": false,
+          "shareWatchHistory": false,
+          "spoilerHideOverviews": true,
+          "spoilerHideStills": true,
+          "spoilerHideTitles": true,
+          "username": "user"
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/users/2"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "profileVisibility": "public"
+      },
+      "expect": {
+        "body": {
+          "avatar": "/api/users/4/avatar?v=1767225600000",
+          "edlAutoSkipCommercials": true,
+          "edlEnabled": true,
+          "email": "other@parity.test",
+          "enabled": true,
+          "hiddenLibraryIds": [],
+          "hideSpoilers": false,
+          "id": 4,
+          "isAdmin": false,
+          "libraryIds": [
+            1,
+            2
+          ],
+          "libraryOrder": [],
+          "mediaServerId": null,
+          "mediaServerType": "local",
+          "movieQuotaLimit": 0,
+          "permissions": [
+            "media.read",
+            "livetv.read",
+            "requests.create"
+          ],
+          "profileVisibility": "public",
+          "quotaPeriodDays": 7,
+          "requirePasswordChange": false,
+          "role": "User",
+          "roleId": 2,
+          "seriesQuotaLimit": 0,
+          "shareDisabled": false,
+          "shareLikes": false,
+          "shareRecommendations": false,
+          "shareStats": false,
+          "shareTastes": false,
+          "shareWatchHistory": false,
+          "spoilerHideOverviews": true,
+          "spoilerHideStills": true,
+          "spoilerHideTitles": true,
+          "username": "other"
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/users/4"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "profileVisibility": "public"
+      },
+      "expect": {
+        "body": {
+          "avatar": null,
+          "edlAutoSkipCommercials": true,
+          "edlEnabled": true,
+          "email": "manager@parity.test",
+          "enabled": true,
+          "hiddenLibraryIds": [],
+          "hideSpoilers": false,
+          "id": 5,
+          "isAdmin": false,
+          "libraryIds": [
+            1,
+            2
+          ],
+          "libraryOrder": [],
+          "mediaServerId": null,
+          "mediaServerType": "local",
+          "movieQuotaLimit": 0,
+          "permissions": [
+            "media.read",
+            "users.manage"
+          ],
+          "profileVisibility": "public",
+          "quotaPeriodDays": 7,
+          "requirePasswordChange": false,
+          "role": "Manager",
+          "roleId": 4,
+          "seriesQuotaLimit": 0,
+          "shareDisabled": false,
+          "shareLikes": false,
+          "shareRecommendations": false,
+          "shareStats": false,
+          "shareTastes": false,
+          "shareWatchHistory": false,
+          "spoilerHideOverviews": true,
+          "spoilerHideStills": true,
+          "spoilerHideTitles": true,
+          "username": "manager"
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/users/5"
+    },
+    {
+      "as": "other",
+      "expect": {
+        "body": {
+          "status": "accepted"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/social/follow/2"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "status": "accepted"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/social/follow/4"
+    },
+    {
+      "as": "manager",
+      "expect": {
+        "body": {
+          "status": "accepted"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/social/follow/2"
+    },
+    {
+      "as": "user",
+      "body": {
+        "name": "Mine public"
+      },
+      "expect": {
+        "body": {
+          "autoDownload": false,
+          "autoPlay": false,
+          "autoRemoveWatched": false,
+          "coverImageUrl": null,
+          "id": 2,
+          "itemCount": 0,
+          "name": "Mine public",
+          "ownerId": 2,
+          "posters": [],
+          "role": "owner",
+          "saved": false,
+          "visibility": "private"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/playlists"
+    },
+    {
+      "as": "user",
+      "body": {
+        "visibility": "public"
+      },
+      "expect": {
+        "body": {
+          "autoDownload": false,
+          "autoPlay": false,
+          "autoRemoveWatched": false,
+          "coverImageUrl": null,
+          "id": 2,
+          "itemCount": 0,
+          "name": "Mine public",
+          "ownerId": 2,
+          "posters": [],
+          "role": "owner",
+          "saved": false,
+          "visibility": "public"
+        },
+        "status": 200
+      },
+      "method": "PATCH",
+      "path": "/api/playlists/2"
+    },
+    {
+      "as": "user",
+      "body": {
+        "role": "editor",
+        "userId": 4
+      },
+      "expect": {
+        "body": [
+          {
+            "avatar": null,
+            "role": "owner",
+            "userId": 2,
+            "username": "user"
+          },
+          {
+            "avatar": "/api/users/4/avatar?v=1767225600000",
+            "role": "editor",
+            "userId": 4,
+            "username": "other"
+          }
+        ],
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/playlists/2/members"
+    },
+    {
+      "as": "other",
+      "body": {
+        "name": "Others"
+      },
+      "expect": {
+        "body": {
+          "autoDownload": false,
+          "autoPlay": false,
+          "autoRemoveWatched": false,
+          "coverImageUrl": null,
+          "id": 3,
+          "itemCount": 0,
+          "name": "Others",
+          "ownerId": 4,
+          "posters": [],
+          "role": "owner",
+          "saved": false,
+          "visibility": "private"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/playlists"
+    },
+    {
+      "as": "other",
+      "body": {
+        "visibility": "public"
+      },
+      "expect": {
+        "body": {
+          "autoDownload": false,
+          "autoPlay": false,
+          "autoRemoveWatched": false,
+          "coverImageUrl": null,
+          "id": 3,
+          "itemCount": 0,
+          "name": "Others",
+          "ownerId": 4,
+          "posters": [],
+          "role": "owner",
+          "saved": false,
+          "visibility": "public"
+        },
+        "status": 200
+      },
+      "method": "PATCH",
+      "path": "/api/playlists/3"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/playlists/3/save"
+    },
+    {
+      "as": "manager",
+      "expect": {
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/playlists/2/save"
+    },
+    {
+      "as": "user",
+      "body": {
+        "mediaId": 3,
+        "recipientId": 4
+      },
+      "expect": {
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/social/recommend"
+    },
+    {
+      "as": "other",
+      "body": {
+        "mediaId": 4,
+        "recipientId": 5
+      },
+      "expect": {
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/social/recommend"
+    },
+    {
+      "as": "other",
+      "body": {
+        "mediaId": 5,
+        "recipientId": 2
+      },
+      "expect": {
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/social/recommend"
+    },
+    {
+      "as": "other",
+      "expect": {
+        "body": [
+          {
+            "autoDownload": false,
+            "autoPlay": false,
+            "autoRemoveWatched": false,
+            "coverImageUrl": null,
+            "id": 2,
+            "itemCount": 0,
+            "name": "Mine public",
+            "ownerId": 2,
+            "posters": [],
+            "role": "editor",
+            "saved": false,
+            "visibility": "public"
+          },
+          {
+            "autoDownload": false,
+            "autoPlay": false,
+            "autoRemoveWatched": false,
+            "coverImageUrl": null,
+            "id": 3,
+            "itemCount": 0,
+            "name": "Others",
+            "ownerId": 4,
+            "posters": [],
+            "role": "owner",
+            "saved": false,
+            "visibility": "public"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/playlists"
+    },
+    {
+      "as": "manager",
+      "expect": {
+        "body": [
+          {
+            "autoDownload": false,
+            "autoPlay": false,
+            "autoRemoveWatched": false,
+            "coverImageUrl": null,
+            "id": 2,
+            "itemCount": 0,
+            "name": "Mine public",
+            "ownerId": 2,
+            "posters": [],
+            "role": "viewer",
+            "saved": true,
+            "visibility": "public"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/playlists"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "shareDisabled": true
+      },
+      "expect": {
+        "body": {
+          "avatar": null,
+          "edlAutoSkipCommercials": true,
+          "edlEnabled": true,
+          "email": "user@parity.test",
+          "enabled": true,
+          "hiddenLibraryIds": [],
+          "hideSpoilers": false,
+          "id": 2,
+          "isAdmin": false,
+          "libraryIds": [
+            1,
+            2
+          ],
+          "libraryOrder": [],
+          "mediaServerId": null,
+          "mediaServerType": "local",
+          "movieQuotaLimit": 0,
+          "permissions": [
+            "media.read",
+            "livetv.read",
+            "requests.create"
+          ],
+          "profileVisibility": "public",
+          "quotaPeriodDays": 7,
+          "requirePasswordChange": false,
+          "role": "User",
+          "roleId": 2,
+          "seriesQuotaLimit": 0,
+          "shareDisabled": true,
+          "shareLikes": false,
+          "shareRecommendations": false,
+          "shareStats": false,
+          "shareTastes": false,
+          "shareWatchHistory": false,
+          "spoilerHideOverviews": true,
+          "spoilerHideStills": true,
+          "spoilerHideTitles": true,
+          "username": "user"
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/users/2"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": [],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/social/users/2/followers"
+    },
+    {
+      "as": "other",
+      "expect": {
+        "body": [],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/social/users/4/followers"
+    },
+    {
+      "as": "other",
+      "expect": {
+        "body": [
+          {
+            "autoDownload": false,
+            "autoPlay": false,
+            "autoRemoveWatched": false,
+            "coverImageUrl": null,
+            "id": 3,
+            "itemCount": 0,
+            "name": "Others",
+            "ownerId": 4,
+            "posters": [],
+            "role": "owner",
+            "saved": false,
+            "visibility": "public"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/playlists"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": [
+          {
+            "autoDownload": false,
+            "autoPlay": false,
+            "autoRemoveWatched": false,
+            "coverImageUrl": null,
+            "id": 2,
+            "itemCount": 0,
+            "name": "Mine public",
+            "ownerId": 2,
+            "posters": [],
+            "role": "owner",
+            "saved": false,
+            "visibility": "private"
+          },
+          {
+            "autoDownload": false,
+            "autoPlay": false,
+            "autoRemoveWatched": false,
+            "coverImageUrl": null,
+            "id": 1,
+            "itemCount": 3,
+            "name": "Parity Playlist",
+            "ownerId": 2,
+            "posters": [],
+            "role": "owner",
+            "saved": false,
+            "visibility": "private"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/playlists"
+    },
+    {
+      "as": "manager",
+      "expect": {
+        "body": [],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/playlists"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "autoDownload": false,
+          "autoPlay": false,
+          "autoRemoveWatched": false,
+          "coverImageUrl": null,
+          "id": 2,
+          "itemCount": 0,
+          "name": "Mine public",
+          "ownerId": 2,
+          "posters": [],
+          "role": "owner",
+          "saved": false,
+          "visibility": "private"
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/playlists/2"
+    },
+    {
+      "as": "other",
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Playlist #2 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "GET",
+      "path": "/api/playlists/2"
+    },
+    {
+      "as": "other",
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Playlist #2 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "GET",
+      "path": "/api/playlists/2/members"
+    },
+    {
+      "as": "other",
+      "expect": {
+        "body": [],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/social/recommendations/received"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": [],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/social/recommendations/received"
+    },
+    {
+      "as": "manager",
+      "expect": {
+        "body": [
+          {
+            "episodeId": null,
+            "fanartUrl": null,
+            "id": 2,
+            "label": null,
+            "liked": false,
+            "mediaId": 4,
+            "mediaType": "movie",
+            "message": null,
+            "posterUrl": null,
+            "seasonId": null,
+            "sender": {
+              "avatar": "/api/users/4/avatar?v=1767225600000",
+              "id": 4,
+              "username": "other"
+            },
+            "stillUrl": null,
+            "title": "Parity Movie 04"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/social/recommendations/received"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": [
+          {
+            "episodeId": null,
+            "fanartUrl": null,
+            "label": null,
+            "mediaId": 1,
+            "mediaType": "movie",
+            "posterUrl": null,
+            "seasonId": null,
+            "stillUrl": null,
+            "title": "Parity Movie 01"
+          },
+          {
+            "episodeId": null,
+            "fanartUrl": null,
+            "label": null,
+            "mediaId": 18,
+            "mediaType": "series",
+            "posterUrl": null,
+            "seasonId": null,
+            "stillUrl": null,
+            "title": "Parity Series A"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/likes"
+    }
+  ],
+  "unordered": [
+    "$"
+  ]
+}

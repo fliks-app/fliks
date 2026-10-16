@@ -1,0 +1,369 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastLogin",
+    "$..lastActiveAt",
+    "$..lastPlayedAt",
+    "$..playedAt",
+    "$..path"
+  ],
+  "name": "playlists-get-followers-visibility",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "visibility": "followers"
+      },
+      "expect": {
+        "body": {
+          "autoDownload": false,
+          "autoPlay": false,
+          "autoRemoveWatched": false,
+          "coverImageUrl": null,
+          "id": 1,
+          "itemCount": 3,
+          "name": "Parity Playlist",
+          "ownerId": 2,
+          "posters": [],
+          "role": "owner",
+          "saved": false,
+          "visibility": "followers"
+        },
+        "status": 200
+      },
+      "method": "PATCH",
+      "path": "/api/playlists/1"
+    },
+    {
+      "as": "other",
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Playlist #1 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "GET",
+      "path": "/api/playlists/1"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "profileVisibility": "public"
+      },
+      "expect": {
+        "body": {
+          "avatar": null,
+          "edlAutoSkipCommercials": true,
+          "edlEnabled": true,
+          "email": "user@parity.test",
+          "enabled": true,
+          "hiddenLibraryIds": [],
+          "hideSpoilers": false,
+          "id": 2,
+          "isAdmin": false,
+          "libraryIds": [
+            1,
+            2
+          ],
+          "libraryOrder": [],
+          "mediaServerId": null,
+          "mediaServerType": "local",
+          "movieQuotaLimit": 0,
+          "permissions": [
+            "media.read",
+            "livetv.read",
+            "requests.create"
+          ],
+          "profileVisibility": "public",
+          "quotaPeriodDays": 7,
+          "requirePasswordChange": false,
+          "role": "User",
+          "roleId": 2,
+          "seriesQuotaLimit": 0,
+          "shareDisabled": false,
+          "shareLikes": false,
+          "shareRecommendations": false,
+          "shareStats": false,
+          "shareTastes": false,
+          "shareWatchHistory": false,
+          "spoilerHideOverviews": true,
+          "spoilerHideStills": true,
+          "spoilerHideTitles": true,
+          "username": "user"
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/users/2"
+    },
+    {
+      "as": "other",
+      "expect": {
+        "body": {
+          "status": "accepted"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/social/follow/2"
+    },
+    {
+      "as": "other",
+      "expect": {
+        "body": {
+          "autoDownload": false,
+          "autoPlay": false,
+          "autoRemoveWatched": false,
+          "coverImageUrl": null,
+          "id": 1,
+          "itemCount": 3,
+          "name": "Parity Playlist",
+          "ownerId": 2,
+          "posters": [],
+          "role": "viewer",
+          "saved": false,
+          "visibility": "followers"
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/playlists/1"
+    },
+    {
+      "as": "manager",
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Playlist #1 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "GET",
+      "path": "/api/playlists/1"
+    },
+    {
+      "as": "other",
+      "expect": {
+        "body": [
+          {
+            "addedById": 2,
+            "episode": null,
+            "itemId": 1,
+            "media": {
+              "addedById": null,
+              "additionalFanartUrls": [],
+              "alternativeTitles": [],
+              "digitalRelease": null,
+              "fanartUrl": null,
+              "folderName": "Parity Movie 01 (2020)",
+              "genres": [
+                "Drama"
+              ],
+              "id": 1,
+              "imdbId": null,
+              "inCinemas": null,
+              "languageProfile": null,
+              "languageProfileId": null,
+              "library": {
+                "color": "#3b82f6",
+                "defaultLanguageProfileId": null,
+                "defaultQualityProfileId": null,
+                "icon": "film",
+                "id": 1,
+                "label": null,
+                "mediaTypes": [
+                  "movie"
+                ],
+                "metadataLanguage": null,
+                "metadataRegion": null,
+                "name": "Movies",
+                "path": "/tmp/fliks-parity/media/movies",
+                "preferredProvider": null
+              },
+              "libraryId": 1,
+              "logoUrl": null,
+              "metadata": null,
+              "metadataRefreshedAt": null,
+              "minimumAvailability": "released",
+              "monitored": true,
+              "originalTitle": null,
+              "overview": "Synthetic movie 1",
+              "path": "/tmp/fliks-parity/media/movies/Parity Movie 01 (2020)",
+              "physicalRelease": null,
+              "posterUrl": null,
+              "preferredProvider": null,
+              "qualityProfile": null,
+              "qualityProfileId": null,
+              "rating": 7.5,
+              "releaseDate": "2020-01-01",
+              "runtime": 90,
+              "status": "released",
+              "title": "Parity Movie 01",
+              "tmdbCollectionId": null,
+              "tmdbCollectionName": null,
+              "tmdbId": 1001,
+              "tvdbId": null,
+              "type": "movie",
+              "year": 2020
+            },
+            "position": 0,
+            "progressPercent": 0,
+            "watched": false
+          },
+          {
+            "addedById": 2,
+            "episode": null,
+            "itemId": 2,
+            "media": {
+              "addedById": null,
+              "additionalFanartUrls": [],
+              "alternativeTitles": [],
+              "digitalRelease": null,
+              "fanartUrl": null,
+              "folderName": "Parity Movie 02 (2020)",
+              "genres": [
+                "Drama"
+              ],
+              "id": 2,
+              "imdbId": null,
+              "inCinemas": null,
+              "languageProfile": null,
+              "languageProfileId": null,
+              "library": {
+                "color": "#3b82f6",
+                "defaultLanguageProfileId": null,
+                "defaultQualityProfileId": null,
+                "icon": "film",
+                "id": 1,
+                "label": null,
+                "mediaTypes": [
+                  "movie"
+                ],
+                "metadataLanguage": null,
+                "metadataRegion": null,
+                "name": "Movies",
+                "path": "/tmp/fliks-parity/media/movies",
+                "preferredProvider": null
+              },
+              "libraryId": 1,
+              "logoUrl": null,
+              "metadata": null,
+              "metadataRefreshedAt": null,
+              "minimumAvailability": "released",
+              "monitored": true,
+              "originalTitle": null,
+              "overview": "Synthetic movie 2",
+              "path": "/tmp/fliks-parity/media/movies/Parity Movie 02 (2020)",
+              "physicalRelease": null,
+              "posterUrl": null,
+              "preferredProvider": null,
+              "qualityProfile": null,
+              "qualityProfileId": null,
+              "rating": 7.5,
+              "releaseDate": "2020-01-01",
+              "runtime": 90,
+              "status": "released",
+              "title": "Parity Movie 02",
+              "tmdbCollectionId": null,
+              "tmdbCollectionName": null,
+              "tmdbId": 1002,
+              "tvdbId": null,
+              "type": "movie",
+              "year": 2020
+            },
+            "position": 1,
+            "progressPercent": 0,
+            "watched": false
+          },
+          {
+            "addedById": 2,
+            "episode": null,
+            "itemId": 3,
+            "media": {
+              "addedById": null,
+              "additionalFanartUrls": [],
+              "alternativeTitles": [],
+              "digitalRelease": null,
+              "fanartUrl": null,
+              "folderName": "Parity Movie 03 (2020)",
+              "genres": [
+                "Drama"
+              ],
+              "id": 3,
+              "imdbId": null,
+              "inCinemas": null,
+              "languageProfile": null,
+              "languageProfileId": null,
+              "library": {
+                "color": "#3b82f6",
+                "defaultLanguageProfileId": null,
+                "defaultQualityProfileId": null,
+                "icon": "film",
+                "id": 1,
+                "label": null,
+                "mediaTypes": [
+                  "movie"
+                ],
+                "metadataLanguage": null,
+                "metadataRegion": null,
+                "name": "Movies",
+                "path": "/tmp/fliks-parity/media/movies",
+                "preferredProvider": null
+              },
+              "libraryId": 1,
+              "logoUrl": null,
+              "metadata": null,
+              "metadataRefreshedAt": null,
+              "minimumAvailability": "released",
+              "monitored": true,
+              "originalTitle": null,
+              "overview": "Synthetic movie 3",
+              "path": "/tmp/fliks-parity/media/movies/Parity Movie 03 (2020)",
+              "physicalRelease": null,
+              "posterUrl": null,
+              "preferredProvider": null,
+              "qualityProfile": null,
+              "qualityProfileId": null,
+              "rating": 7.5,
+              "releaseDate": "2020-01-01",
+              "runtime": 90,
+              "status": "released",
+              "title": "Parity Movie 03",
+              "tmdbCollectionId": null,
+              "tmdbCollectionName": null,
+              "tmdbId": 1003,
+              "tvdbId": null,
+              "type": "movie",
+              "year": 2020
+            },
+            "position": 2,
+            "progressPercent": 0,
+            "watched": false
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/playlists/1/items"
+    },
+    {
+      "as": "manager",
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Playlist #1 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "GET",
+      "path": "/api/playlists/1/items"
+    }
+  ]
+}

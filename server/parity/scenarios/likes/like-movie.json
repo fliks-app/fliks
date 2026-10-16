@@ -1,0 +1,93 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastLogin",
+    "$..lastActiveAt",
+    "$..lastPlayedAt",
+    "$..playedAt"
+  ],
+  "name": "likes-like-movie",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "mediaId": 3
+      },
+      "expect": {
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/likes"
+    },
+    {
+      "as": "user",
+      "body": {
+        "mediaId": 3
+      },
+      "expect": {
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/likes"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "episodeIds": [],
+          "media": true,
+          "seasonIds": []
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/likes/state/3"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": [
+          {
+            "episodeId": null,
+            "fanartUrl": null,
+            "label": null,
+            "mediaId": 3,
+            "mediaType": "movie",
+            "posterUrl": null,
+            "seasonId": null,
+            "stillUrl": null,
+            "title": "Parity Movie 03"
+          },
+          {
+            "episodeId": null,
+            "fanartUrl": null,
+            "label": null,
+            "mediaId": 1,
+            "mediaType": "movie",
+            "posterUrl": null,
+            "seasonId": null,
+            "stillUrl": null,
+            "title": "Parity Movie 01"
+          },
+          {
+            "episodeId": null,
+            "fanartUrl": null,
+            "label": null,
+            "mediaId": 18,
+            "mediaType": "series",
+            "posterUrl": null,
+            "seasonId": null,
+            "stillUrl": null,
+            "title": "Parity Series A"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/likes"
+    }
+  ]
+}

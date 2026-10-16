@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO playlist_shares (\"playlistId\", \"userId\", role)\n           VALUES ($1, $2, $3::text::playlist_shares_role_enum)\n           ON CONFLICT (\"playlistId\", \"userId\") DO UPDATE SET role = EXCLUDED.role, \"updatedAt\" = now()",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f385b4e9d73f27b83cf6feca34b666def64f73fbb28a37279e93154060058529"
+}

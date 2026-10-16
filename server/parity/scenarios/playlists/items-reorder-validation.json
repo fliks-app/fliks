@@ -1,0 +1,133 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastLogin",
+    "$..lastActiveAt",
+    "$..lastPlayedAt",
+    "$..playedAt",
+    "$..path"
+  ],
+  "name": "playlists-items-reorder-validation",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {},
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "each value in itemIds must be an integer number",
+            "itemIds must be an array"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PUT",
+      "path": "/api/playlists/1/items/order"
+    },
+    {
+      "as": "user",
+      "body": {
+        "itemIds": "x"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "each value in itemIds must be an integer number",
+            "itemIds must be an array"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PUT",
+      "path": "/api/playlists/1/items/order"
+    },
+    {
+      "as": "user",
+      "body": {
+        "itemIds": [
+          1,
+          "a"
+        ]
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "each value in itemIds must be an integer number"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PUT",
+      "path": "/api/playlists/1/items/order"
+    },
+    {
+      "as": "user",
+      "body": {
+        "extra": 1,
+        "itemIds": [
+          1
+        ]
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "property extra should not exist"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PUT",
+      "path": "/api/playlists/1/items/order"
+    },
+    {
+      "as": "other",
+      "body": {
+        "itemIds": [
+          1,
+          2,
+          3
+        ]
+      },
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Playlist #1 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "PUT",
+      "path": "/api/playlists/1/items/order"
+    },
+    {
+      "as": "anon",
+      "body": {
+        "itemIds": [
+          1,
+          2,
+          3
+        ]
+      },
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "PUT",
+      "path": "/api/playlists/1/items/order"
+    }
+  ]
+}

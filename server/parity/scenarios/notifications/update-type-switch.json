@@ -1,0 +1,101 @@
+{
+  "capture": {
+    "id": "$.steps[0].body.id"
+  },
+  "deviation": null,
+  "ignore": [
+    "$..id",
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "notifications-update-type-switch",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "events": [
+          "request.created",
+          "request.available"
+        ],
+        "name": "Phone",
+        "settings": {
+          "token": "tk-secret",
+          "topic": "media",
+          "url": "https://ntfy.example.test"
+        },
+        "type": "ntfy"
+      },
+      "expect": {
+        "body": {
+          "enabled": true,
+          "events": [
+            "request.created",
+            "request.available"
+          ],
+          "name": "Phone",
+          "settings": {
+            "secretsSet": [
+              "token"
+            ],
+            "topic": "media",
+            "url": "https://ntfy.example.test"
+          },
+          "type": "ntfy"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/notifications"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "name": "Phone",
+        "settings": {
+          "url": "https://hook.example.test"
+        },
+        "type": "webhook"
+      },
+      "expect": {
+        "body": {
+          "enabled": true,
+          "events": [
+            "request.created",
+            "request.available"
+          ],
+          "name": "Phone",
+          "settings": {
+            "secretsSet": [],
+            "url": "https://hook.example.test"
+          },
+          "type": "webhook"
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/notifications/{id}"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "name": "Phone",
+        "settings": {
+          "url": "https://hook.example.test"
+        },
+        "type": "gotify"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "gotify requires a non-empty settings.token",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PUT",
+      "path": "/api/notifications/{id}"
+    }
+  ],
+  "strictMessage": true
+}

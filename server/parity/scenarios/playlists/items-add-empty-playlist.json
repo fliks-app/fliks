@@ -1,0 +1,209 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastLogin",
+    "$..lastActiveAt",
+    "$..lastPlayedAt",
+    "$..playedAt",
+    "$..path"
+  ],
+  "name": "playlists-items-add-empty-playlist",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "name": "Empty"
+      },
+      "expect": {
+        "body": {
+          "autoDownload": false,
+          "autoPlay": false,
+          "autoRemoveWatched": false,
+          "coverImageUrl": null,
+          "id": 2,
+          "itemCount": 0,
+          "name": "Empty",
+          "ownerId": 2,
+          "posters": [],
+          "role": "owner",
+          "saved": false,
+          "visibility": "private"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/playlists"
+    },
+    {
+      "as": "user",
+      "body": {
+        "mediaId": 5
+      },
+      "expect": {
+        "body": {
+          "added": 1
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/playlists/2/items"
+    },
+    {
+      "as": "user",
+      "body": {
+        "mediaId": 6
+      },
+      "expect": {
+        "body": {
+          "added": 1
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/playlists/2/items"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": [
+          {
+            "addedById": 2,
+            "episode": null,
+            "itemId": 4,
+            "media": {
+              "addedById": null,
+              "additionalFanartUrls": [],
+              "alternativeTitles": [],
+              "digitalRelease": null,
+              "fanartUrl": null,
+              "folderName": "Parity Movie 05 (2020)",
+              "genres": [
+                "Drama"
+              ],
+              "id": 5,
+              "imdbId": null,
+              "inCinemas": null,
+              "languageProfile": null,
+              "languageProfileId": null,
+              "library": {
+                "color": "#3b82f6",
+                "defaultLanguageProfileId": null,
+                "defaultQualityProfileId": null,
+                "icon": "film",
+                "id": 1,
+                "label": null,
+                "mediaTypes": [
+                  "movie"
+                ],
+                "metadataLanguage": null,
+                "metadataRegion": null,
+                "name": "Movies",
+                "path": "/tmp/fliks-parity/media/movies",
+                "preferredProvider": null
+              },
+              "libraryId": 1,
+              "logoUrl": null,
+              "metadata": null,
+              "metadataRefreshedAt": null,
+              "minimumAvailability": "released",
+              "monitored": true,
+              "originalTitle": null,
+              "overview": "Synthetic movie 5",
+              "path": "/tmp/fliks-parity/media/movies/Parity Movie 05 (2020)",
+              "physicalRelease": null,
+              "posterUrl": null,
+              "preferredProvider": null,
+              "qualityProfile": null,
+              "qualityProfileId": null,
+              "rating": 7.5,
+              "releaseDate": "2020-01-01",
+              "runtime": 90,
+              "status": "released",
+              "title": "Parity Movie 05",
+              "tmdbCollectionId": null,
+              "tmdbCollectionName": null,
+              "tmdbId": 1005,
+              "tvdbId": null,
+              "type": "movie",
+              "year": 2020
+            },
+            "position": 0,
+            "progressPercent": 0,
+            "watched": false
+          },
+          {
+            "addedById": 2,
+            "episode": null,
+            "itemId": 5,
+            "media": {
+              "addedById": null,
+              "additionalFanartUrls": [],
+              "alternativeTitles": [],
+              "digitalRelease": null,
+              "fanartUrl": null,
+              "folderName": "Parity Movie 06 (2020)",
+              "genres": [
+                "Drama"
+              ],
+              "id": 6,
+              "imdbId": null,
+              "inCinemas": null,
+              "languageProfile": null,
+              "languageProfileId": null,
+              "library": {
+                "color": "#3b82f6",
+                "defaultLanguageProfileId": null,
+                "defaultQualityProfileId": null,
+                "icon": "film",
+                "id": 1,
+                "label": null,
+                "mediaTypes": [
+                  "movie"
+                ],
+                "metadataLanguage": null,
+                "metadataRegion": null,
+                "name": "Movies",
+                "path": "/tmp/fliks-parity/media/movies",
+                "preferredProvider": null
+              },
+              "libraryId": 1,
+              "logoUrl": null,
+              "metadata": null,
+              "metadataRefreshedAt": null,
+              "minimumAvailability": "released",
+              "monitored": true,
+              "originalTitle": null,
+              "overview": "Synthetic movie 6",
+              "path": "/tmp/fliks-parity/media/movies/Parity Movie 06 (2020)",
+              "physicalRelease": null,
+              "posterUrl": null,
+              "preferredProvider": null,
+              "qualityProfile": null,
+              "qualityProfileId": null,
+              "rating": 7.5,
+              "releaseDate": "2020-01-01",
+              "runtime": 90,
+              "status": "released",
+              "title": "Parity Movie 06",
+              "tmdbCollectionId": null,
+              "tmdbCollectionName": null,
+              "tmdbId": 1006,
+              "tvdbId": null,
+              "type": "movie",
+              "year": 2020
+            },
+            "position": 1,
+            "progressPercent": 0,
+            "watched": false
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/playlists/2/items"
+    }
+  ]
+}

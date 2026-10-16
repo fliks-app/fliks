@@ -1,4 +1,4 @@
-//! `/api/playback/*` deviations (C1, C4, C6), watched toggles and the `/internal/playback` bridges.
+//! `/api/playback/*` deviations (C1, C4, C6), watched toggles and the in-process top genres.
 use axum::{Router, body::Body, http::Request};
 use fliks_server::{config::Config, playback, state::AppState};
 use serde_json::{Value, json};
@@ -203,16 +203,15 @@ async fn recommendation_ties_break_by_media_id(pool: PgPool) {
         .collect();
     assert_eq!((s, got), (200, ids.iter().map(|i| i64::from(*i)).collect()));
 
-    let uri = format!(
-        "/internal/playback/recommendations?userId={}&libraryIds={lib}&limit=2",
-        c.user
-    );
-    assert_eq!(c.call("GET", &uri, "wrong", None).await.0, 401);
-    let (s, got) = c.call("GET", &uri, "bridge", None).await;
-    assert_eq!((s, got.as_array().map(Vec::len)), (200, Some(2)));
-    let uri = format!("/internal/playback/top-genres?userId={}", c.user);
-    assert_eq!(
-        c.call("GET", &uri, "bridge", None).await.1,
-        json!([{"genre": "Drama", "weight": 1.0}])
+    let drama = playback::top_genres(&c.pool, c.user, 8, &[lib])
+        .await
+        .unwrap();
+    assert_eq!(drama.len(), 1);
+    assert_eq!(drama[0].genre, "Drama");
+    assert!(
+        playback::top_genres(&c.pool, c.user, 8, &[lib + 1])
+            .await
+            .unwrap()
+            .is_empty()
     );
 }

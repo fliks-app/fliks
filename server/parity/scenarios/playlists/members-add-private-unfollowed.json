@@ -1,0 +1,95 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastLogin",
+    "$..lastActiveAt",
+    "$..lastPlayedAt",
+    "$..playedAt",
+    "$..path"
+  ],
+  "name": "playlists-members-add-private-unfollowed",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "role": "viewer",
+        "userId": 4
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "You can only add public members or members you follow",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "POST",
+      "path": "/api/playlists/1/members"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "status": "pending"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/social/follow/4"
+    },
+    {
+      "as": "user",
+      "body": {
+        "role": "viewer",
+        "userId": 4
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "You can only add public members or members you follow",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "POST",
+      "path": "/api/playlists/1/members"
+    },
+    {
+      "as": "other",
+      "expect": {
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/social/requests/2/accept"
+    },
+    {
+      "as": "user",
+      "body": {
+        "role": "viewer",
+        "userId": 4
+      },
+      "expect": {
+        "body": [
+          {
+            "avatar": null,
+            "role": "owner",
+            "userId": 2,
+            "username": "user"
+          },
+          {
+            "avatar": "/api/users/4/avatar?v=1767225600000",
+            "role": "viewer",
+            "userId": 4,
+            "username": "other"
+          }
+        ],
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/playlists/1/members"
+    }
+  ]
+}

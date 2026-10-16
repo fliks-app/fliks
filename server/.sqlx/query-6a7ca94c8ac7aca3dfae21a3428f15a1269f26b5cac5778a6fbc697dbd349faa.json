@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT s.\"mediaId\" AS \"media_id!\" FROM episodes e JOIN seasons s ON s.id = e.\"seasonId\"\n           WHERE e.id = $1 AND s.\"mediaId\" IS NOT NULL",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "media_id!",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "6a7ca94c8ac7aca3dfae21a3428f15a1269f26b5cac5778a6fbc697dbd349faa"
+}

@@ -1,0 +1,111 @@
+{
+  "capture": {
+    "id": "$.steps[0].body.id"
+  },
+  "deviation": null,
+  "ignore": [
+    "$..id",
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "notifications-update-keeps-token",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "events": [
+          "request.created",
+          "request.available"
+        ],
+        "name": "Phone",
+        "settings": {
+          "token": "tk-secret",
+          "topic": "media",
+          "url": "https://ntfy.example.test"
+        },
+        "type": "ntfy"
+      },
+      "expect": {
+        "body": {
+          "enabled": true,
+          "events": [
+            "request.created",
+            "request.available"
+          ],
+          "name": "Phone",
+          "settings": {
+            "secretsSet": [
+              "token"
+            ],
+            "topic": "media",
+            "url": "https://ntfy.example.test"
+          },
+          "type": "ntfy"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/notifications"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "enabled": false,
+        "name": "Renamed",
+        "settings": {
+          "secretsSet": [
+            "token"
+          ],
+          "token": "",
+          "url": "https://other.example.test"
+        },
+        "type": "ntfy"
+      },
+      "expect": {
+        "body": {
+          "enabled": false,
+          "events": [
+            "request.created",
+            "request.available"
+          ],
+          "name": "Renamed",
+          "settings": {
+            "secretsSet": [
+              "token"
+            ],
+            "url": "https://other.example.test"
+          },
+          "type": "ntfy"
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/notifications/{id}"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "enabled": false,
+          "events": [
+            "request.created",
+            "request.available"
+          ],
+          "name": "Renamed",
+          "settings": {
+            "secretsSet": [
+              "token"
+            ],
+            "url": "https://other.example.test"
+          },
+          "type": "ntfy"
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/notifications/{id}"
+    }
+  ],
+  "strictMessage": true
+}

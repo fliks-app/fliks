@@ -11,7 +11,7 @@ use crate::{
 use axum::{
     Json, Router,
     extract::{Query, State},
-    http::{HeaderMap, StatusCode},
+    http::StatusCode,
     response::{IntoResponse, Response},
     routing::{delete, get, post},
 };
@@ -64,12 +64,6 @@ pub fn router() -> Router<AppState> {
             "/api/playback/media/{mediaId}/seasons/{seasonId}/toggle-watched",
             post(toggle_season_watched),
         )
-        .route("/internal/playback/history", get(internal_history))
-        .route(
-            "/internal/playback/recommendations",
-            get(internal_recommendations),
-        )
-        .route("/internal/playback/top-genres", get(internal_top_genres))
 }
 
 fn param<'a>(q: &'a [(String, String)], key: &str) -> Option<&'a str> {
@@ -362,60 +356,4 @@ pub async fn toggle_season_watched(
     }
     db::toggle_season_watched(&st.db, a.user.id, media, season, body.on()).await?;
     Ok((StatusCode::CREATED, Json(json!({"watched": body.on()}))))
-}
-
-/// Nest social's reads (`docs/bridge.md`): `userId` and, where it scopes, `libraryIds` (comma list).
-fn bridge_user(
-    st: &AppState,
-    headers: &HeaderMap,
-    q: &[(String, String)],
-) -> Result<i32, AppError> {
-    st.bridge.check(headers)?;
-    param(q, "userId")
-        .and_then(|v| v.parse().ok())
-        .ok_or_else(|| AppError::bad_request("userId must be an integer number"))
-}
-
-fn bridge_libraries(q: &[(String, String)]) -> Result<Vec<i32>, AppError> {
-    param(q, "libraryIds")
-        .unwrap_or_default()
-        .split(',')
-        .filter(|s| !s.is_empty())
-        .map(|s| {
-            s.parse()
-                .map_err(|_| AppError::bad_request("libraryIds must be integers"))
-        })
-        .collect()
-}
-
-async fn internal_history(
-    State(st): State<AppState>,
-    headers: HeaderMap,
-    Query(q): Q,
-) -> Result<Json<db::History>, AppError> {
-    let user = bridge_user(&st, &headers, &q)?;
-    let (page, limit) = history_window(&q)?;
-    let libs = bridge_libraries(&q)?;
-    Ok(Json(db::history(&st.db, user, page, limit, &libs).await?))
-}
-
-async fn internal_recommendations(
-    State(st): State<AppState>,
-    headers: HeaderMap,
-    Query(q): Q,
-) -> Result<Response, AppError> {
-    let user = bridge_user(&st, &headers, &q)?;
-    let libs = bridge_libraries(&q)?;
-    let items = recommend::recommendations(&st.db, user, &libs, limit_param(&q)).await?;
-    Ok(Json(items).into_response())
-}
-
-async fn internal_top_genres(
-    State(st): State<AppState>,
-    headers: HeaderMap,
-    Query(q): Q,
-) -> Result<Response, AppError> {
-    let user = bridge_user(&st, &headers, &q)?;
-    let limit = param(&q, "limit").and_then(|v| v.parse().ok()).unwrap_or(8);
-    Ok(Json(recommend::top_genres(&st.db, user, limit).await?).into_response())
 }

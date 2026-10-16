@@ -1,0 +1,56 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastLogin",
+    "$..lastActiveAt",
+    "$..lastPlayedAt",
+    "$..playedAt"
+  ],
+  "name": "likes-list-acl",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "readonly",
+      "expect": {
+        "body": [],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/likes"
+    },
+    {
+      "as": "readonly",
+      "body": {
+        "mediaId": 5
+      },
+      "expect": {
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/likes"
+    },
+    {
+      "as": "readonly",
+      "expect": {
+        "body": [
+          {
+            "episodeId": null,
+            "fanartUrl": null,
+            "label": null,
+            "mediaId": 5,
+            "mediaType": "movie",
+            "posterUrl": null,
+            "seasonId": null,
+            "stillUrl": null,
+            "title": "Parity Movie 05"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/likes"
+    }
+  ]
+}

@@ -39,8 +39,20 @@ Decided behaviour for the Rust port (security fixes F, correctness fixes C; D3).
 | F19 | a library `path` may be relative and `mkdir -p` ran before the conflict and in-use checks, leaving directories behind on a 400 | `path` must be absolute (400); conflict and in-use checks run first, `mkdir -p` is the last step before the `UPDATE` | none |
 | F20 | `GET /api/libraries/:id` and `:id/access` ignored the library ACL; `PUT :id/access` on an unknown library answered 200 or 500 | the ACL applies to both reads; unknown library → 404 `Library #<id> not found` | none |
 | F21 | an image `variant` such as `..%2F..%2Fx` reached `path.join`: any readable `*.jpg` fetched anonymously | `variant` must match `^(poster\|fanart\|fanart-[0-9]+\|logo)$` for media and request art, else 404 | none |
-| F22 | absolute server paths (`Media.path`, `library.path`, `disk`) were serialised for every reader (`media.read`, library readers) | present only for callers who can manage libraries (`settings.access` or `manage:all`); omitted otherwise on `GET /api/media`, `recently-added`, `GET :id`, `/api/libraries*` and `/api/roles` | client readers use `m.path ?? null` (see `client-audit.md`) |
+| F22 | absolute server paths (`Media.path`, `library.path`, `disk`, playlist items' `media.path` and `media.library.path`) were serialised for every reader (`media.read`, library readers) | present only for callers who can manage libraries (`settings.access` or `manage:all`); omitted otherwise on `GET /api/media`, `recently-added`, `GET :id`, `/api/libraries*`, `/api/roles` and playlist items | client readers use `m.path ?? null` (see `client-audit.md`) |
+| F23 | `GET /social/users/:id/followers` and `/following` ignored `shareDisabled` and listed disabled users | the profile gate (an opted-out viewer or target, non-self, answers 404 `User #<id> not found`); disabled users are omitted | none |
+| F24 | popular among followed counted every followed user's completions | only followed users with `shareWatchHistory` | none |
+| F25 | profile `topGenres` came from the target's whole history | restricted to the viewer's accessible libraries | none |
+| F26 | a saved playlist its owner made private stayed in the saver's list | dropped from `GET /playlists` once it is no longer readable | none |
+| F27 | adding an opted-out member answered 403, a missing one 404 | both 404 `User #<id> not found` | none |
+| F28 | `settings.webhookUrl` of Discord/Slack notification connections returned in clear (the URL embeds its credential) | secret field like `token`: omitted from responses, listed under `secretsSet`; a blank or absent value on write keeps the stored one, `null` is a 400 (the URL is required, so it is replaced, never erased); a type switch drops it | notification editor shows the masked "set" state |
+| F29 | gotify token (query string) and webhook URL could reach sender errors, logs and the `test` response | sender errors never contain the request URL | none |
+| F30 | Discord payloads allowed `@everyone`/role/user mentions from request titles | Discord body adds `allowed_mentions: {parse: []}` | none |
 | F31 | remote state/stopped fan-out reached grantees of a device id under any owner (anyone could mint a code for another user's deviceId and receive its playback state) | fan-out limited to grants whose owner is the device's owner | none |
+| F32 | `POST /api/likes` and `POST /api/social/recommend` accepted a season/episode of another media and media outside the caller's libraries (201) | 404 `Media\|Season\|Episode #<id> not found`, as for unknown ids (user decision 2026-10-16) | none |
+| F33 | `social/requests`, the recommendation cards and the follow lists listed opted-out (`shareDisabled`) and disabled members | they are omitted from every social list (the F23 filter, one predicate; `social.md` rule 57; user decision 2026-10-16) | none |
+| F34 | `GET /api/social/users/:id/stats` returned the target's last login (`activity.lastActiveAt`) to any viewer allowed by `shareStats` | `lastActiveAt` omitted for a non-self viewer; request counts stay under `shareStats` (`social.md` rule 58; user decision 2026-10-16) | none: the profile Statistics tab does not read it |
+| F35 | profile `followerCount`/`followingCount` counted disabled and opted-out members that the follow lists omit | both counts exclude them (the F33 predicate, `social.md` rule 59; user decision 2026-10-16) | none |
 
 Not done (user decision 2026-10-15): login rate limiting/lockout.
 
@@ -60,7 +72,7 @@ A 500 or a half-written request is never part of the frozen contract:
 
 | # | Today (Nest) | Rust behaviour |
 |---|---|---|
-| C1 | 500 on unvalidated input: non-integer or out-of-int4 media filters, `page < 1` with `limit > 0`, negative `recently-added` `limit`, calendar dates Postgres rejects, a `sortBy` naming an `Object.prototype` member (falls back to `title`), `streams` on a library without path (404); library create with a duplicate name, update with a null name, access set with an unknown user; `GET /api/remote/commands` without `targetId`, fractional `page`/`limit` on history, non-numeric `startAt` on playback-info, `null` on non-nullable user fields; `toggle-watched` and season `toggle-watched` on an unknown media | 400 with the standard validation body; unknown media → 404 `not_found` |
+| C1 | 500 on unvalidated input: non-integer or out-of-int4 media filters, `page < 1` with `limit > 0`, negative `recently-added` `limit`, calendar dates Postgres rejects, a `sortBy` naming an `Object.prototype` member (falls back to `title`), `streams` on a library without path (404); library create with a duplicate name, update with a null name, access set with an unknown user; `GET /api/remote/commands` without `targetId`, fractional `page`/`limit` on history, non-numeric `startAt` on playback-info, `null` on non-nullable user fields, `null` `events`/`enabled` and ids beyond int4 on notification connections; `toggle-watched` and season `toggle-watched` on an unknown media | 400 with the standard validation body; unknown media → 404 `not_found` |
 | C2 | writes before failing: bulk `PUT /api/settings` stops at the first protected key; non-manager `PUT /users/:id` with `libraryIds` saves the rest then 403s | validate and authorise the whole request first, write in one transaction |
 | C3 | refresh rotation and pairing claim are not atomic | one transaction with `SELECT … FOR UPDATE` |
 | C4 | recommendations ties follow Postgres scan order | score desc, then media id asc |
@@ -71,14 +83,19 @@ A 500 or a half-written request is never part of the frozen contract:
 | C9 | image ids coerced by unary `+` (`007`, `0x7`, `7.0`, ` 7 ` served id 7) | canonical integers only, else 404 |
 | C10 | `GET /api/media?q=` ordered by the requested sort (default title) because `orderBy` replaced the relevance order | `q` without `sortBy` orders by FTS rank desc (NULL rank last), then title, then id; the search page now omits `sortBy` unless the user chose one |
 | C11 | `cutoffUnmet=true` removed items from the already paginated page (short pages, `total` unchanged) | filtered in SQL before pagination: `page`, `limit` and `total` count only the media that pass |
-| C12 | equal sort keys left list order to the database (media list, recently-added, collections, similar, collection, cast, crew, calendar, files, seasons, episodes; libraries, `userIds`) | every list ends with `id ASC` |
+| C12 | equal sort keys left list order to the database (media list, recently-added, collections, similar, collection, cast, crew, calendar, files, seasons, episodes; libraries, `userIds`, follow lists, likes state, playlist members) | every list ends with `id ASC` |
+| C13 | `GET /playlists/:id` (and the create/patch views) reported `viewer` for an editor or administrator share on a public or followed playlist | the real share role |
+| C14 | playlist reorder/add validated outside their transaction; the leave-social teardown ran as six unrelated statements | validation and writes in one transaction under a row lock on the playlist (add computes `MAX(position)+1` under it); the teardown in the transaction of the user update |
+| C15 | social search ordered by the database collation before `LIMIT 30` | `lower(username)` bytewise, then `id` |
+| C16 | notification senders had no timeout (axios `timeout: 0`) | 10 s total per request, no retry; `test` reports `timeout of 10000ms exceeded` |
+| C17 | a plugin-supplied event outside the notification vocabulary was dispatched (default message) | rejected with 400 before any sender runs |
 | C18 | `POST /api/system/streams/:sid/command` with an `action` outside pause/play/stop/message was relayed to the client as is | 400 |
 | C19 | live TV rows of `/api/system/streams` reported the source's name as `quality` (`"Live"` only without one) | they report `"Live"` |
 | C20 | ValidationPipe coerced ` 7 `, `1e1`, `0x10` before `ParseIntPipe` | integer path segments must be canonical (`7`, `-7`; never `007`, `+7`, ` 7 `, `0x7`) on every Rust route: `PathParams` / `int_param` → 400 |
 
 Frozen as is (decided): the heartbeat keeps its debounce entry after a failed history write and returns
 `sessionLost: false` when the engine session lives but presence cannot be rebuilt. Lists whose order comes
-from DB collation / ICU (`GET /api/settings`, `/api/fs/browse`) are compared order-insensitively by parity;
+from DB collation / ICU (`GET /api/settings`, `/api/fs/browse`, `GET /api/playlists`, the profile `playlists`) are compared order-insensitively by parity;
 Rust sorts settings by key and fs entries case-insensitively (lowercase first).
 
 ## Open divergences

@@ -1,0 +1,81 @@
+{
+  "capture": {
+    "id": "$.steps[0].body.id"
+  },
+  "deviation": "C1",
+  "ignore": [
+    "$..id",
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "notifications-update-null-fields",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "events": [
+          "request.created",
+          "request.available"
+        ],
+        "name": "Phone",
+        "settings": {
+          "token": "tk-secret",
+          "topic": "media",
+          "url": "https://ntfy.example.test"
+        },
+        "type": "ntfy"
+      },
+      "expect": {
+        "body": {
+          "createdAt": "x",
+          "enabled": true,
+          "events": [
+            "request.created",
+            "request.available"
+          ],
+          "id": 1,
+          "name": "Phone",
+          "settings": {
+            "secretsSet": [
+              "token"
+            ],
+            "topic": "media",
+            "url": "https://ntfy.example.test"
+          },
+          "type": "ntfy",
+          "updatedAt": "x"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/notifications"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "enabled": null,
+        "events": null,
+        "name": "Phone",
+        "settings": {
+          "url": "https://ntfy.example.test"
+        },
+        "type": "ntfy"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "events must be an array",
+            "enabled must be a boolean value"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PUT",
+      "path": "/api/notifications/{id}"
+    }
+  ],
+  "strictMessage": true
+}

@@ -120,8 +120,13 @@
           class="input input-bordered input-sm w-full"
           [ngModel]="formWebhookUrl()"
           (ngModelChange)="formWebhookUrl.set($event)"
-          placeholder="https://..."
+          [placeholder]="webhookUrlStored() ? secretMask : 'https://...'"
         />
+        @if (webhookUrlStored()) {
+          <span class="label-text-alt text-base-content/50">
+            {{ 'settings.notifications.webhook_url_hint' | translate }}
+          </span>
+        }
       </label>
 
       @if (supportsToken()) {
@@ -162,7 +167,7 @@
                 {{ 'common.secret_clear' | translate }}
               </button>
             }
-          } @else if (editingId() !== null) {
+          } @else if (tokenStored()) {
             <span class="label-text-alt text-base-content/50">
               {{ 'settings.notifications.token_hint' | translate }}
             </span>

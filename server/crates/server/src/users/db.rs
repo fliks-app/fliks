@@ -139,38 +139,6 @@ pub async fn add_library_access(
     .map(drop)
 }
 
-/// Spec "Social teardown", verbatim and in order.
-pub async fn social_teardown(c: &mut PgConnection, user_id: i32) -> Result<(), sqlx::Error> {
-    sqlx::query!(
-        r#"DELETE FROM user_follows WHERE "followerId" = $1 OR "followingId" = $1"#,
-        user_id
-    )
-    .execute(&mut *c)
-    .await?;
-    sqlx::query!(r#"DELETE FROM playlist_saves WHERE "userId" = $1"#, user_id)
-        .execute(&mut *c)
-        .await?;
-    sqlx::query!(
-        r#"DELETE FROM playlist_shares WHERE "userId" = $1"#,
-        user_id
-    )
-    .execute(&mut *c)
-    .await?;
-    sqlx::query!(r#"DELETE FROM playlist_shares WHERE "playlistId" IN (SELECT id FROM playlists WHERE "ownerId" = $1)"#, user_id)
-        .execute(&mut *c)
-        .await?;
-    sqlx::query!(r#"UPDATE playlists SET visibility = 'private' WHERE "ownerId" = $1 AND visibility <> 'private'"#, user_id)
-        .execute(&mut *c)
-        .await?;
-    sqlx::query!(
-        r#"DELETE FROM content_recommendations WHERE "senderId" = $1 OR "recipientId" = $1"#,
-        user_id
-    )
-    .execute(&mut *c)
-    .await?;
-    Ok(())
-}
-
 /// Revoke every live refresh token of the user except `keep` (a `refresh_tokens.id`).
 pub async fn revoke_other_families(
     db: &PgPool,

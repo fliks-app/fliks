@@ -143,7 +143,7 @@ interface Harness {
   customFormats: { findAll: jest.Mock; scoreReleaseWith: jest.Mock };
   requestLifecycle: { markInProgress: jest.Mock };
   libraryIngestService: { ingest: jest.Mock };
-  notifications: { dispatch: jest.Mock };
+  notifications: { dispatch: jest.Mock; dispatchStrict: jest.Mock };
   mediaServers: { dispatch: jest.Mock };
   settings: { get: jest.Mock; getAll: jest.Mock; set: jest.Mock };
   events: {
@@ -190,7 +190,7 @@ function makeHarness(pluginId: string | null = 'test.plugin'): Harness {
     markInProgress: jest.fn().mockResolvedValue(undefined),
   };
   const libraryIngestService = { ingest: jest.fn() };
-  const notifications = { dispatch: jest.fn() };
+  const notifications = { dispatch: jest.fn(), dispatchStrict: jest.fn() };
   const mediaServers = { dispatch: jest.fn() };
   const settings = {
     get: jest.fn().mockResolvedValue(null),
@@ -1926,9 +1926,10 @@ describe('FliksHostImpl', () => {
         event: 'grab.started',
         payload: { title: 'x' },
       });
-      expect(h.notifications.dispatch).toHaveBeenCalledWith('grab.started', {
-        title: 'x',
-      });
+      expect(h.notifications.dispatchStrict).toHaveBeenCalledWith(
+        'grab.started',
+        { title: 'x' },
+      );
     });
   });
 

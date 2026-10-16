@@ -2161,6 +2161,7 @@
       "field_token": "Token",
       "field_token_optional": "(optional)",
       "token_hint": "Leave empty to keep the stored token.",
+      "webhook_url_hint": "Leave empty to keep the stored URL.",
       "field_topic": "Topic",
       "field_events": "Trigger events",
       "field_enabled": "Connection active",

@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT uf.\"followingId\" FROM user_follows uf JOIN users u ON u.id = uf.\"followingId\"\n           WHERE uf.\"followerId\" = $1 AND uf.status = 'accepted' AND u.\"shareWatchHistory\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "followingId",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "911bd507b940e437e8cf0c3833559ab1974f66cab080b789a044763b37af4767"
+}
