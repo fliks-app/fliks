@@ -32,8 +32,7 @@ for s in A B C; do
   done
 done
 
-# Artwork read by /api/images (`FLIKS_DATA_DIR=$root/data`); library scenarios create directories under $root/libs.
-rm -rf "$root/libs"
+# Artwork read by /api/images (`FLIKS_DATA_DIR=$root/data`).
 img="$root/data"
 mkdir -p "$img"
 [ -s "$root/assets/art.jpg" ] || ffmpeg -v error -y -f lavfi -i "color=c=red:s=2x2" -frames:v 1 "$root/assets/art.jpg"
