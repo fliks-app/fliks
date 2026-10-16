@@ -62,6 +62,10 @@ Decided behaviour for the Rust port (security fixes F, correctness fixes C; D3).
 | F66 | plugin webhook targets and catalog source URLs appear in logs, `failures[]` and `lastRefreshError` | no URL, userinfo or query in any of them (error kinds only) | none |
 | F67 | process plugins reach any address, internal included | plugin outbound HTTP refuses internal addresses unless the plugin holds the `network.internal` grant given at install consent (link-local, reserved, 6to4, Teredo and documentation ranges stay refused) | install sheet lists the new capability `network:internal`, shown raw until a client i18n key exists |
 | F68 | plugin `config.get` without keys returns, and `config.set` writes, every `plugin.<id>.*` key, including those of a plugin whose id extends it (`fliks` reads `fliks.download` secrets); the `hello` config too | only keys whose longest installed owner id is the caller; a `config.set` of another owner's key is `ERR_DENIED` | none |
+| F41 | the stored importer API key (`radarr_api_key`, `sonarr_api_key`, `seerr_api_key`) was used for any body `url` | used only when the body `url` equals the stored `*_url` setting (trailing `/`, scheme and host case ignored); otherwise 400 `apiKey is required` | the data-imports page omits the key only for the saved URL; an edited, unsaved URL needs the key retyped |
+| F42 | importer and media-server requests followed redirects to any host, carrying `X-Api-Key` / `X-Emby-Token` | a redirect is followed only to the same host (limit 5), any other is a plain failure | none |
+| F43 | `GET /api/markers/episode/:id` and `season/:id` answered any id with `[]` and no library check | the library ACL of the media routes applies; an unknown or inaccessible episode or season is 404 | none (the only reader swallows errors) |
+| F44 | a Radarr/Sonarr path such as `/movies/..\\x` mapped to the folder name `..` (the library's parent) or `.` | one `fliks_domain::naming` validator rejects empty, `.`, `..`, separators and NUL: an `errors` entry `<title>: invalid folder name for "<path>"`, never written | none |
 
 Not done (user decision 2026-10-15): login rate limiting/lockout.
 
@@ -126,6 +130,19 @@ A 500 or a half-written request is never part of the frozen contract:
 | C43 | users created by the Seerr (and Emby) import saw no library (Emby) or were written without a transaction (Seerr) | the default role's default libraries are granted in the user's transaction; a username collision re-reads the winner | none |
 | C44 | the Emby playback write was a read, compare and write | one `ON CONFLICT ... WHERE lastPlayedAt <=` statement; the database decides that Fliks wins | none |
 | C45 | an Emby `Users` failure ended in a `completed` event with zeros | a `watch-history.import.failed` event, command row `failed` | the page shows the failure |
+| C33 | a Radarr title with `tmdbId` 0 or null was imported; Sonarr fell back to `tvdbId` as a TMDB id | imported only with `tmdbId` an integer >= 1 (else `invalid tmdbId`); no `tvdbId` fallback; Sonarr v3 (no `tmdbId` anywhere) is 400 `Sonarr v4 or later is required (the series list carries no tmdbId)` |
+| C34 | importer calls had no timeout | 15 s test and title lookup, 60 s lists, 30 s per `extrafile` |
+| C35 | two Seerr imports could run at once | the second is 409 `Import already running`, before `seerr.import.started` (client: the page toasts the message) |
+| C36 | Seerr: the user was created before the TMDB id check, the last requester claimed `addedById`, a `delete`-kind request could be matched, user and access rows were not transactional | TMDB check first (no user, not counted), first requester keeps `addedById`, only `kind = 'add'` rows match, user and `library_user_access` in one transaction |
+| C37 | Radarr/Sonarr `importSubtitles` never wrote a row (TypeORM `mediaFileId` trap) and `update` mode always failed on `qualityProfileId`, which new rows also lost | subtitle rows are written (Radarr language names mapped to ISO 639-1), `update` mode updates, and `qualityProfileId` is stored (client: `subtitlesImported` counts real rows; imported media keep their mapped profile) |
+| C38 | a 2xx `rootfolder`/`movie`/`series` body Nest cannot walk was a 500 | 400 `Cannot connect to <Radarr\|Sonarr>: <decode error>` |
+| C39 | `POST /api/markers` was a delete then an insert (500 for an unknown episode, a new id) and detection persisted per segment without a transaction | one `INSERT ... ON CONFLICT` upsert keeping the row id; unknown episode 404; detection never overwrites a manual marker |
+| C40 | `introMaxLookupMinutes` / `introMinSegmentSeconds` mapped only `0` and `NaN` to the default | fall back to 10 and 15 unless finite and > 0 |
+| C41 | `POST /api/markers/series/:mediaId/detect-all` on an unknown media answered `[]` | 404 `Media #<id> not found` |
+| C42 | two `import-watch-history` runs for one server could overlap | the second is 409 `Import already running` (client: the page toasts the message) |
+| C43 | users created by the Seerr (and Emby) import saw no library (Emby) or were written without a transaction (Seerr) | the default role's default libraries are granted in the user's transaction; a username collision re-reads the winner |
+| C44 | the Emby playback write was a read, compare and write | one `ON CONFLICT ... WHERE lastPlayedAt <=` statement; the database decides that Fliks wins |
+| C45 | an Emby `Users` failure ended in a `completed` event with zeros | a `watch-history.import.failed` event, command row `failed` (client: the page shows the failure) |
 | C47 | `PATCH /api/media/bulk`: no validation (fractional ids, unknown profiles = FK 500, `libraryId` = 500) | non-empty integer ids, unknown profile 404, `libraryId` as `PATCH :id/library` (400 when a media has files), one transaction |
 | C48 | `onMediaRemoved` wrote before the media DELETE, outside any transaction | hook writes and the DELETE in one transaction |
 | C49 | a media delete removed a folder shared with another media or containing a nested library root | such a folder is kept (`WARN`, SSE `media.files.delete_failed`), the row still goes |
