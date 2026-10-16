@@ -183,7 +183,7 @@ describe('PluginCatalogClientService', () => {
 
   it('hides an incompatible pluginApi version and reports the hidden count and minimum core version', async () => {
     const { privateKey, rawPublicKey } = generateTestKeypair();
-    const doc = catalogWith({ pluginApi: PLUGIN_API_VERSION + 1, fliks: '>=5.0.0 <6.0.0' });
+    const doc = catalogWith({ pluginApi: PLUGIN_API_VERSION + 1, fliks: '>=99.0.0 <100.0.0' });
     const bytes = Buffer.from(JSON.stringify(doc), 'utf8');
     const sig = Buffer.from(signManifestBase64(privateKey, bytes), 'utf8');
     axios.defaults.adapter = adapterFor({ 'catalog.json.sig': sig, 'catalog.json': bytes });
@@ -196,7 +196,7 @@ describe('PluginCatalogClientService', () => {
 
     const catalog = source.cachedCatalog as { plugins: { installable: unknown[]; hidden: { count: number; minFliksVersion: string } }[] };
     expect(catalog.plugins[0].installable).toEqual([]);
-    expect(catalog.plugins[0].hidden).toEqual({ count: 1, minFliksVersion: '5.0.0' });
+    expect(catalog.plugins[0].hidden).toEqual({ count: 1, minFliksVersion: '99.0.0' });
   });
 
   /**
