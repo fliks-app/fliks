@@ -125,15 +125,15 @@ fn flatten(img: &DynamicImage) -> image::RgbImage {
 
 /// Fixed width, aspect kept, never enlarged; PNG for logos, JPEG q90 otherwise.
 fn resized(bytes: &[u8], width: u32, png: bool) -> Option<Vec<u8>> {
+    let (_, w, h) = probe(bytes)?;
+    if u64::from(w) * u64::from(h) > MAX_PIXELS {
+        return None;
+    }
     let img = ImageReader::new(Cursor::new(bytes))
         .with_guessed_format()
         .ok()?
         .decode()
         .ok()?;
-    let (w, h) = (img.width(), img.height());
-    if u64::from(w) * u64::from(h) > MAX_PIXELS {
-        return None;
-    }
     let img = if w > width {
         let nh = ((u64::from(h) * u64::from(width) + u64::from(w) / 2) / u64::from(w)).max(1);
         img.resize_exact(width, nh as u32, FilterType::Lanczos3)
