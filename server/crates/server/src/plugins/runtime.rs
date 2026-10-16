@@ -311,7 +311,11 @@ impl Lane {
         let until = tokio::time::Instant::now() + deadline;
         if self.waiting.fetch_add(1, Ordering::SeqCst) >= self.max + self.queue {
             self.waiting.fetch_sub(1, Ordering::SeqCst);
-            return Err(CallError::Unavailable("queue full".into()));
+            return Err(if self.queue == 0 {
+                CallError::Busy
+            } else {
+                CallError::Unavailable("queue full".into())
+            });
         }
         let _w = Waiting(&self.waiting);
         let _permit = if self.queue == 0 {
