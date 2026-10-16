@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "UPDATE seasons SET monitored = $1, \"updatedAt\" = now() WHERE \"mediaId\" = ANY($2)",
+  "query": "UPDATE seasons SET monitored = $1 WHERE \"mediaId\" = ANY($2)",
   "describe": {
     "columns": [],
     "parameters": {
@@ -11,5 +11,5 @@
     },
     "nullable": []
   },
-  "hash": "c84e62b7d9d8b54d1f6d0ed26864c2ede812a62a50200596266ff0a1d44740a3"
+  "hash": "18494ef2d1d6cd4afc12c40ec45624066784c82c83ec310b699b676c2f731795"
 }

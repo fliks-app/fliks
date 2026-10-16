@@ -62,46 +62,34 @@ enum Col {
 fn columns(b: &Body) -> Result<Vec<(&'static str, Col)>, AppError> {
     let mut out = vec![];
     macro_rules! put {
-        ($key:literal, $col:literal, $v:expr, $wrap:expr) => {
+        ($col:literal, $v:expr, $wrap:expr) => {
             if let Some(v) = $v {
                 out.push(($col, $wrap(v)));
             }
         };
     }
-    put!("title", "title", b.str("title")?, Col::Text);
-    put!(
-        "originalTitle",
-        "originalTitle",
-        b.str("originalTitle")?,
-        Col::Text
-    );
-    put!("year", "year", b.int("year")?, Col::Int);
-    put!("type", "type", b.one_of("type", &TYPES)?, |v| Col::Enum(
+    put!("title", b.str("title")?, Col::Text);
+    put!("originalTitle", b.str("originalTitle")?, Col::Text);
+    put!("year", b.int("year")?, Col::Int);
+    put!("type", b.one_of("type", &TYPES)?, |v| Col::Enum(
         "media_type_enum",
         v
     ));
-    put!("tmdbId", "tmdbId", b.int("tmdbId")?, Col::Int);
-    put!("imdbId", "imdbId", b.str("imdbId")?, Col::Text);
-    put!("overview", "overview", b.str("overview")?, Col::Text);
-    put!("status", "status", b.one_of("status", &STATUSES)?, |v| {
+    put!("tmdbId", b.int("tmdbId")?, Col::Int);
+    put!("imdbId", b.str("imdbId")?, Col::Text);
+    put!("overview", b.str("overview")?, Col::Text);
+    put!("status", b.one_of("status", &STATUSES)?, |v| {
         Col::Enum("media_status_enum", v)
     });
-    put!("monitored", "monitored", b.bool("monitored")?, Col::Bool);
-    put!("posterUrl", "posterUrl", b.str("posterUrl")?, Col::Text);
-    put!("fanartUrl", "fanartUrl", b.str("fanartUrl")?, Col::Text);
-    put!("rating", "rating", b.num("rating")?, Col::Float);
-    put!("genres", "genres", b.strings("genres")?, |v: Option<
-        Vec<String>,
-    >| Col::Json(
-        v.map(|g| json!(g))
-    ));
-    put!("runtime", "runtime", b.int("runtime")?, Col::Int);
-    put!(
-        "releaseDate",
-        "releaseDate",
-        b.date("releaseDate")?,
-        Col::Date
-    );
+    put!("monitored", b.bool("monitored")?, Col::Bool);
+    put!("posterUrl", b.str("posterUrl")?, Col::Text);
+    put!("fanartUrl", b.str("fanartUrl")?, Col::Text);
+    put!("rating", b.num("rating")?, Col::Float);
+    put!("genres", b.strings("genres")?, |v: Option<Vec<String>>| {
+        Col::Json(v.map(|g| json!(g)))
+    });
+    put!("runtime", b.int("runtime")?, Col::Int);
+    put!("releaseDate", b.date("releaseDate")?, Col::Date);
     b.str("path")?;
     b.num("qualityProfileId")?;
     b.num("languageProfileId")?;
@@ -214,14 +202,14 @@ async fn cascade_monitored(
     monitored: bool,
 ) -> Result<(), sqlx::Error> {
     sqlx::query!(
-        r#"UPDATE seasons SET monitored = $1, "updatedAt" = now() WHERE "mediaId" = ANY($2)"#,
+        r#"UPDATE seasons SET monitored = $1 WHERE "mediaId" = ANY($2)"#,
         monitored,
         ids
     )
     .execute(&mut *c)
     .await?;
     sqlx::query!(
-        r#"UPDATE episodes SET monitored = $1, "updatedAt" = now()
+        r#"UPDATE episodes SET monitored = $1
            WHERE "seasonId" IN (SELECT id FROM seasons WHERE "mediaId" = ANY($2))"#,
         monitored,
         ids
@@ -500,8 +488,7 @@ pub async fn bulk(
              "qualityProfileId" = CASE WHEN $2 THEN $3 ELSE "qualityProfileId" END,
              "languageProfileId" = CASE WHEN $4 THEN $5 ELSE "languageProfileId" END,
              monitored = COALESCE($6, monitored),
-             "libraryId" = COALESCE($7, "libraryId"),
-             "updatedAt" = now()
+             "libraryId" = COALESCE($7, "libraryId")
            WHERE id = ANY($1)"#,
         &ids,
         q.is_some(),
@@ -619,7 +606,7 @@ pub async fn patch_season(
     .await?;
     if let Some(m) = monitored {
         sqlx::query!(
-            r#"UPDATE episodes SET monitored = $1, "updatedAt" = now() WHERE "seasonId" = $2"#,
+            r#"UPDATE episodes SET monitored = $1 WHERE "seasonId" = $2"#,
             m,
             id
         )
