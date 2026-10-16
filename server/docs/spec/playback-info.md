@@ -204,14 +204,14 @@ Read through `SettingsService.get(key)` (string or null) by `StreamingSettingsCa
 | Scan backfill | `@Cron(EVERY_MINUTE)` | rule 50 `[ts:src/modules/streaming/services/scan-backfill.service.ts:33]` |
 | Source scan | on demand (playback-info hint, post-import, backfill) | rule 49 |
 | Stale re-probe | on demand (playback-info hint) | rule 51 |
-| Sprite generation | on demand (rescan, post-import; admin triggers in S5) | rule 52 |
+| Sprite generation | on demand (rescan, post-import; `GenerateSprites` / `GenerateMissingSprites` triggers from S5, `scheduler.md` rule 28) | rule 52 |
 | Hardware re-detect | boot, engine (re)connect, GPU re-pin | rule 47 |
 | Engine open retry | inside `openSession`, 503 + `Retry-After` up to 15 s | rule 13 |
 
 ## Bridges
 
 - `POST /internal/plugins/pre-roll` (on Nest; added S2, removed S8): Rust asks the plugin host for pre-roll candidates. Request carries what `PluginPreRollService.ask` takes: `{mediaFileId, mediaId, episodeId?, principal:{kind:'delegated', userId}}`; response `PreRollItem[]` (`{mediaFileId, labelKey?, skippable?}`), `[]` on any failure. Rust then ACL-gates every candidate through its own `resolveFile` (rule 20). `[ts:src/modules/plugins/plugin-pre-roll.service.ts:57-82]`
-- Callers left in Nest after S2 that use code moved to Rust (decision needed, see open questions): `post-import.service.ts:139` (`SourceScanService.scheduleIfNeeded`), `post-import.service.ts:283`, `media-rescan.service.ts:381/505`, `media-mutation.service.ts` (`ThumbnailService`), `scheduler.service.ts:494`, `livetv-session.service.ts` (`EngineEventsService`, `engine-presence`), `engine-resolver.service.ts` (`StreamingService`, `SubtitleStreamService`, `ThumbnailService`). The plan lists `POST /internal/jobs/run` and `POST /internal/ingest` only from S5.
+- Callers left in Nest after S2 that use code moved to Rust (decision needed, see open questions): `post-import.service.ts:139` (`SourceScanService.scheduleIfNeeded`), `post-import.service.ts:283`, `media-rescan.service.ts:381/505`, `media-mutation.service.ts` (`ThumbnailService`), `scheduler.service.ts:494`, `livetv-session.service.ts` (`EngineEventsService`, `engine-presence`), `engine-resolver.service.ts` (`StreamingService`, `SubtitleStreamService`, `ThumbnailService`). S5 adds `GET /internal/jobs` and `POST /internal/jobs/run` (`scheduler.md` Bridges); `POST /internal/ingest` was dropped (`bridge.md` known gap until S8).
 - Live TV rows of `GET /api/system/streams` (rule 34) need Nest's `listForActivity()` or an engine `GET /v1/live` read from Rust: not in the plan's bridge list.
 
 ## Deletes in Nest
@@ -239,5 +239,5 @@ Deletable once their consumers move (all inside S2): `streaming.controller.ts`, 
 1. Importers listed under Deletes keep Nest code alive after S2 (thumbnail/source-scan/edl/engine-events/engine-presence): bridge, keep file, or reorder? Plan §10 says a remaining importer means "not done".
 2. Live TV rows in `GET /api/system/streams` and `qoe.addTranscodeProbe` (live TV transcode count in QoE server load) have no bridge in §6.4.
 3. A markers-query failure leaves an opened engine session and presence behind (rule 18): preserve (parity) or close the session on that path (needs an F-number).
-4. `GenerateMissingSprites` pre-filter (`scheduler.service.ts:494`) checks only the legacy sprite path (rule 52): S5 spec decision.
+4. `GenerateMissingSprites` pre-filter (`scheduler.service.ts:494`) checks only the legacy sprite path (rule 52): decided in S5, Rust passes every file with `force=false` and the engine cache answers (`scheduler.md` rule 28).
 5. `startAt=abc` passes `NaN` through (rule 1): keep byte-for-byte (JSON `null`) or reject?
