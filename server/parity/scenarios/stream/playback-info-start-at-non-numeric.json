@@ -27,7 +27,9 @@
       "expect": {
         "body": {
           "error": "Bad Request",
-          "message": "validation",
+          "message": [
+            "startAt must be a number conforming to the specified constraints"
+          ],
           "statusCode": 400
         },
         "status": 400

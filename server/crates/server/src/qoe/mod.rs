@@ -462,18 +462,30 @@ impl Qoe {
 
     /// The session left the engine: flush now. The tracker stays for late events and a revive.
     pub fn session_ended(&self, sid: &str) {
-        {
-            let mut map = self.map();
-            let Some(t) = map.get_mut(sid).filter(|t| t.ended_at.is_none()) else {
-                return;
-            };
-            t.ended_at = Some(now_ms());
-            t.dirty = true;
+        if !self.mark_ended(sid) {
+            return;
         }
         if let Ok(rt) = tokio::runtime::Handle::try_current() {
             let (q, sid) = (self.clone(), sid.to_owned());
             rt.spawn(async move { q.flush(&sid).await });
         }
+    }
+
+    /// Request paths await the row so a following admin read sees the ended session.
+    pub async fn end_session(&self, sid: &str) {
+        if self.mark_ended(sid) {
+            self.flush(sid).await;
+        }
+    }
+
+    fn mark_ended(&self, sid: &str) -> bool {
+        let mut map = self.map();
+        let Some(t) = map.get_mut(sid).filter(|t| t.ended_at.is_none()) else {
+            return false;
+        };
+        t.ended_at = Some(now_ms());
+        t.dirty = true;
+        true
     }
 
     fn to_row(t: &Tracker) -> QoeRow {

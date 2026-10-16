@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO media_file_scans (\"mediaFileId\", size, \"mtimeMs\", scan) VALUES ($1, $2, $3, $4)\n               ON CONFLICT (\"mediaFileId\") DO UPDATE SET size = EXCLUDED.size,\n                 \"mtimeMs\" = EXCLUDED.\"mtimeMs\", scan = EXCLUDED.scan, \"updatedAt\" = now()",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int8",
+        "Float8",
+        "Jsonb"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "2347ebe2687a5d5aac2c2a98115bfe6d0df16a5b79a856e074bee798a6a6a132"
+}

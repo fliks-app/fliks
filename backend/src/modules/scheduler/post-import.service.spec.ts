@@ -2,6 +2,12 @@ import { existsSync } from 'fs';
 import { Subject } from 'rxjs';
 import { PostImportService } from './post-import.service';
 import type { DomainEvent, SseEvent } from './events.service';
+import { bridgeGenerateSprite, bridgeScanSource } from '../bridge/server-bridge';
+
+jest.mock('../bridge/server-bridge', () => ({
+  bridgeGenerateSprite: jest.fn(),
+  bridgeScanSource: jest.fn(),
+}));
 
 jest.mock('fs', () => ({
   ...(jest.requireActual('fs') as object),
@@ -19,7 +25,6 @@ function harness() {
   const domain = new Subject<DomainEvent>();
   const sse = new Subject<SseEvent>();
   const files = [{ id: 1 }, { id: 2 }];
-  const sourceScans = { scheduleIfNeeded: jest.fn().mockResolvedValue(undefined) };
   const mediaFileRepo = {
     find: jest.fn().mockResolvedValue(files),
     findOne: jest.fn().mockImplementation(({ where }: { where: { id: number } }) =>
@@ -31,7 +36,6 @@ function harness() {
       }),
     ),
   };
-  const episodeRepo = { findOne: jest.fn() };
   const events = {
     onDomain: (h: (e: DomainEvent) => void) => domain.subscribe(h),
     subscribe: (h: (e: SseEvent) => void) => sse.subscribe(h),
@@ -39,7 +43,6 @@ function harness() {
   };
   const thumbnails = {
     getMetadataPath: (id: number) => `/cache/${id}/sprite.json`,
-    generateForFile: jest.fn().mockResolvedValue({ interval: 5 }),
   };
   const markers = { autoDetectMissing: jest.fn().mockResolvedValue(undefined) };
   const settings = { get: jest.fn().mockResolvedValue(null) };
@@ -51,14 +54,12 @@ function harness() {
   };
   const service = new PostImportService(
     mediaFileRepo as never,
-    episodeRepo as never,
     events as never,
     thumbnails as never,
     markers as never,
     settings as never,
     postImportQueue as never,
     activityRegistry as never,
-    sourceScans as never,
   );
   service.onModuleInit();
   return {
@@ -72,7 +73,6 @@ function harness() {
     settings,
     postImportQueue,
     activityRegistry,
-    sourceScans,
   };
 }
 
@@ -80,6 +80,8 @@ describe('PostImportService', () => {
   beforeEach(() => {
     jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] });
     hasSprite.mockReturnValue(false);
+    jest.mocked(bridgeGenerateSprite).mockReset().mockResolvedValue({ interval: 5 } as never);
+    jest.mocked(bridgeScanSource).mockReset().mockResolvedValue(undefined);
   });
   afterEach(() => jest.useRealTimers());
 
@@ -87,12 +89,12 @@ describe('PostImportService', () => {
     const h = harness();
 
     h.domain.next({ type: 'media.files.imported', mediaId: 7, source: 'download' });
-    expect(h.thumbnails.generateForFile).not.toHaveBeenCalled();
+    expect(bridgeGenerateSprite).not.toHaveBeenCalled();
 
     jest.advanceTimersByTime(PostImportService.SETTLE_MS);
     await settle();
 
-    expect(h.thumbnails.generateForFile).toHaveBeenCalledTimes(2);
+    expect(bridgeGenerateSprite).toHaveBeenCalledTimes(2);
     expect(h.markers.autoDetectMissing).toHaveBeenCalledWith(7);
     h.service.onModuleDestroy();
   });
@@ -105,8 +107,8 @@ describe('PostImportService', () => {
     jest.advanceTimersByTime(PostImportService.SETTLE_MS);
     await settle();
 
-    expect(h.thumbnails.generateForFile).toHaveBeenCalledTimes(1);
-    expect(h.thumbnails.generateForFile.mock.calls[0][0]).toMatchObject({ id: 2 });
+    expect(bridgeGenerateSprite).toHaveBeenCalledTimes(1);
+    expect(jest.mocked(bridgeGenerateSprite).mock.calls[0][0]).toBe(2);
     h.service.onModuleDestroy();
   });
 
@@ -137,7 +139,7 @@ describe('PostImportService', () => {
     jest.advanceTimersByTime(PostImportService.SETTLE_MS);
     await settle();
 
-    expect(h.thumbnails.generateForFile).not.toHaveBeenCalled();
+    expect(bridgeGenerateSprite).not.toHaveBeenCalled();
     expect(h.markers.autoDetectMissing).toHaveBeenCalledWith(7);
     h.service.onModuleDestroy();
   });
@@ -166,8 +168,8 @@ describe('PostImportService', () => {
     jest.advanceTimersByTime(PostImportService.SETTLE_MS);
     await settle();
 
-    expect(h.sourceScans.scheduleIfNeeded).toHaveBeenCalledWith(1, '/lib/show/f1.mkv', null);
-    expect(h.thumbnails.generateForFile).not.toHaveBeenCalled();
+    expect(bridgeScanSource).toHaveBeenCalledWith(1);
+    expect(bridgeGenerateSprite).not.toHaveBeenCalled();
     expect(h.markers.autoDetectMissing).not.toHaveBeenCalled();
     h.service.onModuleDestroy();
   });

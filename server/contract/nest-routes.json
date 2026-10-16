@@ -860,7 +860,7 @@
     "controller": "LivetvController",
     "handler": "listChannels",
     "file": "src/modules/livetv/controllers/livetv.controller.ts",
-    "line": 62,
+    "line": 61,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -874,7 +874,7 @@
     "controller": "LivetvController",
     "handler": "serveLogo",
     "file": "src/modules/livetv/controllers/livetv.controller.ts",
-    "line": 75,
+    "line": 74,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -887,7 +887,7 @@
     "controller": "LivetvController",
     "handler": "play",
     "file": "src/modules/livetv/controllers/livetv.controller.ts",
-    "line": 139,
+    "line": 138,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard",
@@ -902,7 +902,7 @@
     "controller": "LivetvController",
     "handler": "setPrefs",
     "file": "src/modules/livetv/controllers/livetv.controller.ts",
-    "line": 189,
+    "line": 187,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard",
@@ -917,7 +917,7 @@
     "controller": "LivetvController",
     "handler": "onNow",
     "file": "src/modules/livetv/controllers/livetv.controller.ts",
-    "line": 102,
+    "line": 101,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -931,7 +931,7 @@
     "controller": "LivetvController",
     "handler": "guideWindow",
     "file": "src/modules/livetv/controllers/livetv.controller.ts",
-    "line": 113,
+    "line": 112,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -945,7 +945,7 @@
     "controller": "LivetvController",
     "handler": "program",
     "file": "src/modules/livetv/controllers/livetv.controller.ts",
-    "line": 127,
+    "line": 126,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -958,7 +958,7 @@
     "controller": "LivetvController",
     "handler": "search",
     "file": "src/modules/livetv/controllers/livetv.controller.ts",
-    "line": 133,
+    "line": 132,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -972,7 +972,7 @@
     "controller": "LivetvController",
     "handler": "leave",
     "file": "src/modules/livetv/controllers/livetv.controller.ts",
-    "line": 160,
+    "line": 159,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard",
@@ -986,7 +986,7 @@
     "controller": "LivetvController",
     "handler": "heartbeat",
     "file": "src/modules/livetv/controllers/livetv.controller.ts",
-    "line": 169,
+    "line": 168,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard",
@@ -1000,7 +1000,7 @@
     "controller": "LivetvController",
     "handler": "status",
     "file": "src/modules/livetv/controllers/livetv.controller.ts",
-    "line": 56,
+    "line": 55,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -1240,7 +1240,7 @@
     "controller": "MediaController",
     "handler": "remove",
     "file": "src/modules/media/media.controller.ts",
-    "line": 955,
+    "line": 948,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -1253,7 +1253,7 @@
     "controller": "MediaController",
     "handler": "findOne",
     "file": "src/modules/media/media.controller.ts",
-    "line": 887,
+    "line": 880,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -1266,7 +1266,7 @@
     "controller": "MediaController",
     "handler": "update",
     "file": "src/modules/media/media.controller.ts",
-    "line": 944,
+    "line": 937,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -1280,7 +1280,7 @@
     "controller": "MediaController",
     "handler": "analyzeMedia",
     "file": "src/modules/media/media.controller.ts",
-    "line": 554,
+    "line": 547,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -1294,7 +1294,7 @@
     "controller": "MediaController",
     "handler": "getCast",
     "file": "src/modules/media/media.controller.ts",
-    "line": 924,
+    "line": 917,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -1307,7 +1307,7 @@
     "controller": "MediaController",
     "handler": "getCollection",
     "file": "src/modules/media/media.controller.ts",
-    "line": 914,
+    "line": 907,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -1320,7 +1320,7 @@
     "controller": "MediaController",
     "handler": "getCrew",
     "file": "src/modules/media/media.controller.ts",
-    "line": 934,
+    "line": 927,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -1333,7 +1333,7 @@
     "controller": "MediaController",
     "handler": "refreshEpisodeMetadata",
     "file": "src/modules/media/media.controller.ts",
-    "line": 436,
+    "line": 433,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -1453,7 +1453,7 @@
     "controller": "MediaController",
     "handler": "refreshMetadata",
     "file": "src/modules/media/media.controller.ts",
-    "line": 386,
+    "line": 385,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -1466,7 +1466,7 @@
     "controller": "MediaController",
     "handler": "rescanFiles",
     "file": "src/modules/media/media.controller.ts",
-    "line": 485,
+    "line": 480,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -1479,7 +1479,7 @@
     "controller": "MediaController",
     "handler": "getSimilar",
     "file": "src/modules/media/media.controller.ts",
-    "line": 899,
+    "line": 892,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -1492,7 +1492,7 @@
     "controller": "MediaController",
     "handler": "getStreams",
     "file": "src/modules/media/media.controller.ts",
-    "line": 836,
+    "line": 829,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -1505,7 +1505,7 @@
     "controller": "MediaController",
     "handler": "getSubtitles",
     "file": "src/modules/media/media.controller.ts",
-    "line": 576,
+    "line": 569,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -1518,7 +1518,7 @@
     "controller": "MediaController",
     "handler": "deleteSubtitle",
     "file": "src/modules/media/media.controller.ts",
-    "line": 807,
+    "line": 800,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -1531,7 +1531,7 @@
     "controller": "MediaController",
     "handler": "setSubtitleLanguage",
     "file": "src/modules/media/media.controller.ts",
-    "line": 729,
+    "line": 722,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -1544,7 +1544,7 @@
     "controller": "MediaController",
     "handler": "ocrSubtitle",
     "file": "src/modules/media/media.controller.ts",
-    "line": 701,
+    "line": 694,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -1557,7 +1557,7 @@
     "controller": "MediaController",
     "handler": "postProcessSubtitle",
     "file": "src/modules/media/media.controller.ts",
-    "line": 859,
+    "line": 852,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -1570,7 +1570,7 @@
     "controller": "MediaController",
     "handler": "syncSubtitle",
     "file": "src/modules/media/media.controller.ts",
-    "line": 818,
+    "line": 811,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -1583,7 +1583,7 @@
     "controller": "MediaController",
     "handler": "translateSubtitle",
     "file": "src/modules/media/media.controller.ts",
-    "line": 713,
+    "line": 706,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -1596,7 +1596,7 @@
     "controller": "MediaController",
     "handler": "upgradeSubtitle",
     "file": "src/modules/media/media.controller.ts",
-    "line": 875,
+    "line": 868,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -1609,7 +1609,7 @@
     "controller": "MediaController",
     "handler": "validateSubtitle",
     "file": "src/modules/media/media.controller.ts",
-    "line": 741,
+    "line": 734,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -1622,7 +1622,7 @@
     "controller": "MediaController",
     "handler": "autoSubtitle",
     "file": "src/modules/media/media.controller.ts",
-    "line": 650,
+    "line": 643,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -1635,7 +1635,7 @@
     "controller": "MediaController",
     "handler": "downloadSubtitle",
     "file": "src/modules/media/media.controller.ts",
-    "line": 752,
+    "line": 745,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -1648,7 +1648,7 @@
     "controller": "MediaController",
     "handler": "searchSubtitles",
     "file": "src/modules/media/media.controller.ts",
-    "line": 592,
+    "line": 585,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -1661,7 +1661,7 @@
     "controller": "MediaController",
     "handler": "searchMissingSubtitles",
     "file": "src/modules/media/media.controller.ts",
-    "line": 690,
+    "line": 683,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -1674,7 +1674,7 @@
     "controller": "MediaController",
     "handler": "uploadSubtitle",
     "file": "src/modules/media/media.controller.ts",
-    "line": 770,
+    "line": 763,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -1768,7 +1768,7 @@
     "controller": "MediaController",
     "handler": "patchEpisode",
     "file": "src/modules/media/media.controller.ts",
-    "line": 993,
+    "line": 986,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -1850,7 +1850,7 @@
     "controller": "MediaController",
     "handler": "patchSeason",
     "file": "src/modules/media/media.controller.ts",
-    "line": 981,
+    "line": 974,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -1864,7 +1864,7 @@
     "controller": "MediaController",
     "handler": "getSyncQueue",
     "file": "src/modules/media/media.controller.ts",
-    "line": 853,
+    "line": 846,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -3270,104 +3270,6 @@
     "policies": ""
   },
   {
-    "method": "GET",
-    "path": "/api/stream/:mediaFileId/edl",
-    "controller": "StreamingController",
-    "handler": "edl",
-    "file": "src/modules/streaming/streaming.controller.ts",
-    "line": 159,
-    "guards": [
-      "JwtOrApiKeyGuard"
-    ],
-    "policies": ""
-  },
-  {
-    "method": "POST",
-    "path": "/api/stream/:mediaFileId/playback-info",
-    "controller": "StreamingController",
-    "handler": "playbackInfo",
-    "file": "src/modules/streaming/streaming.controller.ts",
-    "line": 124,
-    "guards": [
-      "JwtOrApiKeyGuard"
-    ],
-    "policies": "",
-    "body": "DeviceProfileDto"
-  },
-  {
-    "method": "GET",
-    "path": "/api/stream/info/effective-settings",
-    "controller": "StreamingController",
-    "handler": "effectiveSettingsInfo",
-    "file": "src/modules/streaming/streaming.controller.ts",
-    "line": 101,
-    "guards": [
-      "JwtOrApiKeyGuard"
-    ],
-    "policies": ""
-  },
-  {
-    "method": "GET",
-    "path": "/api/stream/info/gpus",
-    "controller": "StreamingController",
-    "handler": "gpusInfo",
-    "file": "src/modules/streaming/streaming.controller.ts",
-    "line": 118,
-    "guards": [
-      "JwtOrApiKeyGuard"
-    ],
-    "policies": ""
-  },
-  {
-    "method": "GET",
-    "path": "/api/stream/info/hw-accel",
-    "controller": "StreamingController",
-    "handler": "hwAccelInfo",
-    "file": "src/modules/streaming/streaming.controller.ts",
-    "line": 89,
-    "guards": [
-      "JwtOrApiKeyGuard"
-    ],
-    "policies": ""
-  },
-  {
-    "method": "GET",
-    "path": "/api/stream/info/qualities/:mediaFileId",
-    "controller": "StreamingController",
-    "handler": "downloadQualities",
-    "file": "src/modules/streaming/streaming.controller.ts",
-    "line": 74,
-    "guards": [
-      "JwtOrApiKeyGuard"
-    ],
-    "policies": ""
-  },
-  {
-    "method": "GET",
-    "path": "/api/stream/info/tonemap-algos",
-    "controller": "StreamingController",
-    "handler": "tonemapAlgosInfo",
-    "file": "src/modules/streaming/streaming.controller.ts",
-    "line": 95,
-    "guards": [
-      "JwtOrApiKeyGuard"
-    ],
-    "policies": ""
-  },
-  {
-    "method": "DELETE",
-    "path": "/api/stream/sessions/:sessionId",
-    "controller": "StreamingController",
-    "handler": "stopLiveSession",
-    "file": "src/modules/streaming/streaming.controller.ts",
-    "line": 179,
-    "guards": [
-      "JwtOrApiKeyGuard"
-    ],
-    "policies": "",
-    "httpCode": 204
-  },
-  {
     "method": "DELETE",
     "path": "/api/subtitles/blacklist",
     "controller": "SubtitleActivityController",
@@ -3718,7 +3620,7 @@
     "controller": "SystemController",
     "handler": "createBackup",
     "file": "src/modules/scheduler/system.controller.ts",
-    "line": 365,
+    "line": 186,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -3731,7 +3633,7 @@
     "controller": "SystemController",
     "handler": "listBackups",
     "file": "src/modules/scheduler/system.controller.ts",
-    "line": 371,
+    "line": 192,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -3744,7 +3646,7 @@
     "controller": "SystemController",
     "handler": "deleteBackup",
     "file": "src/modules/scheduler/system.controller.ts",
-    "line": 390,
+    "line": 211,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -3757,7 +3659,7 @@
     "controller": "SystemController",
     "handler": "downloadBackup",
     "file": "src/modules/scheduler/system.controller.ts",
-    "line": 383,
+    "line": 204,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -3770,7 +3672,7 @@
     "controller": "SystemController",
     "handler": "health",
     "file": "src/modules/scheduler/system.controller.ts",
-    "line": 254,
+    "line": 90,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -3783,7 +3685,7 @@
     "controller": "SystemController",
     "handler": "getLogs",
     "file": "src/modules/scheduler/system.controller.ts",
-    "line": 397,
+    "line": 218,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -3796,7 +3698,7 @@
     "controller": "SystemController",
     "handler": "restart",
     "file": "src/modules/scheduler/system.controller.ts",
-    "line": 267,
+    "line": 105,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -3809,7 +3711,7 @@
     "controller": "SystemController",
     "handler": "restore",
     "file": "src/modules/scheduler/system.controller.ts",
-    "line": 377,
+    "line": 198,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -3822,77 +3724,12 @@
     "controller": "SystemController",
     "handler": "stats",
     "file": "src/modules/scheduler/system.controller.ts",
-    "line": 321,
+    "line": 142,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
     ],
     "policies": "(ability) => ability.can(Action.Read, 'Settings')"
-  },
-  {
-    "method": "GET",
-    "path": "/api/system/streams",
-    "controller": "SystemController",
-    "handler": "activeStreams",
-    "file": "src/modules/scheduler/system.controller.ts",
-    "line": 415,
-    "guards": [
-      "JwtOrApiKeyGuard",
-      "PoliciesGuard"
-    ],
-    "policies": "(ability) => ability.can(Action.Read, 'Settings')"
-  },
-  {
-    "method": "POST",
-    "path": "/api/system/streams/:sessionId/command",
-    "controller": "SystemController",
-    "handler": "sendPlayerCommand",
-    "file": "src/modules/scheduler/system.controller.ts",
-    "line": 763,
-    "guards": [
-      "JwtOrApiKeyGuard",
-      "PoliciesGuard"
-    ],
-    "policies": "(ability) => ability.can(Action.Manage, 'Settings')"
-  },
-  {
-    "method": "DELETE",
-    "path": "/api/system/transcode-cache",
-    "controller": "SystemController",
-    "handler": "purgeAllTranscodeCache",
-    "file": "src/modules/scheduler/system.controller.ts",
-    "line": 718,
-    "guards": [
-      "JwtOrApiKeyGuard",
-      "PoliciesGuard"
-    ],
-    "policies": "(ability) => ability.can(Action.Manage, 'Settings')"
-  },
-  {
-    "method": "GET",
-    "path": "/api/system/transcode-cache",
-    "controller": "SystemController",
-    "handler": "transcodeCacheStats",
-    "file": "src/modules/scheduler/system.controller.ts",
-    "line": 704,
-    "guards": [
-      "JwtOrApiKeyGuard",
-      "PoliciesGuard"
-    ],
-    "policies": "(ability) => ability.can(Action.Read, 'Settings')"
-  },
-  {
-    "method": "DELETE",
-    "path": "/api/system/transcode-cache/:mediaFileId",
-    "controller": "SystemController",
-    "handler": "purgeTranscodeCache",
-    "file": "src/modules/scheduler/system.controller.ts",
-    "line": 734,
-    "guards": [
-      "JwtOrApiKeyGuard",
-      "PoliciesGuard"
-    ],
-    "policies": "(ability) => ability.can(Action.Manage, 'Settings')"
   },
   {
     "method": "GET",
@@ -3900,7 +3737,7 @@
     "controller": "SystemController",
     "handler": "update",
     "file": "src/modules/scheduler/system.controller.ts",
-    "line": 289,
+    "line": 127,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -3913,7 +3750,7 @@
     "controller": "SystemController",
     "handler": "version",
     "file": "src/modules/scheduler/system.controller.ts",
-    "line": 283,
+    "line": 121,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
@@ -3926,41 +3763,13 @@
     "controller": "EngineResolverController",
     "handler": "resolve",
     "file": "src/modules/engine/engine-resolver.controller.ts",
-    "line": 39,
+    "line": 16,
     "guards": [
-      "EngineHostGuard"
+      "BridgeAuthGuard"
     ],
     "policies": "",
-    "body": "ResolveRequestDto",
+    "body": "LiveResolveDto",
     "httpCode": 200
-  },
-  {
-    "method": "POST",
-    "path": "/internal/bridge/drop-connections",
-    "controller": "BridgeController",
-    "handler": "dropConnections",
-    "file": "src/modules/bridge/bridge.controller.ts",
-    "line": 34,
-    "guards": [
-      "BridgeAuthGuard"
-    ],
-    "policies": "",
-    "body": "DropConnectionsDto",
-    "httpCode": 204
-  },
-  {
-    "method": "POST",
-    "path": "/internal/bridge/emit",
-    "controller": "BridgeController",
-    "handler": "emit",
-    "file": "src/modules/bridge/bridge.controller.ts",
-    "line": 22,
-    "guards": [
-      "BridgeAuthGuard"
-    ],
-    "policies": "",
-    "body": "EmitDto",
-    "httpCode": 204
   },
   {
     "method": "POST",
@@ -3968,12 +3777,26 @@
     "controller": "BridgeController",
     "handler": "settingsChanged",
     "file": "src/modules/bridge/bridge.controller.ts",
-    "line": 42,
+    "line": 20,
     "guards": [
       "BridgeAuthGuard"
     ],
     "policies": "",
     "body": "SettingsChangedDto",
     "httpCode": 204
+  },
+  {
+    "method": "POST",
+    "path": "/internal/plugins/pre-roll",
+    "controller": "PreRollBridgeController",
+    "handler": "ask",
+    "file": "src/modules/plugins/plugin-pre-roll-bridge.controller.ts",
+    "line": 46,
+    "guards": [
+      "BridgeAuthGuard"
+    ],
+    "policies": "",
+    "body": "PreRollAskDto",
+    "httpCode": 200
   }
 ]

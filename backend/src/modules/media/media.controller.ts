@@ -46,7 +46,7 @@ import { CheckPolicies } from '../auth/casl/check-policies.decorator';
 import { Action } from '../auth/casl/actions.enum';
 import { Media } from './entities/media.entity';
 import { SubtitlesService, SUBTITLE_UPLOAD_MAX_BYTES } from '../subtitles/subtitles.service';
-import { MAX_EDL_BYTES } from '../streaming/edl/edl-sidecar';
+import { MAX_EDL_BYTES } from './edl/edl-sidecar';
 import { SubtitleOcrService } from '../subtitles/subtitle-ocr.service';
 import { SubtitleTranslationService } from '../subtitles/subtitle-translation.service';
 import { SubtitleSyncService } from '../subtitles/subtitle-sync.service';

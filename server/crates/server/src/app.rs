@@ -89,7 +89,20 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         playback::hide,
         playback::toggle_watched,
         playback::toggle_series_watched,
-        playback::toggle_season_watched
+        playback::toggle_season_watched,
+        crate::stream::playback_info,
+        crate::stream::qualities,
+        crate::stream::hw_accel,
+        crate::stream::tonemap_algos,
+        crate::stream::effective_settings,
+        crate::stream::gpus,
+        crate::stream::edl,
+        crate::stream::delete_session,
+        crate::stream::streams,
+        crate::stream::command,
+        crate::stream::stats,
+        crate::stream::purge_all,
+        crate::stream::purge_file
     )
 )]
 pub struct ApiDoc;
@@ -143,6 +156,7 @@ fn api() -> Router<AppState> {
         .merge(remote::router())
         .merge(playback::router())
         .merge(qoe::router())
+        .merge(crate::stream::router())
 }
 
 async fn preflight_here(State(cors): State<Router>, req: Request, next: Next) -> Response {

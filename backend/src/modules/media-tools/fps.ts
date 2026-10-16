@@ -13,13 +13,3 @@ export function parseSourceFps(
   }
   return parseFloat(frameRate) || undefined;
 }
-
-/** Real length of a segment cut every `segmentDuration` seconds on whole GOPs of `fps`. */
-export function realSegmentSeconds(
-  segmentDuration: number,
-  fps?: number,
-): number {
-  if (!fps || fps <= 0) return segmentDuration;
-  const gopSeconds = Math.max(1, Math.round(segmentDuration * fps)) / fps;
-  return Math.round(gopSeconds * 1000) / 1000;
-}

@@ -44,7 +44,7 @@ export class QoeService {
     this.post('served', { session, cmcdRaw: cmcdRaw ?? null, segmentDurationS, waitedMs });
   }
 
-  sessionEnded(session: SessionRef): void {
+  sessionEnded(session: Pick<SessionRef, 'sessionId'>): void {
     this.post('session-ended', { sessionId: session.sessionId });
   }
 

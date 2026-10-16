@@ -22,6 +22,9 @@ Auth: `Authorization: Bearer $FLIKS_BRIDGE_TOKEN` (random per boot; constant-tim
 | `POST /internal/qoe/served` (Rust) | S2 to S7 | `{session:SessionRef, cmcdRaw:string\|null, segmentDurationS:number, waitedMs:number\|null}` per live `SegmentServed`; 204 | S2 | S7 |
 | `POST /internal/qoe/transcode-probe` (Rust) | S2 to S7 | `{count:int>=0}`: live TV holds in transcode mode, added to `serverLoad.activeTranscodes`; Nest pushes it when it changes; 204 | S2 | S7 |
 | `GET /internal/qoe/live-summary?sessionId=` (Rust) | S2 to S7 | 200 `QoeLiveSummary` (`qoe.md` rule 36), 404 when the session is not tracked | S2 | S7 |
+| `POST /internal/jobs/sprite` (Rust) | S2 to S9 | `{mediaFileId:int, force?:bool, priority?:"low"\|"normal"\|"high"}` (default low); Rust resolves the file, media and episode itself and runs the engine's `Sprite` job tracked as `GenerateSprite:<id>` activity; 200 `SpriteMeta`, 204 when none could be made, 404 for an unknown or off-disk file; answers when the job ends | S2 | S9 |
+| `POST /internal/scan/source` (Rust) | S2 to S9 | `{mediaFileId:int, priority?:"low"\|"normal"\|"high"}`; scans the file's source unless its current version was; 204 once settled (a failed scan is logged, not an error), 404 for an unknown or off-disk file | S2 | S9 |
+| `POST /internal/plugins/pre-roll` (Nest) | S2 to S8 | request `{mediaFileId:int, mediaId:int, episodeId?:int\|null, principal:{kind:"delegated", userId:int>=1}}` (bridge bearer); 200 `PreRollItem[]` (`{mediaFileId, labelKey?, skippable?}`), `[]` on any plugin failure; Rust ACL-gates every candidate itself and treats any bridge failure as `[]` | S2 | S8 |
 
 Rust bridge auth: `Authorization: Bearer $FLIKS_BRIDGE_TOKEN`, constant-time compare, 401 otherwise (`Bridge::check`). Nest bridge auth: missing `FLIKS_BRIDGE_TOKEN` answers 503 on every `/internal/bridge/*` call, a wrong or absent bearer 401. Nest reaches Rust through `FLIKS_SERVER_URL` (base URL, no trailing slash).
 

@@ -9,10 +9,11 @@ pub mod remote;
 pub mod resolve;
 mod store;
 #[cfg(test)]
-mod testkit;
+pub(crate) mod testkit;
 
 pub use calls::{ConnectionTest, EngineError, SessionFilter};
-pub use config::{lifetime, validate_streaming_setting};
+pub(crate) use client::enc;
+pub use config::{lifetime, load_streaming, validate_streaming_setting};
 pub use events::Feed;
 pub use jobs::Progress;
 pub use remote::router;

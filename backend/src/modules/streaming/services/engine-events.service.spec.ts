@@ -6,7 +6,7 @@ import { EngineEventsService, sseData } from './engine-events.service';
 import { jobKeyOf } from './engine-presence';
 
 const { engine: recorded } = JSON.parse(
-  readFileSync(join(__dirname, 'engine-playback.recorded.json'), 'utf8'),
+  readFileSync(join(__dirname, '../../../../../server/fixtures/playback-info/engine-playback.recorded.json'), 'utf8'),
 ) as { engine: any };
 
 const snapshot = (over: Record<string, unknown> = {}): any => ({
@@ -57,8 +57,6 @@ function setup(runtime = true) {
   const svc = new EngineEventsService(
     engine as never,
     liveSessions,
-    qoe as never,
-    { segmentDuration: 3 } as never,
   );
   return { svc, engine, qoe, liveSessions };
 }
@@ -120,112 +118,6 @@ describe('EngineEventsService.handle', () => {
     });
     expect(t.liveSessions.peek('sid-1')).toBeNull();
     expect(t.qoe.sessionEnded).toHaveBeenCalledTimes(1);
-  });
-
-  it('feeds the served rung and a CPU fallback of a transcode to QoE', () => {
-    const t = setup();
-    const live = t.liveSessions.create({
-      sessionId: 'sid-1',
-      userId: 7,
-      username: null,
-      mediaFileId: 42,
-      kind: 'transcode',
-      bitrateByQuality: {
-        '720p': { videoBitrateBps: 3_000_000, audioBitrateBps: 192_000, totalBitrateBps: 3_192_000 },
-      },
-    });
-    t.svc.handle({
-      type: 'PipelineChanged',
-      sessionId: 'sid-1',
-      quality: '720p',
-      hwAccel: 'none',
-    });
-    expect(t.qoe.noteServedRung).toHaveBeenCalledWith(live, '720p', 3_000_000);
-    expect(t.qoe.noteHwAccel).toHaveBeenCalledWith(live, 'none');
-  });
-
-  it('gives no bitrate for the rung of a remux', () => {
-    const t = setup();
-    t.liveSessions.create({
-      sessionId: 'sid-1',
-      userId: 7,
-      username: null,
-      mediaFileId: 42,
-      kind: 'remux',
-    });
-    t.svc.handle({
-      type: 'PipelineChanged',
-      sessionId: 'sid-1',
-      quality: 'remux',
-      hwAccel: 'none',
-    });
-    expect(t.qoe.noteServedRung).not.toHaveBeenCalled();
-  });
-
-  it('hands a served segment to QoE with its CMCD and production wait', () => {
-    const t = setup();
-    const live = t.liveSessions.create({
-      sessionId: 'sid-1',
-      userId: 7,
-      username: null,
-      mediaFileId: 42,
-      kind: 'transcode',
-      sourceFps: 24,
-    });
-    t.svc.handle({
-      type: 'SegmentServed',
-      sessionId: 'sid-1',
-      track: 'video',
-      rung: '480p',
-      index: 4,
-      waitedMs: 120,
-      cacheHit: false,
-      cmcdRaw: 'bl=12000,mtp=25000',
-    });
-    expect(t.qoe.observeServed).toHaveBeenCalledWith(
-      live,
-      { bl: 12000, mtp: 25000 },
-      expect.closeTo(3, 1),
-      120,
-    );
-    t.svc.handle({
-      type: 'SegmentServed',
-      sessionId: 'sid-1',
-      track: 'audio',
-      rung: 'a0',
-      index: 4,
-      waitedMs: 0,
-      cacheHit: true,
-    });
-    expect(t.qoe.observeServed).toHaveBeenLastCalledWith(
-      live,
-      null,
-      expect.any(Number),
-      0,
-    );
-  });
-
-  it('ignores events of a session it holds no presence for', () => {
-    const t = setup();
-    t.svc.handle({
-      type: 'SegmentServed',
-      sessionId: 'x',
-      track: 'video',
-      rung: 'r',
-      index: 0,
-      waitedMs: 1,
-      cacheHit: false,
-    });
-    t.svc.handle({
-      type: 'PipelineChanged',
-      sessionId: 'x',
-      quality: 'r',
-      hwAccel: 'none',
-    });
-    t.svc.handle({ type: 'SessionEnded', sessionId: 'x', reason: 'stopped' });
-    expect(t.qoe.observeServed).not.toHaveBeenCalled();
-    expect(t.qoe.noteServedRung).not.toHaveBeenCalled();
-    expect(t.qoe.sessionEnded).not.toHaveBeenCalled();
   });
 
   it('keeps the load counter from job events', () => {

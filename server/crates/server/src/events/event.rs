@@ -114,7 +114,25 @@ pub enum RemoteAction {
     Browse,
 }
 
-/// Nest stores and relays any non-empty heartbeat `state` string verbatim.
+/// `Option<Option<T>>` as the wire shows it: absent is `None`, `null` is `Some(None)`.
+mod present {
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    pub fn serialize<T: Serialize, S: Serializer>(
+        v: &Option<Option<T>>,
+        s: S,
+    ) -> Result<S::Ok, S::Error> {
+        v.as_ref().and_then(Option::as_ref).serialize(s)
+    }
+
+    pub fn deserialize<'de, T: Deserialize<'de>, D: Deserializer<'de>>(
+        d: D,
+    ) -> Result<Option<Option<T>>, D::Error> {
+        Option::<T>::deserialize(d).map(Some)
+    }
+}
+
+/// Nest stores and relays any truthy heartbeat `state` verbatim, whatever its JSON type.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum PlayState {
@@ -122,7 +140,7 @@ pub enum PlayState {
     Paused,
     Buffering,
     #[serde(untagged)]
-    Other(String),
+    Other(Value),
 }
 
 /// One rung of a remote target's quality ladder.
@@ -344,21 +362,21 @@ pub enum SseEvent {
         target_id: String,
         session_id: String,
         media_id: Option<i64>,
-        /// Echoes the heartbeat body: `JSON.stringify` drops it when the client left it out.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        media_file_id: Option<i64>,
+        /// Echoes the heartbeat body: absent stays absent, a JSON `null` stays `null`.
+        #[serde(default, skip_serializing_if = "Option::is_none", with = "present")]
+        media_file_id: Option<Option<i64>>,
         episode_id: Option<i64>,
         media_title: Option<String>,
         episode_label: Option<String>,
         poster_url: Option<String>,
         fanart_url: Option<String>,
         position_seconds: Num,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        duration_seconds: Option<Num>,
+        #[serde(default, skip_serializing_if = "Option::is_none", with = "present")]
+        duration_seconds: Option<Option<Num>>,
         state: PlayState,
         volume: Option<Num>,
         muted: Option<bool>,
-        supports_volume: bool,
+        supports_volume: Option<bool>,
         subtitle_id: Option<String>,
         quality: Option<String>,
         qualities: Option<Vec<QualityRung>>,

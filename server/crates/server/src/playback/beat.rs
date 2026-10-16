@@ -2,7 +2,10 @@
 use super::db::{self, Watch};
 use crate::{
     engine::EngineError,
-    events::event::{PlayState, QualityRung},
+    events::{
+        SseEvent,
+        event::{Num, PlayState, QualityRung},
+    },
     http::{
         AppError,
         auth::SessionAuthed,
@@ -70,10 +73,17 @@ fn index(b: &Value, k: &str) -> Option<Option<i32>> {
     nullable(b, k, |v| v.as_i64().and_then(|n| i32::try_from(n).ok()))
 }
 
-/// `if (payload.state)`: any non-empty string, kept verbatim.
+/// `if (payload.state)`: any JS-truthy value, kept verbatim.
 fn play_state(b: &Value) -> Option<PlayState> {
-    let s = b.get("state")?.as_str().filter(|s| !s.is_empty())?;
-    serde_json::from_value(Value::from(s)).ok()
+    let v = b.get("state")?;
+    let truthy = match v {
+        Value::Null => false,
+        Value::Bool(b) => *b,
+        Value::Number(n) => n.as_f64().is_some_and(|f| f != 0.0),
+        Value::String(s) => !s.is_empty(),
+        _ => true,
+    };
+    truthy.then(|| serde_json::from_value(v.clone()).ok())?
 }
 
 fn presence_beat(b: &Value, sse: Option<String>) -> Beat {
@@ -87,7 +97,7 @@ fn presence_beat(b: &Value, sse: Option<String>) -> Beat {
         autoplay_blocked: b.get("autoplayBlocked").and_then(Value::as_bool),
         has_next: b.get("hasNext").and_then(Value::as_bool),
         episode_label: text(b, "episodeLabel"),
-        supports_volume: b.get("supportsVolume").and_then(Value::as_bool),
+        supports_volume: nullable(b, "supportsVolume", Value::as_bool),
         subtitle_id: text(b, "subtitleId"),
         audio_track_index: index(b, "audioTrackIndex"),
         subtitle_track_index: index(b, "subtitleTrackIndex"),
@@ -192,44 +202,45 @@ fn record_qoe(st: &AppState, user: i32, s: &LiveSession, qoe: &Value) {
     }
 }
 
-/// Rule 11.
+/// Rule 11: the stored presence plus the body fields Nest echoes as received.
+fn remote_state(target_id: String, s: &LiveSession, media: i32, b: &Value) -> SseEvent {
+    SseEvent::RemoteState {
+        target_id,
+        session_id: s.session_id.clone(),
+        media_id: Some(i64::from(media)),
+        media_file_id: nullable(b, "mediaFileId", Value::as_i64),
+        episode_id: int(b, "episodeId"),
+        media_title: s.media_title.clone(),
+        episode_label: s.episode_label.clone(),
+        poster_url: s.poster_url.clone(),
+        fanart_url: s.fanart_url.clone(),
+        position_seconds: Num(s.position),
+        duration_seconds: nullable(b, "durationSeconds", Value::as_f64).map(|d| d.map(Num)),
+        state: s.state.clone(),
+        volume: s.volume.map(Num),
+        muted: s.muted,
+        supports_volume: s.supports_volume,
+        subtitle_id: s.subtitle_id.clone(),
+        quality: s.quality.clone(),
+        qualities: s.qualities.clone(),
+        autoplay_blocked: s.autoplay_blocked,
+        has_next: s.has_next,
+        audio_track_index: s.audio_track_index.map(i64::from),
+        subtitle_track_index: s.subtitle_track_index.map(i64::from),
+        last_cmd_id: b
+            .get("lastCmdId")
+            .and_then(Value::as_str)
+            .map(str::to_owned),
+    }
+}
+
 fn emit_state(st: &AppState, user: i32, s: &LiveSession, media: i32, b: &Value) {
     let Some(target_id) = st.hub.target_id_for(s.sse_connection_id.as_deref()) else {
         tracing::debug!(session = %s.session_id, "remote.state without a target");
         return;
     };
-    use crate::events::{SseEvent, event::Num};
-    st.hub.emit_to_user(
-        user,
-        SseEvent::RemoteState {
-            target_id,
-            session_id: s.session_id.clone(),
-            media_id: Some(i64::from(media)),
-            media_file_id: int(b, "mediaFileId"),
-            episode_id: int(b, "episodeId"),
-            media_title: s.media_title.clone(),
-            episode_label: s.episode_label.clone(),
-            poster_url: s.poster_url.clone(),
-            fanart_url: s.fanart_url.clone(),
-            position_seconds: Num(s.position),
-            duration_seconds: num(b, "durationSeconds").map(Num),
-            state: s.state.clone(),
-            volume: s.volume.map(Num),
-            muted: s.muted,
-            supports_volume: s.supports_volume,
-            subtitle_id: s.subtitle_id.clone(),
-            quality: s.quality.clone(),
-            qualities: s.qualities.clone(),
-            autoplay_blocked: s.autoplay_blocked,
-            has_next: s.has_next,
-            audio_track_index: s.audio_track_index.map(i64::from),
-            subtitle_track_index: s.subtitle_track_index.map(i64::from),
-            last_cmd_id: b
-                .get("lastCmdId")
-                .and_then(Value::as_str)
-                .map(str::to_owned),
-        },
-    );
+    st.hub
+        .emit_to_user(user, remote_state(target_id, s, media, b));
 }
 
 /// Rule 17: the four bodies; `sessionLost` is only ever `true` in one.
@@ -344,7 +355,7 @@ mod tests {
             position: 0.0,
             state: PlayState::Playing,
             episode_label: None,
-            supports_volume: true,
+            supports_volume: Some(true),
             subtitle_id: None,
             audio_track_index: None,
             subtitle_track_index: None,
@@ -484,5 +495,59 @@ mod tests {
         s.quality = Some("360p".into());
         s.bitrate_by_quality = Some([("360p".into(), hint(0))].into());
         assert_eq!(served_rung_bitrate(&s), None, "zero is absent");
+    }
+
+    #[test]
+    fn remote_state_echoes_null_and_absent_body_fields_and_the_stored_ones() {
+        let wire = |b: Value, s: &LiveSession| {
+            serde_json::to_value(remote_state("t".into(), s, 7, &b)).unwrap()
+        };
+        let e = wire(
+            json!({"mediaFileId": null, "durationSeconds": null}),
+            &live(),
+        );
+        assert_eq!(e["mediaFileId"], Value::Null);
+        assert_eq!(e["durationSeconds"], Value::Null);
+        let e = wire(json!({"mediaFileId": 3, "durationSeconds": 90.5}), &live());
+        assert_eq!(
+            (e["mediaFileId"].clone(), e["durationSeconds"].clone()),
+            (json!(3), json!(90.5))
+        );
+        let e = wire(json!({}), &live());
+        assert!(e.get("mediaFileId").is_none() && e.get("durationSeconds").is_none());
+        let s = LiveSession {
+            supports_volume: None,
+            state: play_state(&json!({"state": 5})).unwrap(),
+            ..live()
+        };
+        let e = wire(json!({}), &s);
+        assert_eq!(
+            (e["supportsVolume"].clone(), e["state"].clone()),
+            (Value::Null, json!(5))
+        );
+    }
+
+    #[test]
+    fn heartbeat_state_follows_js_truthiness() {
+        for (v, kept) in [
+            (json!(""), false),
+            (json!(0), false),
+            (json!(false), false),
+            (Value::Null, false),
+            (json!("x"), true),
+            (json!(1), true),
+            (json!(true), true),
+            (json!({}), true),
+            (json!("paused"), true),
+        ] {
+            assert_eq!(play_state(&json!({ "state": v })).is_some(), kept, "{v}");
+        }
+        assert_eq!(
+            play_state(&json!({"state": "paused"})),
+            Some(PlayState::Paused)
+        );
+        let b = presence_beat(&json!({"supportsVolume": null}), None);
+        assert_eq!(b.supports_volume, Some(None));
+        assert_eq!(presence_beat(&json!({}), None).supports_volume, None);
     }
 }

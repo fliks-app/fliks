@@ -1,0 +1,46 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, \"mediaId\" AS media_id, \"episodeId\" AS episode_id, \"relativePath\" AS relative_path,\n                  \"streamInfo\" AS stream_info\n           FROM media_files WHERE id = ANY($1)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "media_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 2,
+        "name": "episode_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "relative_path",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "stream_info",
+        "type_info": "Jsonb"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4Array"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      false,
+      true
+    ]
+  },
+  "hash": "87782f4c9456cb5d3333c158d8cc13eab9a2207c031c86611475e152e99b85a9"
+}

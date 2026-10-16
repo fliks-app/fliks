@@ -155,7 +155,7 @@ impl Ctx {
             position: 0.0,
             state: fliks_server::events::event::PlayState::Playing,
             episode_label: None,
-            supports_volume: true,
+            supports_volume: Some(true),
             subtitle_id: None,
             audio_track_index: None,
             subtitle_track_index: None,

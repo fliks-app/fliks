@@ -34,7 +34,7 @@ pub struct LiveSession {
     pub position: f64,
     pub state: PlayState,
     pub episode_label: Option<String>,
-    pub supports_volume: bool,
+    pub supports_volume: Option<bool>,
     pub subtitle_id: Option<String>,
     pub audio_track_index: Option<i32>,
     pub subtitle_track_index: Option<i32>,
@@ -111,7 +111,7 @@ pub struct Beat {
     pub autoplay_blocked: Option<bool>,
     pub has_next: Option<bool>,
     pub episode_label: Option<Option<String>>,
-    pub supports_volume: Option<bool>,
+    pub supports_volume: Option<Option<bool>>,
     pub subtitle_id: Option<Option<String>>,
     pub audio_track_index: Option<Option<i32>>,
     pub subtitle_track_index: Option<Option<i32>>,
@@ -151,7 +151,7 @@ impl LiveSession {
             position: f.position_s,
             state: PlayState::Playing,
             episode_label: None,
-            supports_volume: true,
+            supports_volume: Some(true),
             subtitle_id: None,
             audio_track_index: None,
             subtitle_track_index: None,
@@ -224,7 +224,7 @@ impl LiveSession {
 }
 
 /// A decimal ("23.976") or a rational ("24000/1001") frame rate; `None` when unknown.
-fn parse_source_fps(raw: &str) -> Option<f64> {
+pub fn parse_source_fps(raw: &str) -> Option<f64> {
     if let Some((n, d)) = raw.split_once('/') {
         let (n, d) = (n.trim().parse::<f64>().ok()?, d.trim().parse::<f64>().ok()?);
         return (n > 0.0 && d > 0.0).then(|| n / d);

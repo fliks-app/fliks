@@ -290,7 +290,7 @@ async fn session_ended(
     body: Bytes,
 ) -> Result<StatusCode, AppError> {
     let r: Ended = parse(&st, &h, &body)?;
-    st.qoe.session_ended(&r.session_id);
+    st.qoe.end_session(&r.session_id).await;
     Ok(StatusCode::NO_CONTENT)
 }
 
