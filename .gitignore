@@ -87,6 +87,7 @@ docker-compose.prod.yml
 /server/.cargo/config.toml
 
 release/
+!server/crates/domain/src/release/
 
 # macOS native app — vendored binaries and build artifacts
 macos/Vendored/
