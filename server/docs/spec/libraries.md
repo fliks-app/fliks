@@ -2,7 +2,7 @@
 
 Sources: `[ts:src/modules/libraries/libraries.controller.ts]`, `[ts:src/modules/libraries/libraries.service.ts]`, `[ts:src/modules/libraries/dto/*.ts]`, `[ts:src/modules/libraries/entities/*.ts]`, `[ts:src/common/utils/fs-path.util.ts]`. Milestone: S3 (plan §10; `DELETE /api/libraries/:id` stays in Nest until S5, plan §15.3). Auth, CASL and error-body rules are in `auth.md` (cited as "auth rule N"); validation body = auth rule 16; `ParseIntPipe` 400 = auth rule 18; 4xx/5xx `Cache-Control: no-store` = `bootstrap.md` rule 7.
 
-Two halves with different fates (plan §10 S3 "Deletes from Nest"): the **controller (except `DELETE /:id`) and the write/enrich methods** move to Rust in S3; the **library ACL helper** (`getAccessibleLibraryIds`) and the import-side helpers (`findAccepting`, `resolveSoleLibrary`, `requirePathFor`, `resolveTargetLibrary`) stay in Nest until S5, so the ACL rule exists twice from S3 to S5 (rules 30-36, bridge.md "library ACL verify in Nest until S5").
+Two halves with different fates (plan §10 S3 "Deletes from Nest"): the **controller (except `DELETE /:id`) and the write/enrich methods** move to Rust in S3; the **library ACL helper** (`getAccessibleLibraryIds`) and the import-side helpers (`findAccepting`, `resolveSoleLibrary`, `requirePathFor`, `resolveTargetLibrary`) stay in Nest until S5 (the ACL helper until S8: counts and the plugin guards still read it), so the ACL rule exists twice from S3 to S8 (rules 30-36, bridge.md "library ACL verify in Nest until S8").
 
 ## Routes
 
@@ -73,15 +73,15 @@ Rules 18-20 document the Nest behaviour that is NOT ported in S3: the route need
 ### E. Library ACL helpers (used by many modules)
 
 30. `getAccessibleLibraryIds(user): Promise<number[]>`: when `user.isAdmin` or `user.permissions` contains `manage:all` (auth rule 19: `isAdmin` implies it) return every `libraries.id` (`SELECT id FROM libraries`, no order, resolved at call time so a new library is visible immediately); otherwise the `libraryId` of every `library_user_access` row of `user.id` (no order). The result is always a concrete array; `[]` = no access and every caller short-circuits to an empty result before further SQL. Role `defaultLibraryIds` (`role_default_libraries`) are applied once, at user creation, and play no part here; `enabled` is checked by the extractor, not here. `[ts:src/modules/libraries/libraries.service.ts:56]`–`[ts:src/modules/libraries/libraries.service.ts:74]`
-31. Both processes read the same tables live with no cache, so Rust and Nest cannot disagree after a write by either; this is what makes the duplication safe until S5. `[assumed]`: no cache found in `libraries.service.ts` or the callers listed in rule 33; re-verify when adding any cache.
+31. Both processes read the same tables live with no cache, so Rust and Nest cannot disagree after a write by either; this is what makes the duplication safe until S8. `[assumed]`: no cache found in `libraries.service.ts` or the callers listed in rule 33; re-verify when adding any cache.
 32. `assertMediaAccessible(mediaId, user)` is NOT in `LibrariesService`: it is a private method of `MediaController` that calls `getAccessibleLibraryIds(user)` then `MediaService.assertAccessible(mediaId, ids)`. `assertAccessible` runs `SELECT m."libraryId" AS "libraryId" FROM media m WHERE m.id = $1`: no row, or `libraryId IS NULL`, or `libraryId` not in the ids → 404 `Media #<id> not found` (the same body for "missing" and "denied": no existence leak; admins also get 404 for a media with a null library). `[ts:src/modules/media/media.controller.ts:81]`–`[ts:src/modules/media/media.controller.ts:88]`, `[ts:src/modules/media/media-service/media-query.service.ts:585]`–`[ts:src/modules/media/media-service/media-query.service.ts:603]`, `[ts:src/modules/media/media.service.ts:154]`
-33. Importers of `getAccessibleLibraryIds` / `assertAccessible` (Nest, as of this spec; "ACL verify in Nest until S5" lives in Nest for the callers that stay, Rust has its own copy for the callers that move):
+33. Importers of `getAccessibleLibraryIds` / `assertAccessible` (Nest, as of this spec; "ACL verify in Nest until S8" lives in Nest for the callers that stay, Rust has its own copy for the callers that move):
 
     | Nest file:line | Use | Moves to Rust at |
     |---|---|---|
-    | `modules/media/media.controller.ts:86` (`assertMediaAccessible`, 29 call sites `:97`-`:1001`) | per-media guard of read and write routes | read routes S3, write routes stay until S5 |
+    | `modules/media/media.controller.ts:86` (`assertMediaAccessible`, 29 call sites `:97`-`:1001`) | per-media guard of read and write routes | read routes S3, write routes stay until S5, counts and plugin guards until S8 |
     | `modules/media/media.controller.ts:123,134,151,159,179,194,207,894` | list/recently-added/counts/qualities/genres/collections/calendar/related read routes | S3 |
-    | `modules/media/media-service/media-query.service.ts:585`, `modules/media/media.service.ts:154` | `assertAccessible` (rule 32) | S3 copy; Nest copy used by the write routes and plugin guards until S5 |
+    | `modules/media/media-service/media-query.service.ts:585`, `modules/media/media.service.ts:154` | `assertAccessible` (rule 32) | S3 copy; Nest copy used by the write routes until S5, by counts and the plugin guards until S8 |
     | `modules/counts/counts.service.ts:91` | counts by library | media/counts S3 (counts spec) |
     | `modules/playback/playback.controller.ts:72,117,127,143` | playback-state / history read routes | S2 |
     | `modules/streaming/streaming.service.ts:60` | `resolveFile` | S2 (`engine-glue.md` rule 41, `playback-info.md` rule 38) |
@@ -93,8 +93,8 @@ Rules 18-20 document the Nest behaviour that is NOT ported in S3: the route need
 
     Callers of the other `LibrariesService` methods (all stay in Nest until S5): `resolveSoleLibrary` at `modules/media/media-service/media-import.service.ts:548` and `modules/requests/requests.service.ts:283`; `requirePathFor` at `modules/imports/disk-import.service.ts:115,411,821`; `resolveTargetLibrary` at `modules/imports/radarr.service.ts:184` and `modules/imports/sonarr.service.ts:173`; `findAccepting` only through `resolveSoleLibrary`. Module importers of `LibrariesModule`/`LibrariesService`: counts, media, playlists, requests, playback, imports, plugins, social, streaming, scheduler. `[ts:src/modules/libraries/libraries.service.ts:398]`–`[ts:src/modules/libraries/libraries.service.ts:446]`
 34. Rust reproduction for the S3 media read routes (and the S2/S4 routes that move earlier): one shared function `accessible_library_ids(db, &AuthUser) -> Vec<i32>` implementing rule 30 from the extractor's `AuthUser` (its permission set already includes `manage:all` for `isAdmin`), and one `assert_media_accessible(db, media_id, &[i32])` implementing rule 32 (404 `Media #<id> not found`, `{"message":"Media #<id> not found","error":"Not Found","statusCode":404}`). Every S3 media read route takes the ids once per request, short-circuits on `[]`, and passes the slice into its SQL as `"libraryId" = ANY($n)` (never `IN (-1)`); per-media routes call `assert_media_accessible` before any other lookup. `playback-state.md`/`playback-info.md`/`engine-glue.md` already cite "the libraries spec" for this helper: it is the one function, defined once (`auth` crate or `libraries` module, the port decides). The table name is `library_user_access`.
-35. The two implementations (Nest until S5, Rust from S3) are pinned by one parity matrix: for each of `admin`, `user` (two libraries), `readonly` (one library), `other`, call a library-scoped read route and a per-media route on Nest and Rust; ids and 404 bodies must match (scenarios in Vectors/parity). The `acl` fixture set (plan §5.2) covers the permission side only (`manage:all` derivation), not this function. `[assumed]`: Nest's S3 copy is deleted with `libraries.service.ts` at S5 (plan §10 S5 "Deletes").
-36. Duplication ends at S5 (`M/media/**` and `M/libraries/**` deleted); until then any change to `getAccessibleLibraryIds` or `assertAccessible` in Nest requires the same change in Rust in the same PR (listed in `bridge.md` as a duplication, not a bridge: there is no endpoint). `[ts:src/modules/libraries/libraries.service.ts:63]`
+35. The two implementations (Nest until S8, Rust from S3) are pinned by one parity matrix: for each of `admin`, `user` (two libraries), `readonly` (one library), `other`, call a library-scoped read route and a per-media route on Nest and Rust; ids and 404 bodies must match (scenarios in Vectors/parity). The `acl` fixture set (plan §5.2) covers the permission side only (`manage:all` derivation), not this function. `[assumed]`: Nest's S3 copy is deleted with `libraries.service.ts` at S5 (plan §10 S5 "Deletes").
+36. Duplication ends at S8 (`M/media/**` and `M/libraries/**` go at S5 except the ACL helper, `assertAccessible` and `getCountsByLibrary`, which `counts.service.ts` and the plugin guards keep reading until S8); until then any change to `getAccessibleLibraryIds` or `assertAccessible` in Nest requires the same change in Rust in the same PR (listed in `bridge.md` as a duplication, not a bridge: there is no endpoint). `[ts:src/modules/libraries/libraries.service.ts:63]`
 
 ### F. Deviations decided for the port (plan §15.3)
 
@@ -133,13 +133,13 @@ none.
 
 ## Bridges
 
-- ACL: **no endpoint**. "Library ACL verify in Nest until S5" is a listed duplication in `bridge.md` (rules 33-36): Nest keeps `getAccessibleLibraryIds` and `assertAccessible` reading the shared database; Rust has its own copy. To add as a row under duplications, not under the endpoint table.
+- ACL: **no endpoint**. "Library ACL verify in Nest until S8" is a listed duplication in `bridge.md` (rules 33-36): Nest keeps `getAccessibleLibraryIds` and `assertAccessible` reading the shared database; Rust has its own copy. To add as a row under duplications, not under the endpoint table.
 - `DELETE /api/libraries/:id` needs `MediaService.remove` (rule 20, S5): no bridge; the route stays in Nest until S5 and the method fallback forwards it (plan §15.3).
 - Engine revoke: direct Rust call, not a bridge (rule 23).
 
 ## Deletes in Nest
 
-Milestone S3 (plan §10 S3 "Deletes from Nest"), respecting that Nest keeps the ACL read-only until S5.
+Milestone S3 (plan §10 S3 "Deletes from Nest"), respecting that Nest keeps the ACL read-only until S8.
 
 - `backend/src/modules/libraries/libraries.controller.ts`: KEEP the `@Delete(':id')` handler (and the class header, guards and imports it needs) until S5; delete the other 7 routes (7 leave `nest-routes.json`). `controllers: [LibrariesController]` in `libraries.module.ts` `[ts:src/modules/libraries/libraries.module.ts:15]` stays; the whole file goes at S5.
 - `backend/src/modules/libraries/dto/{create-library.dto.ts,update-library.dto.ts,assign-library-access.dto.ts,create-library.dto.spec.ts}`: whole files.
@@ -147,7 +147,7 @@ Milestone S3 (plan §10 S3 "Deletes from Nest"), respecting that Nest keeps the 
 - Specs: delete `libraries.service.revoke.spec.ts`, `libraries.service.user-access.spec.ts` (their cases become Rust tests, rules 22, 21); KEEP `libraries.service.remove.spec.ts` until S5; `libraries.module.ts` keeps `TypeOrmModule.forFeature([Library, LibraryUserAccess, Media])` and exports.
 - `backend/src/common/utils/fs-path.util.ts`: stays until S5 if any other Nest caller of `sanitizeFsPath` remains (disk import); delete with its last importer `[assumed]`: not grepped here, the porter checks `grep -rn sanitizeFsPath backend/src`.
 - Entities `library.entity.ts`, `library-user-access.entity.ts` stay until S9 (they mirror the sqlx schema, plan §15.1).
-- Remaining importers after S3: every file in rule 33 still imports `LibrariesService`/`LibrariesModule` (ACL helper) until its own milestone; `LibrariesModule` is deleted with `M/libraries/**` at S5 (plan §10 S5).
+- Remaining importers after S3: every file in rule 33 still imports `LibrariesService`/`LibrariesModule` (ACL helper) until its own milestone; `LibrariesModule` stays for the ACL helper until S8 and the rest of `M/libraries/**` is deleted at S5 (plan §10 S5).
 
 ## Vectors/parity
 
