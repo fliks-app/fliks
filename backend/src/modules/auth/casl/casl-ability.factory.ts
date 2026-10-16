@@ -74,7 +74,7 @@ export class CaslAbilityFactory {
 
     // Every authenticated user may use playlists. This only opens the feature;
     // the per-playlist owner/administrator/editor/viewer rules are enforced in
-    // PlaylistsService (CASL sees the class, never the instance).
+    // the fliks-server playlists routes (CASL sees the class, never the instance).
     can(Action.Read, Playlist);
     can(Action.Create, Playlist);
     can(Action.Update, Playlist);
