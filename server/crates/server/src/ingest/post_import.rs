@@ -107,13 +107,13 @@ impl Queue {
                 match q.tasks.pop_front() {
                     Some(id) => Some((id, q.done, q.total)),
                     None => {
+                        st.hub.activity().remove(QUEUE_PARENT);
                         *q = Q::default();
                         None
                     }
                 }
             };
             let Some((id, done, total)) = next else {
-                st.hub.activity().remove(QUEUE_PARENT);
                 self.idle.notify_waiters();
                 return;
             };
