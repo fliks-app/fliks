@@ -249,7 +249,8 @@ fn plugin_role(line: &str) -> Option<&str> {
     (!head.is_empty() && ok).then_some(role)
 }
 
-/// F37 and rule 23 in one pass: refuses a psql meta-command outside a COPY block, collects the plugin roles.
+/// F37 and rule 23 in one pass: refuses a line-start psql meta-command outside a COPY block (best effort, no
+/// SQL lexing), collects the plugin roles.
 async fn screen(path: &Path) -> Result<BTreeSet<String>, AppError> {
     let file = tokio::fs::File::open(path)
         .await
