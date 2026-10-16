@@ -102,7 +102,7 @@ A 500 or a half-written request is never part of the frozen contract:
 | C103 | plugin import inserts tables in alphabetical order, so `fliks.download` (`indexer_stats` before `indexers`) fails on its foreign keys | tables inserted in foreign-key dependency order |
 | C104 | plugin ids `ui`, `metrics`, `sources`, `import` install and are then shadowed by the concrete routes | refused with `PLUGIN_BAD_ID` |
 | C105 | a proxied plugin call that times out (504) leaves the plugin process running | the instance that ran it is dropped and the timeout counts toward the circuit breaker |
-| C106 | a plugin route that a core route shadows (`GET /logo`, `GET /export`, `POST /import`, `/enable`, `/disable`, `/restart`, `/events/test`) is accepted and unreachable | refused at registration (`invalid-route-path`) |
+| C106 | a plugin route that a core route shadows (`GET /logo`, `GET /export`, `POST /import`, `/enable`, `/disable`, `/restart`, `/events/test`) is accepted and unreachable | refused at registration (`invalid-route-path`) when its path is literally one of them; param and splat patterns stay legal |
 
 Frozen as is (decided): the heartbeat keeps its debounce entry after a failed history write and returns
 `sessionLost: false` when the engine session lives but presence cannot be rebuilt. Lists whose order comes
