@@ -14,7 +14,7 @@ const load = (service, name) => JSON.parse(readFileSync(join(root, service, `${n
 // variant -> list fixture name override per endpoint
 const LISTS = {
   radarr: { movie: { ok: 'movie', 'tmdb-zero': 'movie-tmdb-zero', traversal: 'movie-traversal', profile: 'movie-profile' } },
-  sonarr: { series: { ok: 'series', v3: 'series-v3', profile: 'series-profile' } },
+  sonarr: { series: { ok: 'series', v3: 'series-v3', profile: 'series-profile', traversal: 'series-traversal' } },
   seerr: { request: { ok: 'request-page-1', skipped: 'request-page-skipped', claim: 'request-page-claim' } },
 };
 const hits = [];

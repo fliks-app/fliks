@@ -1,5 +1,5 @@
 {
-  "deviation": null,
+  "deviation": "F44",
   "ignore": [
     "$..createdAt",
     "$..updatedAt",
@@ -19,14 +19,14 @@
           }
         ],
         "targetLibraryId": 2,
-        "url": "http://127.0.0.1:4880/sonarr/ok"
+        "url": "http://127.0.0.1:4880/sonarr/traversal"
       },
       "expect": {
         "body": {
           "errors": [
-            "Lost Show: no path mapping for \"/elsewhere/Lost Show\""
+            "Escape: invalid folder name for \"/data/tv/..\\escape\""
           ],
-          "imported": 1,
+          "imported": 0,
           "qualityProfilesCreated": [
             "Remote HD"
           ],
