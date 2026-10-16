@@ -30,6 +30,7 @@ pub mod presence;
 pub mod profiles;
 pub mod qoe;
 pub mod remote;
+pub mod requests;
 pub mod roles;
 pub mod seams;
 pub mod settings;
@@ -87,6 +88,7 @@ pub async fn serve(cfg: Config) -> Result<(), BoxError> {
     stream::spawn(&state);
     state.engine.start(state.db.clone(), state.cfg.port).await;
     remote::init(&state);
+    requests::spawn(&state);
     let cfg = state.cfg.clone();
     let system = state.system.clone();
     let hub = state.hub.clone();

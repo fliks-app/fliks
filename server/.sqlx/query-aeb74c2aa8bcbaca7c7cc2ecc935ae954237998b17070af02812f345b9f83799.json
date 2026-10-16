@@ -1,0 +1,90 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, \"userId\" AS user_id, \"mediaType\"::text AS \"media_type!\", kind::text AS \"kind!\",\n        \"tmdbId\" AS tmdb_id, title, status::text AS \"status!\", seasons AS \"seasons: Json<Vec<i64>>\",\n        \"qualityProfileId\" AS quality_profile_id, \"languageProfileId\" AS language_profile_id,\n        \"libraryId\" AS library_id, \"mediaId\" AS media_id\n        FROM requests WHERE \"tmdbId\" = $1 AND \"mediaType\"::text = $2 AND status::text = ANY($3)\n        ORDER BY id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "user_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 2,
+        "name": "media_type!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "kind!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "tmdb_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 5,
+        "name": "title",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 6,
+        "name": "status!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "seasons: Json<Vec<i64>>",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 8,
+        "name": "quality_profile_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 9,
+        "name": "language_profile_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 10,
+        "name": "library_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 11,
+        "name": "media_id",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Text",
+        "TextArray"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      null,
+      null,
+      false,
+      false,
+      null,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "aeb74c2aa8bcbaca7c7cc2ecc935ae954237998b17070af02812f345b9f83799"
+}

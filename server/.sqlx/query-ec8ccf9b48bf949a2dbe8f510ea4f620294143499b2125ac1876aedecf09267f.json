@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE requests SET\n        \"qualityProfileId\" = CASE WHEN $2 THEN $3 ELSE \"qualityProfileId\" END,\n        \"languageProfileId\" = CASE WHEN $4 THEN $5 ELSE \"languageProfileId\" END,\n        \"libraryId\" = CASE WHEN $6 THEN $7 ELSE \"libraryId\" END WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Bool",
+        "Int4",
+        "Bool",
+        "Int4",
+        "Bool",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ec8ccf9b48bf949a2dbe8f510ea4f620294143499b2125ac1876aedecf09267f"
+}

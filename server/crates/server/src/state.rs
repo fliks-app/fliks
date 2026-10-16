@@ -2,7 +2,7 @@
 use crate::{
     auth_token::Jwt, bridge::Bridge, config::Config, engine::Engine, events::Hub,
     images::ImageStore, jobs::Running, metadata::Metadata, nest, playback::Debounce,
-    presence::Presence, qoe::Qoe, stream, system,
+    presence::Presence, qoe::Qoe, requests::Ports, stream, system,
 };
 use sqlx::PgPool;
 use std::sync::Arc;
@@ -25,6 +25,8 @@ pub struct AppState {
     pub images: Arc<ImageStore>,
     pub system: Arc<system::Shared>,
     pub jobs: Arc<Running>,
+    /// The S5 services the request flows call; the integration replaces `requests::Unwired`.
+    pub requests: Arc<dyn Ports>,
 }
 
 impl AppState {
@@ -51,6 +53,7 @@ impl AppState {
             images: Arc::new(ImageStore::new(&cfg.metadata.tmdb_image_url)),
             system: Arc::default(),
             jobs: Arc::default(),
+            requests: Arc::new(crate::requests::Unwired),
             cfg: Arc::new(cfg),
             db,
         }

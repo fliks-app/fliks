@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH c AS (INSERT INTO request_comments (\"requestId\", \"userId\", message) VALUES ($1, $2, $3)\n          RETURNING id, \"createdAt\", \"updatedAt\", message)\n        SELECT jsonb_build_object('id', c.id, 'createdAt', iso_ms(c.\"createdAt\"), 'updatedAt', iso_ms(c.\"updatedAt\"),\n          'requestId', $1::int, 'userId', $2::int, 'message', c.message) AS \"json!: Value\" FROM c",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "json!: Value",
+        "type_info": "Jsonb"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "32a5ccf463cd0ee6605cc153421730dd2b3b924036c0fe4bec8ada9360ba7363"
+}

@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE requests SET \"posterUrl\" = $2, \"fanartUrl\" = $3 WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f5e0848ad81401cc766d465b6efdafe406711cb6a580c2bc2a5ccc5cf0a130a7"
+}

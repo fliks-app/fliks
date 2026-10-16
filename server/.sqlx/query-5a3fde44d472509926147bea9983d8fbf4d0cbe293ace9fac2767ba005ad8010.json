@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE requests SET \"mediaId\" = $2 WHERE id = $1 AND status = 'approved' AND \"mediaId\" IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "5a3fde44d472509926147bea9983d8fbf4d0cbe293ace9fac2767ba005ad8010"
+}

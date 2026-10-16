@@ -1,0 +1,58 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, type::text AS \"media_type!\", \"libraryId\" AS library_id,\n        \"qualityProfileId\" AS quality_profile_id, \"languageProfileId\" AS language_profile_id,\n        \"posterUrl\" AS poster_url, \"fanartUrl\" AS fanart_url FROM media WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "media_type!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "library_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "quality_profile_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 4,
+        "name": "language_profile_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 5,
+        "name": "poster_url",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 6,
+        "name": "fanart_url",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      null,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "3df11b35de79702cdc5e8acf1fa6940620145a3144d1eed84b2994d1c438d170"
+}

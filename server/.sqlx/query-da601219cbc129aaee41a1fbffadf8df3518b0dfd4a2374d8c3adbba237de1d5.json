@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE requests SET status = 'approved', \"approvedById\" = $2, \"declinedReason\" = NULL,\n        \"mediaId\" = COALESCE($3, \"mediaId\") WHERE id = $1 AND status = 'pending'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "da601219cbc129aaee41a1fbffadf8df3518b0dfd4a2374d8c3adbba237de1d5"
+}

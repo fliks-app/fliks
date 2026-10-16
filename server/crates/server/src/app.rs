@@ -1,8 +1,8 @@
 use crate::http::{layers, static_files};
 use crate::{
     auth, events, fs, images, importers, jobs, libraries, markers, media, media_servers, metadata,
-    notifications, persons, playback, playlists, profiles, qoe, remote, roles, settings, social,
-    state::AppState, system, users,
+    notifications, persons, playback, playlists, profiles, qoe, remote, requests, roles, settings,
+    social, state::AppState, system, users,
 };
 use axum::{
     Router,
@@ -252,7 +252,23 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         metadata::legacy_seasons,
         persons::search,
         persons::detail,
-        persons::provider_credits
+        persons::provider_credits,
+        requests::create,
+        requests::list,
+        requests::title_state,
+        requests::get_one,
+        requests::update,
+        requests::remove,
+        requests::approve,
+        requests::decline,
+        requests::comment_create,
+        requests::comments_list,
+        requests::comment_remove,
+        requests::rule_list,
+        requests::rule_create,
+        requests::rule_get,
+        requests::rule_update,
+        requests::rule_remove
     )
 )]
 pub struct ApiDoc;
@@ -333,6 +349,7 @@ fn api() -> Router<AppState> {
         .merge(persons::router())
         .merge(system::api())
         .merge(jobs::router())
+        .merge(requests::router())
 }
 
 async fn preflight_here(State(cors): State<Router>, req: Request, next: Next) -> Response {

@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE requests SET status = 'declined', \"declinedReason\" = 'Media removed from library', \"mediaId\" = NULL\n        WHERE \"mediaId\" = $1 AND kind = 'add' AND status IN ('pending', 'approved', 'processing')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "4428e5ab43f038a8491bad9dcfa12eeb5aba23e6fd4ccfca79ae86e19751e5fc"
+}

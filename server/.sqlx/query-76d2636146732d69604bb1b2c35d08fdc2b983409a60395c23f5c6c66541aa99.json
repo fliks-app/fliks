@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT jsonb_build_object('id', id, 'createdAt', iso_ms(\"createdAt\"), 'updatedAt', iso_ms(\"updatedAt\"),\n        'name', name, 'enabled', enabled, 'criteria', criteria) AS \"json!: Value\"\n        FROM auto_approval_rules ORDER BY name ASC, id ASC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "json!: Value",
+        "type_info": "Jsonb"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "76d2636146732d69604bb1b2c35d08fdc2b983409a60395c23f5c6c66541aa99"
+}

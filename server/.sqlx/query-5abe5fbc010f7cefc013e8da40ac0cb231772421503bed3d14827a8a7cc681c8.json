@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH r AS (UPDATE auto_approval_rules SET name = $2, enabled = $3, criteria = $4 WHERE id = $1 RETURNING *)\n        SELECT jsonb_build_object('id', id, 'createdAt', iso_ms(\"createdAt\"), 'updatedAt', iso_ms(\"updatedAt\"),\n        'name', name, 'enabled', enabled, 'criteria', criteria) AS \"json!: Value\" FROM r",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "json!: Value",
+        "type_info": "Jsonb"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Varchar",
+        "Bool",
+        "Jsonb"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "5abe5fbc010f7cefc013e8da40ac0cb231772421503bed3d14827a8a7cc681c8"
+}
