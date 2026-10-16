@@ -175,6 +175,13 @@ fn engine_name(e: Option<fliks_domain::qoe::Engine>) -> Option<String> {
         .and_then(|v| v.as_str().map(str::to_owned))
 }
 
+#[cfg(not(unix))]
+fn load_avg1() -> Option<f64> {
+    // Node's os.loadavg() reports 0 on Windows.
+    Some(0.0)
+}
+
+#[cfg(unix)]
 fn load_avg1() -> Option<f64> {
     let mut l = [0f64; 1];
     // SAFETY: `l` holds the one sample asked for.
