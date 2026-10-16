@@ -2,11 +2,9 @@
 use super::{db, emby};
 use crate::state::AppState;
 use futures_util::future::join_all;
-use serde_json::Value;
 
 /// Refreshes every enabled Emby server subscribed to `event`; failures are logged, never raised.
-/// `_payload` stays in the signature (rule 11: the path is ignored, a full refresh per event).
-pub async fn dispatch(st: &AppState, event: &str, _payload: &Value) {
+pub async fn dispatch(st: &AppState, event: &str) {
     let servers = match db::enabled(&st.db).await {
         Ok(s) => s,
         Err(e) => return tracing::error!(error = %e, event, "media-server dispatch"),

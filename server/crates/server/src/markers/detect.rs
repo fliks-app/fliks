@@ -23,10 +23,6 @@ const COMMAND: &str = "IntroDetection";
 /// `(current, total, message)`.
 type Progress<'a> = Option<&'a (dyn Fn(i64, i64, &str) + Send + Sync)>;
 
-fn failed(e: impl std::fmt::Display) -> String {
-    e.to_string()
-}
-
 /// C40: a positive finite number, else the default.
 pub fn positive_or(value: Option<&str>, default: f64) -> f64 {
     value
@@ -36,7 +32,9 @@ pub fn positive_or(value: Option<&str>, default: f64) -> f64 {
 }
 
 async fn setting(st: &AppState, key: &str) -> Result<Option<String>, String> {
-    db::setting(&st.db, key).await.map_err(failed)
+    crate::settings::setting_value(&st.db, key)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 fn duration(info: Option<&serde_json::Value>) -> f64 {
@@ -76,7 +74,7 @@ async fn fingerprint(
     match st.engine.run_job(&req, None).await {
         Ok(JobResult::Fingerprint { fingerprint }) => Ok(fingerprint),
         Ok(_) => Err("unexpected job result".into()),
-        Err(e) => Err(failed(e)),
+        Err(e) => Err(e.to_string()),
     }
 }
 
@@ -104,7 +102,7 @@ async fn pass(
     }
     let info = db::season_info(&st.db, season)
         .await
-        .map_err(failed)?
+        .map_err(|e| e.to_string())?
         .ok_or_else(|| format!("Season #{season} not found"))?;
     let Some(media_path) = info.media_path else {
         tracing::warn!("Skip season #{season}: parent media has no path");
@@ -112,7 +110,7 @@ async fn pass(
     };
     let episodes = db::episodes_with_files(&st.db, season)
         .await
-        .map_err(failed)?;
+        .map_err(|e| e.to_string())?;
     if episodes.is_empty() || (!outro && episodes.len() < 2) {
         return Ok(0);
     }
@@ -125,7 +123,7 @@ async fn pass(
     let ids: Vec<i32> = episodes.iter().map(|e| e.episode_id).collect();
     let manual: HashSet<i32> = db::manual_episodes(&st.db, &ids, name)
         .await
-        .map_err(failed)?
+        .map_err(|e| e.to_string())?
         .into_iter()
         .collect();
     let eligible = |e: &&EpisodeFile| {
@@ -199,7 +197,11 @@ async fn pass(
                 })
                 .collect(),
         };
-        let res = st.engine.intro_detect(&body).await.map_err(failed)?;
+        let res = st
+            .engine
+            .intro_detect(&body)
+            .await
+            .map_err(|e| e.to_string())?;
         for seg in &res.results {
             result_files.insert(seg.media_file_id as i32);
             let Some(p) = prints
@@ -217,7 +219,7 @@ async fn pass(
                 seg.confidence,
             )
             .await
-            .map_err(failed)?;
+            .map_err(|e| e.to_string())?;
         }
         detected = res.results.len() as i64;
     }
@@ -248,7 +250,9 @@ async fn detect_all(
             tracing::warn!("Outro detection failed for season #{season}: {e}");
             0
         });
-    db::stamp_scanned(&st.db, season).await.map_err(failed)?;
+    db::stamp_scanned(&st.db, season)
+        .await
+        .map_err(|e| e.to_string())?;
     Ok((intros, outros))
 }
 
@@ -307,7 +311,9 @@ async fn run_detection(
 ) {
     let id = activity_id(season);
     let run = async {
-        db::command_running(&st.db, cmd).await.map_err(failed)?;
+        db::command_running(&st.db, cmd)
+            .await
+            .map_err(|e| e.to_string())?;
         st.hub.emit(SseEvent::CommandStarted {
             name: COMMAND.into(),
         });
@@ -334,7 +340,7 @@ async fn run_detection(
         let (intros, outros) = detect_all(&st, season, Some(&progress), priority).await?;
         db::command_end(&st.db, cmd, "completed")
             .await
-            .map_err(failed)?;
+            .map_err(|e| e.to_string())?;
         st.hub.emit(SseEvent::CommandCompleted {
             name: COMMAND.into(),
             status: "completed".into(),
@@ -434,7 +440,7 @@ pub async fn list_seasons_for_scan(
 
 /// Rules 7 and 15 (post-import): only the string `true` enables it, absent is on.
 pub async fn auto_detect_missing(st: &AppState, media_id: i32) -> sqlx::Result<()> {
-    let on = db::setting(&st.db, "markers_auto_detect_on_import")
+    let on = crate::settings::setting_value(&st.db, "markers_auto_detect_on_import")
         .await?
         .is_none_or(|v| v == "true");
     if !on {

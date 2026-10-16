@@ -496,12 +496,12 @@ async fn dispatch_hits_enabled_subscribers_only(pool: PgPool) {
     add_server(&c, "ok", &["library.rescan"], false).await;
     add_server(&c, "500", &["library.rescan"], true).await;
     add_server(&c, "401", &["library.rescan"], true).await;
-    media_servers::dispatch(&c.st, "library.rescan", &json!({"title": "x"})).await;
+    media_servers::dispatch(&c.st, "library.rescan").await;
     assert_eq!(
         *c.hits.0.lock().unwrap(),
         vec![("ok".to_owned(), "tok".to_owned())]
     );
-    media_servers::dispatch(&c.st, "unknown.event", &json!({})).await;
+    media_servers::dispatch(&c.st, "unknown.event").await;
     assert_eq!(c.hits.0.lock().unwrap().len(), 1);
 }
 

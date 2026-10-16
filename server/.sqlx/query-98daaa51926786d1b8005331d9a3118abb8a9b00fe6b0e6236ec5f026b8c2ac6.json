@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE media_servers SET name = $2, type = $3::text::media_servers_type_enum, url = $4,\n           \"apiKey\" = $5, events = $6, enabled = $7 WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Varchar",
+        "Text",
+        "Varchar",
+        "Varchar",
+        "Jsonb",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "98daaa51926786d1b8005331d9a3118abb8a9b00fe6b0e6236ec5f026b8c2ac6"
+}

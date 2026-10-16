@@ -26,15 +26,6 @@ pub async fn libraries(db: &PgPool) -> sqlx::Result<Vec<Library>> {
         .collect())
 }
 
-pub async fn setting(db: &PgPool, key: &str) -> sqlx::Result<Option<String>> {
-    Ok(
-        sqlx::query_scalar!(r#"SELECT value FROM app_settings WHERE key = $1"#, key)
-            .fetch_optional(db)
-            .await?
-            .flatten(),
-    )
-}
-
 pub struct Existing {
     pub id: i32,
     pub year: Option<i32>,

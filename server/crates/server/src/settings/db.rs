@@ -23,6 +23,16 @@ pub async fn list(pool: &PgPool) -> sqlx::Result<Vec<(String, Option<String>)>> 
     Ok(rows.into_iter().map(|r| (r.key, r.value)).collect())
 }
 
+/// The text of one setting, `None` for a missing key or a null value.
+pub async fn value(pool: &PgPool, key: &str) -> sqlx::Result<Option<String>> {
+    Ok(
+        sqlx::query_scalar!(r#"SELECT value FROM app_settings WHERE key = $1"#, key)
+            .fetch_optional(pool)
+            .await?
+            .flatten(),
+    )
+}
+
 pub async fn get(pool: &PgPool, key: &str) -> sqlx::Result<Option<Setting>> {
     sqlx::query_as!(
         Setting,

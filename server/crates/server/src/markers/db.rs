@@ -111,7 +111,7 @@ pub async fn upsert_manual(
         r#"INSERT INTO episode_markers ("episodeId", type, "startSeconds", "endSeconds", confidence, manual)
            VALUES ($1, $2, $3, $4, 1, true)
            ON CONFLICT ("episodeId", type) DO UPDATE SET "startSeconds" = EXCLUDED."startSeconds",
-             "endSeconds" = EXCLUDED."endSeconds", confidence = 1, manual = true, "updatedAt" = now()
+             "endSeconds" = EXCLUDED."endSeconds", confidence = 1, manual = true
            RETURNING id"#,
         episode,
         kind,
@@ -355,8 +355,7 @@ pub async fn upsert_detected(
         r#"INSERT INTO episode_markers ("episodeId", type, "startSeconds", "endSeconds", confidence, manual)
            VALUES ($1, $2, $3, $4, $5, false)
            ON CONFLICT ("episodeId", type) DO UPDATE SET "startSeconds" = EXCLUDED."startSeconds",
-             "endSeconds" = EXCLUDED."endSeconds", confidence = EXCLUDED.confidence, manual = false,
-             "updatedAt" = now()
+             "endSeconds" = EXCLUDED."endSeconds", confidence = EXCLUDED.confidence, manual = false
            WHERE episode_markers.manual = false"#,
         episode,
         kind,
@@ -377,11 +376,4 @@ pub async fn stamp_scanned(db: &PgPool, season: i32) -> sqlx::Result<()> {
     .execute(db)
     .await
     .map(drop)
-}
-
-pub async fn setting(db: &PgPool, key: &str) -> sqlx::Result<Option<String>> {
-    let row = sqlx::query_scalar!(r#"SELECT value FROM app_settings WHERE key = $1"#, key)
-        .fetch_optional(db)
-        .await?;
-    Ok(row.flatten())
 }

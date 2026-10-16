@@ -37,7 +37,7 @@ pub async fn list(db: &PgPool) -> sqlx::Result<Vec<Server>> {
         r#"SELECT id, "createdAt" AS "created_at!", "updatedAt" AS "updated_at!", name,
                   type::text AS "type!", url, "apiKey" AS api_key,
                   events AS "events!: Json<Vec<String>>", enabled
-           FROM media_servers ORDER BY name, id"#
+           FROM media_servers ORDER BY name COLLATE "C", id"#
     )
     .fetch_all(db)
     .await
@@ -86,7 +86,7 @@ pub async fn insert(db: &PgPool, w: &Write<'_>) -> sqlx::Result<i32> {
 pub async fn update(db: &PgPool, id: i32, w: &Write<'_>) -> sqlx::Result<()> {
     sqlx::query!(
         r#"UPDATE media_servers SET name = $2, type = $3::text::media_servers_type_enum, url = $4,
-           "apiKey" = $5, events = $6, enabled = $7, "updatedAt" = now() WHERE id = $1"#,
+           "apiKey" = $5, events = $6, enabled = $7 WHERE id = $1"#,
         id,
         w.name,
         w.r#type,

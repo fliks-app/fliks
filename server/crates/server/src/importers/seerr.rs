@@ -1,5 +1,5 @@
 //! Seerr: connection test and the request import (`importers.md` D).
-use super::{db, dto, fetch};
+use super::{dto, fetch};
 use crate::{
     events::SseEvent,
     http::{AppError, auth::Authed},
@@ -124,10 +124,10 @@ const PAGE: usize = 50;
 
 async fn import(db: &PgPool) -> Result<Stats, String> {
     let (url, key) = (
-        db::setting(db, "seerr_url")
+        crate::settings::setting_value(db, "seerr_url")
             .await
             .map_err(|e| e.to_string())?,
-        db::setting(db, "seerr_api_key")
+        crate::settings::setting_value(db, "seerr_api_key")
             .await
             .map_err(|e| e.to_string())?,
     );

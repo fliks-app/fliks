@@ -74,10 +74,6 @@ fn optional_string(v: Option<Value>, field: &str, msgs: &mut Vec<String>) -> Opt
     }
 }
 
-fn fail(msgs: Vec<String>) -> AppError {
-    AppError::bad_request(msgs)
-}
-
 /// `TestConnectionDto`: `url` any non-empty string (`test`), or a URL (`preview`).
 pub fn connection(body: Value, test: bool) -> Res<Connection> {
     let raw: RawConnection = from_value(body)?;
@@ -103,7 +99,7 @@ pub fn connection(body: Value, test: bool) -> Res<Connection> {
     let api_key = optional_string(raw.api_key, "apiKey", &mut msgs);
     match url {
         Some(url) if msgs.is_empty() => Ok(Connection { url, api_key }),
-        _ => Err(fail(msgs)),
+        _ => Err(AppError::bad_request(msgs)),
     }
 }
 
@@ -245,7 +241,7 @@ pub fn import_body(body: Value) -> Res<ImportBody> {
             target_library_id,
             mappings,
         }),
-        _ => Err(fail(msgs)),
+        _ => Err(AppError::bad_request(msgs)),
     }
 }
 

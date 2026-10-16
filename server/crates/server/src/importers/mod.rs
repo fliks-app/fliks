@@ -81,10 +81,10 @@ async fn resolve_key(
         return Ok(provided.unwrap_or_default());
     }
     let missing = || AppError::bad_request("apiKey is required");
-    let stored = db::setting(&st.db, key_setting)
+    let stored = crate::settings::setting_value(&st.db, key_setting)
         .await?
         .filter(|k| !k.is_empty());
-    let stored_url = db::setting(&st.db, url_setting).await?;
+    let stored_url = crate::settings::setting_value(&st.db, url_setting).await?;
     match (stored, stored_url) {
         (Some(key), Some(u)) if same_url(url, &u) => Ok(key),
         _ => Err(missing()),

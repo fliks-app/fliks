@@ -10,7 +10,7 @@ use std::collections::{HashMap, HashSet};
 
 const TICKS_PER_SECOND: f64 = 10_000_000.0;
 
-#[derive(Debug, Default, PartialEq, Eq)]
+#[derive(Default)]
 pub struct Stats {
     pub users: i64,
     pub users_created: i64,
@@ -26,7 +26,6 @@ struct Caches {
 }
 
 /// What one item writes (rule 18).
-#[derive(Debug, PartialEq)]
 pub struct Plan {
     pub position: f64,
     pub duration: f64,

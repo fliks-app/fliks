@@ -6,6 +6,7 @@ mod secrets;
 use crate::state::AppState;
 use axum::{Router, routing::get};
 
+pub use db::value as setting_value;
 pub use routes::*;
 
 pub fn router() -> Router<AppState> {

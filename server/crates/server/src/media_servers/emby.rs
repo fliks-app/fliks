@@ -35,7 +35,7 @@ pub struct User {
 }
 
 /// The `UserData` / `ProviderIds` members the import reads; anything absent or mistyped reads as absent.
-#[derive(Debug, Default, Clone)]
+#[derive(Default)]
 pub struct Item {
     pub id: String,
     pub kind: String,
