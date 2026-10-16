@@ -108,7 +108,11 @@ pub fn match_subtitle_video(
         by_base.insert(base_lower(rel), i);
     }
     let e = ext(entry);
-    let lower = entry[..entry.len() - e.len()].to_lowercase();
+    // `path.basename(entry, ext)` strips only a same-case suffix: `Movie.SRT` keeps `.srt` as a part.
+    let lower = entry
+        .strip_suffix(e.as_str())
+        .unwrap_or(entry)
+        .to_lowercase();
     let parts: Vec<&str> = lower.split('.').collect();
     for len in (1..parts.len()).rev() {
         if let Some(&i) = by_base.get(&parts[..len].join(".")) {
@@ -172,6 +176,7 @@ mod tests {
             Some(0)
         );
         assert_eq!(match_subtitle_video("other.srt", &files, true), None);
+        assert_eq!(match_subtitle_video("A (2020).SRT", &files, true), Some(0));
         assert_eq!(
             match_subtitle_video("other.srt", &files[..1], true),
             Some(0)
