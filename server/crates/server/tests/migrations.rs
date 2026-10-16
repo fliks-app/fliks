@@ -573,7 +573,9 @@ async fn m1786600_backfills_the_search_vector_and_keeps_it_current(pool: PgPool)
     apply_only(&pool, 1_786_600_000_000).await;
     let got: Vec<(bool, String)> = rows(
         &pool,
-        r#"SELECT "searchVector" IS NOT NULL, to_char("updatedAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD') FROM media"#,
+        r#"SELECT "searchVector" = setweight(to_tsvector('french', 'Les Évadés'), 'A')
+                  || setweight(to_tsvector('french', ''), 'B') || setweight(to_tsvector('french', 'Un banquier'), 'C'),
+                  to_char("updatedAt", 'YYYY-MM-DD') FROM media"#,
     )
     .await;
     assert_eq!(got, vec![(true, "2026-01-01".to_string())]);
