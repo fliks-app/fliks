@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT (uf.\"followingId\" = $1) AS \"incoming!\", u.enabled, u.\"shareDisabled\" AS share_disabled\n           FROM user_follows uf\n           JOIN users u ON u.id = CASE WHEN uf.\"followingId\" = $1 THEN uf.\"followerId\" ELSE uf.\"followingId\" END\n           WHERE uf.status = 'accepted' AND (uf.\"followingId\" = $1 OR uf.\"followerId\" = $1)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "incoming!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 1,
+        "name": "enabled",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 2,
+        "name": "share_disabled",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      null,
+      false,
+      false
+    ]
+  },
+  "hash": "46908b9f23db908785c8fd2b82d1bfc53724af70736076a24a7ac1012c5626d2"
+}

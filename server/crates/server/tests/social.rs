@@ -353,6 +353,17 @@ async fn opted_out_and_disabled_members_leave_every_social_list(pool: PgPool) {
         names(&c, "/api/social/recommendations/received").await,
         ["d"]
     );
+    c.sql(r#"UPDATE user_follows SET status = 'accepted'"#)
+        .await;
+    assert_eq!(names(&c, "/api/social/users/1/followers").await, ["d"]);
+    let (s, p) = c
+        .call(0, "GET", "/api/social/users/1/profile", json!({}))
+        .await;
+    assert_eq!(s, 200);
+    assert_eq!(
+        (&p["followerCount"], &p["followingCount"]),
+        (&json!(1), &json!(1))
+    );
 }
 
 #[sqlx::test(migrations = false)]

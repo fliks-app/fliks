@@ -1,5 +1,5 @@
 //! `GET /api/social/users/:userId/profile` (`docs/spec/social.md` rules 23-33).
-use super::{likes::list_likes, require_user, user_not_found};
+use super::{graph::listable, likes::list_likes, require_user, user_not_found};
 use crate::{
     http::{AppError, auth::Authed, validate::PathParams},
     libraries::accessible_library_ids,
@@ -54,14 +54,21 @@ pub async fn profile(
     if !can_see {
         return Ok(Json(out));
     }
-    let counts = sqlx::query!(
-        r#"SELECT COUNT(*) FILTER (WHERE "followingId" = $1) AS "followers!",
-                  COUNT(*) FILTER (WHERE "followerId" = $1) AS "following!"
-           FROM user_follows WHERE status = 'accepted' AND ("followingId" = $1 OR "followerId" = $1)"#,
+    let edges = sqlx::query!(
+        r#"SELECT (uf."followingId" = $1) AS "incoming!", u.enabled, u."shareDisabled" AS share_disabled
+           FROM user_follows uf
+           JOIN users u ON u.id = CASE WHEN uf."followingId" = $1 THEN uf."followerId" ELSE uf."followingId" END
+           WHERE uf.status = 'accepted' AND (uf."followingId" = $1 OR uf."followerId" = $1)"#,
         target
     )
-    .fetch_one(db)
+    .fetch_all(db)
     .await?;
+    let count = |incoming: bool| {
+        edges
+            .iter()
+            .filter(|e| e.incoming == incoming && listable(e.enabled, e.share_disabled))
+            .count()
+    };
     let viewer = accessible_library_ids(db, &a).await?;
     let shown = [
         ("tastes", t.share_tastes),
@@ -111,8 +118,8 @@ pub async fn profile(
             })
         },
     )?;
-    out["followerCount"] = counts.followers.into();
-    out["followingCount"] = counts.following.into();
+    out["followerCount"] = count(true).into();
+    out["followingCount"] = count(false).into();
     out["shown"] = json!({"playlists": true});
     for (k, v) in shown {
         out["shown"][k] = v.into();
