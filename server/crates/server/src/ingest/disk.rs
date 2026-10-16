@@ -574,14 +574,6 @@ async fn run_batch(st: AppState, a: Authed, items: Vec<RelinkDto>) {
         .iter()
         .map(|d| format!("{batch}:{}:{}", d.media_type, d.folder_name))
         .collect();
-    act.upsert_running(
-        &batch,
-        "OrphanImport",
-        None,
-        Some(Num(0.0)),
-        Some(Num(total as f64)),
-        None,
-    );
     for (k, d) in keys.iter().zip(&items) {
         act.upsert_pending(
             k,
@@ -599,6 +591,14 @@ async fn run_batch(st: AppState, a: Authed, items: Vec<RelinkDto>) {
             message: d.folder_name.clone(),
             subject: None,
         });
+        act.upsert_running(
+            &batch,
+            "OrphanImport",
+            Some(subject_titled(&d.folder_name)),
+            Some(Num((i + 1) as f64)),
+            Some(Num(total as f64)),
+            None,
+        );
         act.upsert_running(
             k,
             "OrphanImport",
