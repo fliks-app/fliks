@@ -1,5 +1,5 @@
 //! Default quality-definition sizes (`docs/spec/profiles.md` rules 25-26).
-use crate::release::quality::{APP_QUALITIES, app_quality_by_id};
+use crate::release::parsing::quality::{APP_QUALITIES, app_quality_by_id};
 
 /// MB per hour of content; `0` on min or max means no limit.
 #[derive(Debug, Clone, Copy, PartialEq)]
