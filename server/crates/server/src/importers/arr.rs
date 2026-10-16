@@ -180,7 +180,8 @@ pub(super) async fn preview(st: &AppState, arr: Arr, a: Authed, body: Value) -> 
                 Some(Value::String(s)) => paths.push(s.as_str()),
                 Some(_) => return Err(decode("rootfolder path is not a string")),
             },
-            _ => return Err(decode("rootfolder entry is not an object")),
+            Value::Null => return Err(decode("rootfolder entry is null")),
+            _ => {}
         }
     }
     let libraries = db::libraries(&st.db).await?;
@@ -520,7 +521,7 @@ async fn radarr_subtitles(
 ) -> i64 {
     let mut count = 0;
     for movie in movies {
-        let title = str_of(movie, "title").unwrap_or_default();
+        let title = str_of(movie, "title").unwrap_or("undefined");
         match radarr_movie_subtitles(st, req, movie).await {
             Ok(n) => count += n,
             Err(e) => errors.push(format!("Subtitles for \"{title}\": {e}")),
@@ -601,9 +602,7 @@ async fn sonarr_subtitles(
 ) -> i64 {
     let mut count = 0;
     for s in series {
-        let title = str_of(s, "title")
-            .filter(|t| !t.is_empty())
-            .unwrap_or("series");
+        let title = str_of(s, "title").unwrap_or("series");
         match sonarr_series_subtitles(st, req, s).await {
             Ok(n) => count += n,
             Err(e) => errors.push(format!("Subtitles for \"{title}\": {e}")),
