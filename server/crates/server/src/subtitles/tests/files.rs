@@ -10,7 +10,7 @@ use std::time::Duration;
 
 const VIDEO: &str = "Movie.2020.1080p.BluRay.x264-GRP.mkv";
 
-async fn row(
+pub(super) async fn row(
     c: &Ctx,
     lang: &str,
     provider: &str,
@@ -35,7 +35,10 @@ async fn row(
     .unwrap()
 }
 
-async fn until<F: std::future::Future<Output = bool>>(what: &str, mut f: impl FnMut() -> F) {
+pub(super) async fn until<F: std::future::Future<Output = bool>>(
+    what: &str,
+    mut f: impl FnMut() -> F,
+) {
     for _ in 0..400 {
         if f().await {
             return;
@@ -45,7 +48,13 @@ async fn until<F: std::future::Future<Output = bool>>(what: &str, mut f: impl Fn
     panic!("never: {what}");
 }
 
-fn job_snapshot(id: &str, kind: &str, state: &str, result: Value, error: Option<&str>) -> Value {
+pub(super) fn job_snapshot(
+    id: &str,
+    kind: &str,
+    state: &str,
+    result: Value,
+    error: Option<&str>,
+) -> Value {
     let mut v = json!({"jobId": id, "kind": kind, "mediaFileId": 1, "priority": "high", "state": state, "pct": 100, "createdMs": 1});
     if !result.is_null() {
         v["result"] = result;
@@ -56,7 +65,7 @@ fn job_snapshot(id: &str, kind: &str, state: &str, result: Value, error: Option<
     v
 }
 
-fn script_job(c: &Ctx, id: &str, snap: Value) {
+pub(super) fn script_job(c: &Ctx, id: &str, snap: Value) {
     c.fake
         .script("POST", "/v1/jobs", vec![ok(json!({"jobId": id}))]);
     c.fake
@@ -554,4 +563,278 @@ async fn an_ocr_job_runs_end_to_end_and_a_failed_run_stays_failed(pool: PgPool) 
             .await
             .unwrap();
     assert_eq!(msg, "activity.subtitle_error_interrupted");
+}
+
+#[sqlx::test]
+async fn a_root_level_movie_works_and_a_folder_symlinked_out_of_the_library_does_not(pool: PgPool) {
+    let c = ctx(pool).await;
+    // F52: a movie with no folder lives in the library root.
+    std::fs::write(c.root.join("Flat.mkv"), b"v").unwrap();
+    sqlx::query(r#"UPDATE media SET "folderName" = NULL WHERE id = $1"#)
+        .bind(c.media)
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    let media = sfiles::load_media(&c.pool, c.media).await.unwrap().unwrap();
+    let dirs = media.dirs(sfiles::NO_ROOT_ADD).unwrap();
+    assert_eq!(
+        dirs.write_sidecar("Flat.mkv", "en", ".srt", b"x").unwrap(),
+        "Flat.en.srt"
+    );
+    // A folder name that is a symlink to outside the library is refused (F45).
+    let outside = std::env::temp_dir().join(format!("fliks-s6-out-{}", std::process::id()));
+    std::fs::create_dir_all(&outside).unwrap();
+    std::os::unix::fs::symlink(&outside, c.root.join("Linked")).unwrap();
+    sqlx::query(r#"UPDATE media SET "folderName" = 'Linked' WHERE id = $1"#)
+        .bind(c.media)
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    let media = sfiles::load_media(&c.pool, c.media).await.unwrap().unwrap();
+    assert!(media.dirs(sfiles::NO_ROOT_ADD).is_err());
+    std::fs::remove_dir_all(&outside).unwrap();
+}
+
+#[sqlx::test]
+async fn concurrent_sidecar_writes_take_distinct_names(pool: PgPool) {
+    let c = ctx(pool).await;
+    let media = sfiles::load_media(&c.pool, c.media).await.unwrap().unwrap();
+    let dirs = std::sync::Arc::new(media.dirs(sfiles::NO_ROOT_ADD).unwrap());
+    let names: Vec<String> = std::thread::scope(|s| {
+        let hs: Vec<_> = (0..8)
+            .map(|_| {
+                let d = dirs.clone();
+                s.spawn(move || d.write_sidecar(VIDEO, "en", ".srt", b"x").unwrap())
+            })
+            .collect();
+        hs.into_iter().map(|h| h.join().unwrap()).collect()
+    });
+    let mut sorted = names.clone();
+    sorted.sort();
+    sorted.dedup();
+    assert_eq!(sorted.len(), 8, "{names:?}");
+}
+
+const ASS: &str = "[Script Info]\nScriptType: v4.00+\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,Hello there.\n";
+
+#[sqlx::test]
+async fn post_processing_refuses_image_formats_and_a_convert_onto_an_existing_srt(pool: PgPool) {
+    let c = ctx(pool).await;
+    let uri = |id: i32| format!("/api/media/{}/subtitles/{id}/post-process", c.media);
+    for ext in ["sup", "sub"] {
+        let name = format!("Movie.2020.1080p.BluRay.x264-GRP.en.{ext}");
+        std::fs::write(c.dir.join(&name), b"x").unwrap();
+        let id = row(&c, "en", "disk", Some(&name), None, None).await;
+        let (s, v) = call(
+            &c,
+            "POST",
+            &uri(id),
+            &c.admin,
+            Some(json!({"action": "removeHiTags"})),
+        )
+        .await;
+        assert_eq!(
+            (s, v["message"].as_str()),
+            (
+                400,
+                Some(format!("Cannot post-process a .{ext} subtitle").as_str())
+            )
+        );
+    }
+    std::fs::write(c.dir.join("Movie.2020.1080p.BluRay.x264-GRP.fr.ass"), ASS).unwrap();
+    std::fs::write(c.dir.join("Movie.2020.1080p.BluRay.x264-GRP.fr.srt"), SRT).unwrap();
+    let id = row(
+        &c,
+        "fr",
+        "disk",
+        Some("Movie.2020.1080p.BluRay.x264-GRP.fr.ass"),
+        None,
+        None,
+    )
+    .await;
+    let (s, v) = call(
+        &c,
+        "POST",
+        &uri(id),
+        &c.admin,
+        Some(json!({"action": "convertToSrt"})),
+    )
+    .await;
+    assert_eq!(
+        (s, v["message"].as_str()),
+        (409, Some("Target subtitle already exists"))
+    );
+    assert!(
+        c.dir
+            .join("Movie.2020.1080p.BluRay.x264-GRP.fr.ass")
+            .exists()
+    );
+    // Without the clash the conversion renames to `.srt`.
+    std::fs::remove_file(c.dir.join("Movie.2020.1080p.BluRay.x264-GRP.fr.srt")).unwrap();
+    let (s, v) = call(
+        &c,
+        "POST",
+        &uri(id),
+        &c.admin,
+        Some(json!({"action": "convertToSrt"})),
+    )
+    .await;
+    assert_eq!(s, 201, "{v}");
+    assert!(
+        c.dir
+            .join("Movie.2020.1080p.BluRay.x264-GRP.fr.srt")
+            .exists()
+    );
+    // An `.srt` target is its own source: no clash check, the rewrite goes through.
+    let (s, _) = call(
+        &c,
+        "POST",
+        &uri(id),
+        &c.admin,
+        Some(json!({"action": "convertToSrt"})),
+    )
+    .await;
+    assert_eq!(s, 201);
+}
+
+#[sqlx::test]
+async fn one_ocr_run_per_source_track_even_when_requested_twice_at_once(pool: PgPool) {
+    let c = ctx(pool).await;
+    let img = row(
+        &c,
+        "en",
+        "embedded",
+        None,
+        Some("hdmv_pgs_subtitle"),
+        Some(2),
+    )
+    .await;
+    c.fake
+        .script("POST", "/v1/jobs", vec![ok(json!({"jobId": "o1"}))]);
+    c.fake.script(
+        "GET",
+        "/v1/jobs/o1",
+        vec![crate::engine::testkit::slow(
+            300,
+            ok(job_snapshot(
+                "o1",
+                "SubtitleOcr",
+                "done",
+                json!({"type": "SubtitleOcr", "srt": SRT}),
+                None,
+            )),
+        )],
+    );
+    let uri = format!("/api/media/{}/subtitles/{img}/ocr", c.media);
+    let (a, b) = tokio::join!(
+        call(&c, "POST", &uri, &c.admin, Some(json!({}))),
+        call(&c, "POST", &uri, &c.admin, Some(json!({})))
+    );
+    let mut codes = [a.0, b.0];
+    codes.sort();
+    assert_eq!(codes, [201, 409], "{a:?} {b:?}");
+    // C61: a placeholder deleted while its run is in flight leaves no row and no file behind.
+    until("the first run finished", || async {
+        sqlx::query_scalar::<_, i64>(r#"SELECT count(*) FROM subtitle_files WHERE "providerType" = 'ocr' AND status = 'downloaded'"#)
+            .fetch_one(&c.pool)
+            .await
+            .unwrap()
+            == 1
+    })
+    .await;
+    sqlx::query(r#"DELETE FROM subtitle_files WHERE "providerType" = 'ocr'"#)
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    std::fs::remove_file(c.dir.join("Movie.2020.1080p.BluRay.x264-GRP.en.ocr.srt")).unwrap();
+    c.fake
+        .script("POST", "/v1/jobs", vec![ok(json!({"jobId": "o2"}))]);
+    c.fake.script(
+        "GET",
+        "/v1/jobs/o2",
+        vec![crate::engine::testkit::slow(
+            400,
+            ok(job_snapshot(
+                "o2",
+                "SubtitleOcr",
+                "done",
+                json!({"type": "SubtitleOcr", "srt": SRT}),
+                None,
+            )),
+        )],
+    );
+    let (s, ph) = call(&c, "POST", &uri, &c.admin, Some(json!({}))).await;
+    assert_eq!(s, 201);
+    sqlx::query("DELETE FROM subtitle_files WHERE id = $1")
+        .bind(ph["id"].as_i64().unwrap() as i32)
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    until("the engine answered", || async {
+        !c.fake.seen("GET", "/v1/jobs/o2").is_empty()
+    })
+    .await;
+    tokio::time::sleep(Duration::from_millis(800)).await;
+    let n: i64 =
+        sqlx::query_scalar(r#"SELECT count(*) FROM subtitle_files WHERE "providerType" = 'ocr'"#)
+            .fetch_one(&c.pool)
+            .await
+            .unwrap();
+    assert_eq!(n, 0);
+    assert!(
+        !c.dir
+            .join("Movie.2020.1080p.BluRay.x264-GRP.en.ocr.srt")
+            .exists()
+    );
+}
+
+#[sqlx::test]
+async fn a_rescan_and_a_file_delete_reach_the_subtitle_hooks(pool: PgPool) {
+    let c = ctx(pool).await;
+    // The disk has a French sidecar the database lacks; the database has an English one the disk lacks.
+    std::fs::write(c.dir.join("Movie.2020.1080p.BluRay.x264-GRP.fr.srt"), SRT).unwrap();
+    row(
+        &c,
+        "en",
+        "disk",
+        Some("Movie.2020.1080p.BluRay.x264-GRP.en.srt"),
+        None,
+        None,
+    )
+    .await;
+    c.fake.script(
+        "POST",
+        "/v1/probe",
+        vec![ok(
+            json!({"ok": true, "info": {"video": [], "audio": [], "subtitles": []}}),
+        )],
+    );
+    let guard = c.st.ingest.media.lock(c.media).await;
+    let counts = crate::ingest::rescan::rescan_files(&c.st, &guard, c.media)
+        .await
+        .unwrap();
+    drop(guard);
+    assert_eq!(counts.subtitle_removed_missing, 1);
+    let langs: Vec<String> =
+        sqlx::query_scalar(r#"SELECT language FROM subtitle_files WHERE "mediaFileId" = $1"#)
+            .bind(c.file)
+            .fetch_all(&c.pool)
+            .await
+            .unwrap();
+    assert_eq!(langs, ["fr"]);
+    // Deleting the video from disk unlinks its tracked sidecars.
+    let (s, _) = call(
+        &c,
+        "DELETE",
+        &format!("/api/media/{}/files/{}?deleteOnDisk=true", c.media, c.file),
+        &c.admin,
+        None,
+    )
+    .await;
+    assert_eq!(s, 200);
+    assert!(
+        !c.dir
+            .join("Movie.2020.1080p.BluRay.x264-GRP.fr.srt")
+            .exists()
+    );
 }

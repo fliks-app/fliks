@@ -625,3 +625,39 @@ async fn downloads_are_capped() {
     assert!(zip::extract_subtitle(&zip_of("a.txt", b"x", false), false).is_err());
     assert!(zip::extract_subtitle(b"not a zip", true).is_err());
 }
+
+#[tokio::test(start_paused = true)]
+async fn a_probe_that_never_answers_reports_a_timeout() {
+    let stub = Stub::start().await;
+    let mut hang = reply(200, "{}");
+    hang.delay_ms = 3_600_000;
+    stub.on("GET", "/api/v1/subtitles", vec![hang]);
+    let sh = shared(&stub);
+    let p = Provider::new("subdl", &json!({"apiKey": "k"}), &sh).unwrap();
+    let t = p.test().await;
+    assert!(!t.ok);
+    assert!(t.detail.unwrap().contains("timeout"));
+}
+
+#[tokio::test]
+async fn a_probe_failure_never_echoes_the_key() {
+    let stub = Stub::start().await;
+    stub.on(
+        "GET",
+        "/api/v1/subtitles",
+        vec![reply(401, json!({"message": "bad key KEY123"}).to_string())],
+    );
+    let sh = shared(&stub);
+    let p = Provider::new("subdl", &json!({"apiKey": "KEY123"}), &sh).unwrap();
+    let detail = p.test().await.detail.unwrap();
+    assert!(
+        detail.contains("***") && !detail.contains("KEY123"),
+        "{detail}"
+    );
+}
+
+#[tokio::test]
+async fn a_stored_zip_entry_is_capped_like_a_deflated_one() {
+    let big = vec![b'a'; 6 * 1024 * 1024];
+    assert!(zip::extract_subtitle(&zip_of("x.srt", &big, false), false).is_err());
+}

@@ -317,3 +317,29 @@ pub fn clean_subtitle(content: &str, opts: &CleanOptions) -> String {
         .collect();
     out.join("\n\n") + "\n"
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // C66: an invalid or backtracking-bound exclusion is skipped, never run unbounded.
+    #[test]
+    fn a_bad_or_overrunning_exclusion_is_skipped_and_counted() {
+        let pats = ["(".to_owned(), "(a+)+$".into(), "good".into()];
+        let (compiled, skipped) = compile_exclusions(&pats);
+        assert_eq!((compiled.len(), skipped), (2, 1));
+        let opts = CleanOptions {
+            custom_exclusions: vec!["(a+)+$".into(), "good".into()],
+            ..CleanOptions::default()
+        };
+        let doc = format!(
+            "1\n00:00:01,000 --> 00:00:02,000\n{}!\n\n2\n00:00:03,000 --> 00:00:04,000\ngood day\n",
+            "a".repeat(40)
+        );
+        let out = clean_subtitle(&doc, &opts);
+        assert!(
+            out.contains(&"a".repeat(40)) && !out.contains("good day"),
+            "{out}"
+        );
+    }
+}

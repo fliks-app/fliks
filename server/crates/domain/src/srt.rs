@@ -61,3 +61,17 @@ pub fn decode_text(bytes: &[u8]) -> String {
         Err(_) => encoding_rs::WINDOWS_1252.decode(bytes).0.into_owned(),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::decode_text;
+
+    // C65: BOM, then UTF-8, then Windows-1252; never lossy.
+    #[test]
+    fn text_decodes_bom_then_utf8_then_windows_1252() {
+        assert_eq!(decode_text(b"caf\xE9"), "café");
+        assert_eq!(decode_text("café".as_bytes()), "café");
+        assert_eq!(decode_text(b"\xFF\xFEc\0a\0"), "ca");
+        assert_eq!(decode_text(b"\xEF\xBB\xBFok"), "ok");
+    }
+}

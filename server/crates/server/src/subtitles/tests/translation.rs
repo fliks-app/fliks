@@ -1,6 +1,5 @@
-//! Translation against a mock OpenAI-compatible server, the provider CRUD and the scheduled passes.
+//! Translation against a mock OpenAI-compatible server and the provider CRUD.
 use super::{routes::*, *};
-use crate::engine::testkit::ok;
 use serde_json::{Value, json};
 use sqlx::PgPool;
 use std::time::Duration;
@@ -425,74 +424,322 @@ async fn translation_providers_keep_one_default_redact_keys_and_list_models(pool
     assert!(last.header("authorization").is_none());
 }
 
-#[sqlx::test]
-async fn the_search_and_upgrade_passes_fill_gaps_and_replace_low_scores(pool: PgPool) {
-    let c = ctx(pool).await;
-    provider(&c, "subdl").await;
-    script_subdl(
-        &c,
-        &[("/subtitle/1.zip", "Movie.2020.1080p.BluRay.x264-GRP", false)],
-    );
-    c.fake.script(
-        "POST",
-        "/v1/probe",
-        vec![ok(
-            json!({"ok": true, "info": {"video": [], "audio": [], "subtitles": []}}),
-        )],
-    );
-    // An embedded French track covers `fr`; `en` is fetched.
-    sqlx::query(r#"INSERT INTO subtitle_files ("mediaId", "mediaFileId", language, "providerType", status, codec, "streamIndex", score) VALUES ($1, $2, 'fr', 'embedded', 'embedded', 'subrip', 1, 100)"#).bind(c.media).bind(c.file).execute(&c.pool).await.unwrap();
-    let got = crate::subtitles::scheduler::search_missing_for_media(&c.st, c.media, c.file).await;
-    // The probe answered no tracks, which retires the embedded row, so both languages are fetched.
-    assert!(got.contains(&"en".to_owned()), "{got:?}");
-    let langs: Vec<String> = sqlx::query_scalar(
-        r#"SELECT language FROM subtitle_files WHERE "providerType" = 'subdl' ORDER BY language"#,
-    )
-    .fetch_all(&c.pool)
-    .await
-    .unwrap();
-    assert!(langs.contains(&"en".to_owned()));
-    // Unknown media or file never errors.
-    assert!(
-        crate::subtitles::scheduler::search_missing_for_media(&c.st, 9999, 1)
-            .await
-            .is_empty()
-    );
-    // The minimum score gates a download: a threshold above any percent downloads nothing new.
-    sqlx::query("INSERT INTO app_settings (key, value) VALUES ('subtitle_min_score', 'abc') ON CONFLICT (key) DO UPDATE SET value = 'abc'").execute(&c.pool).await.unwrap();
-    // C59: a non-numeric value keeps the default of 70.
-    let before: i64 = sqlx::query_scalar("SELECT count(*) FROM subtitle_files")
-        .fetch_one(&c.pool)
-        .await
-        .unwrap();
-    crate::subtitles::scheduler::search_missing_for_media(&c.st, c.media, c.file).await;
-    let after: i64 = sqlx::query_scalar("SELECT count(*) FROM subtitle_files")
-        .fetch_one(&c.pool)
-        .await
-        .unwrap();
-    assert!(after >= before);
-    // Upgrade: a low-score row of a fully covered file is replaced by a better candidate.
-    sqlx::query(
-        r#"UPDATE subtitle_files SET score = 10, locked = false WHERE "providerType" = 'subdl'"#,
-    )
-    .execute(&c.pool)
-    .await
-    .unwrap();
-    sqlx::query(r#"INSERT INTO subtitle_files ("mediaId", "mediaFileId", language, "providerType", status, score) VALUES ($1, $2, 'fr', 'disk', 'downloaded', 100)"#).bind(c.media).bind(c.file).execute(&c.pool).await.unwrap();
-    crate::subtitles::scheduler::upgrade(&c.st).await.unwrap();
-    let upgraded: i64 =
-        sqlx::query_scalar("SELECT count(*) FROM subtitle_files WHERE status = 'upgraded'")
-            .fetch_one(&c.pool)
+mod engines {
+    use super::super::*;
+    use crate::subtitles::{
+        Bases, Shared,
+        translation::{ListError, list_models, translate},
+    };
+    use fliks_domain::translation::{Request, TranslationError};
+    use serde_json::{Value, json};
+
+    fn shared(stub: &Stub) -> Shared {
+        Shared::new(Bases {
+            gemini: stub.url.clone(),
+            allow_http_link: true,
+            ..Bases::default()
+        })
+    }
+
+    fn req(source: &str) -> Request {
+        Request {
+            source_language: source.into(),
+            target_language: "ja".into(),
+            ..Request::default()
+        }
+    }
+
+    fn texts(n: usize) -> Vec<String> {
+        (0..n).map(|i| format!("line {i}")).collect()
+    }
+
+    /// The `#N#` segments of a payload, each answered with its text and a `!`.
+    fn echo(user: &str) -> (usize, String) {
+        let mut out = String::new();
+        let (mut n, mut lines) = (0, user.lines());
+        while let Some(l) = lines.next() {
+            if l.starts_with('#') && l.ends_with('#') {
+                n += 1;
+                out.push_str(&format!("{l}\n{}!\n", lines.next().unwrap_or("")));
+            }
+        }
+        (n, out)
+    }
+
+    fn user_of(seen: &Seen, gemini: bool) -> String {
+        let b: Value = serde_json::from_slice(&seen.body).unwrap();
+        if gemini {
+            b["contents"][0]["parts"][0]["text"]
+                .as_str()
+                .unwrap_or("")
+                .into()
+        } else {
+            b["messages"][1]["content"].as_str().unwrap_or("").into()
+        }
+    }
+
+    fn noop(_: usize, _: usize) {}
+
+    #[tokio::test]
+    async fn gemini_sends_its_key_in_a_header_splits_on_max_tokens_and_lists_models() {
+        let stub = Stub::start().await;
+        stub.on_fn("POST", "/models/gm:generateContent", |seen| {
+            let (n, text) = echo(&user_of(seen, true));
+            if n > 1 {
+                return reply(
+                    200,
+                    json!({"candidates": [{"finishReason": "MAX_TOKENS"}], "usageMetadata": {}})
+                        .to_string(),
+                );
+            }
+            reply(
+                200,
+                json!({"candidates": [{"content": {"parts": [{"text": text}]}, "finishReason": "STOP"}]})
+                    .to_string(),
+            )
+        });
+        stub.on(
+            "GET",
+            "/models",
+            vec![reply(
+                200,
+                json!({"models": [
+                    {"name": "models/zeta", "supportedGenerationMethods": ["generateContent"]},
+                    {"name": "models/embed", "supportedGenerationMethods": ["embedContent"]},
+                    {"name": "models/alpha", "supportedGenerationMethods": ["generateContent"]}
+                ]})
+                .to_string(),
+            )],
+        );
+        let sh = shared(&stub);
+        let s = json!({"apiKey": "GKEY", "model": "gm"});
+        let out = translate(&sh, "gemini", &texts(4), req("en"), &s, &mut noop)
             .await
             .unwrap();
-    assert!(upgraded >= 1);
-}
+        assert_eq!(out, ["line 0!", "line 1!", "line 2!", "line 3!"]);
+        let sent = stub.seen("POST", "/models/gm:generateContent");
+        assert!(sent.len() > 4, "the truncated batches were halved");
+        assert!(
+            sent.iter()
+                .all(|r| r.header("x-goog-api-key") == Some("GKEY"))
+        );
+        assert!(sent.iter().all(|r| !r.query.contains("GKEY")));
+        assert_eq!(
+            list_models(&sh, "gemini", &s).await.ok(),
+            Some(vec!["alpha".to_owned(), "zeta".to_owned()])
+        );
+        let listing = stub.seen("GET", "/models").pop().unwrap();
+        assert_eq!(listing.header("x-goog-api-key"), Some("GKEY"));
+        assert!(matches!(
+            list_models(&sh, "gemini", &json!({})).await,
+            Err(ListError::Bad(_))
+        ));
+    }
 
-#[tokio::test]
-async fn a_pass_skips_when_its_claim_is_held() {
-    let r = std::sync::Arc::new(crate::jobs::Running::default());
-    let held = r.claim("SubtitleSearch").unwrap();
-    assert!(r.claim("SubtitleSearch").is_none());
-    drop(held);
-    assert!(r.claim("SubtitleSearch").is_some());
+    #[tokio::test]
+    async fn libretranslate_sends_chunks_of_25_with_source_auto_for_an_unknown_language() {
+        let stub = Stub::start().await;
+        stub.on_fn("POST", "/translate", |seen| {
+            let b: Value = serde_json::from_slice(&seen.body).unwrap();
+            let out: Vec<String> = b["q"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|t| format!("{}!", t.as_str().unwrap()))
+                .collect();
+            reply(200, json!({"translatedText": out}).to_string())
+        });
+        let sh = shared(&stub);
+        let s = json!({"url": format!("{}/", stub.url), "apiKey": "LKEY"});
+        let mut progress = vec![];
+        let mut on = |d: usize, t: usize| progress.push((d, t));
+        let out = translate(&sh, "libretranslate", &texts(60), req("und"), &s, &mut on)
+            .await
+            .unwrap();
+        assert_eq!(out.len(), 60);
+        assert_eq!(out[59], "line 59!");
+        assert_eq!(progress, [(25, 60), (50, 60), (60, 60)]);
+        let sent = stub.seen("POST", "/translate");
+        let sizes: Vec<usize> = sent
+            .iter()
+            .map(|r| {
+                serde_json::from_slice::<Value>(&r.body).unwrap()["q"]
+                    .as_array()
+                    .unwrap()
+                    .len()
+            })
+            .collect();
+        assert_eq!(sizes, [25, 25, 10]);
+        let first: Value = serde_json::from_slice(&sent[0].body).unwrap();
+        assert_eq!(
+            (
+                first["source"].clone(),
+                first["target"].clone(),
+                first["format"].clone(),
+                first["api_key"].clone()
+            ),
+            (json!("auto"), json!("ja"), json!("text"), json!("LKEY"))
+        );
+        translate(&sh, "libretranslate", &texts(1), req("en"), &s, &mut noop)
+            .await
+            .unwrap();
+        let last: Value =
+            serde_json::from_slice(&stub.seen("POST", "/translate").pop().unwrap().body).unwrap();
+        assert_eq!(last["source"], "en");
+    }
+
+    fn openai(stub: &Stub) -> Value {
+        json!({"baseUrl": format!("{}/v1", stub.url), "model": "m", "apiKey": "OKEY"})
+    }
+
+    #[tokio::test]
+    async fn openai_halves_a_batch_cut_at_its_context_limit() {
+        let stub = Stub::start().await;
+        stub.on_fn("POST", "/v1/chat/completions", |seen| {
+            let (n, text) = echo(&user_of(seen, false));
+            let finish = if n > 1 { "length" } else { "stop" };
+            reply(
+                200,
+                json!({"choices": [{"message": {"content": text}, "finish_reason": finish}]})
+                    .to_string(),
+            )
+        });
+        let sh = shared(&stub);
+        let out = translate(
+            &sh,
+            "openai",
+            &texts(4),
+            req("en"),
+            &openai(&stub),
+            &mut noop,
+        )
+        .await
+        .unwrap();
+        assert_eq!(out, ["line 0!", "line 1!", "line 2!", "line 3!"]);
+        let sent = stub.seen("POST", "/v1/chat/completions");
+        assert_eq!(sent[0].header("authorization"), Some("Bearer OKEY"));
+        assert!(sent.len() > 4);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_429_waits_at_least_the_quota_delay_and_a_413_is_not_retried() {
+        let stub = Stub::start().await;
+        stub.on(
+            "POST",
+            "/v1/chat/completions",
+            vec![
+                reply(429, "slow down"),
+                reply(
+                    200,
+                    json!({"choices": [{"message": {"content": "#1#\nline 0!\n"}, "finish_reason": "stop"}]})
+                        .to_string(),
+                ),
+            ],
+        );
+        let sh = shared(&stub);
+        let t0 = tokio::time::Instant::now();
+        let out = translate(
+            &sh,
+            "openai",
+            &texts(1),
+            req("en"),
+            &openai(&stub),
+            &mut noop,
+        )
+        .await
+        .unwrap();
+        assert_eq!(out, ["line 0!"]);
+        assert!(
+            t0.elapsed() >= std::time::Duration::from_secs(20),
+            "{:?}",
+            t0.elapsed()
+        );
+        assert_eq!(stub.seen("POST", "/v1/chat/completions").len(), 2);
+
+        let stub = Stub::start().await;
+        stub.on(
+            "POST",
+            "/v1/chat/completions",
+            vec![reply(413, "payload too big")],
+        );
+        let sh = shared(&stub);
+        let t0 = tokio::time::Instant::now();
+        let res = translate(
+            &sh,
+            "openai",
+            &texts(1),
+            req("en"),
+            &openai(&stub),
+            &mut noop,
+        )
+        .await;
+        assert!(matches!(res, Err(TranslationError::TooLarge(_))), "{res:?}");
+        assert_eq!(stub.seen("POST", "/v1/chat/completions").len(), 1);
+        assert!(t0.elapsed() < std::time::Duration::from_secs(1));
+    }
+
+    #[tokio::test]
+    async fn translation_follows_no_redirect_and_never_puts_the_key_in_an_error() {
+        let other = Stub::start().await;
+        other.on("POST", "/elsewhere", vec![reply(200, "{}")]);
+        let stub = Stub::start().await;
+        stub.on(
+            "POST",
+            "/v1/chat/completions",
+            vec![with(
+                reply(302, ""),
+                "location",
+                &format!("{}/elsewhere", other.url),
+            )],
+        );
+        let sh = shared(&stub);
+        let Err(e) = translate(
+            &sh,
+            "openai",
+            &texts(1),
+            req("en"),
+            &openai(&stub),
+            &mut noop,
+        )
+        .await
+        else {
+            panic!("a redirect is an error")
+        };
+        assert!(other.all().is_empty());
+        assert!(!e.to_string().contains("OKEY"), "{e}");
+
+        let stub = Stub::start().await;
+        stub.on(
+            "POST",
+            "/v1/chat/completions",
+            vec![reply(500, "bad key OKEY")],
+        );
+        let sh = shared(&stub);
+        let Err(e) = translate(
+            &sh,
+            "openai",
+            &texts(1),
+            req("en"),
+            &openai(&stub),
+            &mut noop,
+        )
+        .await
+        else {
+            panic!("a 500 is an error")
+        };
+        assert!(
+            e.to_string().contains("***") && !e.to_string().contains("OKEY"),
+            "{e}"
+        );
+        // A dead host never leaks the URL either.
+        let sh = shared(&stub);
+        let dead = json!({"baseUrl": "http://127.0.0.1:1/v1", "model": "m", "apiKey": "OKEY"});
+        let Err(e) = translate(&sh, "openai", &texts(1), req("en"), &dead, &mut noop).await else {
+            panic!("a dead host is an error")
+        };
+        assert!(
+            !e.to_string().contains("OKEY") && !e.to_string().contains("127.0.0.1"),
+            "{e}"
+        );
+    }
 }
