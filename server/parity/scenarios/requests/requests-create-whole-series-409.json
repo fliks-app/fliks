@@ -1,0 +1,50 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "requests-create-whole-series-409",
+  "seed": "requests",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "mediaType": "series",
+        "seasons": [
+          1
+        ],
+        "title": "S",
+        "tmdbId": 9005
+      },
+      "expect": {
+        "body": {
+          "error": "Conflict",
+          "message": "The whole series has already been requested",
+          "statusCode": 409
+        },
+        "status": 409
+      },
+      "method": "POST",
+      "path": "/api/requests"
+    },
+    {
+      "as": "user",
+      "body": {
+        "mediaType": "series",
+        "title": "S",
+        "tmdbId": 9005
+      },
+      "expect": {
+        "body": {
+          "error": "Conflict",
+          "message": "This title has already been requested",
+          "statusCode": 409
+        },
+        "status": 409
+      },
+      "method": "POST",
+      "path": "/api/requests"
+    }
+  ]
+}

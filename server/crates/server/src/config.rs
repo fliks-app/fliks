@@ -1,5 +1,8 @@
 //! Environment configuration; defaults and parsing follow `docs/spec/config.md`.
-use crate::auth_token::{positive_int_or, ttl_secs};
+use crate::{
+    auth_token::{positive_int_or, ttl_secs},
+    metadata::{tmdb, tvdb},
+};
 use sqlx::postgres::PgConnectOptions;
 use std::path::PathBuf;
 
@@ -9,10 +12,28 @@ const DEFAULT_JWT_EXPIRATION_SECS: u64 = 3600;
 const DEFAULT_STREAM_TOKEN_TTL_SECS: u64 = 12 * 3600;
 const DEFAULT_REFRESH_TOKEN_TTL_DAYS: i64 = 60;
 
+/// A value that must not reach a log through `{:?}`.
+#[derive(Clone)]
+pub struct Secret(String);
+
+impl Secret {
+    pub fn expose(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Debug for Secret {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Secret(..)")
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Config {
     pub port: u16,
     pub db: PgConnectOptions,
+    /// The pool's password, for `pg_dump` / `psql` (`PgConnectOptions` has no getter).
+    pub db_password: Secret,
     pub cors_origin: Option<String>,
     pub serve_static_path: Option<PathBuf>,
     pub cast_dir: PathBuf,
@@ -28,6 +49,17 @@ pub struct Config {
     pub nest_cmd: Vec<String>,
     pub nest_port: u16,
     pub bridge_token: String,
+    pub metadata: MetadataConfig,
+}
+
+/// API keys and upstream bases of the metadata clients (`metadata.md` rules 20, 35).
+#[derive(Debug, Clone)]
+pub struct MetadataConfig {
+    pub tmdb_key: String,
+    pub tvdb_key: String,
+    pub tmdb_url: String,
+    pub tvdb_url: String,
+    pub tmdb_image_url: String,
 }
 
 impl Config {
@@ -49,6 +81,7 @@ impl Config {
                 .unwrap_or(default)
         };
         let port = number("PORT", DEFAULT_PORT);
+        let db_password = get("DB_PASSWORD").unwrap_or_else(|| "fliks".into());
         let db = PgConnectOptions::new_without_pgpass()
             .host(&get("DB_HOST").unwrap_or_else(|| "localhost".into()))
             .port(
@@ -57,7 +90,7 @@ impl Config {
                     .unwrap_or(5432),
             )
             .username(&get("DB_USERNAME").unwrap_or_else(|| "fliks".into()))
-            .password(&get("DB_PASSWORD").unwrap_or_else(|| "fliks".into()))
+            .password(&db_password)
             .database(&get("DB_NAME").unwrap_or_else(|| "fliks".into()));
         let nest_cmd = match (text("FLIKS_NODE_BIN"), text("FLIKS_NEST_ENTRY")) {
             (Some(bin), Some(entry)) => vec![bin, entry],
@@ -70,6 +103,7 @@ impl Config {
         Self {
             port,
             db,
+            db_password: Secret(db_password),
             cors_origin: text("CORS_ORIGIN"),
             serve_static_path: text("SERVE_STATIC_PATH").map(PathBuf::from),
             cast_dir: text("FLIKS_CAST_DIR").map_or_else(|| "public".into(), PathBuf::from),
@@ -95,6 +129,14 @@ impl Config {
             nest_cmd,
             nest_port: number("FLIKS_NEST_PORT", port.saturating_add(1)),
             bridge_token: text("FLIKS_BRIDGE_TOKEN").unwrap_or_else(|| random_hex(32)),
+            metadata: MetadataConfig {
+                tmdb_key: text("TMDB_API_KEY").unwrap_or_default(),
+                tvdb_key: text("TVDB_API_KEY").unwrap_or_default(),
+                tmdb_url: text("FLIKS_TMDB_API_URL").unwrap_or_else(|| tmdb::API_URL.into()),
+                tvdb_url: text("FLIKS_TVDB_API_URL").unwrap_or_else(|| tvdb::API_URL.into()),
+                tmdb_image_url: text("FLIKS_TMDB_IMAGE_URL")
+                    .unwrap_or_else(|| tmdb::IMAGE_URL.into()),
+            },
         }
     }
 }

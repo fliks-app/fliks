@@ -1,0 +1,34 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..startedOn",
+    "$..endedOn"
+  ],
+  "name": "markers-create-bad-type-400",
+  "seed": "markers",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "endSeconds": 30,
+        "episodeId": 1,
+        "startSeconds": 1,
+        "type": "credits"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "type must be one of the following values: "
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/markers"
+    }
+  ]
+}

@@ -16,7 +16,6 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { EventsService } from '../scheduler/events.service';
 import { EngineService } from '../engine/engine.service';
 import { ActivityRegistryService } from '../scheduler/activity-registry.service';
-import { MediaServersService } from '../media-servers/media-servers.service';
 import { resolveSubtitleAbsolutePath } from './subtitle-path.util';
 import {
   buildMediaProgressSubject,
@@ -65,7 +64,6 @@ export class SubtitleSyncService {
     private readonly engine: EngineService,
     private readonly events: EventsService,
     private readonly activityRegistry: ActivityRegistryService,
-    private readonly mediaServers: MediaServersService,
   ) {}
 
   /** Get current queue state */
@@ -276,16 +274,6 @@ export class SubtitleSyncService {
         mediaId: saved.mediaId,
         automatic: options.automatic,
       });
-      // Notify media servers (Emby/Plex) to refresh
-      const media = await this.mediaRepo.findOne({
-        where: { id: saved.mediaId },
-      });
-      if (media) {
-        void this.mediaServers.dispatch('subtitle.synced', {
-          title: media.title,
-          path: media.path,
-        });
-      }
     }
 
     return saved;

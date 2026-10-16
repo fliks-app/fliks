@@ -1,0 +1,117 @@
+{
+  "deviation": "C37",
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..searchVector"
+  ],
+  "name": "imports-sonarr-import-quality-profile-stored",
+  "seed": "importers",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "apiKey": "parity-key",
+        "pathMappings": [
+          {
+            "localLibraryId": 2,
+            "remotePath": "/data/tv"
+          },
+          {
+            "ignore": true,
+            "remotePath": "/data/ignored"
+          }
+        ],
+        "targetLibraryId": 2,
+        "url": "http://127.0.0.1:4880/sonarr/profile"
+      },
+      "expect": {
+        "body": {
+          "errors": [],
+          "imported": 1,
+          "qualityProfilesCreated": [
+            "Remote HD"
+          ],
+          "rootFoldersCreated": [],
+          "subtitlesImported": 0
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/imports/sonarr"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "addedById": null,
+          "additionalFanartUrls": [],
+          "alternativeTitles": [],
+          "digitalRelease": null,
+          "fanartUrl": null,
+          "files": [],
+          "folderName": "Profiled Show",
+          "genres": null,
+          "id": 21,
+          "imdbId": null,
+          "inCinemas": null,
+          "languageProfile": null,
+          "languageProfileId": null,
+          "library": {
+            "color": "#10b981",
+            "defaultLanguageProfileId": null,
+            "defaultQualityProfileId": null,
+            "icon": "tv",
+            "id": 2,
+            "label": null,
+            "mediaTypes": [
+              "series"
+            ],
+            "metadataLanguage": null,
+            "metadataRegion": null,
+            "name": "Series",
+            "path": "/tmp/fliks-parity/media/series",
+            "preferredProvider": null
+          },
+          "libraryId": 2,
+          "logoUrl": null,
+          "metadata": null,
+          "metadataRefreshedAt": null,
+          "minimumAvailability": "released",
+          "monitored": true,
+          "originalTitle": null,
+          "overview": null,
+          "path": "/tmp/fliks-parity/media/series/Profiled Show",
+          "physicalRelease": null,
+          "posterUrl": null,
+          "preferredProvider": null,
+          "qualityProfile": {
+            "cutoff": 18,
+            "id": 1,
+            "items": [],
+            "minCustomFormatScore": 0,
+            "name": "Existing HD",
+            "resolutionUpgradeOnly": false,
+            "upgradeAllowed": false
+          },
+          "qualityProfileId": 1,
+          "rating": null,
+          "releaseDate": null,
+          "runtime": null,
+          "seasons": [],
+          "status": "continuing",
+          "title": "Profiled Show",
+          "tmdbCollectionId": null,
+          "tmdbCollectionName": null,
+          "tmdbId": 8201,
+          "tvdbId": null,
+          "type": "series",
+          "year": 2020
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/21"
+    }
+  ]
+}

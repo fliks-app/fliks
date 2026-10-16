@@ -1,0 +1,190 @@
+{
+  "id": 1002,
+  "title": "Casablanca Redux",
+  "original_title": "Casablanca Redux (orig)",
+  "overview": "Overview of Casablanca Redux",
+  "release_date": "2001-05-02",
+  "poster_path": "/person-600x900.jpg",
+  "backdrop_path": "/back1002.jpg",
+  "vote_average": 7.5,
+  "genre_ids": [
+    28,
+    878
+  ],
+  "genres": [
+    {
+      "id": 28,
+      "name": "Action"
+    },
+    {
+      "id": 878,
+      "name": "Science Fiction"
+    }
+  ],
+  "runtime": 136,
+  "status": "Released",
+  "budget": 1000,
+  "revenue": 2000,
+  "original_language": "en",
+  "production_countries": [
+    {
+      "name": "United States of America"
+    }
+  ],
+  "production_companies": [
+    {
+      "name": "Warner Bros."
+    }
+  ],
+  "vote_count": 25000,
+  "popularity": 75.5,
+  "tagline": "Welcome to the Real World.",
+  "belongs_to_collection": null,
+  "imdb_id": "tt0000002",
+  "external_ids": {
+    "imdb_id": "tt0000002"
+  },
+  "images": {
+    "logos": [
+      {
+        "file_path": "/logo_en.png",
+        "iso_639_1": "en",
+        "vote_average": 5.1
+      },
+      {
+        "file_path": "/logo_fr.png",
+        "iso_639_1": "fr",
+        "vote_average": 5.0
+      },
+      {
+        "file_path": null,
+        "vote_average": 9
+      }
+    ],
+    "backdrops": [
+      {
+        "file_path": "/back1001.jpg",
+        "vote_average": 5
+      },
+      {
+        "file_path": "/b2.jpg",
+        "vote_average": 6
+      },
+      {
+        "file_path": "/b3.jpg",
+        "vote_average": 7
+      },
+      {
+        "file_path": "/b4.jpg",
+        "vote_average": 6
+      }
+    ]
+  },
+  "release_dates": {
+    "results": [
+      {
+        "iso_3166_1": "FR",
+        "release_dates": [
+          {
+            "type": 3,
+            "release_date": "1999-06-23T00:00:00.000Z"
+          },
+          {
+            "type": 5,
+            "release_date": "2000-01-01T00:00:00.000Z"
+          }
+        ]
+      },
+      {
+        "iso_3166_1": "US",
+        "release_dates": [
+          {
+            "type": 3,
+            "release_date": "1999-03-31T00:00:00.000Z"
+          },
+          {
+            "type": 4,
+            "release_date": "1999-09-21T00:00:00.000Z"
+          },
+          {
+            "type": 2,
+            "release_date": ""
+          }
+        ]
+      }
+    ]
+  },
+  "credits": {
+    "cast": [
+      {
+        "id": 102,
+        "name": "Claude Rains",
+        "character": "Captain Renault",
+        "profile_path": "/person-600x900.jpg",
+        "order": 0
+      },
+      {
+        "id": 7001,
+        "name": "New Actor",
+        "character": null,
+        "profile_path": null,
+        "order": 1
+      }
+    ],
+    "crew": [
+      {
+        "id": 9001,
+        "name": "Director One",
+        "job": "Director",
+        "department": "Directing",
+        "profile_path": null
+      },
+      {
+        "id": 102,
+        "name": "Claude Rains",
+        "job": "Cameo",
+        "department": "Acting",
+        "profile_path": null
+      }
+    ]
+  },
+  "videos": {
+    "results": [
+      {
+        "key": "vKQi3bBA1y8",
+        "site": "YouTube",
+        "type": "Trailer",
+        "name": "Official Trailer",
+        "size": 1080
+      }
+    ]
+  },
+  "keywords": {
+    "keywords": [
+      {
+        "id": 1,
+        "name": "hacker"
+      },
+      {
+        "id": 2,
+        "name": "dystopia"
+      }
+    ]
+  },
+  "alternative_titles": {
+    "titles": [
+      {
+        "title": "Matrix"
+      },
+      {
+        "title": " the matrix "
+      },
+      {
+        "title": "Matrix 1"
+      },
+      {
+        "title": "  "
+      }
+    ]
+  }
+}

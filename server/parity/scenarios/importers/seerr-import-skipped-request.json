@@ -1,0 +1,298 @@
+{
+  "deviation": "C36",
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..searchVector",
+    "$..connectionId"
+  ],
+  "name": "imports-seerr-import-skipped-request",
+  "seed": "importers",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "value": "http://127.0.0.1:4880/seerr/skipped"
+      },
+      "expect": {
+        "body": {
+          "id": 8,
+          "key": "seerr_url",
+          "value": "http://127.0.0.1:4880/seerr/skipped"
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/settings/seerr_url"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "data": {
+              "type": "sse.connected"
+            },
+            "event": ""
+          },
+          {
+            "data": {
+              "type": "seerr.import.started"
+            },
+            "event": ""
+          },
+          {
+            "data": {
+              "name": "ImportSeerrRequests",
+              "type": "command.started"
+            },
+            "event": ""
+          },
+          {
+            "data": {
+              "imported": 0,
+              "skipped": 1,
+              "type": "seerr.import.completed",
+              "updated": 0,
+              "users": 0,
+              "usersCreated": 0
+            },
+            "event": ""
+          },
+          {
+            "data": {
+              "name": "ImportSeerrRequests",
+              "status": "completed",
+              "type": "command.completed"
+            },
+            "event": ""
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/system/events",
+      "sse": {
+        "after": [
+          {
+            "as": "admin",
+            "expect": {
+              "status": 0
+            },
+            "method": "POST",
+            "path": "/api/imports/seerr/import-requests"
+          }
+        ],
+        "events": 5,
+        "timeoutMs": 8000
+      }
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "avatar": null,
+            "edlAutoSkipCommercials": true,
+            "edlEnabled": true,
+            "email": "admin@parity.test",
+            "enabled": true,
+            "hiddenLibraryIds": [],
+            "hideSpoilers": false,
+            "id": 1,
+            "isAdmin": true,
+            "lastLogin": null,
+            "libraryIds": [],
+            "libraryOrder": [],
+            "mediaServerId": null,
+            "mediaServerType": "local",
+            "movieQuotaLimit": 0,
+            "permissions": [
+              "manage:all"
+            ],
+            "profileVisibility": "private",
+            "quotaPeriodDays": 7,
+            "requirePasswordChange": false,
+            "role": null,
+            "roleId": null,
+            "seriesQuotaLimit": 0,
+            "shareDisabled": false,
+            "shareLikes": false,
+            "shareRecommendations": false,
+            "shareStats": false,
+            "shareTastes": false,
+            "shareWatchHistory": false,
+            "spoilerHideOverviews": true,
+            "spoilerHideStills": true,
+            "spoilerHideTitles": true,
+            "username": "admin"
+          },
+          {
+            "avatar": null,
+            "edlAutoSkipCommercials": true,
+            "edlEnabled": true,
+            "email": "manager@parity.test",
+            "enabled": true,
+            "hiddenLibraryIds": [],
+            "hideSpoilers": false,
+            "id": 5,
+            "isAdmin": false,
+            "lastLogin": null,
+            "libraryIds": [
+              1,
+              2
+            ],
+            "libraryOrder": [],
+            "mediaServerId": null,
+            "mediaServerType": "local",
+            "movieQuotaLimit": 0,
+            "permissions": [
+              "media.read",
+              "users.manage"
+            ],
+            "profileVisibility": "private",
+            "quotaPeriodDays": 7,
+            "requirePasswordChange": false,
+            "role": "Manager",
+            "roleId": 4,
+            "seriesQuotaLimit": 0,
+            "shareDisabled": false,
+            "shareLikes": false,
+            "shareRecommendations": false,
+            "shareStats": false,
+            "shareTastes": false,
+            "shareWatchHistory": false,
+            "spoilerHideOverviews": true,
+            "spoilerHideStills": true,
+            "spoilerHideTitles": true,
+            "username": "manager"
+          },
+          {
+            "avatar": "/api/users/4/avatar?v=1767225600000",
+            "edlAutoSkipCommercials": true,
+            "edlEnabled": true,
+            "email": "other@parity.test",
+            "enabled": true,
+            "hiddenLibraryIds": [],
+            "hideSpoilers": false,
+            "id": 4,
+            "isAdmin": false,
+            "lastLogin": null,
+            "libraryIds": [
+              1,
+              2
+            ],
+            "libraryOrder": [],
+            "mediaServerId": null,
+            "mediaServerType": "local",
+            "movieQuotaLimit": 0,
+            "permissions": [
+              "media.read",
+              "livetv.read",
+              "requests.create"
+            ],
+            "profileVisibility": "private",
+            "quotaPeriodDays": 7,
+            "requirePasswordChange": false,
+            "role": "User",
+            "roleId": 2,
+            "seriesQuotaLimit": 0,
+            "shareDisabled": false,
+            "shareLikes": false,
+            "shareRecommendations": false,
+            "shareStats": false,
+            "shareTastes": false,
+            "shareWatchHistory": false,
+            "spoilerHideOverviews": true,
+            "spoilerHideStills": true,
+            "spoilerHideTitles": true,
+            "username": "other"
+          },
+          {
+            "avatar": null,
+            "edlAutoSkipCommercials": true,
+            "edlEnabled": true,
+            "email": "readonly@parity.test",
+            "enabled": true,
+            "hiddenLibraryIds": [],
+            "hideSpoilers": false,
+            "id": 3,
+            "isAdmin": false,
+            "lastLogin": null,
+            "libraryIds": [
+              1
+            ],
+            "libraryOrder": [],
+            "mediaServerId": null,
+            "mediaServerType": "local",
+            "movieQuotaLimit": 0,
+            "permissions": [
+              "media.read",
+              "livetv.read"
+            ],
+            "profileVisibility": "private",
+            "quotaPeriodDays": 7,
+            "requirePasswordChange": false,
+            "role": "Readonly",
+            "roleId": 3,
+            "seriesQuotaLimit": 0,
+            "shareDisabled": false,
+            "shareLikes": false,
+            "shareRecommendations": false,
+            "shareStats": false,
+            "shareTastes": false,
+            "shareWatchHistory": false,
+            "spoilerHideOverviews": true,
+            "spoilerHideStills": true,
+            "spoilerHideTitles": true,
+            "username": "readonly"
+          },
+          {
+            "avatar": null,
+            "edlAutoSkipCommercials": true,
+            "edlEnabled": true,
+            "email": "user@parity.test",
+            "enabled": true,
+            "hiddenLibraryIds": [],
+            "hideSpoilers": false,
+            "id": 2,
+            "isAdmin": false,
+            "lastLogin": null,
+            "libraryIds": [
+              1,
+              2
+            ],
+            "libraryOrder": [],
+            "mediaServerId": null,
+            "mediaServerType": "local",
+            "movieQuotaLimit": 0,
+            "permissions": [
+              "media.read",
+              "livetv.read",
+              "requests.create"
+            ],
+            "profileVisibility": "private",
+            "quotaPeriodDays": 7,
+            "requirePasswordChange": false,
+            "role": "User",
+            "roleId": 2,
+            "seriesQuotaLimit": 0,
+            "shareDisabled": false,
+            "shareLikes": false,
+            "shareRecommendations": false,
+            "shareStats": false,
+            "shareTastes": false,
+            "shareWatchHistory": false,
+            "spoilerHideOverviews": true,
+            "spoilerHideStills": true,
+            "spoilerHideTitles": true,
+            "username": "user"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/users"
+    }
+  ]
+}

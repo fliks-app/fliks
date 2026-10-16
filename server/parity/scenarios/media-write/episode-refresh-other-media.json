@@ -1,0 +1,25 @@
+{
+  "deviation": "F46",
+  "name": "media-write-episode-refresh-other-media",
+  "seed": "ingest",
+  "steps": [
+    {
+      "as": "admin",
+      "method": "POST",
+      "path": "/api/media/101/episodes/101/refresh",
+      "expect": {
+        "status": 404,
+        "body": {
+          "statusCode": 404,
+          "message": "Episode #101 not found",
+          "error": "Not Found"
+        }
+      }
+    }
+  ],
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..metadataRefreshedAt"
+  ]
+}

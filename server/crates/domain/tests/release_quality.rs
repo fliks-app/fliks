@@ -2,7 +2,7 @@
 mod common;
 
 use common::replay;
-use fliks_domain::release::quality::*;
+use fliks_domain::release::parsing::quality::*;
 use serde_json::{Value, json};
 
 #[test]

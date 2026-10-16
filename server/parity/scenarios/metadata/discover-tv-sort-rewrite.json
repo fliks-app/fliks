@@ -1,0 +1,81 @@
+{
+  "deviation": null,
+  "engine": "down",
+  "name": "metadata-discover-tv-sort-rewrite",
+  "seed": "metadata",
+  "steps": [
+    {
+      "expect": {
+        "body": {
+          "ok": true
+        },
+        "status": 200
+      },
+      "method": "POST",
+      "path": "/__reset",
+      "stub": true
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "existingMediaId": 18,
+            "existingMediaType": "series",
+            "fanartUrl": null,
+            "genreIds": [
+              18
+            ],
+            "genres": [],
+            "mediaType": "series",
+            "originalTitle": "Breaking Bad (orig)",
+            "overview": "Overview of Breaking Bad",
+            "posterUrl": "https://image.tmdb.org/t/p/w500/poster2000.jpg",
+            "provider": "tmdb",
+            "rating": 8.1,
+            "title": "Breaking Bad",
+            "tmdbId": 2000,
+            "year": 2008
+          },
+          {
+            "existingMediaId": null,
+            "existingMediaType": null,
+            "fanartUrl": null,
+            "genreIds": [
+              18
+            ],
+            "genres": [],
+            "mediaType": "series",
+            "originalTitle": "Better Call (orig)",
+            "overview": "Overview of Better Call",
+            "posterUrl": "https://image.tmdb.org/t/p/w500/poster1396.jpg",
+            "provider": "tmdb",
+            "rating": 8.1,
+            "title": "Better Call",
+            "tmdbId": 1396,
+            "year": 2015
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/metadata/discover/tv?sort=primary_release_date.desc&yearGte=2000&yearLte=2010"
+    },
+    {
+      "expect": {
+        "body": {
+          "api_key": "tmdb-parity",
+          "first_air_date.gte": "2000-01-01",
+          "first_air_date.lte": "2010-12-31",
+          "language": "en-US",
+          "sort_by": "first_air_date.desc",
+          "vote_count.gte": "50"
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/__last?prefix=/tmdb/3/discover/tv",
+      "stub": true
+    }
+  ]
+}

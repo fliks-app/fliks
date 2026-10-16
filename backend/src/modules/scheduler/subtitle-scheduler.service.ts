@@ -24,7 +24,6 @@ import {
 } from '../../common/constants/subtitle-flags';
 import { EmbeddedSubtitleService } from '../subtitles/embedded-subtitle.service';
 import { SubtitleOcrService } from '../subtitles/subtitle-ocr.service';
-import { MediaServersService } from '../media-servers/media-servers.service';
 import { ActivityRegistryService } from './activity-registry.service';
 import { buildMediaProgressSubject } from '../../common/utils/media-progress-subject.util';
 
@@ -59,7 +58,6 @@ export class SubtitleSchedulerService {
     private readonly settings: SettingsService,
     private readonly embeddedSubtitle: EmbeddedSubtitleService,
     private readonly subtitleOcr: SubtitleOcrService,
-    private readonly mediaServers: MediaServersService,
     private readonly activityRegistry: ActivityRegistryService,
   ) {}
 
@@ -267,11 +265,6 @@ export class SubtitleSchedulerService {
           language: langItem.isoCode,
           provider: best.providerName,
           score: best.score,
-        });
-
-        void this.mediaServers.dispatch('subtitle.downloaded', {
-          title: media.title,
-          path: media.path,
         });
 
         downloaded.push(langItem.isoCode);
@@ -494,11 +487,6 @@ export class SubtitleSchedulerService {
           oldScore: sub.score,
           newScore: better.score,
           provider: better.providerName,
-        });
-
-        void this.mediaServers.dispatch('subtitle.upgraded', {
-          title: sub.media?.title,
-          path: sub.media?.path,
         });
 
         const upgradeSeason = sub.mediaFile?.episode?.season?.seasonNumber;

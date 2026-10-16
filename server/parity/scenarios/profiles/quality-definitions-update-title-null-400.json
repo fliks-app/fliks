@@ -1,0 +1,62 @@
+{
+  "deviation": "C1",
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "quality-definitions-update-title-null-400",
+  "seed": "profiles",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "items": [
+          {
+            "maxSize": 0,
+            "minSize": 0,
+            "preferredSize": 0,
+            "qualityId": 1,
+            "title": null
+          }
+        ]
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "title must be a string"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PUT",
+      "path": "/api/quality-definitions"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "items": [
+          {
+            "maxSize": 0,
+            "minSize": 0,
+            "preferredSize": 0,
+            "qualityId": 1.5
+          }
+        ]
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "items.0.qualityId must be an integer number"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PUT",
+      "path": "/api/quality-definitions"
+    }
+  ]
+}

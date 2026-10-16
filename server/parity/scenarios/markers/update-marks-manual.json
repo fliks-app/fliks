@@ -1,0 +1,31 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..startedOn",
+    "$..endedOn"
+  ],
+  "name": "markers-update-marks-manual",
+  "seed": "markers",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {},
+      "expect": {
+        "body": {
+          "confidence": 1,
+          "endSeconds": 40,
+          "episodeId": 1,
+          "id": 1,
+          "manual": true,
+          "startSeconds": 10,
+          "type": "intro"
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/markers/1"
+    }
+  ]
+}

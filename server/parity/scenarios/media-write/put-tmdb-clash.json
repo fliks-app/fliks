@@ -1,0 +1,28 @@
+{
+  "deviation": "C1",
+  "name": "media-write-put-tmdb-clash",
+  "seed": "ingest",
+  "steps": [
+    {
+      "as": "admin",
+      "method": "PUT",
+      "path": "/api/media/101",
+      "body": {
+        "tmdbId": 5104
+      },
+      "expect": {
+        "status": 409,
+        "body": {
+          "statusCode": 409,
+          "message": "This title is already in the library",
+          "error": "Conflict"
+        }
+      }
+    }
+  ],
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..metadataRefreshedAt"
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..searchVector"
+  ],
+  "name": "imports-radarr-import-api-key-required-first",
+  "seed": "importers",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "pathMappings": [],
+        "targetLibraryId": 99,
+        "url": "http://127.0.0.1:4880/radarr/other"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Library #99 not found",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/imports/radarr"
+    }
+  ]
+}

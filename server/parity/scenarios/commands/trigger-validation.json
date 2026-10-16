@@ -1,0 +1,61 @@
+{
+  "deviation": null,
+  "name": "commands-trigger-validation",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {},
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "name must be a string"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/commands"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "name": 7
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "name must be a string"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/commands"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "extra": 1,
+        "name": "RescanAll"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "property extra should not exist"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/commands"
+    }
+  ],
+  "strictMessage": true
+}

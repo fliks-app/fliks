@@ -1,0 +1,43 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "auto-approval-rules-put-resets-enabled",
+  "seed": "requests",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "criteria": {},
+        "name": "Disabled everything"
+      },
+      "expect": {
+        "body": {
+          "criteria": {},
+          "enabled": true,
+          "id": 1,
+          "name": "Disabled everything"
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/auto-approval-rules/1"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "criteria": {},
+          "enabled": true,
+          "id": 1,
+          "name": "Disabled everything"
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/auto-approval-rules/1"
+    }
+  ]
+}

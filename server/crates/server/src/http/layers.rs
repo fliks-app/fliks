@@ -105,7 +105,9 @@ pub fn apply(router: Router, cors_origin: Option<String>, body_limit_bytes: usiz
         .layer(from_fn(no_store_on_error))
         .layer(cors)
         .layer(from_fn(preflight_204))
-        .layer(TraceLayer::new_for_http())
+        .layer(TraceLayer::new_for_http().make_span_with(|r: &axum::http::Request<_>| {
+            tracing::debug_span!("request", method = %r.method(), path = r.uri().path())
+        }))
 }
 
 #[cfg(test)]

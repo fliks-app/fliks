@@ -1,0 +1,18 @@
+{
+  "deviation": null,
+  "name": "system-version",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "version": "4.5.0"
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/system/version"
+    }
+  ]
+}

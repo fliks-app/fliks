@@ -1,0 +1,39 @@
+{
+  "status": "success",
+  "data": [
+    {
+      "tvdb_id": "81189",
+      "name": "Breaking Bad",
+      "overview": "TVDB overview",
+      "year": "2008",
+      "image_url": "https://artworks.thetvdb.com/p.jpg",
+      "genres": [
+        "Drama"
+      ],
+      "translations": {
+        "fra": "Breaking Bad FR"
+      },
+      "overviews": {
+        "fra": "Resume"
+      },
+      "remote_ids": [
+        {
+          "id": "1396",
+          "sourceName": "TheMovieDB.com"
+        },
+        {
+          "id": "tt0903747",
+          "sourceName": "IMDB"
+        }
+      ]
+    },
+    {
+      "id": "series-999",
+      "tvdb_id": "999",
+      "name": "Other",
+      "year": "",
+      "poster": "https://artworks.thetvdb.com/o.jpg",
+      "remote_ids": []
+    }
+  ]
+}

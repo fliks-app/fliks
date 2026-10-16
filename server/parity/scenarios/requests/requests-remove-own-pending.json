@@ -1,0 +1,32 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "requests-remove-own-pending",
+  "seed": "requests",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "status": 200
+      },
+      "method": "DELETE",
+      "path": "/api/requests/1"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Request #1 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "GET",
+      "path": "/api/requests/1"
+    }
+  ]
+}

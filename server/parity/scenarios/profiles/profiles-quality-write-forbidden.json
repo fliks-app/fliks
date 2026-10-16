@@ -1,0 +1,304 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "profiles-quality-write-forbidden",
+  "seed": "profiles",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "cutoff": 16,
+        "items": [
+          {
+            "allowed": true,
+            "groupId": 2,
+            "qualityId": 16,
+            "qualityName": "WEBDL-1080p",
+            "resolution": 1080,
+            "sortOrder": 1,
+            "source": "web"
+          },
+          {
+            "allowed": false,
+            "groupId": null,
+            "qualityId": 18,
+            "qualityName": "Bluray-1080p",
+            "resolution": 1080,
+            "sortOrder": 2,
+            "source": "bluray"
+          }
+        ],
+        "minCustomFormatScore": 3,
+        "name": "New HD",
+        "resolutionUpgradeOnly": true,
+        "upgradeAllowed": true
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "POST",
+      "path": "/api/profiles/quality"
+    },
+    {
+      "as": "user",
+      "body": {
+        "cutoff": 16,
+        "items": [
+          {
+            "allowed": true,
+            "groupId": 2,
+            "qualityId": 16,
+            "qualityName": "WEBDL-1080p",
+            "resolution": 1080,
+            "sortOrder": 1,
+            "source": "web"
+          },
+          {
+            "allowed": false,
+            "groupId": null,
+            "qualityId": 18,
+            "qualityName": "Bluray-1080p",
+            "resolution": 1080,
+            "sortOrder": 2,
+            "source": "bluray"
+          }
+        ],
+        "minCustomFormatScore": 3,
+        "name": "New HD",
+        "resolutionUpgradeOnly": true,
+        "upgradeAllowed": true
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "PUT",
+      "path": "/api/profiles/quality/1"
+    },
+    {
+      "as": "user",
+      "body": {
+        "cutoff": 16,
+        "items": [
+          {
+            "allowed": true,
+            "groupId": 2,
+            "qualityId": 16,
+            "qualityName": "WEBDL-1080p",
+            "resolution": 1080,
+            "sortOrder": 1,
+            "source": "web"
+          },
+          {
+            "allowed": false,
+            "groupId": null,
+            "qualityId": 18,
+            "qualityName": "Bluray-1080p",
+            "resolution": 1080,
+            "sortOrder": 2,
+            "source": "bluray"
+          }
+        ],
+        "minCustomFormatScore": 3,
+        "name": "New HD",
+        "resolutionUpgradeOnly": true,
+        "upgradeAllowed": true
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "DELETE",
+      "path": "/api/profiles/quality/1"
+    },
+    {
+      "as": "readonly",
+      "body": {
+        "cutoff": 16,
+        "items": [
+          {
+            "allowed": true,
+            "groupId": 2,
+            "qualityId": 16,
+            "qualityName": "WEBDL-1080p",
+            "resolution": 1080,
+            "sortOrder": 1,
+            "source": "web"
+          },
+          {
+            "allowed": false,
+            "groupId": null,
+            "qualityId": 18,
+            "qualityName": "Bluray-1080p",
+            "resolution": 1080,
+            "sortOrder": 2,
+            "source": "bluray"
+          }
+        ],
+        "minCustomFormatScore": 3,
+        "name": "New HD",
+        "resolutionUpgradeOnly": true,
+        "upgradeAllowed": true
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "POST",
+      "path": "/api/profiles/quality"
+    },
+    {
+      "as": "readonly",
+      "body": {
+        "cutoff": 16,
+        "items": [
+          {
+            "allowed": true,
+            "groupId": 2,
+            "qualityId": 16,
+            "qualityName": "WEBDL-1080p",
+            "resolution": 1080,
+            "sortOrder": 1,
+            "source": "web"
+          },
+          {
+            "allowed": false,
+            "groupId": null,
+            "qualityId": 18,
+            "qualityName": "Bluray-1080p",
+            "resolution": 1080,
+            "sortOrder": 2,
+            "source": "bluray"
+          }
+        ],
+        "minCustomFormatScore": 3,
+        "name": "New HD",
+        "resolutionUpgradeOnly": true,
+        "upgradeAllowed": true
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "PUT",
+      "path": "/api/profiles/quality/1"
+    },
+    {
+      "as": "readonly",
+      "body": {
+        "cutoff": 16,
+        "items": [
+          {
+            "allowed": true,
+            "groupId": 2,
+            "qualityId": 16,
+            "qualityName": "WEBDL-1080p",
+            "resolution": 1080,
+            "sortOrder": 1,
+            "source": "web"
+          },
+          {
+            "allowed": false,
+            "groupId": null,
+            "qualityId": 18,
+            "qualityName": "Bluray-1080p",
+            "resolution": 1080,
+            "sortOrder": 2,
+            "source": "bluray"
+          }
+        ],
+        "minCustomFormatScore": 3,
+        "name": "New HD",
+        "resolutionUpgradeOnly": true,
+        "upgradeAllowed": true
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "DELETE",
+      "path": "/api/profiles/quality/1"
+    },
+    {
+      "as": "anon",
+      "body": {
+        "cutoff": 16,
+        "items": [
+          {
+            "allowed": true,
+            "groupId": 2,
+            "qualityId": 16,
+            "qualityName": "WEBDL-1080p",
+            "resolution": 1080,
+            "sortOrder": 1,
+            "source": "web"
+          },
+          {
+            "allowed": false,
+            "groupId": null,
+            "qualityId": 18,
+            "qualityName": "Bluray-1080p",
+            "resolution": 1080,
+            "sortOrder": 2,
+            "source": "bluray"
+          }
+        ],
+        "minCustomFormatScore": 3,
+        "name": "New HD",
+        "resolutionUpgradeOnly": true,
+        "upgradeAllowed": true
+      },
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "POST",
+      "path": "/api/profiles/quality"
+    },
+    {
+      "as": "user",
+      "body": {},
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "PUT",
+      "path": "/api/profiles/quality/abc"
+    }
+  ]
+}

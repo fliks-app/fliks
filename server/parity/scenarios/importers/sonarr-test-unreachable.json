@@ -1,0 +1,25 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$.message"
+  ],
+  "name": "imports-sonarr-test-unreachable",
+  "seed": "importers",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "apiKey": "k",
+        "url": "http://127.0.0.1:1"
+      },
+      "expect": {
+        "body": {
+          "ok": false
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/imports/sonarr/test"
+    }
+  ]
+}

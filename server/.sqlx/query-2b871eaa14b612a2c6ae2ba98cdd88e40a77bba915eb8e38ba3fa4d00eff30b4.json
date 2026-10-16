@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE persons SET name = COALESCE($2, name), \"avatarUrl\" = COALESCE($3, \"avatarUrl\") WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Varchar",
+        "Varchar"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "2b871eaa14b612a2c6ae2ba98cdd88e40a77bba915eb8e38ba3fa4d00eff30b4"
+}

@@ -10,7 +10,6 @@ import {
   CaslAbilityFactory,
 } from '../auth/casl/casl-ability.factory';
 import { Action } from '../auth/casl/actions.enum';
-import { MediaService } from '../media/media.service';
 import { LibrariesService } from '../libraries/libraries.service';
 import { PluginCountsCacheService } from '../plugins/host/plugin-counts-cache.service';
 
@@ -31,7 +30,6 @@ export class CountsService {
     @InjectRepository(FliksRequest)
     private readonly requestRepo: Repository<FliksRequest>,
     private readonly caslAbilityFactory: CaslAbilityFactory,
-    private readonly mediaService: MediaService,
     private readonly libraries: LibrariesService,
     private readonly pluginCounts: PluginCountsCacheService,
   ) {}
@@ -89,6 +87,6 @@ export class CountsService {
     if (!ability.can(Action.Read, Media)) return {};
     const accessibleLibraryIds =
       await this.libraries.getAccessibleLibraryIds(user);
-    return this.mediaService.getCountsByLibrary(accessibleLibraryIds);
+    return this.libraries.getCountsByLibrary(accessibleLibraryIds);
   }
 }

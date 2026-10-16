@@ -1,0 +1,47 @@
+{
+  "capture": {
+    "fname": "$.steps[0].body.filename"
+  },
+  "deviation": null,
+  "ignore": [
+    "$..filename",
+    "$..size",
+    "$..date"
+  ],
+  "name": "system-backups-list-after-create",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {},
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/system/backup"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {}
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/system/backups"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "ok": true
+        },
+        "status": 200
+      },
+      "method": "DELETE",
+      "path": "/api/system/backups/{fname}"
+    }
+  ],
+  "strictMessage": true
+}

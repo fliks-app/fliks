@@ -1,0 +1,27 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "requests-update-nonpending-403",
+  "seed": "requests",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "qualityProfileId": 1
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Only pending requests can be updated",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "PATCH",
+      "path": "/api/requests/3"
+    }
+  ]
+}

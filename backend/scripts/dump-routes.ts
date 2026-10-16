@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { GLOBAL_PREFIX_EXCLUDE } from '../src/common/global-prefix-exclude';
 import 'reflect-metadata';
 import { writeFileSync, mkdirSync, readFileSync, readdirSync } from 'fs';
 import { join, relative, dirname } from 'path';
@@ -229,7 +230,7 @@ function methodVerb(requestMethod: RequestMethod): string {
 async function collectRoutes(): Promise<RouteRecord[]> {
   const classIndex = buildClassIndex();
   const app = await NestFactory.create(AppModule, { preview: true, logger: false });
-  app.setGlobalPrefix('api', { exclude: ['engine/resolve', 'internal/bridge/{*path}', 'internal/plugins/{*path}'] });
+  app.setGlobalPrefix('api', { exclude: GLOBAL_PREFIX_EXCLUDE });
 
   const appConfig = (app as unknown as { config: ApplicationConfig }).config;
   const routePathFactory = new RoutePathFactory(appConfig);

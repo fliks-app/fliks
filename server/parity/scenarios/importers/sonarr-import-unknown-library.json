@@ -1,0 +1,31 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..searchVector"
+  ],
+  "name": "imports-sonarr-import-unknown-library",
+  "seed": "importers",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "apiKey": "parity-key",
+        "pathMappings": [],
+        "targetLibraryId": 99,
+        "url": "http://127.0.0.1:4880/sonarr/ok"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Library #99 not found",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/imports/sonarr"
+    }
+  ]
+}

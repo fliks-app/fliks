@@ -1,0 +1,80 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "requests-create-series-seasons",
+  "seed": "requests",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "mediaType": "series",
+        "seasons": [
+          1,
+          2
+        ],
+        "title": "New Series",
+        "tmdbId": 9100
+      },
+      "expect": {
+        "body": {
+          "approvedBy": null,
+          "approvedById": null,
+          "declinedReason": null,
+          "fanartUrl": null,
+          "id": 11,
+          "kind": "add",
+          "languageProfile": null,
+          "languageProfileId": null,
+          "library": {
+            "id": 2
+          },
+          "libraryId": 2,
+          "media": null,
+          "mediaId": null,
+          "mediaType": "series",
+          "posterUrl": null,
+          "qualityProfile": null,
+          "qualityProfileId": null,
+          "seasons": [
+            1,
+            2
+          ],
+          "status": "pending",
+          "title": "New Series",
+          "tmdbId": 9100,
+          "user": {
+            "avatar": null,
+            "id": 2,
+            "username": "user"
+          },
+          "userId": 2
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/requests"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "lockedLanguageProfileId": null,
+          "lockedQualityProfileId": null,
+          "profilesLocked": true,
+          "requested": false,
+          "requestedSeasons": [
+            1,
+            2
+          ],
+          "wholeSeriesRequested": false
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/requests/title-state?tmdbId=9100&mediaType=series"
+    }
+  ]
+}

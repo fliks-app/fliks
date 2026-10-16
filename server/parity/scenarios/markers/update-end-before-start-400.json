@@ -1,0 +1,29 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..startedOn",
+    "$..endedOn"
+  ],
+  "name": "markers-update-end-before-start-400",
+  "seed": "markers",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "endSeconds": 5
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "endSeconds must be > startSeconds",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PUT",
+      "path": "/api/markers/1"
+    }
+  ]
+}

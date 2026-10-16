@@ -1,0 +1,29 @@
+{
+  "u1": {
+    "resume": [
+      {"Id":"m1","Type":"Movie","Name":"Parity Movie 01","ProviderIds":{"Tmdb":"1001"},"RunTimeTicks":36000000000,"DateCreated":"2024-01-01T00:00:00.0000000Z","UserData":{"Played":false,"PlaybackPositionTicks":6000000000,"LastPlayedDate":"2026-02-01T10:00:00.0000000Z"}}
+    ],
+    "played": [
+      {"Id":"m1","Type":"Movie","Name":"Parity Movie 01","ProviderIds":{"Tmdb":"1001"},"RunTimeTicks":36000000000,"UserData":{"Played":true,"PlaybackPositionTicks":0,"LastPlayedDate":"2026-01-15T00:00:00.0000000Z"}},
+      {"Id":"m2","Type":"Movie","Name":"Parity Movie 02","ProviderIds":{"Tmdb":"1002"},"RunTimeTicks":36000000000,"UserData":{"Played":true,"PlaybackPositionTicks":0,"LastPlayedDate":"2025-12-01T00:00:00.0000000Z"}},
+      {"Id":"m3","Type":"Movie","Name":"Parity Movie 03","ProviderIds":{"Tmdb":"1003"},"RunTimeTicks":18000000000,"DateCreated":"2024-03-04T05:06:07.0000000Z","UserData":{"Played":true}},
+      {"Id":"e1","Type":"Episode","Name":"Episode 1","SeriesId":"s1","ParentIndexNumber":1,"IndexNumber":1,"RunTimeTicks":18000000000,"UserData":{"Played":true,"LastPlayedDate":"2026-03-01T00:00:00.0000000Z"}},
+      {"Id":"e2","Type":"Episode","Name":"Episode 2","SeriesId":"s1","ParentIndexNumber":1,"IndexNumber":2,"RunTimeTicks":18000000000,"PremiereDate":"2021-05-06T00:00:00.0000000Z","UserData":{"Played":true}},
+      {"Id":"e3","Type":"Episode","Name":"Ghost","SeriesId":"s1","ParentIndexNumber":9,"IndexNumber":9,"UserData":{"Played":true}},
+      {"Id":"e4","Type":"Episode","Name":"Other","SeriesId":"s2","ParentIndexNumber":1,"IndexNumber":1,"UserData":{"Played":true}},
+      {"Id":"e5","Type":"Episode","Name":"NoMatch","SeriesId":"s3","ParentIndexNumber":1,"IndexNumber":1,"UserData":{"Played":true}},
+      {"Id":"x1","Type":"Movie","Name":"Unknown Movie","ProviderIds":{"Tmdb":"9999"},"UserData":{"Played":true}}
+    ],
+    "resumable": [
+      {"Id":"m4","Type":"Movie","Name":"Parity Movie 04","ProviderIds":{"Tmdb":"1004"},"RunTimeTicks":36000000000,"UserData":{"Played":false,"PlaybackPositionTicks":3000000000,"LastPlayedDate":"2026-02-02T00:00:00.0000000Z"}},
+      {"Id":"m5","Type":"Movie","Name":"Parity Movie 05","ProviderIds":{"Tmdb":"1005"},"UserData":{"Played":false,"PlaybackPositionTicks":0}}
+    ]
+  },
+  "u2": {
+    "resume": [],
+    "played": [
+      {"Id":"m1","Type":"Movie","Name":"Parity Movie 01","ProviderIds":{"Tmdb":"1001"},"RunTimeTicks":36000000000,"UserData":{"Played":true,"LastPlayedDate":"2026-01-20T00:00:00.0000000Z"}}
+    ],
+    "resumable": []
+  }
+}

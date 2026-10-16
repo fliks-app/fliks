@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT m.\"preferredProvider\" AS media_pref, l.\"preferredProvider\" AS library_pref\n           FROM media m LEFT JOIN libraries l ON l.id = m.\"libraryId\" WHERE m.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "media_pref",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "library_pref",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      true,
+      true
+    ]
+  },
+  "hash": "98bf26bb253ef594dad8b5d4eddbb864fcebf43f41b03091de8dc57580dc0122"
+}

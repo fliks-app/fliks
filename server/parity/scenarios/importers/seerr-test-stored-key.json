@@ -1,0 +1,22 @@
+{
+  "deviation": null,
+  "name": "imports-seerr-test-stored-key",
+  "seed": "importers",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "url": "http://127.0.0.1:4880/seerr/ok"
+      },
+      "expect": {
+        "body": {
+          "message": "Connecté à Parity Seerr",
+          "ok": true
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/imports/seerr/test"
+    }
+  ]
+}

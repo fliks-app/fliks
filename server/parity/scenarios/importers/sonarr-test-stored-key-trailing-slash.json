@@ -1,0 +1,22 @@
+{
+  "deviation": null,
+  "name": "imports-sonarr-test-stored-key-trailing-slash",
+  "seed": "importers",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "url": "HTTP://127.0.0.1:4880/sonarr/ok/"
+      },
+      "expect": {
+        "body": {
+          "message": "Connecté à Sonarr Parity",
+          "ok": true
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/imports/sonarr/test"
+    }
+  ]
+}

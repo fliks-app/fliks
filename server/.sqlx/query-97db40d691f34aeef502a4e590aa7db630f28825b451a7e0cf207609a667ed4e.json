@@ -1,0 +1,68 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, \"createdAt\" AS created_at, \"updatedAt\" AS updated_at, name, cutoff,\n        items AS \"items: Json<Value>\", \"upgradeAllowed\" AS upgrade_allowed,\n        \"resolutionUpgradeOnly\" AS resolution_upgrade_only,\n        \"minCustomFormatScore\" AS min_custom_format_score\n        FROM quality_profiles ORDER BY name ASC, id ASC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 2,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 3,
+        "name": "name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "cutoff",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 5,
+        "name": "items: Json<Value>",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 6,
+        "name": "upgrade_allowed",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 7,
+        "name": "resolution_upgrade_only",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 8,
+        "name": "min_custom_format_score",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "97db40d691f34aeef502a4e590aa7db630f28825b451a7e0cf207609a667ed4e"
+}

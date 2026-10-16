@@ -1,0 +1,37 @@
+{
+  "deviation": "C20",
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "profiles-quality-noncanonical-id",
+  "seed": "profiles",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Validation failed (numeric string is expected)",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "GET",
+      "path": "/api/profiles/quality/%201%20"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Validation failed (numeric string is expected)",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "GET",
+      "path": "/api/profiles/quality/001"
+    }
+  ]
+}

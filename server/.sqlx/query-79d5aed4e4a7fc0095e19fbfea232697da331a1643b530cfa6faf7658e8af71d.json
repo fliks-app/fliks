@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE requests SET status = $2::text::requests_status_enum, seasons = $3,\n                          \"mediaId\" = COALESCE($4, \"mediaId\"), title = COALESCE($5, title)\n                   WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Text",
+        "Jsonb",
+        "Int4",
+        "Varchar"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "79d5aed4e4a7fc0095e19fbfea232697da331a1643b530cfa6faf7658e8af71d"
+}

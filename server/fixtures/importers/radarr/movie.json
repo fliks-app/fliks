@@ -1,0 +1,42 @@
+[
+  {
+    "id": 11,
+    "title": "Parity Movie 01",
+    "tmdbId": 1001,
+    "year": 2019,
+    "monitored": false,
+    "imdbId": "tt0000011",
+    "overview": "Updated overview",
+    "qualityProfileId": 1,
+    "path": "/data/movies/Parity Movie 01 (2020)"
+  },
+  {
+    "id": 12,
+    "title": "Radarr New One",
+    "tmdbId": 7001,
+    "year": 2021,
+    "monitored": true,
+    "imdbId": "tt0007001",
+    "overview": "Brand new",
+    "path": "/data/movies/Radarr New One (2021)"
+  },
+  {
+    "id": 13,
+    "title": "Lost Film",
+    "tmdbId": 7002,
+    "year": 2022,
+    "path": "/elsewhere/Lost Film (2022)"
+  },
+  {
+    "id": 14,
+    "title": "Skipped Film",
+    "tmdbId": 7003,
+    "year": 2023,
+    "path": "/data/ignored/Skipped Film (2023)"
+  },
+  {
+    "id": 15,
+    "title": "No Path",
+    "tmdbId": 7004
+  }
+]

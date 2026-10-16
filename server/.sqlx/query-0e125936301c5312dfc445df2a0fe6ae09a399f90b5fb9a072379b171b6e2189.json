@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT jsonb_build_object('id', c.id, 'createdAt', iso_ms(c.\"createdAt\"), 'updatedAt', iso_ms(c.\"updatedAt\"),\n  'requestId', c.\"requestId\",\n  'user', CASE WHEN u.id IS NULL THEN 'null'::jsonb\n    ELSE jsonb_build_object('id', u.id, 'username', u.username, 'avatar', u.avatar) END,\n  'userId', c.\"userId\", 'message', c.message) AS \"json!: Value\"\nFROM request_comments c LEFT JOIN users u ON u.id = c.\"userId\"\nWHERE c.\"requestId\" = $1 ORDER BY c.\"createdAt\" ASC, c.id ASC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "json!: Value",
+        "type_info": "Jsonb"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "0e125936301c5312dfc445df2a0fe6ae09a399f90b5fb9a072379b171b6e2189"
+}

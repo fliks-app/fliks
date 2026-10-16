@@ -1,0 +1,487 @@
+{
+  "deviation": "C37",
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..searchVector"
+  ],
+  "name": "imports-radarr-import-update",
+  "seed": "importers",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "apiKey": "parity-key",
+        "mode": "update",
+        "pathMappings": [
+          {
+            "localLibraryId": 1,
+            "remotePath": "/data/movies"
+          },
+          {
+            "ignore": true,
+            "remotePath": "/data/ignored"
+          }
+        ],
+        "targetLibraryId": 1,
+        "url": "http://127.0.0.1:4880/radarr/ok"
+      },
+      "expect": {
+        "body": {
+          "errors": [
+            "Lost Film: no path mapping for \"/elsewhere/Lost Film (2022)\"",
+            "No Path: no path mapping for \"\""
+          ],
+          "imported": 2,
+          "qualityProfilesCreated": [
+            "Remote HD"
+          ],
+          "rootFoldersCreated": [],
+          "subtitlesImported": 0
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/imports/radarr"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "addedById": null,
+          "additionalFanartUrls": [],
+          "alternativeTitles": [],
+          "digitalRelease": null,
+          "fanartUrl": null,
+          "files": [
+            {
+              "episodeId": null,
+              "id": 1,
+              "language": "en",
+              "mediaId": 1,
+              "osdbBytesize": null,
+              "osdbHash": null,
+              "quality": "WEBDL-1080p",
+              "relativePath": "Parity Movie 01 (2020).mkv",
+              "size": 73237,
+              "streamInfo": {
+                "audio": [
+                  {
+                    "channelLayout": "mono",
+                    "channels": 1,
+                    "codec": "aac",
+                    "endSeconds": 3.021,
+                    "isDefault": false,
+                    "language": "eng",
+                    "profile": "LC",
+                    "sampleRate": 48000,
+                    "startTimeSeconds": 0,
+                    "streamIndex": 1
+                  }
+                ],
+                "chapters": [],
+                "durationSeconds": 3.021,
+                "formatBitRate": 193941,
+                "formatName": "matroska,webm",
+                "formatStartSeconds": 0,
+                "subtitles": [],
+                "video": [
+                  {
+                    "avgFrameRate": "24/1",
+                    "bitDepth": 8,
+                    "codec": "h264",
+                    "colorRange": "tv",
+                    "displayAspectRatio": "16:9",
+                    "dvBlPresent": false,
+                    "dvElPresent": false,
+                    "dvRpuPresent": false,
+                    "endSeconds": 3,
+                    "firstFrameSeconds": 0,
+                    "frameRate": "24",
+                    "hdr10Plus": false,
+                    "height": 90,
+                    "level": 10,
+                    "pixelFormat": "yuv420p",
+                    "profile": "High",
+                    "reorderFrames": 2,
+                    "startTimeSeconds": 0,
+                    "streamIndex": 0,
+                    "width": 160
+                  }
+                ]
+              }
+            }
+          ],
+          "folderName": "Parity Movie 01 (2020)",
+          "genres": [
+            "Drama"
+          ],
+          "id": 1,
+          "imdbId": "tt0000011",
+          "inCinemas": null,
+          "languageProfile": null,
+          "languageProfileId": null,
+          "library": {
+            "color": "#3b82f6",
+            "defaultLanguageProfileId": null,
+            "defaultQualityProfileId": null,
+            "icon": "film",
+            "id": 1,
+            "label": null,
+            "mediaTypes": [
+              "movie"
+            ],
+            "metadataLanguage": null,
+            "metadataRegion": null,
+            "name": "Movies",
+            "path": "/tmp/fliks-parity/media/movies",
+            "preferredProvider": null
+          },
+          "libraryId": 1,
+          "logoUrl": null,
+          "metadata": null,
+          "metadataRefreshedAt": null,
+          "minimumAvailability": "released",
+          "monitored": false,
+          "originalTitle": null,
+          "overview": "Updated overview",
+          "path": "/tmp/fliks-parity/media/movies/Parity Movie 01 (2020)",
+          "physicalRelease": null,
+          "posterUrl": null,
+          "preferredProvider": null,
+          "qualityProfile": {
+            "cutoff": 18,
+            "id": 2,
+            "items": [
+              {
+                "allowed": true,
+                "quality": {
+                  "id": 18,
+                  "name": "Bluray-1080p",
+                  "resolution": 1080,
+                  "source": "bluray"
+                },
+                "sortOrder": 0
+              },
+              {
+                "allowed": true,
+                "quality": {
+                  "id": 12,
+                  "name": "WEBDL-720p",
+                  "resolution": 720,
+                  "source": "web"
+                },
+                "sortOrder": 1
+              },
+              {
+                "allowed": false,
+                "quality": {
+                  "id": 13,
+                  "name": "WEBRip-720p",
+                  "resolution": 720,
+                  "source": "web"
+                },
+                "sortOrder": 2
+              },
+              {
+                "allowed": false,
+                "quality": {
+                  "id": 11,
+                  "name": "HDTV-720p",
+                  "resolution": 720,
+                  "source": "hdtv"
+                },
+                "sortOrder": 3
+              },
+              {
+                "allowed": false,
+                "quality": {
+                  "id": 1,
+                  "name": "WORKPRINT",
+                  "resolution": 0,
+                  "source": "workprint"
+                },
+                "sortOrder": 4
+              },
+              {
+                "allowed": false,
+                "quality": {
+                  "id": 2,
+                  "name": "CAM",
+                  "resolution": 0,
+                  "source": "cam"
+                },
+                "sortOrder": 5
+              },
+              {
+                "allowed": false,
+                "quality": {
+                  "id": 3,
+                  "name": "TELESYNC",
+                  "resolution": 0,
+                  "source": "telesync"
+                },
+                "sortOrder": 6
+              },
+              {
+                "allowed": false,
+                "quality": {
+                  "id": 4,
+                  "name": "TELECINE",
+                  "resolution": 0,
+                  "source": "telecine"
+                },
+                "sortOrder": 7
+              },
+              {
+                "allowed": false,
+                "quality": {
+                  "id": 5,
+                  "name": "DVD",
+                  "resolution": 480,
+                  "source": "dvd"
+                },
+                "sortOrder": 8
+              },
+              {
+                "allowed": false,
+                "quality": {
+                  "id": 6,
+                  "name": "DVD-R",
+                  "resolution": 480,
+                  "source": "dvd"
+                },
+                "sortOrder": 9
+              },
+              {
+                "allowed": false,
+                "quality": {
+                  "id": 7,
+                  "name": "SDTV",
+                  "resolution": 480,
+                  "source": "sdtv"
+                },
+                "sortOrder": 10
+              },
+              {
+                "allowed": false,
+                "quality": {
+                  "id": 8,
+                  "name": "WEBDL-480p",
+                  "resolution": 480,
+                  "source": "web"
+                },
+                "sortOrder": 11
+              },
+              {
+                "allowed": false,
+                "quality": {
+                  "id": 9,
+                  "name": "WEBRip-480p",
+                  "resolution": 480,
+                  "source": "web"
+                },
+                "sortOrder": 12
+              },
+              {
+                "allowed": false,
+                "quality": {
+                  "id": 10,
+                  "name": "Bluray-480p",
+                  "resolution": 480,
+                  "source": "bluray"
+                },
+                "sortOrder": 13
+              },
+              {
+                "allowed": false,
+                "quality": {
+                  "id": 14,
+                  "name": "Bluray-720p",
+                  "resolution": 720,
+                  "source": "bluray"
+                },
+                "sortOrder": 14
+              },
+              {
+                "allowed": false,
+                "quality": {
+                  "id": 15,
+                  "name": "HDTV-1080p",
+                  "resolution": 1080,
+                  "source": "hdtv"
+                },
+                "sortOrder": 15
+              },
+              {
+                "allowed": false,
+                "quality": {
+                  "id": 16,
+                  "name": "WEBDL-1080p",
+                  "resolution": 1080,
+                  "source": "web"
+                },
+                "sortOrder": 16
+              },
+              {
+                "allowed": false,
+                "quality": {
+                  "id": 17,
+                  "name": "WEBRip-1080p",
+                  "resolution": 1080,
+                  "source": "web"
+                },
+                "sortOrder": 17
+              },
+              {
+                "allowed": false,
+                "quality": {
+                  "id": 19,
+                  "name": "Remux-1080p",
+                  "resolution": 1080,
+                  "source": "remux"
+                },
+                "sortOrder": 18
+              },
+              {
+                "allowed": false,
+                "quality": {
+                  "id": 20,
+                  "name": "HDTV-2160p",
+                  "resolution": 2160,
+                  "source": "hdtv"
+                },
+                "sortOrder": 19
+              },
+              {
+                "allowed": false,
+                "quality": {
+                  "id": 21,
+                  "name": "WEBDL-2160p",
+                  "resolution": 2160,
+                  "source": "web"
+                },
+                "sortOrder": 20
+              },
+              {
+                "allowed": false,
+                "quality": {
+                  "id": 22,
+                  "name": "WEBRip-2160p",
+                  "resolution": 2160,
+                  "source": "web"
+                },
+                "sortOrder": 21
+              },
+              {
+                "allowed": false,
+                "quality": {
+                  "id": 23,
+                  "name": "Bluray-2160p",
+                  "resolution": 2160,
+                  "source": "bluray"
+                },
+                "sortOrder": 22
+              },
+              {
+                "allowed": false,
+                "quality": {
+                  "id": 24,
+                  "name": "Remux-2160p",
+                  "resolution": 2160,
+                  "source": "remux"
+                },
+                "sortOrder": 23
+              }
+            ],
+            "minCustomFormatScore": 0,
+            "name": "Remote HD",
+            "resolutionUpgradeOnly": false,
+            "upgradeAllowed": true
+          },
+          "qualityProfileId": 2,
+          "rating": 7.5,
+          "releaseDate": "2020-01-01",
+          "runtime": 90,
+          "seasons": [],
+          "status": "released",
+          "title": "Parity Movie 01",
+          "tmdbCollectionId": null,
+          "tmdbCollectionName": null,
+          "tmdbId": 1001,
+          "tvdbId": null,
+          "type": "movie",
+          "year": 2019
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/1"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "addedById": null,
+          "additionalFanartUrls": [],
+          "alternativeTitles": [],
+          "digitalRelease": null,
+          "fanartUrl": null,
+          "files": [],
+          "folderName": "Radarr New One (2021)",
+          "genres": null,
+          "id": 21,
+          "imdbId": "tt0007001",
+          "inCinemas": null,
+          "languageProfile": null,
+          "languageProfileId": null,
+          "library": {
+            "color": "#3b82f6",
+            "defaultLanguageProfileId": null,
+            "defaultQualityProfileId": null,
+            "icon": "film",
+            "id": 1,
+            "label": null,
+            "mediaTypes": [
+              "movie"
+            ],
+            "metadataLanguage": null,
+            "metadataRegion": null,
+            "name": "Movies",
+            "path": "/tmp/fliks-parity/media/movies",
+            "preferredProvider": null
+          },
+          "libraryId": 1,
+          "logoUrl": null,
+          "metadata": null,
+          "metadataRefreshedAt": null,
+          "minimumAvailability": "released",
+          "monitored": true,
+          "originalTitle": null,
+          "overview": "Brand new",
+          "path": "/tmp/fliks-parity/media/movies/Radarr New One (2021)",
+          "physicalRelease": null,
+          "posterUrl": null,
+          "preferredProvider": null,
+          "qualityProfile": null,
+          "qualityProfileId": null,
+          "rating": null,
+          "releaseDate": null,
+          "runtime": null,
+          "seasons": [],
+          "status": "released",
+          "title": "Radarr New One",
+          "tmdbCollectionId": null,
+          "tmdbCollectionName": null,
+          "tmdbId": 7001,
+          "tvdbId": null,
+          "type": "movie",
+          "year": 2021
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/21"
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..startedOn",
+    "$..endedOn"
+  ],
+  "name": "markers-detect-series-unauthenticated",
+  "seed": "markers",
+  "steps": [
+    {
+      "as": "anon",
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "POST",
+      "path": "/api/markers/series/18/detect-all"
+    }
+  ]
+}

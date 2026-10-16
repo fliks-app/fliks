@@ -1,0 +1,95 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "requests-create-pending",
+  "seed": "requests",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "mediaType": "movie",
+        "title": "New Movie",
+        "tmdbId": 5555
+      },
+      "expect": {
+        "body": {
+          "approvedBy": null,
+          "approvedById": null,
+          "declinedReason": null,
+          "fanartUrl": null,
+          "id": 11,
+          "kind": "add",
+          "languageProfile": null,
+          "languageProfileId": null,
+          "library": {
+            "id": 1
+          },
+          "libraryId": 1,
+          "media": null,
+          "mediaId": null,
+          "mediaType": "movie",
+          "posterUrl": null,
+          "qualityProfile": null,
+          "qualityProfileId": null,
+          "seasons": null,
+          "status": "pending",
+          "title": "New Movie",
+          "tmdbId": 5555,
+          "user": {
+            "avatar": null,
+            "id": 2,
+            "username": "user"
+          },
+          "userId": 2
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/requests"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "data": [
+            {
+              "approvedBy": null,
+              "approvedById": null,
+              "declinedReason": null,
+              "fanartUrl": null,
+              "id": 11,
+              "kind": "add",
+              "languageProfileId": null,
+              "libraryId": 1,
+              "media": null,
+              "mediaId": null,
+              "mediaType": "movie",
+              "posterUrl": null,
+              "qualityProfileId": null,
+              "seasons": null,
+              "status": "pending",
+              "title": "New Movie",
+              "tmdbId": 5555,
+              "user": {
+                "avatar": null,
+                "id": 2,
+                "username": "user"
+              },
+              "userId": 2
+            }
+          ],
+          "total": 1
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/requests?tmdbId=5555&mediaType=movie"
+    }
+  ],
+  "unordered": [
+    "$.data"
+  ]
+}

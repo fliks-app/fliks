@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH r AS (INSERT INTO auto_approval_rules (name, enabled, criteria) VALUES ($1, $2, $3) RETURNING *)\n        SELECT jsonb_build_object('id', id, 'createdAt', iso_ms(\"createdAt\"), 'updatedAt', iso_ms(\"updatedAt\"),\n        'name', name, 'enabled', enabled, 'criteria', criteria) AS \"json!: Value\" FROM r",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "json!: Value",
+        "type_info": "Jsonb"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Bool",
+        "Jsonb"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "12fee46132ba143c99c05342fd5205c23e970840a60e69ceb50fe7e8f8e610fe"
+}

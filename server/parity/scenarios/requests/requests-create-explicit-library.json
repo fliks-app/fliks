@@ -1,0 +1,99 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "requests-create-explicit-library",
+  "seed": "requests",
+  "steps": [
+    {
+      "as": "validator",
+      "body": {
+        "libraryId": 3,
+        "mediaType": "movie",
+        "title": "M",
+        "tmdbId": 9304
+      },
+      "expect": {
+        "body": {
+          "approvedBy": null,
+          "approvedById": null,
+          "declinedReason": null,
+          "fanartUrl": null,
+          "id": 11,
+          "kind": "add",
+          "languageProfile": null,
+          "languageProfileId": null,
+          "library": {
+            "id": 3
+          },
+          "libraryId": 3,
+          "media": null,
+          "mediaId": null,
+          "mediaType": "movie",
+          "posterUrl": null,
+          "qualityProfile": null,
+          "qualityProfileId": null,
+          "seasons": null,
+          "status": "pending",
+          "title": "M",
+          "tmdbId": 9304,
+          "user": {
+            "avatar": null,
+            "id": 6,
+            "username": "validator"
+          },
+          "userId": 6
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/requests"
+    },
+    {
+      "as": "user",
+      "body": {
+        "libraryId": 1,
+        "mediaType": "movie",
+        "title": "M",
+        "tmdbId": 9305
+      },
+      "expect": {
+        "body": {
+          "approvedBy": null,
+          "approvedById": null,
+          "declinedReason": null,
+          "fanartUrl": null,
+          "id": 12,
+          "kind": "add",
+          "languageProfile": null,
+          "languageProfileId": null,
+          "library": {
+            "id": 1
+          },
+          "libraryId": 1,
+          "media": null,
+          "mediaId": null,
+          "mediaType": "movie",
+          "posterUrl": null,
+          "qualityProfile": null,
+          "qualityProfileId": null,
+          "seasons": null,
+          "status": "pending",
+          "title": "M",
+          "tmdbId": 9305,
+          "user": {
+            "avatar": null,
+            "id": 2,
+            "username": "user"
+          },
+          "userId": 2
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/requests"
+    }
+  ]
+}

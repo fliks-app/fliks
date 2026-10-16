@@ -1,0 +1,40 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..startedOn",
+    "$..endedOn"
+  ],
+  "name": "markers-delete",
+  "seed": "markers",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "status": 200
+      },
+      "method": "DELETE",
+      "path": "/api/markers/1"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "confidence": 1,
+            "endSeconds": 9.5,
+            "episodeId": 1,
+            "id": 2,
+            "manual": true,
+            "startSeconds": 8.5,
+            "type": "outro"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/markers/episode/1"
+    }
+  ]
+}

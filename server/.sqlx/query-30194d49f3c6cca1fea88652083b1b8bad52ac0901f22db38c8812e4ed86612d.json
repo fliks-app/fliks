@@ -1,0 +1,70 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, \"createdAt\" AS created_at, \"updatedAt\" AS updated_at, type AS \"type!\",\n                  \"startSeconds\" AS start_seconds, \"endSeconds\" AS end_seconds, confidence,\n                  manual, \"episodeId\" AS episode_id\n           FROM episode_markers WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 2,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 3,
+        "name": "type!",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "start_seconds",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 5,
+        "name": "end_seconds",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 6,
+        "name": "confidence",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 7,
+        "name": "manual",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 8,
+        "name": "episode_id",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "30194d49f3c6cca1fea88652083b1b8bad52ac0901f22db38c8812e4ed86612d"
+}

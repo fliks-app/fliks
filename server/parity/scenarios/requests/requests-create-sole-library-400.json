@@ -1,0 +1,47 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "requests-create-sole-library-400",
+  "seed": "requests",
+  "steps": [
+    {
+      "as": "validator",
+      "body": {
+        "mediaType": "series",
+        "title": "S",
+        "tmdbId": 9302
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "No library accepts series",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/requests"
+    },
+    {
+      "as": "validator",
+      "body": {
+        "mediaType": "movie",
+        "title": "M",
+        "tmdbId": 9303
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Several libraries accept movie \u2014 pass libraryId to choose one",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/requests"
+    }
+  ]
+}

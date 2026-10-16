@@ -1,0 +1,337 @@
+{
+  "capture": {
+    "mid": "$.steps[2].body.id"
+  },
+  "deviation": null,
+  "engine": "down",
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..metadataRefreshedAt"
+  ],
+  "name": "provider-write-import-movie",
+  "seed": "providers",
+  "steps": [
+    {
+      "expect": {
+        "status": 200
+      },
+      "sleepMs": 800
+    },
+    {
+      "expect": {
+        "body": {
+          "ok": true
+        },
+        "status": 200
+      },
+      "method": "POST",
+      "path": "/__reset",
+      "stub": true
+    },
+    {
+      "as": "admin",
+      "body": {
+        "libraryId": 1,
+        "tmdbId": 1002,
+        "type": "movie"
+      },
+      "expect": {
+        "body": {
+          "addedById": 1,
+          "additionalFanartUrls": [],
+          "alternativeTitles": [
+            "Matrix",
+            "the matrix",
+            "Matrix 1"
+          ],
+          "digitalRelease": "1999-09-21",
+          "fanartUrl": "https://image.tmdb.org/t/p/original/back1002.jpg",
+          "folderName": "Casablanca Redux (orig) (2001)",
+          "genres": [
+            "Action",
+            "Science Fiction"
+          ],
+          "id": 211,
+          "imdbId": "tt0000002",
+          "inCinemas": "1999-03-31",
+          "languageProfile": {
+            "audioLanguages": [],
+            "id": 1,
+            "name": "Toutes les langues (défaut)",
+            "subtitleLanguages": []
+          },
+          "languageProfileId": 1,
+          "library": {
+            "color": "#3b82f6",
+            "defaultLanguageProfileId": null,
+            "defaultQualityProfileId": null,
+            "icon": "film",
+            "id": 1,
+            "label": null,
+            "mediaTypes": [
+              "movie"
+            ],
+            "metadataLanguage": null,
+            "metadataRegion": null,
+            "name": "Movies",
+            "path": "/tmp/fliks-parity/media/movies",
+            "preferredProvider": null
+          },
+          "libraryId": 1,
+          "logoUrl": "https://image.tmdb.org/t/p/original/logo_en.png",
+          "minimumAvailability": "released",
+          "monitored": true,
+          "originalTitle": "Casablanca Redux (orig)",
+          "overview": "Overview of Casablanca Redux",
+          "path": "/tmp/fliks-parity/media/movies/Casablanca Redux (orig) (2001)",
+          "physicalRelease": "2000-01-01",
+          "preferredProvider": null,
+          "qualityProfile": null,
+          "qualityProfileId": null,
+          "rating": 7.5,
+          "releaseDate": "2001-05-02",
+          "runtime": 136,
+          "status": "released",
+          "title": "Casablanca Redux",
+          "tmdbCollectionId": null,
+          "tmdbCollectionName": null,
+          "tmdbId": 1002,
+          "tvdbId": null,
+          "type": "movie",
+          "year": 2001
+        },
+        "status": 201
+      },
+      "ignore": [
+        "$.metadata",
+        "$.posterUrl"
+      ],
+      "method": "POST",
+      "path": "/api/media/import/tmdb"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "status": 200
+      },
+      "ignoreBody": true,
+      "method": "GET",
+      "path": "/api/persons/search?q=claude",
+      "poll": {
+        "path": "$[0].biography",
+        "timeoutMs": 10000,
+        "until": "Refreshed biography."
+      }
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "addedById": 1,
+          "additionalFanartUrls": [],
+          "alternativeTitles": [
+            "Matrix",
+            "the matrix",
+            "Matrix 1"
+          ],
+          "digitalRelease": "1999-09-21",
+          "fanartUrl": "https://image.tmdb.org/t/p/original/back1002.jpg",
+          "files": [],
+          "folderName": "Casablanca Redux (orig) (2001)",
+          "genres": [
+            "Action",
+            "Science Fiction"
+          ],
+          "id": 211,
+          "imdbId": "tt0000002",
+          "inCinemas": "1999-03-31",
+          "languageProfile": {
+            "audioLanguages": [],
+            "id": 1,
+            "name": "Toutes les langues (défaut)",
+            "subtitleLanguages": []
+          },
+          "languageProfileId": 1,
+          "library": {
+            "color": "#3b82f6",
+            "defaultLanguageProfileId": null,
+            "defaultQualityProfileId": null,
+            "icon": "film",
+            "id": 1,
+            "label": null,
+            "mediaTypes": [
+              "movie"
+            ],
+            "metadataLanguage": null,
+            "metadataRegion": null,
+            "name": "Movies",
+            "path": "/tmp/fliks-parity/media/movies",
+            "preferredProvider": null
+          },
+          "libraryId": 1,
+          "logoUrl": "https://image.tmdb.org/t/p/original/logo_en.png",
+          "metadata": {
+            "budget": "1000",
+            "id": 1,
+            "keywords": [
+              "hacker",
+              "dystopia"
+            ],
+            "originalLanguage": "en",
+            "popularity": 75.5,
+            "productionCompanies": [
+              "Warner Bros."
+            ],
+            "productionCountries": [
+              "United States of America"
+            ],
+            "revenue": "2000",
+            "tagline": "Welcome to the Real World.",
+            "videos": [
+              {
+                "key": "vKQi3bBA1y8",
+                "name": "Official Trailer",
+                "site": "YouTube",
+                "type": "Trailer"
+              }
+            ],
+            "voteCount": 25000
+          },
+          "minimumAvailability": "released",
+          "monitored": true,
+          "originalTitle": "Casablanca Redux (orig)",
+          "overview": "Overview of Casablanca Redux",
+          "path": "/tmp/fliks-parity/media/movies/Casablanca Redux (orig) (2001)",
+          "physicalRelease": "2000-01-01",
+          "posterUrl": "/api/images/media/211/poster?v=612f4295",
+          "preferredProvider": null,
+          "qualityProfile": null,
+          "qualityProfileId": null,
+          "rating": 7.5,
+          "releaseDate": "2001-05-02",
+          "runtime": 136,
+          "seasons": [],
+          "status": "released",
+          "title": "Casablanca Redux",
+          "tmdbCollectionId": null,
+          "tmdbCollectionName": null,
+          "tmdbId": 1002,
+          "tvdbId": null,
+          "type": "movie",
+          "year": 2001
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/{mid}",
+      "poll": {
+        "path": "$.posterUrl",
+        "timeoutMs": 10000,
+        "until": "/api/images/media/211/poster?v=612f4295"
+      }
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "character": "Captain Renault",
+            "id": 1,
+            "order": 0,
+            "person": {
+              "avatarUrl": "/api/images/person/201?v=612f4295",
+              "biography": "Refreshed biography.",
+              "birthday": "1963-12-18",
+              "deathday": null,
+              "departments": [
+                "Acting",
+                "Writing"
+              ],
+              "id": 201,
+              "knownForDepartment": "Acting",
+              "name": "Claude Rains",
+              "placeOfBirth": "Shawnee, Oklahoma, USA",
+              "provider": "tmdb",
+              "tmdbId": 102
+            }
+          },
+          {
+            "character": "",
+            "id": 2,
+            "order": 1,
+            "person": {
+              "avatarUrl": null,
+              "biography": null,
+              "birthday": null,
+              "deathday": null,
+              "departments": [
+                "Acting"
+              ],
+              "id": 202,
+              "knownForDepartment": null,
+              "name": "New Actor",
+              "placeOfBirth": null,
+              "provider": "tmdb",
+              "tmdbId": 7001
+            }
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/{mid}/cast"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "department": "Directing",
+            "id": 1,
+            "job": "Director",
+            "person": {
+              "avatarUrl": null,
+              "biography": null,
+              "birthday": null,
+              "deathday": null,
+              "departments": [
+                "Directing"
+              ],
+              "id": 203,
+              "knownForDepartment": null,
+              "name": "Director One",
+              "placeOfBirth": null,
+              "provider": "tmdb",
+              "tmdbId": 9001
+            }
+          },
+          {
+            "department": "Acting",
+            "id": 2,
+            "job": "Cameo",
+            "person": {
+              "avatarUrl": "/api/images/person/201?v=612f4295",
+              "biography": "Refreshed biography.",
+              "birthday": "1963-12-18",
+              "deathday": null,
+              "departments": [
+                "Acting",
+                "Writing"
+              ],
+              "id": 201,
+              "knownForDepartment": "Acting",
+              "name": "Claude Rains",
+              "placeOfBirth": "Shawnee, Oklahoma, USA",
+              "provider": "tmdb",
+              "tmdbId": 102
+            }
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/{mid}/crew"
+    }
+  ]
+}

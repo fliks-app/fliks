@@ -1,0 +1,91 @@
+{
+  "deviation": null,
+  "engine": "down",
+  "name": "metadata-details-tmdb-tv",
+  "seed": "metadata",
+  "steps": [
+    {
+      "expect": {
+        "body": {
+          "ok": true
+        },
+        "status": 200
+      },
+      "method": "POST",
+      "path": "/__reset",
+      "stub": true
+    },
+    {
+      "as": "readonly",
+      "expect": {
+        "body": {
+          "additionalFanartUrls": [
+            "https://image.tmdb.org/t/p/original/bb2.jpg"
+          ],
+          "alternativeTitles": [
+            "Breaking Bad (US)"
+          ],
+          "budget": null,
+          "cast": [
+            {
+              "avatarUrl": "https://image.tmdb.org/t/p/w185/bc.jpg",
+              "character": "Walter White",
+              "externalId": 17419,
+              "name": "Bryan Cranston",
+              "order": 0
+            }
+          ],
+          "crew": [],
+          "digitalRelease": null,
+          "episodeCount": 5,
+          "fanartUrl": null,
+          "genreIds": [
+            18
+          ],
+          "genres": [
+            "Drama"
+          ],
+          "imdbId": "tt0903747",
+          "inCinemas": null,
+          "keywords": [
+            "drug dealer"
+          ],
+          "logoUrl": null,
+          "mediaType": "series",
+          "originalLanguage": "en",
+          "originalTitle": "Breaking Bad (orig)",
+          "overview": "Overview of Breaking Bad",
+          "physicalRelease": null,
+          "popularity": 90.1,
+          "posterUrl": "https://image.tmdb.org/t/p/w500/poster2000.jpg",
+          "productionCompanies": [
+            "AMC",
+            "Gran Via"
+          ],
+          "productionCountries": [
+            "US"
+          ],
+          "provider": "tmdb",
+          "rating": 8.1,
+          "releaseDate": "2008-01-20",
+          "revenue": null,
+          "runtime": 47,
+          "seasonCount": 3,
+          "status": "ended",
+          "tagline": null,
+          "title": "Breaking Bad",
+          "tmdbCollectionId": null,
+          "tmdbCollectionName": null,
+          "tmdbId": 2000,
+          "tvdbId": 81189,
+          "videos": [],
+          "voteCount": 12000,
+          "year": 2008
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/metadata/tmdb/tv/2000"
+    }
+  ]
+}

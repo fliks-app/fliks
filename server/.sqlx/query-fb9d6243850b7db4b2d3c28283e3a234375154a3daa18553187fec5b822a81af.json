@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE subtitle_files SET \"providerType\" = $2::text::subtitle_files_providertype_enum,\n                          \"hearingImpaired\" = $3, tags = $4, \"filePath\" = $5, status = 'downloaded', score = 100,\n                          \"streamIndex\" = CASE WHEN $6 THEN NULL ELSE \"streamIndex\" END,\n                          codec = CASE WHEN $6 THEN NULL ELSE codec END\n                   WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Text",
+        "Bool",
+        "Text",
+        "Varchar",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "fb9d6243850b7db4b2d3c28283e3a234375154a3daa18553187fec5b822a81af"
+}

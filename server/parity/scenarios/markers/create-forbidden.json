@@ -1,0 +1,32 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..startedOn",
+    "$..endedOn"
+  ],
+  "name": "markers-create-forbidden",
+  "seed": "markers",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "endSeconds": 30,
+        "episodeId": 1,
+        "startSeconds": 1,
+        "type": "intro"
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "POST",
+      "path": "/api/markers"
+    }
+  ]
+}

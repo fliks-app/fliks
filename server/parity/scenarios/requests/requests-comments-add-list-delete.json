@@ -1,0 +1,188 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "requests-comments-add-list-delete",
+  "seed": "requests",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "message": "hello"
+      },
+      "expect": {
+        "body": {
+          "id": 3,
+          "message": "hello",
+          "request": {
+            "approvedBy": null,
+            "declinedReason": null,
+            "fanartUrl": null,
+            "id": 1,
+            "kind": "add",
+            "mediaType": "movie",
+            "posterUrl": null,
+            "seasons": null,
+            "status": "pending",
+            "title": "Requested Movie",
+            "tmdbId": 9001,
+            "user": {
+              "avatar": null,
+              "id": 2,
+              "username": "user"
+            }
+          },
+          "requestId": 1,
+          "user": {
+            "avatar": null,
+            "id": 2,
+            "username": "user"
+          },
+          "userId": 2
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/requests/1/comments"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": [
+          {
+            "id": 1,
+            "message": "First comment",
+            "requestId": 1,
+            "user": {
+              "avatar": null,
+              "id": 2,
+              "username": "user"
+            },
+            "userId": 2
+          },
+          {
+            "id": 2,
+            "message": "Admin reply",
+            "requestId": 1,
+            "user": {
+              "avatar": null,
+              "id": 1,
+              "username": "admin"
+            },
+            "userId": 1
+          },
+          {
+            "id": 3,
+            "message": "hello",
+            "requestId": 1,
+            "user": {
+              "avatar": null,
+              "id": 2,
+              "username": "user"
+            },
+            "userId": 2
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/requests/1/comments"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "status": 200
+      },
+      "method": "DELETE",
+      "path": "/api/requests/comments/3"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": [
+          {
+            "id": 1,
+            "message": "First comment",
+            "requestId": 1,
+            "user": {
+              "avatar": null,
+              "id": 2,
+              "username": "user"
+            },
+            "userId": 2
+          },
+          {
+            "id": 2,
+            "message": "Admin reply",
+            "requestId": 1,
+            "user": {
+              "avatar": null,
+              "id": 1,
+              "username": "admin"
+            },
+            "userId": 1
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/requests/1/comments"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "status": 200
+      },
+      "method": "DELETE",
+      "path": "/api/requests/comments/2"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "approvedBy": null,
+          "approvedById": null,
+          "comments": [
+            {
+              "id": 1,
+              "message": "First comment",
+              "requestId": 1,
+              "user": {
+                "avatar": null,
+                "id": 2,
+                "username": "user"
+              },
+              "userId": 2
+            }
+          ],
+          "declinedReason": null,
+          "fanartUrl": null,
+          "id": 1,
+          "kind": "add",
+          "languageProfileId": null,
+          "libraryId": 1,
+          "media": null,
+          "mediaId": null,
+          "mediaType": "movie",
+          "posterUrl": null,
+          "qualityProfileId": null,
+          "seasons": null,
+          "status": "pending",
+          "title": "Requested Movie",
+          "tmdbId": 9001,
+          "user": {
+            "avatar": null,
+            "id": 2,
+            "username": "user"
+          },
+          "userId": 2
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/requests/1"
+    }
+  ]
+}

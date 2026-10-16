@@ -1,0 +1,21 @@
+{
+  "deviation": null,
+  "name": "system-backup-download-bad-name",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Invalid backup name \"a b.sql\"",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "GET",
+      "path": "/api/system/backups/a%20b.sql"
+    }
+  ],
+  "strictMessage": true
+}

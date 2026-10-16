@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT jsonb_build_object('id', s.id, 'createdAt', iso_ms(s.\"createdAt\"), 'updatedAt', iso_ms(s.\"updatedAt\"),\n             'seasonNumber', s.\"seasonNumber\", 'monitored', s.monitored, 'preferredProvider', s.\"preferredProvider\",\n             'posterUrl', s.\"posterUrl\", 'overview', s.overview, 'airDate', s.\"airDate\", 'mediaId', s.\"mediaId\")\n             AS \"j!: Value\" FROM seasons s WHERE s.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "j!: Value",
+        "type_info": "Jsonb"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "725f3ec7e20705c38a2da968cbe821cd91e9135b4f9b1599373c14ace99c0877"
+}

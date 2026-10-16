@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT \"preferredProvider\" AS pref, \"metadataLanguage\" AS lang, \"metadataRegion\" AS region\n           FROM libraries WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "pref",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "lang",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "region",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "4dd78c7fdd3d6036c8fae361ebffa4c70374f4aa457e04534faa4a84cac1d150"
+}

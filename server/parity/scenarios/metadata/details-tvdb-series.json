@@ -1,0 +1,109 @@
+{
+  "deviation": null,
+  "engine": "down",
+  "name": "metadata-details-tvdb-series",
+  "seed": "metadata",
+  "steps": [
+    {
+      "expect": {
+        "body": {
+          "ok": true
+        },
+        "status": 200
+      },
+      "method": "POST",
+      "path": "/__reset",
+      "stub": true
+    },
+    {
+      "as": "readonly",
+      "expect": {
+        "body": {
+          "additionalFanartUrls": [
+            "https://artworks.thetvdb.com/bg2.jpg"
+          ],
+          "alternativeTitles": [
+            "BB"
+          ],
+          "budget": null,
+          "cast": [
+            {
+              "avatarUrl": "https://artworks.thetvdb.com/bc.jpg",
+              "character": "Walter White",
+              "externalId": 1,
+              "name": "Bryan Cranston",
+              "order": 1
+            }
+          ],
+          "crew": [
+            {
+              "avatarUrl": null,
+              "department": "Creator",
+              "externalId": 2,
+              "job": "Creator",
+              "name": "Vince Gilligan"
+            }
+          ],
+          "digitalRelease": null,
+          "episodeCount": null,
+          "fanartUrl": "https://artworks.thetvdb.com/bg1.jpg",
+          "genres": [
+            "Drama"
+          ],
+          "imdbId": "tt0903747",
+          "inCinemas": null,
+          "keywords": [
+            "crime"
+          ],
+          "logoUrl": "https://artworks.thetvdb.com/logo.png",
+          "mediaType": "series",
+          "originalLanguage": "eng",
+          "originalTitle": "Breaking Bad",
+          "overview": "",
+          "physicalRelease": null,
+          "popularity": null,
+          "posterUrl": "https://artworks.thetvdb.com/poster.jpg",
+          "productionCompanies": [
+            "AMC",
+            "Gran Via"
+          ],
+          "productionCountries": [
+            "usa"
+          ],
+          "provider": "tvdb",
+          "rating": 0,
+          "releaseDate": "2008-01-20",
+          "revenue": null,
+          "runtime": null,
+          "seasonCount": 2,
+          "status": "ended",
+          "tagline": null,
+          "title": "Breaking Bad",
+          "tmdbCollectionId": null,
+          "tmdbCollectionName": null,
+          "tmdbId": 1396,
+          "tvdbId": 81189,
+          "videos": [
+            {
+              "key": "abcdefghijk",
+              "name": "Trailer",
+              "site": "YouTube",
+              "type": "Trailer"
+            },
+            {
+              "key": "",
+              "name": "Empty",
+              "site": "Unknown",
+              "type": "Trailer"
+            }
+          ],
+          "voteCount": null,
+          "year": null
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/metadata/tvdb/tv/81189"
+    }
+  ]
+}

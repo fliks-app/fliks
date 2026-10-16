@@ -1,0 +1,226 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "profiles-language-create",
+  "seed": "profiles",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "audioLanguages": [
+          {
+            "isoCode": "de",
+            "name": "German"
+          }
+        ],
+        "name": "New LP",
+        "subtitleLanguages": [
+          {
+            "forced": false,
+            "hi": false,
+            "isoCode": "de",
+            "name": "German"
+          },
+          {
+            "forced": true,
+            "hearingImpaired": "require",
+            "hi": true,
+            "isoCode": "fr",
+            "name": "French"
+          },
+          {
+            "forced": false,
+            "hearingImpaired": null,
+            "hi": false,
+            "isoCode": "en",
+            "name": "English"
+          }
+        ]
+      },
+      "expect": {
+        "body": {
+          "audioLanguages": [
+            {
+              "isoCode": "de",
+              "name": "German"
+            }
+          ],
+          "id": 4,
+          "name": "New LP",
+          "subtitleLanguages": [
+            {
+              "forced": false,
+              "hi": false,
+              "isoCode": "de",
+              "name": "German"
+            },
+            {
+              "forced": true,
+              "hearingImpaired": "require",
+              "hi": true,
+              "isoCode": "fr",
+              "name": "French"
+            },
+            {
+              "forced": false,
+              "hearingImpaired": null,
+              "hi": false,
+              "isoCode": "en",
+              "name": "English"
+            }
+          ]
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/profiles/language"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "name": "Bare"
+      },
+      "expect": {
+        "body": {
+          "audioLanguages": [],
+          "id": 5,
+          "name": "Bare",
+          "subtitleLanguages": []
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/profiles/language"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "audioLanguages": null,
+        "name": "Nulls",
+        "subtitleLanguages": null
+      },
+      "expect": {
+        "body": {
+          "audioLanguages": [],
+          "id": 6,
+          "name": "Nulls",
+          "subtitleLanguages": []
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/profiles/language"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "audioLanguages": [],
+            "id": 5,
+            "name": "Bare",
+            "subtitleLanguages": []
+          },
+          {
+            "audioLanguages": [
+              {
+                "isoCode": "de",
+                "name": "German"
+              }
+            ],
+            "id": 4,
+            "name": "New LP",
+            "subtitleLanguages": [
+              {
+                "forced": false,
+                "hi": false,
+                "isoCode": "de",
+                "name": "German"
+              },
+              {
+                "forced": true,
+                "hearingImpaired": "require",
+                "hi": true,
+                "isoCode": "fr",
+                "name": "French"
+              },
+              {
+                "forced": false,
+                "hearingImpaired": null,
+                "hi": false,
+                "isoCode": "en",
+                "name": "English"
+              }
+            ]
+          },
+          {
+            "audioLanguages": [],
+            "id": 6,
+            "name": "Nulls",
+            "subtitleLanguages": []
+          },
+          {
+            "audioLanguages": [
+              {
+                "isoCode": "fr",
+                "name": "French"
+              },
+              {
+                "isoCode": "en",
+                "name": "English"
+              }
+            ],
+            "id": 2,
+            "name": "Parity FR",
+            "subtitleLanguages": [
+              {
+                "forced": false,
+                "hearingImpaired": "prefer",
+                "hi": false,
+                "isoCode": "fr",
+                "name": "French"
+              },
+              {
+                "forced": true,
+                "hi": false,
+                "isoCode": "en",
+                "name": "English"
+              }
+            ]
+          },
+          {
+            "audioLanguages": [
+              {
+                "isoCode": "en",
+                "name": "English"
+              }
+            ],
+            "id": 3,
+            "name": "Parity Null Mode",
+            "subtitleLanguages": [
+              {
+                "forced": false,
+                "hearingImpaired": null,
+                "hi": true,
+                "isoCode": "en",
+                "name": "English"
+              }
+            ]
+          },
+          {
+            "audioLanguages": [],
+            "id": 1,
+            "name": "Toutes les langues (défaut)",
+            "subtitleLanguages": []
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/profiles/language"
+    }
+  ]
+}

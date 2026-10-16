@@ -1,0 +1,24 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "requests-approve-not-pending-409",
+  "seed": "requests",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Conflict",
+          "message": "Request is not pending",
+          "statusCode": 409
+        },
+        "status": 409
+      },
+      "method": "POST",
+      "path": "/api/requests/3/approve"
+    }
+  ]
+}

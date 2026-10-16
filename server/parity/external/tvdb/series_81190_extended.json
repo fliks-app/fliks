@@ -1,0 +1,146 @@
+{
+  "status": "success",
+  "data": {
+    "id": 81190,
+    "name": "Breaking Bad",
+    "image": "https://image.tmdb.org/t/p/original/p.jpg",
+    "status": {
+      "name": "Ended"
+    },
+    "originalLanguage": "eng",
+    "originalCountry": "usa",
+    "firstAired": "2008-01-20",
+    "averageRuntime": 47,
+    "genres": [
+      {
+        "name": "Drama"
+      }
+    ],
+    "seasons": [
+      {
+        "number": 0,
+        "type": {
+          "type": "official"
+        }
+      },
+      {
+        "number": 1,
+        "type": {
+          "type": "official"
+        }
+      },
+      {
+        "number": 1,
+        "type": {
+          "type": "dvd"
+        }
+      }
+    ],
+    "translations": {
+      "nameTranslations": [
+        {
+          "language": "fra",
+          "name": "Breaking Bad (fr)"
+        }
+      ],
+      "overviewTranslations": [
+        {
+          "language": "fra",
+          "overview": "Un professeur."
+        }
+      ]
+    },
+    "remoteIds": [
+      {
+        "id": "2000",
+        "sourceName": "TheMovieDB.com"
+      },
+      {
+        "id": "tt0903747",
+        "sourceName": "IMDB"
+      }
+    ],
+    "artworks": [
+      {
+        "type": 2,
+        "image": "https://image.tmdb.org/t/p/original/poster.jpg",
+        "language": "eng",
+        "score": 10
+      },
+      {
+        "type": 3,
+        "image": "https://image.tmdb.org/t/p/original/bg1.jpg",
+        "language": "eng",
+        "score": 5
+      },
+      {
+        "type": 3,
+        "image": "https://image.tmdb.org/t/p/original/bg2.jpg",
+        "language": "fra",
+        "score": 7
+      },
+      {
+        "type": 23,
+        "image": "https://image.tmdb.org/t/p/original/logo.png",
+        "language": "eng",
+        "score": 1
+      }
+    ],
+    "trailers": [
+      {
+        "url": "https://www.youtube.com/watch?v=abcdefghijk",
+        "name": "Trailer"
+      },
+      {
+        "url": "",
+        "name": "Empty"
+      }
+    ],
+    "tagOptions": [
+      {
+        "name": "crime"
+      }
+    ],
+    "aliases": [
+      {
+        "name": "BB"
+      },
+      {
+        "name": " breaking bad "
+      }
+    ],
+    "networks": [
+      {
+        "name": "AMC"
+      }
+    ],
+    "companies": [
+      {
+        "name": "Sony"
+      }
+    ],
+    "studios": [
+      {
+        "name": "Gran Via"
+      }
+    ],
+    "characters": [
+      {
+        "peopleId": 1,
+        "personName": "Bryan Cranston",
+        "name": "Walter White",
+        "peopleType": "Actor",
+        "sort": 1,
+        "personImgURL": "https://image.tmdb.org/t/p/original/bc.jpg"
+      },
+      {
+        "peopleId": 2,
+        "personName": "Vince Gilligan",
+        "name": "",
+        "peopleType": "Creator",
+        "sort": 2,
+        "personImgURL": null
+      }
+    ]
+  }
+}

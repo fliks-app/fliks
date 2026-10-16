@@ -37,7 +37,6 @@ describe('SubtitleSyncService — a failed sync', () => {
       { runJob } as never,
       { emit: jest.fn() } as never,
       { upsertPending: jest.fn(), upsertRunning: jest.fn(), remove: jest.fn() } as never,
-      { dispatch: jest.fn() } as never,
     );
     return { service, subtitle, save, runJob };
   };

@@ -1,0 +1,78 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "requests-title-state-series-locked",
+  "seed": "requests",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "lockedLanguageProfileId": 2,
+          "lockedQualityProfileId": 1,
+          "profilesLocked": true,
+          "requested": false,
+          "requestedSeasons": [
+            1,
+            2
+          ],
+          "wholeSeriesRequested": false
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/requests/title-state?tmdbId=9004&mediaType=series"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "lockedLanguageProfileId": null,
+          "lockedQualityProfileId": null,
+          "profilesLocked": true,
+          "requested": true,
+          "requestedSeasons": [],
+          "wholeSeriesRequested": true
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/requests/title-state?tmdbId=9005&mediaType=series"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "lockedLanguageProfileId": null,
+          "lockedQualityProfileId": null,
+          "profilesLocked": true,
+          "requested": false,
+          "requestedSeasons": [],
+          "wholeSeriesRequested": false
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/requests/title-state?tmdbId=2000&mediaType=series"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "lockedLanguageProfileId": null,
+          "lockedQualityProfileId": null,
+          "profilesLocked": false,
+          "requested": false,
+          "requestedSeasons": [],
+          "wholeSeriesRequested": false
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/requests/title-state?tmdbId=777&mediaType=series"
+    }
+  ]
+}

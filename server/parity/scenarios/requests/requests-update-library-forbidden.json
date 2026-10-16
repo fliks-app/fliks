@@ -1,0 +1,27 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "requests-update-library-forbidden",
+  "seed": "requests",
+  "steps": [
+    {
+      "as": "validator",
+      "body": {
+        "libraryId": 2
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "You do not have access to the selected library",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "PATCH",
+      "path": "/api/requests/1"
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "deviation": null,
+  "name": "commands-trigger-unknown",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "name": "nope"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Unknown command: nope. Valid: Backup, RefreshMetadata, RefreshPluginSources, SubtitleSearch, SubtitleUpgrade, LiveTvSourceRefresh, LiveTvGuideRefresh, LiveTvGuidePrune, RescanAll, RefreshMissingMetadata, RescanMissingFiles, GenerateSprites, GenerateMissingSprites, DetectMarkers, DetectMissingMarkers",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/commands"
+    }
+  ],
+  "strictMessage": true
+}

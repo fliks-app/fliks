@@ -1,0 +1,29 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..startedOn",
+    "$..endedOn"
+  ],
+  "name": "markers-update-forbidden",
+  "seed": "markers",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "startSeconds": 1
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "PUT",
+      "path": "/api/markers/1"
+    }
+  ]
+}

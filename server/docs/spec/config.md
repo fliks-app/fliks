@@ -87,9 +87,9 @@ Read via `readEnvPositiveInt(name, fallback)` in `[ts:src/modules/streaming/life
 | `SERVE_STATIC_PATH` | none (when set, second `ServeStaticModule` root at `/`) | string, truthiness (empty = unset) `[ts:src/app.module.ts:51]` | `[ts:src/app.module.ts:48]`, `[ts:src/app.module.ts:51]` |
 | `FLIKS_GITHUB_REPO` | `'fliks-app/fliks'` | string as-is (`??`) `[ts:src/modules/scheduler/update-check.service.ts:5]` | `[ts:src/modules/scheduler/update-check.service.ts:5]` |
 | `FLIKS_DISABLE_UPDATE_CHECK` | `''` (disabled when `1`, `true`, or `yes`, case-insensitive) | `.trim().toLowerCase()` in `1`/`true`/`yes` `[ts:src/modules/scheduler/update-check.service.ts:10]`–`[ts:src/modules/scheduler/update-check.service.ts:11]` | `[ts:src/modules/scheduler/update-check.service.ts:10]` |
-| `FLIKS_SUPERVISED` | none (truthy → supervisor) | truthiness (empty = unset) `[ts:src/modules/scheduler/system.controller.ts:141]` | `[ts:src/modules/scheduler/system.controller.ts:141]` |
-| `pm_id` | none (truthy → pm2) | truthiness `[ts:src/modules/scheduler/system.controller.ts:142]` | `[ts:src/modules/scheduler/system.controller.ts:142]` |
-| `INVOCATION_ID` | none (truthy → systemd) | truthiness `[ts:src/modules/scheduler/system.controller.ts:143]` | `[ts:src/modules/scheduler/system.controller.ts:143]` |
+| `FLIKS_SUPERVISED` | none (truthy → supervisor) | truthiness (empty = unset) `[ts:src/modules/scheduler/system.controller.ts:52]` | `[ts:src/modules/scheduler/system.controller.ts:52]` |
+| `pm_id` | none (truthy → pm2) | truthiness `[ts:src/modules/scheduler/system.controller.ts:53]` | `[ts:src/modules/scheduler/system.controller.ts:53]` |
+| `INVOCATION_ID` | none (truthy → systemd) | truthiness `[ts:src/modules/scheduler/system.controller.ts:54]` | `[ts:src/modules/scheduler/system.controller.ts:54]` |
 
 Bootstrap sets `UV_THREADPOOL_SIZE` to `'16'` before imports (`[ts:src/main.ts:2]`); it is not read from the environment.
 
@@ -107,3 +107,6 @@ Planned for S0 strangler topology (phase-2 plan §9.5 lists them; defaults from 
 | `FLIKS_NEST_PORT` | `PORT + 1` |
 | `FLIKS_BRIDGE_TOKEN` | generated |
 | `FLIKS_CAST_DIR` | `public` relative to cwd (`.trim()`, empty = unset); [new]: Nest served `join(__dirname, '..', 'public')` (`[ts:src/app.module.ts:42]`–`[ts:src/app.module.ts:45]`) |
+| `FLIKS_TMDB_API_URL` | `https://api.themoviedb.org/3`; [new] test seam (`metadata.md` rule 35, `.trim()`, empty = unset) |
+| `FLIKS_TVDB_API_URL` | `https://api4.thetvdb.com/v4`; [new] test seam |
+| `FLIKS_TMDB_IMAGE_URL` | `https://image.tmdb.org/t/p`; [new] test seam, also the host the image store rewrites to `original` |

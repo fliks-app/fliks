@@ -1,0 +1,156 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "profiles-language-write-forbidden",
+  "seed": "profiles",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "audioLanguages": [
+          {
+            "isoCode": "de",
+            "name": "German"
+          }
+        ],
+        "name": "New LP",
+        "subtitleLanguages": [
+          {
+            "forced": false,
+            "hi": false,
+            "isoCode": "de",
+            "name": "German"
+          },
+          {
+            "forced": true,
+            "hearingImpaired": "require",
+            "hi": true,
+            "isoCode": "fr",
+            "name": "French"
+          },
+          {
+            "forced": false,
+            "hearingImpaired": null,
+            "hi": false,
+            "isoCode": "en",
+            "name": "English"
+          }
+        ]
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "POST",
+      "path": "/api/profiles/language"
+    },
+    {
+      "as": "user",
+      "body": {
+        "audioLanguages": [
+          {
+            "isoCode": "de",
+            "name": "German"
+          }
+        ],
+        "name": "New LP",
+        "subtitleLanguages": [
+          {
+            "forced": false,
+            "hi": false,
+            "isoCode": "de",
+            "name": "German"
+          },
+          {
+            "forced": true,
+            "hearingImpaired": "require",
+            "hi": true,
+            "isoCode": "fr",
+            "name": "French"
+          },
+          {
+            "forced": false,
+            "hearingImpaired": null,
+            "hi": false,
+            "isoCode": "en",
+            "name": "English"
+          }
+        ]
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "PUT",
+      "path": "/api/profiles/language/2"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "DELETE",
+      "path": "/api/profiles/language/2"
+    },
+    {
+      "as": "readonly",
+      "body": {
+        "audioLanguages": [
+          {
+            "isoCode": "de",
+            "name": "German"
+          }
+        ],
+        "name": "New LP",
+        "subtitleLanguages": [
+          {
+            "forced": false,
+            "hi": false,
+            "isoCode": "de",
+            "name": "German"
+          },
+          {
+            "forced": true,
+            "hearingImpaired": "require",
+            "hi": true,
+            "isoCode": "fr",
+            "name": "French"
+          },
+          {
+            "forced": false,
+            "hearingImpaired": null,
+            "hi": false,
+            "isoCode": "en",
+            "name": "English"
+          }
+        ]
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "POST",
+      "path": "/api/profiles/language"
+    }
+  ]
+}

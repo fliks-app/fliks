@@ -1,0 +1,72 @@
+{
+  "deviation": null,
+  "engine": "down",
+  "name": "metadata-details-tvdb-movie",
+  "seed": "metadata",
+  "steps": [
+    {
+      "expect": {
+        "body": {
+          "ok": true
+        },
+        "status": 200
+      },
+      "method": "POST",
+      "path": "/__reset",
+      "stub": true
+    },
+    {
+      "as": "readonly",
+      "expect": {
+        "body": {
+          "additionalFanartUrls": [],
+          "alternativeTitles": [],
+          "budget": 63000000,
+          "cast": [],
+          "crew": [],
+          "digitalRelease": "1999-09-21",
+          "episodeCount": null,
+          "fanartUrl": null,
+          "genres": [
+            "Action"
+          ],
+          "imdbId": null,
+          "inCinemas": "1999-03-31",
+          "keywords": [],
+          "logoUrl": null,
+          "mediaType": "movie",
+          "originalLanguage": "eng",
+          "originalTitle": "The Matrix",
+          "overview": "",
+          "physicalRelease": null,
+          "popularity": null,
+          "posterUrl": "https://artworks.thetvdb.com/mp.jpg",
+          "productionCompanies": [
+            "Warner",
+            "Village"
+          ],
+          "productionCountries": [],
+          "provider": "tvdb",
+          "rating": 0,
+          "releaseDate": "1999-03-31",
+          "revenue": null,
+          "runtime": 136,
+          "seasonCount": null,
+          "status": "released",
+          "tagline": null,
+          "title": "The Matrix",
+          "tmdbCollectionId": null,
+          "tmdbCollectionName": null,
+          "tmdbId": 603,
+          "tvdbId": 169,
+          "videos": [],
+          "voteCount": null,
+          "year": null
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/metadata/tvdb/movie/169"
+    }
+  ]
+}

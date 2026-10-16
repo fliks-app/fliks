@@ -1,0 +1,124 @@
+{
+  "deviation": "C35",
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..searchVector",
+    "$..connectionId"
+  ],
+  "name": "imports-seerr-import-concurrent",
+  "seed": "importers",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "value": "http://127.0.0.1:4880/seerr/slow"
+      },
+      "expect": {
+        "body": {
+          "id": 8,
+          "key": "seerr_url",
+          "value": "http://127.0.0.1:4880/seerr/slow"
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/settings/seerr_url"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "data": {
+              "type": "sse.connected"
+            },
+            "event": ""
+          },
+          {
+            "data": {
+              "type": "seerr.import.started"
+            },
+            "event": ""
+          },
+          {
+            "data": {
+              "name": "ImportSeerrRequests",
+              "type": "command.started"
+            },
+            "event": ""
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/system/events",
+      "sse": {
+        "after": [
+          {
+            "as": "admin",
+            "expect": {
+              "status": 0
+            },
+            "method": "POST",
+            "path": "/api/imports/seerr/import-requests"
+          }
+        ],
+        "events": 3,
+        "timeoutMs": 8000
+      }
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Conflict",
+          "message": "Import already running",
+          "statusCode": 409
+        },
+        "status": 409
+      },
+      "method": "POST",
+      "path": "/api/imports/seerr/import-requests"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "data": {
+              "type": "sse.connected"
+            },
+            "event": ""
+          },
+          {
+            "data": {
+              "imported": 5,
+              "skipped": 0,
+              "type": "seerr.import.completed",
+              "updated": 0,
+              "users": 3,
+              "usersCreated": 3
+            },
+            "event": ""
+          },
+          {
+            "data": {
+              "name": "ImportSeerrRequests",
+              "status": "completed",
+              "type": "command.completed"
+            },
+            "event": ""
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/system/events",
+      "sse": {
+        "events": 3,
+        "timeoutMs": 40000
+      }
+    }
+  ]
+}

@@ -1,0 +1,60 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..metadataRefreshedAt"
+  ],
+  "name": "media-write-refresh",
+  "seed": "ingest",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "ok": true
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/media/101/refresh"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Media #9999 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "POST",
+      "path": "/api/media/9999/refresh"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "POST",
+      "path": "/api/media/101/refresh"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "ok": true
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/media/103/episodes/101/refresh"
+    }
+  ]
+}

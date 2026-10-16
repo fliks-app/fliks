@@ -1,0 +1,93 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "quality-definitions-list-user-403",
+  "seed": "profiles",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "GET",
+      "path": "/api/quality-definitions"
+    },
+    {
+      "as": "readonly",
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "GET",
+      "path": "/api/quality-definitions"
+    },
+    {
+      "as": "user",
+      "body": {},
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "POST",
+      "path": "/api/quality-definitions/reset"
+    },
+    {
+      "as": "user",
+      "body": {
+        "items": [
+          {
+            "maxSize": 33,
+            "minSize": 11,
+            "preferredSize": 22,
+            "qualityId": 18
+          },
+          {
+            "maxSize": 0,
+            "minSize": 0,
+            "preferredSize": 5.5,
+            "qualityId": 16,
+            "title": "Renamed"
+          },
+          {
+            "maxSize": 3,
+            "minSize": 1,
+            "preferredSize": 2,
+            "qualityId": 777
+          },
+          {
+            "maxSize": 33,
+            "minSize": 12,
+            "preferredSize": 22,
+            "qualityId": 18
+          }
+        ]
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "PUT",
+      "path": "/api/quality-definitions"
+    }
+  ]
+}

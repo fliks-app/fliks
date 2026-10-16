@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT m.\"libraryId\" FROM seasons s JOIN media m ON m.id = s.\"mediaId\" WHERE s.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "libraryId",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "85e535c103051314c74a49b30dfb2ca66e37bed58fe321db0d12d01a01a808bf"
+}

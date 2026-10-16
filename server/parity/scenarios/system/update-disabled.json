@@ -1,0 +1,23 @@
+{
+  "deviation": null,
+  "name": "system-update-disabled",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "currentVersion": "4.5.0",
+          "latestVersion": null,
+          "publishedAt": null,
+          "releaseNotes": null,
+          "releaseUrl": null,
+          "updateAvailable": false
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/system/update"
+    }
+  ]
+}

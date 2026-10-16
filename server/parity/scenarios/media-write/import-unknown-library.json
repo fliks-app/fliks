@@ -1,0 +1,30 @@
+{
+  "deviation": "F46",
+  "name": "media-write-import-unknown-library",
+  "seed": "ingest",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "externalId": "777",
+        "libraryId": 99,
+        "type": "movie"
+      },
+      "expect": {
+        "status": 404,
+        "body": {
+          "statusCode": 404,
+          "message": "Library #99 not found",
+          "error": "Not Found"
+        }
+      },
+      "method": "POST",
+      "path": "/api/media/import"
+    }
+  ],
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..metadataRefreshedAt"
+  ]
+}

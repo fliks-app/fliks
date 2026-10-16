@@ -21,7 +21,6 @@ import {
   pickOutputFormat,
   type XtreamCredentials,
 } from './xtream.client';
-import { LiveTvLogoService } from './livetv-logo.service';
 import { LiveTvAccessService } from './livetv-access.service';
 import { SettingsService } from '../../settings/settings.service';
 import { NotificationsService } from '../../notifications/notifications.service';
@@ -142,7 +141,6 @@ export class LiveTvSourcesService {
     private readonly streamRepo: Repository<LiveTvChannelStream>,
     private readonly dataSource: DataSource,
     private readonly settings: SettingsService,
-    private readonly logos: LiveTvLogoService,
     private readonly access: LiveTvAccessService,
     private readonly notifications: NotificationsService,
     private readonly activityRegistry: ActivityRegistryService,
@@ -474,16 +472,6 @@ export class LiveTvSourcesService {
         .catch(() => undefined);
     }
     await this.maybeExpireVanishedGroups();
-
-    const touchedChannels = await this.channelRepo
-      .createQueryBuilder('c')
-      .innerJoin('c.streams', 's')
-      .where('s."sourceId" = :sourceId', { sourceId: source.id })
-      .andWhere('c.enabled = true')
-      .getMany();
-    this.logos
-      .cacheLogos(touchedChannels.map((c) => ({ id: c.id, logoPath: c.logoPath })))
-      .catch((err) => this.log.warn(`Logo cache pass failed: ${errorMessage(err)}`));
 
     return { ok: true, added, updated, removed, channelCount: live.length };
   }

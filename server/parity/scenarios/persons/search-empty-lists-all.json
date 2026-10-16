@@ -1,0 +1,186 @@
+{
+  "deviation": null,
+  "engine": "down",
+  "ignore": [
+    "$..metadataRefreshedAt"
+  ],
+  "name": "persons-search-empty-lists-all",
+  "seed": "metadata",
+  "steps": [
+    {
+      "expect": {
+        "body": {
+          "ok": true
+        },
+        "status": 200
+      },
+      "method": "POST",
+      "path": "/__reset",
+      "stub": true
+    },
+    {
+      "as": "readonly",
+      "expect": {
+        "body": [
+          {
+            "avatarUrl": null,
+            "biography": null,
+            "birthday": null,
+            "createdAt": "2026-01-01T00:00:00.000Z",
+            "deathday": null,
+            "departments": [],
+            "id": 5,
+            "knownForDepartment": "Acting",
+            "name": "Amélie Poulain",
+            "placeOfBirth": null,
+            "provider": "tmdb",
+            "tmdbId": 105,
+            "updatedAt": "2026-01-01T00:00:00.000Z"
+          },
+          {
+            "avatarUrl": "/api/images/person/1",
+            "biography": "Fresh bio",
+            "birthday": "1979-04-12",
+            "createdAt": "2026-01-01T00:00:00.000Z",
+            "deathday": null,
+            "departments": [
+              "Acting"
+            ],
+            "id": 1,
+            "knownForDepartment": "Acting",
+            "name": "Claire Danes",
+            "placeOfBirth": "New York",
+            "provider": "tmdb",
+            "tmdbId": 101,
+            "updatedAt": "2026-01-01T00:00:00.000Z"
+          },
+          {
+            "avatarUrl": null,
+            "biography": "Old bio",
+            "birthday": null,
+            "createdAt": "2026-01-01T00:00:00.000Z",
+            "deathday": null,
+            "departments": [],
+            "id": 7,
+            "knownForDepartment": "Acting",
+            "name": "Clara Fallback",
+            "placeOfBirth": null,
+            "provider": "tmdb",
+            "tmdbId": 777,
+            "updatedAt": "2026-01-01T00:00:00.000Z"
+          },
+          {
+            "avatarUrl": null,
+            "biography": "Old bio",
+            "birthday": null,
+            "createdAt": "2026-01-01T00:00:00.000Z",
+            "deathday": null,
+            "departments": [],
+            "id": 2,
+            "knownForDepartment": "Acting",
+            "name": "Claude Rains",
+            "placeOfBirth": null,
+            "provider": "tmdb",
+            "tmdbId": 102,
+            "updatedAt": "2026-01-01T00:00:00.000Z"
+          },
+          {
+            "avatarUrl": null,
+            "biography": null,
+            "birthday": "1963-04-18",
+            "createdAt": "2026-01-01T00:00:00.000Z",
+            "deathday": null,
+            "departments": [],
+            "id": 3,
+            "knownForDepartment": null,
+            "name": "Conan O'Brien",
+            "placeOfBirth": "Brookline",
+            "provider": "tmdb",
+            "tmdbId": 103,
+            "updatedAt": "2026-01-01T00:00:00.000Z"
+          },
+          {
+            "avatarUrl": null,
+            "biography": "Director",
+            "birthday": null,
+            "createdAt": "2026-01-01T00:00:00.000Z",
+            "deathday": "2022-09-13",
+            "departments": [
+              "Directing"
+            ],
+            "id": 4,
+            "knownForDepartment": "Directing",
+            "name": "Jean-Luc Godard",
+            "placeOfBirth": null,
+            "provider": "tmdb",
+            "tmdbId": 104,
+            "updatedAt": "2026-01-01T00:00:00.000Z"
+          },
+          {
+            "avatarUrl": null,
+            "biography": "Old bio",
+            "birthday": null,
+            "createdAt": "2026-01-01T00:00:00.000Z",
+            "deathday": null,
+            "departments": [],
+            "id": 10,
+            "knownForDepartment": "Acting",
+            "name": "Missing Avatar",
+            "placeOfBirth": null,
+            "provider": "tmdb",
+            "tmdbId": 1010,
+            "updatedAt": "2026-01-01T00:00:00.000Z"
+          },
+          {
+            "avatarUrl": null,
+            "biography": "Stored bio",
+            "birthday": null,
+            "createdAt": "2026-01-01T00:00:00.000Z",
+            "deathday": null,
+            "departments": [],
+            "id": 8,
+            "knownForDepartment": "Acting",
+            "name": "Provider Fail",
+            "placeOfBirth": null,
+            "provider": "tmdb",
+            "tmdbId": 888,
+            "updatedAt": "2026-01-01T00:00:00.000Z"
+          },
+          {
+            "avatarUrl": null,
+            "biography": "Fresh bio",
+            "birthday": null,
+            "createdAt": "2026-01-01T00:00:00.000Z",
+            "deathday": null,
+            "departments": [],
+            "id": 9,
+            "knownForDepartment": "Acting",
+            "name": "Shared Id",
+            "placeOfBirth": null,
+            "provider": "tmdb",
+            "tmdbId": 603,
+            "updatedAt": "2026-01-01T00:00:00.000Z"
+          },
+          {
+            "avatarUrl": null,
+            "biography": null,
+            "birthday": null,
+            "createdAt": "2026-01-01T00:00:00.000Z",
+            "deathday": null,
+            "departments": [],
+            "id": 6,
+            "knownForDepartment": null,
+            "name": "Tvdb Actor",
+            "placeOfBirth": null,
+            "provider": "tvdb",
+            "tmdbId": 5555,
+            "updatedAt": "2026-01-01T00:00:00.000Z"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/persons/search"
+    }
+  ]
+}

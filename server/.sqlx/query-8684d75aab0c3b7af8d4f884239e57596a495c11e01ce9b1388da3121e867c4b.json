@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO media_files (\"mediaId\", \"episodeId\", \"relativePath\", size, quality, \"streamInfo\")\n               VALUES ($1, $2, $3, $4, $5, $6)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Varchar",
+        "Int8",
+        "Varchar",
+        "Jsonb"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "8684d75aab0c3b7af8d4f884239e57596a495c11e01ce9b1388da3121e867c4b"
+}

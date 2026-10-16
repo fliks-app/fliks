@@ -1,0 +1,34 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "media-servers-types",
+  "seed": "media-servers",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "label": "Emby",
+            "supportedEvents": [
+              "download.complete",
+              "subtitle.downloaded",
+              "subtitle.upgraded",
+              "subtitle.synced",
+              "file.deleted",
+              "media.deleted",
+              "library.rescan"
+            ],
+            "type": "emby"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media-servers/types"
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..startedOn",
+    "$..endedOn"
+  ],
+  "name": "markers-detect-series-empty",
+  "seed": "markers",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": [],
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/markers/series/1/detect-all"
+    }
+  ]
+}

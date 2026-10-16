@@ -1,0 +1,67 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..metadataRefreshedAt"
+  ],
+  "name": "ingest-relink-batch-queued",
+  "seed": "ingest",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "items": []
+      },
+      "expect": {
+        "body": {
+          "queued": 0
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/imports/library/orphans/relink-batch"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "items": [
+          {
+            "libraryId": 3
+          }
+        ]
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "items.0.type must be one of the following values: movie, series",
+            "items.0.folderName must be a string",
+            "items.0.files must contain at least 1 elements",
+            "items.0.files must be an array"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/imports/library/orphans/relink-batch"
+    },
+    {
+      "as": "user",
+      "body": {
+        "items": []
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "POST",
+      "path": "/api/imports/library/orphans/relink-batch"
+    }
+  ]
+}

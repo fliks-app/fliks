@@ -1,0 +1,42 @@
+{
+  "deviation": "F44",
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..searchVector"
+  ],
+  "name": "imports-sonarr-import-traversal-folder",
+  "seed": "importers",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "apiKey": "parity-key",
+        "pathMappings": [
+          {
+            "localLibraryId": 2,
+            "remotePath": "/data/tv"
+          }
+        ],
+        "targetLibraryId": 2,
+        "url": "http://127.0.0.1:4880/sonarr/traversal"
+      },
+      "expect": {
+        "body": {
+          "errors": [
+            "Escape: invalid folder name for \"/data/tv/..\\escape\""
+          ],
+          "imported": 0,
+          "qualityProfilesCreated": [
+            "Remote HD"
+          ],
+          "rootFoldersCreated": [],
+          "subtitlesImported": 0
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/imports/sonarr"
+    }
+  ]
+}

@@ -1,0 +1,216 @@
+{
+  "deviation": "C36",
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..searchVector",
+    "$..connectionId"
+  ],
+  "name": "imports-seerr-import-first-requester",
+  "seed": "importers",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "value": "http://127.0.0.1:4880/seerr/claim"
+      },
+      "expect": {
+        "body": {
+          "id": 8,
+          "key": "seerr_url",
+          "value": "http://127.0.0.1:4880/seerr/claim"
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/settings/seerr_url"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "data": {
+              "type": "sse.connected"
+            },
+            "event": ""
+          },
+          {
+            "data": {
+              "type": "seerr.import.started"
+            },
+            "event": ""
+          },
+          {
+            "data": {
+              "name": "ImportSeerrRequests",
+              "type": "command.started"
+            },
+            "event": ""
+          },
+          {
+            "data": {
+              "imported": 2,
+              "skipped": 0,
+              "type": "seerr.import.completed",
+              "updated": 0,
+              "users": 2,
+              "usersCreated": 2
+            },
+            "event": ""
+          },
+          {
+            "data": {
+              "name": "ImportSeerrRequests",
+              "status": "completed",
+              "type": "command.completed"
+            },
+            "event": ""
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/system/events",
+      "sse": {
+        "after": [
+          {
+            "as": "admin",
+            "expect": {
+              "status": 0
+            },
+            "method": "POST",
+            "path": "/api/imports/seerr/import-requests"
+          }
+        ],
+        "events": 5,
+        "timeoutMs": 8000
+      }
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "addedById": 6,
+          "additionalFanartUrls": [],
+          "alternativeTitles": [],
+          "digitalRelease": null,
+          "fanartUrl": null,
+          "files": [
+            {
+              "episodeId": null,
+              "id": 3,
+              "language": "en",
+              "mediaId": 3,
+              "osdbBytesize": null,
+              "osdbHash": null,
+              "quality": "WEBDL-1080p",
+              "relativePath": "Parity Movie 03 (2020).mkv",
+              "size": 73237,
+              "streamInfo": {
+                "audio": [
+                  {
+                    "channelLayout": "mono",
+                    "channels": 1,
+                    "codec": "aac",
+                    "endSeconds": 3.021,
+                    "isDefault": false,
+                    "language": "eng",
+                    "profile": "LC",
+                    "sampleRate": 48000,
+                    "startTimeSeconds": 0,
+                    "streamIndex": 1
+                  }
+                ],
+                "chapters": [],
+                "durationSeconds": 3.021,
+                "formatBitRate": 193941,
+                "formatName": "matroska,webm",
+                "formatStartSeconds": 0,
+                "subtitles": [],
+                "video": [
+                  {
+                    "avgFrameRate": "24/1",
+                    "bitDepth": 8,
+                    "codec": "h264",
+                    "colorRange": "tv",
+                    "displayAspectRatio": "16:9",
+                    "dvBlPresent": false,
+                    "dvElPresent": false,
+                    "dvRpuPresent": false,
+                    "endSeconds": 3,
+                    "firstFrameSeconds": 0,
+                    "frameRate": "24",
+                    "hdr10Plus": false,
+                    "height": 90,
+                    "level": 10,
+                    "pixelFormat": "yuv420p",
+                    "profile": "High",
+                    "reorderFrames": 2,
+                    "startTimeSeconds": 0,
+                    "streamIndex": 0,
+                    "width": 160
+                  }
+                ]
+              }
+            }
+          ],
+          "folderName": "Parity Movie 03 (2020)",
+          "genres": [
+            "Drama"
+          ],
+          "id": 3,
+          "imdbId": null,
+          "inCinemas": null,
+          "languageProfile": null,
+          "languageProfileId": null,
+          "library": {
+            "color": "#3b82f6",
+            "defaultLanguageProfileId": null,
+            "defaultQualityProfileId": null,
+            "icon": "film",
+            "id": 1,
+            "label": null,
+            "mediaTypes": [
+              "movie"
+            ],
+            "metadataLanguage": null,
+            "metadataRegion": null,
+            "name": "Movies",
+            "path": "/tmp/fliks-parity/media/movies",
+            "preferredProvider": null
+          },
+          "libraryId": 1,
+          "logoUrl": null,
+          "metadata": null,
+          "metadataRefreshedAt": null,
+          "minimumAvailability": "released",
+          "monitored": true,
+          "originalTitle": null,
+          "overview": "Synthetic movie 3",
+          "path": "/tmp/fliks-parity/media/movies/Parity Movie 03 (2020)",
+          "physicalRelease": null,
+          "posterUrl": null,
+          "preferredProvider": null,
+          "qualityProfile": null,
+          "qualityProfileId": null,
+          "rating": 7.5,
+          "releaseDate": "2020-01-01",
+          "runtime": 90,
+          "seasons": [],
+          "status": "released",
+          "title": "Parity Movie 03",
+          "tmdbCollectionId": null,
+          "tmdbCollectionName": null,
+          "tmdbId": 1003,
+          "tvdbId": null,
+          "type": "movie",
+          "year": 2020
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/3"
+    }
+  ]
+}

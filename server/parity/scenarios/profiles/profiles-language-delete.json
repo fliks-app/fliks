@@ -1,0 +1,45 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "profiles-language-delete",
+  "seed": "profiles",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "status": 200
+      },
+      "method": "DELETE",
+      "path": "/api/profiles/language/3"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "LanguageProfile #3 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "GET",
+      "path": "/api/profiles/language/3"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "LanguageProfile #3 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "DELETE",
+      "path": "/api/profiles/language/3"
+    }
+  ]
+}

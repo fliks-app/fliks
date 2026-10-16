@@ -1,0 +1,25 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "requests-decline-library-403",
+  "seed": "requests",
+  "steps": [
+    {
+      "as": "validator",
+      "body": {},
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "You do not have access to this request's target library",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "POST",
+      "path": "/api/requests/2/decline"
+    }
+  ]
+}

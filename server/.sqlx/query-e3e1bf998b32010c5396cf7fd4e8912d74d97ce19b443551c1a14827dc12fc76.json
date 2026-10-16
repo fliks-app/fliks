@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE quality_definitions SET title = COALESCE($2, title), \"minSize\" = $3,\n            \"preferredSize\" = $4, \"maxSize\" = $5 WHERE \"qualityId\" = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Varchar",
+        "Float8",
+        "Float8",
+        "Float8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e3e1bf998b32010c5396cf7fd4e8912d74d97ce19b443551c1a14827dc12fc76"
+}

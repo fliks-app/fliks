@@ -1,0 +1,54 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..id",
+    "$..createdAt",
+    "$..updatedAt",
+    "$..startedOn",
+    "$..endedOn"
+  ],
+  "name": "commands-trigger-refresh-missing-metadata",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "name": "RefreshMissingMetadata"
+      },
+      "expect": {
+        "body": {
+          "body": null,
+          "name": "RefreshMissingMetadata",
+          "status": "queued",
+          "trigger": "manual"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/commands"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "data": [
+            {
+              "body": null,
+              "name": "RefreshMissingMetadata",
+              "status": "completed",
+              "trigger": "manual"
+            }
+          ],
+          "total": 1
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/commands?limit=1",
+      "poll": {
+        "path": "$.data[0].status",
+        "until": "completed"
+      }
+    }
+  ]
+}

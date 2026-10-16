@@ -1,0 +1,40 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..searchVector"
+  ],
+  "name": "imports-sonarr-import-forbidden",
+  "seed": "importers",
+  "steps": [
+    {
+      "as": "readonly",
+      "body": {
+        "apiKey": "parity-key",
+        "pathMappings": [
+          {
+            "localLibraryId": 2,
+            "remotePath": "/data/tv"
+          },
+          {
+            "ignore": true,
+            "remotePath": "/data/ignored"
+          }
+        ],
+        "targetLibraryId": 2,
+        "url": "http://127.0.0.1:4880/sonarr/ok"
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "POST",
+      "path": "/api/imports/sonarr"
+    }
+  ]
+}

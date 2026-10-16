@@ -1,0 +1,157 @@
+{
+  "deviation": null,
+  "engine": "down",
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..metadataRefreshedAt"
+  ],
+  "name": "provider-write-refresh-person-in-cast-and-crew",
+  "seed": "providers",
+  "steps": [
+    {
+      "expect": {
+        "status": 200
+      },
+      "sleepMs": 800
+    },
+    {
+      "expect": {
+        "body": {
+          "ok": true
+        },
+        "status": 200
+      },
+      "method": "POST",
+      "path": "/__reset",
+      "stub": true
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "ok": true
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/media/209/refresh"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "status": 200
+      },
+      "ignoreBody": true,
+      "method": "GET",
+      "path": "/api/media/209/crew",
+      "poll": {
+        "path": "$[0].job",
+        "timeoutMs": 10000,
+        "until": "Director"
+      }
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "status": 200
+      },
+      "ignoreBody": true,
+      "method": "GET",
+      "path": "/api/persons/search?q=director",
+      "poll": {
+        "path": "$[0].departments[1]",
+        "timeoutMs": 10000,
+        "until": "Directing"
+      }
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "character": "Cameo",
+            "id": 1,
+            "order": 0,
+            "person": {
+              "avatarUrl": null,
+              "biography": null,
+              "birthday": null,
+              "deathday": null,
+              "departments": [
+                "Acting",
+                "Directing"
+              ],
+              "id": 202,
+              "knownForDepartment": null,
+              "name": "Director One",
+              "placeOfBirth": null,
+              "provider": "tmdb",
+              "tmdbId": 9001
+            }
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/209/cast"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "department": "Directing",
+            "id": 1,
+            "job": "Director",
+            "person": {
+              "avatarUrl": null,
+              "biography": null,
+              "birthday": null,
+              "deathday": null,
+              "departments": [
+                "Acting",
+                "Directing"
+              ],
+              "id": 202,
+              "knownForDepartment": null,
+              "name": "Director One",
+              "placeOfBirth": null,
+              "provider": "tmdb",
+              "tmdbId": 9001
+            }
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/209/crew"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "avatarUrl": null,
+            "biography": null,
+            "birthday": null,
+            "deathday": null,
+            "departments": [
+              "Acting",
+              "Directing"
+            ],
+            "id": 202,
+            "knownForDepartment": null,
+            "name": "Director One",
+            "placeOfBirth": null,
+            "provider": "tmdb",
+            "tmdbId": 9001
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/persons/search?q=director"
+    }
+  ]
+}

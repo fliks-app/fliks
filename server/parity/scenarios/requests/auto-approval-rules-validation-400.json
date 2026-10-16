@@ -1,0 +1,140 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "auto-approval-rules-validation-400",
+  "seed": "requests",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "criteria": {
+          "foo": 1,
+          "userIds": [
+            "a"
+          ],
+          "yearFrom": 5
+        },
+        "name": "  "
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "name should not be empty",
+            "criteria.property foo should not exist",
+            "criteria.each value in userIds must be an integer number",
+            "criteria.yearFrom must not be less than 1900"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/auto-approval-rules"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "name": "x"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "criteria should not be null or undefined"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/auto-approval-rules"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "criteria": null,
+        "name": "x"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "criteria should not be null or undefined",
+            "nested property criteria must be either object or array"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/auto-approval-rules"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "criteria": {
+          "maxSeasons": 0,
+          "mediaType": "tv",
+          "yearTo": 3000
+        },
+        "name": "x"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "criteria.mediaType must be one of the following values: movie, series",
+            "criteria.maxSeasons must not be less than 1",
+            "criteria.yearTo must not be greater than 2200"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/auto-approval-rules"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "criteria": {},
+        "enabled": "yes",
+        "name": "x"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "enabled must be a boolean value"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/auto-approval-rules"
+    },
+    {
+      "as": "admin",
+      "body": {},
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "name should not be empty",
+            "name must be a string",
+            "criteria should not be null or undefined"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PUT",
+      "path": "/api/auto-approval-rules/1"
+    }
+  ]
+}

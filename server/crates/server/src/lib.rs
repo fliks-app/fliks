@@ -1,7 +1,9 @@
 pub mod app;
+pub mod atomic_file;
 pub mod auth;
 pub mod auth_token;
 pub mod bridge;
+pub mod busy;
 pub mod config;
 pub mod db;
 pub mod engine;
@@ -9,17 +11,27 @@ pub mod events;
 pub mod fs;
 pub mod http;
 pub mod images;
+pub mod importers;
+pub mod ingest;
+pub mod jobs;
 pub mod jwt_secret;
 pub mod libraries;
+pub mod markers;
 pub mod media;
+pub mod media_servers;
+pub mod metadata;
 pub mod nest;
 pub mod notifications;
+pub mod outbound;
 pub mod paths;
+pub mod persons;
 pub mod playback;
 pub mod playlists;
 pub mod presence;
+pub mod profiles;
 pub mod qoe;
 pub mod remote;
+pub mod requests;
 pub mod roles;
 pub mod settings;
 pub mod social;
@@ -56,7 +68,10 @@ pub async fn migrate(cfg: &Config) -> Result<(), BoxError> {
 pub async fn serve(cfg: Config) -> Result<(), BoxError> {
     let pool = connect(&cfg).await?;
     db::migrate(&pool).await?;
+    jobs::sweep(&pool).await?;
     roles::seed(&pool).await?;
+    profiles::seed_quality_definitions(&pool).await?;
+    profiles::warn_invalid_regexes(&pool).await?;
     users::seed_admin(&pool)
         .await
         .map_err(|e| format!("seed admin: {e:?}"))?;
@@ -73,11 +88,13 @@ pub async fn serve(cfg: Config) -> Result<(), BoxError> {
     stream::spawn(&state);
     state.engine.start(state.db.clone(), state.cfg.port).await;
     remote::init(&state);
+    requests::spawn(&state);
     let cfg = state.cfg.clone();
+    let system = state.system.clone();
     let hub = state.hub.clone();
     let qoe = state.qoe.clone();
     let app = app::router(
-        state,
+        state.clone(),
         upstream,
         cfg.serve_static_path.clone(),
         cfg.cast_dir.clone(),
@@ -87,6 +104,7 @@ pub async fn serve(cfg: Config) -> Result<(), BoxError> {
     let listener = tokio::net::TcpListener::bind(("0.0.0.0", cfg.port)).await?;
     let nest = nest::spawn(&cfg, &secret);
     auth::spawn_jobs(db);
+    jobs::spawn(&state);
     tracing::info!("listening on {}", listener.local_addr()?);
     let served = axum::serve(
         listener,
@@ -100,6 +118,10 @@ pub async fn serve(cfg: Config) -> Result<(), BoxError> {
     qoe.flush_all().await;
     if let Some(nest) = nest {
         let _ = nest.await;
+    }
+    // Non-zero so the parent supervisor (or `Restart=on-failure`) starts us again.
+    if system.restarting() {
+        std::process::exit(1);
     }
     served.map_err(Into::into)
 }

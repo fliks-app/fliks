@@ -1,0 +1,26 @@
+{
+  "deviation": null,
+  "name": "imports-radarr-preview-invalid-url",
+  "seed": "importers",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "apiKey": "k",
+        "url": "radarr:7878"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "url must be a URL address"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/imports/radarr/preview"
+    }
+  ]
+}

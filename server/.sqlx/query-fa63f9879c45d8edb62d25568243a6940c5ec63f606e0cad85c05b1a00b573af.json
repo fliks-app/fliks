@@ -1,0 +1,46 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT s.\"mediaId\" AS media_id, s.\"seasonNumber\" AS season_number, m.title AS \"title?\",\n                  l.path AS \"lib_path?\", m.\"folderName\" AS \"folder_name?\"\n           FROM seasons s LEFT JOIN media m ON m.id = s.\"mediaId\" LEFT JOIN libraries l ON l.id = m.\"libraryId\"\n           WHERE s.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "media_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "season_number",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 2,
+        "name": "title?",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "lib_path?",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "folder_name?",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "fa63f9879c45d8edb62d25568243a6940c5ec63f606e0cad85c05b1a00b573af"
+}

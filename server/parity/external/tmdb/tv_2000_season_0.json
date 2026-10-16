@@ -1,0 +1,16 @@
+{
+  "season_number": 0,
+  "overview": "",
+  "air_date": null,
+  "poster_path": null,
+  "episodes": [
+    {
+      "episode_number": 1,
+      "name": "Episode 1",
+      "overview": "",
+      "air_date": "2008-01-20",
+      "runtime": 47,
+      "still_path": "/still0.jpg"
+    }
+  ]
+}

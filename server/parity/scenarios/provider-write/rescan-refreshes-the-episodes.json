@@ -1,0 +1,265 @@
+{
+  "deviation": null,
+  "engine": "up",
+  "fs": [
+    {
+      "from": "base.mkv",
+      "path": "s5-ingest/work/provider-series/Rescan Show/Season 01/Rescan Show - S01E01.mkv"
+    }
+  ],
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..metadataRefreshedAt"
+  ],
+  "name": "provider-write-rescan-refreshes-the-episodes",
+  "seed": "providers",
+  "steps": [
+    {
+      "expect": {
+        "status": 200
+      },
+      "sleepMs": 3000
+    },
+    {
+      "expect": {
+        "body": {
+          "ok": true
+        },
+        "status": 200
+      },
+      "method": "POST",
+      "path": "/__reset",
+      "stub": true
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "ok": true
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/media/210/rescan"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "status": 200
+      },
+      "ignoreBody": true,
+      "method": "GET",
+      "path": "/api/media/210",
+      "poll": {
+        "path": "$.seasons[0].episodes[1].title",
+        "timeoutMs": 10000,
+        "until": "Episode 2"
+      }
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "status": 200
+      },
+      "ignoreBody": true,
+      "method": "GET",
+      "path": "/api/media/210",
+      "poll": {
+        "path": "$.seasons[0].episodes[0].hasFile",
+        "timeoutMs": 10000,
+        "until": true
+      }
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "addedById": null,
+          "additionalFanartUrls": [],
+          "alternativeTitles": [],
+          "digitalRelease": null,
+          "fanartUrl": null,
+          "files": [
+            {
+              "episodeId": 203,
+              "id": 30,
+              "language": null,
+              "mediaId": 210,
+              "osdbBytesize": null,
+              "osdbHash": null,
+              "quality": "DVD",
+              "relativePath": "Season 01/Rescan Show - S01E01.mkv",
+              "size": 27380,
+              "streamInfo": {
+                "audio": [
+                  {
+                    "channelLayout": "mono",
+                    "channels": 1,
+                    "codec": "aac",
+                    "endSeconds": 2.023,
+                    "isDefault": false,
+                    "language": "und",
+                    "profile": "LC",
+                    "sampleRate": 44100,
+                    "startTimeSeconds": -0.023,
+                    "streamIndex": 1
+                  }
+                ],
+                "chapters": [],
+                "durationSeconds": 2.023,
+                "formatBitRate": 108274,
+                "formatName": "matroska,webm",
+                "formatStartSeconds": -0.023,
+                "schemaVersion": 1,
+                "subtitles": [],
+                "video": [
+                  {
+                    "avgFrameRate": "24/1",
+                    "bitDepth": 8,
+                    "codec": "h264",
+                    "colorRange": "tv",
+                    "displayAspectRatio": "16:9",
+                    "dvBlPresent": false,
+                    "dvElPresent": false,
+                    "dvRpuPresent": false,
+                    "endSeconds": 2,
+                    "firstFrameSeconds": 0,
+                    "frameRate": "24",
+                    "hdr10Plus": false,
+                    "height": 90,
+                    "level": 10,
+                    "pixelFormat": "yuv420p",
+                    "profile": "High",
+                    "reorderFrames": 2,
+                    "startTimeSeconds": 0,
+                    "streamIndex": 0,
+                    "width": 160
+                  }
+                ]
+              }
+            }
+          ],
+          "folderName": "Rescan Show",
+          "genres": [],
+          "id": 210,
+          "imdbId": null,
+          "inCinemas": null,
+          "languageProfile": null,
+          "languageProfileId": null,
+          "library": {
+            "color": "#888888",
+            "defaultLanguageProfileId": null,
+            "defaultQualityProfileId": null,
+            "icon": "tv",
+            "id": 9,
+            "label": null,
+            "mediaTypes": [
+              "series"
+            ],
+            "metadataLanguage": null,
+            "metadataRegion": null,
+            "name": "Rescan Series",
+            "path": "/tmp/fliks-parity/s5-ingest/work/provider-series",
+            "preferredProvider": null
+          },
+          "libraryId": 9,
+          "logoUrl": null,
+          "metadata": null,
+          "minimumAvailability": "released",
+          "monitored": true,
+          "originalTitle": null,
+          "overview": "old",
+          "path": "/tmp/fliks-parity/s5-ingest/work/provider-series/Rescan Show",
+          "physicalRelease": null,
+          "posterUrl": null,
+          "preferredProvider": null,
+          "qualityProfile": null,
+          "qualityProfileId": null,
+          "rating": null,
+          "releaseDate": null,
+          "runtime": null,
+          "seasons": [
+            {
+              "airDate": "2008-01-20",
+              "episodes": [
+                {
+                  "airDate": "2008-01-20",
+                  "endEpisodeNumber": null,
+                  "episodeNumber": 1,
+                  "hasFile": true,
+                  "id": 203,
+                  "markersScannedAt": null,
+                  "monitored": true,
+                  "overview": null,
+                  "runtime": 47,
+                  "seasonId": 204,
+                  "stillUrl": null,
+                  "title": "Episode 1"
+                },
+                {
+                  "airDate": "2008-01-20",
+                  "endEpisodeNumber": null,
+                  "episodeNumber": 2,
+                  "hasFile": false,
+                  "id": 205,
+                  "markersScannedAt": null,
+                  "monitored": true,
+                  "overview": null,
+                  "runtime": 47,
+                  "seasonId": 204,
+                  "stillUrl": null,
+                  "title": "Episode 2"
+                }
+              ],
+              "id": 204,
+              "mediaId": 210,
+              "monitored": true,
+              "overview": "Season 1 overview",
+              "posterUrl": null,
+              "preferredProvider": null,
+              "seasonNumber": 1
+            },
+            {
+              "airDate": null,
+              "episodes": [
+                {
+                  "airDate": "2008-01-20",
+                  "endEpisodeNumber": null,
+                  "episodeNumber": 1,
+                  "hasFile": false,
+                  "id": 204,
+                  "markersScannedAt": null,
+                  "monitored": true,
+                  "overview": null,
+                  "runtime": 47,
+                  "seasonId": 205,
+                  "stillUrl": null,
+                  "title": "Episode 1"
+                }
+              ],
+              "id": 205,
+              "mediaId": 210,
+              "monitored": false,
+              "overview": null,
+              "posterUrl": null,
+              "preferredProvider": null,
+              "seasonNumber": 0
+            }
+          ],
+          "status": "continuing",
+          "title": "Rescan Show",
+          "tmdbCollectionId": null,
+          "tmdbCollectionName": null,
+          "tmdbId": 3004,
+          "tvdbId": null,
+          "type": "series",
+          "year": 2008
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/210"
+    }
+  ]
+}

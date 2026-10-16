@@ -1,0 +1,21 @@
+{
+  "deviation": null,
+  "name": "system-backup-download-missing",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Backup \"missing.sql\" not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "GET",
+      "path": "/api/system/backups/missing.sql"
+    }
+  ],
+  "strictMessage": true
+}

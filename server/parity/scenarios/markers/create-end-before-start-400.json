@@ -1,0 +1,32 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..startedOn",
+    "$..endedOn"
+  ],
+  "name": "markers-create-end-before-start-400",
+  "seed": "markers",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "endSeconds": 30,
+        "episodeId": 1,
+        "startSeconds": 30,
+        "type": "intro"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "endSeconds must be > startSeconds",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/markers"
+    }
+  ]
+}

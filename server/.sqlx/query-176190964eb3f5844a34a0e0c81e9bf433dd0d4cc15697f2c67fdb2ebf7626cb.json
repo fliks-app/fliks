@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id FROM subtitle_files\n           WHERE \"mediaFileId\" = $1 AND language = $2 AND forced = $3 AND \"filePath\" = $4\n           ORDER BY id LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Text",
+        "Bool",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "176190964eb3f5844a34a0e0c81e9bf433dd0d4cc15697f2c67fdb2ebf7626cb"
+}

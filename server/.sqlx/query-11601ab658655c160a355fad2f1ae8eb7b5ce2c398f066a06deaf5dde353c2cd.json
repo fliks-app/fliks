@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM requests WHERE id = $1 AND (NOT $2 OR status = 'pending')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "11601ab658655c160a355fad2f1ae8eb7b5ce2c398f066a06deaf5dde353c2cd"
+}

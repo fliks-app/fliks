@@ -1,0 +1,738 @@
+{
+  "deviation": "C37",
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..searchVector"
+  ],
+  "name": "imports-sonarr-import-update",
+  "seed": "importers",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "apiKey": "parity-key",
+        "mode": "update",
+        "pathMappings": [
+          {
+            "localLibraryId": 2,
+            "remotePath": "/data/tv"
+          },
+          {
+            "ignore": true,
+            "remotePath": "/data/ignored"
+          }
+        ],
+        "targetLibraryId": 2,
+        "url": "http://127.0.0.1:4880/sonarr/ok"
+      },
+      "expect": {
+        "body": {
+          "errors": [
+            "Lost Show: no path mapping for \"/elsewhere/Lost Show\""
+          ],
+          "imported": 2,
+          "qualityProfilesCreated": [
+            "Remote HD"
+          ],
+          "rootFoldersCreated": [],
+          "subtitlesImported": 0
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/imports/sonarr"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "addedById": null,
+          "additionalFanartUrls": [],
+          "alternativeTitles": [],
+          "digitalRelease": null,
+          "fanartUrl": null,
+          "files": [
+            {
+              "episodeId": 1,
+              "id": 18,
+              "language": "en",
+              "mediaId": 18,
+              "osdbBytesize": null,
+              "osdbHash": null,
+              "quality": "WEBDL-1080p",
+              "relativePath": "Season 01/Parity Series A - S01E01.mkv",
+              "size": 73237,
+              "streamInfo": {
+                "audio": [
+                  {
+                    "channelLayout": "mono",
+                    "channels": 1,
+                    "codec": "aac",
+                    "endSeconds": 3.021,
+                    "isDefault": false,
+                    "language": "eng",
+                    "profile": "LC",
+                    "sampleRate": 48000,
+                    "startTimeSeconds": 0,
+                    "streamIndex": 1
+                  }
+                ],
+                "chapters": [],
+                "durationSeconds": 3.021,
+                "formatBitRate": 193941,
+                "formatName": "matroska,webm",
+                "formatStartSeconds": 0,
+                "subtitles": [],
+                "video": [
+                  {
+                    "avgFrameRate": "24/1",
+                    "bitDepth": 8,
+                    "codec": "h264",
+                    "colorRange": "tv",
+                    "displayAspectRatio": "16:9",
+                    "dvBlPresent": false,
+                    "dvElPresent": false,
+                    "dvRpuPresent": false,
+                    "endSeconds": 3,
+                    "firstFrameSeconds": 0,
+                    "frameRate": "24",
+                    "hdr10Plus": false,
+                    "height": 90,
+                    "level": 10,
+                    "pixelFormat": "yuv420p",
+                    "profile": "High",
+                    "reorderFrames": 2,
+                    "startTimeSeconds": 0,
+                    "streamIndex": 0,
+                    "width": 160
+                  }
+                ]
+              }
+            },
+            {
+              "episodeId": 2,
+              "id": 19,
+              "language": "en",
+              "mediaId": 18,
+              "osdbBytesize": null,
+              "osdbHash": null,
+              "quality": "WEBDL-1080p",
+              "relativePath": "Season 01/Parity Series A - S01E02.mkv",
+              "size": 73237,
+              "streamInfo": {
+                "audio": [
+                  {
+                    "channelLayout": "mono",
+                    "channels": 1,
+                    "codec": "aac",
+                    "endSeconds": 3.021,
+                    "isDefault": false,
+                    "language": "eng",
+                    "profile": "LC",
+                    "sampleRate": 48000,
+                    "startTimeSeconds": 0,
+                    "streamIndex": 1
+                  }
+                ],
+                "chapters": [],
+                "durationSeconds": 3.021,
+                "formatBitRate": 193941,
+                "formatName": "matroska,webm",
+                "formatStartSeconds": 0,
+                "subtitles": [],
+                "video": [
+                  {
+                    "avgFrameRate": "24/1",
+                    "bitDepth": 8,
+                    "codec": "h264",
+                    "colorRange": "tv",
+                    "displayAspectRatio": "16:9",
+                    "dvBlPresent": false,
+                    "dvElPresent": false,
+                    "dvRpuPresent": false,
+                    "endSeconds": 3,
+                    "firstFrameSeconds": 0,
+                    "frameRate": "24",
+                    "hdr10Plus": false,
+                    "height": 90,
+                    "level": 10,
+                    "pixelFormat": "yuv420p",
+                    "profile": "High",
+                    "reorderFrames": 2,
+                    "startTimeSeconds": 0,
+                    "streamIndex": 0,
+                    "width": 160
+                  }
+                ]
+              }
+            },
+            {
+              "episodeId": 3,
+              "id": 20,
+              "language": "en",
+              "mediaId": 18,
+              "osdbBytesize": null,
+              "osdbHash": null,
+              "quality": "WEBDL-1080p",
+              "relativePath": "Season 02/Parity Series A - S02E01.mkv",
+              "size": 73237,
+              "streamInfo": {
+                "audio": [
+                  {
+                    "channelLayout": "mono",
+                    "channels": 1,
+                    "codec": "aac",
+                    "endSeconds": 3.021,
+                    "isDefault": false,
+                    "language": "eng",
+                    "profile": "LC",
+                    "sampleRate": 48000,
+                    "startTimeSeconds": 0,
+                    "streamIndex": 1
+                  }
+                ],
+                "chapters": [],
+                "durationSeconds": 3.021,
+                "formatBitRate": 193941,
+                "formatName": "matroska,webm",
+                "formatStartSeconds": 0,
+                "subtitles": [],
+                "video": [
+                  {
+                    "avgFrameRate": "24/1",
+                    "bitDepth": 8,
+                    "codec": "h264",
+                    "colorRange": "tv",
+                    "displayAspectRatio": "16:9",
+                    "dvBlPresent": false,
+                    "dvElPresent": false,
+                    "dvRpuPresent": false,
+                    "endSeconds": 3,
+                    "firstFrameSeconds": 0,
+                    "frameRate": "24",
+                    "hdr10Plus": false,
+                    "height": 90,
+                    "level": 10,
+                    "pixelFormat": "yuv420p",
+                    "profile": "High",
+                    "reorderFrames": 2,
+                    "startTimeSeconds": 0,
+                    "streamIndex": 0,
+                    "width": 160
+                  }
+                ]
+              }
+            },
+            {
+              "episodeId": 4,
+              "id": 21,
+              "language": "en",
+              "mediaId": 18,
+              "osdbBytesize": null,
+              "osdbHash": null,
+              "quality": "WEBDL-1080p",
+              "relativePath": "Season 02/Parity Series A - S02E02.mkv",
+              "size": 73237,
+              "streamInfo": {
+                "audio": [
+                  {
+                    "channelLayout": "mono",
+                    "channels": 1,
+                    "codec": "aac",
+                    "endSeconds": 3.021,
+                    "isDefault": false,
+                    "language": "eng",
+                    "profile": "LC",
+                    "sampleRate": 48000,
+                    "startTimeSeconds": 0,
+                    "streamIndex": 1
+                  }
+                ],
+                "chapters": [],
+                "durationSeconds": 3.021,
+                "formatBitRate": 193941,
+                "formatName": "matroska,webm",
+                "formatStartSeconds": 0,
+                "subtitles": [],
+                "video": [
+                  {
+                    "avgFrameRate": "24/1",
+                    "bitDepth": 8,
+                    "codec": "h264",
+                    "colorRange": "tv",
+                    "displayAspectRatio": "16:9",
+                    "dvBlPresent": false,
+                    "dvElPresent": false,
+                    "dvRpuPresent": false,
+                    "endSeconds": 3,
+                    "firstFrameSeconds": 0,
+                    "frameRate": "24",
+                    "hdr10Plus": false,
+                    "height": 90,
+                    "level": 10,
+                    "pixelFormat": "yuv420p",
+                    "profile": "High",
+                    "reorderFrames": 2,
+                    "startTimeSeconds": 0,
+                    "streamIndex": 0,
+                    "width": 160
+                  }
+                ]
+              }
+            }
+          ],
+          "folderName": "Parity Series A",
+          "genres": [
+            "Drama"
+          ],
+          "id": 18,
+          "imdbId": "tt0002000",
+          "inCinemas": null,
+          "languageProfile": null,
+          "languageProfileId": null,
+          "library": {
+            "color": "#10b981",
+            "defaultLanguageProfileId": null,
+            "defaultQualityProfileId": null,
+            "icon": "tv",
+            "id": 2,
+            "label": null,
+            "mediaTypes": [
+              "series"
+            ],
+            "metadataLanguage": null,
+            "metadataRegion": null,
+            "name": "Series",
+            "path": "/tmp/fliks-parity/media/series",
+            "preferredProvider": null
+          },
+          "libraryId": 2,
+          "logoUrl": null,
+          "metadata": null,
+          "metadataRefreshedAt": null,
+          "minimumAvailability": "released",
+          "monitored": true,
+          "originalTitle": null,
+          "overview": "Series A",
+          "path": "/tmp/fliks-parity/media/series/Parity Series A",
+          "physicalRelease": null,
+          "posterUrl": null,
+          "preferredProvider": null,
+          "qualityProfile": {
+            "cutoff": 18,
+            "id": 2,
+            "items": [
+              {
+                "allowed": true,
+                "quality": {
+                  "id": 18,
+                  "name": "Bluray-1080p",
+                  "resolution": 1080,
+                  "source": "bluray"
+                },
+                "sortOrder": 0
+              },
+              {
+                "allowed": true,
+                "quality": {
+                  "id": 12,
+                  "name": "WEBDL-720p",
+                  "resolution": 720,
+                  "source": "web"
+                },
+                "sortOrder": 1
+              },
+              {
+                "allowed": false,
+                "quality": {
+                  "id": 13,
+                  "name": "WEBRip-720p",
+                  "resolution": 720,
+                  "source": "web"
+                },
+                "sortOrder": 2
+              },
+              {
+                "allowed": false,
+                "quality": {
+                  "id": 11,
+                  "name": "HDTV-720p",
+                  "resolution": 720,
+                  "source": "hdtv"
+                },
+                "sortOrder": 3
+              },
+              {
+                "allowed": false,
+                "quality": {
+                  "id": 1,
+                  "name": "WORKPRINT",
+                  "resolution": 0,
+                  "source": "workprint"
+                },
+                "sortOrder": 4
+              },
+              {
+                "allowed": false,
+                "quality": {
+                  "id": 2,
+                  "name": "CAM",
+                  "resolution": 0,
+                  "source": "cam"
+                },
+                "sortOrder": 5
+              },
+              {
+                "allowed": false,
+                "quality": {
+                  "id": 3,
+                  "name": "TELESYNC",
+                  "resolution": 0,
+                  "source": "telesync"
+                },
+                "sortOrder": 6
+              },
+              {
+                "allowed": false,
+                "quality": {
+                  "id": 4,
+                  "name": "TELECINE",
+                  "resolution": 0,
+                  "source": "telecine"
+                },
+                "sortOrder": 7
+              },
+              {
+                "allowed": false,
+                "quality": {
+                  "id": 5,
+                  "name": "DVD",
+                  "resolution": 480,
+                  "source": "dvd"
+                },
+                "sortOrder": 8
+              },
+              {
+                "allowed": false,
+                "quality": {
+                  "id": 6,
+                  "name": "DVD-R",
+                  "resolution": 480,
+                  "source": "dvd"
+                },
+                "sortOrder": 9
+              },
+              {
+                "allowed": false,
+                "quality": {
+                  "id": 7,
+                  "name": "SDTV",
+                  "resolution": 480,
+                  "source": "sdtv"
+                },
+                "sortOrder": 10
+              },
+              {
+                "allowed": false,
+                "quality": {
+                  "id": 8,
+                  "name": "WEBDL-480p",
+                  "resolution": 480,
+                  "source": "web"
+                },
+                "sortOrder": 11
+              },
+              {
+                "allowed": false,
+                "quality": {
+                  "id": 9,
+                  "name": "WEBRip-480p",
+                  "resolution": 480,
+                  "source": "web"
+                },
+                "sortOrder": 12
+              },
+              {
+                "allowed": false,
+                "quality": {
+                  "id": 10,
+                  "name": "Bluray-480p",
+                  "resolution": 480,
+                  "source": "bluray"
+                },
+                "sortOrder": 13
+              },
+              {
+                "allowed": false,
+                "quality": {
+                  "id": 14,
+                  "name": "Bluray-720p",
+                  "resolution": 720,
+                  "source": "bluray"
+                },
+                "sortOrder": 14
+              },
+              {
+                "allowed": false,
+                "quality": {
+                  "id": 15,
+                  "name": "HDTV-1080p",
+                  "resolution": 1080,
+                  "source": "hdtv"
+                },
+                "sortOrder": 15
+              },
+              {
+                "allowed": false,
+                "quality": {
+                  "id": 16,
+                  "name": "WEBDL-1080p",
+                  "resolution": 1080,
+                  "source": "web"
+                },
+                "sortOrder": 16
+              },
+              {
+                "allowed": false,
+                "quality": {
+                  "id": 17,
+                  "name": "WEBRip-1080p",
+                  "resolution": 1080,
+                  "source": "web"
+                },
+                "sortOrder": 17
+              },
+              {
+                "allowed": false,
+                "quality": {
+                  "id": 19,
+                  "name": "Remux-1080p",
+                  "resolution": 1080,
+                  "source": "remux"
+                },
+                "sortOrder": 18
+              },
+              {
+                "allowed": false,
+                "quality": {
+                  "id": 20,
+                  "name": "HDTV-2160p",
+                  "resolution": 2160,
+                  "source": "hdtv"
+                },
+                "sortOrder": 19
+              },
+              {
+                "allowed": false,
+                "quality": {
+                  "id": 21,
+                  "name": "WEBDL-2160p",
+                  "resolution": 2160,
+                  "source": "web"
+                },
+                "sortOrder": 20
+              },
+              {
+                "allowed": false,
+                "quality": {
+                  "id": 22,
+                  "name": "WEBRip-2160p",
+                  "resolution": 2160,
+                  "source": "web"
+                },
+                "sortOrder": 21
+              },
+              {
+                "allowed": false,
+                "quality": {
+                  "id": 23,
+                  "name": "Bluray-2160p",
+                  "resolution": 2160,
+                  "source": "bluray"
+                },
+                "sortOrder": 22
+              },
+              {
+                "allowed": false,
+                "quality": {
+                  "id": 24,
+                  "name": "Remux-2160p",
+                  "resolution": 2160,
+                  "source": "remux"
+                },
+                "sortOrder": 23
+              }
+            ],
+            "minCustomFormatScore": 0,
+            "name": "Remote HD",
+            "resolutionUpgradeOnly": false,
+            "upgradeAllowed": true
+          },
+          "qualityProfileId": 2,
+          "rating": 8,
+          "releaseDate": null,
+          "runtime": 30,
+          "seasons": [
+            {
+              "airDate": null,
+              "episodes": [
+                {
+                  "airDate": null,
+                  "endEpisodeNumber": null,
+                  "episodeNumber": 1,
+                  "hasFile": true,
+                  "id": 1,
+                  "markersScannedAt": null,
+                  "monitored": true,
+                  "overview": null,
+                  "runtime": null,
+                  "seasonId": 1,
+                  "stillUrl": null,
+                  "title": "Episode 1"
+                },
+                {
+                  "airDate": null,
+                  "endEpisodeNumber": null,
+                  "episodeNumber": 2,
+                  "hasFile": true,
+                  "id": 2,
+                  "markersScannedAt": null,
+                  "monitored": true,
+                  "overview": null,
+                  "runtime": null,
+                  "seasonId": 1,
+                  "stillUrl": null,
+                  "title": "Episode 2"
+                }
+              ],
+              "id": 1,
+              "mediaId": 18,
+              "monitored": true,
+              "overview": null,
+              "posterUrl": null,
+              "preferredProvider": null,
+              "seasonNumber": 1
+            },
+            {
+              "airDate": null,
+              "episodes": [
+                {
+                  "airDate": null,
+                  "endEpisodeNumber": null,
+                  "episodeNumber": 1,
+                  "hasFile": true,
+                  "id": 3,
+                  "markersScannedAt": null,
+                  "monitored": true,
+                  "overview": null,
+                  "runtime": null,
+                  "seasonId": 2,
+                  "stillUrl": null,
+                  "title": "Episode 1"
+                },
+                {
+                  "airDate": null,
+                  "endEpisodeNumber": null,
+                  "episodeNumber": 2,
+                  "hasFile": true,
+                  "id": 4,
+                  "markersScannedAt": null,
+                  "monitored": true,
+                  "overview": null,
+                  "runtime": null,
+                  "seasonId": 2,
+                  "stillUrl": null,
+                  "title": "Episode 2"
+                }
+              ],
+              "id": 2,
+              "mediaId": 18,
+              "monitored": true,
+              "overview": null,
+              "posterUrl": null,
+              "preferredProvider": null,
+              "seasonNumber": 2
+            }
+          ],
+          "status": "continuing",
+          "title": "Parity Series A",
+          "tmdbCollectionId": null,
+          "tmdbCollectionName": null,
+          "tmdbId": 2000,
+          "tvdbId": null,
+          "type": "series",
+          "year": 2021
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/18"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "addedById": null,
+          "additionalFanartUrls": [],
+          "alternativeTitles": [],
+          "digitalRelease": null,
+          "fanartUrl": null,
+          "files": [],
+          "folderName": "Sonarr New Show",
+          "genres": null,
+          "id": 21,
+          "imdbId": null,
+          "inCinemas": null,
+          "languageProfile": null,
+          "languageProfileId": null,
+          "library": {
+            "color": "#10b981",
+            "defaultLanguageProfileId": null,
+            "defaultQualityProfileId": null,
+            "icon": "tv",
+            "id": 2,
+            "label": null,
+            "mediaTypes": [
+              "series"
+            ],
+            "metadataLanguage": null,
+            "metadataRegion": null,
+            "name": "Series",
+            "path": "/tmp/fliks-parity/media/series",
+            "preferredProvider": null
+          },
+          "libraryId": 2,
+          "logoUrl": null,
+          "metadata": null,
+          "metadataRefreshedAt": null,
+          "minimumAvailability": "released",
+          "monitored": true,
+          "originalTitle": null,
+          "overview": null,
+          "path": "/tmp/fliks-parity/media/series/Sonarr New Show",
+          "physicalRelease": null,
+          "posterUrl": null,
+          "preferredProvider": null,
+          "qualityProfile": null,
+          "qualityProfileId": null,
+          "rating": null,
+          "releaseDate": null,
+          "runtime": null,
+          "seasons": [],
+          "status": "continuing",
+          "title": "Sonarr New Show",
+          "tmdbCollectionId": null,
+          "tmdbCollectionName": null,
+          "tmdbId": 8001,
+          "tvdbId": null,
+          "type": "series",
+          "year": 2022
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/21"
+    }
+  ]
+}

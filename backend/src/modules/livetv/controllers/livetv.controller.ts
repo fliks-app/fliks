@@ -24,7 +24,8 @@ import { Action } from '../../auth/casl/actions.enum';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { StreamTokenClient } from '../../bridge/stream-token.client';
 import { User } from '../../users/entities/user.entity';
-import { ImageService, ImageSize } from '../../images/image.service';
+import * as path from 'path';
+import { getDataDir } from '../../../common/constants/paths';
 import { QoeService } from '../../qoe/qoe.service';
 import { LiveTvChannel } from '../entities/livetv-channel.entity';
 import { LiveTvChannelsService } from '../services/livetv-channels.service';
@@ -47,7 +48,6 @@ export class LivetvController {
     private readonly guide: LiveTvGuideService,
     private readonly sessions: LiveTvSessionService,
     private readonly streamTokens: StreamTokenClient,
-    private readonly images: ImageService,
     private readonly qoe: QoeService,
   ) {}
 
@@ -80,15 +80,16 @@ export class LivetvController {
     @Res() res: Response,
   ): Promise<void> {
     await this.channels.assertVisible(id, user);
-    const validSizes: ImageSize[] = ['thumb', 'medium', 'full'];
-    const sz: ImageSize = (validSizes as string[]).includes(size ?? '')
-      ? (size as ImageSize)
-      : 'full';
+    const validSizes = ['thumb', 'medium', 'full'];
+    const sz = validSizes.includes(size ?? '') ? (size as string) : 'full';
 
-    let filePath = this.images.getDiskPath('livetv', id, undefined, sz);
+    // Logos stored by the former image store; new ones are no longer cached (S7).
+    const logoPath = (s: string) =>
+      path.join(getDataDir(), 'livetv', `${id}${s === 'full' ? '' : `-${s}`}.png`);
+    let filePath = logoPath(sz);
     let servedSize = sz;
     if (!fs.existsSync(filePath) && sz !== 'full') {
-      filePath = this.images.getDiskPath('livetv', id, undefined, 'full');
+      filePath = logoPath('full');
       servedSize = 'full';
     }
     if (!fs.existsSync(filePath)) throw new NotFoundException();

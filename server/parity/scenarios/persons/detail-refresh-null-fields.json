@@ -1,0 +1,49 @@
+{
+  "deviation": "C31",
+  "engine": "down",
+  "ignore": [
+    "$..metadataRefreshedAt",
+    "$..updatedAt"
+  ],
+  "name": "persons-detail-refresh-null-fields",
+  "seed": "metadata",
+  "steps": [
+    {
+      "expect": {
+        "body": {
+          "ok": true
+        },
+        "status": 200
+      },
+      "method": "POST",
+      "path": "/__reset",
+      "stub": true
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "cast": [],
+          "crew": [],
+          "person": {
+            "avatarUrl": null,
+            "biography": "Host.",
+            "birthday": "1963-04-18",
+            "createdAt": "2026-01-01T00:00:00.000Z",
+            "deathday": null,
+            "departments": [],
+            "id": 3,
+            "knownForDepartment": "Acting",
+            "name": "Conan O'Brien",
+            "placeOfBirth": "Shawnee, Oklahoma, USA",
+            "provider": "tmdb",
+            "tmdbId": 103
+          }
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/persons/3"
+    }
+  ]
+}

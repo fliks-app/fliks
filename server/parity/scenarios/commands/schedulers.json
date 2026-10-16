@@ -1,0 +1,85 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..nextRun",
+    "$..lastRun"
+  ],
+  "name": "commands-schedulers",
+  "seed": "commands",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "cron": "0 02 * * *",
+            "labelKey": "system.cmd_backup",
+            "lastStatus": "completed",
+            "name": "Backup",
+            "pluginId": null,
+            "triggerable": true
+          },
+          {
+            "cron": "0 04 * * *",
+            "labelKey": "system.cmd_refresh_metadata",
+            "lastStatus": "completed",
+            "name": "RefreshMetadata",
+            "pluginId": null,
+            "triggerable": true
+          },
+          {
+            "cron": "0 3 * * *",
+            "labelKey": "system.cmd_refresh_plugin_sources",
+            "lastStatus": null,
+            "name": "RefreshPluginSources",
+            "pluginId": null,
+            "triggerable": true
+          },
+          {
+            "cron": "0 0-23/6 * * *",
+            "labelKey": "system.cmd_subtitle_search",
+            "lastStatus": null,
+            "name": "SubtitleSearch",
+            "pluginId": null,
+            "triggerable": true
+          },
+          {
+            "cron": "0 0-23/6 * * *",
+            "labelKey": "system.cmd_subtitle_upgrade",
+            "lastStatus": null,
+            "name": "SubtitleUpgrade",
+            "pluginId": null,
+            "triggerable": true
+          },
+          {
+            "cron": "0 0-23/1 * * *",
+            "labelKey": "liveTv.jobs.sourceRefresh",
+            "lastStatus": null,
+            "name": "LiveTvSourceRefresh",
+            "pluginId": null,
+            "triggerable": true
+          },
+          {
+            "cron": "0 0-23/1 * * *",
+            "labelKey": "liveTv.jobs.guideRefresh",
+            "lastStatus": null,
+            "name": "LiveTvGuideRefresh",
+            "pluginId": null,
+            "triggerable": true
+          },
+          {
+            "cron": "0 01 * * *",
+            "labelKey": "liveTv.jobs.guidePrune",
+            "lastStatus": null,
+            "name": "LiveTvGuidePrune",
+            "pluginId": null,
+            "triggerable": true
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/commands/schedulers"
+    }
+  ]
+}

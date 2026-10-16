@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE requests SET status = 'pending', \"approvedById\" = NULL\n           WHERE id = $1 AND status = 'approved' AND \"approvedById\" = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "91e5b4bc07fe3d1fde6c0ae073ab45f88503c35b0059a82e40eb3368b02e4ced"
+}

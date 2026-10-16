@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE requests SET status = 'approved', \"declinedReason\" = NULL, \"mediaId\" = NULL\n        WHERE \"mediaId\" = $1 AND kind = 'delete' AND status IN ('pending', 'approved', 'processing')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b181b3319f8acb2f7a9f100201545535f6bb416a9b8936da83010be6e11d7c6f"
+}

@@ -1,0 +1,34 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "media-servers-update-404",
+  "seed": "media-servers",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "apiKey": "k",
+        "enabled": true,
+        "events": [
+          "library.rescan"
+        ],
+        "name": "Emby New",
+        "type": "emby",
+        "url": "http://127.0.0.1:4882/ok"
+      },
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "MediaServer #999 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "PUT",
+      "path": "/api/media-servers/999"
+    }
+  ]
+}

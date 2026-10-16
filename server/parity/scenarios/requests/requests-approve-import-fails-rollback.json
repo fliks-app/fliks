@@ -1,0 +1,81 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "requests-approve-import-fails-rollback",
+  "seed": "requests",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "TMDB API key is not configured",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/requests/1/approve"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "approvedBy": null,
+          "approvedById": null,
+          "comments": [
+            {
+              "id": 1,
+              "message": "First comment",
+              "requestId": 1,
+              "user": {
+                "avatar": null,
+                "id": 2,
+                "username": "user"
+              },
+              "userId": 2
+            },
+            {
+              "id": 2,
+              "message": "Admin reply",
+              "requestId": 1,
+              "user": {
+                "avatar": null,
+                "id": 1,
+                "username": "admin"
+              },
+              "userId": 1
+            }
+          ],
+          "declinedReason": null,
+          "fanartUrl": null,
+          "id": 1,
+          "kind": "add",
+          "languageProfileId": null,
+          "libraryId": 1,
+          "media": null,
+          "mediaId": null,
+          "mediaType": "movie",
+          "posterUrl": null,
+          "qualityProfileId": null,
+          "seasons": null,
+          "status": "pending",
+          "title": "Requested Movie",
+          "tmdbId": 9001,
+          "user": {
+            "avatar": null,
+            "id": 2,
+            "username": "user"
+          },
+          "userId": 2
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/requests/1"
+    }
+  ]
+}

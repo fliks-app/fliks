@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id AS \"id!\" FROM libraries\n        WHERE ($2::int[] IS NULL OR id = ANY($2)) AND \"mediaTypes\" ? $1\n        ORDER BY name ASC, id ASC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int4Array"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "6923b3ff9428dd37d164da3ed96e1dcb9c919e84d8e770e5832e0156b0608667"
+}

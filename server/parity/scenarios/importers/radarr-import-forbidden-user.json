@@ -1,0 +1,40 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..searchVector"
+  ],
+  "name": "imports-radarr-import-forbidden-user",
+  "seed": "importers",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "apiKey": "parity-key",
+        "pathMappings": [
+          {
+            "localLibraryId": 1,
+            "remotePath": "/data/movies"
+          },
+          {
+            "ignore": true,
+            "remotePath": "/data/ignored"
+          }
+        ],
+        "targetLibraryId": 1,
+        "url": "http://127.0.0.1:4880/radarr/ok"
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "POST",
+      "path": "/api/imports/radarr"
+    }
+  ]
+}

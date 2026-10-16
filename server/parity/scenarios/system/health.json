@@ -1,0 +1,29 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..uptimeSeconds",
+    "$..restartSupervisor"
+  ],
+  "name": "system-health",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "database": {
+            "name": "PostgreSQL",
+            "ok": true
+          },
+          "installedPlugins": 0,
+          "restartSupervisor": null,
+          "runningPlugins": 0,
+          "version": "4.5.0"
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/system/health"
+    }
+  ]
+}

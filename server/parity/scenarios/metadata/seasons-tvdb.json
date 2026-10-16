@@ -1,0 +1,71 @@
+{
+  "deviation": null,
+  "engine": "down",
+  "name": "metadata-seasons-tvdb",
+  "seed": "metadata",
+  "steps": [
+    {
+      "expect": {
+        "body": {
+          "ok": true
+        },
+        "status": 200
+      },
+      "method": "POST",
+      "path": "/__reset",
+      "stub": true
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "airDate": null,
+            "episodeCount": 1,
+            "episodes": [
+              {
+                "airDate": null,
+                "episodeNumber": 1,
+                "overview": null,
+                "runtime": null,
+                "stillUrl": null,
+                "title": "Special"
+              }
+            ],
+            "overview": null,
+            "posterUrl": null,
+            "seasonNumber": 0
+          },
+          {
+            "airDate": "2008-01-20",
+            "episodeCount": 2,
+            "episodes": [
+              {
+                "airDate": "2008-01-20",
+                "episodeNumber": 1,
+                "overview": "Pilot overview",
+                "runtime": 58,
+                "stillUrl": "https://artworks.thetvdb.com/e1.jpg",
+                "title": "Pilot"
+              },
+              {
+                "airDate": "2008-01-27",
+                "episodeNumber": 2,
+                "overview": null,
+                "runtime": 48,
+                "stillUrl": null,
+                "title": "Cat's in the Bag"
+              }
+            ],
+            "overview": null,
+            "posterUrl": null,
+            "seasonNumber": 1
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/metadata/tvdb/tv/81189/seasons"
+    }
+  ]
+}

@@ -1,0 +1,71 @@
+{
+  "deviation": "C45",
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..connectionId"
+  ],
+  "name": "media-servers-import-listusers-fails",
+  "seed": "media-servers",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "data": {
+              "type": "sse.connected"
+            },
+            "event": ""
+          },
+          {
+            "data": {
+              "serverId": 5,
+              "serverName": "Emby No Users",
+              "type": "watch-history.import.started"
+            },
+            "event": ""
+          },
+          {
+            "data": {
+              "name": "ImportWatchHistory",
+              "type": "command.started"
+            },
+            "event": ""
+          },
+          {
+            "data": {
+              "error": "listUsers failed: Request failed with status code 500",
+              "serverId": 5,
+              "serverName": "Emby No Users",
+              "type": "watch-history.import.failed"
+            },
+            "event": ""
+          },
+          {
+            "data": {
+              "name": "ImportWatchHistory",
+              "status": "failed",
+              "type": "command.completed"
+            },
+            "event": ""
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/system/events?device=ms",
+      "sse": {
+        "after": [
+          {
+            "as": "admin",
+            "method": "POST",
+            "path": "/api/media-servers/5/import-watch-history"
+          }
+        ],
+        "events": 5,
+        "timeoutMs": 15000
+      }
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "deviation": null,
+  "name": "imports-radarr-preview-forbidden",
+  "seed": "importers",
+  "steps": [
+    {
+      "as": "readonly",
+      "body": {
+        "url": "http://127.0.0.1:4880/radarr/ok"
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "POST",
+      "path": "/api/imports/radarr/preview"
+    }
+  ]
+}

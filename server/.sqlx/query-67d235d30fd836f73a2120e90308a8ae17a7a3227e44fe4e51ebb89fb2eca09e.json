@@ -1,0 +1,59 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, type::text AS \"media_type!\", \"libraryId\" AS library_id,\n        \"qualityProfileId\" AS quality_profile_id, \"languageProfileId\" AS language_profile_id,\n        \"posterUrl\" AS poster_url, \"fanartUrl\" AS fanart_url\n        FROM media WHERE \"tmdbId\" = $1 AND type::text = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "media_type!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "library_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "quality_profile_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 4,
+        "name": "language_profile_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 5,
+        "name": "poster_url",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 6,
+        "name": "fanart_url",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      null,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "67d235d30fd836f73a2120e90308a8ae17a7a3227e44fe4e51ebb89fb2eca09e"
+}

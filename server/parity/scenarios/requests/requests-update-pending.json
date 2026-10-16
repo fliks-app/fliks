@@ -1,0 +1,157 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "requests-update-pending",
+  "seed": "requests",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "languageProfileId": "2",
+        "libraryId": 2,
+        "qualityProfileId": 1
+      },
+      "expect": {
+        "body": {
+          "approvedBy": null,
+          "approvedById": null,
+          "comments": [
+            {
+              "id": 1,
+              "message": "First comment",
+              "requestId": 1,
+              "user": {
+                "avatar": null,
+                "id": 2,
+                "username": "user"
+              },
+              "userId": 2
+            },
+            {
+              "id": 2,
+              "message": "Admin reply",
+              "requestId": 1,
+              "user": {
+                "avatar": null,
+                "id": 1,
+                "username": "admin"
+              },
+              "userId": 1
+            }
+          ],
+          "declinedReason": null,
+          "fanartUrl": null,
+          "id": 1,
+          "kind": "add",
+          "languageProfile": {
+            "id": 2
+          },
+          "languageProfileId": 2,
+          "library": {
+            "id": 2
+          },
+          "libraryId": 2,
+          "media": null,
+          "mediaId": null,
+          "mediaType": "movie",
+          "posterUrl": null,
+          "qualityProfile": {
+            "id": 1
+          },
+          "qualityProfileId": 1,
+          "seasons": null,
+          "status": "pending",
+          "title": "Requested Movie",
+          "tmdbId": 9001,
+          "user": {
+            "avatar": null,
+            "id": 2,
+            "username": "user"
+          },
+          "userId": 2
+        },
+        "status": 200
+      },
+      "method": "PATCH",
+      "path": "/api/requests/1"
+    },
+    {
+      "as": "user",
+      "body": {
+        "libraryId": 0,
+        "qualityProfileId": null
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "You do not have access to the selected library",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "PATCH",
+      "path": "/api/requests/1"
+    },
+    {
+      "as": "user",
+      "body": {},
+      "expect": {
+        "body": {
+          "approvedBy": null,
+          "approvedById": null,
+          "comments": [
+            {
+              "id": 1,
+              "message": "First comment",
+              "requestId": 1,
+              "user": {
+                "avatar": null,
+                "id": 2,
+                "username": "user"
+              },
+              "userId": 2
+            },
+            {
+              "id": 2,
+              "message": "Admin reply",
+              "requestId": 1,
+              "user": {
+                "avatar": null,
+                "id": 1,
+                "username": "admin"
+              },
+              "userId": 1
+            }
+          ],
+          "declinedReason": null,
+          "fanartUrl": null,
+          "id": 1,
+          "kind": "add",
+          "languageProfileId": 2,
+          "libraryId": 2,
+          "media": null,
+          "mediaId": null,
+          "mediaType": "movie",
+          "posterUrl": null,
+          "qualityProfileId": 1,
+          "seasons": null,
+          "status": "pending",
+          "title": "Requested Movie",
+          "tmdbId": 9001,
+          "user": {
+            "avatar": null,
+            "id": 2,
+            "username": "user"
+          },
+          "userId": 2
+        },
+        "status": 200
+      },
+      "method": "PATCH",
+      "path": "/api/requests/1"
+    }
+  ]
+}

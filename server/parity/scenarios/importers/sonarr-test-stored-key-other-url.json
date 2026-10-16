@@ -1,0 +1,23 @@
+{
+  "deviation": "F41",
+  "name": "imports-sonarr-test-stored-key-other-url",
+  "seed": "importers",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "url": "http://127.0.0.1:4880/sonarr/other"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "apiKey is required",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/imports/sonarr/test"
+    }
+  ]
+}

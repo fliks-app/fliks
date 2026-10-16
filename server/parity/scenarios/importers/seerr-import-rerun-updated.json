@@ -1,0 +1,439 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..searchVector",
+    "$..connectionId"
+  ],
+  "name": "imports-seerr-import-rerun-updated",
+  "seed": "importers",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "data": {
+              "type": "sse.connected"
+            },
+            "event": ""
+          },
+          {
+            "data": {
+              "type": "seerr.import.started"
+            },
+            "event": ""
+          },
+          {
+            "data": {
+              "name": "ImportSeerrRequests",
+              "type": "command.started"
+            },
+            "event": ""
+          },
+          {
+            "data": {
+              "imported": 5,
+              "skipped": 0,
+              "type": "seerr.import.completed",
+              "updated": 0,
+              "users": 3,
+              "usersCreated": 3
+            },
+            "event": ""
+          },
+          {
+            "data": {
+              "name": "ImportSeerrRequests",
+              "status": "completed",
+              "type": "command.completed"
+            },
+            "event": ""
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/system/events",
+      "sse": {
+        "after": [
+          {
+            "as": "admin",
+            "expect": {
+              "status": 0
+            },
+            "method": "POST",
+            "path": "/api/imports/seerr/import-requests"
+          }
+        ],
+        "events": 5,
+        "timeoutMs": 8000
+      }
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "data": {
+              "type": "sse.connected"
+            },
+            "event": ""
+          },
+          {
+            "data": {
+              "type": "seerr.import.started"
+            },
+            "event": ""
+          },
+          {
+            "data": {
+              "name": "ImportSeerrRequests",
+              "type": "command.started"
+            },
+            "event": ""
+          },
+          {
+            "data": {
+              "imported": 0,
+              "skipped": 0,
+              "type": "seerr.import.completed",
+              "updated": 5,
+              "users": 3,
+              "usersCreated": 0
+            },
+            "event": ""
+          },
+          {
+            "data": {
+              "name": "ImportSeerrRequests",
+              "status": "completed",
+              "type": "command.completed"
+            },
+            "event": ""
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/system/events",
+      "sse": {
+        "after": [
+          {
+            "as": "admin",
+            "expect": {
+              "status": 0
+            },
+            "method": "POST",
+            "path": "/api/imports/seerr/import-requests"
+          }
+        ],
+        "events": 5,
+        "timeoutMs": 8000
+      }
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "data": [
+            {
+              "approvedBy": null,
+              "approvedById": null,
+              "declinedReason": null,
+              "fanartUrl": null,
+              "id": 7,
+              "kind": "add",
+              "languageProfileId": null,
+              "libraryId": null,
+              "media": {
+                "addedById": 7,
+                "additionalFanartUrls": [],
+                "alternativeTitles": [],
+                "digitalRelease": null,
+                "fanartUrl": null,
+                "folderName": "Parity Movie 02 (2020)",
+                "genres": [
+                  "Drama"
+                ],
+                "id": 2,
+                "imdbId": null,
+                "inCinemas": null,
+                "languageProfileId": null,
+                "libraryId": 1,
+                "logoUrl": null,
+                "metadataRefreshedAt": null,
+                "minimumAvailability": "released",
+                "monitored": true,
+                "originalTitle": null,
+                "overview": "Synthetic movie 2",
+                "path": null,
+                "physicalRelease": null,
+                "posterUrl": null,
+                "preferredProvider": null,
+                "qualityProfileId": null,
+                "rating": 7.5,
+                "releaseDate": "2020-01-01",
+                "runtime": 90,
+                "status": "released",
+                "title": "Parity Movie 02",
+                "tmdbCollectionId": null,
+                "tmdbCollectionName": null,
+                "tmdbId": 1002,
+                "tvdbId": null,
+                "type": "movie",
+                "year": 2020
+              },
+              "mediaId": 2,
+              "mediaType": "movie",
+              "posterUrl": null,
+              "qualityProfileId": null,
+              "seasons": null,
+              "status": "available",
+              "title": "Parity Movie 02",
+              "tmdbId": 1002,
+              "user": {
+                "avatar": null,
+                "id": 7,
+                "username": "seerr_bob"
+              },
+              "userId": 7
+            },
+            {
+              "approvedBy": null,
+              "approvedById": null,
+              "declinedReason": null,
+              "fanartUrl": null,
+              "id": 6,
+              "kind": "add",
+              "languageProfileId": null,
+              "libraryId": null,
+              "media": null,
+              "mediaId": null,
+              "mediaType": "movie",
+              "posterUrl": null,
+              "qualityProfileId": null,
+              "seasons": null,
+              "status": "failed",
+              "title": "Fetched Title",
+              "tmdbId": 5555,
+              "user": {
+                "avatar": null,
+                "id": 8,
+                "username": "Carol Display"
+              },
+              "userId": 8
+            },
+            {
+              "approvedBy": null,
+              "approvedById": null,
+              "declinedReason": null,
+              "fanartUrl": null,
+              "id": 5,
+              "kind": "add",
+              "languageProfileId": null,
+              "libraryId": null,
+              "media": null,
+              "mediaId": null,
+              "mediaType": "movie",
+              "posterUrl": null,
+              "qualityProfileId": null,
+              "seasons": null,
+              "status": "declined",
+              "title": "",
+              "tmdbId": 9001,
+              "user": {
+                "avatar": null,
+                "id": 6,
+                "username": "seerr_alice"
+              },
+              "userId": 6
+            },
+            {
+              "approvedBy": null,
+              "approvedById": null,
+              "declinedReason": null,
+              "fanartUrl": null,
+              "id": 4,
+              "kind": "add",
+              "languageProfileId": null,
+              "libraryId": null,
+              "media": {
+                "addedById": 7,
+                "additionalFanartUrls": [],
+                "alternativeTitles": [],
+                "digitalRelease": null,
+                "fanartUrl": null,
+                "folderName": "Parity Series A",
+                "genres": [
+                  "Drama"
+                ],
+                "id": 18,
+                "imdbId": null,
+                "inCinemas": null,
+                "languageProfileId": null,
+                "libraryId": 2,
+                "logoUrl": null,
+                "metadataRefreshedAt": null,
+                "minimumAvailability": "released",
+                "monitored": true,
+                "originalTitle": null,
+                "overview": "Synthetic series A",
+                "path": null,
+                "physicalRelease": null,
+                "posterUrl": null,
+                "preferredProvider": null,
+                "qualityProfileId": null,
+                "rating": 8,
+                "releaseDate": null,
+                "runtime": 30,
+                "status": "continuing",
+                "title": "Parity Series A",
+                "tmdbCollectionId": null,
+                "tmdbCollectionName": null,
+                "tmdbId": 2000,
+                "tvdbId": null,
+                "type": "series",
+                "year": 2021
+              },
+              "mediaId": 18,
+              "mediaType": "series",
+              "posterUrl": null,
+              "qualityProfileId": null,
+              "seasons": [
+                1,
+                2
+              ],
+              "status": "processing",
+              "title": "Parity Series A",
+              "tmdbId": 2000,
+              "user": {
+                "avatar": null,
+                "id": 7,
+                "username": "seerr_bob"
+              },
+              "userId": 7
+            },
+            {
+              "approvedBy": null,
+              "approvedById": null,
+              "declinedReason": null,
+              "fanartUrl": null,
+              "id": 3,
+              "kind": "add",
+              "languageProfileId": null,
+              "libraryId": null,
+              "media": {
+                "addedById": 6,
+                "additionalFanartUrls": [],
+                "alternativeTitles": [],
+                "digitalRelease": null,
+                "fanartUrl": null,
+                "folderName": "Parity Movie 01 (2020)",
+                "genres": [
+                  "Drama"
+                ],
+                "id": 1,
+                "imdbId": null,
+                "inCinemas": null,
+                "languageProfileId": null,
+                "libraryId": 1,
+                "logoUrl": null,
+                "metadataRefreshedAt": null,
+                "minimumAvailability": "released",
+                "monitored": true,
+                "originalTitle": null,
+                "overview": "Synthetic movie 1",
+                "path": null,
+                "physicalRelease": null,
+                "posterUrl": null,
+                "preferredProvider": null,
+                "qualityProfileId": null,
+                "rating": 7.5,
+                "releaseDate": "2020-01-01",
+                "runtime": 90,
+                "status": "released",
+                "title": "Parity Movie 01",
+                "tmdbCollectionId": null,
+                "tmdbCollectionName": null,
+                "tmdbId": 1001,
+                "tvdbId": null,
+                "type": "movie",
+                "year": 2020
+              },
+              "mediaId": 1,
+              "mediaType": "movie",
+              "posterUrl": null,
+              "qualityProfileId": null,
+              "seasons": null,
+              "status": "pending",
+              "title": "Parity Movie 01",
+              "tmdbId": 1001,
+              "user": {
+                "avatar": null,
+                "id": 6,
+                "username": "seerr_alice"
+              },
+              "userId": 6
+            },
+            {
+              "approvedBy": null,
+              "approvedById": null,
+              "declinedReason": null,
+              "fanartUrl": null,
+              "id": 1,
+              "kind": "add",
+              "languageProfileId": null,
+              "libraryId": 1,
+              "media": null,
+              "mediaId": null,
+              "mediaType": "movie",
+              "posterUrl": null,
+              "qualityProfileId": null,
+              "seasons": null,
+              "status": "pending",
+              "title": "Requested Movie",
+              "tmdbId": 9001,
+              "user": {
+                "avatar": null,
+                "id": 2,
+                "username": "user"
+              },
+              "userId": 2
+            },
+            {
+              "approvedBy": null,
+              "approvedById": null,
+              "declinedReason": null,
+              "fanartUrl": null,
+              "id": 2,
+              "kind": "add",
+              "languageProfileId": null,
+              "libraryId": 2,
+              "media": null,
+              "mediaId": null,
+              "mediaType": "series",
+              "posterUrl": null,
+              "qualityProfileId": null,
+              "seasons": null,
+              "status": "approved",
+              "title": "Requested Series",
+              "tmdbId": 9002,
+              "user": {
+                "avatar": "/api/users/4/avatar?v=1767225600000",
+                "id": 4,
+                "username": "other"
+              },
+              "userId": 4
+            }
+          ],
+          "total": 7
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/requests"
+    }
+  ]
+}

@@ -1,0 +1,108 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "media-servers-create-validation-400",
+  "seed": "media-servers",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {},
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "name must be a string",
+            "type must be one of the following values: local, jellyfin, emby, plex",
+            "url must be a string"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/media-servers"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "apiKey": 3,
+        "enabled": "yes",
+        "events": [
+          1
+        ],
+        "name": 1,
+        "type": "nope",
+        "url": 2
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "name must be a string",
+            "type must be one of the following values: local, jellyfin, emby, plex",
+            "url must be a string",
+            "apiKey must be a string",
+            "each value in events must be a string",
+            "enabled must be a boolean value"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/media-servers"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "apiKey": "k",
+        "enabled": true,
+        "events": "a",
+        "name": "Emby New",
+        "type": "emby",
+        "url": "http://127.0.0.1:4882/ok"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "events must be an array"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/media-servers"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "apiKey": "k",
+        "enabled": true,
+        "events": [
+          "library.rescan"
+        ],
+        "extra": 1,
+        "name": "Emby New",
+        "type": "emby",
+        "url": "http://127.0.0.1:4882/ok"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "property extra should not exist"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/media-servers"
+    }
+  ]
+}

@@ -1,9 +1,3 @@
-import {
-  ReleaseAttributes,
-  parseReleaseAttributes,
-  parseSeasonEpisode,
-} from '../../common/release-parsing';
-
 /**
  * Scoring weights mirrored from subliminal's `score.py`. Each weight is the
  * credit awarded when the attribute MATCHES between the candidate subtitle and
@@ -145,48 +139,8 @@ export function scoreSubtitle(
   // side we skip the whole block — the candidate falls back to the bonuses
   // already awarded above plus hearing_impaired below.
   if (candidate.releaseName && context.videoReleaseName) {
-    const subAttrs = parseReleaseAttributes(candidate.releaseName);
-    const vidAttrs = parseReleaseAttributes(context.videoReleaseName);
-
-    if (
-      subAttrs.releaseGroup &&
-      vidAttrs.releaseGroup &&
-      subAttrs.releaseGroup === vidAttrs.releaseGroup
-    ) {
-      award('releaseGroup', weights.releaseGroup);
-    }
-    if (subAttrs.source && vidAttrs.source && subAttrs.source === vidAttrs.source) {
-      award('source', weights.source);
-    }
-    if (
-      subAttrs.resolution &&
-      vidAttrs.resolution &&
-      subAttrs.resolution === vidAttrs.resolution
-    ) {
-      award('resolution', weights.resolution);
-    }
-    if (
-      subAttrs.videoCodec &&
-      vidAttrs.videoCodec &&
-      subAttrs.videoCodec === vidAttrs.videoCodec
-    ) {
-      award('videoCodec', weights.videoCodec);
-    }
-    if (
-      subAttrs.audioCodec &&
-      vidAttrs.audioCodec &&
-      subAttrs.audioCodec === vidAttrs.audioCodec
-    ) {
-      award('audioCodec', weights.audioCodec);
-    }
-    if (
-      !isEpisode &&
-      subAttrs.edition &&
-      vidAttrs.edition &&
-      subAttrs.edition === vidAttrs.edition
-    ) {
-      award('edition', (weights as typeof MOVIE_WEIGHTS).edition);
-    }
+    // Release group, source, codec and edition credit (and season / episode below)
+    // return with the S6 port: the release parser now lives in fliks-server.
 
     // Series / title / year recovery from release names when imdb didn't
     // match. Comparison strips every non-alphanumeric so dots / dashes /
@@ -204,25 +158,6 @@ export function scoreSubtitle(
     if (!matches.includes('year') && context.year) {
       if (new RegExp(`\\b${context.year}\\b`).test(candidate.releaseName)) {
         award('year', weights.year);
-      }
-    }
-
-    // Season / episode for series — extracted from the release name.
-    if (isEpisode) {
-      const parsed = parseSeasonEpisode(candidate.releaseName);
-      if (
-        parsed.season != null &&
-        context.season != null &&
-        parsed.season === context.season
-      ) {
-        award('season', (weights as typeof EPISODE_WEIGHTS).season);
-      }
-      if (
-        parsed.episode != null &&
-        context.episode != null &&
-        parsed.episode === context.episode
-      ) {
-        award('episode', (weights as typeof EPISODE_WEIGHTS).episode);
       }
     }
   }

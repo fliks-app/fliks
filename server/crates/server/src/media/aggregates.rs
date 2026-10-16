@@ -1,5 +1,5 @@
 //! Counts, genres, collections and the quality table (`media-query.md` rules 35-38).
-use fliks_domain::{media::query::js_parse_int, release::quality::APP_QUALITIES};
+use fliks_domain::{media::query::js_parse_int, release::parsing::quality::APP_QUALITIES};
 use serde::{Serialize, ser::SerializeMap};
 use serde_json::{Value, json};
 use sqlx::PgPool;

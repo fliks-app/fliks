@@ -1,0 +1,29 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..startedOn",
+    "$..endedOn"
+  ],
+  "name": "markers-update-404",
+  "seed": "markers",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "startSeconds": 1
+      },
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Marker #99999 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "PUT",
+      "path": "/api/markers/99999"
+    }
+  ]
+}

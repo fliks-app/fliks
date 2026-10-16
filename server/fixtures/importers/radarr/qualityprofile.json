@@ -1,0 +1,88 @@
+[
+  {
+    "id": 1,
+    "name": "Remote HD",
+    "upgradeAllowed": true,
+    "cutoff": 7,
+    "items": [
+      {
+        "quality": {
+          "id": 7,
+          "name": "Bluray-1080p"
+        },
+        "allowed": true
+      },
+      {
+        "name": "WEB 720p",
+        "id": 1001,
+        "allowed": true,
+        "items": [
+          {
+            "quality": {
+              "id": 5,
+              "name": "WEBDL-720p"
+            },
+            "allowed": true
+          },
+          {
+            "quality": {
+              "id": 14,
+              "name": "WEBRip-720p"
+            },
+            "allowed": false
+          }
+        ]
+      },
+      {
+        "quality": {
+          "id": 4,
+          "name": "HDTV-720p"
+        },
+        "allowed": false
+      }
+    ]
+  },
+  {
+    "id": 2,
+    "name": "Existing HD",
+    "upgradeAllowed": false,
+    "cutoff": 4,
+    "items": [
+      {
+        "quality": {
+          "id": 7,
+          "name": "Bluray-1080p"
+        },
+        "allowed": true
+      },
+      {
+        "name": "WEB 720p",
+        "id": 1001,
+        "allowed": true,
+        "items": [
+          {
+            "quality": {
+              "id": 5,
+              "name": "WEBDL-720p"
+            },
+            "allowed": true
+          },
+          {
+            "quality": {
+              "id": 14,
+              "name": "WEBRip-720p"
+            },
+            "allowed": false
+          }
+        ]
+      },
+      {
+        "quality": {
+          "id": 4,
+          "name": "HDTV-720p"
+        },
+        "allowed": false
+      }
+    ]
+  }
+]

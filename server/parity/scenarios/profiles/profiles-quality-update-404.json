@@ -1,0 +1,51 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "profiles-quality-update-404",
+  "seed": "profiles",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "cutoff": 16,
+        "items": [
+          {
+            "allowed": true,
+            "groupId": 2,
+            "qualityId": 16,
+            "qualityName": "WEBDL-1080p",
+            "resolution": 1080,
+            "sortOrder": 1,
+            "source": "web"
+          },
+          {
+            "allowed": false,
+            "groupId": null,
+            "qualityId": 18,
+            "qualityName": "Bluray-1080p",
+            "resolution": 1080,
+            "sortOrder": 2,
+            "source": "bluray"
+          }
+        ],
+        "minCustomFormatScore": 3,
+        "name": "New HD",
+        "resolutionUpgradeOnly": true,
+        "upgradeAllowed": true
+      },
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "QualityProfile #999 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "PUT",
+      "path": "/api/profiles/quality/999"
+    }
+  ]
+}

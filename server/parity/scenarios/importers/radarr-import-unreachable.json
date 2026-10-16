@@ -1,0 +1,40 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..searchVector"
+  ],
+  "name": "imports-radarr-import-unreachable",
+  "seed": "importers",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "apiKey": "parity-key",
+        "pathMappings": [
+          {
+            "localLibraryId": 1,
+            "remotePath": "/data/movies"
+          },
+          {
+            "ignore": true,
+            "remotePath": "/data/ignored"
+          }
+        ],
+        "targetLibraryId": 1,
+        "url": "http://127.0.0.1:1"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Cannot connect to Radarr: fetch failed",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/imports/radarr"
+    }
+  ]
+}

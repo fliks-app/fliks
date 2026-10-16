@@ -51,7 +51,7 @@ none. Callers (who needs which function, and when):
    pub fn max_resolution_from_quality_strings(files: &[Option<&str>]) -> u32;
    pub fn allowed_audio_language_ids(items: &[AudioLanguageItem]) -> BTreeSet<u32>;
    pub fn build_allowed_quality_ids(items: &[QualityProfileItem]) -> BTreeSet<u32>;
-   pub fn detect_video_codec(title: Option<&str>) -> Option<VideoCodecLabel>;   // "AV1" | "HEVC" | "VP9" | "x264"
+   pub fn detect_video_codec(title: Option<&str>) -> Option<&'static str>;   // "AV1" | "HEVC" | "VP9" | "x264"
    pub fn detect_codec_size_factor(title: Option<&str>) -> f64;
    pub fn compute_size_deviation(title: &str, size_bytes: f64, runtime_minutes: f64, limits: Option<&SizeLimits>) -> Option<f64>;
    pub fn resolve_search_titles(media: &SearchMedia, custom_query: Option<&str>) -> SearchTitles;   // {searchTitle, expectedTitles}
@@ -63,15 +63,14 @@ none. Callers (who needs which function, and when):
    pub fn release_years(title: &str) -> Vec<u32>;
    pub fn compute_rejections(o: &RejectionInput) -> Vec<ReleaseRejection>;      // {code: String, params?: {k: number|string}}
    pub fn sort_releases_by_relevance<T: Sortable>(rows: Vec<T>, prefer_full_season: bool) -> Vec<T>;
-   pub fn score_and_sort_releases(releases: Vec<ReleaseCandidate>, opts: &ScoreOptions, deps: &dyn ScorerDeps) -> Vec<ScoredRelease>;
-   pub trait ScorerDeps { fn score_custom_formats(&self, title: &str, flags: &[String]) -> i64; fn is_blocked(&self, title: &str, source_id: i64) -> bool; }
+   pub fn score_and_sort_releases(releases: Vec<ReleaseCandidate>, opts: &ScoreOptions, score_custom_formats: &dyn Fn(&str, &[String]) -> i64, is_blocked: &dyn Fn(&str, i64) -> bool) -> Vec<ScoredRelease>;
    // custom_format.rs
    pub fn matches_format(title: &str, fmt: &CustomFormat, flags: &[String]) -> bool;
    pub fn score_release_with(formats: &[CustomFormat], title: &str, flags: &[String]) -> i64;
    pub fn test_release(formats: &[CustomFormat], title: &str, flags: &[String]) -> Vec<CustomFormatMatch>;  // {formatId, formatName, matched, score}
    pub fn validate_title_regexes(specs: &[CustomFormatSpec]) -> Result<(), String>;   // Err(value) of the first bad title_regex
    ```
-   `ScorerDeps` is synchronous: the Nest async callbacks only wrap precomputed tables. `expectedTitle: string | string[]` is an untagged enum on the wire; an empty string means absent in `compute_rejections` (rule 38), `[]` does not.
+   The two lookups are synchronous closures over tables the caller precomputed (no server caller until S8). `expectedTitle: string | string[]` is an untagged enum on the wire; an empty string means absent in `compute_rejections` (rule 38), `[]` does not.
 4. `APP_LANGUAGES`: 38 rows, ids 1..37 then 99, exactly as the TS table (`id`, `name`, `isoCode`, `iso639_2` list, absent on id 99 `Unknown`/`xx`). `UNKNOWN_LANGUAGE` = id 99, `ENGLISH_LANGUAGE` = id 1; lookups by id and by `isoCode`; a missing `isoCode` lookup falls back to `UNKNOWN_LANGUAGE` in the parser (`lang(code)`). Serialises to the `GET /api/profiles/language-definitions` body (`profiles.md` rule 16). Golden fixture `app-languages` (one case, the whole table). `[ts:src/common/constants/app-languages.ts:12]`–`[ts:src/common/constants/app-languages.ts:51]`, `[ts:src/common/constants/app-languages.ts:100]`–`[ts:src/common/constants/app-languages.ts:109]`
 5. JSON conventions of fixtures and wire: TS `undefined` = key absent, TS `null` = `null`; numbers via serde_json with `float_roundtrip` (already enabled in `fliks_domain`); `Math.round` = `js::round` (half toward +infinity, `crates/domain/src/js.rs`); `parseInt(x, 10)` of a digit run = decimal parse of the leading digits (`NaN` = failure).
 6. Three different normalisations exist and are not interchangeable: quality/attributes `norm` = replace every `.` with a space then lower-case `[ts:src/common/release-parsing/quality.parser.ts:12]`–`[ts:src/common/release-parsing/quality.parser.ts:14]`, `[ts:src/common/release-parsing/attributes.parser.ts:62]`–`[ts:src/common/release-parsing/attributes.parser.ts:64]`; language `norm` = replace each of `.`, `_`, `-` with a space then lower-case `[ts:src/common/release-parsing/language.parser.ts:8]`–`[ts:src/common/release-parsing/language.parser.ts:10]`; custom-format `norm` = drop every char outside `[a-z0-9]` (case-insensitively) then lower-case; the `i` flag has no `u`, so no non-ASCII char survives (U+017F, U+212A are dropped): Rust keeps `char::is_ascii_alphanumeric`, never a Unicode `(?i)` class `[ts:src/modules/profiles/custom-formats.service.ts:20]`–`[ts:src/modules/profiles/custom-formats.service.ts:22]`. Nothing else is normalised: the season/episode parser, `extractMediaTitle` and the title tokenizer read their own inputs (rules 19, 24, 31).
@@ -148,6 +147,7 @@ none. Callers (who needs which function, and when):
 53. Sort exactness (rule 44): exact only when the comparator is a total order, never panics; V8's TimSort is not reproduced for intransitive cases.
 54. `unicode-normalization` (NFD/NFKC) is a new `fliks_domain` dependency (`server/CLAUDE.md` lists serde, serde_json, chrono, regex, fancy-regex only); `\p{Diacritic}` comes from `regex`. Needed by rule 30 and naming rule 18; no alternative keeps `fold_case` identical on accented input.
 55. Dead code (rule 9, 7 items) is deleted, not ported. Frozen quirks, no row: `SE_CUT_RE` first match against the "last" comments (rule 23), `expectedTitle: []` always `TITLE_MISMATCH` (rule 38), short-word language false positives (rule 17), `hi`/`cc` as hearing-impaired (rule 16), `h.265` unseen by the attribute parser (rule 14), 8K quality = WORKPRINT with a corrected label (rule 10).
+56. `regress` probed against V8 on 2200 `title_regex` cases (lookaround, backreferences, named groups, invalid patterns, Annex B escapes): identical except two corners, accepted as deviations and left out of the `custom-formats` vectors: `i` folds U+017F and U+212A with `s`/`k` (also in `\w` and `[a-z]`), as the `u` flag does, where V8 without `u` does not; and `\u{41}` reads as a code point where V8 reads a quantified `u`.
 
 ## SQL
 

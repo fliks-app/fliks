@@ -1,0 +1,45 @@
+{
+  "status": "success",
+  "data": {
+    "episodes": [
+      {
+        "id": 1,
+        "seasonNumber": 1,
+        "number": 1,
+        "name": "Pilot",
+        "overview": "Pilot overview",
+        "aired": "2008-01-20",
+        "runtime": 58,
+        "image": "https://artworks.thetvdb.com/e1.jpg",
+        "nameTranslations": [
+          "fra"
+        ],
+        "overviewTranslations": [
+          "fra"
+        ]
+      },
+      {
+        "id": 2,
+        "seasonNumber": 1,
+        "number": 2,
+        "name": "Cat's in the Bag",
+        "overview": null,
+        "aired": "2008-01-27",
+        "runtime": 48,
+        "image": null,
+        "nameTranslations": [],
+        "overviewTranslations": []
+      },
+      {
+        "id": 3,
+        "seasonNumber": 0,
+        "number": 1,
+        "name": "Special",
+        "overview": "",
+        "aired": null,
+        "runtime": null,
+        "image": null
+      }
+    ]
+  }
+}

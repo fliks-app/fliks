@@ -1,0 +1,31 @@
+{
+  "deviation": "F46",
+  "name": "media-write-bulk-outside-acl",
+  "seed": "ingest",
+  "steps": [
+    {
+      "as": "readonly",
+      "method": "PATCH",
+      "path": "/api/media/bulk",
+      "body": {
+        "ids": [
+          103
+        ],
+        "monitored": false
+      },
+      "expect": {
+        "status": 404,
+        "body": {
+          "statusCode": 404,
+          "message": "Media #103 not found",
+          "error": "Not Found"
+        }
+      }
+    }
+  ],
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..metadataRefreshedAt"
+  ]
+}

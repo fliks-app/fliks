@@ -1,6 +1,3 @@
-import * as fs from 'fs';
-import * as os from 'os';
-import * as path from 'path';
 import { FliksHostImpl } from './fliks-host.service';
 import { InProcessPluginHostClient } from './in-process-plugin-host-client';
 import { PluginHostBindingService } from './plugin-host-binding.service';
@@ -74,13 +71,9 @@ class FakeSettings {
 function makeStack() {
   const registrations = new FakeRegistrationRepo();
   const settings = new FakeSettings();
-  const libraryIngestService = {
-    ingest: jest.fn().mockResolvedValue({ imported: [] }),
-  };
   const countsCache = new PluginCountsCacheService();
 
-  // 19 constructor args, matching `fliks-host.service.ts` exactly — a plain
-  // unit build of the real class, same technique as its own spec's harness.
+  // The constructor args of `fliks-host.service.ts`: a plain unit build of the real class.
   // eslint-disable-next-line @typescript-eslint/no-unsafe-call
   const host = new (FliksHostImpl as any)(
     null, // core's own frozen default — every real identity comes from bind()
@@ -89,19 +82,7 @@ function makeStack() {
     fakeRepo(), // episode
     fakeRepo(), // mediaFile
     registrations,
-    { classifyForSearch: jest.fn() },
-    {
-      listMovieTargets: jest.fn().mockResolvedValue([]),
-      listEpisodeTargets: jest.fn().mockResolvedValue([]),
-      groupIntoSeasonPacks: jest.fn().mockResolvedValue([]),
-    },
-    { resolveAllowedForMedia: jest.fn() },
-    { getSizeLimitsMap: jest.fn().mockResolvedValue(new Map()) },
-    { scoreRelease: jest.fn() },
-    { markInProgress: jest.fn() },
-    libraryIngestService,
     { dispatch: jest.fn(), dispatchStrict: jest.fn() },
-    { dispatch: jest.fn() },
     settings,
     {
       emit: jest.fn(),
@@ -114,86 +95,32 @@ function makeStack() {
       viewersForMedia: jest.fn().mockResolvedValue([]),
     },
     countsCache,
+    { current: jest.fn().mockResolvedValue(undefined) },
   ) as FliksHostImpl;
 
   const client = new InProcessPluginHostClient(host, new EventsService());
   const binding = new PluginHostBindingService(registrations as any, client);
-  return { registrations, settings, libraryIngestService, client, binding };
+  return { registrations, settings, client, binding };
 }
 
 describe('PluginHostBindingService', () => {
-  it('keeps config namespaces and ingest roots separate for two plugins served concurrently', async () => {
-    const { registrations, settings, libraryIngestService, binding } =
-      makeStack();
+  it('keeps config namespaces separate for two plugins served concurrently', async () => {
+    const { registrations, settings, binding } = makeStack();
+    registrations.seed('test.alpha', [], ['config:rw']);
+    registrations.seed('test.beta', [], ['config:rw']);
+    await settings.set('plugin.test.alpha.token', 'A-secret');
+    await settings.set('plugin.test.beta.token', 'B-secret');
 
-    const rootAlpha = fs.mkdtempSync(path.join(os.tmpdir(), 'fliks-alpha-'));
-    const rootBeta = fs.mkdtempSync(path.join(os.tmpdir(), 'fliks-beta-'));
-    const fileAlpha = path.join(rootAlpha, 'movie.mkv');
-    const fileBeta = path.join(rootBeta, 'movie.mkv');
-    fs.writeFileSync(fileAlpha, 'x');
-    fs.writeFileSync(fileBeta, 'x');
+    const alpha = binding.bind('test.alpha');
+    const beta = binding.bind('test.beta');
 
-    try {
-      registrations.seed('test.alpha', [rootAlpha], ['config:rw', 'ingest:write']);
-      registrations.seed('test.beta', [rootBeta], ['config:rw', 'ingest:write']);
-      await settings.set('plugin.test.alpha.token', 'A-secret');
-      await settings.set('plugin.test.beta.token', 'B-secret');
-
-      const alpha = binding.bind('test.alpha');
-      const beta = binding.bind('test.beta');
-
-      // Two concurrent, interleaved reads — each must see only its own settings row.
-      const [alphaConfig, betaConfig] = await Promise.all([
-        alpha['config.get']({ keys: ['token'] }),
-        beta['config.get']({ keys: ['token'] }),
-      ]);
-      expect(alphaConfig).toEqual({ token: 'A-secret' });
-      expect(betaConfig).toEqual({ token: 'B-secret' });
-
-      // Each may ingest under its own granted root, concurrently.
-      const [alphaIngest, betaIngest] = await Promise.all([
-        alpha['library.ingest']({
-          idempotencyKey: 'a',
-          mediaId: 1,
-          paths: [fileAlpha],
-          transfer: 'copy',
-          sourceLabel: 'A',
-        }),
-        beta['library.ingest']({
-          idempotencyKey: 'b',
-          mediaId: 2,
-          paths: [fileBeta],
-          transfer: 'copy',
-          sourceLabel: 'B',
-        }),
-      ]);
-      expect(alphaIngest.imported).toEqual([]);
-      expect(betaIngest.imported).toEqual([]);
-      expect(libraryIngestService.ingest).toHaveBeenCalledTimes(2);
-
-      // Neither may ingest under the OTHER plugin's root.
-      await expect(
-        alpha['library.ingest']({
-          idempotencyKey: 'c',
-          mediaId: 1,
-          paths: [fileBeta],
-          transfer: 'copy',
-          sourceLabel: 'A',
-        }),
-      ).rejects.toThrow(/outside/);
-      await expect(
-        beta['library.ingest']({
-          idempotencyKey: 'd',
-          mediaId: 2,
-          paths: [fileAlpha],
-          transfer: 'copy',
-          sourceLabel: 'B',
-        }),
-      ).rejects.toThrow(/outside/);
-    } finally {
-      fs.rmSync(rootAlpha, { recursive: true, force: true });
-      fs.rmSync(rootBeta, { recursive: true, force: true });
-    }
+    // Two concurrent, interleaved reads — each must see only its own settings row.
+    const [alphaConfig, betaConfig] = await Promise.all([
+      alpha['config.get']({ keys: ['token'] }),
+      beta['config.get']({ keys: ['token'] }),
+    ]);
+    expect(alphaConfig).toEqual({ token: 'A-secret' });
+    expect(betaConfig).toEqual({ token: 'B-secret' });
   });
 
   it('adversarial: ignores a plugin id smuggled inside the payload — identity comes only from bind()', async () => {
@@ -268,6 +195,15 @@ describe('PluginHostBindingService', () => {
       'config.set': { key: 'k', value: 'v' },
     };
 
+    /** Served by fliks-server until S8: past the scope check they answer unavailable. */
+    const UNAVAILABLE = new Set<keyof PluginHostApi>([
+      'media.acquisitionContext',
+      'acquisition.candidates',
+      'releases.match',
+      'releases.score',
+      'library.ingest',
+    ]);
+
     const cases = (Object.keys(HOST_METHOD_SCOPES) as (keyof PluginHostApi)[]).map((method) => ({
       method,
       scopes: HOST_METHOD_SCOPES[method],
@@ -296,7 +232,12 @@ describe('PluginHostBindingService', () => {
         }
 
         registrations.seed('test.scoped', ['/tmp'], [...scopes]);
-        await call(binding.bind('test.scoped'), method); // must not reject once granted
+        const granted = call(binding.bind('test.scoped'), method);
+        if (UNAVAILABLE.has(method)) {
+          await expect(granted).rejects.toThrow('unavailable until S8');
+        } else {
+          await granted; // must not reject once granted
+        }
       },
     );
 

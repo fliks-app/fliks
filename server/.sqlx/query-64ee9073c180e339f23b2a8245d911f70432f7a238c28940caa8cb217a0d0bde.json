@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO persons (provider, \"tmdbId\", name)\n               SELECT $1, t.id, t.name FROM UNNEST($2::int[], $3::text[]) AS t(id, name)\n               ON CONFLICT (provider, \"tmdbId\") DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Int4Array",
+        "TextArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "64ee9073c180e339f23b2a8245d911f70432f7a238c28940caa8cb217a0d0bde"
+}

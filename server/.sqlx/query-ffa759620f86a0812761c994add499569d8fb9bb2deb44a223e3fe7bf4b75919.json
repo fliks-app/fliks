@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE seasons SET overview = COALESCE($2, overview), \"airDate\" = COALESCE($3, \"airDate\")\n           WHERE id = $1 AND (overview IS DISTINCT FROM COALESCE($2, overview)\n             OR \"airDate\" IS DISTINCT FROM COALESCE($3, \"airDate\"))",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Text",
+        "Varchar"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ffa759620f86a0812761c994add499569d8fb9bb2deb44a223e3fe7bf4b75919"
+}

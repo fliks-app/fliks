@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM media_crew WHERE \"mediaId\" = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "497a8ebc8c752ddec0fc5ccdf0949684543377c6dbb521deb4f0a1a2f279fc00"
+}

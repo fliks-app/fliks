@@ -1,0 +1,128 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "media-servers-update",
+  "seed": "media-servers",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "apiKey": null,
+        "enabled": false,
+        "events": [
+          "media.deleted"
+        ],
+        "name": "Renamed",
+        "type": "emby",
+        "url": "http://x"
+      },
+      "expect": {
+        "body": {
+          "apiKey": null,
+          "enabled": false,
+          "events": [
+            "media.deleted"
+          ],
+          "id": 1,
+          "name": "Renamed",
+          "type": "emby",
+          "url": "http://x"
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/media-servers/1"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "name": "Spare2",
+        "type": "emby",
+        "url": "http://y"
+      },
+      "expect": {
+        "body": {
+          "apiKey": "parity-key",
+          "enabled": false,
+          "events": [],
+          "id": 2,
+          "name": "Spare2",
+          "type": "emby",
+          "url": "http://y"
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/media-servers/2"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "apiKey": "wrong",
+            "enabled": true,
+            "events": [],
+            "id": 4,
+            "name": "Emby Bad Key",
+            "type": "emby",
+            "url": "http://127.0.0.1:4882/401"
+          },
+          {
+            "apiKey": "parity-key",
+            "enabled": true,
+            "events": [],
+            "id": 5,
+            "name": "Emby No Users",
+            "type": "emby",
+            "url": "http://127.0.0.1:4882/nousers"
+          },
+          {
+            "apiKey": "parity-key",
+            "enabled": true,
+            "events": [],
+            "id": 6,
+            "name": "Emby Slow",
+            "type": "emby",
+            "url": "http://127.0.0.1:4882/slow"
+          },
+          {
+            "apiKey": "plex-key",
+            "enabled": true,
+            "events": [],
+            "id": 3,
+            "name": "Plex Box",
+            "type": "plex",
+            "url": "http://127.0.0.1:4882/ok"
+          },
+          {
+            "apiKey": null,
+            "enabled": false,
+            "events": [
+              "media.deleted"
+            ],
+            "id": 1,
+            "name": "Renamed",
+            "type": "emby",
+            "url": "http://x"
+          },
+          {
+            "apiKey": "parity-key",
+            "enabled": false,
+            "events": [],
+            "id": 2,
+            "name": "Spare2",
+            "type": "emby",
+            "url": "http://y"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media-servers"
+    }
+  ]
+}

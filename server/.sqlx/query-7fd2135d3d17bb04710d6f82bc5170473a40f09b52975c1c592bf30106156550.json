@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT jsonb_build_object('id', p.id, 'createdAt', iso_ms(p.\"createdAt\"), 'updatedAt', iso_ms(p.\"updatedAt\"),\n    'provider', p.provider, 'tmdbId', p.\"tmdbId\", 'name', p.name, 'avatarUrl', p.\"avatarUrl\", 'biography', p.biography,\n    'birthday', p.birthday, 'deathday', p.deathday, 'placeOfBirth', p.\"placeOfBirth\",\n    'knownForDepartment', p.\"knownForDepartment\", 'departments', p.departments,\n    'metadataRefreshedAt', iso_ms(p.\"metadataRefreshedAt\")) AS \"json!: Value\"\nFROM persons p ORDER BY p.name ASC, p.id ASC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "json!: Value",
+        "type_info": "Jsonb"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "7fd2135d3d17bb04710d6f82bc5170473a40f09b52975c1c592bf30106156550"
+}

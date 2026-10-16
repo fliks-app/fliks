@@ -1,0 +1,60 @@
+{
+  "deviation": "C39",
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..startedOn",
+    "$..endedOn"
+  ],
+  "name": "markers-create-unknown-episode",
+  "seed": "markers",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "endSeconds": 30,
+        "episodeId": 99999,
+        "startSeconds": 5,
+        "type": "intro"
+      },
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Episode #99999 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "POST",
+      "path": "/api/markers"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "confidence": 1,
+            "endSeconds": 9.5,
+            "episodeId": 1,
+            "id": 2,
+            "manual": true,
+            "startSeconds": 8.5,
+            "type": "outro"
+          },
+          {
+            "confidence": 0.8,
+            "endSeconds": 40,
+            "episodeId": 1,
+            "id": 1,
+            "manual": false,
+            "startSeconds": 10,
+            "type": "intro"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/markers/episode/1"
+    }
+  ]
+}

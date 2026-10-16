@@ -60,7 +60,6 @@ describe('SubtitleSyncService queue visibility', () => {
       } as never,
       { emit: jest.fn() } as never,
       activityRegistry as never,
-      { dispatch: jest.fn() } as never,
     );
 
     await service.enqueueSyncSubtitle(1);

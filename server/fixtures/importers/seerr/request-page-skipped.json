@@ -1,0 +1,26 @@
+{
+  "pageInfo": {
+    "pages": 1,
+    "pageSize": 50,
+    "results": 1,
+    "page": 1
+  },
+  "results": [
+    {
+      "id": 6,
+      "status": 1,
+      "type": "movie",
+      "createdAt": "2026-02-06T10:00:00.000Z",
+      "updatedAt": "2026-02-06T11:00:00.000Z",
+      "media": {
+        "id": 6,
+        "tmdbId": 0,
+        "status": 1
+      },
+      "requestedBy": {
+        "id": 4,
+        "username": "seerr_dave"
+      }
+    }
+  ]
+}

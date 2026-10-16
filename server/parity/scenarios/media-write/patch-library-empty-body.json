@@ -1,0 +1,25 @@
+{
+  "deviation": "C1",
+  "name": "media-write-patch-library-empty-body",
+  "seed": "ingest",
+  "steps": [
+    {
+      "as": "admin",
+      "method": "PATCH",
+      "path": "/api/media/104/library",
+      "body": {},
+      "expect": {
+        "status": 400,
+        "body": {
+          "statusCode": 400,
+          "error": "Bad Request"
+        }
+      }
+    }
+  ],
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..metadataRefreshedAt"
+  ]
+}

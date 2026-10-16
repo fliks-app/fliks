@@ -1,0 +1,53 @@
+{
+  "deviation": null,
+  "name": "commands-clear-history",
+  "seed": "commands",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "deleted": 5
+        },
+        "status": 200
+      },
+      "method": "DELETE",
+      "path": "/api/commands/history"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "data": [
+            {
+              "body": null,
+              "createdAt": "2026-10-03T10:00:00.000Z",
+              "endedOn": null,
+              "id": 4,
+              "name": "DetectMarkers",
+              "startedOn": null,
+              "status": "queued",
+              "trigger": "manual",
+              "updatedAt": "2026-10-03T10:00:00.000Z"
+            },
+            {
+              "body": null,
+              "createdAt": "2026-10-02T10:00:00.000Z",
+              "endedOn": null,
+              "id": 3,
+              "name": "RescanAll",
+              "startedOn": "2026-10-02T10:00:00.000Z",
+              "status": "running",
+              "trigger": "manual",
+              "updatedAt": "2026-10-02T10:00:00.000Z"
+            }
+          ],
+          "total": 2
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/commands"
+    }
+  ]
+}

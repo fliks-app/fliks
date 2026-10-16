@@ -1,0 +1,32 @@
+{
+  "status": "success",
+  "data": {
+    "id": 5555,
+    "name": "Tvdb Actor",
+    "image": null,
+    "birth": null,
+    "death": null,
+    "birthPlace": null,
+    "biographies": [
+      {
+        "language": "fra",
+        "biography": "Bio fr."
+      },
+      {
+        "language": "eng",
+        "biography": "Bio en."
+      }
+    ],
+    "characters": [
+      {
+        "peopleType": "Writer",
+        "name": "",
+        "seriesId": 81189,
+        "series": {
+          "name": "Breaking Bad",
+          "year": "2008"
+        }
+      }
+    ]
+  }
+}

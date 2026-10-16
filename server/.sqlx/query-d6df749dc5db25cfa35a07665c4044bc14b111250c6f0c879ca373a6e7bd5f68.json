@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, \"relativePath\" AS rel, \"streamInfo\" AS info FROM media_files WHERE \"mediaId\" = $1 ORDER BY id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "rel",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "info",
+        "type_info": "Jsonb"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "d6df749dc5db25cfa35a07665c4044bc14b111250c6f0c879ca373a6e7bd5f68"
+}

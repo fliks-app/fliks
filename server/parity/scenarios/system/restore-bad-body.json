@@ -1,0 +1,22 @@
+{
+  "deviation": null,
+  "name": "system-restore-bad-body",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {},
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Invalid backup name \"undefined\"",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/system/restore"
+    }
+  ],
+  "strictMessage": true
+}

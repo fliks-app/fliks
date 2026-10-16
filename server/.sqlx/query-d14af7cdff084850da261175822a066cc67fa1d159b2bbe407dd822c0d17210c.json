@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE requests SET \"mediaId\" = $2,\n        \"approvedById\" = CASE WHEN status = 'pending' AND $3::int IS NOT NULL THEN $3 ELSE \"approvedById\" END,\n        status = CASE WHEN status = 'pending' THEN 'approved'::requests_status_enum ELSE status END\n        WHERE id = $1 AND status::text = ANY('{pending,approved,processing}')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d14af7cdff084850da261175822a066cc67fa1d159b2bbe407dd822c0d17210c"
+}

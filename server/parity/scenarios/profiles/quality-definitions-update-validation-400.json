@@ -1,0 +1,147 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "quality-definitions-update-validation-400",
+  "seed": "profiles",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "items": [
+          {
+            "maxSize": 0,
+            "minSize": -1,
+            "preferredSize": 0,
+            "qualityId": 1
+          }
+        ]
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "items.0.minSize must not be less than 0"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PUT",
+      "path": "/api/quality-definitions"
+    },
+    {
+      "as": "admin",
+      "body": {},
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "items must be an array"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PUT",
+      "path": "/api/quality-definitions"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "items": "x"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "items must be an array",
+            "each value in nested property items must be either object or array"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PUT",
+      "path": "/api/quality-definitions"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "items": [
+          {
+            "minSize": 0,
+            "preferredSize": 0,
+            "qualityId": 1
+          }
+        ]
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "items.0.maxSize must not be less than 0",
+            "items.0.maxSize must be a number conforming to the specified constraints"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PUT",
+      "path": "/api/quality-definitions"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "items": [
+          {
+            "maxSize": 0,
+            "minSize": 0,
+            "preferredSize": 0,
+            "qualityId": "1"
+          }
+        ]
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "items.0.qualityId must be a number conforming to the specified constraints"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PUT",
+      "path": "/api/quality-definitions"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "items": [
+          {
+            "maxSize": 0,
+            "minSize": 0,
+            "preferredSize": 0,
+            "qualityId": 1,
+            "x": 1
+          }
+        ]
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "items.0.property x should not exist"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PUT",
+      "path": "/api/quality-definitions"
+    }
+  ]
+}

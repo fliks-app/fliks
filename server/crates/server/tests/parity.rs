@@ -3,7 +3,16 @@ use reqwest::{Client, Method, multipart};
 use serde_json::{Map, Value, json};
 use std::{collections::HashMap, fs, path::Path, process::Command, time::Duration};
 
-const ACTORS: [&str; 6] = ["admin", "user", "readonly", "other", "manager", "noread"];
+const ACTORS: [&str; 8] = [
+    "admin",
+    "user",
+    "readonly",
+    "other",
+    "manager",
+    "noread",
+    "settings",
+    "validator",
+];
 const MEDIA_ROOT: &str = "/tmp/fliks-parity";
 
 fn env(k: &str, d: &str) -> String {
@@ -312,6 +321,14 @@ async fn send(ctx: &Ctx, step: &Value, vars: &HashMap<String, Value>) -> Result<
     let mut step = step.clone();
     step.as_object_mut().map(|o| o.remove("expect"));
     subst(&mut step, vars)?;
+    if let Some(ms) = step["sleepMs"].as_u64() {
+        tokio::time::sleep(Duration::from_millis(ms)).await;
+        return Ok(Resp {
+            status: 200,
+            headers: Map::new(),
+            body: Value::Null,
+        });
+    }
     let mut path = step["path"]
         .as_str()
         .ok_or("step without path")?
@@ -347,7 +364,13 @@ async fn send(ctx: &Ctx, step: &Value, vars: &HashMap<String, Value>) -> Result<
     }
     let method = Method::from_bytes(step["method"].as_str().unwrap_or("GET").as_bytes())
         .map_err(|e| e.to_string())?;
-    let mut req = ctx.http.request(method, format!("{}{path}", ctx.target));
+    // `"stub": true` talks to the external-API stub (PARITY_STUB, parity/external/stub.py) instead of the app.
+    let base = if step["stub"].as_bool() == Some(true) {
+        env("PARITY_STUB", "http://127.0.0.1:4890")
+    } else {
+        ctx.target.clone()
+    };
+    let mut req = ctx.http.request(method, format!("{base}{path}"));
     for (k, v) in headers {
         req = req.header(k, v);
     }
@@ -419,7 +442,11 @@ async fn send(ctx: &Ctx, step: &Value, vars: &HashMap<String, Value>) -> Result<
             Value::Array(events)
         }
         _ => {
-            let text = r.text().await.map_err(|e| e.to_string())?;
+            // the app serves the stub's image host under `FLIKS_TMDB_IMAGE_URL`; Nest answered the real one
+            let text = r.text().await.map_err(|e| e.to_string())?.replace(
+                &format!("{}/img/t/p", env("PARITY_STUB", "http://127.0.0.1:4890")),
+                "https://image.tmdb.org/t/p",
+            );
             if text.is_empty() {
                 Value::Null
             } else {
@@ -451,8 +478,92 @@ fn collect(dir: &Path, out: &mut Vec<std::path::PathBuf>) {
     }
 }
 
+/// Scenario `fs`: rebuilds `s5-ingest/work` under the media root (`{path, from}` copies a generated
+/// file, `{path, text}` writes one, `{dir}` makes a directory, `{link, to}` a symlink).
+fn fs_setup(sc: &Value) {
+    let Some(items) = sc["fs"].as_array() else {
+        return;
+    };
+    let root = Path::new(MEDIA_ROOT);
+    let work = root.join("s5-ingest/work");
+    let _ = fs::remove_dir_all(&work);
+    fs::create_dir_all(&work).expect("work dir");
+    let under = |p: &str| {
+        assert!(
+            p.starts_with("s5-ingest/work/"),
+            "fs path outside the work dir: {p}"
+        );
+        root.join(p)
+    };
+    for it in items {
+        if let Some(d) = it["dir"].as_str() {
+            fs::create_dir_all(under(d)).expect("fs dir");
+            continue;
+        }
+        if let (Some(l), Some(to)) = (it["link"].as_str(), it["to"].as_str()) {
+            let l = under(l);
+            fs::create_dir_all(l.parent().expect("parent")).expect("fs parent");
+            std::os::unix::fs::symlink(to, l).expect("fs link");
+            continue;
+        }
+        let p = under(it["path"].as_str().expect("fs path"));
+        fs::create_dir_all(p.parent().expect("parent")).expect("fs parent");
+        match (it["from"].as_str(), it["text"].as_str()) {
+            (Some(f), _) => fs::copy(root.join(f), &p).map(drop),
+            (_, Some(t)) => fs::write(&p, t),
+            _ => fs::write(&p, b""),
+        }
+        .expect("fs file");
+    }
+}
+
+/// Scenario `fsAfter`: `{exists: [...], absent: [...]}`, waited for up to 3 s (detached deletes).
+async fn fs_check(sc: &Value) -> Vec<String> {
+    let root = Path::new(MEDIA_ROOT);
+    let want = |k: &str| -> Vec<String> {
+        sc["fsAfter"][k]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|v| v.as_str().map(str::to_owned))
+            .collect()
+    };
+    let (exists, absent) = (want("exists"), want("absent"));
+    if !exists.is_empty() {
+        // a detached delete must have had time to (wrongly) remove what should stay
+        tokio::time::sleep(Duration::from_millis(500)).await;
+    }
+    let mut errs = vec![];
+    for _ in 0..30 {
+        errs.clear();
+        for p in &exists {
+            if fs::symlink_metadata(root.join(p)).is_err() {
+                errs.push(format!("fs: {p} should exist"));
+            }
+        }
+        for p in &absent {
+            if fs::symlink_metadata(root.join(p)).is_ok() {
+                errs.push(format!("fs: {p} should be absent"));
+            }
+        }
+        if errs.is_empty() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    errs
+}
+
+/// A scenario with a `"stub": true` step needs provider keys and the stub on the target.
+fn uses_stub(sc: &Value) -> bool {
+    sc["steps"]
+        .as_array()
+        .is_some_and(|s| s.iter().any(|st| st["stub"].as_bool() == Some(true)))
+}
+
 /// Runs one scenario; in record mode fills each step's `expect` from the live response.
 async fn run(ctx: &Ctx, sc: &mut Value, record: bool) -> Vec<String> {
+    fs_setup(sc);
     let ignore: Vec<Vec<Seg>> = sc["ignore"]
         .as_array()
         .map(|a| {
@@ -487,15 +598,40 @@ async fn run(ctx: &Ctx, sc: &mut Value, record: bool) -> Vec<String> {
     let n = sc["steps"].as_array().map_or(0, |s| s.len());
     for i in 0..n {
         let step = sc["steps"][i].clone();
-        let resp = match send(ctx, &step, &vars).await {
+        let mut resp = match send(ctx, &step, &vars).await {
             Ok(r) => r,
             Err(e) => {
                 errs.push(format!("step {i}: {e}"));
                 break;
             }
         };
+        // `poll: {path, until, timeoutMs}` repeats the step until the body holds the value (background jobs).
+        if let Some(p) = step["poll"].as_object() {
+            let (path, until) = (parse_path(p["path"].as_str().unwrap_or("$")), &p["until"]);
+            let limit =
+                Duration::from_millis(p.get("timeoutMs").and_then(Value::as_u64).unwrap_or(5000));
+            let started = std::time::Instant::now();
+            while select(&resp.body, &path) != Some(until) && started.elapsed() < limit {
+                tokio::time::sleep(Duration::from_millis(100)).await;
+                if let Ok(r) = send(ctx, &step, &vars).await {
+                    resp = r;
+                }
+            }
+        }
+        // step-level `ignore`: paths dropped from this step's body only
+        let step_ignore: Vec<Vec<Seg>> = step["ignore"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|p| p.as_str())
+            .map(parse_path)
+            .collect();
+        let ignored = || ignore.iter().chain(&step_ignore);
         let mut body = resp.body.clone();
-        ignore.iter().for_each(|p| remove(&mut body, p));
+        ignored().for_each(|p| remove(&mut body, p));
+        if step["ignoreBody"].as_bool() == Some(true) {
+            body = Value::Null;
+        }
         results["steps"].as_array_mut().unwrap().push(json!({
             "status": resp.status, "headers": resp.headers, "body": resp.body }));
         for (k, p) in &captures {
@@ -543,7 +679,7 @@ async fn run(ctx: &Ctx, sc: &mut Value, record: bool) -> Vec<String> {
             }
             (e, _) => {
                 let (mut e, mut b) = (e.clone(), body.clone());
-                ignore.iter().for_each(|p| remove(&mut e, p));
+                ignored().for_each(|p| remove(&mut e, p));
                 unordered.iter().for_each(|p| {
                     sort_at(&mut e, p);
                     sort_at(&mut b, p);
@@ -559,7 +695,29 @@ async fn run(ctx: &Ctx, sc: &mut Value, record: bool) -> Vec<String> {
         }
         errs.extend(d.into_iter().map(|m| format!("step {i}: {m}")));
     }
+    errs.extend(fs_check(sc).await);
     errs
+}
+
+/// Logs every actor of the current database in; seeds beyond `base` add actors (noread, settings,
+/// validator) and a missing one only matters to the scenarios that use it.
+async fn login_all(http: &Client, target: &str) -> HashMap<String, String> {
+    let mut tokens = HashMap::new();
+    for a in ACTORS {
+        let r = http
+            .post(format!("{target}/api/auth/login"))
+            .json(&json!({ "username": a, "password": format!("{a}-pass") }))
+            .send()
+            .await
+            .unwrap_or_else(|e| panic!("login {a}: {e}"));
+        let v: Value = r.json().await.unwrap_or_default();
+        match v["accessToken"].as_str() {
+            Some(t) => tokens.insert(a.to_string(), t.to_string()),
+            None if matches!(a, "noread" | "settings" | "validator") => None,
+            None => panic!("login {a}: {v}"),
+        };
+    }
+    tokens
 }
 
 #[tokio::test]
@@ -574,6 +732,8 @@ async fn parity() {
         env("PARITY_TPL", "fliks_parity_tpl"),
     );
     let engine = env("PARITY_ENGINE", "up");
+    // `PARITY_PROVIDERS=1`: the target has provider keys and the stub; only scenarios with stub steps run.
+    let providers = env("PARITY_PROVIDERS", "") == "1";
     // Library scenarios create directories under libs/ and list it; a leftover from a previous run breaks the listing.
     let _ = fs::remove_dir_all(Path::new(MEDIA_ROOT).join("libs"));
     let (mut ok, mut failed, mut skipped, mut dev) = (0, 0, 0, vec![]);
@@ -597,40 +757,29 @@ async fn parity() {
         }
     }
     reset_db(&db, &template(&base_tpl, seeds.last().expect("seed")));
-    let mut tokens = HashMap::new();
-    for a in ACTORS {
-        let r = http
-            .post(format!("{target}/api/auth/login"))
-            .json(&json!({ "username": a, "password": format!("{a}-pass") }))
-            .send()
-            .await
-            .unwrap_or_else(|e| panic!("login {a}: {e}"));
-        let v: Value = r.json().await.unwrap_or_default();
-        // seeds beyond `base` add actors (noread); a missing one only matters to the scenarios that use it
-        match v["accessToken"].as_str() {
-            Some(t) => tokens.insert(a.to_string(), t.to_string()),
-            None if a == "noread" => None,
-            None => panic!("login {a}: {v}"),
-        };
-    }
-    let ctx = Ctx {
+    let mut ctx = Ctx {
+        tokens: login_all(&http, &target).await,
         http,
         target,
-        tokens,
     };
+    let mut logged_in = seeds.last().cloned().unwrap_or_default();
 
     for f in selected {
         let mut sc: Value = serde_json::from_str(&fs::read_to_string(f).unwrap())
             .unwrap_or_else(|e| panic!("{f:?}: {e}"));
         let name = sc["name"].as_str().unwrap_or("?").to_string();
-        if sc["engine"].as_str().is_some_and(|e| e != engine) {
+        if sc["engine"].as_str().is_some_and(|e| e != engine) || uses_stub(&sc) != providers {
             skipped += 1;
             continue;
         }
-        reset_db(
-            &db,
-            &template(&base_tpl, sc["seed"].as_str().unwrap_or("base")),
-        );
+        let seed = sc["seed"].as_str().unwrap_or("base");
+        reset_db(&db, &template(&base_tpl, seed));
+        if seed != logged_in {
+            ctx.tokens = login_all(&ctx.http, &ctx.target).await;
+            logged_in = seed.to_owned();
+            // the logins wrote refresh tokens: start the scenario from the pristine seed again
+            reset_db(&db, &template(&base_tpl, seed));
+        }
         // untagged scenarios are recorded with the engine up only
         let rec = record && (sc["engine"].is_string() || engine == "up");
         let errs = run(&ctx, &mut sc, rec).await;
@@ -647,6 +796,7 @@ async fn parity() {
             dev.push(if errs.is_empty() {
                 format!("DEVIATION {name} ({}): matches", sc["deviation"])
             } else {
+                failed += 1;
                 line("DEVIATION-DIFF")
             });
         } else if errs.is_empty() {

@@ -1,0 +1,29 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "requests-create-quota-exceeded",
+  "seed": "requests",
+  "steps": [
+    {
+      "as": "other",
+      "body": {
+        "mediaType": "movie",
+        "title": "Too Many",
+        "tmdbId": 9020
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Quota exceeded: 1/1 movie requests in last 7 days",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "POST",
+      "path": "/api/requests"
+    }
+  ]
+}

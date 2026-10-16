@@ -1,0 +1,58 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "custom-formats-get-404",
+  "seed": "profiles",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Custom format #999 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "GET",
+      "path": "/api/custom-formats/999"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Validation failed (numeric string is expected)",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "GET",
+      "path": "/api/custom-formats/abc"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "id": 2,
+          "name": "No CAM",
+          "score": -100,
+          "specs": [
+            {
+              "negate": true,
+              "required": false,
+              "type": "source",
+              "value": "cam"
+            }
+          ]
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/custom-formats/2"
+    }
+  ]
+}

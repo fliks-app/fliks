@@ -1,0 +1,31 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "requests-list-validation-400",
+  "seed": "requests",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "property foo should not exist",
+            "status must be one of the following values: pending, approved, declined, processing, available, failed",
+            "userId must be an integer number",
+            "tmdbId must be an integer number",
+            "page must not be less than 1",
+            "limit must not be greater than 500"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "GET",
+      "path": "/api/requests?status=x&page=0&limit=501&userId=abc&foo=1&tmdbId=1.5"
+    }
+  ]
+}

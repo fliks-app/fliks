@@ -1,0 +1,30 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "requests-create-library-forbidden",
+  "seed": "requests",
+  "steps": [
+    {
+      "as": "validator",
+      "body": {
+        "libraryId": 2,
+        "mediaType": "movie",
+        "title": "M",
+        "tmdbId": 9300
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "You do not have access to the selected library",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "POST",
+      "path": "/api/requests"
+    }
+  ]
+}

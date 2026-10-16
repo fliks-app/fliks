@@ -1,0 +1,65 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "requests-create-series-profile-lock",
+  "seed": "requests",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "languageProfileId": 99,
+        "mediaType": "series",
+        "qualityProfileId": 99,
+        "seasons": [
+          3
+        ],
+        "title": "S",
+        "tmdbId": 9004
+      },
+      "expect": {
+        "body": {
+          "approvedBy": null,
+          "approvedById": null,
+          "declinedReason": null,
+          "fanartUrl": null,
+          "id": 11,
+          "kind": "add",
+          "languageProfile": {
+            "id": 2
+          },
+          "languageProfileId": 2,
+          "library": {
+            "id": 2
+          },
+          "libraryId": 2,
+          "media": null,
+          "mediaId": null,
+          "mediaType": "series",
+          "posterUrl": null,
+          "qualityProfile": {
+            "id": 1
+          },
+          "qualityProfileId": 1,
+          "seasons": [
+            3
+          ],
+          "status": "pending",
+          "title": "S",
+          "tmdbId": 9004,
+          "user": {
+            "avatar": null,
+            "id": 2,
+            "username": "user"
+          },
+          "userId": 2
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/requests"
+    }
+  ]
+}

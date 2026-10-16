@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT count(*) AS \"n!\" FROM episodes e JOIN seasons s ON s.id = e.\"seasonId\" WHERE s.\"mediaId\" = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "n!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "687fb29dd1d13074523bf203216d5e6b6e180a6e815cae7712ffa02ebcb4f63a"
+}

@@ -1,0 +1,38 @@
+{
+  "status": "success",
+  "data": {
+    "id": 777,
+    "name": "Clara 404",
+    "image": null,
+    "birth": "1970-01-02",
+    "death": null,
+    "birthPlace": "Lyon",
+    "biographies": [
+      {
+        "language": "eng",
+        "biography": "English bio."
+      }
+    ],
+    "characters": [
+      {
+        "peopleType": "Actor",
+        "name": "Role",
+        "seriesId": 81189,
+        "series": {
+          "name": "Breaking Bad",
+          "image": null,
+          "year": "2008"
+        }
+      },
+      {
+        "peopleType": "Director",
+        "name": "",
+        "movieId": 169,
+        "movie": {
+          "name": "The Matrix",
+          "year": "1999"
+        }
+      }
+    ]
+  }
+}

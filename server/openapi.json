@@ -179,6 +179,187 @@
         }
       }
     },
+    "/api/auto-approval-rules": {
+      "get": {
+        "tags": [
+          "requests"
+        ],
+        "operationId": "rule_list",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "requests"
+        ],
+        "operationId": "rule_create",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/auto-approval-rules/{id}": {
+      "get": {
+        "tags": [
+          "requests"
+        ],
+        "operationId": "rule_get",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "requests"
+        ],
+        "operationId": "rule_update",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "requests"
+        ],
+        "operationId": "rule_remove",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/commands": {
+      "get": {
+        "tags": [
+          "jobs"
+        ],
+        "operationId": "list",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "jobs"
+        ],
+        "operationId": "trigger",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/commands/history": {
+      "delete": {
+        "tags": [
+          "jobs"
+        ],
+        "operationId": "clear_history",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/commands/schedulers": {
+      "get": {
+        "tags": [
+          "jobs"
+        ],
+        "operationId": "schedulers",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/custom-formats": {
+      "get": {
+        "tags": [
+          "profiles"
+        ],
+        "operationId": "format_list",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "profiles"
+        ],
+        "operationId": "format_create",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/custom-formats/test": {
+      "post": {
+        "tags": [
+          "profiles"
+        ],
+        "operationId": "format_test",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/custom-formats/{id}": {
+      "get": {
+        "tags": [
+          "profiles"
+        ],
+        "operationId": "format_get",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "profiles"
+        ],
+        "operationId": "format_update",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "profiles"
+        ],
+        "operationId": "format_delete",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/engine/remote": {
       "get": {
         "tags": [
@@ -256,6 +437,148 @@
         }
       }
     },
+    "/api/imports/library/orphans/relink": {
+      "post": {
+        "tags": [
+          "crate::ingest::disk"
+        ],
+        "operationId": "relink",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/imports/library/orphans/relink-batch": {
+      "post": {
+        "tags": [
+          "crate::ingest::disk"
+        ],
+        "operationId": "relink_batch",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/imports/library/{libraryId}/orphans/scan": {
+      "post": {
+        "tags": [
+          "crate::ingest::disk"
+        ],
+        "summary": "`POST /api/imports/library/:libraryId/orphans/scan` (rules 60, 70: ACL and F22 on the path).",
+        "operationId": "scan",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/imports/orphans/preview": {
+      "post": {
+        "tags": [
+          "crate::ingest::disk"
+        ],
+        "summary": "`POST /api/imports/orphans/preview` (rules 61, 71: `settings.access`, absolute paths only).",
+        "operationId": "preview",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/imports/radarr": {
+      "post": {
+        "tags": [],
+        "operationId": "radarr_import",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/imports/radarr/preview": {
+      "post": {
+        "tags": [],
+        "operationId": "radarr_preview",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/imports/radarr/test": {
+      "post": {
+        "tags": [],
+        "operationId": "radarr_test",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/imports/seerr/import-requests": {
+      "post": {
+        "tags": [],
+        "operationId": "seerr_import_requests",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/imports/seerr/test": {
+      "post": {
+        "tags": [],
+        "operationId": "seerr_test",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/imports/sonarr": {
+      "post": {
+        "tags": [],
+        "operationId": "sonarr_import",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/imports/sonarr/preview": {
+      "post": {
+        "tags": [],
+        "operationId": "sonarr_preview",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/imports/sonarr/test": {
+      "post": {
+        "tags": [],
+        "operationId": "sonarr_test",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/libraries": {
       "get": {
         "tags": [
@@ -299,6 +622,18 @@
           "libraries"
         ],
         "operationId": "get_one",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "media::write"
+        ],
+        "summary": "`DELETE /api/libraries/:id` (rules 75-76): every media row, never a file; not transactional.",
+        "operationId": "remove_library",
         "responses": {
           "200": {
             "description": ""
@@ -390,12 +725,225 @@
         }
       }
     },
+    "/api/markers": {
+      "post": {
+        "tags": [
+          "routes"
+        ],
+        "operationId": "create",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/markers/episode/{episodeId}": {
+      "get": {
+        "tags": [
+          "routes"
+        ],
+        "operationId": "list_episode",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/markers/season/{seasonId}": {
+      "get": {
+        "tags": [
+          "routes"
+        ],
+        "operationId": "list_season",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/markers/season/{seasonId}/detect": {
+      "post": {
+        "tags": [
+          "routes"
+        ],
+        "operationId": "detect_season",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/markers/series/{mediaId}/detect-all": {
+      "post": {
+        "tags": [
+          "routes"
+        ],
+        "operationId": "detect_all",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/markers/{id}": {
+      "put": {
+        "tags": [
+          "routes"
+        ],
+        "operationId": "update",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "routes"
+        ],
+        "operationId": "remove",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/media": {
       "get": {
         "tags": [
           "media"
         ],
         "operationId": "find",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "media::write"
+        ],
+        "summary": "`POST /api/media` (rule 18): columns only, no library, no folder, no hook.",
+        "operationId": "create",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/media-servers": {
+      "get": {
+        "tags": [
+          "routes"
+        ],
+        "operationId": "list",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "routes"
+        ],
+        "operationId": "create",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/media-servers/types": {
+      "get": {
+        "tags": [
+          "routes"
+        ],
+        "operationId": "types",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/media-servers/{id}": {
+      "get": {
+        "tags": [
+          "routes"
+        ],
+        "operationId": "get_one",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "routes"
+        ],
+        "operationId": "update",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "routes"
+        ],
+        "operationId": "remove",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/media-servers/{id}/import-watch-history": {
+      "post": {
+        "tags": [
+          "routes"
+        ],
+        "operationId": "import_watch_history",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/media-servers/{id}/test": {
+      "post": {
+        "tags": [
+          "routes"
+        ],
+        "operationId": "test",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/media/bulk": {
+      "patch": {
+        "tags": [
+          "media::write"
+        ],
+        "summary": "`PATCH /api/media/bulk` (rule 31, F46, C47): all or nothing, in one transaction.",
+        "operationId": "bulk",
         "responses": {
           "200": {
             "description": ""
@@ -455,6 +1003,20 @@
         }
       }
     },
+    "/api/media/episodes/{episodeId}": {
+      "patch": {
+        "tags": [
+          "media::write"
+        ],
+        "summary": "`PATCH /api/media/episodes/:episodeId` (rule 34): no hook, no event.",
+        "operationId": "patch_episode",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/media/genres": {
       "get": {
         "tags": [
@@ -463,6 +1025,34 @@
         "operationId": "genre_list",
         "responses": {
           "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/media/import": {
+      "post": {
+        "tags": [
+          "media::write"
+        ],
+        "summary": "`POST /api/media/import` (rule 17, C1: a numeric `externalId` and a known `provider`).",
+        "operationId": "import_media",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/media/import/tmdb": {
+      "post": {
+        "tags": [
+          "media::write"
+        ],
+        "summary": "`POST /api/media/import/tmdb` (rules 10-13).",
+        "operationId": "import_tmdb",
+        "responses": {
+          "201": {
             "description": ""
           }
         }
@@ -494,6 +1084,20 @@
         }
       }
     },
+    "/api/media/seasons/{seasonId}": {
+      "patch": {
+        "tags": [
+          "media::write"
+        ],
+        "summary": "`PATCH /api/media/seasons/:seasonId` (rules 32-33).",
+        "operationId": "patch_season",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/media/{id}": {
       "get": {
         "tags": [
@@ -502,6 +1106,44 @@
         "operationId": "get_media",
         "responses": {
           "200": {
+            "description": ""
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "media::write"
+        ],
+        "summary": "`PUT /api/media/:id` (rules 26-28).",
+        "operationId": "update",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "media::write"
+        ],
+        "summary": "`DELETE /api/media/:id` (rule 66): the folder goes after the response, contained (rule 70).",
+        "operationId": "remove",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/media/{id}/analyze": {
+      "post": {
+        "tags": [
+          "media::write"
+        ],
+        "summary": "No claim, no event: two analyses of one media both run (rule 60).",
+        "operationId": "analyze",
+        "responses": {
+          "201": {
             "description": ""
           }
         }
@@ -546,6 +1188,155 @@
         }
       }
     },
+    "/api/media/{id}/episodes/{episodeId}/refresh": {
+      "post": {
+        "tags": [
+          "media::write"
+        ],
+        "summary": "`POST /api/media/:id/episodes/:episodeId/refresh` (rules 54-55, F46: the episode is under `:id`).",
+        "operationId": "refresh_episode",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/media/{id}/files/{fileId}": {
+      "delete": {
+        "tags": [
+          "media::write"
+        ],
+        "summary": "`DELETE /api/media/:id/files/:fileId` (rule 77): only the string `true` deletes on disk.",
+        "operationId": "remove_file",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/media/{id}/files/{fileId}/companions": {
+      "get": {
+        "tags": [
+          "media::write"
+        ],
+        "operationId": "companions_list",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "media::write"
+        ],
+        "summary": "Rules 93-95: a tracked subtitle is the S6 callee's (501 until then), anything else a contained unlink.",
+        "operationId": "companions_delete",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/media/{id}/files/{fileId}/companions/download": {
+      "get": {
+        "tags": [
+          "media::write"
+        ],
+        "operationId": "companions_download",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/media/{id}/files/{fileId}/companions/edl": {
+      "post": {
+        "tags": [
+          "media::write"
+        ],
+        "summary": "`POST .../companions/edl` (rules 89-92): the uploaded bytes, written atomically beside the video.",
+        "operationId": "companions_edl",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/media/{id}/identify": {
+      "post": {
+        "tags": [
+          "media::write"
+        ],
+        "summary": "`POST /api/media/:id/identify` (rules 47-50).",
+        "operationId": "identify",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/media/{id}/library": {
+      "patch": {
+        "tags": [
+          "media::write"
+        ],
+        "summary": "`PATCH /api/media/:id/library` (rule 29): the row moves, the files do not.",
+        "operationId": "patch_library",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/media/{id}/profiles": {
+      "patch": {
+        "tags": [
+          "media::write"
+        ],
+        "summary": "`PATCH /api/media/:id/profiles` (rule 30): `media.grab` or `media.edit`.",
+        "operationId": "patch_profiles",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/media/{id}/refresh": {
+      "post": {
+        "tags": [
+          "media::write"
+        ],
+        "summary": "`POST /api/media/:id/refresh` (rule 52): `metadata.started` goes out before the claim.",
+        "operationId": "refresh",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/media/{id}/rescan": {
+      "post": {
+        "tags": [
+          "media::write"
+        ],
+        "operationId": "rescan",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/media/{id}/similar": {
       "get": {
         "tags": [
@@ -578,6 +1369,253 @@
           "media"
         ],
         "operationId": "track",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/metadata/discover/movie": {
+      "get": {
+        "tags": [
+          "metadata"
+        ],
+        "operationId": "discover_movie",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/metadata/discover/tv": {
+      "get": {
+        "tags": [
+          "metadata"
+        ],
+        "operationId": "discover_tv",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/metadata/genres/movie": {
+      "get": {
+        "tags": [
+          "metadata"
+        ],
+        "operationId": "genres_movie",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/metadata/genres/tv": {
+      "get": {
+        "tags": [
+          "metadata"
+        ],
+        "operationId": "genres_tv",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/metadata/movie/{tmdbId}": {
+      "get": {
+        "tags": [
+          "metadata"
+        ],
+        "operationId": "legacy_movie",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/metadata/popular/movie": {
+      "get": {
+        "tags": [
+          "metadata"
+        ],
+        "operationId": "popular_movie",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/metadata/popular/tv": {
+      "get": {
+        "tags": [
+          "metadata"
+        ],
+        "operationId": "popular_tv",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/metadata/search/movie": {
+      "get": {
+        "tags": [
+          "metadata"
+        ],
+        "operationId": "search_movie",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/metadata/search/tv": {
+      "get": {
+        "tags": [
+          "metadata"
+        ],
+        "operationId": "search_tv",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/metadata/trending/movie": {
+      "get": {
+        "tags": [
+          "metadata"
+        ],
+        "operationId": "trending_movie",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/metadata/trending/tv": {
+      "get": {
+        "tags": [
+          "metadata"
+        ],
+        "operationId": "trending_tv",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/metadata/tv/{tmdbId}": {
+      "get": {
+        "tags": [
+          "metadata"
+        ],
+        "operationId": "legacy_tv",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/metadata/tv/{tmdbId}/seasons": {
+      "get": {
+        "tags": [
+          "metadata"
+        ],
+        "operationId": "legacy_seasons",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/metadata/upcoming/movie": {
+      "get": {
+        "tags": [
+          "metadata"
+        ],
+        "operationId": "upcoming_movie",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/metadata/upcoming/tv": {
+      "get": {
+        "tags": [
+          "metadata"
+        ],
+        "operationId": "upcoming_tv",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/metadata/{provider}/movie/{externalId}": {
+      "get": {
+        "tags": [
+          "metadata"
+        ],
+        "operationId": "details_movie",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/metadata/{provider}/tv/{externalId}": {
+      "get": {
+        "tags": [
+          "metadata"
+        ],
+        "operationId": "details_tv",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/metadata/{provider}/tv/{externalId}/season-stubs": {
+      "get": {
+        "tags": [
+          "metadata"
+        ],
+        "operationId": "season_stubs",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/metadata/{provider}/tv/{externalId}/seasons": {
+      "get": {
+        "tags": [
+          "metadata"
+        ],
+        "operationId": "seasons",
         "responses": {
           "200": {
             "description": ""
@@ -665,6 +1703,45 @@
         "operationId": "test",
         "responses": {
           "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/persons/search": {
+      "get": {
+        "tags": [
+          "persons"
+        ],
+        "operationId": "search",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/persons/{id}": {
+      "get": {
+        "tags": [
+          "persons"
+        ],
+        "operationId": "detail",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/persons/{id}/provider-credits": {
+      "get": {
+        "tags": [
+          "persons"
+        ],
+        "operationId": "provider_credits",
+        "responses": {
+          "200": {
             "description": ""
           }
         }
@@ -1092,6 +2169,175 @@
         }
       }
     },
+    "/api/profiles/language": {
+      "get": {
+        "tags": [
+          "profiles"
+        ],
+        "operationId": "language_list",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "profiles"
+        ],
+        "operationId": "language_create",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/profiles/language-definitions": {
+      "get": {
+        "tags": [
+          "profiles"
+        ],
+        "operationId": "language_definitions",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/profiles/language/{id}": {
+      "get": {
+        "tags": [
+          "profiles"
+        ],
+        "operationId": "language_get",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "profiles"
+        ],
+        "operationId": "language_update",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "profiles"
+        ],
+        "operationId": "language_delete",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/profiles/quality": {
+      "get": {
+        "tags": [
+          "profiles"
+        ],
+        "operationId": "quality_list",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "profiles"
+        ],
+        "operationId": "quality_create",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/profiles/quality/{id}": {
+      "get": {
+        "tags": [
+          "profiles"
+        ],
+        "operationId": "quality_get",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "profiles"
+        ],
+        "operationId": "quality_update",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "profiles"
+        ],
+        "operationId": "quality_delete",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/quality-definitions": {
+      "get": {
+        "tags": [
+          "profiles"
+        ],
+        "operationId": "definitions_list",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "profiles"
+        ],
+        "operationId": "definitions_update",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/quality-definitions/reset": {
+      "post": {
+        "tags": [
+          "profiles"
+        ],
+        "summary": "Computes the defaults only; the client saves them with `PUT` (rule 28).",
+        "operationId": "definitions_reset",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/remote/commands": {
       "get": {
         "tags": [
@@ -1191,6 +2437,141 @@
         "operationId": "command",
         "responses": {
           "202": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/requests": {
+      "get": {
+        "tags": [
+          "requests"
+        ],
+        "operationId": "list",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "requests"
+        ],
+        "operationId": "create",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/requests/comments/{commentId}": {
+      "delete": {
+        "tags": [
+          "requests"
+        ],
+        "operationId": "comment_remove",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/requests/title-state": {
+      "get": {
+        "tags": [
+          "requests"
+        ],
+        "operationId": "title_state",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/requests/{id}": {
+      "get": {
+        "tags": [
+          "requests"
+        ],
+        "operationId": "get_one",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "requests"
+        ],
+        "operationId": "remove",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "requests"
+        ],
+        "operationId": "update",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/requests/{id}/approve": {
+      "post": {
+        "tags": [
+          "requests"
+        ],
+        "operationId": "approve",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/requests/{id}/comments": {
+      "get": {
+        "tags": [
+          "requests"
+        ],
+        "operationId": "comments_list",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "requests"
+        ],
+        "operationId": "comment_create",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/requests/{id}/decline": {
+      "post": {
+        "tags": [
+          "requests"
+        ],
+        "operationId": "decline",
+        "responses": {
+          "201": {
             "description": ""
           }
         }
@@ -1641,12 +3022,76 @@
         }
       }
     },
+    "/api/system/backup": {
+      "post": {
+        "tags": [
+          "system"
+        ],
+        "operationId": "backup_create",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/system/backups": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "operationId": "backup_list",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/system/backups/{name}": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Express `res.download`: `send`'s Range, `Last-Modified` and length, plus a weak ETag and the attachment name.",
+        "operationId": "backup_download",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "system"
+        ],
+        "operationId": "backup_delete",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/system/events": {
       "get": {
         "tags": [
           "events"
         ],
         "operationId": "events",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/system/health": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "operationId": "health",
         "responses": {
           "200": {
             "description": ""
@@ -1671,6 +3116,19 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/api/system/logs": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "operationId": "log_list",
+        "responses": {
+          "200": {
+            "description": ""
           }
         }
       }
@@ -1710,6 +3168,46 @@
           "qoe"
         ],
         "operationId": "summary",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/system/restart": {
+      "post": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Rule 8: respond, then shut down through the normal path and exit non-zero so the supervisor restarts us.",
+        "operationId": "restart",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/system/restore": {
+      "post": {
+        "tags": [
+          "system"
+        ],
+        "operationId": "backup_restore",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/system/stats": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "operationId": "stats",
         "responses": {
           "200": {
             "description": ""
@@ -1773,6 +3271,32 @@
           "crate::stream"
         ],
         "operationId": "purge_file",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/system/update": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "operationId": "update",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/system/version": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "operationId": "version",
         "responses": {
           "200": {
             "description": ""

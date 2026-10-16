@@ -1,0 +1,151 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "profiles-language-list",
+  "seed": "profiles",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "audioLanguages": [
+              {
+                "isoCode": "fr",
+                "name": "French"
+              },
+              {
+                "isoCode": "en",
+                "name": "English"
+              }
+            ],
+            "id": 2,
+            "name": "Parity FR",
+            "subtitleLanguages": [
+              {
+                "forced": false,
+                "hearingImpaired": "prefer",
+                "hi": false,
+                "isoCode": "fr",
+                "name": "French"
+              },
+              {
+                "forced": true,
+                "hi": false,
+                "isoCode": "en",
+                "name": "English"
+              }
+            ]
+          },
+          {
+            "audioLanguages": [
+              {
+                "isoCode": "en",
+                "name": "English"
+              }
+            ],
+            "id": 3,
+            "name": "Parity Null Mode",
+            "subtitleLanguages": [
+              {
+                "forced": false,
+                "hearingImpaired": null,
+                "hi": true,
+                "isoCode": "en",
+                "name": "English"
+              }
+            ]
+          },
+          {
+            "audioLanguages": [],
+            "id": 1,
+            "name": "Toutes les langues (défaut)",
+            "subtitleLanguages": []
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/profiles/language"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": [
+          {
+            "audioLanguages": [
+              {
+                "isoCode": "fr",
+                "name": "French"
+              },
+              {
+                "isoCode": "en",
+                "name": "English"
+              }
+            ],
+            "id": 2,
+            "name": "Parity FR",
+            "subtitleLanguages": [
+              {
+                "forced": false,
+                "hearingImpaired": "prefer",
+                "hi": false,
+                "isoCode": "fr",
+                "name": "French"
+              },
+              {
+                "forced": true,
+                "hi": false,
+                "isoCode": "en",
+                "name": "English"
+              }
+            ]
+          },
+          {
+            "audioLanguages": [
+              {
+                "isoCode": "en",
+                "name": "English"
+              }
+            ],
+            "id": 3,
+            "name": "Parity Null Mode",
+            "subtitleLanguages": [
+              {
+                "forced": false,
+                "hearingImpaired": null,
+                "hi": true,
+                "isoCode": "en",
+                "name": "English"
+              }
+            ]
+          },
+          {
+            "audioLanguages": [],
+            "id": 1,
+            "name": "Toutes les langues (défaut)",
+            "subtitleLanguages": []
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/profiles/language"
+    },
+    {
+      "as": "anon",
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "GET",
+      "path": "/api/profiles/language"
+    }
+  ]
+}

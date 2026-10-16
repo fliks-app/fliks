@@ -5,12 +5,8 @@ import { Season } from '../../media/entities/season.entity';
 import { Episode } from '../../media/entities/episode.entity';
 import { MediaFile } from '../../media/entities/media-file.entity';
 import { PluginRegistration } from '../entities/plugin-registration.entity';
-import { MediaModule } from '../../media/media.module';
-import { ProfilesModule } from '../../profiles/profiles.module';
 import { RequestsModule } from '../../requests/requests.module';
-import { LibraryIngestModule } from '../../../common/library-ingest/library-ingest.module';
 import { NotificationsModule } from '../../notifications/notifications.module';
-import { MediaServersModule } from '../../media-servers/media-servers.module';
 import { SettingsModule } from '../../settings/settings.module';
 import { FliksHostImpl } from './fliks-host.service';
 import { InProcessPluginHostClient } from './in-process-plugin-host-client';
@@ -25,10 +21,10 @@ import { PLUGIN_HOST_PLUGIN_ID } from './plugin-host.constants';
  * `EventsService`/`SseAudienceService` come for free from the `@Global()`
  * `EventsModule`, so they aren't imported here.
  *
- * `@Global()` for the same reason: this module reaches `MediaModule`, which
- * (via `FliksSchedulerModule`) reaches `PluginsModule` — importing this module
- * from `PluginsModule` would close that loop into a cycle. Global-scoping
- * exports the binding service without adding that edge.
+ * `@Global()`: this module reaches `FliksSchedulerModule`, which reaches
+ * `PluginsModule` — importing this module from `PluginsModule` would close that
+ * loop into a cycle. Global-scoping exports the binding service without adding
+ * that edge.
  */
 @Global()
 @Module({
@@ -40,12 +36,8 @@ import { PLUGIN_HOST_PLUGIN_ID } from './plugin-host.constants';
       MediaFile,
       PluginRegistration,
     ]),
-    MediaModule,
-    ProfilesModule,
     RequestsModule,
-    LibraryIngestModule,
     NotificationsModule,
-    MediaServersModule,
     SettingsModule,
     PluginCountsCacheModule,
   ],

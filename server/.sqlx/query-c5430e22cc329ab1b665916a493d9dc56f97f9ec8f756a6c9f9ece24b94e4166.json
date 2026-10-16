@@ -1,0 +1,70 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, \"createdAt\" AS \"created_at!\", \"updatedAt\" AS \"updated_at!\", name,\n                  type::text AS \"type!\", url, \"apiKey\" AS api_key,\n                  events AS \"events!: Json<Vec<String>>\", enabled\n           FROM media_servers WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "created_at!",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 2,
+        "name": "updated_at!",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 3,
+        "name": "name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "type!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "url",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 6,
+        "name": "api_key",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 7,
+        "name": "events!: Json<Vec<String>>",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 8,
+        "name": "enabled",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      null,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "c5430e22cc329ab1b665916a493d9dc56f97f9ec8f756a6c9f9ece24b94e4166"
+}

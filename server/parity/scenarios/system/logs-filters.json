@@ -1,0 +1,42 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..timestamp",
+    "$..message",
+    "$..context",
+    "$..level"
+  ],
+  "name": "system-logs-filters",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": [],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/system/logs?level=nope"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/system/logs?q=zz-no-such-text-zz"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {}
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/system/logs?limit=1"
+    }
+  ]
+}

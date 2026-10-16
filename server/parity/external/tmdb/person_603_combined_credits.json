@@ -1,0 +1,46 @@
+{
+  "cast": [
+    {
+      "id": 1001,
+      "media_type": "movie",
+      "title": "Parity Movie 01",
+      "character": "Neo",
+      "poster_path": "/p1.jpg",
+      "backdrop_path": "/f1.jpg",
+      "release_date": "2020-01-01",
+      "vote_average": 7.5
+    },
+    {
+      "id": 1001,
+      "media_type": "tv",
+      "name": "Parity Series B",
+      "character": "Self",
+      "poster_path": null,
+      "backdrop_path": null,
+      "first_air_date": "2019-05-05",
+      "vote_average": 0
+    },
+    {
+      "id": 424242,
+      "media_type": "movie",
+      "title": "Unowned",
+      "character": "X",
+      "poster_path": null,
+      "backdrop_path": null,
+      "release_date": null
+    }
+  ],
+  "crew": [
+    {
+      "id": 1002,
+      "media_type": "movie",
+      "title": "Parity Movie 02",
+      "job": "Director",
+      "department": "Directing",
+      "poster_path": null,
+      "backdrop_path": null,
+      "release_date": "2020-01-01",
+      "vote_average": 7.5
+    }
+  ]
+}

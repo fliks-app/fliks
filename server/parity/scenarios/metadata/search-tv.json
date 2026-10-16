@@ -1,0 +1,138 @@
+{
+  "deviation": null,
+  "engine": "down",
+  "name": "metadata-search-tv",
+  "seed": "metadata",
+  "steps": [
+    {
+      "expect": {
+        "body": {
+          "ok": true
+        },
+        "status": 200
+      },
+      "method": "POST",
+      "path": "/__reset",
+      "stub": true
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": [
+          {
+            "existingMediaId": 18,
+            "existingMediaType": "series",
+            "fanartUrl": null,
+            "genreIds": [
+              18
+            ],
+            "genres": [],
+            "mediaType": "series",
+            "originalTitle": "Breaking Bad (orig)",
+            "overview": "Overview of Breaking Bad",
+            "posterUrl": "https://image.tmdb.org/t/p/w500/poster2000.jpg",
+            "provider": "tmdb",
+            "rating": 8.1,
+            "title": "Breaking Bad",
+            "tmdbId": 2000,
+            "year": 2008
+          },
+          {
+            "existingMediaId": null,
+            "existingMediaType": null,
+            "fanartUrl": null,
+            "genreIds": [
+              18
+            ],
+            "genres": [],
+            "mediaType": "series",
+            "originalTitle": "Better Call (orig)",
+            "overview": "Overview of Better Call",
+            "posterUrl": "https://image.tmdb.org/t/p/w500/poster1396.jpg",
+            "provider": "tmdb",
+            "rating": 8.1,
+            "title": "Better Call",
+            "tmdbId": 1396,
+            "year": 2015
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/metadata/search/tv?q=breaking"
+    },
+    {
+      "expect": {
+        "body": {
+          "api_key": "tmdb-parity",
+          "language": "en-US",
+          "query": "breaking"
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/__last?prefix=/tmdb/3/search/tv",
+      "stub": true
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "existingMediaId": 18,
+            "existingMediaType": "series",
+            "fanartUrl": null,
+            "genreIds": [
+              18
+            ],
+            "genres": [],
+            "mediaType": "series",
+            "originalTitle": "Breaking Bad (orig)",
+            "overview": "Overview of Breaking Bad",
+            "posterUrl": "https://image.tmdb.org/t/p/w500/poster2000.jpg",
+            "provider": "tmdb",
+            "rating": 8.1,
+            "title": "Breaking Bad",
+            "tmdbId": 2000,
+            "year": 2008
+          },
+          {
+            "existingMediaId": null,
+            "existingMediaType": null,
+            "fanartUrl": null,
+            "genreIds": [
+              18
+            ],
+            "genres": [],
+            "mediaType": "series",
+            "originalTitle": "Better Call (orig)",
+            "overview": "Overview of Better Call",
+            "posterUrl": "https://image.tmdb.org/t/p/w500/poster1396.jpg",
+            "provider": "tmdb",
+            "rating": 8.1,
+            "title": "Better Call",
+            "tmdbId": 1396,
+            "year": 2015
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/metadata/search/tv?q=breaking&year=2008"
+    },
+    {
+      "expect": {
+        "body": {
+          "api_key": "tmdb-parity",
+          "first_air_date_year": "2008",
+          "language": "en-US",
+          "query": "breaking"
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/__last?prefix=/tmdb/3/search/tv",
+      "stub": true
+    }
+  ]
+}

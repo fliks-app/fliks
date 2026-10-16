@@ -1,0 +1,191 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "custom-formats-create",
+  "seed": "profiles",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "name": "New CF",
+        "score": 25,
+        "specs": [
+          {
+            "negate": false,
+            "type": "title_regex",
+            "value": "web[-. ]?dl"
+          },
+          {
+            "required": true,
+            "type": "source",
+            "value": "bluray"
+          },
+          {
+            "negate": null,
+            "type": "language",
+            "value": "fr"
+          }
+        ]
+      },
+      "expect": {
+        "body": {
+          "id": 5,
+          "name": "New CF",
+          "score": 25,
+          "specs": [
+            {
+              "negate": false,
+              "type": "title_regex",
+              "value": "web[-. ]?dl"
+            },
+            {
+              "required": true,
+              "type": "source",
+              "value": "bluray"
+            },
+            {
+              "negate": null,
+              "type": "language",
+              "value": "fr"
+            }
+          ]
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/custom-formats"
+    },
+    {
+      "as": "settings",
+      "body": {
+        "name": "No score",
+        "specs": [
+          {
+            "type": "edition",
+            "value": "extended"
+          }
+        ]
+      },
+      "expect": {
+        "body": {
+          "id": 6,
+          "name": "No score",
+          "score": 0,
+          "specs": [
+            {
+              "type": "edition",
+              "value": "extended"
+            }
+          ]
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/custom-formats"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "id": 4,
+            "name": "Broken negated regex",
+            "score": 7,
+            "specs": [
+              {
+                "negate": true,
+                "required": false,
+                "type": "title_regex",
+                "value": "("
+              }
+            ]
+          },
+          {
+            "id": 3,
+            "name": "Freeleech only",
+            "score": 5,
+            "specs": [
+              {
+                "negate": false,
+                "required": true,
+                "type": "release_flag",
+                "value": "freeleech"
+              },
+              {
+                "negate": false,
+                "required": false,
+                "type": "resolution",
+                "value": "1080"
+              }
+            ]
+          },
+          {
+            "id": 5,
+            "name": "New CF",
+            "score": 25,
+            "specs": [
+              {
+                "negate": false,
+                "type": "title_regex",
+                "value": "web[-. ]?dl"
+              },
+              {
+                "required": true,
+                "type": "source",
+                "value": "bluray"
+              },
+              {
+                "negate": null,
+                "type": "language",
+                "value": "fr"
+              }
+            ]
+          },
+          {
+            "id": 2,
+            "name": "No CAM",
+            "score": -100,
+            "specs": [
+              {
+                "negate": true,
+                "required": false,
+                "type": "source",
+                "value": "cam"
+              }
+            ]
+          },
+          {
+            "id": 6,
+            "name": "No score",
+            "score": 0,
+            "specs": [
+              {
+                "type": "edition",
+                "value": "extended"
+              }
+            ]
+          },
+          {
+            "id": 1,
+            "name": "Remux regex",
+            "score": 50,
+            "specs": [
+              {
+                "negate": false,
+                "required": false,
+                "type": "title_regex",
+                "value": "remux"
+              }
+            ]
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/custom-formats"
+    }
+  ]
+}

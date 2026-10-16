@@ -1,0 +1,238 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..searchVector"
+  ],
+  "name": "imports-radarr-import-skip",
+  "seed": "importers",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "apiKey": "parity-key",
+        "mode": "skip",
+        "pathMappings": [
+          {
+            "localLibraryId": 1,
+            "remotePath": "/data/movies"
+          },
+          {
+            "ignore": true,
+            "remotePath": "/data/ignored"
+          }
+        ],
+        "targetLibraryId": 1,
+        "url": "http://127.0.0.1:4880/radarr/ok"
+      },
+      "expect": {
+        "body": {
+          "errors": [
+            "Lost Film: no path mapping for \"/elsewhere/Lost Film (2022)\"",
+            "No Path: no path mapping for \"\""
+          ],
+          "imported": 1,
+          "qualityProfilesCreated": [
+            "Remote HD"
+          ],
+          "rootFoldersCreated": [],
+          "subtitlesImported": 0
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/imports/radarr"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "addedById": null,
+          "additionalFanartUrls": [],
+          "alternativeTitles": [],
+          "digitalRelease": null,
+          "fanartUrl": null,
+          "files": [
+            {
+              "episodeId": null,
+              "id": 1,
+              "language": "en",
+              "mediaId": 1,
+              "osdbBytesize": null,
+              "osdbHash": null,
+              "quality": "WEBDL-1080p",
+              "relativePath": "Parity Movie 01 (2020).mkv",
+              "size": 73237,
+              "streamInfo": {
+                "audio": [
+                  {
+                    "channelLayout": "mono",
+                    "channels": 1,
+                    "codec": "aac",
+                    "endSeconds": 3.021,
+                    "isDefault": false,
+                    "language": "eng",
+                    "profile": "LC",
+                    "sampleRate": 48000,
+                    "startTimeSeconds": 0,
+                    "streamIndex": 1
+                  }
+                ],
+                "chapters": [],
+                "durationSeconds": 3.021,
+                "formatBitRate": 193941,
+                "formatName": "matroska,webm",
+                "formatStartSeconds": 0,
+                "subtitles": [],
+                "video": [
+                  {
+                    "avgFrameRate": "24/1",
+                    "bitDepth": 8,
+                    "codec": "h264",
+                    "colorRange": "tv",
+                    "displayAspectRatio": "16:9",
+                    "dvBlPresent": false,
+                    "dvElPresent": false,
+                    "dvRpuPresent": false,
+                    "endSeconds": 3,
+                    "firstFrameSeconds": 0,
+                    "frameRate": "24",
+                    "hdr10Plus": false,
+                    "height": 90,
+                    "level": 10,
+                    "pixelFormat": "yuv420p",
+                    "profile": "High",
+                    "reorderFrames": 2,
+                    "startTimeSeconds": 0,
+                    "streamIndex": 0,
+                    "width": 160
+                  }
+                ]
+              }
+            }
+          ],
+          "folderName": "Parity Movie 01 (2020)",
+          "genres": [
+            "Drama"
+          ],
+          "id": 1,
+          "imdbId": null,
+          "inCinemas": null,
+          "languageProfile": null,
+          "languageProfileId": null,
+          "library": {
+            "color": "#3b82f6",
+            "defaultLanguageProfileId": null,
+            "defaultQualityProfileId": null,
+            "icon": "film",
+            "id": 1,
+            "label": null,
+            "mediaTypes": [
+              "movie"
+            ],
+            "metadataLanguage": null,
+            "metadataRegion": null,
+            "name": "Movies",
+            "path": "/tmp/fliks-parity/media/movies",
+            "preferredProvider": null
+          },
+          "libraryId": 1,
+          "logoUrl": null,
+          "metadata": null,
+          "metadataRefreshedAt": null,
+          "minimumAvailability": "released",
+          "monitored": true,
+          "originalTitle": null,
+          "overview": "Synthetic movie 1",
+          "path": "/tmp/fliks-parity/media/movies/Parity Movie 01 (2020)",
+          "physicalRelease": null,
+          "posterUrl": null,
+          "preferredProvider": null,
+          "qualityProfile": null,
+          "qualityProfileId": null,
+          "rating": 7.5,
+          "releaseDate": "2020-01-01",
+          "runtime": 90,
+          "seasons": [],
+          "status": "released",
+          "title": "Parity Movie 01",
+          "tmdbCollectionId": null,
+          "tmdbCollectionName": null,
+          "tmdbId": 1001,
+          "tvdbId": null,
+          "type": "movie",
+          "year": 2020
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/1"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "addedById": null,
+          "additionalFanartUrls": [],
+          "alternativeTitles": [],
+          "digitalRelease": null,
+          "fanartUrl": null,
+          "files": [],
+          "folderName": "Radarr New One (2021)",
+          "genres": null,
+          "id": 21,
+          "imdbId": "tt0007001",
+          "inCinemas": null,
+          "languageProfile": null,
+          "languageProfileId": null,
+          "library": {
+            "color": "#3b82f6",
+            "defaultLanguageProfileId": null,
+            "defaultQualityProfileId": null,
+            "icon": "film",
+            "id": 1,
+            "label": null,
+            "mediaTypes": [
+              "movie"
+            ],
+            "metadataLanguage": null,
+            "metadataRegion": null,
+            "name": "Movies",
+            "path": "/tmp/fliks-parity/media/movies",
+            "preferredProvider": null
+          },
+          "libraryId": 1,
+          "logoUrl": null,
+          "metadata": null,
+          "metadataRefreshedAt": null,
+          "minimumAvailability": "released",
+          "monitored": true,
+          "originalTitle": null,
+          "overview": "Brand new",
+          "path": "/tmp/fliks-parity/media/movies/Radarr New One (2021)",
+          "physicalRelease": null,
+          "posterUrl": null,
+          "preferredProvider": null,
+          "qualityProfile": null,
+          "qualityProfileId": null,
+          "rating": null,
+          "releaseDate": null,
+          "runtime": null,
+          "seasons": [],
+          "status": "released",
+          "title": "Radarr New One",
+          "tmdbCollectionId": null,
+          "tmdbCollectionName": null,
+          "tmdbId": 7001,
+          "tvdbId": null,
+          "type": "movie",
+          "year": 2021
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/21"
+    }
+  ]
+}

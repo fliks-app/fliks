@@ -1,0 +1,220 @@
+{
+  "deviation": null,
+  "engine": "down",
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..metadataRefreshedAt"
+  ],
+  "name": "provider-write-refresh-series-season-override",
+  "seed": "providers",
+  "steps": [
+    {
+      "expect": {
+        "status": 200
+      },
+      "sleepMs": 800
+    },
+    {
+      "expect": {
+        "body": {
+          "ok": true
+        },
+        "status": 200
+      },
+      "method": "POST",
+      "path": "/__reset",
+      "stub": true
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "ok": true
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/media/202/refresh"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "status": 200
+      },
+      "ignoreBody": true,
+      "method": "GET",
+      "path": "/api/media/202",
+      "poll": {
+        "path": "$.seasons[1].episodes[0].title",
+        "timeoutMs": 10000,
+        "until": "Pilot"
+      }
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "addedById": null,
+          "additionalFanartUrls": [],
+          "alternativeTitles": [
+            "Breaking Bad (US)"
+          ],
+          "digitalRelease": null,
+          "fanartUrl": null,
+          "files": [],
+          "folderName": "Seasons Show",
+          "genres": [
+            "Drama"
+          ],
+          "id": 202,
+          "imdbId": "tt0903747",
+          "inCinemas": null,
+          "languageProfile": null,
+          "languageProfileId": null,
+          "library": {
+            "color": "#444444",
+            "defaultLanguageProfileId": null,
+            "defaultQualityProfileId": null,
+            "icon": "tv",
+            "id": 6,
+            "label": null,
+            "mediaTypes": [
+              "series"
+            ],
+            "metadataLanguage": null,
+            "metadataRegion": null,
+            "name": "Plain Series",
+            "path": "/tmp/fliks-parity/providers/series",
+            "preferredProvider": null
+          },
+          "libraryId": 6,
+          "logoUrl": null,
+          "metadata": {
+            "budget": null,
+            "id": 1,
+            "keywords": [
+              "drug dealer"
+            ],
+            "originalLanguage": "en",
+            "popularity": 90.1,
+            "productionCompanies": [
+              "AMC",
+              "Gran Via"
+            ],
+            "productionCountries": [
+              "US"
+            ],
+            "revenue": null,
+            "tagline": null,
+            "videos": [],
+            "voteCount": 12000
+          },
+          "minimumAvailability": "released",
+          "monitored": true,
+          "originalTitle": "Breaking Bad (orig)",
+          "overview": "Overview of Breaking Bad",
+          "path": "/tmp/fliks-parity/providers/series/Seasons Show",
+          "physicalRelease": null,
+          "posterUrl": "https://image.tmdb.org/t/p/w500/poster2000.jpg",
+          "preferredProvider": null,
+          "qualityProfile": null,
+          "qualityProfileId": null,
+          "rating": 8.1,
+          "releaseDate": "2008-01-20",
+          "runtime": 47,
+          "seasons": [
+            {
+              "airDate": "2008-01-20",
+              "episodes": [
+                {
+                  "airDate": "2008-01-20",
+                  "endEpisodeNumber": null,
+                  "episodeNumber": 1,
+                  "hasFile": false,
+                  "id": 201,
+                  "markersScannedAt": null,
+                  "monitored": true,
+                  "overview": "Pilot overview",
+                  "runtime": 58,
+                  "seasonId": 202,
+                  "stillUrl": null,
+                  "title": "Pilot"
+                },
+                {
+                  "airDate": "2008-01-27",
+                  "endEpisodeNumber": null,
+                  "episodeNumber": 2,
+                  "hasFile": false,
+                  "id": 204,
+                  "markersScannedAt": null,
+                  "monitored": true,
+                  "overview": null,
+                  "runtime": 48,
+                  "seasonId": 202,
+                  "stillUrl": null,
+                  "title": "Cat's in the Bag"
+                }
+              ],
+              "id": 202,
+              "mediaId": 202,
+              "monitored": true,
+              "overview": null,
+              "posterUrl": null,
+              "preferredProvider": "tvdb",
+              "seasonNumber": 1
+            },
+            {
+              "airDate": null,
+              "episodes": [],
+              "id": 203,
+              "mediaId": 202,
+              "monitored": true,
+              "overview": null,
+              "posterUrl": null,
+              "preferredProvider": null,
+              "seasonNumber": 2
+            },
+            {
+              "airDate": null,
+              "episodes": [
+                {
+                  "airDate": "2008-01-20",
+                  "endEpisodeNumber": null,
+                  "episodeNumber": 1,
+                  "hasFile": false,
+                  "id": 203,
+                  "markersScannedAt": null,
+                  "monitored": true,
+                  "overview": null,
+                  "runtime": 47,
+                  "seasonId": 201,
+                  "stillUrl": null,
+                  "title": "Episode 1"
+                }
+              ],
+              "id": 201,
+              "mediaId": 202,
+              "monitored": false,
+              "overview": null,
+              "posterUrl": null,
+              "preferredProvider": null,
+              "seasonNumber": 0
+            }
+          ],
+          "status": "ended",
+          "title": "Breaking Bad",
+          "tmdbCollectionId": null,
+          "tmdbCollectionName": null,
+          "tmdbId": 2000,
+          "tvdbId": 81189,
+          "type": "series",
+          "year": 2008
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/202"
+    }
+  ]
+}

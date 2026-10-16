@@ -1,0 +1,82 @@
+{
+  "deviation": "C42",
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..connectionId"
+  ],
+  "name": "media-servers-import-concurrent",
+  "seed": "media-servers",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "ok": true
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/media-servers/6/import-watch-history"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Conflict",
+          "message": "Import already running",
+          "statusCode": 409
+        },
+        "status": 409
+      },
+      "method": "POST",
+      "path": "/api/media-servers/6/import-watch-history"
+    },
+    {
+      "expect": {
+        "status": 200
+      },
+      "sleepMs": 600
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "data": {
+              "type": "sse.connected"
+            },
+            "event": ""
+          },
+          {
+            "data": {
+              "imported": 6,
+              "serverId": 6,
+              "serverName": "Emby Slow",
+              "skipped": 6,
+              "type": "watch-history.import.completed",
+              "users": 2,
+              "usersCreated": 1
+            },
+            "event": ""
+          },
+          {
+            "data": {
+              "name": "ImportWatchHistory",
+              "status": "completed",
+              "type": "command.completed"
+            },
+            "event": ""
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/system/events?device=ms",
+      "sse": {
+        "events": 3,
+        "timeoutMs": 15000
+      }
+    }
+  ]
+}

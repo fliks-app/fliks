@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO episode_markers (\"episodeId\", type, \"startSeconds\", \"endSeconds\", confidence, manual)\n           VALUES ($1, $2, $3, $4, 1, true)\n           ON CONFLICT (\"episodeId\", type) DO UPDATE SET \"startSeconds\" = EXCLUDED.\"startSeconds\",\n             \"endSeconds\" = EXCLUDED.\"endSeconds\", confidence = 1, manual = true\n           RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Varchar",
+        "Float8",
+        "Float8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "72b818a703d07a578614bdf126bd9ccac2b9c5919a65799a02232e7da154a546"
+}

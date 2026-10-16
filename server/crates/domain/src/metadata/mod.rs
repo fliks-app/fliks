@@ -1,0 +1,4 @@
+//! Metadata provider logic shared by the TMDB and TVDB clients (`docs/spec/metadata.md`).
+pub mod breaker;
+pub mod discover;
+pub mod language;

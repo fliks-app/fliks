@@ -52,11 +52,12 @@ function fakeUser(): User {
 
 describe('PluginObjectGuardsService.check', () => {
   function makeService(accessibleLibraryIds: number[]) {
-    const libraries = { getAccessibleLibraryIds: jest.fn().mockResolvedValue(accessibleLibraryIds) };
-    const mediaService = { assertAccessible: jest.fn().mockResolvedValue(undefined) };
-    const moduleRef = { get: jest.fn().mockReturnValue(mediaService) };
-    const service = new PluginObjectGuardsService(libraries as never, moduleRef as never);
-    return { service, libraries, mediaService };
+    const libraries = {
+      getAccessibleLibraryIds: jest.fn().mockResolvedValue(accessibleLibraryIds),
+      assertMediaAccessible: jest.fn().mockResolvedValue(undefined),
+    };
+    const service = new PluginObjectGuardsService(libraries as never);
+    return { service, libraries, mediaService: libraries };
   }
 
   it('libraryAccessible: true when the id is in the accessible set', async () => {
@@ -70,25 +71,25 @@ describe('PluginObjectGuardsService.check', () => {
     await expect(service.check('libraryAccessible', '99', fakeUser())).resolves.toBe(false);
   });
 
-  it('mediaAccessible: true when MediaService.assertAccessible does not throw', async () => {
+  it('mediaAccessible: true when LibrariesService.assertMediaAccessible does not throw', async () => {
     const { service, mediaService } = makeService([1]);
     await expect(service.check('mediaAccessible', '55', fakeUser())).resolves.toBe(true);
-    expect(mediaService.assertAccessible).toHaveBeenCalledWith(55, [1]);
+    expect(mediaService.assertMediaAccessible).toHaveBeenCalledWith(55, [1]);
   });
 
-  it('mediaAccessible: false when MediaService.assertAccessible throws', async () => {
+  it('mediaAccessible: false when LibrariesService.assertMediaAccessible throws', async () => {
     const { service, mediaService } = makeService([1]);
-    mediaService.assertAccessible.mockRejectedValue(new Error('not found'));
+    mediaService.assertMediaAccessible.mockRejectedValue(new Error('not found'));
     await expect(service.check('mediaAccessible', '55', fakeUser())).resolves.toBe(false);
   });
 
   it.each(['0', '-1', '1.5', '01', '..', 'a/b', '1abc', ''])(
-    'never calls LibrariesService or MediaService for a rejected raw value %j',
+    'never calls LibrariesService for a rejected raw value %j',
     async (raw) => {
       const { service, libraries, mediaService } = makeService([1]);
       await expect(service.check('mediaAccessible', raw, fakeUser())).resolves.toBe(false);
       expect(libraries.getAccessibleLibraryIds).not.toHaveBeenCalled();
-      expect(mediaService.assertAccessible).not.toHaveBeenCalled();
+      expect(mediaService.assertMediaAccessible).not.toHaveBeenCalled();
     },
   );
 });
