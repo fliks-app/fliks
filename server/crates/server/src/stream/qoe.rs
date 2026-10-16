@@ -3,7 +3,10 @@
 use super::system::served_rung;
 use crate::{engine::Feed, qoe::SessionRef, state::AppState};
 use fliks_domain::qoe::read_cmcd_raw;
-use fliks_engine_core::api::{EngineEvent, JobState, SessionKind, SessionSnapshot};
+use fliks_engine_core::{
+    api::{EngineEvent, JobState, SessionKind, SessionSnapshot},
+    session::{base_profile_hash, session_key},
+};
 use std::{
     collections::HashSet,
     sync::{Arc, Mutex},
@@ -57,14 +60,33 @@ async fn segment_duration(st: &AppState) -> f64 {
         .map_or(DEFAULT_SEGMENT_S, |s| s.segment_duration)
 }
 
-fn job_key(s: &SessionSnapshot) -> String {
-    let owner = s.owner_id.as_deref().filter(|o| !o.is_empty());
+/// A run of a session: the engine's key (`session_key`) with every `-remux-a<n>` variant as one `-remux`.
+fn run_id(key: &str) -> String {
+    let base = base_profile_hash(key);
+    let tail = &key[base.len()..];
     format!(
-        "{}-{}-{}",
-        s.media_file_id,
-        owner.map_or("anon".to_owned(), |o| format!("u{o}")),
-        s.profile_hash.as_deref().unwrap_or("")
+        "{base}{}",
+        if tail.starts_with("-remux") {
+            "-remux"
+        } else {
+            tail
+        }
     )
+}
+
+/// A snapshot carries no job key, only the session's primary run.
+fn snapshot_run_id(s: &SessionSnapshot) -> String {
+    let hash = s.profile_hash.as_deref().unwrap_or_default();
+    primary_run_id(s.media_file_id, s.owner_id.as_deref(), hash, s.kind)
+}
+
+fn primary_run_id(media: u32, owner: Option<&str>, hash: &str, kind: SessionKind) -> String {
+    let tail = if kind == SessionKind::Remux {
+        "-remux"
+    } else {
+        ""
+    };
+    format!("{}{tail}", session_key(media, owner, hash))
 }
 
 fn resync(jobs: &Jobs, snaps: &[SessionSnapshot]) {
@@ -72,7 +94,7 @@ fn resync(jobs: &Jobs, snaps: &[SessionSnapshot]) {
     *j = snaps
         .iter()
         .filter(|s| s.job.as_ref().is_some_and(|j| j.state == JobState::Running))
-        .map(job_key)
+        .map(snapshot_run_id)
         .collect();
 }
 
@@ -91,12 +113,12 @@ fn observe(st: &AppState, jobs: &Jobs, ev: &EngineEvent, segment_s: f64) {
         EngineEvent::JobStarted { job_key, .. } => {
             jobs.lock()
                 .unwrap_or_else(|e| e.into_inner())
-                .insert(job_key.clone());
+                .insert(run_id(job_key));
         }
         EngineEvent::JobEnded { job_key, .. } => {
             jobs.lock()
                 .unwrap_or_else(|e| e.into_inner())
-                .remove(job_key);
+                .remove(&run_id(job_key));
         }
         EngineEvent::PipelineChanged {
             session_id,
@@ -146,12 +168,25 @@ fn observe(st: &AppState, jobs: &Jobs, ev: &EngineEvent, segment_s: f64) {
 
 #[cfg(test)]
 mod tests {
-    use super::real_segment_seconds as real;
+    use super::{real_segment_seconds as real, *};
 
     #[test]
     fn segments_are_cut_on_whole_gops() {
         assert_eq!(real(3.0, Some(24.0)), 3.0);
         assert_eq!(real(3.0, Some(23.976)), 3.003);
         assert_eq!(real(6.0, None), 6.0);
+    }
+
+    #[test]
+    fn a_resynced_run_ends_on_the_engines_own_job_key() {
+        let jobs = |k, h| primary_run_id(7, Some("3"), h, k);
+        assert_eq!(jobs(SessionKind::Remux, "h1"), run_id("7-u3-h1-remux-a0-u"));
+        assert_eq!(jobs(SessionKind::Remux, "h1"), run_id("7-u3-h1-remux"));
+        assert_eq!(jobs(SessionKind::Transcode, "h1~i2"), run_id("7-u3-h1~i2"));
+        assert_ne!(run_id("7-u3-h1-early"), run_id("7-u3-h1"));
+        assert_eq!(
+            primary_run_id(7, None, "h", SessionKind::Transcode),
+            run_id("7-anon-h")
+        );
     }
 }
