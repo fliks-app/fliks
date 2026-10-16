@@ -291,7 +291,7 @@ pub async fn refresh_metadata(st: &AppState, id: i32, defer_kick: bool) -> Resul
     Ok(found)
 }
 
-/// Rule 51: seasons the provider no longer lists; an empty list drops nothing (C<n>); files survive.
+/// Rule 51: seasons the provider no longer lists; an empty list drops nothing (C99); files survive.
 async fn drop_absent(st: &AppState, id: i32, found: &Found) -> Result<(), sqlx::Error> {
     if found.seasons.is_empty() {
         return Ok(());
