@@ -143,23 +143,6 @@ pub async fn delete(db: &PgPool, id: i32) -> sqlx::Result<bool> {
         .map(|r| r.rows_affected() > 0)
 }
 
-/// The `commands` row `detectSeason` returns (`CommandRow`).
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CommandRow {
-    pub id: i32,
-    #[serde(with = "iso_ms")]
-    pub created_at: DateTime<Utc>,
-    #[serde(with = "iso_ms")]
-    pub updated_at: DateTime<Utc>,
-    pub name: &'static str,
-    pub status: &'static str,
-    pub trigger: String,
-    pub body: Value,
-    pub started_on: Option<()>,
-    pub ended_on: Option<()>,
-}
-
 pub struct SeasonInfo {
     pub media_id: i32,
     pub season_number: i32,
@@ -190,57 +173,6 @@ pub async fn season_info(db: &PgPool, season: i32) -> sqlx::Result<Option<Season
             r.folder_name.as_deref(),
         ),
     }))
-}
-
-pub async fn insert_command(
-    db: &PgPool,
-    trigger: &str,
-    season: i32,
-    info: &SeasonInfo,
-) -> sqlx::Result<CommandRow> {
-    let body = serde_json::json!({
-        "seasonId": season, "mediaId": info.media_id, "seasonNumber": info.season_number
-    });
-    let r = sqlx::query!(
-        r#"INSERT INTO commands (name, status, trigger, body) VALUES ('IntroDetection', 'queued', $1, $2)
-           RETURNING id, "createdAt" AS created_at, "updatedAt" AS updated_at"#,
-        trigger,
-        body
-    )
-    .fetch_one(db)
-    .await?;
-    Ok(CommandRow {
-        id: r.id,
-        created_at: r.created_at,
-        updated_at: r.updated_at,
-        name: "IntroDetection",
-        status: "queued",
-        trigger: trigger.to_owned(),
-        body,
-        started_on: None,
-        ended_on: None,
-    })
-}
-
-pub async fn command_running(db: &PgPool, id: i32) -> sqlx::Result<()> {
-    sqlx::query!(
-        r#"UPDATE commands SET status = 'running', "startedOn" = now() WHERE id = $1"#,
-        id
-    )
-    .execute(db)
-    .await
-    .map(drop)
-}
-
-pub async fn command_end(db: &PgPool, id: i32, status: &str) -> sqlx::Result<()> {
-    sqlx::query!(
-        r#"UPDATE commands SET status = $2, "endedOn" = now() WHERE id = $1"#,
-        id,
-        status
-    )
-    .execute(db)
-    .await
-    .map(drop)
 }
 
 pub async fn season_numbers(db: &PgPool, media: i32) -> sqlx::Result<Vec<(i32, i32)>> {

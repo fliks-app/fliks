@@ -58,11 +58,23 @@ pub async fn insert_running(db: &PgPool, name: &str, trigger: Trigger) -> sqlx::
 }
 
 pub async fn insert_queued(db: &PgPool, name: &str) -> sqlx::Result<Command> {
+    insert_queued_with_body(db, name, Trigger::Manual, None).await
+}
+
+/// A queued row of a job that runs detached (`detectSeason`), with its `body` as the caller reads it back.
+pub async fn insert_queued_with_body(
+    db: &PgPool,
+    name: &str,
+    trigger: Trigger,
+    body: Option<Value>,
+) -> sqlx::Result<Command> {
     sqlx::query_as(
-        r#"INSERT INTO commands (name, status, trigger) VALUES ($1, 'queued', 'manual')
+        r#"INSERT INTO commands (name, status, trigger, body) VALUES ($1, 'queued', $2, $3)
            RETURNING id, "createdAt", "updatedAt", name, status, "startedOn", "endedOn", trigger, body"#,
     )
     .bind(name)
+    .bind(trigger.as_str())
+    .bind(body)
     .fetch_one(db)
     .await
 }

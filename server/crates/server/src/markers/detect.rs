@@ -1,9 +1,10 @@
 //! Detection orchestration and the intro / outro passes (`docs/spec/markers.md` rules 7-22, 24).
-use super::db::{self, CommandRow, EpisodeFile, ScanSeason, SeasonInfo};
+use super::db::{self, EpisodeFile, ScanSeason, SeasonInfo};
 use crate::{
     busy::Claim,
     events::{Num, SseEvent, Subject},
     http::AppError,
+    jobs::{Command, Trigger, finish, insert_queued_with_body, mark_running},
     state::AppState,
 };
 use fliks_domain::media::path::{join, resolve};
@@ -276,16 +277,19 @@ fn activity_id(season: i32) -> String {
 pub async fn detect_season(
     st: &AppState,
     season: i32,
-    trigger: &'static str,
-) -> Result<CommandRow, AppError> {
+    trigger: Trigger,
+) -> Result<Command, AppError> {
     let claim = st.busy.marker_seasons.claim(season).ok_or_else(|| {
         AppError::bad_request(format!("Detection already running for season #{season}"))
     })?;
     let info = db::season_info(&st.db, season)
         .await?
         .ok_or_else(|| AppError::not_found(format!("Season #{season} not found")))?;
-    let cmd = db::insert_command(&st.db, trigger, season, &info).await?;
-    let priority = if trigger == "manual" {
+    let body = serde_json::json!({
+        "seasonId": season, "mediaId": info.media_id, "seasonNumber": info.season_number
+    });
+    let cmd = insert_queued_with_body(&st.db, COMMAND, trigger, Some(body)).await?;
+    let priority = if trigger == Trigger::Manual {
         JobPriority::High
     } else {
         JobPriority::Low
@@ -311,9 +315,7 @@ async fn run_detection(
 ) {
     let id = activity_id(season);
     let run = async {
-        db::command_running(&st.db, cmd)
-            .await
-            .map_err(|e| e.to_string())?;
+        mark_running(&st.db, cmd).await.map_err(|e| e.to_string())?;
         st.hub.emit(SseEvent::CommandStarted {
             name: COMMAND.into(),
         });
@@ -338,7 +340,7 @@ async fn run_detection(
             );
         };
         let (intros, outros) = detect_all(&st, season, Some(&progress), priority).await?;
-        db::command_end(&st.db, cmd, "completed")
+        finish(&st.db, cmd, "completed")
             .await
             .map_err(|e| e.to_string())?;
         st.hub.emit(SseEvent::CommandCompleted {
@@ -356,7 +358,7 @@ async fn run_detection(
     .await;
     if let Err(e) = run {
         tracing::error!("IntroDetection failed for season #{season}: {e}");
-        match db::command_end(&st.db, cmd, "failed").await {
+        match finish(&st.db, cmd, "failed").await {
             Ok(()) => st.hub.emit(SseEvent::CommandCompleted {
                 name: COMMAND.into(),
                 status: "failed".into(),
@@ -414,8 +416,8 @@ pub async fn run_detection_inline(
 pub async fn detect_series(
     st: &AppState,
     media: i32,
-    trigger: &'static str,
-) -> Result<Vec<CommandRow>, AppError> {
+    trigger: Trigger,
+) -> Result<Vec<Command>, AppError> {
     let mut out = vec![];
     for (id, number) in db::season_numbers(&st.db, media).await? {
         if number <= 0 {
@@ -447,7 +449,7 @@ pub async fn auto_detect_missing(st: &AppState, media_id: i32) -> sqlx::Result<(
         return Ok(());
     }
     for s in list_seasons_for_scan(st, true, Some(media_id)).await? {
-        if let Err(e) = detect_season(st, s.id, "auto").await {
+        if let Err(e) = detect_season(st, s.id, Trigger::Auto).await {
             tracing::debug!("auto detect skipped season #{}: {e:?}", s.id);
         }
     }

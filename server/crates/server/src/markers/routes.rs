@@ -5,6 +5,7 @@ use crate::{
         auth::Authed,
         validate::{PathParams, ValidJson, from_value, int_param},
     },
+    jobs::{Command, Trigger},
     libraries::accessible_library_ids,
     state::AppState,
 };
@@ -147,10 +148,10 @@ pub(crate) async fn detect_season(
     State(st): State<AppState>,
     a: Authed,
     raw: PathParams<String>,
-) -> Res<(StatusCode, Json<db::CommandRow>)> {
+) -> Res<(StatusCode, Json<Command>)> {
     manage(&a)?;
     let id = id_of(raw)?;
-    let cmd = detect::detect_season(&st, id, "manual").await?;
+    let cmd = detect::detect_season(&st, id, Trigger::Manual).await?;
     Ok((StatusCode::CREATED, Json(cmd)))
 }
 
@@ -159,13 +160,13 @@ pub(crate) async fn detect_all(
     State(st): State<AppState>,
     a: Authed,
     raw: PathParams<String>,
-) -> Res<(StatusCode, Json<Vec<db::CommandRow>>)> {
+) -> Res<(StatusCode, Json<Vec<Command>>)> {
     manage(&a)?;
     let id = id_of(raw)?;
     if !db::media_exists(&st.db, id).await? {
         return Err(AppError::not_found(format!("Media #{id} not found")));
     }
-    let cmds = detect::detect_series(&st, id, "manual").await?;
+    let cmds = detect::detect_series(&st, id, Trigger::Manual).await?;
     Ok((StatusCode::CREATED, Json(cmds)))
 }
 
