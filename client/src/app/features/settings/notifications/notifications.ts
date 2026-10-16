@@ -79,7 +79,9 @@ export class NotificationsSettingsComponent implements OnInit {
   /** The connection stores a token the response never carries; `●●●●` stands in for it. */
   readonly tokenStored = signal(false);
   readonly formTokenCleared = signal(false);
-  readonly webhookUrlStored = signal(false);
+  /** The Discord/Slack type whose webhook URL is stored; a type switch drops it (F28). */
+  private readonly webhookUrlStoredType = signal<NotificationType | null>(null);
+  readonly webhookUrlStored = computed(() => this.webhookUrlStoredType() === this.formType());
   readonly formTopic = signal('');
   readonly formEvents = signal<string[]>([]);
 
@@ -88,11 +90,6 @@ export class NotificationsSettingsComponent implements OnInit {
 
   readonly connectionTypes = NOTIFICATION_TYPES;
   readonly secretMask = SECRET_MASK;
-
-  /** The Discord and Slack URL is the credential: the API never echoes it, a blank keeps it. */
-  readonly webhookUrlIsSecret = computed(
-    () => this.formType() === 'discord' || this.formType() === 'slack',
-  );
 
   /** Discord and Slack authenticate through the webhook URL itself. */
   readonly supportsToken = computed(
@@ -137,7 +134,7 @@ export class NotificationsSettingsComponent implements OnInit {
     this.formType.set('discord');
     this.formEnabled.set(true);
     this.formWebhookUrl.set('');
-    this.webhookUrlStored.set(false);
+    this.webhookUrlStoredType.set(null);
     this.formToken.set('');
     this.tokenStored.set(false);
     this.formTokenCleared.set(false);
@@ -156,7 +153,8 @@ export class NotificationsSettingsComponent implements OnInit {
     this.formWebhookUrl.set(String(s['webhookUrl'] ?? s['url'] ?? ''));
     this.formToken.set('');
     const secretsSet = s[SECRETS_SET_KEY];
-    this.webhookUrlStored.set(Array.isArray(secretsSet) && secretsSet.includes('webhookUrl'));
+    const urlStored = Array.isArray(secretsSet) && secretsSet.includes('webhookUrl');
+    this.webhookUrlStoredType.set(urlStored ? (nc.type as NotificationType) : null);
     this.tokenStored.set(Array.isArray(secretsSet) && secretsSet.includes('token'));
     this.formTokenCleared.set(false);
     this.formTopic.set(String(s['topic'] ?? ''));

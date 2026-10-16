@@ -295,6 +295,9 @@ describe('NotificationsSettingsComponent — provider tokens', () => {
     expect(c.formWebhookUrl()).toBe('');
     expect(settingsOf(c)).toEqual({ webhookUrl: '' });
 
+    c.formType.set('slack');
+    expect(c.webhookUrlStored()).toBe(false);
+
     c.openCreate();
     expect(c.webhookUrlStored()).toBe(false);
   });
