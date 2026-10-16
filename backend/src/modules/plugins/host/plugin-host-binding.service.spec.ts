@@ -98,7 +98,6 @@ function makeStack() {
     { resolveAllowedForMedia: jest.fn() },
     { getSizeLimitsMap: jest.fn().mockResolvedValue(new Map()) },
     { scoreRelease: jest.fn() },
-    { markInProgress: jest.fn() },
     libraryIngestService,
     { dispatch: jest.fn(), dispatchStrict: jest.fn() },
     { dispatch: jest.fn() },

@@ -16,7 +16,6 @@ import { Media } from '../../media/entities/media.entity';
 import { Season } from '../../media/entities/season.entity';
 import { Episode } from '../../media/entities/episode.entity';
 import { MediaFile } from '../../media/entities/media-file.entity';
-import { RequestLifecycleService } from '../../requests/request-lifecycle.service';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { SettingsService } from '../../settings/settings.service';
 import { EventsService } from '../../scheduler/events.service';
@@ -69,7 +68,6 @@ export class FliksHostImpl implements PluginHostApi {
     private readonly mediaFileRepo: Repository<MediaFile>,
     @InjectRepository(PluginRegistration)
     private readonly pluginRegistrationRepo: Repository<PluginRegistration>,
-    private readonly requestLifecycle: RequestLifecycleService,
     private readonly notifications: NotificationsService,
     private readonly settings: SettingsService,
     private readonly events: EventsService,
@@ -236,12 +234,18 @@ export class FliksHostImpl implements PluginHostApi {
   // B1 — requests.markInProgress
   // ===========================================================================
 
-  private async requestsMarkInProgress(p: {
+  private requestsMarkInProgress(p: {
     idempotencyKey: string;
     mediaId: number;
     seasonNumber?: number;
   }): Promise<void> {
-    await this.requestLifecycle.markInProgress(p.mediaId, p.seasonNumber);
+    // The request lifecycle lives in fliks-server, which reads this event.
+    this.events.emitDomain({
+      type: 'acquisition.grabbed',
+      mediaId: p.mediaId,
+      seasonNumber: p.seasonNumber,
+    });
+    return Promise.resolve();
   }
 
   // ===========================================================================
