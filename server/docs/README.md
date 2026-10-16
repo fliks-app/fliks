@@ -55,8 +55,8 @@ Decided behaviour for the Rust port (security fixes F, correctness fixes C; D3).
 | F35 | profile `followerCount`/`followingCount` counted disabled and opted-out members that the follow lists omit | both counts exclude them (the F33 predicate, `social.md` rule 59; user decision 2026-10-16) | none |
 | F65 | data-tier plugin webhook delivery resolves the host, checks it, then the HTTP client resolves again (DNS rebinding window) | resolve once, connect to the vetted address, same connector as F58 | none |
 | F66 | plugin webhook targets and catalog source URLs appear in logs, `failures[]` and `lastRefreshError` | no URL, userinfo or query in any of them (error kinds only) | none |
-| F67 | process plugins reach any address, internal included | plugin outbound HTTP refuses internal addresses unless the plugin holds the `network.internal` grant given at install consent (link-local and reserved ranges stay refused) | install sheet lists the new capability `network:internal`, shown raw until a client i18n key exists |
-| F68 | plugin `config.get` without keys returns, and `config.set` writes, every `plugin.<id>.*` key, including those of a plugin whose id extends it (`fliks` reads `fliks.download` secrets); the `hello` config too | only keys whose longest installed owner id is the caller | none |
+| F67 | process plugins reach any address, internal included | plugin outbound HTTP refuses internal addresses unless the plugin holds the `network.internal` grant given at install consent (link-local, reserved, 6to4, Teredo and documentation ranges stay refused) | install sheet lists the new capability `network:internal`, shown raw until a client i18n key exists |
+| F68 | plugin `config.get` without keys returns, and `config.set` writes, every `plugin.<id>.*` key, including those of a plugin whose id extends it (`fliks` reads `fliks.download` secrets); the `hello` config too | only keys whose longest installed owner id is the caller; a `config.set` of another owner's key is `ERR_DENIED` | none |
 
 Not done (user decision 2026-10-15): login rate limiting/lockout.
 
@@ -102,6 +102,7 @@ A 500 or a half-written request is never part of the frozen contract:
 | C103 | plugin import inserts tables in alphabetical order, so `fliks.download` (`indexer_stats` before `indexers`) fails on its foreign keys | tables inserted in foreign-key dependency order |
 | C104 | plugin ids `ui`, `metrics`, `sources`, `import` install and are then shadowed by the concrete routes | refused with `PLUGIN_BAD_ID` |
 | C105 | a proxied plugin call that times out (504) leaves the plugin process running | the instance that ran it is dropped and the timeout counts toward the circuit breaker |
+| C106 | a plugin route that a core route shadows (`GET /logo`, `GET /export`, `POST /import`, `/enable`, `/disable`, `/restart`, `/events/test`) is accepted and unreachable | refused at registration (`invalid-route-path`) |
 
 Frozen as is (decided): the heartbeat keeps its debounce entry after a failed history write and returns
 `sessionLost: false` when the engine session lives but presence cannot be rebuilt. Lists whose order comes
