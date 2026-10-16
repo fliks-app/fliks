@@ -1,0 +1,35 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE media SET title = $2, \"originalTitle\" = $3, \"alternativeTitles\" = $4,\n             year = COALESCE($5, year), \"tmdbId\" = COALESCE($6, \"tmdbId\"), \"tvdbId\" = COALESCE($7, \"tvdbId\"),\n             \"imdbId\" = COALESCE($8, \"imdbId\"), overview = COALESCE($9, overview),\n             status = $10::text::media_status_enum, \"posterUrl\" = COALESCE($11, \"posterUrl\"),\n             \"fanartUrl\" = COALESCE($12, \"fanartUrl\"), \"logoUrl\" = COALESCE($13, \"logoUrl\"),\n             rating = COALESCE($14, rating), genres = $15, runtime = COALESCE($16, runtime),\n             \"releaseDate\" = COALESCE($17::text::date, \"releaseDate\"), \"inCinemas\" = COALESCE($18::text::date, \"inCinemas\"),\n             \"digitalRelease\" = COALESCE($19::text::date, \"digitalRelease\"),\n             \"physicalRelease\" = COALESCE($20::text::date, \"physicalRelease\"),\n             \"tmdbCollectionId\" = $21, \"tmdbCollectionName\" = $22\n           WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Varchar",
+        "Varchar",
+        "Jsonb",
+        "Int4",
+        "Int4",
+        "Int4",
+        "Varchar",
+        "Text",
+        "Text",
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Float8",
+        "Jsonb",
+        "Int4",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Int4",
+        "Varchar"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ccadf8c7d40d307aa54431cd1713ceeca1a3b38fa28cf677645231d52c3be8c6"
+}

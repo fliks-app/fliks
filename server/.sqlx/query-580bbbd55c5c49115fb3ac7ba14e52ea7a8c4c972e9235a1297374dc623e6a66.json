@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO episodes (\"seasonId\", \"episodeNumber\", \"endEpisodeNumber\", monitored)\n                   VALUES ($1, $2, $3, true) RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "580bbbd55c5c49115fb3ac7ba14e52ea7a8c4c972e9235a1297374dc623e6a66"
+}

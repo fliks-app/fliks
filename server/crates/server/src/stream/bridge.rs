@@ -31,11 +31,28 @@ pub async fn sprite(
     body: Bytes,
 ) -> Result<Result<Json<SpriteMeta>, StatusCode>, AppError> {
     let r = parse(&st, &h, &body)?;
-    let file = resolve_file(&st, None, i64::from(r.media_file_id)).await?;
+    let meta = sprite_file(
+        &st,
+        r.media_file_id,
+        r.force,
+        r.priority.unwrap_or(JobPriority::Low),
+    )
+    .await?;
+    Ok(meta.map(Json).ok_or(StatusCode::NO_CONTENT))
+}
+
+/// The file's seek-bar sprite, detached so a caller giving up leaves no activity row behind.
+pub async fn sprite_file(
+    st: &AppState,
+    id: i32,
+    force: bool,
+    priority: JobPriority,
+) -> Result<Option<SpriteMeta>, AppError> {
+    let file = resolve_file(st, None, i64::from(id)).await?;
     let title = file.media_title.clone().unwrap_or_default();
-    let subject = subject_of(&st, &file, &title).await?;
-    // Detached: Nest giving up on the call must not leave the activity row behind.
-    let meta = tokio::spawn(async move {
+    let subject = subject_of(st, &file, &title).await?;
+    let st = st.clone();
+    Ok(tokio::spawn(async move {
         sprite::generate(
             &st,
             sprite::SpriteJob {
@@ -44,16 +61,15 @@ pub async fn sprite(
                 info: file.info.as_ref(),
                 title: &title,
                 subject,
-                force: r.force,
-                priority: r.priority.unwrap_or(JobPriority::Low),
+                force,
+                priority,
             },
         )
         .await
     })
     .await
     .ok()
-    .flatten();
-    Ok(meta.map(Json).ok_or(StatusCode::NO_CONTENT))
+    .flatten())
 }
 
 /// 204 once the scan is settled (done, not needed, or failed and logged).
@@ -63,14 +79,19 @@ pub async fn source(
     body: Bytes,
 ) -> Result<StatusCode, AppError> {
     let r = parse(&st, &h, &body)?;
-    let file = resolve_file(&st, None, i64::from(r.media_file_id)).await?;
-    let priority = r.priority.unwrap_or(JobPriority::Low);
-    // Detached: Nest giving up on the call must not leave the file marked as scanning.
+    scan_file(&st, r.media_file_id, r.priority.unwrap_or(JobPriority::Low)).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Scans the file's source unless its current version was; detached so it is not left marked scanning.
+pub async fn scan_file(st: &AppState, id: i32, priority: JobPriority) -> Result<(), AppError> {
+    let file = resolve_file(st, None, i64::from(id)).await?;
+    let st = st.clone();
     let _ = tokio::spawn(async move {
         scan::schedule_if_needed(&st, file.id, &file.absolute, file.info, priority).await;
     })
     .await;
-    Ok(StatusCode::NO_CONTENT)
+    Ok(())
 }
 
 /// `buildMediaProgressSubject`: the media, plus the episode when the file is one.

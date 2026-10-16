@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE playback_states SET \"mediaFileId\" = $1 WHERE \"mediaFileId\" = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "fbc6fca18fd71444d4e31269a8ead874351ffd96f40ddf95ab58331bfcd50ccb"
+}

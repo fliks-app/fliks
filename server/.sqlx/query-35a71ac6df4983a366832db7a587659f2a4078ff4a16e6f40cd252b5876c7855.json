@@ -1,0 +1,48 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO media (title, \"originalTitle\", \"alternativeTitles\", year, type, \"tmdbId\", \"tvdbId\", \"imdbId\",\n             overview, status, \"posterUrl\", \"fanartUrl\", \"logoUrl\", rating, genres, runtime, \"releaseDate\",\n             \"inCinemas\", \"digitalRelease\", \"physicalRelease\", \"tmdbCollectionId\", \"tmdbCollectionName\",\n             monitored, \"metadataRefreshedAt\", \"qualityProfileId\", \"languageProfileId\", \"libraryId\",\n             \"folderName\", \"addedById\")\n           VALUES ($1, $2, $3, $4, $5::text::media_type_enum, $6, $7, $8, $9, $10::text::media_status_enum, $11, $12,\n             $13, $14, $15, $16, $17::text::date, $18::text::date, $19::text::date, $20::text::date, $21, $22,\n             true, now(), $23, $24, $25, NULLIF($26, ''), $27)\n           RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Varchar",
+        "Jsonb",
+        "Int4",
+        "Text",
+        "Int4",
+        "Int4",
+        "Varchar",
+        "Text",
+        "Text",
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Float8",
+        "Jsonb",
+        "Int4",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Int4",
+        "Varchar",
+        "Int4",
+        "Int4",
+        "Int4",
+        "Text",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "35a71ac6df4983a366832db7a587659f2a4078ff4a16e6f40cd252b5876c7855"
+}

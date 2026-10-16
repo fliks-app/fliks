@@ -62,6 +62,20 @@ impl AppError {
     }
 }
 
+impl AppError {
+    pub fn status(&self) -> StatusCode {
+        self.status
+    }
+
+    /// The message when it is one string (SSE `error` fields, `errors[]` entries).
+    pub fn text(&self) -> String {
+        match &self.message {
+            Value::String(s) => s.clone(),
+            v => v.to_string(),
+        }
+    }
+}
+
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let mut body = json!({"statusCode": self.status.as_u16(), "message": self.message});

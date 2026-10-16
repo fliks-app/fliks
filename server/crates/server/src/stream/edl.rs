@@ -22,7 +22,7 @@ fn warn_once(st: &AppState, key: String, msg: String) {
 }
 
 /// The sidecar as it exists on disk (any letter case), if any.
-async fn find(video: &str) -> String {
+pub(crate) async fn find(video: &str) -> String {
     let exact = edl_path_for(video);
     if tokio::fs::symlink_metadata(&exact).await.is_ok() {
         return exact;

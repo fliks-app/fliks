@@ -14,7 +14,9 @@ mod scan;
 mod sprite;
 mod system;
 
-pub use file::{ResolvedFile, resolve_file};
+pub(crate) use bridge::{scan_file, sprite_file};
+pub(crate) use edl::find as edl_sidecar;
+pub use file::{ResolvedFile, extname, resolve_file};
 pub use info::__path_playback_info;
 pub use routes::{
     __path_delete_session, __path_edl, __path_effective_settings, __path_gpus, __path_hw_accel,

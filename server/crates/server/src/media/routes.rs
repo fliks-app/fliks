@@ -24,7 +24,7 @@ use serde_json::{Value, json};
 type Pairs = Query<Vec<(String, String)>>;
 
 pub fn router() -> Router<AppState> {
-    Router::new()
+    super::write::routes(Router::new())
         .route("/api/media", get(find))
         .route("/api/media/recently-added", get(recent))
         .route("/api/media/counts", get(count))

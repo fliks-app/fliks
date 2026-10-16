@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE media_files SET \"streamInfo\" = $2, \"osdbHash\" = $3, \"osdbBytesize\" = $4 WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Jsonb",
+        "Varchar",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e651977c2ce8b21ed931ed6496a4b0269a260b20d2cb85b3c7294838cefafc85"
+}

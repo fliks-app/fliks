@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE media SET \"posterUrl\" = COALESCE($2, \"posterUrl\"), \"fanartUrl\" = COALESCE($3, \"fanartUrl\"),\n             \"logoUrl\" = COALESCE($4, \"logoUrl\"), \"additionalFanartUrls\" = $5 WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "TextArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a208742ceab33669b924c60689caf62404f08c0469665cbfa2112817d27b11b2"
+}

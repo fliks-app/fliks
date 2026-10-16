@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE episodes SET title = COALESCE($2, title), overview = COALESCE($3, overview),\n             \"airDate\" = COALESCE($4::text::date, \"airDate\"), runtime = COALESCE($5, runtime) WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Varchar",
+        "Text",
+        "Text",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d46d548154122e181ba1d4f6f2a3b442500f15b58a88a4ee703f2e707cbf4b4a"
+}

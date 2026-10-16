@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE episodes SET monitored = $1 WHERE id = $2 AND monitored IS DISTINCT FROM $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bool",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a695333ae7637dee6190216caf5ef1d6589f886a7095984645901dfc07d7a06a"
+}

@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT \"mediaId\" AS \"id!\" FROM media_files WHERE \"mediaId\" = ANY($1) ORDER BY \"mediaId\" LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4Array"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "82f6ae50972e120fcb6806e0c5530232cbf16f4fa146df8cfdcfc962086aae32"
+}

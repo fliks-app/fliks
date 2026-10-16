@@ -189,7 +189,32 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         profiles::format_delete,
         profiles::definitions_list,
         profiles::definitions_reset,
-        profiles::definitions_update
+        profiles::definitions_update,
+        media::write::create,
+        media::write::update,
+        media::write::patch_library,
+        media::write::patch_profiles,
+        media::write::bulk,
+        media::write::patch_season,
+        media::write::patch_episode,
+        media::write::import_tmdb,
+        media::write::import_media,
+        media::write::identify,
+        media::write::refresh,
+        media::write::refresh_episode,
+        media::write::rescan,
+        media::write::analyze,
+        media::write::remove,
+        media::write::remove_file,
+        media::write::remove_library,
+        media::write::companions_list,
+        media::write::companions_download,
+        media::write::companions_delete,
+        media::write::companions_edl,
+        crate::ingest::disk::scan,
+        crate::ingest::disk::preview,
+        crate::ingest::disk::relink_batch,
+        crate::ingest::disk::relink
     )
 )]
 pub struct ApiDoc;
@@ -253,6 +278,7 @@ fn api() -> Router<AppState> {
         .merge(social::router())
         .merge(playlists::router())
         .merge(profiles::router())
+        .merge(crate::ingest::disk::router())
 }
 
 async fn preflight_here(State(cors): State<Router>, req: Request, next: Next) -> Response {

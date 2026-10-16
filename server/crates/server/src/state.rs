@@ -18,6 +18,8 @@ pub struct AppState {
     pub qoe: Qoe,
     pub debounce: Arc<Debounce>,
     pub stream: Arc<stream::Shared>,
+    pub ingest: Arc<crate::ingest::Shared>,
+    pub seams: crate::seams::Seams,
 }
 
 impl AppState {
@@ -38,6 +40,8 @@ impl AppState {
             qoe,
             debounce: Arc::default(),
             stream: Arc::default(),
+            ingest: Arc::default(),
+            seams: crate::seams::Seams::default(),
             cfg: Arc::new(cfg),
             db,
         }
