@@ -141,7 +141,7 @@ none. Each connection carries its own configuration in `settings`: `url` | `webh
 
 ## Jobs/timers
 
-none (no retry queue, no timeout, no periodic job; senders are one-shot, rule 12).
+none (no retry queue, no periodic job; senders are one-shot with a 10 s timeout, rule 12, C16).
 
 ## Bridges
 
