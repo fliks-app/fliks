@@ -382,7 +382,7 @@ async fn check_library(
 }
 
 /// `library.path` joined with the media's folder (the library root for a movie without one).
-fn media_root(library_path: Option<String>, folder: Option<String>) -> Option<PathBuf> {
+pub(crate) fn media_root(library_path: Option<String>, folder: Option<String>) -> Option<PathBuf> {
     let library = library_path.filter(|p| !p.is_empty())?;
     Some(lexical_resolve(
         Path::new(&library),
@@ -391,7 +391,7 @@ fn media_root(library_path: Option<String>, folder: Option<String>) -> Option<Pa
 }
 
 /// `path.resolve(base, rel)` without touching the disk: `rel` wins when absolute, `.` and `..` fold.
-fn lexical_resolve(base: &Path, rel: &str) -> PathBuf {
+pub(crate) fn lexical_resolve(base: &Path, rel: &str) -> PathBuf {
     let mut out = PathBuf::new();
     for c in base.join(rel).components() {
         match c {

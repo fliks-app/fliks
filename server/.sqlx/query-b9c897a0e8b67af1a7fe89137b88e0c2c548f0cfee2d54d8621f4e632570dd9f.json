@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE media_files SET \"streamInfo\" = $2 WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Jsonb"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b9c897a0e8b67af1a7fe89137b88e0c2c548f0cfee2d54d8621f4e632570dd9f"
+}

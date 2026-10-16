@@ -20,6 +20,7 @@ import { PluginImportController } from './plugin-import.controller';
 import { PluginBackupController } from './plugin-backup.controller';
 import { PluginBackupService } from './plugin-backup.service';
 import { PluginsController } from './plugins.controller';
+import { PreRollBridgeController } from './plugin-pre-roll-bridge.controller';
 import { PluginUiController } from './plugin-ui.controller';
 import { PluginObjectGuardsService } from './proxy/plugin-object-guards.service';
 import { PluginCountsCacheModule } from './host/plugin-counts-cache.module';
@@ -45,6 +46,7 @@ import { ScheduledJobRegistryModule } from '../scheduler/scheduled-job-registry.
   ],
   controllers: [
     PluginLogoController,
+    PreRollBridgeController,
     PluginSourcesController,
     PluginImportController,
     PluginBackupController,

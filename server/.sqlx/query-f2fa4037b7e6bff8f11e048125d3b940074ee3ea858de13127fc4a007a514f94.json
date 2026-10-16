@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id FROM playback_states\n           WHERE \"userId\" = $1 AND \"mediaId\" = $2\n             AND (\"episodeId\" = $3 OR ($3::int IS NULL AND \"episodeId\" IS NULL))\n           LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "f2fa4037b7e6bff8f11e048125d3b940074ee3ea858de13127fc4a007a514f94"
+}

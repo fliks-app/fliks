@@ -1,0 +1,82 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT mf.\"relativePath\" AS \"relative_path!\", mf.\"streamInfo\" AS stream_info,\n                      mf.\"mediaId\" AS media_id, mf.\"episodeId\" AS episode_id,\n                      m.title AS \"title?\", m.\"type\"::text AS media_type,\n                      m.\"posterUrl\" AS poster_url, m.\"fanartUrl\" AS fanart_url,\n                      m.\"libraryId\" AS library_id, m.\"folderName\" AS folder, l.\"path\" AS library_path\n               FROM media_files mf\n               LEFT JOIN media m ON m.id = mf.\"mediaId\"\n               LEFT JOIN libraries l ON l.id = m.\"libraryId\"\n               WHERE mf.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "relative_path!",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "stream_info",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 2,
+        "name": "media_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "episode_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 4,
+        "name": "title?",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 5,
+        "name": "media_type",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "poster_url",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 7,
+        "name": "fanart_url",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 8,
+        "name": "library_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 9,
+        "name": "folder",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 10,
+        "name": "library_path",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      true,
+      false,
+      null,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "6e2236c56a339b5e65605b147936f972606a426000c235b3793dd14128cf09f9"
+}

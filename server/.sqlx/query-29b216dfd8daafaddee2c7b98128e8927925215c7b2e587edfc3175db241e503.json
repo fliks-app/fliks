@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT mf.id AS \"id!\" FROM media_files mf\n           LEFT JOIN media_file_scans mfs ON mfs.\"mediaFileId\" = mf.id\n           WHERE mfs.id IS NULL AND mf.id > $1 AND mf.\"streamInfo\" -> 'video' -> 0 IS NOT NULL\n           ORDER BY mf.id ASC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "29b216dfd8daafaddee2c7b98128e8927925215c7b2e587edfc3175db241e503"
+}

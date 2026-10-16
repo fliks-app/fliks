@@ -1,7 +1,7 @@
 //! Shared handler state (`State<AppState>`); no DI container, plain fields.
 use crate::{
     auth_token::Jwt, bridge::Bridge, config::Config, engine::Engine, events::Hub, nest,
-    playback::Debounce, presence::Presence, qoe::Qoe,
+    playback::Debounce, presence::Presence, qoe::Qoe, stream,
 };
 use sqlx::PgPool;
 use std::sync::Arc;
@@ -17,6 +17,7 @@ pub struct AppState {
     pub presence: Presence,
     pub qoe: Qoe,
     pub debounce: Arc<Debounce>,
+    pub stream: Arc<stream::Shared>,
 }
 
 impl AppState {
@@ -39,6 +40,7 @@ impl AppState {
             presence,
             qoe,
             debounce: Arc::default(),
+            stream: Arc::default(),
             cfg: Arc::new(cfg),
             db,
         }

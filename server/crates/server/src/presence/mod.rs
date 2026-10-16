@@ -4,7 +4,7 @@ mod feed;
 mod session;
 
 pub use feed::spawn;
-pub use session::{Beat, Facts, LiveSession, Tags, kind_of, to_tags};
+pub use session::{Beat, Facts, LiveSession, Tags, kind_of, parse_source_fps, to_tags};
 
 use crate::{engine::Engine, events::event::Num, state::AppState};
 use fliks_engine_core::api::{SessionKind, SessionSnapshot};

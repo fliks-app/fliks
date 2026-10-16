@@ -224,7 +224,7 @@ impl LiveSession {
 }
 
 /// A decimal ("23.976") or a rational ("24000/1001") frame rate; `None` when unknown.
-fn parse_source_fps(raw: &str) -> Option<f64> {
+pub fn parse_source_fps(raw: &str) -> Option<f64> {
     if let Some((n, d)) = raw.split_once('/') {
         let (n, d) = (n.trim().parse::<f64>().ok()?, d.trim().parse::<f64>().ok()?);
         return (n > 0.0 && d > 0.0).then(|| n / d);

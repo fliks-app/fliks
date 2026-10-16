@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT \"positionSeconds\" AS position, completed FROM playback_states\n           WHERE \"userId\" = $1 AND \"mediaId\" = $2\n             AND (\"episodeId\" = $3 OR ($3::int IS NULL AND \"episodeId\" IS NULL))\n           LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "position",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 1,
+        "name": "completed",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "0293851db8502fb9511a4a48372bed5d29fd1fd2fe1a41baf6113b7f92a1a6ec"
+}

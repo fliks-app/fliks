@@ -136,6 +136,11 @@ pub fn lifetime(env: impl Fn(&str) -> Option<String>) -> LifetimeConfig {
     }
 }
 
+/// The saved `streaming_*` settings, resolved like the config push does.
+pub async fn load_streaming(db: &sqlx::PgPool) -> sqlx::Result<StreamingConfig> {
+    Ok(streaming(&store::values(db, &STREAMING_KEYS).await?))
+}
+
 /// What the settings PUT must refuse: a stored value the engine would reject (and with it the whole config).
 pub fn validate_streaming_setting(key: &str, value: Option<&str>) -> Result<(), String> {
     let Some(v) = value.filter(|v| !v.is_empty()) else {

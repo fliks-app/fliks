@@ -1,6 +1,6 @@
 import type { PreRollItem } from '../../../common/plugin-contract';
 import type { components } from '../../engine/schema';
-import type { EdlRange } from '../edl/edl-parser';
+import type { EdlRange } from '../../media/edl/edl-parser';
 
 type AudioPlan = components['schemas']['AudioPlan'];
 
