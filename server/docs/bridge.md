@@ -40,7 +40,7 @@ Rust bridge auth: `Authorization: Bearer $FLIKS_BRIDGE_TOKEN`, constant-time com
 
 ## Known gaps until Sn
 
-No new temporary bridge: each gap below is a Nest caller that loses a function when its callee moves to Rust, or the reverse. The release gate allows none. `POST /internal/ingest` (plan §6.4) is dropped: known gap until S8.
+No new temporary bridge: each gap below is a Nest caller that loses a function when its callee moves to Rust, or the reverse. The release gate allows none. The two "Engine change" rows are engine follow-ups (no host workaround, plan §0 rule 3). `POST /internal/ingest` (plan §6.4) is dropped: known gap until S8.
 
 | Until | Gap | Spec |
 |---|---|---|
@@ -49,6 +49,8 @@ No new temporary bridge: each gap below is a Nest caller that loses a function w
 | S6 | Subtitle scorer: release-name and episode credit score 0 (`parseReleaseAttributes`, `parseSeasonEpisode` stubbed) | `release.md` |
 | S7 | Nest live TV logo cache stops caching new logos from S5 | `image-store.md` |
 | S7 | `LiveTv*` command rows left `running` by a Nest-only crash stay `running` until the next `fliks-server` boot | `scheduler.md` |
+| Engine change (S7 ships without) | A failover onto another source's stream can exceed that source's `maxStreams`: capacity is checked only for the primary stream's source and the hold then follows the feeding upstream, so a down primary also counts against the wrong source until the first attempt event. Fix = a per-upstream capacity veto in the engine (`LiveUpstream.atCapacity`, or a host callback before an attempt on another source); parity with Nest until then | `livetv-sessions.md` rules 8, 24, 36 |
+| Engine change (S7 ships without) | The engine ends a live viewer on any resolver denial, including a credential that resolves to no user, which the host cannot attribute to the viewer's owner. Fix = end a live viewer only on a denial for its owner | `livetv-sessions.md` rules 31, 37 |
 | S8 | Plugin `library.ingest` throws `unavailable until S8`; plugin imports fail (`POST /internal/ingest` dropped) | `ingest.md`, `media-write.md` |
 | S8 | Plugin host loses its profile and scoring reads (`releases.score`, `releases.match`, `buildWant`, `scoringWindowFor`, `buildAcquisitionTarget`, `filesForEpisode`/`filesForSeasonPack`): plugin acquisition (search, grab, upgrade) does not work between S5 and S8 | `profiles.md`, `release.md` |
 | S8 | `download.complete` triggers no Emby refresh (Nest plugin host) | `media-servers.md` |
