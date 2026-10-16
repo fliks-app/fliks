@@ -122,6 +122,7 @@ A 500 or a half-written request is never part of the frozen contract:
 | C53 | `confirmImport` re-pinned a media of another library and persisted a pin the ingest then refused; a dest outside the media folder was skipped silently | pin only when the media has no library, computed names validated first, every skip is an `errors[]` entry |
 | C54 | ingest, rescan, link in place and deletes of one media interleaved freely | one in-process async lock per media id around each |
 | C55 | rescan and orphan scan took any entry named `*.mkv` (FIFO, socket); the `.nfo` read had no cap | regular files only; `.nfo` capped at 1 MiB (NFO reader) |
+| C<n> | `dropSeasonsAbsentFromProvider` with an empty provider season list (a failed or truncated fetch) deleted every season of the media with its episodes, playback states and markers | an empty list drops nothing | none |
 
 Frozen as is (decided): the heartbeat keeps its debounce entry after a failed history write and returns
 `sessionLost: false` when the engine session lives but presence cannot be rebuilt. Lists whose order comes

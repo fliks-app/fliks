@@ -286,15 +286,14 @@ pub async fn refresh_metadata(st: &AppState, id: i32, defer_kick: bool) -> Resul
     Ok(found)
 }
 
-/// Rule 51: seasons (and episodes of kept seasons) the provider no longer lists; files survive.
+/// Rule 51: seasons the provider no longer lists; an empty list drops nothing (C<n>); files survive.
 async fn drop_absent(st: &AppState, id: i32, found: &Found) -> Result<(), sqlx::Error> {
     if found.seasons.is_empty() {
         return Ok(());
     }
     let live: Vec<i32> = found.seasons.iter().map(|s| s.season_number).collect();
     sqlx::query!(
-        r#"DELETE FROM seasons s WHERE s."mediaId" = $1 AND NOT (s."seasonNumber" = ANY($2))
-           AND EXISTS (SELECT 1 FROM episodes e WHERE e."seasonId" = s.id)"#,
+        r#"DELETE FROM seasons WHERE "mediaId" = $1 AND NOT ("seasonNumber" = ANY($2))"#,
         id,
         &live
     )
