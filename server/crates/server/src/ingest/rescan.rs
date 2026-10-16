@@ -219,7 +219,6 @@ pub async fn rescan_files(
         };
         let disk_size = meta.len() as i64;
         let name = file_name(&abs);
-        let mut episode_id = r.episode_id;
         if media.is_series() {
             let nums = parse_episode_numbers(&name, Some(&abs.to_string_lossy()));
             match (nums, r.episode_id) {
@@ -227,13 +226,11 @@ pub async fn rescan_files(
                     let (ep, created) = ensure_season_and_episode(&st.db, media_id, n).await?;
                     slots_created |= created;
                     link_row(st, r.id, ep).await?;
-                    episode_id = Some(ep);
                     c.updated += 1;
                 }
                 (None, None) => {
                     if let Some(ep) = match_special(&st.db, media_id, &name).await? {
                         link_row(st, r.id, ep.id).await?;
-                        episode_id = Some(ep.id);
                         c.updated += 1;
                     }
                 }
@@ -249,7 +246,6 @@ pub async fn rescan_files(
                 _ => {}
             }
         }
-        let _ = episode_id;
         let unchanged = r.size == disk_size;
         let Ok(mut p) = probe(st, &abs, !unchanged).await.inspect_err(|e| {
             tracing::error!("Rescan[media #{media_id}] refresh \"{}\": {e}", r.rel)
