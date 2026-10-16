@@ -1,8 +1,14 @@
+import * as fs from 'fs';
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import type { Response } from 'express';
 import { LivetvController } from './livetv.controller';
 import { SessionTokenGuard } from '../../auth/guards/session-token.guard';
 import type { User } from '../../users/entities/user.entity';
+
+jest.mock('fs', () => ({
+  ...jest.requireActual<typeof import('fs')>('fs'),
+  existsSync: jest.fn(),
+}));
 
 /** The state-changing routes must reject a stream-scoped token via `SessionTokenGuard`
  *  metadata, the same way `PluginBackupController` proves its guard. */
@@ -30,7 +36,8 @@ describe('LivetvController — channel logo', () => {
       .fn()
       .mockRejectedValue(new NotFoundException('Live TV channel #5 not found'));
     const channels = { assertVisible };
-    const getDiskPath = jest.fn();
+    const exists = fs.existsSync as jest.Mock;
+    exists.mockClear();
     const controller = new LivetvController(
       channels as never,
       {} as never,
@@ -43,7 +50,7 @@ describe('LivetvController — channel logo', () => {
     await expect(
       controller.serveLogo(5, undefined, user, res),
     ).rejects.toBeInstanceOf(NotFoundException);
-    expect(getDiskPath).not.toHaveBeenCalled();
+    expect(exists).not.toHaveBeenCalled();
   });
 });
 
