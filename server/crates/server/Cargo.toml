@@ -12,6 +12,10 @@ path = "src/lib.rs"
 name = "fliks-server"
 path = "src/main.rs"
 
+[features]
+# Test seams for the parity runs; never enabled in a release build.
+parity = []
+
 [dependencies]
 axum = { version = "0.8", features = ["multipart"] }
 jsonwebtoken = { version = "10", default-features = false, features = ["rust_crypto"] }

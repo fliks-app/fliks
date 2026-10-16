@@ -57,16 +57,20 @@ impl Default for Bases {
 }
 
 impl Bases {
-    /// `FLIKS_SUBTITLE_PROVIDERS_URL` (test seam): the OpenSubtitles and Subdl bases move under it, over http.
+    /// Production bases are constants; only a `parity` build reads `FLIKS_SUBTITLE_PROVIDERS_URL`.
     pub fn from_env() -> Self {
-        let url = std::env::var("FLIKS_SUBTITLE_PROVIDERS_URL").unwrap_or_default();
-        let url = url.trim().trim_end_matches('/');
+        #[allow(unused_mut)]
         let mut b = Self::default();
-        if !url.is_empty() {
-            b.opensubtitles = format!("{url}/opensubtitles/api/v1");
-            b.subdl_api = format!("{url}/subdl/api/v1/subtitles");
-            b.subdl_dl = url.to_owned();
-            b.allow_http_link = true;
+        #[cfg(feature = "parity")]
+        {
+            let url = std::env::var("FLIKS_SUBTITLE_PROVIDERS_URL").unwrap_or_default();
+            let url = url.trim().trim_end_matches('/');
+            if !url.is_empty() {
+                b.opensubtitles = format!("{url}/opensubtitles/api/v1");
+                b.subdl_api = format!("{url}/subdl/api/v1/subtitles");
+                b.subdl_dl = url.to_owned();
+                b.allow_http_link = true;
+            }
         }
         b
     }
