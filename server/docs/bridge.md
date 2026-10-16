@@ -1,6 +1,6 @@
 # Bridge registry
 
-Temporary HTTP endpoints between `fliks-server` and Nest during the strangler. Each row is added in the milestone that needs it and removed when the bridge is deleted. Planned list: phase-2 plan §6.4.
+Temporary HTTP endpoints between `fliks-server` and Nest during the strangler. Each row is added in the milestone that needs it and removed when the bridge is deleted. Planned list: phase-2 plan §6.4. A feature whose caller or callee moves later may stay broken instead of getting a bridge (plan §0 rule 2): see "Known gaps until Sn".
 
 Auth: `Authorization: Bearer $FLIKS_BRIDGE_TOKEN` (random per boot; constant-time compare). Nest serves bridges under `/internal` (no `api` prefix). Public fallback must 404 `/internal/**`.
 
@@ -22,8 +22,8 @@ Auth: `Authorization: Bearer $FLIKS_BRIDGE_TOKEN` (random per boot; constant-tim
 | `POST /internal/qoe/served` (Rust) | S2 to S7 | `{session:SessionRef, cmcdRaw:string\|null, segmentDurationS:number, waitedMs:number\|null}` per live `SegmentServed`; 204 | S2 | S7 |
 | `POST /internal/qoe/transcode-probe` (Rust) | S2 to S7 | `{count:int>=0}`: live TV holds in transcode mode, added to `serverLoad.activeTranscodes`; Nest pushes it when it changes; 204 | S2 | S7 |
 | `GET /internal/qoe/live-summary?sessionId=` (Rust) | S2 to S7 | 200 `QoeLiveSummary` (`qoe.md` rule 36), 404 when the session is not tracked | S2 | S7 |
-| `POST /internal/jobs/sprite` (Rust) | S2 to S9 | `{mediaFileId:int, force?:bool, priority?:"low"\|"normal"\|"high"}` (default low); Rust resolves the file, media and episode itself and runs the engine's `Sprite` job tracked as `GenerateSprite:<id>` activity; 200 `SpriteMeta`, 204 when none could be made, 404 for an unknown or off-disk file; answers when the job ends | S2 | S9 |
-| `POST /internal/scan/source` (Rust) | S2 to S9 | `{mediaFileId:int, priority?:"low"\|"normal"\|"high"}`; scans the file's source unless its current version was; 204 once settled (a failed scan is logged, not an error), 404 for an unknown or off-disk file | S2 | S9 |
+| `POST /internal/jobs/sprite` (Rust) | S2 to S5 | `{mediaFileId:int, force?:bool, priority?:"low"\|"normal"\|"high"}` (default low); Rust resolves the file, media and episode itself and runs the engine's `Sprite` job tracked as `GenerateSprite:<id>` activity; 200 `SpriteMeta`, 204 when none could be made, 404 for an unknown or off-disk file; answers when the job ends | S2 | S5 |
+| `POST /internal/scan/source` (Rust) | S2 to S5 | `{mediaFileId:int, priority?:"low"\|"normal"\|"high"}`; scans the file's source unless its current version was; 204 once settled (a failed scan is logged, not an error), 404 for an unknown or off-disk file | S2 | S5 |
 | `POST /internal/plugins/pre-roll` (Nest) | S2 to S8 | request `{mediaFileId:int, mediaId:int, episodeId?:int\|null, principal:{kind:"delegated", userId:int>=1}}` (bridge bearer); 200 `PreRollItem[]` (`{mediaFileId, labelKey?, skippable?}`), `[]` on any plugin failure; Rust ACL-gates every candidate itself and treats any bridge failure as `[]` | S2 | S8 |
 
 Rust bridge auth: `Authorization: Bearer $FLIKS_BRIDGE_TOKEN`, constant-time compare, 401 otherwise (`Bridge::check`). Nest bridge auth: missing `FLIKS_BRIDGE_TOKEN` answers 503 on every `/internal/bridge/*` call, a wrong or absent bearer 401. Nest reaches Rust through `FLIKS_SERVER_URL` (base URL, no trailing slash).
@@ -36,3 +36,20 @@ Rust bridge auth: `Authorization: Bearer $FLIKS_BRIDGE_TOKEN`, constant-time com
 - Release quality parsing in Nest until S5: `quality.parser.ts` and `app-qualities.ts` stay for imports; the Rust copy (`fliks_domain::release::quality`) shares the `release-quality` and `app-qualities` vectors.
 - Media detail hydration in Nest until S5 (`findOne`: the write routes return `MD` and `Media.path`), counts by library in Nest (`getCountsByLibrary` for `/api/counts`, S8), episode coverage SQL in Nest until S5 (`onDiskSql`, used by acquisition).
 - `GET /api/media/sync-queue` is an explicit forward from Rust to Nest until S6 (`app.rs`), so `/api/media/{id}` does not answer 400 for it.
+- Livetv path of `ImageService.getDiskPath` (Nest logo-serving route) until S7 (`image-store.md` rule 20).
+
+## Known gaps until Sn
+
+No new temporary bridge: each gap below is a Nest caller that loses a function when its callee moves to Rust, or the reverse. The release gate allows none. `POST /internal/ingest` (plan §6.4) is dropped: known gap until S8.
+
+| Until | Gap | Spec |
+|---|---|---|
+| S6 | Subtitle callees reached from S5 code stay in Nest and are skipped: `carryOver` (a superseded file's sidecars stay), `deleteSubtitleFilesOnDisk` (a deleted file leaves its sidecar subtitles), `deleteSubtitle` (companion delete of a tracked subtitle answers 501), `reconcileSubtitleFilesAfterRescan` / `discoverExternalSubtitles` / `embeddedSubtitle.detectAndStore` (rescan leaves subtitle rows stale), `syncSubtitle`, `subtitleScheduler.onMediaFileImported` (no automatic subtitle search after an import) | `ingest.md`, `media-write.md` |
+| S6 | `subtitle.synced`, `subtitle.downloaded`, `subtitle.upgraded` trigger no Emby refresh | `media-servers.md` |
+| S6 | Subtitle scorer: release-name and episode credit score 0 (`parseReleaseAttributes`, `parseSeasonEpisode` stubbed) | `release.md` |
+| S7 | Nest live TV logo cache stops caching new logos from S5 | `image-store.md` |
+| S7 | `LiveTv*` command rows left `running` by a Nest-only crash stay `running` until the next `fliks-server` boot | `scheduler.md` |
+| S8 | Plugin `library.ingest` throws `unavailable until S8`; plugin imports fail (`POST /internal/ingest` dropped) | `ingest.md`, `media-write.md` |
+| S8 | Plugin host loses its profile and scoring reads (`releases.score`, `releases.match`, `buildWant`, `scoringWindowFor`, `buildAcquisitionTarget`, `filesForEpisode`/`filesForSeasonPack`): plugin acquisition (search, grab, upgrade) does not work between S5 and S8 | `profiles.md`, `release.md` |
+| S8 | `download.complete` triggers no Emby refresh (Nest plugin host) | `media-servers.md` |
+| S9 | `GET /api/system/logs` shows only `fliks-server`'s own events; Nest and plugin-child lines stay on stdout | `system.md` |
