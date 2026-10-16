@@ -76,7 +76,7 @@ async fn gate(
     Ok(id)
 }
 
-/// `ME` (rule 4): the eager relations only, relation ids omitted when null.
+/// `ME` (rule 4): the eager relations only, relation ids `null` when unset.
 pub async fn entity(db: &PgPool, id: i32, see_paths: bool) -> Result<Option<Value>, sqlx::Error> {
     let Some(mut v) = hydrate::items(db, &[id], see_paths).await?.pop() else {
         return Ok(None);

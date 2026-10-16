@@ -599,7 +599,6 @@ pub async fn companions_delete(
         hit.relative_path,
         hit.kind
     );
-    let _ = l.file;
     Ok(StatusCode::OK)
 }
 
