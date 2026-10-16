@@ -693,6 +693,112 @@
         }
       }
     },
+    "/api/stream/info/effective-settings": {
+      "get": {
+        "tags": [
+          "crate::stream"
+        ],
+        "operationId": "effective_settings",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/stream/info/gpus": {
+      "get": {
+        "tags": [
+          "crate::stream"
+        ],
+        "operationId": "gpus",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/stream/info/hw-accel": {
+      "get": {
+        "tags": [
+          "crate::stream"
+        ],
+        "operationId": "hw_accel",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/stream/info/qualities/{mediaFileId}": {
+      "get": {
+        "tags": [
+          "crate::stream"
+        ],
+        "operationId": "qualities",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/stream/info/tonemap-algos": {
+      "get": {
+        "tags": [
+          "crate::stream"
+        ],
+        "operationId": "tonemap_algos",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/stream/sessions/{sessionId}": {
+      "delete": {
+        "tags": [
+          "crate::stream"
+        ],
+        "summary": "Explicit stop from the client: ends the presence and the engine session; 204 for an unknown sid.",
+        "operationId": "delete_session",
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/stream/{mediaFileId}/edl": {
+      "get": {
+        "tags": [
+          "crate::stream"
+        ],
+        "summary": "Sidecar ranges on the container timeline (the direct-play clock), for original-file downloads.",
+        "operationId": "edl",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/stream/{mediaFileId}/playback-info": {
+      "post": {
+        "tags": [
+          "crate::stream"
+        ],
+        "operationId": "playback_info",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/system/activity": {
       "get": {
         "tags": [
@@ -775,6 +881,69 @@
           "qoe"
         ],
         "operationId": "summary",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/system/streams": {
+      "get": {
+        "tags": [
+          "crate::stream"
+        ],
+        "operationId": "streams",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/system/streams/{sessionId}/command": {
+      "post": {
+        "tags": [
+          "crate::stream"
+        ],
+        "operationId": "command",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/system/transcode-cache": {
+      "get": {
+        "tags": [
+          "crate::stream"
+        ],
+        "operationId": "stats",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "crate::stream"
+        ],
+        "operationId": "purge_all",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/system/transcode-cache/{mediaFileId}": {
+      "delete": {
+        "tags": [
+          "crate::stream"
+        ],
+        "operationId": "purge_file",
         "responses": {
           "200": {
             "description": ""

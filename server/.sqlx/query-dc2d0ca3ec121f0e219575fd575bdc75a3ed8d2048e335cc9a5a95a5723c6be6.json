@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT e.title AS \"title?\", e.\"episodeNumber\" AS \"number?\", s.\"seasonNumber\" AS \"season?\"\n                   FROM episodes e LEFT JOIN seasons s ON s.id = e.\"seasonId\" WHERE e.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "title?",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "number?",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 2,
+        "name": "season?",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "dc2d0ca3ec121f0e219575fd575bdc75a3ed8d2048e335cc9a5a95a5723c6be6"
+}
