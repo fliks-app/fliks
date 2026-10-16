@@ -1,0 +1,202 @@
+{
+  "deviation": null,
+  "engine": "down",
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..metadataRefreshedAt"
+  ],
+  "name": "provider-write-identify-tmdb",
+  "seed": "providers",
+  "steps": [
+    {
+      "expect": {
+        "body": {
+          "ok": true
+        },
+        "status": 200
+      },
+      "method": "POST",
+      "path": "/__reset",
+      "stub": true
+    },
+    {
+      "as": "admin",
+      "body": {
+        "tmdbId": 1002
+      },
+      "expect": {
+        "body": {
+          "addedById": null,
+          "additionalFanartUrls": [],
+          "alternativeTitles": [],
+          "digitalRelease": null,
+          "fanartUrl": null,
+          "folderName": "Old Title (1990)",
+          "genres": [
+            "Old"
+          ],
+          "id": 201,
+          "imdbId": null,
+          "inCinemas": null,
+          "languageProfile": null,
+          "languageProfileId": null,
+          "library": {
+            "color": "#3b82f6",
+            "defaultLanguageProfileId": null,
+            "defaultQualityProfileId": null,
+            "icon": "film",
+            "id": 1,
+            "label": null,
+            "mediaTypes": [
+              "movie"
+            ],
+            "metadataLanguage": null,
+            "metadataRegion": null,
+            "name": "Movies",
+            "path": "/tmp/fliks-parity/media/movies",
+            "preferredProvider": null
+          },
+          "libraryId": 1,
+          "logoUrl": null,
+          "metadata": null,
+          "minimumAvailability": "released",
+          "monitored": true,
+          "originalTitle": null,
+          "overview": "old",
+          "path": "/tmp/fliks-parity/media/movies/Old Title (1990)",
+          "physicalRelease": null,
+          "posterUrl": null,
+          "preferredProvider": null,
+          "qualityProfile": null,
+          "qualityProfileId": null,
+          "rating": null,
+          "releaseDate": null,
+          "runtime": null,
+          "status": "released",
+          "title": "Old Title",
+          "tmdbCollectionId": null,
+          "tmdbCollectionName": null,
+          "tmdbId": 1002,
+          "tvdbId": null,
+          "type": "movie",
+          "year": 1990
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/media/201/identify"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "status": 200
+      },
+      "ignoreBody": true,
+      "method": "GET",
+      "path": "/api/media/201",
+      "poll": {
+        "path": "$.metadata.popularity",
+        "timeoutMs": 10000,
+        "until": 75.5
+      }
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "addedById": null,
+          "additionalFanartUrls": [],
+          "alternativeTitles": [
+            "Matrix",
+            "the matrix",
+            "Matrix 1"
+          ],
+          "digitalRelease": "1999-09-21",
+          "fanartUrl": "https://image.tmdb.org/t/p/original/back1002.jpg",
+          "files": [],
+          "folderName": "Old Title (1990)",
+          "genres": [
+            "Action",
+            "Science Fiction"
+          ],
+          "id": 201,
+          "imdbId": "tt0000002",
+          "inCinemas": "1999-03-31",
+          "languageProfile": null,
+          "languageProfileId": null,
+          "library": {
+            "color": "#3b82f6",
+            "defaultLanguageProfileId": null,
+            "defaultQualityProfileId": null,
+            "icon": "film",
+            "id": 1,
+            "label": null,
+            "mediaTypes": [
+              "movie"
+            ],
+            "metadataLanguage": null,
+            "metadataRegion": null,
+            "name": "Movies",
+            "path": "/tmp/fliks-parity/media/movies",
+            "preferredProvider": null
+          },
+          "libraryId": 1,
+          "logoUrl": "https://image.tmdb.org/t/p/original/logo_en.png",
+          "metadata": {
+            "budget": "1000",
+            "id": 1,
+            "keywords": [
+              "hacker",
+              "dystopia"
+            ],
+            "originalLanguage": "en",
+            "popularity": 75.5,
+            "productionCompanies": [
+              "Warner Bros."
+            ],
+            "productionCountries": [
+              "United States of America"
+            ],
+            "revenue": "2000",
+            "tagline": "Welcome to the Real World.",
+            "videos": [
+              {
+                "key": "vKQi3bBA1y8",
+                "name": "Official Trailer",
+                "site": "YouTube",
+                "type": "Trailer"
+              }
+            ],
+            "voteCount": 25000
+          },
+          "minimumAvailability": "released",
+          "monitored": true,
+          "originalTitle": "Casablanca Redux (orig)",
+          "overview": "Overview of Casablanca Redux",
+          "path": "/tmp/fliks-parity/media/movies/Old Title (1990)",
+          "physicalRelease": "2000-01-01",
+          "posterUrl": "/api/images/media/201/poster?v=612f4295",
+          "preferredProvider": null,
+          "qualityProfile": null,
+          "qualityProfileId": null,
+          "rating": 7.5,
+          "releaseDate": "2001-05-02",
+          "runtime": 136,
+          "seasons": [],
+          "status": "released",
+          "title": "Casablanca Redux",
+          "tmdbCollectionId": null,
+          "tmdbCollectionName": null,
+          "tmdbId": 1002,
+          "tvdbId": null,
+          "type": "movie",
+          "year": 2001
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/201"
+    }
+  ]
+}

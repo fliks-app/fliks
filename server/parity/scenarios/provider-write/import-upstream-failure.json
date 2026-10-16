@@ -1,0 +1,104 @@
+{
+  "deviation": null,
+  "engine": "down",
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..metadataRefreshedAt"
+  ],
+  "name": "provider-write-import-upstream-failure",
+  "seed": "providers",
+  "steps": [
+    {
+      "expect": {
+        "body": {
+          "ok": true
+        },
+        "status": 200
+      },
+      "method": "POST",
+      "path": "/__reset",
+      "stub": true
+    },
+    {
+      "body": {
+        "prefix": "/tmdb/3/movie/1002",
+        "status": 503
+      },
+      "expect": {
+        "body": {
+          "ok": true
+        },
+        "status": 200
+      },
+      "method": "POST",
+      "path": "/__fail",
+      "stub": true
+    },
+    {
+      "as": "admin",
+      "body": {
+        "libraryId": 1,
+        "tmdbId": 1002,
+        "type": "movie"
+      },
+      "expect": {
+        "body": {
+          "message": "Internal server error",
+          "statusCode": 500
+        },
+        "status": 500
+      },
+      "ignore": [
+        "$.metadata",
+        "$.posterUrl"
+      ],
+      "method": "POST",
+      "path": "/api/media/import/tmdb"
+    },
+    {
+      "expect": {
+        "body": {
+          "ok": true
+        },
+        "status": 200
+      },
+      "method": "POST",
+      "path": "/__reset",
+      "stub": true
+    },
+    {
+      "as": "admin",
+      "body": {
+        "libraryId": 1,
+        "tmdbId": 9999,
+        "type": "movie"
+      },
+      "expect": {
+        "body": {
+          "message": "Internal server error",
+          "statusCode": 500
+        },
+        "status": 500
+      },
+      "ignore": [
+        "$.metadata",
+        "$.posterUrl"
+      ],
+      "method": "POST",
+      "path": "/api/media/import/tmdb"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "movies": 19,
+          "series": 6
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/counts"
+    }
+  ]
+}

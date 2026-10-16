@@ -1,0 +1,204 @@
+{
+  "capture": {
+    "mid": "$.steps[1].body.id"
+  },
+  "deviation": null,
+  "engine": "down",
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..metadataRefreshedAt"
+  ],
+  "name": "provider-write-import-tvdb-movie-cross-reference",
+  "seed": "providers",
+  "steps": [
+    {
+      "expect": {
+        "body": {
+          "ok": true
+        },
+        "status": 200
+      },
+      "method": "POST",
+      "path": "/__reset",
+      "stub": true
+    },
+    {
+      "as": "admin",
+      "body": {
+        "externalId": "169",
+        "libraryId": 7,
+        "provider": "tvdb",
+        "type": "movie"
+      },
+      "expect": {
+        "body": {
+          "addedById": 1,
+          "additionalFanartUrls": [],
+          "alternativeTitles": [],
+          "digitalRelease": "1999-09-21",
+          "fanartUrl": null,
+          "folderName": "The Matrix",
+          "genres": [
+            "Action"
+          ],
+          "id": 207,
+          "imdbId": null,
+          "inCinemas": "1999-03-31",
+          "languageProfile": {
+            "audioLanguages": [],
+            "id": 1,
+            "name": "Toutes les langues (défaut)",
+            "subtitleLanguages": []
+          },
+          "languageProfileId": 1,
+          "library": {
+            "color": "#555555",
+            "defaultLanguageProfileId": null,
+            "defaultQualityProfileId": null,
+            "icon": "film",
+            "id": 7,
+            "label": null,
+            "mediaTypes": [
+              "movie"
+            ],
+            "metadataLanguage": "fr",
+            "metadataRegion": "FR",
+            "name": "French Movies",
+            "path": "/tmp/fliks-parity/media/movies-fr",
+            "preferredProvider": null
+          },
+          "libraryId": 7,
+          "logoUrl": null,
+          "minimumAvailability": "released",
+          "monitored": true,
+          "originalTitle": "The Matrix",
+          "overview": "",
+          "path": "/tmp/fliks-parity/media/movies-fr/The Matrix",
+          "physicalRelease": null,
+          "preferredProvider": null,
+          "qualityProfile": null,
+          "qualityProfileId": null,
+          "rating": 0,
+          "releaseDate": "1999-03-31",
+          "runtime": 136,
+          "status": "released",
+          "title": "The Matrix",
+          "tmdbCollectionId": null,
+          "tmdbCollectionName": null,
+          "tmdbId": 603,
+          "tvdbId": 169,
+          "type": "movie",
+          "year": null
+        },
+        "status": 201
+      },
+      "ignore": [
+        "$.metadata",
+        "$.posterUrl"
+      ],
+      "method": "POST",
+      "path": "/api/media/import"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "status": 200
+      },
+      "ignoreBody": true,
+      "method": "GET",
+      "path": "/api/media/{mid}/cast",
+      "poll": {
+        "path": "$[0].order",
+        "timeoutMs": 10000,
+        "until": 0
+      }
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "addedById": 1,
+          "additionalFanartUrls": [],
+          "alternativeTitles": [],
+          "digitalRelease": "1999-09-21",
+          "fanartUrl": null,
+          "files": [],
+          "folderName": "The Matrix",
+          "genres": [
+            "Action"
+          ],
+          "id": 207,
+          "imdbId": null,
+          "inCinemas": "1999-03-31",
+          "languageProfile": {
+            "audioLanguages": [],
+            "id": 1,
+            "name": "Toutes les langues (défaut)",
+            "subtitleLanguages": []
+          },
+          "languageProfileId": 1,
+          "library": {
+            "color": "#555555",
+            "defaultLanguageProfileId": null,
+            "defaultQualityProfileId": null,
+            "icon": "film",
+            "id": 7,
+            "label": null,
+            "mediaTypes": [
+              "movie"
+            ],
+            "metadataLanguage": "fr",
+            "metadataRegion": "FR",
+            "name": "French Movies",
+            "path": "/tmp/fliks-parity/media/movies-fr",
+            "preferredProvider": null
+          },
+          "libraryId": 7,
+          "logoUrl": null,
+          "metadata": {
+            "budget": "63000000",
+            "id": 1,
+            "keywords": [],
+            "originalLanguage": "eng",
+            "popularity": null,
+            "productionCompanies": [
+              "Warner",
+              "Village"
+            ],
+            "productionCountries": [],
+            "revenue": null,
+            "tagline": null,
+            "videos": [],
+            "voteCount": null
+          },
+          "minimumAvailability": "released",
+          "monitored": true,
+          "originalTitle": "The Matrix",
+          "overview": "",
+          "path": "/tmp/fliks-parity/media/movies-fr/The Matrix",
+          "physicalRelease": null,
+          "posterUrl": "https://artworks.thetvdb.com/mp.jpg",
+          "preferredProvider": null,
+          "qualityProfile": null,
+          "qualityProfileId": null,
+          "rating": 0,
+          "releaseDate": "1999-03-31",
+          "runtime": 136,
+          "seasons": [],
+          "status": "released",
+          "title": "The Matrix",
+          "tmdbCollectionId": null,
+          "tmdbCollectionName": null,
+          "tmdbId": 603,
+          "tvdbId": 169,
+          "type": "movie",
+          "year": null
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/{mid}"
+    }
+  ]
+}

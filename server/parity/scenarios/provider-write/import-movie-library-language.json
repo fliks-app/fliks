@@ -1,0 +1,229 @@
+{
+  "capture": {
+    "mid": "$.steps[1].body.id"
+  },
+  "deviation": null,
+  "engine": "down",
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..metadataRefreshedAt"
+  ],
+  "name": "provider-write-import-movie-library-language",
+  "seed": "providers",
+  "steps": [
+    {
+      "expect": {
+        "body": {
+          "ok": true
+        },
+        "status": 200
+      },
+      "method": "POST",
+      "path": "/__reset",
+      "stub": true
+    },
+    {
+      "as": "admin",
+      "body": {
+        "libraryId": 7,
+        "tmdbId": 1002,
+        "type": "movie"
+      },
+      "expect": {
+        "body": {
+          "addedById": 1,
+          "additionalFanartUrls": [],
+          "alternativeTitles": [
+            "Matrix",
+            "the matrix",
+            "Matrix 1"
+          ],
+          "digitalRelease": "1999-09-21",
+          "fanartUrl": "https://image.tmdb.org/t/p/original/back1002.jpg",
+          "folderName": "Casablanca Redux (orig) (2001)",
+          "genres": [
+            "Action",
+            "Science Fiction"
+          ],
+          "id": 207,
+          "imdbId": "tt0000002",
+          "inCinemas": "1999-06-23",
+          "languageProfile": {
+            "audioLanguages": [],
+            "id": 1,
+            "name": "Toutes les langues (défaut)",
+            "subtitleLanguages": []
+          },
+          "languageProfileId": 1,
+          "library": {
+            "color": "#555555",
+            "defaultLanguageProfileId": null,
+            "defaultQualityProfileId": null,
+            "icon": "film",
+            "id": 7,
+            "label": null,
+            "mediaTypes": [
+              "movie"
+            ],
+            "metadataLanguage": "fr",
+            "metadataRegion": "FR",
+            "name": "French Movies",
+            "path": "/tmp/fliks-parity/media/movies-fr",
+            "preferredProvider": null
+          },
+          "libraryId": 7,
+          "logoUrl": "https://image.tmdb.org/t/p/original/logo_fr.png",
+          "minimumAvailability": "released",
+          "monitored": true,
+          "originalTitle": "Casablanca Redux (orig)",
+          "overview": "Overview of Casablanca Redux",
+          "path": "/tmp/fliks-parity/media/movies-fr/Casablanca Redux (orig) (2001)",
+          "physicalRelease": "2000-01-01",
+          "preferredProvider": null,
+          "qualityProfile": null,
+          "qualityProfileId": null,
+          "rating": 7.5,
+          "releaseDate": "2001-05-02",
+          "runtime": 136,
+          "status": "released",
+          "title": "Casablanca Redux",
+          "tmdbCollectionId": null,
+          "tmdbCollectionName": null,
+          "tmdbId": 1002,
+          "tvdbId": null,
+          "type": "movie",
+          "year": 2001
+        },
+        "status": 201
+      },
+      "ignore": [
+        "$.metadata",
+        "$.posterUrl"
+      ],
+      "method": "POST",
+      "path": "/api/media/import/tmdb"
+    },
+    {
+      "expect": {
+        "body": {
+          "api_key": "tmdb-parity",
+          "append_to_response": "external_ids,images,release_dates,credits,videos,keywords,alternative_titles",
+          "include_image_language": "fr,en,null",
+          "language": "fr-FR"
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/__last?prefix=/tmdb/3/movie/1002",
+      "stub": true
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "addedById": 1,
+          "additionalFanartUrls": [],
+          "alternativeTitles": [
+            "Matrix",
+            "the matrix",
+            "Matrix 1"
+          ],
+          "digitalRelease": "1999-09-21",
+          "fanartUrl": "https://image.tmdb.org/t/p/original/back1002.jpg",
+          "files": [],
+          "folderName": "Casablanca Redux (orig) (2001)",
+          "genres": [
+            "Action",
+            "Science Fiction"
+          ],
+          "id": 207,
+          "imdbId": "tt0000002",
+          "inCinemas": "1999-06-23",
+          "languageProfile": {
+            "audioLanguages": [],
+            "id": 1,
+            "name": "Toutes les langues (défaut)",
+            "subtitleLanguages": []
+          },
+          "languageProfileId": 1,
+          "library": {
+            "color": "#555555",
+            "defaultLanguageProfileId": null,
+            "defaultQualityProfileId": null,
+            "icon": "film",
+            "id": 7,
+            "label": null,
+            "mediaTypes": [
+              "movie"
+            ],
+            "metadataLanguage": "fr",
+            "metadataRegion": "FR",
+            "name": "French Movies",
+            "path": "/tmp/fliks-parity/media/movies-fr",
+            "preferredProvider": null
+          },
+          "libraryId": 7,
+          "logoUrl": "https://image.tmdb.org/t/p/original/logo_fr.png",
+          "metadata": {
+            "budget": "1000",
+            "id": 1,
+            "keywords": [
+              "hacker",
+              "dystopia"
+            ],
+            "originalLanguage": "en",
+            "popularity": 75.5,
+            "productionCompanies": [
+              "Warner Bros."
+            ],
+            "productionCountries": [
+              "United States of America"
+            ],
+            "revenue": "2000",
+            "tagline": "Welcome to the Real World.",
+            "videos": [
+              {
+                "key": "vKQi3bBA1y8",
+                "name": "Official Trailer",
+                "site": "YouTube",
+                "type": "Trailer"
+              }
+            ],
+            "voteCount": 25000
+          },
+          "minimumAvailability": "released",
+          "monitored": true,
+          "originalTitle": "Casablanca Redux (orig)",
+          "overview": "Overview of Casablanca Redux",
+          "path": "/tmp/fliks-parity/media/movies-fr/Casablanca Redux (orig) (2001)",
+          "physicalRelease": "2000-01-01",
+          "posterUrl": "/api/images/media/207/poster?v=612f4295",
+          "preferredProvider": null,
+          "qualityProfile": null,
+          "qualityProfileId": null,
+          "rating": 7.5,
+          "releaseDate": "2001-05-02",
+          "runtime": 136,
+          "seasons": [],
+          "status": "released",
+          "title": "Casablanca Redux",
+          "tmdbCollectionId": null,
+          "tmdbCollectionName": null,
+          "tmdbId": 1002,
+          "tvdbId": null,
+          "type": "movie",
+          "year": 2001
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/{mid}",
+      "poll": {
+        "path": "$.posterUrl",
+        "timeoutMs": 10000,
+        "until": "/api/images/media/207/poster?v=612f4295"
+      }
+    }
+  ]
+}

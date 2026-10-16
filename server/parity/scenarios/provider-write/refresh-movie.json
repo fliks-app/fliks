@@ -1,0 +1,234 @@
+{
+  "deviation": null,
+  "engine": "down",
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..metadataRefreshedAt"
+  ],
+  "name": "provider-write-refresh-movie",
+  "seed": "providers",
+  "steps": [
+    {
+      "expect": {
+        "body": {
+          "ok": true
+        },
+        "status": 200
+      },
+      "method": "POST",
+      "path": "/__reset",
+      "stub": true
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "ok": true
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/media/201/refresh"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "status": 200
+      },
+      "ignoreBody": true,
+      "method": "GET",
+      "path": "/api/persons/search?q=claude",
+      "poll": {
+        "path": "$[0].biography",
+        "timeoutMs": 10000,
+        "until": "Refreshed biography."
+      }
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "addedById": null,
+          "additionalFanartUrls": [],
+          "alternativeTitles": [
+            "Matrix",
+            "Matrix 1"
+          ],
+          "digitalRelease": "1999-09-21",
+          "fanartUrl": "https://image.tmdb.org/t/p/original/back1001.jpg",
+          "files": [],
+          "folderName": "Old Title (1990)",
+          "genres": [
+            "Action",
+            "Science Fiction"
+          ],
+          "id": 201,
+          "imdbId": "tt0133093",
+          "inCinemas": "1999-03-31",
+          "languageProfile": null,
+          "languageProfileId": null,
+          "library": {
+            "color": "#3b82f6",
+            "defaultLanguageProfileId": null,
+            "defaultQualityProfileId": null,
+            "icon": "film",
+            "id": 1,
+            "label": null,
+            "mediaTypes": [
+              "movie"
+            ],
+            "metadataLanguage": null,
+            "metadataRegion": null,
+            "name": "Movies",
+            "path": "/tmp/fliks-parity/media/movies",
+            "preferredProvider": null
+          },
+          "libraryId": 1,
+          "logoUrl": "https://image.tmdb.org/t/p/original/logo_en.png",
+          "metadata": {
+            "budget": "63000000",
+            "id": 1,
+            "keywords": [
+              "hacker",
+              "dystopia"
+            ],
+            "originalLanguage": "en",
+            "popularity": 75.5,
+            "productionCompanies": [
+              "Warner Bros."
+            ],
+            "productionCountries": [
+              "United States of America"
+            ],
+            "revenue": null,
+            "tagline": "Welcome to the Real World.",
+            "videos": [
+              {
+                "key": "vKQi3bBA1y8",
+                "name": "Official Trailer",
+                "site": "YouTube",
+                "type": "Trailer"
+              }
+            ],
+            "voteCount": 25000
+          },
+          "minimumAvailability": "released",
+          "monitored": true,
+          "originalTitle": "The Matrix (orig)",
+          "overview": "Overview of The Matrix",
+          "path": "/tmp/fliks-parity/media/movies/Old Title (1990)",
+          "physicalRelease": "2000-01-01",
+          "posterUrl": "https://image.tmdb.org/t/p/w500/poster1001.jpg",
+          "preferredProvider": null,
+          "qualityProfile": null,
+          "qualityProfileId": null,
+          "rating": 7.5,
+          "releaseDate": "1999-03-30",
+          "runtime": 136,
+          "seasons": [],
+          "status": "released",
+          "title": "The Matrix",
+          "tmdbCollectionId": 2344,
+          "tmdbCollectionName": "The Matrix Collection",
+          "tmdbId": 1001,
+          "tvdbId": null,
+          "type": "movie",
+          "year": 1999
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/201"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "character": "Neo",
+            "id": 1,
+            "order": 0,
+            "person": {
+              "avatarUrl": null,
+              "biography": null,
+              "birthday": null,
+              "deathday": null,
+              "departments": [
+                "Acting"
+              ],
+              "id": 202,
+              "knownForDepartment": null,
+              "name": "Keanu Reeves",
+              "placeOfBirth": null,
+              "provider": "tmdb",
+              "tmdbId": 6384
+            }
+          },
+          {
+            "character": "Morpheus",
+            "id": 2,
+            "order": 1,
+            "person": {
+              "avatarUrl": null,
+              "biography": null,
+              "birthday": null,
+              "deathday": null,
+              "departments": [
+                "Acting"
+              ],
+              "id": 203,
+              "knownForDepartment": null,
+              "name": "Laurence Fishburne",
+              "placeOfBirth": null,
+              "provider": "tmdb",
+              "tmdbId": 2975
+            }
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/201/cast"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "department": "Directing",
+            "id": 1,
+            "job": "Director",
+            "person": {
+              "avatarUrl": null,
+              "biography": null,
+              "birthday": null,
+              "deathday": null,
+              "departments": [
+                "Directing"
+              ],
+              "id": 204,
+              "knownForDepartment": null,
+              "name": "Lana Wachowski",
+              "placeOfBirth": null,
+              "provider": "tmdb",
+              "tmdbId": 9339
+            }
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/201/crew"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/persons/search?q=claude"
+    }
+  ]
+}

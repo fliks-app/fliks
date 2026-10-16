@@ -1,0 +1,203 @@
+{
+  "deviation": null,
+  "engine": "down",
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..metadataRefreshedAt"
+  ],
+  "name": "provider-write-refresh-media-override-tvdb-to-tmdb",
+  "seed": "providers",
+  "steps": [
+    {
+      "expect": {
+        "body": {
+          "ok": true
+        },
+        "status": 200
+      },
+      "method": "POST",
+      "path": "/__reset",
+      "stub": true
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "ok": true
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/media/204/refresh"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "status": 200
+      },
+      "ignoreBody": true,
+      "method": "GET",
+      "path": "/api/media/204",
+      "poll": {
+        "path": "$.seasons[0].episodes[1].title",
+        "timeoutMs": 10000,
+        "until": "Episode 2"
+      }
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "addedById": null,
+          "additionalFanartUrls": [],
+          "alternativeTitles": [
+            "Breaking Bad (US)"
+          ],
+          "digitalRelease": null,
+          "fanartUrl": null,
+          "files": [],
+          "folderName": "Tvdb Only",
+          "genres": [
+            "Drama"
+          ],
+          "id": 204,
+          "imdbId": "tt3032476",
+          "inCinemas": null,
+          "languageProfile": null,
+          "languageProfileId": null,
+          "library": {
+            "color": "#444444",
+            "defaultLanguageProfileId": null,
+            "defaultQualityProfileId": null,
+            "icon": "tv",
+            "id": 6,
+            "label": null,
+            "mediaTypes": [
+              "series"
+            ],
+            "metadataLanguage": null,
+            "metadataRegion": null,
+            "name": "Plain Series",
+            "path": "/tmp/fliks-parity/media/series-plain",
+            "preferredProvider": null
+          },
+          "libraryId": 6,
+          "logoUrl": null,
+          "metadata": {
+            "budget": null,
+            "id": 1,
+            "keywords": [
+              "drug dealer"
+            ],
+            "originalLanguage": "en",
+            "popularity": 90.1,
+            "productionCompanies": [
+              "AMC",
+              "Gran Via"
+            ],
+            "productionCountries": [
+              "US"
+            ],
+            "revenue": null,
+            "tagline": null,
+            "videos": [],
+            "voteCount": 12000
+          },
+          "minimumAvailability": "released",
+          "monitored": true,
+          "originalTitle": "Better Call (orig)",
+          "overview": "Overview of Breaking Bad",
+          "path": "/tmp/fliks-parity/media/series-plain/Tvdb Only",
+          "physicalRelease": null,
+          "posterUrl": "https://image.tmdb.org/t/p/w500/poster2000.jpg",
+          "preferredProvider": "tmdb",
+          "qualityProfile": null,
+          "qualityProfileId": null,
+          "rating": 8.1,
+          "releaseDate": "2008-01-20",
+          "runtime": 47,
+          "seasons": [
+            {
+              "airDate": "2008-01-20",
+              "episodes": [
+                {
+                  "airDate": "2008-01-20",
+                  "endEpisodeNumber": null,
+                  "episodeNumber": 1,
+                  "hasFile": false,
+                  "id": 204,
+                  "markersScannedAt": null,
+                  "monitored": true,
+                  "overview": null,
+                  "runtime": 47,
+                  "seasonId": 205,
+                  "stillUrl": null,
+                  "title": "Episode 1"
+                },
+                {
+                  "airDate": "2008-01-20",
+                  "endEpisodeNumber": null,
+                  "episodeNumber": 2,
+                  "hasFile": false,
+                  "id": 205,
+                  "markersScannedAt": null,
+                  "monitored": true,
+                  "overview": null,
+                  "runtime": 47,
+                  "seasonId": 205,
+                  "stillUrl": null,
+                  "title": "Episode 2"
+                }
+              ],
+              "id": 205,
+              "mediaId": 204,
+              "monitored": true,
+              "overview": "Season 1 overview",
+              "posterUrl": null,
+              "preferredProvider": null,
+              "seasonNumber": 1
+            },
+            {
+              "airDate": null,
+              "episodes": [
+                {
+                  "airDate": "2008-01-20",
+                  "endEpisodeNumber": null,
+                  "episodeNumber": 1,
+                  "hasFile": false,
+                  "id": 203,
+                  "markersScannedAt": null,
+                  "monitored": true,
+                  "overview": null,
+                  "runtime": 47,
+                  "seasonId": 204,
+                  "stillUrl": null,
+                  "title": "Episode 1"
+                }
+              ],
+              "id": 204,
+              "mediaId": 204,
+              "monitored": false,
+              "overview": null,
+              "posterUrl": null,
+              "preferredProvider": null,
+              "seasonNumber": 0
+            }
+          ],
+          "status": "ended",
+          "title": "Better Call",
+          "tmdbCollectionId": null,
+          "tmdbCollectionName": null,
+          "tmdbId": 3001,
+          "tvdbId": 81191,
+          "type": "series",
+          "year": 2008
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/204"
+    }
+  ]
+}

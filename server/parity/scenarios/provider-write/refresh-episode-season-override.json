@@ -1,0 +1,176 @@
+{
+  "deviation": null,
+  "engine": "down",
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..metadataRefreshedAt"
+  ],
+  "name": "provider-write-refresh-episode-season-override",
+  "seed": "providers",
+  "steps": [
+    {
+      "expect": {
+        "body": {
+          "ok": true
+        },
+        "status": 200
+      },
+      "method": "POST",
+      "path": "/__reset",
+      "stub": true
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "ok": true
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/media/202/episodes/201/refresh"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "status": 200
+      },
+      "ignoreBody": true,
+      "method": "GET",
+      "path": "/api/media/202",
+      "poll": {
+        "path": "$.seasons[1].episodes[0].title",
+        "timeoutMs": 10000,
+        "until": "Pilot"
+      }
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "addedById": null,
+          "additionalFanartUrls": [],
+          "alternativeTitles": [],
+          "digitalRelease": null,
+          "fanartUrl": null,
+          "files": [],
+          "folderName": "Seasons Show",
+          "genres": [],
+          "id": 202,
+          "imdbId": null,
+          "inCinemas": null,
+          "languageProfile": null,
+          "languageProfileId": null,
+          "library": {
+            "color": "#444444",
+            "defaultLanguageProfileId": null,
+            "defaultQualityProfileId": null,
+            "icon": "tv",
+            "id": 6,
+            "label": null,
+            "mediaTypes": [
+              "series"
+            ],
+            "metadataLanguage": null,
+            "metadataRegion": null,
+            "name": "Plain Series",
+            "path": "/tmp/fliks-parity/media/series-plain",
+            "preferredProvider": null
+          },
+          "libraryId": 6,
+          "logoUrl": null,
+          "metadata": null,
+          "minimumAvailability": "released",
+          "monitored": true,
+          "originalTitle": null,
+          "overview": "old",
+          "path": "/tmp/fliks-parity/media/series-plain/Seasons Show",
+          "physicalRelease": null,
+          "posterUrl": null,
+          "preferredProvider": null,
+          "qualityProfile": null,
+          "qualityProfileId": null,
+          "rating": null,
+          "releaseDate": null,
+          "runtime": null,
+          "seasons": [
+            {
+              "airDate": null,
+              "episodes": [
+                {
+                  "airDate": "2008-01-20",
+                  "endEpisodeNumber": null,
+                  "episodeNumber": 1,
+                  "hasFile": false,
+                  "id": 201,
+                  "markersScannedAt": null,
+                  "monitored": true,
+                  "overview": "Pilot overview",
+                  "runtime": 58,
+                  "seasonId": 202,
+                  "stillUrl": null,
+                  "title": "Pilot"
+                },
+                {
+                  "airDate": null,
+                  "endEpisodeNumber": null,
+                  "episodeNumber": 9,
+                  "hasFile": false,
+                  "id": 202,
+                  "markersScannedAt": null,
+                  "monitored": true,
+                  "overview": null,
+                  "runtime": null,
+                  "seasonId": 202,
+                  "stillUrl": null,
+                  "title": "Gone"
+                }
+              ],
+              "id": 202,
+              "mediaId": 202,
+              "monitored": true,
+              "overview": null,
+              "posterUrl": null,
+              "preferredProvider": "tvdb",
+              "seasonNumber": 1
+            },
+            {
+              "airDate": null,
+              "episodes": [],
+              "id": 203,
+              "mediaId": 202,
+              "monitored": true,
+              "overview": null,
+              "posterUrl": null,
+              "preferredProvider": null,
+              "seasonNumber": 2
+            },
+            {
+              "airDate": null,
+              "episodes": [],
+              "id": 201,
+              "mediaId": 202,
+              "monitored": false,
+              "overview": null,
+              "posterUrl": null,
+              "preferredProvider": null,
+              "seasonNumber": 0
+            }
+          ],
+          "status": "continuing",
+          "title": "Seasons Show",
+          "tmdbCollectionId": null,
+          "tmdbCollectionName": null,
+          "tmdbId": 2000,
+          "tvdbId": 81190,
+          "type": "series",
+          "year": 2008
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/202"
+    }
+  ]
+}

@@ -1,0 +1,133 @@
+{
+  "deviation": null,
+  "engine": "down",
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..metadataRefreshedAt",
+    "$..connectionId"
+  ],
+  "name": "provider-write-refresh-override-unresolvable",
+  "seed": "providers",
+  "steps": [
+    {
+      "expect": {
+        "body": {
+          "ok": true
+        },
+        "status": 200
+      },
+      "method": "POST",
+      "path": "/__reset",
+      "stub": true
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "data": {
+              "type": "sse.connected"
+            },
+            "event": ""
+          },
+          {
+            "data": {
+              "mediaId": 206,
+              "title": "Strict Fail",
+              "type": "metadata.started"
+            },
+            "event": ""
+          },
+          {
+            "data": {
+              "error": "Media override \"tvdb\" cannot be resolved for \"Strict Fail\" (#206): no matching external ID available.",
+              "mediaId": 206,
+              "title": "Strict Fail",
+              "type": "metadata.failed"
+            },
+            "event": ""
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/system/events?device=pw",
+      "sse": {
+        "after": [
+          {
+            "as": "admin",
+            "method": "POST",
+            "path": "/api/media/206/refresh"
+          }
+        ],
+        "events": 3,
+        "timeoutMs": 8000
+      }
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "addedById": null,
+          "additionalFanartUrls": [],
+          "alternativeTitles": [],
+          "digitalRelease": null,
+          "fanartUrl": null,
+          "files": [],
+          "folderName": "Strict Fail (1999)",
+          "genres": [],
+          "id": 206,
+          "imdbId": null,
+          "inCinemas": null,
+          "languageProfile": null,
+          "languageProfileId": null,
+          "library": {
+            "color": "#3b82f6",
+            "defaultLanguageProfileId": null,
+            "defaultQualityProfileId": null,
+            "icon": "film",
+            "id": 1,
+            "label": null,
+            "mediaTypes": [
+              "movie"
+            ],
+            "metadataLanguage": null,
+            "metadataRegion": null,
+            "name": "Movies",
+            "path": "/tmp/fliks-parity/media/movies",
+            "preferredProvider": null
+          },
+          "libraryId": 1,
+          "logoUrl": null,
+          "metadata": null,
+          "minimumAvailability": "released",
+          "monitored": true,
+          "originalTitle": null,
+          "overview": "old",
+          "path": "/tmp/fliks-parity/media/movies/Strict Fail (1999)",
+          "physicalRelease": null,
+          "posterUrl": null,
+          "preferredProvider": "tvdb",
+          "qualityProfile": null,
+          "qualityProfileId": null,
+          "rating": null,
+          "releaseDate": null,
+          "runtime": null,
+          "seasons": [],
+          "status": "released",
+          "title": "Strict Fail",
+          "tmdbCollectionId": null,
+          "tmdbCollectionName": null,
+          "tmdbId": 1003,
+          "tvdbId": null,
+          "type": "movie",
+          "year": 1999
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/206"
+    }
+  ]
+}
