@@ -317,6 +317,40 @@ async fn presence_beats_update_emit_every_time_and_a_state_change_flushes(pool: 
 }
 
 #[sqlx::test(migrations = false)]
+async fn an_unknown_state_is_kept_verbatim_and_absent_body_fields_stay_absent(pool: PgPool) {
+    let c = ctx(pool).await;
+    let conn = c.st.hub.connect(
+        c.user,
+        Identity {
+            target_id: Some("dev#tab".into()),
+            ..Default::default()
+        },
+    );
+    c.st.presence.create(c.live("s1", Some(&conn.id)));
+    let seen: Arc<Mutex<Vec<SseEvent>>> = Arc::default();
+    let sink = seen.clone();
+    c.st.hub
+        .register_household_fan_out(move |ev, _| sink.lock().unwrap().push(ev.clone()));
+    let body = json!({"sessionId": "s1", "positionSeconds": 5, "state": "seeking"});
+    let (status, _) = c.put(c.media, body).await;
+    assert_eq!(
+        status, 400,
+        "the flush still needs mediaFileId, after the emit"
+    );
+    let live = c.st.presence.peek("s1").unwrap();
+    assert_eq!(
+        live.state,
+        fliks_server::events::event::PlayState::Other("seeking".into())
+    );
+    let ev = serde_json::to_value(&seen.lock().unwrap()[0]).unwrap();
+    assert_eq!(ev["state"], "seeking");
+    assert!(
+        ev.get("mediaFileId").is_none() && ev.get("durationSeconds").is_none(),
+        "{ev}"
+    );
+}
+
+#[sqlx::test(migrations = false)]
 async fn history_goes_to_the_launcher_and_no_target_means_no_emit(pool: PgPool) {
     let c = ctx(pool).await;
     let launcher: i32 =

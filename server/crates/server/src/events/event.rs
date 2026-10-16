@@ -344,14 +344,17 @@ pub enum SseEvent {
         target_id: String,
         session_id: String,
         media_id: Option<i64>,
-        media_file_id: i64,
+        /// Echoes the heartbeat body: `JSON.stringify` drops it when the client left it out.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        media_file_id: Option<i64>,
         episode_id: Option<i64>,
         media_title: Option<String>,
         episode_label: Option<String>,
         poster_url: Option<String>,
         fanart_url: Option<String>,
         position_seconds: Num,
-        duration_seconds: Num,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        duration_seconds: Option<Num>,
         state: PlayState,
         volume: Option<Num>,
         muted: Option<bool>,
