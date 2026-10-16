@@ -547,6 +547,13 @@ async fn fs_check(sc: &Value) -> Vec<String> {
     errs
 }
 
+/// A scenario with a `"stub": true` step needs provider keys and the stub on the target.
+fn uses_stub(sc: &Value) -> bool {
+    sc["steps"]
+        .as_array()
+        .is_some_and(|s| s.iter().any(|st| st["stub"].as_bool() == Some(true)))
+}
+
 /// Runs one scenario; in record mode fills each step's `expect` from the live response.
 async fn run(ctx: &Ctx, sc: &mut Value, record: bool) -> Vec<String> {
     fs_setup(sc);
@@ -604,8 +611,17 @@ async fn run(ctx: &Ctx, sc: &mut Value, record: bool) -> Vec<String> {
                 }
             }
         }
+        // step-level `ignore`: paths dropped from this step's body only
+        let step_ignore: Vec<Vec<Seg>> = step["ignore"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|p| p.as_str())
+            .map(parse_path)
+            .collect();
+        let ignored = || ignore.iter().chain(&step_ignore);
         let mut body = resp.body.clone();
-        ignore.iter().for_each(|p| remove(&mut body, p));
+        ignored().for_each(|p| remove(&mut body, p));
         if step["ignoreBody"].as_bool() == Some(true) {
             body = Value::Null;
         }
@@ -656,7 +672,7 @@ async fn run(ctx: &Ctx, sc: &mut Value, record: bool) -> Vec<String> {
             }
             (e, _) => {
                 let (mut e, mut b) = (e.clone(), body.clone());
-                ignore.iter().for_each(|p| remove(&mut e, p));
+                ignored().for_each(|p| remove(&mut e, p));
                 unordered.iter().for_each(|p| {
                     sort_at(&mut e, p);
                     sort_at(&mut b, p);
@@ -688,6 +704,8 @@ async fn parity() {
         env("PARITY_TPL", "fliks_parity_tpl"),
     );
     let engine = env("PARITY_ENGINE", "up");
+    // `PARITY_PROVIDERS=1`: the target has provider keys and the stub; only scenarios with stub steps run.
+    let providers = env("PARITY_PROVIDERS", "") == "1";
     // Library scenarios create directories under libs/ and list it; a leftover from a previous run breaks the listing.
     let _ = fs::remove_dir_all(Path::new(MEDIA_ROOT).join("libs"));
     let (mut ok, mut failed, mut skipped, mut dev) = (0, 0, 0, vec![]);
@@ -737,7 +755,7 @@ async fn parity() {
         let mut sc: Value = serde_json::from_str(&fs::read_to_string(f).unwrap())
             .unwrap_or_else(|e| panic!("{f:?}: {e}"));
         let name = sc["name"].as_str().unwrap_or("?").to_string();
-        if sc["engine"].as_str().is_some_and(|e| e != engine) {
+        if sc["engine"].as_str().is_some_and(|e| e != engine) || uses_stub(&sc) != providers {
             skipped += 1;
             continue;
         }
@@ -761,6 +779,7 @@ async fn parity() {
             dev.push(if errs.is_empty() {
                 format!("DEVIATION {name} ({}): matches", sc["deviation"])
             } else {
+                failed += 1;
                 line("DEVIATION-DIFF")
             });
         } else if errs.is_empty() {

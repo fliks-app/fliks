@@ -29,7 +29,8 @@ export FLIKS_CAST_DIR=$PWD/../backend/public   # from server/; without it bootst
 
 - Actors log in as `<name>` / `<name>-pass` (`admin user readonly other manager`); `engine` sends Bearer `PARITY_HOST_TOKEN`.
 - Seed profiles: a scenario `"seed": "<name>"` other than `base` runs on `base` plus `seed/<name>.sql` (built once per run as `<tpl>_<name>`); `PARITY_DB` / `PARITY_TPL` rename the working and template databases so runs can be parallel. `media-query` adds 31 media, a `noread` actor and the catalog fixtures of `docs/spec/media-query.md`.
-- Step extras: `ignoreBody` (step-level: the body is not compared, e.g. an SSE step that only waits), `headers`, `auth` (`bearer|query`), `multipart`, `sse` (`events`, `timeoutMs`, `after` sub-steps); scenario `unordered` (paths whose arrays are compared as sets).
+- Provider scenarios (any `"stub": true` step) need a target with `TMDB_API_KEY`/`TVDB_API_KEY`, the `FLIKS_TMDB_API_URL`/`FLIKS_TVDB_API_URL`/`FLIKS_TMDB_IMAGE_URL` stub URLs (Nest: `external/nest-external-mock.cjs`) and `external/stub.py`; run them with `PARITY_PROVIDERS=1` (only they run) and every other scenario on a target without keys.
+- Step extras: `ignore` (step-level paths dropped from that step's body), `ignoreBody` (step-level: the body is not compared, e.g. an SSE step that only waits), `headers`, `auth` (`bearer|query`), `multipart`, `sse` (`events`, `timeoutMs`, `after` sub-steps); scenario `unordered` (paths whose arrays are compared as sets).
 - Scenario `fs`: rebuilds `/tmp/fliks-parity/s5-ingest/work` before the steps (`{path, from}` copies a generated file, `{path, text}`, `{dir}`, `{link, to}`); `fsAfter` `{exists, absent}` checks the tree after them (write-path scenarios).
 - `"engine": "up"|"down"` on a scenario needs that engine state (`PARITY_ENGINE`, default `up`; others are skipped).
   Untagged scenarios must pass in both. `down`: Nest without `FLIKS_ENGINE_URL`; record each mode with its own Nest.
