@@ -53,21 +53,15 @@ async fn media_dir_to_remove(st: &AppState, m: &MediaRow) -> Result<Option<PathB
     fsx::removable_media_dir(&root, folder, &roots, &others)
 }
 
-pub struct Removed {
-    pub media: MediaRow,
-    pub dir: Result<Option<PathBuf>, String>,
-}
-
 /// `remove(id)` (rules 67-69, C48): hook and row delete in one transaction; the caller holds the lock.
 pub async fn remove_media(
     st: &AppState,
     _guard: &tokio::sync::OwnedMutexGuard<()>,
     id: i32,
-) -> Result<Removed, AppError> {
+) -> Result<MediaRow, AppError> {
     let media = load_media(&st.db, id)
         .await?
         .ok_or_else(|| crate::libraries::media_not_found(id))?;
-    let dir = media_dir_to_remove(st, &media).await;
     let files = sqlx::query_scalar!(
         r#"SELECT id FROM media_files WHERE "mediaId" = $1 ORDER BY id"#,
         id
@@ -94,7 +88,7 @@ pub async fn remove_media(
     st.seams
         .media_servers
         .dispatch("media.deleted", media.title.clone(), media.path());
-    Ok(Removed { media, dir })
+    Ok(media)
 }
 
 fn delete_failed(st: &AppState, user: i32, m: &MediaRow) {
@@ -116,18 +110,13 @@ pub async fn remove(
 ) -> Result<Json<Value>, AppError> {
     let id = gate(&st, &a, Action::Delete, id).await?;
     let guard = st.ingest.media.lock(id).await;
-    let r = remove_media(&st, &guard, id).await?;
+    let media = remove_media(&st, &guard, id).await?;
     let user = a.user.id;
     let st2 = st.clone();
     tokio::spawn(async move {
         let _guard = guard;
-        let m = &r.media;
-        // Re-checked right before the removal: the tree may have changed since the row went.
-        let dir = match r.dir {
-            Ok(Some(_)) => media_dir_to_remove(&st2, m).await,
-            d => d,
-        };
-        match dir {
+        let m = &media;
+        match media_dir_to_remove(&st2, m).await {
             Ok(None) => {}
             Ok(Some(d)) => match tokio::task::spawn_blocking({
                 let d = d.clone();
