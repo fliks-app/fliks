@@ -1,0 +1,60 @@
+{
+  "deviation": null,
+  "engine": "up",
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..date",
+    "$..queuedAt"
+  ],
+  "name": "subtitles-media-ocr-placeholder-shape",
+  "seed": "subtitles",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "language": "fr"
+      },
+      "expect": {
+        "body": {
+          "codec": "subrip",
+          "episode": null,
+          "episodeId": null,
+          "errorMessage": null,
+          "forced": false,
+          "hashMatched": false,
+          "hearingImpaired": false,
+          "id": 9,
+          "language": "fr",
+          "locked": false,
+          "media": {
+            "id": 1
+          },
+          "mediaFile": {
+            "id": 1
+          },
+          "mediaFileId": 1,
+          "mediaId": 1,
+          "providerFileId": null,
+          "providerType": "ocr",
+          "relativePath": null,
+          "score": 100,
+          "sourceStreamIndex": 2,
+          "status": "processing",
+          "streamIndex": null,
+          "syncFailed": false,
+          "syncOffset": null,
+          "synced": false,
+          "tags": [],
+          "translationEngine": null,
+          "translationModel": null,
+          "translationProviderName": null
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/media/1/subtitles/2/ocr"
+    }
+  ],
+  "strictMessage": true
+}
