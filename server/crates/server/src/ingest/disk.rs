@@ -638,6 +638,15 @@ fn validated_folder(name: &str, media_type: &str) -> Result<String, AppError> {
 
 /// `relinkOrphans` (rules 76-92).
 async fn relink_orphans(st: &AppState, a: &Authed, d: RelinkDto) -> Result<Value, AppError> {
+    if !accessible_library_ids(&st.db, a)
+        .await?
+        .contains(&d.library_id)
+    {
+        return Err(AppError::not_found(format!(
+            "Library #{} not found",
+            d.library_id
+        )));
+    }
     let lib = require_path(st, d.library_id).await?;
     if !lib.types.contains(&d.media_type) {
         return Err(AppError::bad_request(format!(
@@ -719,6 +728,14 @@ async fn link_files(
         let mut entries = vec![];
         for f in &d.files {
             let name = file_name(Path::new(&f.path));
+            // F47: an in-place reorganize moves files that are already in this library, nothing else.
+            if d.transfer.is_none()
+                && !fsx::Root::open(&lib.path)
+                    .is_ok_and(|r| fs::canonicalize(&f.path).is_ok_and(|p| r.contains(&p, false)))
+            {
+                errors.push(format!("{name}: file outside the library root"));
+                continue;
+            }
             let mut episode_id = None;
             if media.is_series() {
                 match caller_nums(f.season, f.episode, f.end)

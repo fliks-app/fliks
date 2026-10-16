@@ -519,6 +519,20 @@ async fn relink_in_place_is_contained(pool: PgPool) {
     t["transfer"] = json!("copy");
     let (s, _) = call(&c, "POST", url, &c.editor, t).await;
     assert_eq!(s, 403);
+    let (s, _) = call(&c, "POST", url, &c.editor, body("Y", lib.join("Y/Y.mkv"))).await;
+    assert_eq!(s, 404);
+    let m = media(&c, l, "Out (2000)", "movie").await;
+    sqlx::query(r#"UPDATE media SET "tmdbId" = 77 WHERE id = $1"#)
+        .bind(m)
+        .execute(&c.st.db)
+        .await
+        .unwrap();
+    let mut r = body("Out (2000)", c.dir.join("outside/Out.mkv"));
+    r["externalId"] = json!("77");
+    r["reorganize"] = json!(true);
+    let (s, b) = call(&c, "POST", url, &c.admin, r).await;
+    assert_eq!((s, b["linked"].clone()), (201, json!(0)), "{b}");
+    assert!(c.dir.join("outside/Out.mkv").exists());
 }
 
 #[sqlx::test(migrations = false)]
