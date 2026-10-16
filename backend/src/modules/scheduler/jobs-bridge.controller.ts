@@ -16,7 +16,6 @@ import { PluginAutoUpdateService } from '../plugins/plugin-auto-update.service';
 import { PluginCatalogClientService } from '../plugins/plugin-catalog-client.service';
 import { PluginJobsService } from '../plugins/plugin-jobs.service';
 import { ScheduledJobRegistry } from './scheduled-job-registry.service';
-import { SubtitleSchedulerService } from './subtitle-scheduler.service';
 
 export class RunJobDto {
   @IsString()
@@ -32,7 +31,6 @@ export class JobsBridgeController {
     private readonly pluginJobs: PluginJobsService,
     private readonly catalogClient: PluginCatalogClientService,
     private readonly pluginAutoUpdate: PluginAutoUpdateService,
-    private readonly subtitleScheduler: SubtitleSchedulerService,
   ) {}
 
   @Get()
@@ -67,14 +65,6 @@ export class JobsBridgeController {
       if (dto.name === 'RefreshPluginSources') {
         await this.catalogClient.refreshAll();
         await this.pluginAutoUpdate.run();
-        return;
-      }
-      if (dto.name === 'SubtitleSearch') {
-        await this.subtitleScheduler.searchMissingSubtitles();
-        return;
-      }
-      if (dto.name === 'SubtitleUpgrade') {
-        await this.subtitleScheduler.upgradeSubtitles();
         return;
       }
       const registered = this.registry.get(dto.name);
