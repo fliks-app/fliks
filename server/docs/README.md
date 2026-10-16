@@ -41,6 +41,9 @@ Decided behaviour for the Rust port (security fixes F, correctness fixes C; D3).
 | F21 | an image `variant` such as `..%2F..%2Fx` reached `path.join`: any readable `*.jpg` fetched anonymously | `variant` must match `^(poster\|fanart\|fanart-[0-9]+\|logo)$` for media and request art, else 404 | none |
 | F22 | absolute server paths (`Media.path`, `library.path`, `disk`) were serialised for every reader (`media.read`, library readers) | present only for callers who can manage libraries (`settings.access` or `manage:all`); omitted otherwise on `GET /api/media`, `recently-added`, `GET :id`, `/api/libraries*` and `/api/roles` | client readers use `m.path ?? null` (see `client-audit.md`) |
 | F31 | remote state/stopped fan-out reached grantees of a device id under any owner (anyone could mint a code for another user's deviceId and receive its playback state) | fan-out limited to grants whose owner is the device's owner | none |
+| F28 | `settings.webhookUrl` of Discord/Slack notification connections returned in clear (the URL embeds its credential) | secret field like `token`: omitted from responses, listed under `secretsSet`; a blank or absent value on write keeps the stored one, `null` erases it; a type switch drops it | notification editor shows the masked "set" state |
+| F29 | gotify token (query string) and webhook URL could reach sender errors, logs and the `test` response | sender errors never contain the request URL | none |
+| F30 | Discord payloads allowed `@everyone`/role/user mentions from request titles | Discord body adds `allowed_mentions: {parse: []}` | none |
 
 Not done (user decision 2026-10-15): login rate limiting/lockout.
 
@@ -60,7 +63,7 @@ A 500 or a half-written request is never part of the frozen contract:
 
 | # | Today (Nest) | Rust behaviour |
 |---|---|---|
-| C1 | 500 on unvalidated input: non-integer or out-of-int4 media filters, `page < 1` with `limit > 0`, negative `recently-added` `limit`, calendar dates Postgres rejects, a `sortBy` naming an `Object.prototype` member (falls back to `title`), `streams` on a library without path (404); library create with a duplicate name, update with a null name, access set with an unknown user; `GET /api/remote/commands` without `targetId`, fractional `page`/`limit` on history, non-numeric `startAt` on playback-info, `null` on non-nullable user fields; `toggle-watched` and season `toggle-watched` on an unknown media | 400 with the standard validation body; unknown media → 404 `not_found` |
+| C1 | 500 on unvalidated input: non-integer or out-of-int4 media filters, `page < 1` with `limit > 0`, negative `recently-added` `limit`, calendar dates Postgres rejects, a `sortBy` naming an `Object.prototype` member (falls back to `title`), `streams` on a library without path (404); library create with a duplicate name, update with a null name, access set with an unknown user; `GET /api/remote/commands` without `targetId`, fractional `page`/`limit` on history, non-numeric `startAt` on playback-info, `null` on non-nullable user fields, `null` `events`/`enabled` and ids beyond int4 on notification connections; `toggle-watched` and season `toggle-watched` on an unknown media | 400 with the standard validation body; unknown media → 404 `not_found` |
 | C2 | writes before failing: bulk `PUT /api/settings` stops at the first protected key; non-manager `PUT /users/:id` with `libraryIds` saves the rest then 403s | validate and authorise the whole request first, write in one transaction |
 | C3 | refresh rotation and pairing claim are not atomic | one transaction with `SELECT … FOR UPDATE` |
 | C4 | recommendations ties follow Postgres scan order | score desc, then media id asc |
@@ -75,6 +78,8 @@ A 500 or a half-written request is never part of the frozen contract:
 | C18 | `POST /api/system/streams/:sid/command` with an `action` outside pause/play/stop/message was relayed to the client as is | 400 |
 | C19 | live TV rows of `/api/system/streams` reported the source's name as `quality` (`"Live"` only without one) | they report `"Live"` |
 | C20 | ValidationPipe coerced ` 7 `, `1e1`, `0x10` before `ParseIntPipe` | integer path segments must be canonical (`7`, `-7`; never `007`, `+7`, ` 7 `, `0x7`) on every Rust route: `PathParams` / `int_param` → 400 |
+| C16 | notification senders had no timeout (axios `timeout: 0`) | 10 s total per request, no retry; `test` reports `timeout of 10000ms exceeded` |
+| C17 | a plugin-supplied event outside the notification vocabulary was dispatched (default message) | rejected with 400 before any sender runs |
 
 Frozen as is (decided): the heartbeat keeps its debounce entry after a failed history write and returns
 `sessionLost: false` when the engine session lives but presence cannot be rebuilt. Lists whose order comes
