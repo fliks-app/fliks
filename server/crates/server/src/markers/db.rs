@@ -1,0 +1,387 @@
+//! Queries of `docs/spec/markers.md` (SQL section).
+use crate::{events::Num, http::json::iso_ms};
+use chrono::{DateTime, Utc};
+use serde::{Serialize, Serializer};
+use serde_json::Value;
+use sqlx::PgPool;
+
+fn num<S: Serializer>(v: &f64, s: S) -> Result<S::Ok, S::Error> {
+    Num(*v).serialize(s)
+}
+
+/// `Marker` of the contract; whole numbers print as integers, like JSON.stringify.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Marker {
+    pub id: i32,
+    #[serde(with = "iso_ms")]
+    pub created_at: DateTime<Utc>,
+    #[serde(with = "iso_ms")]
+    pub updated_at: DateTime<Utc>,
+    pub r#type: String,
+    #[serde(serialize_with = "num")]
+    pub start_seconds: f64,
+    #[serde(serialize_with = "num")]
+    pub end_seconds: f64,
+    #[serde(serialize_with = "num")]
+    pub confidence: f64,
+    pub manual: bool,
+    pub episode_id: Option<i32>,
+}
+
+pub async fn for_episode(db: &PgPool, episode: i32) -> sqlx::Result<Vec<Marker>> {
+    sqlx::query_as!(
+        Marker,
+        r#"SELECT id, "createdAt" AS created_at, "updatedAt" AS updated_at, type AS "type!",
+                  "startSeconds" AS start_seconds, "endSeconds" AS end_seconds, confidence,
+                  manual, "episodeId" AS episode_id
+           FROM episode_markers WHERE "episodeId" = $1 ORDER BY "startSeconds", id"#,
+        episode
+    )
+    .fetch_all(db)
+    .await
+}
+
+pub async fn for_season(db: &PgPool, season: i32) -> sqlx::Result<Vec<Marker>> {
+    sqlx::query_as!(
+        Marker,
+        r#"SELECT m.id, m."createdAt" AS created_at, m."updatedAt" AS updated_at, m.type AS "type!",
+                  m."startSeconds" AS start_seconds, m."endSeconds" AS end_seconds, m.confidence,
+                  m.manual, m."episodeId" AS episode_id
+           FROM episode_markers m JOIN episodes e ON e.id = m."episodeId" WHERE e."seasonId" = $1
+           ORDER BY m."episodeId", m."startSeconds", m.id"#,
+        season
+    )
+    .fetch_all(db)
+    .await
+}
+
+pub async fn find(db: &PgPool, id: i32) -> sqlx::Result<Option<Marker>> {
+    sqlx::query_as!(
+        Marker,
+        r#"SELECT id, "createdAt" AS created_at, "updatedAt" AS updated_at, type AS "type!",
+                  "startSeconds" AS start_seconds, "endSeconds" AS end_seconds, confidence,
+                  manual, "episodeId" AS episode_id
+           FROM episode_markers WHERE id = $1"#,
+        id
+    )
+    .fetch_optional(db)
+    .await
+}
+
+/// `Some(libraryId)` (itself possibly NULL) when the episode exists.
+pub async fn episode_library(db: &PgPool, episode: i32) -> sqlx::Result<Option<Option<i32>>> {
+    let row = sqlx::query_scalar!(
+        r#"SELECT m."libraryId" FROM episodes e
+           JOIN seasons s ON s.id = e."seasonId" JOIN media m ON m.id = s."mediaId"
+           WHERE e.id = $1"#,
+        episode
+    )
+    .fetch_optional(db)
+    .await?;
+    Ok(row)
+}
+
+pub async fn season_library(db: &PgPool, season: i32) -> sqlx::Result<Option<Option<i32>>> {
+    let row = sqlx::query_scalar!(
+        r#"SELECT m."libraryId" FROM seasons s JOIN media m ON m.id = s."mediaId" WHERE s.id = $1"#,
+        season
+    )
+    .fetch_optional(db)
+    .await?;
+    Ok(row)
+}
+
+pub async fn episode_exists(db: &PgPool, episode: i32) -> sqlx::Result<bool> {
+    sqlx::query_scalar!(r#"SELECT id FROM episodes WHERE id = $1"#, episode)
+        .fetch_optional(db)
+        .await
+        .map(|r| r.is_some())
+}
+
+/// C39: a manual marker replaces the `(episode, type)` one in one statement.
+pub async fn upsert_manual(
+    db: &PgPool,
+    episode: i32,
+    kind: &str,
+    start: f64,
+    end: f64,
+) -> sqlx::Result<Marker> {
+    let id = sqlx::query_scalar!(
+        r#"INSERT INTO episode_markers ("episodeId", type, "startSeconds", "endSeconds", confidence, manual)
+           VALUES ($1, $2, $3, $4, 1, true)
+           ON CONFLICT ("episodeId", type) DO UPDATE SET "startSeconds" = EXCLUDED."startSeconds",
+             "endSeconds" = EXCLUDED."endSeconds", confidence = 1, manual = true, "updatedAt" = now()
+           RETURNING id"#,
+        episode,
+        kind,
+        start,
+        end
+    )
+    .fetch_one(db)
+    .await?;
+    Ok(find(db, id).await?.expect("marker just written"))
+}
+
+pub async fn set_range(db: &PgPool, id: i32, start: f64, end: f64) -> sqlx::Result<()> {
+    sqlx::query!(
+        r#"UPDATE episode_markers SET "startSeconds" = $2, "endSeconds" = $3, manual = true, confidence = 1
+           WHERE id = $1"#,
+        id,
+        start,
+        end
+    )
+    .execute(db)
+    .await
+    .map(drop)
+}
+
+pub async fn delete(db: &PgPool, id: i32) -> sqlx::Result<bool> {
+    sqlx::query!("DELETE FROM episode_markers WHERE id = $1", id)
+        .execute(db)
+        .await
+        .map(|r| r.rows_affected() > 0)
+}
+
+/// The `commands` row `detectSeason` returns (`CommandRow`).
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommandRow {
+    pub id: i32,
+    #[serde(with = "iso_ms")]
+    pub created_at: DateTime<Utc>,
+    #[serde(with = "iso_ms")]
+    pub updated_at: DateTime<Utc>,
+    pub name: &'static str,
+    pub status: &'static str,
+    pub trigger: String,
+    pub body: Value,
+    pub started_on: Option<()>,
+    pub ended_on: Option<()>,
+}
+
+pub struct SeasonInfo {
+    pub media_id: i32,
+    pub season_number: i32,
+    pub media_title: String,
+    pub media_path: Option<String>,
+}
+
+pub async fn season_info(db: &PgPool, season: i32) -> sqlx::Result<Option<SeasonInfo>> {
+    let Some(r) = sqlx::query!(
+        r#"SELECT s."mediaId" AS media_id, s."seasonNumber" AS season_number, m.title AS "title?",
+                  l.path AS "lib_path?", m."folderName" AS "folder_name?"
+           FROM seasons s LEFT JOIN media m ON m.id = s."mediaId" LEFT JOIN libraries l ON l.id = m."libraryId"
+           WHERE s.id = $1"#,
+        season
+    )
+    .fetch_optional(db)
+    .await?
+    else {
+        return Ok(None);
+    };
+    let media_id = r.media_id.unwrap_or_default();
+    Ok(Some(SeasonInfo {
+        media_id,
+        season_number: r.season_number,
+        media_title: r.title.unwrap_or_else(|| format!("media #{media_id}")),
+        media_path: fliks_domain::media::path::media_path(
+            r.lib_path.as_deref(),
+            r.folder_name.as_deref(),
+        ),
+    }))
+}
+
+pub async fn insert_command(
+    db: &PgPool,
+    trigger: &str,
+    season: i32,
+    info: &SeasonInfo,
+) -> sqlx::Result<CommandRow> {
+    let body = serde_json::json!({
+        "seasonId": season, "mediaId": info.media_id, "seasonNumber": info.season_number
+    });
+    let r = sqlx::query!(
+        r#"INSERT INTO commands (name, status, trigger, body) VALUES ('IntroDetection', 'queued', $1, $2)
+           RETURNING id, "createdAt" AS created_at, "updatedAt" AS updated_at"#,
+        trigger,
+        body
+    )
+    .fetch_one(db)
+    .await?;
+    Ok(CommandRow {
+        id: r.id,
+        created_at: r.created_at,
+        updated_at: r.updated_at,
+        name: "IntroDetection",
+        status: "queued",
+        trigger: trigger.to_owned(),
+        body,
+        started_on: None,
+        ended_on: None,
+    })
+}
+
+pub async fn command_running(db: &PgPool, id: i32) -> sqlx::Result<()> {
+    sqlx::query!(
+        r#"UPDATE commands SET status = 'running', "startedOn" = now() WHERE id = $1"#,
+        id
+    )
+    .execute(db)
+    .await
+    .map(drop)
+}
+
+pub async fn command_end(db: &PgPool, id: i32, status: &str) -> sqlx::Result<()> {
+    sqlx::query!(
+        r#"UPDATE commands SET status = $2, "endedOn" = now() WHERE id = $1"#,
+        id,
+        status
+    )
+    .execute(db)
+    .await
+    .map(drop)
+}
+
+pub async fn season_numbers(db: &PgPool, media: i32) -> sqlx::Result<Vec<(i32, i32)>> {
+    let rows = sqlx::query!(
+        r#"SELECT id, "seasonNumber" AS season_number FROM seasons WHERE "mediaId" = $1
+           ORDER BY "seasonNumber", id"#,
+        media
+    )
+    .fetch_all(db)
+    .await?;
+    Ok(rows.into_iter().map(|r| (r.id, r.season_number)).collect())
+}
+
+pub async fn media_exists(db: &PgPool, media: i32) -> sqlx::Result<bool> {
+    sqlx::query_scalar!("SELECT id FROM media WHERE id = $1", media)
+        .fetch_optional(db)
+        .await
+        .map(|r| r.is_some())
+}
+
+#[derive(Debug, PartialEq)]
+pub struct ScanSeason {
+    pub id: i32,
+    pub media_id: i32,
+    pub season_number: i32,
+    pub media_title: String,
+}
+
+pub async fn seasons_for_scan(
+    db: &PgPool,
+    only_missing: bool,
+    media: Option<i32>,
+) -> sqlx::Result<Vec<ScanSeason>> {
+    let rows = sqlx::query!(
+        r#"SELECT s.id, s."mediaId" AS "media_id!", s."seasonNumber" AS season_number, m.title AS "title!"
+           FROM seasons s JOIN media m ON m.id = s."mediaId"
+           WHERE s."seasonNumber" > 0 AND m.type = 'series'
+             AND ($1::int IS NULL OR s."mediaId" = $1)
+             AND (NOT $2 OR EXISTS (SELECT 1 FROM episodes e WHERE e."seasonId" = s.id
+                                    AND e."hasFile" = true AND e."markersScannedAt" IS NULL))
+           ORDER BY m.title ASC, s."seasonNumber" ASC, s.id ASC"#,
+        media,
+        only_missing
+    )
+    .fetch_all(db)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| ScanSeason {
+            id: r.id,
+            media_id: r.media_id,
+            season_number: r.season_number,
+            media_title: r.title,
+        })
+        .collect())
+}
+
+pub struct EpisodeFile {
+    pub episode_id: i32,
+    pub episode_number: i32,
+    pub file_id: Option<i32>,
+    pub relative_path: Option<String>,
+    pub info: Option<Value>,
+}
+
+/// Episodes of the season with a file, by episode number; each with its highest-id file.
+pub async fn episodes_with_files(db: &PgPool, season: i32) -> sqlx::Result<Vec<EpisodeFile>> {
+    let rows = sqlx::query!(
+        r#"SELECT e.id, e."episodeNumber" AS number, f.id AS "file_id?", f."relativePath" AS "rel?",
+                  f."streamInfo" AS "info?"
+           FROM episodes e
+           LEFT JOIN LATERAL (SELECT id, "relativePath", "streamInfo" FROM media_files
+                              WHERE "episodeId" = e.id ORDER BY id DESC LIMIT 1) f ON true
+           WHERE e."seasonId" = $1 AND e."hasFile" = true ORDER BY e."episodeNumber", e.id"#,
+        season
+    )
+    .fetch_all(db)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| EpisodeFile {
+            episode_id: r.id,
+            episode_number: r.number,
+            file_id: r.file_id,
+            relative_path: r.rel,
+            info: r.info,
+        })
+        .collect())
+}
+
+pub async fn manual_episodes(db: &PgPool, episodes: &[i32], kind: &str) -> sqlx::Result<Vec<i32>> {
+    sqlx::query_scalar!(
+        r#"SELECT "episodeId" AS "episode_id!" FROM episode_markers
+           WHERE "episodeId" = ANY($1) AND type = $2 AND manual = true"#,
+        episodes,
+        kind
+    )
+    .fetch_all(db)
+    .await
+}
+
+/// C39: a marker made manual during the run is never overwritten.
+pub async fn upsert_detected(
+    db: &PgPool,
+    episode: i32,
+    kind: &str,
+    start: f64,
+    end: f64,
+    confidence: f64,
+) -> sqlx::Result<()> {
+    sqlx::query!(
+        r#"INSERT INTO episode_markers ("episodeId", type, "startSeconds", "endSeconds", confidence, manual)
+           VALUES ($1, $2, $3, $4, $5, false)
+           ON CONFLICT ("episodeId", type) DO UPDATE SET "startSeconds" = EXCLUDED."startSeconds",
+             "endSeconds" = EXCLUDED."endSeconds", confidence = EXCLUDED.confidence, manual = false,
+             "updatedAt" = now()
+           WHERE episode_markers.manual = false"#,
+        episode,
+        kind,
+        start,
+        end,
+        confidence
+    )
+    .execute(db)
+    .await
+    .map(drop)
+}
+
+pub async fn stamp_scanned(db: &PgPool, season: i32) -> sqlx::Result<()> {
+    sqlx::query!(
+        r#"UPDATE episodes SET "markersScannedAt" = now() WHERE "seasonId" = $1 AND "hasFile" = true"#,
+        season
+    )
+    .execute(db)
+    .await
+    .map(drop)
+}
+
+pub async fn setting(db: &PgPool, key: &str) -> sqlx::Result<Option<String>> {
+    let row = sqlx::query_scalar!(r#"SELECT value FROM app_settings WHERE key = $1"#, key)
+        .fetch_optional(db)
+        .await?;
+    Ok(row.flatten())
+}

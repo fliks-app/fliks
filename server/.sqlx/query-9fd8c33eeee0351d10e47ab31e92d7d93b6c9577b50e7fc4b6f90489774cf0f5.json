@@ -1,0 +1,70 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT m.id, m.\"createdAt\" AS created_at, m.\"updatedAt\" AS updated_at, m.type AS \"type!\",\n                  m.\"startSeconds\" AS start_seconds, m.\"endSeconds\" AS end_seconds, m.confidence,\n                  m.manual, m.\"episodeId\" AS episode_id\n           FROM episode_markers m JOIN episodes e ON e.id = m.\"episodeId\" WHERE e.\"seasonId\" = $1\n           ORDER BY m.\"episodeId\", m.\"startSeconds\", m.id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 2,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 3,
+        "name": "type!",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "start_seconds",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 5,
+        "name": "end_seconds",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 6,
+        "name": "confidence",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 7,
+        "name": "manual",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 8,
+        "name": "episode_id",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "9fd8c33eeee0351d10e47ab31e92d7d93b6c9577b50e7fc4b6f90489774cf0f5"
+}

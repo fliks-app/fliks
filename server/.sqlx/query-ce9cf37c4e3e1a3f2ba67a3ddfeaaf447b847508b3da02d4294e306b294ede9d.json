@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE commands SET status = 'running', \"startedOn\" = now() WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ce9cf37c4e3e1a3f2ba67a3ddfeaaf447b847508b3da02d4294e306b294ede9d"
+}
