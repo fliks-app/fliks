@@ -159,8 +159,10 @@ fn events_open_and_end_sessions() {
         json!({"type": "SessionEnded", "sessionId": "a", "reason": "expired"}),
     )
     .unwrap();
-    apply(&p, &Feed::Event(Arc::new(ended)));
+    let ended = Feed::Event(Arc::new(ended));
+    assert_eq!(apply(&p, &ended), ["a"]);
     assert_eq!(p.size(), 0);
+    assert!(apply(&p, &ended).is_empty());
 }
 
 #[tokio::test]

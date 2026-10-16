@@ -43,10 +43,11 @@ pub(super) fn apply(presence: &Presence, feed: &Feed) -> Vec<String> {
                 presence.restore(session);
                 vec![]
             }
-            EngineEvent::SessionEnded { session_id, .. } => {
-                presence.stop(session_id);
-                vec![session_id.clone()]
-            }
+            EngineEvent::SessionEnded { session_id, .. } => presence
+                .stop(session_id)
+                .map(|s| s.session_id)
+                .into_iter()
+                .collect(),
             _ => vec![],
         },
     }
