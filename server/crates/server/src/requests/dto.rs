@@ -1,5 +1,5 @@
 //! Bodies and queries (`requests.md` routes table, rules 28-30): class-validator messages, Nest's coercions.
-use crate::http::AppError;
+use crate::http::{AppError, validate::int_param};
 use fliks_domain::media::query::js_number;
 use serde_json::{Map, Value, json};
 
@@ -411,15 +411,10 @@ pub fn list(q: &[(String, String)]) -> Res<List> {
 /// The `tmdbId` and `mediaType` of `title-state` (`ParseIntPipe`; the enum is validated here, not in Nest: C111).
 pub fn title_state(q: &[(String, String)]) -> Res<(i32, String)> {
     let one = |k: &str| q.iter().find(|(n, _)| n == k).map(|(_, v)| v.as_str());
-    let tmdb = one("tmdbId")
-        .and_then(|v| {
-            let t = v.trim_start_matches('-');
-            let canonical = !t.is_empty()
-                && t.bytes().all(|b| b.is_ascii_digit())
-                && (t == "0" && v.len() == 1 || !t.starts_with('0'));
-            canonical.then(|| v.parse::<i32>().ok()).flatten()
-        })
-        .ok_or_else(|| AppError::bad_request("Validation failed (numeric string is expected)"))?;
+    let tmdb =
+        int_param(one("tmdbId").ok_or_else(|| {
+            AppError::bad_request("Validation failed (numeric string is expected)")
+        })?)?;
     match one("mediaType") {
         Some(m) if MEDIA_TYPES.contains(&m) => Ok((tmdb, m.to_owned())),
         _ => Err(AppError::bad_request(vec![format!(

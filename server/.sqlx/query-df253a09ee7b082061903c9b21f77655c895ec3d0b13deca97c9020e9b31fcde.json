@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE requests SET status = $2::text::requests_status_enum WHERE id = $1 AND status::text = ANY($3)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Text",
+        "TextArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "df253a09ee7b082061903c9b21f77655c895ec3d0b13deca97c9020e9b31fcde"
+}

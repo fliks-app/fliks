@@ -120,12 +120,13 @@ impl Lifecycle {
             {
                 continue;
             }
-            db::set_status(&self.st.db, r.id, "processing").await?;
-            self.st.requests.notify(
-                &self.st,
-                "request.processing",
-                obj(json!({"title": r.title, "mediaType": r.media_type})),
-            );
+            if db::set_status(&self.st.db, r.id, "processing", &["approved"]).await? {
+                self.st.requests.notify(
+                    &self.st,
+                    "request.processing",
+                    obj(json!({"title": r.title, "mediaType": r.media_type})),
+                );
+            }
         }
         Ok(())
     }
@@ -158,12 +159,13 @@ impl Lifecycle {
             if !covered {
                 continue;
             }
-            db::set_status(&self.st.db, r.id, "available").await?;
-            self.st.requests.notify(
-                &self.st,
-                "request.available",
-                obj(json!({"title": r.title, "mediaType": r.media_type})),
-            );
+            if db::set_status(&self.st.db, r.id, "available", &["approved", "processing"]).await? {
+                self.st.requests.notify(
+                    &self.st,
+                    "request.available",
+                    obj(json!({"title": r.title, "mediaType": r.media_type})),
+                );
+            }
         }
         Ok(())
     }
@@ -261,7 +263,9 @@ pub fn spawn(st: &AppState) {
             let lc = lc.clone();
             match &*ev {
                 Bus::Sse(SseEvent::ImportComplete { media_id, .. }) => {
-                    let id = *media_id as i32;
+                    let Ok(id) = i32::try_from(*media_id) else {
+                        continue;
+                    };
                     tokio::spawn(async move {
                         if let Err(e) = lc.on_import_complete(id).await {
                             tracing::warn!("onImportComplete failed for media#{id}: {e:?}");
@@ -273,7 +277,10 @@ pub fn spawn(st: &AppState) {
                     season_number,
                     ..
                 }) => {
-                    let (id, season) = (*media_id as i32, season_number.map(|s| s as i32));
+                    let Ok(id) = i32::try_from(*media_id) else {
+                        continue;
+                    };
+                    let season = season_number.and_then(|s| i32::try_from(s).ok());
                     tokio::spawn(async move {
                         if let Err(e) = lc.mark_in_progress(id, season).await {
                             tracing::warn!("markInProgress failed for media#{id}: {e:?}");

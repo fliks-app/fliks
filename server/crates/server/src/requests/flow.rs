@@ -136,7 +136,7 @@ async fn check_quota(st: &AppState, a: &Authed, media_type: &str) -> Res<()> {
     } else {
         now.checked_add_days(days)
     }
-    .unwrap_or(now)
+    .unwrap_or_else(|| now - chrono::Duration::days(i64::from(period)))
     .to_utc();
     let count = db::quota_count(&st.db, a.user.id, media_type, since).await?;
     if count >= i64::from(limit) {
@@ -541,7 +541,9 @@ pub async fn update(st: &AppState, a: &Authed, id: i32, dto: UpdateRequest) -> R
         library.flatten().filter(|l| *l != 0),
     )
     .await?;
-    db::patch(&st.db, id, quality, language, library.map(some_id)).await?;
+    if !db::patch(&st.db, id, quality, language, library.map(some_id)).await? {
+        return Err(AppError::forbidden("Only pending requests can be updated"));
+    }
     let row = db::find(&st.db, id).await?.ok_or_else(|| not_found(id))?;
     let mut json = detail(st, a, &row).await?;
     if quality.is_some() {
@@ -570,7 +572,12 @@ pub async fn remove(st: &AppState, a: &Authed, id: i32) -> Res<()> {
         }
         owner_or_manager(a, row.user_id)?;
     }
-    Ok(db::delete(&st.db, id).await?)
+    if !db::delete(&st.db, id, !can_manage(a)).await? && !can_manage(a) {
+        return Err(AppError::forbidden(
+            "Only pending requests can be cancelled",
+        ));
+    }
+    Ok(())
 }
 
 /// Rule 23 steps 1-4, shared with `decline`.
@@ -672,7 +679,9 @@ async fn approve_delete(st: &AppState, a: &Authed, row: &db::Req) -> Res<Value> 
 
 pub async fn decline(st: &AppState, a: &Authed, id: i32, reason: Option<String>) -> Res<Value> {
     let row = pending_row(st, a, id).await?;
-    db::decline(&st.db, id, a.user.id, reason.as_deref()).await?;
+    if !db::decline(&st.db, id, a.user.id, reason.as_deref()).await? {
+        return Err(AppError::conflict("Request is not pending"));
+    }
     let event = if row.kind == "delete" {
         "request.delete.declined"
     } else {
@@ -688,13 +697,8 @@ pub async fn decline(st: &AppState, a: &Authed, id: i32, reason: Option<String>)
     Ok(Value::Object(json))
 }
 
-/// Rule 27 gates of `addComment` and `getComments`.
-async fn comment_gate(st: &AppState, a: &Authed, id: i32) -> Res<db::Req> {
-    gate(st, a, id).await
-}
-
 pub async fn comment_add(st: &AppState, a: &Authed, id: i32, message: &str) -> Res<Value> {
-    let row = comment_gate(st, a, id).await?;
+    let row = gate(st, a, id).await?;
     let mut comment = db::comment_insert(&st.db, row.id, a.user.id, message).await?;
     let full = row_json(st, row.id).await?;
     let mut request = Map::new();
@@ -726,7 +730,7 @@ pub async fn comment_add(st: &AppState, a: &Authed, id: i32, message: &str) -> R
 }
 
 pub async fn comments(st: &AppState, a: &Authed, id: i32) -> Res<Vec<Value>> {
-    let row = comment_gate(st, a, id).await?;
+    let row = gate(st, a, id).await?;
     Ok(db::comments(&st.db, row.id).await?)
 }
 

@@ -161,7 +161,7 @@ none. The only timers are the 5 s art wait (rule 16) and nothing periodic; there
 
 ## Bridges
 
-Milestone S5 (moved from S4, plan §15.3): the create/approve/auto-approve/delete-kind flows and the lifecycle hooks run in-process in Rust. There are no B1 (Nest→Rust lifecycle) and no B2 (Rust→Nest S5 services) bridges. Entries for `docs/bridge.md`: none new, one known gap (below).
+Milestone S5 (moved from S4, plan §15.3): the create/approve/auto-approve/delete-kind flows and the lifecycle hooks run in-process in Rust. There are no B1 (Nest→Rust lifecycle) and no B2 (Rust→Nest S5 services) bridges. Entries for `docs/bridge.md`: none new.
 
 - Hub (S2): `POST /internal/events` carries Nest-emitted `import.complete` and `acquisition.grabbed` (plugin host, Nest until S8) into the Rust bus (rule 35); `requests::spawn` subscribes to the bus (rule 34). `GET /internal/events/stream` carries Rust-emitted `request.created`, `request.approved`, `media.acquisition.requested` to Nest's plugin dispatchers.
 - Services of the media side: `requests::Ports` (`AppState.requests`, the real `requests::Services`; tests substitute a fake). `title_facts` and `request_art` read the TMDB provider and the image store (`request/<mediaType>-<tmdbId>`, `poster` and `fanart`; the existing file wins), `assert_import_target` is `resolveImportTarget` over every library, `import_from_tmdb` is `media::write::import_for_request`, `remove_media` runs the media delete (+ `delete_media_folder`, contained), `notify` is `notifications::dispatch`. The media write routes call `requests::Lifecycle::of(&state)` for the hooks of rules 36-41.

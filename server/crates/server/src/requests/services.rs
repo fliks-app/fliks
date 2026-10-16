@@ -31,6 +31,9 @@ fn port(e: AppError) -> PortError {
 }
 
 async fn tmdb_details(st: &AppState, media_type: &str, tmdb_id: i32) -> Result<Value, String> {
+    if !st.metadata.available(Provider::Tmdb) {
+        return Err("TMDB API key is not configured".into());
+    }
     let lang = st
         .metadata
         .lang

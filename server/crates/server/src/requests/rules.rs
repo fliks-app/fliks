@@ -40,6 +40,9 @@ fn ints(c: &Value, key: &str) -> Vec<i64> {
 
 /// A criterion the context cannot answer fails the rule rather than being skipped.
 pub fn matches(c: &Value, ctx: &Ctx) -> bool {
+    if !c.is_object() {
+        return false;
+    }
     let (users, roles) = (ints(c, "userIds"), ints(c, "roleIds"));
     if !(users.is_empty() && roles.is_empty()) {
         let targeted = users.contains(&i64::from(ctx.user_id))

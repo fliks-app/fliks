@@ -229,19 +229,19 @@ pub async fn set_art(
     Ok(())
 }
 
-/// `PATCH`: `None` leaves a column, `Some(None)` clears it.
+/// `PATCH` of a pending row: `None` leaves a column, `Some(None)` clears it; false when it is no longer pending.
 pub async fn patch(
     db: &PgPool,
     id: i32,
     quality: Option<Option<i32>>,
     language: Option<Option<i32>>,
     library: Option<Option<i32>>,
-) -> sqlx::Result<()> {
-    sqlx::query!(
+) -> sqlx::Result<bool> {
+    Ok(sqlx::query!(
         r#"UPDATE requests SET
         "qualityProfileId" = CASE WHEN $2 THEN $3 ELSE "qualityProfileId" END,
         "languageProfileId" = CASE WHEN $4 THEN $5 ELSE "languageProfileId" END,
-        "libraryId" = CASE WHEN $6 THEN $7 ELSE "libraryId" END WHERE id = $1"#,
+        "libraryId" = CASE WHEN $6 THEN $7 ELSE "libraryId" END WHERE id = $1 AND status = 'pending'"#,
         id,
         quality.is_some(),
         quality.flatten(),
@@ -251,27 +251,37 @@ pub async fn patch(
         library.flatten()
     )
     .execute(db)
-    .await?;
-    Ok(())
+    .await?
+    .rows_affected()
+        == 1)
 }
 
-pub async fn delete(db: &PgPool, id: i32) -> sqlx::Result<()> {
-    sqlx::query!("DELETE FROM requests WHERE id = $1", id)
-        .execute(db)
-        .await?;
-    Ok(())
+/// Deletes the row; `pending_only` (a requester cancelling) leaves a row that moved on. False when nothing went.
+pub async fn delete(db: &PgPool, id: i32, pending_only: bool) -> sqlx::Result<bool> {
+    Ok(sqlx::query!(
+        "DELETE FROM requests WHERE id = $1 AND (NOT $2 OR status = 'pending')",
+        id,
+        pending_only
+    )
+    .execute(db)
+    .await?
+    .rows_affected()
+        == 1)
 }
 
-pub async fn decline(db: &PgPool, id: i32, by: i32, reason: Option<&str>) -> sqlx::Result<()> {
-    sqlx::query!(
-        r#"UPDATE requests SET status = 'declined', "approvedById" = $2, "declinedReason" = $3 WHERE id = $1"#,
+/// Declines a pending row; false when it is no longer pending.
+pub async fn decline(db: &PgPool, id: i32, by: i32, reason: Option<&str>) -> sqlx::Result<bool> {
+    Ok(sqlx::query!(
+        r#"UPDATE requests SET status = 'declined', "approvedById" = $2, "declinedReason" = $3
+           WHERE id = $1 AND status = 'pending'"#,
         id,
         by,
         reason
     )
     .execute(db)
-    .await?;
-    Ok(())
+    .await?
+    .rows_affected()
+        == 1)
 }
 
 /// Takes a pending row for approval; false when it is no longer pending (C113).
@@ -365,7 +375,7 @@ pub async fn adopt(db: &PgPool, id: i32, media_id: i32, approver: Option<i32>) -
         r#"UPDATE requests SET "mediaId" = $2,
         "approvedById" = CASE WHEN status = 'pending' AND $3::int IS NOT NULL THEN $3 ELSE "approvedById" END,
         status = CASE WHEN status = 'pending' THEN 'approved'::requests_status_enum ELSE status END
-        WHERE id = $1"#,
+        WHERE id = $1 AND status::text = ANY('{pending,approved,processing}')"#,
         id,
         media_id,
         approver
@@ -375,15 +385,19 @@ pub async fn adopt(db: &PgPool, id: i32, media_id: i32, approver: Option<i32>) -
     Ok(())
 }
 
-pub async fn set_status(db: &PgPool, id: i32, status: &str) -> sqlx::Result<()> {
-    sqlx::query!(
-        "UPDATE requests SET status = $2::text::requests_status_enum WHERE id = $1",
+/// Moves a row from one of `from` to `to`; false when another event already moved it.
+pub async fn set_status(db: &PgPool, id: i32, to: &str, from: &[&str]) -> sqlx::Result<bool> {
+    let from: Vec<String> = from.iter().map(|s| (*s).to_owned()).collect();
+    Ok(sqlx::query!(
+        "UPDATE requests SET status = $2::text::requests_status_enum WHERE id = $1 AND status::text = ANY($3)",
         id,
-        status
+        to,
+        &from
     )
     .execute(db)
-    .await?;
-    Ok(())
+    .await?
+    .rows_affected()
+        == 1)
 }
 
 pub async fn trim_seasons(db: &PgPool, id: i32, seasons: &[i64]) -> sqlx::Result<()> {
