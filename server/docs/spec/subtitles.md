@@ -118,6 +118,7 @@ Static segments win over `:id`/`:subtitleId` in Rust: `/api/media/sync-queue` an
 52. A client-supplied `score`, `hashMatched` and `providerFileId` on `download` and `upgrade` are stored as sent (rule 16): frozen contract; `validate` already grants score 100 to the same permission.
 53. The `date` of `GET /providers/:id/stats` is Nest's instant (rule 31, `subtitle-providers.md` rule 42): a plain `YYYY-MM-DD` would be a contract change, so it is not done.
 54. The scheduled `tick` stays unaudited in `commands` (rule 34), as in Nest, while the manual trigger is audited: recording scheduled runs is a `scheduler.md` decision, not a subtitle one.
+55. [new] C-DRIFT-1 (user decision 2026-10-16): each pass of the tick holds the `jobs::Running` claim of its name (`SubtitleSearch` for `searchMissingSubtitles`, `SubtitleUpgrade` for `upgradeSubtitles`) for its whole run, like a core job (`scheduler.md` rules 8, 19). A pass whose claim is held (a manual run, or a restore) is skipped with a warn and keeps its `lastRun`, so it runs at the next due tick; a manual `POST /api/commands` of that name during the pass answers 409 `Command "<name>" is already running`; a restore is refused while a pass runs (`system.md` rule 25). Nest let a manual run overlap the tick.
 
 ## SQL
 
@@ -193,7 +194,7 @@ None is a secret (no F5 `secretsSet` entry). Provider credentials live in `subti
 
 ## Jobs/timers
 
-- `SubtitleSchedulerService.tick`: every 6 h at minute 0 (rule 34); runs `searchMissingSubtitles` then `upgradeSubtitles` sequentially when due. Rust: its own `jobs::cron::spawn` timer in `jobs::cron::server_tz()` (S5; C97 applies on DST days), same in-memory `lastRun` (start 0). Not audited in `commands`. `jobs::runner::spawn` keeps skipping both names (`names::SUBTITLE`), so only this tick fires them on a schedule.
+- `SubtitleSchedulerService.tick`: every 6 h at minute 0 (rule 34); runs `searchMissingSubtitles` then `upgradeSubtitles` sequentially when due. Rust: its own `jobs::cron::spawn` timer in `jobs::cron::server_tz()` (S5; C97 applies on DST days), same in-memory `lastRun` (start 0). Not audited in `commands`; each pass holds its name's `jobs::Running` claim (rule 55). `jobs::runner::spawn` keeps skipping both names (`names::SUBTITLE`), so only this tick fires them on a schedule.
 - `SubtitleSearch`, `SubtitleUpgrade` commands: listed with cron `0 0-23/6 * * *` (`scheduler.md` rule 10), triggerable, dispatched by the scheduler framework (`scheduler.md`), recorded in `commands`, activity rows per file. S6 gives both an arm of `jobs::bodies::run` and removes them from `names::BRIDGED`; the manual path (queued row, `jobs::Running` claim, C22) is S5's. Until S6 the manual trigger goes through the S5 `POST /internal/jobs/run` bridge to Nest's passes (`scheduler.md` rule 31).
 - Sync queue worker (rule 47), OCR boot sweep (files rule 27), per-file search guard (rule 36): in-memory state, none survives a restart.
 - Engine jobs (`SubtitleOcr`, `SubtitleSync`): no timeout on the wait (`engine-glue.md` rule 30); the engine bounds them (extract 900 s, OCR tool 1800 s, ffsubsync 900 s: `[engine:docs/spec/subtitle-jobs.md:25]`, `[engine:docs/spec/subtitle-jobs.md:35]`).
