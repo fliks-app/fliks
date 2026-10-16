@@ -2,7 +2,7 @@ import axios, { AxiosRequestConfig } from 'axios';
 import * as dns from 'dns';
 import { PluginWebhookDispatcherService } from './plugin-webhook-dispatcher.service';
 import type { SettingsService } from '../settings/settings.service';
-import { EventsService } from '../scheduler/events.service';
+import { loopbackEvents } from '../scheduler/events.test-helpers';
 import { PluginRegistryService } from './plugin-registry.service';
 
 jest.mock('dns', () => ({ promises: { lookup: jest.fn() } }));
@@ -41,7 +41,7 @@ describe('PluginWebhookDispatcherService', () => {
     const registry = registryStub({
       'media.imported': [{ pluginId: 'fliks.plugin-a', webhook: 'https://hooks.example/a' }],
     });
-    const events = new EventsService();
+    const events = loopbackEvents();
     new PluginWebhookDispatcherService(events, registry, settingsStub()).onModuleInit();
 
     events.emitDomain({ type: 'media.imported', mediaId: 1, tmdbId: null, mediaType: 'movie', libraryId: null, addedByUserId: null });
@@ -53,7 +53,7 @@ describe('PluginWebhookDispatcherService', () => {
 
   it('does not deliver to a plugin subscribed to a different event', async () => {
     const registry = registryStub({}); // nothing subscribed to media.removed
-    const events = new EventsService();
+    const events = loopbackEvents();
     new PluginWebhookDispatcherService(events, registry, settingsStub()).onModuleInit();
 
     events.emitDomain({ type: 'media.removed', mediaId: 1, tmdbId: null, mediaType: 'movie' });
@@ -69,7 +69,7 @@ describe('PluginWebhookDispatcherService', () => {
         { pluginId: 'fliks.plugin-b', webhook: 'https://hooks.example/b' },
       ],
     });
-    const events = new EventsService();
+    const events = loopbackEvents();
     new PluginWebhookDispatcherService(events, registry, settingsStub()).onModuleInit();
 
     events.emitDomain({ type: 'settings.changed', key: 'library_path' });
@@ -83,7 +83,7 @@ describe('PluginWebhookDispatcherService', () => {
     const registry = registryStub({
       'settings.changed': [{ pluginId: 'fliks.rebinder', webhook: 'https://rebinder.example/hook' }],
     });
-    const events = new EventsService();
+    const events = loopbackEvents();
     new PluginWebhookDispatcherService(events, registry, settingsStub()).onModuleInit();
 
     events.emitDomain({ type: 'settings.changed', key: 'x' });
@@ -104,7 +104,7 @@ describe('PluginWebhookDispatcherService', () => {
       requests.push({ url: String(config.url), data: config.data ? JSON.parse(String(config.data)) : undefined });
       return Promise.resolve({ data: {}, status: 200, statusText: 'OK', headers: {}, config }) as never;
     };
-    const events = new EventsService();
+    const events = loopbackEvents();
     new PluginWebhookDispatcherService(events, registry, settingsStub()).onModuleInit();
 
     // emitDomain is synchronous and void — the caller (and the emitter's own contract) is never affected.
@@ -119,7 +119,7 @@ describe('PluginWebhookDispatcherService', () => {
     const registry = registryStub({
       'media.removed': [{ pluginId: 'fliks.plugin-a', webhook: 'https://hooks.example/a' }],
     });
-    const events = new EventsService();
+    const events = loopbackEvents();
     new PluginWebhookDispatcherService(events, registry, settingsStub()).onModuleInit();
 
     events.emitDomain({ type: 'media.removed', mediaId: 42, tmdbId: 99, mediaType: 'movie' });
@@ -135,7 +135,7 @@ describe('PluginWebhookDispatcherService', () => {
       const registry = registryStub({
         'media.imported': [{ pluginId: 'fliks.acme', webhook: 'setting:endpoint_url' }],
       });
-      const events = new EventsService();
+      const events = loopbackEvents();
       const settings = settingsStub({ 'plugin.fliks.acme.endpoint_url': 'https://hooks.example/mine' });
       new PluginWebhookDispatcherService(events, registry, settings).onModuleInit();
 
@@ -149,7 +149,7 @@ describe('PluginWebhookDispatcherService', () => {
       const registry = registryStub({
         'media.imported': [{ pluginId: 'fliks.acme', webhook: 'setting:endpoint_url' }],
       });
-      const events = new EventsService();
+      const events = loopbackEvents();
       new PluginWebhookDispatcherService(events, registry, settingsStub()).onModuleInit();
 
       events.emitDomain({ type: 'media.imported', mediaId: 1, tmdbId: null, mediaType: 'movie', libraryId: null, addedByUserId: null });
@@ -162,7 +162,7 @@ describe('PluginWebhookDispatcherService', () => {
       const registry = registryStub({
         'media.imported': [{ pluginId: 'fliks.acme', webhook: 'setting:endpoint_url' }],
       });
-      const events = new EventsService();
+      const events = loopbackEvents();
       const settings = settingsStub({ 'plugin.fliks.acme.endpoint_url': 'http://hooks.example/mine' });
       new PluginWebhookDispatcherService(events, registry, settings).onModuleInit();
 
@@ -178,7 +178,7 @@ describe('PluginWebhookDispatcherService', () => {
         listWebhooksForPlugin: () => [{ event: 'media.imported', webhook: 'setting:endpoint_url' }],
       } as unknown as PluginRegistryService;
       const settings = settingsStub({ 'plugin.fliks.acme.endpoint_url': 'https://hooks.example/mine' });
-      const service = new PluginWebhookDispatcherService(new EventsService(), registry, settings);
+      const service = new PluginWebhookDispatcherService(loopbackEvents(), registry, settings);
 
       const result = await service.sendTest('fliks.acme');
 
@@ -191,7 +191,7 @@ describe('PluginWebhookDispatcherService', () => {
         listWebhooksForEvent: () => [],
         listWebhooksForPlugin: () => [{ event: 'media.imported', webhook: 'setting:endpoint_url' }],
       } as unknown as PluginRegistryService;
-      const service = new PluginWebhookDispatcherService(new EventsService(), registry, settingsStub());
+      const service = new PluginWebhookDispatcherService(loopbackEvents(), registry, settingsStub());
 
       const result = await service.sendTest('fliks.acme');
 
