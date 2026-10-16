@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT \"followerId\" FROM user_follows\n           WHERE \"followerId\" = ANY($1) AND \"followingId\" = $2 AND status = 'accepted'",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "followerId",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4Array",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "e4c2deadfeb4872e3a4c6ea1dbbee4d861b14dff844f2cb66ce29cac9bd1ed9c"
+}

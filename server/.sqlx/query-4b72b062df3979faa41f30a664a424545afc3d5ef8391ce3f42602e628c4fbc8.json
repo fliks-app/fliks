@@ -1,0 +1,133 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT cr.id, cr.message, cr.\"createdAt\" AS created_at, cr.\"seasonId\" AS season_id,\n                  cr.\"episodeId\" AS episode_id,\n                  m.id AS \"media_id?\", m.type::text AS media_type, m.title AS \"title?\",\n                  m.\"posterUrl\" AS poster_url, m.\"fanartUrl\" AS fanart_url, m.\"libraryId\" AS library_id,\n                  s.\"seasonNumber\" AS \"season_number?\", e.\"episodeNumber\" AS \"episode_number?\",\n                  e.title AS episode_title, e.\"stillUrl\" AS still_url,\n                  es.\"seasonNumber\" AS \"episode_season_number?\",\n                  u.id AS other_id, u.username AS other_username, u.avatar AS other_avatar\n           FROM content_recommendations cr\n           JOIN users u ON u.id = CASE WHEN $2 THEN cr.\"senderId\" ELSE cr.\"recipientId\" END\n           LEFT JOIN media m ON m.id = cr.\"mediaId\"\n           LEFT JOIN seasons s ON s.id = cr.\"seasonId\"\n           LEFT JOIN episodes e ON e.id = cr.\"episodeId\"\n           LEFT JOIN seasons es ON es.id = e.\"seasonId\"\n           WHERE (CASE WHEN $2 THEN cr.\"recipientId\" ELSE cr.\"senderId\" END) = $1\n             AND ($3 OR cr.\"dismissedAt\" IS NULL)\n           ORDER BY cr.\"createdAt\" DESC, cr.id DESC\n           LIMIT $4",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "message",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 3,
+        "name": "season_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 4,
+        "name": "episode_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 5,
+        "name": "media_id?",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 6,
+        "name": "media_type",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "title?",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 8,
+        "name": "poster_url",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 9,
+        "name": "fanart_url",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 10,
+        "name": "library_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 11,
+        "name": "season_number?",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 12,
+        "name": "episode_number?",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 13,
+        "name": "episode_title",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 14,
+        "name": "still_url",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 15,
+        "name": "episode_season_number?",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 16,
+        "name": "other_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 17,
+        "name": "other_username",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 18,
+        "name": "other_avatar",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Bool",
+        "Bool",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      false,
+      true,
+      true,
+      false,
+      null,
+      false,
+      true,
+      true,
+      true,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "4b72b062df3979faa41f30a664a424545afc3d5ef8391ce3f42602e628c4fbc8"
+}

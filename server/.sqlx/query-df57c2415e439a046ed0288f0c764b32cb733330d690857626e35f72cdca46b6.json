@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE playlists SET\n                 name = COALESCE($2, name),\n                 \"autoRemoveWatched\" = COALESCE($3, \"autoRemoveWatched\"),\n                 \"autoDownload\" = COALESCE($4, \"autoDownload\"),\n                 \"autoPlay\" = COALESCE($5, \"autoPlay\"),\n                 visibility = COALESCE($6::text::playlists_visibility_enum, visibility),\n                 \"updatedAt\" = now()\n               WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Varchar",
+        "Bool",
+        "Bool",
+        "Bool",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "df57c2415e439a046ed0288f0c764b32cb733330d690857626e35f72cdca46b6"
+}

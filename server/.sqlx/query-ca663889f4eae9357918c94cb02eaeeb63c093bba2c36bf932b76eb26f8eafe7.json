@@ -1,0 +1,88 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT DISTINCT ON (p.id)\n                  p.id, p.\"createdAt\" AS created_at, p.\"updatedAt\" AS updated_at, p.name,\n                  p.\"ownerId\" AS owner_id, p.\"autoRemoveWatched\" AS auto_remove_watched,\n                  p.\"autoDownload\" AS auto_download, p.\"autoPlay\" AS auto_play,\n                  p.visibility::text AS \"visibility!\", p.\"coverImageUrl\" AS cover_image_url,\n                  x.role AS \"role!\", x.saved AS \"saved!\"\n           FROM (\n             SELECT id, 'owner' AS role, false AS saved, 1 AS prec FROM playlists WHERE \"ownerId\" = $1\n             UNION ALL\n             SELECT \"playlistId\", role::text, false, 2 FROM playlist_shares WHERE \"userId\" = $1\n             UNION ALL\n             SELECT sv.\"playlistId\", 'viewer', true, 3\n             FROM playlist_saves sv JOIN playlists sp ON sp.id = sv.\"playlistId\"\n             WHERE sv.\"userId\" = $1 AND (\n               sp.visibility = 'public'\n               OR (sp.visibility = 'followers' AND EXISTS (\n                     SELECT 1 FROM user_follows f\n                     WHERE f.\"followerId\" = $1 AND f.\"followingId\" = sp.\"ownerId\" AND f.status = 'accepted'))\n               OR EXISTS (SELECT 1 FROM playlist_shares s2 WHERE s2.\"playlistId\" = sp.id AND s2.\"userId\" = $1))\n           ) x JOIN playlists p ON p.id = x.id\n           ORDER BY p.id, x.prec",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 2,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 3,
+        "name": "name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "owner_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 5,
+        "name": "auto_remove_watched",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 6,
+        "name": "auto_download",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 7,
+        "name": "auto_play",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 8,
+        "name": "visibility!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 9,
+        "name": "cover_image_url",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 10,
+        "name": "role!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 11,
+        "name": "saved!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      null,
+      true,
+      null,
+      null
+    ]
+  },
+  "hash": "ca663889f4eae9357918c94cb02eaeeb63c093bba2c36bf932b76eb26f8eafe7"
+}

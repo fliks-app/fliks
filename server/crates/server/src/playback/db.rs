@@ -1,5 +1,6 @@
 //! Playback state queries (`docs/spec/playback-state.md` SQL section).
 use crate::http::{AppError, json::iso_ms};
+use crate::playlists::remove_watched_from_auto_playlists;
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -87,7 +88,7 @@ pub struct HistoryItem {
 
 #[derive(Serialize)]
 pub struct History {
-    data: Vec<HistoryItem>,
+    pub data: Vec<HistoryItem>,
     total: i64,
 }
 
@@ -478,33 +479,6 @@ pub async fn reset_dismissals(db: &PgPool, user: i32) -> sqlx::Result<u64> {
     .execute(db)
     .await
     .map(|r| r.rows_affected())
-}
-
-/// Drops the finished items from the user's auto-remove playlists; `episodes` is `None` for a movie.
-/// A failure is logged, never returned: it must not break recording the watch.
-pub async fn remove_watched_from_auto_playlists(
-    db: &PgPool,
-    user: i32,
-    media: i32,
-    episodes: Option<&[i32]>,
-) {
-    if episodes.is_some_and(<[i32]>::is_empty) {
-        return;
-    }
-    let done = sqlx::query!(
-        r#"DELETE FROM playlist_items
-           WHERE "mediaId" = $2
-             AND "playlistId" IN (SELECT id FROM playlists WHERE "ownerId" = $1 AND "autoRemoveWatched")
-             AND ("episodeId" = ANY($3) OR ($3::int4[] IS NULL AND "episodeId" IS NULL))"#,
-        user,
-        media,
-        episodes
-    )
-    .execute(db)
-    .await;
-    if let Err(e) = done {
-        tracing::warn!(media, error = %e, "playlist auto-remove failed");
-    }
 }
 
 pub async fn media_exists(db: &PgPool, media: i32) -> sqlx::Result<bool> {

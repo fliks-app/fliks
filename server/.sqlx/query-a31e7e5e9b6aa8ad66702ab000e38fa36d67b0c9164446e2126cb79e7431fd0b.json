@@ -1,0 +1,76 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, \"createdAt\" AS created_at, \"updatedAt\" AS updated_at, name, \"ownerId\" AS owner_id,\n                  \"autoRemoveWatched\" AS auto_remove_watched, \"autoDownload\" AS auto_download,\n                  \"autoPlay\" AS auto_play, visibility::text AS \"visibility!\",\n                  \"coverImageUrl\" AS cover_image_url\n           FROM playlists WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 2,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 3,
+        "name": "name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "owner_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 5,
+        "name": "auto_remove_watched",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 6,
+        "name": "auto_download",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 7,
+        "name": "auto_play",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 8,
+        "name": "visibility!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 9,
+        "name": "cover_image_url",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      null,
+      true
+    ]
+  },
+  "hash": "a31e7e5e9b6aa8ad66702ab000e38fa36d67b0c9164446e2126cb79e7431fd0b"
+}

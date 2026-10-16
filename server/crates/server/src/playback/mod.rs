@@ -6,5 +6,6 @@ mod recommend;
 mod routes;
 
 pub use beat::{__path_heartbeat, Debounce, heartbeat};
-pub use db::{find_state, remove_watched_from_auto_playlists};
+pub use db::{find_state, history as user_history};
+pub use recommend::{recommendations as user_recommendations, top_genres};
 pub use routes::*;

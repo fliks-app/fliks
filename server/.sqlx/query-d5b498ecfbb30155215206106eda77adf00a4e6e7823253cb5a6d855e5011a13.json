@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM likes WHERE \"userId\" = $1 AND \"mediaId\" = $2\n           AND \"seasonId\" IS NOT DISTINCT FROM $3 AND \"episodeId\" IS NOT DISTINCT FROM $4",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d5b498ecfbb30155215206106eda77adf00a4e6e7823253cb5a6d855e5011a13"
+}

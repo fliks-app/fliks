@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT COUNT(*) FILTER (WHERE \"followingId\" = $1) AS \"followers!\",\n                  COUNT(*) FILTER (WHERE \"followerId\" = $1) AS \"following!\"\n           FROM user_follows WHERE status = 'accepted' AND (\"followingId\" = $1 OR \"followerId\" = $1)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "followers!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "following!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "491c03c76c50f41dff35b34db1356f4945b1b05bdd02a9c4a181754abe36ceee"
+}

@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE user_follows SET status = 'accepted', \"updatedAt\" = now()\n           WHERE \"followerId\" = $1 AND \"followingId\" = $2 AND status = 'pending' RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "cf7afd3ddcf06df3566ee09d0caf63ef7dca419db27789100c3d4bc5a2bef93d"
+}

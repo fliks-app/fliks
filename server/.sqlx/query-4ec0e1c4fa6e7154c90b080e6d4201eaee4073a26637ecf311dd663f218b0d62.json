@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO playlist_saves (\"userId\", \"playlistId\") VALUES ($1, $2)\n           ON CONFLICT (\"userId\", \"playlistId\") DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "4ec0e1c4fa6e7154c90b080e6d4201eaee4073a26637ecf311dd663f218b0d62"
+}
