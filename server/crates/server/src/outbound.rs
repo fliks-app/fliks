@@ -7,16 +7,15 @@ pub const LIST_TIMEOUT: Duration = Duration::from_secs(60);
 pub const ITEM_TIMEOUT: Duration = Duration::from_secs(30);
 const MAX_REDIRECTS: usize = 5;
 
-/// Follows a redirect only to the host of the previous URL, so `X-Api-Key` never reaches another host.
+/// Follows a redirect only to the scheme and host of the previous URL, so `X-Api-Key` never leaves them.
 pub fn client() -> &'static Client {
     static C: OnceLock<Client> = OnceLock::new();
     C.get_or_init(|| {
         Client::builder()
             .redirect(redirect::Policy::custom(|a| {
-                let same = a
-                    .previous()
-                    .last()
-                    .is_some_and(|p| p.host_str() == a.url().host_str());
+                let same = a.previous().last().is_some_and(|p| {
+                    p.scheme() == a.url().scheme() && p.host_str() == a.url().host_str()
+                });
                 if a.previous().len() >= MAX_REDIRECTS {
                     a.error("too many redirects")
                 } else if same {
@@ -35,15 +34,12 @@ pub fn error_text(e: reqwest::Error) -> String {
     e.without_url().to_string()
 }
 
-/// `raw` without its userinfo and with trailing `/` removed (`all`, or just one); a non-URL stays as typed.
+/// `raw` with trailing `/` removed (`all`, or just one); userinfo stays for the request (Basic auth), never in text.
 pub fn base_url(raw: &str, all: bool) -> String {
-    let mut s = Url::parse(raw).ok().filter(|u| u.has_host()).map_or_else(
-        || raw.to_owned(),
-        |mut u| {
-            let _ = (u.set_username(""), u.set_password(None));
-            u.to_string()
-        },
-    );
+    let mut s = Url::parse(raw)
+        .ok()
+        .filter(Url::has_host)
+        .map_or_else(|| raw.to_owned(), String::from);
     // `Url` always keeps one `/` after a bare host.
     if all {
         s.truncate(s.trim_end_matches('/').len());
@@ -58,8 +54,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn strips_userinfo_and_slashes() {
-        assert_eq!(base_url("http://u:p@h:7878//", true), "http://h:7878");
+    fn strips_slashes_and_keeps_userinfo() {
+        assert_eq!(base_url("http://u:p@h:7878//", true), "http://u:p@h:7878");
         assert_eq!(base_url("http://h/x/", false), "http://h/x");
         assert_eq!(base_url("http://h/x//", false), "http://h/x/");
         assert_eq!(base_url("localhost:7878/", true), "localhost:7878");
