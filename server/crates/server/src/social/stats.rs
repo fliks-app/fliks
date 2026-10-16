@@ -75,10 +75,10 @@ pub async fn stats(
     let mut stats = user_stats(&st.db, target)
         .await?
         .ok_or_else(|| user_not_found(target))?;
-    if a.user.id != target {
-        stats["activity"]
-            .as_object_mut()
-            .map(|m| m.remove("lastActiveAt"));
+    if a.user.id != target
+        && let Some(m) = stats["activity"].as_object_mut()
+    {
+        m.remove("lastActiveAt");
     }
     Ok(Json(stats))
 }
