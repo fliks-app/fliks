@@ -106,6 +106,7 @@ A 500 or a half-written request is never part of the frozen contract:
 | C107 | the catalog `zipUrl` fetch follows no redirect, so a GitHub Release asset cannot install | follows https to https redirects, at most 5 hops; the first hop and hops to the `zipUrl` host stay trusted as in Nest, a hop to another host goes through the outbound guard; the signed sha256 stays the gate |
 | C108 | a process plugin has no network grant (it reaches any address) and an upgrade needs no consent for it | an upgrade from a `pluginApi` 1 package with the same id and `verifiedByKeyId` carries `network.internal` forward and auto-update installs it; any later new request fails closed |
 | C109 | Postgres unreachable during a plugin's start or health is a crash: ladder, breaker `failed`, admin restart | not a crash and not counted: the plugin is `degraded`, retried with backoff, `ready` again when the database returns |
+| C118 | a plugin `health` call that times out is a miss: 2 misses degrade the plugin, 4 kill and restart its process | a timed-out or trapped `health` has lost its store and is a crash at once (ladder, breaker); the 2 and 4 miss rule applies only to `ok:false` replies |
 
 Frozen as is (decided): the heartbeat keeps its debounce entry after a failed history write and returns
 `sessionLost: false` when the engine session lives but presence cannot be rebuilt. Lists whose order comes
