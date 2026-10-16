@@ -28,6 +28,7 @@ pub mod paths;
 pub mod persons;
 pub mod playback;
 pub mod playlists;
+pub mod plugins;
 pub mod presence;
 pub mod profiles;
 pub mod qoe;
