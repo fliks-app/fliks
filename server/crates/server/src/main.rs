@@ -23,13 +23,7 @@ async fn main() -> ExitCode {
             };
         }
         Some("openapi") => {
-            use utoipa::OpenApi;
-            println!(
-                "{}",
-                fliks_server::app::ApiDoc::openapi()
-                    .to_pretty_json()
-                    .unwrap()
-            );
+            println!("{}", fliks_server::app::openapi().to_pretty_json().unwrap());
             return ExitCode::SUCCESS;
         }
         Some(other) => {

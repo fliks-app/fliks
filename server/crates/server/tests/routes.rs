@@ -2,14 +2,9 @@
 //! (listed in the OpenAPI document) or reaches the forwarder, never a 405.
 use axum::{Router, body::Body, http::Request, routing::any};
 use fliks_engine::gateway::Upstream;
-use fliks_server::{
-    app::{self, ApiDoc},
-    config::Config,
-    state::AppState,
-};
+use fliks_server::{app, config::Config, state::AppState};
 use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
 use tower::ServiceExt;
-use utoipa::OpenApi;
 
 fn state() -> AppState {
     let pool = PgPoolOptions::new().connect_lazy_with(PgConnectOptions::new());
@@ -49,7 +44,7 @@ fn openapi_path(path: &str) -> String {
 async fn every_nest_route_is_owned_or_forwarded() {
     let routes: Vec<serde_json::Value> =
         serde_json::from_str(include_str!("../../../contract/nest-routes.json")).unwrap();
-    let doc = serde_json::to_value(ApiDoc::openapi()).unwrap();
+    let doc = serde_json::to_value(app::openapi()).unwrap();
     let router = app::router(
         state(),
         fake_nest().await,
@@ -84,7 +79,7 @@ async fn every_nest_route_is_owned_or_forwarded() {
 fn no_openapi_operation_is_in_the_nest_manifest() {
     let routes: Vec<serde_json::Value> =
         serde_json::from_str(include_str!("../../../contract/nest-routes.json")).unwrap();
-    let doc = serde_json::to_value(ApiDoc::openapi()).unwrap();
+    let doc = serde_json::to_value(app::openapi()).unwrap();
     for r in routes {
         let (method, path) = (r["method"].as_str().unwrap(), r["path"].as_str().unwrap());
         // Nest keeps the live delegate Rust calls over the bridge (bridge.md).
@@ -101,7 +96,7 @@ fn no_openapi_operation_is_in_the_nest_manifest() {
 
 #[tokio::test]
 async fn methods_rust_does_not_own_on_owned_paths_are_forwarded() {
-    let doc = serde_json::to_value(ApiDoc::openapi()).unwrap();
+    let doc = serde_json::to_value(app::openapi()).unwrap();
     let router = app::router(
         state(),
         fake_nest().await,

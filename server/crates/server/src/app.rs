@@ -1,7 +1,8 @@
 use crate::http::{layers, static_files};
 use crate::{
-    auth, events, fs, images, libraries, media, notifications, playback, playlists, profiles, qoe,
-    remote, roles, settings, social, state::AppState, system, users,
+    auth, events, fs, images, importers, libraries, markers, media, media_servers, notifications,
+    playback, playlists, profiles, qoe, remote, roles, settings, social, state::AppState, system,
+    users,
 };
 use axum::{
     Router,
@@ -219,6 +220,15 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
 )]
 pub struct ApiDoc;
 
+/// `ApiDoc` plus the routes each S5 domain lists itself.
+pub fn openapi() -> utoipa::openapi::OpenApi {
+    let mut doc = ApiDoc::openapi();
+    doc.merge(importers::Doc::openapi());
+    doc.merge(media_servers::Doc::openapi());
+    doc.merge(markers::Doc::openapi());
+    doc
+}
+
 /// Rust-owned routes and static files get the layers; the forwarded paths do not, as Nest sets its own CORS headers.
 pub fn router(
     state: AppState,
@@ -247,7 +257,7 @@ pub fn router(
     let local = layers::apply(local, cors_origin, BODY_LIMIT_BYTES);
     // axum would send this literal to `/api/media/{id}` (400); it stays Nest's until subtitles move.
     let local = local.route("/api/media/sync-queue", any_service(unowned.clone()));
-    let local = ApiDoc::openapi()
+    let local = openapi()
         .paths
         .paths
         .keys()
@@ -279,6 +289,9 @@ fn api() -> Router<AppState> {
         .merge(playlists::router())
         .merge(profiles::router())
         .merge(crate::ingest::disk::router())
+        .merge(importers::router())
+        .merge(media_servers::router())
+        .merge(markers::router())
 }
 
 async fn preflight_here(State(cors): State<Router>, req: Request, next: Next) -> Response {
