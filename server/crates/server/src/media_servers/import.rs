@@ -78,8 +78,8 @@ pub async fn import_server(db: &PgPool, server: &Server) -> Result<Stats, String
     let mut caches = Caches::default();
     for user in users {
         stats.users += 1;
-        let name = user.name.as_deref().map(str::trim).unwrap_or_default();
-        if name.is_empty() {
+        let name = user.name.as_deref().unwrap_or_default();
+        if name.trim().is_empty() {
             tracing::warn!("watch-history import: user \"\": missing name");
             continue;
         }
