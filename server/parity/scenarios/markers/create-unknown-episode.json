@@ -33,15 +33,6 @@
       "expect": {
         "body": [
           {
-            "confidence": 0.8,
-            "endSeconds": 40,
-            "episodeId": 1,
-            "id": 1,
-            "manual": false,
-            "startSeconds": 10,
-            "type": "intro"
-          },
-          {
             "confidence": 1,
             "endSeconds": 9.5,
             "episodeId": 1,
@@ -49,6 +40,15 @@
             "manual": true,
             "startSeconds": 8.5,
             "type": "outro"
+          },
+          {
+            "confidence": 0.8,
+            "endSeconds": 40,
+            "episodeId": 1,
+            "id": 1,
+            "manual": false,
+            "startSeconds": 10,
+            "type": "intro"
           }
         ],
         "status": 200

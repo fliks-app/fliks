@@ -2,7 +2,8 @@
   "deviation": "C42",
   "ignore": [
     "$..createdAt",
-    "$..updatedAt"
+    "$..updatedAt",
+    "$..connectionId"
   ],
   "name": "media-servers-import-concurrent",
   "seed": "media-servers",
