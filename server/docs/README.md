@@ -45,13 +45,14 @@ Decided behaviour for the Rust port (security fixes F, correctness fixes C; D3).
 | F25 | profile `topGenres` came from the target's whole history | restricted to the viewer's accessible libraries | none |
 | F26 | a saved playlist its owner made private stayed in the saver's list | dropped from `GET /playlists` once it is no longer readable | none |
 | F27 | adding an opted-out member answered 403, a missing one 404 | both 404 `User #<id> not found` | none |
-| F31 | remote state/stopped fan-out reached grantees of a device id under any owner (anyone could mint a code for another user's deviceId and receive its playback state) | fan-out limited to grants whose owner is the device's owner | none |
 | F28 | `settings.webhookUrl` of Discord/Slack notification connections returned in clear (the URL embeds its credential) | secret field like `token`: omitted from responses, listed under `secretsSet`; a blank or absent value on write keeps the stored one, `null` is a 400 (the URL is required, so it is replaced, never erased); a type switch drops it | notification editor shows the masked "set" state |
 | F29 | gotify token (query string) and webhook URL could reach sender errors, logs and the `test` response | sender errors never contain the request URL | none |
 | F30 | Discord payloads allowed `@everyone`/role/user mentions from request titles | Discord body adds `allowed_mentions: {parse: []}` | none |
+| F31 | remote state/stopped fan-out reached grantees of a device id under any owner (anyone could mint a code for another user's deviceId and receive its playback state) | fan-out limited to grants whose owner is the device's owner | none |
 | F32 | `POST /api/likes` and `POST /api/social/recommend` accepted a season/episode of another media and media outside the caller's libraries (201) | 404 `Media\|Season\|Episode #<id> not found`, as for unknown ids (user decision 2026-10-16) | none |
 | F33 | `social/requests`, the recommendation cards and the follow lists listed opted-out (`shareDisabled`) and disabled members | they are omitted from every social list (the F23 filter, one predicate; `social.md` rule 57; user decision 2026-10-16) | none |
 | F34 | `GET /api/social/users/:id/stats` returned the target's last login (`activity.lastActiveAt`) to any viewer allowed by `shareStats` | `lastActiveAt` omitted for a non-self viewer; request counts stay under `shareStats` (`social.md` rule 58; user decision 2026-10-16) | none: the profile Statistics tab does not read it |
+| F35 | profile `followerCount`/`followingCount` counted disabled and opted-out members that the follow lists omit | both counts exclude them (the F33 predicate, `social.md` rule 59; user decision 2026-10-16) | none |
 
 Not done (user decision 2026-10-15): login rate limiting/lockout.
 
@@ -83,14 +84,14 @@ A 500 or a half-written request is never part of the frozen contract:
 | C10 | `GET /api/media?q=` ordered by the requested sort (default title) because `orderBy` replaced the relevance order | `q` without `sortBy` orders by FTS rank desc (NULL rank last), then title, then id; the search page now omits `sortBy` unless the user chose one |
 | C11 | `cutoffUnmet=true` removed items from the already paginated page (short pages, `total` unchanged) | filtered in SQL before pagination: `page`, `limit` and `total` count only the media that pass |
 | C12 | equal sort keys left list order to the database (media list, recently-added, collections, similar, collection, cast, crew, calendar, files, seasons, episodes; libraries, `userIds`, follow lists, likes state, playlist members) | every list ends with `id ASC` |
-| C18 | `POST /api/system/streams/:sid/command` with an `action` outside pause/play/stop/message was relayed to the client as is | 400 |
-| C19 | live TV rows of `/api/system/streams` reported the source's name as `quality` (`"Live"` only without one) | they report `"Live"` |
 | C13 | `GET /playlists/:id` (and the create/patch views) reported `viewer` for an editor or administrator share on a public or followed playlist | the real share role |
 | C14 | playlist reorder/add validated outside their transaction; the leave-social teardown ran as six unrelated statements | validation and writes in one transaction under a row lock on the playlist (add computes `MAX(position)+1` under it); the teardown in the transaction of the user update |
 | C15 | social search ordered by the database collation before `LIMIT 30` | `lower(username)` bytewise, then `id` |
-| C20 | ValidationPipe coerced ` 7 `, `1e1`, `0x10` before `ParseIntPipe` | integer path segments must be canonical (`7`, `-7`; never `007`, `+7`, ` 7 `, `0x7`) on every Rust route: `PathParams` / `int_param` → 400 |
 | C16 | notification senders had no timeout (axios `timeout: 0`) | 10 s total per request, no retry; `test` reports `timeout of 10000ms exceeded` |
 | C17 | a plugin-supplied event outside the notification vocabulary was dispatched (default message) | rejected with 400 before any sender runs |
+| C18 | `POST /api/system/streams/:sid/command` with an `action` outside pause/play/stop/message was relayed to the client as is | 400 |
+| C19 | live TV rows of `/api/system/streams` reported the source's name as `quality` (`"Live"` only without one) | they report `"Live"` |
+| C20 | ValidationPipe coerced ` 7 `, `1e1`, `0x10` before `ParseIntPipe` | integer path segments must be canonical (`7`, `-7`; never `007`, `+7`, ` 7 `, `0x7`) on every Rust route: `PathParams` / `int_param` → 400 |
 
 Frozen as is (decided): the heartbeat keeps its debounce entry after a failed history write and returns
 `sessionLost: false` when the engine session lives but presence cannot be rebuilt. Lists whose order comes

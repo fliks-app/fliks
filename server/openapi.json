@@ -341,6 +341,55 @@
         }
       }
     },
+    "/api/likes": {
+      "get": {
+        "tags": [
+          "social"
+        ],
+        "operationId": "likes_list",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "social"
+        ],
+        "operationId": "like_add",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "social"
+        ],
+        "summary": "The body must repeat the granularity used to like (rule 3).",
+        "operationId": "like_remove",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/likes/state/{mediaId}": {
+      "get": {
+        "tags": [
+          "social"
+        ],
+        "operationId": "like_state",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/media": {
       "get": {
         "tags": [
@@ -531,6 +580,91 @@
         "operationId": "track",
         "responses": {
           "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/notifications": {
+      "get": {
+        "tags": [
+          "notifications"
+        ],
+        "operationId": "list",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "notifications"
+        ],
+        "operationId": "create",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/notifications/events": {
+      "get": {
+        "tags": [
+          "notifications"
+        ],
+        "operationId": "events",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/notifications/{id}": {
+      "get": {
+        "tags": [
+          "notifications"
+        ],
+        "operationId": "get_one",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "notifications"
+        ],
+        "operationId": "update",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "notifications"
+        ],
+        "operationId": "remove",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/notifications/{id}/test": {
+      "post": {
+        "tags": [
+          "notifications"
+        ],
+        "operationId": "test",
+        "responses": {
+          "201": {
             "description": ""
           }
         }
@@ -775,6 +909,189 @@
         }
       }
     },
+    "/api/playlists": {
+      "get": {
+        "tags": [
+          "playlists"
+        ],
+        "operationId": "list",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "playlists"
+        ],
+        "operationId": "create",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/playlists/{id}": {
+      "get": {
+        "tags": [
+          "playlists"
+        ],
+        "operationId": "get_one",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "playlists"
+        ],
+        "operationId": "remove",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "playlists"
+        ],
+        "operationId": "update",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/playlists/{id}/items": {
+      "get": {
+        "tags": [
+          "playlists"
+        ],
+        "operationId": "items",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "playlists"
+        ],
+        "operationId": "add_item",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/playlists/{id}/items/by-media/{mediaId}": {
+      "delete": {
+        "tags": [
+          "playlists"
+        ],
+        "operationId": "remove_by_media",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/playlists/{id}/items/order": {
+      "put": {
+        "tags": [
+          "playlists"
+        ],
+        "operationId": "reorder",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/playlists/{id}/items/{itemId}": {
+      "delete": {
+        "tags": [
+          "playlists"
+        ],
+        "operationId": "remove_item",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/playlists/{id}/members": {
+      "get": {
+        "tags": [
+          "playlists"
+        ],
+        "operationId": "members",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "playlists"
+        ],
+        "operationId": "add_member",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/playlists/{id}/members/{userId}": {
+      "delete": {
+        "tags": [
+          "playlists"
+        ],
+        "operationId": "remove_member",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/playlists/{id}/save": {
+      "post": {
+        "tags": [
+          "playlists"
+        ],
+        "operationId": "save",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "playlists"
+        ],
+        "operationId": "unsave",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/remote/commands": {
       "get": {
         "tags": [
@@ -992,6 +1309,212 @@
           "settings"
         ],
         "operationId": "put_one",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/social/connectable": {
+      "get": {
+        "tags": [
+          "social"
+        ],
+        "operationId": "connectable",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/social/follow/{userId}": {
+      "post": {
+        "tags": [
+          "social"
+        ],
+        "operationId": "follow",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "social"
+        ],
+        "operationId": "unfollow",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/social/recommend": {
+      "post": {
+        "tags": [
+          "social"
+        ],
+        "operationId": "recommend",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/social/recommendations": {
+      "get": {
+        "tags": [
+          "social"
+        ],
+        "operationId": "following_popular",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/social/recommendations/received": {
+      "get": {
+        "tags": [
+          "social"
+        ],
+        "operationId": "received",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/social/recommendations/sent": {
+      "get": {
+        "tags": [
+          "social"
+        ],
+        "operationId": "sent",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/social/recommendations/{id}/dismiss": {
+      "post": {
+        "tags": [
+          "social"
+        ],
+        "operationId": "dismiss",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/social/requests": {
+      "get": {
+        "tags": [
+          "social"
+        ],
+        "operationId": "requests",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/social/requests/{userId}/accept": {
+      "post": {
+        "tags": [
+          "social"
+        ],
+        "operationId": "accept",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/social/requests/{userId}/reject": {
+      "post": {
+        "tags": [
+          "social"
+        ],
+        "operationId": "reject",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/social/search": {
+      "get": {
+        "tags": [
+          "social"
+        ],
+        "operationId": "search",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/social/users/{userId}/followers": {
+      "get": {
+        "tags": [
+          "social"
+        ],
+        "operationId": "followers",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/social/users/{userId}/following": {
+      "get": {
+        "tags": [
+          "social"
+        ],
+        "operationId": "following",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/social/users/{userId}/profile": {
+      "get": {
+        "tags": [
+          "social"
+        ],
+        "operationId": "profile",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/social/users/{userId}/stats": {
+      "get": {
+        "tags": [
+          "social"
+        ],
+        "operationId": "stats",
         "responses": {
           "200": {
             "description": ""
