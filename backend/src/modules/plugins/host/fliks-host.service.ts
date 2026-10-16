@@ -1046,7 +1046,7 @@ export class FliksHostImpl implements PluginHostApi {
     event: 'grab.started';
     payload: Record<string, unknown>;
   }): Promise<void> {
-    await this.notifications.dispatch(p.event, p.payload);
+    await this.notifications.dispatchStrict(p.event, p.payload);
   }
 
   // ===========================================================================
