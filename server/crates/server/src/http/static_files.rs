@@ -13,7 +13,7 @@ use axum::middleware::{Next, from_fn};
 use axum::response::{IntoResponse, Response};
 use tower_http::services::{ServeDir, ServeFile};
 
-/// Express-style weak ETag (`W/"<size hex>-<mtime ms hex>"`), `Cache-Control` and `If-None-Match` 304.
+/// Express-style weak ETag (`W/"<size hex>-<mtime seconds hex>"`, C7), `Cache-Control` and `If-None-Match` 304.
 async fn validators(req: Request, next: Next) -> Response {
     let inm = req.headers().get(IF_NONE_MATCH).cloned();
     let mut res = next.run(req).await;
@@ -43,7 +43,7 @@ async fn validators(req: Request, next: Next) -> Response {
     let (Some(len), Some(mtime)) = (len, mtime) else {
         return res;
     };
-    let etag = format!("W/\"{len:x}-{:x}\"", mtime.as_millis());
+    let etag = weak_etag(len, mtime.as_secs());
     if inm.is_some_and(|v| matches_etag(v.to_str().unwrap_or_default(), &etag)) {
         let headers = res.headers().clone();
         res = Response::new(Body::empty());
@@ -78,7 +78,11 @@ fn add_charset(res: &mut Response) {
     }
 }
 
-fn matches_etag(header: &str, etag: &str) -> bool {
+pub(crate) fn weak_etag(len: u64, mtime_secs: u64) -> String {
+    format!("W/\"{len:x}-{mtime_secs:x}\"")
+}
+
+pub(crate) fn matches_etag(header: &str, etag: &str) -> bool {
     let weak = |t: &str| t.trim().trim_start_matches("W/").to_owned();
     header.trim() == "*" || header.split(',').any(|t| weak(t) == weak(etag))
 }

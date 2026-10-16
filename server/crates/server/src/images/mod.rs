@@ -1,5 +1,12 @@
 //! `GET /api/images/*` (`docs/spec/images.md`): public artwork read from the shared data directory.
-use crate::{http::AppError, paths::data_dir, state::AppState};
+use crate::{
+    http::{
+        AppError,
+        static_files::{matches_etag, weak_etag},
+    },
+    paths::data_dir,
+    state::AppState,
+};
 use axum::{
     Router,
     body::Body,
@@ -146,15 +153,12 @@ async fn serve(
         .ok()
         .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
         .map_or(0, |d| d.as_secs());
-    let etag = format!("W/\"{:x}-{secs:x}\"", meta.len());
+    let etag = weak_etag(meta.len(), secs);
     let hit = req
         .headers()
         .get(IF_NONE_MATCH)
         .and_then(|v| v.to_str().ok())
-        .is_some_and(|v| {
-            let weak = |t: &str| t.trim().trim_start_matches("W/").to_owned();
-            v.trim() == "*" || v.split(',').any(|t| weak(t) == weak(&etag))
-        });
+        .is_some_and(|v| matches_etag(v, &etag));
     let mut res = if hit {
         let mut r = Response::new(Body::empty());
         *r.status_mut() = StatusCode::NOT_MODIFIED;
