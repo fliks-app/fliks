@@ -2236,20 +2236,6 @@
     "policies": ""
   },
   {
-    "method": "POST",
-    "path": "/api/playback/sessions/:sessionId/events",
-    "controller": "PlaybackController",
-    "handler": "postQoeEvents",
-    "file": "src/modules/playback/playback.controller.ts",
-    "line": 409,
-    "guards": [
-      "JwtOrApiKeyGuard",
-      "SessionTokenGuard"
-    ],
-    "policies": "",
-    "httpCode": 204
-  },
-  {
     "method": "GET",
     "path": "/api/playlists",
     "controller": "PlaylistsController",
@@ -3811,45 +3797,6 @@
     "handler": "getLogs",
     "file": "src/modules/scheduler/system.controller.ts",
     "line": 397,
-    "guards": [
-      "JwtOrApiKeyGuard",
-      "PoliciesGuard"
-    ],
-    "policies": "(ability) => ability.can(Action.Read, 'Settings')"
-  },
-  {
-    "method": "GET",
-    "path": "/api/system/qoe/sessions",
-    "controller": "QoeAdminController",
-    "handler": "sessions",
-    "file": "src/modules/qoe/qoe-admin.controller.ts",
-    "line": 34,
-    "guards": [
-      "JwtOrApiKeyGuard",
-      "PoliciesGuard"
-    ],
-    "policies": "(ability) => ability.can(Action.Read, 'Settings')"
-  },
-  {
-    "method": "GET",
-    "path": "/api/system/qoe/sessions/:sessionId",
-    "controller": "QoeAdminController",
-    "handler": "session",
-    "file": "src/modules/qoe/qoe-admin.controller.ts",
-    "line": 57,
-    "guards": [
-      "JwtOrApiKeyGuard",
-      "PoliciesGuard"
-    ],
-    "policies": "(ability) => ability.can(Action.Read, 'Settings')"
-  },
-  {
-    "method": "GET",
-    "path": "/api/system/qoe/summary",
-    "controller": "QoeAdminController",
-    "handler": "summary",
-    "file": "src/modules/qoe/qoe-admin.controller.ts",
-    "line": 65,
     "guards": [
       "JwtOrApiKeyGuard",
       "PoliciesGuard"
