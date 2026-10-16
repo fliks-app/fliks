@@ -50,7 +50,8 @@
   "fsAfter": {
     "exists": [
       "s5-ingest/work/dl/Some.Movie.2010.1080p.WEB-DL.mkv",
-      "s5-ingest/work/movies/Some Movie (2010)"
+      "s5-ingest/work/movies/Some Movie (2010)/Some Movie (2010) WEBDL-480p.mkv",
+      "s5-ingest/work/movies/Some Movie (2010)/Some Movie (2010) WEBDL-480p.en.srt"
     ]
   },
   "ignore": [
