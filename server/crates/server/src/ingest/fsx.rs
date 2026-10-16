@@ -255,6 +255,29 @@ pub fn write_atomic(dest: &Path, bytes: &[u8]) -> io::Result<()> {
     r
 }
 
+/// A new file: temp in the same directory, `fsync`, no-replace rename; `Ok(false)` when `dest` exists.
+pub fn write_new(dest: &Path, bytes: &[u8]) -> io::Result<bool> {
+    let dir = dest.parent().ok_or(io::ErrorKind::InvalidInput)?;
+    let tmp = dir.join(tmp_name());
+    let r = (|| {
+        let mut f = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&tmp)?;
+        io::Write::write_all(&mut f, bytes)?;
+        f.sync_all()?;
+        rename_noreplace(&tmp, dest)
+    })();
+    if r.is_err() {
+        let _ = fs::remove_file(&tmp);
+    }
+    match r {
+        Ok(()) => Ok(true),
+        Err(e) if e.kind() == io::ErrorKind::AlreadyExists => Ok(false),
+        Err(e) => Err(e),
+    }
+}
+
 /// W4: `rename`, a copy + unlink across filesystems; `Ok(false)` when a no-replace move found `dest`.
 pub fn move_file(src: &Path, dest: &Path, replace: bool) -> io::Result<bool> {
     let r = if replace {

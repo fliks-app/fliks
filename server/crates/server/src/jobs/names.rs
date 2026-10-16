@@ -36,7 +36,7 @@ pub const TRIGGER_ONLY: [&str; 7] = [
 ];
 
 /// Core names whose body Nest still holds (rules 30, 31).
-pub const BRIDGED: [&str; 3] = ["RefreshPluginSources", "SubtitleSearch", "SubtitleUpgrade"];
+pub const BRIDGED: [&str; 1] = ["RefreshPluginSources"];
 
 /// Their ticks stay Nest's (rule 31).
 pub const SUBTITLE: [&str; 2] = ["SubtitleSearch", "SubtitleUpgrade"];

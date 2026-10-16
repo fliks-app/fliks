@@ -29,6 +29,8 @@ pub async fn run(st: &AppState, name: &str) -> Outcome {
         "GenerateMissingSprites" => sprites(st, name, false).await,
         "DetectMarkers" => markers(st, name, false).await,
         "DetectMissingMarkers" => markers(st, name, true).await,
+        "SubtitleSearch" => crate::subtitles::scheduler::search_missing(st).await,
+        "SubtitleUpgrade" => crate::subtitles::scheduler::upgrade(st).await,
         _ if names::BRIDGED.contains(&name) || !names::is_core(name) => bridged(st, name).await,
         _ => Err(format!("unknown job {name}")),
     }

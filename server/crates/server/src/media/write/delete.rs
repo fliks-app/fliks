@@ -197,6 +197,7 @@ pub async fn delete_media_file(
                     }
                 }
                 remove_orphan_edl(&root, &full).await;
+                crate::subtitles::sidecars::delete_files_on_disk(st, media.id, file_id).await;
             }
         }
     }

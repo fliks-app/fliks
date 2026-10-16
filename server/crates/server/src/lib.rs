@@ -37,6 +37,7 @@ pub mod settings;
 pub mod social;
 pub mod state;
 pub mod stream;
+pub mod subtitles;
 pub mod system;
 pub mod users;
 
@@ -69,6 +70,7 @@ pub async fn serve(cfg: Config) -> Result<(), BoxError> {
     let pool = connect(&cfg).await?;
     db::migrate(&pool).await?;
     jobs::sweep(&pool).await?;
+    subtitles::sweep(&pool).await?;
     roles::seed(&pool).await?;
     profiles::seed_quality_definitions(&pool).await?;
     profiles::warn_invalid_regexes(&pool).await?;
@@ -105,6 +107,7 @@ pub async fn serve(cfg: Config) -> Result<(), BoxError> {
     let nest = nest::spawn(&cfg, &secret);
     auth::spawn_jobs(db);
     jobs::spawn(&state);
+    subtitles::spawn(&state);
     tracing::info!("listening on {}", listener.local_addr()?);
     let served = axum::serve(
         listener,

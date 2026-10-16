@@ -231,6 +231,15 @@ async fn enrich(st: &AppState, id: i32) -> Result<(), String> {
     .execute(&st.db)
     .await
     .map_err(|e| e.to_string())?;
+    let target: Option<(Option<i32>, Option<i32>)> =
+        sqlx::query_as(r#"SELECT "mediaId", "episodeId" FROM media_files WHERE id = $1"#)
+            .bind(id)
+            .fetch_optional(&st.db)
+            .await
+            .map_err(|e| e.to_string())?;
+    if let Some((Some(media), episode)) = target {
+        crate::subtitles::scheduler::on_media_file_imported(st, media, id, episode).await;
+    }
     Ok(())
 }
 

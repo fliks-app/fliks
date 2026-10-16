@@ -549,7 +549,7 @@ pub async fn companions_download(
     Ok(r)
 }
 
-/// Rules 93-95: a tracked subtitle is the S6 callee's (501 until then), anything else a contained unlink.
+/// Rules 93-95: a tracked subtitle goes through the subtitle delete, anything else is a contained unlink.
 #[utoipa::path(delete, path = "/api/media/{id}/files/{fileId}/companions", responses((status = 200)))]
 pub async fn companions_delete(
     State(st): State<AppState>,
@@ -576,16 +576,19 @@ pub async fn companions_delete(
         vec![&hit]
     };
     let (root, mdir) = l.root.as_ref().ok_or_else(not_listed)?;
-    if targets
-        .iter()
-        .any(|t| l.rows.iter().any(|r| norm(&r.rel) == t.relative_path))
-    {
-        return Err(AppError::with_message(
-            StatusCode::NOT_IMPLEMENTED,
-            "Deleting a tracked subtitle is not available yet",
-        ));
-    }
     for t in &targets {
+        let tracked: Vec<i32> = l
+            .rows
+            .iter()
+            .filter(|r| norm(&r.rel) == t.relative_path)
+            .map(|r| r.id)
+            .collect();
+        if !tracked.is_empty() {
+            for id in tracked {
+                crate::subtitles::sidecars::delete_subtitle(&st, id).await?;
+            }
+            continue;
+        }
         let abs = mdir.join(fsx::safe_rel(&t.relative_path).ok_or_else(not_listed)?);
         match fsx::unlink_contained(root, &abs) {
             Ok(fsx::Unlinked::Removed) => {}

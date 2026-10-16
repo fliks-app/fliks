@@ -124,9 +124,7 @@ pub fn reverse_rtl(content: &str) -> String {
             let text: Vec<String> = ls[2..]
                 .iter()
                 .map(|l| {
-                    if l.chars()
-                        .any(|c| matches!(c as u32, 0x590..=0x74F))
-                    {
+                    if l.chars().any(|c| matches!(c as u32, 0x590..=0x74F)) {
                         l.chars().rev().collect()
                     } else {
                         (*l).to_owned()

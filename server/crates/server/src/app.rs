@@ -2,7 +2,7 @@ use crate::http::{layers, static_files};
 use crate::{
     auth, events, fs, images, importers, jobs, libraries, markers, media, media_servers, metadata,
     notifications, persons, playback, playlists, profiles, qoe, remote, requests, roles, settings,
-    social, state::AppState, system, users,
+    social, state::AppState, subtitles, system, users,
 };
 use axum::{
     Router,
@@ -279,6 +279,7 @@ pub fn openapi() -> utoipa::openapi::OpenApi {
     doc.merge(importers::Doc::openapi());
     doc.merge(media_servers::Doc::openapi());
     doc.merge(markers::Doc::openapi());
+    doc.merge(subtitles::Doc::openapi());
     doc
 }
 
@@ -308,8 +309,6 @@ pub fn router(
         .layer(from_fn_with_state(cors, preflight_here));
     // Merged after the layers so Nest answers the methods Rust does not own, unlayered instead of a 405.
     let local = layers::apply(local, cors_origin, BODY_LIMIT_BYTES);
-    // axum would send this literal to `/api/media/{id}` (400); it stays Nest's until subtitles move.
-    let local = local.route("/api/media/sync-queue", any_service(unowned.clone()));
     let local = openapi()
         .paths
         .paths
@@ -350,6 +349,7 @@ fn api() -> Router<AppState> {
         .merge(system::api())
         .merge(jobs::router())
         .merge(requests::router())
+        .merge(subtitles::router())
 }
 
 async fn preflight_here(State(cors): State<Router>, req: Request, next: Next) -> Response {
