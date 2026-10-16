@@ -1,0 +1,78 @@
+{
+  "deviation": "C1",
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastLogin",
+    "$..lastActiveAt",
+    "$..lastPlayedAt",
+    "$..playedAt"
+  ],
+  "name": "likes-like-unknown-media",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "mediaId": 9999
+      },
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Media #9999 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "POST",
+      "path": "/api/likes"
+    },
+    {
+      "as": "user",
+      "body": {
+        "mediaId": 18,
+        "seasonId": 9999
+      },
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Season #9999 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "POST",
+      "path": "/api/likes"
+    },
+    {
+      "as": "user",
+      "body": {
+        "episodeId": 9999,
+        "mediaId": 18
+      },
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Episode #9999 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "POST",
+      "path": "/api/likes"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "episodeIds": [],
+          "media": true,
+          "seasonIds": []
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/likes/state/18"
+    }
+  ]
+}

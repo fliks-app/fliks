@@ -1,0 +1,41 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastLogin",
+    "$..lastActiveAt",
+    "$..lastPlayedAt",
+    "$..playedAt"
+  ],
+  "name": "likes-like-zero-ids",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "episodeId": 0,
+        "mediaId": 5,
+        "seasonId": 0
+      },
+      "expect": {
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/likes"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "episodeIds": [],
+          "media": true,
+          "seasonIds": []
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/likes/state/5"
+    }
+  ]
+}

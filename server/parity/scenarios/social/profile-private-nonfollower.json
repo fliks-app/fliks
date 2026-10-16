@@ -1,0 +1,128 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastLogin",
+    "$..lastActiveAt",
+    "$..lastPlayedAt",
+    "$..playedAt"
+  ],
+  "name": "social-profile-private-nonfollower",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "status": "pending"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/social/follow/4"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "avatar": "/api/users/4/avatar?v=1767225600000",
+          "followerCount": 0,
+          "followingCount": 0,
+          "followsYou": false,
+          "id": 4,
+          "isFollowing": false,
+          "isSelf": false,
+          "likes": [],
+          "playlists": [],
+          "recentlyWatched": [],
+          "recommendations": [],
+          "requested": true,
+          "shown": {
+            "likes": false,
+            "playlists": false,
+            "recentlyWatched": false,
+            "recommendations": false,
+            "stats": false,
+            "tastes": false
+          },
+          "topGenres": [],
+          "username": "other",
+          "visibility": "private"
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/social/users/4/profile"
+    },
+    {
+      "as": "readonly",
+      "expect": {
+        "body": {
+          "avatar": "/api/users/4/avatar?v=1767225600000",
+          "followerCount": 0,
+          "followingCount": 0,
+          "followsYou": false,
+          "id": 4,
+          "isFollowing": false,
+          "isSelf": false,
+          "likes": [],
+          "playlists": [],
+          "recentlyWatched": [],
+          "recommendations": [],
+          "requested": false,
+          "shown": {
+            "likes": false,
+            "playlists": false,
+            "recentlyWatched": false,
+            "recommendations": false,
+            "stats": false,
+            "tastes": false
+          },
+          "topGenres": [],
+          "username": "other",
+          "visibility": "private"
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/social/users/4/profile"
+    },
+    {
+      "as": "other",
+      "expect": {
+        "body": {
+          "avatar": null,
+          "followerCount": 0,
+          "followingCount": 0,
+          "followsYou": false,
+          "id": 2,
+          "isFollowing": false,
+          "isSelf": false,
+          "likes": [],
+          "playlists": [],
+          "recentlyWatched": [],
+          "recommendations": [],
+          "requested": false,
+          "shown": {
+            "likes": false,
+            "playlists": false,
+            "recentlyWatched": false,
+            "recommendations": false,
+            "stats": false,
+            "tastes": false
+          },
+          "topGenres": [],
+          "username": "user",
+          "visibility": "private"
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/social/users/2/profile"
+    }
+  ],
+  "unordered": [
+    "$.likes"
+  ]
+}

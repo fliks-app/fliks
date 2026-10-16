@@ -1,0 +1,165 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastLogin",
+    "$..lastActiveAt",
+    "$..lastPlayedAt",
+    "$..playedAt"
+  ],
+  "name": "social-search-q",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": [
+          {
+            "avatar": "/api/users/4/avatar?v=1767225600000",
+            "followsYou": false,
+            "id": 4,
+            "isFollowing": false,
+            "requested": false,
+            "username": "other"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/social/search?q=oth"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": [
+          {
+            "avatar": null,
+            "followsYou": false,
+            "id": 1,
+            "isFollowing": false,
+            "requested": false,
+            "username": "admin"
+          },
+          {
+            "avatar": null,
+            "followsYou": false,
+            "id": 5,
+            "isFollowing": false,
+            "requested": false,
+            "username": "manager"
+          },
+          {
+            "avatar": "/api/users/4/avatar?v=1767225600000",
+            "followsYou": false,
+            "id": 4,
+            "isFollowing": false,
+            "requested": false,
+            "username": "other"
+          },
+          {
+            "avatar": null,
+            "followsYou": false,
+            "id": 3,
+            "isFollowing": false,
+            "requested": false,
+            "username": "readonly"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/social/search?q=%25"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": [
+          {
+            "avatar": "/api/users/4/avatar?v=1767225600000",
+            "followsYou": false,
+            "id": 4,
+            "isFollowing": false,
+            "requested": false,
+            "username": "other"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/social/search?q=%20OTH%20"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": [],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/social/search?q=zzz"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": [
+          {
+            "avatar": "/api/users/4/avatar?v=1767225600000",
+            "followsYou": false,
+            "id": 4,
+            "isFollowing": false,
+            "requested": false,
+            "username": "other"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/social/search?q=_t"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": [
+          {
+            "avatar": null,
+            "followsYou": false,
+            "id": 1,
+            "isFollowing": false,
+            "requested": false,
+            "username": "admin"
+          },
+          {
+            "avatar": null,
+            "followsYou": false,
+            "id": 5,
+            "isFollowing": false,
+            "requested": false,
+            "username": "manager"
+          },
+          {
+            "avatar": "/api/users/4/avatar?v=1767225600000",
+            "followsYou": false,
+            "id": 4,
+            "isFollowing": false,
+            "requested": false,
+            "username": "other"
+          },
+          {
+            "avatar": null,
+            "followsYou": false,
+            "id": 3,
+            "isFollowing": false,
+            "requested": false,
+            "username": "readonly"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/social/search?q="
+    }
+  ],
+  "unordered": [
+    "$"
+  ]
+}

@@ -1,0 +1,394 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastLogin",
+    "$..lastActiveAt",
+    "$..lastPlayedAt",
+    "$..playedAt",
+    "$..path"
+  ],
+  "name": "playlists-list",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "profileVisibility": "public"
+      },
+      "expect": {
+        "body": {
+          "avatar": null,
+          "edlAutoSkipCommercials": true,
+          "edlEnabled": true,
+          "email": "user@parity.test",
+          "enabled": true,
+          "hiddenLibraryIds": [],
+          "hideSpoilers": false,
+          "id": 2,
+          "isAdmin": false,
+          "libraryIds": [
+            1,
+            2
+          ],
+          "libraryOrder": [],
+          "mediaServerId": null,
+          "mediaServerType": "local",
+          "movieQuotaLimit": 0,
+          "permissions": [
+            "media.read",
+            "livetv.read",
+            "requests.create"
+          ],
+          "profileVisibility": "public",
+          "quotaPeriodDays": 7,
+          "requirePasswordChange": false,
+          "role": "User",
+          "roleId": 2,
+          "seriesQuotaLimit": 0,
+          "shareDisabled": false,
+          "shareLikes": false,
+          "shareRecommendations": false,
+          "shareStats": false,
+          "shareTastes": false,
+          "shareWatchHistory": false,
+          "spoilerHideOverviews": true,
+          "spoilerHideStills": true,
+          "spoilerHideTitles": true,
+          "username": "user"
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/users/2"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "profileVisibility": "public"
+      },
+      "expect": {
+        "body": {
+          "avatar": "/api/users/4/avatar?v=1767225600000",
+          "edlAutoSkipCommercials": true,
+          "edlEnabled": true,
+          "email": "other@parity.test",
+          "enabled": true,
+          "hiddenLibraryIds": [],
+          "hideSpoilers": false,
+          "id": 4,
+          "isAdmin": false,
+          "libraryIds": [
+            1,
+            2
+          ],
+          "libraryOrder": [],
+          "mediaServerId": null,
+          "mediaServerType": "local",
+          "movieQuotaLimit": 0,
+          "permissions": [
+            "media.read",
+            "livetv.read",
+            "requests.create"
+          ],
+          "profileVisibility": "public",
+          "quotaPeriodDays": 7,
+          "requirePasswordChange": false,
+          "role": "User",
+          "roleId": 2,
+          "seriesQuotaLimit": 0,
+          "shareDisabled": false,
+          "shareLikes": false,
+          "shareRecommendations": false,
+          "shareStats": false,
+          "shareTastes": false,
+          "shareWatchHistory": false,
+          "spoilerHideOverviews": true,
+          "spoilerHideStills": true,
+          "spoilerHideTitles": true,
+          "username": "other"
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/users/4"
+    },
+    {
+      "as": "other",
+      "body": {
+        "name": "Other shared"
+      },
+      "expect": {
+        "body": {
+          "autoDownload": false,
+          "autoPlay": false,
+          "autoRemoveWatched": false,
+          "coverImageUrl": null,
+          "id": 2,
+          "itemCount": 0,
+          "name": "Other shared",
+          "ownerId": 4,
+          "posters": [],
+          "role": "owner",
+          "saved": false,
+          "visibility": "private"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/playlists"
+    },
+    {
+      "as": "other",
+      "body": {
+        "role": "editor",
+        "userId": 2
+      },
+      "expect": {
+        "body": [
+          {
+            "avatar": "/api/users/4/avatar?v=1767225600000",
+            "role": "owner",
+            "userId": 4,
+            "username": "other"
+          },
+          {
+            "avatar": null,
+            "role": "editor",
+            "userId": 2,
+            "username": "user"
+          }
+        ],
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/playlists/2/members"
+    },
+    {
+      "as": "other",
+      "body": {
+        "name": "Zed saved"
+      },
+      "expect": {
+        "body": {
+          "autoDownload": false,
+          "autoPlay": false,
+          "autoRemoveWatched": false,
+          "coverImageUrl": null,
+          "id": 3,
+          "itemCount": 0,
+          "name": "Zed saved",
+          "ownerId": 4,
+          "posters": [],
+          "role": "owner",
+          "saved": false,
+          "visibility": "private"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/playlists"
+    },
+    {
+      "as": "other",
+      "body": {
+        "visibility": "public"
+      },
+      "expect": {
+        "body": {
+          "autoDownload": false,
+          "autoPlay": false,
+          "autoRemoveWatched": false,
+          "coverImageUrl": null,
+          "id": 3,
+          "itemCount": 0,
+          "name": "Zed saved",
+          "ownerId": 4,
+          "posters": [],
+          "role": "owner",
+          "saved": false,
+          "visibility": "public"
+        },
+        "status": 200
+      },
+      "method": "PATCH",
+      "path": "/api/playlists/3"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/playlists/3/save"
+    },
+    {
+      "as": "user",
+      "body": {
+        "mediaId": 7
+      },
+      "expect": {
+        "body": {
+          "added": 1
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/playlists/2/items"
+    },
+    {
+      "as": "other",
+      "body": {
+        "mediaId": 5
+      },
+      "expect": {
+        "body": {
+          "added": 1
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/playlists/3/items"
+    },
+    {
+      "as": "other",
+      "body": {
+        "mediaId": 5
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "errors.media_already_in_playlist",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/playlists/3/items"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": [
+          {
+            "autoDownload": false,
+            "autoPlay": false,
+            "autoRemoveWatched": false,
+            "coverImageUrl": null,
+            "id": 2,
+            "itemCount": 1,
+            "name": "Other shared",
+            "ownerId": 4,
+            "posters": [],
+            "role": "editor",
+            "saved": false,
+            "visibility": "private"
+          },
+          {
+            "autoDownload": false,
+            "autoPlay": false,
+            "autoRemoveWatched": false,
+            "coverImageUrl": null,
+            "id": 1,
+            "itemCount": 3,
+            "name": "Parity Playlist",
+            "ownerId": 2,
+            "posters": [],
+            "role": "owner",
+            "saved": false,
+            "visibility": "private"
+          },
+          {
+            "autoDownload": false,
+            "autoPlay": false,
+            "autoRemoveWatched": false,
+            "coverImageUrl": null,
+            "id": 3,
+            "itemCount": 1,
+            "name": "Zed saved",
+            "ownerId": 4,
+            "posters": [],
+            "role": "viewer",
+            "saved": true,
+            "visibility": "public"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/playlists"
+    },
+    {
+      "as": "other",
+      "expect": {
+        "body": [
+          {
+            "autoDownload": false,
+            "autoPlay": false,
+            "autoRemoveWatched": false,
+            "coverImageUrl": null,
+            "id": 2,
+            "itemCount": 1,
+            "name": "Other shared",
+            "ownerId": 4,
+            "posters": [],
+            "role": "owner",
+            "saved": false,
+            "visibility": "private"
+          },
+          {
+            "autoDownload": false,
+            "autoPlay": false,
+            "autoRemoveWatched": false,
+            "coverImageUrl": null,
+            "id": 3,
+            "itemCount": 1,
+            "name": "Zed saved",
+            "ownerId": 4,
+            "posters": [],
+            "role": "owner",
+            "saved": false,
+            "visibility": "public"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/playlists"
+    },
+    {
+      "as": "readonly",
+      "expect": {
+        "body": [],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/playlists"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/playlists"
+    },
+    {
+      "as": "anon",
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "GET",
+      "path": "/api/playlists"
+    }
+  ],
+  "unordered": [
+    "$"
+  ]
+}

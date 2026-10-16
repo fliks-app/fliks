@@ -1,0 +1,88 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastLogin",
+    "$..lastActiveAt",
+    "$..lastPlayedAt",
+    "$..playedAt"
+  ],
+  "name": "social-followers-private-nonfollower",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "status": "pending"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/social/follow/4"
+    },
+    {
+      "as": "other",
+      "expect": {
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/social/requests/2/accept"
+    },
+    {
+      "as": "readonly",
+      "expect": {
+        "body": [],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/social/users/4/followers"
+    },
+    {
+      "as": "readonly",
+      "expect": {
+        "body": [],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/social/users/4/following"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": [
+          {
+            "avatar": null,
+            "followsYou": false,
+            "id": 2,
+            "isFollowing": false,
+            "requested": false,
+            "username": "user"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/social/users/4/followers"
+    },
+    {
+      "as": "other",
+      "expect": {
+        "body": [
+          {
+            "avatar": null,
+            "followsYou": true,
+            "id": 2,
+            "isFollowing": false,
+            "requested": false,
+            "username": "user"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/social/users/4/followers"
+    }
+  ]
+}

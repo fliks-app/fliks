@@ -1,0 +1,125 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastLogin",
+    "$..lastActiveAt",
+    "$..lastPlayedAt",
+    "$..playedAt",
+    "$..path"
+  ],
+  "name": "playlists-patch-visibility-opted-out",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "shareDisabled": true
+      },
+      "expect": {
+        "body": {
+          "avatar": null,
+          "edlAutoSkipCommercials": true,
+          "edlEnabled": true,
+          "email": "user@parity.test",
+          "enabled": true,
+          "hiddenLibraryIds": [],
+          "hideSpoilers": false,
+          "id": 2,
+          "isAdmin": false,
+          "libraryIds": [
+            1,
+            2
+          ],
+          "libraryOrder": [],
+          "mediaServerId": null,
+          "mediaServerType": "local",
+          "movieQuotaLimit": 0,
+          "permissions": [
+            "media.read",
+            "livetv.read",
+            "requests.create"
+          ],
+          "profileVisibility": "private",
+          "quotaPeriodDays": 7,
+          "requirePasswordChange": false,
+          "role": "User",
+          "roleId": 2,
+          "seriesQuotaLimit": 0,
+          "shareDisabled": true,
+          "shareLikes": false,
+          "shareRecommendations": false,
+          "shareStats": false,
+          "shareTastes": false,
+          "shareWatchHistory": false,
+          "spoilerHideOverviews": true,
+          "spoilerHideStills": true,
+          "spoilerHideTitles": true,
+          "username": "user"
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/users/2"
+    },
+    {
+      "as": "user",
+      "body": {
+        "visibility": "public"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Sharing features are disabled",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PATCH",
+      "path": "/api/playlists/1"
+    },
+    {
+      "as": "user",
+      "body": {
+        "name": "still ok",
+        "visibility": "private"
+      },
+      "expect": {
+        "body": {
+          "autoDownload": false,
+          "autoPlay": false,
+          "autoRemoveWatched": false,
+          "coverImageUrl": null,
+          "id": 1,
+          "itemCount": 3,
+          "name": "still ok",
+          "ownerId": 2,
+          "posters": [],
+          "role": "owner",
+          "saved": false,
+          "visibility": "private"
+        },
+        "status": 200
+      },
+      "method": "PATCH",
+      "path": "/api/playlists/1"
+    },
+    {
+      "as": "user",
+      "body": {
+        "visibility": "followers"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Sharing features are disabled",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PATCH",
+      "path": "/api/playlists/1"
+    }
+  ]
+}

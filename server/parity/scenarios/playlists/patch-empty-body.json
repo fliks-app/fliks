@@ -1,0 +1,59 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..lastLogin"
+  ],
+  "name": "playlists-patch-empty-body",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {},
+      "expect": {
+        "body": {
+          "autoDownload": false,
+          "autoPlay": false,
+          "autoRemoveWatched": false,
+          "coverImageUrl": null,
+          "createdAt": "2026-01-01T00:00:00.000Z",
+          "id": 1,
+          "itemCount": 3,
+          "name": "Parity Playlist",
+          "ownerId": 2,
+          "posters": [],
+          "role": "owner",
+          "saved": false,
+          "updatedAt": "2026-01-01T00:00:00.000Z",
+          "visibility": "private"
+        },
+        "status": 200
+      },
+      "method": "PATCH",
+      "path": "/api/playlists/1"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "autoDownload": false,
+          "autoPlay": false,
+          "autoRemoveWatched": false,
+          "coverImageUrl": null,
+          "createdAt": "2026-01-01T00:00:00.000Z",
+          "id": 1,
+          "itemCount": 3,
+          "name": "Parity Playlist",
+          "ownerId": 2,
+          "posters": [],
+          "role": "owner",
+          "saved": false,
+          "updatedAt": "2026-01-01T00:00:00.000Z",
+          "visibility": "private"
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/playlists/1"
+    }
+  ]
+}

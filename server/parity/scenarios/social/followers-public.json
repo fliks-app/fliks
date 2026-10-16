@@ -1,0 +1,149 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastLogin",
+    "$..lastActiveAt",
+    "$..lastPlayedAt",
+    "$..playedAt"
+  ],
+  "name": "social-followers-public",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "profileVisibility": "public"
+      },
+      "expect": {
+        "body": {
+          "avatar": "/api/users/4/avatar?v=1767225600000",
+          "edlAutoSkipCommercials": true,
+          "edlEnabled": true,
+          "email": "other@parity.test",
+          "enabled": true,
+          "hiddenLibraryIds": [],
+          "hideSpoilers": false,
+          "id": 4,
+          "isAdmin": false,
+          "libraryIds": [
+            1,
+            2
+          ],
+          "libraryOrder": [],
+          "mediaServerId": null,
+          "mediaServerType": "local",
+          "movieQuotaLimit": 0,
+          "permissions": [
+            "media.read",
+            "livetv.read",
+            "requests.create"
+          ],
+          "profileVisibility": "public",
+          "quotaPeriodDays": 7,
+          "requirePasswordChange": false,
+          "role": "User",
+          "roleId": 2,
+          "seriesQuotaLimit": 0,
+          "shareDisabled": false,
+          "shareLikes": false,
+          "shareRecommendations": false,
+          "shareStats": false,
+          "shareTastes": false,
+          "shareWatchHistory": false,
+          "spoilerHideOverviews": true,
+          "spoilerHideStills": true,
+          "spoilerHideTitles": true,
+          "username": "other"
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/users/4"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "status": "accepted"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/social/follow/4"
+    },
+    {
+      "as": "manager",
+      "expect": {
+        "body": {
+          "status": "accepted"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/social/follow/4"
+    },
+    {
+      "as": "readonly",
+      "expect": {
+        "body": [
+          {
+            "avatar": null,
+            "followsYou": false,
+            "id": 2,
+            "isFollowing": false,
+            "requested": false,
+            "username": "user"
+          },
+          {
+            "avatar": null,
+            "followsYou": false,
+            "id": 5,
+            "isFollowing": false,
+            "requested": false,
+            "username": "manager"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/social/users/4/followers"
+    },
+    {
+      "as": "readonly",
+      "expect": {
+        "body": [],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/social/users/4/following"
+    },
+    {
+      "as": "other",
+      "expect": {
+        "body": [
+          {
+            "avatar": null,
+            "followsYou": true,
+            "id": 2,
+            "isFollowing": false,
+            "requested": false,
+            "username": "user"
+          },
+          {
+            "avatar": null,
+            "followsYou": true,
+            "id": 5,
+            "isFollowing": false,
+            "requested": false,
+            "username": "manager"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/social/users/4/followers"
+    }
+  ]
+}

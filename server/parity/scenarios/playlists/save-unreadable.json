@@ -1,0 +1,51 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastLogin",
+    "$..lastActiveAt",
+    "$..lastPlayedAt",
+    "$..playedAt",
+    "$..path"
+  ],
+  "name": "playlists-save-unreadable",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "other",
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Playlist #1 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "POST",
+      "path": "/api/playlists/1/save"
+    },
+    {
+      "as": "other",
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Playlist #999 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "POST",
+      "path": "/api/playlists/999/save"
+    },
+    {
+      "as": "other",
+      "expect": {
+        "body": [],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/playlists"
+    }
+  ]
+}

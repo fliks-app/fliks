@@ -1,0 +1,95 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastLogin",
+    "$..lastActiveAt",
+    "$..lastPlayedAt",
+    "$..playedAt",
+    "$..path"
+  ],
+  "name": "playlists-items-reorder-foreign-id",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "itemIds": [
+          3,
+          1,
+          99
+        ]
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "itemIds must list every item in the playlist exactly once",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PUT",
+      "path": "/api/playlists/1/items/order"
+    },
+    {
+      "as": "other",
+      "body": {
+        "name": "o"
+      },
+      "expect": {
+        "body": {
+          "autoDownload": false,
+          "autoPlay": false,
+          "autoRemoveWatched": false,
+          "coverImageUrl": null,
+          "id": 2,
+          "itemCount": 0,
+          "name": "o",
+          "ownerId": 4,
+          "posters": [],
+          "role": "owner",
+          "saved": false,
+          "visibility": "private"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/playlists"
+    },
+    {
+      "as": "other",
+      "body": {
+        "mediaId": 5
+      },
+      "expect": {
+        "body": {
+          "added": 1
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/playlists/2/items"
+    },
+    {
+      "as": "user",
+      "body": {
+        "itemIds": [
+          1,
+          2,
+          4
+        ]
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "itemIds must list every item in the playlist exactly once",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PUT",
+      "path": "/api/playlists/1/items/order"
+    }
+  ]
+}

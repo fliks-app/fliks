@@ -1,0 +1,71 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastLogin",
+    "$..lastActiveAt",
+    "$..lastPlayedAt",
+    "$..playedAt"
+  ],
+  "name": "social-follow-private",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "status": "pending"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/social/follow/4"
+    },
+    {
+      "as": "other",
+      "expect": {
+        "body": [
+          {
+            "avatar": null,
+            "followsYou": false,
+            "id": 2,
+            "isFollowing": false,
+            "requested": false,
+            "username": "user"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/social/requests"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": [
+          {
+            "avatar": "/api/users/4/avatar?v=1767225600000",
+            "followsYou": false,
+            "id": 4,
+            "isFollowing": false,
+            "requested": true,
+            "username": "other"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/social/search?q=oth"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": [],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/social/users/4/followers"
+    }
+  ]
+}

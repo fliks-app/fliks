@@ -1,0 +1,80 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastLogin",
+    "$..lastActiveAt",
+    "$..lastPlayedAt",
+    "$..playedAt"
+  ],
+  "name": "likes-state",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "episodeIds": [],
+          "media": true,
+          "seasonIds": []
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/likes/state/1"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "episodeIds": [],
+          "media": true,
+          "seasonIds": []
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/likes/state/18"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "episodeIds": [],
+          "media": false,
+          "seasonIds": []
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/likes/state/5"
+    },
+    {
+      "as": "other",
+      "expect": {
+        "body": {
+          "episodeIds": [],
+          "media": true,
+          "seasonIds": []
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/likes/state/2"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "episodeIds": [],
+          "media": false,
+          "seasonIds": []
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/likes/state/9999"
+    }
+  ]
+}

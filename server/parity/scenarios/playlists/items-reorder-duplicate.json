@@ -1,0 +1,57 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastLogin",
+    "$..lastActiveAt",
+    "$..lastPlayedAt",
+    "$..playedAt",
+    "$..path"
+  ],
+  "name": "playlists-items-reorder-duplicate",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "itemIds": [
+          3,
+          1,
+          1
+        ]
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "itemIds must list every item in the playlist exactly once",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PUT",
+      "path": "/api/playlists/1/items/order"
+    },
+    {
+      "as": "user",
+      "body": {
+        "itemIds": [
+          1,
+          1,
+          2,
+          3
+        ]
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "itemIds must list every item in the playlist exactly once",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PUT",
+      "path": "/api/playlists/1/items/order"
+    }
+  ]
+}

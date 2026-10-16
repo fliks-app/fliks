@@ -1,0 +1,91 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastLogin",
+    "$..lastActiveAt",
+    "$..lastPlayedAt",
+    "$..playedAt"
+  ],
+  "name": "social-requests-list",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "status": "pending"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/social/follow/4"
+    },
+    {
+      "as": "manager",
+      "expect": {
+        "body": {
+          "status": "pending"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/social/follow/4"
+    },
+    {
+      "as": "readonly",
+      "expect": {
+        "body": {
+          "status": "pending"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/social/follow/4"
+    },
+    {
+      "as": "other",
+      "expect": {
+        "body": [
+          {
+            "avatar": null,
+            "followsYou": false,
+            "id": 2,
+            "isFollowing": false,
+            "requested": false,
+            "username": "user"
+          },
+          {
+            "avatar": null,
+            "followsYou": false,
+            "id": 5,
+            "isFollowing": false,
+            "requested": false,
+            "username": "manager"
+          },
+          {
+            "avatar": null,
+            "followsYou": false,
+            "id": 3,
+            "isFollowing": false,
+            "requested": false,
+            "username": "readonly"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/social/requests"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": [],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/social/requests"
+    }
+  ]
+}

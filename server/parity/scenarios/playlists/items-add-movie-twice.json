@@ -1,0 +1,62 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastLogin",
+    "$..lastActiveAt",
+    "$..lastPlayedAt",
+    "$..playedAt",
+    "$..path"
+  ],
+  "name": "playlists-items-add-movie-twice",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "mediaId": 4
+      },
+      "expect": {
+        "body": {
+          "added": 1
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/playlists/1/items"
+    },
+    {
+      "as": "user",
+      "body": {
+        "mediaId": 4
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "errors.media_already_in_playlist",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/playlists/1/items"
+    },
+    {
+      "as": "user",
+      "body": {
+        "mediaId": 1
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "errors.media_already_in_playlist",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/playlists/1/items"
+    }
+  ]
+}

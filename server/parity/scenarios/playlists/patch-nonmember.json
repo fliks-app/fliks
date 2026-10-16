@@ -1,0 +1,48 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastLogin",
+    "$..lastActiveAt",
+    "$..lastPlayedAt",
+    "$..playedAt",
+    "$..path"
+  ],
+  "name": "playlists-patch-nonmember",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "other",
+      "body": {
+        "name": "nope"
+      },
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Playlist #1 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "PATCH",
+      "path": "/api/playlists/1"
+    },
+    {
+      "as": "user",
+      "body": {
+        "name": "nope"
+      },
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Playlist #999 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "PATCH",
+      "path": "/api/playlists/999"
+    }
+  ]
+}

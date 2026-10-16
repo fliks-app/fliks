@@ -1,0 +1,181 @@
+{
+  "deviation": "C13",
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastLogin",
+    "$..lastActiveAt",
+    "$..lastPlayedAt",
+    "$..playedAt",
+    "$..path"
+  ],
+  "name": "playlists-get-editor-share-public",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "profileVisibility": "public"
+      },
+      "expect": {
+        "body": {
+          "avatar": "/api/users/4/avatar?v=1767225600000",
+          "edlAutoSkipCommercials": true,
+          "edlEnabled": true,
+          "email": "other@parity.test",
+          "enabled": true,
+          "hiddenLibraryIds": [],
+          "hideSpoilers": false,
+          "id": 4,
+          "isAdmin": false,
+          "libraryIds": [
+            1,
+            2
+          ],
+          "libraryOrder": [],
+          "mediaServerId": null,
+          "mediaServerType": "local",
+          "movieQuotaLimit": 0,
+          "permissions": [
+            "media.read",
+            "livetv.read",
+            "requests.create"
+          ],
+          "profileVisibility": "public",
+          "quotaPeriodDays": 7,
+          "requirePasswordChange": false,
+          "role": "User",
+          "roleId": 2,
+          "seriesQuotaLimit": 0,
+          "shareDisabled": false,
+          "shareLikes": false,
+          "shareRecommendations": false,
+          "shareStats": false,
+          "shareTastes": false,
+          "shareWatchHistory": false,
+          "spoilerHideOverviews": true,
+          "spoilerHideStills": true,
+          "spoilerHideTitles": true,
+          "username": "other"
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/users/4"
+    },
+    {
+      "as": "user",
+      "body": {
+        "visibility": "public"
+      },
+      "expect": {
+        "body": {
+          "autoDownload": false,
+          "autoPlay": false,
+          "autoRemoveWatched": false,
+          "coverImageUrl": null,
+          "id": 1,
+          "itemCount": 3,
+          "name": "Parity Playlist",
+          "ownerId": 2,
+          "posters": [],
+          "role": "owner",
+          "saved": false,
+          "visibility": "public"
+        },
+        "status": 200
+      },
+      "method": "PATCH",
+      "path": "/api/playlists/1"
+    },
+    {
+      "as": "user",
+      "body": {
+        "role": "editor",
+        "userId": 4
+      },
+      "expect": {
+        "body": [
+          {
+            "avatar": null,
+            "role": "owner",
+            "userId": 2,
+            "username": "user"
+          },
+          {
+            "avatar": "/api/users/4/avatar?v=1767225600000",
+            "role": "editor",
+            "userId": 4,
+            "username": "other"
+          }
+        ],
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/playlists/1/members"
+    },
+    {
+      "as": "other",
+      "expect": {
+        "body": {
+          "autoDownload": false,
+          "autoPlay": false,
+          "autoRemoveWatched": false,
+          "coverImageUrl": null,
+          "id": 1,
+          "itemCount": 3,
+          "name": "Parity Playlist",
+          "ownerId": 2,
+          "posters": [],
+          "role": "editor",
+          "saved": false,
+          "visibility": "public"
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/playlists/1"
+    },
+    {
+      "as": "other",
+      "expect": {
+        "body": [
+          {
+            "autoDownload": false,
+            "autoPlay": false,
+            "autoRemoveWatched": false,
+            "coverImageUrl": null,
+            "id": 1,
+            "itemCount": 3,
+            "name": "Parity Playlist",
+            "ownerId": 2,
+            "posters": [],
+            "role": "editor",
+            "saved": false,
+            "visibility": "public"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/playlists"
+    },
+    {
+      "as": "other",
+      "body": {
+        "autoPlay": true
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Insufficient playlist role",
+          "role": "editor",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "PATCH",
+      "path": "/api/playlists/1"
+    }
+  ]
+}

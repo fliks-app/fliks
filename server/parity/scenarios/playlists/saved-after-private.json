@@ -1,0 +1,96 @@
+{
+  "deviation": "F26",
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastLogin",
+    "$..lastActiveAt",
+    "$..lastPlayedAt",
+    "$..playedAt",
+    "$..path"
+  ],
+  "name": "playlists-saved-after-private",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "visibility": "public"
+      },
+      "expect": {
+        "body": {
+          "autoDownload": false,
+          "autoPlay": false,
+          "autoRemoveWatched": false,
+          "coverImageUrl": null,
+          "id": 1,
+          "itemCount": 3,
+          "name": "Parity Playlist",
+          "ownerId": 2,
+          "posters": [],
+          "role": "owner",
+          "saved": false,
+          "visibility": "public"
+        },
+        "status": 200
+      },
+      "method": "PATCH",
+      "path": "/api/playlists/1"
+    },
+    {
+      "as": "other",
+      "expect": {
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/playlists/1/save"
+    },
+    {
+      "as": "user",
+      "body": {
+        "visibility": "private"
+      },
+      "expect": {
+        "body": {
+          "autoDownload": false,
+          "autoPlay": false,
+          "autoRemoveWatched": false,
+          "coverImageUrl": null,
+          "id": 1,
+          "itemCount": 3,
+          "name": "Parity Playlist",
+          "ownerId": 2,
+          "posters": [],
+          "role": "owner",
+          "saved": false,
+          "visibility": "private"
+        },
+        "status": 200
+      },
+      "method": "PATCH",
+      "path": "/api/playlists/1"
+    },
+    {
+      "as": "other",
+      "expect": {
+        "body": [],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/playlists"
+    },
+    {
+      "as": "other",
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Playlist #1 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "GET",
+      "path": "/api/playlists/1"
+    }
+  ]
+}

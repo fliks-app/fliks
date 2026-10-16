@@ -1,0 +1,199 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastLogin",
+    "$..lastActiveAt",
+    "$..lastPlayedAt",
+    "$..playedAt"
+  ],
+  "name": "social-recommend-validation",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "profileVisibility": "public"
+      },
+      "expect": {
+        "body": {
+          "avatar": "/api/users/4/avatar?v=1767225600000",
+          "edlAutoSkipCommercials": true,
+          "edlEnabled": true,
+          "email": "other@parity.test",
+          "enabled": true,
+          "hiddenLibraryIds": [],
+          "hideSpoilers": false,
+          "id": 4,
+          "isAdmin": false,
+          "libraryIds": [
+            1,
+            2
+          ],
+          "libraryOrder": [],
+          "mediaServerId": null,
+          "mediaServerType": "local",
+          "movieQuotaLimit": 0,
+          "permissions": [
+            "media.read",
+            "livetv.read",
+            "requests.create"
+          ],
+          "profileVisibility": "public",
+          "quotaPeriodDays": 7,
+          "requirePasswordChange": false,
+          "role": "User",
+          "roleId": 2,
+          "seriesQuotaLimit": 0,
+          "shareDisabled": false,
+          "shareLikes": false,
+          "shareRecommendations": false,
+          "shareStats": false,
+          "shareTastes": false,
+          "shareWatchHistory": false,
+          "spoilerHideOverviews": true,
+          "spoilerHideStills": true,
+          "spoilerHideTitles": true,
+          "username": "other"
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/users/4"
+    },
+    {
+      "as": "user",
+      "body": {
+        "mediaId": 3,
+        "message": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "recipientId": 4
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "message must be shorter than or equal to 500 characters"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/social/recommend"
+    },
+    {
+      "as": "user",
+      "body": {},
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "recipientId must be an integer number",
+            "mediaId must be an integer number"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/social/recommend"
+    },
+    {
+      "as": "user",
+      "body": {
+        "mediaId": 3,
+        "message": 5,
+        "recipientId": 4
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "message must be shorter than or equal to 500 characters",
+            "message must be a string"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/social/recommend"
+    },
+    {
+      "as": "user",
+      "body": {
+        "extra": 1,
+        "mediaId": 3,
+        "recipientId": 4
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "property extra should not exist"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/social/recommend"
+    },
+    {
+      "as": "user",
+      "body": {
+        "mediaId": 3,
+        "message": "   ",
+        "recipientId": 4
+      },
+      "expect": {
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/social/recommend"
+    },
+    {
+      "as": "other",
+      "expect": {
+        "body": [
+          {
+            "episodeId": null,
+            "fanartUrl": null,
+            "id": 1,
+            "label": null,
+            "liked": false,
+            "mediaId": 3,
+            "mediaType": "movie",
+            "message": null,
+            "posterUrl": null,
+            "seasonId": null,
+            "sender": {
+              "avatar": null,
+              "id": 2,
+              "username": "user"
+            },
+            "stillUrl": null,
+            "title": "Parity Movie 03"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/social/recommendations/received"
+    },
+    {
+      "as": "user",
+      "body": {
+        "mediaId": 3,
+        "message": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "recipientId": 4
+      },
+      "expect": {
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/social/recommend"
+    }
+  ]
+}

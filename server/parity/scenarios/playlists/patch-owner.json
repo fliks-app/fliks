@@ -1,0 +1,117 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastLogin",
+    "$..lastActiveAt",
+    "$..lastPlayedAt",
+    "$..playedAt",
+    "$..path"
+  ],
+  "name": "playlists-patch-owner",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "autoDownload": true,
+        "autoPlay": true,
+        "autoRemoveWatched": true,
+        "name": "  Renamed ",
+        "visibility": "followers"
+      },
+      "expect": {
+        "body": {
+          "autoDownload": true,
+          "autoPlay": true,
+          "autoRemoveWatched": true,
+          "coverImageUrl": null,
+          "id": 1,
+          "itemCount": 3,
+          "name": "Renamed",
+          "ownerId": 2,
+          "posters": [],
+          "role": "owner",
+          "saved": false,
+          "visibility": "followers"
+        },
+        "status": 200
+      },
+      "method": "PATCH",
+      "path": "/api/playlists/1"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "autoDownload": true,
+          "autoPlay": true,
+          "autoRemoveWatched": true,
+          "coverImageUrl": null,
+          "id": 1,
+          "itemCount": 3,
+          "name": "Renamed",
+          "ownerId": 2,
+          "posters": [],
+          "role": "owner",
+          "saved": false,
+          "visibility": "followers"
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/playlists/1"
+    },
+    {
+      "as": "user",
+      "body": {
+        "visibility": "public"
+      },
+      "expect": {
+        "body": {
+          "autoDownload": true,
+          "autoPlay": true,
+          "autoRemoveWatched": true,
+          "coverImageUrl": null,
+          "id": 1,
+          "itemCount": 3,
+          "name": "Renamed",
+          "ownerId": 2,
+          "posters": [],
+          "role": "owner",
+          "saved": false,
+          "visibility": "public"
+        },
+        "status": 200
+      },
+      "method": "PATCH",
+      "path": "/api/playlists/1"
+    },
+    {
+      "as": "user",
+      "body": {
+        "visibility": "private"
+      },
+      "expect": {
+        "body": {
+          "autoDownload": true,
+          "autoPlay": true,
+          "autoRemoveWatched": true,
+          "coverImageUrl": null,
+          "id": 1,
+          "itemCount": 3,
+          "name": "Renamed",
+          "ownerId": 2,
+          "posters": [],
+          "role": "owner",
+          "saved": false,
+          "visibility": "private"
+        },
+        "status": 200
+      },
+      "method": "PATCH",
+      "path": "/api/playlists/1"
+    }
+  ]
+}

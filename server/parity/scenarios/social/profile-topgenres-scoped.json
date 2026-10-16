@@ -1,0 +1,205 @@
+{
+  "deviation": "F25",
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastLogin",
+    "$..lastActiveAt",
+    "$..lastPlayedAt",
+    "$..playedAt"
+  ],
+  "name": "social-profile-topgenres-scoped",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "profileVisibility": "public"
+      },
+      "expect": {
+        "body": {
+          "avatar": "/api/users/4/avatar?v=1767225600000",
+          "edlAutoSkipCommercials": true,
+          "edlEnabled": true,
+          "email": "other@parity.test",
+          "enabled": true,
+          "hiddenLibraryIds": [],
+          "hideSpoilers": false,
+          "id": 4,
+          "isAdmin": false,
+          "libraryIds": [
+            1,
+            2
+          ],
+          "libraryOrder": [],
+          "mediaServerId": null,
+          "mediaServerType": "local",
+          "movieQuotaLimit": 0,
+          "permissions": [
+            "media.read",
+            "livetv.read",
+            "requests.create"
+          ],
+          "profileVisibility": "public",
+          "quotaPeriodDays": 7,
+          "requirePasswordChange": false,
+          "role": "User",
+          "roleId": 2,
+          "seriesQuotaLimit": 0,
+          "shareDisabled": false,
+          "shareLikes": false,
+          "shareRecommendations": false,
+          "shareStats": false,
+          "shareTastes": false,
+          "shareWatchHistory": false,
+          "spoilerHideOverviews": true,
+          "spoilerHideStills": true,
+          "spoilerHideTitles": true,
+          "username": "other"
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/users/4"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "shareTastes": true
+      },
+      "expect": {
+        "body": {
+          "avatar": "/api/users/4/avatar?v=1767225600000",
+          "edlAutoSkipCommercials": true,
+          "edlEnabled": true,
+          "email": "other@parity.test",
+          "enabled": true,
+          "hiddenLibraryIds": [],
+          "hideSpoilers": false,
+          "id": 4,
+          "isAdmin": false,
+          "libraryIds": [
+            1,
+            2
+          ],
+          "libraryOrder": [],
+          "mediaServerId": null,
+          "mediaServerType": "local",
+          "movieQuotaLimit": 0,
+          "permissions": [
+            "media.read",
+            "livetv.read",
+            "requests.create"
+          ],
+          "profileVisibility": "public",
+          "quotaPeriodDays": 7,
+          "requirePasswordChange": false,
+          "role": "User",
+          "roleId": 2,
+          "seriesQuotaLimit": 0,
+          "shareDisabled": false,
+          "shareLikes": false,
+          "shareRecommendations": false,
+          "shareStats": false,
+          "shareTastes": true,
+          "shareWatchHistory": false,
+          "spoilerHideOverviews": true,
+          "spoilerHideStills": true,
+          "spoilerHideTitles": true,
+          "username": "other"
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/users/4"
+    },
+    {
+      "as": "other",
+      "body": {
+        "watched": true
+      },
+      "expect": {
+        "body": {
+          "watched": true
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/playback/media/18/toggle-series-watched"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "avatar": "/api/users/4/avatar?v=1767225600000",
+          "followerCount": 0,
+          "followingCount": 0,
+          "followsYou": false,
+          "id": 4,
+          "isFollowing": false,
+          "isSelf": false,
+          "likes": [],
+          "playlists": [],
+          "recentlyWatched": [],
+          "recommendations": [],
+          "requested": false,
+          "shown": {
+            "likes": false,
+            "playlists": true,
+            "recentlyWatched": false,
+            "recommendations": false,
+            "stats": false,
+            "tastes": true
+          },
+          "topGenres": [
+            {
+              "genre": "Drama",
+              "weight": 1
+            }
+          ],
+          "username": "other",
+          "visibility": "public"
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/social/users/4/profile"
+    },
+    {
+      "as": "readonly",
+      "expect": {
+        "body": {
+          "avatar": "/api/users/4/avatar?v=1767225600000",
+          "followerCount": 0,
+          "followingCount": 0,
+          "followsYou": false,
+          "id": 4,
+          "isFollowing": false,
+          "isSelf": false,
+          "likes": [],
+          "playlists": [],
+          "recentlyWatched": [],
+          "recommendations": [],
+          "requested": false,
+          "shown": {
+            "likes": false,
+            "playlists": true,
+            "recentlyWatched": false,
+            "recommendations": false,
+            "stats": false,
+            "tastes": true
+          },
+          "topGenres": [],
+          "username": "other",
+          "visibility": "public"
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/social/users/4/profile"
+    }
+  ],
+  "unordered": [
+    "$.likes"
+  ]
+}

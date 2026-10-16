@@ -1,0 +1,385 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastLogin",
+    "$..lastActiveAt",
+    "$..lastPlayedAt",
+    "$..playedAt"
+  ],
+  "name": "social-profile-self",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "avatar": null,
+          "followerCount": 0,
+          "followingCount": 0,
+          "followsYou": false,
+          "id": 2,
+          "isFollowing": false,
+          "isSelf": true,
+          "likes": [
+            {
+              "episodeId": null,
+              "fanartUrl": null,
+              "label": null,
+              "mediaId": 1,
+              "mediaType": "movie",
+              "posterUrl": null,
+              "seasonId": null,
+              "stillUrl": null,
+              "title": "Parity Movie 01"
+            },
+            {
+              "episodeId": null,
+              "fanartUrl": null,
+              "label": null,
+              "mediaId": 18,
+              "mediaType": "series",
+              "posterUrl": null,
+              "seasonId": null,
+              "stillUrl": null,
+              "title": "Parity Series A"
+            }
+          ],
+          "playlists": [],
+          "recentlyWatched": [
+            {
+              "completed": true,
+              "durationSeconds": 3600,
+              "episodeId": null,
+              "episodeLabel": null,
+              "fanartUrl": null,
+              "id": 2,
+              "mediaFileId": 2,
+              "mediaId": 2,
+              "mediaTitle": "Parity Movie 02",
+              "mediaType": "movie",
+              "positionSeconds": 3500,
+              "posterUrl": null,
+              "progressPercent": 97,
+              "stillUrl": null
+            }
+          ],
+          "recommendations": [
+            {
+              "becauseTitle": "",
+              "media": {
+                "additionalFanartUrls": [],
+                "available": true,
+                "fanartUrl": null,
+                "genres": [
+                  "Drama"
+                ],
+                "id": 3,
+                "posterUrl": null,
+                "title": "Parity Movie 03",
+                "type": "movie",
+                "year": 2020
+              },
+              "score": 1
+            },
+            {
+              "becauseTitle": "",
+              "media": {
+                "additionalFanartUrls": [],
+                "available": true,
+                "fanartUrl": null,
+                "genres": [
+                  "Drama"
+                ],
+                "id": 4,
+                "posterUrl": null,
+                "title": "Parity Movie 04",
+                "type": "movie",
+                "year": 2020
+              },
+              "score": 1
+            },
+            {
+              "becauseTitle": "",
+              "media": {
+                "additionalFanartUrls": [],
+                "available": true,
+                "fanartUrl": null,
+                "genres": [
+                  "Drama"
+                ],
+                "id": 5,
+                "posterUrl": null,
+                "title": "Parity Movie 05",
+                "type": "movie",
+                "year": 2020
+              },
+              "score": 1
+            },
+            {
+              "becauseTitle": "",
+              "media": {
+                "additionalFanartUrls": [],
+                "available": true,
+                "fanartUrl": null,
+                "genres": [
+                  "Drama"
+                ],
+                "id": 6,
+                "posterUrl": null,
+                "title": "Parity Movie 06",
+                "type": "movie",
+                "year": 2020
+              },
+              "score": 1
+            },
+            {
+              "becauseTitle": "",
+              "media": {
+                "additionalFanartUrls": [],
+                "available": true,
+                "fanartUrl": null,
+                "genres": [
+                  "Drama"
+                ],
+                "id": 7,
+                "posterUrl": null,
+                "title": "Parity Movie 07",
+                "type": "movie",
+                "year": 2020
+              },
+              "score": 1
+            },
+            {
+              "becauseTitle": "",
+              "media": {
+                "additionalFanartUrls": [],
+                "available": true,
+                "fanartUrl": null,
+                "genres": [
+                  "Drama"
+                ],
+                "id": 8,
+                "posterUrl": null,
+                "title": "Parity Movie 08",
+                "type": "movie",
+                "year": 2020
+              },
+              "score": 1
+            },
+            {
+              "becauseTitle": "",
+              "media": {
+                "additionalFanartUrls": [],
+                "available": true,
+                "fanartUrl": null,
+                "genres": [
+                  "Drama"
+                ],
+                "id": 9,
+                "posterUrl": null,
+                "title": "Parity Movie 09",
+                "type": "movie",
+                "year": 2020
+              },
+              "score": 1
+            },
+            {
+              "becauseTitle": "",
+              "media": {
+                "additionalFanartUrls": [],
+                "available": true,
+                "fanartUrl": null,
+                "genres": [
+                  "Drama"
+                ],
+                "id": 10,
+                "posterUrl": null,
+                "title": "Parity Movie 10",
+                "type": "movie",
+                "year": 2020
+              },
+              "score": 1
+            },
+            {
+              "becauseTitle": "",
+              "media": {
+                "additionalFanartUrls": [],
+                "available": true,
+                "fanartUrl": null,
+                "genres": [
+                  "Drama"
+                ],
+                "id": 11,
+                "posterUrl": null,
+                "title": "Parity Movie 11",
+                "type": "movie",
+                "year": 2020
+              },
+              "score": 1
+            },
+            {
+              "becauseTitle": "",
+              "media": {
+                "additionalFanartUrls": [],
+                "available": true,
+                "fanartUrl": null,
+                "genres": [
+                  "Drama"
+                ],
+                "id": 12,
+                "posterUrl": null,
+                "title": "Parity Movie 12",
+                "type": "movie",
+                "year": 2020
+              },
+              "score": 1
+            },
+            {
+              "becauseTitle": "",
+              "media": {
+                "additionalFanartUrls": [],
+                "available": true,
+                "fanartUrl": null,
+                "genres": [
+                  "Drama"
+                ],
+                "id": 13,
+                "posterUrl": null,
+                "title": "Parity Movie 13",
+                "type": "movie",
+                "year": 2020
+              },
+              "score": 1
+            },
+            {
+              "becauseTitle": "",
+              "media": {
+                "additionalFanartUrls": [],
+                "available": true,
+                "fanartUrl": null,
+                "genres": [
+                  "Drama"
+                ],
+                "id": 19,
+                "posterUrl": null,
+                "title": "Parity Series B",
+                "type": "series",
+                "year": 2021
+              },
+              "score": 1
+            },
+            {
+              "becauseTitle": "",
+              "media": {
+                "additionalFanartUrls": [],
+                "available": true,
+                "fanartUrl": null,
+                "genres": [
+                  "Drama"
+                ],
+                "id": 20,
+                "posterUrl": null,
+                "title": "Parity Series C",
+                "type": "series",
+                "year": 2021
+              },
+              "score": 1
+            },
+            {
+              "becauseTitle": "",
+              "media": {
+                "additionalFanartUrls": [],
+                "available": true,
+                "fanartUrl": null,
+                "genres": [
+                  "Drama"
+                ],
+                "id": 14,
+                "posterUrl": null,
+                "title": "Parity Movie 14",
+                "type": "movie",
+                "year": 2020
+              },
+              "score": 1
+            },
+            {
+              "becauseTitle": "",
+              "media": {
+                "additionalFanartUrls": [],
+                "available": true,
+                "fanartUrl": null,
+                "genres": [
+                  "Drama"
+                ],
+                "id": 15,
+                "posterUrl": null,
+                "title": "Parity Movie 15",
+                "type": "movie",
+                "year": 2020
+              },
+              "score": 1
+            }
+          ],
+          "requested": false,
+          "shown": {
+            "likes": true,
+            "playlists": true,
+            "recentlyWatched": true,
+            "recommendations": true,
+            "stats": true,
+            "tastes": true
+          },
+          "topGenres": [
+            {
+              "genre": "Drama",
+              "weight": 1
+            }
+          ],
+          "username": "user",
+          "visibility": "private"
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/social/users/2/profile"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "avatar": null,
+          "followerCount": 0,
+          "followingCount": 0,
+          "followsYou": false,
+          "id": 1,
+          "isFollowing": false,
+          "isSelf": true,
+          "likes": [],
+          "playlists": [],
+          "recentlyWatched": [],
+          "recommendations": [],
+          "requested": false,
+          "shown": {
+            "likes": true,
+            "playlists": true,
+            "recentlyWatched": true,
+            "recommendations": true,
+            "stats": true,
+            "tastes": true
+          },
+          "topGenres": [],
+          "username": "admin",
+          "visibility": "private"
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/social/users/1/profile"
+    }
+  ],
+  "unordered": [
+    "$.likes"
+  ]
+}

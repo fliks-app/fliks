@@ -1,0 +1,494 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastLogin",
+    "$..lastActiveAt",
+    "$..lastPlayedAt",
+    "$..playedAt"
+  ],
+  "name": "social-recommend",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "profileVisibility": "public"
+      },
+      "expect": {
+        "body": {
+          "avatar": "/api/users/4/avatar?v=1767225600000",
+          "edlAutoSkipCommercials": true,
+          "edlEnabled": true,
+          "email": "other@parity.test",
+          "enabled": true,
+          "hiddenLibraryIds": [],
+          "hideSpoilers": false,
+          "id": 4,
+          "isAdmin": false,
+          "libraryIds": [
+            1,
+            2
+          ],
+          "libraryOrder": [],
+          "mediaServerId": null,
+          "mediaServerType": "local",
+          "movieQuotaLimit": 0,
+          "permissions": [
+            "media.read",
+            "livetv.read",
+            "requests.create"
+          ],
+          "profileVisibility": "public",
+          "quotaPeriodDays": 7,
+          "requirePasswordChange": false,
+          "role": "User",
+          "roleId": 2,
+          "seriesQuotaLimit": 0,
+          "shareDisabled": false,
+          "shareLikes": false,
+          "shareRecommendations": false,
+          "shareStats": false,
+          "shareTastes": false,
+          "shareWatchHistory": false,
+          "spoilerHideOverviews": true,
+          "spoilerHideStills": true,
+          "spoilerHideTitles": true,
+          "username": "other"
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/users/4"
+    },
+    {
+      "as": "user",
+      "body": {
+        "mediaId": 3,
+        "message": "  watch this  ",
+        "recipientId": 4
+      },
+      "expect": {
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/social/recommend"
+    },
+    {
+      "as": "user",
+      "body": {
+        "mediaId": 18,
+        "recipientId": 4,
+        "seasonId": 1
+      },
+      "expect": {
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/social/recommend"
+    },
+    {
+      "as": "user",
+      "body": {
+        "episodeId": 1,
+        "mediaId": 18,
+        "recipientId": 4
+      },
+      "expect": {
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/social/recommend"
+    },
+    {
+      "as": "other",
+      "expect": {
+        "body": [
+          {
+            "episodeId": 1,
+            "fanartUrl": null,
+            "id": 3,
+            "label": "S1E1 \u00b7 Episode 1",
+            "liked": false,
+            "mediaId": 18,
+            "mediaType": "series",
+            "message": null,
+            "posterUrl": null,
+            "seasonId": null,
+            "sender": {
+              "avatar": null,
+              "id": 2,
+              "username": "user"
+            },
+            "stillUrl": null,
+            "title": "Parity Series A"
+          },
+          {
+            "episodeId": null,
+            "fanartUrl": null,
+            "id": 2,
+            "label": "Parity Series A \u00b7 S1",
+            "liked": false,
+            "mediaId": 18,
+            "mediaType": "series",
+            "message": null,
+            "posterUrl": null,
+            "seasonId": 1,
+            "sender": {
+              "avatar": null,
+              "id": 2,
+              "username": "user"
+            },
+            "stillUrl": null,
+            "title": "Parity Series A"
+          },
+          {
+            "episodeId": null,
+            "fanartUrl": null,
+            "id": 1,
+            "label": null,
+            "liked": false,
+            "mediaId": 3,
+            "mediaType": "movie",
+            "message": "watch this",
+            "posterUrl": null,
+            "seasonId": null,
+            "sender": {
+              "avatar": null,
+              "id": 2,
+              "username": "user"
+            },
+            "stillUrl": null,
+            "title": "Parity Movie 03"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/social/recommendations/received"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": [
+          {
+            "episodeId": 1,
+            "fanartUrl": null,
+            "id": 3,
+            "label": "S1E1 \u00b7 Episode 1",
+            "mediaId": 18,
+            "mediaType": "series",
+            "message": null,
+            "posterUrl": null,
+            "recipient": {
+              "avatar": "/api/users/4/avatar?v=1767225600000",
+              "id": 4,
+              "username": "other"
+            },
+            "seasonId": null,
+            "stillUrl": null,
+            "title": "Parity Series A"
+          },
+          {
+            "episodeId": null,
+            "fanartUrl": null,
+            "id": 2,
+            "label": "Parity Series A \u00b7 S1",
+            "mediaId": 18,
+            "mediaType": "series",
+            "message": null,
+            "posterUrl": null,
+            "recipient": {
+              "avatar": "/api/users/4/avatar?v=1767225600000",
+              "id": 4,
+              "username": "other"
+            },
+            "seasonId": 1,
+            "stillUrl": null,
+            "title": "Parity Series A"
+          },
+          {
+            "episodeId": null,
+            "fanartUrl": null,
+            "id": 1,
+            "label": null,
+            "mediaId": 3,
+            "mediaType": "movie",
+            "message": "watch this",
+            "posterUrl": null,
+            "recipient": {
+              "avatar": "/api/users/4/avatar?v=1767225600000",
+              "id": 4,
+              "username": "other"
+            },
+            "seasonId": null,
+            "stillUrl": null,
+            "title": "Parity Movie 03"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/social/recommendations/sent"
+    },
+    {
+      "as": "other",
+      "body": {
+        "mediaId": 3
+      },
+      "expect": {
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/likes"
+    },
+    {
+      "as": "other",
+      "expect": {
+        "body": [
+          {
+            "episodeId": 1,
+            "fanartUrl": null,
+            "id": 3,
+            "label": "S1E1 \u00b7 Episode 1",
+            "liked": false,
+            "mediaId": 18,
+            "mediaType": "series",
+            "message": null,
+            "posterUrl": null,
+            "seasonId": null,
+            "sender": {
+              "avatar": null,
+              "id": 2,
+              "username": "user"
+            },
+            "stillUrl": null,
+            "title": "Parity Series A"
+          },
+          {
+            "episodeId": null,
+            "fanartUrl": null,
+            "id": 2,
+            "label": "Parity Series A \u00b7 S1",
+            "liked": false,
+            "mediaId": 18,
+            "mediaType": "series",
+            "message": null,
+            "posterUrl": null,
+            "seasonId": 1,
+            "sender": {
+              "avatar": null,
+              "id": 2,
+              "username": "user"
+            },
+            "stillUrl": null,
+            "title": "Parity Series A"
+          },
+          {
+            "episodeId": null,
+            "fanartUrl": null,
+            "id": 1,
+            "label": null,
+            "liked": true,
+            "mediaId": 3,
+            "mediaType": "movie",
+            "message": "watch this",
+            "posterUrl": null,
+            "seasonId": null,
+            "sender": {
+              "avatar": null,
+              "id": 2,
+              "username": "user"
+            },
+            "stillUrl": null,
+            "title": "Parity Movie 03"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/social/recommendations/received"
+    },
+    {
+      "as": "other",
+      "expect": {
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/social/recommendations/1/dismiss"
+    },
+    {
+      "as": "other",
+      "expect": {
+        "body": [
+          {
+            "episodeId": 1,
+            "fanartUrl": null,
+            "id": 3,
+            "label": "S1E1 \u00b7 Episode 1",
+            "liked": false,
+            "mediaId": 18,
+            "mediaType": "series",
+            "message": null,
+            "posterUrl": null,
+            "seasonId": null,
+            "sender": {
+              "avatar": null,
+              "id": 2,
+              "username": "user"
+            },
+            "stillUrl": null,
+            "title": "Parity Series A"
+          },
+          {
+            "episodeId": null,
+            "fanartUrl": null,
+            "id": 2,
+            "label": "Parity Series A \u00b7 S1",
+            "liked": false,
+            "mediaId": 18,
+            "mediaType": "series",
+            "message": null,
+            "posterUrl": null,
+            "seasonId": 1,
+            "sender": {
+              "avatar": null,
+              "id": 2,
+              "username": "user"
+            },
+            "stillUrl": null,
+            "title": "Parity Series A"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/social/recommendations/received"
+    },
+    {
+      "as": "other",
+      "expect": {
+        "body": [
+          {
+            "episodeId": 1,
+            "fanartUrl": null,
+            "id": 3,
+            "label": "S1E1 \u00b7 Episode 1",
+            "liked": false,
+            "mediaId": 18,
+            "mediaType": "series",
+            "message": null,
+            "posterUrl": null,
+            "seasonId": null,
+            "sender": {
+              "avatar": null,
+              "id": 2,
+              "username": "user"
+            },
+            "stillUrl": null,
+            "title": "Parity Series A"
+          },
+          {
+            "episodeId": null,
+            "fanartUrl": null,
+            "id": 2,
+            "label": "Parity Series A \u00b7 S1",
+            "liked": false,
+            "mediaId": 18,
+            "mediaType": "series",
+            "message": null,
+            "posterUrl": null,
+            "seasonId": 1,
+            "sender": {
+              "avatar": null,
+              "id": 2,
+              "username": "user"
+            },
+            "stillUrl": null,
+            "title": "Parity Series A"
+          },
+          {
+            "episodeId": null,
+            "fanartUrl": null,
+            "id": 1,
+            "label": null,
+            "liked": true,
+            "mediaId": 3,
+            "mediaType": "movie",
+            "message": "watch this",
+            "posterUrl": null,
+            "seasonId": null,
+            "sender": {
+              "avatar": null,
+              "id": 2,
+              "username": "user"
+            },
+            "stillUrl": null,
+            "title": "Parity Movie 03"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/social/recommendations/received?includeDismissed=true"
+    },
+    {
+      "as": "other",
+      "expect": {
+        "body": [
+          {
+            "episodeId": 1,
+            "fanartUrl": null,
+            "id": 3,
+            "label": "S1E1 \u00b7 Episode 1",
+            "liked": false,
+            "mediaId": 18,
+            "mediaType": "series",
+            "message": null,
+            "posterUrl": null,
+            "seasonId": null,
+            "sender": {
+              "avatar": null,
+              "id": 2,
+              "username": "user"
+            },
+            "stillUrl": null,
+            "title": "Parity Series A"
+          },
+          {
+            "episodeId": null,
+            "fanartUrl": null,
+            "id": 2,
+            "label": "Parity Series A \u00b7 S1",
+            "liked": false,
+            "mediaId": 18,
+            "mediaType": "series",
+            "message": null,
+            "posterUrl": null,
+            "seasonId": 1,
+            "sender": {
+              "avatar": null,
+              "id": 2,
+              "username": "user"
+            },
+            "stillUrl": null,
+            "title": "Parity Series A"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/social/recommendations/received?includeDismissed=1"
+    },
+    {
+      "as": "readonly",
+      "expect": {
+        "body": [],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/social/recommendations/received"
+    }
+  ]
+}

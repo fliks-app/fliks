@@ -1,0 +1,149 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastLogin",
+    "$..lastActiveAt",
+    "$..lastPlayedAt",
+    "$..playedAt"
+  ],
+  "name": "social-recommend-twice",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "profileVisibility": "public"
+      },
+      "expect": {
+        "body": {
+          "avatar": "/api/users/4/avatar?v=1767225600000",
+          "edlAutoSkipCommercials": true,
+          "edlEnabled": true,
+          "email": "other@parity.test",
+          "enabled": true,
+          "hiddenLibraryIds": [],
+          "hideSpoilers": false,
+          "id": 4,
+          "isAdmin": false,
+          "libraryIds": [
+            1,
+            2
+          ],
+          "libraryOrder": [],
+          "mediaServerId": null,
+          "mediaServerType": "local",
+          "movieQuotaLimit": 0,
+          "permissions": [
+            "media.read",
+            "livetv.read",
+            "requests.create"
+          ],
+          "profileVisibility": "public",
+          "quotaPeriodDays": 7,
+          "requirePasswordChange": false,
+          "role": "User",
+          "roleId": 2,
+          "seriesQuotaLimit": 0,
+          "shareDisabled": false,
+          "shareLikes": false,
+          "shareRecommendations": false,
+          "shareStats": false,
+          "shareTastes": false,
+          "shareWatchHistory": false,
+          "spoilerHideOverviews": true,
+          "spoilerHideStills": true,
+          "spoilerHideTitles": true,
+          "username": "other"
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/users/4"
+    },
+    {
+      "as": "user",
+      "body": {
+        "mediaId": 3,
+        "message": "one",
+        "recipientId": 4
+      },
+      "expect": {
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/social/recommend"
+    },
+    {
+      "as": "user",
+      "body": {
+        "mediaId": 3,
+        "message": "two",
+        "recipientId": 4
+      },
+      "expect": {
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/social/recommend"
+    },
+    {
+      "as": "other",
+      "expect": {
+        "body": [
+          {
+            "episodeId": null,
+            "fanartUrl": null,
+            "id": 2,
+            "label": null,
+            "liked": false,
+            "mediaId": 3,
+            "mediaType": "movie",
+            "message": "two",
+            "posterUrl": null,
+            "seasonId": null,
+            "sender": {
+              "avatar": null,
+              "id": 2,
+              "username": "user"
+            },
+            "stillUrl": null,
+            "title": "Parity Movie 03"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/social/recommendations/received"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": [
+          {
+            "episodeId": null,
+            "fanartUrl": null,
+            "id": 2,
+            "label": null,
+            "mediaId": 3,
+            "mediaType": "movie",
+            "message": "two",
+            "posterUrl": null,
+            "recipient": {
+              "avatar": "/api/users/4/avatar?v=1767225600000",
+              "id": 4,
+              "username": "other"
+            },
+            "seasonId": null,
+            "stillUrl": null,
+            "title": "Parity Movie 03"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/social/recommendations/sent"
+    }
+  ]
+}

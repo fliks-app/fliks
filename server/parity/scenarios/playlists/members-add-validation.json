@@ -1,0 +1,126 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastLogin",
+    "$..lastActiveAt",
+    "$..lastPlayedAt",
+    "$..playedAt",
+    "$..path"
+  ],
+  "name": "playlists-members-add-validation",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {},
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "userId must be an integer number",
+            "role must be one of the following values: viewer, editor, administrator"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/playlists/1/members"
+    },
+    {
+      "as": "user",
+      "body": {
+        "userId": 4
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "role must be one of the following values: viewer, editor, administrator"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/playlists/1/members"
+    },
+    {
+      "as": "user",
+      "body": {
+        "role": "owner",
+        "userId": 4
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "role must be one of the following values: viewer, editor, administrator"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/playlists/1/members"
+    },
+    {
+      "as": "user",
+      "body": {
+        "role": "viewer",
+        "userId": "x"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "userId must be an integer number"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/playlists/1/members"
+    },
+    {
+      "as": "other",
+      "body": {
+        "role": "viewer",
+        "userId": 3
+      },
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Playlist #1 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "POST",
+      "path": "/api/playlists/1/members"
+    },
+    {
+      "as": "user",
+      "body": {
+        "extra": 1,
+        "role": "viewer",
+        "userId": 3
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "property extra should not exist"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/playlists/1/members"
+    }
+  ]
+}

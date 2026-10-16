@@ -1,0 +1,186 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastLogin",
+    "$..lastActiveAt",
+    "$..lastPlayedAt",
+    "$..playedAt",
+    "$..path"
+  ],
+  "name": "playlists-create",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "autoPlay": true,
+        "name": "  My list  "
+      },
+      "expect": {
+        "body": {
+          "autoDownload": false,
+          "autoPlay": true,
+          "autoRemoveWatched": false,
+          "coverImageUrl": null,
+          "id": 2,
+          "itemCount": 0,
+          "name": "My list",
+          "ownerId": 2,
+          "posters": [],
+          "role": "owner",
+          "saved": false,
+          "visibility": "private"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/playlists"
+    },
+    {
+      "as": "user",
+      "body": {
+        "name": "   "
+      },
+      "expect": {
+        "body": {
+          "autoDownload": false,
+          "autoPlay": false,
+          "autoRemoveWatched": false,
+          "coverImageUrl": null,
+          "id": 3,
+          "itemCount": 0,
+          "name": "",
+          "ownerId": 2,
+          "posters": [],
+          "role": "owner",
+          "saved": false,
+          "visibility": "private"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/playlists"
+    },
+    {
+      "as": "user",
+      "body": {
+        "autoDownload": true,
+        "autoPlay": true,
+        "autoRemoveWatched": true,
+        "name": "full"
+      },
+      "expect": {
+        "body": {
+          "autoDownload": true,
+          "autoPlay": true,
+          "autoRemoveWatched": true,
+          "coverImageUrl": null,
+          "id": 4,
+          "itemCount": 0,
+          "name": "full",
+          "ownerId": 2,
+          "posters": [],
+          "role": "owner",
+          "saved": false,
+          "visibility": "private"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/playlists"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "autoDownload": false,
+          "autoPlay": true,
+          "autoRemoveWatched": false,
+          "coverImageUrl": null,
+          "id": 2,
+          "itemCount": 0,
+          "name": "My list",
+          "ownerId": 2,
+          "posters": [],
+          "role": "owner",
+          "saved": false,
+          "visibility": "private"
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/playlists/2"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": [
+          {
+            "autoDownload": false,
+            "autoPlay": false,
+            "autoRemoveWatched": false,
+            "coverImageUrl": null,
+            "id": 3,
+            "itemCount": 0,
+            "name": "",
+            "ownerId": 2,
+            "posters": [],
+            "role": "owner",
+            "saved": false,
+            "visibility": "private"
+          },
+          {
+            "autoDownload": true,
+            "autoPlay": true,
+            "autoRemoveWatched": true,
+            "coverImageUrl": null,
+            "id": 4,
+            "itemCount": 0,
+            "name": "full",
+            "ownerId": 2,
+            "posters": [],
+            "role": "owner",
+            "saved": false,
+            "visibility": "private"
+          },
+          {
+            "autoDownload": false,
+            "autoPlay": true,
+            "autoRemoveWatched": false,
+            "coverImageUrl": null,
+            "id": 2,
+            "itemCount": 0,
+            "name": "My list",
+            "ownerId": 2,
+            "posters": [],
+            "role": "owner",
+            "saved": false,
+            "visibility": "private"
+          },
+          {
+            "autoDownload": false,
+            "autoPlay": false,
+            "autoRemoveWatched": false,
+            "coverImageUrl": null,
+            "id": 1,
+            "itemCount": 3,
+            "name": "Parity Playlist",
+            "ownerId": 2,
+            "posters": [],
+            "role": "owner",
+            "saved": false,
+            "visibility": "private"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/playlists"
+    }
+  ],
+  "unordered": [
+    "$"
+  ]
+}

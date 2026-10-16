@@ -1,0 +1,179 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastLogin",
+    "$..lastActiveAt",
+    "$..lastPlayedAt",
+    "$..playedAt"
+  ],
+  "name": "social-profile-public",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "profileVisibility": "public"
+      },
+      "expect": {
+        "body": {
+          "avatar": "/api/users/4/avatar?v=1767225600000",
+          "edlAutoSkipCommercials": true,
+          "edlEnabled": true,
+          "email": "other@parity.test",
+          "enabled": true,
+          "hiddenLibraryIds": [],
+          "hideSpoilers": false,
+          "id": 4,
+          "isAdmin": false,
+          "libraryIds": [
+            1,
+            2
+          ],
+          "libraryOrder": [],
+          "mediaServerId": null,
+          "mediaServerType": "local",
+          "movieQuotaLimit": 0,
+          "permissions": [
+            "media.read",
+            "livetv.read",
+            "requests.create"
+          ],
+          "profileVisibility": "public",
+          "quotaPeriodDays": 7,
+          "requirePasswordChange": false,
+          "role": "User",
+          "roleId": 2,
+          "seriesQuotaLimit": 0,
+          "shareDisabled": false,
+          "shareLikes": false,
+          "shareRecommendations": false,
+          "shareStats": false,
+          "shareTastes": false,
+          "shareWatchHistory": false,
+          "spoilerHideOverviews": true,
+          "spoilerHideStills": true,
+          "spoilerHideTitles": true,
+          "username": "other"
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/users/4"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "avatar": "/api/users/4/avatar?v=1767225600000",
+          "followerCount": 0,
+          "followingCount": 0,
+          "followsYou": false,
+          "id": 4,
+          "isFollowing": false,
+          "isSelf": false,
+          "likes": [],
+          "playlists": [],
+          "recentlyWatched": [],
+          "recommendations": [],
+          "requested": false,
+          "shown": {
+            "likes": false,
+            "playlists": true,
+            "recentlyWatched": false,
+            "recommendations": false,
+            "stats": false,
+            "tastes": false
+          },
+          "topGenres": [],
+          "username": "other",
+          "visibility": "public"
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/social/users/4/profile"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "status": "accepted"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/social/follow/4"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "avatar": "/api/users/4/avatar?v=1767225600000",
+          "followerCount": 1,
+          "followingCount": 0,
+          "followsYou": false,
+          "id": 4,
+          "isFollowing": true,
+          "isSelf": false,
+          "likes": [],
+          "playlists": [],
+          "recentlyWatched": [],
+          "recommendations": [],
+          "requested": false,
+          "shown": {
+            "likes": false,
+            "playlists": true,
+            "recentlyWatched": false,
+            "recommendations": false,
+            "stats": false,
+            "tastes": false
+          },
+          "topGenres": [],
+          "username": "other",
+          "visibility": "public"
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/social/users/4/profile"
+    },
+    {
+      "as": "other",
+      "expect": {
+        "body": {
+          "avatar": null,
+          "followerCount": 0,
+          "followingCount": 0,
+          "followsYou": true,
+          "id": 2,
+          "isFollowing": false,
+          "isSelf": false,
+          "likes": [],
+          "playlists": [],
+          "recentlyWatched": [],
+          "recommendations": [],
+          "requested": false,
+          "shown": {
+            "likes": false,
+            "playlists": false,
+            "recentlyWatched": false,
+            "recommendations": false,
+            "stats": false,
+            "tastes": false
+          },
+          "topGenres": [],
+          "username": "user",
+          "visibility": "private"
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/social/users/2/profile"
+    }
+  ],
+  "unordered": [
+    "$.likes"
+  ]
+}
