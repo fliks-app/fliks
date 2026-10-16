@@ -1,11 +1,11 @@
 use super::{
-    acl::{accessible_library_ids, assert_media_accessible, can_see_paths},
     aggregates, calendar as cal, hydrate, list,
     params::{Calendar, Recent, Search, bare},
     related, streams, tracking,
 };
 use crate::{
     http::{AppError, auth::Authed, validate::PathParams},
+    libraries::{accessible_library_ids, assert_media_accessible, media_not_found, paths_visible},
     state::AppState,
 };
 use axum::{
@@ -64,7 +64,7 @@ pub async fn find(
     a.require(Action::Read, Subject::Media)?;
     let p = Search::parse(&q)?;
     let ids = accessible_library_ids(&st.db, &a).await?;
-    let page = list::find_all(&st.db, &p, &ids, a.user.id, can_see_paths(&a)).await?;
+    let page = list::find_all(&st.db, &p, &ids, a.user.id, paths_visible(&a.perms)).await?;
     Ok(Json(json!({"data": page.data, "total": page.total})))
 }
 
@@ -78,7 +78,7 @@ pub async fn recent(
     let p = Recent::parse(&q)?;
     let ids = accessible_library_ids(&st.db, &a).await?;
     Ok(Json(
-        list::recently_added(&st.db, &p, &ids, a.user.id, can_see_paths(&a)).await?,
+        list::recently_added(&st.db, &p, &ids, a.user.id, paths_visible(&a.perms)).await?,
     ))
 }
 
@@ -157,7 +157,7 @@ pub async fn track(
     tracking::tracking(&st.db, id)
         .await?
         .map(Json)
-        .ok_or_else(|| super::acl::not_found(id))
+        .ok_or_else(|| media_not_found(id))
 }
 
 #[utoipa::path(get, path = "/api/media/{id}", responses((status = 200)))]
@@ -167,10 +167,10 @@ pub async fn get_media(
     id: Result<PathParams<i32>, AppError>,
 ) -> Result<Json<Value>, AppError> {
     let (id, _) = gate(&st, &a, id).await?;
-    hydrate::detail(&st.db, id, can_see_paths(&a))
+    hydrate::detail(&st.db, id, paths_visible(&a.perms))
         .await?
         .map(Json)
-        .ok_or_else(|| super::acl::not_found(id))
+        .ok_or_else(|| media_not_found(id))
 }
 
 /// `Number(limit)`: finite and above 0 caps at 30, anything else is 12 (rule 53).

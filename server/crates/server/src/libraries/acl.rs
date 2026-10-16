@@ -4,22 +4,22 @@ use fliks_domain::acl::{Action, Subject};
 use sqlx::PgPool;
 
 /// Every library id for admins and `manage:all`, else the user's `library_user_access` rows; `[]` means no access.
-pub async fn accessible_library_ids(db: &PgPool, user: &Authed) -> sqlx::Result<Vec<i32>> {
-    if user.user.is_admin || user.perms.can(Action::Manage, &Subject::All) {
-        return sqlx::query_scalar!("SELECT id FROM libraries")
+pub async fn accessible_library_ids(db: &PgPool, a: &Authed) -> Result<Vec<i32>, sqlx::Error> {
+    if a.user.is_admin || a.perms.can(Action::Manage, &Subject::All) {
+        return sqlx::query_scalar!(r#"SELECT id AS "id!" FROM libraries ORDER BY id"#)
             .fetch_all(db)
             .await;
     }
-    let ids = sqlx::query_scalar!(
-        r#"SELECT "libraryId" FROM library_user_access WHERE "userId" = $1"#,
-        user.user.id
+    sqlx::query_scalar!(
+        r#"SELECT "libraryId" AS "library_id!" FROM library_user_access
+           WHERE "userId" = $1 AND "libraryId" IS NOT NULL ORDER BY id"#,
+        a.user.id
     )
     .fetch_all(db)
-    .await?;
-    Ok(ids.into_iter().flatten().collect())
+    .await
 }
 
-/// 404 `Media #<id> not found` for a missing media, one without library, or one outside `ids` (no existence leak).
+/// 404 `Media #<id> not found` for a missing media, one without library or outside `ids`.
 pub async fn assert_media_accessible(
     db: &PgPool,
     media_id: i32,
@@ -31,6 +31,10 @@ pub async fn assert_media_accessible(
         .flatten();
     match library {
         Some(l) if ids.contains(&l) => Ok(()),
-        _ => Err(AppError::not_found(format!("Media #{media_id} not found"))),
+        _ => Err(media_not_found(media_id)),
     }
+}
+
+pub fn media_not_found(media_id: i32) -> AppError {
+    AppError::not_found(format!("Media #{media_id} not found"))
 }

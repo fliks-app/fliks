@@ -1,6 +1,6 @@
 //! Similar titles, collection, cast and crew (`media-query.md` rules 52-58).
-use super::acl::not_found;
 use crate::http::AppError;
+use crate::libraries::media_not_found;
 use fliks_domain::media::similarity::{MIN_SCORE, Signals, score_similarity};
 use serde_json::{Value, json};
 use sqlx::PgPool;
@@ -41,7 +41,7 @@ pub async fn similar(db: &PgPool, id: i32, limit: usize) -> Result<Vec<Value>, A
     .fetch_optional(db)
     .await?
     else {
-        return Err(not_found(id));
+        return Err(media_not_found(id));
     };
     let Some(library) = src.library_id.filter(|_| src.kind == "movie") else {
         return Ok(vec![]);
@@ -150,7 +150,7 @@ pub async fn collection(db: &PgPool, id: i32) -> Result<Option<Value>, AppError>
     .fetch_optional(db)
     .await?
     else {
-        return Err(not_found(id));
+        return Err(media_not_found(id));
     };
     let (Some(collection), Some(library)) = (src.collection_id, src.library_id) else {
         return Ok(None);

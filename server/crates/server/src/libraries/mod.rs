@@ -7,7 +7,7 @@ mod routes;
 use crate::state::AppState;
 use axum::{Router, routing::get};
 
-pub use acl::{accessible_library_ids, assert_media_accessible};
+pub use acl::{accessible_library_ids, assert_media_accessible, media_not_found};
 pub use db::paths_visible;
 pub use routes::*;
 

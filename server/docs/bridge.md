@@ -31,9 +31,8 @@ Rust bridge auth: `Authorization: Bearer $FLIKS_BRIDGE_TOKEN`, constant-time com
 ## Allowed duplication
 
 - Users stats SQL (`UsersStatsService`) in Nest until S4 (social profile stats), duplicated by the Rust `GET /api/users/:id/stats`.
-- Library ACL verify in Nest until S8 (`LibrariesService.getAccessibleLibraryIds`, `MediaService.assertAccessible`), duplicated by `libraries::accessible_library_ids` / `assert_media_accessible`; both read the same tables live, so no endpoint. Images path table (`ImageService.getDiskPath`) in Nest until S5, duplicated by `images::disk_path`.
+- Library ACL verify in Nest until S8 (`LibrariesService.getAccessibleLibraryIds`, `MediaService.assertAccessible`; they stay for the write routes, `counts.service.ts` and the plugin guards, read queries only), duplicated by `libraries::accessible_library_ids` / `assert_media_accessible`, the single Rust implementation every route uses; both read the same tables live, so no endpoint. Images path table (`ImageService.getDiskPath`) in Nest until S5, duplicated by `images::disk_path`.
 - Auth verify in Nest until S9: `jwt.strategy.ts`, guards, CASL factory, `PoliciesGuard`, `current-user` decorator, `jwt-secret.ts` (Nest still authenticates its own routes; Rust signs).
 - Release quality parsing in Nest until S5: `quality.parser.ts` and `app-qualities.ts` stay for imports; the Rust copy (`fliks_domain::release::quality`) shares the `release-quality` and `app-qualities` vectors.
-- Library ACL verify in Nest until S8: `getAccessibleLibraryIds` / `assertAccessible` stay for the write routes, `counts.service.ts` and the plugin guards (read queries only); Rust has `media::accessible_library_ids` / `assert_media_accessible`.
 - Media detail hydration in Nest until S5 (`findOne`: the write routes return `MD` and `Media.path`), counts by library in Nest (`getCountsByLibrary` for `/api/counts`, S8), episode coverage SQL in Nest until S5 (`onDiskSql`, used by acquisition).
 - `GET /api/media/sync-queue` is an explicit forward from Rust to Nest until S6 (`app.rs`), so `/api/media/{id}` does not answer 400 for it.
