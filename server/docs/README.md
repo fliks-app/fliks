@@ -140,8 +140,8 @@ A 500 or a half-written request is never part of the frozen contract:
 | C40 | `introMaxLookupMinutes` / `introMinSegmentSeconds` mapped only `0` and `NaN` to the default | fall back to 10 and 15 unless finite and > 0 |
 | C41 | `POST /api/markers/series/:mediaId/detect-all` on an unknown media answered `[]` | 404 `Media #<id> not found` |
 | C42 | two `import-watch-history` runs for one server could overlap | the second is 409 `Import already running` (client: the page toasts the message) |
-| C43 | users created by the Seerr (and Emby) import saw no library (Emby) or were written without a transaction (Seerr) | the default role's default libraries are granted in the user's transaction; a username collision re-reads the winner |
-| C44 | the Emby playback write was a read, compare and write | one `ON CONFLICT ... WHERE lastPlayedAt <=` statement; the database decides that Fliks wins |
+| C43 | users created by the Seerr (and Emby) import saw no library (Emby) or were written without a transaction (Seerr) | the default role's default libraries are granted in the user's transaction; a username collision re-reads the winner; an Emby user without a `Name` (or a blank one) is skipped |
+| C44 | the Emby playback write was a read, compare and write | one `ON CONFLICT ... WHERE lastPlayedAt <=` statement; the database decides that Fliks wins (new `playback_states` ids can skip values) |
 | C45 | an Emby `Users` failure ended in a `completed` event with zeros | a `watch-history.import.failed` event, command row `failed` (client: the page shows the failure) |
 | C47 | `PATCH /api/media/bulk`: no validation (fractional ids, unknown profiles = FK 500, `libraryId` = 500) | non-empty integer ids, unknown profile 404, `libraryId` as `PATCH :id/library` (400 when a media has files), one transaction |
 | C48 | `onMediaRemoved` wrote before the media DELETE, outside any transaction | hook writes and the DELETE in one transaction |
