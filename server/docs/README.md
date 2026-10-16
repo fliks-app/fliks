@@ -107,6 +107,7 @@ A 500 or a half-written request is never part of the frozen contract:
 | C108 | a process plugin has no network grant (it reaches any address) and an upgrade needs no consent for it | an upgrade from a `pluginApi` 1 package with the same id and `verifiedByKeyId` carries `network.internal` forward and auto-update installs it; any later new request fails closed |
 | C109 | Postgres unreachable during a plugin's start or health is a crash: ladder, breaker `failed`, admin restart | not a crash and not counted: the plugin is `degraded`, retried with backoff, `ready` again when the database returns |
 | C118 | a plugin `health` call that times out is a miss: 2 misses degrade the plugin, 4 kill and restart its process | a timed-out or trapped `health` has lost its store and is a crash at once (ladder, breaker); the 2 and 4 miss rule applies only to `ok:false` replies |
+| C119 | per-plugin Postgres roles are `plugin_<id>`, cluster-wide: two Fliks databases on one server share a role and provisioning one rotates the other's password; plugin ids up to 56 chars | role `fp_<installId>_<id>`, scoped per database by an 8-hex id stored in `plugin_host`; the first Rust registration adopts the Node-era role's schema and drops the role unless another database uses it; a restore keeps the target's id; plugin ids over 51 chars are refused (`PLUGIN_BAD_ID`) |
 
 Frozen as is (decided): the heartbeat keeps its debounce entry after a failed history write and returns
 `sessionLost: false` when the engine session lives but presence cannot be rebuilt. Lists whose order comes
