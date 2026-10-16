@@ -158,18 +158,15 @@ pub async fn create(
     ValidJson(v): ValidJson<Value>,
 ) -> Result<(StatusCode, Json<Value>), AppError> {
     a.require(Action::Create, Subject::Media)?;
-    let b = Body::new(v, &MEDIA_FIELDS)?;
-    let cols = columns(&b)?;
+    // `CreateMediaDto` has no `preferredProvider`, the last field.
+    let b = Body::new(v, &MEDIA_FIELDS[..18])?;
     b.required(b.str("title")?, "title", "must be a string")?;
     let media_type = b.required(
         b.one_of("type", &TYPES)?,
         "type",
         "must be one of the following values: movie, series",
     )?;
-    let cols: Vec<_> = cols
-        .into_iter()
-        .filter(|(k, _)| *k != "preferredProvider")
-        .collect();
+    let cols = columns(&b)?;
     let mut q = QueryBuilder::new("INSERT INTO media (");
     q.push(
         cols.iter()
