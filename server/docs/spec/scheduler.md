@@ -145,9 +145,10 @@ Row numbers are the S5 block of plan §15.3; each row goes into `README.md` Devi
 - C12 (extended): final tie-break on every list and the last-run lookup (`id DESC`) and `ORDER BY id` on every job's input scan (Nest relies on heap order).
 - C21: manual `RefreshPluginSources` runs the catalog refresh and auto-update (Nest: no dispatch branch, rule 17).
 - C22: a command already `queued`/`running` under the same name is not started again: manual `POST` answers 409 `Command "<name>" is already running`, a cron tick is skipped with a warn (rules 8, 19). The web status page shows the 409 through its generic error toast.
+- C97: on a DST-change day `cron-parser` skips or shifts some local fires (`0 04 * * *` Paris on 2026-03-29 is skipped) where `croner` fires each valid local time, so Rust fires them and `nextRun` shows them; the `cron-next` vector test allows a difference only in a window crossing a transition.
 
 ## Open questions
 
-- Q1 Rust's seconds-resolution cron vs Nest's: both fire at second 0 of a matching minute; confirm `croner` treats `0 0-23/6 * * *` and a zero-padded `02` like `cron-parser` (the `cron-next` vectors decide). Resolved: equal on every non-transition window; around a DST change `cron-parser` skips or shifts some fires (`0 04 * * *` Paris on 2026-03-29 is skipped) where `croner` fires each valid local time, so Rust fires them (the vector test allows a difference only in a window crossing a transition).
+- Q1 Closed: equal on every non-transition window (`croner` treats `0 0-23/6 * * *` and a zero-padded `02` like `cron-parser`); around a DST change the two differ, see C97.
 - Q2 `TZ` handling (rule 9): if the image has no `tzdata`, libc-based `chrono::Local` silently becomes UTC while Node honoured `TZ`. Resolve `TZ` through `chrono-tz` explicitly, or ship `tzdata` in the Dockerfile? Needed so `0 02 * * *` keeps meaning local 02:00.
 - Q4 `GenerateMissingSprites` pre-filter (carried from `playback-info.md` Q4): rule 28 drops it and relies on the engine cache. Confirm the engine answers a cached sprite for `force=false` without regenerating.
