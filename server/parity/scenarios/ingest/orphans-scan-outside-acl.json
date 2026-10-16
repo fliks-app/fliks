@@ -1,0 +1,25 @@
+{
+  "deviation": "F48",
+  "name": "ingest-orphans-scan-outside-acl",
+  "seed": "ingest",
+  "steps": [
+    {
+      "as": "readonly",
+      "method": "POST",
+      "path": "/api/imports/library/4/orphans/scan",
+      "expect": {
+        "status": 404,
+        "body": {
+          "statusCode": 404,
+          "message": "Library #4 not found",
+          "error": "Not Found"
+        }
+      }
+    }
+  ],
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..metadataRefreshedAt"
+  ]
+}

@@ -1,0 +1,65 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..metadataRefreshedAt"
+  ],
+  "name": "media-write-import-tmdb-no-key",
+  "seed": "ingest",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "tmdbId": 603,
+        "type": "movie"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "TMDB API key is not configured",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/media/import/tmdb"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "tmdbId": 603,
+        "type": "film"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "type must be one of the following values: movie, series"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/media/import/tmdb"
+    },
+    {
+      "as": "user",
+      "body": {
+        "tmdbId": 603,
+        "type": "movie"
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "POST",
+      "path": "/api/media/import/tmdb"
+    }
+  ]
+}

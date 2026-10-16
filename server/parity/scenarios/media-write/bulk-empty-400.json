@@ -1,0 +1,67 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..metadataRefreshedAt"
+  ],
+  "name": "media-write-bulk-empty-400",
+  "seed": "ingest",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "ids": [
+          101
+        ]
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Provide at least one field to update",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PATCH",
+      "path": "/api/media/bulk"
+    },
+    {
+      "as": "user",
+      "body": {
+        "ids": [
+          101
+        ],
+        "monitored": true
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "PATCH",
+      "path": "/api/media/bulk"
+    },
+    {
+      "as": "anon",
+      "body": {
+        "ids": [
+          101
+        ],
+        "monitored": true
+      },
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "PATCH",
+      "path": "/api/media/bulk"
+    }
+  ]
+}

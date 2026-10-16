@@ -1,0 +1,140 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..metadataRefreshedAt"
+  ],
+  "name": "media-write-patch-library-ok",
+  "seed": "ingest",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "libraryId": 1
+      },
+      "expect": {
+        "body": {
+          "addedById": null,
+          "additionalFanartUrls": [],
+          "alternativeTitles": [],
+          "digitalRelease": null,
+          "fanartUrl": null,
+          "files": [
+            {
+              "episodeId": null,
+              "id": 103,
+              "language": "en",
+              "mediaId": 104,
+              "osdbBytesize": null,
+              "osdbHash": null,
+              "quality": "WEBDL-1080p",
+              "relativePath": "Work Solo (2019).mkv",
+              "size": 73237,
+              "streamInfo": null
+            }
+          ],
+          "folderName": "Work Solo (2019)",
+          "genres": [],
+          "id": 104,
+          "imdbId": null,
+          "inCinemas": null,
+          "languageProfile": null,
+          "languageProfileId": null,
+          "library": {
+            "color": "#3b82f6",
+            "defaultLanguageProfileId": null,
+            "defaultQualityProfileId": null,
+            "icon": "film",
+            "id": 1,
+            "label": null,
+            "mediaTypes": [
+              "movie"
+            ],
+            "metadataLanguage": null,
+            "metadataRegion": null,
+            "name": "Movies",
+            "path": "/tmp/fliks-parity/media/movies",
+            "preferredProvider": null
+          },
+          "libraryId": 1,
+          "logoUrl": null,
+          "metadata": null,
+          "minimumAvailability": "released",
+          "monitored": true,
+          "originalTitle": null,
+          "overview": "Own folder",
+          "path": "/tmp/fliks-parity/media/movies/Work Solo (2019)",
+          "physicalRelease": null,
+          "posterUrl": null,
+          "preferredProvider": null,
+          "qualityProfile": null,
+          "qualityProfileId": null,
+          "rating": null,
+          "releaseDate": null,
+          "runtime": null,
+          "seasons": [],
+          "status": "released",
+          "title": "Work Solo",
+          "tmdbCollectionId": null,
+          "tmdbCollectionName": null,
+          "tmdbId": 5104,
+          "tvdbId": null,
+          "type": "movie",
+          "year": 2019
+        },
+        "status": 200
+      },
+      "method": "PATCH",
+      "path": "/api/media/104/library"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "libraryId": 5
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Library \"Pathless\" has no root path configured",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PATCH",
+      "path": "/api/media/104/library"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "libraryId": 99
+      },
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Library #99 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "PATCH",
+      "path": "/api/media/104/library"
+    },
+    {
+      "as": "user",
+      "body": {
+        "libraryId": 1
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "PATCH",
+      "path": "/api/media/104/library"
+    }
+  ]
+}

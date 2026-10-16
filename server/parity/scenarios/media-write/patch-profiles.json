@@ -1,0 +1,232 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..metadataRefreshedAt"
+  ],
+  "name": "media-write-patch-profiles",
+  "seed": "ingest",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "qualityProfileId": 1
+      },
+      "expect": {
+        "body": {
+          "addedById": null,
+          "additionalFanartUrls": [],
+          "alternativeTitles": [],
+          "digitalRelease": null,
+          "fanartUrl": null,
+          "files": [
+            {
+              "episodeId": null,
+              "id": 101,
+              "language": "en",
+              "mediaId": 101,
+              "osdbBytesize": null,
+              "osdbHash": null,
+              "quality": "WEBDL-1080p",
+              "relativePath": "Work Movie (2020).mkv",
+              "size": 73237,
+              "streamInfo": null
+            }
+          ],
+          "folderName": "Work Movie (2020)",
+          "genres": [],
+          "id": 101,
+          "imdbId": null,
+          "inCinemas": null,
+          "languageProfile": null,
+          "languageProfileId": null,
+          "library": {
+            "color": "#111111",
+            "defaultLanguageProfileId": null,
+            "defaultQualityProfileId": null,
+            "icon": "film",
+            "id": 3,
+            "label": null,
+            "mediaTypes": [
+              "movie"
+            ],
+            "metadataLanguage": null,
+            "metadataRegion": null,
+            "name": "Work Movies",
+            "path": "/tmp/fliks-parity/s5-ingest/work/movies",
+            "preferredProvider": null
+          },
+          "libraryId": 3,
+          "logoUrl": null,
+          "metadata": null,
+          "minimumAvailability": "released",
+          "monitored": true,
+          "originalTitle": null,
+          "overview": "Work movie",
+          "path": "/tmp/fliks-parity/s5-ingest/work/movies/Work Movie (2020)",
+          "physicalRelease": null,
+          "posterUrl": null,
+          "preferredProvider": null,
+          "qualityProfile": {
+            "cutoff": 18,
+            "id": 1,
+            "items": [],
+            "minCustomFormatScore": 0,
+            "name": "Parity HD",
+            "resolutionUpgradeOnly": false,
+            "upgradeAllowed": false
+          },
+          "qualityProfileId": 1,
+          "rating": null,
+          "releaseDate": null,
+          "runtime": null,
+          "seasons": [],
+          "status": "released",
+          "title": "Work Movie",
+          "tmdbCollectionId": null,
+          "tmdbCollectionName": null,
+          "tmdbId": 5101,
+          "tvdbId": null,
+          "type": "movie",
+          "year": 2020
+        },
+        "status": 200
+      },
+      "method": "PATCH",
+      "path": "/api/media/101/profiles"
+    },
+    {
+      "as": "admin",
+      "body": {},
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Provide at least one of qualityProfileId or languageProfileId",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PATCH",
+      "path": "/api/media/101/profiles"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "qualityProfileId": 42
+      },
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "QualityProfile #42 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "PATCH",
+      "path": "/api/media/101/profiles"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "languageProfileId": 1,
+        "qualityProfileId": null
+      },
+      "expect": {
+        "body": {
+          "addedById": null,
+          "additionalFanartUrls": [],
+          "alternativeTitles": [],
+          "digitalRelease": null,
+          "fanartUrl": null,
+          "files": [
+            {
+              "episodeId": null,
+              "id": 101,
+              "language": "en",
+              "mediaId": 101,
+              "osdbBytesize": null,
+              "osdbHash": null,
+              "quality": "WEBDL-1080p",
+              "relativePath": "Work Movie (2020).mkv",
+              "size": 73237,
+              "streamInfo": null
+            }
+          ],
+          "folderName": "Work Movie (2020)",
+          "genres": [],
+          "id": 101,
+          "imdbId": null,
+          "inCinemas": null,
+          "languageProfile": {
+            "audioLanguages": [],
+            "id": 1,
+            "name": "Toutes les langues (défaut)",
+            "subtitleLanguages": []
+          },
+          "languageProfileId": 1,
+          "library": {
+            "color": "#111111",
+            "defaultLanguageProfileId": null,
+            "defaultQualityProfileId": null,
+            "icon": "film",
+            "id": 3,
+            "label": null,
+            "mediaTypes": [
+              "movie"
+            ],
+            "metadataLanguage": null,
+            "metadataRegion": null,
+            "name": "Work Movies",
+            "path": "/tmp/fliks-parity/s5-ingest/work/movies",
+            "preferredProvider": null
+          },
+          "libraryId": 3,
+          "logoUrl": null,
+          "metadata": null,
+          "minimumAvailability": "released",
+          "monitored": true,
+          "originalTitle": null,
+          "overview": "Work movie",
+          "path": "/tmp/fliks-parity/s5-ingest/work/movies/Work Movie (2020)",
+          "physicalRelease": null,
+          "posterUrl": null,
+          "preferredProvider": null,
+          "qualityProfile": null,
+          "qualityProfileId": null,
+          "rating": null,
+          "releaseDate": null,
+          "runtime": null,
+          "seasons": [],
+          "status": "released",
+          "title": "Work Movie",
+          "tmdbCollectionId": null,
+          "tmdbCollectionName": null,
+          "tmdbId": 5101,
+          "tvdbId": null,
+          "type": "movie",
+          "year": 2020
+        },
+        "status": 200
+      },
+      "method": "PATCH",
+      "path": "/api/media/101/profiles"
+    },
+    {
+      "as": "user",
+      "body": {
+        "qualityProfileId": 1
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "PATCH",
+      "path": "/api/media/101/profiles"
+    }
+  ]
+}

@@ -1,0 +1,140 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..metadataRefreshedAt",
+    "$..additionalFanartUrls"
+  ],
+  "name": "media-write-identify",
+  "seed": "ingest",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {},
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Provide at least one external id to identify this media against",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/media/101/identify"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "tmdbId": 5104
+      },
+      "expect": {
+        "body": {
+          "error": "Conflict",
+          "message": "\"Work Solo\" (#104) already uses TMDB id 5104 in this library",
+          "statusCode": 409
+        },
+        "status": 409
+      },
+      "method": "POST",
+      "path": "/api/media/101/identify"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "imdbId": "tt0000777",
+        "tmdbId": 777
+      },
+      "expect": {
+        "body": {
+          "addedById": null,
+          "alternativeTitles": [],
+          "digitalRelease": null,
+          "fanartUrl": null,
+          "folderName": "Work Solo (2019)",
+          "genres": [],
+          "id": 104,
+          "imdbId": "tt0000777",
+          "inCinemas": null,
+          "languageProfile": null,
+          "languageProfileId": null,
+          "library": {
+            "color": "#111111",
+            "defaultLanguageProfileId": null,
+            "defaultQualityProfileId": null,
+            "icon": "film",
+            "id": 3,
+            "label": null,
+            "mediaTypes": [
+              "movie"
+            ],
+            "metadataLanguage": null,
+            "metadataRegion": null,
+            "name": "Work Movies",
+            "path": "/tmp/fliks-parity/s5-ingest/work/movies",
+            "preferredProvider": null
+          },
+          "libraryId": 3,
+          "logoUrl": null,
+          "metadata": null,
+          "minimumAvailability": "released",
+          "monitored": true,
+          "originalTitle": null,
+          "overview": "Own folder",
+          "path": "/tmp/fliks-parity/s5-ingest/work/movies/Work Solo (2019)",
+          "physicalRelease": null,
+          "posterUrl": null,
+          "preferredProvider": null,
+          "qualityProfile": null,
+          "qualityProfileId": null,
+          "rating": null,
+          "releaseDate": null,
+          "runtime": null,
+          "status": "released",
+          "title": "Work Solo",
+          "tmdbCollectionId": null,
+          "tmdbCollectionName": null,
+          "tmdbId": 777,
+          "tvdbId": null,
+          "type": "movie",
+          "year": 2019
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/media/104/identify"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "tmdbId": 1
+      },
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Media #9999 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "POST",
+      "path": "/api/media/9999/identify"
+    },
+    {
+      "as": "user",
+      "body": {
+        "tmdbId": 1
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "POST",
+      "path": "/api/media/101/identify"
+    }
+  ]
+}

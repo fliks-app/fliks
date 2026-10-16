@@ -1,0 +1,251 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..metadataRefreshedAt"
+  ],
+  "name": "media-write-put-monitored-cascade",
+  "seed": "ingest",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "monitored": false
+      },
+      "expect": {
+        "body": {
+          "addedById": null,
+          "additionalFanartUrls": [],
+          "alternativeTitles": [],
+          "digitalRelease": null,
+          "fanartUrl": null,
+          "files": [
+            {
+              "episodeId": 101,
+              "id": 102,
+              "language": "en",
+              "mediaId": 103,
+              "osdbBytesize": null,
+              "osdbHash": null,
+              "quality": "WEBDL-1080p",
+              "relativePath": "Season 01/Work Show - S01E01.mkv",
+              "size": 73237,
+              "streamInfo": null
+            }
+          ],
+          "folderName": "Work Show",
+          "genres": [],
+          "id": 103,
+          "imdbId": null,
+          "inCinemas": null,
+          "languageProfile": null,
+          "languageProfileId": null,
+          "library": {
+            "color": "#222222",
+            "defaultLanguageProfileId": null,
+            "defaultQualityProfileId": null,
+            "icon": "tv",
+            "id": 4,
+            "label": null,
+            "mediaTypes": [
+              "series"
+            ],
+            "metadataLanguage": null,
+            "metadataRegion": null,
+            "name": "Work Series",
+            "path": "/tmp/fliks-parity/s5-ingest/work/series",
+            "preferredProvider": null
+          },
+          "libraryId": 4,
+          "logoUrl": null,
+          "metadata": null,
+          "minimumAvailability": "released",
+          "monitored": false,
+          "originalTitle": null,
+          "overview": "Work show",
+          "path": "/tmp/fliks-parity/s5-ingest/work/series/Work Show",
+          "physicalRelease": null,
+          "posterUrl": null,
+          "preferredProvider": null,
+          "qualityProfile": null,
+          "qualityProfileId": null,
+          "rating": null,
+          "releaseDate": null,
+          "runtime": null,
+          "seasons": [
+            {
+              "airDate": null,
+              "episodes": [
+                {
+                  "airDate": null,
+                  "endEpisodeNumber": null,
+                  "episodeNumber": 1,
+                  "hasFile": true,
+                  "id": 101,
+                  "markersScannedAt": null,
+                  "monitored": false,
+                  "overview": null,
+                  "runtime": null,
+                  "seasonId": 101,
+                  "stillUrl": null,
+                  "title": "Pilot"
+                },
+                {
+                  "airDate": null,
+                  "endEpisodeNumber": null,
+                  "episodeNumber": 2,
+                  "hasFile": false,
+                  "id": 102,
+                  "markersScannedAt": null,
+                  "monitored": false,
+                  "overview": null,
+                  "runtime": null,
+                  "seasonId": 101,
+                  "stillUrl": null,
+                  "title": "Second"
+                }
+              ],
+              "id": 101,
+              "mediaId": 103,
+              "monitored": false,
+              "overview": null,
+              "posterUrl": null,
+              "preferredProvider": null,
+              "seasonNumber": 1
+            }
+          ],
+          "status": "continuing",
+          "title": "Work Show",
+          "tmdbCollectionId": null,
+          "tmdbCollectionName": null,
+          "tmdbId": 5103,
+          "tvdbId": null,
+          "type": "series",
+          "year": 2021
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/media/103"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "addedById": null,
+          "additionalFanartUrls": [],
+          "alternativeTitles": [],
+          "digitalRelease": null,
+          "fanartUrl": null,
+          "files": [
+            {
+              "episodeId": 101,
+              "id": 102,
+              "language": "en",
+              "mediaId": 103,
+              "osdbBytesize": null,
+              "osdbHash": null,
+              "quality": "WEBDL-1080p",
+              "relativePath": "Season 01/Work Show - S01E01.mkv",
+              "size": 73237,
+              "streamInfo": null
+            }
+          ],
+          "folderName": "Work Show",
+          "genres": [],
+          "id": 103,
+          "imdbId": null,
+          "inCinemas": null,
+          "languageProfile": null,
+          "languageProfileId": null,
+          "library": {
+            "color": "#222222",
+            "defaultLanguageProfileId": null,
+            "defaultQualityProfileId": null,
+            "icon": "tv",
+            "id": 4,
+            "label": null,
+            "mediaTypes": [
+              "series"
+            ],
+            "metadataLanguage": null,
+            "metadataRegion": null,
+            "name": "Work Series",
+            "path": "/tmp/fliks-parity/s5-ingest/work/series",
+            "preferredProvider": null
+          },
+          "libraryId": 4,
+          "logoUrl": null,
+          "metadata": null,
+          "minimumAvailability": "released",
+          "monitored": false,
+          "originalTitle": null,
+          "overview": "Work show",
+          "path": "/tmp/fliks-parity/s5-ingest/work/series/Work Show",
+          "physicalRelease": null,
+          "posterUrl": null,
+          "preferredProvider": null,
+          "qualityProfile": null,
+          "qualityProfileId": null,
+          "rating": null,
+          "releaseDate": null,
+          "runtime": null,
+          "seasons": [
+            {
+              "airDate": null,
+              "episodes": [
+                {
+                  "airDate": null,
+                  "endEpisodeNumber": null,
+                  "episodeNumber": 1,
+                  "hasFile": true,
+                  "id": 101,
+                  "markersScannedAt": null,
+                  "monitored": false,
+                  "overview": null,
+                  "runtime": null,
+                  "seasonId": 101,
+                  "stillUrl": null,
+                  "title": "Pilot"
+                },
+                {
+                  "airDate": null,
+                  "endEpisodeNumber": null,
+                  "episodeNumber": 2,
+                  "hasFile": false,
+                  "id": 102,
+                  "markersScannedAt": null,
+                  "monitored": false,
+                  "overview": null,
+                  "runtime": null,
+                  "seasonId": 101,
+                  "stillUrl": null,
+                  "title": "Second"
+                }
+              ],
+              "id": 101,
+              "mediaId": 103,
+              "monitored": false,
+              "overview": null,
+              "posterUrl": null,
+              "preferredProvider": null,
+              "seasonNumber": 1
+            }
+          ],
+          "status": "continuing",
+          "title": "Work Show",
+          "tmdbCollectionId": null,
+          "tmdbCollectionName": null,
+          "tmdbId": 5103,
+          "tvdbId": null,
+          "type": "series",
+          "year": 2021
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/103"
+    }
+  ]
+}

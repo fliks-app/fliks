@@ -454,7 +454,84 @@ fn collect(dir: &Path, out: &mut Vec<std::path::PathBuf>) {
 }
 
 /// Runs one scenario; in record mode fills each step's `expect` from the live response.
+/// Scenario `fs`: rebuilds `s5-ingest/work` under the media root (`{path, from}` copies a generated
+/// file, `{path, text}` writes one, `{dir}` makes a directory, `{link, to}` a symlink).
+fn fs_setup(sc: &Value) {
+    let Some(items) = sc["fs"].as_array() else {
+        return;
+    };
+    let root = Path::new(MEDIA_ROOT);
+    let work = root.join("s5-ingest/work");
+    let _ = fs::remove_dir_all(&work);
+    fs::create_dir_all(&work).expect("work dir");
+    let under = |p: &str| {
+        assert!(
+            p.starts_with("s5-ingest/work/"),
+            "fs path outside the work dir: {p}"
+        );
+        root.join(p)
+    };
+    for it in items {
+        if let Some(d) = it["dir"].as_str() {
+            fs::create_dir_all(under(d)).expect("fs dir");
+            continue;
+        }
+        if let (Some(l), Some(to)) = (it["link"].as_str(), it["to"].as_str()) {
+            let l = under(l);
+            fs::create_dir_all(l.parent().expect("parent")).expect("fs parent");
+            std::os::unix::fs::symlink(to, l).expect("fs link");
+            continue;
+        }
+        let p = under(it["path"].as_str().expect("fs path"));
+        fs::create_dir_all(p.parent().expect("parent")).expect("fs parent");
+        match (it["from"].as_str(), it["text"].as_str()) {
+            (Some(f), _) => fs::copy(root.join(f), &p).map(drop),
+            (_, Some(t)) => fs::write(&p, t),
+            _ => fs::write(&p, b""),
+        }
+        .expect("fs file");
+    }
+}
+
+/// Scenario `fsAfter`: `{exists: [...], absent: [...]}`, waited for up to 3 s (detached deletes).
+async fn fs_check(sc: &Value) -> Vec<String> {
+    let root = Path::new(MEDIA_ROOT);
+    let want = |k: &str| -> Vec<String> {
+        sc["fsAfter"][k]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|v| v.as_str().map(str::to_owned))
+            .collect()
+    };
+    let (exists, absent) = (want("exists"), want("absent"));
+    if !exists.is_empty() {
+        // a detached delete must have had time to (wrongly) remove what should stay
+        tokio::time::sleep(Duration::from_millis(500)).await;
+    }
+    let mut errs = vec![];
+    for _ in 0..30 {
+        errs.clear();
+        for p in &exists {
+            if fs::symlink_metadata(root.join(p)).is_err() {
+                errs.push(format!("fs: {p} should exist"));
+            }
+        }
+        for p in &absent {
+            if fs::symlink_metadata(root.join(p)).is_ok() {
+                errs.push(format!("fs: {p} should be absent"));
+            }
+        }
+        if errs.is_empty() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    errs
+}
+
 async fn run(ctx: &Ctx, sc: &mut Value, record: bool) -> Vec<String> {
+    fs_setup(sc);
     let ignore: Vec<Vec<Seg>> = sc["ignore"]
         .as_array()
         .map(|a| {
@@ -561,6 +638,7 @@ async fn run(ctx: &Ctx, sc: &mut Value, record: bool) -> Vec<String> {
         }
         errs.extend(d.into_iter().map(|m| format!("step {i}: {m}")));
     }
+    errs.extend(fs_check(sc).await);
     errs
 }
 

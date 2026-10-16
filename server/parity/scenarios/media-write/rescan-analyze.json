@@ -1,0 +1,84 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..metadataRefreshedAt"
+  ],
+  "name": "media-write-rescan-analyze",
+  "seed": "ingest",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Media #9999 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "POST",
+      "path": "/api/media/9999/rescan"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "POST",
+      "path": "/api/media/101/rescan"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "crop": "false"
+      },
+      "expect": {
+        "body": {
+          "ok": true
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/media/101/analyze"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "evil": 1
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "property evil should not exist"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/media/101/analyze"
+    },
+    {
+      "as": "admin",
+      "body": {},
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Media #9999 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "POST",
+      "path": "/api/media/9999/analyze"
+    }
+  ]
+}

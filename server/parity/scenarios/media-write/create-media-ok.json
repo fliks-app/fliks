@@ -1,0 +1,102 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..metadataRefreshedAt"
+  ],
+  "name": "media-write-create-media-ok",
+  "seed": "ingest",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "genres": [
+          "Drama"
+        ],
+        "title": "Created",
+        "type": "movie",
+        "year": 2001
+      },
+      "expect": {
+        "body": {
+          "addedById": null,
+          "additionalFanartUrls": [],
+          "alternativeTitles": [],
+          "digitalRelease": null,
+          "fanartUrl": null,
+          "folderName": null,
+          "genres": [
+            "Drama"
+          ],
+          "id": 105,
+          "imdbId": null,
+          "inCinemas": null,
+          "languageProfile": null,
+          "languageProfileId": null,
+          "library": null,
+          "libraryId": null,
+          "logoUrl": null,
+          "metadata": null,
+          "minimumAvailability": "released",
+          "monitored": true,
+          "originalTitle": null,
+          "overview": null,
+          "path": null,
+          "physicalRelease": null,
+          "posterUrl": null,
+          "preferredProvider": null,
+          "qualityProfile": null,
+          "qualityProfileId": null,
+          "rating": null,
+          "releaseDate": null,
+          "runtime": null,
+          "status": "tba",
+          "title": "Created",
+          "tmdbCollectionId": null,
+          "tmdbCollectionName": null,
+          "tmdbId": null,
+          "tvdbId": null,
+          "type": "movie",
+          "year": 2001
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/media"
+    },
+    {
+      "as": "user",
+      "body": {
+        "title": "x",
+        "type": "movie"
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "POST",
+      "path": "/api/media"
+    },
+    {
+      "as": "anon",
+      "body": {
+        "title": "x",
+        "type": "movie"
+      },
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "POST",
+      "path": "/api/media"
+    }
+  ]
+}

@@ -1,0 +1,70 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..metadataRefreshedAt"
+  ],
+  "name": "media-write-create-media-validation",
+  "seed": "ingest",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "type": "movie"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "title must be a string"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/media"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "evil": 1,
+        "title": "a",
+        "type": "movie"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "property evil should not exist"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/media"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "folderName": "x",
+        "title": "a",
+        "type": "movie"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "property folderName should not exist"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/media"
+    }
+  ]
+}
