@@ -572,6 +572,9 @@ async fn radarr_movie_subtitles(
         if rel.is_empty() {
             continue;
         }
+        if rel.starts_with(['/', '\\']) || rel.split(['/', '\\']).any(|s| s == "..") {
+            return Err(format!("invalid subtitle path \"{rel}\""));
+        }
         let language = match extra.get("language").and_then(|l| str_of(l, "name")) {
             Some(name) => language_from_name(name),
             None => parse_language_from_path(rel),

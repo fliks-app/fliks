@@ -61,6 +61,9 @@ async fn stub(req: AxReq) -> Response {
         ("radarr", "/api/v3/movie", "tmdb-zero") => fixture("radarr", "movie-tmdb-zero"),
         ("radarr", "/api/v3/movie", "traversal") => fixture("radarr", "movie-traversal"),
         ("radarr", "/api/v3/movie", _) => fixture("radarr", "movie"),
+        ("radarr", "/api/v3/extrafile", "subs-traversal") => {
+            fixture("radarr", "extrafile-traversal")
+        }
         ("radarr", "/api/v3/extrafile", _) => fixture("radarr", "extrafile"),
         ("sonarr", "/api/v3/series", "v3") => fixture("sonarr", "series-v3"),
         ("sonarr", "/api/v3/series", _) => fixture("sonarr", "series"),
@@ -654,4 +657,27 @@ async fn seerr_import_without_configuration_fails_through_the_event(pool: PgPool
     .await;
     assert_eq!(s, 201);
     assert_eq!(wait_command(&c, "ImportSeerrRequests").await, "failed");
+}
+
+#[sqlx::test(migrations = false)]
+async fn radarr_extrafile_path_cannot_leave_the_media_folder(pool: PgPool) {
+    let c = ctx(pool).await;
+    sqlx::query(r#"INSERT INTO media (id, title, year, type, "tmdbId", status, "folderName", "libraryId") VALUES (50, 'Parity Movie 01', 2020, 'movie', 1001, 'released', 'Old', 1)"#)
+        .execute(&c.pool).await.unwrap();
+    sqlx::query(r#"INSERT INTO media_files (id, "mediaId", "relativePath", size, quality) VALUES (60, 50, 'Old.mkv', 1, 'x')"#)
+        .execute(&c.pool).await.unwrap();
+    let mut body = import_body(&c, "radarr", "subs-traversal", 1);
+    body["importSubtitles"] = json!(true);
+    let (s, b) = post(&c, "/api/imports/radarr", &c.admin, body).await;
+    assert_eq!(s, 201, "{b}");
+    assert_eq!(b["subtitlesImported"], json!(0));
+    assert!(
+        b["errors"].to_string().contains("invalid subtitle path"),
+        "{b}"
+    );
+    let n: i64 = sqlx::query_scalar("SELECT count(*) FROM subtitle_files")
+        .fetch_one(&c.pool)
+        .await
+        .unwrap();
+    assert_eq!(n, 0);
 }
