@@ -2033,5 +2033,60 @@
     "policies": "",
     "body": "PreRollAskDto",
     "httpCode": 200
+  },
+  {
+    "method": "POST",
+    "path": "/api/imports/library/:libraryId/orphans/scan",
+    "controller": "ImportsController",
+    "handler": "scanOrphans",
+    "file": "src/modules/imports/imports.controller.ts",
+    "line": 201,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Create, Media)"
+  },
+  {
+    "method": "POST",
+    "path": "/api/imports/library/orphans/relink",
+    "controller": "ImportsController",
+    "handler": "relinkOrphans",
+    "file": "src/modules/imports/imports.controller.ts",
+    "line": 235,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Create, Media)",
+    "body": "RelinkOrphansDto"
+  },
+  {
+    "method": "POST",
+    "path": "/api/imports/library/orphans/relink-batch",
+    "controller": "ImportsController",
+    "handler": "relinkOrphansBatch",
+    "file": "src/modules/imports/imports.controller.ts",
+    "line": 218,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Create, Media)",
+    "body": "RelinkOrphansBatchDto"
+  },
+  {
+    "method": "POST",
+    "path": "/api/imports/orphans/preview",
+    "controller": "ImportsController",
+    "handler": "previewOrphans",
+    "file": "src/modules/imports/imports.controller.ts",
+    "line": 207,
+    "guards": [
+      "JwtOrApiKeyGuard",
+      "PoliciesGuard"
+    ],
+    "policies": "(ability) => ability.can(Action.Create, Media)",
+    "body": "PreviewOrphansDto"
   }
 ]
