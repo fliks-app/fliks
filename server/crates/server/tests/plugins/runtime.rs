@@ -70,6 +70,8 @@ async fn proxy_routes_and_lifecycle() {
         .await;
     assert_eq!(st, 200);
     assert_eq!(headers["cache-control"], "no-store");
+    assert_eq!(headers["x-content-type-options"], "nosniff");
+    assert_eq!(headers["content-security-policy"], "sandbox");
     let (st, headers, _) = h
         .raw(
             "GET",

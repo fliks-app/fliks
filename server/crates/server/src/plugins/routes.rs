@@ -828,6 +828,14 @@ pub async fn proxy(State(st): State<AppState>, a: Authed, req: Request) -> Res {
     let mut out = Response::builder().status(status);
     let h = out.headers_mut().expect("fresh builder");
     h.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    h.insert(
+        header::X_CONTENT_TYPE_OPTIONS,
+        HeaderValue::from_static("nosniff"),
+    );
+    h.insert(
+        header::CONTENT_SECURITY_POLICY,
+        HeaderValue::from_static("sandbox"),
+    );
     let mut typed = false;
     for (name, value) in &res.headers {
         let Some(bytes) = response_header(name, value) else {
