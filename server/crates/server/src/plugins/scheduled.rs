@@ -35,13 +35,20 @@ pub async fn schedule(
         return Err(("ERR_VALIDATION", "payload over 64 KiB".into()));
     }
     let db = |e: sqlx::Error| ("ERR", e.to_string());
+    let mut tx = core.begin().await.map_err(db)?;
+    // Serialises one plugin's schedules so two racing calls cannot both pass the caps.
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtext($1))")
+        .bind(plugin)
+        .execute(&mut *tx)
+        .await
+        .map_err(db)?;
     let (count, total): (i64, i64) = sqlx::query_as(
         r#"SELECT count(*), coalesce(sum(length(payload)), 0)::bigint FROM plugin_scheduled_calls
            WHERE "pluginId" = $1 AND key <> $2"#,
     )
     .bind(plugin)
     .bind(key)
-    .fetch_one(core)
+    .fetch_one(&mut *tx)
     .await
     .map_err(db)?;
     if count >= MAX_PENDING || total + payload.len() as i64 > MAX_TOTAL {
@@ -58,10 +65,10 @@ pub async fn schedule(
     .bind(key)
     .bind(delay_ms as f64)
     .bind(payload)
-    .execute(core)
+    .execute(&mut *tx)
     .await
     .map_err(db)?;
-    Ok(())
+    tx.commit().await.map_err(db)
 }
 
 pub async fn cancel(core: &PgPool, plugin: &str, key: &str) -> sqlx::Result<bool> {
