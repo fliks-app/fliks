@@ -543,6 +543,42 @@ pub fn check_files(i: &Inspected) -> Result<(), Refusal> {
 
 #[cfg(test)]
 mod tests {
+    /// The client declares, non-optional, every field the rule-5 shape checks require (no codegen:
+    /// the host validates shapes, it holds no typed UI contract to generate from).
+    #[test]
+    fn client_ui_types_carry_what_the_host_requires() {
+        let ts = include_str!("../../../../../client/src/app/core/plugin-ui/ui-contribution.ts");
+        let required = |iface: &str, fields: &[&str]| {
+            let start = ts
+                .find(&format!("interface {iface} "))
+                .unwrap_or_else(|| panic!("interface {iface} missing"));
+            let body = &ts[start..start + ts[start..].find("\n}\n").expect("closed")];
+            for f in fields {
+                assert!(
+                    body.contains(&format!("\n  {f}:")),
+                    "{iface}.{f} missing or optional"
+                );
+            }
+        };
+        required(
+            "UiContribution",
+            &["id", "slot", "weight", "labelKey", "action"],
+        );
+        required("FieldDef", &["key", "type", "labelKey"]);
+        required("FormCaption", &["kind", "textKey"]);
+        required("FormGroup", &["kind", "labelKey", "fields"]);
+        required("FormStatus", &["kind", "labelKey", "settingKey"]);
+        required("ConfigPageBase", &["id", "labelKey"]);
+        required("TableConfigPage", &["kind", "list", "columns"]);
+        required("ProvidersConfigPage", &["kind", "list", "implementations"]);
+        required("ReleasePickerPair", &["search", "grab"]);
+        required("ReleasePickerRoutes", &["movie", "season", "episode"]);
+        assert!(
+            ts.contains("export const SECRETS_SET_KEY = 'secretsSet';"),
+            "the settings read key"
+        );
+    }
+
     use super::*;
     use serde_json::json;
 
