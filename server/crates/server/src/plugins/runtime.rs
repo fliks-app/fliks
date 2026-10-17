@@ -428,7 +428,7 @@ impl Lane {
         };
         let era = rt.sh.era.load(Ordering::SeqCst);
         let pooled = self.idle.lock().unwrap().pop();
-        let mut inst = match pooled {
+        let inst = match pooled {
             Some((i, _)) => i,
             None => {
                 if let Some(at) = *self.retry_at.lock().unwrap()
@@ -448,6 +448,12 @@ impl Lane {
                 }
             }
         };
+        // Counted live until it goes back to the pool; dropping the call drops it from the count.
+        let mut slot = Slot {
+            lane: self,
+            inst: Some(inst),
+        };
+        let inst = slot.inst.as_mut().expect("held");
         {
             let d = inst.store.data_mut();
             d.deadline = until.into_std();
@@ -459,44 +465,43 @@ impl Lane {
         tokio::pin!(stopped);
         stopped.as_mut().enable();
         if rt.sh.era.load(Ordering::SeqCst) != era {
-            self.live.fetch_sub(1, Ordering::SeqCst);
             return Err(CallError::Unavailable("stopped".into()));
         }
         let res = {
             let work = async {
                 if let Some(keys) = keys {
-                    let Inst { store, guest, .. } = &mut inst;
+                    let Inst { store, guest, .. } = &mut *inst;
                     guest
                         .fliks_plugin_guest()
                         .call_config_changed(&mut *store, &keys)
                         .await?;
                     inst.cfg_gen = cfg_gen;
                 }
-                f(&mut inst).await
+                f(inst).await
             };
             tokio::select! {
                 r = tokio::time::timeout_at(until, work) => r,
-                _ = stopped => {
-                    self.live.fetch_sub(1, Ordering::SeqCst);
-                    return Err(CallError::Unavailable("stopped".into()));
-                }
+                _ = stopped => return Err(CallError::Unavailable("stopped".into())),
             }
         };
-        let db = inst.store.data().db_unavailable;
+        let db = slot
+            .inst
+            .as_ref()
+            .expect("held")
+            .store
+            .data()
+            .db_unavailable;
         self.last_db.store(db, Ordering::SeqCst);
         let current = rt.sh.era.load(Ordering::SeqCst) == era;
         match res {
             Ok(Ok(r)) => {
                 if current {
-                    self.idle.lock().unwrap().push((inst, Instant::now()));
-                } else {
-                    self.live.fetch_sub(1, Ordering::SeqCst);
+                    slot.back();
                 }
                 Ok(r)
             }
             Ok(Err(trap)) => {
-                drop(inst);
-                self.live.fetch_sub(1, Ordering::SeqCst);
+                drop(slot);
                 let why = format!("{trap:?}");
                 // The epoch callback interrupts at the call's deadline: that is a timeout (rule 39).
                 let timeout = trap.downcast_ref::<Trap>() == Some(&Trap::Interrupt);
@@ -509,13 +514,33 @@ impl Lane {
                 Err(CallError::Crashed(why))
             }
             Err(_) => {
-                drop(inst);
-                self.live.fetch_sub(1, Ordering::SeqCst);
+                drop(slot);
                 if current {
                     rt.lost(self, db, "deadline");
                 }
                 Err(CallError::Timeout)
             }
+        }
+    }
+}
+
+/// An instance taken from a lane: back to the pool, or dropped and uncounted.
+struct Slot<'a> {
+    lane: &'a Lane,
+    inst: Option<Inst>,
+}
+
+impl Slot<'_> {
+    fn back(mut self) {
+        let inst = self.inst.take().expect("held");
+        self.lane.idle.lock().unwrap().push((inst, Instant::now()));
+    }
+}
+
+impl Drop for Slot<'_> {
+    fn drop(&mut self) {
+        if self.inst.take().is_some() {
+            self.lane.live.fetch_sub(1, Ordering::SeqCst);
         }
     }
 }
@@ -555,6 +580,8 @@ struct Sup {
     message: String,
     /// `start` failed only because the database was unreachable (C109).
     db_down: bool,
+    /// A core instance is being created: a second crash must not start another.
+    recreating: bool,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -644,6 +671,7 @@ impl PluginRt {
                 misses: 0,
                 message: String::new(),
                 db_down: false,
+                recreating: false,
             }),
             state: watch::channel(State::Stopped).0,
             ring: Mutex::new(VecDeque::new()),
@@ -974,13 +1002,19 @@ impl PluginRt {
     /// A new core instance after `delay`; `start` runs again when no other instance lives.
     async fn recreate_core(self: Arc<Self>, era: u64, delay: Duration) {
         tokio::time::sleep(delay).await;
-        if !self.alive(era) || self.core.live.load(Ordering::SeqCst) > 0 {
-            return;
+        {
+            let mut s = self.sup.lock().unwrap();
+            if s.recreating || !self.alive(era) || self.core.live.load(Ordering::SeqCst) > 0 {
+                return;
+            }
+            s.recreating = true;
         }
-        match self.instantiate().await {
+        let made = self.instantiate().await;
+        match made {
             Ok(inst) => {
                 let others = self.live_instances();
                 self.core.put(inst);
+                self.sup.lock().unwrap().recreating = false;
                 if others == 0 || self.sup.lock().unwrap().db_down {
                     self.run_start().await;
                 } else if matches!(self.state(), State::Crashed | State::Backoff) {
@@ -988,11 +1022,17 @@ impl PluginRt {
                 }
             }
             Err(SpawnError::Mismatch(d)) => {
-                self.sup.lock().unwrap().message = format!("manifest-mismatch: {d}");
+                let mut s = self.sup.lock().unwrap();
+                s.recreating = false;
+                s.message = format!("manifest-mismatch: {d}");
+                drop(s);
                 self.set_state(State::Failed);
                 self.drop_all();
             }
-            Err(e) => self.crash(&self.core, &e.to_string()),
+            Err(e) => {
+                self.sup.lock().unwrap().recreating = false;
+                self.crash(&self.core, &e.to_string());
+            }
         }
     }
 

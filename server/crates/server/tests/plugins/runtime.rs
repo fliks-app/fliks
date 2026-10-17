@@ -1108,3 +1108,74 @@ async fn database_outage_degrades_without_crashing() {
     relay.accept.abort();
     done(s, h).await;
 }
+
+/// A proxied call dropped mid-flight takes its instance out of the live count.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_dropped_call_frees_its_instance() {
+    let Some((s, h)) = setup("dropcall", |_| {}).await else {
+        return;
+    };
+    let rt = h.st.plugins.rt(ID).unwrap();
+    let before = rt.live_instances();
+    let r2 = rt.clone();
+    let call = tokio::spawn(async move {
+        r2.http(req("/test/spin", &[("s", "5")]), false)
+            .await
+            .map(drop)
+    });
+    until("the spin running", Duration::from_secs(5), async || {
+        rt.live_instances() > before
+    })
+    .await;
+    call.abort();
+    let _ = call.await;
+    until(
+        "the instance uncounted",
+        Duration::from_secs(5),
+        async || rt.live_instances() == before,
+    )
+    .await;
+    done(s, h).await;
+}
+
+/// C112: while a restore holds its claim, registration and the admin routes refuse.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_restore_refuses_registration_and_admin_routes() {
+    let Some((s, h)) = setup("restoring", |_| {}).await else {
+        return;
+    };
+    let claim = h.st.jobs.claim(fliks_server::jobs::RESTORE).unwrap();
+    for (method, path) in [
+        ("POST", "/api/plugins/fliks.fixture/restart"),
+        ("POST", "/api/plugins/fliks.fixture/enable"),
+    ] {
+        let (st, b) = h.call(method, path, Some(&h.admin), None).await;
+        assert_eq!(
+            (st, b["code"].as_str()),
+            (409, Some("PLUGIN_BUSY")),
+            "{path} {b}"
+        );
+    }
+    let pkg = packages::find(&s.pool, ID).await.unwrap().unwrap();
+    let f = h.st.plugins.register_and_settle(&pkg).await.unwrap_err();
+    assert_eq!(f.reason, "db-unavailable");
+    h.st.plugins.stop_all().await;
+    assert_eq!(
+        h.st.plugins.db_wait_reason(ID),
+        None,
+        "stop_all clears the waits"
+    );
+    drop(claim);
+    assert_eq!(
+        h.call(
+            "POST",
+            "/api/plugins/fliks.fixture/restart",
+            Some(&h.admin),
+            None
+        )
+        .await
+        .0,
+        204
+    );
+    done(s, h).await;
+}
