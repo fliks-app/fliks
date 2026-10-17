@@ -74,9 +74,9 @@ fn build_seed_template(base_tpl: &str, seed: &str) {
     psql(&["-d", &name], Some(&delta));
 }
 
-/// Waits until the previous scenario left nothing running (activity registry, stub requests in
-/// flight, queries on the scenario DB), stable over two polls, so detached work cannot hit the next reset.
-async fn await_idle(ctx: &Ctx, db: &str, stub: Option<&str>) {
+/// Waits until nothing runs (activity registry, stub requests in flight, queries on the scenario DB),
+/// stable over two polls, so detached work cannot hit the next reset; `until_busy` waits for the opposite.
+async fn await_idle(ctx: &Ctx, db: &str, stub: Option<&str>, until_busy: bool) {
     let probe = format!(
         "SELECT count(*) FROM pg_stat_activity WHERE datname = '{db}' AND state <> 'idle' AND pid <> pg_backend_pid()"
     );
@@ -93,7 +93,7 @@ async fn await_idle(ctx: &Ctx, db: &str, stub: Option<&str>) {
     let (mut calm, mut polls) = (0, 0);
     while calm < 2 {
         polls += 1;
-        assert!(polls < 300, "target still busy after 15s");
+        assert!(polls < 300, "no state change of the target after 15s");
         let running = get(
             format!("{}/api/system/activity", ctx.target),
             ctx.tokens.get("admin"),
@@ -111,7 +111,12 @@ async fn await_idle(ctx: &Ctx, db: &str, stub: Option<&str>) {
             .trim()
             .parse::<u64>()
             .unwrap_or(0);
-        if running + inflight + queries == 0 {
+        let busy = running + inflight + queries > 0;
+        if until_busy {
+            if busy {
+                return;
+            }
+        } else if !busy {
             calm += 1;
         } else {
             calm = 0;
@@ -340,6 +345,8 @@ struct Resp {
     status: u16,
     headers: Map<String, Value>,
     body: Value,
+    /// SSE steps: each `after` sub-step with the response it got.
+    after: Vec<(Value, Option<Resp>)>,
 }
 
 struct Ctx {
@@ -374,6 +381,23 @@ async fn send(ctx: &Ctx, step: &Value, vars: &HashMap<String, Value>) -> Result<
             status: 200,
             headers: Map::new(),
             body: Value::Null,
+            after: vec![],
+        });
+    }
+    if let Some(w) = step["wait"].as_str() {
+        let db = env("PARITY_DB", "fliks_parity");
+        await_idle(
+            ctx,
+            &db,
+            Some(&env("PARITY_STUB", "http://127.0.0.1:4890")),
+            w == "busy",
+        )
+        .await;
+        return Ok(Resp {
+            status: 200,
+            headers: Map::new(),
+            body: Value::Null,
+            after: vec![],
         });
     }
     let mut path = step["path"]
@@ -471,6 +495,7 @@ async fn send(ctx: &Ctx, step: &Value, vars: &HashMap<String, Value>) -> Result<
             )
         })
         .collect();
+    let mut done = vec![];
     let body = match sse {
         Some(cfg) if status == 200 => {
             let want = cfg["events"].as_u64().unwrap_or(1) as usize;
@@ -487,7 +512,8 @@ async fn send(ctx: &Ctx, step: &Value, vars: &HashMap<String, Value>) -> Result<
                         // sub-steps run once the stream is open, so the events they cause are observed
                         if let Some(steps) = after.take() {
                             for s in steps {
-                                let _ = Box::pin(send(ctx, &s, vars)).await;
+                                let r = Box::pin(send(ctx, &s, vars)).await.ok();
+                                done.push((s, r));
                             }
                         }
                         if events.len() >= want {
@@ -516,6 +542,7 @@ async fn send(ctx: &Ctx, step: &Value, vars: &HashMap<String, Value>) -> Result<
         status,
         headers,
         body,
+        after: done,
     })
 }
 
@@ -627,6 +654,63 @@ fn uses_stub(sc: &Value) -> bool {
         .is_some_and(|s| s.iter().any(|st| st["stub"].as_bool() == Some(true)))
 }
 
+/// Differences between a step's `expect` and its response (status, body under the ignore rules, headers).
+fn verdict(
+    step: &Value,
+    resp: &Resp,
+    ignore: &[Vec<Seg>],
+    unordered: &[Vec<Seg>],
+    strict: bool,
+) -> Vec<String> {
+    let step_ignore: Vec<Vec<Seg>> = step["ignore"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|p| p.as_str())
+        .map(parse_path)
+        .collect();
+    let ignored = || ignore.iter().chain(&step_ignore);
+    let mut body = resp.body.clone();
+    ignored().for_each(|p| remove(&mut body, p));
+    if step["ignoreBody"].as_bool() == Some(true) {
+        body = Value::Null;
+    }
+    let ex = &step["expect"];
+    let mut d = vec![];
+    if ex["status"].as_u64() != Some(resp.status as u64) {
+        d.push(format!(
+            "status: expected {} got {}",
+            ex["status"], resp.status
+        ));
+    }
+    match (&ex["body"], ex["status"].as_u64().unwrap_or(0) >= 400) {
+        (Value::Object(e), true) if e.contains_key("statusCode") => {
+            diff_error(e, &body, strict, &mut d)
+        }
+        (Value::Null, _) => {
+            if !body.is_null() {
+                d.push(format!("/: expected empty body got {}", show(&body)));
+            }
+        }
+        (e, _) => {
+            let (mut e, mut b) = (e.clone(), body.clone());
+            ignored().for_each(|p| remove(&mut e, p));
+            unordered.iter().for_each(|p| {
+                sort_at(&mut e, p);
+                sort_at(&mut b, p);
+            });
+            diff("", &e, &b, &mut d)
+        }
+    }
+    for (k, ev) in ex["headers"].as_object().into_iter().flatten() {
+        let got = resp.headers.get(k).unwrap_or(&Value::Null);
+        if ev != got {
+            d.push(format!("header {k}: expected {ev} got {got}"));
+        }
+    }
+    d
+}
+
 /// Runs one scenario; in record mode fills each step's `expect` from the live response.
 async fn run(ctx: &Ctx, sc: &mut Value, record: bool) -> Vec<String> {
     fs_setup(sc);
@@ -726,37 +810,18 @@ async fn run(ctx: &Ctx, sc: &mut Value, record: bool) -> Vec<String> {
             sc["steps"][i]["expect"] = ex.into();
             continue;
         }
-        let ex = &step["expect"];
-        let mut d = vec![];
-        if ex["status"].as_u64() != Some(resp.status as u64) {
-            d.push(format!(
-                "status: expected {} got {}",
-                ex["status"], resp.status
-            ));
-        }
-        match (&ex["body"], ex["status"].as_u64().unwrap_or(0) >= 400) {
-            (Value::Object(e), true) if e.contains_key("statusCode") => {
-                diff_error(e, &body, strict, &mut d)
-            }
-            (Value::Null, _) => {
-                if !body.is_null() {
-                    d.push(format!("/: expected empty body got {}", show(&body)));
+        let mut d = verdict(&step, &resp, &ignore, &unordered, strict);
+        // an `after` sub-step with an expectation is asserted too; `status: 0` leaves it unchecked
+        for (sub, r) in &resp.after {
+            if sub["expect"]["status"].as_u64().is_some_and(|s| s != 0) {
+                match r {
+                    Some(r) => d.extend(
+                        verdict(sub, r, &ignore, &unordered, strict)
+                            .into_iter()
+                            .map(|m| format!("after {}: {m}", sub["path"])),
+                    ),
+                    None => d.push(format!("after {}: request failed", sub["path"])),
                 }
-            }
-            (e, _) => {
-                let (mut e, mut b) = (e.clone(), body.clone());
-                ignored().for_each(|p| remove(&mut e, p));
-                unordered.iter().for_each(|p| {
-                    sort_at(&mut e, p);
-                    sort_at(&mut b, p);
-                });
-                diff("", &e, &b, &mut d)
-            }
-        }
-        for (k, ev) in ex["headers"].as_object().into_iter().flatten() {
-            let got = resp.headers.get(k).unwrap_or(&Value::Null);
-            if ev != got {
-                d.push(format!("header {k}: expected {ev} got {got}"));
             }
         }
         errs.extend(d.into_iter().map(|m| format!("step {i}: {m}")));
@@ -844,6 +909,7 @@ async fn parity() {
                 &ctx,
                 &db,
                 Some(&env("PARITY_STUB", "http://127.0.0.1:4890")),
+                false,
             )
             .await;
         }

@@ -45,7 +45,10 @@
           {
             "as": "admin",
             "expect": {
-              "status": 0
+              "status": 201,
+              "body": {
+                "ok": true
+              }
             },
             "method": "POST",
             "path": "/api/media-servers/6/import-watch-history"

@@ -84,12 +84,10 @@
     },
     {
       "as": "anon",
+      "wait": "busy",
       "expect": {
         "status": 200
-      },
-      "method": "GET",
-      "path": "/",
-      "sleepMs": 600
+      }
     },
     {
       "as": "admin",
@@ -106,13 +104,10 @@
     },
     {
       "as": "anon",
+      "wait": "idle",
       "expect": {
         "status": 200
-      },
-      "method": "POST",
-      "path": "/_mode",
-      "sleepMs": 3500,
-      "stub": true
+      }
     },
     {
       "as": "admin",
@@ -132,7 +127,12 @@
         "status": 200
       },
       "method": "GET",
-      "path": "/api/commands?limit=5"
+      "path": "/api/commands?limit=5",
+      "poll": {
+        "path": "$.data[0].status",
+        "until": "completed",
+        "timeoutMs": 10000
+      }
     },
     {
       "as": "anon",

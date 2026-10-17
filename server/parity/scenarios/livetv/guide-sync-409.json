@@ -48,12 +48,10 @@
     },
     {
       "as": "anon",
+      "wait": "busy",
       "expect": {
         "status": 200
-      },
-      "method": "GET",
-      "path": "/",
-      "sleepMs": 600
+      }
     },
     {
       "as": "admin",
@@ -70,13 +68,10 @@
     },
     {
       "as": "anon",
+      "wait": "idle",
       "expect": {
         "status": 200
-      },
-      "method": "POST",
-      "path": "/_mode",
-      "sleepMs": 3500,
-      "stub": true
+      }
     },
     {
       "as": "anon",

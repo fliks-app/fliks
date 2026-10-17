@@ -7,6 +7,7 @@ import gzip
 import json
 import subprocess
 import sys
+import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
@@ -16,6 +17,9 @@ BASE = f"http://127.0.0.1:{PORT}"
 ETAG = '"v1"'
 # set by `POST /_mode`: `shrunk` serves the short playlist, `delay` holds playlists and guides back.
 MODE = {"shrunk": False, "delay": 0.0}
+# requests being served, read by the runner's idle wait (`GET /__inflight`)
+INFLIGHT = [0]
+LOCK = threading.Lock()
 ENTRY = '#EXTINF:-1 tvg-id="{tvg}" tvg-name="{name}" tvg-logo="{base}/logo/{n}.png" tvg-chno="{n}" group-title="{group}",{name}'
 PNG = bytes.fromhex(
     "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360000002000001e221bc330000000049454e44ae426082"
@@ -123,14 +127,31 @@ class Handler(BaseHTTPRequestHandler):
     def as_json(self, v):
         self.reply(200, json.dumps(v).encode(), {"Content-Type": "application/json"})
 
+    def counted(self, handle):
+        with LOCK:
+            INFLIGHT[0] += 1
+        try:
+            handle()
+        finally:
+            with LOCK:
+                INFLIGHT[0] -= 1
+
     def do_POST(self):
+        self.counted(self.post)
+
+    def do_GET(self):
+        if self.path == "/__inflight":
+            return self.as_json({"inflight": INFLIGHT[0]})
+        self.counted(self.get)
+
+    def post(self):
         """`/_mode`: the scenarios flip the provider between steps."""
         n = int(self.headers.get("Content-Length") or 0)
         body = json.loads(self.rfile.read(n) or b"{}")
         MODE.update({"shrunk": False, "delay": 0.0, **body})
         self.as_json(MODE)
 
-    def do_GET(self):
+    def get(self):
         u = urlparse(self.path)
         q = {k: v[0] for k, v in parse_qs(u.query).items()}
         p = u.path
