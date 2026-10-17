@@ -373,10 +373,11 @@ pub async fn open(
         st,
         token: token.clone(),
     };
-    let answer = st.engine.open_live(&req).await;
-    guard.token.clear();
-    let res = match answer {
-        Ok(r) => r,
+    let res = match st.engine.open_live(&req).await {
+        Ok(r) => {
+            guard.token.clear();
+            r
+        }
         Err(e) => return Err(open_failed(st, e, &token, channel_name, &streams, verdict).await),
     };
     let token_now = res.capacity_token.clone();
