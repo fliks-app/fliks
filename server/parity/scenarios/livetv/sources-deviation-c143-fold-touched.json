@@ -8,7 +8,7 @@
     "$..lastSeenAt",
     "$..guideUrls"
   ],
-  "name": "sources-deviation-c-s7-2-fold-touched",
+  "name": "sources-deviation-c143-fold-touched",
   "seed": "livetv",
   "steps": [
     {

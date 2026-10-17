@@ -1,6 +1,5 @@
-//! The XMLTV feed as a stream (`livetv-guide.md` rules 12, 13, 26): the network body feeds a blocking
-//! reader through a bounded channel, the reader's elements come back through another, so memory stays
-//! bounded whatever the file size.
+//! The XMLTV feed as a stream (`livetv-guide.md` rules 12, 13, 26): bounded channels in and out of a
+//! blocking reader, so memory stays flat whatever the file size.
 use bytes::Bytes;
 use flate2::read::MultiGzDecoder;
 use fliks_domain::livetv::xmltv::{self, Channel, Options, Programme, Sink};

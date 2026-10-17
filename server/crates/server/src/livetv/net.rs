@@ -1,6 +1,5 @@
-//! Outbound requests of live TV (`livetv-sources.md` rules 14, 19, 35; `livetv-guide.md` rule 10): one
-//! identity, conditional validators, a read-idle timeout, a redirect limit and a body cap. Errors never
-//! carry the request URL, its userinfo or its query (F71).
+//! Outbound requests of live TV: one identity, validators, idle timeout, redirect limit, body cap.
+//! Errors never carry the request URL, userinfo or query (F71).
 use crate::vetted;
 use reqwest::{
     Client, ClientBuilder, Response, StatusCode, Url,
@@ -224,8 +223,12 @@ pub async fn text(reply: Reply, idle: Duration) -> Result<String, String> {
         }
         body.extend_from_slice(&chunk);
     }
-    let s = String::from_utf8_lossy(&body);
-    Ok(s.strip_prefix('\u{feff}').unwrap_or(&s).to_owned())
+    let mut s = String::from_utf8(body)
+        .unwrap_or_else(|e| String::from_utf8_lossy(e.as_bytes()).into_owned());
+    if s.starts_with('\u{feff}') {
+        s.drain(..3);
+    }
+    Ok(s)
 }
 
 /// A JSON answer; a body that is not JSON stays a string, as axios hands it over.

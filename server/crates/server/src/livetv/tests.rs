@@ -1249,6 +1249,26 @@ mod sessions {
     }
 
     #[sqlx::test(migrations = false)]
+    async fn an_open_dropped_mid_call_gives_its_hold_back(pool: PgPool) {
+        let w = world(pool).await;
+        let c = &w.c;
+        c.fake.script(
+            "POST",
+            "/v1/live",
+            vec![crate::engine::testkit::slow(
+                2000,
+                ok(open_answer("sid-1", SELF, "remux")),
+            )],
+        );
+        let dropped = tokio::time::timeout(Duration::from_millis(300), open(&w, w.a, "A")).await;
+        assert!(dropped.is_err(), "the open is still waiting for the engine");
+        assert!(
+            session::peek(&c.st).1.is_empty(),
+            "the pending hold went with the cancelled request"
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
     async fn the_default_agent_goes_out_when_nobody_sets_one(pool: PgPool) {
         let w = world(pool).await;
         w.c.fake.script(

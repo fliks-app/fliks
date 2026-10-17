@@ -369,7 +369,13 @@ pub async fn open(
             ("device".to_owned(), device.clone().unwrap_or_default()),
         ]),
     };
-    let res = match st.engine.open_live(&req).await {
+    let mut guard = PendingHold {
+        st,
+        token: token.clone(),
+    };
+    let answer = st.engine.open_live(&req).await;
+    guard.token.clear();
+    let res = match answer {
         Ok(r) => r,
         Err(e) => return Err(open_failed(st, e, &token, channel_name, &streams, verdict).await),
     };
@@ -414,6 +420,20 @@ pub async fn open(
         dvr_window_seconds: res.dvr_window_seconds,
         segment_seconds: res.segment_seconds,
     })
+}
+
+/// Removes a hold whose open was cancelled before the engine answered (a dropped request).
+struct PendingHold<'a> {
+    st: &'a AppState,
+    token: String,
+}
+
+impl Drop for PendingHold<'_> {
+    fn drop(&mut self) {
+        if !self.token.is_empty() {
+            self.st.livetv.live.lock().holds.remove(&self.token);
+        }
+    }
 }
 
 /// The error of a refused open, after giving the hold back (rule 12).

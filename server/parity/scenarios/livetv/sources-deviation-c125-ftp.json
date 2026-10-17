@@ -6,7 +6,7 @@
     "$..lastSyncAt",
     "$..logoPath"
   ],
-  "name": "sources-deviation-c78-ftp",
+  "name": "sources-deviation-c125-ftp",
   "seed": "livetv",
   "steps": [
     {

@@ -208,7 +208,13 @@ impl Engine {
             None => StreamingConfig::default(),
         };
         let livetv = match self.db() {
-            Some(db) => livetv(&store::values(db, &LIVETV_KEYS).await?),
+            Some(db) => match store::values(db, &LIVETV_KEYS).await {
+                Ok(raw) => livetv(&raw),
+                Err(e) => {
+                    tracing::warn!("live TV settings unreadable, engine defaults used: {e}");
+                    LiveTvConfig::default()
+                }
+            },
             None => LiveTvConfig::default(),
         };
         self.inner

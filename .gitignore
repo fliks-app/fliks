@@ -95,3 +95,4 @@ macos/build/
 macos/.build/
 macos/*.xcodeproj/xcuserdata/
 macos/*.xcodeproj/project.xcworkspace/xcuserdata/
+__pycache__/
