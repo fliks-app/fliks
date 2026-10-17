@@ -114,22 +114,14 @@
     },
     {
       "as": "anon",
-      "expect": {
-        "status": 200
-      },
-      "method": "GET",
-      "path": "/",
-      "sleepMs": 800
-    },
-    {
-      "as": "anon",
       "baseEnv": "PARITY_FRONT",
       "expect": {
         "status": 403
       },
       "ignoreBody": true,
       "method": "GET",
-      "path": "{url}"
+      "path": "{url}",
+      "retryMs": 10000
     },
     {
       "as": "user",

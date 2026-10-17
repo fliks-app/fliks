@@ -68,15 +68,6 @@
       "path": "/api/livetv/channels/3/play"
     },
     {
-      "as": "anon",
-      "expect": {
-        "status": 200
-      },
-      "method": "GET",
-      "path": "/",
-      "sleepMs": 2500
-    },
-    {
       "as": "admin",
       "expect": {
         "body": {
@@ -191,7 +182,8 @@
         "status": 200
       },
       "method": "GET",
-      "path": "/api/livetv/admin/channels?query=C"
+      "path": "/api/livetv/admin/channels?query=C",
+      "retryMs": 10000
     },
     {
       "as": "user",

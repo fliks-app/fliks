@@ -61,15 +61,6 @@
       "path": "/api/livetv/channels/4/play"
     },
     {
-      "as": "anon",
-      "expect": {
-        "status": 200
-      },
-      "method": "GET",
-      "path": "/",
-      "sleepMs": 800
-    },
-    {
       "as": "admin",
       "expect": {
         "body": {
@@ -184,7 +175,8 @@
         "status": 200
       },
       "method": "GET",
-      "path": "/api/livetv/admin/channels?query=D"
+      "path": "/api/livetv/admin/channels?query=D",
+      "retryMs": 10000
     },
     {
       "as": "user",
@@ -198,15 +190,6 @@
       },
       "method": "POST",
       "path": "/api/livetv/channels/4/play"
-    },
-    {
-      "as": "anon",
-      "expect": {
-        "status": 200
-      },
-      "method": "GET",
-      "path": "/",
-      "sleepMs": 800
     },
     {
       "as": "admin",
@@ -323,7 +306,8 @@
         "status": 200
       },
       "method": "GET",
-      "path": "/api/livetv/admin/channels?query=D"
+      "path": "/api/livetv/admin/channels?query=D",
+      "retryMs": 10000
     }
   ]
 }

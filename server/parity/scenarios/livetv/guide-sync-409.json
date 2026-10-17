@@ -51,7 +51,8 @@
       "wait": "busy",
       "expect": {
         "status": 200
-      }
+      },
+      "note": "needs the fixture delay set above: without it the sync can finish before this wait sees it busy"
     },
     {
       "as": "admin",

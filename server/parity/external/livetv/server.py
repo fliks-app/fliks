@@ -128,6 +128,9 @@ class Handler(BaseHTTPRequestHandler):
         self.reply(200, json.dumps(v).encode(), {"Content-Type": "application/json"})
 
     def counted(self, handle):
+        # long-lived media streams are not work in flight
+        if self.path.startswith(("/live/", "/stream/", "/direct/", "/ua-only")):
+            return handle()
         with LOCK:
             INFLIGHT[0] += 1
         try:

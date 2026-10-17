@@ -74,52 +74,56 @@ fn build_seed_template(base_tpl: &str, seed: &str) {
     psql(&["-d", &name], Some(&delta));
 }
 
+/// One probe of the idle wait: any failure to read it is a panic, never "idle".
+async fn probe(ctx: &Ctx, url: String, token: Option<&String>, field: &str) -> u64 {
+    let mut req = ctx.http.get(&url);
+    if let Some(t) = token {
+        req = req.bearer_auth(t);
+    }
+    let r = req.send().await.unwrap_or_else(|e| panic!("{url}: {e}"));
+    assert!(r.status().is_success(), "{url}: status {}", r.status());
+    let v: Value = r.json().await.unwrap_or_else(|e| panic!("{url}: {e}"));
+    v[field]
+        .as_u64()
+        .unwrap_or_else(|| panic!("{url}: no `{field}` in {v}"))
+}
+
 /// Waits until nothing runs (activity registry, stub requests in flight, queries on the scenario DB),
 /// stable over two polls, so detached work cannot hit the next reset; `until_busy` waits for the opposite.
 async fn await_idle(ctx: &Ctx, db: &str, stub: Option<&str>, until_busy: bool) {
-    let probe = format!(
-        "SELECT count(*) FROM pg_stat_activity WHERE datname = '{db}' AND state <> 'idle' AND pid <> pg_backend_pid()"
+    let query = format!(
+        "SELECT count(*) FROM pg_stat_activity WHERE datname = '{db}' AND backend_type = 'client backend' \
+         AND state <> 'idle' AND pid <> pg_backend_pid()"
     );
-    let get = async |url: String, token: Option<&String>| -> Value {
-        let mut req = ctx.http.get(url);
-        if let Some(t) = token {
-            req = req.bearer_auth(t);
-        }
-        match req.send().await {
-            Ok(r) => r.json().await.unwrap_or_default(),
-            Err(_) => Value::Null,
-        }
-    };
-    let (mut calm, mut polls) = (0, 0);
+    let deadline = std::time::Instant::now() + Duration::from_secs(15);
+    let mut calm = 0;
     while calm < 2 {
-        polls += 1;
-        assert!(polls < 300, "no state change of the target after 15s");
-        let running = get(
+        assert!(
+            std::time::Instant::now() < deadline,
+            "target still busy after 15s"
+        );
+        let admin = ctx.tokens.get("admin");
+        let mut busy = probe(
+            ctx,
             format!("{}/api/system/activity", ctx.target),
-            ctx.tokens.get("admin"),
+            admin,
+            "total",
         )
-        .await["total"]
-            .as_u64()
-            .unwrap_or(0);
-        let inflight = match stub {
-            Some(u) => get(format!("{u}/__inflight"), None).await["inflight"]
-                .as_u64()
-                .unwrap_or(0),
-            None => 0,
-        };
-        let queries = psql(&["-d", "postgres", "-At", "-c", &probe], None)
+        .await;
+        if let Some(u) = stub {
+            busy += probe(ctx, format!("{u}/__inflight"), None, "inflight").await;
+        }
+        let q = psql(&["-d", "postgres", "-At", "-c", &query], None);
+        busy += q
             .trim()
             .parse::<u64>()
-            .unwrap_or(0);
-        let busy = running + inflight + queries > 0;
+            .unwrap_or_else(|_| panic!("pg_stat_activity: {q:?}"));
         if until_busy {
-            if busy {
+            if busy > 0 {
                 return;
             }
-        } else if !busy {
-            calm += 1;
         } else {
-            calm = 0;
+            calm = if busy == 0 { calm + 1 } else { 0 };
         }
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
@@ -654,6 +658,53 @@ fn uses_stub(sc: &Value) -> bool {
         .is_some_and(|s| s.iter().any(|st| st["stub"].as_bool() == Some(true)))
 }
 
+/// Step-level `ignore`: paths dropped from that step's body only.
+fn step_ignore(step: &Value) -> Vec<Vec<Seg>> {
+    step["ignore"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|p| p.as_str())
+        .map(parse_path)
+        .collect()
+}
+
+/// The response body as compared: scenario and step ignores applied, `ignoreBody` honoured.
+fn live_body(step: &Value, resp: &Resp, ignore: &[Vec<Seg>]) -> Value {
+    let mut body = resp.body.clone();
+    ignore
+        .iter()
+        .chain(&step_ignore(step))
+        .for_each(|p| remove(&mut body, p));
+    if step["ignoreBody"].as_bool() == Some(true) {
+        body = Value::Null;
+    }
+    body
+}
+
+/// Record mode: the `expect` of a step from its live response.
+fn recorded(step: &Value, resp: &Resp, ignore: &[Vec<Seg>]) -> Value {
+    let mut ex = Map::new();
+    ex.insert("status".into(), resp.status.into());
+    let body = live_body(step, resp, ignore);
+    if !body.is_null() {
+        ex.insert("body".into(), body);
+    }
+    if let Some(h) = step["expect"]["headers"].as_object() {
+        let live: Map<String, Value> = h
+            .keys()
+            .map(|k| {
+                (
+                    k.clone(),
+                    resp.headers.get(k).cloned().unwrap_or(Value::Null),
+                )
+            })
+            .collect();
+        ex.insert("headers".into(), live.into());
+    }
+    ex.into()
+}
+
 /// Differences between a step's `expect` and its response (status, body under the ignore rules, headers).
 fn verdict(
     step: &Value,
@@ -662,19 +713,9 @@ fn verdict(
     unordered: &[Vec<Seg>],
     strict: bool,
 ) -> Vec<String> {
-    let step_ignore: Vec<Vec<Seg>> = step["ignore"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter_map(|p| p.as_str())
-        .map(parse_path)
-        .collect();
+    let step_ignore = step_ignore(step);
     let ignored = || ignore.iter().chain(&step_ignore);
-    let mut body = resp.body.clone();
-    ignored().for_each(|p| remove(&mut body, p));
-    if step["ignoreBody"].as_bool() == Some(true) {
-        body = Value::Null;
-    }
+    let body = live_body(step, resp, ignore);
     let ex = &step["expect"];
     let mut d = vec![];
     if ex["status"].as_u64() != Some(resp.status as u64) {
@@ -768,19 +809,17 @@ async fn run(ctx: &Ctx, sc: &mut Value, record: bool) -> Vec<String> {
                 }
             }
         }
-        // step-level `ignore`: paths dropped from this step's body only
-        let step_ignore: Vec<Vec<Seg>> = step["ignore"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter_map(|p| p.as_str())
-            .map(parse_path)
-            .collect();
-        let ignored = || ignore.iter().chain(&step_ignore);
-        let mut body = resp.body.clone();
-        ignored().for_each(|p| remove(&mut body, p));
-        if step["ignoreBody"].as_bool() == Some(true) {
-            body = Value::Null;
+        // `retryMs`: repeat the step until its `expect` holds, at most that long, then fail on the last diff
+        if let (Some(ms), false) = (step["retryMs"].as_u64(), record) {
+            let started = std::time::Instant::now();
+            while !verdict(&step, &resp, &ignore, &unordered, strict).is_empty()
+                && started.elapsed() < Duration::from_millis(ms)
+            {
+                tokio::time::sleep(Duration::from_millis(100)).await;
+                if let Ok(r) = send(ctx, &step, &vars).await {
+                    resp = r;
+                }
+            }
         }
         results["steps"].as_array_mut().unwrap().push(json!({
             "status": resp.status, "headers": resp.headers, "body": resp.body }));
@@ -790,28 +829,11 @@ async fn run(ctx: &Ctx, sc: &mut Value, record: bool) -> Vec<String> {
             }
         }
         if record {
-            let mut ex = Map::new();
-            ex.insert("status".into(), resp.status.into());
-            if !body.is_null() {
-                ex.insert("body".into(), body);
-            }
-            if let Some(h) = step["expect"]["headers"].as_object() {
-                let live: Map<String, Value> = h
-                    .keys()
-                    .map(|k| {
-                        (
-                            k.clone(),
-                            resp.headers.get(k).cloned().unwrap_or(Value::Null),
-                        )
-                    })
-                    .collect();
-                ex.insert("headers".into(), live.into());
-            }
-            sc["steps"][i]["expect"] = ex.into();
+            sc["steps"][i]["expect"] = recorded(&step, &resp, &ignore);
             continue;
         }
         let mut d = verdict(&step, &resp, &ignore, &unordered, strict);
-        // an `after` sub-step with an expectation is asserted too; `status: 0` leaves it unchecked
+        // an `after` sub-step with an expectation is asserted too; `status: 0` or none leaves it unchecked
         for (sub, r) in &resp.after {
             if sub["expect"]["status"].as_u64().is_some_and(|s| s != 0) {
                 match r {
