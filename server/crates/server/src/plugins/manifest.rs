@@ -174,9 +174,12 @@ fn route_array(v: &Value) -> bool {
     })
 }
 
+/// Rule 3 ceiling of `memoryMb`.
+const MEMORY_MB_MAX: f64 = 1024.0;
+
 fn process_fields(j: &Value) -> bool {
     j["runtime"] == "wasm"
-        && j["memoryMb"].is_number()
+        && j["memoryMb"].as_f64().is_some_and(|m| m <= MEMORY_MB_MAX)
         && string_record(&j["files"])
         && j["database"].is_object()
         && j["database"]["schema"].is_boolean()
@@ -574,6 +577,11 @@ mod tests {
             p[k] = v;
         }
         assert!(parse(&b(&p)).is_some());
+        p["memoryMb"] = json!(1024);
+        assert!(parse(&b(&p)).is_some());
+        p["memoryMb"] = json!(1025);
+        assert!(parse(&b(&p)).is_none());
+        p["memoryMb"] = json!(64);
         p["network"] = json!({"internal": true});
         assert!(parse(&b(&p)).is_some());
         p["network"] = json!({"internal": false});
