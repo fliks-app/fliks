@@ -37,9 +37,7 @@
       "expect": {
         "status": 200
       },
-      "method": "GET",
-      "path": "/",
-      "sleepMs": 2500
+      "wait": "idle"
     },
     {
       "as": "user",

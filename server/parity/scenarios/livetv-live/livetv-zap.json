@@ -111,7 +111,8 @@
       },
       "method": "GET",
       "path": "/",
-      "sleepMs": 4000
+      "sleepMs": 4000,
+      "note": "release grace: livetv_channel_idle_seconds 2 s + livetv_slot_release_seconds 1 s, plus a 1 s margin"
     }
   ]
 }

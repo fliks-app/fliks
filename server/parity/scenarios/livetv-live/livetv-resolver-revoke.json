@@ -82,12 +82,10 @@
     },
     {
       "as": "anon",
+      "wait": "idle",
       "expect": {
         "status": 200
-      },
-      "method": "GET",
-      "path": "/",
-      "sleepMs": 1500
+      }
     },
     {
       "as": "anon",
@@ -97,7 +95,8 @@
       },
       "ignoreBody": true,
       "method": "GET",
-      "path": "{url}"
+      "path": "{url}",
+      "retryMs": 10000
     }
   ]
 }

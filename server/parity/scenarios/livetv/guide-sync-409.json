@@ -48,12 +48,11 @@
     },
     {
       "as": "anon",
+      "wait": "busy",
       "expect": {
         "status": 200
       },
-      "method": "GET",
-      "path": "/",
-      "sleepMs": 600
+      "note": "needs the fixture delay set above: without it the sync can finish before this wait sees it busy"
     },
     {
       "as": "admin",
@@ -70,13 +69,10 @@
     },
     {
       "as": "anon",
+      "wait": "idle",
       "expect": {
         "status": 200
-      },
-      "method": "POST",
-      "path": "/_mode",
-      "sleepMs": 3500,
-      "stub": true
+      }
     },
     {
       "as": "anon",
