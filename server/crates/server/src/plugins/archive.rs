@@ -96,6 +96,12 @@ fn u64_at(b: &[u8], i: usize) -> Option<u64> {
     Some(u64::from_le_bytes(b.get(i..i + 8)?.try_into().ok()?))
 }
 
+/// `len` bytes at a file-controlled offset; an offset past `usize` or an overflowing end is `None`.
+fn span(b: &[u8], at: u64, len: usize) -> Option<&[u8]> {
+    let at = usize::try_from(at).ok()?;
+    b.get(at..at.checked_add(len)?)
+}
+
 const EOF: &str = "unexpected EOF";
 
 /// The opened central directory: `(entry count, comment, cd offset)`.
@@ -121,8 +127,8 @@ fn open(buf: &[u8]) -> Result<(usize, String, u64), String> {
             }
             let comment = decode(&buf[at + 22..], false);
             if i >= 20 && u32_at(buf, at - 20) == Some(0x0706_4b50) {
-                let off = u64_at(buf, at - 12).ok_or(EOF)? as usize;
-                let rec = buf.get(off..off + 56).ok_or(EOF)?;
+                let off = u64_at(buf, at - 12).ok_or(EOF)?;
+                let rec = span(buf, off, 56).ok_or(EOF)?;
                 if u32_at(rec, 0) != Some(0x0606_4b50) {
                     return Err("invalid zip64 end of central directory record signature".into());
                 }
@@ -149,8 +155,8 @@ fn open(buf: &[u8]) -> Result<(usize, String, u64), String> {
 
 /// The next central-directory entry at `*cursor`, with yauzl's own per-entry errors.
 fn read_entry(buf: &[u8], cursor: &mut u64) -> Result<Entry, String> {
+    let h = span(buf, *cursor, 46).ok_or(EOF)?;
     let at = *cursor as usize;
-    let h = buf.get(at..at + 46).ok_or(EOF)?;
     let sig = u32_at(h, 0).unwrap_or(0);
     if sig != 0x0201_4b50 {
         return Err(format!(
@@ -217,8 +223,8 @@ fn read_entry(buf: &[u8], cursor: &mut u64) -> Result<Entry, String> {
         take(&mut local_offset, "relative header offset")?;
     }
     if method == 0 {
-        let expected = uncompressed + if flags & 1 != 0 { 12 } else { 0 };
-        if compressed != expected {
+        let expected = uncompressed.checked_add(if flags & 1 != 0 { 12 } else { 0 });
+        if expected != Some(compressed) {
             return Err(format!(
                 "compressed/uncompressed size mismatch for stored file: {compressed} != {uncompressed}"
             ));
@@ -241,26 +247,28 @@ fn read_data(buf: &[u8], e: &Entry) -> Result<Vec<u8>, String> {
     if e.method != 0 && e.method != 8 {
         return Err(format!("unsupported compression method: {}", e.method));
     }
+    let h = span(buf, e.local_offset, 30).ok_or(EOF)?;
     let at = e.local_offset as usize;
-    let h = buf.get(at..at + 30).ok_or(EOF)?;
     let sig = u32_at(h, 0).unwrap_or(0);
     if sig != 0x0403_4b50 {
         return Err(format!("invalid local file header signature: 0x{sig:x}"));
     }
     let start = at + 30 + u16_at(h, 26).unwrap_or(0) as usize + u16_at(h, 28).unwrap_or(0) as usize;
-    let end = start as u64 + e.compressed;
-    if end > buf.len() as u64 {
+    let end = (start as u64)
+        .checked_add(e.compressed)
+        .filter(|&end| end <= buf.len() as u64);
+    let Some(end) = end else {
         return Err(format!(
             "file data overflows file bounds: {start} + {} > {}",
             e.compressed,
             buf.len()
         ));
-    }
+    };
     let data = &buf[start..end as usize];
     if e.method == 0 {
         return Ok(data.to_vec());
     }
-    let limit = e.uncompressed as usize + 1;
+    let limit = usize::try_from(e.uncompressed).map_or(usize::MAX, |u| u.saturating_add(1));
     let out = miniz_oxide::inflate::decompress_to_vec_with_limit(data, limit)
         .map_err(|e| format!("invalid deflate data: {:?}", e.status))?;
     if out.len() as u64 > e.uncompressed {
@@ -641,6 +649,31 @@ mod tests {
             code(&pack(&[("plugin.json", &big)])),
             "PLUGIN_MANIFEST_TOO_LARGE"
         );
+    }
+
+    #[test]
+    fn zip64_offsets_near_the_top_refuse() {
+        let zip64 = |record: Option<u64>, locator_off: u64| {
+            let mut b = pack(&[("plugin.json", b"{}")]);
+            let eocd = b.len() - 22;
+            let mut tail = vec![];
+            let off = record.map_or(locator_off, |cd| {
+                let mut r = vec![0u8; 56];
+                r[..4].copy_from_slice(&0x0606_4b50u32.to_le_bytes());
+                r[32..40].copy_from_slice(&1u64.to_le_bytes());
+                r[48..].copy_from_slice(&cd.to_le_bytes());
+                tail.extend(r);
+                eocd as u64
+            });
+            tail.extend(0x0706_4b50u32.to_le_bytes());
+            tail.extend(0u32.to_le_bytes());
+            tail.extend(off.to_le_bytes());
+            tail.extend(1u32.to_le_bytes());
+            b.splice(eocd..eocd, tail);
+            code(&b)
+        };
+        assert_eq!(zip64(None, u64::MAX - 10), "PLUGIN_MALFORMED_ARCHIVE");
+        assert_eq!(zip64(Some(u64::MAX - 10), 0), "PLUGIN_MALFORMED_ARCHIVE");
     }
 
     #[test]
