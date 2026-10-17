@@ -288,6 +288,20 @@
         }
       }
     },
+    "/api/counts": {
+      "get": {
+        "tags": [
+          "media"
+        ],
+        "summary": "`counts.md`: the sidebar counters; each degrades to empty without its ability, never a 403.",
+        "operationId": "sidebar_counts",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/custom-formats": {
       "get": {
         "tags": [
@@ -2793,6 +2807,234 @@
         }
       }
     },
+    "/api/plugins": {
+      "get": {
+        "tags": [],
+        "operationId": "list",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/plugins/import/confirm": {
+      "post": {
+        "tags": [],
+        "operationId": "import_confirm",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/plugins/import/inspect": {
+      "post": {
+        "tags": [],
+        "operationId": "import_inspect",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/plugins/metrics": {
+      "get": {
+        "tags": [],
+        "operationId": "metrics",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/plugins/sources": {
+      "get": {
+        "tags": [],
+        "operationId": "sources_list",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "post": {
+        "tags": [],
+        "operationId": "sources_create",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/plugins/sources/{id}": {
+      "put": {
+        "tags": [],
+        "operationId": "sources_update",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "delete": {
+        "tags": [],
+        "operationId": "sources_delete",
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/plugins/sources/{id}/catalog": {
+      "get": {
+        "tags": [],
+        "operationId": "sources_catalog",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/plugins/sources/{id}/inspect": {
+      "post": {
+        "tags": [],
+        "operationId": "sources_inspect",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/plugins/sources/{id}/refresh": {
+      "post": {
+        "tags": [],
+        "operationId": "sources_refresh",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/plugins/ui": {
+      "get": {
+        "tags": [],
+        "operationId": "ui",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/plugins/{pluginId}": {
+      "delete": {
+        "tags": [],
+        "operationId": "uninstall",
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/plugins/{pluginId}/disable": {
+      "post": {
+        "tags": [],
+        "operationId": "disable",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/plugins/{pluginId}/enable": {
+      "post": {
+        "tags": [],
+        "operationId": "enable",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/plugins/{pluginId}/events/test": {
+      "post": {
+        "tags": [],
+        "operationId": "events_test",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/plugins/{pluginId}/export": {
+      "get": {
+        "tags": [],
+        "operationId": "export",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/plugins/{pluginId}/import": {
+      "post": {
+        "tags": [],
+        "operationId": "import",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/plugins/{pluginId}/logo": {
+      "get": {
+        "tags": [],
+        "operationId": "logo",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/plugins/{pluginId}/restart": {
+      "post": {
+        "tags": [],
+        "operationId": "restart",
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/plugins/{pluginId}/{*splat}": {
+      "options": {
+        "tags": [],
+        "summary": "Rules 36-39: route, policy, object guard, live check, then the guest's `http` export.",
+        "operationId": "proxy",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/profiles/language": {
       "get": {
         "tags": [
@@ -3314,6 +3556,43 @@
           "settings"
         ],
         "operationId": "put_one",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/setup-checklist": {
+      "get": {
+        "tags": [
+          "crate::settings::checklist"
+        ],
+        "operationId": "list",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/setup-checklist/{key}/dismiss": {
+      "post": {
+        "tags": [
+          "crate::settings::checklist"
+        ],
+        "operationId": "dismiss",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "crate::settings::checklist"
+        ],
+        "operationId": "undismiss",
         "responses": {
           "200": {
             "description": ""
