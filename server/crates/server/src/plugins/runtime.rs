@@ -94,6 +94,9 @@ pub struct HostConfig {
     /// The image the compile child runs (`/proc/self/exe` in production).
     pub compiler: PathBuf,
     pub compile_kill: Duration,
+    /// A `parity` seam for the SDK harness, which has no server image to start.
+    #[cfg(feature = "parity")]
+    pub compile_in_process: bool,
 }
 
 impl HostConfig {
@@ -122,6 +125,8 @@ impl HostConfig {
             task_max: 2,
             compiler: super::compile::own_image(),
             compile_kill: Duration::from_secs(600),
+            #[cfg(feature = "parity")]
+            compile_in_process: false,
         }
     }
 }

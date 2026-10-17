@@ -141,6 +141,18 @@ pub async fn compile_in_child(
     }
 }
 
+async fn compile(env: &Env, wasm: &[u8]) -> Result<Vec<u8>, LoadError> {
+    #[cfg(feature = "parity")]
+    if env.cfg.compile_in_process {
+        let (engine, wasm) = (env.engine.clone(), wasm.to_vec());
+        return tokio::task::spawn_blocking(move || engine.precompile_component(&wasm))
+            .await
+            .map_err(|e| LoadError::Host(e.to_string()))?
+            .map_err(|e| LoadError::Invalid(format!("{e:#}")));
+    }
+    compile_in_child(&env.cfg.compiler, env.cfg.compile_kill, wasm).await
+}
+
 /// The component from the cache when the row authenticates the file, else compiled and cached.
 pub async fn load(env: &Env, id: &str, wasm: &[u8]) -> Result<Loaded, LoadError> {
     let engine = &env.engine;
@@ -171,7 +183,7 @@ pub async fn load(env: &Env, id: &str, wasm: &[u8]) -> Result<Loaded, LoadError>
             Err(e) => tracing::warn!("plugin \"{id}\" cached component refused ({e}); recompiling"),
         }
     }
-    let bytes = compile_in_child(&env.cfg.compiler, env.cfg.compile_kill, wasm).await?;
+    let bytes = compile(env, wasm).await?;
     let elapsed = t.elapsed();
     let dir = path.parent().expect("cwasm dir").to_path_buf();
     let write = || -> std::io::Result<()> {
