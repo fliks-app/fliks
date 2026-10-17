@@ -3,11 +3,27 @@
 Scenarios recorded against Nest, replayed against any target (plan §5.3). Local only.
 Needs docker (`fliks-postgres-1`), ffmpeg, python3 and `FLIKS_ENGINE_FIXTURES` (default `~/Documents/clement/code/fliks-engine/fixtures/probe`).
 
+## Run everything
+
+```bash
+CARGO_TARGET_DIR=$HOME/Documents/clement/code/fliks/server/target/<worktree> server/parity/run-all.sh [filter]
+# PARITY_MODES="up0 down1" limits the modes; PARITY_ENGINE_VERSION=<x.y.z> tests another engine release than engine.lock
+```
+
+It builds Rust (parity feature) and Nest once, downloads the engine pinned in `engine.lock`, creates its own
+`pall_*` databases, starts every stub and its own engine, runs each scenario group in each mode it needs
+(engine up/down without provider keys, engine stub for `markers`, engine up/down with provider keys), prints
+one table and exits non-zero on any FAIL or DEVIATION-DIFF. Everything is torn down by process group on exit or
+Ctrl-C; runtime dirs and logs are in `$CARGO_TARGET_DIR/run-all`. Needs docker (`fliks-postgres-1`), ffmpeg,
+python3, node. Reserved ports 4960-4999: 4960 arr stub, 4961 livetv fixture, 4962 emby stub, 4963 engine stub,
+4964 provider stub (`stub.py`), 4965 engine, 4966 Rust target, 4967 Nest behind it. Media and fixtures live in
+`$CARGO_TARGET_DIR/run-all/root` (`FLIKS_PARITY_ROOT`; the default `/tmp/fliks-parity` is what scenarios spell).
+
+The sections below describe the pieces `run-all.sh` scripts, for recording or debugging a single group.
+
 ```bash
 ./media-gen.sh      # tiny files under /tmp/fliks-parity (idempotent)
 ./seed/build.sh     # rebuilds template DB fliks_parity_tpl + seed/base.sql (drop the DBs freely)
-# template from the committed dump only (no fixtures needed):
-docker exec -i fliks-postgres-1 sh -c 'psql -U "$POSTGRES_USER" -qd postgres -c "DROP DATABASE IF EXISTS fliks_parity_tpl WITH (FORCE)" -c "CREATE DATABASE fliks_parity_tpl" && psql -U "$POSTGRES_USER" -qd fliks_parity_tpl' < seed/base.sql
 ```
 
 From `server/`, with the `CARGO_*` env of `CLAUDE.md`:
@@ -32,7 +48,7 @@ export FLIKS_CAST_DIR=$PWD/../backend/public   # from server/; without it bootst
 - Provider scenarios (any `"stub": true` step) need a target with `TMDB_API_KEY`/`TVDB_API_KEY`, the `FLIKS_TMDB_API_URL`/`FLIKS_TVDB_API_URL`/`FLIKS_TMDB_IMAGE_URL` stub URLs (Nest: `external/nest-external-mock.cjs`) and `external/stub.py`; run them with `PARITY_PROVIDERS=1` (only they run) and every other scenario on a target without keys.
 - Step extras: `baseEnv` (the step goes to that env var's URL when it is set and non-empty, else to the target), `ignore` (step-level paths dropped from that step's body), `ignoreBody` (step-level: the body is not compared, e.g. an SSE step that only waits), `headers`, `auth` (`bearer|query`), `multipart` (`file`|`content`|`size` bytes, `filename`, `contentType`, `fields` text parts sent before the file), `sse` (`events`, `timeoutMs`, `after` sub-steps); scenario `unordered` (paths whose arrays are compared as sets).
 - Scenario `fs`: rebuilds `/tmp/fliks-parity/<fsDir>` (default `s5-ingest/work`) before the steps (`{path, from}` copies a generated file, `{path, text}`, `{dir}`, `{link, to}`); `fsAfter` `{exists, absent}` checks the tree after them (write-path scenarios).
-- `"engine": "up"|"down"|"stub"` on a scenario needs that engine state (`PARITY_ENGINE`, default `up`; others are skipped). `stub` is the markers detection: run `node parity/stubs/engine-stub.mjs 4881`, start the target with `FLIKS_ENGINE_URL=http://127.0.0.1:4881 FLIKS_ENGINE_TOKEN=stub` and `PARITY_ENGINE=stub PARITY_FILTER=scenarios/markers/`. Detection against the real engine is the S5 exit check (`docs/spec/markers.md`, Vectors/parity).
+- `"engine": "up"|"down"|"stub"` on a scenario needs that engine state (`PARITY_ENGINE`, default `up`; others are skipped). `stub` is the markers detection: run `node parity/stubs/engine-stub.mjs 4963`, start the target with `FLIKS_ENGINE_URL=http://127.0.0.1:4963 FLIKS_ENGINE_TOKEN=stub` and `PARITY_ENGINE=stub PARITY_FILTER=scenarios/markers/`. Detection against the real engine is the S5 exit check (`docs/spec/markers.md`, Vectors/parity).
   Untagged scenarios must pass in both. `down`: Nest without `FLIKS_ENGINE_URL`; record each mode with its own Nest.
 - Engine-up recordings use the dev-stack `engine` service via `docker compose run` (cargo watch on `../fliks-engine`),
   media mounted from `/tmp/fliks-parity`; `PARITY_HOST_TOKEN` is read from the engine's `GET /v1/config`.

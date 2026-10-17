@@ -1,7 +1,13 @@
 //! HTTP parity runner (plan 5.3); env knobs and usage in server/parity/README.md.
 use reqwest::{Client, Method, multipart};
 use serde_json::{Map, Value, json};
-use std::{collections::HashMap, fs, path::Path, process::Command, time::Duration};
+use std::{
+    collections::HashMap,
+    fs,
+    path::{Path, PathBuf},
+    process::Command,
+    time::Duration,
+};
 
 const ACTORS: [&str; 8] = [
     "admin",
@@ -13,7 +19,17 @@ const ACTORS: [&str; 8] = [
     "settings",
     "validator",
 ];
-const MEDIA_ROOT: &str = "/tmp/fliks-parity";
+const DEFAULT_ROOT: &str = "/tmp/fliks-parity";
+
+/// Media/fixture root of this run (`FLIKS_PARITY_ROOT`); scenarios and seeds spell it `/tmp/fliks-parity`.
+fn media_root() -> String {
+    env("FLIKS_PARITY_ROOT", DEFAULT_ROOT)
+}
+
+/// Reads a scenario or seed file with the default root rewritten to this run's root.
+fn read_rooted(p: &Path) -> std::io::Result<String> {
+    fs::read_to_string(p).map(|s| s.replace(DEFAULT_ROOT, &media_root()))
+}
 
 fn env(k: &str, d: &str) -> String {
     std::env::var(k).unwrap_or_else(|_| d.into())
@@ -57,7 +73,7 @@ fn template(base_tpl: &str, seed: &str) -> String {
 fn build_seed_template(base_tpl: &str, seed: &str) {
     let name = template(base_tpl, seed);
     let dir = std::env::var("CARGO_MANIFEST_DIR").expect("run through cargo test");
-    let delta = fs::read(Path::new(&dir).join(format!("../../parity/seed/{seed}.sql")))
+    let delta = read_rooted(&Path::new(&dir).join(format!("../../parity/seed/{seed}.sql")))
         .unwrap_or_else(|e| panic!("seed {seed}: {e}"));
     psql(
         &[
@@ -70,7 +86,7 @@ fn build_seed_template(base_tpl: &str, seed: &str) {
         ],
         None,
     );
-    psql(&["-d", &name], Some(&delta));
+    psql(&["-d", &name], Some(delta.as_bytes()));
 }
 
 /// Recreates the scenario database from its seed template.
@@ -366,7 +382,7 @@ async fn send(ctx: &Ctx, step: &Value, vars: &HashMap<String, Value>) -> Result<
         .map_err(|e| e.to_string())?;
     // `"stub": true` talks to the external-API stub (PARITY_STUB, parity/external/stub.py) instead of the app.
     let base = if step["stub"].as_bool() == Some(true) {
-        env("PARITY_STUB", "http://127.0.0.1:4890")
+        env("PARITY_STUB", "http://127.0.0.1:4964")
     } else if let Some(url) = step["baseEnv"]
         .as_str()
         .and_then(|k| std::env::var(k).ok())
@@ -382,7 +398,9 @@ async fn send(ctx: &Ctx, step: &Value, vars: &HashMap<String, Value>) -> Result<
     }
     if let Some(m) = step.get("multipart") {
         let bytes = match m["file"].as_str() {
-            Some(f) => fs::read(Path::new(MEDIA_ROOT).join(f)).map_err(|e| format!("{f}: {e}"))?,
+            Some(f) => {
+                fs::read(PathBuf::from(media_root()).join(f)).map_err(|e| format!("{f}: {e}"))?
+            }
             None => match m["size"].as_u64() {
                 Some(n) => vec![b'x'; n as usize],
                 None => m["content"]
@@ -455,7 +473,7 @@ async fn send(ctx: &Ctx, step: &Value, vars: &HashMap<String, Value>) -> Result<
         _ => {
             // the app serves the stub's image host under `FLIKS_TMDB_IMAGE_URL`; Nest answered the real one
             let text = r.text().await.map_err(|e| e.to_string())?.replace(
-                &format!("{}/img/t/p", env("PARITY_STUB", "http://127.0.0.1:4890")),
+                &format!("{}/img/t/p", env("PARITY_STUB", "http://127.0.0.1:4964")),
                 "https://image.tmdb.org/t/p",
             );
             if text.is_empty() {
@@ -495,7 +513,7 @@ fn fs_setup(sc: &Value) {
     let Some(items) = sc["fs"].as_array() else {
         return;
     };
-    let root = Path::new(MEDIA_ROOT);
+    let root = PathBuf::from(media_root());
     let dir = sc["fsDir"].as_str().unwrap_or("s5-ingest/work");
     assert!(
         !dir.is_empty()
@@ -538,7 +556,7 @@ fn fs_setup(sc: &Value) {
 
 /// Scenario `fsAfter`: `{exists: [...], absent: [...]}`, waited for up to 3 s (detached deletes).
 async fn fs_check(sc: &Value) -> Vec<String> {
-    let root = Path::new(MEDIA_ROOT);
+    let root = PathBuf::from(media_root());
     let want = |k: &str| -> Vec<String> {
         sc["fsAfter"][k]
             .as_array()
@@ -683,8 +701,10 @@ async fn run(ctx: &Ctx, sc: &mut Value, record: bool) -> Vec<String> {
         let mut d = vec![];
         if ex["status"].as_u64() != Some(resp.status as u64) {
             d.push(format!(
-                "status: expected {} got {}",
-                ex["status"], resp.status
+                "status: expected {} got {} ({})",
+                ex["status"],
+                resp.status,
+                show(&body)
             ));
         }
         match (&ex["body"], ex["status"].as_u64().unwrap_or(0) >= 400) {
@@ -744,6 +764,10 @@ async fn login_all(http: &Client, target: &str) -> HashMap<String, String> {
 async fn parity() {
     let target = env("PARITY_TARGET", "http://127.0.0.1:4849");
     let record = env("PARITY_RECORD", "") == "1";
+    assert!(
+        !record || media_root() == DEFAULT_ROOT,
+        "recording needs the default root"
+    );
     let filter = env("PARITY_FILTER", "");
     let http = Client::new();
     let (db, base_tpl) = (
@@ -754,7 +778,7 @@ async fn parity() {
     // `PARITY_PROVIDERS=1`: the target has provider keys and the stub; only scenarios with stub steps run.
     let providers = env("PARITY_PROVIDERS", "") == "1";
     // Library scenarios create directories under libs/ and list it; a leftover from a previous run breaks the listing.
-    let _ = fs::remove_dir_all(Path::new(MEDIA_ROOT).join("libs"));
+    let _ = fs::remove_dir_all(PathBuf::from(media_root()).join("libs"));
     let (mut ok, mut failed, mut skipped, mut dev) = (0, 0, 0, vec![]);
     let mut files = vec![];
     collect(
@@ -768,7 +792,7 @@ async fn parity() {
         .filter(|f| f.to_string_lossy().contains(&filter))
         .collect();
     for f in &selected {
-        let sc: Value = serde_json::from_str(&fs::read_to_string(f).unwrap()).unwrap_or_default();
+        let sc: Value = serde_json::from_str(&read_rooted(f).unwrap()).unwrap_or_default();
         let seed = sc["seed"].as_str().unwrap_or("base").to_string();
         if !seeds.contains(&seed) {
             build_seed_template(&base_tpl, &seed);
@@ -784,8 +808,8 @@ async fn parity() {
     let mut logged_in = seeds.last().cloned().unwrap_or_default();
 
     for f in selected {
-        let mut sc: Value = serde_json::from_str(&fs::read_to_string(f).unwrap())
-            .unwrap_or_else(|e| panic!("{f:?}: {e}"));
+        let mut sc: Value =
+            serde_json::from_str(&read_rooted(f).unwrap()).unwrap_or_else(|e| panic!("{f:?}: {e}"));
         let name = sc["name"].as_str().unwrap_or("?").to_string();
         if sc["engine"].as_str().is_some_and(|e| e != engine) || uses_stub(&sc) != providers {
             skipped += 1;
