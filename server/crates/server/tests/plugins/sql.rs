@@ -359,3 +359,42 @@ async fn an_import_failing_at_commit_writes_nothing() {
     h.finish().await;
     s.finish().await;
 }
+
+/// Rule 54 (C155): the import body is bounded at 64 MiB by the route, after authentication.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn the_import_body_cap_is_the_routes_own() {
+    let Some(s) = Scratch::create("impcap").await else {
+        return;
+    };
+    let h = harness(&s, "impcap", |_| {}).await;
+    let big = json!({"formatVersion": 1, "pad": "x".repeat(200 << 10)});
+    let (st, b) = h
+        .call(
+            "POST",
+            "/api/plugins/fliks.none/import",
+            Some(&h.admin),
+            Some(big.clone()),
+        )
+        .await;
+    assert_eq!(st, 400, "past the global 100 kB JSON cap: {b}");
+    assert_eq!(
+        h.call("POST", "/api/plugins/fliks.none/import", None, Some(big))
+            .await
+            .0,
+        401
+    );
+    let huge = json!({"pad": "x".repeat((64 << 20) + 1)});
+    assert_eq!(
+        h.call(
+            "POST",
+            "/api/plugins/fliks.none/import",
+            Some(&h.admin),
+            Some(huge)
+        )
+        .await
+        .0,
+        413
+    );
+    h.finish().await;
+    s.finish().await;
+}

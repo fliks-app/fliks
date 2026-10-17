@@ -48,8 +48,15 @@ async fn no_store_on_error(req: Request, next: Next) -> Response {
     res
 }
 
+/// A path whose handler reads and bounds its own body.
+pub type Exempt = fn(&str) -> bool;
+
 /// Express's 100 kB limit only covers JSON and urlencoded bodies; uploads and streams are untouched.
-async fn body_limit(State(limit): State<usize>, req: Request, next: Next) -> Response {
+async fn body_limit(
+    State((limit, exempt)): State<(usize, Exempt)>,
+    req: Request,
+    next: Next,
+) -> Response {
     let limited = req
         .headers()
         .get(CONTENT_TYPE)
@@ -59,10 +66,10 @@ async fn body_limit(State(limit): State<usize>, req: Request, next: Next) -> Res
             essence.eq_ignore_ascii_case("application/json")
                 || essence.eq_ignore_ascii_case("application/x-www-form-urlencoded")
         });
-    if !limited {
+    // An exempt route reads and bounds its own body, after its own auth.
+    if !limited || exempt(req.uri().path()) {
         return next.run(req).await;
     }
-    let limit = crate::plugins::routes::body_limit_for(req.uri().path()).unwrap_or(limit);
     let (parts, body) = req.into_parts();
     match to_bytes(body, limit).await {
         Ok(bytes) => {
@@ -88,7 +95,12 @@ async fn preflight_204(req: Request, next: Next) -> Response {
     res
 }
 
-pub fn apply(router: Router, cors_origin: Option<String>, body_limit_bytes: usize) -> Router {
+pub fn apply(
+    router: Router,
+    cors_origin: Option<String>,
+    body_limit_bytes: usize,
+    exempt: Exempt,
+) -> Router {
     let cors = CorsLayer::new()
         .allow_origin(AllowOrigin::list(origins(cors_origin.as_deref())))
         .allow_credentials(true)
@@ -102,7 +114,7 @@ pub fn apply(router: Router, cors_origin: Option<String>, body_limit_bytes: usiz
         ])
         .allow_headers(AllowHeaders::mirror_request());
     router
-        .layer(from_fn_with_state(body_limit_bytes, body_limit))
+        .layer(from_fn_with_state((body_limit_bytes, exempt), body_limit))
         .layer(from_fn(no_store_on_error))
         .layer(cors)
         .layer(from_fn(preflight_204))
@@ -126,7 +138,7 @@ mod tests {
                 "/json",
                 post(|body: String| async move { body.len().to_string() }),
             );
-        apply(r, cors.map(str::to_owned), 100 * 1024)
+        apply(r, cors.map(str::to_owned), 100 * 1024, |_| false)
     }
 
     #[tokio::test]

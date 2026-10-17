@@ -341,12 +341,13 @@ pub fn router(
         .route("/internal/{*rest}", any(internal_404))
         .fallback_service(static_files::router(client_dir, cast_dir));
     // Preflights of owned paths stay with the Rust CORS layer, so they answer while Nest is down.
-    let cors = layers::apply(Router::new(), cors_origin.clone(), BODY_LIMIT_BYTES);
+    let exempt = crate::plugins::routes::reads_own_body;
+    let cors = layers::apply(Router::new(), cors_origin.clone(), BODY_LIMIT_BYTES, exempt);
     let unowned = forwarder
         .clone()
         .layer(from_fn_with_state(cors, preflight_here));
     // Merged after the layers so Nest answers the methods Rust does not own, unlayered instead of a 405.
-    let local = layers::apply(local, cors_origin, BODY_LIMIT_BYTES);
+    let local = layers::apply(local, cors_origin, BODY_LIMIT_BYTES, exempt);
     let local = openapi()
         .paths
         .paths

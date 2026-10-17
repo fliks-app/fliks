@@ -118,21 +118,18 @@ pub fn router() -> Router<AppState> {
         )
         .route("/api/plugins/{pluginId}/logo", with_proxy(get(logo)))
         .route("/api/plugins/{pluginId}/export", with_proxy(get(export)))
-        .route(
-            "/api/plugins/{pluginId}/import",
-            with_proxy(post(import)).layer(DefaultBodyLimit::max(IMPORT_LIMIT)),
-        )
+        .route("/api/plugins/{pluginId}/import", with_proxy(post(import)))
         .route("/api/plugins/{pluginId}/{*splat}", any(proxy))
 }
 
 /// Rule 54: an export document carries whole tables.
 const IMPORT_LIMIT: usize = 64 << 20;
 
-/// The JSON body cap of a path when it is not the global one.
-pub fn body_limit_for(path: &str) -> Option<usize> {
-    let rest = path.strip_prefix("/api/plugins/")?;
-    let (id, tail) = rest.split_once('/')?;
-    (!id.is_empty() && tail == "import").then_some(IMPORT_LIMIT)
+/// Paths whose handler reads and bounds its own body after authenticating (the global JSON cap skips them).
+pub fn reads_own_body(path: &str) -> bool {
+    path.strip_prefix("/api/plugins/")
+        .and_then(|rest| rest.split_once('/'))
+        .is_some_and(|(id, tail)| !id.is_empty() && tail == "import")
 }
 
 type Res = Result<Response, Bail>;
@@ -684,9 +681,12 @@ pub async fn import(
     a: Authed,
     Path(id): Path<String>,
     headers: HeaderMap,
-    body: Bytes,
+    body: axum::body::Body,
 ) -> Res {
     need(&a, Action::Manage)?;
+    let body = axum::body::to_bytes(body, IMPORT_LIMIT)
+        .await
+        .map_err(|_| app(AppError::payload_too_large("request entity too large")))?;
     let v = json_body(&headers, &body).await?;
     let r = st.plugins.import(&id, &v).await.map_err(inst)?;
     Ok((StatusCode::CREATED, Json(r)).into_response())
