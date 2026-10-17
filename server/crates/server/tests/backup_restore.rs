@@ -472,13 +472,13 @@ async fn run(c: &Ctx, c_old: &Ctx, pool: &PgPool, role: &str) {
         .0,
         201
     );
-    let granted: bool =
-        sqlx::query_scalar("SELECT has_table_privilege($1, 'app_settings', 'SELECT')")
-            .bind(role)
-            .fetch_one(pool)
-            .await
-            .unwrap();
-    assert!(granted);
+    // C119: the replay could create the role, and the host drops it as not this database's.
+    let kept: bool = sqlx::query_scalar("SELECT EXISTS (SELECT FROM pg_roles WHERE rolname = $1)")
+        .bind(role)
+        .fetch_one(pool)
+        .await
+        .unwrap();
+    assert!(!kept);
 
     // C24: 409 while a command runs; idle restore leaves no running row, and sweeps the dump's own
     sqlx::query("INSERT INTO commands (name, status) VALUES ('X', 'running')")

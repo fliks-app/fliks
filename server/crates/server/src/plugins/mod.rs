@@ -288,6 +288,7 @@ impl Plugins {
     pub async fn forget(&self, id: &str) {
         self.unregister(id).await;
         self.registry.withdraw(id, false);
+        acquisition::forget(id);
     }
 
     pub async fn revoke(&self, id: &str, reason: &str) {
