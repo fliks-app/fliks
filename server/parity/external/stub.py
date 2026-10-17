@@ -7,21 +7,14 @@ Subtitles (docs/spec/subtitle-providers.md): GET /subdl/api/v1/subtitles (releas
 Control (used by scenario steps with "stub": true): POST /__reset, POST /__fail {prefix,status|"hang"},
 GET /__hits?prefix=, GET /__last?prefix= (query of the last request), GET /__inflight (requests being served).
 """
-import io, json, os, subprocess, sys, threading, time, zipfile
+import io, json, os, sys, threading, time, zipfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-IMG_DIR = "/tmp/fliks-parity/s5-metadata/images"
+IMG_DIR = os.path.join(HERE, "img")  # committed bytes: the poster hash must not depend on the local ffmpeg
 LOCK = threading.Lock()
 STATE = {"hits": [], "fail": {}, "inflight": 0}
-
-
-def ensure_images():
-    os.makedirs(IMG_DIR, exist_ok=True)
-    jpg = os.path.join(IMG_DIR, "person-600x900.jpg")
-    if not os.path.exists(jpg):
-        subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "gradients=s=600x900:d=1", "-frames:v", "1", jpg], check=True)
 
 
 def fixture(kind, rest, query):
@@ -145,5 +138,4 @@ class H(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    ensure_images()
     ThreadingHTTPServer(("127.0.0.1", int(sys.argv[1])), H).serve_forever()

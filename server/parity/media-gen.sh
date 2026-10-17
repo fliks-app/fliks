@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Generates the tiny synthetic library under /tmp/fliks-parity (idempotent). Layout is mirrored by seed/build.sh.
+# Generates the tiny synthetic library under $FLIKS_PARITY_ROOT (default /tmp/fliks-parity, idempotent). Layout is mirrored by seed/build.sh.
 set -euo pipefail
-root=/tmp/fliks-parity
+cd "$(dirname "$0")"
+root=${FLIKS_PARITY_ROOT:-/tmp/fliks-parity}
 mkdir -p "$root/assets" "$root/media/movies" "$root/media/series"
 
 mk() { # mk <out> : 2 s 160x90 h264 + aac, container by extension
@@ -47,7 +48,7 @@ mkdir -p "$img/media/1"
 # live TV upload scenarios (scenarios/livetv/sources-playlist-upload*, sources-test-suggestion)
 lt="$root/s7"
 mkdir -p "$lt"
-[ -s "$lt/playlist.m3u" ] || python3 -c 'import sys; sys.path.insert(0, "external/livetv"); import server; sys.stdout.write(server.playlist())' > "$lt/playlist.m3u"
+python3 -c 'import sys; sys.path.insert(0, "external/livetv"); import server; sys.stdout.write(server.playlist())' > "$lt/playlist.m3u"
 printf '#EXTM3U\n#EXTINF:-1 group-title="Live",One\nhttp://panel.example:8080/live/joe/s3cret/1.ts\n#EXTINF:-1 group-title="Live",Two\nhttp://panel.example:8080/live/joe/s3cret/2.ts\n' > "$lt/playlist-xtream.m3u"
 printf 'hello\n' > "$lt/not-a-playlist.txt"
 : > "$lt/empty.m3u"
