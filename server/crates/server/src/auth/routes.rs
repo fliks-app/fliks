@@ -13,7 +13,6 @@ use crate::{
 };
 use axum::{
     Json, Router,
-    body::Bytes,
     extract::{Query, State},
     http::{HeaderMap, StatusCode, header},
     response::{IntoResponse, Response},
@@ -42,7 +41,6 @@ pub fn router() -> Router<AppState> {
         .route("/api/auth/pairing/pending", get(pairing_pending))
         .route("/api/auth/pairing/{id}/approve", post(pairing_approve))
         .route("/api/auth/pairing/{id}/deny", post(pairing_deny))
-        .route("/internal/auth/stream-token", post(internal_stream_token))
 }
 
 #[derive(Serialize)]
@@ -428,27 +426,6 @@ pub(crate) async fn stream_token(
         Json(json!({"streamToken": token, "expiresAt": expires_at})),
     )
         .into_response())
-}
-
-/// Nest live TV mints its stream tokens here (`docs/bridge.md`): one signer.
-async fn internal_stream_token(
-    State(st): State<AppState>,
-    headers: HeaderMap,
-    body: Bytes,
-) -> Result<Json<Value>, AppError> {
-    st.bridge.check(&headers)?;
-    #[derive(Deserialize)]
-    #[serde(deny_unknown_fields, rename_all = "camelCase")]
-    struct Req {
-        user_id: i32,
-    }
-    let req: Req = serde_json::from_slice(&body)
-        .map_err(|_| AppError::bad_request(vec!["userId must be an integer number".to_owned()]))?;
-    let (user, _) = load_enabled(&st.db, req.user_id)
-        .await?
-        .ok_or_else(|| AppError::not_found("User not found"))?;
-    let token = st.jwt.sign_stream(user.id, &user.username)?.token;
-    Ok(Json(json!({"streamToken": token})))
 }
 
 #[derive(Deserialize)]

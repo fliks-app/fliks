@@ -1,0 +1,108 @@
+{
+  "deviation": "C129",
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastSyncAt",
+    "$..logoPath",
+    "$..startsAt",
+    "$..endsAt"
+  ],
+  "name": "guide-sync-duplicate-channel-id",
+  "seed": "livetv",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "kind": "xmltv",
+        "name": "Dup",
+        "url": "http://127.0.0.1:4921/guide-dup.xml"
+      },
+      "expect": {
+        "body": {
+          "enabled": true,
+          "etag": null,
+          "id": 3,
+          "kind": "xmltv",
+          "language": null,
+          "lastModified": null,
+          "lastSyncError": null,
+          "lastSyncStatus": "never",
+          "name": "Dup",
+          "priority": 0,
+          "programCount": 0,
+          "refreshIntervalHours": 12,
+          "source": null,
+          "sourceId": null,
+          "timezoneOffsetMinutes": 0,
+          "url": "http://127.0.0.1:4921/guide-dup.xml"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/livetv/admin/guide-sources"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "channelsTouched": 2,
+          "ok": true,
+          "programCount": 6
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/livetv/admin/guide-sources/3/sync"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "byKind": {
+            "fuzzy": 1,
+            "id": 2,
+            "manual": 1,
+            "name": 0
+          },
+          "candidates": [
+            {
+              "displayName": "Lonely",
+              "guideSourceId": 3,
+              "id": "lonely.fr"
+            },
+            {
+              "displayName": "One",
+              "guideSourceId": 3,
+              "id": "one.fr"
+            },
+            {
+              "displayName": "Three",
+              "guideSourceId": 3,
+              "id": "three.fr"
+            },
+            {
+              "displayName": "Two",
+              "guideSourceId": 3,
+              "id": "two.fr"
+            }
+          ],
+          "total": 6,
+          "unmatched": [
+            {
+              "channelId": 4,
+              "name": "No Group"
+            },
+            {
+              "channelId": 6,
+              "name": "Disabled"
+            }
+          ]
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/livetv/admin/guide/match-report?guideSourceId=3"
+    }
+  ]
+}

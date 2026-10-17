@@ -1,5 +1,5 @@
 //! `POST /engine/resolve` (`engine-glue.md` section F): the engine asks whether a credential may read
-//! a media file, and where it is. `live` is Nest's until S7 (bridge B1).
+//! a media file, and where it is; `live` asks the live TV sessions.
 use crate::{
     http::{
         AppError,
@@ -21,11 +21,7 @@ use fliks_engine_core::{
 };
 use serde_json::Value;
 use sha2::{Digest, Sha256};
-use std::{
-    path::{Component, Path, PathBuf},
-    sync::OnceLock,
-    time::Duration,
-};
+use std::path::{Component, Path, PathBuf};
 use subtle::ConstantTimeEq;
 
 const TTL_S: f64 = 60.0;
@@ -94,10 +90,10 @@ pub async fn resolve(
     ValidJson(body): ValidJson<Value>,
 ) -> Result<Json<ResolveResponse>, AppError> {
     let request = parse(&body).map_err(AppError::bad_request)?;
-    let Some((user, perms)) = user_for(&st, &request.credential).await? else {
+    let Some((user, perms, raw)) = user_for(&st, &request.credential).await? else {
         return Ok(Json(deny()));
     };
-    match locate(&st, &user, &perms, &request).await {
+    match locate(&st, &user, &perms, &raw, &request).await {
         Ok(found) => Ok(Json(ResolveResponse {
             allow: true,
             owner_id: Some(user.id.to_string()),
@@ -213,16 +209,20 @@ fn token_of(credential: &str) -> Option<String> {
 async fn user_for(
     st: &AppState,
     credential: &str,
-) -> Result<Option<(UserRow, Permissions)>, AppError> {
+) -> Result<Option<(UserRow, Permissions, Vec<String>)>, AppError> {
     let Some(claims) = token_of(credential).and_then(|t| st.jwt.verify(&t)) else {
         return Ok(None);
     };
     Ok(load_enabled(&st.db, claims.sub).await?.map(|(user, role)| {
-        let perms = Permissions::from(
-            role.as_ref().map_or(&[][..], |r| &r.permissions),
-            user.is_admin,
-        );
-        (user, perms)
+        let granted = role.map(|r| r.permissions).unwrap_or_default();
+        let perms = Permissions::from(&granted, user.is_admin);
+        // `User.permissions`: an admin holds `manage:all` whatever the role says.
+        let raw = if user.is_admin {
+            vec!["manage:all".to_owned()]
+        } else {
+            granted
+        };
+        (user, perms, raw)
     }))
 }
 
@@ -230,6 +230,7 @@ async fn locate(
     st: &AppState,
     user: &UserRow,
     perms: &Permissions,
+    raw_perms: &[String],
     req: &ResolveRequest,
 ) -> Result<ResolveResponse, Fail> {
     let found = |path: Option<String>, format: Option<&str>| ResolveResponse {
@@ -240,7 +241,7 @@ async fn locate(
         ttl_s: None,
     };
     let id = match &req.media_id {
-        ResolveMediaId::Live(viewer) => return nest_live(st, viewer, user.id).await,
+        ResolveMediaId::Live(viewer) => return live(st, viewer, user.id, raw_perms).await,
         ResolveMediaId::File(id) if *id != u32::MAX => *id,
         ResolveMediaId::File(_) => return Err(Fail::Denied),
     };
@@ -270,6 +271,26 @@ async fn locate(
         ResolvePurpose::Subtitle if req.stream_index.is_none() => Err(Fail::Denied),
         ResolvePurpose::Subtitle => Ok(found(Some(file), Some("embedded"))),
         _ => Ok(found(Some(file), None)),
+    }
+}
+
+/// A live viewer's data plane: allowed while the channel stays playable for its owner, re-checked on every request.
+async fn live(
+    st: &AppState,
+    viewer: &str,
+    user_id: i32,
+    perms: &[String],
+) -> Result<ResolveResponse, Fail> {
+    match crate::livetv::session::resolve_live(st, viewer, user_id, perms).await {
+        Ok(true) => Ok(ResolveResponse {
+            allow: true,
+            path: None,
+            owner_id: None,
+            format: None,
+            ttl_s: Some(0.0),
+        }),
+        Ok(false) => Err(Fail::Denied),
+        Err(e) => Err(Fail::Fault(e)),
     }
 }
 
@@ -409,40 +430,6 @@ pub(crate) fn lexical_resolve(base: &Path, rel: &str) -> PathBuf {
         }
     }
     out
-}
-
-/// Bridge B1: Nest answers `live` (it owns the viewers and the channel access policy) until S7.
-async fn nest_live(st: &AppState, viewer: &str, user_id: i32) -> Result<ResolveResponse, Fail> {
-    static HTTP: OnceLock<reqwest::Client> = OnceLock::new();
-    let http = HTTP.get_or_init(|| {
-        reqwest::Client::builder()
-            .timeout(Duration::from_secs(5))
-            .build()
-            .expect("reqwest client")
-    });
-    let fault = |e: String| {
-        tracing::error!(error = %e, "live resolve bridge");
-        Fail::Fault(AppError::plain(StatusCode::BAD_GATEWAY, "Bad Gateway"))
-    };
-    let res = http
-        .post(format!("{}/engine/resolve", crate::nest::url(&st.cfg)))
-        .bearer_auth(&st.cfg.bridge_token)
-        .json(&serde_json::json!({"mediaId": viewer, "userId": user_id, "purpose": "live"}))
-        .send()
-        .await
-        .map_err(|e| fault(e.without_url().to_string()))?;
-    if !res.status().is_success() {
-        return Err(fault(format!("status {}", res.status())));
-    }
-    let verdict: ResolveResponse = res
-        .json()
-        .await
-        .map_err(|e| fault(e.without_url().to_string()))?;
-    if verdict.allow {
-        Ok(verdict)
-    } else {
-        Err(Fail::Denied)
-    }
 }
 
 #[cfg(test)]

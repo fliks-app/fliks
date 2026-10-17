@@ -1,0 +1,100 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastSyncAt",
+    "$..logoPath",
+    "$..startedOn",
+    "$..endedOn",
+    "$..id",
+    "$..programCount"
+  ],
+  "name": "jobs-trigger-guide-refresh",
+  "seed": "livetv",
+  "steps": [
+    {
+      "as": "admin",
+      "baseEnv": "PARITY_NEST",
+      "body": {
+        "name": "LiveTvGuideRefresh"
+      },
+      "expect": {
+        "body": {
+          "body": null,
+          "name": "LiveTvGuideRefresh",
+          "status": "queued",
+          "trigger": "manual"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/commands"
+    },
+    {
+      "as": "admin",
+      "baseEnv": "PARITY_NEST",
+      "expect": {
+        "body": {
+          "data": [
+            {
+              "body": null,
+              "name": "LiveTvGuideRefresh",
+              "status": "completed",
+              "trigger": "manual"
+            }
+          ],
+          "total": 1
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/commands?limit=1",
+      "poll": {
+        "path": "$.data[0].status",
+        "timeoutMs": 15000,
+        "until": "completed"
+      }
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "enabled": true,
+            "etag": null,
+            "kind": "xmltv",
+            "language": null,
+            "lastModified": null,
+            "lastSyncError": null,
+            "lastSyncStatus": "ok",
+            "name": "Feed A",
+            "priority": 1,
+            "refreshIntervalHours": 12,
+            "sourceId": null,
+            "timezoneOffsetMinutes": 0,
+            "url": "http://127.0.0.1:4921/guide.xml"
+          },
+          {
+            "enabled": true,
+            "etag": null,
+            "kind": "source",
+            "language": "fr",
+            "lastModified": null,
+            "lastSyncError": null,
+            "lastSyncStatus": "ok",
+            "name": "Feed B",
+            "priority": 0,
+            "refreshIntervalHours": 12,
+            "sourceId": 1,
+            "timezoneOffsetMinutes": 60,
+            "url": null
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/livetv/admin/guide-sources"
+    }
+  ]
+}

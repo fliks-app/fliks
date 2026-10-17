@@ -1,0 +1,68 @@
+{
+  "capture": {
+    "loc": "$.steps[0].body.location"
+  },
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastSyncAt",
+    "$..logoPath",
+    "$..location"
+  ],
+  "name": "sources-test-suggestion",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {},
+        "status": 201
+      },
+      "method": "POST",
+      "multipart": {
+        "contentType": "audio/mpegurl",
+        "field": "file",
+        "file": "s7/playlist-xtream.m3u",
+        "filename": "xtream.m3u"
+      },
+      "path": "/api/livetv/admin/sources/playlist"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "kind": "m3u",
+        "url": "{loc}"
+      },
+      "expect": {
+        "body": {
+          "accountStatus": null,
+          "channelCount": 2,
+          "expiresAt": null,
+          "groups": [
+            {
+              "count": 2,
+              "name": "Live"
+            }
+          ],
+          "guideUrl": null,
+          "guideUrls": [],
+          "kind": "m3u",
+          "maxConnections": null,
+          "ok": true,
+          "onDemandCount": 0,
+          "playlistUrlFromFile": "http://panel.example:8080/get.php?username=joe&password=s3cret&type=m3u_plus&output=ts",
+          "suggestion": {
+            "baseUrl": "http://panel.example:8080",
+            "password": "s3cret",
+            "suggestedKind": "xtream",
+            "username": "joe"
+          }
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/livetv/admin/sources/test"
+    }
+  ]
+}

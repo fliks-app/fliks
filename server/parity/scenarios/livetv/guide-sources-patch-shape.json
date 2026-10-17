@@ -1,0 +1,159 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastSyncAt",
+    "$..logoPath"
+  ],
+  "name": "guide-sources-patch-shape",
+  "seed": "livetv",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "name": "Same"
+      },
+      "expect": {
+        "body": {
+          "enabled": true,
+          "etag": null,
+          "id": 2,
+          "kind": "source",
+          "language": "fr",
+          "lastModified": null,
+          "lastSyncError": null,
+          "lastSyncStatus": "never",
+          "name": "Same",
+          "priority": 0,
+          "programCount": 0,
+          "refreshIntervalHours": 12,
+          "source": {
+            "accountStatus": null,
+            "channelCount": 5,
+            "enabled": true,
+            "excludeGroupsPattern": null,
+            "expiresAt": null,
+            "guideUrls": [
+              "http://127.0.0.1:4921/guide.xml"
+            ],
+            "id": 1,
+            "includeGroupsPattern": null,
+            "kind": "m3u",
+            "lastAdultGuardError": null,
+            "lastSyncError": null,
+            "lastSyncStatus": "ok",
+            "maxStreams": 2,
+            "maxStreamsIsManual": false,
+            "name": "Alpha",
+            "playlistEtag": null,
+            "playlistLastModified": null,
+            "priority": 0,
+            "referer": null,
+            "refreshIntervalHours": 12,
+            "url": "http://127.0.0.1:4921/playlist.m3u",
+            "userAgent": null,
+            "username": null
+          },
+          "sourceId": 1,
+          "timezoneOffsetMinutes": 60,
+          "url": null
+        },
+        "status": 200
+      },
+      "method": "PATCH",
+      "path": "/api/livetv/admin/guide-sources/2"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "sourceId": 2
+      },
+      "expect": {
+        "body": {
+          "enabled": true,
+          "etag": null,
+          "id": 2,
+          "kind": "source",
+          "language": "fr",
+          "lastModified": null,
+          "lastSyncError": null,
+          "lastSyncStatus": "never",
+          "name": "Same",
+          "priority": 0,
+          "programCount": 0,
+          "refreshIntervalHours": 12,
+          "source": {
+            "id": 2
+          },
+          "sourceId": 2,
+          "timezoneOffsetMinutes": 60,
+          "url": null
+        },
+        "status": 200
+      },
+      "method": "PATCH",
+      "path": "/api/livetv/admin/guide-sources/2"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "sourceId": null
+      },
+      "expect": {
+        "body": {
+          "enabled": true,
+          "etag": null,
+          "id": 1,
+          "kind": "xmltv",
+          "language": null,
+          "lastModified": null,
+          "lastSyncError": null,
+          "lastSyncStatus": "never",
+          "name": "Feed A",
+          "priority": 1,
+          "programCount": 0,
+          "refreshIntervalHours": 12,
+          "source": null,
+          "sourceId": null,
+          "timezoneOffsetMinutes": 0,
+          "url": "http://127.0.0.1:4921/guide.xml"
+        },
+        "status": 200
+      },
+      "method": "PATCH",
+      "path": "/api/livetv/admin/guide-sources/1"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "sourceId": 1
+      },
+      "expect": {
+        "body": {
+          "enabled": true,
+          "etag": null,
+          "id": 1,
+          "kind": "xmltv",
+          "language": null,
+          "lastModified": null,
+          "lastSyncError": null,
+          "lastSyncStatus": "never",
+          "name": "Feed A",
+          "priority": 1,
+          "programCount": 0,
+          "refreshIntervalHours": 12,
+          "source": {
+            "id": 1
+          },
+          "sourceId": 1,
+          "timezoneOffsetMinutes": 0,
+          "url": "http://127.0.0.1:4921/guide.xml"
+        },
+        "status": 200
+      },
+      "method": "PATCH",
+      "path": "/api/livetv/admin/guide-sources/1"
+    }
+  ]
+}

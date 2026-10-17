@@ -1,0 +1,158 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastSyncAt",
+    "$..logoPath",
+    "$..startsAt",
+    "$..endsAt"
+  ],
+  "name": "guide-sync-kind-source-xtream",
+  "seed": "livetv",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "enabled": true
+      },
+      "expect": {
+        "body": {
+          "accountStatus": null,
+          "channelCount": 0,
+          "enabled": true,
+          "excludeGroupsPattern": null,
+          "expiresAt": null,
+          "guideUrls": [],
+          "id": 2,
+          "includeGroupsPattern": null,
+          "kind": "xtream",
+          "lastAdultGuardError": null,
+          "lastSyncError": null,
+          "lastSyncStatus": "never",
+          "maxStreams": 1,
+          "maxStreamsIsManual": true,
+          "name": "Beta",
+          "playlistEtag": null,
+          "playlistLastModified": null,
+          "priority": 1,
+          "referer": "http://beta.example/",
+          "refreshIntervalHours": 6,
+          "url": "http://127.0.0.1:4921",
+          "userAgent": "BetaAgent/1",
+          "username": "u"
+        },
+        "status": 200
+      },
+      "method": "PATCH",
+      "path": "/api/livetv/admin/sources/2"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "kind": "source",
+        "name": "XtGuide",
+        "sourceId": 2
+      },
+      "expect": {
+        "body": {
+          "enabled": true,
+          "etag": null,
+          "id": 3,
+          "kind": "source",
+          "language": null,
+          "lastModified": null,
+          "lastSyncError": null,
+          "lastSyncStatus": "never",
+          "name": "XtGuide",
+          "priority": 0,
+          "programCount": 0,
+          "refreshIntervalHours": 12,
+          "source": {
+            "id": 2
+          },
+          "sourceId": 2,
+          "timezoneOffsetMinutes": 0,
+          "url": null
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/livetv/admin/guide-sources"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "channelsTouched": 2,
+          "ok": true,
+          "programCount": 6
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/livetv/admin/guide-sources/3/sync"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "enabled": true,
+            "etag": null,
+            "id": 1,
+            "kind": "xmltv",
+            "language": null,
+            "lastModified": null,
+            "lastSyncError": null,
+            "lastSyncStatus": "never",
+            "name": "Feed A",
+            "priority": 1,
+            "programCount": 0,
+            "refreshIntervalHours": 12,
+            "sourceId": null,
+            "timezoneOffsetMinutes": 0,
+            "url": "http://127.0.0.1:4921/guide.xml"
+          },
+          {
+            "enabled": true,
+            "etag": null,
+            "id": 2,
+            "kind": "source",
+            "language": "fr",
+            "lastModified": null,
+            "lastSyncError": null,
+            "lastSyncStatus": "never",
+            "name": "Feed B",
+            "priority": 0,
+            "programCount": 0,
+            "refreshIntervalHours": 12,
+            "sourceId": 1,
+            "timezoneOffsetMinutes": 60,
+            "url": null
+          },
+          {
+            "enabled": true,
+            "etag": null,
+            "id": 3,
+            "kind": "source",
+            "language": null,
+            "lastModified": null,
+            "lastSyncError": null,
+            "lastSyncStatus": "ok",
+            "name": "XtGuide",
+            "priority": 0,
+            "programCount": 6,
+            "refreshIntervalHours": 12,
+            "sourceId": 2,
+            "timezoneOffsetMinutes": 0,
+            "url": null
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/livetv/admin/guide-sources"
+    }
+  ]
+}

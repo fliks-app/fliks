@@ -31,10 +31,6 @@ export type JobRequest = components['schemas']['JobRequest'];
 export type JobResult = components['schemas']['JobResult'];
 export type JobSnapshot = components['schemas']['JobSnapshot'];
 export type JobPriority = components['schemas']['JobPriority'];
-export type OpenLiveRequest = components['schemas']['OpenLiveRequest'];
-export type OpenLiveResponse = components['schemas']['OpenLiveResponse'];
-export type LiveSnapshot = components['schemas']['LiveSnapshot'];
-export type LiveTvConfig = components['schemas']['LiveTvConfig'];
 export type SourceScan = components['schemas']['SourceScan'];
 export type SpriteMeta = components['schemas']['SpriteMeta'];
 export type Fingerprint = components['schemas']['Fingerprint'];
@@ -398,36 +394,6 @@ export class EngineService implements OnModuleInit, OnModuleDestroy {
         (Number(response.headers.get('retry-after')) || 1) * 1000,
       );
     }
-  }
-
-  /** POST /v1/live, waiting out the 503 + Retry-After of the first detection run; a `live_*` error
-   *  body surfaces as an {@link EngineError} with its code. */
-  async openLive(body: OpenLiveRequest): Promise<OpenLiveResponse> {
-    const client = this.need();
-    if (!this.features.includes('live'))
-      throw new ServiceUnavailableException(
-        'The engine has no live TV runtime',
-      );
-    const deadline = Date.now() + OPEN_TIMEOUT_MS;
-    for (;;) {
-      const { data, error, response } = await client.POST('/v1/live', { body });
-      if (data) return data;
-      const code = error?.code;
-      if (response.status !== 503 || code || Date.now() > deadline) {
-        throw new EngineError(response.status, 'POST /v1/live', code);
-      }
-      await this.sleep(
-        (Number(response.headers.get('retry-after')) || 1) * 1000,
-      );
-    }
-  }
-
-  async listLive(ownerId?: string): Promise<LiveSnapshot[]> {
-    const { data, response } = await this.need().GET('/v1/live', {
-      query: { ownerId },
-    });
-    if (!data) throw new EngineError(response.status, 'GET /v1/live');
-    return data;
   }
 
   /** `sessionLost` when the engine no longer knows the sid; throws EngineError 403 for another owner. */

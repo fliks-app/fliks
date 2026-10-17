@@ -1,0 +1,409 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastSyncAt",
+    "$..logoPath"
+  ],
+  "name": "sources-crud",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": [],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/livetv/admin/sources"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "kind": "m3u",
+        "name": "M",
+        "url": "http://127.0.0.1:4921/playlist.m3u"
+      },
+      "expect": {
+        "body": {
+          "accountStatus": null,
+          "channelCount": 0,
+          "enabled": true,
+          "excludeGroupsPattern": null,
+          "expiresAt": null,
+          "guideUrls": [],
+          "id": 1,
+          "includeGroupsPattern": null,
+          "kind": "m3u",
+          "lastAdultGuardError": null,
+          "lastSyncError": null,
+          "lastSyncStatus": "never",
+          "maxStreams": 0,
+          "maxStreamsIsManual": false,
+          "name": "M",
+          "playlistEtag": null,
+          "playlistLastModified": null,
+          "priority": 0,
+          "referer": null,
+          "refreshIntervalHours": 12,
+          "url": "http://127.0.0.1:4921/playlist.m3u",
+          "userAgent": null,
+          "username": null
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/livetv/admin/sources"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "enabled": false,
+        "excludeGroupsPattern": "y",
+        "includeGroupsPattern": "x",
+        "kind": "xtream",
+        "maxStreams": 3,
+        "name": "X",
+        "password": "p",
+        "priority": 1,
+        "refreshIntervalHours": 6,
+        "url": "http://127.0.0.1:4921",
+        "userAgent": "UA/1",
+        "username": "u"
+      },
+      "expect": {
+        "body": {
+          "accountStatus": null,
+          "channelCount": 0,
+          "enabled": false,
+          "excludeGroupsPattern": "y",
+          "expiresAt": null,
+          "guideUrls": [],
+          "id": 2,
+          "includeGroupsPattern": "x",
+          "kind": "xtream",
+          "lastAdultGuardError": null,
+          "lastSyncError": null,
+          "lastSyncStatus": "never",
+          "maxStreams": 3,
+          "maxStreamsIsManual": true,
+          "name": "X",
+          "playlistEtag": null,
+          "playlistLastModified": null,
+          "priority": 1,
+          "referer": null,
+          "refreshIntervalHours": 6,
+          "url": "http://127.0.0.1:4921",
+          "userAgent": "UA/1",
+          "username": "u"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/livetv/admin/sources"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "accountStatus": null,
+            "channelCount": 0,
+            "enabled": true,
+            "excludeGroupsPattern": null,
+            "expiresAt": null,
+            "guideUrls": [],
+            "id": 1,
+            "includeGroupsPattern": null,
+            "kind": "m3u",
+            "lastAdultGuardError": null,
+            "lastSyncError": null,
+            "lastSyncStatus": "never",
+            "maxStreams": 0,
+            "maxStreamsIsManual": false,
+            "name": "M",
+            "playlistEtag": null,
+            "playlistLastModified": null,
+            "priority": 0,
+            "referer": null,
+            "refreshIntervalHours": 12,
+            "url": "http://127.0.0.1:4921/playlist.m3u",
+            "userAgent": null,
+            "username": null
+          },
+          {
+            "accountStatus": null,
+            "channelCount": 0,
+            "enabled": false,
+            "excludeGroupsPattern": "y",
+            "expiresAt": null,
+            "guideUrls": [],
+            "id": 2,
+            "includeGroupsPattern": "x",
+            "kind": "xtream",
+            "lastAdultGuardError": null,
+            "lastSyncError": null,
+            "lastSyncStatus": "never",
+            "maxStreams": 3,
+            "maxStreamsIsManual": true,
+            "name": "X",
+            "playlistEtag": null,
+            "playlistLastModified": null,
+            "priority": 1,
+            "referer": null,
+            "refreshIntervalHours": 6,
+            "url": "http://127.0.0.1:4921",
+            "userAgent": "UA/1",
+            "username": "u"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/livetv/admin/sources"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "enabled": false,
+        "maxStreams": 5,
+        "name": "Renamed"
+      },
+      "expect": {
+        "body": {
+          "accountStatus": null,
+          "channelCount": 0,
+          "enabled": false,
+          "excludeGroupsPattern": null,
+          "expiresAt": null,
+          "guideUrls": [],
+          "id": 1,
+          "includeGroupsPattern": null,
+          "kind": "m3u",
+          "lastAdultGuardError": null,
+          "lastSyncError": null,
+          "lastSyncStatus": "never",
+          "maxStreams": 5,
+          "maxStreamsIsManual": true,
+          "name": "Renamed",
+          "playlistEtag": null,
+          "playlistLastModified": null,
+          "priority": 0,
+          "referer": null,
+          "refreshIntervalHours": 12,
+          "url": "http://127.0.0.1:4921/playlist.m3u",
+          "userAgent": null,
+          "username": null
+        },
+        "status": 200
+      },
+      "method": "PATCH",
+      "path": "/api/livetv/admin/sources/1"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "priority": 0,
+        "referer": "http://r/",
+        "username": null
+      },
+      "expect": {
+        "body": {
+          "accountStatus": null,
+          "channelCount": 0,
+          "enabled": false,
+          "excludeGroupsPattern": "y",
+          "expiresAt": null,
+          "guideUrls": [],
+          "id": 2,
+          "includeGroupsPattern": "x",
+          "kind": "xtream",
+          "lastAdultGuardError": null,
+          "lastSyncError": null,
+          "lastSyncStatus": "never",
+          "maxStreams": 3,
+          "maxStreamsIsManual": true,
+          "name": "X",
+          "playlistEtag": null,
+          "playlistLastModified": null,
+          "priority": 0,
+          "referer": "http://r/",
+          "refreshIntervalHours": 6,
+          "url": "http://127.0.0.1:4921",
+          "userAgent": "UA/1",
+          "username": null
+        },
+        "status": 200
+      },
+      "method": "PATCH",
+      "path": "/api/livetv/admin/sources/2"
+    },
+    {
+      "as": "admin",
+      "body": {},
+      "expect": {
+        "body": {
+          "accountStatus": null,
+          "channelCount": 0,
+          "enabled": false,
+          "excludeGroupsPattern": "y",
+          "expiresAt": null,
+          "guideUrls": [],
+          "id": 2,
+          "includeGroupsPattern": "x",
+          "kind": "xtream",
+          "lastAdultGuardError": null,
+          "lastSyncError": null,
+          "lastSyncStatus": "never",
+          "maxStreams": 3,
+          "maxStreamsIsManual": true,
+          "name": "X",
+          "playlistEtag": null,
+          "playlistLastModified": null,
+          "priority": 0,
+          "referer": "http://r/",
+          "refreshIntervalHours": 6,
+          "url": "http://127.0.0.1:4921",
+          "userAgent": "UA/1",
+          "username": null
+        },
+        "status": 200
+      },
+      "method": "PATCH",
+      "path": "/api/livetv/admin/sources/2"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "accountStatus": null,
+            "channelCount": 0,
+            "enabled": false,
+            "excludeGroupsPattern": null,
+            "expiresAt": null,
+            "guideUrls": [],
+            "id": 1,
+            "includeGroupsPattern": null,
+            "kind": "m3u",
+            "lastAdultGuardError": null,
+            "lastSyncError": null,
+            "lastSyncStatus": "never",
+            "maxStreams": 5,
+            "maxStreamsIsManual": true,
+            "name": "Renamed",
+            "playlistEtag": null,
+            "playlistLastModified": null,
+            "priority": 0,
+            "referer": null,
+            "refreshIntervalHours": 12,
+            "url": "http://127.0.0.1:4921/playlist.m3u",
+            "userAgent": null,
+            "username": null
+          },
+          {
+            "accountStatus": null,
+            "channelCount": 0,
+            "enabled": false,
+            "excludeGroupsPattern": "y",
+            "expiresAt": null,
+            "guideUrls": [],
+            "id": 2,
+            "includeGroupsPattern": "x",
+            "kind": "xtream",
+            "lastAdultGuardError": null,
+            "lastSyncError": null,
+            "lastSyncStatus": "never",
+            "maxStreams": 3,
+            "maxStreamsIsManual": true,
+            "name": "X",
+            "playlistEtag": null,
+            "playlistLastModified": null,
+            "priority": 0,
+            "referer": "http://r/",
+            "refreshIntervalHours": 6,
+            "url": "http://127.0.0.1:4921",
+            "userAgent": "UA/1",
+            "username": null
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/livetv/admin/sources"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "status": 200
+      },
+      "method": "DELETE",
+      "path": "/api/livetv/admin/sources/1"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "accountStatus": null,
+            "channelCount": 0,
+            "enabled": false,
+            "excludeGroupsPattern": "y",
+            "expiresAt": null,
+            "guideUrls": [],
+            "id": 2,
+            "includeGroupsPattern": "x",
+            "kind": "xtream",
+            "lastAdultGuardError": null,
+            "lastSyncError": null,
+            "lastSyncStatus": "never",
+            "maxStreams": 3,
+            "maxStreamsIsManual": true,
+            "name": "X",
+            "playlistEtag": null,
+            "playlistLastModified": null,
+            "priority": 0,
+            "referer": "http://r/",
+            "refreshIntervalHours": 6,
+            "url": "http://127.0.0.1:4921",
+            "userAgent": "UA/1",
+            "username": null
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/livetv/admin/sources"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Live TV source #99 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "DELETE",
+      "path": "/api/livetv/admin/sources/99"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "name": "x"
+      },
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Live TV source #99 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "PATCH",
+      "path": "/api/livetv/admin/sources/99"
+    }
+  ]
+}

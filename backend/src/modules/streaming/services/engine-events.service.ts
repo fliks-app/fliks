@@ -50,8 +50,6 @@ export class EngineEventsService implements OnModuleInit, OnModuleDestroy {
   private readonly log = new Logger(EngineEventsService.name);
   private abort: AbortController | null = null;
   private readonly jobs = new Set<string>();
-  private readonly listeners: ((ev: EngineEvent) => void)[] = [];
-  private readonly resyncListeners: (() => Promise<void>)[] = [];
   protected sleep = (ms: number, signal: AbortSignal) =>
     new Promise<void>((resolve) => {
       const t = setTimeout(resolve, ms);
@@ -72,16 +70,6 @@ export class EngineEventsService implements OnModuleInit, OnModuleDestroy {
 
   onModuleDestroy(): void {
     this.abort?.abort();
-  }
-
-  /** Hears every event, for the parts of the app (live TV) that own their own session state. */
-  onEvent(listener: (ev: EngineEvent) => void): void {
-    this.listeners.push(listener);
-  }
-
-  /** Runs after every (re)connect's resync, like the presence one. */
-  onResync(listener: () => Promise<void>): void {
-    this.resyncListeners.push(listener);
   }
 
   /** Running ffmpeg jobs, for the QoE load probe. */
@@ -151,11 +139,9 @@ export class EngineEventsService implements OnModuleInit, OnModuleDestroy {
     for (const s of snaps)
       if (s.job?.state === 'running') this.jobs.add(jobKeyOf(s));
     await this.engine.resyncJobs();
-    await Promise.all(this.resyncListeners.map((l) => l()));
   }
 
   handle(ev: EngineEvent): void {
-    for (const l of this.listeners) l(ev);
     switch (ev.type) {
       case 'SessionOpened':
         if (!this.liveSessions.peek(ev.session.sessionId))

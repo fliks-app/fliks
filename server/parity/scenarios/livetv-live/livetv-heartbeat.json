@@ -1,0 +1,149 @@
+{
+  "capture": {
+    "sid": "$.steps[3].body.sessionId"
+  },
+  "deviation": null,
+  "engine": "up",
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastSyncAt",
+    "$..logoPath",
+    "$..sessionId",
+    "$..url"
+  ],
+  "name": "livetv-heartbeat",
+  "seed": "livetv-live",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "value": "2"
+      },
+      "expect": {
+        "body": {
+          "id": 5,
+          "key": "livetv_channel_idle_seconds",
+          "value": "2"
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/settings/livetv_channel_idle_seconds"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "value": "1"
+      },
+      "expect": {
+        "body": {
+          "id": 6,
+          "key": "livetv_slot_release_seconds",
+          "value": "1"
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/settings/livetv_slot_release_seconds"
+    },
+    {
+      "as": "user",
+      "body": {},
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Live TV session not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "PUT",
+      "path": "/api/livetv/sessions/nope/state"
+    },
+    {
+      "as": "user",
+      "body": {},
+      "expect": {
+        "body": {
+          "channelId": 5,
+          "channelName": "E",
+          "dvrWindowSeconds": 900,
+          "isLive": true,
+          "mode": "remux",
+          "segmentSeconds": 2
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/livetv/channels/5/play"
+    },
+    {
+      "as": "other",
+      "body": {},
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Not your session",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "PUT",
+      "path": "/api/livetv/sessions/{sid}/state"
+    },
+    {
+      "as": "user",
+      "body": {},
+      "expect": {
+        "body": {
+          "ok": true
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/livetv/sessions/{sid}/state"
+    },
+    {
+      "as": "user",
+      "body": {
+        "qoe": {
+          "nope": true
+        },
+        "state": "paused"
+      },
+      "expect": {
+        "body": {
+          "ok": true
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/livetv/sessions/{sid}/state"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "ok": true
+        },
+        "status": 200
+      },
+      "method": "DELETE",
+      "path": "/api/livetv/sessions/{sid}"
+    },
+    {
+      "as": "anon",
+      "body": {},
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "PUT",
+      "path": "/api/livetv/sessions/x/state"
+    }
+  ]
+}

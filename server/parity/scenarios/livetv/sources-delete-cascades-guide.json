@@ -1,0 +1,83 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastSyncAt",
+    "$..logoPath"
+  ],
+  "name": "sources-delete-cascades-guide",
+  "seed": "livetv",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "status": 200
+      },
+      "method": "DELETE",
+      "path": "/api/livetv/admin/sources/1"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "enabled": true,
+            "etag": null,
+            "id": 1,
+            "kind": "xmltv",
+            "language": null,
+            "lastModified": null,
+            "lastSyncError": null,
+            "lastSyncStatus": "never",
+            "name": "Feed A",
+            "priority": 1,
+            "programCount": 0,
+            "refreshIntervalHours": 12,
+            "sourceId": null,
+            "timezoneOffsetMinutes": 0,
+            "url": "http://127.0.0.1:4921/guide.xml"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/livetv/admin/guide-sources"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "byKind": {
+            "fuzzy": 0,
+            "id": 0,
+            "manual": 0,
+            "name": 0
+          },
+          "candidates": [
+            {
+              "displayName": "adult.fr",
+              "guideSourceId": 1,
+              "id": "adult.fr"
+            },
+            {
+              "displayName": "One",
+              "guideSourceId": 1,
+              "id": "one.fr"
+            },
+            {
+              "displayName": "Two",
+              "guideSourceId": 1,
+              "id": "two.fr"
+            }
+          ],
+          "total": 0,
+          "unmatched": []
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/livetv/admin/guide/match-report"
+    }
+  ]
+}

@@ -1,0 +1,139 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastSyncAt",
+    "$..logoPath"
+  ],
+  "name": "livetv-channels-list",
+  "seed": "livetv",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": [
+          {
+            "favorite": true,
+            "groupName": "Mine",
+            "guideChannelId": "two.fr",
+            "id": 2,
+            "name": "Two",
+            "number": 2
+          },
+          {
+            "favorite": false,
+            "groupName": "Old News",
+            "guideChannelId": "one.fr",
+            "id": 1,
+            "name": "One",
+            "number": 1
+          },
+          {
+            "favorite": false,
+            "groupName": "__livetv_ungrouped__",
+            "guideChannelId": null,
+            "id": 4,
+            "name": "No Group",
+            "number": null
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/livetv/channels"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "favorite": false,
+            "groupName": "Old News",
+            "guideChannelId": "one.fr",
+            "id": 1,
+            "name": "One",
+            "number": 1
+          },
+          {
+            "favorite": false,
+            "groupName": "Mine",
+            "guideChannelId": "two.fr",
+            "id": 2,
+            "name": "Two",
+            "number": 2
+          },
+          {
+            "favorite": false,
+            "groupName": "Adult XXX",
+            "guideChannelId": "adult.fr",
+            "id": 3,
+            "name": "Adult XXX 1",
+            "number": 3
+          },
+          {
+            "favorite": false,
+            "groupName": "News",
+            "guideChannelId": "hidden.fr",
+            "id": 5,
+            "name": "Hidden One",
+            "number": 5
+          },
+          {
+            "favorite": false,
+            "groupName": "__livetv_ungrouped__",
+            "guideChannelId": null,
+            "id": 4,
+            "name": "No Group",
+            "number": null
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/livetv/channels"
+    },
+    {
+      "as": "readonly",
+      "expect": {
+        "body": [
+          {
+            "favorite": false,
+            "groupName": "Old News",
+            "guideChannelId": "one.fr",
+            "id": 1,
+            "name": "One",
+            "number": 1
+          },
+          {
+            "favorite": false,
+            "groupName": "Mine",
+            "guideChannelId": "two.fr",
+            "id": 2,
+            "name": "Two",
+            "number": 2
+          },
+          {
+            "favorite": false,
+            "groupName": "News",
+            "guideChannelId": "hidden.fr",
+            "id": 5,
+            "name": "Hidden One",
+            "number": 5
+          },
+          {
+            "favorite": false,
+            "groupName": "__livetv_ungrouped__",
+            "guideChannelId": null,
+            "id": 4,
+            "name": "No Group",
+            "number": null
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/livetv/channels"
+    }
+  ]
+}

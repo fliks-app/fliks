@@ -1,0 +1,247 @@
+{
+  "capture": {
+    "loc": "$.steps[0].body.location"
+  },
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastSyncAt",
+    "$..logoPath",
+    "$..location",
+    "$..url"
+  ],
+  "name": "sources-playlist-upload",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {},
+        "status": 201
+      },
+      "method": "POST",
+      "multipart": {
+        "contentType": "audio/mpegurl",
+        "field": "file",
+        "file": "s7/playlist.m3u",
+        "filename": "My List (1).m3u"
+      },
+      "path": "/api/livetv/admin/sources/playlist"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "kind": "m3u",
+        "url": "{loc}"
+      },
+      "expect": {
+        "body": {
+          "accountStatus": null,
+          "channelCount": 5,
+          "expiresAt": null,
+          "groups": [
+            {
+              "count": 2,
+              "name": "News"
+            },
+            {
+              "count": 1,
+              "name": "Sport"
+            },
+            {
+              "count": 1,
+              "name": "Movies"
+            },
+            {
+              "count": 1,
+              "name": "__livetv_ungrouped__"
+            }
+          ],
+          "guideUrl": "http://127.0.0.1:4921/guide.xml",
+          "guideUrls": [
+            "http://127.0.0.1:4921/guide.xml"
+          ],
+          "kind": "m3u",
+          "maxConnections": 2,
+          "ok": true,
+          "onDemandCount": 2,
+          "playlistUrlFromFile": "http://127.0.0.1:4921/get.php?username=u&password=p&type=m3u_plus&output=ts",
+          "suggestion": {
+            "baseUrl": "http://127.0.0.1:4921",
+            "password": "p",
+            "suggestedKind": "xtream",
+            "username": "u"
+          }
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/livetv/admin/sources/test"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "excludeGroupsPattern": "x",
+        "includeGroupsPattern": "^news$",
+        "kind": "m3u",
+        "url": "{loc}"
+      },
+      "expect": {
+        "body": {
+          "accountStatus": null,
+          "channelCount": 2,
+          "expiresAt": null,
+          "groups": [
+            {
+              "count": 2,
+              "name": "News"
+            },
+            {
+              "count": 1,
+              "name": "Sport"
+            },
+            {
+              "count": 1,
+              "name": "Movies"
+            },
+            {
+              "count": 1,
+              "name": "__livetv_ungrouped__"
+            }
+          ],
+          "guideUrl": "http://127.0.0.1:4921/guide.xml",
+          "guideUrls": [
+            "http://127.0.0.1:4921/guide.xml"
+          ],
+          "kind": "m3u",
+          "maxConnections": 2,
+          "ok": true,
+          "onDemandCount": 2,
+          "playlistUrlFromFile": "http://127.0.0.1:4921/get.php?username=u&password=p&type=m3u_plus&output=ts",
+          "suggestion": {
+            "baseUrl": "http://127.0.0.1:4921",
+            "password": "p",
+            "suggestedKind": "xtream",
+            "username": "u"
+          }
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/livetv/admin/sources/test"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "includeGroupsPattern": "(",
+        "kind": "m3u",
+        "url": "{loc}"
+      },
+      "expect": {
+        "body": {
+          "accountStatus": null,
+          "channelCount": 0,
+          "expiresAt": null,
+          "groups": [],
+          "guideUrl": null,
+          "guideUrls": [],
+          "kind": "m3u",
+          "maxConnections": null,
+          "ok": false,
+          "onDemandCount": 0
+        },
+        "status": 201
+      },
+      "ignore": [
+        "$.error"
+      ],
+      "method": "POST",
+      "path": "/api/livetv/admin/sources/test"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "kind": "m3u",
+        "name": "Up",
+        "url": "{loc}"
+      },
+      "expect": {
+        "body": {
+          "accountStatus": null,
+          "channelCount": 0,
+          "enabled": true,
+          "excludeGroupsPattern": null,
+          "expiresAt": null,
+          "guideUrls": [],
+          "id": 1,
+          "includeGroupsPattern": null,
+          "kind": "m3u",
+          "lastAdultGuardError": null,
+          "lastSyncError": null,
+          "lastSyncStatus": "never",
+          "maxStreams": 0,
+          "maxStreamsIsManual": false,
+          "name": "Up",
+          "playlistEtag": null,
+          "playlistLastModified": null,
+          "priority": 0,
+          "referer": null,
+          "refreshIntervalHours": 12,
+          "userAgent": null,
+          "username": null
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/livetv/admin/sources"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "added": 5,
+          "channelCount": 5,
+          "ok": true,
+          "removed": 0,
+          "updated": 0
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/livetv/admin/sources/1/sync"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "added": 0,
+          "channelCount": 5,
+          "ok": true,
+          "removed": 0,
+          "updated": 0
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/livetv/admin/sources/1/sync"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "status": 200
+      },
+      "method": "DELETE",
+      "path": "/api/livetv/admin/sources/1"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/livetv/admin/sources"
+    }
+  ]
+}

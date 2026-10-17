@@ -1,0 +1,50 @@
+{
+  "deviation": "C135",
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastSyncAt",
+    "$..logoPath"
+  ],
+  "name": "livetv-access-set-grants-unknown-user",
+  "seed": "livetv",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "groups": [
+          "Adult XXX"
+        ]
+      },
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "User #99 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "PUT",
+      "path": "/api/livetv/admin/access/users/99"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "groups": [
+          "Nope"
+        ]
+      },
+      "expect": {
+        "body": {
+          "groups": [],
+          "ignored": [
+            "Nope"
+          ]
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/livetv/admin/access/users/99"
+    }
+  ]
+}

@@ -1,0 +1,161 @@
+{
+  "deviation": null,
+  "engine": "up",
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastSyncAt",
+    "$..logoPath",
+    "$..sessionId",
+    "$..url"
+  ],
+  "name": "livetv-play-validation",
+  "seed": "livetv-live",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "directPlay": "yes"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "directPlay must be a boolean value"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/livetv/channels/5/play"
+    },
+    {
+      "as": "user",
+      "body": {
+        "maxBitrateBps": 0
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "maxBitrateBps must not be less than 1"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/livetv/channels/5/play"
+    },
+    {
+      "as": "user",
+      "body": {
+        "maxBitrateBps": 1.5
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "maxBitrateBps must be an integer number"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/livetv/channels/5/play"
+    },
+    {
+      "as": "user",
+      "body": {
+        "useTs": 1
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "useTs must be a boolean value"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/livetv/channels/5/play"
+    },
+    {
+      "as": "user",
+      "body": {
+        "extra": 1
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "property extra should not exist"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/livetv/channels/5/play"
+    },
+    {
+      "as": "user",
+      "body": {},
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Live TV channel #99 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "POST",
+      "path": "/api/livetv/channels/99/play"
+    },
+    {
+      "as": "user",
+      "body": {},
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Validation failed (numeric string is expected)",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/livetv/channels/abc/play"
+    },
+    {
+      "as": "noread",
+      "body": {},
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "POST",
+      "path": "/api/livetv/channels/5/play"
+    },
+    {
+      "as": "anon",
+      "body": {},
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "POST",
+      "path": "/api/livetv/channels/5/play"
+    }
+  ]
+}

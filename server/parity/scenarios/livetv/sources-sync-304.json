@@ -1,0 +1,156 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastSyncAt",
+    "$..logoPath",
+    "$..lastSeenAt"
+  ],
+  "name": "sources-sync-304",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "kind": "m3u",
+        "name": "E",
+        "url": "http://127.0.0.1:4921/playlist-etag.m3u"
+      },
+      "expect": {
+        "body": {
+          "accountStatus": null,
+          "channelCount": 0,
+          "enabled": true,
+          "excludeGroupsPattern": null,
+          "expiresAt": null,
+          "guideUrls": [],
+          "id": 1,
+          "includeGroupsPattern": null,
+          "kind": "m3u",
+          "lastAdultGuardError": null,
+          "lastSyncError": null,
+          "lastSyncStatus": "never",
+          "maxStreams": 0,
+          "maxStreamsIsManual": false,
+          "name": "E",
+          "playlistEtag": null,
+          "playlistLastModified": null,
+          "priority": 0,
+          "referer": null,
+          "refreshIntervalHours": 12,
+          "url": "http://127.0.0.1:4921/playlist-etag.m3u",
+          "userAgent": null,
+          "username": null
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/livetv/admin/sources"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "added": 5,
+          "channelCount": 5,
+          "ok": true,
+          "removed": 0,
+          "updated": 0
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/livetv/admin/sources/1/sync"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "accountStatus": null,
+            "channelCount": 5,
+            "enabled": true,
+            "excludeGroupsPattern": null,
+            "expiresAt": null,
+            "guideUrls": [
+              "http://127.0.0.1:4921/guide.xml"
+            ],
+            "id": 1,
+            "includeGroupsPattern": null,
+            "kind": "m3u",
+            "lastAdultGuardError": null,
+            "lastSyncError": null,
+            "lastSyncStatus": "ok",
+            "maxStreams": 2,
+            "maxStreamsIsManual": false,
+            "name": "E",
+            "playlistEtag": "\"v1\"",
+            "playlistLastModified": null,
+            "priority": 0,
+            "referer": null,
+            "refreshIntervalHours": 12,
+            "url": "http://127.0.0.1:4921/playlist-etag.m3u",
+            "userAgent": null,
+            "username": null
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/livetv/admin/sources"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "added": 0,
+          "channelCount": 5,
+          "ok": true,
+          "removed": 0,
+          "updated": 0
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/livetv/admin/sources/1/sync"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "accountStatus": null,
+            "channelCount": 5,
+            "enabled": true,
+            "excludeGroupsPattern": null,
+            "expiresAt": null,
+            "guideUrls": [
+              "http://127.0.0.1:4921/guide.xml"
+            ],
+            "id": 1,
+            "includeGroupsPattern": null,
+            "kind": "m3u",
+            "lastAdultGuardError": null,
+            "lastSyncError": null,
+            "lastSyncStatus": "ok",
+            "maxStreams": 2,
+            "maxStreamsIsManual": false,
+            "name": "E",
+            "playlistEtag": "\"v1\"",
+            "playlistLastModified": null,
+            "priority": 0,
+            "referer": null,
+            "refreshIntervalHours": 12,
+            "url": "http://127.0.0.1:4921/playlist-etag.m3u",
+            "userAgent": null,
+            "username": null
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/livetv/admin/sources"
+    }
+  ]
+}

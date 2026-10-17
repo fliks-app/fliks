@@ -1,0 +1,96 @@
+{
+  "deviation": "C130",
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastSyncAt",
+    "$..logoPath",
+    "$..startedOn",
+    "$..endedOn",
+    "$..id"
+  ],
+  "name": "guide-sync-409",
+  "seed": "livetv",
+  "steps": [
+    {
+      "as": "anon",
+      "body": {
+        "delay": 2.5
+      },
+      "expect": {
+        "body": {
+          "delay": 2.5,
+          "shrunk": false
+        },
+        "status": 200
+      },
+      "method": "POST",
+      "path": "/_mode",
+      "stub": true
+    },
+    {
+      "as": "admin",
+      "baseEnv": "PARITY_NEST",
+      "body": {
+        "name": "LiveTvGuideRefresh"
+      },
+      "expect": {
+        "body": {
+          "body": null,
+          "name": "LiveTvGuideRefresh",
+          "status": "queued",
+          "trigger": "manual"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/commands"
+    },
+    {
+      "as": "anon",
+      "expect": {
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/",
+      "sleepMs": 600
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Conflict",
+          "message": "errors.already_running",
+          "statusCode": 409
+        },
+        "status": 409
+      },
+      "method": "POST",
+      "path": "/api/livetv/admin/guide-sources/1/sync"
+    },
+    {
+      "as": "anon",
+      "expect": {
+        "status": 200
+      },
+      "method": "POST",
+      "path": "/_mode",
+      "sleepMs": 3500,
+      "stub": true
+    },
+    {
+      "as": "anon",
+      "body": {},
+      "expect": {
+        "body": {
+          "delay": 0.0,
+          "shrunk": false
+        },
+        "status": 200
+      },
+      "method": "POST",
+      "path": "/_mode",
+      "stub": true
+    }
+  ]
+}

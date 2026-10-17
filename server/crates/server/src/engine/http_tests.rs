@@ -1,4 +1,4 @@
-//! The routes (`/api/engine/remote*`, `/engine/resolve`, the live TV config bridge) and the DB-backed
+//! The routes (`/api/engine/remote*`, `/engine/resolve`) and the DB-backed
 //! parts of the glue through the real router; ports of `engine-resolver.spec.ts`.
 use super::{
     testkit::{Fake, RUNTIME, hello_body},
@@ -25,18 +25,15 @@ const BRIDGE: &str = "bridge-token";
 
 type Calls = Arc<Mutex<Vec<(String, String, Value)>>>;
 
-/// Stands in for Nest: records the bridge calls and answers `/engine/resolve` from `live`.
+/// Stands in for Nest: records the bridge calls.
 struct FakeNest {
     url: String,
     calls: Calls,
-    live: Arc<Mutex<Value>>,
 }
 
 #[derive(Clone)]
 struct NestState {
     calls: Calls,
-    live: Arc<Mutex<Value>>,
-    live_status: u16,
 }
 
 async fn nest_handler(State(s): State<NestState>, req: Request) -> (StatusCode, Json<Value>) {
@@ -53,29 +50,19 @@ async fn nest_handler(State(s): State<NestState>, req: Request) -> (StatusCode, 
         .lock()
         .unwrap()
         .push((parts.uri.path().to_owned(), auth, body));
-    if parts.uri.path() == "/engine/resolve" {
-        (
-            StatusCode::from_u16(s.live_status).unwrap(),
-            Json(s.live.lock().unwrap().clone()),
-        )
-    } else {
-        (StatusCode::NO_CONTENT, Json(Value::Null))
-    }
+    (StatusCode::NO_CONTENT, Json(Value::Null))
 }
 
-async fn fake_nest(live: Value, live_status: u16) -> FakeNest {
+async fn fake_nest() -> FakeNest {
     let calls: Calls = Arc::default();
-    let live = Arc::new(Mutex::new(live));
     let state = NestState {
         calls: calls.clone(),
-        live: live.clone(),
-        live_status,
     };
     let app = Router::new().fallback(nest_handler).with_state(state);
     let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let url = format!("http://{}", l.local_addr().unwrap());
     tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
-    FakeNest { url, calls, live }
+    FakeNest { url, calls }
 }
 
 struct Ctx {
@@ -97,7 +84,7 @@ async fn ctx(pool: PgPool, boot_engine: bool) -> Ctx {
     crate::db::migrate(&pool).await.unwrap();
     let fake = Fake::start().await;
     fake.hello(Some(hello_body(&RUNTIME, "x")));
-    let nest = fake_nest(json!({"allow": true, "ownerId": "1", "ttlS": 0}), 200).await;
+    let nest = fake_nest().await;
     let env = [
         ("FLIKS_ENGINE_URL", fake.url.clone()),
         ("FLIKS_ENGINE_TOKEN", "tok".into()),
@@ -518,42 +505,39 @@ mod remote {
     }
 
     #[sqlx::test(migrations = false)]
-    async fn the_live_tv_bridge_hands_the_config_to_the_next_push(pool: PgPool) {
+    async fn the_live_tv_settings_go_to_the_engine_and_a_write_repushes(pool: PgPool) {
         let c = ctx(pool, true).await;
-        let cfg = json!({"segmentSeconds": 4, "timeshiftMinutes": 5, "probeSeconds": 3, "channelIdleSeconds": 30, "fastZap": null});
-        let bridge = |token: &str| vec![("authorization", format!("Bearer {token}"))];
-        let (s, _) = call(
-            &c.app,
-            "PUT",
-            "/internal/engine/livetv-config",
-            &bridge("wrong"),
-            Some(cfg.clone()),
-        )
-        .await;
-        assert_eq!(s, 401);
-        let (s, _) = call(
-            &c.app,
-            "PUT",
-            "/internal/engine/livetv-config",
-            &[],
-            Some(cfg.clone()),
-        )
-        .await;
-        assert_eq!(s, 401);
-        let (s, _) = call(
-            &c.app,
-            "PUT",
-            "/internal/engine/livetv-config",
-            &bridge(BRIDGE),
-            Some(cfg),
-        )
-        .await;
-        assert_eq!(s, 204);
-        let last = c.fake.seen("PUT", "/v1/config").pop().unwrap().body;
+        let set = |k: &'static str, v: &'static str| {
+            let pool = c.pool.clone();
+            async move {
+                sqlx::query(r#"INSERT INTO app_settings ("key", "value") VALUES ($1, $2) ON CONFLICT ("key") DO UPDATE SET "value" = $2"#)
+                    .bind(k)
+                    .bind(v)
+                    .execute(&pool)
+                    .await
+                    .unwrap();
+            }
+        };
         assert_eq!(
-            last["livetv"],
-            json!({"segmentSeconds": 4, "timeshiftMinutes": 5, "probeSeconds": 3, "channelIdleSeconds": 30})
+            c.fake.seen("PUT", "/v1/config")[0].body["livetv"],
+            json!({"segmentSeconds": 2, "timeshiftMinutes": 15, "probeSeconds": 3, "channelIdleSeconds": 30})
         );
+        assert_eq!(c.st.engine.livetv_segment_seconds(), 2);
+        set("livetv_segment_seconds", "4").await;
+        set("livetv_fast_zap", "true").await;
+        c.st.engine
+            .settings_changed(&["livetv_segment_seconds".into()])
+            .await;
+        let sent = c.fake.seen("PUT", "/v1/config");
+        assert_eq!(sent.len(), 2);
+        assert_eq!(
+            sent[1].body["livetv"],
+            json!({"segmentSeconds": 4, "timeshiftMinutes": 15, "probeSeconds": 3, "channelIdleSeconds": 30, "fastZap": true})
+        );
+        assert_eq!(sent[1].body["revision"], 9);
+        assert_eq!(c.st.engine.livetv_segment_seconds(), 4);
+        c.st.engine.settings_changed(&["unrelated".into()]).await;
+        assert_eq!(c.fake.seen("PUT", "/v1/config").len(), 2);
     }
 }
 
@@ -854,83 +838,6 @@ mod resolve {
         )
         .await;
         assert_eq!(b["allow"], true);
-    }
-
-    #[sqlx::test(migrations = false)]
-    async fn live_goes_to_nest_with_the_user_and_nests_answer_comes_back(pool: PgPool) {
-        let w = world(pool).await;
-        let ask = |viewer: Value| {
-            resolve(
-                &w,
-                json!({"mediaId": viewer, "credential": format!("Bearer {}", w.member.1), "purpose": "live"}),
-            )
-        };
-        let (s, b) = ask(json!("sid-1")).await;
-        assert_eq!(
-            (s, b),
-            (
-                200,
-                json!({"allow": true, "ownerId": w.member.0.to_string(), "ttlS": 0.0})
-            )
-        );
-        ask(json!(5)).await;
-        let calls = w.c.nest.calls.lock().unwrap().clone();
-        let live: Vec<_> = calls
-            .iter()
-            .filter(|(p, _, _)| p == "/engine/resolve")
-            .collect();
-        assert_eq!(live[0].1, "Bearer bridge-token");
-        assert_eq!(
-            live[0].2,
-            json!({"mediaId": "sid-1", "userId": w.member.0, "purpose": "live"})
-        );
-        assert_eq!(live[1].2["mediaId"], "5");
-        drop(calls);
-        *w.c.nest.live.lock().unwrap() = json!({"allow": false, "ttlS": 60});
-        assert_eq!(ask(json!("sid-1")).await.1, denied());
-        // Unauthenticated: denied without bothering Nest.
-        let before = w.c.nest.calls.lock().unwrap().len();
-        let (_, b) = resolve(
-            &w,
-            json!({"mediaId": "sid", "credential": "Bearer nope", "purpose": "live"}),
-        )
-        .await;
-        assert_eq!(b, denied());
-        assert_eq!(w.c.nest.calls.lock().unwrap().len(), before);
-    }
-
-    #[sqlx::test(migrations = false)]
-    async fn a_nest_that_is_down_is_a_host_fault_not_a_denial(pool: PgPool) {
-        crate::db::migrate(&pool).await.unwrap();
-        let env = [
-            ("FLIKS_NEST_URL", "http://127.0.0.1:1"),
-            ("FLIKS_BRIDGE_TOKEN", BRIDGE),
-        ];
-        let cfg = Config::from_lookup(|k| {
-            env.iter()
-                .find(|(n, _)| *n == k)
-                .map(|(_, v)| v.to_string())
-        });
-        let st = AppState::new(pool.clone(), cfg, SECRET);
-        let id = user(&pool, "u", false, true).await;
-        let token = st.jwt.sign_access(id, "u").unwrap().token;
-        let upstream = fliks_engine::gateway::Upstream::parse("http://127.0.0.1:1").unwrap();
-        let app = app::router(st.clone(), upstream, None, "/nonexistent".into(), None);
-        let host = vec![(
-            "authorization",
-            format!("Bearer {}", st.engine.host_token()),
-        )];
-        let (s, _) = call(
-            &app,
-            "POST",
-            "/engine/resolve",
-            &host,
-            Some(
-                json!({"mediaId": "v", "credential": format!("Bearer {token}"), "purpose": "live"}),
-            ),
-        )
-        .await;
-        assert_eq!(s, 502);
     }
 
     #[sqlx::test(migrations = false)]

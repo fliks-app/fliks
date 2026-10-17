@@ -1,0 +1,95 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastSyncAt",
+    "$..logoPath",
+    "$..startsAt",
+    "$..endsAt"
+  ],
+  "name": "program-denied-group-404",
+  "seed": "livetv",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Program #7 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "GET",
+      "path": "/api/livetv/programs/7"
+    },
+    {
+      "as": "other",
+      "expect": {
+        "body": {
+          "categories": [
+            "Cat"
+          ],
+          "description": "About Adult Now",
+          "episodeNumber": null,
+          "guideChannelId": "adult.fr",
+          "guideSourceId": 1,
+          "iconUrl": null,
+          "id": 7,
+          "isLive": false,
+          "isNew": false,
+          "rating": null,
+          "seasonNumber": null,
+          "seriesId": null,
+          "subtitle": null,
+          "title": "Adult Now",
+          "year": null
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/livetv/programs/7"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "categories": [
+            "Cat"
+          ],
+          "description": "About Adult Now",
+          "episodeNumber": null,
+          "guideChannelId": "adult.fr",
+          "guideSourceId": 1,
+          "iconUrl": null,
+          "id": 7,
+          "isLive": false,
+          "isNew": false,
+          "rating": null,
+          "seasonNumber": null,
+          "seriesId": null,
+          "subtitle": null,
+          "title": "Adult Now",
+          "year": null
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/livetv/programs/7"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Program #8 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "GET",
+      "path": "/api/livetv/programs/8"
+    }
+  ]
+}

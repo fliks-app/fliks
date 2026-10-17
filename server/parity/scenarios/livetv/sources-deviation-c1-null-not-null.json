@@ -1,0 +1,67 @@
+{
+  "deviation": "C1",
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastSyncAt",
+    "$..logoPath"
+  ],
+  "name": "sources-deviation-c1-null-not-null",
+  "seed": "livetv",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "name": null
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "name must not be null"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PATCH",
+      "path": "/api/livetv/admin/sources/1"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "maxStreams": null
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "maxStreams must not be null"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PATCH",
+      "path": "/api/livetv/admin/sources/1"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "priority": 3000000000
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "priority must be a 32-bit integer"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PATCH",
+      "path": "/api/livetv/admin/sources/1"
+    }
+  ]
+}

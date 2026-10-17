@@ -13,13 +13,15 @@ pub(crate) mod testkit;
 
 pub use calls::{ConnectionTest, EngineError, SessionFilter};
 pub(crate) use client::enc;
-pub use config::{lifetime, load_streaming, validate_streaming_setting};
+pub use config::{
+    LIVETV_KEYS, lifetime, livetv as livetv_config, load_streaming, validate_streaming_setting,
+};
 pub use events::Feed;
 pub use jobs::Progress;
 pub use remote::router;
 
 use client::Client;
-use fliks_engine_core::api::{Hello, LiveTvConfig, PathMapping};
+use fliks_engine_core::api::{Hello, PathMapping};
 use serde::Serialize;
 use sqlx::PgPool;
 use std::{
@@ -116,7 +118,7 @@ struct Inner {
     host_url: OnceLock<String>,
     state: Mutex<State>,
     pushed: tokio::sync::Mutex<Pushed>,
-    livetv: Mutex<Option<LiveTvConfig>>,
+    segment_seconds: std::sync::atomic::AtomicI32,
     feed: broadcast::Sender<Feed>,
     adoptions: watch::Sender<u64>,
     jobs: jobs::Waiters,
@@ -158,7 +160,7 @@ impl Engine {
                     push_needed: false,
                 }),
                 pushed: tokio::sync::Mutex::default(),
-                livetv: Mutex::new(None),
+                segment_seconds: std::sync::atomic::AtomicI32::new(2),
                 feed: broadcast::channel(4096).0,
                 adoptions: watch::channel(0).0,
                 jobs: jobs::Waiters::default(),

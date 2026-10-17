@@ -13,7 +13,6 @@ import { SettingsModule } from '../settings/settings.module';
 import { LibrariesModule } from '../libraries/libraries.module';
 import { PluginsModule } from '../plugins/plugins.module';
 import { PlaybackModule } from '../playback/playback.module';
-import { QoeModule } from '../qoe/qoe.module';
 import { MediaProbeModule } from '../media-probe/media-probe.module';
 
 @Module({
@@ -30,7 +29,6 @@ import { MediaProbeModule } from '../media-probe/media-probe.module';
     SettingsModule,
     LibrariesModule,
     PluginsModule,
-    QoeModule,
     forwardRef(() => PlaybackModule),
   ],
   providers: [

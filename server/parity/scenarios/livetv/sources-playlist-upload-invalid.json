@@ -1,0 +1,102 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastSyncAt",
+    "$..logoPath"
+  ],
+  "name": "sources-playlist-upload-invalid",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "That file is not an extended M3U playlist",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "multipart": {
+        "contentType": "audio/mpegurl",
+        "field": "file",
+        "file": "s7/not-a-playlist.txt",
+        "filename": "x.txt"
+      },
+      "path": "/api/livetv/admin/sources/playlist"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "No playlist uploaded",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "multipart": {
+        "contentType": "audio/mpegurl",
+        "field": "file",
+        "file": "s7/empty.m3u",
+        "filename": "My List (1).m3u"
+      },
+      "path": "/api/livetv/admin/sources/playlist"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Unexpected field - other",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "multipart": {
+        "contentType": "audio/mpegurl",
+        "field": "other",
+        "file": "s7/playlist.m3u",
+        "filename": "My List (1).m3u"
+      },
+      "path": "/api/livetv/admin/sources/playlist"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "No playlist uploaded",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/livetv/admin/sources/playlist"
+    },
+    {
+      "as": "readonly",
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "POST",
+      "multipart": {
+        "contentType": "audio/mpegurl",
+        "field": "file",
+        "file": "s7/playlist.m3u",
+        "filename": "My List (1).m3u"
+      },
+      "path": "/api/livetv/admin/sources/playlist"
+    }
+  ]
+}

@@ -1,0 +1,204 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastSyncAt",
+    "$..logoPath",
+    "$..startedOn",
+    "$..endedOn",
+    "$..nextRun",
+    "$..lastRun",
+    "$..id",
+    "$..lastSeenAt",
+    "$..lastStatus",
+    "$..guideUrls"
+  ],
+  "name": "jobs-trigger-source-refresh",
+  "seed": "livetv",
+  "steps": [
+    {
+      "as": "admin",
+      "baseEnv": "PARITY_NEST",
+      "expect": {
+        "body": [
+          {
+            "cron": "0 02 * * *",
+            "labelKey": "system.cmd_backup",
+            "name": "Backup",
+            "pluginId": null,
+            "triggerable": true
+          },
+          {
+            "cron": "0 04 * * *",
+            "labelKey": "system.cmd_refresh_metadata",
+            "name": "RefreshMetadata",
+            "pluginId": null,
+            "triggerable": true
+          },
+          {
+            "cron": "0 3 * * *",
+            "labelKey": "system.cmd_refresh_plugin_sources",
+            "name": "RefreshPluginSources",
+            "pluginId": null,
+            "triggerable": true
+          },
+          {
+            "cron": "0 0-23/6 * * *",
+            "labelKey": "system.cmd_subtitle_search",
+            "name": "SubtitleSearch",
+            "pluginId": null,
+            "triggerable": true
+          },
+          {
+            "cron": "0 0-23/6 * * *",
+            "labelKey": "system.cmd_subtitle_upgrade",
+            "name": "SubtitleUpgrade",
+            "pluginId": null,
+            "triggerable": true
+          },
+          {
+            "cron": "0 0-23/1 * * *",
+            "labelKey": "liveTv.jobs.sourceRefresh",
+            "name": "LiveTvSourceRefresh",
+            "pluginId": null,
+            "triggerable": true
+          },
+          {
+            "cron": "0 0-23/1 * * *",
+            "labelKey": "liveTv.jobs.guideRefresh",
+            "name": "LiveTvGuideRefresh",
+            "pluginId": null,
+            "triggerable": true
+          },
+          {
+            "cron": "0 01 * * *",
+            "labelKey": "liveTv.jobs.guidePrune",
+            "name": "LiveTvGuidePrune",
+            "pluginId": null,
+            "triggerable": true
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/commands/schedulers"
+    },
+    {
+      "as": "admin",
+      "baseEnv": "PARITY_NEST",
+      "body": {
+        "name": "LiveTvSourceRefresh"
+      },
+      "expect": {
+        "body": {
+          "body": null,
+          "name": "LiveTvSourceRefresh",
+          "status": "queued",
+          "trigger": "manual"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/commands"
+    },
+    {
+      "as": "admin",
+      "baseEnv": "PARITY_NEST",
+      "expect": {
+        "body": {
+          "data": [
+            {
+              "body": null,
+              "name": "LiveTvSourceRefresh",
+              "status": "completed",
+              "trigger": "manual"
+            }
+          ],
+          "total": 1
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/commands?limit=1",
+      "poll": {
+        "path": "$.data[0].status",
+        "timeoutMs": 15000,
+        "until": "completed"
+      }
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "accountStatus": null,
+            "channelCount": 5,
+            "enabled": true,
+            "excludeGroupsPattern": null,
+            "expiresAt": null,
+            "includeGroupsPattern": null,
+            "kind": "m3u",
+            "lastAdultGuardError": null,
+            "lastSyncError": null,
+            "lastSyncStatus": "ok",
+            "maxStreams": 2,
+            "maxStreamsIsManual": false,
+            "name": "Alpha",
+            "playlistEtag": null,
+            "playlistLastModified": null,
+            "priority": 0,
+            "referer": null,
+            "refreshIntervalHours": 12,
+            "url": "http://127.0.0.1:4921/playlist.m3u",
+            "userAgent": null,
+            "username": null
+          },
+          {
+            "accountStatus": "Active",
+            "channelCount": 6,
+            "enabled": true,
+            "excludeGroupsPattern": null,
+            "expiresAt": "2100-01-01T00:00:00.000Z",
+            "includeGroupsPattern": null,
+            "kind": "xtream",
+            "lastAdultGuardError": null,
+            "lastSyncError": null,
+            "lastSyncStatus": "ok",
+            "maxStreams": 1,
+            "maxStreamsIsManual": true,
+            "name": "Beta",
+            "playlistEtag": null,
+            "playlistLastModified": null,
+            "priority": 1,
+            "referer": "http://beta.example/",
+            "refreshIntervalHours": 6,
+            "url": "http://127.0.0.1:4921",
+            "userAgent": "BetaAgent/1",
+            "username": "u"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/livetv/admin/sources"
+    },
+    {
+      "as": "readonly",
+      "baseEnv": "PARITY_NEST",
+      "body": {
+        "name": "LiveTvSourceRefresh"
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "POST",
+      "path": "/api/commands"
+    }
+  ]
+}

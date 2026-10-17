@@ -1,0 +1,156 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastSyncAt",
+    "$..logoPath"
+  ],
+  "name": "livetv-channels-filters",
+  "seed": "livetv",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": [],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/livetv/channels?group=News"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": [
+          {
+            "favorite": true,
+            "groupName": "Mine",
+            "guideChannelId": "two.fr",
+            "id": 2,
+            "name": "Two",
+            "number": 2
+          },
+          {
+            "favorite": false,
+            "groupName": "Old News",
+            "guideChannelId": "one.fr",
+            "id": 1,
+            "name": "One",
+            "number": 1
+          },
+          {
+            "favorite": false,
+            "groupName": "__livetv_ungrouped__",
+            "guideChannelId": null,
+            "id": 4,
+            "name": "No Group",
+            "number": null
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/livetv/channels?group="
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": [
+          {
+            "favorite": true,
+            "groupName": "Mine",
+            "guideChannelId": "two.fr",
+            "id": 2,
+            "name": "Two",
+            "number": 2
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/livetv/channels?favoritesOnly=true"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": [
+          {
+            "favorite": true,
+            "groupName": "Mine",
+            "guideChannelId": "two.fr",
+            "id": 2,
+            "name": "Two",
+            "number": 2
+          },
+          {
+            "favorite": false,
+            "groupName": "Old News",
+            "guideChannelId": "one.fr",
+            "id": 1,
+            "name": "One",
+            "number": 1
+          },
+          {
+            "favorite": false,
+            "groupName": "__livetv_ungrouped__",
+            "guideChannelId": null,
+            "id": 4,
+            "name": "No Group",
+            "number": null
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/livetv/channels?favoritesOnly=nope"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": [
+          {
+            "favorite": false,
+            "groupName": "Old News",
+            "guideChannelId": "one.fr",
+            "id": 1,
+            "name": "One",
+            "number": 1
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/livetv/channels?query=ON"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "group must be a string"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "GET",
+      "path": "/api/livetv/channels?group=News&group=Sport"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "property unknown should not exist"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "GET",
+      "path": "/api/livetv/channels?unknown=1"
+    }
+  ]
+}

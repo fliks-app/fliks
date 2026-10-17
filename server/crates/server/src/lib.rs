@@ -16,6 +16,7 @@ pub mod ingest;
 pub mod jobs;
 pub mod jwt_secret;
 pub mod libraries;
+pub mod livetv;
 pub mod markers;
 pub mod media;
 pub mod media_servers;
@@ -40,6 +41,7 @@ pub mod stream;
 pub mod subtitles;
 pub mod system;
 pub mod users;
+pub mod vetted;
 
 use config::Config;
 use fliks_engine::{gateway::Upstream, supervise};
@@ -86,6 +88,7 @@ pub async fn serve(cfg: Config) -> Result<(), BoxError> {
         state.engine.clone(),
         state.qoe.clone(),
     );
+    livetv::spawn(&state);
     qoe::spawn(&state.qoe);
     stream::spawn(&state);
     state.engine.start(state.db.clone(), state.cfg.port).await;

@@ -725,6 +725,435 @@
         }
       }
     },
+    "/api/livetv/admin/access/restricted-groups": {
+      "get": {
+        "tags": [
+          "livetv::access"
+        ],
+        "operationId": "restricted_groups",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "livetv::access"
+        ],
+        "operationId": "set_restricted_groups",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/livetv/admin/access/users": {
+      "get": {
+        "tags": [
+          "livetv::access"
+        ],
+        "operationId": "users",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/livetv/admin/access/users/{userId}": {
+      "get": {
+        "tags": [
+          "livetv::access"
+        ],
+        "operationId": "grants",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "livetv::access"
+        ],
+        "operationId": "set_grants",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/livetv/admin/channels": {
+      "get": {
+        "tags": [
+          "livetv::channels"
+        ],
+        "operationId": "admin_list",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/livetv/admin/channels/bulk": {
+      "patch": {
+        "tags": [
+          "livetv::channels"
+        ],
+        "operationId": "bulk_update",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/livetv/admin/channels/merge": {
+      "post": {
+        "tags": [
+          "livetv::channels"
+        ],
+        "operationId": "merge",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/livetv/admin/channels/{id}": {
+      "patch": {
+        "tags": [
+          "livetv::channels"
+        ],
+        "operationId": "update_channel",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/livetv/admin/guide-sources": {
+      "get": {
+        "tags": [
+          "livetv::guide"
+        ],
+        "operationId": "list",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "livetv::guide"
+        ],
+        "operationId": "create",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/livetv/admin/guide-sources/{id}": {
+      "delete": {
+        "tags": [
+          "livetv::guide"
+        ],
+        "operationId": "remove",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "livetv::guide"
+        ],
+        "operationId": "update",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/livetv/admin/guide-sources/{id}/sync": {
+      "post": {
+        "tags": [
+          "livetv::guide"
+        ],
+        "operationId": "sync_route",
+        "responses": {
+          "201": {
+            "description": ""
+          },
+          "409": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/livetv/admin/guide/match-report": {
+      "get": {
+        "tags": [
+          "livetv::guide"
+        ],
+        "operationId": "match_report",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/livetv/admin/sources": {
+      "get": {
+        "tags": [
+          "livetv::sources"
+        ],
+        "operationId": "list",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "livetv::sources"
+        ],
+        "operationId": "create",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/livetv/admin/sources/playlist": {
+      "post": {
+        "tags": [
+          "livetv::sources"
+        ],
+        "operationId": "upload",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/livetv/admin/sources/test": {
+      "post": {
+        "tags": [
+          "livetv::sources"
+        ],
+        "operationId": "test",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/livetv/admin/sources/{id}": {
+      "delete": {
+        "tags": [
+          "livetv::sources"
+        ],
+        "operationId": "remove",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "livetv::sources"
+        ],
+        "operationId": "update",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/livetv/admin/sources/{id}/sync": {
+      "post": {
+        "tags": [
+          "livetv::sources"
+        ],
+        "operationId": "sync_route",
+        "responses": {
+          "201": {
+            "description": ""
+          },
+          "409": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/livetv/channels": {
+      "get": {
+        "tags": [
+          "livetv::channels"
+        ],
+        "operationId": "list",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/livetv/channels/on-now": {
+      "get": {
+        "tags": [
+          "livetv::guide"
+        ],
+        "operationId": "on_now",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/livetv/channels/{id}/logo": {
+      "get": {
+        "tags": [
+          "livetv::channels"
+        ],
+        "operationId": "logo",
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "404": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/livetv/channels/{id}/play": {
+      "post": {
+        "tags": [
+          "livetv::session"
+        ],
+        "operationId": "play",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/livetv/channels/{id}/prefs": {
+      "put": {
+        "tags": [
+          "livetv::channels"
+        ],
+        "operationId": "set_prefs",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/livetv/guide": {
+      "get": {
+        "tags": [
+          "livetv::guide"
+        ],
+        "operationId": "window",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/livetv/programs/{id}": {
+      "get": {
+        "tags": [
+          "livetv::guide"
+        ],
+        "operationId": "program",
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "404": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/livetv/search": {
+      "get": {
+        "tags": [
+          "livetv::guide"
+        ],
+        "operationId": "search",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/livetv/sessions/{sessionId}": {
+      "delete": {
+        "tags": [
+          "livetv::session"
+        ],
+        "operationId": "leave",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/livetv/sessions/{sessionId}/state": {
+      "put": {
+        "tags": [
+          "livetv::session"
+        ],
+        "operationId": "heartbeat",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/livetv/status": {
+      "get": {
+        "tags": [
+          "livetv::channels"
+        ],
+        "operationId": "status",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/markers": {
       "post": {
         "tags": [

@@ -2,11 +2,11 @@
 use serde::Deserialize;
 
 /// `String.prototype.trim` / `\s` whitespace.
-pub(crate) fn is_ws(c: char) -> bool {
+pub fn is_ws(c: char) -> bool {
     (c.is_whitespace() && c != '\u{85}') || c == '\u{feff}'
 }
 
-pub(crate) fn trim(s: &str) -> &str {
+pub fn trim(s: &str) -> &str {
     s.trim_matches(is_ws)
 }
 
@@ -106,6 +106,51 @@ macro_rules! rx {
     }};
 }
 pub(crate) use rx;
+
+/// JS `parseInt(raw, 10)`: the leading integer after JS whitespace, `None` for NaN; huge values saturate.
+pub fn parse_int(raw: &str) -> Option<i64> {
+    let t = trim_start(raw);
+    let (neg, digits) = match t.as_bytes().first()? {
+        b'-' => (true, &t[1..]),
+        b'+' => (false, &t[1..]),
+        _ => (false, t),
+    };
+    let end = digits.bytes().take_while(u8::is_ascii_digit).count();
+    let n: i64 = digits[..end]
+        .parse()
+        .ok()
+        .or((end > 0).then_some(i64::MAX))?;
+    Some(if neg { -n } else { n })
+}
+
+/// JS `parseFloat`: the longest decimal prefix after JS whitespace (`Infinity` included), `None` for NaN.
+pub fn parse_float(raw: &str) -> Option<f64> {
+    let t = trim_start(raw);
+    let m = rx!(r"^[+-]?(?:Infinity|(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?)").find(t)?;
+    let s = m.as_str();
+    match s.trim_start_matches(['+', '-']) {
+        "Infinity" if s.starts_with('-') => Some(f64::NEG_INFINITY),
+        "Infinity" => Some(f64::INFINITY),
+        _ => s.parse().ok(),
+    }
+}
+
+fn trim_start(s: &str) -> &str {
+    s.trim_start_matches(is_ws)
+}
+
+/// JS `encodeURIComponent`: everything but `A-Za-z0-9-_.!~*'()` is percent-encoded as UTF-8.
+pub fn encode_uri_component(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for b in s.bytes() {
+        if b.is_ascii_alphanumeric() || b"-_.!~*'()".contains(&b) {
+            out.push(b as char);
+        } else {
+            out.push_str(&format!("%{b:02X}"));
+        }
+    }
+    out
+}
 
 /// `String.prototype.length`: UTF-16 code units.
 pub(crate) fn u16len(s: &str) -> usize {

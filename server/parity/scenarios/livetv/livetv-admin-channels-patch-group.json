@@ -1,0 +1,269 @@
+{
+  "deviation": "C138",
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastSyncAt",
+    "$..logoPath"
+  ],
+  "name": "livetv-admin-channels-patch-group",
+  "seed": "livetv",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "groupName": "  New Group "
+      },
+      "expect": {
+        "body": {
+          "consecutiveFailures": 0,
+          "enabled": true,
+          "groupName": "New Group",
+          "groupNameSource": "manual",
+          "guideChannelId": "one.fr",
+          "guideMatchKind": "id",
+          "guideShiftMinutes": 0,
+          "id": 1,
+          "lastErrorAt": null,
+          "lastPlayedAt": null,
+          "name": "One",
+          "number": 1,
+          "sortIndex": 0
+        },
+        "status": 200
+      },
+      "method": "PATCH",
+      "path": "/api/livetv/admin/channels/1"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "groupName": null
+      },
+      "expect": {
+        "body": {
+          "consecutiveFailures": 0,
+          "enabled": true,
+          "groupName": "__livetv_ungrouped__",
+          "groupNameSource": "manual",
+          "guideChannelId": "one.fr",
+          "guideMatchKind": "id",
+          "guideShiftMinutes": 0,
+          "id": 1,
+          "lastErrorAt": null,
+          "lastPlayedAt": null,
+          "name": "One",
+          "number": 1,
+          "sortIndex": 0
+        },
+        "status": 200
+      },
+      "method": "PATCH",
+      "path": "/api/livetv/admin/channels/1"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "groups": [
+            {
+              "count": 2,
+              "name": "__livetv_ungrouped__"
+            },
+            {
+              "count": 1,
+              "name": "Adult XXX"
+            },
+            {
+              "count": 1,
+              "name": "Mine"
+            },
+            {
+              "count": 1,
+              "name": "News"
+            },
+            {
+              "count": 1,
+              "name": "Sport"
+            }
+          ],
+          "items": [
+            {
+              "consecutiveFailures": 0,
+              "enabled": true,
+              "groupName": "News",
+              "groupNameSource": "provider",
+              "guideChannelId": "hidden.fr",
+              "guideMatchKind": "fuzzy",
+              "guideShiftMinutes": 30,
+              "id": 5,
+              "lastErrorAt": null,
+              "lastPlayedAt": null,
+              "name": "Hidden One",
+              "number": 5,
+              "sortIndex": 0,
+              "streams": [
+                {
+                  "channelId": 5,
+                  "externalId": "501",
+                  "id": 6,
+                  "lastError": null,
+                  "lastOkAt": null,
+                  "lastSeenAt": "2026-01-02T10:00:00.000Z",
+                  "priority": 0,
+                  "probedAudioCodec": null,
+                  "probedContainer": null,
+                  "probedVideoCodec": null,
+                  "providerName": "Hidden One",
+                  "qualityLabel": null,
+                  "referer": null,
+                  "source": {
+                    "accountStatus": null,
+                    "channelCount": 5,
+                    "enabled": true,
+                    "excludeGroupsPattern": null,
+                    "expiresAt": null,
+                    "guideUrls": [
+                      "http://127.0.0.1:4921/guide.xml"
+                    ],
+                    "id": 1,
+                    "includeGroupsPattern": null,
+                    "kind": "m3u",
+                    "lastAdultGuardError": null,
+                    "lastSyncError": null,
+                    "lastSyncStatus": "ok",
+                    "maxStreams": 2,
+                    "maxStreamsIsManual": false,
+                    "name": "Alpha",
+                    "playlistEtag": null,
+                    "playlistLastModified": null,
+                    "priority": 0,
+                    "referer": null,
+                    "refreshIntervalHours": 12,
+                    "url": "http://127.0.0.1:4921/playlist.m3u",
+                    "userAgent": null,
+                    "username": null
+                  },
+                  "sourceId": 1,
+                  "url": "http://127.0.0.1:4921/live/u/p/501.ts",
+                  "userAgent": null
+                }
+              ]
+            },
+            {
+              "consecutiveFailures": 0,
+              "enabled": true,
+              "groupName": "__livetv_ungrouped__",
+              "groupNameSource": "manual",
+              "guideChannelId": "one.fr",
+              "guideMatchKind": "id",
+              "guideShiftMinutes": 0,
+              "id": 1,
+              "lastErrorAt": null,
+              "lastPlayedAt": null,
+              "name": "One",
+              "number": 1,
+              "sortIndex": 0,
+              "streams": [
+                {
+                  "channelId": 1,
+                  "externalId": "101",
+                  "id": 1,
+                  "lastError": null,
+                  "lastOkAt": null,
+                  "lastSeenAt": "2026-01-02T10:00:00.000Z",
+                  "priority": 0,
+                  "probedAudioCodec": null,
+                  "probedContainer": null,
+                  "probedVideoCodec": null,
+                  "providerName": "One HD",
+                  "qualityLabel": "HD",
+                  "referer": null,
+                  "source": {
+                    "accountStatus": null,
+                    "channelCount": 5,
+                    "enabled": true,
+                    "excludeGroupsPattern": null,
+                    "expiresAt": null,
+                    "guideUrls": [
+                      "http://127.0.0.1:4921/guide.xml"
+                    ],
+                    "id": 1,
+                    "includeGroupsPattern": null,
+                    "kind": "m3u",
+                    "lastAdultGuardError": null,
+                    "lastSyncError": null,
+                    "lastSyncStatus": "ok",
+                    "maxStreams": 2,
+                    "maxStreamsIsManual": false,
+                    "name": "Alpha",
+                    "playlistEtag": null,
+                    "playlistLastModified": null,
+                    "priority": 0,
+                    "referer": null,
+                    "refreshIntervalHours": 12,
+                    "url": "http://127.0.0.1:4921/playlist.m3u",
+                    "userAgent": null,
+                    "username": null
+                  },
+                  "sourceId": 1,
+                  "url": "http://127.0.0.1:4921/live/u/p/101.ts",
+                  "userAgent": null
+                },
+                {
+                  "channelId": 1,
+                  "externalId": "102",
+                  "id": 2,
+                  "lastError": null,
+                  "lastOkAt": null,
+                  "lastSeenAt": "2026-01-02T10:00:00.000Z",
+                  "priority": 1,
+                  "probedAudioCodec": null,
+                  "probedContainer": null,
+                  "probedVideoCodec": null,
+                  "providerName": "One FHD",
+                  "qualityLabel": null,
+                  "referer": null,
+                  "source": {
+                    "accountStatus": null,
+                    "channelCount": 5,
+                    "enabled": true,
+                    "excludeGroupsPattern": null,
+                    "expiresAt": null,
+                    "guideUrls": [
+                      "http://127.0.0.1:4921/guide.xml"
+                    ],
+                    "id": 1,
+                    "includeGroupsPattern": null,
+                    "kind": "m3u",
+                    "lastAdultGuardError": null,
+                    "lastSyncError": null,
+                    "lastSyncStatus": "ok",
+                    "maxStreams": 2,
+                    "maxStreamsIsManual": false,
+                    "name": "Alpha",
+                    "playlistEtag": null,
+                    "playlistLastModified": null,
+                    "priority": 0,
+                    "referer": null,
+                    "refreshIntervalHours": 12,
+                    "url": "http://127.0.0.1:4921/playlist.m3u",
+                    "userAgent": null,
+                    "username": null
+                  },
+                  "sourceId": 1,
+                  "url": "http://127.0.0.1:4921/live/u/p/102.ts",
+                  "userAgent": null
+                }
+              ]
+            }
+          ],
+          "total": 2
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/livetv/admin/channels?query=one"
+    }
+  ]
+}

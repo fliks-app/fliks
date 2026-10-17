@@ -1,8 +1,8 @@
 use crate::http::{layers, static_files};
 use crate::{
-    auth, events, fs, images, importers, jobs, libraries, markers, media, media_servers, metadata,
-    notifications, persons, playback, playlists, profiles, qoe, remote, requests, roles, settings,
-    social, state::AppState, subtitles, system, users,
+    auth, events, fs, images, importers, jobs, libraries, livetv, markers, media, media_servers,
+    metadata, notifications, persons, playback, playlists, profiles, qoe, remote, requests, roles,
+    settings, social, state::AppState, subtitles, system, users,
 };
 use axum::{
     Router,
@@ -268,7 +268,40 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         requests::rule_create,
         requests::rule_get,
         requests::rule_update,
-        requests::rule_remove
+        requests::rule_remove,
+        livetv::channels::status,
+        livetv::channels::list,
+        livetv::guide::on_now,
+        livetv::channels::logo,
+        livetv::channels::set_prefs,
+        livetv::session::play,
+        livetv::session::leave,
+        livetv::session::heartbeat,
+        livetv::guide::window,
+        livetv::guide::program,
+        livetv::guide::search,
+        livetv::sources::list,
+        livetv::sources::create,
+        livetv::sources::test,
+        livetv::sources::upload,
+        livetv::sources::update,
+        livetv::sources::remove,
+        livetv::sources::sync_route,
+        livetv::channels::admin_list,
+        livetv::channels::bulk_update,
+        livetv::channels::merge,
+        livetv::channels::update_channel,
+        livetv::guide::list,
+        livetv::guide::create,
+        livetv::guide::update,
+        livetv::guide::remove,
+        livetv::guide::sync_route,
+        livetv::guide::match_report,
+        livetv::access::restricted_groups,
+        livetv::access::set_restricted_groups,
+        livetv::access::users,
+        livetv::access::grants,
+        livetv::access::set_grants
     )
 )]
 pub struct ApiDoc;
@@ -350,6 +383,7 @@ fn api() -> Router<AppState> {
         .merge(jobs::router())
         .merge(requests::router())
         .merge(subtitles::router())
+        .merge(livetv::router())
 }
 
 async fn preflight_here(State(cors): State<Router>, req: Request, next: Next) -> Response {

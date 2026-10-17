@@ -20,6 +20,13 @@ export const CORE_SCHEDULER_JOB_NAMES = [
   'SubtitleUpgrade',
 ] as const;
 
+/** The live TV cron jobs, run by `fliks-server` since S7; listed so a plugin cannot take their names. */
+export const CORE_LIVETV_JOB_NAMES = [
+  'LiveTvSourceRefresh',
+  'LiveTvGuideRefresh',
+  'LiveTvGuidePrune',
+] as const;
+
 export type CoreSchedulerJobName = (typeof CORE_SCHEDULER_JOB_NAMES)[number];
 
 /**
@@ -39,5 +46,6 @@ export const CORE_TRIGGER_ONLY_JOB_NAMES = [
 /** Every name a plugin job may not take, whether cron-driven or trigger-only. */
 export const RESERVED_CORE_JOB_NAMES: readonly string[] = [
   ...CORE_SCHEDULER_JOB_NAMES,
+  ...CORE_LIVETV_JOB_NAMES,
   ...CORE_TRIGGER_ONLY_JOB_NAMES,
 ];

@@ -1,0 +1,122 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastSyncAt",
+    "$..logoPath",
+    "$..startsAt",
+    "$..endsAt"
+  ],
+  "name": "program-by-id",
+  "seed": "livetv",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "categories": [
+            "Cat"
+          ],
+          "description": "About One Before",
+          "episodeNumber": null,
+          "guideChannelId": "one.fr",
+          "guideSourceId": 1,
+          "iconUrl": null,
+          "id": 1,
+          "isLive": false,
+          "isNew": false,
+          "rating": null,
+          "seasonNumber": null,
+          "seriesId": null,
+          "subtitle": null,
+          "title": "One Before",
+          "year": null
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/livetv/programs/1"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "categories": [
+            "Cat"
+          ],
+          "description": "About One Now",
+          "episodeNumber": 2,
+          "guideChannelId": "one.fr",
+          "guideSourceId": 1,
+          "iconUrl": null,
+          "id": 2,
+          "isLive": false,
+          "isNew": true,
+          "rating": "PG",
+          "seasonNumber": 1,
+          "seriesId": null,
+          "subtitle": null,
+          "title": "One Now",
+          "year": 2020
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/livetv/programs/2"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Program #999 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "GET",
+      "path": "/api/livetv/programs/999"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Validation failed (numeric string is expected)",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "GET",
+      "path": "/api/livetv/programs/abc"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "categories": [
+            "Cat"
+          ],
+          "description": "About Two Now",
+          "episodeNumber": null,
+          "guideChannelId": "two.fr",
+          "guideSourceId": 1,
+          "iconUrl": null,
+          "id": 5,
+          "isLive": false,
+          "isNew": false,
+          "rating": null,
+          "seasonNumber": null,
+          "seriesId": null,
+          "subtitle": null,
+          "title": "Two Now",
+          "year": null
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/livetv/programs/5"
+    }
+  ]
+}

@@ -1,0 +1,300 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastSyncAt",
+    "$..logoPath",
+    "$..startsAt",
+    "$..endsAt"
+  ],
+  "name": "guide-window-page-clamp",
+  "seed": "livetv",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "channels": [
+            {
+              "favorite": true,
+              "groupName": "Mine",
+              "guideChannelId": "two.fr",
+              "id": 2,
+              "name": "Two",
+              "number": 2
+            },
+            {
+              "favorite": false,
+              "groupName": "Old News",
+              "guideChannelId": "one.fr",
+              "id": 1,
+              "name": "One",
+              "number": 1
+            },
+            {
+              "favorite": false,
+              "groupName": "__livetv_ungrouped__",
+              "guideChannelId": null,
+              "id": 4,
+              "name": "No Group",
+              "number": null
+            }
+          ],
+          "page": 1,
+          "pageSize": 50,
+          "programs": {
+            "one.fr": [
+              {
+                "categories": [
+                  "Cat"
+                ],
+                "description": "About One Before",
+                "episodeNumber": null,
+                "guideChannelId": "one.fr",
+                "guideSourceId": 1,
+                "iconUrl": null,
+                "id": 1,
+                "isLive": false,
+                "isNew": false,
+                "rating": null,
+                "seasonNumber": null,
+                "seriesId": null,
+                "subtitle": null,
+                "title": "One Before",
+                "year": null
+              },
+              {
+                "categories": [
+                  "Cat"
+                ],
+                "description": "About One Now",
+                "episodeNumber": 2,
+                "guideChannelId": "one.fr",
+                "guideSourceId": 1,
+                "iconUrl": null,
+                "id": 2,
+                "isLive": false,
+                "isNew": true,
+                "rating": "PG",
+                "seasonNumber": 1,
+                "seriesId": null,
+                "subtitle": null,
+                "title": "One Now",
+                "year": 2020
+              },
+              {
+                "categories": [
+                  "Cat"
+                ],
+                "description": "About One Later",
+                "episodeNumber": null,
+                "guideChannelId": "one.fr",
+                "guideSourceId": 1,
+                "iconUrl": null,
+                "id": 3,
+                "isLive": false,
+                "isNew": false,
+                "rating": null,
+                "seasonNumber": null,
+                "seriesId": null,
+                "subtitle": null,
+                "title": "One Later",
+                "year": null
+              }
+            ],
+            "two.fr": [
+              {
+                "categories": [
+                  "Cat"
+                ],
+                "description": "About Two Now",
+                "episodeNumber": null,
+                "guideChannelId": "two.fr",
+                "guideSourceId": 1,
+                "iconUrl": null,
+                "id": 5,
+                "isLive": false,
+                "isNew": false,
+                "rating": null,
+                "seasonNumber": null,
+                "seriesId": null,
+                "subtitle": null,
+                "title": "Two Now",
+                "year": null
+              },
+              {
+                "categories": [
+                  "Cat"
+                ],
+                "description": "About Two Later",
+                "episodeNumber": null,
+                "guideChannelId": "two.fr",
+                "guideSourceId": 1,
+                "iconUrl": null,
+                "id": 6,
+                "isLive": false,
+                "isNew": false,
+                "rating": null,
+                "seasonNumber": null,
+                "seriesId": null,
+                "subtitle": null,
+                "title": "Two Later",
+                "year": null
+              }
+            ]
+          },
+          "total": 3
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/livetv/guide?from=2000-01-01T00:00:00Z&to=2100-01-01T00:00:00Z&pageSize=51"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "channels": [
+            {
+              "favorite": false,
+              "groupName": "Old News",
+              "guideChannelId": "one.fr",
+              "id": 1,
+              "name": "One",
+              "number": 1
+            }
+          ],
+          "page": 2,
+          "pageSize": 1,
+          "programs": {
+            "one.fr": [
+              {
+                "categories": [
+                  "Cat"
+                ],
+                "description": "About One Before",
+                "episodeNumber": null,
+                "guideChannelId": "one.fr",
+                "guideSourceId": 1,
+                "iconUrl": null,
+                "id": 1,
+                "isLive": false,
+                "isNew": false,
+                "rating": null,
+                "seasonNumber": null,
+                "seriesId": null,
+                "subtitle": null,
+                "title": "One Before",
+                "year": null
+              },
+              {
+                "categories": [
+                  "Cat"
+                ],
+                "description": "About One Now",
+                "episodeNumber": 2,
+                "guideChannelId": "one.fr",
+                "guideSourceId": 1,
+                "iconUrl": null,
+                "id": 2,
+                "isLive": false,
+                "isNew": true,
+                "rating": "PG",
+                "seasonNumber": 1,
+                "seriesId": null,
+                "subtitle": null,
+                "title": "One Now",
+                "year": 2020
+              },
+              {
+                "categories": [
+                  "Cat"
+                ],
+                "description": "About One Later",
+                "episodeNumber": null,
+                "guideChannelId": "one.fr",
+                "guideSourceId": 1,
+                "iconUrl": null,
+                "id": 3,
+                "isLive": false,
+                "isNew": false,
+                "rating": null,
+                "seasonNumber": null,
+                "seriesId": null,
+                "subtitle": null,
+                "title": "One Later",
+                "year": null
+              }
+            ]
+          },
+          "total": 3
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/livetv/guide?from=2000-01-01T00:00:00Z&to=2100-01-01T00:00:00Z&page=2&pageSize=1"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "page must not be less than 1"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "GET",
+      "path": "/api/livetv/guide?from=2000-01-01T00:00:00Z&to=2100-01-01T00:00:00Z&page=0"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "pageSize must not be less than 1"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "GET",
+      "path": "/api/livetv/guide?from=2000-01-01T00:00:00Z&to=2100-01-01T00:00:00Z&pageSize=0"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "page must not be less than 1",
+            "page must be an integer number"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "GET",
+      "path": "/api/livetv/guide?from=2000-01-01T00:00:00Z&to=2100-01-01T00:00:00Z&page=x"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "property unknown should not exist"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "GET",
+      "path": "/api/livetv/guide?from=2000-01-01T00:00:00Z&to=2100-01-01T00:00:00Z&unknown=1"
+    }
+  ]
+}

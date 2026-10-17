@@ -26,6 +26,7 @@ pub struct AppState {
     pub system: Arc<system::Shared>,
     pub jobs: Arc<Running>,
     pub subtitles: Arc<crate::subtitles::Shared>,
+    pub livetv: Arc<crate::livetv::Shared>,
 }
 
 impl AppState {
@@ -53,6 +54,7 @@ impl AppState {
             system: Arc::default(),
             jobs: Arc::default(),
             subtitles: Arc::default(),
+            livetv: Arc::default(),
             cfg: Arc::new(cfg),
             db,
         }
