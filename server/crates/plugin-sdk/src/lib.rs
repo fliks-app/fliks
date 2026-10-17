@@ -14,6 +14,8 @@ pub mod bindings {
 #[cfg(all(feature = "build", not(target_arch = "wasm32")))]
 pub mod build;
 pub mod db;
+#[cfg(all(feature = "harness", not(target_arch = "wasm32")))]
+pub mod harness;
 pub mod http;
 pub mod log;
 pub mod router;

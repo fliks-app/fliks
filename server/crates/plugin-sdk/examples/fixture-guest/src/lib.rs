@@ -423,6 +423,8 @@ impl Plugin for Fixture {
             spin(payload.parse().unwrap_or(1.0));
         } else if key.starts_with("pgsleep:") {
             pg_sleep(payload.parse().unwrap_or(1.0))?;
+        } else if key.starts_with("trap:") && attempt == 1 {
+            panic!("asked to trap in scheduled");
         } else if key.starts_with("fail:") {
             return Err("asked to fail".into());
         } else if key.starts_with("again:") && payload == "\"first\"" {
