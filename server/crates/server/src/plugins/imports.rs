@@ -15,8 +15,18 @@ pub fn host_err(code: &str, message: impl Into<String>) -> HostError {
     }
 }
 
+/// C109: a core database the host cannot reach is not the guest's fault.
+pub const DB_UNAVAILABLE: &str = "db-unavailable";
+
 fn db_err(e: sqlx::Error) -> HostError {
-    host_err("ERR", e.to_string())
+    let unreachable = matches!(
+        e,
+        sqlx::Error::Io(_) | sqlx::Error::PoolTimedOut | sqlx::Error::PoolClosed
+    );
+    host_err(
+        if unreachable { DB_UNAVAILABLE } else { "ERR" },
+        e.to_string(),
+    )
 }
 
 /// Every installed id, for the ownership rule of `plugin.<id>.*` keys (rule 24).
@@ -50,29 +60,8 @@ pub async fn config_for(
         .collect())
 }
 
-const SCOPE_OF: [(&str, &[&str]); 15] = [
-    ("media.acquisitionContext", &["media:read"]),
-    (
-        "acquisition.candidates",
-        &["acquisition:candidates", "media:read"],
-    ),
-    ("releases.match", &["acquisition:candidates", "media:read"]),
-    ("releases.score", &["releases:score"]),
-    ("media.resolve", &["media:read"]),
-    ("media.exists", &["media:read"]),
-    ("requests.markInProgress", &["requests:progress"]),
-    ("library.ingest", &["ingest:write"]),
-    ("events.publish", &["events:emit"]),
-    ("notifications.dispatch", &["events:emit"]),
-    ("counts.set", &["events:emit"]),
-    ("events.emitOwn", &["events:emit"]),
-    ("progress.set", &["events:emit"]),
-    ("config.get", &["config:rw"]),
-    ("config.set", &["config:rw"]),
-];
-
 /// Re-reads the registration and checks every scope of the method (rule 30).
-async fn bound(sh: &super::runtime::Shared, method: &str) -> Result<(), HostError> {
+async fn bound(sh: &super::runtime::Shared, method: &str, need: &[&str]) -> Result<(), HostError> {
     let id = &*sh.id;
     let scopes: Option<Vec<String>> =
         sqlx::query_scalar(r#"SELECT scopes FROM plugin_registrations WHERE "pluginId" = $1"#)
@@ -86,10 +75,6 @@ async fn bound(sh: &super::runtime::Shared, method: &str) -> Result<(), HostErro
             format!("plugin \"{id}\" has no active registration"),
         ));
     };
-    let need = SCOPE_OF
-        .iter()
-        .find(|(m, _)| *m == method)
-        .map_or(&[][..], |(_, s)| *s);
     if let Some(missing) = need.iter().find(|s| !scopes.iter().any(|x| x == *s)) {
         return Err(host_err(
             "ERR_DENIED",
@@ -109,19 +94,22 @@ impl Ctx {
             .ok_or_else(|| host_err("ERR", "core services are not attached"))
     }
 
-    fn track<T>(&self, started: Instant, r: Result<T, HostError>) -> Result<T, HostError> {
+    fn track<T>(&mut self, started: Instant, r: Result<T, HostError>) -> Result<T, HostError> {
         self.sh.stats.record(started, r.is_ok());
+        if r.as_ref().err().is_some_and(|e| e.code == DB_UNAVAILABLE) {
+            self.db_unavailable = true;
+        }
         r
     }
 }
 
-/// Runs a host method with its binding check, deadline (8 s unless given) and counters.
+/// Runs a host method with its binding check on `$scope`s, deadline and counters.
 macro_rules! call {
-    ($self:ident, $method:literal, $deadline:expr, $body:expr) => {{
+    ($self:ident, $method:literal, [$($scope:literal),*], $deadline:expr, $body:expr) => {{
         let started = Instant::now();
         let sh = $self.sh.clone();
         let r = async {
-            bound(&sh, $method).await?;
+            bound(&sh, $method, &[$($scope),*]).await?;
             match tokio::time::timeout($deadline, $body).await {
                 Ok(r) => r,
                 Err(_) => Err(host_err(
@@ -147,36 +135,57 @@ impl host::Host for Ctx {
         season_id: Option<u32>,
         episode_id: Option<u32>,
     ) -> Result<Option<t::AcquisitionTarget>, HostError> {
-        let app = self.app()?;
-        call!(self, "media.acquisitionContext", HOST_CALL, async {
-            super::acquisition::context(&app, media_id, season_id, episode_id)
-                .await
-                .map_err(db_err)
-        })
+        let app = self.app();
+        call!(
+            self,
+            "media.acquisitionContext",
+            ["media:read"],
+            HOST_CALL,
+            async {
+                let app = app?;
+                super::acquisition::context(&app, media_id, season_id, episode_id)
+                    .await
+                    .map_err(db_err)
+            }
+        )
     }
     async fn acquisition_candidates(
         &mut self,
         q: t::CandidatesQuery,
     ) -> Result<t::CandidatesPage, HostError> {
-        let app = self.app()?;
+        let app = self.app();
         let id = self.sh.id.clone();
-        call!(self, "acquisition.candidates", HOST_CALL, async {
-            super::acquisition::candidates(&app, &id, q)
-                .await
-                .map_err(db_err)
-        })
+        call!(
+            self,
+            "acquisition.candidates",
+            ["acquisition:candidates", "media:read"],
+            HOST_CALL,
+            async {
+                let app = app?;
+                super::acquisition::candidates(&app, &id, q)
+                    .await
+                    .map_err(db_err)
+            }
+        )
     }
     async fn releases_match(
         &mut self,
         titles: Vec<t::ReleaseTitle>,
         min_age_minutes: Option<u32>,
     ) -> Result<Vec<t::ReleaseMatch>, HostError> {
-        let app = self.app()?;
-        call!(self, "releases.match", HOST_CALL, async {
-            super::acquisition::matches(&app, titles, min_age_minutes)
-                .await
-                .map_err(db_err)
-        })
+        let app = self.app();
+        call!(
+            self,
+            "releases.match",
+            ["acquisition:candidates", "media:read"],
+            HOST_CALL,
+            async {
+                let app = app?;
+                super::acquisition::matches(&app, titles, min_age_minutes)
+                    .await
+                    .map_err(db_err)
+            }
+        )
     }
     async fn releases_score(
         &mut self,
@@ -185,19 +194,26 @@ impl host::Host for Ctx {
         episode_number: Option<u32>,
         releases: Vec<t::CandidateRelease>,
     ) -> Result<Vec<t::ScoredRelease>, HostError> {
-        let app = self.app()?;
-        call!(self, "releases.score", HOST_CALL, async {
-            super::acquisition::score(&app, media_id, season_number, episode_number, releases)
-                .await
-                .map_err(db_err)
-        })
+        let app = self.app();
+        call!(
+            self,
+            "releases.score",
+            ["releases:score"],
+            HOST_CALL,
+            async {
+                let app = app?;
+                super::acquisition::score(&app, media_id, season_number, episode_number, releases)
+                    .await
+                    .map_err(db_err)
+            }
+        )
     }
     async fn media_resolve(
         &mut self,
         q: t::ResolveQuery,
     ) -> Result<Vec<(String, t::ResolvedMedia)>, HostError> {
         let core = self.sh.env.core.clone();
-        call!(self, "media.resolve", HOST_CALL, async {
+        call!(self, "media.resolve", ["media:read"], HOST_CALL, async {
             let total = q.media_ids.len() + q.season_ids.len() + q.episode_ids.len();
             if total > 100 {
                 return Err(host_err(
@@ -210,7 +226,7 @@ impl host::Host for Ctx {
     }
     async fn media_exists(&mut self, media_ids: Vec<u32>) -> Result<Vec<u32>, HostError> {
         let core = self.sh.env.core.clone();
-        call!(self, "media.exists", HOST_CALL, async {
+        call!(self, "media.exists", ["media:read"], HOST_CALL, async {
             let ids: Vec<i32> = media_ids.iter().map(|i| *i as i32).collect();
             let found: Vec<i32> =
                 sqlx::query_scalar("SELECT id FROM media WHERE id = ANY($1) ORDER BY id")
@@ -227,24 +243,39 @@ impl host::Host for Ctx {
         media_id: u32,
         season_number: Option<u32>,
     ) -> Result<(), HostError> {
-        let app = self.app()?;
-        call!(self, "requests.markInProgress", HOST_CALL, async {
-            crate::requests::Lifecycle::of(&app)
-                .mark_in_progress(media_id as i32, season_number.map(|s| s as i32))
-                .await
-                .map_err(|e| host_err("ERR", e.text()))
-        })
+        let app = self.app();
+        call!(
+            self,
+            "requests.markInProgress",
+            ["requests:progress"],
+            HOST_CALL,
+            async {
+                let app = app?;
+                crate::requests::Lifecycle::of(&app)
+                    .mark_in_progress(media_id as i32, season_number.map(|s| s as i32))
+                    .await
+                    .map_err(|e| host_err("ERR", e.text()))
+            }
+        )
     }
     async fn library_ingest(&mut self, r: t::IngestRequest) -> Result<t::IngestResult, HostError> {
-        let app = self.app()?;
+        let app = self.app();
         let id = self.sh.id.clone();
-        call!(self, "library.ingest", INGEST_CALL, async {
-            super::ingest::run(&app, &id, r).await
-        })
+        call!(
+            self,
+            "library.ingest",
+            ["ingest:write"],
+            INGEST_CALL,
+            async {
+                let app = app?;
+                super::ingest::run(&app, &id, r).await
+            }
+        )
     }
     async fn events_publish(&mut self, events: Vec<t::AcquisitionEvent>) -> Result<(), HostError> {
-        let app = self.app()?;
-        call!(self, "events.publish", HOST_CALL, async {
+        let app = self.app();
+        call!(self, "events.publish", ["events:emit"], HOST_CALL, async {
+            let app = app?;
             super::events::publish(&app, events).await;
             Ok(())
         })
@@ -253,22 +284,30 @@ impl host::Host for Ctx {
         &mut self,
         payload: String,
     ) -> Result<(), HostError> {
-        let app = self.app()?;
-        call!(self, "notifications.dispatch", HOST_CALL, async {
-            let serde_json::Value::Object(map) = serde_json::from_str(&payload)
-                .map_err(|e| host_err("ERR_VALIDATION", format!("payload is not JSON: {e}")))?
-            else {
-                return Err(host_err("ERR_VALIDATION", "payload must be an object"));
-            };
-            crate::notifications::dispatch(&app.db, "grab.started", &map)
-                .await
-                .map_err(db_err)
-        })
+        let app = self.app();
+        call!(
+            self,
+            "notifications.dispatch",
+            ["events:emit"],
+            HOST_CALL,
+            async {
+                let app = app?;
+                let serde_json::Value::Object(map) = serde_json::from_str(&payload)
+                    .map_err(|e| host_err("ERR_VALIDATION", format!("payload is not JSON: {e}")))?
+                else {
+                    return Err(host_err("ERR_VALIDATION", "payload must be an object"));
+                };
+                crate::notifications::dispatch(&app.db, "grab.started", &map)
+                    .await
+                    .map_err(db_err)
+            }
+        )
     }
     async fn counts_set(&mut self, key: String, value: u64) -> Result<(), HostError> {
-        let app = self.app()?;
+        let app = self.app();
         let id = self.sh.id.clone();
-        call!(self, "counts.set", HOST_CALL, async {
+        call!(self, "counts.set", ["events:emit"], HOST_CALL, async {
+            let app = app?;
             app.plugins
                 .counts
                 .set(&id, &key, value)
@@ -281,9 +320,10 @@ impl host::Host for Ctx {
         payload: String,
         audience: t::Audience,
     ) -> Result<(), HostError> {
-        let app = self.app()?;
+        let app = self.app();
         let id = self.sh.id.clone();
-        call!(self, "events.emitOwn", HOST_CALL, async {
+        call!(self, "events.emitOwn", ["events:emit"], HOST_CALL, async {
+            let app = app?;
             let payload = serde_json::from_str(&payload)
                 .map_err(|e| host_err("ERR_VALIDATION", format!("payload is not JSON: {e}")))?;
             super::events::emit_own(&app, &id, &kind, payload, audience).await;
@@ -295,8 +335,9 @@ impl host::Host for Ctx {
         media_id: u32,
         downloads: Vec<t::DownloadProgress>,
     ) -> Result<(), HostError> {
-        let app = self.app()?;
-        call!(self, "progress.set", HOST_CALL, async {
+        let app = self.app();
+        call!(self, "progress.set", ["events:emit"], HOST_CALL, async {
+            let app = app?;
             super::events::progress_gates()
                 .set(&app, media_id as i32, &downloads)
                 .await;
@@ -318,7 +359,7 @@ impl host::Host for Ctx {
     ) -> Result<(), HostError> {
         let env = self.sh.env.clone();
         let id = self.sh.id.clone();
-        call!(self, "schedule-call", HOST_CALL, async {
+        call!(self, "schedule-call", [], HOST_CALL, async {
             scheduled::schedule(&env.core, &id, &key, delay_ms, &payload)
                 .await
                 .map_err(|(c, m)| host_err(c, m))?;
@@ -329,7 +370,7 @@ impl host::Host for Ctx {
     async fn cancel_call(&mut self, key: String) -> Result<bool, HostError> {
         let core = self.sh.env.core.clone();
         let id = self.sh.id.clone();
-        call!(self, "cancel-call", HOST_CALL, async {
+        call!(self, "cancel-call", [], HOST_CALL, async {
             scheduled::cancel(&core, &id, &key).await.map_err(db_err)
         })
     }
@@ -340,16 +381,18 @@ impl host::Host for Ctx {
     ) -> Result<Vec<(String, String)>, HostError> {
         let core = self.sh.env.core.clone();
         let id = self.sh.id.clone();
-        call!(self, "config.get", HOST_CALL, async {
+        call!(self, "config.get", ["config:rw"], HOST_CALL, async {
             config_for(&core, &id, keys.as_deref())
                 .await
                 .map_err(db_err)
         })
     }
     async fn config_set(&mut self, key: String, value: Option<String>) -> Result<(), HostError> {
-        let app = self.app()?;
+        let app = self.app();
         let id = self.sh.id.clone();
-        call!(self, "config.set", HOST_CALL, async {
+        call!(self, "config.set", ["config:rw"], HOST_CALL, async {
+            config_bounds(&key, value.as_deref())?;
+            let app = app?;
             let full = format!("plugin.{id}.{key}");
             let ids = installed_ids(&app.db).await.map_err(db_err)?;
             if fliks_domain::plugins::setting_owner(&full, ids.iter().map(String::as_str))
@@ -365,6 +408,17 @@ impl host::Host for Ctx {
                 .map_err(db_err)
         })
     }
+}
+
+/// Rule 34 bounds of `config.set`.
+fn config_bounds(key: &str, value: Option<&str>) -> Result<(), HostError> {
+    if !(1..=256).contains(&key.chars().count()) {
+        return Err(host_err("ERR_VALIDATION", "key must be 1-256 chars"));
+    }
+    if value.is_some_and(|v| v.len() > 64 * 1024) {
+        return Err(host_err("ERR_VALIDATION", "value over 64 KiB"));
+    }
+    Ok(())
 }
 
 async fn resolve(
@@ -508,5 +562,25 @@ impl log::Host for Ctx {
             log::Level::Error => Level::Error,
         };
         self.sh.env.logs.push(&self.sh.id, level, &message);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn config_set_bounds() {
+        let code = |k: &str, v: Option<&str>| config_bounds(k, v).err().map(|e| e.code);
+        assert_eq!(code("a", Some("x")), None);
+        assert_eq!(code(&"é".repeat(256), None), None);
+        assert_eq!(
+            code(&"a".repeat(257), None).as_deref(),
+            Some("ERR_VALIDATION")
+        );
+        assert_eq!(code("", None).as_deref(), Some("ERR_VALIDATION"));
+        let big = "x".repeat(64 * 1024 + 1);
+        assert_eq!(code("a", Some(&big)).as_deref(), Some("ERR_VALIDATION"));
+        assert_eq!(code("a", Some(&big[1..])), None);
     }
 }
