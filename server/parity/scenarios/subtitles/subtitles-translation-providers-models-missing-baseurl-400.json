@@ -1,0 +1,63 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..date",
+    "$..queuedAt"
+  ],
+  "name": "subtitles-translation-providers-models-missing-baseurl-400",
+  "seed": "subtitles",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "engine": "openai",
+        "settings": {}
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "An OpenAI-compatible base URL is required",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/subtitles/translation-providers/models"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "engine": "gemini",
+        "settings": {}
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Gemini API key is not set",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/subtitles/translation-providers/models"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "engine": "libretranslate",
+        "settings": {}
+      },
+      "expect": {
+        "body": {
+          "models": []
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/subtitles/translation-providers/models"
+    }
+  ],
+  "strictMessage": true
+}

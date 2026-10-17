@@ -1,0 +1,132 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..date",
+    "$..queuedAt"
+  ],
+  "name": "subtitles-media-bound-to-media",
+  "seed": "subtitles",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Subtitle #3 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "POST",
+      "path": "/api/media/2/subtitles/3/validate"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Subtitle #3 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "DELETE",
+      "path": "/api/media/2/subtitles/3"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "language": "en"
+      },
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Subtitle #3 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "PATCH",
+      "path": "/api/media/2/subtitles/3/language"
+    },
+    {
+      "as": "admin",
+      "body": {},
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Subtitle #3 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "POST",
+      "path": "/api/media/2/subtitles/3/ocr"
+    },
+    {
+      "as": "admin",
+      "body": {},
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Subtitle #3 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "POST",
+      "path": "/api/media/2/subtitles/3/sync"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "action": "removeHiTags"
+      },
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Subtitle #3 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "POST",
+      "path": "/api/media/2/subtitles/3/post-process"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "searchResult": {}
+      },
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Subtitle #3 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "POST",
+      "path": "/api/media/2/subtitles/3/upgrade"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "targetLanguage": "de"
+      },
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Subtitle #3 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "POST",
+      "path": "/api/media/2/subtitles/3/translate"
+    }
+  ],
+  "strictMessage": true
+}

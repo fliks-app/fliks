@@ -1,0 +1,125 @@
+{
+  "deviation": null,
+  "fs": [
+    {
+      "from": "base.mkv",
+      "path": "s6/subtitles-work/movies/Work Movie (2020)/Work.Movie.2020.1080p.BluRay.x264-GRP.mkv"
+    },
+    {
+      "from": "base.mkv",
+      "path": "s6/subtitles-work/series/Work Show/Season 01/Work.Show.S01E01.1080p.WEB-DL.x264-GRP.mkv"
+    }
+  ],
+  "fsAfter": {
+    "absent": [],
+    "exists": [
+      "s6/subtitles-work/movies/Work Movie (2020)/Work.Movie.2020.1080p.BluRay.x264-GRP.fr.srt"
+    ]
+  },
+  "fsDir": "s6/subtitles-work",
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..date",
+    "$..queuedAt"
+  ],
+  "name": "subtitles-provider-auto-default-language-fr",
+  "seed": "subtitles-work",
+  "steps": [
+    {
+      "expect": {
+        "body": {
+          "ok": true
+        },
+        "status": 200
+      },
+      "method": "POST",
+      "path": "/__reset",
+      "stub": true
+    },
+    {
+      "as": "admin",
+      "body": {
+        "mediaFileId": 101
+      },
+      "expect": {
+        "body": {
+          "codec": null,
+          "episode": null,
+          "episodeId": null,
+          "errorMessage": null,
+          "forced": false,
+          "hashMatched": false,
+          "hearingImpaired": false,
+          "id": 1,
+          "language": "fr",
+          "locked": false,
+          "media": {
+            "id": 101
+          },
+          "mediaFile": {
+            "id": 101
+          },
+          "mediaFileId": 101,
+          "mediaId": 101,
+          "providerFileId": "/subtitle/101.zip",
+          "providerType": "subdl",
+          "relativePath": "Work.Movie.2020.1080p.BluRay.x264-GRP.fr.srt",
+          "score": 1,
+          "sourceStreamIndex": null,
+          "status": "downloaded",
+          "streamIndex": null,
+          "syncFailed": false,
+          "syncOffset": null,
+          "synced": false,
+          "tags": [],
+          "translationEngine": null,
+          "translationModel": null,
+          "translationProviderName": null
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/media/101/subtitles/auto"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "codec": null,
+            "episodeId": null,
+            "errorMessage": null,
+            "forced": false,
+            "hashMatched": false,
+            "hearingImpaired": false,
+            "id": 1,
+            "language": "fr",
+            "locked": false,
+            "mediaFileId": 101,
+            "mediaId": 101,
+            "providerFileId": "/subtitle/101.zip",
+            "providerType": "subdl",
+            "relativePath": "Work.Movie.2020.1080p.BluRay.x264-GRP.fr.srt",
+            "score": 1,
+            "sourceStreamIndex": null,
+            "status": "downloaded",
+            "streamIndex": null,
+            "syncFailed": false,
+            "syncOffset": null,
+            "synced": false,
+            "tags": [],
+            "translationEngine": null,
+            "translationModel": null,
+            "translationProviderId": null,
+            "translationProviderName": null
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/101/subtitles"
+    }
+  ],
+  "strictMessage": true
+}

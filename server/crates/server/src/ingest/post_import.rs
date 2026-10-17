@@ -131,6 +131,17 @@ impl Queue {
             if let Err(e) = enrich(st, id).await {
                 tracing::warn!("Post-import enrich of file #{id} failed: {e}");
             }
+            // Whatever the probe returned: the embedded tracks and the search still run.
+            if let Ok(Some((Some(media), episode))) =
+                sqlx::query_as::<_, (Option<i32>, Option<i32>)>(
+                    r#"SELECT "mediaId", "episodeId" FROM media_files WHERE id = $1"#,
+                )
+                .bind(id)
+                .fetch_optional(&st.db)
+                .await
+            {
+                crate::subtitles::scheduler::on_media_file_imported(st, media, id, episode).await;
+            }
             st.hub.activity().remove(&key);
             let (done, total) = {
                 let mut q = self.lock();

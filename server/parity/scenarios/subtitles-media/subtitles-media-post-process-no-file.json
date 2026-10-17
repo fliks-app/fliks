@@ -1,0 +1,62 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..date",
+    "$..queuedAt"
+  ],
+  "name": "subtitles-media-post-process-no-file",
+  "seed": "subtitles",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "action": "removeHiTags"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Subtitle has no file path",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/media/1/subtitles/1/post-process"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "action": "removeHiTags"
+      },
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Subtitle #999 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "POST",
+      "path": "/api/media/1/subtitles/999/post-process"
+    },
+    {
+      "as": "user",
+      "body": {
+        "action": "removeHiTags"
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "POST",
+      "path": "/api/media/1/subtitles/4/post-process"
+    }
+  ],
+  "strictMessage": true
+}

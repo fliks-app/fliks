@@ -1,0 +1,79 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..date",
+    "$..queuedAt"
+  ],
+  "name": "subtitles-providers-test-connection-unsupported-type",
+  "seed": "subtitles",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "type": "whisper"
+      },
+      "expect": {
+        "body": {
+          "detail": "Unsupported subtitle provider type: whisper",
+          "ok": false
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/subtitles/providers/test-connection"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "type": "nope"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "type must be one of the following values: opensubtitles, subscene, sous_titres_eu, subdl, subsynchro, supersubtitles, whisper, yify, gestdown, embedded, radarr, sonarr, disk, ocr, translated"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/subtitles/providers/test-connection"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "settings": {},
+        "type": "opensubtitles"
+      },
+      "expect": {
+        "body": {
+          "detail": "missing username or password",
+          "ok": false
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/subtitles/providers/test-connection"
+    },
+    {
+      "as": "user",
+      "body": {
+        "type": "yify"
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "POST",
+      "path": "/api/subtitles/providers/test-connection"
+    }
+  ],
+  "strictMessage": true
+}

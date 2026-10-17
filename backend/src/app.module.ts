@@ -9,7 +9,6 @@ import { EventsModule } from './modules/scheduler/events.module';
 import { LibrariesModule } from './modules/libraries/libraries.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { SettingsModule } from './modules/settings/settings.module';
-import { SubtitlesModule } from './modules/subtitles/subtitles.module';
 import { StreamingModule } from './modules/streaming/streaming.module';
 import { PlaybackModule } from './modules/playback/playback.module';
 import { SetupChecklistModule } from './modules/setup-checklist/setup-checklist.module';
@@ -51,7 +50,6 @@ import { BridgeModule } from './modules/bridge/bridge.module';
     LibrariesModule,
     NotificationsModule,
     SettingsModule,
-    SubtitlesModule,
     StreamingModule,
     PlaybackModule,
     SetupChecklistModule,

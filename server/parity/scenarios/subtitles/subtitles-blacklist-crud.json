@@ -1,0 +1,133 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..date",
+    "$..queuedAt"
+  ],
+  "name": "subtitles-blacklist-crud",
+  "seed": "subtitles",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "data": [
+            {
+              "id": 2,
+              "language": null,
+              "mediaId": null,
+              "providerFileId": "/subtitle/9.zip",
+              "providerType": "subdl",
+              "reason": null,
+              "sourceTitle": null
+            },
+            {
+              "id": 1,
+              "language": "en",
+              "mediaId": 1,
+              "providerFileId": "123",
+              "providerType": "opensubtitles",
+              "reason": "out of sync",
+              "sourceTitle": "Bad.Release"
+            }
+          ],
+          "total": 2
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/subtitles/blacklist"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "language": "fr",
+        "providerFileId": "/subtitle/1.zip",
+        "providerType": "subdl",
+        "reason": "r",
+        "sourceTitle": "T"
+      },
+      "expect": {
+        "body": {
+          "id": 3,
+          "language": "fr",
+          "providerFileId": "/subtitle/1.zip",
+          "providerType": "subdl",
+          "reason": "r",
+          "sourceTitle": "T"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/subtitles/blacklist"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "data": [
+            {
+              "id": 3,
+              "language": "fr",
+              "mediaId": null,
+              "providerFileId": "/subtitle/1.zip",
+              "providerType": "subdl",
+              "reason": "r",
+              "sourceTitle": "T"
+            },
+            {
+              "id": 2,
+              "language": null,
+              "mediaId": null,
+              "providerFileId": "/subtitle/9.zip",
+              "providerType": "subdl",
+              "reason": null,
+              "sourceTitle": null
+            }
+          ],
+          "total": 3
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/subtitles/blacklist?page=1&limit=2"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "status": 200
+      },
+      "method": "DELETE",
+      "path": "/api/subtitles/blacklist/1"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Blacklist entry #999 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "DELETE",
+      "path": "/api/subtitles/blacklist/999"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Validation failed (numeric string is expected)",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "DELETE",
+      "path": "/api/subtitles/blacklist/abc"
+    }
+  ],
+  "strictMessage": true
+}

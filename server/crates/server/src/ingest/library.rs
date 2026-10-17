@@ -137,9 +137,11 @@ pub async fn ingest(
     if out.imported.is_empty() {
         return Ok(out);
     }
-    if req.replace_existing {
-        remove_superseded(st, &media, &out.imported).await;
-    }
+    let carried = if req.replace_existing {
+        remove_superseded(st, &media, &out.imported).await
+    } else {
+        vec![]
+    };
     let one = (out.imported.len() == 1).then(|| &out.imported[0]);
     st.hub.emit_domain(DomainEvent::MediaFilesImported {
         media_id: i64::from(media.id),
@@ -154,6 +156,20 @@ pub async fn ingest(
     st.ingest.settle.schedule(st, media.id);
     for i in &out.imported {
         st.ingest.queue.enqueue(st, i.file_id);
+    }
+    if !carried.is_empty() {
+        let st2 = st.clone();
+        tokio::spawn(async move {
+            for id in carried {
+                let o = crate::subtitles::sync::Options {
+                    automatic: true,
+                    ..Default::default()
+                };
+                if let Err(e) = crate::subtitles::sync::do_sync(&st2, id, &o).await {
+                    tracing::warn!("Auto-sync of carried subtitle #{id} failed: {e}");
+                }
+            }
+        });
     }
     Ok(out)
 }
@@ -569,7 +585,8 @@ struct Old {
 }
 
 /// Rules 29-31: the files the new ones replace; progress moves to the heir first.
-async fn remove_superseded(st: &AppState, media: &MediaRow, imported: &[Imported]) {
+async fn remove_superseded(st: &AppState, media: &MediaRow, imported: &[Imported]) -> Vec<i32> {
+    let mut carried = vec![];
     let new_ids: Vec<i32> = imported.iter().map(|i| i.file_id).collect();
     let olds = sqlx::query_as!(
         Old,
@@ -586,7 +603,10 @@ async fn remove_superseded(st: &AppState, media: &MediaRow, imported: &[Imported
     .await;
     let olds = match olds {
         Ok(o) => o,
-        Err(e) => return tracing::warn!("superseded lookup failed: {e}"),
+        Err(e) => {
+            tracing::warn!("superseded lookup failed: {e}");
+            return carried;
+        }
     };
     let covered: HashSet<(i32, i32)> = imported
         .iter()
@@ -595,6 +615,16 @@ async fn remove_superseded(st: &AppState, media: &MediaRow, imported: &[Imported
         .collect();
     for old in olds {
         let r: Result<(), String> = async {
+            let heir = if media.is_series() {
+                match (old.season_number, old.episode_number, old.end) {
+                    (Some(s), Some(e), None) => imported
+                        .iter()
+                        .find(|i| i.season_number == Some(s) && i.episode_number == Some(e) && i.episode_end.is_none()),
+                    _ => None,
+                }
+            } else {
+                imported.first()
+            };
             if media.is_series() {
                 let (Some(s), Some(e)) = (old.season_number, old.episode_number) else {
                     return Ok(());
@@ -624,6 +654,9 @@ async fn remove_superseded(st: &AppState, media: &MediaRow, imported: &[Imported
                 .await
                 .map_err(|e| e.to_string())?;
             }
+            if let Some(h) = heir {
+                carried.extend(crate::subtitles::sidecars::carry_over(st, media.id, old.id, h.file_id).await);
+            }
             crate::media::write::delete_media_file(st, media, old.id, true)
                 .await
                 .map_err(|e| format!("{e:?}"))?;
@@ -645,6 +678,7 @@ async fn remove_superseded(st: &AppState, media: &MediaRow, imported: &[Imported
             tracing::warn!("could not remove superseded \"{}\": {e}", old.relative_path);
         }
     }
+    carried
 }
 
 /// `epNums` from a caller's season and episode (both present).

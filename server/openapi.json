@@ -1098,6 +1098,19 @@
         }
       }
     },
+    "/api/media/sync-queue": {
+      "get": {
+        "tags": [
+          "routes_media"
+        ],
+        "operationId": "sync_queue",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/media/{id}": {
       "get": {
         "tags": [
@@ -1232,7 +1245,7 @@
         "tags": [
           "media::write"
         ],
-        "summary": "Rules 93-95: a tracked subtitle is the S6 callee's (501 until then), anything else a contained unlink.",
+        "summary": "Rules 93-95: a tracked subtitle goes through the subtitle delete, anything else is a contained unlink.",
         "operationId": "companions_delete",
         "responses": {
           "200": {
@@ -1358,6 +1371,188 @@
         "operationId": "media_streams",
         "responses": {
           "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/media/{id}/subtitles": {
+      "get": {
+        "tags": [
+          "routes_media"
+        ],
+        "operationId": "list",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/media/{id}/subtitles/auto": {
+      "post": {
+        "tags": [
+          "routes_media"
+        ],
+        "operationId": "auto",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/media/{id}/subtitles/download": {
+      "post": {
+        "tags": [
+          "routes_media"
+        ],
+        "operationId": "download",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/media/{id}/subtitles/search": {
+      "get": {
+        "tags": [
+          "routes_media"
+        ],
+        "operationId": "search",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/media/{id}/subtitles/search-missing": {
+      "post": {
+        "tags": [
+          "routes_media"
+        ],
+        "operationId": "search_missing",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/media/{id}/subtitles/upload": {
+      "post": {
+        "tags": [
+          "routes_media"
+        ],
+        "operationId": "upload",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/media/{id}/subtitles/{subtitleId}": {
+      "delete": {
+        "tags": [
+          "routes_media"
+        ],
+        "operationId": "remove",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/media/{id}/subtitles/{subtitleId}/language": {
+      "patch": {
+        "tags": [
+          "routes_media"
+        ],
+        "operationId": "set_language",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/media/{id}/subtitles/{subtitleId}/ocr": {
+      "post": {
+        "tags": [
+          "routes_media"
+        ],
+        "operationId": "ocr",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/media/{id}/subtitles/{subtitleId}/post-process": {
+      "post": {
+        "tags": [
+          "routes_media"
+        ],
+        "operationId": "post_process",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/media/{id}/subtitles/{subtitleId}/sync": {
+      "post": {
+        "tags": [
+          "routes_media"
+        ],
+        "operationId": "sync",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/media/{id}/subtitles/{subtitleId}/translate": {
+      "post": {
+        "tags": [
+          "routes_media"
+        ],
+        "operationId": "translate",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/media/{id}/subtitles/{subtitleId}/upgrade": {
+      "post": {
+        "tags": [
+          "routes_media"
+        ],
+        "operationId": "upgrade",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/media/{id}/subtitles/{subtitleId}/validate": {
+      "post": {
+        "tags": [
+          "routes_media"
+        ],
+        "operationId": "validate",
+        "responses": {
+          "201": {
             "description": ""
           }
         }
@@ -3002,6 +3197,328 @@
           "crate::stream"
         ],
         "operationId": "playback_info",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/subtitles/blacklist": {
+      "get": {
+        "tags": [
+          "routes_activity"
+        ],
+        "operationId": "blacklist_list",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "routes_activity"
+        ],
+        "operationId": "blacklist_add",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "routes_activity"
+        ],
+        "operationId": "blacklist_clear",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/subtitles/blacklist/{id}": {
+      "delete": {
+        "tags": [
+          "routes_activity"
+        ],
+        "operationId": "blacklist_remove",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/subtitles/health": {
+      "get": {
+        "tags": [
+          "routes_activity"
+        ],
+        "operationId": "health",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/subtitles/history": {
+      "get": {
+        "tags": [
+          "routes_activity"
+        ],
+        "operationId": "history",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/subtitles/missing": {
+      "get": {
+        "tags": [
+          "routes_activity"
+        ],
+        "operationId": "missing",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/subtitles/providers": {
+      "get": {
+        "tags": [
+          "routes_providers"
+        ],
+        "operationId": "list",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "routes_providers"
+        ],
+        "operationId": "create",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/subtitles/providers/rate-limits": {
+      "get": {
+        "tags": [
+          "routes_providers"
+        ],
+        "operationId": "rate_limits",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/subtitles/providers/test-connection": {
+      "post": {
+        "tags": [
+          "routes_providers"
+        ],
+        "operationId": "test_connection",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/subtitles/providers/{id}": {
+      "get": {
+        "tags": [
+          "routes_providers"
+        ],
+        "operationId": "get_one",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "routes_providers"
+        ],
+        "operationId": "update",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "routes_providers"
+        ],
+        "operationId": "remove",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/subtitles/providers/{id}/stats": {
+      "get": {
+        "tags": [
+          "routes_providers"
+        ],
+        "operationId": "stats",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/subtitles/providers/{id}/test": {
+      "post": {
+        "tags": [
+          "routes_providers"
+        ],
+        "operationId": "test",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/subtitles/stats": {
+      "get": {
+        "tags": [
+          "routes_activity"
+        ],
+        "operationId": "stats",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/subtitles/translation-providers": {
+      "get": {
+        "tags": [
+          "translation_providers"
+        ],
+        "operationId": "list",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "translation_providers"
+        ],
+        "operationId": "create",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/subtitles/translation-providers/available": {
+      "get": {
+        "tags": [
+          "translation_providers"
+        ],
+        "operationId": "available",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/subtitles/translation-providers/models": {
+      "post": {
+        "tags": [
+          "translation_providers"
+        ],
+        "operationId": "models",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/subtitles/translation-providers/test-connection": {
+      "post": {
+        "tags": [
+          "translation_providers"
+        ],
+        "operationId": "test_connection",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/subtitles/translation-providers/{id}": {
+      "get": {
+        "tags": [
+          "translation_providers"
+        ],
+        "operationId": "get_one",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "translation_providers"
+        ],
+        "operationId": "update",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "translation_providers"
+        ],
+        "operationId": "remove",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/subtitles/translation-providers/{id}/test": {
+      "post": {
+        "tags": [
+          "translation_providers"
+        ],
+        "operationId": "test",
         "responses": {
           "201": {
             "description": ""

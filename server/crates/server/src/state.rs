@@ -25,6 +25,7 @@ pub struct AppState {
     pub images: Arc<ImageStore>,
     pub system: Arc<system::Shared>,
     pub jobs: Arc<Running>,
+    pub subtitles: Arc<crate::subtitles::Shared>,
 }
 
 impl AppState {
@@ -51,6 +52,7 @@ impl AppState {
             images: Arc::new(ImageStore::new(&cfg.metadata.tmdb_image_url)),
             system: Arc::default(),
             jobs: Arc::default(),
+            subtitles: Arc::default(),
             cfg: Arc::new(cfg),
             db,
         }

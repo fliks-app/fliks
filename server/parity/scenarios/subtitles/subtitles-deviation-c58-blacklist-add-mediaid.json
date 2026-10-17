@@ -1,0 +1,73 @@
+{
+  "deviation": [
+    "C58"
+  ],
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..id"
+  ],
+  "name": "subtitles-deviation-c58-blacklist-add-mediaid",
+  "seed": "subtitles",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "mediaId": 1,
+        "providerFileId": "zz",
+        "providerType": "subdl",
+        "reason": "r"
+      },
+      "expect": {
+        "body": {
+          "providerFileId": "zz",
+          "providerType": "subdl",
+          "reason": "r"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/subtitles/blacklist"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "mediaId": 9999,
+        "providerFileId": "zz",
+        "providerType": "subdl"
+      },
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Media #9999 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "POST",
+      "path": "/api/subtitles/blacklist"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "data": [
+            {
+              "language": null,
+              "mediaId": 1,
+              "providerFileId": "zz",
+              "providerType": "subdl",
+              "reason": "r",
+              "sourceTitle": null
+            }
+          ],
+          "total": 3
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/subtitles/blacklist?page=1&limit=1"
+    }
+  ],
+  "strictMessage": true
+}

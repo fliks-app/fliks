@@ -1,0 +1,96 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..date",
+    "$..queuedAt"
+  ],
+  "name": "subtitles-missing-paging-total",
+  "seed": "subtitles",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "data": [
+            {
+              "episodeId": null,
+              "episodeLabel": null,
+              "fileId": 1,
+              "fileName": "Parity Movie 01 (2020).mkv",
+              "forced": true,
+              "language": "de",
+              "mediaId": 1,
+              "mediaTitle": "Parity Movie 01",
+              "mediaType": "movie"
+            }
+          ],
+          "total": 3
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/subtitles/missing?page=1&limit=1"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "data": [],
+          "total": 0
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/subtitles/missing?page=99&limit=1"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "data": [
+            {
+              "episodeId": null,
+              "episodeLabel": null,
+              "fileId": 1,
+              "fileName": "Parity Movie 01 (2020).mkv",
+              "forced": true,
+              "language": "de",
+              "mediaId": 1,
+              "mediaTitle": "Parity Movie 01",
+              "mediaType": "movie"
+            },
+            {
+              "episodeId": null,
+              "episodeLabel": null,
+              "fileId": 2,
+              "fileName": "Parity Movie 02 (2020).mp4",
+              "forced": false,
+              "language": "en",
+              "mediaId": 2,
+              "mediaTitle": "Parity Movie 02",
+              "mediaType": "movie"
+            },
+            {
+              "episodeId": null,
+              "episodeLabel": null,
+              "fileId": 2,
+              "fileName": "Parity Movie 02 (2020).mp4",
+              "forced": false,
+              "language": "fr",
+              "mediaId": 2,
+              "mediaTitle": "Parity Movie 02",
+              "mediaType": "movie"
+            }
+          ],
+          "total": 3
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/subtitles/missing?limit=0"
+    }
+  ],
+  "strictMessage": true
+}

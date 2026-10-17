@@ -1,0 +1,61 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..date",
+    "$..queuedAt"
+  ],
+  "name": "subtitles-media-upload-missing-media-file-id",
+  "seed": "subtitles",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "mediaFileId is required",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "multipart": {
+        "content": "1\n00:00:01,000 --> 00:00:02,000\nHi\n",
+        "contentType": "text/plain",
+        "field": "file",
+        "filename": "x.srt"
+      },
+      "path": "/api/media/1/subtitles/upload"
+    },
+    {
+      "as": "admin",
+      "body": {},
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "No file uploaded",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/media/1/subtitles/upload"
+    },
+    {
+      "as": "user",
+      "body": {},
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "POST",
+      "path": "/api/media/1/subtitles/upload"
+    }
+  ],
+  "strictMessage": true
+}

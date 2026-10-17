@@ -9,14 +9,15 @@ import { Episode } from '../media/entities/episode.entity';
 import { LogBufferModule } from './log-buffer.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { AuthModule } from '../auth/auth.module';
-import { SubtitleSchedulerService } from './subtitle-scheduler.service';
 import { JobsBridgeController } from './jobs-bridge.controller';
-import { MediaSubtitlesController } from '../subtitles/media-subtitles.controller';
 import { LibrariesModule } from '../libraries/libraries.module';
-import { SubtitlesModule } from '../subtitles/subtitles.module';
 import { SettingsModule } from '../settings/settings.module';
 import { StreamingModule } from '../streaming/streaming.module';
 import { SubtitleFile } from '../subtitles/entities/subtitle-file.entity';
+import { SubtitleBlacklist } from '../subtitles/entities/subtitle-blacklist.entity';
+import { SubtitleProvider } from '../subtitles/entities/subtitle-provider.entity';
+import { SubtitleProviderStat } from '../subtitles/entities/subtitle-provider-stat.entity';
+import { TranslationProvider } from '../subtitles/entities/translation-provider.entity';
 import { Library } from '../libraries/entities/library.entity';
 import { PluginsModule } from '../plugins/plugins.module';
 import { ScheduledJobRegistryModule } from './scheduled-job-registry.module';
@@ -32,13 +33,17 @@ import { QoeModule } from '../qoe/qoe.module';
       Media,
       MediaFile,
       Episode,
+      // fliks-server owns subtitles; the entities stay registered until S9 for the relations that remain.
       SubtitleFile,
+      SubtitleBlacklist,
+      SubtitleProvider,
+      SubtitleProviderStat,
+      TranslationProvider,
       Library,
     ]),
     NotificationsModule,
     AuthModule,
     LibrariesModule,
-    SubtitlesModule,
     SettingsModule,
     StreamingModule,
     LogBufferModule,
@@ -48,9 +53,7 @@ import { QoeModule } from '../qoe/qoe.module';
     LiveTvModule,
     QoeModule,
   ],
-  // `MediaSubtitlesController` lives here because it needs `SubtitleSchedulerService`; it moves with S6.
-  controllers: [JobsBridgeController, MediaSubtitlesController],
-  providers: [SubtitleSchedulerService],
-  exports: [LogBufferModule, SubtitleSchedulerService],
+  controllers: [JobsBridgeController],
+  exports: [LogBufferModule],
 })
 export class FliksSchedulerModule {}

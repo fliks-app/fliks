@@ -17,11 +17,16 @@ pub struct SubtitleName {
 }
 
 /// `path.extname` lowercased (a leading dot is not an extension).
-fn ext(name: &str) -> String {
+pub fn ext(name: &str) -> String {
     match name.rfind('.') {
         Some(i) if i > 0 => name[i..].to_lowercase(),
         _ => String::new(),
     }
+}
+
+/// `resolveLanguageCode`: ISO 639-1, culture form, ISO 639-2, then the full name.
+pub fn resolve_language_code(token: &str) -> Option<String> {
+    language_of(token)
 }
 
 fn language_of(token: &str) -> Option<String> {
@@ -87,6 +92,18 @@ pub fn parse_subtitle_filename(name: &str) -> Option<SubtitleName> {
         }
     }
     Some(out)
+}
+
+/// The name without its HI token (`Movie.en.hi.srt` -> `Movie.en.srt`), extension as written.
+pub fn strip_hi_from_filename(filename: &str) -> Option<String> {
+    let hi = parse_subtitle_filename(filename)?.hi_part?;
+    let cut = match filename.rfind('.') {
+        Some(i) if i > 0 => i,
+        _ => filename.len(),
+    };
+    let mut parts: Vec<&str> = filename[..cut].split('.').collect();
+    parts.remove(hi);
+    Some(parts.join(".") + &filename[cut..])
 }
 
 /// `path.basename(p, path.extname(p))` lowercased.

@@ -7,14 +7,16 @@ pub const LIST_TIMEOUT: Duration = Duration::from_secs(60);
 pub const ITEM_TIMEOUT: Duration = Duration::from_secs(30);
 const MAX_REDIRECTS: usize = 5;
 
-/// Follows a redirect only to the scheme and host of the previous URL, so `X-Api-Key` never leaves them.
+/// Follows a redirect only to the scheme, host and port of the previous URL, so `X-Api-Key` never leaves them.
 pub fn client() -> &'static Client {
     static C: OnceLock<Client> = OnceLock::new();
     C.get_or_init(|| {
         Client::builder()
             .redirect(redirect::Policy::custom(|a| {
                 let same = a.previous().last().is_some_and(|p| {
-                    p.scheme() == a.url().scheme() && p.host_str() == a.url().host_str()
+                    p.scheme() == a.url().scheme()
+                        && p.host_str() == a.url().host_str()
+                        && p.port_or_known_default() == a.url().port_or_known_default()
                 });
                 if a.previous().len() >= MAX_REDIRECTS {
                     a.error("too many redirects")

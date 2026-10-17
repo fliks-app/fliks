@@ -1,0 +1,58 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..date",
+    "$..queuedAt"
+  ],
+  "name": "subtitles-providers-update-null-clears-apikey",
+  "seed": "subtitles",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "settings": {
+          "apiKey": null,
+          "password": "",
+          "username": "u"
+        }
+      },
+      "expect": {
+        "body": {
+          "enabled": false,
+          "id": 1,
+          "name": "OpenSubtitles",
+          "priority": 1,
+          "settings": {
+            "secretsSet": [
+              "password"
+            ],
+            "username": "u"
+          },
+          "type": "opensubtitles"
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/subtitles/providers/1"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "name": "x"
+      },
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "SubtitleProvider #999 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "PUT",
+      "path": "/api/subtitles/providers/999"
+    }
+  ],
+  "strictMessage": true
+}

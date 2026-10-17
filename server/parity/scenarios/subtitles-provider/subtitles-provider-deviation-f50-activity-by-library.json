@@ -1,0 +1,216 @@
+{
+  "deviation": "F50",
+  "fs": [
+    {
+      "from": "base.mkv",
+      "path": "s6/subtitles-work/movies/Work Movie (2020)/Work.Movie.2020.1080p.BluRay.x264-GRP.mkv"
+    },
+    {
+      "from": "base.mkv",
+      "path": "s6/subtitles-work/series/Work Show/Season 01/Work.Show.S01E01.1080p.WEB-DL.x264-GRP.mkv"
+    }
+  ],
+  "fsDir": "s6/subtitles-work",
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..date",
+    "$..queuedAt"
+  ],
+  "name": "subtitles-provider-deviation-f50-activity-by-library",
+  "seed": "subtitles-work",
+  "steps": [
+    {
+      "expect": {
+        "body": {
+          "ok": true
+        },
+        "status": 200
+      },
+      "method": "POST",
+      "path": "/__reset",
+      "stub": true
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "codec": null,
+          "episode": null,
+          "episodeId": null,
+          "errorMessage": null,
+          "forced": false,
+          "hashMatched": false,
+          "hearingImpaired": false,
+          "id": 1,
+          "language": "en",
+          "locked": false,
+          "media": {
+            "id": 101
+          },
+          "mediaFile": {
+            "id": 101
+          },
+          "mediaFileId": 101,
+          "mediaId": 101,
+          "providerFileId": null,
+          "providerType": "disk",
+          "relativePath": "Work.Movie.2020.1080p.BluRay.x264-GRP.en.srt",
+          "score": 100,
+          "sourceStreamIndex": null,
+          "status": "downloaded",
+          "streamIndex": null,
+          "syncFailed": false,
+          "syncOffset": null,
+          "synced": true,
+          "tags": [],
+          "translationEngine": null,
+          "translationModel": null,
+          "translationProviderName": null
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "multipart": {
+        "content": "1\n00:00:01,000 --> 00:00:03,000\nHello there.\n\n2\n00:00:04,000 --> 00:00:06,000\nSecond line.\n",
+        "contentType": "application/x-subrip",
+        "fields": {
+          "language": "en",
+          "mediaFileId": "101"
+        },
+        "filename": "x.en.srt"
+      },
+      "path": "/api/media/101/subtitles/upload"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "data": [],
+          "limit": 25,
+          "page": 1,
+          "total": 0
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/subtitles/history"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "byProvider": {},
+          "byStatus": {},
+          "recent": [],
+          "total": 0
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/subtitles/stats"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "data": [],
+          "total": 0
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/subtitles/missing"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": [],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/media/sync-queue"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "data": [
+            {
+              "episodeId": null,
+              "episodeNumber": null,
+              "episodeTitle": null,
+              "errorMessage": null,
+              "forced": false,
+              "hearingImpaired": false,
+              "id": 1,
+              "language": "en",
+              "mediaId": 101,
+              "mediaTitle": "Work Movie",
+              "mediaType": "movie",
+              "providerType": "disk",
+              "score": 100,
+              "seasonNumber": null,
+              "status": "downloaded",
+              "syncFailed": false,
+              "synced": true
+            }
+          ],
+          "limit": 25,
+          "page": 1,
+          "total": 1
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/subtitles/history"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "data": [
+            {
+              "episodeId": null,
+              "episodeLabel": null,
+              "fileId": 101,
+              "fileName": "Work.Movie.2020.1080p.BluRay.x264-GRP.mkv",
+              "forced": false,
+              "language": "fr",
+              "mediaId": 101,
+              "mediaTitle": "Work Movie",
+              "mediaType": "movie"
+            },
+            {
+              "episodeId": 101,
+              "episodeLabel": "S01E01",
+              "fileId": 102,
+              "fileName": "Work.Show.S01E01.1080p.WEB-DL.x264-GRP.mkv",
+              "forced": false,
+              "language": "en",
+              "mediaId": 103,
+              "mediaTitle": "Work Show",
+              "mediaType": "series"
+            },
+            {
+              "episodeId": 101,
+              "episodeLabel": "S01E01",
+              "fileId": 102,
+              "fileName": "Work.Show.S01E01.1080p.WEB-DL.x264-GRP.mkv",
+              "forced": false,
+              "language": "fr",
+              "mediaId": 103,
+              "mediaTitle": "Work Show",
+              "mediaType": "series"
+            }
+          ],
+          "total": 3
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/subtitles/missing"
+    }
+  ],
+  "strictMessage": true
+}

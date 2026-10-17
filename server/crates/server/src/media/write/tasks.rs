@@ -59,8 +59,8 @@ pub async fn rescan(
                         added: c.added,
                         removed: c.removed,
                         updated: c.updated,
-                        subtitle_removed_missing: Some(0),
-                        subtitle_removed_duplicates: Some(0),
+                        subtitle_removed_missing: Some(c.subtitle_removed_missing),
+                        subtitle_removed_duplicates: Some(c.subtitle_removed_duplicates),
                     },
                 );
                 if let Some(lib) = media.library_id {

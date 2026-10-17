@@ -377,11 +377,14 @@ async fn send(ctx: &Ctx, step: &Value, vars: &HashMap<String, Value>) -> Result<
     if let Some(m) = step.get("multipart") {
         let bytes = match m["file"].as_str() {
             Some(f) => fs::read(Path::new(MEDIA_ROOT).join(f)).map_err(|e| format!("{f}: {e}"))?,
-            None => m["content"]
-                .as_str()
-                .unwrap_or_default()
-                .as_bytes()
-                .to_vec(),
+            None => match m["size"].as_u64() {
+                Some(n) => vec![b'x'; n as usize],
+                None => m["content"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .as_bytes()
+                    .to_vec(),
+            },
         };
         let part = multipart::Part::bytes(bytes)
             .file_name(m["filename"].as_str().unwrap_or("file").to_string())
@@ -391,9 +394,11 @@ async fn send(ctx: &Ctx, step: &Value, vars: &HashMap<String, Value>) -> Result<
                     .unwrap_or("application/octet-stream"),
             )
             .map_err(|e| e.to_string())?;
-        req = req.multipart(
-            multipart::Form::new().part(m["field"].as_str().unwrap_or("file").to_string(), part),
-        );
+        let mut form = multipart::Form::new();
+        for (k, v) in m["fields"].as_object().into_iter().flatten() {
+            form = form.text(k.clone(), v.as_str().unwrap_or_default().to_string());
+        }
+        req = req.multipart(form.part(m["field"].as_str().unwrap_or("file").to_string(), part));
     } else if let Some(b) = step.get("body") {
         req = req.json(b);
     }
@@ -478,19 +483,27 @@ fn collect(dir: &Path, out: &mut Vec<std::path::PathBuf>) {
     }
 }
 
-/// Scenario `fs`: rebuilds `s5-ingest/work` under the media root (`{path, from}` copies a generated
+/// Scenario `fs`: rebuilds `fsDir` (default `s5-ingest/work`) under the media root (`{path, from}` copies a generated
 /// file, `{path, text}` writes one, `{dir}` makes a directory, `{link, to}` a symlink).
 fn fs_setup(sc: &Value) {
     let Some(items) = sc["fs"].as_array() else {
         return;
     };
     let root = Path::new(MEDIA_ROOT);
-    let work = root.join("s5-ingest/work");
+    let dir = sc["fsDir"].as_str().unwrap_or("s5-ingest/work");
+    assert!(
+        !dir.is_empty()
+            && Path::new(dir)
+                .components()
+                .all(|c| matches!(c, std::path::Component::Normal(_))),
+        "fsDir must be a relative path under the parity media root: {dir}"
+    );
+    let work = root.join(dir);
     let _ = fs::remove_dir_all(&work);
     fs::create_dir_all(&work).expect("work dir");
     let under = |p: &str| {
         assert!(
-            p.starts_with("s5-ingest/work/"),
+            p.starts_with(&format!("{dir}/")),
             "fs path outside the work dir: {p}"
         );
         root.join(p)

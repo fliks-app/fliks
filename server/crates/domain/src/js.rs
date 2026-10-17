@@ -26,7 +26,7 @@ where
 }
 
 /// The JS `\s` set as regex class contents.
-const WS_CLASS: &str =
+pub(crate) const WS_CLASS: &str =
     r"\x09-\x0D \x{A0}\x{1680}\x{2000}-\x{200A}\x{2028}\x{2029}\x{202F}\x{205F}\x{3000}\x{FEFF}";
 
 /// ASCII `\b` for `fancy_regex`, which has no `(?-u:\b)`.
@@ -106,3 +106,37 @@ macro_rules! rx {
     }};
 }
 pub(crate) use rx;
+
+/// `String.prototype.length`: UTF-16 code units.
+pub(crate) fn u16len(s: &str) -> usize {
+    s.encode_utf16().count()
+}
+
+/// JS `^`/`$` under the `m` flag break on `\n`, `\r`, U+2028 and U+2029 (fancy-regex only).
+pub(crate) fn multiline(p: &str) -> String {
+    const LT: &str = r"[^\n\r\x{2028}\x{2029}]";
+    let (mut out, mut in_class, mut chars) = (String::new(), false, p.chars().peekable());
+    while let Some(c) = chars.next() {
+        match c {
+            '\\' => {
+                out.push(c);
+                out.extend(chars.next());
+            }
+            '[' if !in_class => {
+                in_class = true;
+                out.push(c);
+                if chars.peek() == Some(&'^') {
+                    out.extend(chars.next());
+                }
+            }
+            ']' if in_class => {
+                in_class = false;
+                out.push(c);
+            }
+            '^' if !in_class => out.push_str(&format!("(?<!{LT})")),
+            '$' if !in_class => out.push_str(&format!("(?!{LT})")),
+            c => out.push(c),
+        }
+    }
+    out
+}

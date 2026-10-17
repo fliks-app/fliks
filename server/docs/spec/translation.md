@@ -111,7 +111,7 @@ Manifest lines: `[ts:src/modules/subtitles/translation-providers.controller.ts:3
 
 ## Events
 
-From the run (all broadcast, payloads in `events-hub.md`): `subtitle.translation_progress {subtitleId, mediaId, progress}` (rule 43), `subtitle.downloaded {..., reason: 'translation'}` and `subtitle.failed {..., reason, scope}` (rule 44).
+From the run (to the users who can see the media's library plus admins, F49; payloads in `events-hub.md`): `subtitle.translation_progress {subtitleId, mediaId, progress}` (rule 43), `subtitle.downloaded {..., reason: 'translation'}` and `subtitle.failed {..., reason, scope}` (rule 44).
 
 ## Settings keys
 
@@ -129,7 +129,7 @@ none (no periodic job; `tokensPerMinute` windows and the slot gate are in-proces
 
 ## Bridges
 
-none. Known gap until S6: `subtitle-translation.service.ts` runs inside Nest until S6 and still reads providers from the same tables, so nothing needs a bridge; the Nest `subtitle.failed` notification and SSE emit through the existing S2/S4 bridges. No new temporary bridge is proposed.
+none. Resolved in S6: translation runs in Rust (`subtitles::translate`), reads the providers from the same tables and emits `subtitle.*` and notifications natively. No bridge.
 
 ## Deletes in Nest
 
@@ -137,7 +137,7 @@ Milestone S6: `src/modules/subtitles/{translation-core,gemini-translator,openai-
 
 ## Vectors/parity
 
-Plan §5.2 set `translation` = `translation-batching.spec.ts`, `translation-retry.spec.ts`, `translation-register.spec.ts`. Harness `backend/test/server-vectors/translation.ts` -> `server/fixtures/translation/cases.json`, `fn` discriminator, scripted engines (a case supplies a script, the harness records the calls), fake timers for sleeps (record `sleep(ms)` arguments instead of waiting):
+Plan §5.2 set `translation` = `translation-batching.spec.ts`, `translation-retry.spec.ts`, `translation-register.spec.ts`, recorded from the Nest sources at `f246dfa7` into `server/fixtures/translation/cases.json` (1626 cases; the harness `.ts` was deleted with the Nest code, no `fn` shared with another set), scripted engines (a case supplies a script and records the calls), recorded `sleep(ms)` arguments instead of waiting:
 - `batching-*` (spec names kept): reservation scaled to the batch (record `maxOutputTokens`), fills to the 500-cue ceiling (`[500, 400]` over 900 cues), `maxTokensPerRequest` budget (record batch sizes and the `prompt + reservation <= max` invariant), split on too-large (`[4,2,1,1,2,1,1]`), single too-large cue kept as source, all cues too large -> throws, progress per half (`[2, 4]`), ceiling shrink (`[400, 200, 200]`), `maxTokensPerRequest` clamp to 2048, zero `batchCeiling`, non-size error propagates, one bad cue does not collapse later batches (`calls < 50`), 3 consecutive mismatches abort, `tokensPerMinute` pacing (record virtual start times; `>= 60000` apart). Add: `batchEnd` token cut with long cues, `reserveOutput` floor 256, texts with non-BMP characters (UTF-16 length), empty input.
 - `retry-*` (spec names kept): 413 TPM waits and retries, quota 413 ends as rate limit with scope, daily 429 stops at once (1 call, `daily`), context 413 is too-large. Add: recorded waits per attempt for 429 with `retryDelay "38s"`, with `Retry-After`, neither (1/2/4 s, 20 s quota floor, 60 s cap), 503 retried 3 times then `API error 503: <body>`, 400 with body "quota" retried (rule 10), network error x4 -> `request failed after 4 attempts`, per-minute scope text, `parseRetryDelayMs` variants (`1.5s`, `1m`, bad JSON).
 - `register-*` (spec names kept): both-forms system text, no-register text, languages without a choice, one-word answers per language (7 x 2), both forms refused (2 cases), unterminated `<think>`, closed `<think>`, sample windows (`registerSample(600, 2, 4)`), probe failure and known register make no call; plus the full `buildSystemInstruction` text for a matrix of {context present/absent, series/movie, unknown source, register}, `buildRegisterProbe` text, `parseNumbered` variants (inline marker, fences, CRLF, duplicates, missing number, preamble lines), `buildPayload`; `srt-*`: `parseSrt`/`serializeSrt` (BOM, CR, missing separator with and without index, empty text, whitespace separator line).

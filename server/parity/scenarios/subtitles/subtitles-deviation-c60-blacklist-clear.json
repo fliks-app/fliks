@@ -1,0 +1,53 @@
+{
+  "deviation": [
+    "C60"
+  ],
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..date",
+    "$..queuedAt",
+    "$.id"
+  ],
+  "name": "subtitles-deviation-c60-blacklist-clear",
+  "seed": "subtitles",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "deleted": 2
+        },
+        "status": 200
+      },
+      "method": "DELETE",
+      "path": "/api/subtitles/blacklist"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "data": [],
+          "total": 0
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/subtitles/blacklist"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "DELETE",
+      "path": "/api/subtitles/blacklist"
+    }
+  ],
+  "strictMessage": true
+}

@@ -1,0 +1,52 @@
+{
+  "deviation": [
+    "C62"
+  ],
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..date",
+    "$..queuedAt",
+    "$.id"
+  ],
+  "name": "subtitles-deviation-c62-post-process-validates-first",
+  "seed": "subtitles",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "action": "nope"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Unknown post-processing action: nope",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/media/1/subtitles/4/post-process"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "action": "adjustTimes",
+        "params": {
+          "offsetMs": "x"
+        }
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "offsetMs must be a finite number",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/media/1/subtitles/4/post-process"
+    }
+  ],
+  "strictMessage": true
+}

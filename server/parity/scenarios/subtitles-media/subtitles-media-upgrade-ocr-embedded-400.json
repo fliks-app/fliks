@@ -1,0 +1,68 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..date",
+    "$..queuedAt"
+  ],
+  "name": "subtitles-media-upgrade-ocr-embedded-400",
+  "seed": "subtitles",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "searchResult": {
+          "language": "en",
+          "providerFileId": "1",
+          "providerType": "subdl"
+        }
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Cannot upgrade an OCR subtitle",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/media/1/subtitles/5/upgrade"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "searchResult": {
+          "language": "en",
+          "providerFileId": "1",
+          "providerType": "subdl"
+        }
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Cannot upgrade an embedded subtitle",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/media/1/subtitles/1/upgrade"
+    },
+    {
+      "as": "admin",
+      "body": {},
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Cannot upgrade an embedded subtitle",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/media/1/subtitles/1/upgrade"
+    }
+  ],
+  "strictMessage": true
+}

@@ -1,0 +1,62 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..date",
+    "$..queuedAt"
+  ],
+  "name": "subtitles-translation-providers-get-404",
+  "seed": "subtitles",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "TranslationProvider #999 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "GET",
+      "path": "/api/subtitles/translation-providers/999"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "enabled": true,
+          "engine": "openai",
+          "id": 2,
+          "isDefault": false,
+          "name": "Local",
+          "settings": {
+            "baseUrl": "http://127.0.0.1:1/v1",
+            "model": "m",
+            "secretsSet": [
+              "apiKey"
+            ]
+          }
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/subtitles/translation-providers/2"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Validation failed (numeric string is expected)",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "GET",
+      "path": "/api/subtitles/translation-providers/abc"
+    }
+  ],
+  "strictMessage": true
+}

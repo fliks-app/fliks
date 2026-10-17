@@ -12,6 +12,10 @@ path = "src/lib.rs"
 name = "fliks-server"
 path = "src/main.rs"
 
+[features]
+# Test seams for the parity runs; never enabled in a release build.
+parity = []
+
 [dependencies]
 axum = { version = "0.8", features = ["multipart"] }
 jsonwebtoken = { version = "10", default-features = false, features = ["rust_crypto"] }
@@ -41,7 +45,9 @@ tower = { version = "0.5", features = ["util"] }
 percent-encoding = "2"
 fliks-engine = { git = "https://github.com/fliks-app/engine", tag = "v0.3.2" }
 croner = "4.0.1"
+miniz_oxide = "0.8"
 chrono-tz = "0.10.4"
+regex.workspace = true
 
 [dev-dependencies]
 reqwest = { version = "0.12", default-features = false, features = ["json", "multipart"] }

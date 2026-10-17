@@ -1,0 +1,67 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..date",
+    "$..queuedAt"
+  ],
+  "name": "subtitles-providers-stats",
+  "seed": "subtitles",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "avgResponseMs": 250,
+            "errors": 1,
+            "queries": "2",
+            "totalResults": 4
+          },
+          {
+            "avgResponseMs": 900,
+            "errors": 0,
+            "queries": "1",
+            "totalResults": 1
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/subtitles/providers/1/stats"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": [
+          {
+            "avgResponseMs": 250,
+            "errors": 1,
+            "queries": "2",
+            "totalResults": 4
+          },
+          {
+            "avgResponseMs": 900,
+            "errors": 0,
+            "queries": "1",
+            "totalResults": 1
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/subtitles/providers/1/stats"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/subtitles/providers/999/stats"
+    }
+  ],
+  "strictMessage": true
+}

@@ -1,0 +1,79 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..date",
+    "$..queuedAt"
+  ],
+  "name": "subtitles-blacklist-add-validation",
+  "seed": "subtitles",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "providerType": "subdl"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Only a provider download can be blacklisted",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/subtitles/blacklist"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "providerFileId": "x"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Only a provider download can be blacklisted",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/subtitles/blacklist"
+    },
+    {
+      "as": "user",
+      "body": {
+        "providerFileId": "b",
+        "providerType": "a"
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "POST",
+      "path": "/api/subtitles/blacklist"
+    },
+    {
+      "as": "anon",
+      "body": {
+        "providerFileId": "b",
+        "providerType": "a"
+      },
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "POST",
+      "path": "/api/subtitles/blacklist"
+    }
+  ],
+  "strictMessage": true
+}
