@@ -1,7 +1,7 @@
 import { Component, computed, inject, input, model } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import { FieldDef, FormCaption, FormGroup, FormItem, FormStatus } from '@fliks/plugin-contract/ui';
+import { FieldDef, FormCaption, FormGroup, FormItem, FormStatus } from '@fliks/plugin-ui';
 import { InputFieldComponent, InputFieldType } from '../forms/input-field/input-field';
 import { SelectFieldComponent } from '../forms/select-field/select-field';
 import { ToggleFieldComponent } from '../forms/toggle-field/toggle-field';

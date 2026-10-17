@@ -11,7 +11,7 @@ import { TvService } from '../../../../core/services/tv.service';
 import { AuthService } from '../../../../core/services/auth.service';
 import { DeviceService } from '../../../../core/services/device.service';
 import { PluginUiRegistryService } from '../../../../core/plugin-ui/plugin-ui-registry.service';
-import type { SlotId, UiContribution } from '@fliks/plugin-contract/ui';
+import type { SlotId, UiContribution } from '@fliks/plugin-ui';
 
 /**
  * `media.season.actions` is a plugin-only slot — core contributes nothing to it,

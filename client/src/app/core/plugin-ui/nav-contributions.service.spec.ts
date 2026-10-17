@@ -6,7 +6,7 @@ import { AuthService } from '../services/auth.service';
 import { TvService } from '../services/tv.service';
 import { DeviceService } from '../services/device.service';
 import { LiveTvAvailabilityService } from '../services/live-tv-availability.service';
-import type { SlotId, UiContribution } from '@fliks/plugin-contract/ui';
+import type { SlotId, UiContribution } from '@fliks/plugin-ui';
 
 const contribution = (id: string, weight: number, overrides: Partial<UiContribution> = {}): UiContribution => ({
   id,

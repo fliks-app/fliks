@@ -1,4 +1,4 @@
-import type { UiContribution } from '@fliks/plugin-contract/ui';
+import type { UiContribution } from '@fliks/plugin-ui';
 
 /**
  * Core's own `media.actions` items, expressed as contributions so they merge

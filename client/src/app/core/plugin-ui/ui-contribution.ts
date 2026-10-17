@@ -1,5 +1,5 @@
 /** UI-facing contribution types of the manifest's `ui.*` block, as the plugin host validates them
- *  (`server/docs/spec/plugins.md` rule 5); imported as `@fliks/plugin-contract/ui`. */
+ *  (`server/docs/spec/plugins.md` rule 5); imported as `@fliks/plugin-ui`. */
 
 /** The six slots a contribution can render into. */
 export type SlotId =

@@ -15,7 +15,7 @@
     "target": "ES2022",
     "module": "preserve",
     "paths": {
-      "@fliks/plugin-contract/ui": ["./src/app/core/plugin-ui/ui-contribution.ts"]
+      "@fliks/plugin-ui": ["./src/app/core/plugin-ui/ui-contribution.ts"]
     }
   },
   "angularCompilerOptions": {

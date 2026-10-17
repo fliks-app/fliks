@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
-import { SECRETS_SET_KEY } from '@fliks/plugin-contract/ui';
+import { SECRETS_SET_KEY } from '@fliks/plugin-ui';
 
 export interface AppSetting {
   key: string;

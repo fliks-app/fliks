@@ -13,7 +13,7 @@ import { HttpClient } from '@angular/common/http';
 import { LucideX } from '@lucide/angular';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { firstValueFrom } from 'rxjs';
-import { SECRETS_SET_KEY } from '@fliks/plugin-contract/ui';
+import { SECRETS_SET_KEY } from '@fliks/plugin-ui';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { SECRET_MASK } from '../../../shared/components/schema-form/schema-form';
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';

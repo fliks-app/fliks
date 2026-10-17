@@ -12,7 +12,7 @@ import {
 import { SseService } from '../sse.service';
 import type { MediaType } from '../../enums/media-type.enum';
 import type { EdlRange } from '../../utils/edl-policy';
-import type { PreRollItem } from '@fliks/plugin-contract/ui';
+import type { PreRollItem } from '@fliks/plugin-ui';
 import type { QoeSample } from '../playback-engine/playback-engine';
 import type { QoeEvent } from './qoe-api.service';
 

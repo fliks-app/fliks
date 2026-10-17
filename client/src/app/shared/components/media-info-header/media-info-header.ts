@@ -69,7 +69,7 @@ import {
   resolveMenuContributions,
   type ResolvedMenuRow,
 } from '../../../core/plugin-ui/resolve-menu-contributions';
-import type { UiContribution } from '@fliks/plugin-contract/ui';
+import type { UiContribution } from '@fliks/plugin-ui';
 import { CachedSrcDirective } from '../../directives/cached-src.directive';
 import { normalizeLangTag } from '../../../core/utils/language.utils';
 

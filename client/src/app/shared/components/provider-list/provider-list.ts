@@ -21,7 +21,7 @@ import { ToastService } from '../../../core/services/toast.service';
 import { InputFieldComponent } from '../forms/input-field/input-field';
 import { ToggleFieldComponent } from '../forms/toggle-field/toggle-field';
 import { SelectFieldComponent } from '../forms/select-field/select-field';
-import { FieldDef, SECRETS_SET_KEY } from '@fliks/plugin-contract/ui';
+import { FieldDef, SECRETS_SET_KEY } from '@fliks/plugin-ui';
 import { SchemaFormComponent, SchemaFormValue } from '../schema-form/schema-form';
 import {
   ProviderDraft,
