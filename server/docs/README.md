@@ -80,6 +80,13 @@ Decided behaviour for the Rust port (security fixes F, correctness fixes C; D3).
 | F67 | process plugins reach any address, internal included | plugin outbound HTTP refuses internal addresses unless the plugin holds the `network.internal` grant given at install consent (link-local, reserved, 6to4, Teredo and documentation ranges stay refused) | install sheet lists the new capability `network:internal`, shown raw until a client i18n key exists |
 | F68 | plugin `config.get` without keys returns, and `config.set` writes, every `plugin.<id>.*` key, including those of a plugin whose id extends it (`fliks` reads `fliks.download` secrets); the `hello` config too | only keys whose longest installed owner id is the caller; a `config.set` of another owner's key is `ERR_DENIED` | none |
 | F69 | `GET /api/requests/:id` serialised the absolute server paths of its media (`media.path`, `media.library.path`) to the requester | present only for callers who can manage libraries, omitted otherwise (F22) | none: clients read `m.path ?? null` |
+| F70 | `POST /api/livetv/admin/sources/test` fetched any url (SSRF), resolving twice and not re-checking redirects | the probe resolves once, connects to the vetted address, re-vets every redirect hop, `http`/`https` only; registered sources, syncs, guide fetches and logos stay unguarded (a LAN provider keeps working) | none for public providers; a probe of a loopback/private address is refused |
+| F71 | a failed guide sync stored and returned the feed url (userinfo, query) in `lastSyncError` | messages never contain the url, userinfo or query | none: the error text loses the url |
+| F72 | a gzip guide or playlist body had no decompressed cap | decompressed bytes are capped at 1 GiB (guide) and 512 MiB (playlist), an XMLTV element at 1 MiB | none for real feeds |
+| F73 | an uploaded-playlist location passed a string prefix check (`playlists-x/` passed) | component-wise prefix on the canonical path | none |
+| F74 | `DELETE /api/livetv/sessions/:sid` ended any live or on-demand session for any `livetv.read` user | only the owner or a Manage Settings caller may; a sid that is not a live viewer answers `{ok:true}` without calling the engine | a non-owner gets 403 `Not your session` |
+| F75 | the resolver denied a live viewer using the caller's group access, ending someone else's viewer | an owner mismatch is never a denial from the host; the engine's owner check answers 403 | none for owners |
+| F76 | `logoPath` of a channel was the provider URL until the logo was cached | every channel payload returns `null` until cached, then `/api/livetv/channels/<id>/logo` | clients already fall back when null |
 
 Not done (user decision 2026-10-15): login rate limiting/lockout.
 
@@ -198,6 +205,32 @@ A 500 or a half-written request is never part of the frozen contract:
 | C119 | per-plugin Postgres roles are `plugin_<id>`, cluster-wide: two Fliks databases on one server share a role and provisioning one rotates the other's password; plugin ids up to 56 chars | role `fp_<database oid as 8 hex>_<id>`, scoped per database by its `pg_database` OID; the first Rust registration adopts the Node-era role's schema and drops the role unless another database uses it; a restore or a copy of the database takes the new database's names over; plugin ids over 51 chars are refused (`PLUGIN_BAD_ID`) |
 | C120 | a rescan of a media whose folder cannot be resolved deleted every external subtitle row | reconcile skips such a media (nothing is deleted) |
 | C121 | `adjustTimes` with a fractional `offsetMs` printed fractional milliseconds in the timestamp | the offset is rounded to whole milliseconds |
+| C122 | a PATCH of the url, credentials or patterns left the stored ETag and Last-Modified, so the next sync could answer not modified | a PATCH that changes one of those values clears them |
+| C123 | an Xtream lineup repeating a `stream_id` aborted the whole sync with 500 | deduped by `externalId`, first wins, as M3U |
+| C124 | the guide match pass loaded channels in database order | ordered by id |
+| C125 | a playlist url accepted `ftp://` and failed at sync | `http` and `https` only |
+| C126 | a group pattern rejected by the Rust regex engine behaved differently from JS | 400 at save and test, ignored with a warning at sync, as an invalid one is today |
+| C127 | the guide refresh job ran a feed once its interval elapsed to the millisecond | a 5-minute tolerance, so an hourly sweep does not skip a feed by a few seconds |
+| C128 | XMLTV text kept NUL characters and surrogate references | U+0000 and surrogate references are dropped |
+| C129 | a feed repeating a channel id failed the insert and the sync; an empty feed was `ok` | the first occurrence wins; an empty feed (no channel, no programme) is an error `empty guide feed` |
+| C130 | a guide sync while one ran for the same source started a second one | 409 `errors.already_running` |
+| C131 | guide source validation gaps (a non-http url, an unknown `sourceId` FK, `refreshIntervalHours` below 1, an offset beyond JS Date range, `language` over 16, int32 overflow) were accepted or a 500 | 400 |
+| C132 | `%` and `_` in the guide search and channel `query` acted as SQL wildcards | escaped |
+| C133 | XMLTV attributes in single quotes were ignored | accepted |
+| C134 | the denied-group test folded case in JS in some paths and in SQL in others | one SQL predicate (`lower(btrim(x))`) everywhere |
+| C135 | `PUT /api/livetv/admin/access/users/:id` for an unknown user with a non-empty match was a 500 | 404 |
+| C136 | a channel whose streams are all on disabled sources opened a session | 503 `livetv_channel_unavailable`; an open viewer of a disabled source ends at its next playlist request |
+| C137 | a grant change called `revokeOwner`, ending the user's VOD sessions too | only the user's live viewers of a group no longer granted end; VOD sessions stay |
+| C138 | a channel PATCH of `groupName` answered with the old `groupNameSource` | the value after the update |
+| C139 | any other engine refusal to open a live session was a 500 | 502 `Bad Gateway`; a transport failure is 503 |
+| C140 | the per-entry `#EXTVLCOPT` user agent and referer were ignored when opening a stream | each value is the entry's, else the source's; the agent then defaults to `VLC/3.0.20 LibVLC/3.0.20` |
+| C141 | a restart left live viewers without an activity row | the viewers rebuilt from `GET /v1/live` are reported again |
+| C142 | bulk channel `startNumber` renumber was always a 500 (untyped `VALUES`) | renumbers |
+| C143 | a fold that also realigned group or guide id orphaned the folded stream | the stream stays attached to its channel |
+| C144 | a `compress` Content-Encoding was decoded by the HTTP client | not supported (never sent by providers) |
+| C145 | `billed-till` and expiry dates went through JS `Date.parse` | ISO 8601 only, read as UTC |
+| C146 | an out-of-range int32 in a provider payload became a database error | read as null |
+| C147 | a refused provider connection reported the Node error text | the same text (`connect ECONNREFUSED host:port`) from the Rust client |
 
 Frozen as is (decided): the heartbeat keeps its debounce entry after a failed history write and returns
 `sessionLost: false` when the engine session lives but presence cannot be rebuilt. Lists whose order comes
