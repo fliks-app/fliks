@@ -1380,6 +1380,7 @@ dependencies = [
 name = "fliks-plugin-sdk"
 version = "0.1.0"
 dependencies = [
+ "axum",
  "base64 0.22.1",
  "ed25519-dalek",
  "fliks-plugin-route",
@@ -1390,6 +1391,7 @@ dependencies = [
  "sqlx",
  "tokio",
  "tokio-rustls",
+ "tower",
  "tracing-subscriber",
  "wit-bindgen 0.62.0",
  "wit-parser 0.259.0",

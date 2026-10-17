@@ -1,10 +1,5 @@
-//! Component tests (SDK-11): a built guest runs under the real host (`fliks_server::plugins`)
-//! on a scratch Postgres database, with programmable outbound targets and a movable clock for
-//! scheduled calls.
-//!
-//! `FLIKS_HARNESS_PG_URL` is a superuser URL of a maintenance database; without it
-//! [`Harness::start`] answers `None` and the test should return. Scratch databases are named
-//! `FLIKS_HARNESS_DB_PREFIX` (default `fliks_harness_`) plus random hex.
+//! Component tests (SDK-11): a built guest under the real host on a scratch database named
+//! `FLIKS_HARNESS_DB_PREFIX` + hex, created through the superuser `FLIKS_HARNESS_PG_URL`.
 
 use crate::build::Crate;
 use fliks_server::net::guard::{Net, SystemNet};
@@ -13,7 +8,8 @@ use fliks_server::plugins::{HealthReport, HttpRequest, HttpResponse, Options, Pl
 use fliks_server::{config::Config, state::AppState};
 use futures_util::future::BoxFuture;
 use serde_json::{Value, json};
-use sqlx::{Connection, PgConnection, PgPool, postgres::PgPoolOptions};
+use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
+use sqlx::{Connection, PgConnection, PgPool};
 use std::collections::HashMap;
 use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
@@ -152,9 +148,74 @@ pub struct Harness {
     pub pool: PgPool,
     pub targets: Arc<Targets>,
     pub id: String,
+    token: String,
+    _scratch: Scratch,
+}
+
+/// Drops the scratch database, its `fp_<oid>_*` roles and the runtime dir, panicking or not.
+struct Scratch {
     db: String,
-    admin: String,
+    admin: PgConnectOptions,
     dir: PathBuf,
+}
+
+impl Drop for Scratch {
+    fn drop(&mut self) {
+        let (db, admin) = (self.db.clone(), self.admin.clone());
+        // Drop can't await, and blocking inside the test's runtime would panic.
+        let done = std::thread::spawn(move || {
+            tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .map_err(sqlx::Error::Io)?
+                .block_on(drop_database(&admin, &db))
+        })
+        .join();
+        if !matches!(done, Ok(Ok(()))) {
+            eprintln!("harness: could not drop the database {}: {done:?}", self.db);
+        }
+        let _ = std::fs::remove_dir_all(&self.dir);
+    }
+}
+
+async fn drop_database(admin: &PgConnectOptions, db: &str) -> sqlx::Result<()> {
+    let mut c = PgConnection::connect_with(admin).await?;
+    let oid: Option<String> = sqlx::query_scalar(
+        "SELECT lpad(to_hex(oid::bigint), 8, '0') FROM pg_database WHERE datname = $1",
+    )
+    .bind(db)
+    .fetch_optional(&mut c)
+    .await?;
+    sqlx::raw_sql(&format!("DROP DATABASE IF EXISTS \"{db}\" WITH (FORCE)"))
+        .execute(&mut c)
+        .await?;
+    let Some(oid) = oid else { return Ok(()) };
+    let roles: Vec<String> =
+        sqlx::query_scalar("SELECT rolname::text FROM pg_roles WHERE rolname LIKE $1")
+            .bind(format!("fp\\_{oid}\\_%"))
+            .fetch_all(&mut c)
+            .await?;
+    for r in roles {
+        sqlx::raw_sql(&format!("DROP ROLE IF EXISTS \"{r}\""))
+            .execute(&mut c)
+            .await?;
+    }
+    Ok(())
+}
+
+/// Under CI a missing input fails the test; locally it skips it, loudly.
+pub fn skip(what: &str) {
+    if std::env::var("CI").is_ok_and(|v| !matches!(v.as_str(), "" | "0" | "false")) {
+        panic!("{what}: required under CI");
+    }
+    eprintln!("\n\x1b[1;33mWARNING: {what}: test SKIPPED\x1b[0m\n");
+}
+
+fn valid_prefix(p: &str) -> bool {
+    let mut c = p.chars();
+    c.next().is_some_and(|f| f.is_ascii_lowercase() || f == '_')
+        && c.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+        && p.len() <= 55
 }
 
 const SECRET: &str = "0123456789abcdef0123456789abcdef";
@@ -172,22 +233,36 @@ fn log_ring() {
 impl Harness {
     /// A scratch database, the host, then the plugin installed (unsigned allowed) and ready.
     pub async fn start(setup: Setup) -> Option<Harness> {
-        let Ok(admin) = std::env::var("FLIKS_HARNESS_PG_URL") else {
-            eprintln!("FLIKS_HARNESS_PG_URL unset: skipped");
+        let Ok(url) = std::env::var("FLIKS_HARNESS_PG_URL") else {
+            skip("FLIKS_HARNESS_PG_URL unset");
             return None;
         };
+        let admin: PgConnectOptions = url.parse().expect("FLIKS_HARNESS_PG_URL");
         let prefix =
             std::env::var("FLIKS_HARNESS_DB_PREFIX").unwrap_or_else(|_| "fliks_harness_".into());
+        assert!(
+            valid_prefix(&prefix),
+            "FLIKS_HARNESS_DB_PREFIX must match [a-z_][a-z0-9_]* (at most 55 characters)"
+        );
         let db = format!("{prefix}{}", fliks_server::config::random_hex(4));
-        let mut c = PgConnection::connect(&admin).await.expect("the admin URL");
-        sqlx::raw_sql(&format!("CREATE DATABASE {db}"))
+        let root =
+            std::env::var("CARGO_TARGET_DIR").map_or_else(|_| std::env::temp_dir(), PathBuf::from);
+        let dir = root.join("plugin-harness").join(&db);
+        let mut c = PgConnection::connect_with(&admin)
+            .await
+            .expect("the admin URL");
+        sqlx::raw_sql(&format!("CREATE DATABASE \"{db}\""))
             .execute(&mut c)
             .await
             .expect("CREATE DATABASE");
-        let url = format!("{}/{db}", admin.rsplit_once('/').expect("a database").0);
+        let scratch = Scratch {
+            db: db.clone(),
+            admin: admin.clone(),
+            dir: dir.clone(),
+        };
         let pool = PgPoolOptions::new()
             .max_connections(10)
-            .connect(&url)
+            .connect_with(admin.database(&db))
             .await
             .expect("the scratch database");
         fliks_server::db::migrate(&pool)
@@ -198,9 +273,6 @@ impl Harness {
             .await
             .expect("no catalog sources");
 
-        let root =
-            std::env::var("CARGO_TARGET_DIR").map_or_else(|_| std::env::temp_dir(), PathBuf::from);
-        let dir = root.join("plugin-harness").join(&db);
         std::fs::create_dir_all(&dir).expect("the runtime dir");
         log_ring();
         let mut st = AppState::new(pool.clone(), Config::from_lookup(|_| None), SECRET);
@@ -214,7 +286,7 @@ impl Harness {
             pool.clone(),
             Options {
                 version: "5.0.0".into(),
-                runtime_dir: dir.clone(),
+                runtime_dir: dir,
                 disabled: false,
                 pg: fliks_server::plugins::db::PgTarget {
                     host: opts.get_host().to_owned(),
@@ -263,14 +335,21 @@ impl Harness {
             .await
             .unwrap_or_else(|e| panic!("confirm: {e:?}"));
         assert_eq!(r.status, "active", "{:?} {:?}", r.reason, r.detail);
+        let uid: i32 = sqlx::query_scalar(
+            r#"INSERT INTO users (username, "isAdmin") VALUES ('admin', true)
+               ON CONFLICT (username) DO UPDATE SET "isAdmin" = true RETURNING id"#,
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("the admin user");
+        let token = st.jwt.sign_access(uid, "admin").expect("a token").token;
         Some(Harness {
             st,
             pool,
             targets: setup.targets,
             id,
-            db,
-            admin,
-            dir,
+            token,
+            _scratch: scratch,
         })
     }
 
@@ -282,9 +361,46 @@ impl Harness {
         self.st.plugins.state_of(&self.id)
     }
 
-    /// The `http` export, as the proxy calls it once the route and policy passed.
+    /// The `http` export directly: no route resolution, policy, or response header filtering.
     pub async fn http(&self, req: HttpRequest) -> Result<HttpResponse, CallError> {
         self.rt().http(req, false).await
+    }
+
+    /// `/api/plugins/<id><path>` (with its query) through the host's proxy route, as an admin.
+    pub async fn proxy(&self, method: &str, path: &str, body: Option<&Value>) -> HttpResponse {
+        use axum::body::Body;
+        use tower::ServiceExt;
+        let req = axum::http::Request::builder()
+            .method(method)
+            .uri(format!("/api/plugins/{}{path}", self.id))
+            .header("authorization", format!("Bearer {}", self.token));
+        let req = match body {
+            Some(b) => req
+                .header("content-type", "application/json")
+                .body(Body::from(b.to_string())),
+            None => req.body(Body::empty()),
+        }
+        .expect("a request");
+        let res = fliks_server::plugins::routes::router()
+            .with_state(self.st.clone())
+            .oneshot(req)
+            .await
+            .expect("the router is infallible");
+        let status = res.status().as_u16();
+        let headers = res
+            .headers()
+            .iter()
+            .map(|(n, v)| (n.to_string(), String::from_utf8_lossy(v.as_bytes()).into()))
+            .collect();
+        let body = axum::body::to_bytes(res.into_body(), usize::MAX)
+            .await
+            .expect("the body")
+            .to_vec();
+        HttpResponse {
+            status,
+            headers,
+            body,
+        }
     }
 
     pub async fn health(&self) -> Result<HealthReport, CallError> {
@@ -373,32 +489,10 @@ impl Harness {
         l
     }
 
-    /// Stops the plugin (`shutdown`), then drops the database and its `fp_<oid>_*` roles.
+    /// Stops the plugin (`shutdown`); dropping the harness then drops its database and roles.
     pub async fn finish(self) {
         self.st.plugins.shutdown().await;
-        let oid = fliks_server::plugins::db::database_oid(&self.pool)
-            .await
-            .expect("the database oid");
         self.pool.close().await;
-        let mut c = PgConnection::connect(&self.admin)
-            .await
-            .expect("the admin URL");
-        sqlx::raw_sql(&format!("DROP DATABASE IF EXISTS {} WITH (FORCE)", self.db))
-            .execute(&mut c)
-            .await
-            .expect("DROP DATABASE");
-        let roles: Vec<String> =
-            sqlx::query_scalar("SELECT rolname::text FROM pg_roles WHERE rolname LIKE $1")
-                .bind(format!("fp\\_{oid}\\_%"))
-                .fetch_all(&mut c)
-                .await
-                .expect("roles");
-        for r in roles {
-            let _ = sqlx::raw_sql(&format!("DROP ROLE IF EXISTS \"{r}\""))
-                .execute(&mut c)
-                .await;
-        }
-        let _ = std::fs::remove_dir_all(&self.dir);
     }
 }
 

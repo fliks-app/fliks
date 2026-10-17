@@ -57,6 +57,34 @@ async fn exports_and_scheduled_calls() {
         return;
     };
     assert!(h.health().await.unwrap().ok);
+    let header = |r: &HttpResponse, n: &str| {
+        r.headers
+            .iter()
+            .find(|(k, _)| k == n)
+            .map(|(_, v)| v.clone())
+    };
+    let r = h.proxy("GET", "/hello", None).await;
+    assert_eq!((r.status, body(&r)["hello"].as_str()), (200, Some("world")));
+    assert_eq!(
+        header(&r, "x-content-type-options").as_deref(),
+        Some("nosniff")
+    );
+    assert_eq!(
+        header(&r, "content-security-policy").as_deref(),
+        Some("sandbox")
+    );
+    let r = h.proxy("GET", "/headers", None).await;
+    assert_eq!(header(&r, "etag").as_deref(), Some("\"v1\""));
+    for dropped in ["set-cookie", "x-custom", "location"] {
+        assert_eq!(header(&r, dropped), None, "{dropped} is not allow-listed");
+    }
+    assert_eq!(h.proxy("GET", "/status/700", None).await.status, 502);
+    assert_eq!(h.proxy("GET", "/nowhere", None).await.status, 403);
+    let r = h.proxy("POST", "/echo?q=1", Some(&json!({ "a": 1 }))).await;
+    assert_eq!(
+        (body(&r)["body"].clone(), body(&r)["query"].clone()),
+        (json!({ "a": 1 }), json!([["q", "1"]]))
+    );
     h.job("FixtureJob", Some("0")).await.unwrap();
     h.scheduled("direct", "\"d\"", 3).await.unwrap();
     assert!(logged(&h, "scheduled direct attempt 3 payload \"d\""));
