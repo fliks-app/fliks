@@ -3,7 +3,7 @@ resolver = "3"
 members = ["crates/domain", "crates/plugin-route", "crates/server"]
 
 [workspace.package]
-version = "4.5.0"
+version = "5.0.0"
 edition = "2024"
 license = "AGPL-3.0-or-later"
 repository = "https://github.com/fliks-app/fliks"
