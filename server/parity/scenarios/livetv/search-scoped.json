@@ -1,0 +1,483 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastSyncAt",
+    "$..logoPath",
+    "$..startsAt",
+    "$..endsAt"
+  ],
+  "name": "search-scoped",
+  "seed": "livetv",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "channels": [],
+          "programs": [
+            {
+              "categories": [
+                "Cat"
+              ],
+              "description": "About Two Now",
+              "episodeNumber": null,
+              "guideChannelId": "two.fr",
+              "guideSourceId": 1,
+              "iconUrl": null,
+              "id": 5,
+              "isLive": false,
+              "isNew": false,
+              "rating": null,
+              "seasonNumber": null,
+              "seriesId": null,
+              "subtitle": null,
+              "title": "Two Now",
+              "year": null
+            },
+            {
+              "categories": [
+                "Cat"
+              ],
+              "description": "About One Now (feed B)",
+              "episodeNumber": null,
+              "guideChannelId": "one.fr",
+              "guideSourceId": 2,
+              "iconUrl": null,
+              "id": 4,
+              "isLive": false,
+              "isNew": false,
+              "rating": null,
+              "seasonNumber": null,
+              "seriesId": null,
+              "subtitle": null,
+              "title": "One Now (feed B)",
+              "year": null
+            },
+            {
+              "categories": [
+                "Cat"
+              ],
+              "description": "About One Now",
+              "episodeNumber": 2,
+              "guideChannelId": "one.fr",
+              "guideSourceId": 1,
+              "iconUrl": null,
+              "id": 2,
+              "isLive": false,
+              "isNew": true,
+              "rating": "PG",
+              "seasonNumber": 1,
+              "seriesId": null,
+              "subtitle": null,
+              "title": "One Now",
+              "year": 2020
+            }
+          ]
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/livetv/search?q=Now"
+    },
+    {
+      "as": "other",
+      "expect": {
+        "body": {
+          "channels": [],
+          "programs": [
+            {
+              "categories": [
+                "Cat"
+              ],
+              "description": "About Two Now",
+              "episodeNumber": null,
+              "guideChannelId": "two.fr",
+              "guideSourceId": 1,
+              "iconUrl": null,
+              "id": 5,
+              "isLive": false,
+              "isNew": false,
+              "rating": null,
+              "seasonNumber": null,
+              "seriesId": null,
+              "subtitle": null,
+              "title": "Two Now",
+              "year": null
+            },
+            {
+              "categories": [
+                "Cat"
+              ],
+              "description": "About Adult Now",
+              "episodeNumber": null,
+              "guideChannelId": "adult.fr",
+              "guideSourceId": 1,
+              "iconUrl": null,
+              "id": 7,
+              "isLive": false,
+              "isNew": false,
+              "rating": null,
+              "seasonNumber": null,
+              "seriesId": null,
+              "subtitle": null,
+              "title": "Adult Now",
+              "year": null
+            },
+            {
+              "categories": [
+                "Cat"
+              ],
+              "description": "About Hidden Now",
+              "episodeNumber": null,
+              "guideChannelId": "hidden.fr",
+              "guideSourceId": 1,
+              "iconUrl": null,
+              "id": 8,
+              "isLive": false,
+              "isNew": false,
+              "rating": null,
+              "seasonNumber": null,
+              "seriesId": null,
+              "subtitle": null,
+              "title": "Hidden Now",
+              "year": null
+            },
+            {
+              "categories": [
+                "Cat"
+              ],
+              "description": "About One Now (feed B)",
+              "episodeNumber": null,
+              "guideChannelId": "one.fr",
+              "guideSourceId": 2,
+              "iconUrl": null,
+              "id": 4,
+              "isLive": false,
+              "isNew": false,
+              "rating": null,
+              "seasonNumber": null,
+              "seriesId": null,
+              "subtitle": null,
+              "title": "One Now (feed B)",
+              "year": null
+            },
+            {
+              "categories": [
+                "Cat"
+              ],
+              "description": "About One Now",
+              "episodeNumber": 2,
+              "guideChannelId": "one.fr",
+              "guideSourceId": 1,
+              "iconUrl": null,
+              "id": 2,
+              "isLive": false,
+              "isNew": true,
+              "rating": "PG",
+              "seasonNumber": 1,
+              "seriesId": null,
+              "subtitle": null,
+              "title": "One Now",
+              "year": 2020
+            }
+          ]
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/livetv/search?q=Now"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "channels": [],
+          "programs": [
+            {
+              "categories": [
+                "Cat"
+              ],
+              "description": "About Two Now",
+              "episodeNumber": null,
+              "guideChannelId": "two.fr",
+              "guideSourceId": 1,
+              "iconUrl": null,
+              "id": 5,
+              "isLive": false,
+              "isNew": false,
+              "rating": null,
+              "seasonNumber": null,
+              "seriesId": null,
+              "subtitle": null,
+              "title": "Two Now",
+              "year": null
+            },
+            {
+              "categories": [
+                "Cat"
+              ],
+              "description": "About Adult Now",
+              "episodeNumber": null,
+              "guideChannelId": "adult.fr",
+              "guideSourceId": 1,
+              "iconUrl": null,
+              "id": 7,
+              "isLive": false,
+              "isNew": false,
+              "rating": null,
+              "seasonNumber": null,
+              "seriesId": null,
+              "subtitle": null,
+              "title": "Adult Now",
+              "year": null
+            },
+            {
+              "categories": [
+                "Cat"
+              ],
+              "description": "About Hidden Now",
+              "episodeNumber": null,
+              "guideChannelId": "hidden.fr",
+              "guideSourceId": 1,
+              "iconUrl": null,
+              "id": 8,
+              "isLive": false,
+              "isNew": false,
+              "rating": null,
+              "seasonNumber": null,
+              "seriesId": null,
+              "subtitle": null,
+              "title": "Hidden Now",
+              "year": null
+            },
+            {
+              "categories": [
+                "Cat"
+              ],
+              "description": "About One Now (feed B)",
+              "episodeNumber": null,
+              "guideChannelId": "one.fr",
+              "guideSourceId": 2,
+              "iconUrl": null,
+              "id": 4,
+              "isLive": false,
+              "isNew": false,
+              "rating": null,
+              "seasonNumber": null,
+              "seriesId": null,
+              "subtitle": null,
+              "title": "One Now (feed B)",
+              "year": null
+            },
+            {
+              "categories": [
+                "Cat"
+              ],
+              "description": "About One Now",
+              "episodeNumber": 2,
+              "guideChannelId": "one.fr",
+              "guideSourceId": 1,
+              "iconUrl": null,
+              "id": 2,
+              "isLive": false,
+              "isNew": true,
+              "rating": "PG",
+              "seasonNumber": 1,
+              "seriesId": null,
+              "subtitle": null,
+              "title": "One Now",
+              "year": 2020
+            }
+          ]
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/livetv/search?q=now"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "channels": [
+            {
+              "favorite": true,
+              "groupName": "Mine",
+              "guideChannelId": "two.fr",
+              "id": 2,
+              "name": "Two",
+              "number": 2
+            },
+            {
+              "favorite": false,
+              "groupName": "Old News",
+              "guideChannelId": "one.fr",
+              "id": 1,
+              "name": "One",
+              "number": 1
+            },
+            {
+              "favorite": false,
+              "groupName": "__livetv_ungrouped__",
+              "guideChannelId": null,
+              "id": 4,
+              "name": "No Group",
+              "number": null
+            }
+          ],
+          "programs": [
+            {
+              "categories": [
+                "Cat"
+              ],
+              "description": "About One Before",
+              "episodeNumber": null,
+              "guideChannelId": "one.fr",
+              "guideSourceId": 1,
+              "iconUrl": null,
+              "id": 1,
+              "isLive": false,
+              "isNew": false,
+              "rating": null,
+              "seasonNumber": null,
+              "seriesId": null,
+              "subtitle": null,
+              "title": "One Before",
+              "year": null
+            },
+            {
+              "categories": [
+                "Cat"
+              ],
+              "description": "About Two Now",
+              "episodeNumber": null,
+              "guideChannelId": "two.fr",
+              "guideSourceId": 1,
+              "iconUrl": null,
+              "id": 5,
+              "isLive": false,
+              "isNew": false,
+              "rating": null,
+              "seasonNumber": null,
+              "seriesId": null,
+              "subtitle": null,
+              "title": "Two Now",
+              "year": null
+            },
+            {
+              "categories": [
+                "Cat"
+              ],
+              "description": "About One Now (feed B)",
+              "episodeNumber": null,
+              "guideChannelId": "one.fr",
+              "guideSourceId": 2,
+              "iconUrl": null,
+              "id": 4,
+              "isLive": false,
+              "isNew": false,
+              "rating": null,
+              "seasonNumber": null,
+              "seriesId": null,
+              "subtitle": null,
+              "title": "One Now (feed B)",
+              "year": null
+            },
+            {
+              "categories": [
+                "Cat"
+              ],
+              "description": "About One Now",
+              "episodeNumber": 2,
+              "guideChannelId": "one.fr",
+              "guideSourceId": 1,
+              "iconUrl": null,
+              "id": 2,
+              "isLive": false,
+              "isNew": true,
+              "rating": "PG",
+              "seasonNumber": 1,
+              "seriesId": null,
+              "subtitle": null,
+              "title": "One Now",
+              "year": 2020
+            },
+            {
+              "categories": [
+                "Cat"
+              ],
+              "description": "About Two Later",
+              "episodeNumber": null,
+              "guideChannelId": "two.fr",
+              "guideSourceId": 1,
+              "iconUrl": null,
+              "id": 6,
+              "isLive": false,
+              "isNew": false,
+              "rating": null,
+              "seasonNumber": null,
+              "seriesId": null,
+              "subtitle": null,
+              "title": "Two Later",
+              "year": null
+            },
+            {
+              "categories": [
+                "Cat"
+              ],
+              "description": "About One Later",
+              "episodeNumber": null,
+              "guideChannelId": "one.fr",
+              "guideSourceId": 1,
+              "iconUrl": null,
+              "id": 3,
+              "isLive": false,
+              "isNew": false,
+              "rating": null,
+              "seasonNumber": null,
+              "seriesId": null,
+              "subtitle": null,
+              "title": "One Later",
+              "year": null
+            }
+          ]
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/livetv/search"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "q must be shorter than or equal to 200 characters"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "GET",
+      "path": "/api/livetv/search?q=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "property extra should not exist"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "GET",
+      "path": "/api/livetv/search?q=one&extra=1"
+    }
+  ]
+}

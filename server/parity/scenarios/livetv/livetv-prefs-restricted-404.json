@@ -1,0 +1,51 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastSyncAt",
+    "$..logoPath"
+  ],
+  "name": "livetv-prefs-restricted-404",
+  "seed": "livetv",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "favorite": true
+      },
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Live TV channel #3 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "PUT",
+      "path": "/api/livetv/channels/3/prefs"
+    },
+    {
+      "as": "other",
+      "body": {
+        "favorite": true
+      },
+      "expect": {
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/livetv/channels/3/prefs"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "favorite": true
+      },
+      "expect": {
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/livetv/channels/3/prefs"
+    }
+  ]
+}

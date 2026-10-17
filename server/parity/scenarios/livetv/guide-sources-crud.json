@@ -1,0 +1,363 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastSyncAt",
+    "$..logoPath"
+  ],
+  "name": "guide-sources-crud",
+  "seed": "livetv",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "enabled": true,
+            "etag": null,
+            "id": 1,
+            "kind": "xmltv",
+            "language": null,
+            "lastModified": null,
+            "lastSyncError": null,
+            "lastSyncStatus": "never",
+            "name": "Feed A",
+            "priority": 1,
+            "programCount": 0,
+            "refreshIntervalHours": 12,
+            "sourceId": null,
+            "timezoneOffsetMinutes": 0,
+            "url": "http://127.0.0.1:4921/guide.xml"
+          },
+          {
+            "enabled": true,
+            "etag": null,
+            "id": 2,
+            "kind": "source",
+            "language": "fr",
+            "lastModified": null,
+            "lastSyncError": null,
+            "lastSyncStatus": "never",
+            "name": "Feed B",
+            "priority": 0,
+            "programCount": 0,
+            "refreshIntervalHours": 12,
+            "sourceId": 1,
+            "timezoneOffsetMinutes": 60,
+            "url": null
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/livetv/admin/guide-sources"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "kind": "xmltv",
+        "name": "New",
+        "url": "http://127.0.0.1:4921/guide.xml"
+      },
+      "expect": {
+        "body": {
+          "enabled": true,
+          "etag": null,
+          "id": 3,
+          "kind": "xmltv",
+          "language": null,
+          "lastModified": null,
+          "lastSyncError": null,
+          "lastSyncStatus": "never",
+          "name": "New",
+          "priority": 0,
+          "programCount": 0,
+          "refreshIntervalHours": 12,
+          "source": null,
+          "sourceId": null,
+          "timezoneOffsetMinutes": 0,
+          "url": "http://127.0.0.1:4921/guide.xml"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/livetv/admin/guide-sources"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "enabled": false,
+        "kind": "source",
+        "language": "fr",
+        "name": "Linked",
+        "priority": 5,
+        "refreshIntervalHours": 6,
+        "sourceId": 2,
+        "timezoneOffsetMinutes": 120
+      },
+      "expect": {
+        "body": {
+          "enabled": false,
+          "etag": null,
+          "id": 4,
+          "kind": "source",
+          "language": "fr",
+          "lastModified": null,
+          "lastSyncError": null,
+          "lastSyncStatus": "never",
+          "name": "Linked",
+          "priority": 5,
+          "programCount": 0,
+          "refreshIntervalHours": 6,
+          "source": {
+            "id": 2
+          },
+          "sourceId": 2,
+          "timezoneOffsetMinutes": 120,
+          "url": null
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/livetv/admin/guide-sources"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "enabled": true,
+            "etag": null,
+            "id": 1,
+            "kind": "xmltv",
+            "language": null,
+            "lastModified": null,
+            "lastSyncError": null,
+            "lastSyncStatus": "never",
+            "name": "Feed A",
+            "priority": 1,
+            "programCount": 0,
+            "refreshIntervalHours": 12,
+            "sourceId": null,
+            "timezoneOffsetMinutes": 0,
+            "url": "http://127.0.0.1:4921/guide.xml"
+          },
+          {
+            "enabled": true,
+            "etag": null,
+            "id": 2,
+            "kind": "source",
+            "language": "fr",
+            "lastModified": null,
+            "lastSyncError": null,
+            "lastSyncStatus": "never",
+            "name": "Feed B",
+            "priority": 0,
+            "programCount": 0,
+            "refreshIntervalHours": 12,
+            "sourceId": 1,
+            "timezoneOffsetMinutes": 60,
+            "url": null
+          },
+          {
+            "enabled": false,
+            "etag": null,
+            "id": 4,
+            "kind": "source",
+            "language": "fr",
+            "lastModified": null,
+            "lastSyncError": null,
+            "lastSyncStatus": "never",
+            "name": "Linked",
+            "priority": 5,
+            "programCount": 0,
+            "refreshIntervalHours": 6,
+            "sourceId": 2,
+            "timezoneOffsetMinutes": 120,
+            "url": null
+          },
+          {
+            "enabled": true,
+            "etag": null,
+            "id": 3,
+            "kind": "xmltv",
+            "language": null,
+            "lastModified": null,
+            "lastSyncError": null,
+            "lastSyncStatus": "never",
+            "name": "New",
+            "priority": 0,
+            "programCount": 0,
+            "refreshIntervalHours": 12,
+            "sourceId": null,
+            "timezoneOffsetMinutes": 0,
+            "url": "http://127.0.0.1:4921/guide.xml"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/livetv/admin/guide-sources"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "name": "Renamed",
+        "priority": 2
+      },
+      "expect": {
+        "body": {
+          "enabled": true,
+          "etag": null,
+          "id": 3,
+          "kind": "xmltv",
+          "language": null,
+          "lastModified": null,
+          "lastSyncError": null,
+          "lastSyncStatus": "never",
+          "name": "Renamed",
+          "priority": 2,
+          "programCount": 0,
+          "refreshIntervalHours": 12,
+          "source": null,
+          "sourceId": null,
+          "timezoneOffsetMinutes": 0,
+          "url": "http://127.0.0.1:4921/guide.xml"
+        },
+        "status": 200
+      },
+      "method": "PATCH",
+      "path": "/api/livetv/admin/guide-sources/3"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "kind": "xmltv",
+        "sourceId": null,
+        "url": "http://127.0.0.1:4921/guide.xml"
+      },
+      "expect": {
+        "body": {
+          "enabled": true,
+          "etag": null,
+          "id": 2,
+          "kind": "xmltv",
+          "language": "fr",
+          "lastModified": null,
+          "lastSyncError": null,
+          "lastSyncStatus": "never",
+          "name": "Feed B",
+          "priority": 0,
+          "programCount": 0,
+          "refreshIntervalHours": 12,
+          "source": null,
+          "sourceId": null,
+          "timezoneOffsetMinutes": 60,
+          "url": "http://127.0.0.1:4921/guide.xml"
+        },
+        "status": 200
+      },
+      "method": "PATCH",
+      "path": "/api/livetv/admin/guide-sources/2"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "status": 200
+      },
+      "method": "DELETE",
+      "path": "/api/livetv/admin/guide-sources/1"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "enabled": true,
+            "etag": null,
+            "id": 2,
+            "kind": "xmltv",
+            "language": "fr",
+            "lastModified": null,
+            "lastSyncError": null,
+            "lastSyncStatus": "never",
+            "name": "Feed B",
+            "priority": 0,
+            "programCount": 0,
+            "refreshIntervalHours": 12,
+            "sourceId": null,
+            "timezoneOffsetMinutes": 60,
+            "url": "http://127.0.0.1:4921/guide.xml"
+          },
+          {
+            "enabled": false,
+            "etag": null,
+            "id": 4,
+            "kind": "source",
+            "language": "fr",
+            "lastModified": null,
+            "lastSyncError": null,
+            "lastSyncStatus": "never",
+            "name": "Linked",
+            "priority": 5,
+            "programCount": 0,
+            "refreshIntervalHours": 6,
+            "sourceId": 2,
+            "timezoneOffsetMinutes": 120,
+            "url": null
+          },
+          {
+            "enabled": true,
+            "etag": null,
+            "id": 3,
+            "kind": "xmltv",
+            "language": null,
+            "lastModified": null,
+            "lastSyncError": null,
+            "lastSyncStatus": "never",
+            "name": "Renamed",
+            "priority": 2,
+            "programCount": 0,
+            "refreshIntervalHours": 12,
+            "sourceId": null,
+            "timezoneOffsetMinutes": 0,
+            "url": "http://127.0.0.1:4921/guide.xml"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/livetv/admin/guide-sources"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Guide source #99 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "DELETE",
+      "path": "/api/livetv/admin/guide-sources/99"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "name": "x"
+      },
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Guide source #99 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "PATCH",
+      "path": "/api/livetv/admin/guide-sources/99"
+    }
+  ]
+}

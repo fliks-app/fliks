@@ -1,0 +1,329 @@
+{
+  "deviation": null,
+  "engine": "up",
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastSyncAt",
+    "$..logoPath",
+    "$..sessionId",
+    "$..url",
+    "$..lastOkAt",
+    "$..lastErrorAt",
+    "$..lastSeenAt"
+  ],
+  "name": "livetv-all-dead",
+  "seed": "livetv-live",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "value": "2"
+      },
+      "expect": {
+        "body": {
+          "id": 5,
+          "key": "livetv_channel_idle_seconds",
+          "value": "2"
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/settings/livetv_channel_idle_seconds"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "value": "1"
+      },
+      "expect": {
+        "body": {
+          "id": 6,
+          "key": "livetv_slot_release_seconds",
+          "value": "1"
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/settings/livetv_slot_release_seconds"
+    },
+    {
+      "as": "user",
+      "body": {},
+      "expect": {
+        "body": {
+          "channelName": "D",
+          "code": "livetv_channel_unavailable"
+        },
+        "status": 503
+      },
+      "method": "POST",
+      "path": "/api/livetv/channels/4/play"
+    },
+    {
+      "as": "anon",
+      "expect": {
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/",
+      "sleepMs": 800
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "groups": [
+            {
+              "count": 1,
+              "name": "Adult XXX"
+            },
+            {
+              "count": 8,
+              "name": "Live"
+            }
+          ],
+          "items": [
+            {
+              "consecutiveFailures": 1,
+              "enabled": true,
+              "groupName": "Live",
+              "groupNameSource": "provider",
+              "guideChannelId": null,
+              "guideMatchKind": null,
+              "guideShiftMinutes": 0,
+              "id": 4,
+              "lastPlayedAt": null,
+              "name": "D",
+              "number": 4,
+              "sortIndex": 0,
+              "streams": [
+                {
+                  "channelId": 4,
+                  "externalId": "d1",
+                  "id": 5,
+                  "lastError": "no segment produced within the startup window",
+                  "priority": 0,
+                  "probedAudioCodec": null,
+                  "probedContainer": null,
+                  "probedVideoCodec": null,
+                  "providerName": "D",
+                  "qualityLabel": null,
+                  "referer": null,
+                  "source": {
+                    "accountStatus": null,
+                    "channelCount": 0,
+                    "enabled": true,
+                    "excludeGroupsPattern": null,
+                    "expiresAt": null,
+                    "guideUrls": [],
+                    "id": 2,
+                    "includeGroupsPattern": null,
+                    "kind": "m3u",
+                    "lastAdultGuardError": null,
+                    "lastSyncError": null,
+                    "lastSyncStatus": "ok",
+                    "maxStreams": 0,
+                    "maxStreamsIsManual": false,
+                    "name": "S2",
+                    "playlistEtag": null,
+                    "playlistLastModified": null,
+                    "priority": 1,
+                    "referer": null,
+                    "refreshIntervalHours": 12,
+                    "userAgent": null,
+                    "username": null
+                  },
+                  "sourceId": 2,
+                  "userAgent": null
+                },
+                {
+                  "channelId": 4,
+                  "externalId": "d2",
+                  "id": 6,
+                  "lastError": "no segment produced within the startup window",
+                  "priority": 1,
+                  "probedAudioCodec": null,
+                  "probedContainer": null,
+                  "probedVideoCodec": null,
+                  "providerName": "D",
+                  "qualityLabel": null,
+                  "referer": null,
+                  "source": {
+                    "accountStatus": null,
+                    "channelCount": 0,
+                    "enabled": true,
+                    "excludeGroupsPattern": null,
+                    "expiresAt": null,
+                    "guideUrls": [],
+                    "id": 2,
+                    "includeGroupsPattern": null,
+                    "kind": "m3u",
+                    "lastAdultGuardError": null,
+                    "lastSyncError": null,
+                    "lastSyncStatus": "ok",
+                    "maxStreams": 0,
+                    "maxStreamsIsManual": false,
+                    "name": "S2",
+                    "playlistEtag": null,
+                    "playlistLastModified": null,
+                    "priority": 1,
+                    "referer": null,
+                    "refreshIntervalHours": 12,
+                    "userAgent": null,
+                    "username": null
+                  },
+                  "sourceId": 2,
+                  "userAgent": null
+                }
+              ]
+            }
+          ],
+          "total": 1
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/livetv/admin/channels?query=D"
+    },
+    {
+      "as": "user",
+      "body": {},
+      "expect": {
+        "body": {
+          "channelName": "D",
+          "code": "livetv_channel_unavailable"
+        },
+        "status": 503
+      },
+      "method": "POST",
+      "path": "/api/livetv/channels/4/play"
+    },
+    {
+      "as": "anon",
+      "expect": {
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/",
+      "sleepMs": 800
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "groups": [
+            {
+              "count": 1,
+              "name": "Adult XXX"
+            },
+            {
+              "count": 8,
+              "name": "Live"
+            }
+          ],
+          "items": [
+            {
+              "consecutiveFailures": 2,
+              "enabled": true,
+              "groupName": "Live",
+              "groupNameSource": "provider",
+              "guideChannelId": null,
+              "guideMatchKind": null,
+              "guideShiftMinutes": 0,
+              "id": 4,
+              "lastPlayedAt": null,
+              "name": "D",
+              "number": 4,
+              "sortIndex": 0,
+              "streams": [
+                {
+                  "channelId": 4,
+                  "externalId": "d1",
+                  "id": 5,
+                  "lastError": "no segment produced within the startup window",
+                  "priority": 0,
+                  "probedAudioCodec": null,
+                  "probedContainer": null,
+                  "probedVideoCodec": null,
+                  "providerName": "D",
+                  "qualityLabel": null,
+                  "referer": null,
+                  "source": {
+                    "accountStatus": null,
+                    "channelCount": 0,
+                    "enabled": true,
+                    "excludeGroupsPattern": null,
+                    "expiresAt": null,
+                    "guideUrls": [],
+                    "id": 2,
+                    "includeGroupsPattern": null,
+                    "kind": "m3u",
+                    "lastAdultGuardError": null,
+                    "lastSyncError": null,
+                    "lastSyncStatus": "ok",
+                    "maxStreams": 0,
+                    "maxStreamsIsManual": false,
+                    "name": "S2",
+                    "playlistEtag": null,
+                    "playlistLastModified": null,
+                    "priority": 1,
+                    "referer": null,
+                    "refreshIntervalHours": 12,
+                    "userAgent": null,
+                    "username": null
+                  },
+                  "sourceId": 2,
+                  "userAgent": null
+                },
+                {
+                  "channelId": 4,
+                  "externalId": "d2",
+                  "id": 6,
+                  "lastError": "no segment produced within the startup window",
+                  "priority": 1,
+                  "probedAudioCodec": null,
+                  "probedContainer": null,
+                  "probedVideoCodec": null,
+                  "providerName": "D",
+                  "qualityLabel": null,
+                  "referer": null,
+                  "source": {
+                    "accountStatus": null,
+                    "channelCount": 0,
+                    "enabled": true,
+                    "excludeGroupsPattern": null,
+                    "expiresAt": null,
+                    "guideUrls": [],
+                    "id": 2,
+                    "includeGroupsPattern": null,
+                    "kind": "m3u",
+                    "lastAdultGuardError": null,
+                    "lastSyncError": null,
+                    "lastSyncStatus": "ok",
+                    "maxStreams": 0,
+                    "maxStreamsIsManual": false,
+                    "name": "S2",
+                    "playlistEtag": null,
+                    "playlistLastModified": null,
+                    "priority": 1,
+                    "referer": null,
+                    "refreshIntervalHours": 12,
+                    "userAgent": null,
+                    "username": null
+                  },
+                  "sourceId": 2,
+                  "userAgent": null
+                }
+              ]
+            }
+          ],
+          "total": 1
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/livetv/admin/channels?query=D"
+    }
+  ]
+}

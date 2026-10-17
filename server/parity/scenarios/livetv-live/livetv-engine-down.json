@@ -1,0 +1,41 @@
+{
+  "deviation": null,
+  "engine": "down",
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastSyncAt",
+    "$..logoPath"
+  ],
+  "name": "livetv-engine-down",
+  "seed": "livetv-live",
+  "steps": [
+    {
+      "as": "user",
+      "body": {},
+      "expect": {
+        "body": {
+          "error": "Service Unavailable",
+          "message": "The streaming engine is not running",
+          "statusCode": 503
+        },
+        "status": 503
+      },
+      "method": "POST",
+      "path": "/api/livetv/channels/5/play"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "error": "Service Unavailable",
+          "message": "The streaming engine is not running",
+          "statusCode": 503
+        },
+        "status": 503
+      },
+      "method": "DELETE",
+      "path": "/api/livetv/sessions/x"
+    }
+  ]
+}

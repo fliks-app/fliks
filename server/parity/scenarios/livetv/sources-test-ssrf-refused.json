@@ -1,0 +1,146 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastSyncAt",
+    "$..logoPath"
+  ],
+  "name": "sources-test-ssrf-refused",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "kind": "m3u",
+        "url": "http://127.0.0.1:4921/playlist.m3u"
+      },
+      "expect": {
+        "body": {
+          "accountStatus": null,
+          "channelCount": 0,
+          "error": "Refused: \"127.0.0.1\" resolves to an internal address (127.0.0.1)",
+          "expiresAt": null,
+          "groups": [],
+          "guideUrl": null,
+          "guideUrls": [],
+          "kind": "m3u",
+          "maxConnections": null,
+          "ok": false,
+          "onDemandCount": 0
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/livetv/admin/sources/test"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "kind": "xtream",
+        "password": "p",
+        "url": "http://127.0.0.1:4921",
+        "username": "u"
+      },
+      "expect": {
+        "body": {
+          "accountStatus": null,
+          "channelCount": 0,
+          "error": "Refused: \"127.0.0.1\" resolves to an internal address (127.0.0.1)",
+          "expiresAt": null,
+          "groups": [],
+          "guideUrl": null,
+          "guideUrls": [],
+          "kind": "xtream",
+          "maxConnections": null,
+          "ok": false,
+          "onDemandCount": 0
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/livetv/admin/sources/test"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "kind": "m3u",
+        "url": "http://localhost:1/x.m3u"
+      },
+      "expect": {
+        "body": {
+          "accountStatus": null,
+          "channelCount": 0,
+          "error": "Refused: \"localhost\" resolves to an internal address (127.0.0.1)",
+          "expiresAt": null,
+          "groups": [],
+          "guideUrl": null,
+          "guideUrls": [],
+          "kind": "m3u",
+          "maxConnections": null,
+          "ok": false,
+          "onDemandCount": 0
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/livetv/admin/sources/test"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "kind": "m3u",
+        "url": "http://nonexistent.invalid/x.m3u"
+      },
+      "expect": {
+        "body": {
+          "accountStatus": null,
+          "channelCount": 0,
+          "error": "Could not resolve \"nonexistent.invalid\": getaddrinfo ENOTFOUND nonexistent.invalid",
+          "expiresAt": null,
+          "groups": [],
+          "guideUrl": null,
+          "guideUrls": [],
+          "kind": "m3u",
+          "maxConnections": null,
+          "ok": false,
+          "onDemandCount": 0
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/livetv/admin/sources/test"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "kind": "m3u",
+        "url": "http://127.0.0.1:4921/get.php?username=u&password=p&type=m3u"
+      },
+      "expect": {
+        "body": {
+          "accountStatus": null,
+          "channelCount": 0,
+          "error": "Refused: \"127.0.0.1\" resolves to an internal address (127.0.0.1)",
+          "expiresAt": null,
+          "groups": [],
+          "guideUrl": null,
+          "guideUrls": [],
+          "kind": "m3u",
+          "maxConnections": null,
+          "ok": false,
+          "onDemandCount": 0,
+          "suggestion": {
+            "baseUrl": "http://127.0.0.1:4921",
+            "password": "p",
+            "suggestedKind": "xtream",
+            "username": "u"
+          }
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/livetv/admin/sources/test"
+    }
+  ]
+}

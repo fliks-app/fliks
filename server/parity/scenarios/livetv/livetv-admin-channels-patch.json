@@ -1,0 +1,240 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastSyncAt",
+    "$..logoPath"
+  ],
+  "name": "livetv-admin-channels-patch",
+  "seed": "livetv",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "enabled": false,
+        "guideChannelId": "custom.fr",
+        "guideShiftMinutes": 15,
+        "name": "Renamed",
+        "number": 42
+      },
+      "expect": {
+        "body": {
+          "consecutiveFailures": 0,
+          "enabled": false,
+          "groupName": "Old News",
+          "groupNameSource": "provider",
+          "guideChannelId": "custom.fr",
+          "guideMatchKind": "manual",
+          "guideShiftMinutes": 15,
+          "id": 1,
+          "lastErrorAt": null,
+          "lastPlayedAt": null,
+          "name": "Renamed",
+          "number": 42,
+          "sortIndex": 0
+        },
+        "status": 200
+      },
+      "method": "PATCH",
+      "path": "/api/livetv/admin/channels/1"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "groups": [
+            {
+              "count": 1,
+              "name": "__livetv_ungrouped__"
+            },
+            {
+              "count": 1,
+              "name": "Adult XXX"
+            },
+            {
+              "count": 1,
+              "name": "Mine"
+            },
+            {
+              "count": 1,
+              "name": "News"
+            },
+            {
+              "count": 1,
+              "name": "Old News"
+            },
+            {
+              "count": 1,
+              "name": "Sport"
+            }
+          ],
+          "items": [
+            {
+              "consecutiveFailures": 0,
+              "enabled": false,
+              "groupName": "Old News",
+              "groupNameSource": "provider",
+              "guideChannelId": "custom.fr",
+              "guideMatchKind": "manual",
+              "guideShiftMinutes": 15,
+              "id": 1,
+              "lastErrorAt": null,
+              "lastPlayedAt": null,
+              "name": "Renamed",
+              "number": 42,
+              "sortIndex": 0,
+              "streams": [
+                {
+                  "channelId": 1,
+                  "externalId": "101",
+                  "id": 1,
+                  "lastError": null,
+                  "lastOkAt": null,
+                  "lastSeenAt": "2026-01-02T10:00:00.000Z",
+                  "priority": 0,
+                  "probedAudioCodec": null,
+                  "probedContainer": null,
+                  "probedVideoCodec": null,
+                  "providerName": "One HD",
+                  "qualityLabel": "HD",
+                  "referer": null,
+                  "source": {
+                    "accountStatus": null,
+                    "channelCount": 5,
+                    "enabled": true,
+                    "excludeGroupsPattern": null,
+                    "expiresAt": null,
+                    "guideUrls": [
+                      "http://127.0.0.1:4921/guide.xml"
+                    ],
+                    "id": 1,
+                    "includeGroupsPattern": null,
+                    "kind": "m3u",
+                    "lastAdultGuardError": null,
+                    "lastSyncError": null,
+                    "lastSyncStatus": "ok",
+                    "maxStreams": 2,
+                    "maxStreamsIsManual": false,
+                    "name": "Alpha",
+                    "playlistEtag": null,
+                    "playlistLastModified": null,
+                    "priority": 0,
+                    "referer": null,
+                    "refreshIntervalHours": 12,
+                    "url": "http://127.0.0.1:4921/playlist.m3u",
+                    "userAgent": null,
+                    "username": null
+                  },
+                  "sourceId": 1,
+                  "url": "http://127.0.0.1:4921/live/u/p/101.ts",
+                  "userAgent": null
+                },
+                {
+                  "channelId": 1,
+                  "externalId": "102",
+                  "id": 2,
+                  "lastError": null,
+                  "lastOkAt": null,
+                  "lastSeenAt": "2026-01-02T10:00:00.000Z",
+                  "priority": 1,
+                  "probedAudioCodec": null,
+                  "probedContainer": null,
+                  "probedVideoCodec": null,
+                  "providerName": "One FHD",
+                  "qualityLabel": null,
+                  "referer": null,
+                  "source": {
+                    "accountStatus": null,
+                    "channelCount": 5,
+                    "enabled": true,
+                    "excludeGroupsPattern": null,
+                    "expiresAt": null,
+                    "guideUrls": [
+                      "http://127.0.0.1:4921/guide.xml"
+                    ],
+                    "id": 1,
+                    "includeGroupsPattern": null,
+                    "kind": "m3u",
+                    "lastAdultGuardError": null,
+                    "lastSyncError": null,
+                    "lastSyncStatus": "ok",
+                    "maxStreams": 2,
+                    "maxStreamsIsManual": false,
+                    "name": "Alpha",
+                    "playlistEtag": null,
+                    "playlistLastModified": null,
+                    "priority": 0,
+                    "referer": null,
+                    "refreshIntervalHours": 12,
+                    "url": "http://127.0.0.1:4921/playlist.m3u",
+                    "userAgent": null,
+                    "username": null
+                  },
+                  "sourceId": 1,
+                  "url": "http://127.0.0.1:4921/live/u/p/102.ts",
+                  "userAgent": null
+                }
+              ]
+            }
+          ],
+          "total": 1
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/livetv/admin/channels?query=renamed"
+    },
+    {
+      "as": "admin",
+      "body": {},
+      "expect": {
+        "body": {
+          "consecutiveFailures": 0,
+          "enabled": false,
+          "groupName": "Old News",
+          "groupNameSource": "provider",
+          "guideChannelId": "custom.fr",
+          "guideMatchKind": "manual",
+          "guideShiftMinutes": 15,
+          "id": 1,
+          "lastErrorAt": null,
+          "lastPlayedAt": null,
+          "name": "Renamed",
+          "number": 42,
+          "sortIndex": 0
+        },
+        "status": 200
+      },
+      "method": "PATCH",
+      "path": "/api/livetv/admin/channels/1"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "guideChannelId": null,
+        "number": null
+      },
+      "expect": {
+        "body": {
+          "consecutiveFailures": 0,
+          "enabled": false,
+          "groupName": "Old News",
+          "groupNameSource": "provider",
+          "guideChannelId": null,
+          "guideMatchKind": "manual",
+          "guideShiftMinutes": 15,
+          "id": 1,
+          "lastErrorAt": null,
+          "lastPlayedAt": null,
+          "name": "Renamed",
+          "number": null,
+          "sortIndex": 0
+        },
+        "status": 200
+      },
+      "method": "PATCH",
+      "path": "/api/livetv/admin/channels/1"
+    }
+  ]
+}

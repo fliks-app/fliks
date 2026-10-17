@@ -1,0 +1,540 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastSyncAt",
+    "$..logoPath",
+    "$..startsAt",
+    "$..endsAt",
+    "$..programs..id"
+  ],
+  "name": "guide-sync-xmltv",
+  "seed": "livetv",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "channelsTouched": 2,
+          "ok": true,
+          "programCount": 6
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/livetv/admin/guide-sources/1/sync"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "enabled": true,
+            "etag": null,
+            "id": 1,
+            "kind": "xmltv",
+            "language": null,
+            "lastModified": null,
+            "lastSyncError": null,
+            "lastSyncStatus": "ok",
+            "name": "Feed A",
+            "priority": 1,
+            "programCount": 6,
+            "refreshIntervalHours": 12,
+            "sourceId": null,
+            "timezoneOffsetMinutes": 0,
+            "url": "http://127.0.0.1:4921/guide.xml"
+          },
+          {
+            "enabled": true,
+            "etag": null,
+            "id": 2,
+            "kind": "source",
+            "language": "fr",
+            "lastModified": null,
+            "lastSyncError": null,
+            "lastSyncStatus": "never",
+            "name": "Feed B",
+            "priority": 0,
+            "programCount": 0,
+            "refreshIntervalHours": 12,
+            "sourceId": 1,
+            "timezoneOffsetMinutes": 60,
+            "url": null
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/livetv/admin/guide-sources"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "channels": [
+            {
+              "favorite": false,
+              "groupName": "Old News",
+              "guideChannelId": "one.fr",
+              "id": 1,
+              "name": "One",
+              "number": 1
+            },
+            {
+              "favorite": false,
+              "groupName": "Mine",
+              "guideChannelId": "two.fr",
+              "id": 2,
+              "name": "Two",
+              "number": 2
+            },
+            {
+              "favorite": false,
+              "groupName": "Adult XXX",
+              "guideChannelId": "adult.fr",
+              "id": 3,
+              "name": "Adult XXX 1",
+              "number": 3
+            },
+            {
+              "favorite": false,
+              "groupName": "News",
+              "guideChannelId": "hidden.fr",
+              "id": 5,
+              "name": "Hidden One",
+              "number": 5
+            },
+            {
+              "favorite": false,
+              "groupName": "__livetv_ungrouped__",
+              "guideChannelId": null,
+              "id": 4,
+              "name": "No Group",
+              "number": null
+            }
+          ],
+          "page": 1,
+          "pageSize": 50,
+          "programs": {
+            "adult.fr": [
+              {
+                "categories": [
+                  "Cat"
+                ],
+                "description": "About Adult Now",
+                "episodeNumber": null,
+                "guideChannelId": "adult.fr",
+                "guideSourceId": 1,
+                "iconUrl": null,
+                "id": 7,
+                "isLive": false,
+                "isNew": false,
+                "rating": null,
+                "seasonNumber": null,
+                "seriesId": null,
+                "subtitle": null,
+                "title": "Adult Now",
+                "year": null
+              }
+            ],
+            "hidden.fr": [
+              {
+                "categories": [
+                  "Cat"
+                ],
+                "description": "About Hidden Now",
+                "episodeNumber": null,
+                "guideChannelId": "hidden.fr",
+                "guideSourceId": 1,
+                "iconUrl": null,
+                "id": 8,
+                "isLive": false,
+                "isNew": false,
+                "rating": null,
+                "seasonNumber": null,
+                "seriesId": null,
+                "subtitle": null,
+                "title": "Hidden Now",
+                "year": null
+              }
+            ],
+            "one.fr": [
+              {
+                "categories": [
+                  "Cat"
+                ],
+                "description": "About Before",
+                "episodeNumber": 2,
+                "guideChannelId": "one.fr",
+                "guideSourceId": 1,
+                "iconUrl": null,
+                "id": 9,
+                "isLive": false,
+                "isNew": false,
+                "rating": null,
+                "seasonNumber": 1,
+                "seriesId": null,
+                "subtitle": null,
+                "title": "Before EN",
+                "year": null
+              },
+              {
+                "categories": [
+                  "Cat"
+                ],
+                "description": "About Now",
+                "episodeNumber": 2,
+                "guideChannelId": "one.fr",
+                "guideSourceId": 1,
+                "iconUrl": null,
+                "id": 10,
+                "isLive": false,
+                "isNew": false,
+                "rating": null,
+                "seasonNumber": 1,
+                "seriesId": null,
+                "subtitle": null,
+                "title": "Now EN",
+                "year": null
+              },
+              {
+                "categories": [
+                  "Cat"
+                ],
+                "description": "About Later",
+                "episodeNumber": 2,
+                "guideChannelId": "one.fr",
+                "guideSourceId": 1,
+                "iconUrl": null,
+                "id": 11,
+                "isLive": false,
+                "isNew": false,
+                "rating": null,
+                "seasonNumber": 1,
+                "seriesId": null,
+                "subtitle": null,
+                "title": "Later EN",
+                "year": null
+              }
+            ],
+            "two.fr": [
+              {
+                "categories": [
+                  "Cat"
+                ],
+                "description": "About Before",
+                "episodeNumber": 2,
+                "guideChannelId": "two.fr",
+                "guideSourceId": 1,
+                "iconUrl": null,
+                "id": 12,
+                "isLive": false,
+                "isNew": false,
+                "rating": null,
+                "seasonNumber": 1,
+                "seriesId": null,
+                "subtitle": null,
+                "title": "Before",
+                "year": null
+              },
+              {
+                "categories": [
+                  "Cat"
+                ],
+                "description": "About Now",
+                "episodeNumber": 2,
+                "guideChannelId": "two.fr",
+                "guideSourceId": 1,
+                "iconUrl": null,
+                "id": 13,
+                "isLive": false,
+                "isNew": false,
+                "rating": null,
+                "seasonNumber": 1,
+                "seriesId": null,
+                "subtitle": null,
+                "title": "Now",
+                "year": null
+              },
+              {
+                "categories": [
+                  "Cat"
+                ],
+                "description": "About Later",
+                "episodeNumber": 2,
+                "guideChannelId": "two.fr",
+                "guideSourceId": 1,
+                "iconUrl": null,
+                "id": 14,
+                "isLive": false,
+                "isNew": false,
+                "rating": null,
+                "seasonNumber": 1,
+                "seriesId": null,
+                "subtitle": null,
+                "title": "Later",
+                "year": null
+              }
+            ]
+          },
+          "total": 5
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/livetv/guide?from=2000-01-01T00:00:00Z&to=2100-01-01T00:00:00Z&pageSize=50"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "byKind": {
+            "fuzzy": 1,
+            "id": 2,
+            "manual": 1,
+            "name": 0
+          },
+          "candidates": [
+            {
+              "displayName": "Lonely",
+              "guideSourceId": 1,
+              "id": "lonely.fr"
+            },
+            {
+              "displayName": "One",
+              "guideSourceId": 2,
+              "id": "one.fr"
+            },
+            {
+              "displayName": "One",
+              "guideSourceId": 1,
+              "id": "one.fr"
+            },
+            {
+              "displayName": "Three",
+              "guideSourceId": 1,
+              "id": "three.fr"
+            },
+            {
+              "displayName": "Two",
+              "guideSourceId": 1,
+              "id": "two.fr"
+            }
+          ],
+          "total": 6,
+          "unmatched": [
+            {
+              "channelId": 4,
+              "name": "No Group"
+            },
+            {
+              "channelId": 6,
+              "name": "Disabled"
+            }
+          ]
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/livetv/admin/guide/match-report"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "channelsTouched": 2,
+          "ok": true,
+          "programCount": 6
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/livetv/admin/guide-sources/1/sync"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "entries": [
+            {
+              "channel": {
+                "favorite": false,
+                "groupName": "Old News",
+                "guideChannelId": "one.fr",
+                "id": 1,
+                "name": "One",
+                "number": 1
+              },
+              "next": {
+                "categories": [
+                  "Cat"
+                ],
+                "description": "About Later",
+                "episodeNumber": 2,
+                "guideChannelId": "one.fr",
+                "guideSourceId": 1,
+                "iconUrl": null,
+                "id": 17,
+                "isLive": false,
+                "isNew": false,
+                "rating": null,
+                "seasonNumber": 1,
+                "seriesId": null,
+                "subtitle": null,
+                "title": "Later EN",
+                "year": null
+              },
+              "now": {
+                "categories": [
+                  "Cat"
+                ],
+                "description": "About Now",
+                "episodeNumber": 2,
+                "guideChannelId": "one.fr",
+                "guideSourceId": 1,
+                "iconUrl": null,
+                "id": 16,
+                "isLive": false,
+                "isNew": false,
+                "rating": null,
+                "seasonNumber": 1,
+                "seriesId": null,
+                "subtitle": null,
+                "title": "Now EN",
+                "year": null
+              }
+            },
+            {
+              "channel": {
+                "favorite": false,
+                "groupName": "Mine",
+                "guideChannelId": "two.fr",
+                "id": 2,
+                "name": "Two",
+                "number": 2
+              },
+              "next": {
+                "categories": [
+                  "Cat"
+                ],
+                "description": "About Later",
+                "episodeNumber": 2,
+                "guideChannelId": "two.fr",
+                "guideSourceId": 1,
+                "iconUrl": null,
+                "id": 20,
+                "isLive": false,
+                "isNew": false,
+                "rating": null,
+                "seasonNumber": 1,
+                "seriesId": null,
+                "subtitle": null,
+                "title": "Later",
+                "year": null
+              },
+              "now": {
+                "categories": [
+                  "Cat"
+                ],
+                "description": "About Now",
+                "episodeNumber": 2,
+                "guideChannelId": "two.fr",
+                "guideSourceId": 1,
+                "iconUrl": null,
+                "id": 19,
+                "isLive": false,
+                "isNew": false,
+                "rating": null,
+                "seasonNumber": 1,
+                "seriesId": null,
+                "subtitle": null,
+                "title": "Now",
+                "year": null
+              }
+            },
+            {
+              "channel": {
+                "favorite": false,
+                "groupName": "Adult XXX",
+                "guideChannelId": "adult.fr",
+                "id": 3,
+                "name": "Adult XXX 1",
+                "number": 3
+              },
+              "next": null,
+              "now": {
+                "categories": [
+                  "Cat"
+                ],
+                "description": "About Adult Now",
+                "episodeNumber": null,
+                "guideChannelId": "adult.fr",
+                "guideSourceId": 1,
+                "iconUrl": null,
+                "id": 7,
+                "isLive": false,
+                "isNew": false,
+                "rating": null,
+                "seasonNumber": null,
+                "seriesId": null,
+                "subtitle": null,
+                "title": "Adult Now",
+                "year": null
+              }
+            },
+            {
+              "channel": {
+                "favorite": false,
+                "groupName": "News",
+                "guideChannelId": "hidden.fr",
+                "id": 5,
+                "name": "Hidden One",
+                "number": 5
+              },
+              "next": null,
+              "now": {
+                "categories": [
+                  "Cat"
+                ],
+                "description": "About Hidden Now",
+                "episodeNumber": null,
+                "guideChannelId": "hidden.fr",
+                "guideSourceId": 1,
+                "iconUrl": null,
+                "id": 8,
+                "isLive": false,
+                "isNew": false,
+                "rating": null,
+                "seasonNumber": null,
+                "seriesId": null,
+                "subtitle": null,
+                "title": "Hidden Now",
+                "year": null
+              }
+            },
+            {
+              "channel": {
+                "favorite": false,
+                "groupName": "__livetv_ungrouped__",
+                "guideChannelId": null,
+                "id": 4,
+                "name": "No Group",
+                "number": null
+              },
+              "next": null,
+              "now": null
+            }
+          ],
+          "page": 1,
+          "pageSize": 50,
+          "total": 5
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/livetv/channels/on-now"
+    }
+  ]
+}

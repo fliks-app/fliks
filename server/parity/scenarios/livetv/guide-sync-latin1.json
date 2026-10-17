@@ -1,0 +1,125 @@
+{
+  "deviation": "C133",
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastSyncAt",
+    "$..logoPath",
+    "$..startsAt",
+    "$..endsAt",
+    "$..programs..id"
+  ],
+  "name": "guide-sync-latin1",
+  "seed": "livetv",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "kind": "xmltv",
+        "name": "Latin",
+        "url": "http://127.0.0.1:4921/guide-latin1.xml"
+      },
+      "expect": {
+        "body": {
+          "enabled": true,
+          "etag": null,
+          "id": 3,
+          "kind": "xmltv",
+          "language": null,
+          "lastModified": null,
+          "lastSyncError": null,
+          "lastSyncStatus": "never",
+          "name": "Latin",
+          "priority": 0,
+          "programCount": 0,
+          "refreshIntervalHours": 12,
+          "source": null,
+          "sourceId": null,
+          "timezoneOffsetMinutes": 0,
+          "url": "http://127.0.0.1:4921/guide-latin1.xml"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/livetv/admin/guide-sources"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "channelsTouched": 2,
+          "ok": true,
+          "programCount": 6
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/livetv/admin/guide-sources/3/sync"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "channels": [
+            {
+              "favorite": false,
+              "groupName": "Mine",
+              "guideChannelId": "two.fr",
+              "id": 2,
+              "name": "Two",
+              "number": 2
+            }
+          ],
+          "page": 1,
+          "pageSize": 50,
+          "programs": {
+            "two.fr": [
+              {
+                "categories": [
+                  "Cat"
+                ],
+                "description": "About Two Now",
+                "episodeNumber": null,
+                "guideChannelId": "two.fr",
+                "guideSourceId": 1,
+                "iconUrl": null,
+                "id": 5,
+                "isLive": false,
+                "isNew": false,
+                "rating": null,
+                "seasonNumber": null,
+                "seriesId": null,
+                "subtitle": null,
+                "title": "Two Now",
+                "year": null
+              },
+              {
+                "categories": [
+                  "Cat"
+                ],
+                "description": "About Two Later",
+                "episodeNumber": null,
+                "guideChannelId": "two.fr",
+                "guideSourceId": 1,
+                "iconUrl": null,
+                "id": 6,
+                "isLive": false,
+                "isNew": false,
+                "rating": null,
+                "seasonNumber": null,
+                "seriesId": null,
+                "subtitle": null,
+                "title": "Two Later",
+                "year": null
+              }
+            ]
+          },
+          "total": 1
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/livetv/guide?from=2000-01-01T00:00:00Z&to=2100-01-01T00:00:00Z&group=Mine"
+    }
+  ]
+}

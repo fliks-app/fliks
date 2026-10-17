@@ -1,0 +1,152 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastSyncAt",
+    "$..logoPath",
+    "$..startedOn",
+    "$..endedOn",
+    "$..id",
+    "$..lastSeenAt"
+  ],
+  "name": "sources-sync-409",
+  "seed": "livetv",
+  "steps": [
+    {
+      "as": "anon",
+      "body": {
+        "delay": 2.5
+      },
+      "expect": {
+        "body": {
+          "delay": 2.5,
+          "shrunk": false
+        },
+        "status": 200
+      },
+      "method": "POST",
+      "path": "/_mode",
+      "stub": true
+    },
+    {
+      "as": "admin",
+      "body": {
+        "enabled": false
+      },
+      "expect": {
+        "body": {
+          "accountStatus": null,
+          "channelCount": 0,
+          "enabled": false,
+          "excludeGroupsPattern": null,
+          "expiresAt": null,
+          "guideUrls": [],
+          "includeGroupsPattern": null,
+          "kind": "xtream",
+          "lastAdultGuardError": null,
+          "lastSyncError": null,
+          "lastSyncStatus": "never",
+          "maxStreams": 1,
+          "maxStreamsIsManual": true,
+          "name": "Beta",
+          "playlistEtag": null,
+          "playlistLastModified": null,
+          "priority": 1,
+          "referer": "http://beta.example/",
+          "refreshIntervalHours": 6,
+          "url": "http://127.0.0.1:4921",
+          "userAgent": "BetaAgent/1",
+          "username": "u"
+        },
+        "status": 200
+      },
+      "method": "PATCH",
+      "path": "/api/livetv/admin/sources/2"
+    },
+    {
+      "as": "admin",
+      "baseEnv": "PARITY_NEST",
+      "body": {
+        "name": "LiveTvSourceRefresh"
+      },
+      "expect": {
+        "body": {
+          "body": null,
+          "name": "LiveTvSourceRefresh",
+          "status": "queued",
+          "trigger": "manual"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/commands"
+    },
+    {
+      "as": "anon",
+      "expect": {
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/",
+      "sleepMs": 600
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Conflict",
+          "message": "errors.already_running",
+          "statusCode": 409
+        },
+        "status": 409
+      },
+      "method": "POST",
+      "path": "/api/livetv/admin/sources/1/sync"
+    },
+    {
+      "as": "anon",
+      "expect": {
+        "status": 200
+      },
+      "method": "POST",
+      "path": "/_mode",
+      "sleepMs": 3500,
+      "stub": true
+    },
+    {
+      "as": "admin",
+      "baseEnv": "PARITY_NEST",
+      "expect": {
+        "body": {
+          "data": [
+            {
+              "body": null,
+              "name": "LiveTvSourceRefresh",
+              "status": "completed",
+              "trigger": "manual"
+            }
+          ],
+          "total": 1
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/commands?limit=5"
+    },
+    {
+      "as": "anon",
+      "body": {},
+      "expect": {
+        "body": {
+          "delay": 0.0,
+          "shrunk": false
+        },
+        "status": 200
+      },
+      "method": "POST",
+      "path": "/_mode",
+      "stub": true
+    }
+  ]
+}

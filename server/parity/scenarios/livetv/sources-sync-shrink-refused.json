@@ -1,0 +1,500 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastSyncAt",
+    "$..logoPath",
+    "$..lastSeenAt"
+  ],
+  "name": "sources-sync-shrink-refused",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "anon",
+      "body": {},
+      "expect": {
+        "body": {
+          "delay": 0.0,
+          "shrunk": false
+        },
+        "status": 200
+      },
+      "method": "POST",
+      "path": "/_mode",
+      "stub": true
+    },
+    {
+      "as": "admin",
+      "body": {
+        "kind": "m3u",
+        "name": "S",
+        "url": "http://127.0.0.1:4921/playlist.m3u"
+      },
+      "expect": {
+        "body": {
+          "accountStatus": null,
+          "channelCount": 0,
+          "enabled": true,
+          "excludeGroupsPattern": null,
+          "expiresAt": null,
+          "guideUrls": [],
+          "id": 1,
+          "includeGroupsPattern": null,
+          "kind": "m3u",
+          "lastAdultGuardError": null,
+          "lastSyncError": null,
+          "lastSyncStatus": "never",
+          "maxStreams": 0,
+          "maxStreamsIsManual": false,
+          "name": "S",
+          "playlistEtag": null,
+          "playlistLastModified": null,
+          "priority": 0,
+          "referer": null,
+          "refreshIntervalHours": 12,
+          "url": "http://127.0.0.1:4921/playlist.m3u",
+          "userAgent": null,
+          "username": null
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/livetv/admin/sources"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "added": 5,
+          "channelCount": 5,
+          "ok": true,
+          "removed": 0,
+          "updated": 0
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/livetv/admin/sources/1/sync"
+    },
+    {
+      "as": "anon",
+      "body": {
+        "shrunk": true
+      },
+      "expect": {
+        "body": {
+          "delay": 0.0,
+          "shrunk": true
+        },
+        "status": 200
+      },
+      "method": "POST",
+      "path": "/_mode",
+      "stub": true
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "added": 0,
+          "channelCount": 5,
+          "error": "refresh returned 2 live entries against 5 known: treating it as a truncated response and keeping the current lineup",
+          "ok": false,
+          "removed": 0,
+          "updated": 0
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/livetv/admin/sources/1/sync"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "accountStatus": null,
+            "channelCount": 5,
+            "enabled": true,
+            "excludeGroupsPattern": null,
+            "expiresAt": null,
+            "guideUrls": [
+              "http://127.0.0.1:4921/guide.xml"
+            ],
+            "id": 1,
+            "includeGroupsPattern": null,
+            "kind": "m3u",
+            "lastAdultGuardError": null,
+            "lastSyncError": "refresh returned 2 live entries against 5 known: treating it as a truncated response and keeping the current lineup",
+            "lastSyncStatus": "error",
+            "maxStreams": 2,
+            "maxStreamsIsManual": false,
+            "name": "S",
+            "playlistEtag": null,
+            "playlistLastModified": null,
+            "priority": 0,
+            "referer": null,
+            "refreshIntervalHours": 12,
+            "url": "http://127.0.0.1:4921/playlist.m3u",
+            "userAgent": null,
+            "username": null
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/livetv/admin/sources"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "groups": [
+            {
+              "count": 1,
+              "name": "__livetv_ungrouped__"
+            },
+            {
+              "count": 1,
+              "name": "Movies"
+            },
+            {
+              "count": 2,
+              "name": "News"
+            },
+            {
+              "count": 1,
+              "name": "Sport"
+            }
+          ],
+          "items": [
+            {
+              "consecutiveFailures": 0,
+              "enabled": false,
+              "groupName": "__livetv_ungrouped__",
+              "groupNameSource": "provider",
+              "guideChannelId": null,
+              "guideMatchKind": null,
+              "guideShiftMinutes": 0,
+              "id": 5,
+              "lastErrorAt": null,
+              "lastPlayedAt": null,
+              "name": "No Group",
+              "number": null,
+              "sortIndex": 0,
+              "streams": [
+                {
+                  "channelId": 5,
+                  "externalId": "105",
+                  "id": 5,
+                  "lastError": null,
+                  "lastOkAt": null,
+                  "priority": 0,
+                  "probedAudioCodec": null,
+                  "probedContainer": null,
+                  "probedVideoCodec": null,
+                  "providerName": "No Group",
+                  "qualityLabel": null,
+                  "referer": null,
+                  "source": {
+                    "accountStatus": null,
+                    "channelCount": 5,
+                    "enabled": true,
+                    "excludeGroupsPattern": null,
+                    "expiresAt": null,
+                    "guideUrls": [
+                      "http://127.0.0.1:4921/guide.xml"
+                    ],
+                    "id": 1,
+                    "includeGroupsPattern": null,
+                    "kind": "m3u",
+                    "lastAdultGuardError": null,
+                    "lastSyncError": "refresh returned 2 live entries against 5 known: treating it as a truncated response and keeping the current lineup",
+                    "lastSyncStatus": "error",
+                    "maxStreams": 2,
+                    "maxStreamsIsManual": false,
+                    "name": "S",
+                    "playlistEtag": null,
+                    "playlistLastModified": null,
+                    "priority": 0,
+                    "referer": null,
+                    "refreshIntervalHours": 12,
+                    "url": "http://127.0.0.1:4921/playlist.m3u",
+                    "userAgent": null,
+                    "username": null
+                  },
+                  "sourceId": 1,
+                  "url": "http://127.0.0.1:4921/live/u/p/105.ts",
+                  "userAgent": null
+                }
+              ]
+            },
+            {
+              "consecutiveFailures": 0,
+              "enabled": false,
+              "groupName": "News",
+              "groupNameSource": "provider",
+              "guideChannelId": "one.fr",
+              "guideMatchKind": null,
+              "guideShiftMinutes": 0,
+              "id": 2,
+              "lastErrorAt": null,
+              "lastPlayedAt": null,
+              "name": "One FHD",
+              "number": 1,
+              "sortIndex": 0,
+              "streams": [
+                {
+                  "channelId": 2,
+                  "externalId": "102",
+                  "id": 2,
+                  "lastError": null,
+                  "lastOkAt": null,
+                  "priority": 0,
+                  "probedAudioCodec": null,
+                  "probedContainer": null,
+                  "probedVideoCodec": null,
+                  "providerName": "One FHD",
+                  "qualityLabel": null,
+                  "referer": null,
+                  "source": {
+                    "accountStatus": null,
+                    "channelCount": 5,
+                    "enabled": true,
+                    "excludeGroupsPattern": null,
+                    "expiresAt": null,
+                    "guideUrls": [
+                      "http://127.0.0.1:4921/guide.xml"
+                    ],
+                    "id": 1,
+                    "includeGroupsPattern": null,
+                    "kind": "m3u",
+                    "lastAdultGuardError": null,
+                    "lastSyncError": "refresh returned 2 live entries against 5 known: treating it as a truncated response and keeping the current lineup",
+                    "lastSyncStatus": "error",
+                    "maxStreams": 2,
+                    "maxStreamsIsManual": false,
+                    "name": "S",
+                    "playlistEtag": null,
+                    "playlistLastModified": null,
+                    "priority": 0,
+                    "referer": null,
+                    "refreshIntervalHours": 12,
+                    "url": "http://127.0.0.1:4921/playlist.m3u",
+                    "userAgent": null,
+                    "username": null
+                  },
+                  "sourceId": 1,
+                  "url": "http://127.0.0.1:4921/live/u/p/102.ts",
+                  "userAgent": null
+                }
+              ]
+            },
+            {
+              "consecutiveFailures": 0,
+              "enabled": false,
+              "groupName": "News",
+              "groupNameSource": "provider",
+              "guideChannelId": "one.fr",
+              "guideMatchKind": null,
+              "guideShiftMinutes": 0,
+              "id": 1,
+              "lastErrorAt": null,
+              "lastPlayedAt": null,
+              "name": "One HD",
+              "number": 1,
+              "sortIndex": 0,
+              "streams": [
+                {
+                  "channelId": 1,
+                  "externalId": "101",
+                  "id": 1,
+                  "lastError": null,
+                  "lastOkAt": null,
+                  "priority": 0,
+                  "probedAudioCodec": null,
+                  "probedContainer": null,
+                  "probedVideoCodec": null,
+                  "providerName": "One HD",
+                  "qualityLabel": null,
+                  "referer": null,
+                  "source": {
+                    "accountStatus": null,
+                    "channelCount": 5,
+                    "enabled": true,
+                    "excludeGroupsPattern": null,
+                    "expiresAt": null,
+                    "guideUrls": [
+                      "http://127.0.0.1:4921/guide.xml"
+                    ],
+                    "id": 1,
+                    "includeGroupsPattern": null,
+                    "kind": "m3u",
+                    "lastAdultGuardError": null,
+                    "lastSyncError": "refresh returned 2 live entries against 5 known: treating it as a truncated response and keeping the current lineup",
+                    "lastSyncStatus": "error",
+                    "maxStreams": 2,
+                    "maxStreamsIsManual": false,
+                    "name": "S",
+                    "playlistEtag": null,
+                    "playlistLastModified": null,
+                    "priority": 0,
+                    "referer": null,
+                    "refreshIntervalHours": 12,
+                    "url": "http://127.0.0.1:4921/playlist.m3u",
+                    "userAgent": null,
+                    "username": null
+                  },
+                  "sourceId": 1,
+                  "url": "http://127.0.0.1:4921/live/u/p/101.ts",
+                  "userAgent": null
+                }
+              ]
+            },
+            {
+              "consecutiveFailures": 0,
+              "enabled": false,
+              "groupName": "Movies",
+              "groupNameSource": "provider",
+              "guideChannelId": "three.fr",
+              "guideMatchKind": null,
+              "guideShiftMinutes": -30,
+              "id": 4,
+              "lastErrorAt": null,
+              "lastPlayedAt": null,
+              "name": "Three",
+              "number": null,
+              "sortIndex": 0,
+              "streams": [
+                {
+                  "channelId": 4,
+                  "externalId": "104",
+                  "id": 4,
+                  "lastError": null,
+                  "lastOkAt": null,
+                  "priority": 0,
+                  "probedAudioCodec": null,
+                  "probedContainer": null,
+                  "probedVideoCodec": null,
+                  "providerName": "Three",
+                  "qualityLabel": null,
+                  "referer": null,
+                  "source": {
+                    "accountStatus": null,
+                    "channelCount": 5,
+                    "enabled": true,
+                    "excludeGroupsPattern": null,
+                    "expiresAt": null,
+                    "guideUrls": [
+                      "http://127.0.0.1:4921/guide.xml"
+                    ],
+                    "id": 1,
+                    "includeGroupsPattern": null,
+                    "kind": "m3u",
+                    "lastAdultGuardError": null,
+                    "lastSyncError": "refresh returned 2 live entries against 5 known: treating it as a truncated response and keeping the current lineup",
+                    "lastSyncStatus": "error",
+                    "maxStreams": 2,
+                    "maxStreamsIsManual": false,
+                    "name": "S",
+                    "playlistEtag": null,
+                    "playlistLastModified": null,
+                    "priority": 0,
+                    "referer": null,
+                    "refreshIntervalHours": 12,
+                    "url": "http://127.0.0.1:4921/playlist.m3u",
+                    "userAgent": null,
+                    "username": null
+                  },
+                  "sourceId": 1,
+                  "url": "http://127.0.0.1:4921/live/u/p/104.ts",
+                  "userAgent": "EntryAgent/1.0"
+                }
+              ]
+            },
+            {
+              "consecutiveFailures": 0,
+              "enabled": false,
+              "groupName": "Sport",
+              "groupNameSource": "provider",
+              "guideChannelId": "two.fr",
+              "guideMatchKind": null,
+              "guideShiftMinutes": 0,
+              "id": 3,
+              "lastErrorAt": null,
+              "lastPlayedAt": null,
+              "name": "Two",
+              "number": 2,
+              "sortIndex": 0,
+              "streams": [
+                {
+                  "channelId": 3,
+                  "externalId": "103",
+                  "id": 3,
+                  "lastError": null,
+                  "lastOkAt": null,
+                  "priority": 0,
+                  "probedAudioCodec": null,
+                  "probedContainer": null,
+                  "probedVideoCodec": null,
+                  "providerName": "Two",
+                  "qualityLabel": null,
+                  "referer": null,
+                  "source": {
+                    "accountStatus": null,
+                    "channelCount": 5,
+                    "enabled": true,
+                    "excludeGroupsPattern": null,
+                    "expiresAt": null,
+                    "guideUrls": [
+                      "http://127.0.0.1:4921/guide.xml"
+                    ],
+                    "id": 1,
+                    "includeGroupsPattern": null,
+                    "kind": "m3u",
+                    "lastAdultGuardError": null,
+                    "lastSyncError": "refresh returned 2 live entries against 5 known: treating it as a truncated response and keeping the current lineup",
+                    "lastSyncStatus": "error",
+                    "maxStreams": 2,
+                    "maxStreamsIsManual": false,
+                    "name": "S",
+                    "playlistEtag": null,
+                    "playlistLastModified": null,
+                    "priority": 0,
+                    "referer": null,
+                    "refreshIntervalHours": 12,
+                    "url": "http://127.0.0.1:4921/playlist.m3u",
+                    "userAgent": null,
+                    "username": null
+                  },
+                  "sourceId": 1,
+                  "url": "http://127.0.0.1:4921/live/u/p/103.ts",
+                  "userAgent": null
+                }
+              ]
+            }
+          ],
+          "total": 5
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/livetv/admin/channels?pageSize=100"
+    },
+    {
+      "as": "anon",
+      "body": {},
+      "expect": {
+        "body": {
+          "delay": 0.0,
+          "shrunk": false
+        },
+        "status": 200
+      },
+      "method": "POST",
+      "path": "/_mode",
+      "stub": true
+    }
+  ]
+}

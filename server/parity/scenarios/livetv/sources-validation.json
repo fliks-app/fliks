@@ -1,0 +1,306 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastSyncAt",
+    "$..logoPath"
+  ],
+  "name": "sources-validation",
+  "seed": "livetv",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {},
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "name must be a string",
+            "kind must be one of the following values: m3u, xtream",
+            "url must be a URL address"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/livetv/admin/sources"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "kind": "x",
+        "name": 1,
+        "url": "not a url"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "name must be a string",
+            "kind must be one of the following values: m3u, xtream",
+            "url must be a URL address"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/livetv/admin/sources"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "extra": 1,
+        "kind": "m3u",
+        "name": "n",
+        "url": "http://h/x"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "property extra should not exist"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/livetv/admin/sources"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "enabled": "yes",
+        "kind": "m3u",
+        "maxStreams": -1,
+        "name": "n",
+        "priority": 1.5,
+        "refreshIntervalHours": 0,
+        "url": "http://h/x"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "maxStreams must not be less than 0",
+            "refreshIntervalHours must not be less than 1",
+            "enabled must be a boolean value",
+            "priority must be an integer number"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/livetv/admin/sources"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "kind": "m3u",
+        "name": "n",
+        "url": "/etc/passwd"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "url must be a URL address"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/livetv/admin/sources"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "includeGroupsPattern": "(",
+        "kind": "m3u",
+        "name": "n",
+        "url": "http://h/x"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "includeGroupsPattern is not a valid regular expression: Invalid regular expression: /(/i: Unterminated group",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/livetv/admin/sources"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "excludeGroupsPattern": "[a",
+        "kind": "m3u",
+        "name": "n",
+        "url": "http://h/x"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "excludeGroupsPattern is not a valid regular expression: Invalid regular expression: /[a/i: Unterminated character class",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/livetv/admin/sources"
+    },
+    {
+      "as": "admin",
+      "body": {},
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "kind must be one of the following values: m3u, xtream",
+            "url must be a URL address"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/livetv/admin/sources/test"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "id": 0,
+        "kind": "m3u",
+        "url": "http://h/x"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "id must not be less than 1"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/livetv/admin/sources/test"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "kind": "x",
+        "maxStreams": "5"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "kind must be one of the following values: m3u, xtream",
+            "maxStreams must not be less than 0",
+            "maxStreams must be an integer number"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PATCH",
+      "path": "/api/livetv/admin/sources/1"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "url": "nope"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "url must be a URL address"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PATCH",
+      "path": "/api/livetv/admin/sources/1"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "includeGroupsPattern": "("
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "includeGroupsPattern is not a valid regular expression: Invalid regular expression: /(/i: Unterminated group",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PATCH",
+      "path": "/api/livetv/admin/sources/1"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "name": "x"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Validation failed (numeric string is expected)",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PATCH",
+      "path": "/api/livetv/admin/sources/abc"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Validation failed (numeric string is expected)",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "DELETE",
+      "path": "/api/livetv/admin/sources/abc"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Validation failed (numeric string is expected)",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/livetv/admin/sources/abc/sync"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Live TV source #99 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "POST",
+      "path": "/api/livetv/admin/sources/99/sync"
+    }
+  ]
+}

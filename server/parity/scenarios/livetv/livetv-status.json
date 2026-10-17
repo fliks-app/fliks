@@ -1,0 +1,60 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastSyncAt",
+    "$..logoPath"
+  ],
+  "name": "livetv-status",
+  "seed": "livetv",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "available": true
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/livetv/status"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "available": true
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/livetv/status"
+    },
+    {
+      "as": "noread",
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "GET",
+      "path": "/api/livetv/status"
+    },
+    {
+      "as": "anon",
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "GET",
+      "path": "/api/livetv/status"
+    }
+  ]
+}

@@ -1,0 +1,92 @@
+{
+  "capture": {
+    "sid": "$.steps[2].body.sessionId",
+    "url": "$.steps[2].body.url"
+  },
+  "deviation": null,
+  "engine": "up",
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastSyncAt",
+    "$..logoPath",
+    "$..sessionId",
+    "$..url"
+  ],
+  "name": "livetv-play-transcode",
+  "seed": "livetv-live",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "value": "2"
+      },
+      "expect": {
+        "body": {
+          "id": 5,
+          "key": "livetv_channel_idle_seconds",
+          "value": "2"
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/settings/livetv_channel_idle_seconds"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "value": "1"
+      },
+      "expect": {
+        "body": {
+          "id": 6,
+          "key": "livetv_slot_release_seconds",
+          "value": "1"
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/settings/livetv_slot_release_seconds"
+    },
+    {
+      "as": "user",
+      "body": {
+        "maxBitrateBps": 1500000
+      },
+      "expect": {
+        "body": {
+          "channelId": 5,
+          "channelName": "E",
+          "dvrWindowSeconds": 900,
+          "isLive": true,
+          "mode": "transcode",
+          "segmentSeconds": 2
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/livetv/channels/5/play"
+    },
+    {
+      "as": "anon",
+      "baseEnv": "PARITY_FRONT",
+      "expect": {
+        "status": 200
+      },
+      "ignoreBody": true,
+      "method": "GET",
+      "path": "{url}"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "ok": true
+        },
+        "status": 200
+      },
+      "method": "DELETE",
+      "path": "/api/livetv/sessions/{sid}"
+    }
+  ]
+}

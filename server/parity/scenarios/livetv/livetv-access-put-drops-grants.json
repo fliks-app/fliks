@@ -1,0 +1,124 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastSyncAt",
+    "$..logoPath",
+    "$..vanishedSince",
+    "$..cleanupAt"
+  ],
+  "name": "livetv-access-put-drops-grants",
+  "seed": "livetv",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "groups": [
+          "adult xxx",
+          "New Group",
+          "",
+          " New Group "
+        ]
+      },
+      "expect": {
+        "body": [
+          "New Group",
+          "adult xxx"
+        ],
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/livetv/admin/access/restricted-groups"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          "Adult XXX"
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/livetv/admin/access/users/4"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "groups": [
+          "New Group"
+        ]
+      },
+      "expect": {
+        "body": [
+          "New Group"
+        ],
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/livetv/admin/access/restricted-groups"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/livetv/admin/access/users/4"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "exempt": [
+            "adult xxx"
+          ],
+          "groups": [
+            {
+              "automatic": false,
+              "name": "New Group"
+            }
+          ]
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/livetv/admin/access/restricted-groups"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "groups": [
+          "Adult XXX",
+          "Adult XXX"
+        ]
+      },
+      "expect": {
+        "body": [
+          "Adult XXX"
+        ],
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/livetv/admin/access/restricted-groups"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "exempt": [],
+          "groups": [
+            {
+              "automatic": true,
+              "name": "Adult XXX"
+            }
+          ]
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/livetv/admin/access/restricted-groups"
+    }
+  ]
+}

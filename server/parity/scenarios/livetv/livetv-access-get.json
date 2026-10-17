@@ -1,0 +1,113 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastSyncAt",
+    "$..logoPath",
+    "$..vanishedSince",
+    "$..cleanupAt"
+  ],
+  "name": "livetv-access-get",
+  "seed": "livetv",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "exempt": [],
+          "groups": [
+            {
+              "automatic": true,
+              "name": "Adult XXX"
+            }
+          ]
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/livetv/admin/access/restricted-groups"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "groups": [],
+            "hasFullAccess": true,
+            "id": 1,
+            "username": "admin"
+          },
+          {
+            "groups": [],
+            "hasFullAccess": false,
+            "id": 5,
+            "username": "manager"
+          },
+          {
+            "groups": [],
+            "hasFullAccess": false,
+            "id": 6,
+            "username": "noread"
+          },
+          {
+            "groups": [
+              "Adult XXX"
+            ],
+            "hasFullAccess": false,
+            "id": 4,
+            "username": "other"
+          },
+          {
+            "groups": [],
+            "hasFullAccess": false,
+            "id": 3,
+            "username": "readonly"
+          },
+          {
+            "groups": [],
+            "hasFullAccess": false,
+            "id": 2,
+            "username": "user"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/livetv/admin/access/users"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          "Adult XXX"
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/livetv/admin/access/users/4"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/livetv/admin/access/users/99"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Validation failed (numeric string is expected)",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "GET",
+      "path": "/api/livetv/admin/access/users/abc"
+    }
+  ]
+}

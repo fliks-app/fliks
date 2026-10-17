@@ -1,0 +1,201 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastSyncAt",
+    "$..logoPath"
+  ],
+  "name": "sources-sync-error",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "kind": "m3u",
+        "name": "Dead",
+        "url": "http://127.0.0.1:4921/nope.m3u"
+      },
+      "expect": {
+        "body": {
+          "accountStatus": null,
+          "channelCount": 0,
+          "enabled": true,
+          "excludeGroupsPattern": null,
+          "expiresAt": null,
+          "guideUrls": [],
+          "id": 1,
+          "includeGroupsPattern": null,
+          "kind": "m3u",
+          "lastAdultGuardError": null,
+          "lastSyncError": null,
+          "lastSyncStatus": "never",
+          "maxStreams": 0,
+          "maxStreamsIsManual": false,
+          "name": "Dead",
+          "playlistEtag": null,
+          "playlistLastModified": null,
+          "priority": 0,
+          "referer": null,
+          "refreshIntervalHours": 12,
+          "url": "http://127.0.0.1:4921/nope.m3u",
+          "userAgent": null,
+          "username": null
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/livetv/admin/sources"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "added": 0,
+          "channelCount": 0,
+          "error": "Request failed with status code 404",
+          "ok": false,
+          "removed": 0,
+          "updated": 0
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/livetv/admin/sources/1/sync"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "kind": "m3u",
+        "name": "Gone",
+        "url": "http://127.0.0.1:1/x.m3u"
+      },
+      "expect": {
+        "body": {
+          "accountStatus": null,
+          "channelCount": 0,
+          "enabled": true,
+          "excludeGroupsPattern": null,
+          "expiresAt": null,
+          "guideUrls": [],
+          "id": 2,
+          "includeGroupsPattern": null,
+          "kind": "m3u",
+          "lastAdultGuardError": null,
+          "lastSyncError": null,
+          "lastSyncStatus": "never",
+          "maxStreams": 0,
+          "maxStreamsIsManual": false,
+          "name": "Gone",
+          "playlistEtag": null,
+          "playlistLastModified": null,
+          "priority": 0,
+          "referer": null,
+          "refreshIntervalHours": 12,
+          "url": "http://127.0.0.1:1/x.m3u",
+          "userAgent": null,
+          "username": null
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/livetv/admin/sources"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "added": 0,
+          "channelCount": 0,
+          "error": "connect ECONNREFUSED 127.0.0.1:1",
+          "ok": false,
+          "removed": 0,
+          "updated": 0
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/livetv/admin/sources/2/sync"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "kind": "m3u",
+        "name": "NoFile",
+        "url": "/tmp/fliks-parity/s7/playlist.m3u"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "url must be a URL address"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/livetv/admin/sources"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "accountStatus": null,
+            "channelCount": 0,
+            "enabled": true,
+            "excludeGroupsPattern": null,
+            "expiresAt": null,
+            "guideUrls": [],
+            "id": 1,
+            "includeGroupsPattern": null,
+            "kind": "m3u",
+            "lastAdultGuardError": null,
+            "lastSyncError": "Request failed with status code 404",
+            "lastSyncStatus": "error",
+            "maxStreams": 0,
+            "maxStreamsIsManual": false,
+            "name": "Dead",
+            "playlistEtag": null,
+            "playlistLastModified": null,
+            "priority": 0,
+            "referer": null,
+            "refreshIntervalHours": 12,
+            "url": "http://127.0.0.1:4921/nope.m3u",
+            "userAgent": null,
+            "username": null
+          },
+          {
+            "accountStatus": null,
+            "channelCount": 0,
+            "enabled": true,
+            "excludeGroupsPattern": null,
+            "expiresAt": null,
+            "guideUrls": [],
+            "id": 2,
+            "includeGroupsPattern": null,
+            "kind": "m3u",
+            "lastAdultGuardError": null,
+            "lastSyncError": "connect ECONNREFUSED 127.0.0.1:1",
+            "lastSyncStatus": "error",
+            "maxStreams": 0,
+            "maxStreamsIsManual": false,
+            "name": "Gone",
+            "playlistEtag": null,
+            "playlistLastModified": null,
+            "priority": 0,
+            "referer": null,
+            "refreshIntervalHours": 12,
+            "url": "http://127.0.0.1:1/x.m3u",
+            "userAgent": null,
+            "username": null
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/livetv/admin/sources"
+    }
+  ]
+}

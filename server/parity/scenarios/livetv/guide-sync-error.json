@@ -1,0 +1,241 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastSyncAt",
+    "$..logoPath"
+  ],
+  "name": "guide-sync-error",
+  "seed": "livetv",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "kind": "xmltv",
+        "name": "Dead",
+        "url": "http://127.0.0.1:4921/nope.xml"
+      },
+      "expect": {
+        "body": {
+          "enabled": true,
+          "etag": null,
+          "id": 3,
+          "kind": "xmltv",
+          "language": null,
+          "lastModified": null,
+          "lastSyncError": null,
+          "lastSyncStatus": "never",
+          "name": "Dead",
+          "priority": 0,
+          "programCount": 0,
+          "refreshIntervalHours": 12,
+          "source": null,
+          "sourceId": null,
+          "timezoneOffsetMinutes": 0,
+          "url": "http://127.0.0.1:4921/nope.xml"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/livetv/admin/guide-sources"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "channelsTouched": 0,
+          "error": "Request failed with status code 404",
+          "ok": false,
+          "programCount": 0
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/livetv/admin/guide-sources/3/sync"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "kind": "xmltv",
+        "name": "NoUrl"
+      },
+      "expect": {
+        "body": {
+          "enabled": true,
+          "etag": null,
+          "id": 4,
+          "kind": "xmltv",
+          "language": null,
+          "lastModified": null,
+          "lastSyncError": null,
+          "lastSyncStatus": "never",
+          "name": "NoUrl",
+          "priority": 0,
+          "programCount": 0,
+          "refreshIntervalHours": 12,
+          "source": null,
+          "sourceId": null,
+          "timezoneOffsetMinutes": 0,
+          "url": null
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/livetv/admin/guide-sources"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "channelsTouched": 0,
+          "error": "Guide source has no URL",
+          "ok": false,
+          "programCount": 0
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/livetv/admin/guide-sources/4/sync"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "kind": "source",
+        "name": "NoParent"
+      },
+      "expect": {
+        "body": {
+          "enabled": true,
+          "etag": null,
+          "id": 5,
+          "kind": "source",
+          "language": null,
+          "lastModified": null,
+          "lastSyncError": null,
+          "lastSyncStatus": "never",
+          "name": "NoParent",
+          "priority": 0,
+          "programCount": 0,
+          "refreshIntervalHours": 12,
+          "source": null,
+          "sourceId": null,
+          "timezoneOffsetMinutes": 0,
+          "url": null
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/livetv/admin/guide-sources"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "channelsTouched": 0,
+          "error": "Guide source has no parent Live TV source",
+          "ok": false,
+          "programCount": 0
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/livetv/admin/guide-sources/5/sync"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "enabled": true,
+            "etag": null,
+            "id": 3,
+            "kind": "xmltv",
+            "language": null,
+            "lastModified": null,
+            "lastSyncError": "Request failed with status code 404",
+            "lastSyncStatus": "error",
+            "name": "Dead",
+            "priority": 0,
+            "programCount": 0,
+            "refreshIntervalHours": 12,
+            "sourceId": null,
+            "timezoneOffsetMinutes": 0,
+            "url": "http://127.0.0.1:4921/nope.xml"
+          },
+          {
+            "enabled": true,
+            "etag": null,
+            "id": 1,
+            "kind": "xmltv",
+            "language": null,
+            "lastModified": null,
+            "lastSyncError": null,
+            "lastSyncStatus": "never",
+            "name": "Feed A",
+            "priority": 1,
+            "programCount": 0,
+            "refreshIntervalHours": 12,
+            "sourceId": null,
+            "timezoneOffsetMinutes": 0,
+            "url": "http://127.0.0.1:4921/guide.xml"
+          },
+          {
+            "enabled": true,
+            "etag": null,
+            "id": 2,
+            "kind": "source",
+            "language": "fr",
+            "lastModified": null,
+            "lastSyncError": null,
+            "lastSyncStatus": "never",
+            "name": "Feed B",
+            "priority": 0,
+            "programCount": 0,
+            "refreshIntervalHours": 12,
+            "sourceId": 1,
+            "timezoneOffsetMinutes": 60,
+            "url": null
+          },
+          {
+            "enabled": true,
+            "etag": null,
+            "id": 5,
+            "kind": "source",
+            "language": null,
+            "lastModified": null,
+            "lastSyncError": "Guide source has no parent Live TV source",
+            "lastSyncStatus": "error",
+            "name": "NoParent",
+            "priority": 0,
+            "programCount": 0,
+            "refreshIntervalHours": 12,
+            "sourceId": null,
+            "timezoneOffsetMinutes": 0,
+            "url": null
+          },
+          {
+            "enabled": true,
+            "etag": null,
+            "id": 4,
+            "kind": "xmltv",
+            "language": null,
+            "lastModified": null,
+            "lastSyncError": "Guide source has no URL",
+            "lastSyncStatus": "error",
+            "name": "NoUrl",
+            "priority": 0,
+            "programCount": 0,
+            "refreshIntervalHours": 12,
+            "sourceId": null,
+            "timezoneOffsetMinutes": 0,
+            "url": null
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/livetv/admin/guide-sources"
+    }
+  ]
+}

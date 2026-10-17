@@ -1,0 +1,141 @@
+{
+  "capture": {
+    "st": "$.steps[0].body.streamToken"
+  },
+  "deviation": "F8",
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastSyncAt",
+    "$..logoPath",
+    "$..expiresAt",
+    "$..streamToken"
+  ],
+  "name": "livetv-channels-stream-token",
+  "seed": "livetv",
+  "steps": [
+    {
+      "as": "user",
+      "body": {},
+      "expect": {
+        "body": {},
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/auth/stream-token"
+    },
+    {
+      "as": "anon",
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "headers": {
+        "authorization": "Bearer {st}"
+      },
+      "method": "GET",
+      "path": "/api/livetv/channels"
+    },
+    {
+      "as": "anon",
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Live TV channel #99 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "headers": {
+        "authorization": "Bearer {st}"
+      },
+      "method": "GET",
+      "path": "/api/livetv/channels/99/logo"
+    },
+    {
+      "as": "anon",
+      "body": {
+        "favorite": true
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "session_token_required",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "headers": {
+        "authorization": "Bearer {st}"
+      },
+      "method": "PUT",
+      "path": "/api/livetv/channels/1/prefs"
+    },
+    {
+      "as": "anon",
+      "body": {},
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "session_token_required",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "headers": {
+        "authorization": "Bearer {st}"
+      },
+      "method": "POST",
+      "path": "/api/livetv/channels/1/play"
+    },
+    {
+      "as": "anon",
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "session_token_required",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "headers": {
+        "authorization": "Bearer {st}"
+      },
+      "method": "DELETE",
+      "path": "/api/livetv/sessions/x"
+    },
+    {
+      "as": "anon",
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "headers": {
+        "authorization": "Bearer {st}"
+      },
+      "method": "GET",
+      "path": "/api/livetv/guide?from=2000-01-01&to=2100-01-01"
+    },
+    {
+      "as": "anon",
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "headers": {
+        "authorization": "Bearer {st}"
+      },
+      "method": "GET",
+      "path": "/api/livetv/admin/sources"
+    }
+  ]
+}

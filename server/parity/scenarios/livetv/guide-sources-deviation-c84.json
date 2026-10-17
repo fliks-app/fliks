@@ -1,0 +1,129 @@
+{
+  "deviation": "C131",
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastSyncAt",
+    "$..logoPath"
+  ],
+  "name": "guide-sources-deviation-c84",
+  "seed": "livetv",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "kind": "source",
+        "name": "n",
+        "sourceId": 99
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "sourceId must belong to an existing live TV source"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/livetv/admin/guide-sources"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "kind": "xmltv",
+        "name": "n",
+        "refreshIntervalHours": 0
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "refreshIntervalHours must not be less than 1"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/livetv/admin/guide-sources"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "kind": "xmltv",
+        "name": "n",
+        "timezoneOffsetMinutes": 5000
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "timezoneOffsetMinutes must be between -1440 and 1440"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/livetv/admin/guide-sources"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "kind": "xmltv",
+        "language": "xxxxxxxxxxxxxxxxxxxx",
+        "name": "n"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "language must be shorter than or equal to 16 characters"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/livetv/admin/guide-sources"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "url": "ftp://h/x"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "url must be a URL address"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PATCH",
+      "path": "/api/livetv/admin/guide-sources/1"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "name": null
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "name must not be null"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PATCH",
+      "path": "/api/livetv/admin/guide-sources/1"
+    }
+  ]
+}

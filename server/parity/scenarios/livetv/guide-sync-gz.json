@@ -1,0 +1,120 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastSyncAt",
+    "$..logoPath",
+    "$..startsAt",
+    "$..endsAt"
+  ],
+  "name": "guide-sync-gz",
+  "seed": "livetv",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "kind": "xmltv",
+        "name": "Gz",
+        "url": "http://127.0.0.1:4921/guide.xml.gz"
+      },
+      "expect": {
+        "body": {
+          "enabled": true,
+          "etag": null,
+          "id": 3,
+          "kind": "xmltv",
+          "language": null,
+          "lastModified": null,
+          "lastSyncError": null,
+          "lastSyncStatus": "never",
+          "name": "Gz",
+          "priority": 0,
+          "programCount": 0,
+          "refreshIntervalHours": 12,
+          "source": null,
+          "sourceId": null,
+          "timezoneOffsetMinutes": 0,
+          "url": "http://127.0.0.1:4921/guide.xml.gz"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/livetv/admin/guide-sources"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "channelsTouched": 2,
+          "ok": true,
+          "programCount": 6
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/livetv/admin/guide-sources/3/sync"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "enabled": true,
+            "etag": null,
+            "id": 1,
+            "kind": "xmltv",
+            "language": null,
+            "lastModified": null,
+            "lastSyncError": null,
+            "lastSyncStatus": "never",
+            "name": "Feed A",
+            "priority": 1,
+            "programCount": 0,
+            "refreshIntervalHours": 12,
+            "sourceId": null,
+            "timezoneOffsetMinutes": 0,
+            "url": "http://127.0.0.1:4921/guide.xml"
+          },
+          {
+            "enabled": true,
+            "etag": null,
+            "id": 2,
+            "kind": "source",
+            "language": "fr",
+            "lastModified": null,
+            "lastSyncError": null,
+            "lastSyncStatus": "never",
+            "name": "Feed B",
+            "priority": 0,
+            "programCount": 0,
+            "refreshIntervalHours": 12,
+            "sourceId": 1,
+            "timezoneOffsetMinutes": 60,
+            "url": null
+          },
+          {
+            "enabled": true,
+            "etag": null,
+            "id": 3,
+            "kind": "xmltv",
+            "language": null,
+            "lastModified": null,
+            "lastSyncError": null,
+            "lastSyncStatus": "ok",
+            "name": "Gz",
+            "priority": 0,
+            "programCount": 6,
+            "refreshIntervalHours": 12,
+            "sourceId": null,
+            "timezoneOffsetMinutes": 0,
+            "url": "http://127.0.0.1:4921/guide.xml.gz"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/livetv/admin/guide-sources"
+    }
+  ]
+}

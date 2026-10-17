@@ -1,0 +1,60 @@
+{
+  "deviation": "C132",
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastSyncAt",
+    "$..logoPath",
+    "$..startsAt",
+    "$..endsAt"
+  ],
+  "name": "search-wildcard",
+  "seed": "livetv",
+  "steps": [
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "channels": [],
+          "programs": []
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/livetv/search?q=%25"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "channels": [],
+          "programs": []
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/livetv/search?q=_ne"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "channels": [],
+          "programs": []
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/livetv/search?q=O_e"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": [],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/livetv/channels?query=%25"
+    }
+  ]
+}

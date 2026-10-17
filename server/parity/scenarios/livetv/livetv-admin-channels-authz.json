@@ -1,0 +1,133 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastSyncAt",
+    "$..logoPath"
+  ],
+  "name": "livetv-admin-channels-authz",
+  "seed": "livetv",
+  "steps": [
+    {
+      "as": "anon",
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "GET",
+      "path": "/api/livetv/admin/channels"
+    },
+    {
+      "as": "readonly",
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "GET",
+      "path": "/api/livetv/admin/channels"
+    },
+    {
+      "as": "anon",
+      "body": {
+        "selection": {}
+      },
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "PATCH",
+      "path": "/api/livetv/admin/channels/bulk"
+    },
+    {
+      "as": "readonly",
+      "body": {
+        "selection": {}
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "PATCH",
+      "path": "/api/livetv/admin/channels/bulk"
+    },
+    {
+      "as": "anon",
+      "body": {
+        "sourceChannelIds": [
+          2
+        ],
+        "targetChannelId": 1
+      },
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "POST",
+      "path": "/api/livetv/admin/channels/merge"
+    },
+    {
+      "as": "readonly",
+      "body": {
+        "sourceChannelIds": [
+          2
+        ],
+        "targetChannelId": 1
+      },
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "POST",
+      "path": "/api/livetv/admin/channels/merge"
+    },
+    {
+      "as": "anon",
+      "body": {},
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "PATCH",
+      "path": "/api/livetv/admin/channels/1"
+    },
+    {
+      "as": "readonly",
+      "body": {},
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "PATCH",
+      "path": "/api/livetv/admin/channels/1"
+    }
+  ]
+}

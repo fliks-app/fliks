@@ -1,0 +1,112 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastSyncAt",
+    "$..logoPath"
+  ],
+  "name": "livetv-admin-channels-bulk-validation",
+  "seed": "livetv",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {},
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "selection must be a non-empty object"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PATCH",
+      "path": "/api/livetv/admin/channels/bulk"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "selection": "x"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "selection must be a non-empty object",
+            "nested property selection must be either object or array"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PATCH",
+      "path": "/api/livetv/admin/channels/bulk"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "selection": {
+          "channelIds": []
+        }
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "selection.channelIds should not be empty"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PATCH",
+      "path": "/api/livetv/admin/channels/bulk"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "enabled": "x",
+        "selection": {
+          "channelIds": [
+            "a"
+          ]
+        }
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "selection.each value in channelIds must be an integer number",
+            "enabled must be a boolean value"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PATCH",
+      "path": "/api/livetv/admin/channels/bulk"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "selection": {
+          "extra": 1
+        }
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "selection.property extra should not exist"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PATCH",
+      "path": "/api/livetv/admin/channels/bulk"
+    }
+  ]
+}

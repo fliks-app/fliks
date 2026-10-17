@@ -1,0 +1,61 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastSyncAt",
+    "$..logoPath"
+  ],
+  "name": "livetv-access-users-overview",
+  "seed": "livetv",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "groups": [],
+            "hasFullAccess": true,
+            "id": 1,
+            "username": "admin"
+          },
+          {
+            "groups": [],
+            "hasFullAccess": false,
+            "id": 5,
+            "username": "manager"
+          },
+          {
+            "groups": [],
+            "hasFullAccess": false,
+            "id": 6,
+            "username": "noread"
+          },
+          {
+            "groups": [
+              "Adult XXX"
+            ],
+            "hasFullAccess": false,
+            "id": 4,
+            "username": "other"
+          },
+          {
+            "groups": [],
+            "hasFullAccess": false,
+            "id": 3,
+            "username": "readonly"
+          },
+          {
+            "groups": [],
+            "hasFullAccess": false,
+            "id": 2,
+            "username": "user"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/livetv/admin/access/users"
+    }
+  ]
+}

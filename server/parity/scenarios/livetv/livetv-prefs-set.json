@@ -1,0 +1,152 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastSyncAt",
+    "$..logoPath"
+  ],
+  "name": "livetv-prefs-set",
+  "seed": "livetv",
+  "steps": [
+    {
+      "as": "user",
+      "body": {
+        "favorite": true
+      },
+      "expect": {
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/livetv/channels/1/prefs"
+    },
+    {
+      "as": "user",
+      "body": {
+        "hidden": true
+      },
+      "expect": {
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/livetv/channels/1/prefs"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": [
+          {
+            "favorite": true,
+            "groupName": "Mine",
+            "guideChannelId": "two.fr",
+            "id": 2,
+            "name": "Two",
+            "number": 2
+          },
+          {
+            "favorite": false,
+            "groupName": "__livetv_ungrouped__",
+            "guideChannelId": null,
+            "id": 4,
+            "name": "No Group",
+            "number": null
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/livetv/channels"
+    },
+    {
+      "as": "user",
+      "body": {},
+      "expect": {
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/livetv/channels/1/prefs"
+    },
+    {
+      "as": "user",
+      "body": {
+        "favorite": "yes"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "favorite must be a boolean value"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PUT",
+      "path": "/api/livetv/channels/1/prefs"
+    },
+    {
+      "as": "user",
+      "body": {
+        "extra": 1
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "property extra should not exist"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PUT",
+      "path": "/api/livetv/channels/1/prefs"
+    },
+    {
+      "as": "user",
+      "body": {
+        "favorite": true
+      },
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Live TV channel #6 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "PUT",
+      "path": "/api/livetv/channels/6/prefs"
+    },
+    {
+      "as": "user",
+      "body": {
+        "favorite": true
+      },
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Live TV channel #99 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "PUT",
+      "path": "/api/livetv/channels/99/prefs"
+    },
+    {
+      "as": "user",
+      "body": {},
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Validation failed (numeric string is expected)",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PUT",
+      "path": "/api/livetv/channels/abc/prefs"
+    }
+  ]
+}

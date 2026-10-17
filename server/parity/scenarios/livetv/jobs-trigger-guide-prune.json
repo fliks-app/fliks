@@ -1,0 +1,59 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastSyncAt",
+    "$..logoPath",
+    "$..startedOn",
+    "$..endedOn",
+    "$..id"
+  ],
+  "name": "jobs-trigger-guide-prune",
+  "seed": "livetv",
+  "steps": [
+    {
+      "as": "admin",
+      "baseEnv": "PARITY_NEST",
+      "body": {
+        "name": "LiveTvGuidePrune"
+      },
+      "expect": {
+        "body": {
+          "body": null,
+          "name": "LiveTvGuidePrune",
+          "status": "queued",
+          "trigger": "manual"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/commands"
+    },
+    {
+      "as": "admin",
+      "baseEnv": "PARITY_NEST",
+      "expect": {
+        "body": {
+          "data": [
+            {
+              "body": null,
+              "name": "LiveTvGuidePrune",
+              "status": "completed",
+              "trigger": "manual"
+            }
+          ],
+          "total": 1
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/commands?limit=1",
+      "poll": {
+        "path": "$.data[0].status",
+        "timeoutMs": 15000,
+        "until": "completed"
+      }
+    }
+  ]
+}
