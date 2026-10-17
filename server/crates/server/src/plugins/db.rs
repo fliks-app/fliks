@@ -265,10 +265,12 @@ pub async fn provision(
         )
         .await?;
     }
+    // Core joins the role so export and import can `SET LOCAL ROLE` to it (rule 54).
     let mut sql = format!(
         "ALTER ROLE {qr} LOGIN PASSWORD '{password}';
          GRANT USAGE ON SCHEMA public TO {qr};
-         REVOKE REFERENCES ON ALL TABLES IN SCHEMA public FROM {qr};"
+         REVOKE REFERENCES ON ALL TABLES IN SCHEMA public FROM {qr};
+         GRANT {qr} TO CURRENT_USER;"
     );
     for t in core_refs {
         sql.push_str(&format!(
@@ -419,10 +421,6 @@ impl PluginDb {
             lock_key,
             deadline,
         })
-    }
-
-    pub async fn session(self: &Arc<Self>) -> Result<Session, DbError> {
-        self.lease().await.map(Session)
     }
 
     async fn lease(self: &Arc<Self>) -> Result<Lease, DbError> {
@@ -588,15 +586,6 @@ async fn run(c: &Client, sql: &str, params: &[TextParam], rows: bool) -> Result<
 }
 
 /// A leased connection; dropping it (also mid-call) cancels and resets it before reuse.
-/// A leased connection as the plugin's own role, for host work on its schema (rule 54).
-pub struct Session(Lease);
-
-impl Session {
-    pub fn client(&mut self) -> &mut Client {
-        self.0.client.as_mut().expect("leased")
-    }
-}
-
 struct Lease {
     client: Option<Client>,
     db: Arc<PluginDb>,

@@ -282,3 +282,80 @@ async fn import_runs_plugin_triggers_as_the_plugin_role() {
     h.finish().await;
     s.finish().await;
 }
+
+/// Rule 54: settings and rows commit together; a deferred trigger failing at commit keeps neither.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn an_import_failing_at_commit_writes_nothing() {
+    let Some((m, w)) = fixture() else { return };
+    let Some(s) = Scratch::create("impatom").await else {
+        return;
+    };
+    let h = harness(&s, "impatom", |_| {}).await;
+    allow_unsigned(&h).await;
+    assert_eq!(
+        h.install(&pack(&m, "0.1.0", &w, None)).await["status"],
+        "active"
+    );
+    let rt = h.st.plugins.rt("fliks.fixture").unwrap();
+    let sql = r#"CREATE TABLE late (id int PRIMARY KEY);
+        CREATE FUNCTION refuse() RETURNS trigger LANGUAGE plpgsql AS $$
+        BEGIN RAISE EXCEPTION 'refused at commit'; END $$;
+        CREATE CONSTRAINT TRIGGER refuse AFTER INSERT ON late DEFERRABLE INITIALLY DEFERRED
+          FOR EACH ROW EXECUTE FUNCTION refuse();"#;
+    let r = rt
+        .http(
+            post(
+                "/test/db/script",
+                sql.as_bytes().to_vec(),
+                &[("name", "0100_late")],
+            ),
+            false,
+        )
+        .await
+        .unwrap();
+    let made: Value = serde_json::from_slice(&r.body).unwrap();
+    assert!(made.get("error").is_none(), "{made}");
+    let (_, mut doc) = h
+        .call(
+            "GET",
+            "/api/plugins/fliks.fixture/export",
+            Some(&h.admin),
+            None,
+        )
+        .await;
+    doc["tables"]["late"] = json!([{"id": 1}]);
+    doc["settings"] = json!({"plugin.fliks.fixture.restored": "yes"});
+    let (st, b) = h
+        .call(
+            "POST",
+            "/api/plugins/fliks.fixture/import",
+            Some(&h.admin),
+            Some(doc),
+        )
+        .await;
+    assert_eq!(st, 500, "{b}");
+    assert!(
+        b["message"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("refused at commit"),
+        "{b}"
+    );
+    let n: i64 = sqlx::query_scalar("SELECT count(*) FROM plugin_fliks_fixture.late")
+        .fetch_one(&s.pool)
+        .await
+        .unwrap();
+    let set: Option<String> = sqlx::query_scalar(
+        r#"SELECT "key" FROM app_settings WHERE "key" = 'plugin.fliks.fixture.restored'"#,
+    )
+    .fetch_optional(&s.pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        (n, set),
+        (0, None),
+        "neither the row nor the setting survived"
+    );
+    h.finish().await;
+    s.finish().await;
+}
