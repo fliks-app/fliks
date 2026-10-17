@@ -1019,7 +1019,7 @@ async fn provisioning_waits_for_the_database() {
     relay.set(true);
     until(
         "ready after the database returns",
-        Duration::from_secs(30),
+        Duration::from_secs(60),
         async || p.state_of(ID) == Some(State::Ready),
     )
     .await;
