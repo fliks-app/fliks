@@ -8,7 +8,7 @@ use std::time::Duration;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Error {
-    /// The host's outbound guard refused the address.
+    /// The host's outbound guard refused the address; its text is fixed by plugins.md.
     Denied,
     Dns(String),
     Refused,
@@ -193,5 +193,16 @@ fn map_code(code: ErrorCode) -> Error {
         | ErrorCode::TlsAlertReceived(_) => Error::Tls,
         ErrorCode::HttpRequestUriInvalid => Error::InvalidUrl,
         other => Error::Other(format!("{other:?}")),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn denied_text() {
+        assert_eq!(
+            super::Error::Denied.to_string(),
+            "target address is not allowed"
+        );
     }
 }
