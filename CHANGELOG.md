@@ -1,5 +1,35 @@
 # Changelog
 
+## [5.0.0](https://github.com/fliks-app/fliks/compare/v4.5.0...v5.0.0) (2026-10-17)
+
+
+### ⚠ BREAKING CHANGES
+
+* playback answers 503 and imports fail without a reachable engine; the image and the desktop launchers always start the engine in front of Node.
+
+### Features
+
+* run streaming, media jobs and live tv through fliks-engine ([509d5bf](https://github.com/fliks-app/fliks/commit/509d5bf12091fb71e603d5d4fa39939c4d42a0cf))
+* run the backend under fliks-engine supervise ([#1662](https://github.com/fliks-app/fliks/issues/1662)) ([15332f0](https://github.com/fliks-app/fliks/commit/15332f01f45ebcbf12094e21c2977e782954bc9f))
+* **server-db:** convert typeorm migrations and adopt the ledger ([#1678](https://github.com/fliks-app/fliks/issues/1678)) ([9371069](https://github.com/fliks-app/fliks/commit/9371069b259ddc865eac5cdcbb5fd3df8d32e430))
+* **server:** add the fliks-server workspace skeleton ([3e6d432](https://github.com/fliks-app/fliks/commit/3e6d432356d55f6e947f281760b46ae33722a21c))
+* **server:** add the nest route manifest ([#1675](https://github.com/fliks-app/fliks/issues/1675)) ([85da4dc](https://github.com/fliks-app/fliks/commit/85da4dc697056706f95519d50e033be60dbcc92a))
+* **server:** adopt engine 0.4.1 live capacity veto, owner denial ([#1756](https://github.com/fliks-app/fliks/issues/1756)) ([8ae8eec](https://github.com/fliks-app/fliks/commit/8ae8eec68902640e202e9a9f7cb7b2499ddd2993))
+* **server:** s0 foundation, fliks-server in front of nest ([#1694](https://github.com/fliks-app/fliks/issues/1694)) ([39d011b](https://github.com/fliks-app/fliks/commit/39d011b79c8df675174fe72be48924abb179c1d5))
+* **server:** s1 identity and settings in rust ([#1710](https://github.com/fliks-app/fliks/issues/1710)) ([cf358f5](https://github.com/fliks-app/fliks/commit/cf358f55e0d7e00dec570e3d86356c838c0e1dc2))
+* **server:** s2 realtime and playback in rust ([#1720](https://github.com/fliks-app/fliks/issues/1720)) ([1b3651e](https://github.com/fliks-app/fliks/commit/1b3651edceb9c099e0b3e0055c4c990bc16570df))
+* **server:** s3 catalog read side in rust ([#1726](https://github.com/fliks-app/fliks/issues/1726)) ([bc5665d](https://github.com/fliks-app/fliks/commit/bc5665d4b068b54546bcab32e9fba2663fc9bb14))
+* **server:** s4 notifications, social, likes and playlists in rust ([#1734](https://github.com/fliks-app/fliks/issues/1734)) ([ed47b97](https://github.com/fliks-app/fliks/commit/ed47b977c8cc7afb15861443656deb997f66e9a7))
+* **server:** s5 library, ingest, importers, metadata, requests and system in rust ([#1749](https://github.com/fliks-app/fliks/issues/1749)) ([a037f93](https://github.com/fliks-app/fliks/commit/a037f93985e584695b02ae2f7d7a0df71aee01ce))
+* **server:** s6 subtitles in rust ([#1751](https://github.com/fliks-app/fliks/issues/1751)) ([8b6483c](https://github.com/fliks-app/fliks/commit/8b6483c3a627a1a22a4c567bf375918514e45f1d))
+* **server:** s7 live tv in rust ([#1752](https://github.com/fliks-app/fliks/issues/1752)) ([6d41c5e](https://github.com/fliks-app/fliks/commit/6d41c5ed984ec2221fbe69b405852e9273bbb530))
+* **server:** s8 wasm plugin host in rust ([#1753](https://github.com/fliks-app/fliks/issues/1753)) ([8cb55fe](https://github.com/fliks-app/fliks/commit/8cb55fee135d7842d816f33625919cd3fb33c58f))
+
+
+### Bug Fixes
+
+* **backend:** read class-level policies and drop the db in dump-routes ([#1679](https://github.com/fliks-app/fliks/issues/1679)) ([4611676](https://github.com/fliks-app/fliks/commit/46116766f50a329de927f7b48c92e419e1878afd))
+
 ## [4.5.0](https://github.com/fliks-app/fliks/compare/v4.4.0...v4.5.0) (2026-10-13)
 
 
