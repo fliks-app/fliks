@@ -89,15 +89,23 @@ async fn template_copy_and_restore_take_their_own_names() {
     a.pool.close().await;
     let copy = format!("{}_copy", a.name);
     let mut c = PgConnection::connect(&admin).await.unwrap();
-    // A closed pool's backends end asynchronously; a template needs them gone (55006).
+    // A template needs every session on its source gone (55006).
     for attempt in 0.. {
         match sqlx::raw_sql(&format!("CREATE DATABASE {copy} TEMPLATE {}", a.name))
             .execute(&mut c)
             .await
         {
             Err(sqlx::Error::Database(e))
-                if e.code().as_deref() == Some("55006") && attempt < 300 =>
+                if e.code().as_deref() == Some("55006") && attempt < 50 =>
             {
+                // Whatever still holds the scratch source (autovacuum, a closing backend) goes.
+                sqlx::query(
+                    "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1",
+                )
+                .bind(&a.name)
+                .execute(&mut c)
+                .await
+                .unwrap();
                 tokio::time::sleep(std::time::Duration::from_millis(100)).await
             }
             r => {
