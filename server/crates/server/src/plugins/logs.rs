@@ -54,7 +54,9 @@ impl Logs {
                     warned: false,
                 };
             }
-            if w.bytes + text.len() > CAP_PER_MINUTE {
+            // An empty line still costs a byte, so a flood of them hits the cap too.
+            let cost = text.len().max(1);
+            if w.bytes + cost > CAP_PER_MINUTE {
                 if !w.warned {
                     w.warned = true;
                     self.ring(Line {
@@ -66,7 +68,7 @@ impl Logs {
                 }
                 return;
             }
-            w.bytes += text.len();
+            w.bytes += cost;
         }
         self.ring(Line {
             at: now,
@@ -190,5 +192,21 @@ impl AsyncWrite for LineWriter {
             self.pipe.line(&line);
         }
         Poll::Ready(Ok(()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn empty_lines_count_toward_the_cap() {
+        let logs = Logs::default();
+        for _ in 0..CAP_PER_MINUTE {
+            logs.push("acme.quiet", Level::Info, "");
+        }
+        assert!(!logs.windows.lock().unwrap()["acme.quiet"].warned);
+        logs.push("acme.quiet", Level::Info, "");
+        assert!(logs.windows.lock().unwrap()["acme.quiet"].warned);
     }
 }
