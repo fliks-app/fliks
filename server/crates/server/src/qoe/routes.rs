@@ -1,4 +1,4 @@
-//! QoE routes: the admin reads, the client events ingest and the live TV bridges.
+//! QoE routes: the admin reads and the client events ingest.
 use super::{SessionRef, now_ms, playbacks, store};
 use crate::{
     http::{
@@ -10,19 +10,15 @@ use crate::{
 };
 use axum::{
     Json, Router,
-    body::Bytes,
     extract::{Query, State},
-    http::{HeaderMap, StatusCode},
+    http::StatusCode,
     routing::{get, post},
 };
 use chrono::{DateTime, Utc};
 use fliks_domain::{
     acl::{Action, Subject},
-    qoe::{
-        QoePipeline, parse_events, parse_playback_id, parse_sample, parse_sent_at, read_cmcd_raw,
-    },
+    qoe::{parse_events, parse_playback_id, parse_sent_at},
 };
-use serde::Deserialize;
 use serde_json::{Value, json, to_value};
 
 pub fn router() -> Router<AppState> {
@@ -31,12 +27,6 @@ pub fn router() -> Router<AppState> {
         .route("/api/system/qoe/sessions/{sessionId}", get(session))
         .route("/api/system/qoe/summary", get(summary))
         .route("/api/playback/sessions/{sessionId}/events", post(events))
-        .route("/internal/qoe/register", post(register))
-        .route("/internal/qoe/live-sample", post(live_sample))
-        .route("/internal/qoe/session-ended", post(session_ended))
-        .route("/internal/qoe/served", post(served))
-        .route("/internal/qoe/transcode-probe", post(transcode_probe))
-        .route("/internal/qoe/live-summary", get(live_summary))
 }
 
 type Q = Query<Vec<(String, String)>>;
@@ -218,127 +208,4 @@ pub async fn events(
     st.qoe
         .record_events(&live, &events, parse_playback_id(&field("playbackId")));
     Ok(StatusCode::NO_CONTENT)
-}
-
-/// Parsed after the bearer check so an unauthenticated caller learns nothing about the shapes.
-fn parse<T: serde::de::DeserializeOwned>(
-    st: &AppState,
-    h: &HeaderMap,
-    body: &[u8],
-) -> Result<T, AppError> {
-    st.bridge.check(h)?;
-    serde_json::from_slice(body).map_err(|e| AppError::bad_request(e.to_string()))
-}
-
-#[derive(Deserialize)]
-struct Register {
-    session: SessionRef,
-    /// The engine's own pipeline report: absent members become the core's explicit nulls.
-    pipeline: Option<Value>,
-}
-
-async fn register(
-    State(st): State<AppState>,
-    h: HeaderMap,
-    body: Bytes,
-) -> Result<StatusCode, AppError> {
-    let r: Register = parse(&st, &h, &body)?;
-    st.qoe.register(&r.session);
-    if let Some(p) = r.pipeline.filter(|p| !p.is_null()) {
-        let p: QoePipeline =
-            serde_json::from_value(p).map_err(|e| AppError::bad_request(e.to_string()))?;
-        st.qoe.set_pipeline(&r.session, p);
-    }
-    Ok(StatusCode::NO_CONTENT)
-}
-
-#[derive(Deserialize)]
-struct LiveSample {
-    session: SessionRef,
-    #[serde(default)]
-    state: Option<String>,
-    #[serde(default)]
-    qoe: Value,
-}
-
-async fn live_sample(
-    State(st): State<AppState>,
-    h: HeaderMap,
-    body: Bytes,
-) -> Result<StatusCode, AppError> {
-    let mut r: LiveSample = parse(&st, &h, &body)?;
-    r.session.state = if r.state.as_deref() == Some("paused") {
-        crate::events::event::PlayState::Paused
-    } else {
-        crate::events::event::PlayState::Playing
-    };
-    if let Some(sample) = parse_sample(&r.qoe) {
-        st.qoe.record_sample(&r.session, &sample);
-    }
-    Ok(StatusCode::NO_CONTENT)
-}
-
-#[derive(Deserialize)]
-struct Ended {
-    #[serde(rename = "sessionId")]
-    session_id: String,
-}
-
-async fn session_ended(
-    State(st): State<AppState>,
-    h: HeaderMap,
-    body: Bytes,
-) -> Result<StatusCode, AppError> {
-    let r: Ended = parse(&st, &h, &body)?;
-    st.qoe.end_session(&r.session_id).await;
-    Ok(StatusCode::NO_CONTENT)
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct Served {
-    session: SessionRef,
-    cmcd_raw: Option<String>,
-    segment_duration_s: f64,
-    waited_ms: Option<f64>,
-}
-
-async fn served(
-    State(st): State<AppState>,
-    h: HeaderMap,
-    body: Bytes,
-) -> Result<StatusCode, AppError> {
-    let r: Served = parse(&st, &h, &body)?;
-    let cmcd = r.cmcd_raw.as_deref().and_then(read_cmcd_raw);
-    st.qoe
-        .observe_served(&r.session, cmcd.as_ref(), r.segment_duration_s, r.waited_ms);
-    Ok(StatusCode::NO_CONTENT)
-}
-
-#[derive(Deserialize)]
-struct Probe {
-    count: u32,
-}
-
-async fn transcode_probe(
-    State(st): State<AppState>,
-    h: HeaderMap,
-    body: Bytes,
-) -> Result<StatusCode, AppError> {
-    let r: Probe = parse(&st, &h, &body)?;
-    st.qoe.set_live_transcodes(r.count);
-    Ok(StatusCode::NO_CONTENT)
-}
-
-/// 404 when the session is not tracked (QoE off or unknown).
-async fn live_summary(
-    State(st): State<AppState>,
-    h: HeaderMap,
-    Query(q): Q,
-) -> Result<Json<Value>, AppError> {
-    st.bridge.check(&h)?;
-    scalar(&q, "sessionId")
-        .and_then(|sid| st.qoe.live_summary(sid))
-        .map(|s| Json(to_value(s).expect("summary")))
-        .ok_or_else(|| AppError::bare(StatusCode::NOT_FOUND))
 }

@@ -2,11 +2,11 @@
 use serde::Deserialize;
 
 /// `String.prototype.trim` / `\s` whitespace.
-pub(crate) fn is_ws(c: char) -> bool {
+pub fn is_ws(c: char) -> bool {
     (c.is_whitespace() && c != '\u{85}') || c == '\u{feff}'
 }
 
-pub(crate) fn trim(s: &str) -> &str {
+pub fn trim(s: &str) -> &str {
     s.trim_matches(is_ws)
 }
 

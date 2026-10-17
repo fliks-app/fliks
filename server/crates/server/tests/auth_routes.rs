@@ -330,33 +330,6 @@ async fn pairing_flow(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
-async fn internal_stream_token_is_bearer_gated(pool: PgPool) {
-    let c = ctx(pool.clone()).await;
-    let id = user(&pool, "bob", None, false, true).await;
-    let off = user(&pool, "off", None, false, false).await;
-    let url = "/internal/auth/stream-token";
-    let good = format!("Bearer {}", c.st.cfg.bridge_token);
-    for h in [vec![], vec![("authorization", "Bearer nope")]] {
-        let (s, _, _) = call(&c, "POST", url, &h, Some(json!({"userId": id}))).await;
-        assert_eq!(s, 401);
-    }
-    let h = [("authorization", good.as_str())];
-    let (s, _, b) = call(&c, "POST", url, &h, Some(json!({"userId": id}))).await;
-    assert_eq!(s, 200);
-    assert_eq!(
-        c.st.jwt
-            .verify(b["streamToken"].as_str().unwrap())
-            .unwrap()
-            .sub,
-        id
-    );
-    for uid in [off, 9999] {
-        let (s, _, _) = call(&c, "POST", url, &h, Some(json!({"userId": uid}))).await;
-        assert_eq!(s, 404);
-    }
-}
-
-#[sqlx::test(migrations = false)]
 async fn logout_is_always_204_and_revokes(pool: PgPool) {
     let c = ctx(pool.clone()).await;
     user(&pool, "bob", None, false, true).await;

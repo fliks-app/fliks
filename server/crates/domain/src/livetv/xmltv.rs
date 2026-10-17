@@ -76,7 +76,7 @@ pub fn decode_xml_text(raw: &str) -> String {
 }
 
 /// `YYYYMMDDHHMM[SS] [+-HHMM]`: the stamp's own offset, else `fallback_offset_minutes`. An impossible
-/// date is `None` rather than rolled over (C81).
+/// date is `None` rather than rolled over (C128).
 pub fn parse_xmltv_date(raw: Option<&str>, fallback_offset_minutes: i32) -> Option<DateTime<Utc>> {
     let t = js::trim(raw?);
     let m = rx!(r"^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})?\s*([+-]\d{4})?").captures(t)?;
@@ -272,8 +272,12 @@ pub trait Sink {
         true
     }
     fn channel(&mut self, _: Channel) {}
-    /// Once, before the first programme is read or at the end of the feed.
-    fn channels_done(&mut self) {}
+    /// Once: before the first programme (`true`), or at the end of a feed that has none (`false`).
+    fn channels_done(&mut self, _programmes_follow: bool) {}
+    /// Asked after every element: `true` ends the read (the consumer is gone).
+    fn stop(&self) -> bool {
+        false
+    }
     /// Asked at the open tag: an unwanted programme is never assembled.
     fn wants(&self, _channel_id: &str) -> bool {
         true
@@ -427,6 +431,9 @@ fn read_events<R: BufRead>(input: R, opts: &Options, sink: &mut impl Sink) -> io
                 if let Some(open) = begin(&e, want_channels, &mut started, sink, &mut stats) {
                     finish(open, opts, sink, &mut stats);
                 }
+                if sink.stop() {
+                    break;
+                }
             }
             Event::Start(e) => append(&mut cur, opts, &format!("<{}>", raw(&e))),
             Event::Empty(e) => append(&mut cur, opts, &format!("<{}/>", raw(&e))),
@@ -435,6 +442,9 @@ fn read_events<R: BufRead>(input: R, opts: &Options, sink: &mut impl Sink) -> io
                     let mut open = cur.take().expect("open element");
                     open.block.push_str(&format!("</{}>", raw(open.close)));
                     finish(open, opts, sink, &mut stats);
+                    if sink.stop() {
+                        break;
+                    }
                 } else {
                     append(&mut cur, opts, &format!("</{}>", raw(e.name().as_ref())));
                 }
@@ -448,7 +458,7 @@ fn read_events<R: BufRead>(input: R, opts: &Options, sink: &mut impl Sink) -> io
         }
     }
     if !started {
-        sink.channels_done();
+        sink.channels_done(false);
     }
     Ok(stats)
 }
@@ -471,7 +481,7 @@ fn begin(
         stats.programmes += 1;
         if !*started {
             *started = true;
-            sink.channels_done();
+            sink.channels_done(true);
         }
         skip = !sink.wants(attr(&attrs(&tag), "channel").as_deref().unwrap_or_default());
     }
@@ -531,7 +541,7 @@ mod tests {
         fn channel(&mut self, c: Channel) {
             self.channels.push(c);
         }
-        fn channels_done(&mut self) {
+        fn channels_done(&mut self, _follow: bool) {
             self.done += 1;
         }
         fn programme(&mut self, p: Programme) {

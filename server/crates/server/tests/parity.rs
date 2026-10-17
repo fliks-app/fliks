@@ -367,6 +367,12 @@ async fn send(ctx: &Ctx, step: &Value, vars: &HashMap<String, Value>) -> Result<
     // `"stub": true` talks to the external-API stub (PARITY_STUB, parity/external/stub.py) instead of the app.
     let base = if step["stub"].as_bool() == Some(true) {
         env("PARITY_STUB", "http://127.0.0.1:4890")
+    } else if let Some(url) = step["baseEnv"]
+        .as_str()
+        .and_then(|k| std::env::var(k).ok())
+        .filter(|u| !u.is_empty())
+    {
+        url
     } else {
         ctx.target.clone()
     };

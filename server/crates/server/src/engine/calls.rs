@@ -292,6 +292,18 @@ impl Engine {
         self.get("GET /v1/live", "/v1/live", &query).await
     }
 
+    /// One viewer of a live session; `None` on 404.
+    pub async fn get_live(&self, sid: &str) -> Result<Option<LiveSnapshot>, EngineError> {
+        let reply = self
+            .need()?
+            .get(&format!("/v1/live/{}", enc(sid)), &[])
+            .await?;
+        if reply.status.as_u16() == 404 {
+            return Ok(None);
+        }
+        expect("GET live", &reply).map(Some)
+    }
+
     /// `session_lost` when the engine no longer knows the sid; `Http` 403 for another owner.
     pub async fn heartbeat(
         &self,

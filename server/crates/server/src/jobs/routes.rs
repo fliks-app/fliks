@@ -52,13 +52,16 @@ pub async fn schedulers(
 ) -> Result<Json<Vec<SchedulerJob>>, AppError> {
     a.require(Action::Read, Subject::Settings)?;
     let held = st.bridge.jobs().await.unwrap_or_default();
-    let core = names::CORE.iter().map(|(n, c, l)| BridgedJob {
-        name: (*n).into(),
-        cron: (*c).into(),
-        triggerable: true,
-        label_key: (*l).into(),
-        plugin_id: None,
-    });
+    let core = names::CORE
+        .iter()
+        .chain(names::LIVETV.iter())
+        .map(|(n, c, l)| BridgedJob {
+            name: (*n).into(),
+            cron: (*c).into(),
+            triggerable: true,
+            label_key: (*l).into(),
+            plugin_id: None,
+        });
     let all: Vec<BridgedJob> = core.chain(held).collect();
     let tracked: Vec<String> = all
         .iter()
@@ -132,6 +135,7 @@ fn classify(name: &str, held: &[BridgedJob]) -> Result<Kind, AppError> {
         _ => {
             let valid: Vec<&str> = names::CORE
                 .iter()
+                .chain(names::LIVETV.iter())
                 .map(|(n, ..)| *n)
                 .chain(
                     held.iter()
@@ -209,7 +213,7 @@ mod tests {
     #[test]
     fn unknown_names_list_the_valid_ones_in_order() {
         let held = [BridgedJob {
-            name: "LiveTvSourceRefresh".into(),
+            name: "NestHeld".into(),
             cron: "0 * * * *".into(),
             triggerable: true,
             label_key: "k".into(),
@@ -220,10 +224,11 @@ mod tests {
         };
         let body = format!("{e:?}");
         assert!(body.contains(
-            "Unknown command: nope. Valid: Backup, RefreshMetadata, RefreshPluginSources, SubtitleSearch, SubtitleUpgrade, LiveTvSourceRefresh, RescanAll, RefreshMissingMetadata"
+            "Unknown command: nope. Valid: Backup, RefreshMetadata, RefreshPluginSources, SubtitleSearch, SubtitleUpgrade, LiveTvSourceRefresh, LiveTvGuideRefresh, LiveTvGuidePrune, NestHeld, RescanAll, RefreshMissingMetadata"
         ));
         assert!(classify("Backup", &[]).unwrap() == Kind::Rust);
-        assert!(classify("LiveTvSourceRefresh", &held).unwrap() == Kind::Held);
+        assert!(classify("NestHeld", &held).unwrap() == Kind::Held);
+        assert!(classify("LiveTvGuidePrune", &[]).unwrap() == Kind::Rust);
         assert!(classify("backup", &[]).is_err());
         assert!(classify("IntroDetection", &[]).is_err());
     }

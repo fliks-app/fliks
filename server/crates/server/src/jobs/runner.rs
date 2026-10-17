@@ -51,6 +51,7 @@ pub fn spawn(st: &AppState) {
     for &(name, expr, _) in names::CORE
         .iter()
         .filter(|(n, ..)| !names::SUBTITLE.contains(n))
+        .chain(names::LIVETV.iter())
     {
         let st = st.clone();
         cron::spawn(expr, tz, chrono::Utc::now, move || fire(st.clone(), name));

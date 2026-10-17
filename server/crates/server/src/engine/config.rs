@@ -9,6 +9,15 @@ use serde::de::DeserializeOwned;
 use serde_json::Value;
 use std::collections::HashMap;
 
+/// The `livetv_*` settings the engine receives (`livetv-sessions.md` rule 32).
+pub const LIVETV_KEYS: [&str; 5] = [
+    "livetv_segment_seconds",
+    "livetv_timeshift_minutes",
+    "livetv_probe_seconds",
+    "livetv_channel_idle_seconds",
+    "livetv_fast_zap",
+];
+
 const STREAMING_KEYS: [&str; 12] = [
     "streaming_segment_duration",
     "streaming_qsv_preset",
@@ -95,20 +104,26 @@ pub fn streaming(raw: &HashMap<String, String>) -> StreamingConfig {
     }
 }
 
-/// JS `parseInt(raw, 10)`: the leading integer, `None` for NaN.
-fn parse_int(raw: &str) -> Option<i64> {
-    let t = raw.trim_start();
-    let (neg, digits) = match t.as_bytes().first()? {
-        b'-' => (true, &t[1..]),
-        b'+' => (false, &t[1..]),
-        _ => (false, t),
+use fliks_domain::js::parse_int;
+
+/// `LiveTvConfig` from the `livetv_*` rows: `intOr` defaults, the floors of the engine, `fastZap` only for `true`/`false`.
+pub fn livetv(raw: &HashMap<String, String>) -> LiveTvConfig {
+    let int = |k: &str, default: i32| {
+        raw.get(k).and_then(|v| parse_int(v)).map_or(default, |n| {
+            n.clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32
+        })
     };
-    let end = digits.bytes().take_while(u8::is_ascii_digit).count();
-    let n: i64 = digits[..end]
-        .parse()
-        .ok()
-        .or((end > 0).then_some(i64::MAX))?;
-    Some(if neg { -n } else { n })
+    LiveTvConfig {
+        segment_seconds: int("livetv_segment_seconds", 2).max(1),
+        timeshift_minutes: int("livetv_timeshift_minutes", 15).max(1),
+        probe_seconds: int("livetv_probe_seconds", 3),
+        channel_idle_seconds: int("livetv_channel_idle_seconds", 30),
+        fast_zap: match raw.get("livetv_fast_zap").map(String::as_str) {
+            Some("true") => Some(true),
+            Some("false") => Some(false),
+            _ => None,
+        },
+    }
 }
 
 /// `EngineConfig.lifetime` from the `STREAM_*` env: a positive integer, else the default.
@@ -161,17 +176,21 @@ pub fn validate_streaming_setting(key: &str, value: Option<&str>) -> Result<(), 
 }
 
 impl Engine {
-    /// The live TV settings Nest assembles (bridge, until S7); they go out with every later push.
-    pub async fn set_livetv(&self, livetv: LiveTvConfig) {
-        *self.inner.livetv.lock().expect("livetv") = Some(livetv);
-        self.push_logged().await;
-    }
-
-    /// A settings write: the `streaming_*` keys are the engine's, so they re-push.
+    /// A settings write: the `streaming_*` and `livetv_*` keys are the engine's, so they re-push.
     pub async fn settings_changed(&self, keys: &[String]) {
-        if keys.iter().any(|k| k.starts_with("streaming_")) {
+        if keys
+            .iter()
+            .any(|k| k.starts_with("streaming_") || LIVETV_KEYS.contains(&k.as_str()))
+        {
             self.push_logged().await;
         }
+    }
+
+    /// The live TV segment length of the last config the engine was given (2 before the first).
+    pub fn livetv_segment_seconds(&self) -> i32 {
+        self.inner
+            .segment_seconds
+            .load(std::sync::atomic::Ordering::Relaxed)
     }
 
     /// `PUT /v1/config` with the next revision when anything pushed changed; serialized, so two callers
@@ -188,7 +207,13 @@ impl Engine {
             }
             None => StreamingConfig::default(),
         };
-        let livetv = self.inner.livetv.lock().expect("livetv").clone();
+        let livetv = match self.db() {
+            Some(db) => livetv(&store::values(db, &LIVETV_KEYS).await?),
+            None => LiveTvConfig::default(),
+        };
+        self.inner
+            .segment_seconds
+            .store(livetv.segment_seconds, std::sync::atomic::Ordering::Relaxed);
         let path_mappings = self.state().path_mappings.clone();
         let key =
             serde_json::to_string(&(&streaming, &livetv, &path_mappings)).expect("config key");
@@ -202,7 +227,7 @@ impl Engine {
             host_token: Some(self.inner.host_token.clone()),
             streaming,
             lifetime: lifetime(|k| std::env::var(k).ok()),
-            livetv: livetv.unwrap_or_default(),
+            livetv,
             path_mappings,
         };
         let backoff = self.timing().conflict_backoff;
@@ -285,6 +310,43 @@ mod tests {
         assert!(!s.auto_crop_enabled && !s.throttle_enabled);
         assert_eq!(s.gpu_render_node, "/dev/dri/renderD129");
         assert_eq!(s.throttle_threshold_seconds, 60.0);
+    }
+
+    #[test]
+    fn livetv_settings_default_floor_and_parse_like_the_host_did() {
+        let d = livetv(&raw(&[]));
+        assert_eq!(
+            (
+                d.segment_seconds,
+                d.timeshift_minutes,
+                d.probe_seconds,
+                d.channel_idle_seconds
+            ),
+            (2, 15, 3, 30)
+        );
+        assert_eq!(d.fast_zap, None);
+        let l = livetv(&raw(&[
+            ("livetv_segment_seconds", "0"),
+            ("livetv_timeshift_minutes", "-4"),
+            ("livetv_probe_seconds", "1"),
+            ("livetv_channel_idle_seconds", "12s"),
+            ("livetv_fast_zap", "false"),
+        ]));
+        assert_eq!(
+            (
+                l.segment_seconds,
+                l.timeshift_minutes,
+                l.probe_seconds,
+                l.channel_idle_seconds
+            ),
+            (1, 1, 1, 12)
+        );
+        assert_eq!(l.fast_zap, Some(false));
+        let odd = livetv(&raw(&[
+            ("livetv_segment_seconds", "x"),
+            ("livetv_fast_zap", "TRUE"),
+        ]));
+        assert_eq!((odd.segment_seconds, odd.fast_zap), (2, None));
     }
 
     #[test]

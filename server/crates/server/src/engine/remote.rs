@@ -1,6 +1,6 @@
-//! `/api/engine/remote*` (`engine-glue.md` section G), `POST /engine/resolve` and the live TV config bridge.
+//! `/api/engine/remote*` (`engine-glue.md` section G), and `POST /engine/resolve`.
 use super::{
-    resolve::{self, bearer_is},
+    resolve,
     store::{self, TokenWrite},
     urls_differ,
 };
@@ -10,12 +10,12 @@ use crate::{
 };
 use axum::{
     Json, Router,
-    extract::{FromRequestParts, State},
-    http::{StatusCode, request::Parts},
-    routing::{get, post, put},
+    extract::State,
+    http::StatusCode,
+    routing::{get, post},
 };
 use fliks_domain::acl::{Action, Subject};
-use fliks_engine_core::api::{LiveTvConfig, PathMapping};
+use fliks_engine_core::api::PathMapping;
 use serde_json::{Value, json};
 
 /// Passed to the `settings-changed` bridge so Nest's listeners know the engine module wrote the keys.
@@ -26,22 +26,6 @@ pub fn router() -> Router<AppState> {
         .route("/api/engine/remote", get(get_remote).put(put_remote))
         .route("/api/engine/remote/test", post(test_remote))
         .route("/engine/resolve", post(resolve::resolve))
-        .route("/internal/engine/livetv-config", put(livetv_config))
-}
-
-/// The bridge bearer (`FLIKS_BRIDGE_TOKEN`), constant-time.
-struct BridgeAuth;
-
-impl FromRequestParts<AppState> for BridgeAuth {
-    type Rejection = AppError;
-
-    async fn from_request_parts(parts: &mut Parts, st: &AppState) -> Result<Self, AppError> {
-        if bearer_is(&parts.headers, &st.cfg.bridge_token) {
-            Ok(Self)
-        } else {
-            Err(AppError::bare(StatusCode::UNAUTHORIZED))
-        }
-    }
 }
 
 /// Field-level checks of the DTOs with class-validator's messages (all of them, not the first).
@@ -204,16 +188,6 @@ pub async fn test_remote(
         .test_connection(url, token.unwrap_or(""), probe)
         .await;
     Ok((StatusCode::CREATED, Json(result)))
-}
-
-/// Bridge B2: Nest hands over its live TV settings; they go out with the next config push (until S7).
-async fn livetv_config(
-    State(st): State<AppState>,
-    _bridge: BridgeAuth,
-    ValidJson(config): ValidJson<LiveTvConfig>,
-) -> StatusCode {
-    st.engine.set_livetv(config).await;
-    StatusCode::NO_CONTENT
 }
 
 #[cfg(test)]

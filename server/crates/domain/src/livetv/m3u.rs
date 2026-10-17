@@ -31,7 +31,7 @@ pub struct M3uPlaylist {
     pub entries: Vec<M3uEntry>,
 }
 
-/// Provider text never carries U+0000: Postgres rejects it (C81).
+/// Provider text never carries U+0000: Postgres rejects it (C128).
 fn clean(s: &str) -> String {
     s.replace('\0', "")
 }
@@ -432,7 +432,7 @@ mod tests {
 
     #[test]
     fn nul_bytes_never_reach_the_rows() {
-        let p = parse(&["#EXTINF:-1,A\0B", "http://p/\01.ts"]);
+        let p = parse(&["#EXTINF:-1,A\0B", "http://p/\u{0}1.ts"]);
         assert_eq!(
             (p.entries[0].name.as_str(), p.entries[0].url.as_str()),
             ("AB", "http://p/1.ts")

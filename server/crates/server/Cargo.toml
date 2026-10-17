@@ -19,7 +19,7 @@ parity = []
 [dependencies]
 axum = { version = "0.8", features = ["multipart"] }
 jsonwebtoken = { version = "10", default-features = false, features = ["rust_crypto"] }
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls-webpki-roots"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls-webpki-roots", "gzip", "deflate", "brotli", "zstd"] }
 serde_path_to_error = "0.1"
 fliks_domain = { path = "../domain" }
 chrono.workspace = true
@@ -46,6 +46,9 @@ percent-encoding = "2"
 fliks-engine = { git = "https://github.com/fliks-app/engine", tag = "v0.3.2" }
 croner = "4.0.1"
 miniz_oxide = "0.8"
+flate2 = "1"
+bytes = "1"
+url = "2"
 chrono-tz = "0.10.4"
 regex.workspace = true
 

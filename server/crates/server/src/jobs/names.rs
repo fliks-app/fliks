@@ -25,6 +25,21 @@ pub const CORE: [(&str, &str, &str); 5] = [
     ),
 ];
 
+/// The live TV registry jobs, after the core five in the listing (`livetv-sources.md` rule 46).
+pub const LIVETV: [(&str, &str, &str); 3] = [
+    (
+        "LiveTvSourceRefresh",
+        "0 0-23/1 * * *",
+        "liveTv.jobs.sourceRefresh",
+    ),
+    (
+        "LiveTvGuideRefresh",
+        "0 0-23/1 * * *",
+        "liveTv.jobs.guideRefresh",
+    ),
+    ("LiveTvGuidePrune", "0 01 * * *", "liveTv.jobs.guidePrune"),
+];
+
 pub const TRIGGER_ONLY: [&str; 7] = [
     "RescanAll",
     "RefreshMissingMetadata",
@@ -45,7 +60,7 @@ pub const SUBTITLE: [&str; 2] = ["SubtitleSearch", "SubtitleUpgrade"];
 pub const PRUNE_CRON: &str = "0 03 * * *";
 
 pub fn is_core(name: &str) -> bool {
-    CORE.iter().any(|(n, ..)| *n == name) || TRIGGER_ONLY.contains(&name)
+    CORE.iter().chain(LIVETV.iter()).any(|(n, ..)| *n == name) || TRIGGER_ONLY.contains(&name)
 }
 
 #[cfg(test)]
@@ -78,6 +93,8 @@ mod tests {
             quoted(&src, "CORE_TRIGGER_ONLY_JOB_NAMES = [")
         );
         assert!(src.contains("PLUGIN_SOURCE_REFRESH_CRON = '0 3 * * *'"));
+        let livetv: Vec<_> = LIVETV.iter().map(|(n, ..)| n.to_string()).collect();
+        assert_eq!(livetv, quoted(&src, "CORE_LIVETV_JOB_NAMES = ["));
     }
 
     #[test]

@@ -218,7 +218,7 @@ async fn handle(State(s): State<Arc<Mutex<S>>>, req: Request) -> Response {
         let mut s = s.lock().unwrap();
         s.order.push(key.clone());
         s.seen.entry(key.clone()).or_default().push(seen);
-        respond(&mut s, &key)
+        respond(&mut s, &key, &bytes)
     };
     if delay_ms > 0 {
         tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
@@ -226,7 +226,21 @@ async fn handle(State(s): State<Arc<Mutex<S>>>, req: Request) -> Response {
     response
 }
 
-fn respond(s: &mut S, key: &str) -> (Response, u64) {
+/// A `"$field"` string in a scripted body is replaced by that field of the request body.
+fn echo(v: &mut Value, req: &Value) {
+    match v {
+        Value::String(t) => {
+            if let Some(f) = t.strip_prefix('$') {
+                *v = req.get(f).cloned().unwrap_or(Value::Null);
+            }
+        }
+        Value::Array(a) => a.iter_mut().for_each(|x| echo(x, req)),
+        Value::Object(o) => o.values_mut().for_each(|x| echo(x, req)),
+        _ => {}
+    }
+}
+
+fn respond(s: &mut S, key: &str, req: &[u8]) -> (Response, u64) {
     if key == "GET /v1/events" {
         s.connected_at.push(Instant::now());
         let res = match s.conns.pop_front() {
@@ -244,6 +258,10 @@ fn respond(s: &mut S, key: &str) -> (Response, u64) {
             q.front().cloned()
         }
         .expect("a scripted answer");
+        let mut a = a;
+        if let Some(b) = a.body.as_mut() {
+            echo(b, &serde_json::from_slice(req).unwrap_or(Value::Null));
+        }
         return (json_response(&a), a.delay_ms);
     }
     let res = match key {

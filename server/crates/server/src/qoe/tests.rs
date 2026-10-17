@@ -1,11 +1,9 @@
 use super::{Kind, Qoe, SessionRef, playbacks, routes, store, until_next};
-use crate::{config::Config, events::event::PlayState, state::AppState};
-use axum::{body::Body, http::Request};
+use crate::events::event::PlayState;
 use chrono::NaiveDateTime;
 use fliks_domain::qoe::{parse_events, parse_sample};
 use serde_json::{Value, json};
 use sqlx::PgPool;
-use tower::ServiceExt;
 
 fn sref(sid: &str, user: Option<i32>) -> SessionRef {
     SessionRef {
@@ -176,134 +174,6 @@ async fn session_end_stamps_the_row_once_and_a_sample_revives_it(pool: PgPool) {
     q.record_sample(&s, &parse_sample(&sample("p", 0)).unwrap());
     q.flush("a").await;
     assert!(rows(&pool).await[0].endedAt.is_none());
-}
-
-async fn bridge(st: &AppState, method: &str, uri: &str, body: Value, bearer: bool) -> (u16, Value) {
-    let mut req = Request::builder()
-        .method(method)
-        .uri(uri)
-        .header("content-type", "application/json");
-    if bearer {
-        req = req.header("authorization", format!("Bearer {}", st.cfg.bridge_token));
-    }
-    let res = routes::router()
-        .with_state(st.clone())
-        .oneshot(req.body(Body::from(body.to_string())).unwrap())
-        .await
-        .unwrap();
-    let status = res.status().as_u16();
-    let bytes = axum::body::to_bytes(res.into_body(), 1 << 20)
-        .await
-        .unwrap();
-    (
-        status,
-        serde_json::from_slice(&bytes).unwrap_or(Value::Null),
-    )
-}
-
-#[sqlx::test(migrations = false)]
-async fn the_live_tv_bridges_feed_the_trackers(pool: PgPool) {
-    crate::db::migrate(&pool).await.unwrap();
-    let st = AppState::new(pool, Config::from_lookup(|_| None), "secret");
-    st.qoe.reload_enabled().await;
-    let session = json!({"sessionId": "l1", "userId": 1, "mediaFileId": null, "mediaTitle": "ch", "startedAt": 1.0,
-        "lastBeat": 2.0, "deviceLabel": "ua", "systemName": null, "appVersion": null, "kind": "live", "quality": null,
-        "transcodeReasons": [], "state": "playing", "attributedUserId": null});
-    let (code, _) = bridge(
-        &st,
-        "POST",
-        "/internal/qoe/register",
-        json!({"session": session}),
-        false,
-    )
-    .await;
-    assert_eq!(code, 401);
-    // The engine's report has absent members; Rust maps them to the core's explicit nulls.
-    let pipeline = json!({"output": {"codec": "h264"}, "encode": {"hw": true, "kind": "vaapi"}});
-    let (code, _) = bridge(
-        &st,
-        "POST",
-        "/internal/qoe/register",
-        json!({"session": session, "pipeline": pipeline}),
-        true,
-    )
-    .await;
-    assert_eq!(code, 204);
-    let p = st
-        .qoe
-        .map()
-        .get("l1")
-        .unwrap()
-        .agg
-        .pipeline()
-        .cloned()
-        .unwrap();
-    assert_eq!(p.output.unwrap().quality, None);
-    assert!(p.encode.unwrap().hw);
-    let body = json!({"session": session, "state": "playing", "qoe": sample("lp", 0)});
-    assert_eq!(
-        bridge(&st, "POST", "/internal/qoe/live-sample", body, true)
-            .await
-            .0,
-        204
-    );
-    let body = json!({"session": session, "cmcdRaw": "bl=5000,mtp=20000", "segmentDurationS": 4, "waitedMs": 50});
-    assert_eq!(
-        bridge(&st, "POST", "/internal/qoe/served", body, true)
-            .await
-            .0,
-        204
-    );
-    assert_eq!(
-        bridge(
-            &st,
-            "POST",
-            "/internal/qoe/transcode-probe",
-            json!({"count": 2}),
-            true
-        )
-        .await
-        .0,
-        204
-    );
-    let (code, sum) = bridge(
-        &st,
-        "GET",
-        "/internal/qoe/live-summary?sessionId=l1",
-        json!({}),
-        true,
-    )
-    .await;
-    assert_eq!(
-        (code, sum["playbackId"].as_str(), sum["cmcd"].as_bool()),
-        (200, Some("lp"), Some(true))
-    );
-    assert_eq!(
-        bridge(
-            &st,
-            "GET",
-            "/internal/qoe/live-summary?sessionId=nope",
-            json!({}),
-            true
-        )
-        .await
-        .0,
-        404
-    );
-    assert_eq!(
-        bridge(
-            &st,
-            "POST",
-            "/internal/qoe/session-ended",
-            json!({"sessionId": "l1"}),
-            true
-        )
-        .await
-        .0,
-        204
-    );
-    st.qoe.flush("l1").await;
-    assert!(rows(&st.db).await[0].endedAt.is_some());
 }
 
 #[test]

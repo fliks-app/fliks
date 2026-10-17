@@ -228,49 +228,12 @@ mod config_push {
     }
 
     #[tokio::test]
-    async fn skips_an_unchanged_push_and_sends_each_change_with_the_next_revision() {
+    async fn skips_an_unchanged_push() {
         let f = Fake::start().await;
         let e = boot(&f).await;
         e.push_config().await.unwrap();
+        e.push_config().await.unwrap();
         assert_eq!(puts(&f).len(), 1);
-        let mut livetv = LiveTvConfig::default();
-        e.set_livetv(livetv.clone()).await;
-        livetv.segment_seconds = 4;
-        e.set_livetv(livetv).await;
-        let sent = puts(&f);
-        assert_eq!(sent.len(), 3);
-        assert_eq!(
-            (sent[1]["revision"].as_u64(), sent[2]["revision"].as_u64()),
-            (Some(9), Some(10))
-        );
-        assert_eq!(sent[2]["livetv"]["segmentSeconds"], 4);
-    }
-
-    #[tokio::test]
-    async fn sends_the_live_tv_settings_with_every_push_even_when_known_before_the_engine() {
-        let f = Fake::start().await;
-        let e = engine_with(&f.url, fast());
-        let livetv = LiveTvConfig {
-            segment_seconds: 4,
-            timeshift_minutes: 5,
-            fast_zap: Some(true),
-            ..LiveTvConfig::default()
-        };
-        e.set_livetv(livetv).await;
-        assert!(puts(&f).is_empty(), "no engine yet: kept, not sent");
-        e.start_with(None, 4849).await;
-        let first = &puts(&f)[0];
-        assert_eq!(
-            first["livetv"],
-            json!({"segmentSeconds": 4, "timeshiftMinutes": 5, "probeSeconds": 3, "fastZap": true, "channelIdleSeconds": 30})
-        );
-        e.set_livetv(LiveTvConfig {
-            segment_seconds: 2,
-            ..LiveTvConfig::default()
-        })
-        .await;
-        assert_eq!(puts(&f)[1]["revision"], 9);
-        assert_eq!(puts(&f)[1]["livetv"]["segmentSeconds"], 2);
     }
 
     #[tokio::test]
@@ -331,13 +294,11 @@ mod config_push {
             to: "/data".into(),
         }];
         e.start_with(None, 4849).await;
-        e.set_livetv(LiveTvConfig::default()).await;
         let sent = puts(&f);
         assert_eq!(
             sent[0]["pathMappings"],
             json!([{"from": "/nas", "to": "/data"}])
         );
-        assert_eq!(sent[1]["pathMappings"], sent[0]["pathMappings"]);
         let other = Fake::start().await;
         boot(&other).await;
         assert!(puts(&other)[0].get("pathMappings").is_none());
