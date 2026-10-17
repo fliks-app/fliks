@@ -103,6 +103,24 @@ macro_rules! export {
                 <$t as $crate::Plugin>::shutdown()
             }
         }
+        // Native builds (unit tests, clippy) cannot link the component export names.
+        #[cfg(target_arch = "wasm32")]
         $crate::bindings::__export_world!(__FliksGuest with_types_in $crate::bindings);
+        // Natively the exports stay reachable, so the plugin's code is not dead.
+        #[cfg(not(target_arch = "wasm32"))]
+        const _: () = {
+            use $crate::bindings::exports::fliks::plugin::guest::Guest as G;
+            let _ = (
+                <__FliksGuest as G>::hello,
+                <__FliksGuest as G>::health,
+                <__FliksGuest as G>::start,
+                <__FliksGuest as G>::job,
+                <__FliksGuest as G>::scheduled,
+                <__FliksGuest as G>::http,
+                <__FliksGuest as G>::event,
+                <__FliksGuest as G>::config_changed,
+                <__FliksGuest as G>::shutdown,
+            );
+        };
     };
 }
