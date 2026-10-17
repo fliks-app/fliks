@@ -19,7 +19,7 @@ import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { StreamingApiService, PlaybackInfoResponse } from '../../core/services/api/streaming-api.service';
 import { MediaService, Media } from '../../core/services/api/media.service';
 import { BrowserDeviceProfileService, DeviceProfile } from '../../core/services/browser-device-profile.service';
-import type { PreRollItem } from '@fliks/plugin-contract/ui';
+import type { PreRollItem } from '@fliks/plugin-ui';
 import { SseService, RemoteCommand, RemoteQualityRung } from '../../core/services/sse.service';
 import { RemoteService } from '../../core/services/remote.service';
 import { remoteOverlayOpen } from '../../core/services/remote-playback-target';

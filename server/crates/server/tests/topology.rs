@@ -255,3 +255,23 @@ async fn rust_serves_the_spa_and_the_cast_receiver(pool: PgPool) {
     );
     std::fs::remove_dir_all(root).ok();
 }
+
+/// No database at boot: the server exits non-zero before it listens or loads a plugin.
+#[test]
+fn without_a_database_the_server_exits() {
+    let dir = std::env::var("CARGO_TARGET_DIR")
+        .map_or_else(|_| std::env::temp_dir(), std::path::PathBuf::from);
+    let started = Instant::now();
+    let out = Command::new(env!("CARGO_BIN_EXE_fliks-server"))
+        .env("DB_HOST", "127.0.0.1")
+        .env("DB_PORT", free_port().to_string())
+        .env("PORT", free_port().to_string())
+        .env("FLIKS_CONF_DIR", dir.join("no-db-conf"))
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(!out.status.success(), "{stderr}");
+    assert!(stderr.contains("cannot reach the database"), "{stderr}");
+    assert!(!stderr.contains("plugin"), "{stderr}");
+    assert!(started.elapsed() < Duration::from_secs(20));
+}

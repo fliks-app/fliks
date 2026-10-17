@@ -8,7 +8,6 @@ use crate::{
 };
 use serde_json::json;
 use sqlx::PgConnection;
-use std::collections::HashSet;
 use tokio::sync::broadcast::error::RecvError;
 
 type Res<T> = Result<T, AppError>;
@@ -203,22 +202,6 @@ fn obj(v: serde_json::Value) -> serde_json::Map<String, serde_json::Value> {
     }
 }
 
-/// Episode numbers on disk in a season: own file or inside a multi-episode file's range.
-fn on_disk(eps: &[&db::Ep]) -> HashSet<i32> {
-    let mut set = HashSet::new();
-    for e in eps.iter().filter(|e| e.has_file) {
-        set.insert(e.number);
-        for n in e
-            .end_number
-            .filter(|end| *end > e.number)
-            .map_or(1..1, |end| e.number + 1..end + 1)
-        {
-            set.insert(n);
-        }
-    }
-    set
-}
-
 /// `isRequestScopeCovered` for a series: every monitored episode of the monitored scoped seasons is on
 /// disk; a scope with nothing to check is not covered (code wins over the source comment, Q9).
 pub(super) fn scope_covered(scope: Option<&[i64]>, eps: &[db::Ep]) -> bool {
@@ -238,7 +221,11 @@ pub(super) fn scope_covered(scope: Option<&[i64]>, eps: &[db::Ep]) -> bool {
             continue;
         }
         checked = true;
-        let disk = on_disk(&in_season);
+        let disk = fliks_domain::media::episodes_on_disk(
+            in_season
+                .iter()
+                .map(|e| (e.number, e.end_number, e.has_file)),
+        );
         if !monitored.iter().all(|e| disk.contains(&e.number)) {
             return false;
         }

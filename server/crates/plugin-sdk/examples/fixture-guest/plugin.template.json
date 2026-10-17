@@ -1,0 +1,45 @@
+{
+  "id": "fliks.fixture",
+  "pluginApi": 2,
+  "name": "Fixture",
+  "fliks": ">=5.0.0 <6.0.0",
+  "author": "Fliks",
+  "description": "Test and parity fixture: every route exercises one host behaviour.",
+  "license": "MIT",
+  "logo": "logo.svg",
+  "kind": "process",
+  "runtime": "wasm",
+  "memoryMb": 64,
+  "database": { "schema": true, "coreRefs": ["episodes", "media", "seasons", "users"] },
+  "scopes": ["config:rw", "media:read", "events:emit", "ingest:write", "requests:progress", "acquisition:candidates", "releases:score"],
+  "ingestRoots": [],
+  "permissions": ["queue"],
+  "routes": [
+    { "method": "GET", "path": "/hello", "policy": "read:Settings" },
+    { "method": "GET", "path": "/admin", "policy": "manage:Settings" },
+    { "method": "GET", "path": "/queue", "policy": "read:plugin:fliks.fixture:queue" },
+    { "method": "GET", "path": "/media/:id", "policy": "read:Media", "objectGuard": "mediaAccessible:id" },
+    { "method": "GET", "path": "/status/:code", "policy": "read:Settings" },
+    { "method": "GET", "path": "/headers", "policy": "read:Settings" },
+    { "method": "POST", "path": "/echo", "policy": "read:Settings" },
+    { "method": "GET", "path": "/path/:p", "policy": "read:Settings" },
+    { "method": "GET", "path": "/config", "policy": "read:Settings" },
+    { "method": "GET", "path": "/test/*rest", "policy": "read:Settings" },
+    { "method": "POST", "path": "/test/*rest", "policy": "read:Settings" }
+  ],
+  "jobs": [
+    { "name": "FixtureJob", "cron": "0 0 1 1 *", "triggerable": true, "labelKey": "fixture.job" },
+    { "name": "FixtureHidden", "cron": "0 0 1 1 *", "triggerable": false, "labelKey": "fixture.hidden" }
+  ],
+  "ui": {
+    "contributions": [
+      { "id": "fixture.queue", "slot": "nav.acquisition", "weight": 10, "labelKey": "fixture.nav.queue", "action": { "kind": "route", "path": "/plugins/fliks.fixture/queue" } },
+      { "id": "fixture.settings", "slot": "settings.page", "weight": 100, "labelKey": "fixture.nav.settings", "action": { "kind": "route", "path": "/admin/settings/plugins/fliks.fixture/general" } }
+    ],
+    "configPages": [
+      { "id": "queue", "kind": "table", "labelKey": "fixture.page.queue", "list": "/queue", "columns": [{ "key": "title", "labelKey": "fixture.col.title" }] },
+      { "id": "general", "labelKey": "fixture.page.general", "fields": [{ "key": "token", "type": "password", "labelKey": "fixture.field.token", "secret": true }] }
+    ]
+  },
+  "i18n": { "en": { "fixture.nav.queue": "Queue", "fixture.nav.settings": "Fixture" } }
+}

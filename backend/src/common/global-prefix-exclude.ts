@@ -2,7 +2,4 @@
 export const GLOBAL_PREFIX_EXCLUDE = [
   'engine/resolve',
   'internal/bridge/{*path}',
-  'internal/plugins/{*path}',
-  'internal/jobs',
-  'internal/jobs/{*path}',
 ];

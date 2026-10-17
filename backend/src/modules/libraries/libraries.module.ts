@@ -7,6 +7,9 @@ import { MediaMetadata } from '../media/entities/media-metadata.entity';
 import { MediaCast } from '../media/entities/media-cast.entity';
 import { MediaCrew } from '../media/entities/media-crew.entity';
 import { Person } from '../media/entities/person.entity';
+import { Season } from '../media/entities/season.entity';
+import { LanguageProfile } from '../profiles/entities/language-profile.entity';
+import { QualityProfile } from '../profiles/entities/quality-profile.entity';
 import { LibrariesService } from './libraries.service';
 
 @Module({
@@ -18,6 +21,9 @@ import { LibrariesService } from './libraries.service';
       MediaCast,
       MediaCrew,
       Person,
+      Season,
+      LanguageProfile,
+      QualityProfile,
     ])],
   providers: [LibrariesService],
   exports: [LibrariesService, TypeOrmModule],

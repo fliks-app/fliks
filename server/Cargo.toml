@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/domain", "crates/server"]
+members = ["crates/domain", "crates/plugin-route", "crates/server"]
 
 [workspace.package]
 version = "4.5.0"

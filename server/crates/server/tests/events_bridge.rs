@@ -53,7 +53,6 @@ async fn every_internal_route_needs_the_bridge_bearer() {
     for (m, u) in [
         ("POST", "/internal/events"),
         ("GET", "/internal/events/stream"),
-        ("GET", "/internal/events/progress?mediaId=1"),
         ("POST", "/internal/activity"),
         ("POST", "/internal/activity/claim"),
     ] {
@@ -136,22 +135,4 @@ async fn activity_and_progress_bridges_round_trip() {
     assert_eq!(post(json!({"op": "remove", "id": "Rescan:1"})).await.0, 204);
     assert_eq!(claim().await.0, 204);
     assert_eq!(claim().await.0, 409);
-    let (s, _) = call(
-        &st,
-        "GET",
-        "/internal/events/progress?mediaId=x",
-        None,
-        true,
-    )
-    .await;
-    assert_eq!(s, 400);
-    let (s, body) = call(
-        &st,
-        "GET",
-        "/internal/events/progress?mediaId=9",
-        None,
-        true,
-    )
-    .await;
-    assert_eq!((s, body), (200, json!({"downloads": []})));
 }

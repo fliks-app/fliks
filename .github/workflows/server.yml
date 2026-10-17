@@ -1,4 +1,5 @@
-# Rust server: fmt, clippy, tests, sqlx offline cache and openapi.json drift. Linux only; parity runs locally.
+# Rust server and plugin SDK: fmt, clippy, tests (plugins on the wasm fixture), sqlx offline cache and
+# openapi.json drift. Linux only; parity runs locally.
 name: Server
 
 on:
@@ -43,14 +44,21 @@ jobs:
       DATABASE_URL: postgres://fliks:fliks@localhost:5432/fliks
       # With DATABASE_URL set, query! would compile against the unmigrated DB; prepare --check forces online itself.
       SQLX_OFFLINE: 'true'
+      S8_PG_ADMIN_URL: postgres://fliks:fliks@localhost:5432/postgres
+      FLIKS_HARNESS_PG_URL: postgres://fliks:fliks@localhost:5432/postgres
+      # Where `cargo xtask build` leaves the fixture: the SDK workspace's own target dir.
+      FLIKS_TEST_WASM_DIR: ${{ github.workspace }}/server/crates/plugin-sdk/target/wasm32-wasip2/release
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+          targets: wasm32-wasip2
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: server
+          workspaces: |
+            server
+            server/crates/plugin-sdk
       # The restore test runs pg_dump against the Postgres 18 service; the runner image ships 16.
       - name: PostgreSQL 18 client tools
         run: |
@@ -62,7 +70,20 @@ jobs:
           echo /usr/lib/postgresql/18/bin >> "$GITHUB_PATH"
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: plugin SDK fmt and clippy (native and wasm32-wasip2)
+        working-directory: server/crates/plugin-sdk
+        run: |
+          cargo fmt --all --check
+          cargo clippy --workspace --all-targets -- -D warnings
+          cargo clippy --workspace --all-targets --target wasm32-wasip2 -- -D warnings
+      - name: build the fixture component
+        working-directory: server/crates/plugin-sdk
+        run: cargo xtask build examples/fixture-guest
+      # Includes the plugin host tests (`--test plugins`), which fail under CI without the fixture.
       - run: cargo test --workspace
+      - name: plugin SDK tests (harness on the fixture)
+        working-directory: server/crates/plugin-sdk
+        run: cargo test --workspace
       # No query! macros yet, so no .sqlx cache: the check starts once the directory is committed.
       - name: sqlx offline cache is current
         run: |

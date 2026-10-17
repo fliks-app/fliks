@@ -29,6 +29,7 @@ pub fn router() -> Router<AppState> {
         .route("/api/media/recently-added", get(recent))
         .route("/api/media/counts", get(count))
         .route("/api/media/counts-by-library", get(count_by_library))
+        .route("/api/counts", get(sidebar_counts))
         .route("/api/media/qualities", get(quality_table))
         .route("/api/media/genres", get(genre_list))
         .route("/api/media/collections", get(collection_list))
@@ -239,4 +240,37 @@ pub async fn media_streams(
     let libs = accessible_library_ids(&st.db, &a).await?;
     assert_media_accessible(&st.db, id, &libs).await?;
     Ok(Json(streams::streams(&st, id, file).await?))
+}
+
+/// `counts.md`: the sidebar counters; each degrades to empty without its ability, never a 403.
+#[utoipa::path(get, path = "/api/counts", responses((status = 200)))]
+pub async fn sidebar_counts(
+    State(st): State<AppState>,
+    a: Authed,
+) -> Result<Json<Value>, AppError> {
+    let pending = async {
+        let all = a.perms.can(Action::Manage, &Subject::FliksRequest);
+        sqlx::query_scalar::<_, i32>(r#"SELECT count(*)::int FROM requests WHERE status = 'pending' AND ($1 OR "userId" = $2)"#)
+            .bind(all)
+            .bind(a.user.id)
+            .fetch_one(&st.db)
+            .await
+    };
+    let by_library = async {
+        if !a.perms.can(Action::Read, &Subject::Media) {
+            return Ok(aggregates::ByLibrary(vec![]));
+        }
+        let ids = accessible_library_ids(&st.db, &a).await?;
+        aggregates::counts_by_library(&st.db, &ids).await
+    };
+    let (pending, by_library) = tokio::try_join!(pending, by_library)?;
+    let mut badges = serde_json::Map::new();
+    let sees_queue = a.perms.can(Action::Manage, &Subject::Settings)
+        || a.perms.can(Action::Track, &Subject::Media);
+    if let (true, Some(n)) = (sees_queue, st.plugins.counts.get("queueActive")) {
+        badges.insert("queueActive".into(), n.into());
+    }
+    Ok(Json(
+        json!({ "badgeCounts": badges, "pendingRequests": pending, "mediaByLibrary": by_library }),
+    ))
 }

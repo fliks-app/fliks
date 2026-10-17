@@ -28,7 +28,7 @@ import { NavbarService } from '../../../core/services/navbar.service';
 import { PluginUiRegistryService } from '../../../core/plugin-ui/plugin-ui-registry.service';
 import { evaluateWhen, type WhenContext } from '../../../core/plugin-ui/when-evaluator';
 import { hasProviderId } from '../../../core/utils/media-identity';
-import type { UiContribution } from '@fliks/plugin-contract/ui';
+import type { UiContribution } from '@fliks/plugin-ui';
 import { CORE_MEDIA_ACTIONS, sectionOf } from '../media-info-header/core-media-actions';
 import { resolveMenuContributions } from '../../../core/plugin-ui/resolve-menu-contributions';
 import { resolveMediaAction, type MediaActionHandlers } from '../../../core/plugin-ui/media-action-registry';

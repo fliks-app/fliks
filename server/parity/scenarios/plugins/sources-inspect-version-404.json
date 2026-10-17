@@ -1,0 +1,84 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..id"
+  ],
+  "name": "plugins-sources-inspect-version-404",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "publicKey": "Gb9ECWmEzf6FQbrBZ9w7lshQhqowtrbLDFw4rXAxZuE=",
+        "url": "https://catalog.example.invalid/catalog.json"
+      },
+      "expect": {
+        "body": {
+          "enabled": true,
+          "hasPinnedKey": true,
+          "lastRefreshError": null,
+          "lastRefreshedAt": null,
+          "pluginCount": 0,
+          "url": "https://catalog.example.invalid/catalog.json"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/plugins/sources"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "pluginId": "fliks.none",
+        "version": "1.0.0"
+      },
+      "expect": {
+        "body": {
+          "code": "PLUGIN_CATALOG_VERSION_NOT_FOUND",
+          "message": "\"fliks.none@1.0.0\" is not an installable version on source #2"
+        },
+        "status": 404
+      },
+      "method": "POST",
+      "path": "/api/plugins/sources/2/inspect"
+    },
+    {
+      "as": "admin",
+      "body": {},
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "pluginId should not be empty",
+            "pluginId must be a string",
+            "version should not be empty",
+            "version must be a string"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/plugins/sources/2/inspect"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "pluginId": "a",
+        "version": "1"
+      },
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Plugin source #999 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "POST",
+      "path": "/api/plugins/sources/999/inspect"
+    }
+  ]
+}

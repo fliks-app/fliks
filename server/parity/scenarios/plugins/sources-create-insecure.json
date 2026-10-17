@@ -1,0 +1,23 @@
+{
+  "deviation": null,
+  "name": "plugins-sources-create-insecure",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "publicKey": "Gb9ECWmEzf6FQbrBZ9w7lshQhqowtrbLDFw4rXAxZuE=",
+        "url": "http://catalog.example.invalid/c.json"
+      },
+      "expect": {
+        "body": {
+          "code": "PLUGIN_SOURCE_INSECURE_URL",
+          "message": "source url \"http://catalog.example.invalid/c.json\" must be https"
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/plugins/sources"
+    }
+  ]
+}

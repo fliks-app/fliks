@@ -1,0 +1,138 @@
+{
+  "deviation": null,
+  "name": "plugins-unknown-plugin-404",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "code": "PLUGIN_NOT_FOUND",
+          "message": "plugin \"fliks.none\" is not installed"
+        },
+        "status": 404
+      },
+      "method": "POST",
+      "path": "/api/plugins/fliks.none/enable"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "code": "PLUGIN_NOT_FOUND",
+          "message": "plugin \"fliks.none\" is not installed"
+        },
+        "status": 404
+      },
+      "method": "POST",
+      "path": "/api/plugins/fliks.none/disable"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "code": "PLUGIN_NOT_FOUND",
+          "message": "plugin \"fliks.none\" is not installed"
+        },
+        "status": 404
+      },
+      "method": "POST",
+      "path": "/api/plugins/fliks.none/restart"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "status": 204
+      },
+      "method": "DELETE",
+      "path": "/api/plugins/fliks.none"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "message": "Not Found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "GET",
+      "path": "/api/plugins/fliks.none/logo"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "code": "PLUGIN_NOT_FOUND",
+          "message": "plugin \"fliks.none\" is not installed"
+        },
+        "status": 404
+      },
+      "method": "GET",
+      "path": "/api/plugins/fliks.none/export"
+    },
+    {
+      "as": "admin",
+      "body": {},
+      "expect": {
+        "body": {
+          "code": "PLUGIN_EXPORT_MALFORMED",
+          "message": "not a recognisable plugin export document"
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/plugins/fliks.none/import"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "code": "PLUGIN_NOT_FOUND",
+          "message": "plugin \"fliks.none\" is not installed"
+        },
+        "status": 404
+      },
+      "method": "POST",
+      "path": "/api/plugins/fliks.none/events/test"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "GET",
+      "path": "/api/plugins/fliks.none/anything"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "POST",
+      "path": "/api/plugins/fliks.none/enable"
+    },
+    {
+      "as": "anon",
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "GET",
+      "path": "/api/plugins/fliks.none/logo"
+    }
+  ]
+}

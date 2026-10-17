@@ -1,5 +1,4 @@
 //! The job bodies of `scheduler.md` rules 22-31: loops, progress events, activity rows and logs.
-use super::names;
 use crate::{
     events::{Hub, Num, SseEvent, Subject},
     ingest::rescan::rescan_files,
@@ -34,17 +33,8 @@ pub async fn run(st: &AppState, name: &str) -> Outcome {
         "LiveTvSourceRefresh" => crate::livetv::jobs::refresh_sources(st).await,
         "LiveTvGuideRefresh" => crate::livetv::jobs::refresh_guides(st).await,
         "LiveTvGuidePrune" => crate::livetv::jobs::prune_guide(st).await,
-        _ if names::BRIDGED.contains(&name) || !names::is_core(name) => bridged(st, name).await,
+        "RefreshPluginSources" => crate::plugins::sources::refresh_and_update(st).await,
         _ => Err(format!("unknown job {name}")),
-    }
-}
-
-/// Registry jobs and the core bodies Nest still holds (rules 18, 30, 31).
-async fn bridged(st: &AppState, name: &str) -> Outcome {
-    match st.bridge.run_job(name).await {
-        Ok((s, _)) if s.as_u16() == 204 => Ok(()),
-        Ok((s, m)) => Err(m.unwrap_or_else(|| format!("jobs/run answered {s}"))),
-        Err(e) => Err(e.to_string()),
     }
 }
 

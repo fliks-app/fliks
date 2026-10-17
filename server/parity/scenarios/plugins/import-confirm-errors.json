@@ -1,0 +1,79 @@
+{
+  "deviation": null,
+  "name": "plugins-import-confirm-errors",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "stagingId": "00000000-0000-4000-8000-000000000000"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "stagingId must match /^[0-9a-f]{32}$/ regular expression"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/plugins/import/confirm"
+    },
+    {
+      "as": "admin",
+      "body": {},
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "stagingId must match /^[0-9a-f]{32}$/ regular expression",
+            "sha256 must match /^[0-9a-f]{64}$/ regular expression"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/plugins/import/confirm"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "sha256": "y",
+        "stagingId": "x",
+        "z": 1
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "property z should not exist",
+            "stagingId must match /^[0-9a-f]{32}$/ regular expression",
+            "sha256 must match /^[0-9a-f]{64}$/ regular expression"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/plugins/import/confirm"
+    },
+    {
+      "as": "user",
+      "body": {},
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "POST",
+      "path": "/api/plugins/import/confirm"
+    }
+  ]
+}

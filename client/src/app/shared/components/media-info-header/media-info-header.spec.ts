@@ -18,7 +18,7 @@ import { TrackManagerService } from '../../../core/services/track-manager.servic
 import { PlayableMediaService } from '../../../core/services/playable-media.service';
 import { StreamingApiService } from '../../../core/services/api/streaming-api.service';
 import { PluginUiRegistryService } from '../../../core/plugin-ui/plugin-ui-registry.service';
-import type { SlotId, UiContribution } from '@fliks/plugin-contract/ui';
+import type { SlotId, UiContribution } from '@fliks/plugin-ui';
 
 /**
  * Permission-matrix + characterisation test for the `media.actions` kebab

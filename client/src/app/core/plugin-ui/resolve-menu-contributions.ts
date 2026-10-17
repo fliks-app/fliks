@@ -1,4 +1,4 @@
-import type { UiContribution } from '@fliks/plugin-contract/ui';
+import type { UiContribution } from '@fliks/plugin-ui';
 import { evaluateWhen, type WhenContext } from './when-evaluator';
 
 /** One contribution that survived gating, with its action already resolved. */

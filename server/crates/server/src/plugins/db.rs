@@ -1,0 +1,864 @@
+//! Per-plugin Postgres (`plugins.md` rule 35, SQL section): own role (C119), own schema,
+//! text-format params, the deadline cancel and the `unavailable` code.
+use super::runtime::{DbError, Param, RowSet, Value};
+use bytes::BytesMut;
+use chrono::DateTime;
+use sqlx::{PgPool, Postgres, Transaction};
+
+type Tx = Transaction<'static, Postgres>;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
+use tokio::sync::{OwnedSemaphorePermit, Semaphore};
+use tokio_postgres::types::{Format, FromSql, IsNull, ToSql, Type, to_sql_checked};
+use tokio_postgres::{Client, NoTls};
+
+pub const QUERY_DEADLINE: Duration = Duration::from_secs(60);
+pub const MIGRATE_DEADLINE: Duration = Duration::from_secs(600);
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(2);
+const IDLE_CLOSE: Duration = Duration::from_secs(600);
+pub const UNAVAILABLE: &str = "unavailable";
+
+/// Where plugin roles log in: the core database, as another role.
+#[derive(Clone, Debug)]
+pub struct PgTarget {
+    pub host: String,
+    pub port: u16,
+    pub dbname: String,
+}
+
+/// `plugin_` + the id with `.` as `_` (ids never contain `_`, so it is injective).
+pub fn schema(plugin_id: &str) -> String {
+    format!("plugin_{}", plugin_id.replace('.', "_"))
+}
+
+/// C119: `fp_<database oid as 8 hex>_<suffix>`, at most 63 bytes.
+pub fn role(oid: &str, plugin_id: &str) -> String {
+    format!("fp_{oid}_{}", plugin_id.replace('.', "_"))
+}
+
+/// This database's OID as the 8 lowercase hex digits of role names.
+pub async fn database_oid(core: &PgPool) -> sqlx::Result<String> {
+    sqlx::query_scalar(
+        "SELECT lpad(to_hex(oid::bigint), 8, '0') FROM pg_database WHERE datname = current_database()",
+    )
+    .fetch_one(core)
+    .await
+}
+
+fn quote(ident: &str) -> String {
+    format!("\"{}\"", ident.replace('"', "\"\""))
+}
+
+fn legal_core_ref(name: &str) -> bool {
+    name.len() <= 63
+        && name.starts_with(|c: char| c.is_ascii_lowercase() || c == '_')
+        && name
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
+}
+
+async fn role_exists(tx: &mut Tx, r: &str) -> sqlx::Result<bool> {
+    sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = $1)")
+        .bind(r)
+        .fetch_one(&mut **tx)
+        .await
+}
+
+/// `DROP ROLE` in a savepoint: a role another database still uses stays (`2BP01`).
+async fn drop_role_tolerant(tx: &mut Tx, r: &str) -> sqlx::Result<()> {
+    sqlx::Executor::execute(&mut **tx, sqlx::raw_sql("SAVEPOINT fp_drop")).await?;
+    match sqlx::Executor::execute(&mut **tx, sqlx::raw_sql(&format!("DROP ROLE {}", quote(r))))
+        .await
+    {
+        Ok(_) => sqlx::Executor::execute(&mut **tx, sqlx::raw_sql("RELEASE SAVEPOINT fp_drop"))
+            .await
+            .map(drop),
+        Err(sqlx::Error::Database(e)) if e.code().as_deref() == Some("2BP01") => {
+            sqlx::Executor::execute(&mut **tx, sqlx::raw_sql("ROLLBACK TO SAVEPOINT fp_drop"))
+                .await
+                .map(drop)
+        }
+        Err(e) => Err(e),
+    }
+}
+
+/// Moves what `former` owns here to `to` and drops it unless another database uses it.
+async fn adopt(tx: &mut Tx, former: &str, to: &str) -> sqlx::Result<()> {
+    let (f, t) = (quote(former), quote(to));
+    sqlx::Executor::execute(
+        &mut **tx,
+        sqlx::raw_sql(&format!("REASSIGN OWNED BY {f} TO {t}; DROP OWNED BY {f}")),
+    )
+    .await?;
+    drop_role_tolerant(tx, former).await
+}
+
+#[derive(Debug)]
+pub struct ProvisionError {
+    pub message: String,
+    /// Postgres could not be reached (C109).
+    pub unavailable: bool,
+}
+
+impl ProvisionError {
+    fn new(message: String) -> Self {
+        Self {
+            message,
+            unavailable: false,
+        }
+    }
+}
+
+impl From<sqlx::Error> for ProvisionError {
+    fn from(e: sqlx::Error) -> Self {
+        let unavailable = matches!(
+            e,
+            sqlx::Error::Io(_) | sqlx::Error::PoolTimedOut | sqlx::Error::PoolClosed
+        );
+        let message = match &e {
+            sqlx::Error::Database(d) => d.message().to_owned(),
+            other => other.to_string(),
+        };
+        Self {
+            message,
+            unavailable,
+        }
+    }
+}
+
+async fn public_create_open(tx: &mut Tx) -> sqlx::Result<bool> {
+    sqlx::query_scalar("SELECT has_schema_privilege('public', 'public', 'CREATE')")
+        .fetch_one(&mut **tx)
+        .await
+}
+
+/// Rule 19 (3) and the SQL section: role, adoption, schema, ownership, grants; one transaction.
+/// Returns the freshly rotated password.
+pub async fn provision(
+    core: &PgPool,
+    plugin_id: &str,
+    core_refs: &[String],
+) -> Result<String, ProvisionError> {
+    let mut seen = std::collections::BTreeSet::new();
+    for r in core_refs {
+        if !legal_core_ref(r) {
+            return Err(ProvisionError::new(format!(
+                "coreRef {} is not a legal table name",
+                serde_json::Value::String(r.clone())
+            )));
+        }
+        if !seen.insert(r.clone()) {
+            return Err(ProvisionError::new(format!(
+                "coreRef {} is declared more than once",
+                serde_json::Value::String(r.clone())
+            )));
+        }
+    }
+    let oid = database_oid(core).await?;
+    let (schema, role) = (schema(plugin_id), role(&oid, plugin_id));
+    let suffix = plugin_id.replace('.', "_");
+    let (qs, qr) = (quote(&schema), quote(&role));
+    let mut tx = core.begin().await?;
+    for t in core_refs {
+        let kind: Option<String> = sqlx::query_scalar(
+            "SELECT t.table_type::text FROM information_schema.columns c
+               JOIN information_schema.tables t ON t.table_schema = c.table_schema AND t.table_name = c.table_name
+              WHERE c.table_schema = 'public' AND c.table_name = $1 AND c.column_name = 'id'",
+        )
+        .bind(t)
+        .fetch_optional(&mut *tx)
+        .await?;
+        if kind.as_deref() != Some("BASE TABLE") {
+            return Err(ProvisionError::new(format!(
+                "coreRef {} is not a public base table with an id column",
+                serde_json::Value::String(t.clone())
+            )));
+        }
+    }
+    if public_create_open(&mut tx).await? {
+        sqlx::Executor::execute(
+            &mut *tx,
+            sqlx::raw_sql("REVOKE CREATE ON SCHEMA public FROM PUBLIC"),
+        )
+        .await?;
+        // A REVOKE by a non-owner only warns, so the outcome is read back.
+        if public_create_open(&mut tx).await? {
+            return Err(ProvisionError::new(
+                "PUBLIC holds CREATE on schema public (the default before Postgres 15) and this role \
+                 may not revoke it: run REVOKE CREATE ON SCHEMA public FROM PUBLIC as its owner"
+                    .into(),
+            ));
+        }
+    }
+    let password = crate::config::random_hex(24);
+    let exists = role_exists(&mut tx, &role).await?;
+    if !exists {
+        sqlx::Executor::execute(
+            &mut *tx,
+            sqlx::raw_sql(&format!("CREATE ROLE {qr} LOGIN PASSWORD '{password}'")),
+        )
+        .await?;
+    }
+    let mut former = vec![];
+    let legacy = format!("plugin_{suffix}");
+    let exists = role_exists(&mut tx, &legacy).await?;
+    if exists {
+        former.push(legacy);
+    }
+    let owner: Option<String> = sqlx::query_scalar(
+        "SELECT pg_get_userbyid(nspowner)::text FROM pg_namespace WHERE nspname = $1",
+    )
+    .bind(&schema)
+    .fetch_optional(&mut *tx)
+    .await?;
+    if let Some(o) = &owner
+        && o != &role
+        && o.strip_prefix("fp_")
+            .and_then(|r| r.split_once('_'))
+            .is_some_and(|(hex, rest)| {
+                hex.len() == 8 && hex.bytes().all(|b| b.is_ascii_hexdigit()) && rest == suffix
+            })
+        && !former.contains(o)
+    {
+        former.push(o.clone());
+    }
+    for f in former.clone() {
+        adopt(&mut tx, &f, &role).await?;
+    }
+    sqlx::Executor::execute(
+        &mut *tx,
+        sqlx::raw_sql(&format!(
+            "CREATE SCHEMA IF NOT EXISTS {qs} AUTHORIZATION {qr}"
+        )),
+    )
+    .await?;
+    let (owner, me): (String, String) = sqlx::query_as(
+        "SELECT pg_get_userbyid(nspowner)::text, current_user::text FROM pg_namespace WHERE nspname = $1",
+    )
+    .bind(&schema)
+    .fetch_one(&mut *tx)
+    .await?;
+    if owner == me {
+        sqlx::Executor::execute(
+            &mut *tx,
+            sqlx::raw_sql(&format!("ALTER SCHEMA {qs} OWNER TO {qr}")),
+        )
+        .await?;
+    } else if owner != role {
+        return Err(ProvisionError::new(format!(
+            "schema \"{schema}\" already exists, owned by \"{owner}\""
+        )));
+    }
+    let rels: Vec<String> = sqlx::query_scalar(
+        "SELECT c.relname::text FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+          WHERE n.nspname = $1 AND c.relkind IN ('r', 'p', 'v', 'm', 'S', 'f')
+            AND pg_get_userbyid(c.relowner) = current_user
+          ORDER BY c.relkind = 'S', c.relname",
+    )
+    .bind(&schema)
+    .fetch_all(&mut *tx)
+    .await?;
+    for r in rels {
+        sqlx::Executor::execute(
+            &mut *tx,
+            sqlx::raw_sql(&format!("ALTER TABLE {qs}.{} OWNER TO {qr}", quote(&r))),
+        )
+        .await?;
+    }
+    // Core joins the role so export and import can `SET LOCAL ROLE` to it (rule 54).
+    let mut sql = format!(
+        "ALTER ROLE {qr} LOGIN PASSWORD '{password}';
+         GRANT USAGE ON SCHEMA public TO {qr};
+         REVOKE REFERENCES ON ALL TABLES IN SCHEMA public FROM {qr};
+         GRANT {qr} TO CURRENT_USER;"
+    );
+    for t in core_refs {
+        sql.push_str(&format!(
+            "GRANT REFERENCES (id) ON public.{} TO {qr};",
+            quote(t)
+        ));
+    }
+    sqlx::Executor::execute(&mut *tx, sqlx::raw_sql(&sql)).await?;
+    tx.commit().await?;
+    Ok(password)
+}
+
+/// Uninstall (rule 20): our role, a never-adopted Node-era role, the schema; tolerant of none.
+pub async fn deprovision(core: &PgPool, plugin_id: &str) -> sqlx::Result<()> {
+    let oid = database_oid(core).await?;
+    let mut tx = core.begin().await?;
+    for r in [
+        role(&oid, plugin_id),
+        format!("plugin_{}", plugin_id.replace('.', "_")),
+    ] {
+        let exists = role_exists(&mut tx, &r).await?;
+        if exists {
+            sqlx::Executor::execute(
+                &mut *tx,
+                sqlx::raw_sql(&format!("DROP OWNED BY {}", quote(&r))),
+            )
+            .await?;
+        }
+    }
+    sqlx::Executor::execute(
+        &mut *tx,
+        sqlx::raw_sql(&format!(
+            "DROP SCHEMA IF EXISTS {} CASCADE",
+            quote(&schema(plugin_id))
+        )),
+    )
+    .await?;
+    for r in [
+        role(&oid, plugin_id),
+        format!("plugin_{}", plugin_id.replace('.', "_")),
+    ] {
+        let exists = role_exists(&mut tx, &r).await?;
+        if exists {
+            drop_role_tolerant(&mut tx, &r).await?;
+        }
+    }
+    tx.commit().await
+}
+
+/// After a restore (rule 44): every role the dump named that is not one of this database's.
+pub async fn drop_foreign_roles(core: &PgPool, roles: &[String]) -> sqlx::Result<()> {
+    let ours = format!("fp_{}_", database_oid(core).await?);
+    let mut tx = core.begin().await?;
+    let foreign: Vec<String> = roles
+        .iter()
+        .filter(|r| !r.starts_with(&ours))
+        .cloned()
+        .collect();
+    for r in foreign {
+        let exists = role_exists(&mut tx, &r).await?;
+        if exists {
+            sqlx::Executor::execute(
+                &mut *tx,
+                sqlx::raw_sql(&format!("DROP OWNED BY {}", quote(&r))),
+            )
+            .await?;
+            drop_role_tolerant(&mut tx, &r).await?;
+        }
+    }
+    tx.commit().await
+}
+
+/// The advisory of rule 35: foreign keys into `public` without `ON DELETE CASCADE/SET NULL`.
+pub async fn unsafe_core_fks(
+    core: &PgPool,
+    plugin_id: &str,
+) -> sqlx::Result<Vec<(String, String, String)>> {
+    sqlx::query_as(
+        "SELECT con.conname::text, cl.relname::text, fcl.relname::text
+           FROM pg_constraint con
+           JOIN pg_class cl ON cl.oid = con.conrelid
+           JOIN pg_namespace ns ON ns.oid = cl.relnamespace
+           JOIN pg_class fcl ON fcl.oid = con.confrelid
+           JOIN pg_namespace fns ON fns.oid = fcl.relnamespace
+          WHERE con.contype = 'f' AND ns.nspname = $1 AND fns.nspname = 'public'
+            AND con.confdeltype NOT IN ('c', 'n')
+          ORDER BY con.conname",
+    )
+    .bind(schema(plugin_id))
+    .fetch_all(core)
+    .await
+}
+
+pub struct PluginDb {
+    cfg: tokio_postgres::Config,
+    core: PgPool,
+    idle: Mutex<Vec<(Client, Instant)>>,
+    sem: Arc<Semaphore>,
+    migrating: tokio::sync::Mutex<()>,
+    lock_key: i64,
+    deadline: Duration,
+}
+
+fn err(code: &str, message: impl Into<String>) -> DbError {
+    DbError {
+        code: code.into(),
+        message: message.into(),
+    }
+}
+
+fn pg_err(e: tokio_postgres::Error) -> DbError {
+    match e.as_db_error() {
+        Some(d) => err(d.code().code(), d.message()),
+        None => err(UNAVAILABLE, e.to_string()),
+    }
+}
+
+impl PluginDb {
+    pub fn new(
+        target: &PgTarget,
+        core: PgPool,
+        role: &str,
+        schema: &str,
+        password: &str,
+        cap: usize,
+        deadline: Duration,
+    ) -> Arc<Self> {
+        let mut cfg = tokio_postgres::Config::new();
+        cfg.host(&target.host)
+            .port(target.port)
+            .dbname(&target.dbname)
+            .user(role)
+            .password(password)
+            .options(format!(
+                "-c search_path={schema} -c statement_timeout={}",
+                (deadline + Duration::from_secs(1)).as_millis()
+            ))
+            .connect_timeout(CONNECT_TIMEOUT);
+        let lock_key = schema
+            .bytes()
+            .fold(0x5138_i64, |h, b| h.wrapping_mul(31).wrapping_add(b as i64));
+        Arc::new(PluginDb {
+            cfg,
+            core,
+            idle: Mutex::new(Vec::new()),
+            sem: Arc::new(Semaphore::new(cap)),
+            migrating: tokio::sync::Mutex::new(()),
+            lock_key,
+            deadline,
+        })
+    }
+
+    async fn lease(self: &Arc<Self>) -> Result<Lease, DbError> {
+        let permit = tokio::time::timeout(CONNECT_TIMEOUT, self.sem.clone().acquire_owned())
+            .await
+            .map_err(|_| err(UNAVAILABLE, "connection pool wait exceeded"))?
+            .expect("never closed");
+        let pooled = {
+            let mut idle = self.idle.lock().unwrap();
+            idle.retain(|(c, at)| !c.is_closed() && at.elapsed() < IDLE_CLOSE);
+            idle.pop()
+        };
+        let client = match pooled {
+            Some((c, _)) => c,
+            None => {
+                let (client, conn) = tokio::time::timeout(CONNECT_TIMEOUT, self.cfg.connect(NoTls))
+                    .await
+                    .map_err(|_| err(UNAVAILABLE, "connect timed out"))?
+                    .map_err(|e| match e.as_db_error() {
+                        Some(d) => err(d.code().code(), d.message()),
+                        None => err(UNAVAILABLE, e.to_string()),
+                    })?;
+                tokio::spawn(conn);
+                client
+            }
+        };
+        Ok(Lease {
+            client: Some(client),
+            db: self.clone(),
+            _permit: permit,
+            busy: false,
+        })
+    }
+
+    pub async fn query(self: &Arc<Self>, sql: &str, params: &[Param]) -> Result<RowSet, DbError> {
+        match self.call(sql, params, true).await? {
+            Out::Rows(cols, rows) => decode(cols, rows),
+            Out::Count(_) => unreachable!("asked for rows"),
+        }
+    }
+
+    pub async fn execute(self: &Arc<Self>, sql: &str, params: &[Param]) -> Result<u64, DbError> {
+        match self.call(sql, params, false).await? {
+            Out::Count(n) => Ok(n),
+            Out::Rows(..) => unreachable!("asked for a count"),
+        }
+    }
+
+    /// At the deadline: cancel server-side, then 57014, or `unavailable` when the database is gone.
+    async fn call(
+        self: &Arc<Self>,
+        sql: &str,
+        params: &[Param],
+        rows: bool,
+    ) -> Result<Out, DbError> {
+        let mut lease = self.lease().await?;
+        let params = text_params(params);
+        lease.busy = true;
+        let out = match tokio::time::timeout(self.deadline, run(lease.client(), sql, &params, rows))
+            .await
+        {
+            Ok(r) => r,
+            Err(_) => {
+                let _ = lease.client().cancel_token().cancel_query(NoTls).await;
+                lease.busy = false;
+                Err(self.cut().await)
+            }
+        };
+        lease.settle(out).await
+    }
+
+    /// The code of a call cut by a deadline: a core probe tells a dead database from a slow query.
+    pub async fn cut(&self) -> DbError {
+        let probe =
+            tokio::time::timeout(CONNECT_TIMEOUT, sqlx::query("SELECT 1").execute(&self.core))
+                .await;
+        if matches!(probe, Ok(Ok(_))) {
+            err("57014", "canceling statement due to statement timeout")
+        } else {
+            err(UNAVAILABLE, "database unreachable")
+        }
+    }
+
+    /// Applies the unrecorded entries in order, each script in its own transaction with its row.
+    pub async fn migrate(
+        self: &Arc<Self>,
+        migrations: &[(String, String)],
+    ) -> Result<Vec<String>, DbError> {
+        let _one = self.migrating.lock().await;
+        let mut lease = self.lease().await?;
+        lease.busy = true;
+        let key = self.lock_key;
+        let work = async {
+            let c = lease.client.as_mut().expect("leased");
+            let mut applied = Vec::new();
+            for (name, up) in migrations {
+                let tx = c.transaction().await.map_err(pg_err)?;
+                tx.batch_execute(&format!(
+                    "SET LOCAL statement_timeout = {}; SELECT pg_advisory_xact_lock({key});
+                     CREATE TABLE IF NOT EXISTS \"_migrations\" (
+                       \"name\" text PRIMARY KEY,
+                       \"appliedAt\" timestamptz NOT NULL DEFAULT now())",
+                    MIGRATE_DEADLINE.as_millis()
+                ))
+                .await
+                .map_err(pg_err)?;
+                let done = tx
+                    .query_opt("SELECT 1 FROM \"_migrations\" WHERE \"name\" = $1", &[name])
+                    .await
+                    .map_err(pg_err)?;
+                if done.is_some() {
+                    continue;
+                }
+                tx.batch_execute(up).await.map_err(|e| {
+                    let e = pg_err(e);
+                    err(&e.code, format!("migration {name}: {}", e.message))
+                })?;
+                tx.execute(
+                    "INSERT INTO \"_migrations\" (\"name\") VALUES ($1)",
+                    &[name],
+                )
+                .await
+                .map_err(pg_err)?;
+                tx.commit().await.map_err(pg_err)?;
+                applied.push(name.clone());
+            }
+            Ok(applied)
+        };
+        let out = match tokio::time::timeout(MIGRATE_DEADLINE, work).await {
+            Ok(r) => r,
+            Err(_) => Err(self.cut().await),
+        };
+        lease.settle(out).await
+    }
+}
+
+enum Out {
+    Rows(Vec<String>, Vec<tokio_postgres::Row>),
+    Count(u64),
+}
+
+async fn run(c: &Client, sql: &str, params: &[TextParam], rows: bool) -> Result<Out, DbError> {
+    let refs: Vec<&(dyn ToSql + Sync)> = params.iter().map(|p| p as _).collect();
+    let stmt = c.prepare(sql).await.map_err(pg_err)?;
+    if stmt.params().len() != refs.len() {
+        return Err(err(
+            "ERR_VALIDATION",
+            format!("expected {} params", stmt.params().len()),
+        ));
+    }
+    if rows {
+        let cols = stmt.columns().iter().map(|c| c.name().to_owned()).collect();
+        c.query(&stmt, &refs)
+            .await
+            .map(|r| Out::Rows(cols, r))
+            .map_err(pg_err)
+    } else {
+        c.execute(&stmt, &refs)
+            .await
+            .map(Out::Count)
+            .map_err(pg_err)
+    }
+}
+
+/// A leased connection; dropping it (also mid-call) cancels and resets it before reuse.
+struct Lease {
+    client: Option<Client>,
+    db: Arc<PluginDb>,
+    _permit: OwnedSemaphorePermit,
+    busy: bool,
+}
+
+impl Lease {
+    fn client(&self) -> &Client {
+        self.client.as_ref().expect("leased")
+    }
+    async fn settle<T>(mut self, r: Result<T, DbError>) -> Result<T, DbError> {
+        self.busy = false;
+        let c = self.client.take().expect("leased");
+        if c.batch_execute("DISCARD ALL").await.is_ok() {
+            self.db.idle.lock().unwrap().push((c, Instant::now()));
+        }
+        r
+    }
+}
+
+impl Drop for Lease {
+    fn drop(&mut self) {
+        let Some(c) = self.client.take() else { return };
+        let db = self.db.clone();
+        let busy = self.busy;
+        tokio::spawn(async move {
+            if busy {
+                let _ = c.cancel_token().cancel_query(NoTls).await;
+            }
+            if c.batch_execute("DISCARD ALL").await.is_ok() {
+                db.idle.lock().unwrap().push((c, Instant::now()));
+            }
+        });
+    }
+}
+
+/// Every parameter goes as text with an inferred type, as node-pg sent them.
+#[derive(Debug)]
+struct TextParam(Option<String>);
+
+impl ToSql for TextParam {
+    fn to_sql(
+        &self,
+        _: &Type,
+        out: &mut BytesMut,
+    ) -> Result<IsNull, Box<dyn std::error::Error + Sync + Send>> {
+        match &self.0 {
+            None => Ok(IsNull::Yes),
+            Some(s) => {
+                out.extend_from_slice(s.as_bytes());
+                Ok(IsNull::No)
+            }
+        }
+    }
+    fn accepts(_: &Type) -> bool {
+        true
+    }
+    fn encode_format(&self, _: &Type) -> Format {
+        Format::Text
+    }
+    to_sql_checked!();
+}
+
+fn float_text(f: f64) -> String {
+    if f.is_nan() {
+        "NaN".into()
+    } else if f.is_infinite() {
+        if f > 0.0 {
+            "Infinity".into()
+        } else {
+            "-Infinity".into()
+        }
+    } else {
+        f.to_string()
+    }
+}
+
+fn array_text<T: AsRef<str>>(items: impl Iterator<Item = T>) -> String {
+    let body: Vec<String> = items
+        .map(|s| {
+            format!(
+                "\"{}\"",
+                s.as_ref().replace('\\', "\\\\").replace('"', "\\\"")
+            )
+        })
+        .collect();
+    format!("{{{}}}", body.join(","))
+}
+
+fn text_params(params: &[Param]) -> Vec<TextParam> {
+    params
+        .iter()
+        .map(|p| {
+            TextParam(match p {
+                Param::Null => None,
+                Param::Boolean(b) => Some(b.to_string()),
+                Param::Int(i) => Some(i.to_string()),
+                Param::Float(f) => Some(float_text(*f)),
+                Param::Text(t) | Param::Json(t) => Some(t.clone()),
+                Param::Bytes(b) => Some(format!(
+                    "\\x{}",
+                    b.iter().map(|x| format!("{x:02x}")).collect::<String>()
+                )),
+                Param::TextList(l) => Some(array_text(l.iter())),
+                Param::IntList(l) => Some(array_text(l.iter().map(|i| i.to_string()))),
+            })
+        })
+        .collect()
+}
+
+struct Raw<'a>(Option<&'a [u8]>);
+
+impl<'a> FromSql<'a> for Raw<'a> {
+    fn from_sql(_: &Type, raw: &'a [u8]) -> Result<Self, Box<dyn std::error::Error + Sync + Send>> {
+        Ok(Raw(Some(raw)))
+    }
+    fn from_sql_null(_: &Type) -> Result<Self, Box<dyn std::error::Error + Sync + Send>> {
+        Ok(Raw(None))
+    }
+    fn accepts(_: &Type) -> bool {
+        true
+    }
+}
+
+fn decode(columns: Vec<String>, rows: Vec<tokio_postgres::Row>) -> Result<RowSet, DbError> {
+    let mut out = Vec::with_capacity(rows.len());
+    for row in &rows {
+        let mut vals = Vec::with_capacity(columns.len());
+        for (i, col) in row.columns().iter().enumerate() {
+            let Raw(raw) = row.get::<_, Raw>(i);
+            vals.push(match raw {
+                None => Value::Null,
+                Some(_) if col.type_().name() == "void" => Value::Null,
+                Some(b) => value(col.type_(), b).ok_or_else(|| {
+                    err(
+                        "ERR",
+                        format!(
+                            "column \"{}\" has unsupported type {}",
+                            col.name(),
+                            col.type_().name()
+                        ),
+                    )
+                })?,
+            });
+        }
+        out.push(vals);
+    }
+    Ok(RowSet { columns, rows: out })
+}
+
+const PG_EPOCH_SECS: i64 = 946_684_800;
+
+fn be<const N: usize>(b: &[u8]) -> Option<[u8; N]> {
+    b.get(..N)?.try_into().ok()
+}
+
+pub(crate) fn value(ty: &Type, b: &[u8]) -> Option<Value> {
+    let text = || {
+        std::str::from_utf8(b)
+            .ok()
+            .map(|s| Value::Text(s.to_owned()))
+    };
+    Some(match ty.name() {
+        "int2" => Value::Int(i16::from_be_bytes(be(b)?) as i64),
+        "int4" => Value::Int(i32::from_be_bytes(be(b)?) as i64),
+        "int8" => Value::Int(i64::from_be_bytes(be(b)?)),
+        "float4" => Value::Float(f32::from_be_bytes(be(b)?) as f64),
+        "float8" => Value::Float(f64::from_be_bytes(be(b)?)),
+        "bool" => Value::Boolean(*b.first()? != 0),
+        "text" | "varchar" | "bpchar" | "name" | "citext" => text()?,
+        "void" => Value::Null,
+        "uuid" => {
+            let h: String = b.iter().map(|x| format!("{x:02x}")).collect();
+            Value::Text(format!(
+                "{}-{}-{}-{}-{}",
+                &h[..8],
+                &h[8..12],
+                &h[12..16],
+                &h[16..20],
+                &h[20..32]
+            ))
+        }
+        "numeric" => Value::Text(numeric(b)?),
+        "date" => {
+            let days = i32::from_be_bytes(be(b)?);
+            Value::Text(match days {
+                i32::MAX => "infinity".into(),
+                i32::MIN => "-infinity".into(),
+                d => DateTime::from_timestamp(PG_EPOCH_SECS + d as i64 * 86_400, 0)?
+                    .format("%Y-%m-%d")
+                    .to_string(),
+            })
+        }
+        "timestamptz" | "timestamp" => {
+            let us = i64::from_be_bytes(be(b)?);
+            Value::Text(match us {
+                i64::MAX => "infinity".into(),
+                i64::MIN => "-infinity".into(),
+                us => DateTime::from_timestamp_micros(us + PG_EPOCH_SECS * 1_000_000)?
+                    .format("%Y-%m-%dT%H:%M:%S%.3fZ")
+                    .to_string(),
+            })
+        }
+        "json" => Value::Json(std::str::from_utf8(b).ok()?.to_owned()),
+        "jsonb" => Value::Json(std::str::from_utf8(b.get(1..)?).ok()?.to_owned()),
+        "bytea" => Value::Bytes(b.to_vec()),
+        _ => return None,
+    })
+}
+
+/// Binary `numeric` (base-10000 digits) to its canonical text.
+fn numeric(b: &[u8]) -> Option<String> {
+    let n = u16::from_be_bytes(be(b)?) as usize;
+    let weight = i16::from_be_bytes(be(b.get(2..)?)?) as i64;
+    let sign = u16::from_be_bytes(be(b.get(4..)?)?);
+    let dscale = u16::from_be_bytes(be(b.get(6..)?)?) as usize;
+    match sign {
+        0xC000 => return Some("NaN".into()),
+        0xD000 => return Some("Infinity".into()),
+        0xF000 => return Some("-Infinity".into()),
+        _ => {}
+    }
+    let digits: Vec<i64> = (0..n)
+        .map(|i| be(b.get(8 + 2 * i..)?).map(|d| i16::from_be_bytes(d) as i64))
+        .collect::<Option<_>>()?;
+    let at = |i: i64| {
+        if i < 0 {
+            0
+        } else {
+            digits.get(i as usize).copied().unwrap_or(0)
+        }
+    };
+    let mut s = String::new();
+    if sign == 0x4000 {
+        s.push('-');
+    }
+    if weight < 0 {
+        s.push('0');
+    } else {
+        for i in 0..=weight {
+            if i == 0 {
+                s += &at(i).to_string()
+            } else {
+                s += &format!("{:04}", at(i))
+            }
+        }
+    }
+    if dscale > 0 {
+        let mut frac = String::new();
+        let mut k = 1;
+        while frac.len() < dscale {
+            frac += &format!("{:04}", at(weight + k));
+            k += 1;
+        }
+        frac.truncate(dscale);
+        s.push('.');
+        s += &frac;
+    }
+    Some(s)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn names() {
+        assert_eq!(schema("fliks.download"), "plugin_fliks_download");
+        assert_eq!(
+            role("0000a1b2", "fliks.download"),
+            "fp_0000a1b2_fliks_download"
+        );
+        assert_eq!(role("ffffffff", &"a".repeat(51)).len(), 63);
+    }
+}

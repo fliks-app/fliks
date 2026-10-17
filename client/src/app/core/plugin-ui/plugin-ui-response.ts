@@ -1,4 +1,4 @@
-import type { ConfigPage, ReleasePickerRoutes, UiContribution } from '@fliks/plugin-contract/ui';
+import type { ConfigPage, ReleasePickerRoutes, UiContribution } from '@fliks/plugin-ui';
 
 /**
  * `GET /api/plugins/ui` response entry, one per plugin whose contributions

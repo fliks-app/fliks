@@ -7,7 +7,7 @@ import { AuthService } from '../services/auth.service';
 import { TvService } from '../services/tv.service';
 import { DeviceService } from '../services/device.service';
 import { PluginUiRegistryService } from '../plugin-ui/plugin-ui-registry.service';
-import type { UiContribution, WhenPredicate } from '@fliks/plugin-contract/ui';
+import type { UiContribution, WhenPredicate } from '@fliks/plugin-ui';
 
 const routeState = (url: string) => ({ url }) as never;
 

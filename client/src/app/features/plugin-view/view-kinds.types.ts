@@ -1,4 +1,4 @@
-import type { ConfigPage, FormConfigPage, ProvidersConfigPage, TableConfigPage } from '@fliks/plugin-contract/ui';
+import type { ConfigPage, FormConfigPage, ProvidersConfigPage, TableConfigPage } from '@fliks/plugin-ui';
 
 /** The contract discriminates `ConfigPage` on `kind`; these narrow it for the renderer switch. */
 export type AnyConfigPage = ConfigPage;

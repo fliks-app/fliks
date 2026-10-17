@@ -1,0 +1,147 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..id"
+  ],
+  "name": "plugins-sources-crud",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "enabled": true,
+            "hasPinnedKey": false,
+            "lastRefreshError": null,
+            "lastRefreshedAt": null,
+            "pluginCount": 0,
+            "url": "https://fliks-app.github.io/fliks-plugin-catalog/catalog.json"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/plugins/sources"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "publicKey": "Gb9ECWmEzf6FQbrBZ9w7lshQhqowtrbLDFw4rXAxZuE=",
+        "url": "https://catalog.example.invalid/catalog.json"
+      },
+      "expect": {
+        "body": {
+          "enabled": true,
+          "hasPinnedKey": true,
+          "lastRefreshError": null,
+          "lastRefreshedAt": null,
+          "pluginCount": 0,
+          "url": "https://catalog.example.invalid/catalog.json"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/plugins/sources"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "enabled": true,
+            "hasPinnedKey": false,
+            "lastRefreshError": null,
+            "lastRefreshedAt": null,
+            "pluginCount": 0,
+            "url": "https://fliks-app.github.io/fliks-plugin-catalog/catalog.json"
+          },
+          {
+            "enabled": true,
+            "hasPinnedKey": true,
+            "lastRefreshError": null,
+            "lastRefreshedAt": null,
+            "pluginCount": 0,
+            "url": "https://catalog.example.invalid/catalog.json"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/plugins/sources"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "enabled": false
+      },
+      "expect": {
+        "body": {
+          "enabled": false,
+          "hasPinnedKey": true,
+          "lastRefreshError": null,
+          "lastRefreshedAt": null,
+          "pluginCount": 0,
+          "url": "https://catalog.example.invalid/catalog.json"
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/plugins/sources/2"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "cachedCatalog": null,
+          "lastRefreshError": null,
+          "lastRefreshedAt": null
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/plugins/sources/2/catalog"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "status": 204
+      },
+      "method": "DELETE",
+      "path": "/api/plugins/sources/2"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "enabled": true,
+            "hasPinnedKey": false,
+            "lastRefreshError": null,
+            "lastRefreshedAt": null,
+            "pluginCount": 0,
+            "url": "https://fliks-app.github.io/fliks-plugin-catalog/catalog.json"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/plugins/sources"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Not Found",
+          "message": "Plugin source #2 not found",
+          "statusCode": 404
+        },
+        "status": 404
+      },
+      "method": "DELETE",
+      "path": "/api/plugins/sources/2"
+    }
+  ]
+}

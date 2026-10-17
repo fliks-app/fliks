@@ -1,0 +1,254 @@
+package fliks:plugin@2.0.0;
+
+interface types {
+  type json = string;
+
+  variant principal { delegated(u32), system }
+
+  record manifest-check { id: string, version: string, plugin-api: u32 }
+  record health-report { ok: bool, detail: option<string> }
+
+  record http-request {
+    method: string,
+    path: string,
+    query: list<tuple<string, string>>,
+    body: list<u8>,
+    principal: principal,
+  }
+  record http-response { status: u16, headers: list<tuple<string, string>>, body: list<u8> }
+
+  record host-error { code: string, message: string }
+
+  enum media-kind { movie, series }
+  enum want-decision { missing, upgrade, skip }
+  record want {
+    decision: want-decision,
+    allowed-quality-ids: list<u32>,
+    allowed-language-ids: list<u32>,
+    min-resolution: u32,
+    resolution-upgrade-only: bool,
+  }
+  record season-ref { id: u32, number: u32, episode-count: u32 }
+  record episode-ref {
+    id: u32,
+    number: u32,
+    end-number: option<u32>,
+    air-date: option<string>,
+    title: option<string>,
+  }
+  record acquisition-target {
+    media-id: u32,
+    kind: media-kind,
+    title: string,
+    original-title: option<string>,
+    alternative-titles: list<string>,
+    year: option<u32>,
+    runtime-minutes: option<u32>,
+    imdb-id: option<string>,
+    tmdb-id: option<u32>,
+    tvdb-id: option<u32>,
+    library-id: u32,
+    want: option<want>,
+    expected-titles: list<string>,
+    search-title: string,
+    season: option<season-ref>,
+    episode: option<episode-ref>,
+  }
+
+  record span { first: u32, last: u32 }
+  record release-coverage { seasons: option<span>, episodes: option<span>, complete-series: bool }
+  variant param-value { number(f64), text(string) }
+  record rejection { code: string, params: list<tuple<string, param-value>> }
+  record scored-release {
+    id: string,
+    quality-id: u32,
+    quality-name: string,
+    rank: s32,
+    allowed: bool,
+    custom-format-score: s32,
+    blocklisted: bool,
+    language-id: option<u32>,
+    language-name: option<string>,
+    language-allowed: bool,
+    is-full-season: bool,
+    coverage: option<release-coverage>,
+    size-deviation: option<f64>,
+    video-codec: option<string>,
+    rejections: list<rejection>,
+  }
+
+  record release-title { id: string, title: string, publish-date: string }
+  enum match-decision { grab, skip }
+  enum skip-reason { on-disk, not-monitored, unmatched, too-fresh, not-available, unprofiled }
+  record release-match {
+    id: string,
+    media-id: option<u32>,
+    season-number: option<u32>,
+    episode-number: option<u32>,
+    is-full-season: bool,
+    coverage: option<release-coverage>,
+    decision: match-decision,
+    skip-reason: option<skip-reason>,
+  }
+  record candidate-release {
+    id: string,
+    title: string,
+    size: u64,
+    seeders: u32,
+    leechers: u32,
+    publish-date: string,
+    %flags: option<list<string>>,
+    freeleech: option<bool>,
+    download-volume-factor: option<f64>,
+    source-ref: string,
+    min-seeders: option<u32>,
+    unknown-language-iso-code: option<string>,
+    blocked: bool,
+  }
+  record candidates-query {
+    kind: option<media-kind>,
+    media-ids: option<list<u32>>,
+    available-on: string,
+    limit: u32,
+    cursor: option<string>,
+  }
+  record candidates-page { items: list<acquisition-target>, cursor: option<string> }
+  record resolve-query { media-ids: list<u32>, season-ids: list<u32>, episode-ids: list<u32> }
+  record resolved-media {
+    title: string,
+    kind: media-kind,
+    library-id: u32,
+    season-number: option<u32>,
+    episode-number: option<u32>,
+    episode-title: option<string>,
+  }
+
+  enum transfer-mode { copy, move }
+  record ingest-request {
+    idempotency-key: string,
+    media-id: u32,
+    paths: list<string>,
+    transfer: transfer-mode,
+    fallback-quality: option<string>,
+    source-label: string,
+  }
+  record imported-file { media-file-id: u32, relative-path: string, quality: string }
+  record ingest-result {
+    imported: list<imported-file>,
+    already-present: list<string>,
+    season-number: option<u32>,
+    episode-number: option<u32>,
+  }
+
+  variant acquisition-event {
+    grabbed(grabbed),
+    imported(imported),
+    failed(failed),
+    queue-changed,
+    stalled-removed(stalled-removed),
+  }
+  record grabbed { media-id: u32, season-number: option<u32>, episode-number: option<u32> }
+  record imported {
+    media-id: u32,
+    season-number: option<u32>,
+    episode-number: option<u32>,
+    quality: string,
+    source-title: string,
+  }
+  record failed { media-id: u32, title: string, reason: string }
+  record stalled-removed { media-id: option<u32>, title: string }
+
+  variant audience { everyone, media(u32), user(u32) }
+  enum download-state { queued, active, stalled, paused, importing }
+  record download-progress {
+    ref: string,
+    season-number: option<u32>,
+    episode-number: option<u32>,
+    progress: f64,
+    bytes-per-second: option<f64>,
+    eta-seconds: option<f64>,
+    state: download-state,
+  }
+}
+
+interface host {
+  use types.{
+    acquisition-target, candidates-query, candidates-page, release-title, release-match,
+    candidate-release, scored-release, resolve-query, resolved-media, ingest-request,
+    ingest-result, acquisition-event, audience, download-progress, host-error, json,
+  };
+
+  media-acquisition-context: func(media-id: u32, season-id: option<u32>, episode-id: option<u32>)
+    -> result<option<acquisition-target>, host-error>;
+  acquisition-candidates: func(query: candidates-query) -> result<candidates-page, host-error>;
+  releases-match: func(titles: list<release-title>, min-age-minutes: option<u32>)
+    -> result<list<release-match>, host-error>;
+  releases-score: func(
+    media-id: u32, season-number: option<u32>, episode-number: option<u32>,
+    releases: list<candidate-release>,
+  ) -> result<list<scored-release>, host-error>;
+  media-resolve: func(query: resolve-query) -> result<list<tuple<string, resolved-media>>, host-error>;
+  media-exists: func(media-ids: list<u32>) -> result<list<u32>, host-error>;
+
+  requests-mark-in-progress: func(idempotency-key: string, media-id: u32, season-number: option<u32>)
+    -> result<_, host-error>;
+  library-ingest: func(request: ingest-request) -> result<ingest-result, host-error>;
+
+  events-publish: func(events: list<acquisition-event>) -> result<_, host-error>;
+  notifications-dispatch-grab-started: func(payload: json) -> result<_, host-error>;
+  counts-set: func(key: string, value: u64) -> result<_, host-error>;
+  events-emit-own: func(event-type: string, payload: json, audience: audience) -> result<_, host-error>;
+  progress-set: func(media-id: u32, downloads: list<download-progress>) -> result<_, host-error>;
+
+  deadline-remaining-ms: func() -> u64;
+
+  schedule-call: func(key: string, delay-ms: u64, payload: json) -> result<_, host-error>;
+  cancel-call: func(key: string) -> result<bool, host-error>;
+
+  config-get: func(keys: option<list<string>>) -> result<list<tuple<string, string>>, host-error>;
+  config-set: func(key: string, value: option<string>) -> result<_, host-error>;
+}
+
+interface db {
+  variant param {
+    null, boolean(bool), int(s64), float(f64), text(string), bytes(list<u8>), json(string),
+    text-list(list<string>), int-list(list<s64>),
+  }
+  variant value { null, boolean(bool), int(s64), float(f64), text(string), bytes(list<u8>), json(string) }
+  record row-set { columns: list<string>, rows: list<list<value>> }
+  record migration { name: string, up: string }
+  record db-error { code: string, message: string }
+
+  query: func(sql: string, params: list<param>) -> result<row-set, db-error>;
+  execute: func(sql: string, params: list<param>) -> result<u64, db-error>;
+  migrate: func(migrations: list<migration>) -> result<list<string>, db-error>;
+}
+
+interface log {
+  enum level { debug, info, warn, error }
+  log: func(level: level, message: string);
+}
+
+interface guest {
+  use types.{manifest-check, health-report, http-request, http-response, json};
+
+  hello: func(core-version: string, config: list<tuple<string, string>>) -> result<manifest-check, string>;
+  health: func() -> health-report;
+  start: func() -> result<_, string>;
+  job: func(name: string, job-id: string, args: option<json>) -> result<_, string>;
+  scheduled: func(key: string, payload: json, attempt: u32) -> result<_, string>;
+  http: func(request: http-request) -> result<http-response, string>;
+  event: func(name: string, payload: json);
+  config-changed: func(keys: list<string>);
+  shutdown: func();
+}
+
+world plugin {
+  include wasi:cli/imports@0.2.12;
+  import wasi:http/types@0.2.12;
+  import wasi:http/outgoing-handler@0.2.12;
+  import host;
+  import db;
+  import log;
+  export guest;
+}

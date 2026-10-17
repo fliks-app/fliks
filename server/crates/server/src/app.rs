@@ -133,6 +133,10 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         media::recent,
         media::count,
         media::count_by_library,
+        media::sidebar_counts,
+        crate::settings::checklist::list,
+        crate::settings::checklist::dismiss,
+        crate::settings::checklist::undismiss,
         media::quality_table,
         media::genre_list,
         media::collection_list,
@@ -313,6 +317,7 @@ pub fn openapi() -> utoipa::openapi::OpenApi {
     doc.merge(media_servers::Doc::openapi());
     doc.merge(markers::Doc::openapi());
     doc.merge(subtitles::Doc::openapi());
+    doc.merge(crate::plugins::routes::Doc::openapi());
     doc
 }
 
@@ -336,16 +341,18 @@ pub fn router(
         .route("/internal/{*rest}", any(internal_404))
         .fallback_service(static_files::router(client_dir, cast_dir));
     // Preflights of owned paths stay with the Rust CORS layer, so they answer while Nest is down.
-    let cors = layers::apply(Router::new(), cors_origin.clone(), BODY_LIMIT_BYTES);
+    let exempt = crate::plugins::routes::reads_own_body;
+    let cors = layers::apply(Router::new(), cors_origin.clone(), BODY_LIMIT_BYTES, exempt);
     let unowned = forwarder
         .clone()
         .layer(from_fn_with_state(cors, preflight_here));
     // Merged after the layers so Nest answers the methods Rust does not own, unlayered instead of a 405.
-    let local = layers::apply(local, cors_origin, BODY_LIMIT_BYTES);
+    let local = layers::apply(local, cors_origin, BODY_LIMIT_BYTES, exempt);
     let local = openapi()
         .paths
         .paths
         .keys()
+        .filter(|p| !crate::plugins::routes::PROXY_FALLBACK.contains(&p.as_str()))
         .fold(local, |r, p| r.route(p, any_service(unowned.clone())));
     ["/api", "/api/", "/api/{*rest}"]
         .into_iter()
@@ -384,6 +391,7 @@ fn api() -> Router<AppState> {
         .merge(requests::router())
         .merge(subtitles::router())
         .merge(livetv::router())
+        .merge(crate::plugins::routes::router())
 }
 
 async fn preflight_here(State(cors): State<Router>, req: Request, next: Next) -> Response {

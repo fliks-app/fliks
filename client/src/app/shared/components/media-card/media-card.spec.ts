@@ -15,7 +15,7 @@ import { DeviceService } from '../../../core/services/device.service';
 import { PlayableMediaService } from '../../../core/services/playable-media.service';
 import { NavbarService } from '../../../core/services/navbar.service';
 import { PluginUiRegistryService } from '../../../core/plugin-ui/plugin-ui-registry.service';
-import type { SlotId, UiContribution } from '@fliks/plugin-contract/ui';
+import type { SlotId, UiContribution } from '@fliks/plugin-ui';
 import { clearPosterStamps, stampPoster } from '../../utils/view-transition';
 
 /**

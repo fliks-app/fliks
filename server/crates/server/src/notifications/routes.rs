@@ -1,6 +1,6 @@
 use super::{
     db::{self, Connection, Write},
-    send::{dispatch, send},
+    send::send,
 };
 use crate::{
     http::{
@@ -12,13 +12,12 @@ use crate::{
 };
 use axum::{
     Json,
-    body::Bytes,
     extract::{FromRequest, Request, State},
-    http::{HeaderMap, StatusCode},
+    http::StatusCode,
 };
 use fliks_domain::{
     acl::{Action, Subject},
-    notifications::{self as dom, EVENTS},
+    notifications::{self as dom},
 };
 use serde_json::{Map, Value, json};
 
@@ -170,41 +169,4 @@ pub async fn test(
         Err(message) => json!({"ok": false, "message": message}),
     };
     Ok((StatusCode::CREATED, Json(out)))
-}
-
-/// Nest's `NotificationsService.dispatch`: 204 once every sender settled; the event must be in the
-/// vocabulary (C17).
-pub async fn internal_dispatch(
-    State(st): State<AppState>,
-    headers: HeaderMap,
-    raw: Bytes,
-) -> Res<StatusCode> {
-    st.bridge.check(&headers)?;
-    let body: Value =
-        serde_json::from_slice(&raw).map_err(|e| AppError::bad_request(e.to_string()))?;
-    let obj = body.as_object().cloned().unwrap_or_default();
-    let mut msgs: Vec<String> = obj
-        .keys()
-        .filter(|k| !["event", "payload"].contains(&k.as_str()))
-        .map(|k| format!("property {k} should not exist"))
-        .collect();
-    let event = obj
-        .get("event")
-        .and_then(Value::as_str)
-        .filter(|e| dom::is_event(e));
-    if event.is_none() {
-        msgs.push(format!(
-            "event must be one of the following values: {}",
-            EVENTS.join(", ")
-        ));
-    }
-    let payload = obj.get("payload").and_then(Value::as_object);
-    if payload.is_none() {
-        msgs.push("payload must be an object".into());
-    }
-    invalid(msgs)?;
-    if let (Some(event), Some(payload)) = (event, payload) {
-        dispatch(&st.db, event, payload).await?;
-    }
-    Ok(StatusCode::NO_CONTENT)
 }

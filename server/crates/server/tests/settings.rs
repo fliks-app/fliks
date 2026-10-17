@@ -378,3 +378,145 @@ async fn every_put_notifies_nest_even_when_a_secret_keeps_its_value(pool: PgPool
         .collect();
     assert_eq!(keys, vec![json!(["seerr_api_key"]); 3]);
 }
+
+/// `setup-checklist.md`: the seven items in order, dismissal stored compact, unknown keys 400.
+#[sqlx::test(migrations = false)]
+async fn setup_checklist_items_and_dismissal(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    let (s, items) = call(
+        &c.app,
+        "GET",
+        "/api/setup-checklist",
+        Some(&c.admin),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(s, 200);
+    let keys: Vec<&str> = items
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|i| i["key"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        keys,
+        [
+            "library",
+            "quality-profile",
+            "language-profile",
+            "subtitle-provider",
+            "notification",
+            "non-admin-user",
+            "auto-approval-rule"
+        ]
+    );
+    assert_eq!(
+        items[5],
+        json!({"key": "non-admin-user", "severity": "recommended", "done": true, "dismissed": false,
+        "route": ["/admin", "settings", "users"]})
+    );
+    assert_eq!(
+        call(
+            &c.app,
+            "GET",
+            "/api/setup-checklist",
+            Some(&c.plain),
+            Value::Null
+        )
+        .await
+        .0,
+        403
+    );
+    assert_eq!(
+        call(
+            &c.app,
+            "POST",
+            "/api/setup-checklist/nope/dismiss",
+            Some(&c.admin),
+            Value::Null
+        )
+        .await,
+        (
+            400,
+            json!({"message": "Unknown checklist key: nope", "error": "Bad Request", "statusCode": 400})
+        )
+    );
+    for key in ["notification", "library", "notification"] {
+        assert_eq!(
+            call(
+                &c.app,
+                "POST",
+                &format!("/api/setup-checklist/{key}/dismiss"),
+                Some(&c.admin),
+                Value::Null
+            )
+            .await,
+            (201, json!({"ok": true}))
+        );
+    }
+    assert_eq!(
+        stored(&pool, "setup_checklist_dismissed_keys").await,
+        Some(Some(r#"["notification","library"]"#.into()))
+    );
+    assert_eq!(
+        call(
+            &c.app,
+            "DELETE",
+            "/api/setup-checklist/notification/dismiss",
+            Some(&c.admin),
+            Value::Null
+        )
+        .await,
+        (200, json!({"ok": true}))
+    );
+    sqlx::query(r#"UPDATE app_settings SET value = '["library", 3, "gone"]' WHERE key = 'setup_checklist_dismissed_keys'"#).execute(&pool).await.unwrap();
+    let (_, items) = call(
+        &c.app,
+        "GET",
+        "/api/setup-checklist",
+        Some(&c.admin),
+        Value::Null,
+    )
+    .await;
+    let dismissed: Vec<bool> = items
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|i| i["dismissed"] == true)
+        .collect();
+    assert_eq!(dismissed, [true, false, false, false, false, false, false]);
+}
+
+/// `counts.md`: the three counters, each scoped by its own ability.
+#[sqlx::test(migrations = false)]
+async fn sidebar_counts(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    sqlx::raw_sql(
+        r#"INSERT INTO libraries (id, name, "mediaTypes", path) VALUES (1, 'M', '["movie"]', '/nonexistent/m');
+           INSERT INTO media (title, type, "tmdbId", "libraryId", "folderName") VALUES ('A', 'movie', 1, 1, 'a'), ('B', 'movie', 2, 1, 'b');
+           INSERT INTO requests ("userId", "mediaType", "tmdbId", title, status)
+             SELECT id, 'movie', 9, 'R', 'pending' FROM users WHERE username = 'admin';"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        call(&c.app, "GET", "/api/counts", Some(&c.admin), Value::Null).await,
+        (
+            200,
+            json!({"badgeCounts": {}, "pendingRequests": 1, "mediaByLibrary": {"1": 2}})
+        )
+    );
+    assert_eq!(
+        call(&c.app, "GET", "/api/counts", Some(&c.plain), Value::Null)
+            .await
+            .1["pendingRequests"],
+        0
+    );
+    assert_eq!(
+        call(&c.app, "GET", "/api/counts", None, Value::Null)
+            .await
+            .0,
+        401
+    );
+}

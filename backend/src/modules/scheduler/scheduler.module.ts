@@ -7,9 +7,7 @@ import { Media } from '../media/entities/media.entity';
 import { MediaFile } from '../media/entities/media-file.entity';
 import { Episode } from '../media/entities/episode.entity';
 import { LogBufferModule } from './log-buffer.module';
-import { NotificationsModule } from '../notifications/notifications.module';
 import { AuthModule } from '../auth/auth.module';
-import { JobsBridgeController } from './jobs-bridge.controller';
 import { LibrariesModule } from '../libraries/libraries.module';
 import { SettingsModule } from '../settings/settings.module';
 import { StreamingModule } from '../streaming/streaming.module';
@@ -19,8 +17,6 @@ import { SubtitleProvider } from '../subtitles/entities/subtitle-provider.entity
 import { SubtitleProviderStat } from '../subtitles/entities/subtitle-provider-stat.entity';
 import { TranslationProvider } from '../subtitles/entities/translation-provider.entity';
 import { Library } from '../libraries/entities/library.entity';
-import { PluginsModule } from '../plugins/plugins.module';
-import { ScheduledJobRegistryModule } from './scheduled-job-registry.module';
 
 @Module({
   imports: [
@@ -39,17 +35,12 @@ import { ScheduledJobRegistryModule } from './scheduled-job-registry.module';
       TranslationProvider,
       Library,
     ]),
-    NotificationsModule,
     AuthModule,
     LibrariesModule,
     SettingsModule,
     StreamingModule,
     LogBufferModule,
-    // Imported directly so the jobs bridge can reach the plugin job and catalog services.
-    PluginsModule,
-    ScheduledJobRegistryModule,
   ],
-  controllers: [JobsBridgeController],
   exports: [LogBufferModule],
 })
 export class FliksSchedulerModule {}

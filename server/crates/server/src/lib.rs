@@ -22,12 +22,14 @@ pub mod media;
 pub mod media_servers;
 pub mod metadata;
 pub mod nest;
+pub mod net;
 pub mod notifications;
 pub mod outbound;
 pub mod paths;
 pub mod persons;
 pub mod playback;
 pub mod playlists;
+pub mod plugins;
 pub mod presence;
 pub mod profiles;
 pub mod qoe;
@@ -45,14 +47,14 @@ pub mod vetted;
 
 use config::Config;
 use fliks_engine::{gateway::Upstream, supervise};
-use sqlx::{PgPool, postgres::PgPoolOptions};
+use sqlx::{Connection, PgConnection, PgPool, postgres::PgPoolOptions};
 use state::AppState;
 use std::{net::SocketAddr, time::Duration};
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
 /// Nest's TypeORM pool size (`bootstrap.md` rule 14).
-const POOL_MAX: u32 = 30;
+pub(crate) const POOL_MAX: u32 = 30;
 
 async fn connect(cfg: &Config) -> Result<PgPool, sqlx::Error> {
     PgPoolOptions::new()
@@ -69,6 +71,14 @@ pub async fn migrate(cfg: &Config) -> Result<(), BoxError> {
 }
 
 pub async fn serve(cfg: Config) -> Result<(), BoxError> {
+    // One direct attempt: the pool would retry a refused connection for its whole acquire timeout.
+    let probe =
+        tokio::time::timeout(Duration::from_secs(10), PgConnection::connect_with(&cfg.db)).await;
+    match probe {
+        Ok(Ok(c)) => c.close().await?,
+        Ok(Err(e)) => return Err(format!("cannot reach the database: {e}").into()),
+        Err(_) => return Err("cannot reach the database: no answer within 10 s".into()),
+    }
     let pool = connect(&cfg).await?;
     db::migrate(&pool).await?;
     jobs::sweep(&pool).await?;
@@ -83,6 +93,8 @@ pub async fn serve(cfg: Config) -> Result<(), BoxError> {
     let upstream = Upstream::parse(&nest::url(&cfg))?;
     let db = pool.clone();
     let state = AppState::new(pool, cfg, &secret);
+    // The plugin host keeps the state for the process lifetime (a cycle only `serve` may create).
+    state.plugins.attach(&state);
     presence::spawn(
         state.presence.clone(),
         state.engine.clone(),
@@ -111,6 +123,8 @@ pub async fn serve(cfg: Config) -> Result<(), BoxError> {
     auth::spawn_jobs(db);
     jobs::spawn(&state);
     subtitles::scheduler::spawn_tick(&state);
+    state.plugins.spawn(&state);
+    state.plugins.boot().await;
     tracing::info!("listening on {}", listener.local_addr()?);
     let served = axum::serve(
         listener,
@@ -122,6 +136,7 @@ pub async fn serve(cfg: Config) -> Result<(), BoxError> {
     })
     .await;
     qoe.flush_all().await;
+    state.plugins.shutdown().await;
     if let Some(nest) = nest {
         let _ = nest.await;
     }

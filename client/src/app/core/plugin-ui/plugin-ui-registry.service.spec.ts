@@ -4,7 +4,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { PluginUiRegistryService } from './plugin-ui-registry.service';
 import type { PluginUiEntry } from './plugin-ui-response';
-import type { UiContribution } from '@fliks/plugin-contract/ui';
+import type { UiContribution } from '@fliks/plugin-ui';
 
 const contribution = (id: string, weight: number, overrides: Partial<UiContribution> = {}): UiContribution => ({
   id,

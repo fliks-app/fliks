@@ -13,7 +13,7 @@ import { TvSelectDirective } from '../../../shared/directives/tv-select.directiv
 import { firstValueFrom } from 'rxjs';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import { SECRETS_SET_KEY } from '@fliks/plugin-contract/ui';
+import { SECRETS_SET_KEY } from '@fliks/plugin-ui';
 import { SECRET_MASK } from '../../../shared/components/schema-form/schema-form';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { SettingsApiService } from '../../../core/services/api/settings-api.service';

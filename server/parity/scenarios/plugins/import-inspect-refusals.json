@@ -1,0 +1,65 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..detail"
+  ],
+  "name": "plugins-import-inspect-refusals",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "installable": false,
+          "refusalCode": "PLUGIN_BAD_MAGIC"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "multipart": {
+        "content": "not a zip",
+        "contentType": "application/zip",
+        "field": "file",
+        "filename": "p.zip"
+      },
+      "path": "/api/plugins/import/inspect"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "installable": false,
+          "refusalCode": "PLUGIN_MALFORMED_ARCHIVE"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "multipart": {
+        "content": "PK\u0003\u0004truncated",
+        "contentType": "application/zip",
+        "field": "file",
+        "filename": "p.zip"
+      },
+      "path": "/api/plugins/import/inspect"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "Unexpected field - other",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "multipart": {
+        "content": "x",
+        "contentType": "application/zip",
+        "field": "other",
+        "filename": "p.zip"
+      },
+      "path": "/api/plugins/import/inspect"
+    }
+  ]
+}

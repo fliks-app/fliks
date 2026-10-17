@@ -1,0 +1,19 @@
+{
+  "deviation": null,
+  "name": "plugins-list-requires-auth",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "anon",
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "GET",
+      "path": "/api/plugins"
+    }
+  ]
+}

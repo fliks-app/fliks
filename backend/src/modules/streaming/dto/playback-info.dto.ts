@@ -1,4 +1,9 @@
-import type { PreRollItem } from '../../../common/plugin-contract';
+/** A pre-roll candidate: a library file, resolved and ACL-checked like the main item. */
+interface PreRollItem {
+  mediaFileId: number;
+  labelKey?: string;
+  skippable?: boolean;
+}
 import type { components } from '../../engine/schema';
 import type { EdlRange } from '../../media/edl/edl-parser';
 

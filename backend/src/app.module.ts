@@ -7,14 +7,9 @@ import { RequestsModule } from './modules/requests/requests.module';
 import { FliksSchedulerModule } from './modules/scheduler/scheduler.module';
 import { EventsModule } from './modules/scheduler/events.module';
 import { LibrariesModule } from './modules/libraries/libraries.module';
-import { NotificationsModule } from './modules/notifications/notifications.module';
 import { SettingsModule } from './modules/settings/settings.module';
 import { StreamingModule } from './modules/streaming/streaming.module';
 import { PlaybackModule } from './modules/playback/playback.module';
-import { SetupChecklistModule } from './modules/setup-checklist/setup-checklist.module';
-import { CountsModule } from './modules/counts/counts.module';
-import { PluginsModule } from './modules/plugins/plugins.module';
-import { PluginHostModule } from './modules/plugins/host/plugin-host.module';
 import { EngineModule } from './modules/engine/engine.module';
 import { BridgeModule } from './modules/bridge/bridge.module';
 
@@ -47,16 +42,11 @@ import { BridgeModule } from './modules/bridge/bridge.module';
     RequestsModule,
     FliksSchedulerModule,
     LibrariesModule,
-    NotificationsModule,
     SettingsModule,
     StreamingModule,
     PlaybackModule,
-    SetupChecklistModule,
-    CountsModule,
-    PluginsModule,
     // @Global(): registered once here so PluginProcessService (in PluginsModule) can
     // inject PluginHostBindingService without an import edge back into this module.
-    PluginHostModule,
   ],
 })
 export class AppModule {}

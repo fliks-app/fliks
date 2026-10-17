@@ -28,7 +28,7 @@ serde.workspace = true
 serde_json.workspace = true
 tower-http = { version = "0.6", features = ["cors", "fs", "trace"] }
 tracing = "0.1"
-tokio = { version = "1", features = ["fs", "io-util", "macros", "process", "rt-multi-thread", "signal", "sync", "time"] }
+tokio = { version = "1", features = ["fs", "io-util", "macros", "net", "process", "rt-multi-thread", "signal", "sync", "time"] }
 futures-util = { version = "0.3", default-features = false }
 sqlx = { version = "0.8", features = ["postgres", "runtime-tokio", "macros", "json", "chrono", "migrate"] }
 fliks-engine-core = { git = "https://github.com/fliks-app/engine", tag = "v0.4.1" }
@@ -51,11 +51,30 @@ bytes = "1"
 url = "2"
 chrono-tz = "0.10.4"
 regex.workspace = true
+wasmtime = { version = "=49.0.3", default-features = false, features = ["anyhow", "async", "component-model", "cranelift", "parallel-compilation", "runtime", "std", "wat"] }
+wasmtime-wasi = { version = "=49.0.3", default-features = false, features = ["p2"] }
+wasmtime-wasi-http = { version = "=49.0.3", default-features = false, features = ["p2"] }
+tokio-postgres = { version = "0.7", features = ["with-serde_json-1", "with-chrono-0_4"] }
+hyper = { version = "1", features = ["client", "http1"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
+http-body-util = "0.1"
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
+webpki-roots = "1"
+anyhow = "1"
+http = "1"
+http-body = "1"
+ed25519-dalek = "2"
+nodejs-semver = "7"
+unicode-normalization = "0.1"
 
 [dev-dependencies]
+# The integration tests reroute vetted addresses through `Net::route`.
+fliks-server = { path = ".", features = ["parity"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "multipart"] }
 tokio = { version = "1", features = ["time", "test-util"] }
 tokio-stream = "0.1"
+rcgen = "0.14"
+zip = { version = "9", default-features = false, features = ["deflate"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

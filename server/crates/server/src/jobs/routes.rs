@@ -1,7 +1,6 @@
 //! `/api/commands*` (`scheduler.md` rules 10-21).
 use super::{audit, cron, names, runner};
 use crate::{
-    bridge::BridgedJob,
     http::{
         AppError,
         auth::Authed,
@@ -51,18 +50,18 @@ pub async fn schedulers(
     a: Authed,
 ) -> Result<Json<Vec<SchedulerJob>>, AppError> {
     a.require(Action::Read, Subject::Settings)?;
-    let held = st.bridge.jobs().await.unwrap_or_default();
+    let held = held_jobs(&st).await;
     let core = names::CORE
         .iter()
         .chain(names::LIVETV.iter())
-        .map(|(n, c, l)| BridgedJob {
+        .map(|(n, c, l)| JobEntry {
             name: (*n).into(),
             cron: (*c).into(),
             triggerable: true,
             label_key: (*l).into(),
             plugin_id: None,
         });
-    let all: Vec<BridgedJob> = core.chain(held).collect();
+    let all: Vec<JobEntry> = core.chain(held).collect();
     let tracked: Vec<String> = all
         .iter()
         .filter(|j| j.plugin_id.is_none())
@@ -120,28 +119,30 @@ struct Dto {
 #[derive(PartialEq)]
 enum Kind {
     Rust,
-    Held,
     Plugin,
 }
 
+/// A schedulable job: a core one (`plugin_id` none) or a plugin-declared one.
+pub struct JobEntry {
+    pub name: String,
+    pub cron: String,
+    pub triggerable: bool,
+    pub label_key: String,
+    pub plugin_id: Option<String>,
+}
+
 /// Rule 15: where the name runs, or the 400 listing every valid one.
-fn classify(name: &str, held: &[BridgedJob]) -> Result<Kind, AppError> {
+fn classify(name: &str, held: &[JobEntry]) -> Result<Kind, AppError> {
     if names::is_core(name) {
         return Ok(Kind::Rust);
     }
     match held.iter().find(|j| j.name == name) {
         Some(j) if j.plugin_id.is_some() => Ok(Kind::Plugin),
-        Some(j) if j.triggerable => Ok(Kind::Held),
         _ => {
             let valid: Vec<&str> = names::CORE
                 .iter()
                 .chain(names::LIVETV.iter())
                 .map(|(n, ..)| *n)
-                .chain(
-                    held.iter()
-                        .filter(|j| j.plugin_id.is_none() && j.triggerable)
-                        .map(|j| j.name.as_str()),
-                )
                 .chain(names::TRIGGER_ONLY)
                 .collect();
             Err(AppError::bad_request(format!(
@@ -164,7 +165,7 @@ pub async fn trigger(
     let held = if names::is_core(&name) {
         vec![]
     } else {
-        st.bridge.jobs().await.unwrap_or_default()
+        held_jobs(&st).await
     };
     if classify(&name, &held)? == Kind::Plugin {
         return plugin_job(&st, &name).await;
@@ -178,23 +179,36 @@ pub async fn trigger(
     Ok((StatusCode::CREATED, Json(queued)).into_response())
 }
 
-/// Rule 18: a plugin job has no `commands` row; Nest answers at once.
+/// The declared plugin jobs.
+async fn held_jobs(st: &AppState) -> Vec<JobEntry> {
+    st.plugins
+        .registry
+        .jobs()
+        .into_iter()
+        .map(|(id, j)| JobEntry {
+            name: j.name,
+            cron: j.cron,
+            triggerable: j.triggerable,
+            label_key: j.label_key,
+            plugin_id: Some(id),
+        })
+        .collect()
+}
+
+/// Rule 18: a plugin job has no `commands` row; it starts detached.
 async fn plugin_job(st: &AppState, name: &str) -> Result<Response, AppError> {
-    let (status, message) = st
-        .bridge
-        .run_job(name)
-        .await
-        .map_err(|e| AppError::internal(e.to_string()))?;
-    match status.as_u16() {
-        202 => Ok((StatusCode::CREATED, Json(json!({"ok": true}))).into_response()),
-        409 => Err(AppError::conflict(format!(
+    use crate::plugins::jobs::{Trigger, trigger};
+    match trigger(st, name) {
+        Trigger::Started => Ok((StatusCode::CREATED, Json(json!({"ok": true}))).into_response()),
+        Trigger::AlreadyRunning => Err(AppError::conflict(format!(
             "Job \"{name}\" is already running"
         ))),
-        400 => {
-            let reason = message.unwrap_or_default().replace('-', " ");
-            Err(AppError::bad_request(format!("Job \"{name}\" is {reason}")))
-        }
-        s => Err(AppError::internal(format!("jobs/run answered {s}"))),
+        Trigger::Unknown => Err(AppError::bad_request(format!(
+            "Job \"{name}\" is unknown job"
+        ))),
+        Trigger::NotTriggerable => Err(AppError::bad_request(format!(
+            "Job \"{name}\" is not triggerable"
+        ))),
     }
 }
 
@@ -212,22 +226,14 @@ mod tests {
 
     #[test]
     fn unknown_names_list_the_valid_ones_in_order() {
-        let held = [BridgedJob {
-            name: "NestHeld".into(),
-            cron: "0 * * * *".into(),
-            triggerable: true,
-            label_key: "k".into(),
-            plugin_id: None,
-        }];
-        let Err(e) = classify("nope", &held) else {
+        let Err(e) = classify("nope", &[]) else {
             panic!()
         };
         let body = format!("{e:?}");
         assert!(body.contains(
-            "Unknown command: nope. Valid: Backup, RefreshMetadata, RefreshPluginSources, SubtitleSearch, SubtitleUpgrade, LiveTvSourceRefresh, LiveTvGuideRefresh, LiveTvGuidePrune, NestHeld, RescanAll, RefreshMissingMetadata"
+            "Unknown command: nope. Valid: Backup, RefreshMetadata, RefreshPluginSources, SubtitleSearch, SubtitleUpgrade, LiveTvSourceRefresh, LiveTvGuideRefresh, LiveTvGuidePrune, RescanAll, RefreshMissingMetadata"
         ));
         assert!(classify("Backup", &[]).unwrap() == Kind::Rust);
-        assert!(classify("NestHeld", &held).unwrap() == Kind::Held);
         assert!(classify("LiveTvGuidePrune", &[]).unwrap() == Kind::Rust);
         assert!(classify("backup", &[]).is_err());
         assert!(classify("IntroDetection", &[]).is_err());

@@ -50,13 +50,19 @@ pub fn next_after(cron: &Cron, tz: Tz, after: DateTime<Utc>) -> Option<DateTime<
 const RECHECK: Duration = Duration::from_secs(30);
 
 /// One timer: `fire` runs at every match of `expr` and must return at once. No catch-up of missed ticks.
-pub fn spawn<C, F>(expr: &'static str, tz: Tz, clock: C, mut fire: F) -> tokio::task::JoinHandle<()>
+pub fn spawn<C, F>(
+    expr: impl Into<String>,
+    tz: Tz,
+    clock: C,
+    mut fire: F,
+) -> tokio::task::JoinHandle<()>
 where
     C: Fn() -> DateTime<Utc> + Send + 'static,
     F: FnMut() + Send + 'static,
 {
+    let expr: String = expr.into();
     tokio::spawn(async move {
-        let Ok(cron) = parse(expr) else {
+        let Ok(cron) = parse(&expr) else {
             tracing::error!("invalid cron expression \"{expr}\"");
             return;
         };

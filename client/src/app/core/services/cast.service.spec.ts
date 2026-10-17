@@ -2,7 +2,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { TranslateService } from '@ngx-translate/core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { CastService } from './cast.service';
+import { CAST_BRIDGE, CastService } from './cast.service';
 import { CastSettingsService } from './cast-settings.service';
 import { ToastService } from './toast.service';
 
@@ -58,6 +58,13 @@ function make(session: unknown) {
   TestBed.configureTestingModule({
     providers: [
       provideZonelessChangeDetection(),
+      // Provided, not module-mocked: another spec may have loaded the service with the real plugin.
+      {
+        provide: CAST_BRIDGE,
+        useValue: {
+          plugin: { initialize: async () => ({ available: false }), getCastDevices: async () => ({ devices: [] }) },
+        },
+      },
       { provide: TranslateService, useValue: { instant: (k: string) => k } },
       { provide: ToastService, useValue: { error: vi.fn() } },
       {

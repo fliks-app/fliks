@@ -3,7 +3,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TranslateLoader, provideTranslateService } from '@ngx-translate/core';
 import { of } from 'rxjs';
 import { SchemaFormComponent } from './schema-form';
-import type { FieldDef, FormItem } from '@fliks/plugin-contract/ui';
+import type { FieldDef, FormItem } from '@fliks/plugin-ui';
 import { DeviceService } from '../../../core/services/device.service';
 import { TvService } from '../../../core/services/tv.service';
 import { DismissableStackService } from '../../../core/services/dismissable-stack.service';
