@@ -275,7 +275,7 @@ fn pick(entry: &Option<String>, source: &Option<String>) -> Option<String> {
         .cloned()
 }
 
-fn upstream(s: &HStream) -> LiveUpstream {
+fn upstream(s: &HStream, at_capacity: bool) -> LiveUpstream {
     let mut headers = BTreeMap::new();
     headers.insert(
         "User-Agent".to_owned(),
@@ -291,6 +291,7 @@ fn upstream(s: &HStream) -> LiveUpstream {
         probed_container: s.probed_container.clone(),
         probed_video_codec: s.probed_video_codec.clone(),
         probed_audio_codec: s.probed_audio_codec.clone(),
+        at_capacity,
     }
 }
 
@@ -322,27 +323,32 @@ pub async fn open(
     let grace =
         grace_of(crate::settings::setting_value(&st.db, "livetv_slot_release_seconds").await?);
     let token = super::playlist_file::uuid_v4();
-    let verdict: Option<AtCapacity> = {
+    let (verdict, vetoes): (Option<AtCapacity>, Vec<bool>) = {
         let mut g = st.livetv.live.lock();
-        let on_source = g
-            .holds
-            .values()
-            .filter(|h| h.source_id == primary.source.id)
-            .count();
-        let v = g.releases.verdict(
-            (
-                primary.source.id,
-                &primary.source.name,
-                Some(primary.source.max_streams),
-            ),
-            grace,
-            on_source,
-            Instant::now(),
-        );
+        let now = Instant::now();
+        let mut per_stream = Vec::with_capacity(streams.len());
+        for s in &streams {
+            let on_source = g
+                .holds
+                .values()
+                .filter(|h| h.source_id == s.source.id)
+                .count();
+            per_stream.push(g.releases.verdict(
+                (s.source.id, &s.source.name, Some(s.source.max_streams)),
+                grace,
+                on_source,
+                now,
+            ));
+        }
+        let vetoes: Vec<bool> = per_stream.iter().map(Option::is_some).collect();
+        let feeding = vetoes
+            .iter()
+            .position(|v| !v)
+            .map_or(primary, |i| &streams[i]);
         g.holds.insert(
             token.clone(),
             Hold {
-                source_id: primary.source.id,
+                source_id: feeding.source.id,
                 channel_id,
                 streams: streams.clone(),
                 fed: None,
@@ -350,11 +356,15 @@ pub async fn open(
                 mode: None,
             },
         );
-        v
+        (per_stream.into_iter().next().flatten(), vetoes)
     };
     let req = OpenLiveRequest {
         channel_id: channel_id.to_string(),
-        upstreams: streams.iter().map(upstream).collect(),
+        upstreams: streams
+            .iter()
+            .zip(vetoes)
+            .map(|(s, v)| upstream(s, v))
+            .collect(),
         caps: LiveCaps {
             direct_play: caps.direct_play,
             max_bitrate_bps: caps.max_bitrate_bps,
@@ -362,7 +372,7 @@ pub async fn open(
         },
         owner_id: Some(who.id.to_string()),
         capacity_token: token.clone(),
-        at_capacity: verdict.is_some(),
+        at_capacity: false,
         tags: BTreeMap::from([
             ("channelName".to_owned(), channel_name.to_owned()),
             ("username".to_owned(), who.username.clone()),

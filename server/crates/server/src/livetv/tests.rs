@@ -1312,9 +1312,43 @@ mod sessions {
             )
         );
         let sent = c.fake.seen("POST", "/v1/live");
-        assert_eq!(sent[1].body["atCapacity"], true);
+        assert_eq!(sent[1].body["atCapacity"], false);
+        assert_eq!(sent[1].body["upstreams"][0]["atCapacity"], true);
         let (_, holds) = session::peek(&c.st);
         assert_eq!(holds.len(), 1, "the refused open gave its hold back");
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn each_upstream_carries_its_own_sources_verdict(pool: PgPool) {
+        let w = world(pool).await;
+        let c = &w.c;
+        let free = source(c, "S2", "m3u", "http://h/y", 0).await;
+        let both = channel(&c.pool, "C", "Live", true).await;
+        stream(&c.pool, both, free, "http://h/c0.ts", 0).await;
+        stream(&c.pool, both, w.src1, "http://h/c1.ts", 1).await;
+        c.fake.script(
+            "POST",
+            "/v1/live",
+            vec![
+                ok(open_answer("sid-1", SELF, "remux")),
+                ok(open_answer("sid-2", SELF, "remux")),
+            ],
+        );
+        open(&w, w.a, "A").await.map_err(err_body).unwrap();
+        open(&w, both, "C").await.map_err(err_body).unwrap();
+        let sent = &c.fake.seen("POST", "/v1/live")[1].body;
+        assert_eq!(sent["atCapacity"], false);
+        let flags: Vec<_> = sent["upstreams"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|u| u["atCapacity"].as_bool().unwrap_or(false))
+            .collect();
+        assert_eq!(flags, [false, true]);
+        let (_, holds) = session::peek(&c.st);
+        let t = token_of(&w, 1);
+        let hold = holds.iter().find(|h| h.0 == t).unwrap();
+        assert_eq!(hold.1, free, "the hold sits on the first unvetoed source");
     }
 
     #[sqlx::test(migrations = false)]
@@ -1545,6 +1579,63 @@ mod sessions {
     }
 
     #[sqlx::test(migrations = false)]
+    async fn a_full_primary_with_a_free_secondary_plays_on_the_secondary(pool: PgPool) {
+        let w = world(pool).await;
+        let c = &w.c;
+        let free = source(c, "S2", "m3u", "http://h/y", 0).await;
+        let d = channel(&c.pool, "D", "Live", true).await;
+        stream(&c.pool, d, w.src1, "http://h/d0.ts", 0).await;
+        stream(&c.pool, d, free, "http://h/d1.ts", 1).await;
+        c.fake.script(
+            "POST",
+            "/v1/live",
+            vec![
+                ok(open_answer("sid-1", SELF, "remux")),
+                ok(open_answer("sid-2", SELF, "remux")),
+            ],
+        );
+        open(&w, w.a, "A").await.map_err(err_body).unwrap();
+        open(&w, d, "D").await.map_err(err_body).unwrap();
+        let ups = &c.fake.seen("POST", "/v1/live")[1].body["upstreams"];
+        assert_eq!(ups[0]["atCapacity"], true);
+        assert!(ups[1]["atCapacity"].as_bool() != Some(true));
+        let t = token_of(&w, 1);
+        let (_, holds) = session::peek(&c.st);
+        assert_eq!(holds.iter().find(|h| h.0 == t).unwrap().1, free);
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn the_next_open_sends_the_probe_the_last_attempt_learned(pool: PgPool) {
+        let w = world(pool).await;
+        let c = &w.c;
+        let (_, t1) = opened(&w).await;
+        let first = &c.fake.seen("POST", "/v1/live")[0].body["upstreams"][0];
+        assert!(first.get("probedVideoCodec").is_none_or(Value::is_null));
+        let ev = serde_json::from_value(
+            json!({"type": "LiveAttempt", "capacityToken": t1, "upstream": 0,
+            "upstreamUrl": "http://h/a.ts", "upstreamPriority": 0,
+            "probe": {"videoCodec": "h264", "audioCodec": "aac", "container": "mpegts"}}),
+        )
+        .unwrap();
+        session::on_event(&c.st, &ev).await;
+        c.fake.script(
+            "POST",
+            "/v1/live",
+            vec![ok(open_answer("sid-2", SELF, "remux"))],
+        );
+        open(&w, w.a, "A").await.map_err(err_body).unwrap();
+        let up = &c.fake.seen("POST", "/v1/live")[1].body["upstreams"][0];
+        assert_eq!(
+            (
+                up["probedVideoCodec"].clone(),
+                up["probedAudioCodec"].clone(),
+                up["probedContainer"].clone()
+            ),
+            (json!("h264"), json!("aac"), json!("mpegts"))
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
     async fn released_frees_the_token_and_counts_a_failure_only_when_failed(pool: PgPool) {
         let w = world(pool).await;
         let c = &w.c;
@@ -1742,7 +1833,7 @@ mod sessions {
         );
         open(&w, w.a, "A").await.map_err(err_body).unwrap();
         assert_eq!(
-            c.fake.seen("POST", "/v1/live").last().unwrap().body["atCapacity"],
+            c.fake.seen("POST", "/v1/live").last().unwrap().body["upstreams"][0]["atCapacity"],
             true
         );
     }

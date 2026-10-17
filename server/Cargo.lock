@@ -1003,8 +1003,8 @@ dependencies = [
 
 [[package]]
 name = "fliks-engine"
-version = "0.3.2"
-source = "git+https://github.com/fliks-app/engine?tag=v0.3.2#f05c41853107021524ce9224cc18a33be67c98c0"
+version = "0.4.1"
+source = "git+https://github.com/fliks-app/engine?tag=v0.4.1#31b7e978283da7b737559aa0fb7d3114d2c6f5d1"
 dependencies = [
  "alass-util",
  "axum",
@@ -1030,8 +1030,8 @@ dependencies = [
 
 [[package]]
 name = "fliks-engine-core"
-version = "0.3.2"
-source = "git+https://github.com/fliks-app/engine?tag=v0.3.2#f05c41853107021524ce9224cc18a33be67c98c0"
+version = "0.4.1"
+source = "git+https://github.com/fliks-app/engine?tag=v0.4.1#31b7e978283da7b737559aa0fb7d3114d2c6f5d1"
 dependencies = [
  "serde",
  "serde_json",
