@@ -1312,7 +1312,7 @@ mod sessions {
             )
         );
         let sent = c.fake.seen("POST", "/v1/live");
-        assert_eq!(sent[1].body["atCapacity"], true);
+        assert_eq!(sent[1].body["atCapacity"], false);
         assert_eq!(sent[1].body["upstreams"][0]["atCapacity"], true);
         let (_, holds) = session::peek(&c.st);
         assert_eq!(holds.len(), 1, "the refused open gave its hold back");
@@ -1579,6 +1579,32 @@ mod sessions {
     }
 
     #[sqlx::test(migrations = false)]
+    async fn a_full_primary_with_a_free_secondary_plays_on_the_secondary(pool: PgPool) {
+        let w = world(pool).await;
+        let c = &w.c;
+        let free = source(c, "S2", "m3u", "http://h/y", 0).await;
+        let d = channel(&c.pool, "D", "Live", true).await;
+        stream(&c.pool, d, w.src1, "http://h/d0.ts", 0).await;
+        stream(&c.pool, d, free, "http://h/d1.ts", 1).await;
+        c.fake.script(
+            "POST",
+            "/v1/live",
+            vec![
+                ok(open_answer("sid-1", SELF, "remux")),
+                ok(open_answer("sid-2", SELF, "remux")),
+            ],
+        );
+        open(&w, w.a, "A").await.map_err(err_body).unwrap();
+        open(&w, d, "D").await.map_err(err_body).unwrap();
+        let ups = &c.fake.seen("POST", "/v1/live")[1].body["upstreams"];
+        assert_eq!(ups[0]["atCapacity"], true);
+        assert!(ups[1]["atCapacity"].as_bool() != Some(true));
+        let t = token_of(&w, 1);
+        let (_, holds) = session::peek(&c.st);
+        assert_eq!(holds.iter().find(|h| h.0 == t).unwrap().1, free);
+    }
+
+    #[sqlx::test(migrations = false)]
     async fn the_next_open_sends_the_probe_the_last_attempt_learned(pool: PgPool) {
         let w = world(pool).await;
         let c = &w.c;
@@ -1807,7 +1833,7 @@ mod sessions {
         );
         open(&w, w.a, "A").await.map_err(err_body).unwrap();
         assert_eq!(
-            c.fake.seen("POST", "/v1/live").last().unwrap().body["atCapacity"],
+            c.fake.seen("POST", "/v1/live").last().unwrap().body["upstreams"][0]["atCapacity"],
             true
         );
     }

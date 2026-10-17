@@ -340,10 +340,15 @@ pub async fn open(
                 now,
             ));
         }
+        let vetoes: Vec<bool> = per_stream.iter().map(Option::is_some).collect();
+        let feeding = vetoes
+            .iter()
+            .position(|v| !v)
+            .map_or(primary, |i| &streams[i]);
         g.holds.insert(
             token.clone(),
             Hold {
-                source_id: primary.source.id,
+                source_id: feeding.source.id,
                 channel_id,
                 streams: streams.clone(),
                 fed: None,
@@ -351,8 +356,7 @@ pub async fn open(
                 mode: None,
             },
         );
-        let vetoes = per_stream.iter().map(Option::is_some).collect();
-        (per_stream.swap_remove(0), vetoes)
+        (per_stream.into_iter().next().flatten(), vetoes)
     };
     let req = OpenLiveRequest {
         channel_id: channel_id.to_string(),
@@ -368,7 +372,7 @@ pub async fn open(
         },
         owner_id: Some(who.id.to_string()),
         capacity_token: token.clone(),
-        at_capacity: verdict.is_some(),
+        at_capacity: false,
         tags: BTreeMap::from([
             ("channelName".to_owned(), channel_name.to_owned()),
             ("username".to_owned(), who.username.clone()),

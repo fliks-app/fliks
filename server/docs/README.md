@@ -231,7 +231,7 @@ A 500 or a half-written request is never part of the frozen contract:
 | C145 | `billed-till` and expiry dates went through JS `Date.parse` | ISO 8601 only, read as UTC |
 | C146 | an out-of-range int32 in a provider payload became a database error | read as null |
 | C147 | a refused provider connection reported the Node error text | the same text (`connect ECONNREFUSED host:port`) from the Rust client |
-| C156 | only the primary stream's source was checked for capacity, so a failover could land on a source at its limit | every stream's own source is checked at open and sent as `LiveUpstream.atCapacity`; a full source never feeds the session (a full primary still answers the 409, as before) |
+| C156 | only the primary stream's source was checked for capacity, so a failover could land on a source at its limit | every stream's own source is checked at open and sent as `LiveUpstream.atCapacity`; a full source never feeds the session, so a full primary with a free secondary source plays on it (Nest answered 409); an all-full channel still answers the 409 with the primary's body |
 | C157 | the engine ended a live viewer on any resolver denial, including one for a credential that resolves to no user | a live denial for a known user carries `ownerId` and ends only that owner's viewer; other denials end nothing |
 
 Frozen as is (decided): the heartbeat keeps its debounce entry after a failed history write and returns
