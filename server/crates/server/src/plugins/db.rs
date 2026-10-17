@@ -126,6 +126,12 @@ impl From<sqlx::Error> for ProvisionError {
     }
 }
 
+async fn public_create_open(tx: &mut Tx) -> sqlx::Result<bool> {
+    sqlx::query_scalar("SELECT has_schema_privilege('public', 'public', 'CREATE')")
+        .fetch_one(&mut **tx)
+        .await
+}
+
 /// Rule 19 (3) and the SQL section: role, adoption, schema, ownership, grants; one transaction.
 /// Returns the freshly rotated password.
 pub async fn provision(
@@ -167,6 +173,21 @@ pub async fn provision(
                 "coreRef {} is not a public base table with an id column",
                 serde_json::Value::String(t.clone())
             )));
+        }
+    }
+    if public_create_open(&mut tx).await? {
+        sqlx::Executor::execute(
+            &mut *tx,
+            sqlx::raw_sql("REVOKE CREATE ON SCHEMA public FROM PUBLIC"),
+        )
+        .await?;
+        // A REVOKE by a non-owner only warns, so the outcome is read back.
+        if public_create_open(&mut tx).await? {
+            return Err(ProvisionError::new(
+                "PUBLIC holds CREATE on schema public (the default before Postgres 15) and this role \
+                 may not revoke it: run REVOKE CREATE ON SCHEMA public FROM PUBLIC as its owner"
+                    .into(),
+            ));
         }
     }
     let password = crate::config::random_hex(24);

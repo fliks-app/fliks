@@ -146,3 +146,20 @@ async fn template_copy_and_restore_take_their_own_names() {
     let reopened = Scratch::reopen(a).await;
     reopened.finish().await;
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn provision_revokes_public_create() {
+    let Some(s) = Scratch::create("pubcreate").await else {
+        return;
+    };
+    let open = "SELECT has_schema_privilege('public', 'public', 'CREATE')";
+    sqlx::raw_sql("GRANT CREATE ON SCHEMA public TO PUBLIC")
+        .execute(&s.pool)
+        .await
+        .unwrap();
+    db::provision(&s.pool, "acme.revoke", &[]).await.unwrap();
+    let still: bool = sqlx::query_scalar(open).fetch_one(&s.pool).await.unwrap();
+    assert!(!still, "PUBLIC lost CREATE on public");
+    db::deprovision(&s.pool, "acme.revoke").await.unwrap();
+    s.finish().await;
+}
