@@ -1,6 +1,5 @@
-import { Injectable, OnModuleDestroy, Optional } from '@nestjs/common';
+import { Injectable, OnModuleDestroy } from '@nestjs/common';
 import type { components } from '../engine/schema';
-import { QoeService } from '../qoe/qoe.service';
 import type { RemoteQualityRung } from '../scheduler/events.service';
 import type { TranscodeReason } from './dto/playback-info.dto';
 
@@ -175,8 +174,6 @@ export function buildLiveSession(
 export class LiveSessionRegistry implements OnModuleDestroy {
   private readonly sessions = new Map<string, LiveSession>();
 
-  constructor(@Optional() private readonly qoe?: QoeService) {}
-
   onModuleDestroy(): void {
     this.sessions.clear();
   }
@@ -248,8 +245,6 @@ export class LiveSessionRegistry implements OnModuleDestroy {
 
   /** Drop a session explicitly. Returns whether the id was known. */
   stop(sessionId: string): boolean {
-    const session = this.sessions.get(sessionId);
-    if (session) this.qoe?.sessionEnded(session);
     return this.sessions.delete(sessionId);
   }
 

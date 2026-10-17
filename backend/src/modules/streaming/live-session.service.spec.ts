@@ -55,13 +55,10 @@ describe('LiveSessionRegistry', () => {
     expect(updated!.quality).toBe('1080p');
   });
 
-  it('stop removes the session, ends its QoE and returns whether it was known', () => {
-    const qoe = { sessionEnded: jest.fn() };
-    svc = new LiveSessionRegistry(qoe as never);
+  it('stop removes the session and returns whether it was known', () => {
     const session = svc.create(BASE);
     expect(svc.stop(session.sessionId)).toBe(true);
     expect(svc.stop(session.sessionId)).toBe(false);
-    expect(qoe.sessionEnded).toHaveBeenCalledTimes(1);
     expect(svc.size()).toBe(0);
   });
 

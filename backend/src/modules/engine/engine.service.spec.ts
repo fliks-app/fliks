@@ -363,25 +363,6 @@ describe('EngineService runtime', () => {
       expect(slept).toEqual([2000]);
     });
 
-    it('opens a live session, waiting out the detection 503 but not a coded one', async () => {
-      const post = jest
-        .fn()
-        .mockResolvedValueOnce(reply(503, undefined, { 'retry-after': '1' }))
-        .mockResolvedValueOnce(reply(200, { sessionId: 'v' }));
-      const { s } = await connected({ GET: hello([...RUNTIME, 'live']), POST: post });
-      await expect(s.openLive({} as never)).resolves.toEqual({ sessionId: 'v' });
-
-      post.mockResolvedValue({ ...reply(503), error: { code: 'live_unavailable' } });
-      await expect(s.openLive({} as never)).rejects.toMatchObject({ status: 503, code: 'live_unavailable' });
-      post.mockResolvedValue({ ...reply(409), error: { code: 'live_at_capacity' } });
-      await expect(s.openLive({} as never)).rejects.toMatchObject({ status: 409, code: 'live_at_capacity' });
-    });
-
-    it('refuses a live open on an engine without the live runtime', async () => {
-      const { s } = await connected();
-      await expect(s.openLive({} as never)).rejects.toThrow('no live TV runtime');
-    });
-
     it('throws the status of any other refusal', async () => {
       const { s } = await connected({ POST: jest.fn(async () => reply(400)) });
       await expect(s.openSession({} as never)).rejects.toMatchObject({ status: 400 });

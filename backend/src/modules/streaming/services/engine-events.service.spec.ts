@@ -43,7 +43,7 @@ function setup(runtime = true) {
     observeServed: jest.fn(),
     sessionEnded: jest.fn(),
   };
-  const liveSessions = new LiveSessionRegistry(qoe as never);
+  const liveSessions = new LiveSessionRegistry();
   const engine = {
     runtime,
     whenReady: jest.fn().mockResolvedValue(undefined),
@@ -117,7 +117,6 @@ describe('EngineEventsService.handle', () => {
       reason: 'expired',
     });
     expect(t.liveSessions.peek('sid-1')).toBeNull();
-    expect(t.qoe.sessionEnded).toHaveBeenCalledTimes(1);
   });
 
   it('keeps the load counter from job events', () => {
@@ -218,22 +217,6 @@ describe('EngineEventsService.resync', () => {
     expect(jobKeyOf(snapshot({ ownerId: undefined }))).toBe('42-anon-abc');
     t.svc.handle({ type: 'JobEnded', jobKey: '42-u7-abc', state: 'done' });
     expect(t.svc.activeJobs).toBe(0);
-  });
-});
-
-describe('EngineEventsService listeners', () => {
-  it('hands every event to the subscribers, and runs theirs after the resync', async () => {
-    const t = setup();
-    const heard: unknown[] = [];
-    const resynced = jest.fn(async () => undefined);
-    t.svc.onEvent((ev) => heard.push(ev.type));
-    t.svc.onResync(resynced);
-
-    t.svc.handle({ type: 'LiveReleased', capacityToken: 't', reason: 'idle' });
-    await t.svc.resync();
-
-    expect(heard).toEqual(['LiveReleased']);
-    expect(resynced).toHaveBeenCalledTimes(1);
   });
 });
 

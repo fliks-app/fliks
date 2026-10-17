@@ -15,7 +15,6 @@ import { SetupChecklistModule } from './modules/setup-checklist/setup-checklist.
 import { CountsModule } from './modules/counts/counts.module';
 import { PluginsModule } from './modules/plugins/plugins.module';
 import { PluginHostModule } from './modules/plugins/host/plugin-host.module';
-import { LiveTvModule } from './modules/livetv/livetv.module';
 import { EngineModule } from './modules/engine/engine.module';
 import { BridgeModule } from './modules/bridge/bridge.module';
 
@@ -58,7 +57,6 @@ import { BridgeModule } from './modules/bridge/bridge.module';
     // @Global(): registered once here so PluginProcessService (in PluginsModule) can
     // inject PluginHostBindingService without an import edge back into this module.
     PluginHostModule,
-    LiveTvModule,
   ],
 })
 export class AppModule {}

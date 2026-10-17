@@ -21,8 +21,6 @@ import { TranslationProvider } from '../subtitles/entities/translation-provider.
 import { Library } from '../libraries/entities/library.entity';
 import { PluginsModule } from '../plugins/plugins.module';
 import { ScheduledJobRegistryModule } from './scheduled-job-registry.module';
-import { LiveTvModule } from '../livetv/livetv.module';
-import { QoeModule } from '../qoe/qoe.module';
 
 @Module({
   imports: [
@@ -50,8 +48,6 @@ import { QoeModule } from '../qoe/qoe.module';
     // Imported directly so the jobs bridge can reach the plugin job and catalog services.
     PluginsModule,
     ScheduledJobRegistryModule,
-    LiveTvModule,
-    QoeModule,
   ],
   controllers: [JobsBridgeController],
   exports: [LogBufferModule],
