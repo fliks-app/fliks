@@ -242,7 +242,6 @@ A 500 or a half-written request is never part of the frozen contract:
 | C155 | a plugin import document over Express's 100 kB JSON limit was refused 413 | accepted up to 64 MiB (`plugins.md` rule 54) |
 | C156 | only the primary stream's source was checked for capacity, so a failover could land on a source at its limit | every stream's own source is checked at open and sent as `LiveUpstream.atCapacity`; a full source never feeds the session, so a full primary with a free secondary source plays on it (Nest answered 409); an all-full channel still answers the 409 with the primary's body |
 | C157 | the engine ended a live viewer on any resolver denial, including one for a credential that resolves to no user | a live denial for a known user carries `ownerId` and ends only that owner's viewer; other denials end nothing |
-| C160 | a plugin import document over Express's 100 kB JSON limit was refused 413 | accepted up to 64 MiB (`plugins.md` rule 54) |
 
 Frozen as is (decided): the heartbeat keeps its debounce entry after a failed history write and returns
 `sessionLost: false` when the engine session lives but presence cannot be rebuilt. Lists whose order comes
