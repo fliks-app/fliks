@@ -63,7 +63,7 @@
         "events": "a",
         "name": "Emby New",
         "type": "emby",
-        "url": "http://127.0.0.1:4882/ok"
+        "url": "http://127.0.0.1:4962/ok"
       },
       "expect": {
         "body": {
@@ -89,7 +89,7 @@
         "extra": 1,
         "name": "Emby New",
         "type": "emby",
-        "url": "http://127.0.0.1:4882/ok"
+        "url": "http://127.0.0.1:4962/ok"
       },
       "expect": {
         "body": {

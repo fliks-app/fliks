@@ -19,7 +19,6 @@
   "steps": [
     {
       "as": "admin",
-      "baseEnv": "PARITY_NEST",
       "expect": {
         "body": [
           {
@@ -86,7 +85,6 @@
     },
     {
       "as": "admin",
-      "baseEnv": "PARITY_NEST",
       "body": {
         "name": "LiveTvSourceRefresh"
       },
@@ -104,7 +102,6 @@
     },
     {
       "as": "admin",
-      "baseEnv": "PARITY_NEST",
       "expect": {
         "body": {
           "data": [
@@ -150,7 +147,7 @@
             "priority": 0,
             "referer": null,
             "refreshIntervalHours": 12,
-            "url": "http://127.0.0.1:4921/playlist.m3u",
+            "url": "http://127.0.0.1:4961/playlist.m3u",
             "userAgent": null,
             "username": null
           },
@@ -173,7 +170,7 @@
             "priority": 1,
             "referer": "http://beta.example/",
             "refreshIntervalHours": 6,
-            "url": "http://127.0.0.1:4921",
+            "url": "http://127.0.0.1:4961",
             "userAgent": "BetaAgent/1",
             "username": "u"
           }
@@ -185,7 +182,6 @@
     },
     {
       "as": "readonly",
-      "baseEnv": "PARITY_NEST",
       "body": {
         "name": "LiveTvSourceRefresh"
       },

@@ -11,7 +11,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
-PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 4921
+PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 4961
 BASE = f"http://127.0.0.1:{PORT}"
 ETAG = '"v1"'
 # set by `POST /_mode`: `shrunk` serves the short playlist, `delay` holds playlists and guides back.

@@ -12,13 +12,13 @@
     {
       "as": "admin",
       "body": {
-        "value": "http://127.0.0.1:4880/seerr/500"
+        "value": "http://127.0.0.1:4960/seerr/500"
       },
       "expect": {
         "body": {
           "id": 8,
           "key": "seerr_url",
-          "value": "http://127.0.0.1:4880/seerr/500"
+          "value": "http://127.0.0.1:4960/seerr/500"
         },
         "status": 200
       },

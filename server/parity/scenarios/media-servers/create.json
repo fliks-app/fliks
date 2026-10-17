@@ -17,7 +17,7 @@
         ],
         "name": "Emby New",
         "type": "emby",
-        "url": "http://127.0.0.1:4882/ok"
+        "url": "http://127.0.0.1:4962/ok"
       },
       "expect": {
         "body": {
@@ -29,7 +29,7 @@
           "id": 7,
           "name": "Emby New",
           "type": "emby",
-          "url": "http://127.0.0.1:4882/ok"
+          "url": "http://127.0.0.1:4962/ok"
         },
         "status": 201
       },
@@ -47,7 +47,7 @@
             "id": 4,
             "name": "Emby Bad Key",
             "type": "emby",
-            "url": "http://127.0.0.1:4882/401"
+            "url": "http://127.0.0.1:4962/401"
           },
           {
             "apiKey": "parity-key",
@@ -59,7 +59,7 @@
             "id": 1,
             "name": "Emby Main",
             "type": "emby",
-            "url": "http://127.0.0.1:4882/ok"
+            "url": "http://127.0.0.1:4962/ok"
           },
           {
             "apiKey": "k",
@@ -70,7 +70,7 @@
             "id": 7,
             "name": "Emby New",
             "type": "emby",
-            "url": "http://127.0.0.1:4882/ok"
+            "url": "http://127.0.0.1:4962/ok"
           },
           {
             "apiKey": "parity-key",
@@ -79,7 +79,7 @@
             "id": 5,
             "name": "Emby No Users",
             "type": "emby",
-            "url": "http://127.0.0.1:4882/nousers"
+            "url": "http://127.0.0.1:4962/nousers"
           },
           {
             "apiKey": "parity-key",
@@ -88,7 +88,7 @@
             "id": 6,
             "name": "Emby Slow",
             "type": "emby",
-            "url": "http://127.0.0.1:4882/slow"
+            "url": "http://127.0.0.1:4962/slow"
           },
           {
             "apiKey": "parity-key",
@@ -97,7 +97,7 @@
             "id": 2,
             "name": "Emby Spare",
             "type": "emby",
-            "url": "http://127.0.0.1:4882/ok/"
+            "url": "http://127.0.0.1:4962/ok/"
           },
           {
             "apiKey": "plex-key",
@@ -106,7 +106,7 @@
             "id": 3,
             "name": "Plex Box",
             "type": "plex",
-            "url": "http://127.0.0.1:4882/ok"
+            "url": "http://127.0.0.1:4962/ok"
           }
         ],
         "status": 200

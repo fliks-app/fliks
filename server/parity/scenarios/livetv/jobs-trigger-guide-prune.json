@@ -14,7 +14,6 @@
   "steps": [
     {
       "as": "admin",
-      "baseEnv": "PARITY_NEST",
       "body": {
         "name": "LiveTvGuidePrune"
       },
@@ -32,7 +31,6 @@
     },
     {
       "as": "admin",
-      "baseEnv": "PARITY_NEST",
       "expect": {
         "body": {
           "data": [

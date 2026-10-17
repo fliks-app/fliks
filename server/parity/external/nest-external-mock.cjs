@@ -3,7 +3,7 @@
 const path = require('node:path');
 const axios = require(require.resolve('axios', { paths: [process.cwd(), path.join(process.cwd(), 'backend')] }));
 
-const stub = (process.env.PARITY_STUB || 'http://127.0.0.1:4890').replace(/\/$/, '');
+const stub = (process.env.PARITY_STUB || 'http://127.0.0.1:4964').replace(/\/$/, '');
 const routes = [
   ['https://api.themoviedb.org/3', `${stub}/tmdb/3`],
   ['https://api4.thetvdb.com/v4', `${stub}/tvdb/v4`],

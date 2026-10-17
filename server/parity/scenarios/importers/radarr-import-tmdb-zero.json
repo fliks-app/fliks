@@ -23,7 +23,7 @@
           }
         ],
         "targetLibraryId": 1,
-        "url": "http://127.0.0.1:4880/radarr/tmdb-zero"
+        "url": "http://127.0.0.1:4960/radarr/tmdb-zero"
       },
       "expect": {
         "body": {

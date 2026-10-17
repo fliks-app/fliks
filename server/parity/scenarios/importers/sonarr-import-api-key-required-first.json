@@ -13,7 +13,7 @@
       "body": {
         "pathMappings": [],
         "targetLibraryId": 99,
-        "url": "http://127.0.0.1:4880/sonarr/other"
+        "url": "http://127.0.0.1:4960/sonarr/other"
       },
       "expect": {
         "body": {

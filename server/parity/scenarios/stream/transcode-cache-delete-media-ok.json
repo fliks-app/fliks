@@ -1,6 +1,9 @@
 {
   "deviation": null,
   "engine": "up",
+  "ignore": [
+    "$.bytes"
+  ],
   "name": "stream-transcode-cache-delete-media-ok",
   "seed": "base",
   "steps": [

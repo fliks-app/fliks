@@ -23,7 +23,7 @@
       "body": {
         "kind": "m3u",
         "name": "M",
-        "url": "http://127.0.0.1:4921/playlist.m3u"
+        "url": "http://127.0.0.1:4961/playlist.m3u"
       },
       "expect": {
         "body": {
@@ -47,7 +47,7 @@
           "priority": 0,
           "referer": null,
           "refreshIntervalHours": 12,
-          "url": "http://127.0.0.1:4921/playlist.m3u",
+          "url": "http://127.0.0.1:4961/playlist.m3u",
           "userAgent": null,
           "username": null
         },
@@ -68,7 +68,7 @@
         "password": "p",
         "priority": 1,
         "refreshIntervalHours": 6,
-        "url": "http://127.0.0.1:4921",
+        "url": "http://127.0.0.1:4961",
         "userAgent": "UA/1",
         "username": "u"
       },
@@ -94,7 +94,7 @@
           "priority": 1,
           "referer": null,
           "refreshIntervalHours": 6,
-          "url": "http://127.0.0.1:4921",
+          "url": "http://127.0.0.1:4961",
           "userAgent": "UA/1",
           "username": "u"
         },
@@ -128,7 +128,7 @@
             "priority": 0,
             "referer": null,
             "refreshIntervalHours": 12,
-            "url": "http://127.0.0.1:4921/playlist.m3u",
+            "url": "http://127.0.0.1:4961/playlist.m3u",
             "userAgent": null,
             "username": null
           },
@@ -153,7 +153,7 @@
             "priority": 1,
             "referer": null,
             "refreshIntervalHours": 6,
-            "url": "http://127.0.0.1:4921",
+            "url": "http://127.0.0.1:4961",
             "userAgent": "UA/1",
             "username": "u"
           }
@@ -192,7 +192,7 @@
           "priority": 0,
           "referer": null,
           "refreshIntervalHours": 12,
-          "url": "http://127.0.0.1:4921/playlist.m3u",
+          "url": "http://127.0.0.1:4961/playlist.m3u",
           "userAgent": null,
           "username": null
         },
@@ -230,7 +230,7 @@
           "priority": 0,
           "referer": "http://r/",
           "refreshIntervalHours": 6,
-          "url": "http://127.0.0.1:4921",
+          "url": "http://127.0.0.1:4961",
           "userAgent": "UA/1",
           "username": null
         },
@@ -264,7 +264,7 @@
           "priority": 0,
           "referer": "http://r/",
           "refreshIntervalHours": 6,
-          "url": "http://127.0.0.1:4921",
+          "url": "http://127.0.0.1:4961",
           "userAgent": "UA/1",
           "username": null
         },
@@ -298,7 +298,7 @@
             "priority": 0,
             "referer": null,
             "refreshIntervalHours": 12,
-            "url": "http://127.0.0.1:4921/playlist.m3u",
+            "url": "http://127.0.0.1:4961/playlist.m3u",
             "userAgent": null,
             "username": null
           },
@@ -323,7 +323,7 @@
             "priority": 0,
             "referer": "http://r/",
             "refreshIntervalHours": 6,
-            "url": "http://127.0.0.1:4921",
+            "url": "http://127.0.0.1:4961",
             "userAgent": "UA/1",
             "username": null
           }
@@ -366,7 +366,7 @@
             "priority": 0,
             "referer": "http://r/",
             "refreshIntervalHours": 6,
-            "url": "http://127.0.0.1:4921",
+            "url": "http://127.0.0.1:4961",
             "userAgent": "UA/1",
             "username": null
           }

@@ -58,17 +58,17 @@
               "name": "__livetv_ungrouped__"
             }
           ],
-          "guideUrl": "http://127.0.0.1:4921/guide.xml",
+          "guideUrl": "http://127.0.0.1:4961/guide.xml",
           "guideUrls": [
-            "http://127.0.0.1:4921/guide.xml"
+            "http://127.0.0.1:4961/guide.xml"
           ],
           "kind": "m3u",
           "maxConnections": 2,
           "ok": true,
           "onDemandCount": 2,
-          "playlistUrlFromFile": "http://127.0.0.1:4921/get.php?username=u&password=p&type=m3u_plus&output=ts",
+          "playlistUrlFromFile": "http://127.0.0.1:4961/get.php?username=u&password=p&type=m3u_plus&output=ts",
           "suggestion": {
-            "baseUrl": "http://127.0.0.1:4921",
+            "baseUrl": "http://127.0.0.1:4961",
             "password": "p",
             "suggestedKind": "xtream",
             "username": "u"
@@ -110,17 +110,17 @@
               "name": "__livetv_ungrouped__"
             }
           ],
-          "guideUrl": "http://127.0.0.1:4921/guide.xml",
+          "guideUrl": "http://127.0.0.1:4961/guide.xml",
           "guideUrls": [
-            "http://127.0.0.1:4921/guide.xml"
+            "http://127.0.0.1:4961/guide.xml"
           ],
           "kind": "m3u",
           "maxConnections": 2,
           "ok": true,
           "onDemandCount": 2,
-          "playlistUrlFromFile": "http://127.0.0.1:4921/get.php?username=u&password=p&type=m3u_plus&output=ts",
+          "playlistUrlFromFile": "http://127.0.0.1:4961/get.php?username=u&password=p&type=m3u_plus&output=ts",
           "suggestion": {
-            "baseUrl": "http://127.0.0.1:4921",
+            "baseUrl": "http://127.0.0.1:4961",
             "password": "p",
             "suggestedKind": "xtream",
             "username": "u"

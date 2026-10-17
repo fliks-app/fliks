@@ -35,7 +35,7 @@
             "excludeGroupsPattern": null,
             "expiresAt": null,
             "guideUrls": [
-              "http://127.0.0.1:4921/guide.xml"
+              "http://127.0.0.1:4961/guide.xml"
             ],
             "id": 1,
             "includeGroupsPattern": null,
@@ -51,7 +51,7 @@
             "priority": 0,
             "referer": null,
             "refreshIntervalHours": 12,
-            "url": "http://127.0.0.1:4921/playlist.m3u",
+            "url": "http://127.0.0.1:4961/playlist.m3u",
             "userAgent": null,
             "username": null
           },
@@ -117,7 +117,7 @@
           "source": null,
           "sourceId": null,
           "timezoneOffsetMinutes": 0,
-          "url": "http://127.0.0.1:4921/guide.xml"
+          "url": "http://127.0.0.1:4961/guide.xml"
         },
         "status": 200
       },
@@ -148,7 +148,7 @@
           },
           "sourceId": 1,
           "timezoneOffsetMinutes": 0,
-          "url": "http://127.0.0.1:4921/guide.xml"
+          "url": "http://127.0.0.1:4961/guide.xml"
         },
         "status": 200
       },

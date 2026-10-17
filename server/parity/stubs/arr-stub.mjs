@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const port = Number(process.env.ARR_STUB_PORT ?? 4880);
+const port = Number(process.env.ARR_STUB_PORT ?? 4960);
 const root = join(dirname(fileURLToPath(import.meta.url)), '../../fixtures/importers');
 const KEY = 'parity-key';
 const load = (service, name) => JSON.parse(readFileSync(join(root, service, `${name}.json`), 'utf8'));

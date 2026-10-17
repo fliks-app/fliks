@@ -7,7 +7,7 @@
       "as": "admin",
       "body": {
         "apiKey": "parity-key",
-        "url": "http://127.0.0.1:4880/sonarr/not-array"
+        "url": "http://127.0.0.1:4960/sonarr/not-array"
       },
       "expect": {
         "body": {
