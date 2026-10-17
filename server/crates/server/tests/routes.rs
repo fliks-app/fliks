@@ -106,21 +106,27 @@ async fn methods_rust_does_not_own_on_owned_paths_are_forwarded() {
     );
     for (path, ops) in doc["paths"].as_object().unwrap() {
         let uri = path.replace(['{', '}'], "");
-        // `/api/plugins/{pluginId}` routes and the proxy catch every other method there, as in Nest.
-        if uri.starts_with("/api/plugins/") {
-            continue;
-        }
+        let plugin = uri.strip_prefix("/api/plugins/");
         for method in ["GET", "POST", "PUT", "PATCH", "DELETE"] {
-            if ops[method.to_lowercase()].is_object() {
+            let m = method.to_lowercase();
+            if ops[&m].is_object() {
                 continue;
             }
+            // The proxy catches `/api/plugins/:id/*splat` and `:id` routes take literal ids, as in Nest.
+            let rust = plugin.is_some_and(|r| {
+                r.contains('/') || doc["paths"]["/api/plugins/{pluginId}"][&m].is_object()
+            });
             let req = Request::builder()
                 .method(method)
                 .uri(&uri)
                 .body(Body::empty())
                 .unwrap();
             let res = router.clone().oneshot(req).await.unwrap();
-            assert!(res.headers().contains_key(FORWARDED), "{method} {path}");
+            assert_eq!(
+                res.headers().contains_key(FORWARDED),
+                !rust,
+                "{method} {path}"
+            );
         }
     }
 }
