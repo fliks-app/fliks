@@ -162,7 +162,11 @@ impl host::Host for Ctx {
             HOST_CALL,
             async {
                 let app = app?;
-                super::acquisition::candidates(&app, &id, q)
+                let on = (q.available_on.len() == 10)
+                    .then(|| chrono::NaiveDate::parse_from_str(&q.available_on, "%Y-%m-%d").ok())
+                    .flatten()
+                    .ok_or_else(|| host_err("ERR_VALIDATION", "availableOn must be YYYY-MM-DD"))?;
+                super::acquisition::candidates(&app, &id, q, on)
                     .await
                     .map_err(db_err)
             }

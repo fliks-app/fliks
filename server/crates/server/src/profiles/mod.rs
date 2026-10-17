@@ -1,5 +1,5 @@
 //! `/api/profiles/*`, `/api/custom-formats/*`, `/api/quality-definitions/*` (`docs/spec/profiles.md`).
-mod db;
+pub mod db;
 mod dto;
 mod helpers;
 mod routes;

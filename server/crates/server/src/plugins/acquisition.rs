@@ -1,5 +1,6 @@
 //! The acquisition reads of `plugins.md` rule 31, built on the S5 release domain.
 use super::runtime::fliks::plugin::types as t;
+use crate::profiles::db as profiles;
 use crate::state::AppState;
 use chrono::{Days, NaiveDate, Utc};
 use fliks_domain::release::parsing::quality::{app_quality_by_id, rank_from_quality_string};
@@ -203,16 +204,41 @@ async fn episodes_of(db: &PgPool, season_id: i32) -> sqlx::Result<Vec<EpisodeRow
     .await
 }
 
-/// Episode numbers on disk: own file, or covered by a multi-episode file.
 fn on_disk(eps: &[EpisodeRow]) -> BTreeSet<i32> {
-    let mut out = BTreeSet::new();
-    for e in eps.iter().filter(|e| e.has_file) {
-        out.insert(e.episode_number);
-        if let Some(end) = e.end_episode_number.filter(|n| *n > e.episode_number) {
-            out.extend(e.episode_number + 1..=end);
+    fliks_domain::media::episodes_on_disk(
+        eps.iter()
+            .map(|e| (e.episode_number, e.end_episode_number, e.has_file)),
+    )
+}
+
+/// The highest-ranked quality; the first of equal ranks wins, as in Nest.
+fn best(qualities: Vec<String>) -> Option<String> {
+    qualities.into_iter().reduce(|a, b| {
+        if rank_from_quality_string(Some(&b)) > rank_from_quality_string(Some(&a)) {
+            b
+        } else {
+            a
         }
+    })
+}
+
+/// `(owner id, quality)` rows of `media_files` grouped by owner, in row order.
+async fn qualities_by(
+    db: &PgPool,
+    column: &str,
+    ids: &[i32],
+) -> sqlx::Result<HashMap<i32, Vec<String>>> {
+    let rows: Vec<(i32, String)> = sqlx::query_as(&format!(
+        r#"SELECT "{column}", quality FROM media_files WHERE "{column}" = ANY($1) ORDER BY id"#
+    ))
+    .bind(ids)
+    .fetch_all(db)
+    .await?;
+    let mut out: HashMap<i32, Vec<String>> = HashMap::new();
+    for (id, q) in rows {
+        out.entry(id).or_default().push(q);
     }
-    out
+    Ok(out)
 }
 
 async fn file_qualities(db: &PgPool, column: &str, id: i32) -> sqlx::Result<Vec<String>> {
@@ -236,11 +262,7 @@ async fn files_for_episode(
     if q.is_empty() {
         return Ok(vec![None]);
     }
-    let best = q
-        .iter()
-        .max_by_key(|x| rank_from_quality_string(Some(x)))
-        .cloned();
-    Ok(vec![best])
+    Ok(vec![best(q)])
 }
 
 /// `[]` while any episode is missing, else the weakest quality on disk.
@@ -453,9 +475,13 @@ struct EpTarget {
     season: (i32, i32),
     episode: EpisodeRow,
     files: Files,
+    decision: Decision,
 }
 
-async fn movie_targets(db: &PgPool, ids: Option<&[i32]>) -> sqlx::Result<Vec<(MediaRow, Files)>> {
+async fn movie_targets(
+    db: &PgPool,
+    ids: Option<&[i32]>,
+) -> sqlx::Result<Vec<(MediaRow, Files, Decision)>> {
     let rows: Vec<MediaRow> = sqlx::query_as(&format!(
         r#"{MEDIA_SELECT} WHERE m.monitored AND m.type = 'movie'
              AND (NOT EXISTS (SELECT 1 FROM media_files f WHERE f."mediaId" = m.id) OR qp."upgradeAllowed")
@@ -464,24 +490,30 @@ async fn movie_targets(db: &PgPool, ids: Option<&[i32]>) -> sqlx::Result<Vec<(Me
     .bind(ids)
     .fetch_all(db)
     .await?;
-    let mut out = vec![];
-    for m in rows {
-        let files: Files = file_qualities(db, "mediaId", m.id)
-            .await?
-            .into_iter()
-            .map(Some)
-            .collect();
-        if !excluded(classify(&m, &files)) {
-            out.push((m, files));
-        }
-    }
-    Ok(out)
+    let mids: Vec<i32> = rows.iter().map(|m| m.id).collect();
+    let mut files = qualities_by(db, "mediaId", &mids).await?;
+    Ok(rows
+        .into_iter()
+        .filter_map(|m| {
+            let f: Files = files
+                .remove(&m.id)
+                .unwrap_or_default()
+                .into_iter()
+                .map(Some)
+                .collect();
+            let d = classify(&m, &f);
+            (!excluded(d)).then_some((m, f, d))
+        })
+        .collect())
 }
 
-async fn episode_targets(db: &PgPool, ids: Option<&[i32]>) -> sqlx::Result<Vec<EpTarget>> {
-    let today = Utc::now().date_naive();
-    let rows: Vec<(i32, i32, i32)> = sqlx::query_as(
-        r#"SELECT ep.id, s.id, s."seasonNumber" FROM episodes ep
+async fn episode_targets(
+    db: &PgPool,
+    ids: Option<&[i32]>,
+    today: NaiveDate,
+) -> sqlx::Result<Vec<EpTarget>> {
+    let rows: Vec<(i32, i32, i32, i32)> = sqlx::query_as(
+        r#"SELECT ep.id, s.id, s."seasonNumber", m.id FROM episodes ep
              JOIN seasons s ON s.id = ep."seasonId" JOIN media m ON m.id = s."mediaId"
              LEFT JOIN quality_profiles qp ON qp.id = m."qualityProfileId"
             WHERE m.monitored AND m.type = 'series' AND s.monitored AND ep.monitored
@@ -497,40 +529,50 @@ async fn episode_targets(db: &PgPool, ids: Option<&[i32]>) -> sqlx::Result<Vec<E
     .bind(ids)
     .fetch_all(db)
     .await?;
-    let mut medias: HashMap<i32, MediaRow> = HashMap::new();
+    let eids: Vec<i32> = rows.iter().map(|r| r.0).collect();
+    let mut mids: Vec<i32> = rows.iter().map(|r| r.3).collect();
+    mids.sort_unstable();
+    mids.dedup();
+    let mut episodes: HashMap<i32, EpisodeRow> =
+        sqlx::query_as::<_, EpisodeRow>(&format!("{EPISODE_SELECT} WHERE id = ANY($1)"))
+            .bind(&eids)
+            .fetch_all(db)
+            .await?
+            .into_iter()
+            .map(|e| (e.id, e))
+            .collect();
+    let medias: HashMap<i32, MediaRow> =
+        sqlx::query_as::<_, MediaRow>(&format!("{MEDIA_SELECT} WHERE m.id = ANY($1)"))
+            .bind(&mids)
+            .fetch_all(db)
+            .await?
+            .into_iter()
+            .map(|m| (m.id, m))
+            .collect();
+    let with_file: Vec<i32> = episodes
+        .values()
+        .filter(|e| e.has_file)
+        .map(|e| e.id)
+        .collect();
+    let mut files = qualities_by(db, "episodeId", &with_file).await?;
     let mut out = vec![];
-    for (eid, sid, snum) in rows {
-        let e: EpisodeRow = sqlx::query_as(&format!("{EPISODE_SELECT} WHERE id = $1"))
-            .bind(eid)
-            .fetch_one(db)
-            .await?;
-        let mid: i32 = sqlx::query_scalar(r#"SELECT "mediaId" FROM seasons WHERE id = $1"#)
-            .bind(sid)
-            .fetch_one(db)
-            .await?;
-        if !medias.contains_key(&mid)
-            && let Some(m) = media(db, mid).await?
-        {
-            medias.insert(mid, m);
-        }
-        let Some(m) = medias.get(&mid).cloned() else {
+    for (eid, sid, snum, mid) in rows {
+        let (Some(e), Some(m)) = (episodes.remove(&eid), medias.get(&mid)) else {
             continue;
         };
         let files: Files = if e.has_file {
-            let q = file_qualities(db, "episodeId", e.id).await?;
-            vec![
-                q.into_iter()
-                    .max_by_key(|x| rank_from_quality_string(Some(x))),
-            ]
+            vec![best(files.remove(&e.id).unwrap_or_default())]
         } else {
             vec![]
         };
-        if !excluded(classify(&m, &files)) {
+        let decision = classify(m, &files);
+        if !excluded(decision) {
             out.push(EpTarget {
-                media: m,
+                media: m.clone(),
                 season: (sid, snum),
                 episode: e,
                 files,
+                decision,
             });
         }
     }
@@ -540,14 +582,14 @@ async fn episode_targets(db: &PgPool, ids: Option<&[i32]>) -> sqlx::Result<Vec<E
 async fn count_by_season(
     db: &PgPool,
     ids: &[i32],
-    unaired: bool,
+    unaired_after: Option<NaiveDate>,
 ) -> sqlx::Result<HashMap<i32, i64>> {
     let rows: Vec<(i32, i64)> = sqlx::query_as(
         r#"SELECT "seasonId", count(*) FROM episodes WHERE "seasonId" = ANY($1)
-             AND (NOT $2 OR "airDate" IS NULL OR "airDate" > CURRENT_DATE) GROUP BY "seasonId""#,
+             AND ($2::date IS NULL OR "airDate" IS NULL OR "airDate" > $2) GROUP BY "seasonId""#,
     )
     .bind(ids)
-    .bind(unaired)
+    .bind(unaired_after)
     .fetch_all(db)
     .await?;
     Ok(rows.into_iter().collect())
@@ -558,6 +600,11 @@ type Cached = (String, Instant, Vec<t::AcquisitionTarget>);
 fn page_cache() -> &'static Mutex<HashMap<String, Cached>> {
     static C: std::sync::OnceLock<Mutex<HashMap<String, Cached>>> = std::sync::OnceLock::new();
     C.get_or_init(Mutex::default)
+}
+
+/// Drops the plugin's cached candidates page (uninstall).
+pub fn forget(plugin: &str) {
+    page_cache().lock().unwrap().remove(plugin);
 }
 
 fn page(targets: &[t::AcquisitionTarget], cursor: Option<&str>, limit: usize) -> t::CandidatesPage {
@@ -573,10 +620,12 @@ fn page(targets: &[t::AcquisitionTarget], cursor: Option<&str>, limit: usize) ->
 }
 
 /// `acquisition.candidates`: movies, season packs and episodes, sorted, paged by offset.
+/// `on` is the validated `availableOn`.
 pub async fn candidates(
     st: &AppState,
     plugin: &str,
     q: t::CandidatesQuery,
+    on: NaiveDate,
 ) -> sqlx::Result<t::CandidatesPage> {
     let db = &st.db;
     let limit = q.limit.clamp(1, MAX_LIMIT) as usize;
@@ -601,35 +650,28 @@ pub async fn candidates(
         return Ok(page(targets, q.cursor.as_deref(), limit));
     }
     let ids = ids.filter(|v| !v.is_empty());
-    let on = NaiveDate::parse_from_str(&q.available_on, "%Y-%m-%d")
-        .unwrap_or_else(|_| Utc::now().date_naive());
+    let today = Utc::now().date_naive();
     let mut targets = vec![];
     if !matches!(q.kind, Some(t::MediaKind::Series)) {
-        for (m, files) in movie_targets(db, ids.as_deref()).await? {
+        for (m, files, d) in movie_targets(db, ids.as_deref()).await? {
             if available(&m, on) {
-                let d = classify(&m, &files);
-                if !excluded(d) {
-                    targets.extend(target(&m, Some(d), &files));
-                }
+                targets.extend(target(&m, Some(d), &files));
             }
         }
     }
     if !matches!(q.kind, Some(t::MediaKind::Movie)) {
-        let eps: Vec<EpTarget> = episode_targets(db, ids.as_deref())
+        let eps: Vec<EpTarget> = episode_targets(db, ids.as_deref(), today)
             .await?
             .into_iter()
             .filter(|e| e.episode.air_date.is_none_or(|d| d <= on))
             .collect();
-        let mut by_season: Vec<(i32, Vec<&EpTarget>)> = vec![];
+        let mut by_season: BTreeMap<i32, Vec<&EpTarget>> = BTreeMap::new();
         for e in &eps {
-            match by_season.iter_mut().find(|(s, _)| *s == e.season.0) {
-                Some((_, v)) => v.push(e),
-                None => by_season.push((e.season.0, vec![e])),
-            }
+            by_season.entry(e.season.0).or_default().push(e);
         }
-        let season_ids: Vec<i32> = by_season.iter().map(|(s, _)| *s).collect();
-        let totals = count_by_season(db, &season_ids, false).await?;
-        let unaired = count_by_season(db, &season_ids, true).await?;
+        let season_ids: Vec<i32> = by_season.keys().copied().collect();
+        let totals = count_by_season(db, &season_ids, None).await?;
+        let unaired = count_by_season(db, &season_ids, Some(today)).await?;
         for (sid, group) in by_season.iter().filter(|(_, g)| g.len() >= 2) {
             if unaired.get(sid).copied().unwrap_or(0) > 0 {
                 continue;
@@ -664,11 +706,7 @@ pub async fn candidates(
             }
         }
         for e in &eps {
-            let d = classify(&e.media, &e.files);
-            if excluded(d) {
-                continue;
-            }
-            if let Some(mut tg) = target(&e.media, Some(d), &e.files) {
+            if let Some(mut tg) = target(&e.media, Some(e.decision), &e.files) {
                 let count = totals.get(&e.season.0).copied().unwrap_or(1);
                 tg.season = Some(t::SeasonRef {
                     id: e.season.0 as u32,
@@ -718,8 +756,9 @@ pub async fn matches(
         sqlx::query_as(&format!("{MEDIA_SELECT} WHERE m.monitored ORDER BY m.id"))
             .fetch_all(db)
             .await?;
-    let indexed: Vec<_> = tokio::task::block_in_place(|| {
-        library
+    // Index and identification are CPU-bound over owned data; only the DB reads stay async.
+    let (library, identified) = tokio::task::spawn_blocking(move || {
+        let indexed: Vec<_> = library
             .iter()
             .map(|m| {
                 let mut names = vec![
@@ -729,12 +768,25 @@ pub async fn matches(
                 names.extend(m.alt());
                 index_title_expectations(&names)
             })
-            .collect()
-    });
+            .collect();
+        let identified: Vec<_> = titles
+            .into_iter()
+            .map(|entry| {
+                let se = parse_season_episode(&entry.title);
+                let coverage = wit_coverage(&coverage_of(&se));
+                let tokens = release_title_tokens(&entry.title);
+                let hit = indexed.iter().position(|idx| {
+                    matches_indexed_expectation(&tokens, idx, WhenUnreadable::NoMatch)
+                });
+                (entry, se, coverage, hit)
+            })
+            .collect();
+        (library, identified)
+    })
+    .await
+    .unwrap_or_else(|e| std::panic::resume_unwind(e.into_panic()));
     let mut out = vec![];
-    for entry in titles {
-        let se = parse_season_episode(&entry.title);
-        let coverage = wit_coverage(&coverage_of(&se));
+    for (entry, se, coverage, hit) in identified {
         let skip = |reason: t::SkipReason, media: Option<i32>, s: Option<i32>, e: Option<i32>| {
             t::ReleaseMatch {
                 id: entry.id.clone(),
@@ -747,13 +799,7 @@ pub async fn matches(
                 skip_reason: Some(reason),
             }
         };
-        let tokens = release_title_tokens(&entry.title);
-        let Some(m) = library
-            .iter()
-            .zip(&indexed)
-            .find(|(_, idx)| matches_indexed_expectation(&tokens, idx, WhenUnreadable::NoMatch))
-            .map(|(m, _)| m)
-        else {
+        let Some(m) = hit.map(|i| &library[i]) else {
             out.push(skip(t::SkipReason::Unmatched, None, None, None));
             continue;
         };
@@ -852,9 +898,9 @@ pub async fn matches(
             _ => {}
         }
         if let Some(min) = min_age.filter(|m| *m > 0)
-            && let Ok(at) = chrono::DateTime::parse_from_rfc3339(&entry.publish_date)
+            && let Some(at) = published(&entry.publish_date)
         {
-            let age = (Utc::now() - at.with_timezone(&Utc)).num_milliseconds() as f64 / 60_000.0;
+            let age = (Utc::now() - at).num_milliseconds() as f64 / 60_000.0;
             if age < f64::from(min) {
                 out.push(skip(
                     t::SkipReason::TooFresh,
@@ -879,9 +925,13 @@ pub async fn matches(
     Ok(out)
 }
 
-struct Deps {
-    formats: Vec<CustomFormat>,
-    blocked: BTreeMap<i64, bool>,
+/// `Date.parse` of an indexer date: RFC 3339, then RFC 2822, then ISO 8601 without offset as UTC.
+fn published(s: &str) -> Option<chrono::DateTime<Utc>> {
+    chrono::DateTime::parse_from_rfc3339(s)
+        .or_else(|_| chrono::DateTime::parse_from_rfc2822(s))
+        .map(|d| d.to_utc())
+        .ok()
+        .or_else(|| fliks_domain::livetv::m3u::parse_iso_date(s))
 }
 
 async fn runtime_minutes(
@@ -933,39 +983,32 @@ pub async fn score(
     };
     let (allowed, allowed_langs) = m.allowed();
     let titles = resolve_search_titles(&m.search(), None);
-    let defs: Vec<(i32, f64, f64, f64)> = sqlx::query_as(
-        r#"SELECT "qualityId", "minSize", "preferredSize", "maxSize" FROM quality_definitions"#,
-    )
-    .fetch_all(db)
-    .await?;
-    let size_by_quality = defs
+    let size_by_quality = profiles::definition_list(db)
+        .await?
         .into_iter()
-        .map(|(q, min, preferred, max)| {
+        .map(|d| {
             (
-                q as u32,
+                d.quality_id as u32,
                 SizeLimits {
-                    min,
-                    preferred,
-                    max,
+                    min: d.min_size,
+                    preferred: d.preferred_size,
+                    max: d.max_size,
                 },
             )
         })
         .collect();
-    let formats: Vec<CustomFormat> = sqlx::query_as::<_, (i32, String, i32, Value)>(
-        r#"SELECT id, name, score, specs FROM custom_formats ORDER BY name"#,
-    )
-    .fetch_all(db)
-    .await?
-    .into_iter()
-    .filter_map(|(id, name, score, specs)| {
-        Some(CustomFormat {
-            id: id.into(),
-            name,
-            score: score.into(),
-            specs: serde_json::from_value(specs).ok()?,
+    let formats: Vec<CustomFormat> = profiles::format_list(db)
+        .await?
+        .into_iter()
+        .filter_map(|f| {
+            Some(CustomFormat {
+                id: f.id.into(),
+                name: f.name,
+                score: f.score.into(),
+                specs: serde_json::from_value(f.specs.0).ok()?,
+            })
         })
-    })
-    .collect();
+        .collect();
     let (mut season, mut episode) = (None, None);
     if !m.is_movie()
         && let Some(sn) = season_n
@@ -1027,14 +1070,11 @@ pub async fn score(
         min_rank_exclusive: min_rank,
         max_rank_inclusive: max_rank,
     };
-    let deps = Deps {
-        formats,
-        blocked: releases
-            .iter()
-            .enumerate()
-            .map(|(i, r)| (i as i64, r.blocked))
-            .collect(),
-    };
+    let blocked: BTreeMap<i64, bool> = releases
+        .iter()
+        .enumerate()
+        .map(|(i, r)| (i as i64, r.blocked))
+        .collect();
     let ids: Vec<String> = releases.iter().map(|r| r.id.clone()).collect();
     let candidates = releases
         .into_iter()
@@ -1055,14 +1095,15 @@ pub async fn score(
             publish_date: Some(r.publish_date),
         })
         .collect();
-    let scored = tokio::task::block_in_place(|| {
+    let scored = tokio::task::spawn_blocking(move || {
         let formats = |title: &str, flags: &[String]| {
-            fliks_domain::release::scoring::score_release_with(&deps.formats, title, flags)
+            fliks_domain::release::scoring::score_release_with(&formats, title, flags)
         };
-        let blocked =
-            |_: &str, source_id: i64| deps.blocked.get(&source_id).copied().unwrap_or(false);
+        let blocked = |_: &str, source_id: i64| blocked.get(&source_id).copied().unwrap_or(false);
         score_and_sort_releases(candidates, &opts, &formats, &blocked)
-    });
+    })
+    .await
+    .unwrap_or_else(|e| std::panic::resume_unwind(e.into_panic()));
     Ok(scored
         .into_iter()
         .map(|s| t::ScoredRelease {
@@ -1103,4 +1144,30 @@ pub async fn score(
                 .collect(),
         })
         .collect())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn published_dates() {
+        let at = |s: &str| published(s).map(|d| d.to_rfc3339());
+        let want = Some("2026-10-17T10:00:00+00:00".to_owned());
+        assert_eq!(at("2026-10-17T12:00:00+02:00"), want);
+        assert_eq!(at("Sat, 17 Oct 2026 10:00:00 +0000"), want);
+        assert_eq!(at("2026-10-17T10:00:00"), want);
+        assert_eq!(at("not a date"), None);
+    }
+
+    #[test]
+    fn best_keeps_the_first_of_equal_ranks() {
+        let a = "Bluray-1080p".to_owned();
+        let b = format!("{a} ");
+        assert_eq!(
+            rank_from_quality_string(Some(&a)),
+            rank_from_quality_string(Some(&b))
+        );
+        assert_eq!(best(vec![a.clone(), b]), Some(a));
+    }
 }
