@@ -2,7 +2,7 @@
   "capture": {
     "jwt": "$.steps[0].body.accessToken"
   },
-  "deviation": null,
+  "deviation": "C157",
   "engine": "up",
   "ignore": [
     "$..accessToken",
@@ -82,6 +82,7 @@
       "expect": {
         "body": {
           "allow": false,
+          "ownerId": "2",
           "ttlS": 60
         },
         "status": 200

@@ -693,6 +693,32 @@ mod resolve {
     }
 
     #[sqlx::test(migrations = false)]
+    async fn a_live_denial_names_a_known_user_and_never_an_unknown_one(pool: PgPool) {
+        let w = world(pool).await;
+        let ask = |credential: String, purpose: &str| {
+            resolve(
+                &w,
+                json!({"mediaId": "sid-x", "credential": credential, "purpose": purpose}),
+            )
+        };
+        let (s, b) = ask(format!("Bearer {}", w.member.1), "live").await;
+        assert_eq!(s, 200);
+        assert_eq!(
+            b,
+            json!({"allow": false, "ownerId": w.member.0.to_string(), "ttlS": 60.0})
+        );
+        for credential in ["Bearer garbage".to_owned(), "x=1; y=2".to_owned()] {
+            assert_eq!(ask(credential, "live").await.1, denied());
+        }
+        let (_, b) = resolve(
+            &w,
+            json!({"mediaId": w.loose, "credential": format!("Bearer {}", w.outsider.1), "purpose": "stream"}),
+        )
+        .await;
+        assert_eq!(b, denied(), "only a live denial names its owner");
+    }
+
+    #[sqlx::test(migrations = false)]
     async fn download_sprite_and_the_subtitle_purposes(pool: PgPool) {
         let w = world(pool).await;
         let cred = format!("Bearer {}", w.member.1);

@@ -83,6 +83,14 @@ fn deny() -> ResolveResponse {
     }
 }
 
+/// A live denial names the known user so the engine ends only that owner's viewer.
+fn denied_for(req: &ResolveRequest, user_id: i32) -> ResolveResponse {
+    ResolveResponse {
+        owner_id: (req.purpose == ResolvePurpose::Live).then(|| user_id.to_string()),
+        ..deny()
+    }
+}
+
 #[utoipa::path(post, path = "/engine/resolve", responses((status = 200)))]
 pub async fn resolve(
     State(st): State<AppState>,
@@ -100,7 +108,7 @@ pub async fn resolve(
             ttl_s: Some(found.ttl_s.unwrap_or(TTL_S)),
             ..found
         })),
-        Err(Fail::Denied) => Ok(Json(deny())),
+        Err(Fail::Denied) => Ok(Json(denied_for(&request, user.id))),
         Err(Fail::Fault(e)) => Err(e),
     }
 }
