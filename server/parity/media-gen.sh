@@ -44,3 +44,10 @@ for f in media/1/{poster,poster-thumb,fanart,fanart-1}.jpg media/2/poster.jpg pe
 done
 mkdir -p "$img/media/1"
 [ -s "$img/media/1/logo.png" ] || cp "$root/assets/art.png" "$img/media/1/logo.png"
+# live TV upload scenarios (scenarios/livetv/sources-playlist-upload*, sources-test-suggestion)
+lt="$root/s7"
+mkdir -p "$lt"
+[ -s "$lt/playlist.m3u" ] || python3 -c 'import sys; sys.path.insert(0, "external/livetv"); import server; sys.stdout.write(server.playlist())' > "$lt/playlist.m3u"
+printf '#EXTM3U\n#EXTINF:-1 group-title="Live",One\nhttp://panel.example:8080/live/joe/s3cret/1.ts\n#EXTINF:-1 group-title="Live",Two\nhttp://panel.example:8080/live/joe/s3cret/2.ts\n' > "$lt/playlist-xtream.m3u"
+printf 'hello\n' > "$lt/not-a-playlist.txt"
+: > "$lt/empty.m3u"
