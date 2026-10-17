@@ -14,6 +14,7 @@ pub mod bindings {
 pub mod db;
 pub mod http;
 pub mod log;
+pub mod router;
 pub mod scheduled;
 pub mod time;
 

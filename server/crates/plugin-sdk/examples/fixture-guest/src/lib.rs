@@ -4,13 +4,12 @@
 use fliks_plugin_sdk::bindings::fliks::plugin::types as t;
 use fliks_plugin_sdk::bindings::wasi::http::types::Method;
 use fliks_plugin_sdk::db::{self, Param, Value};
-use fliks_plugin_sdk::http::Request;
-use fliks_plugin_sdk::{
-    HealthReport, HttpRequest, HttpResponse, Plugin, host, info, json_response,
-};
+use fliks_plugin_sdk::router::{Request, Response, Router, not_found};
+use fliks_plugin_sdk::{HealthReport, HttpRequest, HttpResponse, Plugin, host, http, info};
 use serde_json::{Value as Json, json};
 use std::hint::black_box;
 use std::io::Write;
+use std::sync::LazyLock;
 use std::time::{Duration, Instant};
 
 const MIGRATIONS: [(&str, &str); 8] = [
@@ -81,13 +80,6 @@ fn spin(secs: f64) {
     }
 }
 
-fn arg(req: &HttpRequest, k: &str) -> Option<String> {
-    req.query
-        .iter()
-        .find(|(n, _)| n == k)
-        .map(|(_, v)| v.clone())
-}
-
 fn param(v: &Json) -> Param {
     let x = &v["v"];
     match v["t"].as_str().unwrap_or("") {
@@ -137,88 +129,109 @@ fn run_query(body: &[u8]) -> Json {
     }
 }
 
-fn ok(body: Json) -> Result<HttpResponse, String> {
-    Ok(json_response(200, body.to_string()))
+fn ok(body: Json) -> Result<Response, String> {
+    Ok(Response::json(200, &body))
 }
 
-fn host_result<T: serde::Serialize>(r: Result<T, t::HostError>) -> Result<HttpResponse, String> {
+fn host_result<T: serde::Serialize>(r: Result<T, t::HostError>) -> Result<Response, String> {
     match r {
         Ok(v) => ok(json!({ "ok": v })),
         Err(e) => ok(json!({ "error": e.code, "message": e.message })),
     }
 }
 
-fn parity(req: &HttpRequest) -> Option<Result<HttpResponse, String>> {
-    let p = req.path.to_ascii_lowercase();
-    let p = p.strip_suffix('/').unwrap_or(&p);
-    Some(match p {
-        "/hello" | "/admin" | "/queue" => ok(json!({ "hello": "world", "path": req.path })),
-        "/headers" => Ok(HttpResponse {
-            status: 200,
-            headers: vec![
-                ("content-type".into(), "application/json".into()),
-                ("set-cookie".into(), "a=b".into()),
-                ("x-custom".into(), "1".into()),
-                ("ETag".into(), "\"v1\"".into()),
-                ("cache-control".into(), "max-age=60".into()),
-                ("location".into(), "/elsewhere".into()),
-            ],
-            body: br#"{"headers":true}"#.to_vec(),
-        }),
-        "/echo" => {
-            let body: Json = serde_json::from_slice(&req.body).unwrap_or(Json::Null);
-            ok(
-                json!({ "method": req.method, "body": body, "query": req.query.iter().map(|(k, v)| json!([k, v])).collect::<Vec<_>>() }),
-            )
-        }
-        "/config" => match host::config_get(None) {
-            Ok(v) => ok(Json::Object(
-                v.into_iter().map(|(k, v)| (k, Json::String(v))).collect(),
-            )),
-            Err(e) => ok(json!({ "error": e.code })),
-        },
-        _ if p.starts_with("/status/") => {
-            let code: u16 = p["/status/".len()..].parse().unwrap_or(500);
-            Ok(HttpResponse {
-                status: code,
-                headers: vec![("content-type".into(), "application/json".into())],
-                body: br#"{"status":true}"#.to_vec(),
-            })
-        }
-        _ if p.starts_with("/media/") => ok(json!({ "media": &req.path["/media/".len()..] })),
-        _ if p.starts_with("/path/") => ok(json!({ "path": req.path })),
-        _ => return None,
-    })
+fn hello(req: &Request) -> Result<Response, String> {
+    ok(json!({ "hello": "world", "path": req.path }))
 }
 
-fn test_route(req: HttpRequest) -> Result<HttpResponse, String> {
-    let rest = req
-        .path
-        .strip_prefix("/test")
-        .unwrap_or(&req.path)
-        .to_owned();
+fn headers(_: &Request) -> Result<Response, String> {
+    Ok(Response::json(200, &json!({ "headers": true }))
+        .with_header("set-cookie", "a=b")
+        .with_header("x-custom", "1")
+        .with_header("ETag", "\"v1\"")
+        .with_header("cache-control", "max-age=60")
+        .with_header("location", "/elsewhere"))
+}
+
+fn echo(req: &Request) -> Result<Response, String> {
+    let body: Json = req.json().unwrap_or(Json::Null);
+    let query: Vec<Json> = req.query.iter().map(|(k, v)| json!([k, v])).collect();
+    ok(json!({ "method": req.method, "body": body, "query": query }))
+}
+
+fn config(_: &Request) -> Result<Response, String> {
+    match host::config_get(None) {
+        Ok(v) => ok(Json::Object(
+            v.into_iter().map(|(k, v)| (k, Json::String(v))).collect(),
+        )),
+        Err(e) => ok(json!({ "error": e.code })),
+    }
+}
+
+fn status(req: &Request) -> Result<Response, String> {
+    let code = req
+        .param("code")
+        .and_then(|c| c.parse().ok())
+        .unwrap_or(500);
+    Ok(Response::json(code, &json!({ "status": true })))
+}
+
+fn path(req: &Request) -> Result<Response, String> {
+    ok(json!({ "path": req.path }))
+}
+
+fn media(req: &Request) -> Result<Response, String> {
+    ok(json!({ "media": req.param("id") }))
+}
+
+static ROUTES: LazyLock<Router> = LazyLock::new(|| {
+    Router::new()
+        .route("GET", "/hello", hello)
+        .route("GET", "/admin", hello)
+        .route("GET", "/queue", hello)
+        .route("GET", "/media/:id", media)
+        .route("GET", "/status/:code", status)
+        .route("GET", "/headers", headers)
+        .route("POST", "/echo", echo)
+        .route("GET", "/path/:p", path)
+        .route("GET", "/config", config)
+        .route("GET", "/test/*rest", test_route)
+        .route("POST", "/test/*rest", test_route)
+});
+
+fn test_route(req: &Request) -> Result<Response, String> {
+    let rest = req.param("rest").unwrap_or_default();
     match rest.as_str() {
-        "/loop" => loop {
+        "loop" => loop {
             black_box(());
         },
-        "/trap" => panic!("asked to trap"),
-        "/spin" => {
-            spin(arg(&req, "s").and_then(|v| v.parse().ok()).unwrap_or(1.0));
+        "trap" => panic!("asked to trap"),
+        "spin" => {
+            spin(
+                req.query("s")
+                    .map(str::to_owned)
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(1.0),
+            );
             ok(json!({ "spun": true }))
         }
-        "/deadline" => ok(json!({ "remaining": host::deadline_remaining_ms() })),
-        "/grow" => {
-            let mb: usize = arg(&req, "mb").and_then(|v| v.parse().ok()).unwrap_or(1);
+        "deadline" => ok(json!({ "remaining": host::deadline_remaining_ms() })),
+        "grow" => {
+            let mb: usize = req
+                .query("mb")
+                .map(str::to_owned)
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(1);
             let v = vec![1u8; mb << 20];
             ok(json!({ "len": black_box(v).len() }))
         }
-        "/sock" => {
+        "sock" => {
             let r = std::net::TcpStream::connect("93.184.216.34:80");
             ok(json!({ "connected": r.is_ok() }))
         }
-        "/fetch" => {
-            let url = arg(&req, "url").unwrap_or_default();
-            match Request::new(Method::Get, url)
+        "fetch" => {
+            let url = req.query("url").map(str::to_owned).unwrap_or_default();
+            match http::Request::new(Method::Get, url)
                 .timeout(Duration::from_secs(10))
                 .send()
             {
@@ -228,8 +241,12 @@ fn test_route(req: HttpRequest) -> Result<HttpResponse, String> {
                 Err(e) => ok(json!({ "error": format!("{e:?}") })),
             }
         }
-        "/spam" => {
-            let kb: usize = arg(&req, "kb").and_then(|v| v.parse().ok()).unwrap_or(1);
+        "spam" => {
+            let kb: usize = req
+                .query("kb")
+                .map(str::to_owned)
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(1);
             let line = "x".repeat(1023);
             for i in 0..kb {
                 if i % 2 == 0 {
@@ -241,57 +258,73 @@ fn test_route(req: HttpRequest) -> Result<HttpResponse, String> {
             info!("spam done");
             ok(json!({ "kb": kb }))
         }
-        "/db/sleep" => {
-            let s: f64 = arg(&req, "s").and_then(|v| v.parse().ok()).unwrap_or(1.0);
+        "db/sleep" => {
+            let s: f64 = req
+                .query("s")
+                .map(str::to_owned)
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(1.0);
             match db::query("SELECT 1 AS slept FROM pg_sleep($1)", &[Param::Float(s)]) {
                 Ok(_) => ok(json!({ "slept": s })),
                 Err(e) => ok(json!({ "error": e.code, "message": e.message })),
             }
         }
-        "/db/set-timeout" => {
+        "db/set-timeout" => {
             ok(json!({ "ok": db::execute("SET statement_timeout = 1", &[]).is_ok() }))
         }
-        "/db/show-timeout" => {
+        "db/show-timeout" => {
             let r = db::query("SHOW statement_timeout", &[]).map_err(|e| e.message)?;
             ok(json!({ "statement_timeout": r.text(0, "statement_timeout") }))
         }
-        "/db/migrate" => match db::migrate(&MIGRATIONS) {
+        "db/migrate" => match db::migrate(&MIGRATIONS) {
             Ok(applied) => ok(json!({ "applied": applied })),
             Err(e) => ok(json!({ "error": e.code, "message": e.message })),
         },
-        "/db/script" => {
+        "db/script" => {
             let up = String::from_utf8_lossy(&req.body).into_owned();
-            let name = arg(&req, "name").unwrap_or_else(|| "script".into());
+            let name = req
+                .query("name")
+                .map(str::to_owned)
+                .unwrap_or_else(|| "script".into());
             match db::migrate(&[(name.as_str(), up.as_str())]) {
                 Ok(applied) => ok(json!({ "applied": applied })),
                 Err(e) => ok(json!({ "error": e.code, "message": e.message })),
             }
         }
-        "/db/query" => ok(run_query(&req.body)),
-        "/schedule" => {
-            let key = arg(&req, "key").unwrap_or_default();
-            let delay = arg(&req, "delay").and_then(|v| v.parse().ok()).unwrap_or(0);
+        "db/query" => ok(run_query(&req.body)),
+        "schedule" => {
+            let key = req.query("key").map(str::to_owned).unwrap_or_default();
+            let delay = req
+                .query("delay")
+                .map(str::to_owned)
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(0);
             let payload = String::from_utf8_lossy(&req.body).into_owned();
             host_result(host::schedule_call(&key, delay, &payload))
         }
-        "/cancel" => host_result(host::cancel_call(&arg(&req, "key").unwrap_or_default())),
-        "/counts" => host_result(host::counts_set(
-            &arg(&req, "key").unwrap_or_default(),
-            arg(&req, "v").and_then(|v| v.parse().ok()).unwrap_or(0),
+        "cancel" => host_result(host::cancel_call(
+            &req.query("key").map(str::to_owned).unwrap_or_default(),
         )),
-        "/config-set" => {
-            let v = arg(&req, "value");
+        "counts" => host_result(host::counts_set(
+            &req.query("key").map(str::to_owned).unwrap_or_default(),
+            req.query("v")
+                .map(str::to_owned)
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(0),
+        )),
+        "config-set" => {
+            let v = req.query("value").map(str::to_owned);
             host_result(host::config_set(
-                &arg(&req, "key").unwrap_or_default(),
+                &req.query("key").map(str::to_owned).unwrap_or_default(),
                 v.as_deref(),
             ))
         }
-        "/emit" => host_result(host::events_emit_own(
+        "emit" => host_result(host::events_emit_own(
             "ping",
             r#"{"n":1}"#,
             t::Audience::Everyone,
         )),
-        "/resolve" => host_result(
+        "resolve" => host_result(
             host::media_resolve(&t::ResolveQuery {
                 media_ids: vec![1, 2],
                 season_ids: vec![],
@@ -299,13 +332,17 @@ fn test_route(req: HttpRequest) -> Result<HttpResponse, String> {
             })
             .map(|v| v.into_iter().map(|(k, m)| (k, m.title)).collect::<Vec<_>>()),
         ),
-        "/exists" => host_result(host::media_exists(&[1, 2, 999_999])),
-        "/ingest" => {
-            let paths: Vec<String> = arg(&req, "path").into_iter().collect();
+        "exists" => host_result(host::media_exists(&[1, 2, 999_999])),
+        "ingest" => {
+            let paths: Vec<String> = req.query("path").map(str::to_owned).into_iter().collect();
             host_result(
                 host::library_ingest(&t::IngestRequest {
                     idempotency_key: "k".into(),
-                    media_id: arg(&req, "media").and_then(|v| v.parse().ok()).unwrap_or(1),
+                    media_id: req
+                        .query("media")
+                        .map(str::to_owned)
+                        .and_then(|v| v.parse().ok())
+                        .unwrap_or(1),
                     paths,
                     transfer: t::TransferMode::Copy,
                     fallback_quality: None,
@@ -314,7 +351,7 @@ fn test_route(req: HttpRequest) -> Result<HttpResponse, String> {
                 .map(|r| r.imported.len()),
             )
         }
-        _ => Ok(json_response(404, r#"{"error":"not found"}"#)),
+        _ => Ok(not_found()),
     }
 }
 
@@ -404,13 +441,7 @@ impl Plugin for Fixture {
     }
 
     fn http(req: HttpRequest) -> Result<HttpResponse, String> {
-        if let Some(r) = parity(&req) {
-            return r;
-        }
-        if req.path.to_ascii_lowercase().starts_with("/test/") {
-            return test_route(req);
-        }
-        Ok(json_response(404, r#"{"error":"not found"}"#))
+        ROUTES.handle(req)
     }
 }
 
