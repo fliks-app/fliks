@@ -1,7 +1,5 @@
-//! The plugin host's Rust-only tests (`plugins.md` Vectors/parity, "Rust-only tests"), against
-//! real components. Needs `S8_PG_ADMIN_URL` (a superuser URL of the maintenance database) and the
-//! built fixture components (`FLIKS_TEST_WASM_DIR`, default `$CARGO_TARGET_DIR/wasm32-wasip2/release`);
-//! skipped otherwise.
+//! The plugin host's Rust-only tests against real components (`plugins.md` Vectors/parity).
+//! Need `S8_PG_ADMIN_URL` and the fixture wasm (`FLIKS_TEST_WASM_DIR`); skipped otherwise.
 mod api;
 mod harness;
 mod net;
