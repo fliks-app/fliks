@@ -2,6 +2,8 @@
 
 Sources: repo state at `origin/main` ed47b977 (S4 merged; S5-S8 not yet), plan §0, §9.1-§9.3, §10 (S9, "Milestone gate", "Release gate"), §15; engine `origin/main` d4189ba (`Dockerfile`, `crates/engine/src/{slots,supervise,jobs/sync}.rs`); the TrueNAS catalog `ix-dev/community/fliks` on `truenas/apps` master (read 2026-10-16). Milestone: S9. No Nest `[ts:]` tags: this spec deletes code, it ports none. File:line citations are the tree at ed47b977; S5-S8 delete part of what is listed, so the S9 porter **re-greps every row** (section 11) and treats a row that is already gone as done.
 
+**Release rule** (plan §0 rule 0, user): nothing is released between 4.x and the S9 result. The release gate below is the only user-facing gate, and the only upgrade path that must work is a real 4.x install to 5.0.0 (release-gate item 1). Intermediate milestone states never reached users, so S9 needs no compatibility with them: no shim, no migration and no bridge for a state between S0 and S8. Progress since this spec was written: S5-S7 are merged (`main` 6d41c5ed), S8 is PR #1753.
+
 State at ed47b977 to size the work: `backend/` 1286 tracked files (191 `*.spec.ts`, 82 under `src/migrations`, 549 under `assets/prowlarr-definitions`); `server/contract/nest-routes.json` 222 routes; `server/docs/bridge.md` 30 data rows (19 bridges, 11 known gaps); the S-prep manifest (`85da4dc6`, 366 distinct non-`ALL` operations) minus `server/openapi.json` leaves 219.
 
 ## 1. Preconditions (entry gate of the S9 PR)
@@ -253,6 +255,8 @@ Each item names the check so "done" is observable. Items 1-4 and 6 are the plan'
 10. **The grep exit** of section 8, run on the release commit.
 11. **Version and engine**: the release PR (not merged) proposes `5.0.0`, `engine.lock` equals the Dockerfile `ENGINE_IMAGE` and the Cargo tag, the image's `fliks-engine --version` prints that release.
 12. **Rollback note**: the release PR body states that the 4.x → 5.0 upgrade is one-way (new sqlx migrations are not reversible) and that a downgrade needs the pre-upgrade dump; the user is reminded to take it.
+13. **First-party plugins published as pluginApi 2** before the release PR is merged: `fk-plugin-download` and `fk-plugin-notify` 1.0.0 are tagged in their repos (release assets `plugin.json`, `plugin.wasm`, `logo.svg`), packaged and signed by the catalog's `package-plugin.yml`, and listed in `catalog.json`. Otherwise a 4.x install's download plugin stays `failed incompatible-api` after the upgrade with nothing for auto-update to install (S8 decision 8). The catalog `COMPATIBILITY.md` row for pluginApi 1 is marked retired in the same catalog PR.
+14. **Parity known limits are the documented ones only**: the unchecked `after` sub-steps and the residual idle race listed in `server/parity/README.md` (#1754, accepted because Nest-recorded expectations are frozen at S9); no other skipped or unchecked scenario.
 
 ## 11. Order of work in the S9 PR (commits)
 
@@ -283,7 +287,7 @@ Fixed in `phase2-plan.md` (companion edit, outside the repo): items 1, 2, 5 in �
 
 ## 13. Deviation rows
 
-None are required by design: S9 deletes the process that served the forwarded routes, and every route keeps its path, status and body. Placeholders (numbering is settled at merge; none touches the HTTP contract):
+None are required by design: S9 deletes the process that served the forwarded routes, and every route keeps its path, status and body. Placeholders (numbering is settled at merge: the next free ids on `main` after S8 are F78 and C152 [assumed until #1753 merges]; none touches the HTTP contract):
 
 | # | Today | After S9 | Client impact |
 |---|---|---|---|
