@@ -14,7 +14,7 @@
         "apiKey": "parity-key",
         "pathMappings": [],
         "targetLibraryId": 99,
-        "url": "http://127.0.0.1:4880/radarr/ok"
+        "url": "http://127.0.0.1:4960/radarr/ok"
       },
       "expect": {
         "body": {

@@ -7,7 +7,7 @@
       "as": "admin",
       "body": {
         "apiKey": "parity-key",
-        "url": "http://127.0.0.1:4880/radarr/not-array"
+        "url": "http://127.0.0.1:4960/radarr/not-array"
       },
       "expect": {
         "body": {

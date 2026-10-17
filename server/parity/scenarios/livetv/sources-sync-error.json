@@ -14,7 +14,7 @@
       "body": {
         "kind": "m3u",
         "name": "Dead",
-        "url": "http://127.0.0.1:4921/nope.m3u"
+        "url": "http://127.0.0.1:4961/nope.m3u"
       },
       "expect": {
         "body": {
@@ -38,7 +38,7 @@
           "priority": 0,
           "referer": null,
           "refreshIntervalHours": 12,
-          "url": "http://127.0.0.1:4921/nope.m3u",
+          "url": "http://127.0.0.1:4961/nope.m3u",
           "userAgent": null,
           "username": null
         },
@@ -162,7 +162,7 @@
             "priority": 0,
             "referer": null,
             "refreshIntervalHours": 12,
-            "url": "http://127.0.0.1:4921/nope.m3u",
+            "url": "http://127.0.0.1:4961/nope.m3u",
             "userAgent": null,
             "username": null
           },

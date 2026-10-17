@@ -23,7 +23,7 @@
           }
         ],
         "targetLibraryId": 2,
-        "url": "http://127.0.0.1:4880/sonarr/500"
+        "url": "http://127.0.0.1:4960/sonarr/500"
       },
       "expect": {
         "body": {

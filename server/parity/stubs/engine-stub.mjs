@@ -1,8 +1,8 @@
-// Stub engine for the markers scenarios: node engine-stub.mjs [port=4881]; no dependencies.
+// Stub engine for the markers scenarios: node engine-stub.mjs [port=4963]; no dependencies.
 // Fingerprint jobs end at once, /v1/intro-detect answers one fixed segment per episode.
 import { createServer } from 'node:http';
 
-const port = Number(process.argv[2] ?? 4881);
+const port = Number(process.argv[2] ?? 4963);
 // Files of these ids answer /v1/intro-detect after a delay, so a second detect call finds the season running.
 const SLOW_FILES = new Set([22, 23]);
 const SLOW_MS = 1500;

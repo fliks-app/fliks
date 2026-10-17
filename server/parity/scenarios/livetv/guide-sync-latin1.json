@@ -17,7 +17,7 @@
       "body": {
         "kind": "xmltv",
         "name": "Latin",
-        "url": "http://127.0.0.1:4921/guide-latin1.xml"
+        "url": "http://127.0.0.1:4961/guide-latin1.xml"
       },
       "expect": {
         "body": {
@@ -36,7 +36,7 @@
           "source": null,
           "sourceId": null,
           "timezoneOffsetMinutes": 0,
-          "url": "http://127.0.0.1:4921/guide-latin1.xml"
+          "url": "http://127.0.0.1:4961/guide-latin1.xml"
         },
         "status": 201
       },

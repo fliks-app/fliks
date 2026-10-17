@@ -23,7 +23,7 @@
           }
         ],
         "targetLibraryId": 2,
-        "url": "http://127.0.0.1:4880/sonarr/profile"
+        "url": "http://127.0.0.1:4960/sonarr/profile"
       },
       "expect": {
         "body": {
