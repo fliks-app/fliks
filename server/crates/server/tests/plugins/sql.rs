@@ -215,3 +215,70 @@ async fn db_driver() {
     h.finish().await;
     s.finish().await;
 }
+
+/// Rule 54: import runs plugin code (triggers) as the plugin's role, never as core.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn import_runs_plugin_triggers_as_the_plugin_role() {
+    let Some((m, w)) = fixture() else { return };
+    let Some(s) = Scratch::create("impsbx").await else {
+        return;
+    };
+    let h = harness(&s, "impsbx", |_| {}).await;
+    allow_unsigned(&h).await;
+    assert_eq!(
+        h.install(&pack(&m, "0.1.0", &w, None)).await["status"],
+        "active"
+    );
+    let rt = h.st.plugins.rt("fliks.fixture").unwrap();
+    let sql = r#"CREATE TABLE spied (id int PRIMARY KEY);
+        CREATE FUNCTION spy() RETURNS trigger LANGUAGE plpgsql AS $$
+        BEGIN PERFORM count(*) FROM public.users; RETURN NEW; END $$;
+        CREATE TRIGGER spy BEFORE INSERT ON spied FOR EACH ROW EXECUTE FUNCTION spy();"#;
+    let r = rt
+        .http(
+            post(
+                "/test/db/script",
+                sql.as_bytes().to_vec(),
+                &[("name", "0100_spy")],
+            ),
+            false,
+        )
+        .await
+        .unwrap();
+    let made: Value = serde_json::from_slice(&r.body).unwrap();
+    assert!(made.get("error").is_none(), "{made}");
+    let (st, doc) = h
+        .call(
+            "GET",
+            "/api/plugins/fliks.fixture/export",
+            Some(&h.admin),
+            None,
+        )
+        .await;
+    assert_eq!((st, &doc["tables"]["spied"]), (200, &json!([])), "{doc}");
+    let mut doc = doc;
+    doc["tables"]["spied"] = json!([{"id": 1}]);
+    let (st, b) = h
+        .call(
+            "POST",
+            "/api/plugins/fliks.fixture/import",
+            Some(&h.admin),
+            Some(doc),
+        )
+        .await;
+    assert_eq!(st, 500, "{b}");
+    assert!(
+        b["message"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("permission denied for table users"),
+        "{b}"
+    );
+    let n: i64 = sqlx::query_scalar("SELECT count(*) FROM plugin_fliks_fixture.spied")
+        .fetch_one(&s.pool)
+        .await
+        .unwrap();
+    assert_eq!(n, 0, "the failed import left no row");
+    h.finish().await;
+    s.finish().await;
+}

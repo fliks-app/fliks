@@ -269,6 +269,7 @@ impl Plugins {
     async fn fail(&self, id: &str, f: Fail) -> Fail {
         self.stop_rt(id).await;
         self.drop_crons(id);
+        self.counts.forget(id);
         self.registry
             .withdraw(id, registry::installed_but_not_running(f.reason));
         f
@@ -419,9 +420,18 @@ impl Plugins {
         });
     }
 
+    /// A restore holds its claim (C112).
+    pub(crate) fn restoring(&self) -> bool {
+        self.app().is_some_and(|a| a.jobs.is_restoring())
+    }
+
     async fn try_register(&self, pkg: &Package) -> Result<Pending, Fail> {
         let id = &pkg.plugin_id;
         let m = &pkg.manifest;
+        // The ladder retries it; `after_restore` registers everything again anyway.
+        if self.restoring() {
+            return Err(fail(DB_UNAVAILABLE, "a restore is running"));
+        }
         self.stop_rt(id).await;
         self.drop_crons(id);
         self.reverify(pkg)?;
@@ -506,25 +516,11 @@ impl Plugins {
                 .flatten()
                 .filter_map(|v| v.as_str().map(str::to_owned))
                 .collect();
-            let password = db::provision(&self.db, id, &refs)
-                .await
-                .map_err(|e| db_fail("db-provision-failed", e))?;
-            let oid = db::database_oid(&self.db)
-                .await
-                .map_err(|e| db_fail("db-provision-failed", e))?;
             let jobs = m["jobs"].as_array().map_or(0, Vec::len);
             let c = &host.env.cfg;
             let cap = 1 + 1 + c.http_max + c.task_max + jobs;
             self.warn_connection_budget(cap).await;
-            Some(db::PluginDb::new(
-                &c.pg,
-                self.db.clone(),
-                &db::role(&oid, id),
-                &db::schema(id),
-                &password,
-                cap,
-                c.deadlines.db_query,
-            ))
+            Some(self.open_db(&host, id, &refs, cap).await?)
         } else {
             if m["database"]["coreRefs"]
                 .as_array()
@@ -575,6 +571,32 @@ impl Plugins {
             declared,
             registered,
         })
+    }
+
+    /// Provisions (rotating the password) and opens the plugin's own role pool.
+    pub(crate) async fn open_db(
+        &self,
+        host: &Host,
+        id: &str,
+        refs: &[String],
+        cap: usize,
+    ) -> Result<Arc<db::PluginDb>, Fail> {
+        let password = db::provision(&self.db, id, refs)
+            .await
+            .map_err(|e| db_fail("db-provision-failed", e))?;
+        let oid = db::database_oid(&self.db)
+            .await
+            .map_err(|e| db_fail("db-provision-failed", e))?;
+        let c = &host.env.cfg;
+        Ok(db::PluginDb::new(
+            &c.pg,
+            self.db.clone(),
+            &db::role(&oid, id),
+            &db::schema(id),
+            &password,
+            cap,
+            c.deadlines.db_query,
+        ))
     }
 
     async fn warn_connection_budget(&self, _cap: usize) {
@@ -841,6 +863,7 @@ impl Plugins {
 
     /// C112: every plugin stops before a restore replays.
     pub async fn stop_all(&self) {
+        self.db_waits.lock().unwrap().clear();
         let ids: Vec<String> = self.live().iter().map(|r| r.sh.id.to_string()).collect();
         for id in ids {
             let _l = self.lock(&id).await;

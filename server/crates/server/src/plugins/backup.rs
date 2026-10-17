@@ -1,20 +1,54 @@
-//! Plugin export and import (`plugins.md` rules 53-54, C102, C103).
+//! Plugin export and import (`plugins.md` rules 53-54, C102, C103), on the plugin's own role:
+//! its triggers, defaults and policies are plugin code and stay in the rule-35 sandbox.
 use super::Plugins;
-use super::db::schema;
+use super::db::{PluginDb, schema};
 use super::install::{InstallError, ie};
+use super::packages::Package;
 use axum::http::StatusCode;
 use serde_json::{Map, Value, json};
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
+use tokio_postgres::{GenericClient, IsolationLevel};
 
 fn quote(i: &str) -> String {
     format!("\"{}\"", i.replace('"', "\"\""))
 }
 
-fn internal(e: sqlx::Error) -> InstallError {
+/// The server's own text for a database error (`tokio_postgres` displays only "db error").
+trait Detail {
+    fn detail(&self) -> String;
+}
+
+impl Detail for tokio_postgres::Error {
+    fn detail(&self) -> String {
+        self.as_db_error()
+            .map_or_else(|| self.to_string(), |d| d.message().to_owned())
+    }
+}
+
+impl Detail for sqlx::Error {
+    fn detail(&self) -> String {
+        self.to_string()
+    }
+}
+
+impl Detail for &str {
+    fn detail(&self) -> String {
+        (*self).to_owned()
+    }
+}
+
+impl Detail for String {
+    fn detail(&self) -> String {
+        self.clone()
+    }
+}
+
+fn internal(e: impl Detail) -> InstallError {
     ie(
         StatusCode::INTERNAL_SERVER_ERROR,
         "PLUGIN_DB_PROVISION_FAILED",
-        e.to_string(),
+        e.detail(),
     )
 }
 
@@ -24,6 +58,73 @@ fn malformed() -> InstallError {
         "PLUGIN_EXPORT_MALFORMED",
         "not a recognisable plugin export document",
     )
+}
+
+/// Base tables of the plugin schema, the `_`-prefixed bookkeeping excluded.
+async fn tables(c: &impl GenericClient, s: &str) -> Result<Vec<String>, tokio_postgres::Error> {
+    let rows = c
+        .query(
+            "SELECT table_name::text FROM information_schema.tables
+              WHERE table_schema = $1 AND table_type = 'BASE TABLE' ORDER BY table_name",
+            &[&s],
+        )
+        .await?;
+    Ok(rows
+        .iter()
+        .map(|r| r.get::<_, String>(0))
+        .filter(|t| !t.starts_with('_'))
+        .collect())
+}
+
+/// Writable columns: generated ones are skipped, the dropped ones never listed.
+async fn columns(
+    c: &impl GenericClient,
+    s: &str,
+    t: &str,
+) -> Result<BTreeSet<String>, tokio_postgres::Error> {
+    let rows = c
+        .query(
+            "SELECT a.attname::text FROM pg_attribute a
+              WHERE a.attrelid = ($1::text)::regclass AND a.attnum > 0 AND NOT a.attisdropped
+                AND a.attgenerated = ''",
+            &[&format!("{}.{}", quote(s), quote(t))],
+        )
+        .await?;
+    Ok(rows.iter().map(|r| r.get::<_, String>(0)).collect())
+}
+
+/// Parents first by the schema's own foreign keys; on a cycle the first remaining table goes next.
+async fn fk_order(
+    c: &impl GenericClient,
+    s: &str,
+    names: &[String],
+) -> Result<Vec<String>, tokio_postgres::Error> {
+    let rows = c
+        .query(
+            "SELECT cl.relname::text, fcl.relname::text FROM pg_constraint con
+               JOIN pg_class cl ON cl.oid = con.conrelid JOIN pg_namespace ns ON ns.oid = cl.relnamespace
+               JOIN pg_class fcl ON fcl.oid = con.confrelid JOIN pg_namespace fns ON fns.oid = fcl.relnamespace
+              WHERE con.contype = 'f' AND ns.nspname = $1 AND fns.nspname = $1",
+            &[&s],
+        )
+        .await?;
+    let mut deps: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    for r in &rows {
+        let (child, parent): (String, String) = (r.get(0), r.get(1));
+        if child != parent && names.contains(&child) && names.contains(&parent) {
+            deps.entry(child).or_default().insert(parent);
+        }
+    }
+    let mut out: Vec<String> = vec![];
+    let mut left: Vec<&String> = names.iter().collect();
+    while !left.is_empty() {
+        let ready = left.iter().position(|n| {
+            deps.get(*n)
+                .is_none_or(|ps| ps.iter().all(|p| out.contains(p)))
+        });
+        out.push(left.remove(ready.unwrap_or(0)).clone());
+    }
+    Ok(out)
 }
 
 impl Plugins {
@@ -43,58 +144,80 @@ impl Plugins {
             .collect())
     }
 
-    /// Base tables of the plugin schema, the `_`-prefixed bookkeeping excluded.
-    async fn tables(&self, id: &str) -> sqlx::Result<Vec<String>> {
-        let all: Vec<String> = sqlx::query_scalar(
-            "SELECT table_name::text FROM information_schema.tables
-              WHERE table_schema = $1 AND table_type = 'BASE TABLE' ORDER BY table_name",
-        )
-        .bind(schema(id))
-        .fetch_all(&self.db)
-        .await?;
-        Ok(all.into_iter().filter(|t| !t.starts_with('_')).collect())
-    }
-
     fn has_schema(m: &Value) -> bool {
         m["kind"] == "process" && m["database"]["schema"] == Value::Bool(true)
     }
 
+    /// The live plugin's role pool, else one opened for this call (provisioning rotates the password).
+    async fn role_db(&self, pkg: &Package) -> Result<Arc<PluginDb>, InstallError> {
+        if let Some(db) = self.rt(&pkg.plugin_id).and_then(|r| r.sh.db.clone()) {
+            return Ok(db);
+        }
+        let host = self.host().map_err(|e| internal(e.to_string()))?;
+        let refs: Vec<String> = pkg.manifest["database"]["coreRefs"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|v| v.as_str().map(str::to_owned))
+            .collect();
+        self.open_db(&host, &pkg.plugin_id, &refs, 1)
+            .await
+            .map_err(|f| internal(format!("{}: {}", f.reason, f.detail)))
+    }
+
     pub async fn export(&self, id: &str) -> Result<Value, InstallError> {
         let pkg = self.find_installed(id).await?;
-        let mut tables = Map::new();
+        let mut out = Map::new();
         if Self::has_schema(&pkg.manifest) {
-            for t in self.tables(id).await.map_err(internal)? {
-                let pk: Vec<String> = sqlx::query_scalar(
-                    "SELECT a.attname::text FROM pg_index i
-                       JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
-                      WHERE i.indrelid = ($1 || '.' || $2)::regclass AND i.indisprimary ORDER BY a.attnum",
-                )
-                .bind(quote(&schema(id)))
-                .bind(quote(&t))
-                .fetch_all(&self.db)
+            let db = self.role_db(&pkg).await?;
+            let mut session = db.session().await.map_err(|e| internal(e.message))?;
+            // One snapshot for every table.
+            let tx = session
+                .client()
+                .build_transaction()
+                .isolation_level(IsolationLevel::RepeatableRead)
+                .read_only(true)
+                .start()
                 .await
                 .map_err(internal)?;
+            let s = schema(id);
+            for t in tables(&tx, &s).await.map_err(internal)? {
+                let pk = tx
+                    .query(
+                        "SELECT a.attname::text FROM pg_index i
+                           CROSS JOIN LATERAL unnest(i.indkey) WITH ORDINALITY k(attnum, ord)
+                           JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = k.attnum
+                          WHERE i.indrelid = ($1::text)::regclass AND i.indisprimary ORDER BY k.ord",
+                        &[&format!("{}.{}", quote(&s), quote(&t))],
+                    )
+                    .await
+                    .map_err(internal)?;
                 let order = if pk.is_empty() {
                     String::new()
                 } else {
-                    format!(
-                        " ORDER BY {}",
-                        pk.iter()
-                            .map(|c| format!("r.{}", quote(c)))
-                            .collect::<Vec<_>>()
-                            .join(", ")
-                    )
+                    let cols: Vec<String> = pk
+                        .iter()
+                        .map(|r| format!("r.{}", quote(&r.get::<_, String>(0))))
+                        .collect();
+                    format!(" ORDER BY {}", cols.join(", "))
                 };
-                let rows: Vec<Value> = sqlx::query_scalar(&format!(
-                    "SELECT to_jsonb(r) FROM {}.{} r{order}",
-                    quote(&schema(id)),
-                    quote(&t)
-                ))
-                .fetch_all(&self.db)
-                .await
-                .map_err(internal)?;
-                tables.insert(t, Value::Array(rows));
+                let rows = tx
+                    .query(
+                        &format!(
+                            "SELECT to_jsonb(r) FROM {}.{} r{order}",
+                            quote(&s),
+                            quote(&t)
+                        ),
+                        &[],
+                    )
+                    .await
+                    .map_err(internal)?;
+                out.insert(
+                    t,
+                    Value::Array(rows.iter().map(|r| r.get::<_, Value>(0)).collect()),
+                );
             }
+            tx.commit().await.map_err(internal)?;
         }
         Ok(json!({
             "formatVersion": 1,
@@ -102,61 +225,12 @@ impl Plugins {
             "pluginVersion": pkg.version,
             "exportedAt": chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
             "settings": self.owned_settings(id).await.map_err(internal)?,
-            "tables": tables,
+            "tables": out,
         }))
     }
 
-    async fn columns(&self, id: &str, table: &str) -> sqlx::Result<BTreeSet<String>> {
-        let c: Vec<String> = sqlx::query_scalar(
-            "SELECT column_name::text FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2",
-        )
-        .bind(schema(id))
-        .bind(table)
-        .fetch_all(&self.db)
-        .await?;
-        Ok(c.into_iter().collect())
-    }
-
-    /// Parents first by the schema's own foreign keys; a cycle keeps the document's order.
-    async fn fk_order(&self, id: &str, names: &[String]) -> sqlx::Result<Vec<String>> {
-        let edges: Vec<(String, String)> = sqlx::query_as(
-            "SELECT cl.relname::text, fcl.relname::text FROM pg_constraint con
-               JOIN pg_class cl ON cl.oid = con.conrelid JOIN pg_namespace ns ON ns.oid = cl.relnamespace
-               JOIN pg_class fcl ON fcl.oid = con.confrelid JOIN pg_namespace fns ON fns.oid = fcl.relnamespace
-              WHERE con.contype = 'f' AND ns.nspname = $1 AND fns.nspname = $1",
-        )
-        .bind(schema(id))
-        .fetch_all(&self.db)
-        .await?;
-        let mut deps: BTreeMap<&str, BTreeSet<&str>> = BTreeMap::new();
-        for (child, parent) in &edges {
-            if names.contains(child) && names.contains(parent) {
-                deps.entry(child.as_str())
-                    .or_default()
-                    .insert(parent.as_str());
-            }
-        }
-        let mut out: Vec<String> = vec![];
-        let mut left: Vec<&String> = names.iter().collect();
-        while !left.is_empty() {
-            let pos = left.iter().position(|n| {
-                deps.get(n.as_str())
-                    .is_none_or(|ps| ps.iter().all(|p| out.iter().any(|o| o == p)))
-            });
-            match pos {
-                Some(i) => out.push(left.remove(i).clone()),
-                None => {
-                    out.extend(left.into_iter().cloned());
-                    break;
-                }
-            }
-        }
-        Ok(out)
-    }
-
-    /// Rule 54: every check before any write; one transaction for the tables.
+    /// Rule 54: every check before any write; the rows in one transaction as the plugin's role.
     pub async fn import(&self, id: &str, doc: &Value) -> Result<Value, InstallError> {
-        let o = doc.as_object().ok_or_else(malformed)?;
         let ok = doc["formatVersion"] == json!(1)
             && doc["pluginId"].is_string()
             && doc["pluginVersion"].is_string()
@@ -166,7 +240,7 @@ impl Plugins {
             && doc["tables"]
                 .as_object()
                 .is_some_and(|t| t.values().all(Value::is_array));
-        if !ok || o.is_empty() {
+        if !ok {
             return Err(malformed());
         }
         let doc_id = doc["pluginId"].as_str().unwrap_or_default();
@@ -177,6 +251,21 @@ impl Plugins {
                 format!("export is for \"{doc_id}\", not \"{id}\""),
             ));
         }
+        let st = self
+            .app()
+            .ok_or_else(|| internal("no application state"))?
+            .clone();
+        // C112: no restore may replay under an import, nor a second import run beside it.
+        let _claim = st
+            .jobs
+            .claim(&format!("plugin-import:{id}"))
+            .ok_or_else(|| {
+                ie(
+                    StatusCode::CONFLICT,
+                    "PLUGIN_BUSY",
+                    format!("plugin \"{id}\" is busy: a restore or another import is running"),
+                )
+            })?;
         let _l = self.lock(id).await;
         let pkg = self.find_installed(id).await?;
         if pkg.status != "active" {
@@ -200,29 +289,9 @@ impl Plugins {
             ));
         }
         let has = Self::has_schema(&pkg.manifest);
-        let tables = doc["tables"].as_object().expect("checked");
+        let tables_doc = doc["tables"].as_object().expect("checked");
         let settings = doc["settings"].as_object().expect("checked");
-        if has {
-            for t in self.tables(id).await.map_err(internal)? {
-                let any: Option<i32> = sqlx::query_scalar(&format!(
-                    "SELECT 1 FROM {}.{} LIMIT 1",
-                    quote(&schema(id)),
-                    quote(&t)
-                ))
-                .fetch_optional(&self.db)
-                .await
-                .map_err(internal)?;
-                if any.is_some() {
-                    return Err(ie(
-                        StatusCode::CONFLICT,
-                        "PLUGIN_SCHEMA_NOT_EMPTY",
-                        format!(
-                            "plugin \"{id}\" already has rows in its schema — uninstall and reinstall it before importing"
-                        ),
-                    ));
-                }
-            }
-        } else if !tables.is_empty() {
+        if !has && !tables_doc.is_empty() {
             return Err(ie(
                 StatusCode::CONFLICT,
                 "PLUGIN_EXPORT_HAS_NO_SCHEMA",
@@ -231,8 +300,13 @@ impl Plugins {
                 ),
             ));
         }
-        let prefix = format!("plugin.{id}.");
-        if let Some(k) = settings.keys().find(|k| !k.starts_with(&prefix)) {
+        let ids = super::imports::installed_ids(&self.db)
+            .await
+            .map_err(internal)?;
+        let owned = |k: &str| {
+            fliks_domain::plugins::setting_owner(k, ids.iter().map(String::as_str)) == Some(id)
+        };
+        if let Some(k) = settings.keys().find(|k| !owned(k)) {
             return Err(ie(
                 StatusCode::BAD_REQUEST,
                 "PLUGIN_EXPORT_SETTING_OUT_OF_SCOPE",
@@ -243,19 +317,53 @@ impl Plugins {
             ));
         }
         let mut counts = Map::new();
-        if has {
-            let known: BTreeSet<String> = self
-                .tables(id)
+        let entries: Vec<(String, Option<String>)> = settings
+            .iter()
+            .map(|(k, v)| (k.clone(), v.as_str().map(str::to_owned)))
+            .collect();
+        let mut core_tx = st.db.begin().await.map_err(internal)?;
+        for (k, v) in &entries {
+            crate::settings::set_in(&mut core_tx, k, v.as_deref())
                 .await
-                .map_err(internal)?
-                .into_iter()
-                .collect();
-            let mut cols = BTreeMap::new();
-            for (t, rows) in tables {
+                .map_err(internal)?;
+        }
+        if has {
+            let db = self.role_db(&pkg).await?;
+            let mut session = db.session().await.map_err(|e| internal(e.message))?;
+            let tx = session.client().transaction().await.map_err(internal)?;
+            let s = schema(id);
+            let known = tables(&tx, &s).await.map_err(internal)?;
+            for t in &known {
+                // Re-checked under the lock, so nothing lands between the check and the inserts.
+                tx.batch_execute(&format!(
+                    "LOCK TABLE {}.{} IN EXCLUSIVE MODE",
+                    quote(&s),
+                    quote(t)
+                ))
+                .await
+                .map_err(internal)?;
+                let any = tx
+                    .query_opt(
+                        &format!("SELECT 1 FROM {}.{} LIMIT 1", quote(&s), quote(t)),
+                        &[],
+                    )
+                    .await
+                    .map_err(internal)?;
+                if any.is_some() {
+                    return Err(ie(
+                        StatusCode::CONFLICT,
+                        "PLUGIN_SCHEMA_NOT_EMPTY",
+                        format!(
+                            "plugin \"{id}\" already has rows in its schema — uninstall and reinstall it before importing"
+                        ),
+                    ));
+                }
+            }
+            for (t, rows) in tables_doc {
                 if !known.contains(t) {
                     return Err(malformed());
                 }
-                let c = self.columns(id, t).await.map_err(internal)?;
+                let c = columns(&tx, &s, t).await.map_err(internal)?;
                 for r in rows.as_array().expect("checked") {
                     let Some(r) = r.as_object() else {
                         return Err(malformed());
@@ -264,65 +372,55 @@ impl Plugins {
                         return Err(malformed());
                     }
                 }
-                cols.insert(t.clone(), c);
                 counts.insert(t.clone(), json!(rows.as_array().map_or(0, Vec::len)));
             }
-            let names: Vec<String> = tables.keys().cloned().collect();
-            let order = self.fk_order(id, &names).await.map_err(internal)?;
-            let mut tx = self.db.begin().await.map_err(internal)?;
-            let s = quote(&schema(id));
-            for t in &order {
-                for r in tables[t].as_array().expect("checked") {
+            let names: Vec<String> = tables_doc.keys().cloned().collect();
+            for t in fk_order(&tx, &s, &names).await.map_err(internal)? {
+                let target = format!("{}.{}", quote(&s), quote(&t));
+                for r in tables_doc[&t].as_array().expect("checked") {
                     let r = r.as_object().expect("checked");
                     if r.is_empty() {
                         continue;
                     }
                     let list = r.keys().map(|k| quote(k)).collect::<Vec<_>>().join(", ");
-                    sqlx::query(&format!(
-                        "INSERT INTO {s}.{t} ({list}) SELECT {list} FROM jsonb_populate_record(NULL::{s}.{t}, $1)",
-                        t = quote(t)
-                    ))
-                    .bind(Value::Object(r.clone()))
-                    .execute(&mut *tx)
+                    tx.execute(
+                        &format!(
+                            "INSERT INTO {target} ({list}) OVERRIDING SYSTEM VALUE
+                             SELECT {list} FROM jsonb_populate_record(NULL::{target}, $1)"
+                        ),
+                        &[&Value::Object(r.clone())],
+                    )
                     .await
                     .map_err(internal)?;
                 }
-                let serials: Vec<String> = sqlx::query_scalar(
-                    "SELECT column_name::text FROM information_schema.columns
-                      WHERE table_schema = $1 AND table_name = $2
-                        AND pg_get_serial_sequence(quote_ident($1) || '.' || quote_ident($2), column_name) IS NOT NULL",
-                )
-                .bind(schema(id))
-                .bind(t)
-                .fetch_all(&mut *tx)
-                .await
-                .map_err(internal)?;
-                for c in serials {
-                    sqlx::query(&format!(
-                        "SELECT setval(pg_get_serial_sequence(quote_ident($1) || '.' || quote_ident($2), $3),
-                           (SELECT COALESCE(MAX({}), 0) + 1 FROM {s}.{}), false)",
-                        quote(&c),
-                        quote(t)
-                    ))
-                    .bind(schema(id))
-                    .bind(t)
-                    .bind(&c)
-                    .execute(&mut *tx)
+                let serials = tx
+                    .query(
+                        "SELECT column_name::text FROM information_schema.columns
+                          WHERE table_schema = $1 AND table_name = $2
+                            AND pg_get_serial_sequence(quote_ident($1) || '.' || quote_ident($2), column_name) IS NOT NULL",
+                        &[&s, &t],
+                    )
+                    .await
+                    .map_err(internal)?;
+                for c in serials.iter().map(|r| r.get::<_, String>(0)) {
+                    tx.execute(
+                        &format!(
+                            "SELECT setval(pg_get_serial_sequence(quote_ident($1) || '.' || quote_ident($2), $3),
+                               (SELECT COALESCE(MAX({}), 0) + 1 FROM {target}), false)",
+                            quote(&c)
+                        ),
+                        &[&s, &t, &c],
+                    )
                     .await
                     .map_err(internal)?;
                 }
             }
             tx.commit().await.map_err(internal)?;
         }
-        let entries: Vec<(String, Option<String>)> = settings
-            .iter()
-            .map(|(k, v)| (k.clone(), v.as_str().map(str::to_owned)))
-            .collect();
-        if let Some(st) = self.app() {
-            crate::settings::write(st, &entries, Some(&format!("plugin-import:{id}")))
-                .await
-                .map_err(internal)?;
-        }
+        // The rows commit first: the settings alone are cheap to rewrite, a half-restored schema is not.
+        core_tx.commit().await.map_err(internal)?;
+        let keys: Vec<String> = entries.iter().map(|(k, _)| k.clone()).collect();
+        crate::settings::notify_changed(&st, &keys, Some(&format!("plugin-import:{id}"))).await;
         Ok(json!({"pluginId": id, "tablesRestored": counts, "settingsRestored": entries.len()}))
     }
 }

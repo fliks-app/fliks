@@ -250,12 +250,25 @@ impl Plugins {
     }
 
     /// Rule 19: denylist, provisioning, the row, then registration.
+    /// C112: no install, upgrade, enable or restart while a restore holds its claim.
+    fn refuse_while_restoring(&self) -> Result<(), InstallError> {
+        if self.restoring() {
+            return Err(ie(
+                StatusCode::CONFLICT,
+                "PLUGIN_BUSY",
+                "a restore is running",
+            ));
+        }
+        Ok(())
+    }
+
     pub async fn promote(
         &self,
         bytes: &[u8],
         i: &Inspected,
         origin: &str,
     ) -> Result<InstallResult, InstallError> {
+        self.refuse_while_restoring()?;
         let id = &i.id;
         let m = &i.manifest;
         if i.signature == super::trust::Trust::Unsigned {
@@ -452,6 +465,7 @@ impl Plugins {
     }
 
     pub async fn enable(&self, id: &str) -> Result<Summary, InstallError> {
+        self.refuse_while_restoring()?;
         let pending = {
             let _l = self.lock(id).await;
             let pkg = self.find_installed(id).await?;
@@ -476,6 +490,7 @@ impl Plugins {
 
     /// Rule 23: a fresh registration with a fresh breaker; 503 with the reason when it fails.
     pub async fn restart(&self, id: &str) -> Result<(), InstallError> {
+        self.refuse_while_restoring()?;
         let pending = {
             let _l = self.lock(id).await;
             let pkg = self.find_installed(id).await?;

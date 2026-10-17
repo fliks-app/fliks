@@ -118,8 +118,21 @@ pub fn router() -> Router<AppState> {
         )
         .route("/api/plugins/{pluginId}/logo", with_proxy(get(logo)))
         .route("/api/plugins/{pluginId}/export", with_proxy(get(export)))
-        .route("/api/plugins/{pluginId}/import", with_proxy(post(import)))
+        .route(
+            "/api/plugins/{pluginId}/import",
+            with_proxy(post(import)).layer(DefaultBodyLimit::max(IMPORT_LIMIT)),
+        )
         .route("/api/plugins/{pluginId}/{*splat}", any(proxy))
+}
+
+/// Rule 54: an export document carries whole tables.
+const IMPORT_LIMIT: usize = 64 << 20;
+
+/// The JSON body cap of a path when it is not the global one.
+pub fn body_limit_for(path: &str) -> Option<usize> {
+    let rest = path.strip_prefix("/api/plugins/")?;
+    let (id, tail) = rest.split_once('/')?;
+    (!id.is_empty() && tail == "import").then_some(IMPORT_LIMIT)
 }
 
 type Res = Result<Response, Bail>;

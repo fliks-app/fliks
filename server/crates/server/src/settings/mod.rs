@@ -27,6 +27,19 @@ pub async fn write(
     Ok(())
 }
 
+/// One row inside the caller's transaction; `notify_changed` once it commits.
+pub async fn set_in(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    key: &str,
+    value: Option<&str>,
+) -> sqlx::Result<()> {
+    db::set(tx, key, value).await.map(drop)
+}
+
+pub async fn notify_changed(st: &AppState, keys: &[String], origin: Option<&str>) {
+    routes::notify(st, keys, origin).await;
+}
+
 pub fn router() -> Router<AppState> {
     checklist::router()
         .route("/api/settings", get(routes::list).put(routes::put_bulk))

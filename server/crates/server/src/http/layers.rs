@@ -62,6 +62,7 @@ async fn body_limit(State(limit): State<usize>, req: Request, next: Next) -> Res
     if !limited {
         return next.run(req).await;
     }
+    let limit = crate::plugins::routes::body_limit_for(req.uri().path()).unwrap_or(limit);
     let (parts, body) = req.into_parts();
     match to_bytes(body, limit).await {
         Ok(bytes) => {
