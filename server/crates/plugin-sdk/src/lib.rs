@@ -11,6 +11,8 @@ pub mod bindings {
     });
 }
 
+#[cfg(all(feature = "build", not(target_arch = "wasm32")))]
+pub mod build;
 pub mod db;
 pub mod http;
 pub mod log;
