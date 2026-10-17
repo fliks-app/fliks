@@ -15,16 +15,17 @@ pub fn host_err(code: &str, message: impl Into<String>) -> HostError {
     }
 }
 
-/// C109: a core database the host cannot reach is not the guest's fault.
-pub const DB_UNAVAILABLE: &str = "db-unavailable";
-
 fn db_err(e: sqlx::Error) -> HostError {
     let unreachable = matches!(
         e,
         sqlx::Error::Io(_) | sqlx::Error::PoolTimedOut | sqlx::Error::PoolClosed
     );
     host_err(
-        if unreachable { DB_UNAVAILABLE } else { "ERR" },
+        if unreachable {
+            super::db::UNAVAILABLE
+        } else {
+            "ERR"
+        },
         e.to_string(),
     )
 }
@@ -96,7 +97,10 @@ impl Ctx {
 
     fn track<T>(&mut self, started: Instant, r: Result<T, HostError>) -> Result<T, HostError> {
         self.sh.stats.record(started, r.is_ok());
-        if r.as_ref().err().is_some_and(|e| e.code == DB_UNAVAILABLE) {
+        if r.as_ref()
+            .err()
+            .is_some_and(|e| e.code == super::db::UNAVAILABLE)
+        {
             self.db_unavailable = true;
         }
         r
