@@ -1,67 +1,12 @@
 //! Outbound requests to an address vetted once (`livetv-sources.md` rule 14, F70): the host is resolved
 //! a single time, every address checked, and the connection goes to the address that passed.
+use fliks_domain::net::{Class, classify};
 use reqwest::{Client, Url, header::LOCATION, redirect};
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
+use std::net::{IpAddr, SocketAddr};
 
-const BLOCKED_V4: [(Ipv4Addr, u32); 14] = [
-    (Ipv4Addr::new(0, 0, 0, 0), 8),
-    (Ipv4Addr::new(10, 0, 0, 0), 8),
-    (Ipv4Addr::new(100, 64, 0, 0), 10),
-    (Ipv4Addr::new(127, 0, 0, 0), 8),
-    (Ipv4Addr::new(169, 254, 0, 0), 16),
-    (Ipv4Addr::new(172, 16, 0, 0), 12),
-    (Ipv4Addr::new(192, 0, 0, 0), 24),
-    (Ipv4Addr::new(192, 0, 2, 0), 24),
-    (Ipv4Addr::new(192, 168, 0, 0), 16),
-    (Ipv4Addr::new(198, 18, 0, 0), 15),
-    (Ipv4Addr::new(198, 51, 100, 0), 24),
-    (Ipv4Addr::new(203, 0, 113, 0), 24),
-    (Ipv4Addr::new(224, 0, 0, 0), 4),
-    (Ipv4Addr::new(240, 0, 0, 0), 4),
-];
-
-fn blocked_v4(ip: Ipv4Addr) -> bool {
-    BLOCKED_V4.iter().any(|(base, bits)| {
-        let mask = u32::MAX.checked_shl(32 - bits).unwrap_or(0);
-        u32::from(ip) & mask == u32::from(*base) & mask
-    })
-}
-
-/// Loopback, private, link-local, site-local, CGNAT, reserved, documentation, Teredo and multicast space;
-/// IPv4-mapped, -compatible, NAT64 and 6to4 addresses are judged on the IPv4 they carry.
+/// Any address outside the public class of `fliks_domain::net` (F70 and F67 share the one predicate).
 pub fn is_internal(ip: IpAddr) -> bool {
-    match ip {
-        IpAddr::V4(v4) => blocked_v4(v4),
-        IpAddr::V6(v6) => internal_v6(v6),
-    }
-}
-
-fn internal_v6(ip: Ipv6Addr) -> bool {
-    let g = ip.segments();
-    let embedded =
-        |g: [u16; 8]| Ipv4Addr::new((g[6] >> 8) as u8, g[6] as u8, (g[7] >> 8) as u8, g[7] as u8);
-    let mapped = g[..5].iter().all(|x| *x == 0) && g[5] == 0xffff;
-    let nat64 = g[0] == 0x64 && g[1] == 0xff9b && g[2..6].iter().all(|x| *x == 0);
-    if mapped || nat64 || (g[..6].iter().all(|x| *x == 0) && (g[6] | g[7]) > 1) {
-        return blocked_v4(embedded(g));
-    }
-    if g[0] == 0x2002 {
-        return blocked_v4(Ipv4Addr::new(
-            (g[1] >> 8) as u8,
-            g[1] as u8,
-            (g[2] >> 8) as u8,
-            g[2] as u8,
-        ));
-    }
-    if g[0] == 0x2001 && g[1] == 0 {
-        return true;
-    }
-    ip.is_unspecified()
-        || ip.is_loopback()
-        || g[0] & 0xffc0 == 0xfe80
-        || g[0] & 0xffc0 == 0xfec0
-        || g[0] & 0xfe00 == 0xfc00
-        || g[0] & 0xff00 == 0xff00
+    classify(ip) != Class::Public
 }
 
 /// The addresses of `url`'s host, all of them public; the error is the text the probe reports.
@@ -156,15 +101,14 @@ mod tests {
             "fec0::1",
             "2002:7f00:1::1",
             "2002:0a00:1::",
+            "2002:0808:0808::1",
             "2001:0:4136:e378:8000:63bf:3fff:fdd2",
             "::7f00:1",
             "::a00:1",
         ] {
             assert!(is_internal(ip.parse().unwrap()), "{ip}");
         }
-        for ip in ["2002:0808:0808::1", "::808:808"] {
-            assert!(!is_internal(ip.parse().unwrap()), "{ip}");
-        }
+        assert!(!is_internal("::808:808".parse().unwrap()));
         for ip in [
             "8.8.8.8",
             "100.63.255.255",

@@ -1,5 +1,5 @@
 //! `/api/libraries/*` (`docs/spec/libraries.md`): library CRUD, per-user access and the library ACL helpers.
-mod acl;
+pub mod acl;
 mod db;
 mod path;
 mod routes;

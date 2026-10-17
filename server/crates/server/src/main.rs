@@ -3,6 +3,9 @@ use std::process::ExitCode;
 
 #[tokio::main]
 async fn main() -> ExitCode {
+    if std::env::args().nth(1).as_deref() == Some(fliks_server::plugins::compile::SUBCOMMAND) {
+        return fliks_server::plugins::compile::child_main();
+    }
     use tracing_subscriber::prelude::*;
     tracing_subscriber::registry()
         .with(

@@ -27,6 +27,7 @@ pub struct AppState {
     pub jobs: Arc<Running>,
     pub subtitles: Arc<crate::subtitles::Shared>,
     pub livetv: Arc<crate::livetv::Shared>,
+    pub plugins: Arc<crate::plugins::Plugins>,
 }
 
 impl AppState {
@@ -34,6 +35,11 @@ impl AppState {
     pub fn new(db: PgPool, cfg: Config, jwt_secret: &str) -> Self {
         let presence = Presence::default();
         let qoe = Qoe::new(db.clone());
+        let jobs: Arc<Running> = Arc::default();
+        let plugins = Arc::new(crate::plugins::Plugins::new(
+            db.clone(),
+            crate::plugins::Options::from_config(&cfg),
+        ));
         Self {
             jwt: Arc::new(Jwt::new(
                 jwt_secret,
@@ -52,9 +58,10 @@ impl AppState {
             metadata: Arc::new(Metadata::new(db.clone(), &cfg.metadata)),
             images: Arc::new(ImageStore::new(&cfg.metadata.tmdb_image_url)),
             system: Arc::default(),
-            jobs: Arc::default(),
+            jobs,
             subtitles: Arc::default(),
             livetv: Arc::default(),
+            plugins,
             cfg: Arc::new(cfg),
             db,
         }

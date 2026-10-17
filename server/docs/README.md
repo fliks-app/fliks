@@ -87,6 +87,7 @@ Decided behaviour for the Rust port (security fixes F, correctness fixes C; D3).
 | F74 | `DELETE /api/livetv/sessions/:sid` ended any live or on-demand session for any `livetv.read` user | only the owner or a Manage Settings caller may; a sid that is not a live viewer answers `{ok:true}` without calling the engine | a non-owner gets 403 `Not your session` |
 | F75 | the resolver denied a live viewer using the caller's group access, ending someone else's viewer | an owner mismatch is never a denial from the host; the engine's owner check answers 403 | none for owners |
 | F76 | `logoPath` of a channel was the provider URL until the logo was cached | every channel payload returns `null` until cached, then `/api/livetv/channels/<id>/logo` | clients already fall back when null |
+| F77 | a plugin webhook target that is an IPv6 literal was never checked (`hostname` keeps its brackets) | refused at registration like an IPv4 literal | none for public targets |
 
 Not done (user decision 2026-10-15): login rate limiting/lockout.
 
@@ -192,7 +193,7 @@ A 500 or a half-written request is never part of the frozen contract:
 | C106 | a plugin route that a core route shadows (`GET /logo`, `GET /export`, `POST /import`, `/enable`, `/disable`, `/restart`, `/events/test`) is accepted and unreachable | refused at registration (`invalid-route-path`) when its path is literally one of them; param and splat patterns stay legal |
 | C107 | the catalog `zipUrl` fetch follows no redirect, so a GitHub Release asset cannot install | follows https to https redirects, at most 5 hops; the first hop and hops to the `zipUrl` host stay trusted as in Nest, a hop to another host goes through the outbound guard; the signed sha256 stays the gate |
 | C108 | a process plugin has no network grant (it reaches any address) and an upgrade needs no consent for it | an upgrade from a `pluginApi` 1 package with the same id and `verifiedByKeyId` carries `network.internal` forward and auto-update installs it; any later new request fails closed |
-| C109 | Postgres unreachable during a plugin's start or health is a crash: ladder, breaker `failed`, admin restart | not a crash and not counted: the plugin is `degraded`, retried with backoff, `ready` again when the database returns |
+| C109 | Postgres unreachable during a plugin's start, health or provisioning is a crash or a terminal `db-provision-failed` | not a crash and not counted: the plugin is `degraded` (`db-unavailable`), retried with backoff, `ready` again when the database returns; a database unreachable at boot stops the server |
 | C110 | the subtitle search and upgrade ticks overlapped a manual run and a restore | each pass holds the `jobs::Running` claim of its name; a held claim skips the tick (409 for a manual run, a restore is refused) (`subtitles.md` rule 55) |
 | C111 | plugin crons and scheduled work run unseen by the core scheduler; a restore can run under them | plugin jobs and scheduled calls hold a `jobs::Running` claim: a restore is refused while one runs and none starts during a restore (`plugins.md` rules 50, 55) |
 | C112 | a restore replays under running plugin processes | the host stops every plugin before the replay and registers them again after it (`plugins.md` rule 44) |
@@ -231,6 +232,10 @@ A 500 or a half-written request is never part of the frozen contract:
 | C145 | `billed-till` and expiry dates went through JS `Date.parse` | ISO 8601 only, read as UTC |
 | C146 | an out-of-range int32 in a provider payload became a database error | read as null |
 | C147 | a refused provider connection reported the Node error text | the same text (`connect ECONNREFUSED host:port`) from the Rust client |
+| C148 | a plugin route capture that does not percent-decode (`%E0%A4%A`) threw in `path-to-regexp` and answered 500 | no match: 403 like an undeclared route |
+| C149 | a plugin response header value Node cannot write (a control character, a character above U+00FF) threw and answered 500 | the header is dropped; Latin-1 values go out as the same bytes |
+| C150 | plugin job crons were checked with `cron-parser` (an empty or 4-field string and `H` passed, `0 0 31 4 *`, `15W` and `LW` failed) | checked with `croner`, 5 or 6 fields or an `@` nickname, as the cron runner reads them |
+| C151 | a `timestamptz` `infinity` from a plugin query crashed the plugin's parser; `-infinity` `timestamp` read as null, `void` as `""`, `interval` and arrays as JS values | `infinity`/`-infinity` as text, `void` null, `interval` and array columns an error naming the column (rule 35) |
 | C156 | only the primary stream's source was checked for capacity, so a failover could land on a source at its limit | every stream's own source is checked at open and sent as `LiveUpstream.atCapacity`; a full source never feeds the session, so a full primary with a free secondary source plays on it (Nest answered 409); an all-full channel still answers the 409 with the primary's body |
 | C157 | the engine ended a live viewer on any resolver denial, including one for a credential that resolves to no user | a live denial for a known user carries `ownerId` and ends only that owner's viewer; other denials end nothing |
 

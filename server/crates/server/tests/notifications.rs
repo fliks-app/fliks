@@ -1,4 +1,4 @@
-//! Notification routes, senders and the dispatch bridge (`docs/spec/notifications.md`) against a
+//! Notification routes, senders (`docs/spec/notifications.md`) against a
 //! local mock receiver: no external network.
 use axum::{
     Router,
@@ -67,7 +67,6 @@ struct Ctx {
     pool: PgPool,
     admin: String,
     plain: String,
-    bridge: String,
 }
 
 async fn user(pool: &PgPool, st: &AppState, name: &str, admin: bool) -> String {
@@ -88,7 +87,6 @@ async fn ctx(pool: PgPool) -> Ctx {
     let st = AppState::new(pool.clone(), Config::from_lookup(|_| None), SECRET);
     let admin = user(&pool, &st, "admin", true).await;
     let plain = user(&pool, &st, "plain", false).await;
-    let bridge = st.cfg.bridge_token.clone();
     let app = app::router(
         st,
         fliks_engine::gateway::Upstream::parse("http://127.0.0.1:1").unwrap(),
@@ -101,7 +99,6 @@ async fn ctx(pool: PgPool) -> Ctx {
         pool,
         admin,
         plain,
-        bridge,
     }
 }
 
@@ -144,14 +141,11 @@ async fn admin(c: &Ctx, method: &str, uri: &str, body: Option<Value>) -> (u16, V
 }
 
 async fn dispatch(c: &Ctx, body: Value) -> (u16, Value) {
-    call(
-        c,
-        "POST",
-        "/internal/notifications/dispatch",
-        Some(&c.bridge),
-        Some(body),
-    )
-    .await
+    let payload = body["payload"].as_object().cloned().unwrap_or_default();
+    fliks_server::notifications::dispatch(&c.pool, body["event"].as_str().unwrap(), &payload)
+        .await
+        .unwrap();
+    (204, Value::Null)
 }
 
 fn bad(msgs: &[&str]) -> Value {
@@ -513,62 +507,6 @@ async fn dispatch_reaches_enabled_subscribed_connections(pool: PgPool) {
     assert_eq!(
         ntfy.headers["content-type"],
         "application/x-www-form-urlencoded"
-    );
-}
-
-#[sqlx::test]
-async fn bridge_validates_before_sending(pool: PgPool) {
-    let c = ctx(pool).await;
-    async fn post(c: &Ctx, token: Option<&str>, body: Value) -> (u16, Value) {
-        call(
-            c,
-            "POST",
-            "/internal/notifications/dispatch",
-            token,
-            Some(body),
-        )
-        .await
-    }
-    let ok = json!({"event": "request.created", "payload": {}});
-    assert_eq!(post(&c, None, ok.clone()).await.0, 401);
-    assert_eq!(post(&c, Some("wrong"), ok.clone()).await.0, 401);
-    assert_eq!(post(&c, Some(&c.bridge), ok).await.0, 204);
-    let vocab = "event must be one of the following values: request.created, request.approved";
-    for body in [
-        json!({"event": "nope", "payload": {}}),
-        json!({"event": 5, "payload": {}}),
-        json!({"payload": {}}),
-    ] {
-        let (s, b) = post(&c, Some(&c.bridge), body).await;
-        assert_eq!(s, 400);
-        assert!(b["message"][0].as_str().unwrap().starts_with(vocab), "{b}");
-        assert_eq!(b["error"], "Bad Request");
-    }
-    assert_eq!(
-        post(
-            &c,
-            Some(&c.bridge),
-            json!({"event": "request.created", "payload": []})
-        )
-        .await
-        .1,
-        bad(&["payload must be an object"])
-    );
-    assert_eq!(
-        post(&c, Some(&c.bridge), json!({"event": "request.created"}))
-            .await
-            .1,
-        bad(&["payload must be an object"])
-    );
-    assert_eq!(
-        post(
-            &c,
-            Some(&c.bridge),
-            json!({"event": "request.created", "payload": {}, "x": 1})
-        )
-        .await
-        .1,
-        bad(&["property x should not exist"])
     );
 }
 

@@ -1,67 +1,17 @@
 //! Guest outbound HTTP: one lookup, every address vetted, connect to the vetted address.
 
+use crate::net::guard::{self, Net, Refused};
 use bytes::Bytes;
-use fliks_domain::net::{Class, classify};
-use futures_util::future::BoxFuture;
 use http_body_util::BodyExt;
 use std::future::{Future, poll_fn};
-use std::io;
 use std::net::{IpAddr, SocketAddr};
 use std::pin::{Pin, pin};
 use std::sync::Arc;
 use std::task::{Context, Poll, ready};
 use std::time::Duration;
-use tokio::net::TcpStream;
-use tokio_rustls::rustls::{self, pki_types::ServerName};
+use tokio_rustls::rustls::pki_types::ServerName;
 use wasmtime_wasi_http::io::TokioIo;
 use wasmtime_wasi_http::{Error, RequestOptions, WasiBody, WasiHttpHooks};
-
-pub trait Net: Send + Sync {
-    fn lookup(&self, host: &str, port: u16) -> BoxFuture<'static, io::Result<Vec<SocketAddr>>>;
-    fn connect(&self, addr: SocketAddr) -> BoxFuture<'static, io::Result<TcpStream>>;
-    fn tls(&self) -> Arc<rustls::ClientConfig>;
-}
-
-pub struct SystemNet {
-    tls: Arc<rustls::ClientConfig>,
-}
-
-impl SystemNet {
-    pub fn new() -> Self {
-        Self::with_roots(rustls::RootCertStore {
-            roots: webpki_roots::TLS_SERVER_ROOTS.into(),
-        })
-    }
-    pub fn with_roots(roots: rustls::RootCertStore) -> Self {
-        let tls = rustls::ClientConfig::builder_with_provider(Arc::new(
-            rustls::crypto::ring::default_provider(),
-        ))
-        .with_safe_default_protocol_versions()
-        .expect("ring supports the default versions")
-        .with_root_certificates(roots)
-        .with_no_client_auth();
-        SystemNet { tls: Arc::new(tls) }
-    }
-}
-
-impl Default for SystemNet {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl Net for SystemNet {
-    fn lookup(&self, host: &str, port: u16) -> BoxFuture<'static, io::Result<Vec<SocketAddr>>> {
-        let host = host.to_owned();
-        Box::pin(async move { Ok(tokio::net::lookup_host((host, port)).await?.collect()) })
-    }
-    fn connect(&self, addr: SocketAddr) -> BoxFuture<'static, io::Result<TcpStream>> {
-        Box::pin(TcpStream::connect(addr))
-    }
-    fn tls(&self) -> Arc<rustls::ClientConfig> {
-        self.tls.clone()
-    }
-}
 
 pub struct Outbound {
     pub plugin_id: Arc<str>,
@@ -90,7 +40,7 @@ impl WasiHttpHooks for Outbound {
     }
 }
 
-/// The addresses a guest request may connect to, in resolver order, or the refusal.
+/// The addresses a guest request may connect to, or the `wasi:http` error it sees.
 pub async fn vet(
     net: &dyn Net,
     id: &str,
@@ -98,27 +48,25 @@ pub async fn vet(
     host: &str,
     port: u16,
 ) -> Result<Vec<SocketAddr>, Error> {
-    let addrs = match host.parse::<IpAddr>() {
-        Ok(ip) => vec![SocketAddr::new(ip, port)],
-        Err(_) => net.lookup(host, port).await.map_err(|e| Error::DnsError {
-            rcode: Some(e.kind().to_string()),
-            info_code: None,
-        })?,
-    };
-    if addrs.is_empty() {
-        return Err(Error::DestinationNotFound);
-    }
-    for a in &addrs {
-        let class = classify(a.ip());
-        if class == Class::Refused || (class == Class::Private && !internal) {
-            tracing::warn!(
-                "plugin \"{id}\" outbound refused: {host} resolves to {} address",
-                class.name()
-            );
-            return Err(Error::HttpRequestDenied);
-        }
-    }
-    Ok(addrs)
+    guard::vet(net, host, port, internal)
+        .await
+        .map_err(|r| match r {
+            Refused::Address(class) => {
+                tracing::warn!(
+                    "plugin \"{id}\" outbound refused: {host} resolves to {class} address"
+                );
+                Error::HttpRequestDenied
+            }
+            Refused::NotFound => Error::DnsError {
+                rcode: Some("NXDOMAIN".into()),
+                info_code: None,
+            },
+            Refused::Lookup => Error::DnsError {
+                rcode: Some("SERVFAIL".into()),
+                info_code: None,
+            },
+            Refused::Timeout => Error::DnsTimeout,
+        })
 }
 
 trait Stream: tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Sync + Unpin + 'static {}

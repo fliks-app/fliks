@@ -1,6 +1,6 @@
 //! Plugin output: guest `log`, stdout and stderr into one ring, capped per plugin per minute.
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
@@ -9,7 +9,6 @@ use tokio::io::AsyncWrite;
 use wasmtime_wasi::cli::{IsTerminal, StdoutStream};
 
 pub const CAP_PER_MINUTE: usize = 64 * 1024;
-const RING: usize = 2000;
 const TAIL: usize = 4096;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -37,7 +36,6 @@ struct Window {
 
 #[derive(Default)]
 pub struct Logs {
-    lines: Mutex<VecDeque<Line>>,
     windows: Mutex<HashMap<String, Window>>,
     tails: Mutex<HashMap<String, String>>,
 }
@@ -79,11 +77,13 @@ impl Logs {
     }
 
     fn ring(&self, line: Line) {
-        let mut l = self.lines.lock().unwrap();
-        if l.len() == RING {
-            l.pop_front();
-        }
-        l.push_back(line);
+        let level = match line.level {
+            Level::Debug => "debug",
+            Level::Info => "log",
+            Level::Warn => "warn",
+            Level::Error => "error",
+        };
+        crate::system::logs::push(level, &line.context, line.text);
     }
 
     fn stderr(&self, plugin: &str, text: &str) {
@@ -107,10 +107,6 @@ impl Logs {
             .get(plugin)
             .cloned()
             .unwrap_or_default()
-    }
-
-    pub fn lines(&self) -> Vec<Line> {
-        self.lines.lock().unwrap().iter().cloned().collect()
     }
 }
 

@@ -72,12 +72,13 @@ fn refuse_protected(key: &str) -> Result<(), AppError> {
 }
 
 /// Nest listeners cache settings: a failed notify leaves them stale, so it is logged loudly.
-async fn notify(st: &AppState, keys: &[String]) {
+pub(crate) async fn notify(st: &AppState, keys: &[String], origin: Option<&str>) {
     if keys.is_empty() {
         return;
     }
+    st.plugins.settings_changed(keys, origin);
     let nest = async {
-        if let Err(e) = st.bridge.settings_changed(keys, None).await {
+        if let Err(e) = st.bridge.settings_changed(keys, origin).await {
             tracing::warn!(error = %e, ?keys, "settings-changed bridge failed: nest caches are stale");
         }
     };
@@ -153,7 +154,7 @@ pub(crate) async fn put_one(
     };
     tx.commit().await.map_err(db_err)?;
     // Nest notifies on every PUT, even when a secret kept its stored value (spec rule 8).
-    notify(&st, std::slice::from_ref(&key)).await;
+    notify(&st, std::slice::from_ref(&key), None).await;
     if secrets.is_secret(&key) {
         saved.value = None;
     }
@@ -193,6 +194,6 @@ pub(crate) async fn put_bulk(
         keys.push(key);
     }
     tx.commit().await.map_err(db_err)?;
-    notify(&st, &keys).await;
+    notify(&st, &keys, None).await;
     Ok(Json(json!({"ok": true})))
 }

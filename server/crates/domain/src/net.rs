@@ -77,8 +77,9 @@ fn in_v6(ip: Ipv6Addr, net: u128, bits: u32) -> bool {
 
 fn classify_v6(ip: Ipv6Addr) -> Class {
     let bits = u128::from(ip);
-    // ::ffff:0:0/96 and 64:ff9b::/96 carry an IPv4 address.
-    if in_v6(ip, 0xffff << 32, 96) || in_v6(ip, 0x0064_ff9b << 96, 96) {
+    // ::ffff:0:0/96, 64:ff9b::/96 and the deprecated IPv4-compatible ::/96 carry an IPv4 address.
+    let compatible = bits >> 32 == 0 && bits > 1;
+    if compatible || in_v6(ip, 0xffff << 32, 96) || in_v6(ip, 0x0064_ff9b << 96, 96) {
         return classify_v4(Ipv4Addr::from(bits as u32));
     }
     const REFUSED: [(u128, u32); 6] = [
@@ -91,7 +92,8 @@ fn classify_v6(ip: Ipv6Addr) -> Class {
     ];
     if REFUSED.iter().any(|(n, b)| in_v6(ip, *n, *b)) {
         Class::Refused
-    } else if ip == Ipv6Addr::LOCALHOST || in_v6(ip, 0xfc << 120, 7) {
+    } else if ip == Ipv6Addr::LOCALHOST || in_v6(ip, 0xfc << 120, 7) || in_v6(ip, 0xfec0 << 112, 10)
+    {
         Class::Private
     } else {
         Class::Public
@@ -129,6 +131,10 @@ mod tests {
             ("::ffff:8.8.8.8", Class::Public),
             ("64:ff9b::a9fe:a9fe", Class::Refused),
             ("2606:4700::1111", Class::Public),
+            ("fec0::1", Class::Private),
+            ("::7f00:1", Class::Private),
+            ("::808:808", Class::Public),
+            ("2002:0808:0808::1", Class::Refused),
         ];
         for (ip, want) in cases {
             assert_eq!(classify(ip.parse().unwrap()), want, "{ip}");

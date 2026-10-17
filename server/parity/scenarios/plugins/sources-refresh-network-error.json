@@ -1,0 +1,67 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..id",
+    "$..detail",
+    "$..lastRefreshError",
+    "$..lastRefreshedAt"
+  ],
+  "name": "plugins-sources-refresh-network-error",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "publicKey": "Gb9ECWmEzf6FQbrBZ9w7lshQhqowtrbLDFw4rXAxZuE=",
+        "url": "https://127.0.0.1:1/catalog.json"
+      },
+      "expect": {
+        "body": {
+          "enabled": true,
+          "hasPinnedKey": true,
+          "pluginCount": 0,
+          "url": "https://127.0.0.1:1/catalog.json"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/plugins/sources"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "ok": false,
+          "reason": "network-error"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/plugins/sources/2/refresh"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": [
+          {
+            "enabled": true,
+            "hasPinnedKey": false,
+            "pluginCount": 0,
+            "url": "https://fliks-app.github.io/fliks-plugin-catalog/catalog.json"
+          },
+          {
+            "enabled": true,
+            "hasPinnedKey": true,
+            "pluginCount": 0,
+            "url": "https://127.0.0.1:1/catalog.json"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/plugins/sources"
+    }
+  ]
+}

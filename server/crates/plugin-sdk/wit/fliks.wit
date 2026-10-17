@@ -200,6 +200,8 @@ interface host {
   events-emit-own: func(event-type: string, payload: json, audience: audience) -> result<_, host-error>;
   progress-set: func(media-id: u32, downloads: list<download-progress>) -> result<_, host-error>;
 
+  deadline-remaining-ms: func() -> u64;
+
   schedule-call: func(key: string, delay-ms: u64, payload: json) -> result<_, host-error>;
   cancel-call: func(key: string) -> result<bool, host-error>;
 

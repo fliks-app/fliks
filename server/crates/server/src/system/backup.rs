@@ -237,15 +237,28 @@ pub fn js_string(v: Option<&Value>) -> String {
     }
 }
 
-/// `^GRANT .+ TO (plugin_[a-z0-9_]{1,56});$`: the only guard of the role statement (rule 23).
+/// `^GRANT .+ TO (plugin_[a-z0-9_]{1,56}|fp_[0-9a-f]{8}_[a-z0-9_]{1,51});$`: the only guard of
+/// the role statement (rule 23).
 fn plugin_role(line: &str) -> Option<&str> {
     let body = line.strip_prefix("GRANT ")?.strip_suffix(';')?;
     let (head, role) = body.rsplit_once(" TO ")?;
-    let tail = role.strip_prefix("plugin_")?;
-    let ok = (1..=56).contains(&tail.len())
-        && tail
-            .bytes()
-            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_');
+    let tail_ok = |t: &str, max: usize| {
+        (1..=max).contains(&t.len())
+            && t.bytes()
+                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
+    };
+    let ok = match (role.strip_prefix("plugin_"), role.strip_prefix("fp_")) {
+        (Some(t), _) => tail_ok(t, 56),
+        (_, Some(r)) => {
+            r.get(..9).is_some_and(|h| {
+                h.ends_with('_')
+                    && h[..8]
+                        .bytes()
+                        .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+            }) && tail_ok(&r[9..], 51)
+        }
+        _ => false,
+    };
     (!head.is_empty() && ok).then_some(role)
 }
 
@@ -311,6 +324,7 @@ pub async fn restore(
     cfg: &Config,
     db: &PgPool,
     running: &Arc<jobs::Running>,
+    plugins: &Arc<crate::plugins::Plugins>,
     path: &Path,
     name: &str,
 ) -> Result<(), AppError> {
@@ -321,11 +335,25 @@ pub async fn restore(
     }
     tracing::warn!("Restoring backup: {name}");
     let roles = screen(path).await?;
+    plugins.stop_all().await;
+    let r = replay(cfg, db, path, name, &roles).await;
+    let roles: Vec<String> = roles.into_iter().collect();
+    plugins.after_restore(&roles).await;
+    r
+}
+
+async fn replay(
+    cfg: &Config,
+    db: &PgPool,
+    path: &Path,
+    name: &str,
+    roles: &BTreeSet<String>,
+) -> Result<(), AppError> {
     if !roles.is_empty() {
         let mut args = vec!["-X".to_owned()];
         args.extend(conn_args(cfg));
         args.extend(["-v", "ON_ERROR_STOP=1", "-c"].map(String::from));
-        args.push(create_roles_sql(&roles));
+        args.push(create_roles_sql(roles));
         run_tool(cfg, "psql", &args, Stdio::null()).await?;
     }
     let mut args = vec!["-X".to_owned()];
@@ -394,6 +422,21 @@ mod tests {
         }
         let long = format!("GRANT a TO plugin_{};", "x".repeat(57));
         assert_eq!(plugin_role(&long), None);
+        assert_eq!(
+            plugin_role("GRANT USAGE ON SCHEMA public TO fp_0000a1b2_fliks_notify;"),
+            Some("fp_0000a1b2_fliks_notify")
+        );
+        for bad in [
+            "GRANT a TO fp_0000a1b_x;",
+            "GRANT a TO fp_0000A1B2_x;",
+            "GRANT a TO fp_0000a1b2_;",
+        ] {
+            assert_eq!(plugin_role(bad), None, "{bad}");
+        }
+        assert_eq!(
+            plugin_role(&format!("GRANT a TO fp_0000a1b2_{};", "x".repeat(52))),
+            None
+        );
     }
 
     #[tokio::test]

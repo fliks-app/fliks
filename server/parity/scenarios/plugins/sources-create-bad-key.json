@@ -1,0 +1,42 @@
+{
+  "deviation": null,
+  "name": "plugins-sources-create-bad-key",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "publicKey": "c2hvcnQ=",
+        "url": "https://catalog.example.invalid/catalog.json"
+      },
+      "expect": {
+        "body": {
+          "code": "PLUGIN_SOURCE_BAD_KEY",
+          "message": "publicKey must be base64-encoded and decode to exactly 32 bytes, got 5"
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/plugins/sources"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "publicKey": 5,
+        "url": "https://catalog.example.invalid/catalog.json"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "publicKey must be a string"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/plugins/sources"
+    }
+  ]
+}

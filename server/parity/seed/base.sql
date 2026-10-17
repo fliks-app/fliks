@@ -287,6 +287,19 @@ END $$;
 
 
 --
+-- Name: persons_search_vector_update(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.persons_search_vector_update() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  NEW."searchVector" := to_tsvector('simple', NEW.name);
+  RETURN NEW;
+END $$;
+
+
+--
 -- Name: set_updated_at(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -1754,7 +1767,10 @@ CREATE TABLE public.plugin_packages (
     manifest jsonb NOT NULL,
     status public.plugin_packages_status_enum DEFAULT 'active'::public.plugin_packages_status_enum NOT NULL,
     "statusReason" text,
-    enabled boolean DEFAULT true NOT NULL
+    enabled boolean DEFAULT true NOT NULL,
+    "networkInternal" boolean DEFAULT false NOT NULL,
+    "cwasmSha256" text,
+    "cwasmEngine" text
 );
 
 
@@ -1789,8 +1805,7 @@ CREATE TABLE public.plugin_registrations (
     "pluginId" character varying NOT NULL,
     "ingestRoots" text[] DEFAULT '{}'::text[] NOT NULL,
     scopes text[] DEFAULT '{}'::text[] NOT NULL,
-    manifest jsonb NOT NULL,
-    "childUid" integer
+    manifest jsonb NOT NULL
 );
 
 
@@ -1812,6 +1827,32 @@ CREATE SEQUENCE public.plugin_registrations_id_seq
 --
 
 ALTER SEQUENCE public.plugin_registrations_id_seq OWNED BY public.plugin_registrations.id;
+
+
+--
+-- Name: plugin_scheduled_calls; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.plugin_scheduled_calls (
+    "pluginId" text NOT NULL,
+    key text NOT NULL,
+    "runAt" timestamp with time zone NOT NULL,
+    payload text NOT NULL,
+    attempt integer DEFAULT 0 NOT NULL,
+    version bigint NOT NULL
+);
+
+
+--
+-- Name: plugin_scheduled_calls_version_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.plugin_scheduled_calls_version_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
 
 
 --
@@ -2955,6 +2996,9 @@ COPY public._sqlx_migrations (version, description, installed_on, success, check
 1786500000000	updated at trigger	2026-01-01 00:00:00+00	t	\\xa08d5738eee946976096dae99719b149c27748ba8250460ae2bcf7be938e642c694351c72dac35289c99f018ddb18cca	0
 1786600000000	media search vector	2026-01-01 00:00:00+00	t	\\xcfeecff428f67c3a7cb5a9ce90f642cb107559291054384f27b83488ebe418331f87814468e5c0692ac0d5c4b2d0970e	0
 1786700000000	iso ms function	2026-01-01 00:00:00+00	t	\\x941e1bc6e1fedf78b23d8612b99132fdd779c547bd2b625b5d113fcb821c19d2e6670f4d8d4813783cb3aade40dd8d98	0
+1786830000000	persons search vector	2026-01-01 00:00:00+00	t	\\x5193d58a2af78a4d8fe0a7002ed1972d27e4d9387c88624b31612aa4e25abff5cd185024ad663a244b1a7cc0dc04a773	0
+1786900000000	plugins-wasm-host	2026-01-01 00:00:00+00	t	\\x7d91aa54274314dac952692f4a1fd58bda4230dc5731e69d7931a734ee896f9e53eeee367dfeaa00e9b8c1ada16ea4f7	0
+1787100000000	livetv clear xtream guide urls	2026-01-01 00:00:00+00	t	\\x5a36fd84eb4d4ae7c1d06968dfbed790b0d10f30c2d678d6fb1269d478fe499edf757e4788e4ab9a99f987b731e1b8a3	0
 \.
 
 
@@ -3335,7 +3379,7 @@ COPY public.playlists (id, "createdAt", "updatedAt", name, "ownerId", "autoRemov
 -- Data for Name: plugin_packages; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.plugin_packages (id, "createdAt", "updatedAt", "pluginId", version, archive, origin, signature, "verifiedByKeyId", manifest, status, "statusReason", enabled) FROM stdin;
+COPY public.plugin_packages (id, "createdAt", "updatedAt", "pluginId", version, archive, origin, signature, "verifiedByKeyId", manifest, status, "statusReason", enabled, "networkInternal", "cwasmSha256", "cwasmEngine") FROM stdin;
 \.
 
 
@@ -3343,7 +3387,15 @@ COPY public.plugin_packages (id, "createdAt", "updatedAt", "pluginId", version, 
 -- Data for Name: plugin_registrations; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.plugin_registrations (id, "createdAt", "updatedAt", "pluginId", "ingestRoots", scopes, manifest, "childUid") FROM stdin;
+COPY public.plugin_registrations (id, "createdAt", "updatedAt", "pluginId", "ingestRoots", scopes, manifest) FROM stdin;
+\.
+
+
+--
+-- Data for Name: plugin_scheduled_calls; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.plugin_scheduled_calls ("pluginId", key, "runAt", payload, attempt, version) FROM stdin;
 \.
 
 
@@ -3768,6 +3820,13 @@ SELECT pg_catalog.setval('public.plugin_packages_id_seq', 1, false);
 --
 
 SELECT pg_catalog.setval('public.plugin_registrations_id_seq', 1, false);
+
+
+--
+-- Name: plugin_scheduled_calls_version_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.plugin_scheduled_calls_version_seq', 1, false);
 
 
 --
@@ -4338,14 +4397,6 @@ ALTER TABLE ONLY public.plugin_packages
 
 
 --
--- Name: plugin_registrations UQ_plugin_registrations_child_uid; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.plugin_registrations
-    ADD CONSTRAINT "UQ_plugin_registrations_child_uid" UNIQUE ("childUid");
-
-
---
 -- Name: plugin_registrations UQ_plugin_registrations_pluginId; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4431,6 +4482,14 @@ ALTER TABLE ONLY public.plugin_packages
 
 ALTER TABLE ONLY public.plugin_registrations
     ADD CONSTRAINT plugin_registrations_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: plugin_scheduled_calls plugin_scheduled_calls_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.plugin_scheduled_calls
+    ADD CONSTRAINT plugin_scheduled_calls_pkey PRIMARY KEY ("pluginId", key);
 
 
 --
@@ -4762,6 +4821,13 @@ CREATE INDEX "IDX_playlists_ownerId" ON public.playlists USING btree ("ownerId")
 
 
 --
+-- Name: IDX_plugin_scheduled_calls_runAt; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "IDX_plugin_scheduled_calls_runAt" ON public.plugin_scheduled_calls USING btree ("runAt");
+
+
+--
 -- Name: IDX_refresh_tokens_tokenHash; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -4902,6 +4968,13 @@ CREATE INDEX idx_media_search_vector ON public.media USING gin ("searchVector");
 
 
 --
+-- Name: idx_persons_search_vector; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_persons_search_vector ON public.persons USING gin ("searchVector");
+
+
+--
 -- Name: idx_playback_user_episode; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -4920,6 +4993,13 @@ CREATE UNIQUE INDEX idx_playback_user_movie ON public.playback_states USING btre
 --
 
 CREATE TRIGGER media_search_vector BEFORE INSERT OR UPDATE OF title, "originalTitle", overview ON public.media FOR EACH ROW EXECUTE FUNCTION public.media_search_vector_update();
+
+
+--
+-- Name: persons persons_search_vector; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER persons_search_vector BEFORE INSERT OR UPDATE OF name ON public.persons FOR EACH ROW EXECUTE FUNCTION public.persons_search_vector_update();
 
 
 --

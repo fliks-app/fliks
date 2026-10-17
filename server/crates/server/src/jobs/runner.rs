@@ -20,6 +20,14 @@ pub struct Claim {
 pub const RESTORE: &str = "Restore";
 
 impl Running {
+    /// A restore holds its claim: nothing new may start.
+    pub fn is_restoring(&self) -> bool {
+        self.0
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .contains(RESTORE)
+    }
+
     pub fn claim(self: &Arc<Self>, name: &str) -> Option<Claim> {
         let mut set = self.0.lock().unwrap_or_else(|e| e.into_inner());
         let free = if name == RESTORE {

@@ -1,10 +1,9 @@
-//! Pre-roll candidates (spec rule 20): the plugin host's answer over the bridge, ACL-gated per file.
+//! Pre-roll candidates (spec rule 20): the winning plugin's answer, ACL-gated per file.
 use super::file::resolve_file;
 use crate::{http::auth::Authed, state::AppState};
 use futures_util::future::join_all;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::{sync::OnceLock, time::Duration};
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -16,7 +15,7 @@ pub struct Item {
     pub skippable: Option<bool>,
 }
 
-/// `[]` on any failure, like the plugin host itself.
+/// `[]` on any failure: the winning plugin's pre-roll route, sanitised (`plugins.md` rule 51).
 async fn ask(
     st: &AppState,
     file: i32,
@@ -24,40 +23,38 @@ async fn ask(
     episode: Option<i32>,
     user: i32,
 ) -> Vec<Item> {
-    static HTTP: OnceLock<reqwest::Client> = OnceLock::new();
-    let http = HTTP.get_or_init(|| {
-        reqwest::Client::builder()
-            .timeout(Duration::from_secs(5))
-            .build()
-            .expect("reqwest client")
-    });
-    let body = json!({
-        "mediaFileId": file, "mediaId": media, "episodeId": episode,
-        "principal": {"kind": "delegated", "userId": user},
-    });
-    let res = http
-        .post(format!(
-            "{}/internal/plugins/pre-roll",
-            crate::nest::url(&st.cfg)
-        ))
-        .bearer_auth(&st.cfg.bridge_token)
-        .json(&body)
-        .send()
-        .await;
-    let items = async {
-        let res = res.map_err(|e| e.without_url().to_string())?;
-        if !res.status().is_success() {
-            return Err(format!("status {}", res.status()));
+    let body = json!({"mediaFileId": file, "mediaId": media, "episodeId": episode});
+    let Some(v) = st.plugins.pre_roll(body, user).await else {
+        return vec![];
+    };
+    sanitize(&v, file)
+}
+
+/// An array of objects with a positive integer `mediaFileId` (not the main file, no repeat), at most 5.
+fn sanitize(body: &serde_json::Value, main: i32) -> Vec<Item> {
+    let mut seen = vec![i64::from(main)];
+    let mut out = vec![];
+    for e in body.as_array().into_iter().flatten() {
+        if out.len() >= 5 {
+            break;
         }
-        res.json::<Vec<Item>>()
-            .await
-            .map_err(|e| e.without_url().to_string())
+        let id = e["mediaFileId"]
+            .as_f64()
+            .filter(|n| n.fract() == 0.0 && *n > 0.0 && *n < 9.0e15);
+        let Some(id) = id.filter(|_| e.is_object()).map(|n| n as i64) else {
+            continue;
+        };
+        if seen.contains(&id) {
+            continue;
+        }
+        seen.push(id);
+        out.push(Item {
+            media_file_id: id,
+            label_key: e["labelKey"].as_str().map(str::to_owned),
+            skippable: e["skippable"].as_bool(),
+        });
     }
-    .await;
-    items.unwrap_or_else(|e| {
-        tracing::warn!("pre-roll bridge: {e}");
-        vec![]
-    })
+    out
 }
 
 /// `None` (key omitted) when no candidate survives; each must resolve for the same user as the main file.

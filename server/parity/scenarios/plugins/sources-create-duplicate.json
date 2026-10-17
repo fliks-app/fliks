@@ -1,0 +1,48 @@
+{
+  "deviation": null,
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..id"
+  ],
+  "name": "plugins-sources-create-duplicate",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "publicKey": "Gb9ECWmEzf6FQbrBZ9w7lshQhqowtrbLDFw4rXAxZuE=",
+        "url": "https://catalog.example.invalid/catalog.json"
+      },
+      "expect": {
+        "body": {
+          "enabled": true,
+          "hasPinnedKey": true,
+          "lastRefreshError": null,
+          "lastRefreshedAt": null,
+          "pluginCount": 0,
+          "url": "https://catalog.example.invalid/catalog.json"
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/plugins/sources"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "publicKey": "Gb9ECWmEzf6FQbrBZ9w7lshQhqowtrbLDFw4rXAxZuE=",
+        "url": "https://catalog.example.invalid/catalog.json"
+      },
+      "expect": {
+        "body": {
+          "code": "PLUGIN_SOURCE_DUPLICATE_URL",
+          "message": "a source for \"https://catalog.example.invalid/catalog.json\" already exists"
+        },
+        "status": 409
+      },
+      "method": "POST",
+      "path": "/api/plugins/sources"
+    }
+  ]
+}

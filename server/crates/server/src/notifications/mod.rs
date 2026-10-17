@@ -23,8 +23,4 @@ pub fn router() -> Router<AppState> {
                 .delete(routes::remove),
         )
         .route("/api/notifications/{id}/test", post(routes::test))
-        .route(
-            "/internal/notifications/dispatch",
-            post(routes::internal_dispatch),
-        )
 }

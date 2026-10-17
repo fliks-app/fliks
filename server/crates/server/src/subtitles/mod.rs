@@ -19,7 +19,7 @@ pub mod translate;
 pub mod translation;
 pub mod translation_providers;
 
-mod events;
+pub mod events;
 
 use providers::limiter::Limiter;
 use std::{collections::HashMap, sync::Mutex};

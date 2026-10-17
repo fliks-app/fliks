@@ -106,6 +106,10 @@ async fn methods_rust_does_not_own_on_owned_paths_are_forwarded() {
     );
     for (path, ops) in doc["paths"].as_object().unwrap() {
         let uri = path.replace(['{', '}'], "");
+        // `/api/plugins/{pluginId}` routes and the proxy catch every other method there, as in Nest.
+        if uri.starts_with("/api/plugins/") {
+            continue;
+        }
         for method in ["GET", "POST", "PUT", "PATCH", "DELETE"] {
             if ops[method.to_lowercase()].is_object() {
                 continue;

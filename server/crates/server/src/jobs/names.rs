@@ -50,9 +50,6 @@ pub const TRIGGER_ONLY: [&str; 7] = [
     "DetectMissingMarkers",
 ];
 
-/// Core names whose body Nest still holds (rule 30).
-pub const BRIDGED: [&str; 1] = ["RefreshPluginSources"];
-
 /// Their tick is the subtitle tick (`subtitles::scheduler::spawn_tick`), not the runner's (rule 31).
 pub const SUBTITLE: [&str; 2] = ["SubtitleSearch", "SubtitleUpgrade"];
 
@@ -95,10 +92,5 @@ mod tests {
         assert!(src.contains("PLUGIN_SOURCE_REFRESH_CRON = '0 3 * * *'"));
         let livetv: Vec<_> = LIVETV.iter().map(|(n, ..)| n.to_string()).collect();
         assert_eq!(livetv, quoted(&src, "CORE_LIVETV_JOB_NAMES = ["));
-    }
-
-    #[test]
-    fn bridged_names_are_core() {
-        assert!(BRIDGED.iter().all(|n| is_core(n)));
     }
 }

@@ -20,7 +20,6 @@ use axum::{
 use fliks_domain::acl::{Action, Subject as Resource};
 use futures_util::stream;
 use serde::Deserialize;
-use serde_json::{Value, json};
 use std::convert::Infallible;
 use tokio::sync::broadcast::error::RecvError;
 
@@ -30,7 +29,6 @@ pub fn router() -> Router<AppState> {
         .route("/api/system/activity", get(activity))
         .route("/internal/events", post(internal_emit))
         .route("/internal/events/stream", get(internal_stream))
-        .route("/internal/events/progress", get(internal_progress))
         .route("/internal/activity", post(internal_activity))
         .route("/internal/activity/claim", post(internal_claim))
 }
@@ -176,19 +174,6 @@ async fn internal_stream(
         }
     });
     Ok(Sse::new(events).keep_alive(KeepAlive::default()))
-}
-
-/// The plugin host's read of the replay cache: the downloads last stated for a media.
-async fn internal_progress(
-    State(st): State<AppState>,
-    headers: HeaderMap,
-    Query(q): Query<Vec<(String, String)>>,
-) -> Result<Json<Value>, AppError> {
-    st.bridge.check(&headers)?;
-    let id = param(&q, "mediaId")
-        .and_then(|v| v.parse::<i64>().ok())
-        .ok_or_else(|| AppError::bad_request("mediaId must be an integer number"))?;
-    Ok(Json(json!({"downloads": st.hub.progress_current(id)})))
 }
 
 #[derive(Deserialize)]

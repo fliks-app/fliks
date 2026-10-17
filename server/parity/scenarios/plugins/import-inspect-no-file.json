@@ -1,0 +1,35 @@
+{
+  "deviation": null,
+  "name": "plugins-import-inspect-no-file",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {},
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "No file uploaded",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/plugins/import/inspect"
+    },
+    {
+      "as": "user",
+      "body": {},
+      "expect": {
+        "body": {
+          "error": "Forbidden",
+          "message": "Forbidden resource",
+          "statusCode": 403
+        },
+        "status": 403
+      },
+      "method": "POST",
+      "path": "/api/plugins/import/inspect"
+    }
+  ]
+}

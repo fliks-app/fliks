@@ -1,0 +1,16 @@
+{
+  "deviation": null,
+  "name": "plugins-list-empty",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": [],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/plugins"
+    }
+  ]
+}

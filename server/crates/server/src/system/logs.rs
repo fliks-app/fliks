@@ -25,7 +25,8 @@ fn ring() -> std::sync::MutexGuard<'static, VecDeque<Entry>> {
     RING.lock().unwrap_or_else(|e| e.into_inner())
 }
 
-fn push(level: &'static str, context: &str, message: String) {
+/// A line whose context is not a `tracing` target (`plugin:<id>`, `plugins.md` rule 45).
+pub fn push(level: &'static str, context: &str, message: String) {
     let mut r = ring();
     if r.len() == CAPACITY {
         r.pop_front();
