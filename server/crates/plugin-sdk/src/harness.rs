@@ -51,6 +51,7 @@ impl Setup {
         });
         let template = c.template().expect("plugin.template.json");
         let logo = template["logo"].as_str().map(|n| {
+            let n = crate::build::logo_name(n).unwrap_or_else(|e| panic!("{e}"));
             (
                 n.to_owned(),
                 std::fs::read(c.dir.join(n)).expect("the logo"),
@@ -248,7 +249,8 @@ impl Harness {
         }
         let logo = setup.logo.as_ref().map(|(n, b)| (n.as_str(), b.as_slice()));
         let manifest = crate::build::manifest(&template, &setup.version, &setup.wasm, logo);
-        let archive = crate::build::archive(&manifest, &setup.wasm, logo, None);
+        let archive =
+            crate::build::archive(&manifest, &setup.wasm, logo, None).expect("the archive");
         let report = st
             .plugins
             .inspect_and_stage(&archive, "manual")

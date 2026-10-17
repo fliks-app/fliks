@@ -1,7 +1,7 @@
 //! Build and packaging (SDK-12): the release component, `plugin.json` from the template, the
 //! deterministic archive, and `verify` through the host's own `inspect`.
 
-use ed25519_dalek::{Signer, SigningKey};
+use ed25519_dalek::{Signer, SigningKey, VerifyingKey};
 use fliks_server::plugins::archive::{pack, sha256_hex};
 use fliks_server::plugins::manifest::{Inspected, check_files, inspect};
 use fliks_server::plugins::trust;
@@ -111,6 +111,7 @@ impl Crate {
             .map_err(|e| format!("{}: {e}", self.wasm_path().display()))?;
         let logo = match template["logo"].as_str() {
             Some(name) => {
+                let name = logo_name(name)?;
                 let bytes =
                     std::fs::read(self.dir.join(name)).map_err(|e| format!("{name}: {e}"))?;
                 Some((name.to_owned(), bytes))
@@ -124,7 +125,15 @@ impl Crate {
             manifest["id"].as_str().unwrap_or_default(),
             self.version
         );
-        Ok((name, archive(&manifest, &wasm, logo, key)))
+        Ok((name, archive(&manifest, &wasm, logo, key)?))
+    }
+}
+
+/// The only logo names the host accepts (rule 13), checked before anything is read.
+pub fn logo_name(name: &str) -> Result<&str, Error> {
+    match name {
+        "logo.svg" | "logo.png" => Ok(name),
+        _ => Err(format!("logo {name:?} must be logo.svg or logo.png")),
     }
 }
 
@@ -160,8 +169,8 @@ pub fn archive(
     wasm: &[u8],
     logo: Option<(&str, &[u8])>,
     key: Option<&SigningKey>,
-) -> Vec<u8> {
-    let bytes = serde_json::to_vec_pretty(manifest).expect("a JSON value serialises");
+) -> Result<Vec<u8>, Error> {
+    let bytes = serde_json::to_vec_pretty(manifest).map_err(|e| e.to_string())?;
     let sig = key.map(|k| sign(&bytes, k));
     let mut entries: Vec<(&str, &[u8])> = vec![("plugin.json", &bytes)];
     if let Some(s) = &sig {
@@ -171,19 +180,27 @@ pub fn archive(
     if let Some((name, b)) = logo {
         entries.push((name, b));
     }
-    pack(&entries)
+    Ok(pack(&entries))
 }
 
-/// A dev key from 64 hex characters (the 32-byte seed).
-pub fn dev_key(hex: &str) -> Result<SigningKey, Error> {
+fn hex32(hex: &str) -> Result<[u8; 32], Error> {
     let hex = hex.trim();
     let bytes: Vec<u8> = (0..hex.len())
         .step_by(2)
         .map(|i| u8::from_str_radix(hex.get(i..i + 2).unwrap_or("zz"), 16))
         .collect::<Result<_, _>>()
         .map_err(|_| "the key is not hex")?;
-    let seed: [u8; 32] = bytes.try_into().map_err(|_| "the key is not 32 bytes")?;
-    Ok(SigningKey::from_bytes(&seed))
+    Ok(bytes.try_into().map_err(|_| "the key is not 32 bytes")?)
+}
+
+/// A dev key from 64 hex characters (the 32-byte seed).
+pub fn dev_key(hex: &str) -> Result<SigningKey, Error> {
+    Ok(SigningKey::from_bytes(&hex32(hex)?))
+}
+
+/// A trust key from 64 hex characters (the ed25519 public key the host checks against).
+pub fn public_key(hex: &str) -> Result<VerifyingKey, Error> {
+    VerifyingKey::from_bytes(&hex32(hex)?).map_err(|e| format!("not an ed25519 public key: {e}"))
 }
 
 /// The host's `inspect` and file checks, the size budget and the component's world.
@@ -249,7 +266,7 @@ pub fn check_world(wasm: &[u8]) -> Result<(), Error> {
 }
 
 const USAGE: &str = "usage: xtask build|package [<crate dir>] [--key <hex seed file>] [--out <dir>] \
-[--max-mib <n>] | verify <archive> [--key <hex seed file>] [--max-mib <n>]";
+[--max-mib <n>] | verify <archive> [--key <hex public key file>] [--max-mib <n>]";
 
 /// The whole CLI of a plugin repository's thin `cargo xtask` (arguments after the program).
 pub fn cli(args: &[String]) -> Result<(), Error> {
@@ -261,28 +278,32 @@ pub fn cli(args: &[String]) -> Result<(), Error> {
         match a.as_str() {
             "--key" => {
                 let file = value()?;
-                let hex = std::fs::read_to_string(&file).map_err(|e| format!("{file}: {e}"))?;
-                key = Some(dev_key(&hex)?);
+                key = Some(std::fs::read_to_string(&file).map_err(|e| format!("{file}: {e}"))?);
             }
             "--out" => out = PathBuf::from(value()?),
-            "--max-mib" => budget = value()?.parse::<usize>().map_err(|_| USAGE)? << 20,
+            "--max-mib" => {
+                budget = value()?
+                    .parse::<usize>()
+                    .ok()
+                    .and_then(|n| n.checked_mul(1 << 20))
+                    .ok_or(USAGE)?;
+            }
             p if path.is_none() && !p.starts_with("--") => path = Some(PathBuf::from(p)),
             _ => return Err(USAGE.into()),
         }
     }
-    let extra: trust::Keys = key
-        .iter()
-        .map(|k| ("dev".to_owned(), k.verifying_key().to_bytes()))
-        .collect();
     let path = path.unwrap_or_else(|| PathBuf::from("."));
+    let trusted = |k: VerifyingKey| vec![("dev".to_owned(), k.to_bytes())];
     match cmd.as_str() {
         "build" => {
             println!("{}", Crate::at(&path)?.build()?.display());
         }
         "package" => {
+            let key = key.as_deref().map(dev_key).transpose()?;
             let c = Crate::at(&path)?;
             c.build()?;
             let (name, bytes) = c.package(key.as_ref())?;
+            let extra = key.map_or_else(Vec::new, |k| trusted(k.verifying_key()));
             verify(&bytes, extra, budget)?;
             std::fs::create_dir_all(&out).map_err(|e| e.to_string())?;
             let file = out.join(name);
@@ -290,6 +311,10 @@ pub fn cli(args: &[String]) -> Result<(), Error> {
             println!("{}", file.display());
         }
         "verify" => {
+            let extra = match key.as_deref() {
+                Some(k) => trusted(public_key(k)?),
+                None => vec![],
+            };
             let bytes = std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))?;
             let i = verify(&bytes, extra, budget)?;
             println!("{} {} {}", i.id, i.version, i.signature.as_str());

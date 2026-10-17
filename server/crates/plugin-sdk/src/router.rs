@@ -58,12 +58,15 @@ pub struct Response {
 }
 
 impl Response {
-    /// `application/json`, as every Node plugin answered.
+    /// `application/json`, as every Node plugin answered; a 500 if `body` does not serialise.
     pub fn json(status: u16, body: &impl Serialize) -> Self {
-        Response {
-            status,
-            headers: vec![("content-type".into(), "application/json".into())],
-            body: serde_json::to_vec(body).expect("a JSON value serialises"),
+        match serde_json::to_vec(body) {
+            Ok(body) => Response {
+                status,
+                headers: vec![("content-type".into(), "application/json".into())],
+                body,
+            },
+            Err(e) => Response::empty(500).with_body(e.to_string()),
         }
     }
 
