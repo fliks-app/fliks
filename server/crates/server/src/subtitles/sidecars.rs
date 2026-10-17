@@ -154,11 +154,12 @@ pub async fn reconcile_after_rescan(st: &AppState, media_id: i32) -> (usize, usi
         let stored = r.file_path.as_deref().unwrap_or_default();
         // Gone: no path, an unresolvable or non-regular one, or NotFound; any other error keeps the row.
         let gone = stored.trim().is_empty()
-            || match dirs.resolve_file(stored) {
-                Err(_) => true,
-                Ok(abs) => {
-                    matches!(fs::symlink_metadata(abs), Err(e) if e.kind() == std::io::ErrorKind::NotFound)
-                }
+            || match dirs.resolve(stored) {
+                None => true,
+                Some(abs) => match fs::symlink_metadata(abs) {
+                    Ok(m) => !m.is_file(),
+                    Err(e) => e.kind() == std::io::ErrorKind::NotFound,
+                },
             };
         if gone && remove_row(st, r.id).await {
             missing += 1;

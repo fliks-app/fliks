@@ -504,7 +504,7 @@ async fn upgrade_batch(st: &AppState, rows: &[Row], opts: &Opts) -> Result<(), S
                 events::notify(
                     st,
                     "subtitle.upgraded",
-                    json!({"title": media.title, "language": sub.language, "oldScore": sub.score, "newScore": new, "provider": provider}),
+                    json!({"title": media.title, "language": sub.language, "oldScore": sub.score, "newScore": new.round() as i64, "provider": provider}),
                 )
                 .await;
                 crate::media_servers::dispatch_detached(st, "subtitle.upgraded");

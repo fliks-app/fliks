@@ -491,6 +491,13 @@ fn fs_setup(sc: &Value) {
     };
     let root = Path::new(MEDIA_ROOT);
     let dir = sc["fsDir"].as_str().unwrap_or("s5-ingest/work");
+    assert!(
+        !dir.is_empty()
+            && Path::new(dir)
+                .components()
+                .all(|c| matches!(c, std::path::Component::Normal(_))),
+        "fsDir must be a relative path under the parity media root: {dir}"
+    );
     let work = root.join(dir);
     let _ = fs::remove_dir_all(&work);
     fs::create_dir_all(&work).expect("work dir");
