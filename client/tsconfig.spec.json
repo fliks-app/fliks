@@ -11,7 +11,6 @@
   },
   "include": [
     "src/**/*.d.ts",
-    "src/**/*.spec.ts",
-    "../backend/src/common/plugin-contract/ui-contribution.ts"
+    "src/**/*.spec.ts"
   ]
 }

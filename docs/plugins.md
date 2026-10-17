@@ -162,37 +162,19 @@ calls it makes, one for the notes core sends it (`hello`, `health`, `event`, `co
 release scoring, library ingest constrained to declared `ingestRoots`, event publication with a
 forced `<pluginId>.` prefix, settings read/write scoped to its own namespace.
 
-The contract types are the `@fliks/plugin-contract` package, whose source is
-`backend/src/common/plugin-contract/`. Depend on it rather than restating it — the types are
-erased at build time, so a spawned plugin still ships no core code and still cannot import from
-core at runtime. Three entry points: the barrel for the whole surface, `/protocol` for wire
-constants and `/ui` for the UI-contribution types, the last two dependency-free.
+Since the Rust host (S8) a `process` plugin is a WebAssembly component (`pluginApi` 2, world
+`fliks:plugin@2.0.0`) built with the `fliks-plugin-sdk` crate (`server/crates/plugin-sdk/`, `MIT OR
+Apache-2.0`, published as a git tag): the WIT, the `export!` macro, typed `host`, `db`, `http` and
+scheduled-call helpers, a router over the host's own route matcher (`fliks-plugin-route`), a
+component test harness over the real host (feature `harness`) and the build, package and verify
+tooling (feature `build`, `cargo xtask build|package|verify`). The host rules are
+`server/docs/spec/plugins.md`. The UI-contribution types the web client reads live in
+`client/src/app/core/plugin-ui/ui-contribution.ts`; the Node `@fliks/plugin-contract` package is gone.
 
-It is deliberately **not** on any registry: compile-time-only types need no publishing step, and
-none of this repository depends on one. Each GitHub release carries the package as an installable
-tarball stamped with that release's version (`.github/workflows/plugin-contract-asset.yml`), and an
-author who already keeps a core checkout beside their plugin can point `paths` at it instead. The
-package README states both.
-
-The client consumes the same files through a tsconfig path mapping, so there is one declaration of
-each type in the tree and nothing to keep in sync. That mapping points one level above `client/`, so
-anything that builds the client in a container has to bring the directory along — the image build
-copies it, and a dev container bind-mounting only `client/` needs the same:
-
-```yaml
-volumes:
-  - ./client:/app
-  - ./backend/src/common/plugin-contract:/backend/src/common/plugin-contract:ro
-```
-
-Without it the build stops at `TS2307: Cannot find module '@fliks/plugin-contract/ui'`.
-
-`examples/plugin-scaffold/` is the starting point: a `process` plugin that starts, answers all 7
-methods, serves a route and reads its own settings, under MIT. Its README carries the dev loop and
-the mistakes core refuses by name. `fk-plugin-download` is the full reference implementation.
-
-A `process` plugin ships as **one bundled `plugin.js`** — an archive carries no `node_modules`, so
-an unbundled `require` of any package, this one included, fails at spawn with `MODULE_NOT_FOUND`.
+Start from the SDK's examples: `examples/fk-plugin-notify/` is a complete small plugin (scheduled
+retries, one outbound POST, two routes), `examples/fixture-guest/` exercises every host behaviour
+and is what the host tests run, `examples/xtask/` is the build tool a plugin repository keeps.
+`fk-plugin-download` is the full reference implementation.
 
 ### Environment
 
@@ -341,23 +323,17 @@ leaves an unsigned plugin already installed running, uninstall it instead.
 
 ### Packaging
 
-`npm run package-plugin -- <built-plugin-dir> [-o out.fkplugin]` (from `backend/`) turns a build
-output directory — `plugin.json`, `plugin.js` for a `process` plugin, an optional `logo.svg` or
-`logo.png` — into an archive the inspector above will accept. It recomputes every `files` sha256
-itself rather than trusting the manifest, and refuses early, by name, on anything the inspector
-would refuse later: a missing `plugin.js` for a `process` manifest, a `plugin.js` present on a
-`data` one, a `logo` field that doesn't match what's on disk or whose bytes are not the format its
-name claims, a bad id or version, an oversized entry, and any file an archive may not carry (rather
-than dropping it silently and leaving you to find out at runtime). The archive it writes is always unsigned; a `process` plugin built this way installs only
-when the installing core has `plugins.allow_unsigned` on. Signing an archive for real
-distribution is a separate, later step this tool does not perform.
+`cargo xtask package <plugin dir>` (the SDK's `build` feature) builds the release component for
+`wasm32-wasip2`, writes `plugin.json` from `plugin.template.json` with the version and every
+`files` sha256, and writes a deterministic store-only archive the host's inspector accepts;
+`verify` runs that inspector, the size budget and the world check. An unsigned archive installs
+only when `plugins.allow_unsigned` is on; `--key <hex seed file>` adds a dev signature.
 
 ### Deadlines and ceilings
 
-Core enforces these; exceeding one gets your call abandoned or your process killed. They are
-exported from the contract as `PLUGIN_DEADLINES_MS`, `HOST_CALL_DEADLINE_OVERRIDES_MS`,
-`PLUGIN_LOG_CAP_BYTES_PER_MINUTE`, `PLUGIN_DEFAULT_MEMORY_MB` and `MAX_FRAME_BYTES`, and a test
-fails if they ever stop matching what the supervisor applies.
+Core enforces these; exceeding one gets your call abandoned or your process killed. The values are
+`server/docs/spec/plugins.md` rules 39-43; a guest reads its own budget with
+`deadline-remaining-ms`.
 
 | What | Value | On breach |
 |---|---|---|

@@ -8,8 +8,8 @@
     "rootDir": "..",
     "types": []
   },
-  "include": ["src/**/*.ts", "../backend/src/common/plugin-contract/ui-contribution.ts"],
-  "exclude": ["src/**/*.spec.ts", "../backend/src/common/plugin-contract/ui-contribution.ts"],
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/*.spec.ts"],
   "angularCompilerOptions": {
     "extendedDiagnostics": {
       // NG8107 misfires under Angular 22's template `?.` typing: dropping the

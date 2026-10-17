@@ -139,8 +139,6 @@ services:
       - /src/client/node_modules
     volumes:
       - ./client:/src/client
-      # client/tsconfig.json resolves @fliks/plugin-contract/ui from ../backend.
-      - ./backend/src/common/plugin-contract:/src/backend/src/common/plugin-contract:ro
 
   postgres:
     image: postgres:18.3-alpine
