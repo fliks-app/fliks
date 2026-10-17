@@ -1,4 +1,4 @@
-import { Injectable, inject, signal, OnDestroy } from '@angular/core';
+import { Injectable, InjectionToken, inject, signal, OnDestroy } from '@angular/core';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import { TranslateService } from '@ngx-translate/core';
 import { environment } from '../../../environments/environment';
@@ -164,8 +164,12 @@ interface DesktopCastBridge extends NativeCastPlugin {
 }
 
 const DesktopCast = (globalThis as { fliksCast?: DesktopCastBridge }).fliksCast;
-const CastBridge: NativeCastPlugin =
-  DesktopCast ?? registerPlugin<NativeCastPlugin>('NativeCast');
+/** The native Cast plugin (desktop shell bridge, else Capacitor's), injected so a test supplies its own.
+ *  Boxed: the plugin proxy answers every property, and an injector calls a value's `ngOnDestroy`. */
+export const CAST_BRIDGE = new InjectionToken<{ plugin: NativeCastPlugin }>('CAST_BRIDGE', {
+  providedIn: 'root',
+  factory: () => ({ plugin: DesktopCast ?? registerPlugin<NativeCastPlugin>('NativeCast') }),
+});
 const CAST_APP_ID = environment.castAppId;
 /** Ceiling on a connect attempt: a cold receiver launch is ~2 s on a Chromecast. */
 const CONNECT_TIMEOUT_MS = 30_000;
@@ -237,6 +241,7 @@ export class CastService implements OnDestroy {
   /** Whether a native-process Cast sender backs this client — the Capacitor
    *  plugin on mobile, the Electron main process on desktop. Without one we are
    *  in a browser and drive the Cast Web SDK instead. */
+  private readonly bridge = inject(CAST_BRIDGE).plugin;
   private readonly hasCastBridge = Capacitor.isNativePlatform() || !!DesktopCast;
 
   /** True when the backing sender enumerates devices itself, so the picker
@@ -284,12 +289,12 @@ export class CastService implements OnDestroy {
   // ---------------------------------------------------------------------------
 
   saveResumeState(state: unknown): void {
-    if (this.hasCastBridge) void CastBridge.setResumeState?.({ state }).catch(() => {});
+    if (this.hasCastBridge) void this.bridge.setResumeState?.({ state }).catch(() => {});
   }
 
   private async initNative() {
     try {
-      const { available, connected, resume } = await CastBridge.initialize({ appId: CAST_APP_ID });
+      const { available, connected, resume } = await this.bridge.initialize({ appId: CAST_APP_ID });
       this.isAvailable.set(available || !!connected);
       if (connected) this.isConnected.set(true);
       if (resume) this.resumedState.set(resume);
@@ -542,7 +547,7 @@ export class CastService implements OnDestroy {
     this.beginConnecting();
     if (this.hasCastBridge) {
       // The plugin resolves immediately; castStateChanged fires on connect OR dismiss.
-      CastBridge.requestSession().catch(() => this.endConnecting());
+      this.bridge.requestSession().catch(() => this.endConnecting());
     } else {
       cast.framework.CastContext.getInstance().requestSession().catch(() => this.endConnecting());
     }
@@ -573,7 +578,7 @@ export class CastService implements OnDestroy {
   async getCastDevices(): Promise<CastDevice[]> {
     if (!this.hasCastBridge) return [];
     try {
-      const { devices } = await CastBridge.getCastDevices();
+      const { devices } = await this.bridge.getCastDevices();
       this.castDevices.set(devices);
       return devices;
     } catch (err) {
@@ -589,7 +594,7 @@ export class CastService implements OnDestroy {
   async selectCastDevice(id: string): Promise<void> {
     this.beginConnecting();
     try {
-      await CastBridge.selectCastDevice({ id });
+      await this.bridge.selectCastDevice({ id });
     } catch (err) {
       this.endConnecting();
       throw err;
@@ -636,7 +641,7 @@ export class CastService implements OnDestroy {
     const subtitleStyle = this.castSettings.get().subtitleStyle;
 
     if (this.hasCastBridge) {
-      await CastBridge.loadMedia({
+      await this.bridge.loadMedia({
         url: info.url,
         contentType: info.contentType,
         title: info.title,
@@ -705,14 +710,14 @@ export class CastService implements OnDestroy {
   }
 
   play() {
-    if (this.hasCastBridge) { CastBridge.play(); this.isPaused.set(false); return; }
+    if (this.hasCastBridge) { this.bridge.play(); this.isPaused.set(false); return; }
     if (!this.remotePlayerController) return;
     this.isPaused.set(false);
     if (this.remotePlayer?.isPaused) this.remotePlayerController.playOrPause();
   }
 
   pause() {
-    if (this.hasCastBridge) { CastBridge.pause(); this.isPaused.set(true); return; }
+    if (this.hasCastBridge) { this.bridge.pause(); this.isPaused.set(true); return; }
     if (!this.remotePlayerController) return;
     this.isPaused.set(true);
     if (!this.remotePlayer?.isPaused) this.remotePlayerController.playOrPause();
@@ -735,7 +740,7 @@ export class CastService implements OnDestroy {
     const v = Math.min(1, Math.max(0, level));
     this.volume.set(v);
     if (v > 0 && this.muted()) this.setMuted(false);
-    if (this.hasCastBridge) { CastBridge.setVolume({ level: v }).catch(() => {}); return; }
+    if (this.hasCastBridge) { this.bridge.setVolume({ level: v }).catch(() => {}); return; }
     if (!this.remotePlayer || !this.remotePlayerController) return;
     this.remotePlayer.volumeLevel = v;
     this.remotePlayerController.setVolumeLevel();
@@ -743,7 +748,7 @@ export class CastService implements OnDestroy {
 
   setMuted(muted: boolean) {
     this.muted.set(muted);
-    if (this.hasCastBridge) { CastBridge.setMuted({ muted }).catch(() => {}); return; }
+    if (this.hasCastBridge) { this.bridge.setMuted({ muted }).catch(() => {}); return; }
     if (!this.remotePlayer || !this.remotePlayerController) return;
     // muteOrUnmute() toggles receiver-side, so only fire it when the receiver's
     // current state differs from the target — avoids a double-toggle no-op.
@@ -798,7 +803,7 @@ export class CastService implements OnDestroy {
   private dispatchSeek(time: number) {
     this.lastDispatchedSeekTarget = time;
     this.seekSettleUntil = Date.now() + CAST_SEEK_SETTLE_MS;
-    if (this.hasCastBridge) { CastBridge.seek({ time }); return; }
+    if (this.hasCastBridge) { this.bridge.seek({ time }); return; }
     if (!this.remotePlayer) return;
     this.remotePlayer.currentTime = time;
     this.remotePlayerController?.seek();
@@ -829,12 +834,12 @@ export class CastService implements OnDestroy {
   }
 
   stop() {
-    if (this.hasCastBridge) { CastBridge.stop(); return; }
+    if (this.hasCastBridge) { this.bridge.stop(); return; }
     this.remotePlayerController?.stop();
   }
 
   disconnect() {
-    if (this.hasCastBridge) { CastBridge.disconnect(); }
+    if (this.hasCastBridge) { this.bridge.disconnect(); }
     else { cast.framework.CastContext.getInstance().endCurrentSession(true); }
     this.isConnected.set(false);
     this.session = null;
@@ -856,7 +861,7 @@ export class CastService implements OnDestroy {
 
   private applyTextTrack(trackId: number) {
     if (this.hasCastBridge) {
-      void CastBridge.setActiveSubtitle({ trackId }).catch(() => {});
+      void this.bridge.setActiveSubtitle({ trackId }).catch(() => {});
       return;
     }
     this.applyActiveTracks({ textId: trackId > 0 ? trackId : null });
@@ -881,7 +886,7 @@ export class CastService implements OnDestroy {
     await this.pendingLoad;
     if (this.hasCastBridge) {
       try {
-        const { success } = await CastBridge.setActiveAudioLanguage({ language, name });
+        const { success } = await this.bridge.setActiveAudioLanguage({ language, name });
         return success;
       } catch {
         return false;
