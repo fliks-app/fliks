@@ -1,0 +1,9 @@
+[package]
+name = "fliks-plugin-route"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+description = "The plugin route matcher shared by the Fliks host and the plugin SDK"
+
+[dependencies]
+fancy-regex = "0.14"

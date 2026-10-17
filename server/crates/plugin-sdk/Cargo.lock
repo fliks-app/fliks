@@ -1370,13 +1370,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "fliks-plugin-route"
+version = "0.1.0"
+dependencies = [
+ "fancy-regex",
+]
+
+[[package]]
 name = "fliks-plugin-sdk"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
  "ed25519-dalek",
+ "fliks-plugin-route",
  "fliks-server",
- "fliks_domain",
  "futures-util",
  "serde",
  "serde_json",
@@ -1452,6 +1459,7 @@ dependencies = [
  "chrono",
  "encoding_rs",
  "fancy-regex",
+ "fliks-plugin-route",
  "percent-encoding",
  "quick-xml",
  "regex 1.13.1",

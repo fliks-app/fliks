@@ -2,8 +2,8 @@
 //! path the host routed to the plugin resolves to the same route inside it.
 
 use crate::bindings::fliks::plugin::types::{HttpRequest, HttpResponse, Principal};
-use fliks_domain::plugins::route::Matcher;
-pub use fliks_domain::plugins::route::ParamValue;
+use fliks_plugin_route::Matcher;
+pub use fliks_plugin_route::ParamValue;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 

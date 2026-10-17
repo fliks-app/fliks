@@ -1,5 +1,5 @@
 //! Pure plugin-host rules (`docs/spec/plugins.md`): route matching, policy vocabulary, guards.
-pub mod route;
+pub use fliks_plugin_route as route;
 
 use crate::acl::{Action, Subject};
 use std::collections::BTreeSet;

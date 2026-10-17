@@ -1424,6 +1424,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "fliks-plugin-route"
+version = "0.1.0"
+dependencies = [
+ "fancy-regex",
+]
+
+[[package]]
 name = "fliks-server"
 version = "4.5.0"
 dependencies = [
@@ -1491,6 +1498,7 @@ dependencies = [
  "chrono",
  "encoding_rs",
  "fancy-regex",
+ "fliks-plugin-route",
  "percent-encoding",
  "quick-xml",
  "regex 1.13.1",
