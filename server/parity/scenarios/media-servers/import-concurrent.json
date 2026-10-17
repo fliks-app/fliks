@@ -10,14 +10,48 @@
   "steps": [
     {
       "as": "admin",
+      "method": "GET",
+      "path": "/api/system/events?device=ms",
       "expect": {
-        "body": {
-          "ok": true
-        },
-        "status": 201
+        "status": 200,
+        "body": [
+          {
+            "data": {
+              "type": "sse.connected"
+            },
+            "event": ""
+          },
+          {
+            "data": {
+              "serverId": 6,
+              "serverName": "Emby Slow",
+              "type": "watch-history.import.started"
+            },
+            "event": ""
+          },
+          {
+            "data": {
+              "name": "ImportWatchHistory",
+              "type": "command.started"
+            },
+            "event": ""
+          }
+        ]
       },
-      "method": "POST",
-      "path": "/api/media-servers/6/import-watch-history"
+      "sse": {
+        "events": 3,
+        "timeoutMs": 8000,
+        "after": [
+          {
+            "as": "admin",
+            "expect": {
+              "status": 0
+            },
+            "method": "POST",
+            "path": "/api/media-servers/6/import-watch-history"
+          }
+        ]
+      }
     },
     {
       "as": "admin",
@@ -31,12 +65,6 @@
       },
       "method": "POST",
       "path": "/api/media-servers/6/import-watch-history"
-    },
-    {
-      "expect": {
-        "status": 200
-      },
-      "sleepMs": 600
     },
     {
       "as": "admin",

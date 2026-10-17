@@ -1,6 +1,6 @@
 {
   "capture": {
-    "mid": "$.steps[2].body.id"
+    "mid": "$.steps[1].body.id"
   },
   "deviation": null,
   "engine": "down",
@@ -12,12 +12,6 @@
   "name": "provider-write-import-tvdb-series",
   "seed": "providers",
   "steps": [
-    {
-      "expect": {
-        "status": 200
-      },
-      "sleepMs": 800
-    },
     {
       "expect": {
         "body": {

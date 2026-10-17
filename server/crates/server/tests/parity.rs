@@ -20,7 +20,7 @@ fn env(k: &str, d: &str) -> String {
 }
 
 /// Runs psql inside the container so no credentials are needed; `sql` is fed on stdin when given.
-fn psql(args: &[&str], sql: Option<&[u8]>) {
+fn psql(args: &[&str], sql: Option<&[u8]>) -> String {
     use std::io::Write;
     use std::process::Stdio;
     let mut child = Command::new("docker")
@@ -29,7 +29,7 @@ fn psql(args: &[&str], sql: Option<&[u8]>) {
         .arg("_")
         .args(args)
         .stdin(Stdio::piped())
-        .stdout(Stdio::null())
+        .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
         .expect("docker");
@@ -44,6 +44,7 @@ fn psql(args: &[&str], sql: Option<&[u8]>) {
         "psql {args:?}: {}",
         String::from_utf8_lossy(&out.stderr)
     );
+    String::from_utf8_lossy(&out.stdout).into()
 }
 
 /// Template DB of a scenario `seed`: `base` is the committed dump, any other name is `seed/<name>.sql` applied on top.
@@ -71,6 +72,52 @@ fn build_seed_template(base_tpl: &str, seed: &str) {
         None,
     );
     psql(&["-d", &name], Some(&delta));
+}
+
+/// Waits until the previous scenario left nothing running (activity registry, stub requests in
+/// flight, queries on the scenario DB), stable over two polls, so detached work cannot hit the next reset.
+async fn await_idle(ctx: &Ctx, db: &str, stub: Option<&str>) {
+    let probe = format!(
+        "SELECT count(*) FROM pg_stat_activity WHERE datname = '{db}' AND state <> 'idle' AND pid <> pg_backend_pid()"
+    );
+    let get = async |url: String, token: Option<&String>| -> Value {
+        let mut req = ctx.http.get(url);
+        if let Some(t) = token {
+            req = req.bearer_auth(t);
+        }
+        match req.send().await {
+            Ok(r) => r.json().await.unwrap_or_default(),
+            Err(_) => Value::Null,
+        }
+    };
+    let (mut calm, mut polls) = (0, 0);
+    while calm < 2 {
+        polls += 1;
+        assert!(polls < 300, "target still busy after 15s");
+        let running = get(
+            format!("{}/api/system/activity", ctx.target),
+            ctx.tokens.get("admin"),
+        )
+        .await["total"]
+            .as_u64()
+            .unwrap_or(0);
+        let inflight = match stub {
+            Some(u) => get(format!("{u}/__inflight"), None).await["inflight"]
+                .as_u64()
+                .unwrap_or(0),
+            None => 0,
+        };
+        let queries = psql(&["-d", "postgres", "-At", "-c", &probe], None)
+            .trim()
+            .parse::<u64>()
+            .unwrap_or(0);
+        if running + inflight + queries == 0 {
+            calm += 1;
+        } else {
+            calm = 0;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
 }
 
 /// Recreates the scenario database from its seed template.
@@ -792,6 +839,14 @@ async fn parity() {
             continue;
         }
         let seed = sc["seed"].as_str().unwrap_or("base");
+        if providers {
+            await_idle(
+                &ctx,
+                &db,
+                Some(&env("PARITY_STUB", "http://127.0.0.1:4890")),
+            )
+            .await;
+        }
         reset_db(&db, &template(&base_tpl, seed));
         if seed != logged_in {
             ctx.tokens = login_all(&ctx.http, &ctx.target).await;

@@ -5,7 +5,7 @@ Usage: stub.py PORT. Routes: /tmdb/3/*, /tvdb/v4/*, /img/t/p/<size>/<file>.
 Fixture of a GET: <dir>/<path with / as _>.<query value>.json, else <path>.json, else 404.
 Subtitles (docs/spec/subtitle-providers.md): GET /subdl/api/v1/subtitles (releases by `type`/`languages`), GET /subtitle/<n>.zip.
 Control (used by scenario steps with "stub": true): POST /__reset, POST /__fail {prefix,status|"hang"},
-GET /__hits?prefix=, GET /__last?prefix= (query of the last request).
+GET /__hits?prefix=, GET /__last?prefix= (query of the last request), GET /__inflight (requests being served).
 """
 import io, json, os, subprocess, sys, threading, time, zipfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -14,7 +14,7 @@ from urllib.parse import urlparse, parse_qs
 HERE = os.path.dirname(os.path.abspath(__file__))
 IMG_DIR = "/tmp/fliks-parity/s5-metadata/images"
 LOCK = threading.Lock()
-STATE = {"hits": [], "fail": {}}
+STATE = {"hits": [], "fail": {}, "inflight": 0}
 
 
 def ensure_images():
@@ -74,6 +74,15 @@ class H(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def handle_any(self, method):
+        with LOCK:
+            STATE["inflight"] += 1
+        try:
+            self.route(method)
+        finally:
+            with LOCK:
+                STATE["inflight"] -= 1
+
+    def route(self, method):
         u = urlparse(self.path)
         query = parse_qs(u.query, keep_blank_values=True)
         n = int(self.headers.get("content-length") or 0)
@@ -117,6 +126,9 @@ class H(BaseHTTPRequestHandler):
                 b = json.loads(raw or b"{}")
                 STATE["fail"][b["prefix"]] = b.get("status", 500)
                 return self.send(200, {"ok": True})
+            if path == "/__inflight":
+                # the control request itself is counted
+                return self.send(200, {"inflight": STATE["inflight"] - 1})
             prefix = query.get("prefix", [""])[0]
             hits = [h for h in STATE["hits"] if h["path"].startswith(prefix)]
         if path == "/__hits":

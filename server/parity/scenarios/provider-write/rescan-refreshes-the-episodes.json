@@ -17,12 +17,6 @@
   "steps": [
     {
       "expect": {
-        "status": 200
-      },
-      "sleepMs": 3000
-    },
-    {
-      "expect": {
         "body": {
           "ok": true
         },
