@@ -13,8 +13,20 @@ use tower::ServiceExt;
 pub const SECRET: &str = "0123456789abcdef0123456789abcdef";
 pub const TEST_KEY: [u8; 32] = [7u8; 32];
 
+/// Under CI a missing input fails the test; locally it skips it, loudly.
+fn skip(what: &str) {
+    if std::env::var("CI").is_ok_and(|v| !matches!(v.as_str(), "" | "0" | "false")) {
+        panic!("{what}: required under CI");
+    }
+    eprintln!("\n\x1b[1;33mWARNING: {what}: test SKIPPED\x1b[0m\n");
+}
+
 pub fn admin_url() -> Option<String> {
-    std::env::var("S8_PG_ADMIN_URL").ok()
+    let url = std::env::var("S8_PG_ADMIN_URL").ok();
+    if url.is_none() {
+        skip("S8_PG_ADMIN_URL unset");
+    }
+    url
 }
 
 pub fn wasm(name: &str) -> Option<Vec<u8>> {
@@ -25,8 +37,16 @@ pub fn wasm(name: &str) -> Option<Vec<u8>> {
             std::env::var("CARGO_TARGET_DIR")
                 .ok()
                 .map(|d| PathBuf::from(d).join("wasm32-wasip2/release"))
-        })?;
-    std::fs::read(dir.join(format!("{name}.wasm"))).ok()
+        });
+    let file = dir.map(|d| d.join(format!("{name}.wasm")));
+    let w = file.as_ref().and_then(|f| std::fs::read(f).ok());
+    if w.is_none() {
+        skip(&format!(
+            "{name}.wasm not found at {file:?} (FLIKS_TEST_WASM_DIR or $CARGO_TARGET_DIR/\
+             wasm32-wasip2/release; cargo xtask build examples/fixture-guest in plugin-sdk)"
+        ));
+    }
+    w
 }
 
 pub fn template(example: &str) -> Value {
@@ -80,10 +100,7 @@ pub struct Scratch {
 
 impl Scratch {
     pub async fn create(tag: &str) -> Option<Scratch> {
-        let Some(admin) = admin_url() else {
-            eprintln!("S8_PG_ADMIN_URL unset: skipped");
-            return None;
-        };
+        let admin = admin_url()?;
         let name = format!("s8_{tag}_{}", fliks_server::config::random_hex(4));
         let mut c = PgConnection::connect(&admin).await.unwrap();
         sqlx::raw_sql(&format!("CREATE DATABASE {name}"))
@@ -358,11 +375,7 @@ pub async fn until(what: &str, max: Duration, mut f: impl AsyncFnMut() -> bool) 
 }
 
 pub fn fixture() -> Option<(Value, Vec<u8>)> {
-    let Some(w) = wasm("fixture_guest") else {
-        eprintln!("fixture component not built: skipped");
-        return None;
-    };
-    Some((template("fixture-guest"), w))
+    Some((template("fixture-guest"), wasm("fixture_guest")?))
 }
 
 /// The fixture as installed by tests: unsigned process plugins allowed.
