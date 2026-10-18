@@ -1,66 +1,12 @@
-# Dev stack: NestJS + Angular in watch mode on the mounted sources.
+# Dev stack: fliks-server (Rust) + Angular in watch mode on the mounted sources.
 # Copy to `docker-compose.yml` (gitignored), point the media paths at your own
 # library, then `docker compose up` → UI on http://localhost:4500.
-# node_modules live in the images at /src, above the bind-mounted sources:
-# `docker compose build` after any package.json change.
-# The engine is the front door (:3000, --upstream server:3001), as in production; server (Rust) forwards
-# what it doesn't own to backend (Nest, :3002). Neither has a published port.
+# The client's npm dependencies live in its image, above the bind-mounted sources:
+# `docker compose build client` after a package.json change.
+# The engine is the front door (:3000, --upstream server:3001), as in production; server has no published port.
 # The engine runs from the checkout at ${FLIKS_ENGINE_SRC:-../fliks-engine} (cargo watch); first build takes minutes.
 
 services:
-  backend:
-    build:
-      context: .
-      target: dev
-    depends_on:
-      postgres:
-        condition: service_healthy
-      engine:
-        condition: service_healthy
-      server:
-        condition: service_started
-    # Uncomment for Intel QSV/VAAPI. The render node is root:render and the
-    # non-root user below is not in that group, so both lines are needed or the
-    # probe fails and transcodes fall back to CPU.
-    # Your gid: `getent group render | cut -d: -f3`.
-    # devices:
-    #   - /dev/dri:/dev/dri
-    # group_add: ['${FLIKS_RENDER_GID:-990}']
-    working_dir: /src/backend
-    # Build output lands in the mounted sources (backend/dist, client/.angular);
-    # as root it would make the host's own build fail on EACCES.
-    user: '${FLIKS_UID:-1000}:${FLIKS_GID:-1000}'
-    command: npm run start:dev
-    environment:
-      NODE_ENV: development
-      PORT: 3002
-      FLIKS_HOST_URL: http://server:3001
-      FLIKS_SERVER_URL: http://server:3001
-      FLIKS_BRIDGE_TOKEN: dev-bridge
-      CORS_ORIGIN: http://localhost:4500
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_USERNAME: fliks
-      DB_PASSWORD: password
-      DB_NAME: fliks
-      JWT_SECRET: dev-secret
-      FLIKS_ENGINE_URL: http://engine:7400
-      FLIKS_ENGINE_TOKEN: dev-engine-token
-      # TMDB_API_KEY: ''
-      # TVDB_API_KEY: ''
-      # Throwaway cache, container-only: /src is root-owned in the image, so the
-      # non-root user it runs as needs a path it can actually write.
-      FLIKS_TRANSCODE_DIR: /tmp/transcode
-      FLIKS_DATA_DIR: /src/data
-    # Keeps the host's own node_modules out of the container.
-    tmpfs:
-      - /src/backend/node_modules
-    volumes:
-      - ./backend:/src/backend
-      - ./.dev/downloads:/downloads
-      - ./.dev/medias:/medias
-      - ./.dev/data:/src/data
-
   engine:
     build:
       context: .
@@ -72,7 +18,9 @@ services:
       FLIKS_ENGINE_TOKEN: dev-engine-token
       CARGO_TARGET_DIR: /cargo-target
       XDG_CACHE_HOME: /tmp
-    # Same QSV/VAAPI block as the backend.
+    # Uncomment for Intel QSV/VAAPI. The render device is root:render, so a
+    # non-root container user also needs the group_add line or the probe fails
+    # and transcodes fall back to CPU. Your gid: `getent group render | cut -d: -f3`.
     # devices:
     #   - /dev/dri:/dev/dri
     # group_add: ['${FLIKS_RENDER_GID:-990}']
@@ -89,7 +37,7 @@ services:
       - ${FLIKS_ENGINE_SRC:-../fliks-engine}:/engine
       - engine-target:/cargo-target
       - engine-registry:/usr/local/cargo/registry
-      # Engine reads media by path: same mount as the backend.
+      # Engine reads media by path: same mount as the server.
       - ./.dev/medias:/medias
 
   server:
@@ -105,11 +53,9 @@ services:
     command: cargo watch -x 'run -p fliks-server'
     environment:
       PORT: 3001
-      FLIKS_NEST_URL: http://backend:3002
       FLIKS_CAST_DIR: /src/server/public
       FLIKS_ENGINE_URL: http://engine:7400
       FLIKS_ENGINE_TOKEN: dev-engine-token
-      FLIKS_BRIDGE_TOKEN: dev-bridge
       DB_HOST: postgres
       DB_PORT: 5432
       DB_USERNAME: fliks
@@ -120,8 +66,15 @@ services:
       CARGO_BUILD_JOBS: 4
       CARGO_TARGET_DIR: /cargo-target
       SQLX_OFFLINE: 'true'
+      # TMDB_API_KEY: ''
+      # TVDB_API_KEY: ''
+      FLIKS_TRANSCODE_DIR: /tmp/transcode
+      FLIKS_DATA_DIR: /src/data
     volumes:
       - ./server:/src/server
+      - ./.dev/downloads:/downloads
+      - ./.dev/medias:/medias
+      - ./.dev/data:/src/data
       - server-target:/cargo-target
       - server-registry:/usr/local/cargo/registry
 
