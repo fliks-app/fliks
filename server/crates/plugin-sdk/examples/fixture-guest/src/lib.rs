@@ -261,6 +261,22 @@ fn test_route(req: &Request) -> Result<Response, String> {
             let r = rt::block_on(rt::timeout(Duration::from_millis(200), send));
             ok(json!({ "timedOut": r.is_none() }))
         }
+        "drip" => {
+            let url = req.query("url").map(str::to_owned).unwrap_or_default();
+            let get = || http::Request::new(Method::Get, &url).timeout(Duration::from_secs(2));
+            let started = Instant::now();
+            let blocking = get().deadline(Duration::from_millis(400)).send();
+            let blocking_ms = started.elapsed().as_millis() as u64;
+            let b = rt::Budget::new(Duration::from_millis(400));
+            let started = Instant::now();
+            let budgeted = rt::block_on(get().budget(&b).send_async());
+            ok(json!({
+                "blocking": blocking.err().map(|e| format!("{e:?}")),
+                "blockingMs": blocking_ms,
+                "budgeted": budgeted.err().map(|e| format!("{e:?}")),
+                "budgetedMs": started.elapsed().as_millis() as u64,
+            }))
+        }
         "budget" => {
             let url = req.query("url").map(str::to_owned).unwrap_or_default();
             let b = rt::Budget::new(Duration::from_millis(300));

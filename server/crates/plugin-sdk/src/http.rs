@@ -57,6 +57,8 @@ pub struct Request {
     pub timeout: Duration,
     /// Response bytes kept; the rest is drained and dropped.
     pub body_cap: usize,
+    /// The whole exchange, response body included; a dripping server cannot outlast it.
+    pub deadline: Option<Duration>,
 }
 
 impl Request {
@@ -68,6 +70,7 @@ impl Request {
             body: Vec::new(),
             timeout: Duration::from_secs(60),
             body_cap: 32 << 20,
+            deadline: None,
         }
     }
     pub fn header(mut self, name: &str, value: &str) -> Self {
@@ -83,6 +86,14 @@ impl Request {
         self.timeout = t;
         self
     }
+    pub fn deadline(mut self, d: Duration) -> Self {
+        self.deadline = Some(self.deadline.map_or(d, |old| old.min(d)));
+        self
+    }
+    /// Ends the request with the budget, and no later than any deadline already set.
+    pub fn budget(self, b: &crate::rt::Budget) -> Self {
+        self.deadline(b.remaining())
+    }
     pub fn body_cap(mut self, cap: usize) -> Self {
         self.body_cap = cap;
         self
@@ -95,6 +106,15 @@ impl Request {
 
     /// Dropping the future before it resolves abandons the request: the host drops its connection.
     pub async fn send_async(self) -> Result<Response, Error> {
+        match self.deadline {
+            Some(d) => crate::rt::timeout(d, self.exchange())
+                .await
+                .unwrap_or(Err(Error::Timeout)),
+            None => self.exchange().await,
+        }
+    }
+
+    async fn exchange(self) -> Result<Response, Error> {
         let (scheme, rest) = self.url.split_once("://").ok_or(Error::InvalidUrl)?;
         let scheme = match scheme.to_ascii_lowercase().as_str() {
             "https" => Scheme::Https,

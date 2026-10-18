@@ -64,6 +64,25 @@ fn slow_stub(port: u16, delay: Duration) -> Arc<Mutex<Vec<bool>>> {
     dropped
 }
 
+/// Sends headers, then one body byte every 100 ms for 10 s: no per-byte timeout ever fires.
+fn drip_stub(port: u16) {
+    let l = TcpListener::bind(("127.0.0.1", port)).unwrap();
+    std::thread::spawn(move || {
+        for mut c in l.incoming().flatten() {
+            std::thread::spawn(move || {
+                let _ = c.read(&mut [0u8; 4096]);
+                let _ = c.write_all(b"HTTP/1.1 200 OK\r\ncontent-length: 100\r\n\r\n");
+                for _ in 0..100 {
+                    std::thread::sleep(Duration::from_millis(100));
+                    if c.write_all(b"x").is_err() {
+                        break;
+                    }
+                }
+            });
+        }
+    });
+}
+
 async fn fetch(h: &Harness, url: &str) -> Value {
     body(
         &h.http(request("GET", "/test/fetch", &[("url", url)], b""))
@@ -306,6 +325,37 @@ async fn async_requests_overlap_cancel_and_budget() {
         r["hostMs"].as_u64().unwrap() > 170_000,
         "an http export has the 180 s host deadline: {r}"
     );
+    h.finish().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn request_deadline_stops_a_dripping_server() {
+    drip_stub(4942);
+    let s = setup(|_| {});
+    s.targets.answer("drip.test", &["93.184.216.36"]);
+    s.targets
+        .route("93.184.216.36:80", "127.0.0.1:4942".parse().unwrap());
+    let Some(h) = Harness::start(s).await else {
+        return;
+    };
+    let r = h
+        .http(request(
+            "GET",
+            "/test/drip",
+            &[("url", "http://drip.test/")],
+            b"",
+        ))
+        .await
+        .unwrap();
+    let r = body(&r);
+    for k in ["blocking", "budgeted"] {
+        assert_eq!(r[k], "Timeout", "{r}");
+        let ms = r[format!("{k}Ms")].as_u64().unwrap();
+        assert!(
+            (400..1500).contains(&ms),
+            "{k} ends at its deadline: {ms} ms"
+        );
+    }
     h.finish().await;
 }
 
