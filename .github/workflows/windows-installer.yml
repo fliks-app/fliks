@@ -1,10 +1,10 @@
 # Builds a self-contained Fliks Windows server (tray app + embedded
-# PostgreSQL + Node + tri-vendor FFmpeg).
+# PostgreSQL + tri-vendor FFmpeg + fliks-engine and fliks-server).
 #
 # Packaged with Velopack (per-user Setup.exe + update feed on the `win-server`
 # channel; the desktop client owns `win` in the same release).
 # PR / workflow_dispatch → builds the Setup.exe as a workflow artifact (fast: the
-#   vendored binaries and the client/backend build are cached).
+#   vendored binaries and the client build are cached).
 # Release tag `v*`       → also pulls the previous release for a delta package
 #   and uploads the release files, which the tray's updater reads.
 #
@@ -50,7 +50,7 @@ jobs:
             echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
           else
             # Velopack only takes SemVer2.
-            base=$(node -p "require('./backend/package.json').version")
+            base=$(jq -r '."."' .github/.release-please-manifest.json)
             echo "version=${base}-dev.${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
           fi
 
@@ -58,9 +58,7 @@ jobs:
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: |
-            client/package-lock.json
-            backend/package-lock.json
+          cache-dependency-path: client/package-lock.json
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -87,18 +85,15 @@ jobs:
           path: windows/Vendored
           key: win-vendored-${{ hashFiles('windows/Scripts/fetch-vendored.ps1') }}
 
-      # Client + backend build outputs, keyed on their sources + lockfiles.
+      # Client build output, keyed on its sources + lockfile.
       # A change touching only windows/** (the tray) hits this cache and skips
       # the slow web build entirely.
       - name: Cache web build
         id: webcache
         uses: actions/cache@v4
         with:
-          path: |
-            client/dist
-            backend/dist
-            backend/node_modules
-          key: win-web-${{ hashFiles('client/package-lock.json', 'client/src/**', 'client/angular.json', 'client/tsconfig*.json', 'backend/package-lock.json', 'backend/src/**', 'backend/tsconfig*.json', 'backend/nest-cli.json') }}
+          path: client/dist
+          key: win-web-${{ hashFiles('client/package-lock.json', 'client/src/**', 'client/angular.json', 'client/tsconfig*.json') }}
 
       - name: Install vpk
         run: dotnet tool install -g vpk --version 1.2.161
@@ -113,14 +108,6 @@ jobs:
         run: |
           npm ci
           npx ng build --configuration=production
-
-      - name: Build backend
-        if: steps.webcache.outputs.cache-hit != 'true'
-        working-directory: backend
-        run: |
-          npm ci
-          npm run build
-          npm ci --omit=dev
 
       - name: Build bundle
         working-directory: windows

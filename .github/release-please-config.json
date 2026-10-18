@@ -9,21 +9,6 @@
       "extra-files": [
         {
           "type": "json",
-          "path": "backend/package.json",
-          "jsonpath": "$.version"
-        },
-        {
-          "type": "json",
-          "path": "backend/package-lock.json",
-          "jsonpath": "$.version"
-        },
-        {
-          "type": "json",
-          "path": "backend/package-lock.json",
-          "jsonpath": "$.packages[''].version"
-        },
-        {
-          "type": "json",
           "path": "client/package.json",
           "jsonpath": "$.version"
         },

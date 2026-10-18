@@ -5,17 +5,16 @@
 #   tools/sym -f FILE [-a] outline of FILE: line, kind, name (-a: with struct members / enumerators)
 #   tools/sym -g REGEX    grep the symbol names (case-insensitive)
 # Output: file:line  kind  name  [scope] signature   -> then Read FILE with offset=line-5, limit=40
-# Indexes TypeScript (backend/src), Rust (server/crates), markdown headings. The index (.tags, gitignored)
+# Indexes Rust (server/crates) and markdown headings. The index (.tags, gitignored)
 # rebuilds itself when a source is newer; ~1 s.
 set -eo pipefail
 cd "$(dirname "$0")/.."
 T=.tags
-SRC=(backend/src server/crates server/docs server/CLAUDE.md CLAUDE.md backend/CLAUDE.md)
+SRC=(server/crates server/docs server/CLAUDE.md CLAUDE.md)
 CTAGS=$(command -v ctags || echo ~/.local/bin/ctags)
-if [ ! -s $T ] || [ -n "$(find "${SRC[@]}" -newer $T \( -name '*.rs' -o -name '*.ts' -o -name '*.md' \) -print -quit 2>/dev/null)" ]; then
+if [ ! -s $T ] || [ -n "$(find "${SRC[@]}" -newer $T \( -name '*.rs' -o -name '*.md' \) -print -quit 2>/dev/null)" ]; then
     "$CTAGS" -R -f $T --excmd=number --extras=+q --fields=+nKSZ --fields=-P \
-        --languages=Rust,TypeScript,Markdown --kinds-TypeScript=-l \
-        --exclude=target --exclude=node_modules --exclude='*.d.ts' --exclude='*.spec.ts' --exclude='*.test.ts' "${SRC[@]}" 2>/dev/null
+        --languages=Rust,Markdown --exclude=target "${SRC[@]}" 2>/dev/null
 fi
 # name file line;" kind line:N [scope:x] [signature:...]
 fmt() { awk -F'\t' -v all="$1" -v dedup="$2" '$1 !~ /^!_/ {

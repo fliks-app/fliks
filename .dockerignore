@@ -4,9 +4,6 @@
 **/.git
 **/*.md
 **/coverage
-backend/.env
-backend/.env.*
-!backend/.env.example
 client/android
 client/ios
 server/target

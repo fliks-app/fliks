@@ -44,14 +44,12 @@ jobs:
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $SHORT" macos/Fliks/Info.plist
           echo "Patched Info.plist: CFBundleShortVersionString=$SHORT (from $RAW)"
 
-      # ── Node.js for building client + backend ──
+      # ── Node.js for building the client ──
       - uses: actions/setup-node@v6
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: |
-            client/package-lock.json
-            backend/package-lock.json
+          cache-dependency-path: client/package-lock.json
 
       # ── Rust for fliks-server (built by build-app) ──
       - uses: dtolnay/rust-toolchain@stable
@@ -71,7 +69,7 @@ jobs:
       - name: Install Homebrew dependencies
         run: brew install postgresql@18 xcodegen create-dmg
 
-      # ── Fetch vendored Node.js 24 (arm64) ──
+      # ── Fetch vendored PostgreSQL and ffmpeg (arm64) ──
       - name: Fetch vendored binaries
         working-directory: macos
         run: ./Scripts/fetch-vendored.sh
@@ -82,14 +80,6 @@ jobs:
         run: |
           npm ci
           npx ng build --configuration=production
-
-      # ── Build NestJS backend ──
-      - name: Build backend
-        working-directory: backend
-        run: |
-          npm ci
-          npm run build
-          npm ci --omit=dev
 
       # ── Generate Xcode project ──
       - name: Generate Xcode project
