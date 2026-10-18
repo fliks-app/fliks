@@ -60,16 +60,17 @@ A `process` manifest additionally requires these seven keys — reference `fk-pl
   A method whose scopes you have not all declared rejects with `missing scope "<scope>" required
   for "<method>"`. `HOST_METHOD_SCOPES` in the contract is the source this table restates.
 - `ingestRoots[]` — the allowlist `library.ingest` paths must fall under; may be empty.
-- `network` — optional, `{ internal: true }` and nothing else: lets the plugin's outbound requests
-  reach private addresses (a LAN download client). The install consent sheet is the grant; an upgrade
-  that newly asks for it is not applied unattended and waits for an admin to confirm.
 
 Optional beyond that:
 
 - `jobs[]` (`process`) — named cron entries core schedules and dispatches.
+- `network` (`process`) — `{ internal: true }` and nothing else: lets the plugin's outbound requests
+  reach private addresses (a LAN download client). The install consent sheet is the grant; an upgrade
+  that newly asks for it is not applied unattended and waits for an admin to confirm, unless it
+  replaces a `pluginApi` 1 package signed by the same key, which carries the grant over.
 - `events[]` — domain events to receive. Only a `data` plugin uses it: it gets an HTTPS POST from core.
   A `process` plugin is called with every domain event and ignores the list.
-- `permissions[]` — raw names; core builds the CASL subject as `plugin:<id>:<name>`, so a plugin cannot claim another's or a core subject.
+- `permissions[]` (`process`) — raw names; core builds the CASL subject as `plugin:<id>:<name>`, so a plugin cannot claim another's or a core subject.
   Every distinct `action:subject` policy your `routes[]` declare is offered as its own tick box in the
   roles editor, so `read:plugin:<id>:queue` can be granted without `manage:plugin:<id>:queue`. A declared
   name no route names is offered whole (it then allows every action). Nothing is granted by default:
