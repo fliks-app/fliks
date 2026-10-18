@@ -209,7 +209,7 @@ function audioLabelParts(audio: AudioLabelSource, translate: TranslateService, t
   const codec = (audio.codec ?? '').toUpperCase().replace('TRUEHD', 'TrueHD');
   const markers = trackMarkerLabels(audio.trackMarkers, translate);
   const details = [codec, audioChannelsLabel(audio.channels), ...markers].filter(Boolean);
-  return { head, details, title: audioTitleHint(audio, [head, ...markers], translate) };
+  return { head, details, title: audioTitleHint(audio, [head, ...markers, ...(audio.trackMarkers ?? [])], translate) };
 }
 
 /** Localised labels of a track's markers; ids this client has no label for are skipped. */

@@ -33,7 +33,8 @@ static SDH: LazyLock<Regex> = LazyLock::new(|| {
     title_re(r"sdh|cc|sme|hearing[\s._-]?impaired|closed[\s._-]?captions?|sourds|malentendants")
 });
 static FORCED: LazyLock<Regex> = LazyLock::new(|| title_re("forced|forcés?"));
-static NOT_FORCED: LazyLock<Regex> = LazyLock::new(|| title_re(r"(?:non|not)[\s._-]?forced"));
+static NOT_FORCED: LazyLock<Regex> =
+    LazyLock::new(|| title_re(r"(?:non|not)[\s._-]?forc(?:ed|és?)"));
 
 fn flag(s: &Value, key: &str) -> bool {
     s.get(key).and_then(Value::as_bool) == Some(true)
@@ -178,6 +179,7 @@ mod tests {
         assert_eq!(t("Forced"), [Forced]);
         assert_eq!(t("Français forcés"), [Forced]);
         assert_eq!(t("Non-Forced"), []);
+        assert_eq!(t("Français non forcés"), []);
         assert_eq!(t("Commentary"), [Commentary]);
         assert_eq!(t("Accented"), []);
     }

@@ -34,6 +34,7 @@ describe('track marker labels', () => {
     expect(formatAudioParts(comm, EN, 2).sub).toBe('AAC • 2.0 • Commentary • Commentary by the director');
     expect(formatAudioParts(comm, FR, 2).sub).toBe('AAC • 2.0 • Commentaire • Commentary by the director');
     expect(formatAudioParts({ ...comm, title: 'Commentary' }, EN, 2).sub).toBe('AAC • 2.0 • Commentary');
+    expect(formatAudioParts({ ...comm, title: 'Commentary' }, FR, 2).sub).toBe('AAC • 2.0 • Commentaire');
     expect(formatAudioLabel({ language: 'fre', codec: 'ac3', channels: 2, trackMarkers: ['audioDescription'] }, FR, 1))
       .toBe('Français (AC3 - 2.0 - Audiodescription)');
   });

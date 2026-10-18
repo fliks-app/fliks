@@ -174,9 +174,8 @@ export function matchRememberedAudio(
   return pool.find((i) => String(streams[i].channels ?? '') === channels) ?? pool[0];
 }
 
-/** Stream the language targets: a main track over a commentary, described, karaoke or
- *  music-and-effects one (unless nothing else carries the language), then the `original`-flagged
- *  one when `preferOriginal`, then the default-flagged one. */
+/** Stream the language targets: a main track over a side one (unless nothing else carries the
+ *  language), then the `original`-flagged one when `preferOriginal`, then the default-flagged one. */
 export function pickAudioStreamForLanguage(
   streams: AudioStreamChoice[],
   language: string,
