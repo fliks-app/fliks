@@ -551,6 +551,7 @@ impl Plugins {
             stopped: Notify::new(),
             mem_total: Default::default(),
             stats: Default::default(),
+            outbound: Arc::new(tokio::sync::Semaphore::new(outbound::MAX_IN_FLIGHT)),
         });
         let rt = PluginRt::new(sh, m.clone(), &loaded.component, pkg.network_internal)
             .map_err(|e| fail("invalid-component", e.to_string()))?;

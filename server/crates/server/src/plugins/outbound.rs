@@ -9,14 +9,19 @@ use std::pin::{Pin, pin};
 use std::sync::Arc;
 use std::task::{Context, Poll, ready};
 use std::time::Duration;
+use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 use tokio_rustls::rustls::pki_types::ServerName;
 use wasmtime_wasi_http::io::TokioIo;
 use wasmtime_wasi_http::{Error, RequestOptions, WasiBody, WasiHttpHooks};
+
+/// Most outbound requests one plugin has in flight; the rest queue within the call's deadline.
+pub const MAX_IN_FLIGHT: usize = 32;
 
 pub struct Outbound {
     pub plugin_id: Arc<str>,
     pub internal: bool,
     pub net: Arc<dyn Net>,
+    pub permits: Arc<Semaphore>,
 }
 
 type IoFuture = Box<dyn Future<Output = Result<(), Error>> + Send>;
@@ -33,8 +38,11 @@ impl WasiHttpHooks for Outbound {
         let net = self.net.clone();
         let id = self.plugin_id.clone();
         let internal = self.internal;
+        let permits = self.permits.clone();
         Box::new(async move {
-            let (res, io) = send(net, id, internal, request, options).await?;
+            // The call's deadline aborts a guest still queued here, like any other host wait.
+            let permit = Arc::new(permits.acquire_owned().await.expect("never closed"));
+            let (res, io) = send(net, id, internal, request, options, permit).await?;
             Ok((res.map(BodyExt::boxed_unsync), Box::new(io) as IoFuture))
         })
     }
@@ -82,6 +90,7 @@ async fn send(
     internal: bool,
     mut req: http::Request<WasiBody>,
     options: Option<RequestOptions>,
+    permit: Arc<OwnedSemaphorePermit>,
 ) -> Result<
     (
         http::Response<IncomingBody>,
@@ -146,6 +155,7 @@ async fn send(
         .build()
         .expect("comes from a valid request");
 
+    let body_permit = permit.clone();
     let send = async move {
         let res = tokio::time::timeout(first_byte, sender.send_request(req))
             .await
@@ -153,7 +163,11 @@ async fn send(
             .map_err(Error::from)?;
         let mut timeout = tokio::time::interval(between);
         timeout.reset();
-        Ok::<_, Error>(res.map(|incoming| IncomingBody { incoming, timeout }))
+        Ok::<_, Error>(res.map(|incoming| IncomingBody {
+            incoming,
+            timeout,
+            _permit: body_permit,
+        }))
     };
     let mut send = pin!(send);
     let mut conn = Some(conn);
@@ -173,6 +187,7 @@ async fn send(
     })
     .await?;
     Ok((res, async move {
+        let _permit = permit;
         match conn.take() {
             Some(c) => c.await.map_err(Error::from),
             None => Ok(()),
@@ -183,6 +198,7 @@ async fn send(
 pub struct IncomingBody {
     incoming: hyper::body::Incoming,
     timeout: tokio::time::Interval,
+    _permit: Arc<OwnedSemaphorePermit>,
 }
 
 impl http_body::Body for IncomingBody {

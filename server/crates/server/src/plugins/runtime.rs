@@ -220,6 +220,8 @@ pub struct Shared {
     pub stopped: Notify,
     pub mem_total: AtomicUsize,
     pub stats: CallStats,
+    /// In-flight guest outbound requests of this plugin, across its instances.
+    pub outbound: Arc<tokio::sync::Semaphore>,
 }
 
 pub struct Ctx {
@@ -770,6 +772,7 @@ impl PluginRt {
                 plugin_id: id.clone(),
                 internal: self.internal,
                 net: env.cfg.net.clone(),
+                permits: self.sh.outbound.clone(),
             },
             sh: self.sh.clone(),
             deadline: Instant::now() + env.cfg.deadlines.hello,

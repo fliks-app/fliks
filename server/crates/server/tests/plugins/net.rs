@@ -2,6 +2,7 @@
 use super::harness::*;
 use fliks_server::net::guard::Net;
 use fliks_server::plugins::fetch::{ArchiveError, Fetcher};
+use fliks_server::plugins::outbound;
 use fliks_server::plugins::runtime::{HttpRequest, Principal};
 use futures_util::future::BoxFuture;
 use serde_json::{Value, json};
@@ -570,6 +571,93 @@ async fn webhooks_resolve_once_and_never_leak_urls() {
     assert!(
         warned.iter().all(|e| !e.message.contains("secret")),
         "F66 in the logs"
+    );
+    h.finish().await;
+    s.finish().await;
+}
+
+/// A plain-HTTP stub: `/hold` answers after a second, and the peak of `/hold` requests in flight is kept.
+async fn hold_stub() -> (u16, Arc<std::sync::atomic::AtomicUsize>) {
+    use std::sync::atomic::{AtomicUsize, Ordering::SeqCst};
+    let (cur, peak) = (Arc::new(AtomicUsize::new(0)), Arc::new(AtomicUsize::new(0)));
+    let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+        .await
+        .unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let p = peak.clone();
+    tokio::spawn(async move {
+        loop {
+            let Ok((mut s, _)) = listener.accept().await else {
+                return;
+            };
+            let (cur, peak) = (cur.clone(), p.clone());
+            tokio::spawn(async move {
+                let mut buf = [0u8; 4096];
+                let n = s.read(&mut buf).await.unwrap_or(0);
+                let hold = String::from_utf8_lossy(&buf[..n]).contains("GET /hold");
+                if hold {
+                    peak.fetch_max(cur.fetch_add(1, SeqCst) + 1, SeqCst);
+                    tokio::time::sleep(Duration::from_secs(1)).await;
+                    cur.fetch_sub(1, SeqCst);
+                }
+                let _ = s
+                    .write_all(
+                        b"HTTP/1.1 200 X\r\ncontent-length: 2\r\nconnection: close\r\n\r\nok",
+                    )
+                    .await;
+            });
+        }
+    });
+    (port, peak)
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn guest_outbound_in_flight_cap() {
+    let Some((m, w)) = fixture() else { return };
+    let Some(s) = Scratch::create("cap").await else {
+        return;
+    };
+    let (port, peak) = hold_stub().await;
+    let net = StubNet::new(
+        port,
+        rustls::RootCertStore::empty(),
+        &[("pub.test", &[&["93.184.216.34"]])],
+    );
+    let h = harness_with(
+        &s,
+        "cap",
+        Arc::new(|c| {
+            c.http_max = 40;
+            c.http_queue = 64;
+            c.deadlines.http = Duration::from_secs(30);
+        }),
+        move |o| o.fetch.net = net.clone(),
+    )
+    .await;
+    allow_unsigned(&h).await;
+    assert_eq!(
+        h.install(&pack(&m, "0.1.0", &w, None)).await["status"],
+        "active"
+    );
+    let a = h.st.plugins.rt("fliks.fixture").unwrap();
+    let total = outbound::MAX_IN_FLIGHT + 8;
+    let held: Vec<_> = (0..total)
+        .map(|_| {
+            let a = a.clone();
+            tokio::spawn(async move { a.http(fetch("http://pub.test/hold"), false).await })
+        })
+        .collect();
+    for j in held {
+        let r = j.await.unwrap().unwrap();
+        assert_eq!(
+            serde_json::from_slice::<Value>(&r.body).unwrap()["status"],
+            200,
+            "a queued request completes"
+        );
+    }
+    assert_eq!(
+        peak.load(std::sync::atomic::Ordering::SeqCst),
+        outbound::MAX_IN_FLIGHT
     );
     h.finish().await;
     s.finish().await;
