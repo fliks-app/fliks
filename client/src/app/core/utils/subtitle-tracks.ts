@@ -16,7 +16,7 @@ export interface SubtitleRowLike {
 
 /** Embedded subtitle streams as `streamInfo.subtitles` lists them. */
 export type SubtitleStreams =
-  | { streamIndex: number; title?: string | null; languageTag?: string | null }[]
+  | { streamIndex: number; title?: string | null; languageTag?: string | null; trackMarkers?: readonly string[] }[]
   | null
   | undefined;
 
@@ -55,6 +55,8 @@ export interface SubtitleTrack {
   title: string | null;
   /** BCP-47 tag of an embedded track (`es-419`), for the label only. */
   languageTag: string | null;
+  /** Server-derived markers of an embedded track (`commentary`, `forced`, …). */
+  trackMarkers: readonly string[];
   kind: 'external' | 'embedded';
   /** Origin of the sub — `translated`, `ocr`, `embedded`, or a download
    *  provider name. Surfaced as an origin hint in the track label. */
@@ -106,17 +108,19 @@ export function buildSubtitleTracks(
     if (seen.has(key)) continue;
     seen.add(key);
 
+    const markers = embeddedStream(sub, opts.streams)?.trackMarkers ?? [];
     out.push({
       key,
       subtitleId: sub.id,
       language: normalizeLangCode(sub.language),
       codec: sub.codec ?? null,
-      forced: sub.forced ?? false,
-      hearingImpaired: sub.hearingImpaired ?? false,
+      forced: !!sub.forced || markers.includes('forced'),
+      hearingImpaired: !!sub.hearingImpaired || markers.includes('hearingImpaired'),
       relativePath: sub.relativePath ?? null,
       streamIndex: sub.streamIndex ?? null,
       title: embeddedSubtitleTitle(sub, opts.streams),
       languageTag: embeddedSubtitleTag(sub, opts.streams),
+      trackMarkers: markers,
       kind,
       providerType: sub.providerType ?? null,
       isImage,

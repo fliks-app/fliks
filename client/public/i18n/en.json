@@ -114,6 +114,19 @@
     "subtitle_track_n": "Subtitle {{index}}",
     "subtitle_forced": "Forced",
     "subtitle_hearing_impaired": "Hearing-impaired",
+    "track_marker": {
+      "commentary": "Commentary",
+      "audioDescription": "Audio description",
+      "hearingImpaired": "Hearing-impaired",
+      "original": "Original",
+      "dub": "Dub",
+      "musicAndEffects": "Music & effects",
+      "karaoke": "Karaoke",
+      "atmos": "Atmos",
+      "dtsX": "DTS:X",
+      "descriptions": "Descriptions",
+      "lyrics": "Lyrics"
+    },
     "subtitle_source": {
       "translated": "Translated",
       "ocr": "OCR"

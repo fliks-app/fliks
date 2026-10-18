@@ -114,6 +114,19 @@
     "subtitle_track_n": "Legenda {{index}}",
     "subtitle_forced": "Forçado",
     "subtitle_hearing_impaired": "Surdos",
+    "track_marker": {
+      "commentary": "Comentário",
+      "audioDescription": "Audiodescrição",
+      "hearingImpaired": "Surdos",
+      "original": "Original",
+      "dub": "Dobragem",
+      "musicAndEffects": "Música e efeitos",
+      "karaoke": "Karaoke",
+      "atmos": "Atmos",
+      "dtsX": "DTS:X",
+      "descriptions": "Descrições",
+      "lyrics": "Letras"
+    },
     "subtitle_source": {
       "translated": "Traduzido",
       "ocr": "OCR"

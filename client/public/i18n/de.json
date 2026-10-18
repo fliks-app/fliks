@@ -114,6 +114,19 @@
     "subtitle_track_n": "Untertitel {{index}}",
     "subtitle_forced": "Erzwungen",
     "subtitle_hearing_impaired": "Hörgeschädigt",
+    "track_marker": {
+      "commentary": "Kommentar",
+      "audioDescription": "Audiodeskription",
+      "hearingImpaired": "Hörgeschädigt",
+      "original": "Original",
+      "dub": "Synchronfassung",
+      "musicAndEffects": "Musik & Effekte",
+      "karaoke": "Karaoke",
+      "atmos": "Atmos",
+      "dtsX": "DTS:X",
+      "descriptions": "Beschreibungen",
+      "lyrics": "Liedtexte"
+    },
     "subtitle_source": {
       "translated": "Übersetzt",
       "ocr": "OCR"

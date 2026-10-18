@@ -225,8 +225,8 @@ export class TrackManagerService {
             language: normalizeLangCode(emb.language),
             languageTag: emb.languageTag,
             burnIn: false,
-            forced: emb.forced ?? false,
-            hearingImpaired: emb.hearingImpaired ?? false,
+            forced: !!emb.forced || !!emb.trackMarkers?.includes('forced'),
+            hearingImpaired: !!emb.hearingImpaired || !!emb.trackMarkers?.includes('hearingImpaired'),
           });
         }
       }
