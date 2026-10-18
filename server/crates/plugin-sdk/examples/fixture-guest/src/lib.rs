@@ -5,7 +5,7 @@ use fliks_plugin_sdk::bindings::fliks::plugin::types as t;
 use fliks_plugin_sdk::bindings::wasi::http::types::Method;
 use fliks_plugin_sdk::db::{self, Param, Value};
 use fliks_plugin_sdk::router::{Request, Response, Router, not_found};
-use fliks_plugin_sdk::{HealthReport, HttpRequest, HttpResponse, Plugin, host, http, info};
+use fliks_plugin_sdk::{HealthReport, HttpRequest, HttpResponse, Plugin, host, http, info, rt};
 use serde_json::{Value as Json, json};
 use std::hint::black_box;
 use std::io::Write;
@@ -240,6 +240,56 @@ fn test_route(req: &Request) -> Result<Response, String> {
                 ),
                 Err(e) => ok(json!({ "error": format!("{e:?}") })),
             }
+        }
+        "fanout" => {
+            let urls = req.query("urls").map(str::to_owned).unwrap_or_default();
+            let started = Instant::now();
+            let sends = urls.split(',').map(|u| {
+                let r = http::Request::new(Method::Get, u).timeout(Duration::from_secs(10));
+                rt::spawn_local(r.send_async())
+            });
+            // Tasks spawn on the running reactor, so inside `block_on`.
+            let statuses: Vec<Json> = rt::block_on(async { rt::join_all(sends).await })
+                .into_iter()
+                .map(|r| r.map_or_else(|e| json!(format!("{e:?}")), |r| json!(r.status)))
+                .collect();
+            ok(json!({ "statuses": statuses, "ms": started.elapsed().as_millis() as u64 }))
+        }
+        "abandon" => {
+            let url = req.query("url").map(str::to_owned).unwrap_or_default();
+            let send = http::Request::new(Method::Get, url).send_async();
+            let r = rt::block_on(rt::timeout(Duration::from_millis(200), send));
+            ok(json!({ "timedOut": r.is_none() }))
+        }
+        "drip" => {
+            let url = req.query("url").map(str::to_owned).unwrap_or_default();
+            let get = || http::Request::new(Method::Get, &url).timeout(Duration::from_secs(2));
+            let started = Instant::now();
+            let blocking = get().deadline(Duration::from_millis(400)).send();
+            let blocking_ms = started.elapsed().as_millis() as u64;
+            let b = rt::Budget::new(Duration::from_millis(400));
+            let started = Instant::now();
+            let budgeted = rt::block_on(get().budget(&b).send_async());
+            ok(json!({
+                "blocking": blocking.err().map(|e| format!("{e:?}")),
+                "blockingMs": blocking_ms,
+                "budgeted": budgeted.err().map(|e| format!("{e:?}")),
+                "budgetedMs": started.elapsed().as_millis() as u64,
+            }))
+        }
+        "budget" => {
+            let url = req.query("url").map(str::to_owned).unwrap_or_default();
+            let b = rt::Budget::new(Duration::from_millis(300));
+            let started = Instant::now();
+            let r = http::Request::new(Method::Get, url)
+                .timeout(b.cap(Duration::from_secs(60)))
+                .send();
+            ok(json!({
+                "error": r.err().map(|e| format!("{e:?}")),
+                "expired": b.expired(),
+                "ms": started.elapsed().as_millis() as u64,
+                "hostMs": rt::Budget::host().remaining().as_millis() as u64,
+            }))
         }
         "spam" => {
             let kb: usize = req

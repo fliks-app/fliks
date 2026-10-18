@@ -18,6 +18,10 @@ wit-bindgen = "=0.62.0"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 fliks-plugin-route = { path = "../plugin-route" }
+# Pinned: wasip2's WASI minor must stay the world's (0.2.12), or the component imports drift.
+wasip2 = "=1.0.4"
+wstd = { version = "=0.6.8", default-features = false }
+futures-util = { version = "0.3", default-features = false, features = ["alloc"] }
 
 [features]
 # Native tooling for plugin repositories (build/package/verify, component tests); a wasm32 build
@@ -31,7 +35,6 @@ harness = [
   "dep:axum",
   "dep:tower",
   "dep:sqlx",
-  "dep:futures-util",
   "dep:tracing-subscriber",
 ]
 
@@ -45,7 +48,6 @@ axum = { version = "0.8", default-features = false, optional = true }
 tower = { version = "0.5", features = ["util"], optional = true }
 tokio-rustls = { version = "0.26", default-features = false, optional = true }
 sqlx = { version = "0.8", features = ["postgres", "runtime-tokio"], optional = true }
-futures-util = { version = "0.3", default-features = false, optional = true }
 tracing-subscriber = { version = "0.3", optional = true }
 
 [profile.release]

@@ -1,10 +1,11 @@
-//! Blocking HTTP client over `wasi:http/outgoing-handler`; the host vets every address.
+//! HTTP client over `wasi:http/outgoing-handler`, async or blocking; the host vets every address.
 
 use crate::bindings::wasi::http::outgoing_handler;
 use crate::bindings::wasi::http::types::{
     ErrorCode, Fields, IncomingBody, Method, OutgoingBody, OutgoingRequest, RequestOptions, Scheme,
 };
 use std::time::Duration;
+use wstd::io::{AsyncInputStream, AsyncOutputStream, AsyncPollable};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Error {
@@ -56,6 +57,10 @@ pub struct Request {
     pub timeout: Duration,
     /// Response bytes kept; the rest is drained and dropped.
     pub body_cap: usize,
+    /// The whole exchange, response body included; a dripping server cannot outlast it.
+    pub deadline: Option<Duration>,
+    /// Kept as a monotonic end, so a request queued before it is sent cannot outlive it.
+    pub budget: Option<crate::rt::Budget>,
 }
 
 impl Request {
@@ -67,6 +72,8 @@ impl Request {
             body: Vec::new(),
             timeout: Duration::from_secs(60),
             body_cap: 32 << 20,
+            deadline: None,
+            budget: None,
         }
     }
     pub fn header(mut self, name: &str, value: &str) -> Self {
@@ -82,12 +89,49 @@ impl Request {
         self.timeout = t;
         self
     }
+    /// Bounds the whole exchange from the send; it only tightens: a longer one set later is ignored.
+    pub fn deadline(mut self, d: Duration) -> Self {
+        self.deadline = Some(self.deadline.map_or(d, |old| old.min(d)));
+        self
+    }
+    /// Ends the request with the budget, and no later than any deadline already set.
+    pub fn budget(mut self, b: &crate::rt::Budget) -> Self {
+        self.budget = Some(match self.budget {
+            Some(old) if old.remaining() < b.remaining() => old,
+            _ => *b,
+        });
+        self
+    }
     pub fn body_cap(mut self, cap: usize) -> Self {
         self.body_cap = cap;
         self
     }
 
+    /// Blocks until the response; not callable inside [`crate::rt::block_on`] (use `send_async`).
     pub fn send(self) -> Result<Response, Error> {
+        crate::rt::block_on(self.send_async())
+    }
+
+    /// Dropping the future before it resolves abandons the request: the host drops its connection.
+    pub async fn send_async(self) -> Result<Response, Error> {
+        match self.limit() {
+            Some(d) if d.is_zero() => Err(Error::Timeout),
+            Some(d) => crate::rt::timeout(d, self.exchange())
+                .await
+                .unwrap_or(Err(Error::Timeout)),
+            None => self.exchange().await,
+        }
+    }
+
+    fn limit(&self) -> Option<Duration> {
+        let left = self.budget.map(|b| b.remaining());
+        match (self.deadline, left) {
+            (Some(d), Some(l)) => Some(d.min(l)),
+            (d, l) => d.or(l),
+        }
+    }
+
+    async fn exchange(self) -> Result<Response, Error> {
         let (scheme, rest) = self.url.split_once("://").ok_or(Error::InvalidUrl)?;
         let scheme = match scheme.to_ascii_lowercase().as_str() {
             "https" => Scheme::Https,
@@ -128,29 +172,22 @@ impl Request {
         let _ = opts.set_first_byte_timeout(Some(ns));
         let _ = opts.set_between_bytes_timeout(Some(ns));
         let fut = outgoing_handler::handle(req, Some(opts)).map_err(map_code)?;
-        {
-            let stream = out
-                .write()
-                .map_err(|_| Error::Other("body stream".into()))?;
-            for chunk in self.body.chunks(4096) {
-                stream
-                    .blocking_write_and_flush(chunk)
-                    .map_err(|e| Error::Other(format!("write: {e:?}")))?;
-            }
-        }
-        OutgoingBody::finish(out, None).map_err(map_code)?;
-        fut.subscribe().block();
+        let written = write_body(&out, &self.body).await;
+        let finished = OutgoingBody::finish(out, None).map_err(map_code);
+        AsyncPollable::new(fut.subscribe()).wait_for().await;
+        // A failed request also closes its body stream: its own error says why.
         let resp = fut
             .get()
             .ok_or_else(|| Error::Other("response not ready".into()))?
             .map_err(|_| Error::Other("response taken".into()))?
             .map_err(map_code)?;
+        written.and(finished)?;
         let status = resp.status();
         let headers = resp.headers().entries();
         let incoming = resp
             .consume()
             .map_err(|_| Error::Other("body taken".into()))?;
-        let body = read_body(&incoming, self.body_cap)?;
+        let body = read_body(&incoming, self.body_cap).await?;
         IncomingBody::finish(incoming);
         Ok(Response {
             status,
@@ -160,19 +197,34 @@ impl Request {
     }
 }
 
-fn read_body(incoming: &IncomingBody, cap: usize) -> Result<Vec<u8>, Error> {
-    let stream = incoming
-        .stream()
-        .map_err(|_| Error::Other("body stream".into()))?;
-    let mut body = Vec::new();
+async fn write_body(out: &OutgoingBody, body: &[u8]) -> Result<(), Error> {
+    if body.is_empty() {
+        return Ok(());
+    }
+    let stream = AsyncOutputStream::new(
+        out.write()
+            .map_err(|_| Error::Other("body stream".into()))?,
+    );
+    let write = |e: std::io::Error| Error::Other(format!("write: {e}"));
+    stream.write_all(body).await.map_err(write)?;
+    stream.flush().await.map_err(write)
+}
+
+async fn read_body(incoming: &IncomingBody, cap: usize) -> Result<Vec<u8>, Error> {
+    let stream = AsyncInputStream::new(
+        incoming
+            .stream()
+            .map_err(|_| Error::Other("body stream".into()))?,
+    );
+    let (mut body, mut buf) = (Vec::new(), vec![0; 64 * 1024]);
     loop {
-        match stream.blocking_read(64 * 1024) {
-            Ok(bytes) => {
+        match stream.read(&mut buf).await {
+            Ok(0) => break,
+            Ok(n) => {
                 let room = cap.saturating_sub(body.len());
-                body.extend_from_slice(&bytes[..bytes.len().min(room)]);
+                body.extend_from_slice(&buf[..n.min(room)]);
             }
-            Err(crate::bindings::wasi::io::streams::StreamError::Closed) => break,
-            Err(e) => return Err(Error::Other(format!("read: {e:?}"))),
+            Err(e) => return Err(Error::Other(format!("read: {e}"))),
         }
     }
     Ok(body)
@@ -198,6 +250,28 @@ fn map_code(code: ErrorCode) -> Error {
 
 #[cfg(test)]
 mod tests {
+    use super::Request;
+    use crate::bindings::wasi::http::types::Method;
+    use crate::rt::Budget;
+    use std::time::Duration;
+
+    #[test]
+    fn budget_is_counted_from_its_creation() {
+        let b = Budget::new(Duration::from_millis(200));
+        let r = Request::new(Method::Get, "http://h/").budget(&b);
+        std::thread::sleep(Duration::from_millis(50));
+        assert!(r.limit().unwrap() <= Duration::from_millis(150));
+        let r = r.deadline(Duration::from_millis(10));
+        assert_eq!(r.limit(), Some(Duration::from_millis(10)));
+        let r = r.budget(&Budget::new(Duration::from_secs(60)));
+        assert!(r.limit().unwrap() <= Duration::from_millis(10));
+        let gone = Budget::new(Duration::ZERO);
+        assert_eq!(
+            Request::new(Method::Get, "http://h/").budget(&gone).limit(),
+            Some(Duration::ZERO)
+        );
+    }
+
     #[test]
     fn denied_text() {
         assert_eq!(

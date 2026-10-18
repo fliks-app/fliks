@@ -165,7 +165,10 @@ forced `<pluginId>.` prefix, settings read/write scoped to its own namespace.
 Since the Rust host (S8) a `process` plugin is a WebAssembly component (`pluginApi` 2, world
 `fliks:plugin@2.0.0`) built with the `fliks-plugin-sdk` crate (`server/crates/plugin-sdk/`, `MIT OR
 Apache-2.0`, published as a git tag): the WIT, the `export!` macro, typed `host`, `db`, `http` and
-scheduled-call helpers, a router over the host's own route matcher (`fliks-plugin-route`), a
+scheduled-call helpers, an async runtime (`rt`: `block_on`, `join_all`, `spawn_local`, `timeout`,
+`sleep` over `wstd`, and `Budget` with the per-export guest budgets) so one export can have several
+outbound requests in flight, `info!`-style logging that scrubs `scheme://user:pass@` (and
+`log::redact_url`), a router over the host's own route matcher (`fliks-plugin-route`), a
 component test harness over the real host (feature `harness`) and the build, package and verify
 tooling (feature `build`, `cargo xtask build|package|verify`). The host rules are
 `server/docs/spec/plugins.md`. The UI-contribution types the web client reads live in
