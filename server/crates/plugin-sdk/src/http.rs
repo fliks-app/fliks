@@ -172,16 +172,16 @@ impl Request {
         let _ = opts.set_first_byte_timeout(Some(ns));
         let _ = opts.set_between_bytes_timeout(Some(ns));
         let fut = outgoing_handler::handle(req, Some(opts)).map_err(map_code)?;
-        let written = write_body(&out, &self.body).await;
-        let finished = OutgoingBody::finish(out, None).map_err(map_code);
+        // A server may answer and close before the upload ends, and a failed request closes the
+        // body stream too: the response, or the request's own error, is what the caller gets.
+        let _ = write_body(&out, &self.body).await;
+        let _ = OutgoingBody::finish(out, None);
         AsyncPollable::new(fut.subscribe()).wait_for().await;
-        // A failed request also closes its body stream: its own error says why.
         let resp = fut
             .get()
             .ok_or_else(|| Error::Other("response not ready".into()))?
             .map_err(|_| Error::Other("response taken".into()))?
             .map_err(map_code)?;
-        written.and(finished)?;
         let status = resp.status();
         let headers = resp.headers().entries();
         let incoming = resp

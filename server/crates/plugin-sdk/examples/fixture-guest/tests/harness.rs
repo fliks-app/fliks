@@ -329,6 +329,54 @@ async fn async_requests_overlap_cancel_and_budget() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_refused_upload_returns_the_refusal() {
+    // Reads the body, refuses it and closes at once, as qBittorrent does.
+    let l = TcpListener::bind(("127.0.0.1", 4943)).unwrap();
+    std::thread::spawn(move || {
+        for c in l.incoming().flatten() {
+            let mut r = std::io::BufReader::new(c);
+            let mut len = 0;
+            loop {
+                let mut line = String::new();
+                if std::io::BufRead::read_line(&mut r, &mut line).unwrap_or(0) == 0
+                    || line == "\r\n"
+                {
+                    break;
+                }
+                if let Some(v) = line.to_ascii_lowercase().strip_prefix("content-length:") {
+                    len = v.trim().parse().unwrap_or(0);
+                }
+            }
+            let _ = r.read_exact(&mut vec![0; len]);
+            let _ = r
+                .get_mut()
+                .write_all(b"HTTP/1.1 403 X\r\ncontent-length: 0\r\nconnection: close\r\n\r\n");
+        }
+    });
+    let s = setup(|_| {});
+    s.targets.answer("refuse.test", &["93.184.216.37"]);
+    s.targets
+        .route("93.184.216.37:80", "127.0.0.1:4943".parse().unwrap());
+    let Some(h) = Harness::start(s).await else {
+        return;
+    };
+    // The close races the end of the upload, so one pass proves little.
+    for i in 0..30 {
+        let r = h
+            .http(request(
+                "POST",
+                "/test/post",
+                &[("url", "http://refuse.test/"), ("kb", "64")],
+                b"",
+            ))
+            .await
+            .unwrap();
+        assert_eq!(body(&r), json!({ "status": 403 }), "attempt {i}");
+    }
+    h.finish().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn request_deadline_stops_a_dripping_server() {
     drip_stub(4942);
     let s = setup(|_| {});

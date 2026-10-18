@@ -241,6 +241,18 @@ fn test_route(req: &Request) -> Result<Response, String> {
                 Err(e) => ok(json!({ "error": format!("{e:?}") })),
             }
         }
+        "post" => {
+            let url = req.query("url").map(str::to_owned).unwrap_or_default();
+            let kb: usize = req.query("kb").and_then(|v| v.parse().ok()).unwrap_or(1);
+            match http::Request::new(Method::Post, url)
+                .timeout(Duration::from_secs(10))
+                .body(vec![b'x'; kb << 10])
+                .send()
+            {
+                Ok(r) => ok(json!({ "status": r.status })),
+                Err(e) => ok(json!({ "error": format!("{e:?}") })),
+            }
+        }
         "fanout" => {
             let urls = req.query("urls").map(str::to_owned).unwrap_or_default();
             let started = Instant::now();
