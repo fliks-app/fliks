@@ -8,7 +8,40 @@ pub mod bindings {
         pub_export_macro: true,
         export_macro_name: "__export_world",
         default_bindings_module: "fliks_plugin_sdk::bindings",
+        // The `wasip2` types, so SDK pollables and requests run on the `wstd` reactor.
+        with: {
+            "wasi:cli/environment@0.2.12": wasip2::cli::environment,
+            "wasi:cli/exit@0.2.12": wasip2::cli::exit,
+            "wasi:cli/stdin@0.2.12": wasip2::cli::stdin,
+            "wasi:cli/stdout@0.2.12": wasip2::cli::stdout,
+            "wasi:cli/stderr@0.2.12": wasip2::cli::stderr,
+            "wasi:cli/terminal-input@0.2.12": wasip2::cli::terminal_input,
+            "wasi:cli/terminal-output@0.2.12": wasip2::cli::terminal_output,
+            "wasi:cli/terminal-stdin@0.2.12": wasip2::cli::terminal_stdin,
+            "wasi:cli/terminal-stdout@0.2.12": wasip2::cli::terminal_stdout,
+            "wasi:cli/terminal-stderr@0.2.12": wasip2::cli::terminal_stderr,
+            "wasi:clocks/monotonic-clock@0.2.12": wasip2::clocks::monotonic_clock,
+            "wasi:clocks/wall-clock@0.2.12": wasip2::clocks::wall_clock,
+            "wasi:filesystem/types@0.2.12": wasip2::filesystem::types,
+            "wasi:filesystem/preopens@0.2.12": wasip2::filesystem::preopens,
+            "wasi:http/types@0.2.12": wasip2::http::types,
+            "wasi:http/outgoing-handler@0.2.12": wasip2::http::outgoing_handler,
+            "wasi:io/error@0.2.12": wasip2::io::error,
+            "wasi:io/poll@0.2.12": wasip2::io::poll,
+            "wasi:io/streams@0.2.12": wasip2::io::streams,
+            "wasi:random/insecure-seed@0.2.12": wasip2::random::insecure_seed,
+            "wasi:random/insecure@0.2.12": wasip2::random::insecure,
+            "wasi:random/random@0.2.12": wasip2::random::random,
+            "wasi:sockets/network@0.2.12": wasip2::sockets::network,
+            "wasi:sockets/instance-network@0.2.12": wasip2::sockets::instance_network,
+            "wasi:sockets/ip-name-lookup@0.2.12": wasip2::sockets::ip_name_lookup,
+            "wasi:sockets/tcp@0.2.12": wasip2::sockets::tcp,
+            "wasi:sockets/tcp-create-socket@0.2.12": wasip2::sockets::tcp_create_socket,
+            "wasi:sockets/udp@0.2.12": wasip2::sockets::udp,
+            "wasi:sockets/udp-create-socket@0.2.12": wasip2::sockets::udp_create_socket,
+        },
     });
+    pub use wasip2 as wasi;
 }
 
 #[cfg(all(feature = "build", not(target_arch = "wasm32")))]
@@ -19,6 +52,7 @@ pub mod harness;
 pub mod http;
 pub mod log;
 pub mod router;
+pub mod rt;
 pub mod scheduled;
 pub mod time;
 

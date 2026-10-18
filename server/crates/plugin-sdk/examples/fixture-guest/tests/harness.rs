@@ -9,8 +9,8 @@ use fliks_plugin_sdk::harness::{Harness, Setup, request, until};
 use serde_json::{Value, json};
 use std::io::{Read, Write};
 use std::net::TcpListener;
-use std::sync::Arc;
-use std::time::Duration;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 const DIR: &str = env!("CARGO_MANIFEST_DIR");
 const DEV_KEY: &str = "0707070707070707070707070707070707070707070707070707070707070707";
@@ -36,6 +36,32 @@ fn stub(port: u16) {
                 c.write_all(b"HTTP/1.1 200 OK\r\ncontent-length: 2\r\nconnection: close\r\n\r\nok");
         }
     });
+}
+
+/// Answers `ok` after `delay` on `port`; `dropped` records, per connection, whether the client
+/// closed it before the answer.
+fn slow_stub(port: u16, delay: Duration) -> Arc<Mutex<Vec<bool>>> {
+    let l = TcpListener::bind(("127.0.0.1", port)).unwrap();
+    let dropped = Arc::new(Mutex::new(Vec::new()));
+    let d = dropped.clone();
+    std::thread::spawn(move || {
+        for mut c in l.incoming().flatten() {
+            let d = d.clone();
+            std::thread::spawn(move || {
+                let mut buf = [0u8; 4096];
+                let _ = c.read(&mut buf);
+                c.set_read_timeout(Some(delay)).unwrap();
+                let closed = matches!(c.read(&mut buf), Ok(0));
+                if !closed {
+                    let _ = c.write_all(
+                        b"HTTP/1.1 200 OK\r\ncontent-length: 2\r\nconnection: close\r\n\r\nok",
+                    );
+                }
+                d.lock().unwrap().push(closed);
+            });
+        }
+    });
+    dropped
 }
 
 async fn fetch(h: &Harness, url: &str) -> Value {
@@ -216,6 +242,69 @@ async fn network_internal_reaches_private_targets() {
     assert_eq!(
         fetch(&h, "http://169.254.169.254/").await["error"],
         "Denied"
+    );
+    h.finish().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn async_requests_overlap_cancel_and_budget() {
+    let dropped = slow_stub(4940, Duration::from_millis(700));
+    let hung = slow_stub(4941, Duration::from_secs(3));
+    let s = setup(|_| {});
+    s.targets.answer("slow.test", &["93.184.216.34"]);
+    s.targets.answer("hung.test", &["93.184.216.35"]);
+    s.targets
+        .route("93.184.216.34:80", "127.0.0.1:4940".parse().unwrap());
+    s.targets
+        .route("93.184.216.35:80", "127.0.0.1:4941".parse().unwrap());
+    let Some(h) = Harness::start(s).await else {
+        return;
+    };
+    let get = async |route: &str, q: &[(&str, &str)]| {
+        body(&h.http(request("GET", route, q, b"")).await.unwrap())
+    };
+
+    let urls = (1..=4)
+        .map(|i| format!("http://slow.test/{i}"))
+        .collect::<Vec<_>>()
+        .join(",");
+    let r = get("/test/fanout", &[("urls", &urls)]).await;
+    assert_eq!(r["statuses"], json!([200, 200, 200, 200]), "{r}");
+    let ms = r["ms"].as_u64().unwrap();
+    assert!(
+        (700..1400).contains(&ms),
+        "4 requests of 700 ms each overlap: {ms} ms"
+    );
+    assert_eq!(dropped.lock().unwrap().as_slice(), [false; 4]);
+
+    let started = Instant::now();
+    let r = get("/test/abandon", &[("url", "http://hung.test/")]).await;
+    assert_eq!(r["timedOut"], true, "{r}");
+    until(
+        "the abandoned connection",
+        Duration::from_secs(2),
+        async || hung.lock().unwrap().as_slice() == [true],
+    )
+    .await;
+    assert!(
+        started.elapsed() < Duration::from_secs(3),
+        "closed before the stub answered"
+    );
+
+    let r = get("/test/budget", &[("url", "http://hung.test/")]).await;
+    assert_eq!(
+        (r["error"].as_str(), r["expired"].as_bool()),
+        (Some("Timeout"), Some(true)),
+        "{r}"
+    );
+    let ms = r["ms"].as_u64().unwrap();
+    assert!(
+        (300..1500).contains(&ms),
+        "the budget cut the request: {ms} ms"
+    );
+    assert!(
+        r["hostMs"].as_u64().unwrap() > 170_000,
+        "an http export has the 180 s host deadline: {r}"
     );
     h.finish().await;
 }

@@ -1,10 +1,11 @@
-//! Blocking HTTP client over `wasi:http/outgoing-handler`; the host vets every address.
+//! HTTP client over `wasi:http/outgoing-handler`, async or blocking; the host vets every address.
 
 use crate::bindings::wasi::http::outgoing_handler;
 use crate::bindings::wasi::http::types::{
     ErrorCode, Fields, IncomingBody, Method, OutgoingBody, OutgoingRequest, RequestOptions, Scheme,
 };
 use std::time::Duration;
+use wstd::io::{AsyncInputStream, AsyncOutputStream, AsyncPollable};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Error {
@@ -87,7 +88,13 @@ impl Request {
         self
     }
 
+    /// Blocks until the response; not callable inside [`crate::rt::block_on`] (use `send_async`).
     pub fn send(self) -> Result<Response, Error> {
+        crate::rt::block_on(self.send_async())
+    }
+
+    /// Dropping the future before it resolves abandons the request: the host drops its connection.
+    pub async fn send_async(self) -> Result<Response, Error> {
         let (scheme, rest) = self.url.split_once("://").ok_or(Error::InvalidUrl)?;
         let scheme = match scheme.to_ascii_lowercase().as_str() {
             "https" => Scheme::Https,
@@ -128,29 +135,22 @@ impl Request {
         let _ = opts.set_first_byte_timeout(Some(ns));
         let _ = opts.set_between_bytes_timeout(Some(ns));
         let fut = outgoing_handler::handle(req, Some(opts)).map_err(map_code)?;
-        {
-            let stream = out
-                .write()
-                .map_err(|_| Error::Other("body stream".into()))?;
-            for chunk in self.body.chunks(4096) {
-                stream
-                    .blocking_write_and_flush(chunk)
-                    .map_err(|e| Error::Other(format!("write: {e:?}")))?;
-            }
-        }
-        OutgoingBody::finish(out, None).map_err(map_code)?;
-        fut.subscribe().block();
+        let written = write_body(&out, &self.body).await;
+        let finished = OutgoingBody::finish(out, None).map_err(map_code);
+        AsyncPollable::new(fut.subscribe()).wait_for().await;
+        // A failed request also closes its body stream: its own error says why.
         let resp = fut
             .get()
             .ok_or_else(|| Error::Other("response not ready".into()))?
             .map_err(|_| Error::Other("response taken".into()))?
             .map_err(map_code)?;
+        written.and(finished)?;
         let status = resp.status();
         let headers = resp.headers().entries();
         let incoming = resp
             .consume()
             .map_err(|_| Error::Other("body taken".into()))?;
-        let body = read_body(&incoming, self.body_cap)?;
+        let body = read_body(&incoming, self.body_cap).await?;
         IncomingBody::finish(incoming);
         Ok(Response {
             status,
@@ -160,19 +160,34 @@ impl Request {
     }
 }
 
-fn read_body(incoming: &IncomingBody, cap: usize) -> Result<Vec<u8>, Error> {
-    let stream = incoming
-        .stream()
-        .map_err(|_| Error::Other("body stream".into()))?;
-    let mut body = Vec::new();
+async fn write_body(out: &OutgoingBody, body: &[u8]) -> Result<(), Error> {
+    if body.is_empty() {
+        return Ok(());
+    }
+    let stream = AsyncOutputStream::new(
+        out.write()
+            .map_err(|_| Error::Other("body stream".into()))?,
+    );
+    let write = |e: std::io::Error| Error::Other(format!("write: {e}"));
+    stream.write_all(body).await.map_err(write)?;
+    stream.flush().await.map_err(write)
+}
+
+async fn read_body(incoming: &IncomingBody, cap: usize) -> Result<Vec<u8>, Error> {
+    let stream = AsyncInputStream::new(
+        incoming
+            .stream()
+            .map_err(|_| Error::Other("body stream".into()))?,
+    );
+    let (mut body, mut buf) = (Vec::new(), vec![0; 64 * 1024]);
     loop {
-        match stream.blocking_read(64 * 1024) {
-            Ok(bytes) => {
+        match stream.read(&mut buf).await {
+            Ok(0) => break,
+            Ok(n) => {
                 let room = cap.saturating_sub(body.len());
-                body.extend_from_slice(&bytes[..bytes.len().min(room)]);
+                body.extend_from_slice(&buf[..n.min(room)]);
             }
-            Err(crate::bindings::wasi::io::streams::StreamError::Closed) => break,
-            Err(e) => return Err(Error::Other(format!("read: {e:?}"))),
+            Err(e) => return Err(Error::Other(format!("read: {e}"))),
         }
     }
     Ok(body)
