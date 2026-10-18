@@ -62,3 +62,10 @@ inherits = "release"
 opt-level = 1
 lto = false
 codegen-units = 16
+
+# Optimised deps: an unoptimised Cranelift makes every wasm compile in the harness tests minutes long.
+[profile.dev.package."*"]
+opt-level = 1
+# A path dependency here, so rebuilt every CI run: optimising it costs more than it saves.
+[profile.dev.package.fliks-server]
+opt-level = 0

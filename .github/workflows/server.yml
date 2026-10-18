@@ -19,6 +19,8 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
+  # Full debuginfo of the optimised deps fills the runner disk and the cache; file:line is enough.
+  CARGO_PROFILE_DEV_DEBUG: line-tables-only
 
 jobs:
   rust:
@@ -56,6 +58,8 @@ jobs:
           targets: wasm32-wasip2
       - uses: Swatinem/rust-cache@v2
         with:
+          # PR caches would evict main's from the repository's 10 GB.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
           workspaces: |
             server
             server/crates/plugin-sdk
@@ -84,12 +88,14 @@ jobs:
       - name: plugin SDK tests (harness on the fixture)
         working-directory: server/crates/plugin-sdk
         run: cargo test --workspace
-      # No query! macros yet, so no .sqlx cache: the check starts once the directory is committed.
+      # The binary `cargo test` built: `cargo run` would rebuild the deps without the dev-dependency features.
+      - name: openapi.json is current
+        run: target/debug/fliks-server openapi | diff - openapi.json
       - name: sqlx offline cache is current
         run: |
           if [ -d .sqlx ]; then
-            cargo install sqlx-cli --locked --no-default-features --features postgres,rustls
-            cargo run -q -p fliks-server -- migrate
+            cargo install sqlx-cli@0.8.6 --locked --no-default-features --features postgres,rustls
+            target/debug/fliks-server migrate
             cargo sqlx prepare --check --workspace
           else
             echo "::notice::no .sqlx directory, sqlx prepare check skipped"
@@ -100,5 +106,3 @@ jobs:
           DB_USERNAME: fliks
           DB_PASSWORD: fliks
           DB_NAME: fliks
-      - name: openapi.json is current
-        run: cargo run -q -p fliks-server -- openapi | diff - openapi.json
