@@ -32,9 +32,9 @@ static AUDIO_DESCRIPTION: LazyLock<Regex> = LazyLock::new(|| {
 static SDH: LazyLock<Regex> = LazyLock::new(|| {
     title_re(r"sdh|cc|sme|hearing[\s._-]?impaired|closed[\s._-]?captions?|sourds|malentendants")
 });
-static FORCED: LazyLock<Regex> = LazyLock::new(|| title_re("forced|forcés?"));
+static FORCED: LazyLock<Regex> = LazyLock::new(|| title_re("forced|forcée?s?"));
 static NOT_FORCED: LazyLock<Regex> =
-    LazyLock::new(|| title_re(r"(?:non|not)[\s._-]?forc(?:ed|és?)"));
+    LazyLock::new(|| title_re(r"(?:non|not)[\s._-]?forc(?:ed|ée?s?)"));
 
 fn flag(s: &Value, key: &str) -> bool {
     s.get(key).and_then(Value::as_bool) == Some(true)
@@ -178,6 +178,9 @@ mod tests {
         assert_eq!(t("Français (sourds et malentendants)"), [HearingImpaired]);
         assert_eq!(t("Forced"), [Forced]);
         assert_eq!(t("Français forcés"), [Forced]);
+        assert_eq!(t("Sous-titres forcée"), [Forced]);
+        assert_eq!(t("VF forcées"), [Forced]);
+        assert_eq!(t("Version non forcées"), []);
         assert_eq!(t("Non-Forced"), []);
         assert_eq!(t("Français non forcés"), []);
         assert_eq!(t("Commentary"), [Commentary]);
