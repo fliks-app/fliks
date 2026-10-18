@@ -52,12 +52,12 @@ fn slow_stub(port: u16, delay: Duration) -> Arc<Mutex<Vec<bool>>> {
                 let _ = c.read(&mut buf);
                 c.set_read_timeout(Some(delay)).unwrap();
                 let closed = matches!(c.read(&mut buf), Ok(0));
+                d.lock().unwrap().push(closed);
                 if !closed {
                     let _ = c.write_all(
                         b"HTTP/1.1 200 OK\r\ncontent-length: 2\r\nconnection: close\r\n\r\nok",
                     );
                 }
-                d.lock().unwrap().push(closed);
             });
         }
     });
