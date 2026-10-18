@@ -551,11 +551,14 @@ async fn send(ctx: &Ctx, step: &Value, vars: &HashMap<String, Value>) -> Result<
             Value::Array(events)
         }
         _ => {
-            // the app serves the stub's image host under `FLIKS_TMDB_IMAGE_URL`; Nest answered the real one
-            let text = r.text().await.map_err(|e| e.to_string())?.replace(
-                &format!("{}/img/t/p", env("PARITY_STUB", "http://127.0.0.1:4964")),
-                "https://image.tmdb.org/t/p",
-            );
+            // the stub stands in for both image hosts (`stub.py` `local_images`); Nest answered the real ones
+            let stub = env("PARITY_STUB", "http://127.0.0.1:4964");
+            let text = r
+                .text()
+                .await
+                .map_err(|e| e.to_string())?
+                .replace(&format!("{stub}/img/t/p"), "https://image.tmdb.org/t/p")
+                .replace(&format!("{stub}/tvdb-art"), "https://artworks.thetvdb.com");
             if text.is_empty() {
                 Value::Null
             } else {

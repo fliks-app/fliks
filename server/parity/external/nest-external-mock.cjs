@@ -1,4 +1,4 @@
-// Preload for the recording Nest: sends TMDB, TVDB and TMDB image calls to the loopback stub, product code untouched.
+// Preload for the recording Nest: sends TMDB, TVDB and their image calls to the loopback stub, product code untouched.
 // NODE_OPTIONS="--require $PWD/server/parity/external/nest-external-mock.cjs" from backend/ (axios resolves from there).
 const path = require('node:path');
 const axios = require(require.resolve('axios', { paths: [process.cwd(), path.join(process.cwd(), 'backend')] }));
@@ -8,6 +8,7 @@ const routes = [
   ['https://api.themoviedb.org/3', `${stub}/tmdb/3`],
   ['https://api4.thetvdb.com/v4', `${stub}/tvdb/v4`],
   ['https://image.tmdb.org/t/p', `${stub}/img/t/p`],
+  ['https://artworks.thetvdb.com', `${stub}/tvdb-art`],
 ];
 const real = axios.getAdapter(axios.defaults.adapter);
 

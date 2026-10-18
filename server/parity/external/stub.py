@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Loopback stand-in for TMDB, TVDB and image.tmdb.org (docs/spec/metadata.md Vectors/parity).
 
-Usage: stub.py PORT. Routes: /tmdb/3/*, /tvdb/v4/*, /img/t/p/<size>/<file>.
+Usage: stub.py PORT. Routes: /tmdb/3/*, /tvdb/v4/*, /img/t/p/<size>/<file>, /tvdb-art/* (artworks.thetvdb.com, 403).
 Fixture of a GET: <dir>/<path with / as _>.<query value>.json, else <path>.json, else 404.
 Subtitles (docs/spec/subtitle-providers.md): GET /subdl/api/v1/subtitles (releases by `type`/`languages`), GET /subtitle/<n>.zip.
 Control (used by scenario steps with "stub": true): POST /__reset, POST /__fail {prefix,status|"hang"},
@@ -52,6 +52,12 @@ def subdl_zip(n):
     return out.getvalue()
 
 
+def local_images(body):
+    """Absolute image hosts in fixtures point back here; the runner maps them back in response bodies."""
+    base = f"http://127.0.0.1:{sys.argv[1]}".encode()
+    return body.replace(b"https://image.tmdb.org/t/p", base + b"/img/t/p").replace(b"https://artworks.thetvdb.com", base + b"/tvdb-art")
+
+
 class H(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
@@ -82,6 +88,9 @@ class H(BaseHTTPRequestHandler):
         raw = self.rfile.read(n) if n else b""
         if u.path.startswith("/__"):
             return self.control(method, u.path, query, raw)
+        if u.path.startswith("/tmdb/3/") and not query.get("api_key", [""])[-1]:
+            # a keyless run (no provider keys) sees what api.themoviedb.org answers
+            return self.send(401, {"status_code": 7, "status_message": "Invalid API key: You must be granted a valid key.", "success": False})
         with LOCK:
             STATE["hits"].append({"method": method, "path": u.path, "query": {k: v[-1] for k, v in query.items()}})
             fail = next((f for p, f in STATE["fail"].items() if u.path.startswith(p)), None)
@@ -94,6 +103,8 @@ class H(BaseHTTPRequestHandler):
             return self.send(200, subdl_search(query))
         if u.path.startswith("/subtitle/") and u.path.endswith(".zip"):
             return self.send(200, subdl_zip(u.path[len("/subtitle/"):-4]), "application/zip")
+        if u.path.startswith("/tvdb-art/"):
+            return self.send(403, b"Forbidden", "text/plain")  # what artworks.thetvdb.com answers for these names
         if u.path.startswith("/img/t/p/"):
             f = os.path.join(IMG_DIR, u.path.rsplit("/", 1)[-1])
             if os.path.isfile(f):
@@ -105,7 +116,7 @@ class H(BaseHTTPRequestHandler):
             if u.path.startswith(prefix + "/"):
                 p = fixture(kind, u.path[len(prefix):], query)
                 if p:
-                    return self.send(200, open(p, "rb").read())
+                    return self.send(200, local_images(open(p, "rb").read()))
                 return self.send(404, {"status_code": 34, "status_message": "The resource you requested could not be found.", "message": "not found"})
         self.send(404, {})
 

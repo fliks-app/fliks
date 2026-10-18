@@ -135,10 +135,13 @@ run_mode() { # run_mode <engine up|down|stub> <providers 0|1> <filter>
     FLIKS_BRIDGE_TOKEN=pall-bridge FLIKS_CAST_DIR="$ROOT/backend/public" RUST_LOG=info
     FLIKS_CONF_DIR="$d/conf" FLIKS_DATA_DIR="$FLIKS_PARITY_ROOT/data" FLIKS_CACHE_DIR="$d/cache" FLIKS_RUNTIME_DIR="$d/runtime"
     FLIKS_ENGINE_URL=$ENG_URL FLIKS_ENGINE_TOKEN=$ENG_TOK)
-  [ "$prov" = 1 ] && penv+=(TMDB_API_KEY=tmdb-parity TVDB_API_KEY=tvdb-parity
-    FLIKS_TMDB_API_URL=http://127.0.0.1:$P_PROV/tmdb/3 FLIKS_TVDB_API_URL=http://127.0.0.1:$P_PROV/tvdb/v4
+  # provider hosts are the stub in every mode, so a keyless run never leaves loopback
+  penv+=(FLIKS_TMDB_API_URL=http://127.0.0.1:$P_PROV/tmdb/3 FLIKS_TVDB_API_URL=http://127.0.0.1:$P_PROV/tvdb/v4
     FLIKS_TMDB_IMAGE_URL=http://127.0.0.1:$P_PROV/img/t/p FLIKS_SUBTITLE_PROVIDERS_URL=http://127.0.0.1:$P_PROV)
+  [ "$prov" = 1 ] && penv+=(TMDB_API_KEY=tmdb-parity TVDB_API_KEY=tvdb-parity)
   psql_admin -d postgres -c "DROP DATABASE IF EXISTS $DB WITH (FORCE)" -c "CREATE DATABASE $DB TEMPLATE $TPL"
+  # the boot catalog pass would fetch the official source from github.io; the runner resets this DB first
+  psql_admin -d "$DB" -c "TRUNCATE plugin_sources CASCADE" >/dev/null
   start "target-$1-$2" "$ROOT/backend" env -u TMDB_API_KEY -u TVDB_API_KEY -u DATABASE_URL -u INVOCATION_ID -u pm_id -u FLIKS_SUPERVISED "${penv[@]}" "$BIN"
   local TPID=${PIDS[-1]}
   if ! wait_http "http://127.0.0.1:$P_TARGET/api/auth/login" 90; then
