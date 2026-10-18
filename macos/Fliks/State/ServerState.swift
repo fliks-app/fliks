@@ -1,10 +1,10 @@
 import Foundation
 
-/// Lifecycle state of the Fliks server stack (Postgres + Node).
+/// Lifecycle state of the Fliks server stack (Postgres + engine + fliks-server).
 enum ServerState: Equatable {
     case stopped
     case startingPostgres
-    case startingBackend
+    case startingServer
     case running
     case stopping
     case error(String)
@@ -13,7 +13,7 @@ enum ServerState: Equatable {
     var menuBarOpacity: Double {
         switch self {
         case .running:                            return 1.0
-        case .startingPostgres, .startingBackend,
+        case .startingPostgres, .startingServer,
              .stopping:                           return 0.5
         case .stopped, .error:                    return 0.3
         }
@@ -24,7 +24,7 @@ enum ServerState: Equatable {
         switch self {
         case .stopped:                return "Fliks is stopped"
         case .startingPostgres:       return "Starting database..."
-        case .startingBackend:        return "Starting server..."
+        case .startingServer:        return "Starting server..."
         case .running:                return "Fliks is running"
         case .stopping:               return "Stopping..."
         case .error(let message):     return "Error: \(message)"
@@ -33,7 +33,7 @@ enum ServerState: Equatable {
 
     var isStarting: Bool {
         switch self {
-        case .startingPostgres, .startingBackend: return true
+        case .startingPostgres, .startingServer: return true
         default: return false
         }
     }

@@ -43,12 +43,11 @@ targets:
       # These MUST live here: xcodegen regenerates the .plist at `path` from
       # these properties on every `generate`, and CI runs `xcodegen generate`
       # right before build-app.sh signs. An empty `properties: {}` emits an empty
-      # `<dict/>`, which would drop the entitlements the signed node needs.
+      # `<dict/>`, which would drop the entitlements the signed binaries need.
       properties:
-        # Node's V8 JIT under the hardened runtime (required for notarization).
-        com.apple.security.cs.allow-jit: true
+        # wasmtime maps plugin code writable then executable (mprotect, no MAP_JIT).
         com.apple.security.cs.allow-unsigned-executable-memory: true
-        # The bundled node / postgres / ffmpeg load relocated Homebrew dylibs;
+        # The bundled postgres / ffmpeg load relocated Homebrew dylibs;
         # allow loading libraries not signed with this app's Team ID.
         com.apple.security.cs.disable-library-validation: true
 

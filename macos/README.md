@@ -32,23 +32,16 @@ xcodegen generate
 cd ../client
 npm ci
 npx ng build --configuration=production
-
-# Backend (NestJS)
-cd ../backend
-npm ci
-npm run build
 ```
 
-### 3. Fetch vendored Node.js
-
-The app needs a Node.js 24 binary (not available via Homebrew). The fetch script downloads it:
+### 3. Fetch vendored binaries
 
 ```bash
 cd ../macos
 ./Scripts/fetch-vendored.sh
 ```
 
-> This also fetches PostgreSQL and FFmpeg binaries for future standalone distribution. During development, the app uses Homebrew-installed versions instead.
+> This fetches PostgreSQL and FFmpeg for the bundle. During development, the app uses Homebrew-installed versions instead. `fliks-engine` and `fliks-server` only exist in a bundle built by `build-app.sh`.
 
 ### 4. Build & run
 
@@ -82,14 +75,14 @@ To create a self-contained, distributable DMG:
 ```
 
 This will:
-1. Build client + backend
+1. Build the client and `fliks-server`, fetch `fliks-engine` (pinned in `engine.lock`)
 2. Build the Swift app (Release)
-3. Copy PostgreSQL, FFmpeg, Node.js into the app bundle
+3. Copy PostgreSQL, FFmpeg, the engine and the server into the app bundle
 4. Recursively bundle all dylib dependencies (`bundle-dylibs.sh`)
 5. Code sign everything
 6. Create `build/Fliks-<version>-arm64.dmg` with drag-to-Applications layout
 
-Use `--skip-web` to skip rebuilding client/backend if unchanged:
+Use `--skip-web` to skip rebuilding the client if unchanged:
 
 ```bash
 ./Scripts/build-app.sh --skip-web
@@ -99,7 +92,7 @@ Use `--skip-web` to skip rebuilding client/backend if unchanged:
 ## What happens on launch
 
 1. **PostgreSQL 18** initializes (first run only) and starts on port **5433**
-2. **Node.js** starts the NestJS backend on port **4848**
+2. **fliks-engine** listens on port **4848** and runs **fliks-server** behind it on 4849
 3. On first launch, your browser opens to `http://localhost:4848` for initial setup
 4. **VideoToolbox** hardware acceleration is auto-detected
 
@@ -109,7 +102,7 @@ Use `--skip-web` to skip rebuilding client/backend if unchanged:
 |--------|-------------|
 | **Open Fliks** | Opens the web UI in your default browser |
 | **Start at Login** | Toggle auto-start on macOS login |
-| **Restart Server** | Stops and restarts both PostgreSQL and Node.js |
+| **Restart Server** | Stops and restarts PostgreSQL and the server |
 | **View Logs** | Opens the log directory in Finder |
 | **Quit Fliks** | Gracefully shuts down all processes |
 
@@ -120,7 +113,7 @@ Use `--skip-web` to skip rebuilding client/backend if unchanged:
 | `~/Library/Application Support/Fliks Server/postgresql/` | Database cluster |
 | `~/Library/Application Support/Fliks Server/conf/` | JWT secret (auto-generated) |
 | `~/Library/Application Support/Fliks Server/data/images/` | Cached posters & fanart |
-| `~/Library/Application Support/Fliks Server/logs/` | PostgreSQL logs |
+| `~/Library/Application Support/Fliks Server/logs/` | PostgreSQL and server logs (`server-<date>.log`) |
 | `/tmp/transcode/` | HLS transcode cache (ephemeral) |
 
 ## Clean reset
@@ -143,7 +136,7 @@ macos/
 │   ├── MenuBar/MenuBarView.swift       # SwiftUI menu content
 │   ├── Services/
 │   │   ├── PostgresManager.swift       # Embedded PostgreSQL lifecycle
-│   │   ├── NodeManager.swift           # Node.js process management
+│   │   ├── ServerManager.swift         # Engine + fliks-server process management
 │   │   └── ConfigStore.swift           # Persistent settings
 │   └── Utilities/
 │       ├── Paths.swift                 # All file paths (bundle + Homebrew fallbacks)

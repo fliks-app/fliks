@@ -4,7 +4,7 @@
 #
 # Usage: ./fetch-vendored.sh
 #
-# Downloads to ../Vendored/{node,postgresql,ffmpeg}/.
+# Downloads to ../Vendored/{postgresql,ffmpeg}/.
 # Idempotent — skips already-downloaded components.
 
 set -euo pipefail
@@ -14,7 +14,6 @@ VENDORED="$(pwd)/Vendored"
 mkdir -p "$VENDORED"
 
 # ── Versions ──
-NODE_VERSION="24.2.0"
 PG_VERSION="18"
 ARCH="arm64"
 # jellyfin-ffmpeg (GPL) — FFmpeg 8.1 base shared with the Linux/Windows servers.
@@ -23,24 +22,6 @@ ARCH="arm64"
 FFMPEG_VERSION="8.1.2-1"
 
 echo "==> Fetching vendored binaries to $VENDORED"
-
-# ─────────────────────────────────────────────────────────────
-# Node.js 24 arm64
-# ─────────────────────────────────────────────────────────────
-if [ -x "$VENDORED/node/bin/node" ]; then
-    echo "    [skip] Node.js already present"
-else
-    echo "    [fetch] Node.js v${NODE_VERSION} (${ARCH})..."
-    NODE_TAR="node-v${NODE_VERSION}-darwin-${ARCH}.tar.gz"
-    NODE_URL="https://nodejs.org/dist/v${NODE_VERSION}/${NODE_TAR}"
-    TMP_NODE="$(mktemp -d)"
-
-    curl -fSL "$NODE_URL" -o "$TMP_NODE/$NODE_TAR"
-    mkdir -p "$VENDORED/node"
-    tar xzf "$TMP_NODE/$NODE_TAR" -C "$VENDORED/node" --strip-components=1
-    rm -rf "$TMP_NODE"
-    echo "    [done] Node.js v${NODE_VERSION}"
-fi
 
 # ─────────────────────────────────────────────────────────────
 # PostgreSQL 18 — extract from Homebrew bottle
@@ -114,6 +95,5 @@ fi
 
 echo ""
 echo "==> All vendored binaries ready in $VENDORED"
-echo "    node:       $(${VENDORED}/node/bin/node --version 2>/dev/null || echo 'not found')"
 echo "    postgres:   $($VENDORED/postgresql/bin/postgres --version 2>/dev/null || echo 'not found')"
 echo "    ffmpeg:     $($VENDORED/ffmpeg/bin/ffmpeg -version 2>/dev/null | head -1 || echo 'not found')"

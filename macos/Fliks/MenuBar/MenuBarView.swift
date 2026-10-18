@@ -61,7 +61,7 @@ struct MenuBarView: View {
         switch appState.serverState {
         case .running:                        return .green
         case .startingPostgres,
-             .startingBackend, .stopping:     return .orange
+             .startingServer, .stopping:     return .orange
         case .stopped:                        return .gray
         case .error:                          return .red
         }

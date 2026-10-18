@@ -4,13 +4,13 @@
 #
 # Prerequisites:
 #   1. brew install xcodegen postgresql@18
-#   2. ./Scripts/fetch-vendored.sh  (Node.js 24 + jellyfin-ffmpeg, arm64)
+#   2. ./Scripts/fetch-vendored.sh  (jellyfin-ffmpeg, arm64)
 #   3. Xcode 16+ with command line tools
-#   4. Rust toolchain (cargo) for fliks-server
+#   4. Rust toolchain (cargo) for fliks-server, npm for the client
 #
 # Usage: ./build-app.sh [--skip-web] [--skip-xcode]
 #
-# --skip-web    Skip rebuilding client + backend
+# --skip-web    Skip rebuilding the client
 # --skip-xcode  Skip xcodebuild (reuse existing .app, just re-bundle resources)
 
 set -euo pipefail
@@ -32,11 +32,6 @@ for arg in "$@"; do
 done
 
 # ── Verify prerequisites ──
-if [ ! -x "$VENDORED/node/bin/node" ]; then
-    echo "Error: Vendored Node.js not found. Run ./Scripts/fetch-vendored.sh first."
-    exit 1
-fi
-
 if ! command -v psql &>/dev/null; then
     echo "Error: psql not found. Run: brew install postgresql@18"
     exit 1
@@ -49,7 +44,6 @@ fi
 PG_PREFIX="$(brew --prefix postgresql@18)"
 
 echo "==> Build configuration"
-echo "    Node.js:    $VENDORED/node/bin/node ($($VENDORED/node/bin/node --version))"
 echo "    PostgreSQL: $PG_PREFIX ($($PG_PREFIX/bin/postgres --version | awk '{print $NF}'))"
 echo "    FFmpeg:     $VENDORED/ffmpeg/bin/ffmpeg ($("$VENDORED/ffmpeg/bin/ffmpeg" -version 2>&1 | head -1 | awk '{print $3}'))"
 echo ""
@@ -60,13 +54,6 @@ if [ "$SKIP_WEB" = false ]; then
     cd "$REPO_ROOT/client"
     npm ci --silent
     npx ng build --configuration=production
-    echo "    [done]"
-
-    echo "==> Building NestJS backend..."
-    cd "$REPO_ROOT/backend"
-    npm ci --silent
-    npm run build
-    npm ci --omit=dev --silent
     echo "    [done]"
 fi
 
@@ -99,13 +86,10 @@ echo "==> Populating $APP_BUNDLE"
 # denied" even when the user owns the file — the signature triggers a
 # protected-write check. Without this, an incremental xcodebuild leaves
 # the old Resources in place and the script aborts on the first cp,
-# silently shipping a DMG with a stale backend / Postgres / FFmpeg.
-rm -rf "$RESOURCES/node" "$RESOURCES/postgres" "$RESOURCES/ffmpeg" "$RESOURCES/backend" "$RESOURCES/client"
+# silently shipping a DMG with a stale server / Postgres / FFmpeg.
+rm -rf "$RESOURCES/bin" "$RESOURCES/postgres" "$RESOURCES/ffmpeg" "$RESOURCES/cast" "$RESOURCES/client"
 
-# ── Node.js (statically linked, no dylib fixup needed) ──
-echo "    [node] Copying Node.js 24..."
-mkdir -p "$RESOURCES/node/bin"
-cp "$VENDORED/node/bin/node" "$RESOURCES/node/bin/"
+mkdir -p "$RESOURCES/bin"
 
 # ── fliks-engine (supervisor, pinned in engine.lock) ──
 echo "    [engine] Fetching fliks-engine..."
@@ -115,15 +99,15 @@ if [ -z "$ENGINE_SHA" ]; then
     echo "Error: engine.lock has no sha256_darwin_arm64 (run scripts/bump-engine.sh)." >&2
     exit 1
 fi
-curl -fsSL -o "$RESOURCES/node/bin/fliks-engine" \
+curl -fsSL -o "$RESOURCES/bin/fliks-engine" \
     "https://github.com/fliks-app/engine/releases/download/v$ENGINE_VERSION/fliks-engine-darwin-arm64"
-echo "$ENGINE_SHA  $RESOURCES/node/bin/fliks-engine" | shasum -a 256 -c -
-chmod +x "$RESOURCES/node/bin/fliks-engine"
+echo "$ENGINE_SHA  $RESOURCES/bin/fliks-engine" | shasum -a 256 -c -
+chmod +x "$RESOURCES/bin/fliks-engine"
 
-# ── fliks-server (Rust, built here; spawns Nest behind the engine) ──
+# ── fliks-server (Rust, built here; runs behind the engine) ──
 echo "    [server] Building fliks-server..."
 (cd "$REPO_ROOT/server" && cargo build --release -p fliks-server)
-cp "$REPO_ROOT/server/target/release/fliks-server" "$RESOURCES/node/bin/"
+cp "$REPO_ROOT/server/target/release/fliks-server" "$RESOURCES/bin/"
 
 # ── PostgreSQL (from Homebrew installed, needs dylib bundling) ──
 # The bottle hardcodes /opt/homebrew/share/postgresql@18 and lib/postgresql@18, and only
@@ -185,13 +169,6 @@ echo "    [ffmpeg] Copying jellyfin-ffmpeg..."
 mkdir -p "$RESOURCES/ffmpeg/bin"
 cp -R "$VENDORED/ffmpeg/bin/"* "$RESOURCES/ffmpeg/bin/"
 
-# ── Backend ──
-echo "    [backend] Copying NestJS backend..."
-mkdir -p "$RESOURCES/backend"
-cp -R "$REPO_ROOT/backend/dist" "$RESOURCES/backend/"
-cp -R "$REPO_ROOT/backend/node_modules" "$RESOURCES/backend/"
-cp "$REPO_ROOT/backend/package.json" "$RESOURCES/backend/"
-
 # ── Cast receiver page ──
 mkdir -p "$RESOURCES/cast"
 cp -R "$REPO_ROOT/server/public/"* "$RESOURCES/cast/"
@@ -219,8 +196,8 @@ sign() {
     fi
 }
 
-# Every Mach-O inside the bundle: dylibs, the node/postgres/ffmpeg helpers, AND
-# native .node addons. `file -b` decides (name/perm would miss a .bundle);
+# Every Mach-O inside the bundle: dylibs and the engine/server/postgres/ffmpeg
+# binaries. `file -b` decides (name/perm would miss a .bundle);
 # restricted to executable/shared-library/bundle so .o objects and dSYM
 # companions, which codesign refuses, are skipped. Sign in parallel: each
 # --timestamp is a network round-trip.
@@ -238,24 +215,10 @@ echo "    [done]"
 # Assert the actual on-disk result rather than trusting the steps above.
 echo "==> Verifying bundle..."
 
-# 1. Node must carry the JIT entitlement: under the hardened runtime V8 needs
-#    com.apple.security.cs.allow-jit to allocate the executable memory for its
-#    code range. Only meaningful for a Developer ID (hardened) build; ad-hoc
-#    local builds run without the runtime.
-if [ "$SIGN_ID" != "-" ]; then
-    if ! codesign -d --entitlements :- "$RESOURCES/node/bin/node" 2>/dev/null \
-        | grep -q 'com.apple.security.cs.allow-jit'; then
-        echo "Error: bundled node is missing com.apple.security.cs.allow-jit (required under the hardened runtime)."
-        exit 1
-    fi
-    echo "    [verify] node carries allow-jit"
-fi
-
-# 2. No vendored Mach-O may reference /opt/homebrew — those paths exist only on
+# 1. No vendored Mach-O may reference /opt/homebrew — those paths exist only on
 #    the build host, so every dependency must be relocated into the bundle.
-#    Scoped to the dirs this script relocates (node/postgres/ffmpeg);
-#    backend/node_modules ships its own prebuilt addons and is out of scope here.
-stray="$(find "$RESOURCES/node" "$RESOURCES/postgres" "$RESOURCES/ffmpeg" \
+#    Scoped to the dirs this script relocates (bin/postgres/ffmpeg).
+stray="$(find "$RESOURCES/bin" "$RESOURCES/postgres" "$RESOURCES/ffmpeg" \
     -type f \( -perm +111 -o -name '*.dylib' \) -print0 2>/dev/null \
     | xargs -0 -I{} sh -c 'otool -L "$1" 2>/dev/null | grep -q "/opt/homebrew" && echo "$1"' _ {} \
     || true)"
@@ -273,7 +236,7 @@ if [ "$pg_share" != "$(cd "$PG_ROOT" && pwd -P)/share/postgresql@18" ]; then
 fi
 echo "    [verify] postgres resolves share/ inside the bundle"
 
-# 3. ffmpeg must have zscale (libzimg) + the VideoToolbox tone-map — the HDR
+# 2. ffmpeg must have zscale (libzimg) + the VideoToolbox tone-map — the HDR
 #    paths (crop / burn-in / DV) depend on them.
 for filt in zscale tonemap_videotoolbox; do
     if ! "$RESOURCES/ffmpeg/bin/ffmpeg" -hide_banner -filters 2>/dev/null | grep -qw "$filt"; then
