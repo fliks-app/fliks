@@ -59,6 +59,8 @@ pub struct Request {
     pub body_cap: usize,
     /// The whole exchange, response body included; a dripping server cannot outlast it.
     pub deadline: Option<Duration>,
+    /// Kept as a monotonic end, so a request queued before it is sent cannot outlive it.
+    pub budget: Option<crate::rt::Budget>,
 }
 
 impl Request {
@@ -71,6 +73,7 @@ impl Request {
             timeout: Duration::from_secs(60),
             body_cap: 32 << 20,
             deadline: None,
+            budget: None,
         }
     }
     pub fn header(mut self, name: &str, value: &str) -> Self {
@@ -91,8 +94,12 @@ impl Request {
         self
     }
     /// Ends the request with the budget, and no later than any deadline already set.
-    pub fn budget(self, b: &crate::rt::Budget) -> Self {
-        self.deadline(b.remaining())
+    pub fn budget(mut self, b: &crate::rt::Budget) -> Self {
+        self.budget = Some(match self.budget {
+            Some(old) if old.remaining() < b.remaining() => old,
+            _ => *b,
+        });
+        self
     }
     pub fn body_cap(mut self, cap: usize) -> Self {
         self.body_cap = cap;
@@ -106,11 +113,20 @@ impl Request {
 
     /// Dropping the future before it resolves abandons the request: the host drops its connection.
     pub async fn send_async(self) -> Result<Response, Error> {
-        match self.deadline {
+        match self.limit() {
+            Some(d) if d.is_zero() => Err(Error::Timeout),
             Some(d) => crate::rt::timeout(d, self.exchange())
                 .await
                 .unwrap_or(Err(Error::Timeout)),
             None => self.exchange().await,
+        }
+    }
+
+    fn limit(&self) -> Option<Duration> {
+        let left = self.budget.map(|b| b.remaining());
+        match (self.deadline, left) {
+            (Some(d), Some(l)) => Some(d.min(l)),
+            (d, l) => d.or(l),
         }
     }
 
@@ -233,6 +249,28 @@ fn map_code(code: ErrorCode) -> Error {
 
 #[cfg(test)]
 mod tests {
+    use super::Request;
+    use crate::bindings::wasi::http::types::Method;
+    use crate::rt::Budget;
+    use std::time::Duration;
+
+    #[test]
+    fn budget_is_counted_from_its_creation() {
+        let b = Budget::new(Duration::from_millis(200));
+        let r = Request::new(Method::Get, "http://h/").budget(&b);
+        std::thread::sleep(Duration::from_millis(50));
+        assert!(r.limit().unwrap() <= Duration::from_millis(150));
+        let r = r.deadline(Duration::from_millis(10));
+        assert_eq!(r.limit(), Some(Duration::from_millis(10)));
+        let r = r.budget(&Budget::new(Duration::from_secs(60)));
+        assert!(r.limit().unwrap() <= Duration::from_millis(10));
+        let gone = Budget::new(Duration::ZERO);
+        assert_eq!(
+            Request::new(Method::Get, "http://h/").budget(&gone).limit(),
+            Some(Duration::ZERO)
+        );
+    }
+
     #[test]
     fn denied_text() {
         assert_eq!(
