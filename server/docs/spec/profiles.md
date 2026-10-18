@@ -152,6 +152,8 @@ Parity scenarios (`server/parity/scenarios/profiles/`, recorded against Nest bef
 - Custom formats: `custom-formats-list-admin`, `-list-user-403` (`media.read` only), `-create`, `-create-empty-specs-400`, `-create-bad-type-400`, `-create-bad-regex-400` (`Invalid regular expression: (`), `-update` (absent `score` resets to 0), `-get-404`, `-delete`, `custom-formats-test` (title with source/language/resolution; `freeleech: true` matches a `release_flag` format; `downloadVolumeFactor: 0.5` is `halfleech`; an invalid stored regex with `negate` answers `matched: true`, pinned), `custom-formats-test-validation-400`.
 - Quality definitions: `quality-definitions-list` (24 rows ascending), `-list-user-403`, `-reset-defaults` (no DB change: a following GET equals the one before), `-update` (sizes changed, unknown `qualityId` ignored, `title` omitted keeps the title), `-update-validation-400` (negative size), `-update-title-null-400` (deviation C1: Nest 500).
 
+Struck at S9 (`node-removal.md` §5 item 6): `quality-definition-defaults` was never generated as a `server/fixtures` set; the Rust tests in `crates/domain/src/profiles.rs` and `crates/server/tests/profiles.rs` cover the rules instead.
+
 ## Open questions
 
 None. Q7 decided in the port: the `settings` actor is in `seed/profiles.sql` (seed name `profiles`, scenarios of this domain).

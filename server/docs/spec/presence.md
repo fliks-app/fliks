@@ -103,3 +103,5 @@ Parity scenarios (§5.3), dir `server/parity/scenarios/presence/`:
 - `presence-orphan-dropped-on-resync` (end the engine session while the server is down; after restart it is absent)
 - `presence-stale-filtered` (engine listing absent: entries older than 30 s hidden)
 Ignore paths: `$..startedAt`, `$..lastActivity`, `$..sessionId` (engine-generated), `$..position*`.
+
+Struck at S9 (`node-removal.md` §5 item 6): `presence` was never generated as a `server/fixtures` set; the Rust tests in `crates/server/src/presence/tests.rs` cover the rules instead.

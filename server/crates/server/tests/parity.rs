@@ -778,7 +778,7 @@ fn verdict(
     d
 }
 
-/// Runs one scenario; in record mode fills each step's `expect` from the live response.
+/// Runs one scenario; record mode fills only the steps without an `expect` from the live response.
 async fn run(ctx: &Ctx, sc: &mut Value, record: bool) -> Vec<String> {
     fs_setup(sc);
     let ignore: Vec<Vec<Seg>> = sc["ignore"]
@@ -815,6 +815,7 @@ async fn run(ctx: &Ctx, sc: &mut Value, record: bool) -> Vec<String> {
     let n = sc["steps"].as_array().map_or(0, |s| s.len());
     for i in 0..n {
         let step = sc["steps"][i].clone();
+        let fill = record && step["expect"].is_null();
         let mut resp = match send(ctx, &step, &vars).await {
             Ok(r) => r,
             Err(e) => {
@@ -836,7 +837,7 @@ async fn run(ctx: &Ctx, sc: &mut Value, record: bool) -> Vec<String> {
             }
         }
         // `retryMs`: repeat the step until its `expect` holds, at most that long, then fail on the last diff
-        if let (Some(ms), false) = (step["retryMs"].as_u64(), record) {
+        if let (Some(ms), false) = (step["retryMs"].as_u64(), fill) {
             let started = std::time::Instant::now();
             while !verdict(&step, &resp, &ignore, &unordered, strict).is_empty()
                 && started.elapsed() < Duration::from_millis(ms)
@@ -854,7 +855,7 @@ async fn run(ctx: &Ctx, sc: &mut Value, record: bool) -> Vec<String> {
                 vars.insert(k.clone(), v.clone());
             }
         }
-        if record {
+        if fill {
             sc["steps"][i]["expect"] = recorded(&step, &resp, &ignore);
             continue;
         }
