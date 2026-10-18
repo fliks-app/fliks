@@ -53,13 +53,7 @@ async fn ctx(pool: PgPool) -> Ctx {
     let admin = user(&pool, &st, "admin", None, true).await;
     let manager = user(&pool, &st, "manager", Some(r#"["users.manage"]"#), false).await;
     let editor = user(&pool, &st, "editor", Some(r#"["roles.manage"]"#), false).await;
-    let app = app::router(
-        st,
-        fliks_engine::gateway::Upstream::parse("http://127.0.0.1:1").unwrap(),
-        None,
-        std::env::temp_dir(),
-        None,
-    );
+    let app = app::router(st, None, std::env::temp_dir(), None);
     Ctx {
         app,
         admin,

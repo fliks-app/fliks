@@ -150,13 +150,7 @@ async fn ctx(pool: PgPool) -> Ctx {
     .execute(&pool)
     .await
     .unwrap();
-    let app = app::router(
-        st.clone(),
-        fliks_engine::gateway::Upstream::parse("http://127.0.0.1:1").unwrap(),
-        None,
-        std::env::temp_dir(),
-        None,
-    );
+    let app = app::router(st.clone(), None, std::env::temp_dir(), None);
     Ctx {
         app,
         st,

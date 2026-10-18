@@ -186,13 +186,7 @@ async fn ctx(pool: PgPool) -> Ctx {
     let st = AppState::new(pool.clone(), Config::from_lookup(|_| None), SECRET);
     let admin = user(&pool, &st, "admin", r#"["settings.access"]"#, true).await;
     let plain = user(&pool, &st, "plain", r#"["media.read"]"#, false).await;
-    let app = app::router(
-        st.clone(),
-        fliks_engine::gateway::Upstream::parse("http://127.0.0.1:1").unwrap(),
-        None,
-        std::env::temp_dir(),
-        None,
-    );
+    let app = app::router(st.clone(), None, std::env::temp_dir(), None);
     let (base, hits) = spawn_stub().await;
     Ctx {
         st,

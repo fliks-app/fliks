@@ -1,5 +1,4 @@
-//! SSE hub, event catalogue and activity registry (`docs/spec/events-hub.md`); the bridges to Nest
-//! are `docs/bridge.md` rows `/internal/events*` and `/internal/activity*`.
+//! SSE hub, event catalogue and activity registry (`docs/spec/events-hub.md`).
 pub mod activity;
 pub mod event;
 mod hub;

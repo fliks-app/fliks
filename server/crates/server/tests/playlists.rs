@@ -38,9 +38,8 @@ async fn ctx(pool: PgPool) -> Ctx {
     ] {
         sqlx::query(q).execute(&pool).await.unwrap();
     }
-    let nest = fliks_engine::gateway::Upstream::parse("http://127.0.0.1:1").unwrap();
     Ctx {
-        app: app::router(st, nest, None, "/nonexistent".into(), None),
+        app: app::router(st, None, "/nonexistent".into(), None),
         pool,
         tokens,
     }

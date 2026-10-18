@@ -71,20 +71,13 @@ fn refuse_protected(key: &str) -> Result<(), AppError> {
     }
 }
 
-/// Nest listeners cache settings: a failed notify leaves them stale, so it is logged loudly.
 pub(crate) async fn notify(st: &AppState, keys: &[String], origin: Option<&str>) {
     if keys.is_empty() {
         return;
     }
     st.plugins.settings_changed(keys, origin);
-    let nest = async {
-        if let Err(e) = st.bridge.settings_changed(keys, origin).await {
-            tracing::warn!(error = %e, ?keys, "settings-changed bridge failed: nest caches are stale");
-        }
-    };
     st.metadata.lang.settings_changed(keys);
     tokio::join!(
-        nest,
         st.engine.settings_changed(keys),
         st.qoe.settings_changed(keys)
     );

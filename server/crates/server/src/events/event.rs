@@ -514,7 +514,7 @@ pub enum ImportSource {
     Disk,
 }
 
-/// What the in-process subscribers and `GET /internal/events/stream` see: `{"kind":..,"event":{..}}`.
+/// What the in-process subscribers see: `{"kind":..,"event":{..}}`.
 // Built per emit and moved once into an Arc: boxing `SseEvent` would only add a hop.
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

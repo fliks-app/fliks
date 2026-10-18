@@ -2,7 +2,6 @@ pub mod app;
 pub mod atomic_file;
 pub mod auth;
 pub mod auth_token;
-pub mod bridge;
 pub mod busy;
 pub mod config;
 pub mod db;
@@ -21,7 +20,6 @@ pub mod markers;
 pub mod media;
 pub mod media_servers;
 pub mod metadata;
-pub mod nest;
 pub mod net;
 pub mod notifications;
 pub mod outbound;
@@ -46,7 +44,6 @@ pub mod users;
 pub mod vetted;
 
 use config::Config;
-use fliks_engine::{gateway::Upstream, supervise};
 use sqlx::{Connection, PgConnection, PgPool, postgres::PgPoolOptions};
 use state::AppState;
 use std::{net::SocketAddr, time::Duration};
@@ -90,7 +87,6 @@ pub async fn serve(cfg: Config) -> Result<(), BoxError> {
         .await
         .map_err(|e| format!("seed admin: {e:?}"))?;
     let secret = jwt_secret::resolve(&cfg);
-    let upstream = Upstream::parse(&nest::url(&cfg))?;
     let db = pool.clone();
     let state = AppState::new(pool, cfg, &secret);
     // The plugin host keeps the state for the process lifetime (a cycle only `serve` may create).
@@ -112,14 +108,11 @@ pub async fn serve(cfg: Config) -> Result<(), BoxError> {
     let qoe = state.qoe.clone();
     let app = app::router(
         state.clone(),
-        upstream,
         cfg.serve_static_path.clone(),
         cfg.cast_dir.clone(),
         cfg.cors_origin.clone(),
     );
-    // Bind before spawning Nest so a port clash cannot orphan it.
     let listener = tokio::net::TcpListener::bind(("0.0.0.0", cfg.port)).await?;
-    let nest = nest::spawn(&cfg, &secret);
     auth::spawn_jobs(db);
     jobs::spawn(&state);
     subtitles::scheduler::spawn_tick(&state);
@@ -131,20 +124,29 @@ pub async fn serve(cfg: Config) -> Result<(), BoxError> {
         app.into_make_service_with_connect_info::<SocketAddr>(),
     )
     .with_graceful_shutdown(async move {
-        supervise::shutdown_signal().await;
+        shutdown_signal().await;
         hub.shutdown();
     })
     .await;
     qoe.flush_all().await;
     state.plugins.shutdown().await;
-    if let Some(nest) = nest {
-        let _ = nest.await;
-    }
     // Non-zero so the parent supervisor (or `Restart=on-failure`) starts us again.
     if system.restarting() {
         std::process::exit(1);
     }
     served.map_err(Into::into)
+}
+
+async fn shutdown_signal() {
+    #[cfg(unix)]
+    {
+        use tokio::signal::unix::{SignalKind, signal};
+        let mut term = signal(SignalKind::terminate()).expect("SIGTERM handler");
+        let mut int = signal(SignalKind::interrupt()).expect("SIGINT handler");
+        tokio::select! { _ = term.recv() => {}, _ = int.recv() => {} }
+    }
+    #[cfg(not(unix))]
+    tokio::signal::ctrl_c().await.expect("ctrl-c handler");
 }
 
 /// GET `/api/system/liveness` on loopback; true on a 2xx.

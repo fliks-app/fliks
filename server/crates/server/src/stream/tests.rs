@@ -64,15 +64,13 @@ async fn ctx(pool: PgPool, engine: bool) -> Ctx {
     let env = [
         ("FLIKS_ENGINE_URL", fake.url.clone()),
         ("FLIKS_ENGINE_TOKEN", "tok".into()),
-        ("FLIKS_NEST_URL", "http://127.0.0.1:1".into()),
     ];
     let cfg = Config::from_lookup(|k| env.iter().find(|(n, _)| *n == k).map(|(_, v)| v.clone()));
     let st = AppState::new(pool.clone(), cfg, SECRET);
     if engine {
         st.engine.start(pool.clone(), 4849).await;
     }
-    let upstream = fliks_engine::gateway::Upstream::parse("http://127.0.0.1:1").unwrap();
-    let app = app::router(st.clone(), upstream, None, "/nonexistent".into(), None);
+    let app = app::router(st.clone(), None, "/nonexistent".into(), None);
     let dir = std::env::temp_dir().join(format!(
         "fliks-stream-test-{}",
         crate::config::random_hex(6)

@@ -43,7 +43,6 @@ base64 = "0.22"
 subtle = "2"
 tower = { version = "0.5", features = ["util"] }
 percent-encoding = "2"
-fliks-engine = { git = "https://github.com/fliks-app/engine", tag = "v0.4.1" }
 croner = "4.0.1"
 miniz_oxide = "0.8"
 flate2 = "1"

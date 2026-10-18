@@ -15,12 +15,8 @@ struct Ctx {
 }
 
 async fn ctx(pool: PgPool) -> Ctx {
-    ctx_with(pool, None).await
-}
-
-async fn ctx_with(pool: PgPool, nest_url: Option<String>) -> Ctx {
     fliks_server::db::migrate(&pool).await.unwrap();
-    let cfg = Config::from_lookup(|k| nest_url.clone().filter(|_| k == "FLIKS_NEST_URL"));
+    let cfg = Config::from_lookup(|_| None);
     let st = AppState::new(pool.clone(), cfg, SECRET);
     let mut tokens = vec![];
     for (name, admin) in [("admin", true), ("plain", false)] {
@@ -34,8 +30,7 @@ async fn ctx_with(pool: PgPool, nest_url: Option<String>) -> Ctx {
         .unwrap();
         tokens.push(st.jwt.sign_access(id, name).unwrap().token);
     }
-    let nest = fliks_engine::gateway::Upstream::parse("http://127.0.0.1:1").unwrap();
-    let app = app::router(st, nest, None, "/nonexistent".into(), None);
+    let app = app::router(st, None, "/nonexistent".into(), None);
     Ctx {
         app,
         plain: tokens.pop().unwrap(),
@@ -330,53 +325,6 @@ async fn fs_browse_lists_sorted_directories_only(pool: PgPool) {
             .contains("ENOENT: no such file or directory, scandir")
     );
     std::fs::remove_dir_all(&root).unwrap();
-}
-
-#[sqlx::test(migrations = false)]
-async fn every_put_notifies_nest_even_when_a_secret_keeps_its_value(pool: PgPool) {
-    let calls = std::sync::Arc::new(std::sync::Mutex::new(Vec::<Value>::new()));
-    let seen = calls.clone();
-    let fake = Router::new().fallback(axum::routing::any(move |body: String| async move {
-        seen.lock()
-            .unwrap()
-            .push(serde_json::from_str(&body).unwrap());
-    }));
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let url = format!("http://{}", listener.local_addr().unwrap());
-    tokio::spawn(async { axum::serve(listener, fake).await.unwrap() });
-    let c = ctx_with(pool, Some(url)).await;
-    let a = Some(c.admin.as_str());
-    call(
-        &c.app,
-        "PUT",
-        "/api/settings/seerr_api_key",
-        a,
-        json!({"value": "sk"}),
-    )
-    .await;
-    call(
-        &c.app,
-        "PUT",
-        "/api/settings/seerr_api_key",
-        a,
-        json!({"value": ""}),
-    )
-    .await;
-    call(
-        &c.app,
-        "PUT",
-        "/api/settings",
-        a,
-        json!({"data": {"seerr_api_key": ""}}),
-    )
-    .await;
-    let keys: Vec<Value> = calls
-        .lock()
-        .unwrap()
-        .iter()
-        .map(|b| b["keys"].clone())
-        .collect();
-    assert_eq!(keys, vec![json!(["seerr_api_key"]); 3]);
 }
 
 /// `setup-checklist.md`: the seven items in order, dismissal stored compact, unknown keys 400.

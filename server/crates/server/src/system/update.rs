@@ -180,14 +180,4 @@ mod tests {
         assert!(newer("3rc1.0", "2.9"));
         assert!(!newer("1.2.3", "1.2.3"));
     }
-
-    #[test]
-    fn cargo_version_equals_the_nest_package() {
-        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../../backend/package.json");
-        let Ok(raw) = std::fs::read_to_string(path) else {
-            return;
-        };
-        let pkg: serde_json::Value = serde_json::from_str(&raw).unwrap();
-        assert_eq!(pkg["version"], env!("CARGO_PKG_VERSION"));
-    }
 }

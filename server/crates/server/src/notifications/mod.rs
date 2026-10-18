@@ -1,4 +1,4 @@
-//! `/api/notifications/*`, the senders and the Nest dispatch bridge (`docs/spec/notifications.md`).
+//! `/api/notifications/*` and the senders (`docs/spec/notifications.md`).
 mod db;
 mod routes;
 mod send;
