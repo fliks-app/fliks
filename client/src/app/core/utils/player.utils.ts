@@ -161,8 +161,8 @@ export function audioChannelsLabel(channels: number | null | undefined): string 
  * Render an audio track as a dropdown label. Used by both the player and
  * the media-detail audio menu so the text matches in both places.
  *
- * Format: `"<langue> (CODEC - channels)"`, e.g. `"Français (EAC3 - 5.1)"`.
- * Codec and/or channels are dropped when missing.
+ * Format: `"<langue> (CODEC - channels - markers)"`, e.g. `"Français (EAC3 - 5.1 - Atmos)"`.
+ * Each part is dropped when missing.
  *
  * `trackIndex` is the 1-based position of the track in the file's audio
  * list — used to produce a translated `Piste N` / `Audio N` head when
@@ -171,35 +171,77 @@ export function audioChannelsLabel(channels: number | null | undefined): string 
  * (callers with no track-list position to number).
  */
 export function formatAudioLabel(
-  audio: { language?: string; languageTag?: string; title?: string; codec?: string; channels?: number },
+  audio: AudioLabelSource,
   translate: TranslateService,
   trackIndex?: number,
 ): string {
-  const norm = normalizeLangCode(audio.language);
-  const head =
-    trackIndex != null && (norm === 'und' || norm === 'xx')
-      ? translate.instant('player.audio_track_n', { index: trackIndex })
-      : localizeLanguageTag(audio.language, audio.languageTag, translate);
-  const codec = (audio.codec ?? '').toUpperCase().replace('TRUEHD', 'TrueHD');
-  const channels = audioChannelsLabel(audio.channels);
-  const tail = [codec, channels].filter(Boolean).join(' - ');
+  const { head, details } = audioLabelParts(audio, translate, trackIndex);
+  const tail = details.join(' - ');
   return tail ? `${head} (${tail})` : head;
 }
 
-/** Two-part audio label for the menu: language head + details ("EAC3 • 5.1"). */
+/** Two-part audio label for the menu: language head + details ("EAC3 • 5.1 • Atmos • title"). */
 export function formatAudioParts(
-  audio: { language?: string; languageTag?: string; title?: string; codec?: string; channels?: number },
+  audio: AudioLabelSource,
   translate: TranslateService,
   trackIndex?: number,
 ): { head: string; sub: string } {
+  const { head, details, title } = audioLabelParts(audio, translate, trackIndex);
+  return { head, sub: [...details, title].filter(Boolean).join(' • ') };
+}
+
+export interface AudioLabelSource {
+  language?: string;
+  languageTag?: string;
+  title?: string;
+  codec?: string;
+  channels?: number;
+  /** Server-derived track markers (`commentary`, `atmos`, …), in display order. */
+  trackMarkers?: readonly string[];
+}
+
+function audioLabelParts(audio: AudioLabelSource, translate: TranslateService, trackIndex?: number) {
   const norm = normalizeLangCode(audio.language);
   const head =
     trackIndex != null && (norm === 'und' || norm === 'xx')
       ? translate.instant('player.audio_track_n', { index: trackIndex })
       : localizeLanguageTag(audio.language, audio.languageTag, translate);
   const codec = (audio.codec ?? '').toUpperCase().replace('TRUEHD', 'TrueHD');
-  const channels = audioChannelsLabel(audio.channels);
-  return { head, sub: [codec, channels].filter(Boolean).join(' • ') };
+  const markers = trackMarkerLabels(audio.trackMarkers, translate);
+  const details = [codec, audioChannelsLabel(audio.channels), ...markers].filter(Boolean);
+  return { head, details, title: audioTitleHint(audio, [head, ...markers, ...(audio.trackMarkers ?? [])], translate) };
+}
+
+/** Localised labels of a track's markers; ids this client has no label for are skipped. */
+export function trackMarkerLabels(
+  markers: readonly string[] | null | undefined,
+  translate: TranslateService,
+  skip: readonly string[] = [],
+): string[] {
+  return (markers ?? [])
+    .filter((m) => !skip.includes(m))
+    .map((m) => {
+      const key = `player.track_marker.${m}`;
+      const label = translate.instant(key);
+      return label === key ? '' : label;
+    })
+    .filter(Boolean);
+}
+
+const AUDIO_TITLE_NOISE =
+  /^(?:\d+(?:\.\d)?(?:ch)?|kbps|aac|ac-?3|e-?ac-?3|dd\+?|ddp\d*(?:\.\d)?|dolby|digital|plus|truehd|true|hd|atmos|dts|dts-hd|ma|hra|x|flac|opus|pcm|lpcm|mp3|stereo|mono|surround|channels?|audio|track)$/;
+
+/** The stream title, unless it only spells out the language, codec, layout or markers already shown
+ *  ("English DDP 5.1", "Commentary"). */
+function audioTitleHint(audio: AudioLabelSource, shown: string[], translate: TranslateService): string {
+  const title = (audio.title ?? '').trim().replace(/\s+/g, ' ');
+  if (!title) return '';
+  const split = (s: string) => s.toLowerCase().split(/[^\p{L}\p{N}.+-]+/u).filter(Boolean);
+  const known = languageTagWords(audio.language, audio.languageTag, translate);
+  for (const s of [...shown, localizeLanguage(audio.language, translate), audio.language ?? '', normalizeLangCode(audio.language)]) {
+    split(s).forEach((w) => known.add(w));
+  }
+  return split(title).every((w) => known.has(w) || AUDIO_TITLE_NOISE.test(w)) ? '' : title;
 }
 
 /** Whether the pickers spell out the file format. Off unless the viewer asked
@@ -220,7 +262,11 @@ export interface SubtitleLabelSource {
   title?: string | null;
   /** BCP-47 tag of an embedded track (`es-419`); label only, `language` stays canonical. */
   languageTag?: string | null;
+  /** Server-derived markers of an embedded track; `forced`/`hearingImpaired` show through the flags. */
+  trackMarkers?: readonly string[] | null;
 }
+
+const FLAG_MARKERS = ['forced', 'hearingImpaired'];
 
 /**
  * The stream title worth showing next to the language, or ''. Dropped when
@@ -239,6 +285,7 @@ function subtitleTitleHint(sub: SubtitleLabelSource, translate: TranslateService
   if (sub.hearingImpaired) {
     redundant.push('sdh', 'cc', 'hi', 'hearing impaired', translate.instant('player.subtitle_hearing_impaired'));
   }
+  redundant.push(...trackMarkerLabels(sub.trackMarkers, translate, FLAG_MARKERS), ...(sub.trackMarkers ?? []));
   if (redundant.some((r) => r && String(r).toLowerCase() === t)) return '';
   const known = languageTagWords(sub.language, sub.languageTag, translate);
   const words = t.split(/[^\p{L}\p{N}]+/u).filter(Boolean);
@@ -268,6 +315,7 @@ export function formatSubtitleLabel(
   if (title) parts.push(title);
   if (sub.hearingImpaired) parts.push(translate.instant('player.subtitle_hearing_impaired'));
   if (sub.forced) parts.push(translate.instant('player.subtitle_forced'));
+  parts.push(...trackMarkerLabels(sub.trackMarkers, translate, FLAG_MARKERS));
   const codec = opts?.showFormat ? shortSubtitleCodec(sub.codec, sub.relativePath) : '';
   if (codec) parts.push(codec);
   const origin = subtitleOriginLabel(sub.providerType, translate);
@@ -298,6 +346,7 @@ export function formatSubtitleParts(
   if (codec) parts.push(codec);
   if (sub.forced) parts.push(translate.instant('player.subtitle_forced'));
   if (sub.hearingImpaired) parts.push(translate.instant('player.subtitle_hearing_impaired'));
+  parts.push(...trackMarkerLabels(sub.trackMarkers, translate, FLAG_MARKERS));
   const origin = subtitleOriginLabel(sub.providerType, translate);
   if (origin) parts.push(origin);
   return { head, sub: parts.join(' • ') };

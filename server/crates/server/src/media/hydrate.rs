@@ -1,5 +1,5 @@
 //! `Media` entities as JSON (`media-query.md` rules 30-32): built in SQL, absolute paths added or removed in Rust (F22).
-use fliks_domain::media::path::media_path;
+use fliks_domain::{media::path::media_path, track_markers};
 use serde_json::Value;
 use sqlx::PgPool;
 use std::collections::HashMap;
@@ -75,6 +75,16 @@ WHERE media.id = ANY($1)"#,
             let Some(obj) = v.as_object_mut() else {
                 return v;
             };
+            for f in obj
+                .get_mut("files")
+                .and_then(Value::as_array_mut)
+                .into_iter()
+                .flatten()
+            {
+                if let Some(info) = f.get_mut("streamInfo") {
+                    track_markers::annotate(info);
+                }
+            }
             if see_paths {
                 let path = media_path(r.lib_path.as_deref(), r.folder_name.as_deref());
                 obj.insert("path".into(), path.into());

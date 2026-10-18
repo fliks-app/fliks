@@ -206,8 +206,11 @@ fn the_query_follows_the_controller() {
 #[sqlx::test(migrations = false)]
 async fn the_recorded_engine_answer_gives_the_recorded_body(pool: PgPool) {
     let c = ctx(pool, true).await;
-    let (status, body) = info(&c, "?token=tok&startQuality=360p").await;
+    let (status, mut body) = info(&c, "?token=tok&startQuality=360p").await;
     assert_eq!(status, 201);
+    // `trackMarkers` is additive: the recorded body predates it.
+    let track = body["audioTracks"][0].as_object_mut().unwrap();
+    assert_eq!(track.remove("trackMarkers"), Some(json!([])));
     assert_eq!(body, golden().1);
     let req = &c.fake.seen("POST", "/v1/sessions")[0].body;
     assert_eq!(req["decide"]["media"]["ext"], ".mkv");
@@ -380,6 +383,38 @@ async fn unknown_and_unreadable_files_are_404s(pool: PgPool) {
     )
     .await;
     assert_eq!(s, 400);
+}
+
+#[sqlx::test(migrations = false)]
+async fn audio_tracks_carry_the_title_and_the_track_markers(pool: PgPool) {
+    let c = ctx(pool, true).await;
+    let mut info_json = stream_info();
+    info_json["audio"] = json!([
+        {"streamIndex": 1, "codec": "eac3", "channels": 6, "language": "eng",
+         "profile": "Dolby Digital Plus + Dolby Atmos", "audioDescription": true},
+        {"streamIndex": 2, "codec": "aac", "channels": 2, "language": "eng",
+         "title": "Commentary by the director"},
+    ]);
+    sqlx::query(r#"UPDATE media_files SET "streamInfo" = $1"#)
+        .bind(&info_json)
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    let mut open = golden().0;
+    let track = open["decision"]["response"]["audioTracks"][0].clone();
+    let mut second = track.clone();
+    second["index"] = json!(1);
+    open["decision"]["response"]["audioTracks"] = json!([track, second]);
+    c.fake.script("POST", "/v1/sessions", vec![ok(open)]);
+    let (s, b) = info(&c, "").await;
+    assert_eq!(s, 201);
+    assert_eq!(
+        b["audioTracks"][0]["trackMarkers"],
+        json!(["audioDescription", "atmos"])
+    );
+    assert!(b["audioTracks"][0].get("title").is_none());
+    assert_eq!(b["audioTracks"][1]["trackMarkers"], json!(["commentary"]));
+    assert_eq!(b["audioTracks"][1]["title"], "Commentary by the director");
 }
 
 #[sqlx::test(migrations = false)]

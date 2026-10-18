@@ -95,6 +95,10 @@ export interface PlaybackInfoResponse {
     /** Source sample rate for a copy, output target for a transcode. */
     sampleRate?: number;
     reasonFlags: string[];
+    /** Source stream title, when it has one. */
+    title?: string;
+    /** Same markers as `streamInfo.audio[index].trackMarkers`. */
+    trackMarkers?: string[];
   }[];
   source: {
     container: string;

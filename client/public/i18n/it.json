@@ -114,6 +114,19 @@
     "subtitle_track_n": "Sottotitolo {{index}}",
     "subtitle_forced": "Forzato",
     "subtitle_hearing_impaired": "Non udenti",
+    "track_marker": {
+      "commentary": "Commento",
+      "audioDescription": "Audiodescrizione",
+      "hearingImpaired": "Non udenti",
+      "original": "Originale",
+      "dub": "Doppiaggio",
+      "musicAndEffects": "Musica ed effetti",
+      "karaoke": "Karaoke",
+      "atmos": "Atmos",
+      "dtsX": "DTS:X",
+      "descriptions": "Descrizioni",
+      "lyrics": "Testi"
+    },
     "subtitle_source": {
       "translated": "Tradotto",
       "ocr": "OCR"

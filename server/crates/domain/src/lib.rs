@@ -26,4 +26,5 @@ pub mod subtitle_name;
 pub mod subtitle_path;
 pub mod subtitle_post;
 pub mod subtitle_score;
+pub mod track_markers;
 pub mod translation;

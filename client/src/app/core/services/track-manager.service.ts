@@ -108,7 +108,7 @@ export class TrackManagerService {
     // resolveAudioStreamIndex applies before load.
     const lang = this.playerSettings.audioLanguage(originalLanguage);
     const source = streams?.length ? streams : tracks;
-    const idx = lang ? pickAudioStreamForLanguage(source, lang) : undefined;
+    const idx = lang ? pickAudioStreamForLanguage(source, lang, settings.audioSelectionMode === 'original') : undefined;
     const match = idx != null ? trackForStreamIndex(idx, source, tracks) : undefined;
     if (match && match.id !== activeAudioTrackId) onSelect(match.id);
   }
@@ -225,8 +225,8 @@ export class TrackManagerService {
             language: normalizeLangCode(emb.language),
             languageTag: emb.languageTag,
             burnIn: false,
-            forced: emb.forced ?? false,
-            hearingImpaired: emb.hearingImpaired ?? false,
+            forced: !!emb.forced || !!emb.trackMarkers?.includes('forced'),
+            hearingImpaired: !!emb.hearingImpaired || !!emb.trackMarkers?.includes('hearingImpaired'),
           });
         }
       }

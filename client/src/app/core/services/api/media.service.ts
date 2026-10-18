@@ -293,6 +293,8 @@ export interface AudioStreamInfo {
   sampleRate?: number;
   bitRate?: number;
   isDefault?: boolean;
+  /** Server-derived markers: dispositions, codec profile (`atmos`, `dtsX`), title fallback. */
+  trackMarkers?: string[];
 }
 
 export interface SubtitleStreamInfo {
@@ -303,6 +305,8 @@ export interface SubtitleStreamInfo {
   title?: string;
   forced: boolean;
   hearingImpaired: boolean;
+  /** Server-derived markers: dispositions, title fallback. */
+  trackMarkers?: string[];
 }
 
 export interface Chapter {
