@@ -69,7 +69,7 @@
             "id": 4,
             "name": "Emby Bad Key",
             "type": "emby",
-            "url": "http://127.0.0.1:4882/401"
+            "url": "http://127.0.0.1:4962/401"
           },
           {
             "apiKey": "parity-key",
@@ -78,7 +78,7 @@
             "id": 5,
             "name": "Emby No Users",
             "type": "emby",
-            "url": "http://127.0.0.1:4882/nousers"
+            "url": "http://127.0.0.1:4962/nousers"
           },
           {
             "apiKey": "parity-key",
@@ -87,7 +87,7 @@
             "id": 6,
             "name": "Emby Slow",
             "type": "emby",
-            "url": "http://127.0.0.1:4882/slow"
+            "url": "http://127.0.0.1:4962/slow"
           },
           {
             "apiKey": "plex-key",
@@ -96,7 +96,7 @@
             "id": 3,
             "name": "Plex Box",
             "type": "plex",
-            "url": "http://127.0.0.1:4882/ok"
+            "url": "http://127.0.0.1:4962/ok"
           },
           {
             "apiKey": null,

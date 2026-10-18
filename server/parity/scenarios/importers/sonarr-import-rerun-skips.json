@@ -23,7 +23,7 @@
           }
         ],
         "targetLibraryId": 2,
-        "url": "http://127.0.0.1:4880/sonarr/ok"
+        "url": "http://127.0.0.1:4960/sonarr/ok"
       },
       "expect": {
         "body": {
@@ -57,7 +57,7 @@
           }
         ],
         "targetLibraryId": 2,
-        "url": "http://127.0.0.1:4880/sonarr/ok"
+        "url": "http://127.0.0.1:4960/sonarr/ok"
       },
       "expect": {
         "body": {

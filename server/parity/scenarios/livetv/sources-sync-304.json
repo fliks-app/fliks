@@ -15,7 +15,7 @@
       "body": {
         "kind": "m3u",
         "name": "E",
-        "url": "http://127.0.0.1:4921/playlist-etag.m3u"
+        "url": "http://127.0.0.1:4961/playlist-etag.m3u"
       },
       "expect": {
         "body": {
@@ -39,7 +39,7 @@
           "priority": 0,
           "referer": null,
           "refreshIntervalHours": 12,
-          "url": "http://127.0.0.1:4921/playlist-etag.m3u",
+          "url": "http://127.0.0.1:4961/playlist-etag.m3u",
           "userAgent": null,
           "username": null
         },
@@ -74,7 +74,7 @@
             "excludeGroupsPattern": null,
             "expiresAt": null,
             "guideUrls": [
-              "http://127.0.0.1:4921/guide.xml"
+              "http://127.0.0.1:4961/guide.xml"
             ],
             "id": 1,
             "includeGroupsPattern": null,
@@ -90,7 +90,7 @@
             "priority": 0,
             "referer": null,
             "refreshIntervalHours": 12,
-            "url": "http://127.0.0.1:4921/playlist-etag.m3u",
+            "url": "http://127.0.0.1:4961/playlist-etag.m3u",
             "userAgent": null,
             "username": null
           }
@@ -126,7 +126,7 @@
             "excludeGroupsPattern": null,
             "expiresAt": null,
             "guideUrls": [
-              "http://127.0.0.1:4921/guide.xml"
+              "http://127.0.0.1:4961/guide.xml"
             ],
             "id": 1,
             "includeGroupsPattern": null,
@@ -142,7 +142,7 @@
             "priority": 0,
             "referer": null,
             "refreshIntervalHours": 12,
-            "url": "http://127.0.0.1:4921/playlist-etag.m3u",
+            "url": "http://127.0.0.1:4961/playlist-etag.m3u",
             "userAgent": null,
             "username": null
           }

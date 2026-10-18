@@ -6,7 +6,7 @@
     {
       "as": "admin",
       "body": {
-        "url": "http://127.0.0.1:4880/radarr/other"
+        "url": "http://127.0.0.1:4960/radarr/other"
       },
       "expect": {
         "body": {

@@ -9,25 +9,25 @@ INSERT INTO users (id, "createdAt", "updatedAt", username, email, "passwordHash"
 
 INSERT INTO livetv_sources (id, "createdAt", "updatedAt", name, kind, url, username, password, "userAgent", referer, "maxStreams", "maxStreamsIsManual",
   "refreshIntervalHours", "includeGroupsPattern", "excludeGroupsPattern", "guideUrls", enabled, priority, "lastSyncAt", "lastSyncStatus", "channelCount") VALUES
- (1, '2026-01-01', '2026-01-01', 'Alpha', 'm3u', 'http://127.0.0.1:4921/playlist.m3u', NULL, NULL, NULL, NULL, 2, false, 12, NULL, NULL,
-  '["http://127.0.0.1:4921/guide.xml"]', true, 0, '2026-01-02 10:00', 'ok', 5),
- (2, '2026-01-01', '2026-01-01', 'Beta', 'xtream', 'http://127.0.0.1:4921', 'u', 'p', 'BetaAgent/1', 'http://beta.example/', 1, true, 6, NULL, NULL,
+ (1, '2026-01-01', '2026-01-01', 'Alpha', 'm3u', 'http://127.0.0.1:4961/playlist.m3u', NULL, NULL, NULL, NULL, 2, false, 12, NULL, NULL,
+  '["http://127.0.0.1:4961/guide.xml"]', true, 0, '2026-01-02 10:00', 'ok', 5),
+ (2, '2026-01-01', '2026-01-01', 'Beta', 'xtream', 'http://127.0.0.1:4961', 'u', 'p', 'BetaAgent/1', 'http://beta.example/', 1, true, 6, NULL, NULL,
   '[]', true, 1, NULL, 'never', 0);
 INSERT INTO livetv_channels (id, "createdAt", "updatedAt", name, number, "logoPath", "groupName", "groupNameSource", enabled, "sortIndex", "guideChannelId", "guideMatchKind", "guideShiftMinutes") VALUES
- (1, '2026-01-01', '2026-01-01', 'One', 1, 'http://127.0.0.1:4921/logo/1.png', 'Old News', 'provider', true, 0, 'one.fr', 'id', 0),
+ (1, '2026-01-01', '2026-01-01', 'One', 1, 'http://127.0.0.1:4961/logo/1.png', 'Old News', 'provider', true, 0, 'one.fr', 'id', 0),
  (2, '2026-01-01', '2026-01-01', 'Two', 2, NULL, 'Mine', 'manual', true, 0, 'two.fr', 'name', 0),
  (3, '2026-01-01', '2026-01-01', 'Adult XXX 1', 3, NULL, 'Adult XXX', 'manual', true, 0, 'adult.fr', 'manual', 0),
  (4, '2026-01-01', '2026-01-01', 'No Group', NULL, NULL, '__livetv_ungrouped__', 'provider', true, 5, NULL, NULL, 0),
  (5, '2026-01-01', '2026-01-01', 'Hidden One', 5, NULL, 'News', 'provider', true, 0, 'hidden.fr', 'fuzzy', 30),
  (6, '2026-01-01', '2026-01-01', 'Disabled', 6, NULL, 'Sport', 'provider', false, 0, NULL, NULL, 0);
 INSERT INTO livetv_channel_streams (id, "createdAt", "updatedAt", "externalId", url, priority, "qualityLabel", "providerName", "userAgent", referer, "lastSeenAt", "channelId", "sourceId") VALUES
- (1, '2026-01-01', '2026-01-01', '101', 'http://127.0.0.1:4921/live/u/p/101.ts', 0, 'HD', 'One HD', NULL, NULL, '2026-01-02 10:00', 1, 1),
- (2, '2026-01-01', '2026-01-01', '102', 'http://127.0.0.1:4921/live/u/p/102.ts', 1, NULL, 'One FHD', NULL, NULL, '2026-01-02 10:00', 1, 1),
- (3, '2026-01-01', '2026-01-01', '103', 'http://127.0.0.1:4921/live/u/p/103.ts', 0, NULL, 'Two', NULL, NULL, '2026-01-02 10:00', 2, 1),
- (4, '2026-01-01', '2026-01-01', '301', 'http://127.0.0.1:4921/live/u/p/301.ts', 0, NULL, 'Adult XXX 1', NULL, NULL, '2026-01-02 10:00', 3, 1),
- (5, '2026-01-01', '2026-01-01', '105', 'http://127.0.0.1:4921/live/u/p/105.ts', 0, NULL, 'No Group', NULL, NULL, '2026-01-02 10:00', 4, 1),
- (6, '2026-01-01', '2026-01-01', '501', 'http://127.0.0.1:4921/live/u/p/501.ts', 0, NULL, 'Hidden One', NULL, NULL, '2026-01-02 10:00', 5, 1),
- (7, '2026-01-01', '2026-01-01', '601', 'http://127.0.0.1:4921/live/u/p/601.ts', 0, NULL, 'Disabled', NULL, NULL, '2026-01-02 10:00', 6, 1);
+ (1, '2026-01-01', '2026-01-01', '101', 'http://127.0.0.1:4961/live/u/p/101.ts', 0, 'HD', 'One HD', NULL, NULL, '2026-01-02 10:00', 1, 1),
+ (2, '2026-01-01', '2026-01-01', '102', 'http://127.0.0.1:4961/live/u/p/102.ts', 1, NULL, 'One FHD', NULL, NULL, '2026-01-02 10:00', 1, 1),
+ (3, '2026-01-01', '2026-01-01', '103', 'http://127.0.0.1:4961/live/u/p/103.ts', 0, NULL, 'Two', NULL, NULL, '2026-01-02 10:00', 2, 1),
+ (4, '2026-01-01', '2026-01-01', '301', 'http://127.0.0.1:4961/live/u/p/301.ts', 0, NULL, 'Adult XXX 1', NULL, NULL, '2026-01-02 10:00', 3, 1),
+ (5, '2026-01-01', '2026-01-01', '105', 'http://127.0.0.1:4961/live/u/p/105.ts', 0, NULL, 'No Group', NULL, NULL, '2026-01-02 10:00', 4, 1),
+ (6, '2026-01-01', '2026-01-01', '501', 'http://127.0.0.1:4961/live/u/p/501.ts', 0, NULL, 'Hidden One', NULL, NULL, '2026-01-02 10:00', 5, 1),
+ (7, '2026-01-01', '2026-01-01', '601', 'http://127.0.0.1:4961/live/u/p/601.ts', 0, NULL, 'Disabled', NULL, NULL, '2026-01-02 10:00', 6, 1);
 INSERT INTO livetv_user_channel_prefs (id, "createdAt", "updatedAt", favorite, hidden, "userId", "channelId") VALUES
  (1, '2026-01-01', '2026-01-01', true, false, 2, 2),
  (2, '2026-01-01', '2026-01-01', false, true, 2, 5);
@@ -38,11 +38,11 @@ INSERT INTO app_settings (key, value) VALUES
  ('livetv_restricted_groups_vanished', '{}');
 
 INSERT INTO livetv_guide_sources (id, "createdAt", "updatedAt", name, kind, url, "sourceId", "refreshIntervalHours", "timezoneOffsetMinutes", language, priority, enabled, "lastSyncStatus") VALUES
- (1, '2026-01-01', '2026-01-01', 'Feed A', 'xmltv', 'http://127.0.0.1:4921/guide.xml', NULL, 12, 0, NULL, 1, true, 'never'),
+ (1, '2026-01-01', '2026-01-01', 'Feed A', 'xmltv', 'http://127.0.0.1:4961/guide.xml', NULL, 12, 0, NULL, 1, true, 'never'),
  (2, '2026-01-01', '2026-01-01', 'Feed B', 'source', NULL, 1, 12, 60, 'fr', 0, true, 'never');
 INSERT INTO livetv_guide_channels (id, "createdAt", "updatedAt", "channelId", "displayNames", "iconUrl", "guideSourceId") VALUES
  (1, '2026-01-01', '2026-01-01', 'one.fr', '["One","One HD"]', NULL, 1),
- (2, '2026-01-01', '2026-01-01', 'two.fr', '["Two"]', 'http://127.0.0.1:4921/logo/2.png', 1),
+ (2, '2026-01-01', '2026-01-01', 'two.fr', '["Two"]', 'http://127.0.0.1:4961/logo/2.png', 1),
  (3, '2026-01-01', '2026-01-01', 'adult.fr', '[]', NULL, 1),
  (4, '2026-01-01', '2026-01-01', 'one.fr', '["One"]', NULL, 2);
 INSERT INTO livetv_programs (id, "createdAt", "updatedAt", "guideChannelId", "startsAt", "endsAt", title, subtitle, description, categories, "iconUrl",

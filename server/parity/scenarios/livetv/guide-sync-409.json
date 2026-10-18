@@ -14,6 +14,7 @@
   "steps": [
     {
       "as": "anon",
+      "baseEnv": "PARITY_LIVETV",
       "body": {
         "delay": 2.5
       },
@@ -25,12 +26,10 @@
         "status": 200
       },
       "method": "POST",
-      "path": "/_mode",
-      "stub": true
+      "path": "/_mode"
     },
     {
       "as": "admin",
-      "baseEnv": "PARITY_NEST",
       "body": {
         "name": "LiveTvGuideRefresh"
       },
@@ -76,6 +75,7 @@
     },
     {
       "as": "anon",
+      "baseEnv": "PARITY_LIVETV",
       "body": {},
       "expect": {
         "body": {
@@ -85,8 +85,7 @@
         "status": 200
       },
       "method": "POST",
-      "path": "/_mode",
-      "stub": true
+      "path": "/_mode"
     }
   ]
 }

@@ -1,0 +1,4 @@
+#!/bin/bash
+f=; a=()
+while [ $# -gt 0 ]; do case "$1" in -f) f=$2; shift 2;; *) a+=("$1"); shift;; esac; done
+if [ -n "$f" ]; then exec docker exec -i -e PGPASSWORD fliks-postgres-1 psql "${a[@]}" -f - < "$f"; else exec docker exec -i -e PGPASSWORD fliks-postgres-1 psql "${a[@]}"; fi

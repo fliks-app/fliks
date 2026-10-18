@@ -28,7 +28,7 @@
             "refreshIntervalHours": 12,
             "sourceId": null,
             "timezoneOffsetMinutes": 0,
-            "url": "http://127.0.0.1:4921/guide.xml"
+            "url": "http://127.0.0.1:4961/guide.xml"
           },
           {
             "enabled": true,
@@ -58,7 +58,7 @@
       "body": {
         "kind": "xmltv",
         "name": "New",
-        "url": "http://127.0.0.1:4921/guide.xml"
+        "url": "http://127.0.0.1:4961/guide.xml"
       },
       "expect": {
         "body": {
@@ -77,7 +77,7 @@
           "source": null,
           "sourceId": null,
           "timezoneOffsetMinutes": 0,
-          "url": "http://127.0.0.1:4921/guide.xml"
+          "url": "http://127.0.0.1:4961/guide.xml"
         },
         "status": 201
       },
@@ -141,7 +141,7 @@
             "refreshIntervalHours": 12,
             "sourceId": null,
             "timezoneOffsetMinutes": 0,
-            "url": "http://127.0.0.1:4921/guide.xml"
+            "url": "http://127.0.0.1:4961/guide.xml"
           },
           {
             "enabled": true,
@@ -192,7 +192,7 @@
             "refreshIntervalHours": 12,
             "sourceId": null,
             "timezoneOffsetMinutes": 0,
-            "url": "http://127.0.0.1:4921/guide.xml"
+            "url": "http://127.0.0.1:4961/guide.xml"
           }
         ],
         "status": 200
@@ -223,7 +223,7 @@
           "source": null,
           "sourceId": null,
           "timezoneOffsetMinutes": 0,
-          "url": "http://127.0.0.1:4921/guide.xml"
+          "url": "http://127.0.0.1:4961/guide.xml"
         },
         "status": 200
       },
@@ -235,7 +235,7 @@
       "body": {
         "kind": "xmltv",
         "sourceId": null,
-        "url": "http://127.0.0.1:4921/guide.xml"
+        "url": "http://127.0.0.1:4961/guide.xml"
       },
       "expect": {
         "body": {
@@ -254,7 +254,7 @@
           "source": null,
           "sourceId": null,
           "timezoneOffsetMinutes": 60,
-          "url": "http://127.0.0.1:4921/guide.xml"
+          "url": "http://127.0.0.1:4961/guide.xml"
         },
         "status": 200
       },
@@ -288,7 +288,7 @@
             "refreshIntervalHours": 12,
             "sourceId": null,
             "timezoneOffsetMinutes": 60,
-            "url": "http://127.0.0.1:4921/guide.xml"
+            "url": "http://127.0.0.1:4961/guide.xml"
           },
           {
             "enabled": false,
@@ -322,7 +322,7 @@
             "refreshIntervalHours": 12,
             "sourceId": null,
             "timezoneOffsetMinutes": 0,
-            "url": "http://127.0.0.1:4921/guide.xml"
+            "url": "http://127.0.0.1:4961/guide.xml"
           }
         ],
         "status": 200

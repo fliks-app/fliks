@@ -13,7 +13,7 @@
       "as": "admin",
       "body": {
         "kind": "m3u",
-        "url": "http://127.0.0.1:4921/playlist.m3u"
+        "url": "http://127.0.0.1:4961/playlist.m3u"
       },
       "expect": {
         "body": {
@@ -39,7 +39,7 @@
       "body": {
         "kind": "xtream",
         "password": "p",
-        "url": "http://127.0.0.1:4921",
+        "url": "http://127.0.0.1:4961",
         "username": "u"
       },
       "expect": {
@@ -115,7 +115,7 @@
       "as": "admin",
       "body": {
         "kind": "m3u",
-        "url": "http://127.0.0.1:4921/get.php?username=u&password=p&type=m3u"
+        "url": "http://127.0.0.1:4961/get.php?username=u&password=p&type=m3u"
       },
       "expect": {
         "body": {
@@ -131,7 +131,7 @@
           "ok": false,
           "onDemandCount": 0,
           "suggestion": {
-            "baseUrl": "http://127.0.0.1:4921",
+            "baseUrl": "http://127.0.0.1:4961",
             "password": "p",
             "suggestedKind": "xtream",
             "username": "u"

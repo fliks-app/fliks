@@ -21,7 +21,8 @@ INSERT INTO persons (id, "createdAt", "updatedAt", "tmdbId", name, "avatarUrl", 
  (9, '2026-01-01', '2026-01-01', 603, 'Shared Id', NULL, 'Fresh bio', NULL, NULL, NULL, 'Acting', '[]', now(), 'tmdb'),
  (10, '2026-01-01', '2026-01-01', 1010, 'Missing Avatar', NULL, 'Old bio', NULL, NULL, NULL, 'Acting', '[]', now() - interval '30 days', 'tmdb');
 ALTER TABLE persons DISABLE TRIGGER set_updated_at;
-UPDATE persons SET "searchVector" = to_tsvector('simple', name) WHERE id <> 5;
+-- the insert trigger indexed every row; person 5 stays never-indexed (persons.md rule 6)
+UPDATE persons SET "searchVector" = NULL WHERE id = 5;
 ALTER TABLE persons ENABLE TRIGGER set_updated_at;
 SELECT setval('persons_id_seq', 10);
 

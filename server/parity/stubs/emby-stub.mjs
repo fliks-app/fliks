@@ -1,4 +1,4 @@
-// Emby stand-in for parity (no dependencies): `node emby-stub.mjs [port]`, default 4882.
+// Emby stand-in for parity (no dependencies): `node emby-stub.mjs [port]`, default 4962.
 // The first path segment picks the mode: ok, 401, 500, slow (`/Users` waits 3 s), redirect, nousers, big.
 // `GET /__hits` lists the Library/Refresh calls, `DELETE /__hits` clears them.
 import { createServer } from 'node:http';
@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const port = Number(process.argv[2] ?? 4882);
+const port = Number(process.argv[2] ?? 4962);
 const dir = join(dirname(fileURLToPath(import.meta.url)), '../../fixtures/media-servers/emby');
 const load = (f) => JSON.parse(readFileSync(join(dir, f), 'utf8'));
 const [info, users, series, items] = ['system-info', 'users', 'series', 'items'].map((f) => load(`${f}.json`));

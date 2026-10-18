@@ -16,7 +16,7 @@
         "kind": "xtream",
         "name": "Dup",
         "password": "p",
-        "url": "http://127.0.0.1:4921",
+        "url": "http://127.0.0.1:4961",
         "username": "dup"
       },
       "expect": {
@@ -41,7 +41,7 @@
           "priority": 0,
           "referer": null,
           "refreshIntervalHours": 12,
-          "url": "http://127.0.0.1:4921",
+          "url": "http://127.0.0.1:4961",
           "userAgent": null,
           "username": "dup"
         },
@@ -127,7 +127,7 @@
                     "excludeGroupsPattern": null,
                     "expiresAt": null,
                     "guideUrls": [
-                      "http://127.0.0.1:4921/guide.xml"
+                      "http://127.0.0.1:4961/guide.xml"
                     ],
                     "id": 1,
                     "includeGroupsPattern": null,
@@ -143,12 +143,12 @@
                     "priority": 0,
                     "referer": null,
                     "refreshIntervalHours": 12,
-                    "url": "http://127.0.0.1:4921/playlist.m3u",
+                    "url": "http://127.0.0.1:4961/playlist.m3u",
                     "userAgent": null,
                     "username": null
                   },
                   "sourceId": 1,
-                  "url": "http://127.0.0.1:4921/live/u/p/101.ts",
+                  "url": "http://127.0.0.1:4961/live/u/p/101.ts",
                   "userAgent": null
                 },
                 {
@@ -171,7 +171,7 @@
                     "excludeGroupsPattern": null,
                     "expiresAt": null,
                     "guideUrls": [
-                      "http://127.0.0.1:4921/guide.xml"
+                      "http://127.0.0.1:4961/guide.xml"
                     ],
                     "id": 1,
                     "includeGroupsPattern": null,
@@ -187,12 +187,12 @@
                     "priority": 0,
                     "referer": null,
                     "refreshIntervalHours": 12,
-                    "url": "http://127.0.0.1:4921/playlist.m3u",
+                    "url": "http://127.0.0.1:4961/playlist.m3u",
                     "userAgent": null,
                     "username": null
                   },
                   "sourceId": 1,
-                  "url": "http://127.0.0.1:4921/live/u/p/102.ts",
+                  "url": "http://127.0.0.1:4961/live/u/p/102.ts",
                   "userAgent": null
                 },
                 {
@@ -229,12 +229,12 @@
                     "priority": 0,
                     "referer": null,
                     "refreshIntervalHours": 12,
-                    "url": "http://127.0.0.1:4921",
+                    "url": "http://127.0.0.1:4961",
                     "userAgent": null,
                     "username": "dup"
                   },
                   "sourceId": 3,
-                  "url": "http://127.0.0.1:4921/live/dup/p/8.ts",
+                  "url": "http://127.0.0.1:4961/live/dup/p/8.ts",
                   "userAgent": null
                 }
               ]
@@ -274,7 +274,7 @@
                     "excludeGroupsPattern": null,
                     "expiresAt": null,
                     "guideUrls": [
-                      "http://127.0.0.1:4921/guide.xml"
+                      "http://127.0.0.1:4961/guide.xml"
                     ],
                     "id": 1,
                     "includeGroupsPattern": null,
@@ -290,12 +290,12 @@
                     "priority": 0,
                     "referer": null,
                     "refreshIntervalHours": 12,
-                    "url": "http://127.0.0.1:4921/playlist.m3u",
+                    "url": "http://127.0.0.1:4961/playlist.m3u",
                     "userAgent": null,
                     "username": null
                   },
                   "sourceId": 1,
-                  "url": "http://127.0.0.1:4921/live/u/p/103.ts",
+                  "url": "http://127.0.0.1:4961/live/u/p/103.ts",
                   "userAgent": null
                 },
                 {
@@ -332,12 +332,12 @@
                     "priority": 0,
                     "referer": null,
                     "refreshIntervalHours": 12,
-                    "url": "http://127.0.0.1:4921",
+                    "url": "http://127.0.0.1:4961",
                     "userAgent": null,
                     "username": "dup"
                   },
                   "sourceId": 3,
-                  "url": "http://127.0.0.1:4921/live/dup/p/7.ts",
+                  "url": "http://127.0.0.1:4961/live/dup/p/7.ts",
                   "userAgent": null
                 }
               ]
@@ -391,12 +391,12 @@
                     "priority": 0,
                     "referer": null,
                     "refreshIntervalHours": 12,
-                    "url": "http://127.0.0.1:4921",
+                    "url": "http://127.0.0.1:4961",
                     "userAgent": null,
                     "username": "dup"
                   },
                   "sourceId": 3,
-                  "url": "http://127.0.0.1:4921/live/dup/p/5.ts",
+                  "url": "http://127.0.0.1:4961/live/dup/p/5.ts",
                   "userAgent": null
                 }
               ]
@@ -450,12 +450,12 @@
                     "priority": 0,
                     "referer": null,
                     "refreshIntervalHours": 12,
-                    "url": "http://127.0.0.1:4921",
+                    "url": "http://127.0.0.1:4961",
                     "userAgent": null,
                     "username": "dup"
                   },
                   "sourceId": 3,
-                  "url": "http://127.0.0.1:4921/live/dup/p/1.ts",
+                  "url": "http://127.0.0.1:4961/live/dup/p/1.ts",
                   "userAgent": null
                 }
               ]
@@ -509,12 +509,12 @@
                     "priority": 0,
                     "referer": null,
                     "refreshIntervalHours": 12,
-                    "url": "http://127.0.0.1:4921",
+                    "url": "http://127.0.0.1:4961",
                     "userAgent": null,
                     "username": "dup"
                   },
                   "sourceId": 3,
-                  "url": "http://127.0.0.1:4921/direct/3.ts",
+                  "url": "http://127.0.0.1:4961/direct/3.ts",
                   "userAgent": null
                 }
               ]
@@ -568,12 +568,12 @@
                     "priority": 0,
                     "referer": null,
                     "refreshIntervalHours": 12,
-                    "url": "http://127.0.0.1:4921",
+                    "url": "http://127.0.0.1:4961",
                     "userAgent": null,
                     "username": "dup"
                   },
                   "sourceId": 3,
-                  "url": "http://127.0.0.1:4921/live/dup/p/2.ts",
+                  "url": "http://127.0.0.1:4961/live/dup/p/2.ts",
                   "userAgent": null
                 }
               ]

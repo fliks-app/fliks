@@ -44,7 +44,7 @@
             "refreshIntervalHours": 12,
             "sourceId": null,
             "timezoneOffsetMinutes": 0,
-            "url": "http://127.0.0.1:4921/guide.xml"
+            "url": "http://127.0.0.1:4961/guide.xml"
           },
           {
             "enabled": true,
