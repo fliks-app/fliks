@@ -682,6 +682,9 @@ fn uses_stub(sc: &Value) -> bool {
         .is_some_and(|s| s.iter().any(|st| st["stub"].as_bool() == Some(true)))
 }
 
+/// Keys added to the contract after the Nest recordings (spec rows marked additive): never compared.
+const ADDITIVE: &[&str] = &["$..trackMarkers"];
+
 /// Step-level `ignore`: paths dropped from that step's body only.
 fn step_ignore(step: &Value) -> Vec<Vec<Seg>> {
     step["ignore"]
@@ -783,13 +786,12 @@ async fn run(ctx: &Ctx, sc: &mut Value, record: bool) -> Vec<String> {
     fs_setup(sc);
     let ignore: Vec<Vec<Seg>> = sc["ignore"]
         .as_array()
-        .map(|a| {
-            a.iter()
-                .filter_map(|p| p.as_str())
-                .map(parse_path)
-                .collect()
-        })
-        .unwrap_or_default();
+        .into_iter()
+        .flatten()
+        .filter_map(|p| p.as_str())
+        .chain(ADDITIVE.iter().copied())
+        .map(parse_path)
+        .collect();
     let unordered: Vec<Vec<Seg>> = sc["unordered"]
         .as_array()
         .map(|a| {

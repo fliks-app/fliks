@@ -134,3 +134,29 @@ async fn paths_and_libraries_follow_the_caller(pool: PgPool) {
     let (s, _) = c.get(&c.plain, "/api/media?page=0").await;
     assert_eq!(s, 400);
 }
+
+#[sqlx::test(migrations = false)]
+async fn stream_info_tracks_carry_their_markers(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    sqlx::query(r#"UPDATE media_files SET "streamInfo" = $1 WHERE "mediaId" = 1"#)
+        .bind(
+            serde_json::json!({"video": [{}], "audio": [{"title": "Commentary"}, {}],
+            "subtitles": [{"forced": true, "hearingImpaired": false}]}),
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (_, m) = c.get(&c.admin, "/api/media/1").await;
+    let info = &m["files"][0]["streamInfo"];
+    assert_eq!(
+        info["audio"][0]["trackMarkers"],
+        serde_json::json!(["commentary"])
+    );
+    assert_eq!(info["audio"][1]["trackMarkers"], serde_json::json!([]));
+    assert_eq!(
+        info["subtitles"][0]["trackMarkers"],
+        serde_json::json!(["forced"])
+    );
+    let (_, other) = c.get(&c.admin, "/api/media/2").await;
+    assert!(other["files"][0]["streamInfo"].is_null());
+}

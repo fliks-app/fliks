@@ -21,7 +21,7 @@ use axum::{
     extract::{Query, State},
     http::{HeaderMap, StatusCode},
 };
-use fliks_domain::edl::shift_ranges;
+use fliks_domain::{edl::shift_ranges, track_markers};
 use fliks_engine_core::{
     api::{
         ClientInfo, DecideMedia, DecideRequest, DecideSelection, DeviceProfile, JobPriority,
@@ -393,6 +393,25 @@ fn assemble(
     else {
         unreachable!("PlaybackInfo is an object")
     };
+    let audio = file.info.as_ref().map_or(&[][..], |i| &i.audio[..]);
+    for t in out
+        .get_mut("audioTracks")
+        .and_then(Value::as_array_mut)
+        .into_iter()
+        .flatten()
+    {
+        let source = t["index"].as_u64().and_then(|i| audio.get(i as usize));
+        let stream = source.map_or(Value::Null, |s| json!(s));
+        if let Some(o) = t.as_object_mut() {
+            if let Some(title) = source.and_then(|s| s.title.clone()) {
+                o.insert("title".into(), title.into());
+            }
+            o.insert(
+                "trackMarkers".into(),
+                json!(track_markers::audio_markers(&stream)),
+            );
+        }
+    }
     let mut put = |k: &str, v: Value| {
         out.insert(k.to_owned(), v);
     };
