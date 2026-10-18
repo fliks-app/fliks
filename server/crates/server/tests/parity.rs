@@ -967,8 +967,9 @@ async fn parity() {
         }
         // untagged scenarios are recorded with the engine up only
         let rec = record && (sc["engine"].is_string() || engine == "up");
+        let steps = sc["steps"].clone();
         let errs = run(&ctx, &mut sc, rec).await;
-        if rec && sc["deviation"].is_null() {
+        if rec && sc["deviation"].is_null() && sc["steps"] != steps {
             fs::write(f, serde_json::to_string_pretty(&sc).unwrap() + "\n").unwrap();
         }
         let line = |tag: &str| {
