@@ -58,7 +58,8 @@ A `process` manifest additionally requires these seven keys — reference `fk-pl
   | `config:rw` | `config.get`, `config.set` |
 
   A method whose scopes you have not all declared rejects with `missing scope "<scope>" required
-  for "<method>"`. `HOST_METHOD_SCOPES` in the contract is the source this table restates.
+  for "<method>"`. The `call!` sites in `server/crates/server/src/plugins/imports.rs` are the
+  source this table restates.
 - `ingestRoots[]` — the allowlist `library.ingest` paths must fall under; may be empty.
 
 Optional beyond that:
