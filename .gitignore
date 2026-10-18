@@ -60,7 +60,6 @@ store/**/*.wgt
 store/**/*.ipk
 store/**/*.ipa
 volumes/*
-/backend/images/
 /scripts/
 logos/
 plans/

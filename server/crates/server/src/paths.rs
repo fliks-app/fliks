@@ -1,4 +1,4 @@
-//! Nest's `getDataDir` / `getCacheDir` (`common/constants/paths.ts`): the directories both processes share.
+//! The data and cache directories, resolved as Nest's `getDataDir` / `getCacheDir` (`common/constants/paths.ts`).
 use std::{
     path::{Path, PathBuf},
     sync::OnceLock,

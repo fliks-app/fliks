@@ -36,10 +36,11 @@ services:
     # server (set Settings > General > Public address if it isn't obvious).
     ports:
       - '4848:4848'
-    # Set this on a small box. Node reads the cgroup limit and sizes its heap
-    # from it; with none it assumes the whole host and reserves ~4 GB, leaving
-    # nothing for the ffmpeg processes a scan runs alongside.
+    # Set these on a shared box. A 4K HDR transcode takes ~700 MB of RAM; the
+    # engine runs one software ffmpeg per CPU of the limit minus one (at least
+    # one), so 4 CPUs give 3 concurrent transcodes.
     # mem_limit: 4g
+    # cpus: '4'
     environment:
       PORT: 4848
       DB_HOST: postgres
@@ -87,7 +88,6 @@ services:
 
       # ---- Hardware (optional) ----
       # FLIKS_OPENCL_DEVICE: '0.0'               # pin platform.device for the OpenCL tone-map
-      # THUMB_HWACCEL_DEVICE: off                # thumbnails: off, or a render node
     volumes:
       # Library root — this is the path you type when adding a library in the UI.
       - /path/to/your/media:/medias

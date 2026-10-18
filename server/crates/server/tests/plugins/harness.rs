@@ -256,8 +256,7 @@ pub async fn harness_with(
         .unwrap();
         tokens.push(st.jwt.sign_access(id, name).unwrap().token);
     }
-    let nest = fliks_engine::gateway::Upstream::parse("http://127.0.0.1:1").unwrap();
-    let app = app::router(st.clone(), nest, None, "/nonexistent".into(), None);
+    let app = app::router(st.clone(), None, "/nonexistent".into(), None);
     H {
         user: tokens.pop().unwrap(),
         admin: tokens.pop().unwrap(),

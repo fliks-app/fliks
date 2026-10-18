@@ -7,7 +7,6 @@ use sqlx::postgres::PgConnectOptions;
 use std::path::PathBuf;
 
 const DEFAULT_PORT: u16 = 4849;
-const DEFAULT_NEST_CMD: &str = "node dist/main";
 const DEFAULT_JWT_EXPIRATION_SECS: u64 = 3600;
 const DEFAULT_STREAM_TOKEN_TTL_SECS: u64 = 12 * 3600;
 const DEFAULT_REFRESH_TOKEN_TTL_DAYS: i64 = 60;
@@ -45,10 +44,6 @@ pub struct Config {
     pub refresh_token_ttl_days: i64,
     pub engine_url: String,
     pub engine_token: String,
-    pub nest_url: Option<String>,
-    pub nest_cmd: Vec<String>,
-    pub nest_port: u16,
-    pub bridge_token: String,
     pub metadata: MetadataConfig,
 }
 
@@ -92,14 +87,6 @@ impl Config {
             .username(&get("DB_USERNAME").unwrap_or_else(|| "fliks".into()))
             .password(&db_password)
             .database(&get("DB_NAME").unwrap_or_else(|| "fliks".into()));
-        let nest_cmd = match (text("FLIKS_NODE_BIN"), text("FLIKS_NEST_ENTRY")) {
-            (Some(bin), Some(entry)) => vec![bin, entry],
-            _ => text("FLIKS_NEST_CMD")
-                .unwrap_or_else(|| DEFAULT_NEST_CMD.into())
-                .split_whitespace()
-                .map(str::to_owned)
-                .collect(),
-        };
         Self {
             port,
             db,
@@ -125,10 +112,6 @@ impl Config {
             ),
             engine_url: get("FLIKS_ENGINE_URL").unwrap_or_default(),
             engine_token: get("FLIKS_ENGINE_TOKEN").unwrap_or_default(),
-            nest_url: text("FLIKS_NEST_URL"),
-            nest_cmd,
-            nest_port: number("FLIKS_NEST_PORT", port.saturating_add(1)),
-            bridge_token: text("FLIKS_BRIDGE_TOKEN").unwrap_or_else(|| random_hex(32)),
             metadata: MetadataConfig {
                 tmdb_key: text("TMDB_API_KEY").unwrap_or_default(),
                 tvdb_key: text("TVDB_API_KEY").unwrap_or_default(),
@@ -163,13 +146,11 @@ mod tests {
     #[test]
     fn defaults() {
         let c = cfg(&[]);
-        assert_eq!((c.port, c.nest_port), (4849, 4850));
-        assert_eq!(c.nest_cmd, ["node", "dist/main"]);
+        assert_eq!(c.port, 4849);
         assert_eq!(c.db.get_host(), "localhost");
         assert_eq!(c.db.get_port(), 5432);
         assert_eq!(c.db.get_username(), "fliks");
-        assert_eq!(c.bridge_token.len(), 64);
-        assert!(c.nest_url.is_none() && c.cors_origin.is_none() && c.jwt_secret.is_none());
+        assert!(c.cors_origin.is_none() && c.jwt_secret.is_none());
         assert_eq!(
             (
                 c.jwt_ttl_secs,
@@ -202,39 +183,12 @@ mod tests {
     fn port_falls_back_like_number_or_default() {
         assert_eq!(cfg(&[("PORT", "abc")]).port, 4849);
         assert_eq!(cfg(&[("PORT", "0")]).port, 4849);
-        let c = cfg(&[("PORT", "3001")]);
-        assert_eq!((c.port, c.nest_port), (3001, 3002));
-        assert_eq!(
-            cfg(&[("PORT", "3001"), ("FLIKS_NEST_PORT", "9")]).nest_port,
-            9
-        );
-    }
-
-    #[test]
-    fn node_bin_and_entry_win_over_nest_cmd_and_keep_spaces() {
-        let c = cfg(&[
-            ("FLIKS_NODE_BIN", "/a b/node"),
-            ("FLIKS_NEST_ENTRY", "/c d/main.js"),
-            ("FLIKS_NEST_CMD", "ignored"),
-        ]);
-        assert_eq!(c.nest_cmd, ["/a b/node", "/c d/main.js"]);
-        assert_eq!(
-            cfg(&[("FLIKS_NEST_CMD", " node  x.js ")]).nest_cmd,
-            ["node", "x.js"]
-        );
-        assert_eq!(
-            cfg(&[("FLIKS_NODE_BIN", "node")]).nest_cmd,
-            ["node", "dist/main"]
-        );
+        assert_eq!(cfg(&[("PORT", "3001")]).port, 3001);
     }
 
     #[test]
     fn empty_values_are_unset() {
-        let c = cfg(&[
-            ("JWT_SECRET", ""),
-            ("CORS_ORIGIN", " "),
-            ("FLIKS_NEST_URL", ""),
-        ]);
-        assert!(c.jwt_secret.is_none() && c.cors_origin.is_none() && c.nest_url.is_none());
+        let c = cfg(&[("JWT_SECRET", ""), ("CORS_ORIGIN", " ")]);
+        assert!(c.jwt_secret.is_none() && c.cors_origin.is_none());
     }
 }

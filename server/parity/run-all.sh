@@ -2,7 +2,7 @@
 # One command for the whole parity suite: builds, starts every stub/fixture/engine/target it needs, runs each
 # scenario group in each mode, prints one table, tears everything down. Usage: server/parity/run-all.sh [filter]
 # Ports 4960-4999 are reserved: 4960 arr stub, 4961 livetv fixture, 4962 emby stub, 4963 engine stub,
-# 4964 provider stub, 4965 engine, 4966 Rust target, 4967 Nest (behind Rust).
+# 4964 provider stub, 4965 engine, 4966 fliks-server.
 set -uo pipefail
 
 SERVER=$(cd "$(dirname "$0")/.." && pwd)
@@ -14,7 +14,7 @@ export FLIKS_PARITY_ROOT=$RUN/root # media and fixtures of this run only; other 
 DBPFX=${PARITY_DB_PREFIX:-pall_}
 HEAVY=${HEAVY:-fliks-heavy}
 FILTER=${1:-}
-P_ARR=4960 P_LIVETV=4961 P_EMBY=4962 P_ESTUB=4963 P_PROV=4964 P_ENGINE=4965 P_TARGET=4966 P_NEST=4967
+P_ARR=4960 P_LIVETV=4961 P_EMBY=4962 P_ESTUB=4963 P_PROV=4964 P_ENGINE=4965 P_TARGET=4966
 PIDS=()
 
 log() { echo "[run-all] $*" >&2; }
@@ -52,7 +52,7 @@ wait_http() { # wait_http <url> [seconds]
 # ---- preconditions ----
 for t in docker ffmpeg python3 node curl sha256sum; do command -v "$t" >/dev/null || die "missing tool: $t"; done
 docker exec fliks-postgres-1 true 2>/dev/null || die "docker container fliks-postgres-1 is not running"
-for p in $P_ARR $P_LIVETV $P_EMBY $P_ESTUB $P_PROV $P_ENGINE $P_TARGET $P_NEST; do
+for p in $P_ARR $P_LIVETV $P_EMBY $P_ESTUB $P_PROV $P_ENGINE $P_TARGET; do
   ss -ltn | grep -q "[:.]$p " && die "port $p is in use (4960-4999 are reserved for run-all.sh)"
 done
 trap cleanup EXIT # only now: a second run stopped by the port check must not drop the first run's databases
@@ -71,12 +71,6 @@ for l in sys.stdin:
     if m.get("executable") and m.get("target",{}).get("name")=="parity": print(m["executable"])' | tail -1)
 [ -x "$TESTEXE" ] || die "parity runner binary not found"
 BIN=$CARGO_TARGET_DIR/debug/fliks-server
-
-# Nest sits behind Rust for the routes Rust does not own yet
-if [ ! -d "$ROOT/backend/node_modules" ]; then log "npm ci"; (cd "$ROOT/backend" && $HEAVY npm ci) || die "npm ci failed"; fi
-if [ ! -f "$ROOT/backend/dist/main.js" ] || [ -n "$(find "$ROOT/backend/src" -newer "$ROOT/backend/dist/main.js" -print -quit)" ]; then
-  log "building Nest"; (cd "$ROOT/backend" && $HEAVY npm run build) || die "nest build failed"
-fi
 
 # ---- engine: the pinned release, checked against engine.lock ----
 ENGVER=${PARITY_ENGINE_VERSION:-$(sed -n 's/^version=//p' "$ROOT/engine.lock")}
@@ -130,8 +124,8 @@ run_mode() { # run_mode <engine up|down|stub> <providers 0|1> <filter>
     stub) ENG_URL=http://127.0.0.1:$P_ESTUB ENG_TOK=stub ;;
   esac
   local penv=(DB_HOST=$DBHOST DB_PORT=5432 DB_USERNAME=$DBUSER DB_PASSWORD=$DBPASS DB_NAME=$DB
-    PORT=$P_TARGET FLIKS_NEST_PORT=$P_NEST JWT_SECRET=parity-secret FLIKS_PLUGINS_DISABLED=1 FLIKS_DISABLE_UPDATE_CHECK=1
-    FLIKS_BRIDGE_TOKEN=pall-bridge FLIKS_CAST_DIR="$ROOT/backend/public" RUST_LOG=info
+    PORT=$P_TARGET JWT_SECRET=parity-secret FLIKS_PLUGINS_DISABLED=1 FLIKS_DISABLE_UPDATE_CHECK=1
+    FLIKS_CAST_DIR="$ROOT/server/public" RUST_LOG=info
     FLIKS_CONF_DIR="$d/conf" FLIKS_DATA_DIR="$FLIKS_PARITY_ROOT/data" FLIKS_CACHE_DIR="$d/cache" FLIKS_RUNTIME_DIR="$d/runtime"
     FLIKS_ENGINE_URL=$ENG_URL FLIKS_ENGINE_TOKEN=$ENG_TOK)
   # provider hosts are the stub in every mode, so a keyless run never leaves loopback
@@ -139,7 +133,7 @@ run_mode() { # run_mode <engine up|down|stub> <providers 0|1> <filter>
     FLIKS_TMDB_IMAGE_URL=http://127.0.0.1:$P_PROV/img/t/p FLIKS_SUBTITLE_PROVIDERS_URL=http://127.0.0.1:$P_PROV)
   [ "$prov" = 1 ] && penv+=(TMDB_API_KEY=tmdb-parity TVDB_API_KEY=tvdb-parity)
   psql_admin -d postgres -c "DROP DATABASE IF EXISTS $DB WITH (FORCE)" -c "CREATE DATABASE $DB TEMPLATE $TPL"
-  start "target-$1-$2" "$ROOT/backend" env -u TMDB_API_KEY -u TVDB_API_KEY -u DATABASE_URL -u INVOCATION_ID -u pm_id -u FLIKS_SUPERVISED "${penv[@]}" "$BIN"
+  start "target-$1-$2" "$d" env -u TMDB_API_KEY -u TVDB_API_KEY -u DATABASE_URL -u INVOCATION_ID -u pm_id -u FLIKS_SUPERVISED "${penv[@]}" "$BIN"
   if ! wait_http "http://127.0.0.1:$P_TARGET/api/auth/login" 90; then
     log "target did not start, see $RUN/target-$1-$2.log"; SUMMARY+=("$tag|ERROR|0|0|0|target"); FAILED=1
     stop_all_but_stubs; return

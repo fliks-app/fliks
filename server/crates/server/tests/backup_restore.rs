@@ -115,9 +115,8 @@ async fn ctx(s: &Scratch, url: &str) -> Ctx {
         .unwrap();
         toks.push(st.jwt.sign_access(id, name).unwrap().token);
     }
-    let nest = fliks_engine::gateway::Upstream::parse("http://127.0.0.1:1").unwrap();
     Ctx {
-        app: app::router(st.clone(), nest, None, "/nonexistent".into(), None),
+        app: app::router(st.clone(), None, "/nonexistent".into(), None),
         st,
         limited: toks.pop().unwrap(),
         admin: toks.pop().unwrap(),

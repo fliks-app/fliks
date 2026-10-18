@@ -4,22 +4,14 @@ use crate::{
     metadata, notifications, persons, playback, playlists, profiles, qoe, remote, requests, roles,
     settings, social, state::AppState, subtitles, system, users,
 };
-use axum::{
-    Router,
-    extract::{Request, State},
-    middleware::{Next, from_fn_with_state},
-    response::{IntoResponse, Response},
-    routing::{any, any_service},
-};
-use fliks_engine::gateway::{self, RouteTable, Upstream};
+use axum::{Router, extract::Request, response::Response, routing::any};
 use std::path::PathBuf;
-use tower::ServiceExt;
 use utoipa::OpenApi;
 
 /// Nest's default JSON limit (`bootstrap.md` rule 10).
 pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
 
-/// A route is ported iff it is listed here (plan §4.3).
+/// With the per-domain docs merged by `openapi()`, every route the server answers.
 #[derive(OpenApi)]
 #[openapi(
     info(title = "Fliks", version = "1"),
@@ -321,42 +313,22 @@ pub fn openapi() -> utoipa::openapi::OpenApi {
     doc
 }
 
-/// Rust-owned routes and static files get the layers; the forwarded paths do not, as Nest sets its own CORS headers.
+/// Unmatched `/api` paths and undeclared methods on owned paths get Nest's `Cannot` 404, never a 405.
 pub fn router(
     state: AppState,
-    nest: Upstream,
     client_dir: Option<PathBuf>,
     cast_dir: PathBuf,
     cors_origin: Option<String>,
 ) -> Router {
-    let forwarder = gateway::router(
-        RouteTable::from_json("[]").expect("empty table"),
-        nest,
-        None,
-    );
     let local = system::router()
         .merge(api().with_state(state))
-        .route("/internal", any(internal_404))
-        .route("/internal/", any(internal_404))
-        .route("/internal/{*rest}", any(internal_404))
+        .route("/api", any(unowned))
+        .route("/api/", any(unowned))
+        .route("/api/{*rest}", any(unowned))
+        .method_not_allowed_fallback(unowned)
         .fallback_service(static_files::router(client_dir, cast_dir));
-    // Preflights of owned paths stay with the Rust CORS layer, so they answer while Nest is down.
     let exempt = crate::plugins::routes::reads_own_body;
-    let cors = layers::apply(Router::new(), cors_origin.clone(), BODY_LIMIT_BYTES, exempt);
-    let unowned = forwarder
-        .clone()
-        .layer(from_fn_with_state(cors, preflight_here));
-    // Merged after the layers so Nest answers the methods Rust does not own, unlayered instead of a 405.
-    let local = layers::apply(local, cors_origin, BODY_LIMIT_BYTES, exempt);
-    let local = openapi()
-        .paths
-        .paths
-        .keys()
-        .filter(|p| !crate::plugins::routes::PROXY_FALLBACK.contains(&p.as_str()))
-        .fold(local, |r, p| r.route(p, any_service(unowned.clone())));
-    ["/api", "/api/", "/api/{*rest}"]
-        .into_iter()
-        .fold(local, |r, p| r.route(p, any_service(forwarder.clone())))
+    layers::apply(local, cors_origin, BODY_LIMIT_BYTES, exempt)
 }
 
 /// Ported domain routers are merged here, one `.merge(...)` per domain.
@@ -394,13 +366,6 @@ fn api() -> Router<AppState> {
         .merge(crate::plugins::routes::router())
 }
 
-async fn preflight_here(State(cors): State<Router>, req: Request, next: Next) -> Response {
-    if layers::is_preflight(&req) {
-        return cors.oneshot(req).await.into_response();
-    }
-    next.run(req).await
-}
-
-async fn internal_404(req: Request) -> Response {
+async fn unowned(req: Request) -> Response {
     static_files::cannot(&req)
 }

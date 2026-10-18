@@ -1,8 +1,8 @@
 //! Shared handler state (`State<AppState>`); no DI container, plain fields.
 use crate::{
-    auth_token::Jwt, bridge::Bridge, config::Config, engine::Engine, events::Hub,
-    images::ImageStore, jobs::Running, metadata::Metadata, nest, playback::Debounce,
-    presence::Presence, qoe::Qoe, stream, system,
+    auth_token::Jwt, config::Config, engine::Engine, events::Hub, images::ImageStore,
+    jobs::Running, metadata::Metadata, playback::Debounce, presence::Presence, qoe::Qoe, stream,
+    system,
 };
 use sqlx::PgPool;
 use std::sync::Arc;
@@ -13,7 +13,6 @@ pub struct AppState {
     pub cfg: Arc<Config>,
     pub jwt: Arc<Jwt>,
     pub engine: Engine,
-    pub bridge: Bridge,
     pub hub: Hub,
     pub presence: Presence,
     pub qoe: Qoe,
@@ -31,7 +30,7 @@ pub struct AppState {
 }
 
 impl AppState {
-    /// `jwt_secret` is the resolved secret (`jwt_secret::resolve`); TTLs and the bridge token come from `cfg`.
+    /// `jwt_secret` is the resolved secret (`jwt_secret::resolve`); TTLs come from `cfg`.
     pub fn new(db: PgPool, cfg: Config, jwt_secret: &str) -> Self {
         let presence = Presence::default();
         let qoe = Qoe::new(db.clone());
@@ -47,7 +46,6 @@ impl AppState {
                 cfg.stream_token_ttl_secs,
             )),
             engine: Engine::new(&cfg.engine_url, &cfg.engine_token),
-            bridge: Bridge::new(&nest::url(&cfg), &cfg.bridge_token),
             hub: Hub::new(),
             presence,
             qoe,

@@ -45,9 +45,8 @@ async fn ctx(pool: PgPool) -> Ctx {
     .execute(&pool)
     .await
     .unwrap();
-    let nest = fliks_engine::gateway::Upstream::parse("http://127.0.0.1:1").unwrap();
     Ctx {
-        app: app::router(st.clone(), nest, None, "/nonexistent".into(), None),
+        app: app::router(st.clone(), None, "/nonexistent".into(), None),
         st,
         pool,
         tokens,

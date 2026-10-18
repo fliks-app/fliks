@@ -21,24 +21,6 @@ use fliks_domain::plugins::{
 use serde_json::{Value, json};
 use utoipa::OpenApi;
 
-/// Paths whose other methods reach the proxy instead of the Nest forwarder.
-pub const PROXY_FALLBACK: [&str; 14] = [
-    "/api/plugins/{pluginId}/{*splat}",
-    "/api/plugins/import/inspect",
-    "/api/plugins/import/confirm",
-    "/api/plugins/sources/{id}",
-    "/api/plugins/sources/{id}/catalog",
-    "/api/plugins/sources/{id}/refresh",
-    "/api/plugins/sources/{id}/inspect",
-    "/api/plugins/{pluginId}/enable",
-    "/api/plugins/{pluginId}/disable",
-    "/api/plugins/{pluginId}/restart",
-    "/api/plugins/{pluginId}/events/test",
-    "/api/plugins/{pluginId}/logo",
-    "/api/plugins/{pluginId}/export",
-    "/api/plugins/{pluginId}/import",
-];
-
 #[derive(OpenApi)]
 #[openapi(paths(
     list,

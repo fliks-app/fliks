@@ -175,22 +175,18 @@ impl Hub {
         &self.0.activity
     }
 
-    /// Every event of both kinds, whatever its audience: the in-process subscribers' feed
-    /// (`GET /internal/events/stream`). At-most-once; a slow receiver lags and loses events.
+    /// Every event of both kinds, whatever its audience: the in-process subscribers' feed.
+    /// At-most-once; a slow receiver lags and loses events.
     pub fn subscribe(&self) -> broadcast::Receiver<Arc<Bus>> {
         self.0.bus.subscribe()
     }
 
-    /// Closes every SSE stream and ends the internal stream, so a graceful shutdown is not held open.
+    /// Closes every SSE stream and refuses new ones, so a graceful shutdown is not held open.
     pub fn shutdown(&self) {
         self.0.down.send_replace(true);
         for (_, c) in self.lock().conns.drain() {
             let _ = c.tx.send(Msg::Close);
         }
-    }
-
-    pub(super) fn down(&self) -> watch::Receiver<bool> {
-        self.0.down.subscribe()
     }
 
     /// Set once by the remote module: widens `remote.state|targets_changed|stopped` sent through
@@ -995,7 +991,7 @@ mod tests {
         let _ = got(&mut c);
         hub.shutdown();
         assert_eq!(got(&mut c), ["<close>"]);
-        assert!(*hub.down().borrow());
+        assert!(*hub.0.down.borrow());
         let mut late = hub.connect(1, Identity::default());
         assert_eq!(got(&mut late), ["sse.connected", "<close>"]);
     }

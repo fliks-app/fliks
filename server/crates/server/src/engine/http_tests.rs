@@ -5,72 +5,18 @@ use super::{
     *,
 };
 use crate::{app, config::Config, state::AppState};
-use axum::{
-    Json, Router,
-    body::Body,
-    extract::{Request, State},
-    http::StatusCode,
-};
+use axum::{Router, body::Body, extract::Request};
 use serde_json::{Value, json};
 use sqlx::PgPool;
-use std::{
-    fs,
-    path::PathBuf,
-    sync::{Arc, Mutex},
-};
+use std::{fs, path::PathBuf};
 use tower::ServiceExt;
 
 const SECRET: &str = "0123456789abcdef0123456789abcdef";
-const BRIDGE: &str = "bridge-token";
-
-type Calls = Arc<Mutex<Vec<(String, String, Value)>>>;
-
-/// Stands in for Nest: records the bridge calls.
-struct FakeNest {
-    url: String,
-    calls: Calls,
-}
-
-#[derive(Clone)]
-struct NestState {
-    calls: Calls,
-}
-
-async fn nest_handler(State(s): State<NestState>, req: Request) -> (StatusCode, Json<Value>) {
-    let (parts, body) = req.into_parts();
-    let bytes = axum::body::to_bytes(body, 1 << 20).await.unwrap();
-    let auth = parts
-        .headers
-        .get("authorization")
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or_default()
-        .to_owned();
-    let body = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
-    s.calls
-        .lock()
-        .unwrap()
-        .push((parts.uri.path().to_owned(), auth, body));
-    (StatusCode::NO_CONTENT, Json(Value::Null))
-}
-
-async fn fake_nest() -> FakeNest {
-    let calls: Calls = Arc::default();
-    let state = NestState {
-        calls: calls.clone(),
-    };
-    let app = Router::new().fallback(nest_handler).with_state(state);
-    let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let url = format!("http://{}", l.local_addr().unwrap());
-    tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
-    FakeNest { url, calls }
-}
-
 struct Ctx {
     app: Router,
     st: AppState,
     pool: PgPool,
     fake: Fake,
-    nest: FakeNest,
     dir: PathBuf,
 }
 
@@ -84,20 +30,16 @@ async fn ctx(pool: PgPool, boot_engine: bool) -> Ctx {
     crate::db::migrate(&pool).await.unwrap();
     let fake = Fake::start().await;
     fake.hello(Some(hello_body(&RUNTIME, "x")));
-    let nest = fake_nest().await;
     let env = [
         ("FLIKS_ENGINE_URL", fake.url.clone()),
         ("FLIKS_ENGINE_TOKEN", "tok".into()),
-        ("FLIKS_NEST_URL", nest.url.clone()),
-        ("FLIKS_BRIDGE_TOKEN", BRIDGE.into()),
     ];
     let cfg = Config::from_lookup(|k| env.iter().find(|(n, _)| *n == k).map(|(_, v)| v.clone()));
     let st = AppState::new(pool.clone(), cfg, SECRET);
     if boot_engine {
         st.engine.start(pool.clone(), 4849).await;
     }
-    let upstream = fliks_engine::gateway::Upstream::parse("http://127.0.0.1:1").unwrap();
-    let app = app::router(st.clone(), upstream, None, "/nonexistent".into(), None);
+    let app = app::router(st.clone(), None, "/nonexistent".into(), None);
     let dir = std::env::temp_dir().join(format!(
         "fliks-engine-test-{}",
         crate::config::random_hex(6)
@@ -108,7 +50,6 @@ async fn ctx(pool: PgPool, boot_engine: bool) -> Ctx {
         st,
         pool,
         fake,
-        nest,
         dir,
     }
 }
@@ -244,7 +185,7 @@ mod remote {
     }
 
     #[sqlx::test(migrations = false)]
-    async fn put_saves_the_three_keys_reconnects_and_tells_nest(pool: PgPool) {
+    async fn put_saves_the_three_keys_and_reconnects(pool: PgPool) {
         let c = ctx(pool, true).await;
         let (admin, _) = admin_and_plain(&c).await;
         let other = Fake::start().await;
@@ -275,22 +216,13 @@ mod remote {
             other.seen("PUT", "/v1/config")[0].body["pathMappings"],
             json!([{"from": "/nas", "to": "/data"}])
         );
-        let calls = c.nest.calls.lock().unwrap();
-        let (path, bearer, sent) = &calls[0];
-        assert_eq!(
-            (path.as_str(), bearer.as_str()),
-            ("/internal/bridge/settings-changed", "Bearer bridge-token")
-        );
-        assert_eq!(
-            *sent,
-            json!({"keys": ["engine_url", "engine_token", "engine_path_mappings"], "origin": "own-module-write"})
-        );
     }
 
     #[sqlx::test(migrations = false)]
     async fn put_keeps_the_token_on_blank_or_absent_and_clears_it_on_null(pool: PgPool) {
         let c = ctx(pool, true).await;
         let (admin, _) = admin_and_plain(&c).await;
+        let mut rx = c.st.hub.subscribe();
         let put = |token: Option<Value>| {
             let mut body = json!({"url": c.fake.url, "pathMappings": []});
             if let Some(t) = token {
@@ -310,14 +242,18 @@ mod remote {
         let (_, b) = put(Some(Value::Null)).await;
         assert_eq!(setting(&c.pool, "engine_token").await, None);
         assert!(b.get("secretsSet").is_none());
-        let calls = c.nest.calls.lock().unwrap();
-        let keys: Vec<_> = calls
-            .iter()
-            .map(|(_, _, b)| b["keys"].as_array().unwrap().len())
-            .collect();
+        let mut keys = vec![];
+        while let Ok(bus) = rx.try_recv() {
+            if let crate::events::Bus::Domain(crate::events::DomainEvent::SettingsChanged { key }) =
+                &*bus
+            {
+                keys.push(key.clone());
+            }
+        }
+        let token_writes = keys.iter().filter(|k| *k == "engine_token").count();
         assert_eq!(
-            keys,
-            [3, 2, 2, 3],
+            (keys.len(), token_writes),
+            (10, 2),
             "a kept token is not announced as written"
         );
     }

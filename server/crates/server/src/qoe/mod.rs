@@ -1,5 +1,5 @@
-//! Playback QoE (`docs/spec/qoe.md`): in-memory trackers, the 30 s flush, the daily purge, the admin
-//! reads and the live TV bridges (`docs/bridge.md` rows `/internal/qoe/*`).
+//! Playback QoE (`docs/spec/qoe.md`): in-memory trackers, the 30 s flush, the daily purge and the
+//! admin reads.
 mod playbacks;
 mod routes;
 mod store;
@@ -232,7 +232,7 @@ impl Qoe {
         *self.0.load_probe.lock().unwrap_or_else(|e| e.into_inner()) = Some(Arc::new(probe));
     }
 
-    /// Running live TV transcodes (the bridge), added to the count.
+    /// Running live TV transcodes, added to the count.
     pub fn set_live_transcodes(&self, n: u32) {
         self.0.live_transcodes.store(n, Ordering::Relaxed);
     }

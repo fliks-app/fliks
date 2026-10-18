@@ -5,7 +5,7 @@ Tizen, webOS, Android TV, Capacitor and Electron all run the Angular bundle with
 (`C/core/utils/standalone-bundle.ts:9-17`): Bearer header, no cookie auth, cross-origin to the user's server.
 Only the web build uses the `fliks_access` cookie. `client/tizen` and `client/webos` are packaging scripts only.
 Cast receiver, `macos/`, `windows/` never call F1-F7 endpoints (receiver has no `/api/` call; hosts only `GET /api` health
-at `macos/Fliks/Services/NodeManager.swift:184`, `windows/Fliks.Tray/Services/NodeManager.cs:178`, any status < 500 passes).
+at `macos/Fliks/Services/ServerManager.swift:163`, `windows/Fliks.Tray/Services/ServerManager.cs:164`, any status < 500 passes).
 
 ## F1 POST /api/auth/register requires users.manage
 

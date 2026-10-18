@@ -18,7 +18,7 @@ struct FliksApp: App {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let appState = AppState()
 
-    /// Menu, Cmd-Q, logout and an updater's terminate all land here. Node and
+    /// Menu, Cmd-Q, logout and an updater's terminate all land here. The server and
     /// Postgres outlive the app if it exits first, so it only exits once they
     /// have stopped.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {

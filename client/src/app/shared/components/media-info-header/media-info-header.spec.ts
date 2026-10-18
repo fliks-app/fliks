@@ -28,7 +28,7 @@ import type { SlotId, UiContribution } from '@fliks/plugin-ui';
  * action to the wrong viewer's eyes, which is what this file exists to catch.
  */
 
-// ── Role model: mirrors backend/src/common/constants/permissions.ts ──
+// ── Role model: mirrors server/crates/domain/src/acl.rs ──
 
 interface Role {
   isAdmin: boolean;

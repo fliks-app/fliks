@@ -35,8 +35,7 @@ async fn ctx(pool: PgPool) -> Ctx {
         .unwrap();
         toks.push(st.jwt.sign_access(id, name).unwrap().token);
     }
-    let nest = fliks_engine::gateway::Upstream::parse("http://127.0.0.1:1").unwrap();
-    let app = app::router(st.clone(), nest, None, "/nonexistent".into(), None);
+    let app = app::router(st.clone(), None, "/nonexistent".into(), None);
     let tmp = std::env::temp_dir().join(format!("fliks-lib-{}", uuid_like()));
     Ctx {
         app,

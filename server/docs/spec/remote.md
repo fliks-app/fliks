@@ -150,3 +150,5 @@ Parity scenarios (§5.3), dir `server/parity/scenarios/remote/`:
 - `remote-command-ok-202` (to a polled target of the same user), `remote-command-granted`, `remote-command-denied-403` (reason `remote.error_device_not_granted`), `remote-command-disabled-target-403`, `remote-command-self-target-400`, `remote-command-bad-action-400`, `remote-command-extra-field-400`, `remote-command-offline-404`, `remote-command-load-claims-attribution` (cross-process with playback-info once S2 step 4 lands)
 - `remote-fanout-state-to-grantee` and `remote-fanout-revoke-announces` (two SSE streams, assert `remote.state`/`remote.targets_changed` arrival; cache window 30 s means the revoke scenario asserts the `targets_changed`, not state silence).
 Ignore paths: `$..createdAt`, `$..cmdId` (uuid), `$..id` on grant rows, `$..code` (random), `$..expiresAt`.
+
+Struck at S9 (`node-removal.md` §5 item 6): `remote-can-control` and `remote-grant-code` were never generated as `server/fixtures` sets; the Rust tests in `crates/server/tests/remote.rs` cover the rules instead.

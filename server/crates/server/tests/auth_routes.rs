@@ -1,4 +1,4 @@
-//! `/api/auth/*` and `/internal/auth/stream-token` through the real router on a fresh database.
+//! `/api/auth/*` through the real router on a fresh database.
 use axum::{Router, body::Body, http::Request};
 use fliks_server::{auth, config::Config, state::AppState};
 use serde_json::{Value, json};

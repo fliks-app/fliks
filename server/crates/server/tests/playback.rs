@@ -16,7 +16,7 @@ struct Ctx {
 
 async fn ctx(pool: PgPool) -> Ctx {
     fliks_server::db::migrate(&pool).await.unwrap();
-    let cfg = Config::from_lookup(|k| (k == "FLIKS_BRIDGE_TOKEN").then(|| "bridge".into()));
+    let cfg = Config::from_lookup(|_| None);
     let st = AppState::new(pool.clone(), cfg, SECRET);
     let user: i32 = sqlx::query_scalar(
         r#"INSERT INTO users (username, "isAdmin") VALUES ('u', true) RETURNING id"#,

@@ -14,7 +14,6 @@ mechanisms.
 | Concern | macOS (`macos/`) | Windows (`windows/`) |
 |---------|------------------|----------------------|
 | Tray UI | SwiftUI `MenuBarExtra` | C#/.NET 8 WinForms `NotifyIcon` |
-| Code discovery | symlink dist/node_modules into a writable cwd | run `node <dist>\main.js` by absolute path, cwd = writable data dir (Node resolves `node_modules` from the script path — no symlinks) |
 | PostgreSQL | Homebrew bottle + dylib relocation | EDB binaries zip (self-contained, no relocation) |
 | FFmpeg | Homebrew + dylib relocation | jellyfin-ffmpeg gpl build (QSV + AMF + NVENC + OpenCL, incl. zero-copy D3D11↔OpenCL P010 for HDR tone-map) |
 | Autostart | `SMAppService` | `HKCU\…\Run` registry value |
@@ -24,7 +23,8 @@ mechanisms.
 
 - **Windows 10/11 x64**
 - **.NET 8 SDK**
-- **Node.js** (for building client + backend)
+- **Node.js** (for building the client)
+- **Rust toolchain** (cargo, for `fliks-server`)
 - **vpk** (`dotnet tool install -g vpk`) — for the Setup.exe
 - **Windows SDK** (`signtool`) — only for signing
 
@@ -33,10 +33,10 @@ mechanisms.
 ```powershell
 cd windows
 
-# 1. Fetch vendored binaries (Node, PostgreSQL, FFmpeg) into .\Vendored
+# 1. Fetch vendored binaries (PostgreSQL, FFmpeg) into .\Vendored
 .\Scripts\fetch-vendored.ps1
 
-# 2. Build client + backend + tray, assemble .\build\Bundle
+# 2. Build client + fliks-server + tray, fetch fliks-engine, assemble .\build\Bundle
 $env:TMDB_API_KEY = "..."   # optional; baked into the tray
 $env:TVDB_API_KEY = "..."
 .\Scripts\build-app.ps1
@@ -47,12 +47,13 @@ $env:TVDB_API_KEY = "..."
 ```
 
 For a dev run without packaging, `dotnet run --project Fliks.Tray` uses the
-vendored binaries and the repo's `backend/dist` + `client/dist` directly.
+vendored binaries and the repo's `client/dist` and `server/public`; `fliks-engine.exe` and
+`fliks-server.exe` must sit in a `bin\` directory beside the tray exe.
 
 ## What happens on launch
 
 1. **PostgreSQL 18** initializes (first run only) and starts on port **5433**.
-2. **Node.js** starts the NestJS backend on port **4848**.
+2. **fliks-engine** listens on port **4848** and runs **fliks-server** behind it on 4849.
 3. On first launch, your browser opens to `http://localhost:4848` for setup.
 4. Hardware transcoding is auto-detected: **QSV → AMF → NVENC → CPU**.
    NVENC needs a recent NVIDIA driver (**≥ 570**); on older drivers NVENC is
@@ -65,7 +66,7 @@ vendored binaries and the repo's `backend/dist` + `client/dist` directly.
 |--------|-------------|
 | **Open Fliks** | Open the web UI in your default browser |
 | **Start at Login** | Toggle auto-start (per-user `Run` key) |
-| **Restart Server** | Stop and restart PostgreSQL + Node.js |
+| **Restart Server** | Stop and restart PostgreSQL + the server |
 | **View Logs…** | Open the log folder in Explorer |
 | **Quit Fliks** | Gracefully shut down all processes |
 
@@ -75,12 +76,12 @@ vendored binaries and the repo's `backend/dist` + `client/dist` directly.
 |------|----------|
 | `%LOCALAPPDATA%\Fliks Server\postgresql\` | Database cluster |
 | `%LOCALAPPDATA%\Fliks Server\conf\` | JWT secret + tray settings |
-| `%LOCALAPPDATA%\Fliks Server\data\` | Backend cwd (images, thumbnails, backups) |
-| `%LOCALAPPDATA%\Fliks Server\logs\` | Backend + PostgreSQL logs |
+| `%LOCALAPPDATA%\Fliks Server\data\` | Server cwd (images, backups) |
+| `%LOCALAPPDATA%\Fliks Server\logs\` | Server (`server-<date>.log`) + PostgreSQL logs |
 | `%LOCALAPPDATA%\Fliks Server\transcode\` | HLS transcode cache (ephemeral) |
 
 Setup installs the app under `%LOCALAPPDATA%\FliksServer` (per-user, no admin);
-the tray offers new releases and applies them after stopping PostgreSQL and node.
+the tray offers new releases and applies them after stopping PostgreSQL and the server.
 Uninstalling removes that folder only and leaves `%LOCALAPPDATA%\Fliks Server` data intact.
 
 ## Clean reset
@@ -104,5 +105,5 @@ validate on real Windows hardware:
 
 - QSV / AMF / NVENC transcode + HDR→SDR paths per GPU vendor.
 - EDB PostgreSQL binaries URL/version (`fetch-vendored.ps1` `$PgVersion`).
-- OpenCL tonemap device selection (`FLIKS_OPENCL_DEVICE` — see backend).
+- OpenCL tonemap device selection (`FLIKS_OPENCL_DEVICE` — see the engine).
 - Drop a real `fliks.ico` into `Fliks.Tray/Resources/`.

@@ -151,8 +151,6 @@ async fn ctx_with(pool: PgPool, pre: impl FnOnce(&Fake), consumer: bool) -> Ctx 
     let env = [
         ("FLIKS_ENGINE_URL", fake.url.clone()),
         ("FLIKS_ENGINE_TOKEN", "tok".into()),
-        ("FLIKS_NEST_URL", "http://127.0.0.1:1".into()),
-        ("FLIKS_BRIDGE_TOKEN", "bridge".into()),
     ];
     let cfg = Config::from_lookup(|k| env.iter().find(|(n, _)| *n == k).map(|(_, v)| v.clone()));
     let st = AppState::new(pool.clone(), cfg, SECRET);
@@ -160,8 +158,7 @@ async fn ctx_with(pool: PgPool, pre: impl FnOnce(&Fake), consumer: bool) -> Ctx 
         session::spawn(&st);
     }
     st.engine.start(pool.clone(), 4849).await;
-    let upstream = fliks_engine::gateway::Upstream::parse("http://127.0.0.1:1").unwrap();
-    let app = app::router(st.clone(), upstream, None, "/nonexistent".into(), None);
+    let app = app::router(st.clone(), None, "/nonexistent".into(), None);
     let (base, prov) = provider().await;
     Ctx {
         st,
@@ -467,7 +464,7 @@ mod sources_sync {
     }
 
     #[sqlx::test(migrations = false)]
-    async fn the_adult_guard_restricts_a_new_adult_group_and_notifies_the_bridge(pool: PgPool) {
+    async fn the_adult_guard_restricts_a_new_adult_group(pool: PgPool) {
         let c = ctx(pool).await;
         c.prov.lock().unwrap().playlist = PLAYLIST.into();
         let id = source(&c, "S", "m3u", &format!("{}/playlist.m3u", c.base), 0).await;

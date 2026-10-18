@@ -3,7 +3,7 @@ import os
 import AppKit
 
 /// Central state object that orchestrates the full Fliks server
-/// lifecycle: PostgreSQL → Node.js backend → ready.
+/// lifecycle: PostgreSQL → engine + fliks-server → ready.
 @MainActor
 final class AppState: ObservableObject {
 
@@ -13,13 +13,13 @@ final class AppState: ObservableObject {
 
     let config = ConfigStore()
     let postgresManager: PostgresManager
-    let nodeManager = NodeManager()
+    let serverManager = ServerManager()
 
     /// Periodic Postgres health check timer.
     private var healthCheckTimer: Timer?
 
     /// The start in flight, if any: a shutdown cancels and awaits it, or it
-    /// would spawn node or Postgres after the stop and outlive the app.
+    /// would spawn the server or Postgres after the stop and outlive the app.
     private var startupTask: Task<Void, Never>?
 
     init() {
@@ -31,7 +31,7 @@ final class AppState: ObservableObject {
 
     // MARK: - Lifecycle
 
-    /// Full startup sequence: Postgres → Node.
+    /// Full startup sequence: Postgres → server.
     func startAll() async {
         do {
             try Paths.ensureAppSupportStructure()
@@ -43,17 +43,17 @@ final class AppState: ObservableObject {
             try await postgresManager.createDatabaseIfNeeded()
             try Task.checkCancellation()
 
-            // 2. Node.js backend
-            serverState = .startingBackend
-            let env = BackendEnvironment(port: config.port, dbPort: config.pgPort)
+            // 2. Engine + fliks-server
+            serverState = .startingServer
+            let env = ServerEnvironment(port: config.port, dbPort: config.pgPort)
 
-            await nodeManager.setOnCrash { [weak self] exitCode in
+            await serverManager.setOnCrash { [weak self] exitCode in
                 Task { @MainActor in
-                    self?.handleNodeCrash(exitCode: exitCode)
+                    self?.handleServerCrash(exitCode: exitCode)
                 }
             }
 
-            try await nodeManager.start(config: env)
+            try await serverManager.start(config: env)
 
             serverState = .running
             startHealthChecks()
@@ -72,7 +72,7 @@ final class AppState: ObservableObject {
         }
     }
 
-    /// Clean shutdown: Node first, then Postgres.
+    /// Clean shutdown: server first, then Postgres.
     func shutdown() async {
         serverState = .stopping
         healthCheckTimer?.invalidate()
@@ -81,7 +81,7 @@ final class AppState: ObservableObject {
         await startupTask?.value
         startupTask = nil
 
-        await nodeManager.stop()
+        await serverManager.stop()
         try? await postgresManager.stop()
 
         serverState = .stopped
@@ -103,19 +103,19 @@ final class AppState: ObservableObject {
 
     // MARK: - Crash Recovery
 
-    private func handleNodeCrash(exitCode: Int32) {
-        logger.warning("Node.js crashed with exit code \(exitCode)")
-        serverState = .error("Backend crashed (exit \(exitCode))")
+    private func handleServerCrash(exitCode: Int32) {
+        logger.warning("The server crashed with exit code \(exitCode)")
+        serverState = .error("Server crashed (exit \(exitCode))")
 
         // Auto-restart after a delay.
         startupTask = Task {
             try? await Task.sleep(for: .seconds(3))
             guard !Task.isCancelled, case .error = self.serverState else { return }
-            logger.info("Auto-restarting backend...")
-            self.serverState = .startingBackend
-            let env = BackendEnvironment(port: self.config.port, dbPort: self.config.pgPort)
+            logger.info("Auto-restarting the server...")
+            self.serverState = .startingServer
+            let env = ServerEnvironment(port: self.config.port, dbPort: self.config.pgPort)
             do {
-                try await self.nodeManager.start(config: env)
+                try await self.serverManager.start(config: env)
                 self.serverState = .running
             } catch {
                 self.serverState = .error(error.localizedDescription)
@@ -139,9 +139,9 @@ final class AppState: ObservableObject {
     }
 }
 
-// MARK: - NodeManager helper
+// MARK: - ServerManager helper
 
-extension NodeManager {
+extension ServerManager {
     func setOnCrash(_ handler: @escaping @Sendable (Int32) -> Void) {
         self.onCrash = handler
     }

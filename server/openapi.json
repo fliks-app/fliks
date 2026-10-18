@@ -390,7 +390,7 @@
         "tags": [
           "crate::engine::remote"
         ],
-        "summary": "Saves the three keys, then both processes reconnect: Rust here, Nest through the settings bridge.",
+        "summary": "Saves the three keys, then reconnects to the engine.",
         "operationId": "put_remote",
         "responses": {
           "200": {

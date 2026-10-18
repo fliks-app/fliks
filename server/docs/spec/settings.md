@@ -136,3 +136,5 @@ Fixture sets (§5.2): none required (no pure logic beyond the protected-key map,
 Parity scenarios (§5.3): one file per case in `server/parity/scenarios/settings/` and `server/parity/scenarios/fs/` (deviation cases carry `"deviation": "F<n>"`; `fs` browses generated dirs under `/tmp/fliks-parity/` only; list and `entries` arrays are compared unordered).
 Cross-process effects (Nest listeners refreshed, no origin echo to a plugin writer) are not observable through the HTTP runner: Rust bridge-client tests and the Nest endpoint's specs cover them.
 Ignore paths: `$..createdAt`, `$..updatedAt`, `$..id` on `PUT /api/settings/:key` responses.
+
+Struck at S9 (`node-removal.md` §5 item 6): `settings/protected-keys.json` was never generated as a `server/fixtures` set; the Rust tests in `crates/server/tests/settings.rs` cover the rules instead.

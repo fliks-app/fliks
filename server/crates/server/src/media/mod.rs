@@ -1,4 +1,4 @@
-//! `/api/media` routes: reads (`media-query.md`) and writes (`media-write.md`); `sync-queue` stays in Nest.
+//! `/api/media` routes: reads (`media-query.md`) and writes (`media-write.md`).
 mod aggregates;
 mod calendar;
 pub mod hydrate;

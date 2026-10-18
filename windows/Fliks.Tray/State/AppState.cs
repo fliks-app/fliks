@@ -4,16 +4,16 @@ using Fliks.Tray.Utilities;
 
 namespace Fliks.Tray.State;
 
-/// <summary>Orchestrates the full server lifecycle: PostgreSQL → Node backend
+/// <summary>Orchestrates the full server lifecycle: PostgreSQL → engine + fliks-server
 /// → ready, with crash recovery and a periodic Postgres health check.</summary>
 internal sealed class AppState
 {
     public ConfigStore Config { get; } = new();
     private readonly PostgresManager _postgres;
-    private readonly NodeManager _node = new();
+    private readonly ServerManager _server = new();
     private System.Threading.Timer? _healthTimer;
     // Startup or crash restart in flight; shutdown cancels and awaits it so
-    // neither can spawn node or postgres after the stop.
+    // neither can spawn the server or postgres after the stop.
     private CancellationTokenSource _lifetime = new();
     private Task _startup = Task.CompletedTask;
 
@@ -35,7 +35,7 @@ internal sealed class AppState
     {
         _postgres = new PostgresManager(Config.PgPort);
         _openWhenReady = openBrowserWhenReady;
-        _node.OnCrash = HandleNodeCrash;
+        _server.OnCrash = HandleServerCrash;
     }
 
     // Off the UI context: Quit() blocks the UI thread while shutdown awaits this.
@@ -51,7 +51,7 @@ internal sealed class AppState
         {
             AppPaths.EnsureStructure();
             Log.Info($"startup: exe={Environment.ProcessPath} repoRoot={AppPaths.RepoRoot ?? "(installed)"}");
-            Log.Info($"paths: node={AppPaths.NodeExe} main={AppPaths.BackendMainJs} pgBin={AppPaths.PgBinDir} client={AppPaths.ClientDir} data={AppPaths.AppData}");
+            Log.Info($"paths: bin={AppPaths.BinDir} pgBin={AppPaths.PgBinDir} client={AppPaths.ClientDir} data={AppPaths.AppData}");
 
             State = ServerState.StartingPostgres;
             Log.Info("postgres: initialize");
@@ -62,10 +62,10 @@ internal sealed class AppState
             Log.Info("postgres: create database");
             await _postgres.CreateDatabaseIfNeededAsync();
 
-            State = ServerState.StartingBackend;
-            Log.Info("backend: start");
+            State = ServerState.StartingServer;
+            Log.Info("server: start");
             ct.ThrowIfCancellationRequested();
-            await _node.StartAsync(new BackendEnvironment(Config.Port, Config.PgPort), ct);
+            await _server.StartAsync(new ServerEnvironment(Config.Port, Config.PgPort), ct);
 
             State = ServerState.Running;
             Log.Info("running");
@@ -96,7 +96,7 @@ internal sealed class AppState
         _lifetime.Cancel();
         try { await _startup; } catch { /* cancelled */ }
         _lifetime = new CancellationTokenSource();
-        await _node.StopAsync();
+        await _server.StopAsync();
         await _postgres.StopAsync();
         State = ServerState.Stopped;
     }
@@ -130,18 +130,18 @@ internal sealed class AppState
         Process.Start(new ProcessStartInfo(AppPaths.LogsDir) { UseShellExecute = true });
     }
 
-    private void HandleNodeCrash(int exitCode)
+    private void HandleServerCrash(int exitCode)
     {
-        State = ServerState.Errored($"Backend crashed (exit {exitCode})");
+        State = ServerState.Errored($"Server crashed (exit {exitCode})");
         var ct = _lifetime.Token;
         _startup = Task.Run(async () =>
         {
             await Task.Delay(3000, ct);
             if (State.Phase != ServerPhase.Error) return;
-            State = ServerState.StartingBackend;
+            State = ServerState.StartingServer;
             try
             {
-                await _node.StartAsync(new BackendEnvironment(Config.Port, Config.PgPort), ct);
+                await _server.StartAsync(new ServerEnvironment(Config.Port, Config.PgPort), ct);
                 State = ServerState.Running;
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { }

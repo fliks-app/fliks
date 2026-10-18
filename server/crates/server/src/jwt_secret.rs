@@ -37,7 +37,7 @@ fn read(file: &Path) -> Option<String> {
 }
 
 /// `JWT_SECRET`, else the conf file, else a fresh one written 0600 (`create_new`: the first writer wins).
-/// A failed write only warns and yields a process-local secret, which Nest will not share.
+/// A failed write only warns and yields a process-local secret, lost at the next start.
 pub fn resolve(cfg: &Config) -> String {
     if let Some(s) = &cfg.jwt_secret {
         return s.clone();

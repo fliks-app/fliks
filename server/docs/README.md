@@ -2,13 +2,13 @@
 
 ## Spec index
 
-Per-domain specs land under [`spec/`](spec/) as milestones complete (template: phase-2 plan §12).
+Per-domain specs live under [`spec/`](spec/) (template: phase-2 plan §12); [`spec/node-removal.md`](spec/node-removal.md) is the removal of the Nest backend (S9). Specs are the record of each port: their `[ts:]` tags and "Bridges"/"Deletes in Nest" sections are history.
 
 ## Tag legend (in specs)
 
 | Tag | Meaning |
 |---|---|
-| `[ts:path:line]` | Open that file at that line only (±40 lines). |
+| `[ts:path:line]` | Open that file at that line only (±40 lines). `backend/` is gone: `git show nest-final:backend/<path>`. |
 | `[new]` | Deliberate deviation from Nest; record here or in Deviations. |
 | `[assumed]` | Behaviour inferred where Nest is unclear; verify before port. |
 
@@ -243,6 +243,8 @@ A 500 or a half-written request is never part of the frozen contract:
 | C155 | a plugin import document over Express's 100 kB JSON limit was refused 413 | accepted up to 64 MiB (`plugins.md` rule 54) |
 | C156 | only the primary stream's source was checked for capacity, so a failover could land on a source at its limit | every stream's own source is checked at open and sent as `LiveUpstream.atCapacity`; a full source never feeds the session, so a full primary with a free secondary source plays on it (Nest answered 409); an all-full channel still answers the 409 with the primary's body |
 | C157 | the engine ended a live viewer on any resolver denial, including one for a credential that resolves to no user | a live denial for a known user carries `ownerId` and ends only that owner's viewer; other denials end nothing |
+| C158 | the macOS and Windows bundles wrote Nest's output to `logs/backend-<date>.log` | `logs/server-<date>.log` holds the engine and `fliks-server` output; old files are left in place |
+| C159 | `/internal/**` answered Nest's `Cannot <METHOD>` 404 even with a client dir (strangler bridges) | no `/internal` route: it falls to the SPA fallback like any unknown non-`/api` path (the `Cannot` 404 when no client dir is set) |
 
 Frozen as is (decided): the heartbeat keeps its debounce entry after a failed history write and returns
 `sessionLost: false` when the engine session lives but presence cannot be rebuilt. Lists whose order comes

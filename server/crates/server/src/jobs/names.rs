@@ -59,38 +59,3 @@ pub const PRUNE_CRON: &str = "0 03 * * *";
 pub fn is_core(name: &str) -> bool {
     CORE.iter().chain(LIVETV.iter()).any(|(n, ..)| *n == name) || TRIGGER_ONLY.contains(&name)
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn quoted(src: &str, array: &str) -> Vec<String> {
-        let body = src.split(array).nth(1).unwrap().split(']').next().unwrap();
-        body.split('\'')
-            .skip(1)
-            .step_by(2)
-            .map(str::to_owned)
-            .collect()
-    }
-
-    /// Pins both lists to the TS source while it exists (deleted with Nest at S8).
-    #[test]
-    fn lists_equal_core_scheduler_jobs_ts() {
-        let path = concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../../backend/src/common/constants/core-scheduler-jobs.ts"
-        );
-        let Ok(src) = std::fs::read_to_string(path) else {
-            return;
-        };
-        let core: Vec<_> = CORE.iter().map(|(n, ..)| n.to_string()).collect();
-        assert_eq!(core, quoted(&src, "CORE_SCHEDULER_JOB_NAMES = ["));
-        assert_eq!(
-            TRIGGER_ONLY.map(String::from).to_vec(),
-            quoted(&src, "CORE_TRIGGER_ONLY_JOB_NAMES = [")
-        );
-        assert!(src.contains("PLUGIN_SOURCE_REFRESH_CRON = '0 3 * * *'"));
-        let livetv: Vec<_> = LIVETV.iter().map(|(n, ..)| n.to_string()).collect();
-        assert_eq!(livetv, quoted(&src, "CORE_LIVETV_JOB_NAMES = ["));
-    }
-}

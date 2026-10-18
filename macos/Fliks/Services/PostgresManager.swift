@@ -148,7 +148,7 @@ actor PostgresManager {
             }
         }
 
-        // Ensure pg_trgm extension (the backend also does this, but belt-and-suspenders).
+        // Ensure pg_trgm extension (the server also does this, but belt-and-suspenders).
         let extResult = try await ProcessRunner.run(
             executable: binDir.appendingPathComponent("psql"),
             arguments: [

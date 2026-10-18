@@ -18,9 +18,6 @@ use fliks_domain::acl::{Action, Subject};
 use fliks_engine_core::api::PathMapping;
 use serde_json::{Value, json};
 
-/// Passed to the `settings-changed` bridge so Nest's listeners know the engine module wrote the keys.
-const OWN_MODULE_ORIGIN: &str = "own-module-write";
-
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/api/engine/remote", get(get_remote).put(put_remote))
@@ -145,7 +142,7 @@ pub async fn get_remote(
     snapshot(&st).await.map(Json)
 }
 
-/// Saves the three keys, then both processes reconnect: Rust here, Nest through the settings bridge.
+/// Saves the three keys, then reconnects to the engine.
 #[utoipa::path(put, path = "/api/engine/remote", responses((status = 200)))]
 pub async fn put_remote(
     State(st): State<AppState>,
@@ -156,16 +153,8 @@ pub async fn put_remote(
     let dto = parse_put(&body).map_err(AppError::bad_request)?;
     let mappings = store::sanitize(dto.path_mappings);
     let keys = store::write_engine_settings(&st.db, &dto.url, dto.token, &mappings).await?;
-    let nest = async {
-        if let Err(e) = st
-            .bridge
-            .settings_changed(&keys, Some(OWN_MODULE_ORIGIN))
-            .await
-        {
-            tracing::warn!(error = %e, "settings-changed bridge failed: nest keeps the previous engine");
-        }
-    };
-    tokio::join!(st.engine.reconfigure(), nest);
+    st.engine.reconfigure().await;
+    crate::settings::notify_changed(&st, &keys, None).await;
     snapshot(&st).await.map(Json)
 }
 

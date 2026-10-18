@@ -1,0 +1,30 @@
+# The engine release in engine.lock, the Dockerfile engine image and the server's engine crate tag move
+# together (scripts/bump-engine.sh); a hand edit of one of them goes red here.
+name: Engine lock
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'engine.lock'
+      - 'Dockerfile'
+      - 'server/crates/server/Cargo.toml'
+      - 'scripts/bump-engine.sh'
+      - '.github/workflows/engine-lock.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  lock:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Server engine tag and Dockerfile image match engine.lock
+        run: |
+          v="$(sed -n 's/^version=//p' engine.lock)"
+          t="$(sed -n 's/^fliks-engine-core = .*tag = "v\([^"]*\)".*/\1/p' server/crates/server/Cargo.toml)"
+          [ "$t" = "$v" ] || { echo "::error::fliks-engine-core tag is v$t, engine.lock says v$v"; exit 1; }
+          i="$(sed -n 's|^ARG ENGINE_IMAGE=ghcr.io/fliks-app/engine:||p' Dockerfile)"
+          [ "$i" = "$v" ] || { echo "::error::Dockerfile ENGINE_IMAGE is $i, engine.lock says $v"; exit 1; }

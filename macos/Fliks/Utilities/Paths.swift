@@ -3,10 +3,10 @@ import Foundation
 /// Central path registry — every file-system location the app touches
 /// lives here so nothing is scattered across managers.
 ///
-/// Resolution order for external binaries: bundle resources first,
-/// then Homebrew prefix (`/opt/homebrew`), then system PATH.
-/// This allows development builds (Homebrew-installed) and release
-/// builds (fully bundled) to share the same code.
+/// External binaries resolve from the bundle resources first, then the
+/// Homebrew prefix (`/opt/homebrew`), so development builds (Homebrew
+/// installed) and release builds (fully bundled) share the same code;
+/// fliks-engine and fliks-server only exist in the bundle.
 enum Paths {
 
     // MARK: - Application Support
@@ -23,8 +23,8 @@ enum Paths {
     static let pgLogFile  = appSupport.appendingPathComponent("postgresql/pg.log")
     /// JWT secret and other auto-generated config (maps to FLIKS_CONF_DIR).
     static let confDir    = appSupport.appendingPathComponent("conf")
-    /// Working directory for the Node process — `images/`, `backups/`,
-    /// `thumbnails/` are created here by the backend.
+    /// Working directory of the server — `images/` and `backups/` of
+    /// existing installs live here.
     static let dataDir    = appSupport.appendingPathComponent("data")
     /// Application logs.
     static let logsDir    = appSupport.appendingPathComponent("logs")
@@ -35,31 +35,12 @@ enum Paths {
         Bundle.main.resourceURL ?? URL(fileURLWithPath: "/dev/null")
     }()
 
-    // MARK: - Node.js
+    // MARK: - Engine and server
 
-    /// Node.js binary — bundle first, then Vendored (dev), then Homebrew, then system.
-    static let nodeBinary: URL = {
-        let bundled = resources.appendingPathComponent("node/bin/node")
-        if isExecutable(bundled) { return bundled }
-        // Dev: Vendored dir next to the Xcode project
-        if let repo = repoRoot {
-            let vendored = repo.appendingPathComponent("macos/Vendored/node/bin/node")
-            if isExecutable(vendored) { return vendored }
-        }
-        // Homebrew node (may be node@24, node@22, or just node)
-        for name in ["node@24", "node@22", "node"] {
-            let brew = URL(fileURLWithPath: "/opt/homebrew/opt/\(name)/bin/node")
-            if isExecutable(brew) { return brew }
-        }
-        // System PATH fallback
-        if let sys = findInPath("node") { return sys }
-        return bundled // will fail at runtime with a clear error
-    }()
-
-    /// Supervisor shipped beside node; required to run the backend (nil only when it is missing).
+    /// Supervisor shipped beside fliks-server in `bin/` (nil only when it is missing).
     static let engineBinary: URL? = {
-        let engine = nodeBinary.deletingLastPathComponent().appendingPathComponent("fliks-engine")
-        return isExecutable(engine) ? engine : nil
+        let bundled = resources.appendingPathComponent("bin/fliks-engine")
+        return isExecutable(bundled) ? bundled : nil
     }()
 
     // MARK: - PostgreSQL
@@ -98,15 +79,12 @@ enum Paths {
         return bundled
     }()
 
-    // MARK: - Backend & Client
+    // MARK: - Client
 
-    /// Built NestJS backend (dist/, node_modules/, package.json).
-    static let backendDir        = resources.appendingPathComponent("backend")
-    static let backendDist       = resources.appendingPathComponent("backend/dist")
-    static let backendModules    = resources.appendingPathComponent("backend/node_modules")
-    static let backendPackageJSON = resources.appendingPathComponent("backend/package.json")
     /// Built Angular client.
     static let clientDir         = resources.appendingPathComponent("client")
+    /// Cast receiver page, served at /cast (FLIKS_CAST_DIR).
+    static let castDir           = resources.appendingPathComponent("cast")
 
     // MARK: - Development fallbacks
 
@@ -120,7 +98,7 @@ enum Paths {
         for _ in 0..<4 {
             sourceDir = sourceDir.deletingLastPathComponent()
         }
-        if FileManager.default.fileExists(atPath: sourceDir.appendingPathComponent("backend/package.json").path) {
+        if FileManager.default.fileExists(atPath: sourceDir.appendingPathComponent("server/Cargo.toml").path) {
             return sourceDir
         }
         #endif
@@ -128,7 +106,7 @@ enum Paths {
         var dir = URL(fileURLWithPath: ProcessInfo.processInfo.arguments[0])
             .deletingLastPathComponent()
         for _ in 0..<10 {
-            if FileManager.default.fileExists(atPath: dir.appendingPathComponent("backend/package.json").path) {
+            if FileManager.default.fileExists(atPath: dir.appendingPathComponent("server/Cargo.toml").path) {
                 return dir
             }
             dir = dir.deletingLastPathComponent()
@@ -136,20 +114,9 @@ enum Paths {
         return nil
     }()
 
-    /// Backend dist (development: from repo, production: from bundle).
-    static let effectiveBackendDist: URL = {
-        if FileManager.default.fileExists(atPath: backendDist.path) { return backendDist }
-        return repoRoot?.appendingPathComponent("backend/dist") ?? backendDist
-    }()
-
-    static let effectiveBackendModules: URL = {
-        if FileManager.default.fileExists(atPath: backendModules.path) { return backendModules }
-        return repoRoot?.appendingPathComponent("backend/node_modules") ?? backendModules
-    }()
-
-    static let effectiveBackendPackageJSON: URL = {
-        if FileManager.default.fileExists(atPath: backendPackageJSON.path) { return backendPackageJSON }
-        return repoRoot?.appendingPathComponent("backend/package.json") ?? backendPackageJSON
+    static let effectiveCastDir: URL = {
+        if FileManager.default.fileExists(atPath: castDir.path) { return castDir }
+        return repoRoot?.appendingPathComponent("server/public") ?? castDir
     }()
 
     static let effectiveClientDir: URL = {
@@ -173,14 +140,5 @@ enum Paths {
 
     private static func isExecutable(_ url: URL) -> Bool {
         FileManager.default.isExecutableFile(atPath: url.path)
-    }
-
-    private static func findInPath(_ name: String) -> URL? {
-        guard let pathEnv = ProcessInfo.processInfo.environment["PATH"] else { return nil }
-        for dir in pathEnv.split(separator: ":") {
-            let candidate = URL(fileURLWithPath: String(dir)).appendingPathComponent(name)
-            if isExecutable(candidate) { return candidate }
-        }
-        return nil
     }
 }

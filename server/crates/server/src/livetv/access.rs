@@ -22,9 +22,6 @@ use serde_json::{Value, json};
 use sqlx::{PgPool, Postgres, Transaction};
 use std::collections::HashSet;
 
-/// Passed to the `settings-changed` bridge so Nest's listeners know this module wrote the keys.
-const OWN_MODULE_ORIGIN: &str = "own-module-write";
-
 /// One in-process mutex over every read-modify-write of the three keys and the grants (rule 7).
 #[derive(Default)]
 pub struct Access(tokio::sync::Mutex<()>);
@@ -111,16 +108,8 @@ async fn save(st: &AppState, before: &Groups, after: &Groups) -> sqlx::Result<()
             .await?;
     }
     tx.commit().await?;
-    if !keys.is_empty() {
-        let keys: Vec<String> = keys.iter().map(|k| (*k).to_owned()).collect();
-        if let Err(e) = st
-            .bridge
-            .settings_changed(&keys, Some(OWN_MODULE_ORIGIN))
-            .await
-        {
-            tracing::warn!(error = %e, "settings-changed bridge failed for the live TV access keys");
-        }
-    }
+    let keys: Vec<String> = keys.iter().map(|k| (*k).to_owned()).collect();
+    crate::settings::notify_changed(st, &keys, None).await;
     Ok(())
 }
 
