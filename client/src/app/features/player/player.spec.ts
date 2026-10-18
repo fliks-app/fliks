@@ -2023,6 +2023,17 @@ describe('PlayerComponent audio target', () => {
     configures.forEach((order: number, i: number) => expect(order).toBeLessThan(loads[i]));
   });
 
+  it('leaves a server master\'s DEFAULT rendition to Shaka instead of preferring a language', async () => {
+    const h = audioHarness();
+    h.component.activeAudioStreamIndex = 1;
+    h.streamingApi.getPlaybackInfo.mockResolvedValueOnce(buildPi(MAIN_FILE_ID, { playMethod: 'DirectStream' }));
+
+    await h.component.reloadStream();
+
+    expect(h.engine.configure).toHaveBeenCalledWith({ preferredAudioLanguage: '' });
+    expect(h.engine.configure).not.toHaveBeenCalledWith({ preferredAudioLanguage: 'fr' });
+  });
+
   it('puts an engine that fell back to its default track back on the target, keeping the target', () => {
     const h = audioHarness();
     h.component.activeAudioStreamIndex = 1;
