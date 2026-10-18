@@ -87,7 +87,8 @@ echo "==> Populating $APP_BUNDLE"
 # protected-write check. Without this, an incremental xcodebuild leaves
 # the old Resources in place and the script aborts on the first cp,
 # silently shipping a DMG with a stale server / Postgres / FFmpeg.
-rm -rf "$RESOURCES/bin" "$RESOURCES/postgres" "$RESOURCES/ffmpeg" "$RESOURCES/cast" "$RESOURCES/client"
+rm -rf "$RESOURCES/bin" "$RESOURCES/postgres" "$RESOURCES/ffmpeg" "$RESOURCES/cast" "$RESOURCES/client" \
+    "$RESOURCES/node" "$RESOURCES/backend"  # 4.x layout, wiped for one release
 
 mkdir -p "$RESOURCES/bin"
 
@@ -186,13 +187,17 @@ echo "    [done] All resources copied"
 # + entitlements. Sign inside-out — every nested Mach-O first, the .app last.
 SIGN_ID="${MAC_SIGN_IDENTITY:--}"
 ENTITLEMENTS="$MACOS_DIR/Fliks/Fliks.entitlements"
+# Only fliks-server runs wasmtime, which maps plugin code writable then executable (no MAP_JIT).
+SERVER_ENTITLEMENTS="$SCRIPTS_DIR/fliks-server.entitlements"
 echo "==> Code signing (identity: $SIGN_ID)..."
 sign() {
     if [ "$SIGN_ID" = "-" ]; then
         codesign --force --sign - "$1" 2>/dev/null || true
     else
+        local ent="$ENTITLEMENTS"
+        [ "$(basename "$1")" = fliks-server ] && ent="$SERVER_ENTITLEMENTS"
         codesign --force --options runtime --timestamp \
-            --entitlements "$ENTITLEMENTS" --sign "$SIGN_ID" "$1"
+            --entitlements "$ent" --sign "$SIGN_ID" "$1"
     fi
 }
 
@@ -202,7 +207,7 @@ sign() {
 # companions, which codesign refuses, are skipped. Sign in parallel: each
 # --timestamp is a network round-trip.
 export -f sign
-export SIGN_ID ENTITLEMENTS
+export SIGN_ID ENTITLEMENTS SERVER_ENTITLEMENTS
 find "$RESOURCES" -type f -print0 \
     | xargs -0 -n1 -P "$(sysctl -n hw.ncpu)" bash -c \
         'if file -b "$1" 2>/dev/null | grep -qE "Mach-O.*(executable|shared library|bundle)"; then sign "$1"; fi' _
@@ -215,7 +220,19 @@ echo "    [done]"
 # Assert the actual on-disk result rather than trusting the steps above.
 echo "==> Verifying bundle..."
 
-# 1. No vendored Mach-O may reference /opt/homebrew — those paths exist only on
+# 1. Executable memory is granted to fliks-server only.
+if [ "$SIGN_ID" != "-" ]; then
+    ents() { codesign -d --entitlements :- "$1" 2>/dev/null; }
+    if ! ents "$RESOURCES/bin/fliks-server" | grep -q 'allow-unsigned-executable-memory' \
+        || ents "$APP_BUNDLE" | grep -q 'allow-unsigned-executable-memory' \
+        || ents "$RESOURCES/bin/fliks-engine" | grep -q 'allow-unsigned-executable-memory'; then
+        echo "Error: allow-unsigned-executable-memory must be on bin/fliks-server only."
+        exit 1
+    fi
+    echo "    [verify] only fliks-server may map executable memory"
+fi
+
+# 2. No vendored Mach-O may reference /opt/homebrew — those paths exist only on
 #    the build host, so every dependency must be relocated into the bundle.
 #    Scoped to the dirs this script relocates (bin/postgres/ffmpeg).
 stray="$(find "$RESOURCES/bin" "$RESOURCES/postgres" "$RESOURCES/ffmpeg" \
@@ -236,7 +253,7 @@ if [ "$pg_share" != "$(cd "$PG_ROOT" && pwd -P)/share/postgresql@18" ]; then
 fi
 echo "    [verify] postgres resolves share/ inside the bundle"
 
-# 2. ffmpeg must have zscale (libzimg) + the VideoToolbox tone-map — the HDR
+# 3. ffmpeg must have zscale (libzimg) + the VideoToolbox tone-map — the HDR
 #    paths (crop / burn-in / DV) depend on them.
 for filt in zscale tonemap_videotoolbox; do
     if ! "$RESOURCES/ffmpeg/bin/ffmpeg" -hide_banner -filters 2>/dev/null | grep -qw "$filt"; then

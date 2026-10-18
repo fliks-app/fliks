@@ -3,10 +3,10 @@ import Foundation
 /// Central path registry — every file-system location the app touches
 /// lives here so nothing is scattered across managers.
 ///
-/// Resolution order for external binaries: bundle resources first,
-/// then Homebrew prefix (`/opt/homebrew`), then system PATH.
-/// This allows development builds (Homebrew-installed) and release
-/// builds (fully bundled) to share the same code.
+/// External binaries resolve from the bundle resources first, then the
+/// Homebrew prefix (`/opt/homebrew`), so development builds (Homebrew
+/// installed) and release builds (fully bundled) share the same code;
+/// fliks-engine and fliks-server only exist in the bundle.
 enum Paths {
 
     // MARK: - Application Support
@@ -140,14 +140,5 @@ enum Paths {
 
     private static func isExecutable(_ url: URL) -> Bool {
         FileManager.default.isExecutableFile(atPath: url.path)
-    }
-
-    private static func findInPath(_ name: String) -> URL? {
-        guard let pathEnv = ProcessInfo.processInfo.environment["PATH"] else { return nil }
-        for dir in pathEnv.split(separator: ":") {
-            let candidate = URL(fileURLWithPath: String(dir)).appendingPathComponent(name)
-            if isExecutable(candidate) { return candidate }
-        }
-        return nil
     }
 }

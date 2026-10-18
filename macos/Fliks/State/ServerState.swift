@@ -24,7 +24,7 @@ enum ServerState: Equatable {
         switch self {
         case .stopped:                return "Fliks is stopped"
         case .startingPostgres:       return "Starting database..."
-        case .startingServer:        return "Starting server..."
+        case .startingServer:         return "Starting server..."
         case .running:                return "Fliks is running"
         case .stopping:               return "Stopping..."
         case .error(let message):     return "Error: \(message)"
