@@ -82,9 +82,14 @@ Copy-Item (Join-Path $repo 'server\target\release\fliks-server.exe') (Join-Path 
 # what the server never loads stays out: message translations, sourcemaps, typings, docs.
 Copy-Tree (Join-Path $vendored 'pgsql')  (Join-Path $bundle 'pgsql') @('/XD', (Join-Path $vendored 'pgsql\share\locale'))
 Copy-Tree (Join-Path $vendored 'ffmpeg') (Join-Path $bundle 'ffmpeg')
+Copy-Tree (Join-Path $repo 'server\public') (Join-Path $bundle 'cast')
 
 New-Item -ItemType Directory -Force -Path (Join-Path $bundle 'client') | Out-Null
 Copy-Tree (Join-Path $repo 'client\dist\client\browser') (Join-Path $bundle 'client')
+
+foreach ($f in 'bin\fliks-engine.exe', 'bin\fliks-server.exe', 'cast\cast-receiver.html', 'client\index.html') {
+    if (-not (Test-Path (Join-Path $bundle $f))) { throw "bundle is missing $f" }
+}
 
 if ($Version) { Set-Content -Path (Join-Path $bundle 'VERSION') -Value $Version }
 
