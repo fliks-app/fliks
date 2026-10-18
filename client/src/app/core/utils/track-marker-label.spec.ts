@@ -38,6 +38,12 @@ describe('track marker labels', () => {
       .toBe('Français (AC3 - 2.0 - Audiodescription)');
   });
 
+  it('shows a subtitle title only when the track has no marker', () => {
+    const sub = { language: 'eng', title: 'Commentary by the director and writers' };
+    expect(formatSubtitleParts(sub, EN, 1).sub).toBe(sub.title);
+    expect(formatSubtitleParts({ ...sub, trackMarkers: ['commentary'] }, EN, 1).sub).toBe('Commentary');
+  });
+
   it('skips marker ids it has no label for', () => {
     expect(formatAudioParts({ language: 'eng', codec: 'aac', trackMarkers: ['future'] }, EN, 1).sub).toBe('AAC');
   });

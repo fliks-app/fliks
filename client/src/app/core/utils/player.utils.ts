@@ -241,7 +241,8 @@ export interface SubtitleLabelSource {
   hearingImpaired?: boolean | null;
   relativePath?: string | null;
   providerType?: string | null;
-  /** Embedded stream title; never part of a label (can be a paragraph). */
+  /** Embedded stream title; the language is often all the probe keeps, so it
+   *  tells two tracks of one language apart when neither has a marker. */
   title?: string | null;
   /** BCP-47 tag of an embedded track (`es-419`); label only, `language` stays canonical. */
   languageTag?: string | null;
@@ -252,10 +253,35 @@ export interface SubtitleLabelSource {
 const FLAG_MARKERS = ['forced', 'hearingImpaired'];
 
 /**
+ * The stream title worth showing next to the language, or ''. Dropped when
+ * empty, equal (case-insensitive) to the language name or code, when it only
+ * restates a flag already shown ("Forced", "SDH"), or when every word of it is
+ * part of the region/script the head already spells out ("Latin American" next
+ * to "Espagnol (Amérique latine)"). Anything else is kept. A track with markers shows those only.
+ */
+function subtitleTitleHint(sub: SubtitleLabelSource, translate: TranslateService): string {
+  if (sub.trackMarkers?.length) return '';
+  const title = (sub.title ?? '').trim().replace(/\s+/g, ' ');
+  if (!title) return '';
+  const t = title.toLowerCase();
+  const norm = normalizeLangCode(sub.language);
+  const redundant = [sub.language, norm, localizeLanguage(sub.language, translate)];
+  if (sub.forced) redundant.push('forced', translate.instant('player.subtitle_forced'));
+  if (sub.hearingImpaired) {
+    redundant.push('sdh', 'cc', 'hi', 'hearing impaired', translate.instant('player.subtitle_hearing_impaired'));
+  }
+  redundant.push(...trackMarkerLabels(sub.trackMarkers, translate, FLAG_MARKERS), ...(sub.trackMarkers ?? []));
+  if (redundant.some((r) => r && String(r).toLowerCase() === t)) return '';
+  const known = languageTagWords(sub.language, sub.languageTag, translate);
+  const words = t.split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+  return known.size && words.every((w) => known.has(w)) ? '' : title;
+}
+
+/**
  * Render a subtitle as a dropdown label. Mirrors {@link formatAudioLabel} so
  * the player and media-detail subtitle menus stay consistent.
  *
- * Format: `"<lang> (hearing-impaired) (forced) (CODEC)"`, every parenthesised
+ * Format: `"<lang> (title) (hearing-impaired) (forced) (CODEC)"`, every parenthesised
  * part localised and omitted when the corresponding flag is absent.
  */
 export function formatSubtitleLabel(
@@ -270,6 +296,8 @@ export function formatSubtitleLabel(
       ? translate.instant('player.subtitle_track_n', { index: trackIndex })
       : localizeLanguageTag(sub.language, sub.languageTag, translate);
   const parts: string[] = [];
+  const title = subtitleTitleHint(sub, translate);
+  if (title) parts.push(title);
   if (sub.hearingImpaired) parts.push(translate.instant('player.subtitle_hearing_impaired'));
   if (sub.forced) parts.push(translate.instant('player.subtitle_forced'));
   parts.push(...trackMarkerLabels(sub.trackMarkers, translate, FLAG_MARKERS));
@@ -282,7 +310,7 @@ export function formatSubtitleLabel(
 
 /**
  * Two-part subtitle label for the player menu: the language on top and the
- * details ("SRT • forced • translated") as a subline, joined with " • ".
+ * details ("Latin American • SRT • forced • translated") as a subline, joined with " • ".
  * Every flag label is localised.
  */
 export function formatSubtitleParts(
@@ -297,6 +325,8 @@ export function formatSubtitleParts(
       ? translate.instant('player.subtitle_track_n', { index: trackIndex })
       : localizeLanguageTag(sub.language, sub.languageTag, translate);
   const parts: string[] = [];
+  const title = subtitleTitleHint(sub, translate);
+  if (title) parts.push(title);
   const codec = opts?.showFormat ? shortSubtitleCodec(sub.codec, sub.relativePath) : '';
   if (codec) parts.push(codec);
   if (sub.forced) parts.push(translate.instant('player.subtitle_forced'));
