@@ -176,13 +176,13 @@ full list of what it runs on.
 
 | How you run it | Platforms | Hardware transcoding | Ships with |
 |---|---|---|---|
-| **Docker** *(recommended)* | `linux/amd64`, `linux/arm64` | Intel QSV · VAAPI · NVIDIA NVENC · AMD | backend, web client, FFmpeg |
+| **Docker** *(recommended)* | `linux/amd64`, `linux/arm64` | Intel QSV · VAAPI · NVIDIA NVENC · AMD | server, web client, FFmpeg |
 | **Windows** — tray app, NSIS installer | Windows x64 | Intel QSV · AMD AMF · NVIDIA NVENC, auto-detected | everything, no dependencies |
 | **macOS** — menu-bar app, `.dmg` | macOS 13 Ventura+, Apple Silicon | VideoToolbox | everything, no dependencies |
-| **From source** | anywhere Node runs | whatever your FFmpeg exposes | — |
+| **From source** | anywhere Rust and Node (client build) run | whatever your FFmpeg exposes | — |
 
-The image is a single container: NestJS backend, the built Angular
-client served as static assets, and a self-contained
+The image is a single container: the Rust server (`fliks-server`, behind the
+`fliks-engine` streaming engine), the built Angular client served as static assets, and a self-contained
 [jellyfin-ffmpeg](https://github.com/jellyfin/jellyfin-ffmpeg) build. A
 PostgreSQL container sits beside it (the example Compose pins 18.3).
 

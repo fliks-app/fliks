@@ -13,7 +13,7 @@ struct DirectPlayProfile: Encodable {
 }
 
 /// Fine-grained codec gate. `codec` is matched against the source's raw
-/// ffprobe codec name (backend/dto/device-profile.dto.ts `CodecCondition`).
+/// ffprobe codec name (`server/crates/server/src/stream/info.rs`).
 struct CodecCondition: Encodable {
     let codec: String
     var maxLevel: Int? = nil
@@ -23,8 +23,8 @@ struct CodecCondition: Encodable {
     var maxHeight: Int? = nil
 }
 
-/// Body of `POST /api/stream/:mediaFileId/playback-info` — mirrors
-/// `backend/src/modules/streaming/dto/device-profile.dto.ts`. Advertises the
+/// Body of `POST /api/stream/:mediaFileId/playback-info` — mirrors the
+/// device profile of `server/crates/server/src/stream/info.rs`. Advertises the
 /// device's real native decode capabilities (probed below), not a fixed list.
 struct DeviceProfile: Encodable {
     let directPlayProfiles: [DirectPlayProfile]

@@ -203,14 +203,13 @@ pkill -x electron        # NOT  pkill -f .../desktop
 - `[renderer]` — Angular console.
 - `[ipc]` / `[input]` — main process (load URLs, SDL input forwarding).
 
-## Testing against a backend
+## Testing against a server
 
 - The server URL is chosen **in-app** on the native server-setup screen. Point it
-  at a local backend or prod there.
-- **Local backend** for backend iteration: docker `fliks-backend-1` on
-  `localhost:3001`, bind-mounts `backend/src`, runs `npm run start:dev` (NestJS
-  watch → edits hot-reload; watch for `Found 0 errors` / `Nest application
-  successfully started`). JWT secret `change-me-in-production`, 7-day expiry.
+  at a local server or prod there.
+- **Local server**: the dev stack of `docker-compose.dev.example.yml`, the engine
+  front door on `localhost:3000` forwarding to `server` (`fliks-server`, cargo watch
+  on `server/`). JWT secret `dev-secret` (the compose example).
 - Prod (`fliks.delestre.me`) is a different machine — you can't inspect its files.
 
 ## Known constraints / gotchas
