@@ -150,8 +150,12 @@ async fn await_idle(ctx: &Ctx, db: &str, until_busy: bool) {
     }
 }
 
-/// Recreates the scenario database from its seed template.
+/// Recreates the scenario database from its seed template, and drops its backups (`<root>/data/backups`).
 fn reset_db(db: &str, tpl: &str) {
+    let backups = PathBuf::from(media_root()).join("data/backups");
+    for e in fs::read_dir(backups).into_iter().flatten().flatten() {
+        let _ = fs::remove_file(e.path());
+    }
     psql(
         &[
             "-d",
@@ -949,9 +953,7 @@ async fn parity() {
             continue;
         }
         let seed = sc["seed"].as_str().unwrap_or("base");
-        if providers {
-            await_idle(&ctx, &db, false).await;
-        }
+        await_idle(&ctx, &db, false).await;
         reset_db(&db, &template(&base_tpl, seed));
         if seed != logged_in {
             ctx.tokens = login_all(&ctx.http, &ctx.target).await;
