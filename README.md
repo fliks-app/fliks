@@ -139,9 +139,11 @@ hand.
   is written to disk.
 - **A plugin that runs code runs apart.** There are two tiers: a `data`
   plugin ships JSON and executes nothing at all, while a `process`
-  plugin gets its own child process under its own uid, plus its own
-  PostgreSQL role and schema. It cannot reach another plugin's tables,
-  or yours.
+  plugin is a WebAssembly component run in a sandbox by the server. It
+  has no network of its own (outbound HTTP only through the server's
+  guard) and sees one private data folder, plus its own PostgreSQL role
+  and schema. It cannot reach another plugin's tables, or yours, and
+  its memory, run time and concurrent requests are capped.
 - **Plugins extend the interface**, not just the backend. Their pages,
   menu entries and settings appear where they belong and follow your
   permissions like everything else.

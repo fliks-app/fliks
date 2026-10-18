@@ -9,9 +9,10 @@ particular plugin *does* belongs in that plugin's own README.
 settings, and subscribe to domain events — core makes every outbound request on its behalf. It
 holds no database, answers no route, and runs no code. Installing one cannot execute anything.
 
-**`process`** ships a `plugin.js` that core spawns as a child process. It answers HTTP routes
-through core's proxy, owns a Postgres schema, and runs jobs on a schedule. It is the tier that can
-do work of its own, and the one whose failure needs supervision.
+**`process`** ships a WebAssembly component (`plugin.wasm`, `pluginApi` 2) that `fliks-server` runs
+in a wasmtime sandbox. It answers HTTP routes through core's proxy, owns a Postgres schema, and runs
+jobs on a schedule. It is the tier that can do work of its own, and the one whose failure needs
+supervision.
 
 Pick `data` unless the plugin genuinely needs to act. The tiers are not a spectrum: a `data`
 plugin that needs to answer one route is a `process` plugin.
@@ -27,16 +28,16 @@ the only identity field that's optional.
 A `process` manifest additionally requires these seven keys — reference `fk-plugin-download`'s
 `plugin.json` for a manifest that satisfies all of them:
 
-- `runtime` — the only legal value is the literal `"node"`.
-- `memoryMb` — passed through as the child's own `--max-old-space-size`. Core does not clamp it.
-- `pluginApi` — the contract revision this plugin is written against. Core accepts every value in
-  its own `SUPPORTED_PLUGIN_API_VERSIONS`, so a bump does not orphan your plugin the day it lands:
-  the older value keeps working until a later release drops it, and that window is when to republish.
+- `runtime` — the only legal value is the literal `"wasm"`. (`"node"` is refused.)
+- `memoryMb` — the cap on each instance's linear memory, at most 1024; larger is refused.
+- `pluginApi` — the contract revision this plugin is written against. Core accepts only the values in
+  its own `SUPPORTED_PLUGIN_API_VERSIONS`, which is `[2]`: a manifest declaring anything else is
+  installed but `failed` with `incompatible-api`, with no transition window.
 - `fliks` — the core versions this plugin runs on, as a semver range that should carry an upper
-  bound (`>=3.0.0 <4.0.0`). Core itself only checks the range is non-empty and satisfied by the
+  bound (`>=5.0.0 <6.0.0`). Core itself only checks the range is non-empty and satisfied by the
   running version; the official catalogue's CI is what refuses an unbounded range before publishing.
-  A prerelease core matches as its own release would, so a `3.0.0-rc` runs the
-  plugins that declare `>=3.0.0` — which is how a major upgrade gets rehearsed before it ships.
+  A prerelease core matches as its own release would, so a `5.0.0-rc` runs the
+  plugins that declare `>=5.0.0` — which is how a major upgrade gets rehearsed before it ships.
 - `files` — sha256 of every archive entry but the manifest and its own signature.
 - `database` — `{ schema: boolean, coreRefs: string[] }`: whether it wants its own schema, and
   which core tables it needs `REFERENCES` on.
@@ -59,12 +60,15 @@ A `process` manifest additionally requires these seven keys — reference `fk-pl
   A method whose scopes you have not all declared rejects with `missing scope "<scope>" required
   for "<method>"`. `HOST_METHOD_SCOPES` in the contract is the source this table restates.
 - `ingestRoots[]` — the allowlist `library.ingest` paths must fall under; may be empty.
+- `network` — optional, `{ internal: true }` and nothing else: lets the plugin's outbound requests
+  reach private addresses (a LAN download client). The install consent sheet is the grant; an upgrade
+  that newly asks for it is not applied unattended and waits for an admin to confirm.
 
 Optional beyond that:
 
 - `jobs[]` (`process`) — named cron entries core schedules and dispatches.
-- `events[]` — domain events to receive. A `data` plugin gets an HTTPS POST from core; a `process`
-  plugin gets a note over its socket.
+- `events[]` — domain events to receive. Only a `data` plugin uses it: it gets an HTTPS POST from core.
+  A `process` plugin is called with every domain event and ignores the list.
 - `permissions[]` — raw names; core builds the CASL subject as `plugin:<id>:<name>`, so a plugin cannot claim another's or a core subject.
   Every distinct `action:subject` policy your `routes[]` declare is offered as its own tick box in the
   roles editor, so `read:plugin:<id>:queue` can be granted without `manage:plugin:<id>:queue`. A declared
@@ -96,7 +100,7 @@ and the contributions opening a withheld page are withheld with it. So a nav ent
 **`ui.configPages[]`** declares a page, discriminated on `kind`:
 
 - `form` — key/value settings stored in `app_settings` under `plugin.<id>.<key>`, rendered by
-  core's schema form. Works with the process stopped. May declare `actions[]` naming a
+  core's schema form. Works with the plugin stopped. May declare `actions[]` naming a
   core-implemented button.
 - `providers` — a CRUD list of instances over the plugin's own routes, with a per-implementation
   field set, an optional connection test, and row/list actions.
@@ -110,7 +114,7 @@ A `form` page's `fields[]` is an ordered list of items, discriminated on `kind`:
   plain input fields, never another group — nesting one is refused at install, not merely ignored;
 - `status` — a read-only line naming a `settingKey`. It shows whatever value the plugin last wrote
   to `plugin.<id>.<settingKey>` via `config.set`. There is no route behind it, so — like the rest
-  of `form` — it still renders with the process stopped; it is not a live status check.
+  of `form` — it still renders with the plugin stopped; it is not a live status check.
 
 A field may also declare validation constraints, all optional: `min`/`max` for a `number` field,
 `minLength`/`maxLength` otherwise. The renderer enforces them before it will save. They are an
@@ -156,94 +160,90 @@ The Apple TV and Cast players do not model this field and will play the main vid
 
 ## What a `process` plugin can ask of core
 
-A spawned plugin talks to core over two unix sockets with newline-delimited JSON-RPC: one for the
-calls it makes, one for the notes core sends it (`hello`, `health`, `event`, `config`, `http`,
-`job`, `shutdown`). Its host API is a fixed set of methods — media lookup, acquisition targets,
-release scoring, library ingest constrained to declared `ingestRoots`, event publication with a
-forced `<pluginId>.` prefix, settings read/write scoped to its own namespace.
-
-Since the Rust host (S8) a `process` plugin is a WebAssembly component (`pluginApi` 2, world
-`fliks:plugin@2.0.0`) built with the `fliks-plugin-sdk` crate (`server/crates/plugin-sdk/`, `MIT OR
-Apache-2.0`, published as a git tag): the WIT, the `export!` macro, typed `host`, `db`, `http` and
-scheduled-call helpers, an async runtime (`rt`: `block_on`, `join_all`, `spawn_local`, `timeout`,
-`sleep` over `wstd`, and `Budget` with the per-export guest budgets) so one export can have several
-outbound requests in flight, `info!`-style logging that scrubs `scheme://user:pass@` (and
-`log::redact_url`), a router over the host's own route matcher (`fliks-plugin-route`), a
-component test harness over the real host (feature `harness`) and the build, package and verify
-tooling (feature `build`, `cargo xtask build|package|verify`). The host rules are
-`server/docs/spec/plugins.md`. The UI-contribution types the web client reads live in
-`client/src/app/core/plugin-ui/ui-contribution.ts`; the Node `@fliks/plugin-contract` package is gone.
+A `process` plugin is a WebAssembly component (`pluginApi` 2, world `fliks:plugin@2.0.0`) that
+`fliks-server` runs in its own wasm host (wasmtime). It is built with the `fliks-plugin-sdk` crate
+(`server/crates/plugin-sdk/`, `MIT OR Apache-2.0`, published as a git tag): the WIT, the `export!`
+macro, typed `host`, `db`, `http` and scheduled-call helpers, an async runtime (`rt`: `block_on`,
+`join_all`, `spawn_local`, `timeout`, `sleep` over `wstd`, and `Budget` with the per-export guest
+budgets) so one export can have several outbound requests in flight, `info!`-style logging that
+scrubs `scheme://user:pass@` (and `log::redact_url`), a router over the host's own route matcher
+(`fliks-plugin-route`), a component test harness over the real host (feature `harness`) and the
+build, package and verify tooling (feature `build`, `cargo xtask build|package|verify`). The host
+rules are `server/docs/spec/plugins.md`. The UI-contribution types the web client reads live in
+`client/src/app/core/plugin-ui/ui-contribution.ts`.
 
 Start from the SDK's examples: `examples/fk-plugin-notify/` is a complete small plugin (scheduled
 retries, one outbound POST, two routes), `examples/fixture-guest/` exercises every host behaviour
 and is what the host tests run, `examples/xtask/` is the build tool a plugin repository keeps.
 `fk-plugin-download` is the full reference implementation.
 
-### Environment
+### The sandbox
 
-Core never passes `...process.env` to the child — everything a `process` plugin gets is one of
-these, set once at spawn (`supervisor/spawn-plan.ts`):
+There are no sockets, pid files or uids: the component only has what the host links in.
 
-- `FLIKS_PLUGIN_TOKEN` — random per spawn. Echo it back, unmodified, as `hello`'s `token`: it is
-  the only proof the responder is the process core just spawned, not something else connected to
-  the same socket. Get this wrong and the plugin is SIGKILLed with no message naming why.
-- `FLIKS_CORE_SOCK` — the unix socket to dial for this plugin's own host-API calls.
-- `FLIKS_PLUGIN_SOCK` — the unix socket to listen on for core's calls.
-- `FLIKS_DB_URL` — this plugin's own Postgres connection string; empty when its manifest declared
-  no schema.
-- `FLIKS_PLUGIN_ID` — this manifest's `id`, verbatim.
-- `FLIKS_API_VERSION` — the plugin API version, stringified. Checked for exact equality, never a
-  range.
-- `FLIKS_CFG_*` — every `plugin.<id>.<key>` admin setting, re-keyed: drop the `plugin.<id>.`
-  prefix, upper-case what's left, replace every character outside `[A-Z0-9_]` with `_`, and
-  prepend `FLIKS_CFG_`. Not a fixed set — read whichever names your own manifest's settings
-  resolve to.
+- **Network**: no sockets of its own. Outbound HTTP goes through `wasi:http`, and every request is
+  vetted by the host: `http` and `https` only, the name resolved once and every address checked, no
+  redirect followed for it. Private ranges are refused unless the manifest declares `network:
+  {internal: true}` and an admin consented at install; reserved, multicast and link-local (cloud
+  metadata) ranges stay refused either way. At most 32 requests per plugin are in flight.
+- **Filesystem**: one directory, `/data`, private to the plugin and kept across restarts and
+  upgrades. Uninstall removes it. Nothing else is visible.
+- **Database**: its own role and schema, through the `db` interface (see Database).
+- **Memory and time**: `memoryMb` caps each instance's linear memory, and every export has a
+  deadline (see Deadlines and ceilings). A trapped, out-of-memory or overdue instance is dropped;
+  the host and the other plugins are unaffected.
+- **Host functions**: a fixed set of calls — media lookup, acquisition targets, release scoring,
+  library ingest constrained to declared `ingestRoots`, event publication, settings read/write
+  scoped to the plugin's own `plugin.<id>.` namespace, scheduled calls — each bound to the
+  calling plugin's id and checked against its declared `scopes`.
 
-### Filesystem
+### Exports and lifecycle
 
-`--allow-fs-read` covers this plugin's own code directory; `--allow-fs-write`, `HOME` and the
-child's cwd are all one directory keyed by this plugin's `id` alone, outside that code tree.
-That split matters because the code directory does not survive: core re-extracts and replaces it
-from the signed archive on every ordinary start — boot, enable, an admin restart, install and
-upgrade alike, not just a crash respawn — so nothing written there outlives the next start. The
-data directory is never touched by that sweep, so it is the only place worth writing anything a
-restart, an upgrade, or a disable/re-enable needs to survive. Uninstall removes both the code
-directory and the data directory, along with this plugin's `plugin.<id>.*` settings and its
-registration, and (for a schema-owning plugin) the database schema.
+The guest interface is `hello`, `health`, `start`, `http`, `event`, `config-changed`, `job`,
+`scheduled` and `shutdown`. A guest holds no timer between calls and may be dropped at any time, so
+nothing that matters lives in an instance: it lives in the plugin's schema, its `/data`, or a
+scheduled call.
 
-### The handshake
-
-The first call core makes on a freshly spawned child is `hello`, with `{ pluginApi, coreVersion,
-config }`. That `pluginApi` — and the `FLIKS_API_VERSION` env var — is the value **your** manifest
-declares, not core's newest: core answers each plugin in the revision that plugin was written
-against, so comparing it for exact equality against the revision you built for is safe. The reply must be `{ manifest, token }`: `manifest` is this archive's own
-`plugin.json`, read fresh rather than baked into the bundle, and `token` is `FLIKS_PLUGIN_TOKEN`
-echoed back exactly. A wrong or missing token is a crash: core logs `plugin crashed: hello token
-mismatch` against that plugin's own log stream and retries up the backoff ladder until the breaker
-trips. See `fk-plugin-download`'s `hello` handler in `src/plugin.ts` for a minimal implementation
-that gets both right.
-
-### Health
-
-Once ready, core calls `health` on `healthIntervalMs` (15s default) with no payload; reply with
-`{ ok: boolean, detail?: string }`. A reply of `ok: false` counts exactly like a timed-out or
-unanswered call — two consecutive misses mark the plugin `degraded`, four force a SIGTERM-then-
-SIGKILL respawn — so an unhealthy-but-reachable plugin can ask to be recycled without waiting out
-the deadline. `detail` is logged against this plugin's own log stream, so name what's wrong there.
-
-### Config changes
-
-When an admin saves one of this plugin's own `plugin.<id>.*` settings while it is running, core
-pushes a `config` note: `{ changed: string[] }`, one entry, the same unprefixed key shape
-`config.get` returns. It names what changed; it does not carry the new value — call `config.get`
-for that. A plugin that is not running is never a target, and a save for a namespace no running
-plugin owns raises nothing.
+- **Instances**: a wasm instance runs one export at a time, so the host keeps lanes: one `core`
+  instance (`hello`, `start`, `health`, `config-changed`, `shutdown`), one for `event`, up to four for
+  proxied `http`, one per declared job, and up to two for `scheduled`. A health check, a request or an
+  event never waits behind a job. Idle `http`, `job` and `scheduled` instances are dropped after
+  10 minutes.
+- **Handshake**: `hello(core-version, config)` gets the plugin's settings (keys without the
+  `plugin.<id>.` prefix) and answers `{ id, version, plugin-api }`, which the SDK embeds at build time.
+  The host compares them for exact equality with the signed manifest; a mismatch fails the
+  registration as `manifest-mismatch`, with no retry.
+- **Start**: `start` then runs once, after `hello`, whenever the plugin has no other live instance.
+  It runs the migrations and re-arms the plugin's own background work; the plugin is `ready` once it
+  returns. A `start` that errors is a crash, unless core's own database was unreachable, in which case
+  the plugin is `degraded` and `start` is retried.
+- **Health**: the `core` instance gets `health` every 15 s, reply `{ ok, detail? }`. Two consecutive
+  `ok: false` replies mark the plugin `degraded` (503 on its routes, withdrawn from the UI), four
+  drop the instance as a crash; a good reply recovers it. A health call that times out or traps is a
+  crash at once.
+- **Crashes**: a crash drops only that instance, and its lane re-creates one after `1, 2, 4, 8, 16,
+  30 s` (the ladder resets after 120 s of continuous `ready`). Six crashes in ten minutes trip the
+  breaker.
+- **Config changes**: when an admin saves one of the plugin's own settings, every live instance gets
+  `config-changed(keys)` before its next call. It names the keys, not the values; call `config.get`.
+- **Events**: every domain event is delivered to every `process` plugin as `event(name, payload)`,
+  unfiltered, at-most-once, through a ring of 64 per plugin (the oldest is dropped when it is full). A
+  plugin's own `events[]` is ignored.
+- **Jobs and scheduled calls**: `jobs[]` are cron entries core runs as `job` calls, with no overlap
+  per job. `schedule-call(key, delay-ms, payload)` stores one durable pending call per key in a
+  host table, so it survives restarts, disable and upgrade. It runs as `scheduled(key, payload,
+  attempt)`; delivery is at-least-once, so the handler must be idempotent. After 20 attempts the call is dropped.
+- **Logs**: `log` and every line written to stdout or stderr go to core's log ring under the context
+  `plugin:<id>`.
 
 ## Database
 
 A `process` plugin that asks for a schema gets its own Postgres role and schema
-(`plugin_<id with dots as underscores>`), a password rotated on every spawn, and `REFERENCES`-only
-grants on the core tables it declared. It runs its own migrations. Core never reads those tables.
+(`plugin_<id with dots as underscores>`), a password rotated on every start and never handed to the
+guest, and `REFERENCES`-only grants on the core tables it declared. It reaches them only through the
+`db` interface (`query`, `execute`, `migrate`): the host keeps one pool per plugin, logged in as that
+role with the schema as its whole `search_path`. A plugin runs its own migrations, from `start`.
+Core never reads those tables.
 
 Uninstalling drops the role and the schema. Disabling does not.
 
@@ -298,18 +298,17 @@ at-most-once with no retry; a plugin that needs retries is `process` and does it
 
 `GET /plugins/metrics` (admin-gated the same way as the rest of `/plugins`) answers one entry per
 installed plugin: `{ pluginId, kind, metrics }`. `metrics` is `null` for a `data` plugin — it has no
-supervisor — and for a `process` plugin that isn't currently running: never a row of zeros that
-reads like a healthy process. For a running `process` plugin it carries:
+instances — and for a `process` plugin that isn't currently running: never a row of zeros that
+reads like a healthy plugin. For a running `process` plugin, summed over its instances, it carries:
 
-- `hostCallCount` / `hostCallFailureCount` — every inbound call across the plugin's 15 host
-  methods, counted once in `dispatchHostCall`, the single funnel all of them share.
+- `hostCallCount` / `hostCallFailureCount` — every call the guest makes to the `host` and `db`
+  interfaces.
 - `hostCallP95Ms` — p95 duration over the most recent 256 host calls, not a time window, so a
   plugin that has been up for weeks still reports a bounded, recent figure. `null` before the first call.
-- `restartCount` — crash-triggered respawns since this plugin's supervisor last started.
-- `eventDropCount` — notes core could not deliver because the outbound ring to this plugin was full.
-- `residentSetSizeBytes` — the child's resident memory, read from `VmRSS` in `/proc/<pid>/status`
-  when the endpoint is called, not polled in the background. `null`, never `0`, off Linux or if the
-  child isn't up — a gauge that always silently reads zero is worse than one that admits it can't answer.
+- `restartCount` — crashes since this plugin was registered.
+- `eventDropCount` — events core could not deliver because the plugin's ring of 64 was full.
+- `residentSetSizeBytes` — the linear memory in use across the instances, read when the endpoint is
+  called. `null`, never `0`, when no instance is up.
 
 ## Trust and installation
 
@@ -332,22 +331,37 @@ leaves an unsigned plugin already installed running, uninstall it instead.
 `verify` runs that inspector, the size budget and the world check. An unsigned archive installs
 only when `plugins.allow_unsigned` is on; `--key <hex seed file>` adds a dev signature.
 
+A `process` archive carries `plugin.json`, `plugin.wasm` (starting with the component preamble), the
+logo and the signature; `plugin.wasm` is capped at 32 MiB and the uncompressed entries at 48 MiB in
+all. There is no `installed/` tree: the host hashes the archive it stored at every load and compiles
+the component from it (the compiled form is cached and authenticated against the database row).
+
 ### Deadlines and ceilings
 
-Core enforces these; exceeding one gets your call abandoned or your process killed. The values are
-`server/docs/spec/plugins.md` rules 39-43; a guest reads its own budget with
-`deadline-remaining-ms`.
+Core enforces these; exceeding one gets your call abandoned and, for a call on an instance, the
+instance dropped. The values are `server/docs/spec/plugins.md` rules 39-43 and the host's
+`Deadlines`; a guest reads the budget of the export it runs in with `deadline-remaining-ms`.
 
 | What | Value | On breach |
 |---|---|---|
-| `hello` reply | 10 s | killed, restarted with backoff |
-| `health` reply | 3 s, asked every 15 s | 2 misses degrade, 4 recycle |
-| host call | 8 s | the call rejects; `library.ingest` is allowed 30 min |
+| `hello` | 10 s | crash, restarted with backoff |
+| `start` | 15 min | crash, restarted with backoff |
+| `health` | 3 s, asked every 15 s | a timeout is a crash; 2 `ok: false` replies degrade, 4 recycle |
+| `config-changed`, `shutdown` | 3 s | instance dropped |
+| proxied `http` | 180 s | 504, instance dropped |
+| pre-roll | 3 s, queue included | the item list is omitted |
+| `event` | 60 s | instance dropped |
+| `scheduled` | 5 min | instance dropped, the call fires again |
+| `job` | 60 min | instance dropped |
+| host call | 8 s | `ERR_TIMEOUT`; `library.ingest` 30 min, `db.migrate` 10 min |
+| `db.query` / `db.execute` | 60 s | cancelled, SQLSTATE `57014` |
 | outbound HTTP requests in flight | 32 per plugin | the 33rd waits for a slot, inside the call's deadline |
-| `shutdown` reply | 3 s, then 2 s before SIGKILL | killed |
-| stdout+stderr | 64 KB/min | output dropped for the rest of the minute, once with a warning |
-| heap (`memoryMb`) | 256 MB default | V8 old space only — nothing caps process RSS |
-| one frame | 4 MiB | refused at the sender rather than breaking the connection |
+| proxied requests waiting for an instance | queue of 32, 30 s | 503 `PLUGIN_UNAVAILABLE` |
+| stdout, stderr and `log` | 64 KiB/min | output dropped for the rest of the minute, once with a warning |
+| memory (`memoryMb`) | at most 1024, per instance | `memory.grow` past it traps that instance |
+
+Guest CPU is bounded by the wall-clock deadline, enforced by epoch interruption. Six crashes in ten
+minutes trip the breaker: the plugin is `failed` until an admin restarts or re-enables it.
 
 Catalogue sources are HTTPS documents listing each plugin's installable versions with a `sha256`
 per version; core refuses bytes whose hash does not match. Publishing a plugin means committing its
@@ -378,28 +392,30 @@ it is not reporting an outage.
 
 Latency: a revocation reaches an already-running plugin the moment the catalogue that names it
 refreshes — the daily 3am cron, or immediately on a manual refresh — never waiting for a reboot. The
-refresh that lands a new deny-list entry stops any matching installed package's process and marks
+refresh that lands a new deny-list entry stops any matching installed package and marks
 its row `failed` with the publisher's reason right there, rather than merely blocking the next
 install.
 
 ## Operator semantics worth knowing before you rely on them
 
-- **Disable** stops the process and drops every live registration — routes, contributions, jobs,
-  webhooks — while the row, the archive, the role and the schema stand.
-- **Uninstall** destroys the schema and its data, the plugin's data directory, its
-  `plugin.<id>.*` settings, and its registration.
+- **Disable** stops the plugin's instances and drops every live registration — routes, contributions,
+  jobs, webhooks — while the row, the archive, the role, the schema and its pending scheduled calls
+  stand.
+- **Uninstall** destroys the schema and its data, the plugin's data directory, its pending scheduled
+  calls, its `plugin.<id>.*` settings, and its registration.
 - **An upgrade over a disabled plugin stays disabled.**
-- A plugin that goes unreachable has its contributions filtered out server-side, so a frozen
-  client never has to know about plugin health.
+- A plugin that is not `ready` has its contributions filtered out server-side, so a frozen client
+  never has to know about plugin health.
 
 ---
 
 ## Proposing an extension point
 
-Everything a plugin can reach is a closed set: the host methods in `host-methods.ts`, the scopes in
-`manifest.ts`, the UI slots in `ui-contribution.ts`, and the routes a manifest may declare. That is
-deliberate — a closed set is what makes a plugin's blast radius reviewable, and what lets core
-promise a plugin will keep working across a release.
+Everything a plugin can reach is a closed set: the host functions in the WIT world
+(`server/crates/plugin-sdk/wit/fliks.wit`), the scopes in `server/crates/server/src/plugins/manifest.rs`,
+the UI slots in `client/src/app/core/plugin-ui/ui-contribution.ts`, and the routes a manifest may
+declare. That is deliberate — a closed set is what makes a plugin's blast radius reviewable, and what
+lets core promise a plugin will keep working across a release.
 
 It also means "can my plugin do X?" has no answer a plugin author can reach alone. When X is not in
 one of those sets, open an issue. A proposal that can be acted on says:
@@ -407,16 +423,25 @@ one of those sets, open an issue. A proposal that can be acted on says:
 1. **What the plugin is trying to do**, in terms of the user-visible outcome — not the API you
    imagined for it. The right extension point is frequently not the one proposed.
 2. **What you tried within the existing set**, and where it stopped. Often the answer is an existing
-   method used differently, and that is a faster outcome for everyone than a new one.
-3. **What core would have to trust you with.** A new host method is a new scope, or a widening of
+   function used differently, and that is a faster outcome for everyone than a new one.
+3. **What core would have to trust you with.** A new host function is a new scope, or a widening of
    one; say which, and what a hostile plugin holding it could do.
-4. **Whether it can be additive.** A new method, scope or slot is additive and can ship in a minor.
-   A change to an existing one's shape or meaning is a `pluginApi` major and orphans every plugin
-   that has not republished, so it waits for a scheduled break.
+4. **Whether it can be additive.** Within one `pluginApi` value the WIT package only grows (a new
+   optional field or function bumps its minor version and the host links both). A change to an
+   existing one's shape or meaning is a `pluginApi` bump and orphans every plugin that has not
+   republished, so it waits for a scheduled break.
 
 Items 3 and 4 are what decide the answer. A proposal that is additive and whose worst case is
 bounded is a small change; one that widens an existing scope is a security review.
 
-`SUPPORTED_PLUGIN_API_VERSIONS` is what a break costs in practice: a bump adds an entry, a later
-release drops the oldest, and the window between the two is when authors republish. Proposals that
-fit inside the current entry ship far sooner than proposals that need a new one.
+There is no transition window: core accepts only the `pluginApi` values it lists (today `2`), and a
+plugin declaring another one is installed but `failed`, not loaded. Proposals that fit inside the
+current value ship far sooner than proposals that need a new one.
+
+## pluginApi 1 (Fliks 4.x)
+
+Fliks 4.x ran `process` plugins as Node child processes (`runtime: "node"`, a `plugin.js`, JSON-RPC
+over unix sockets). That contract is gone: a `pluginApi` 1 package, `data` tier included, still shows
+up after an upgrade but is `failed` with `incompatible-api` and its routes answer 503, until the
+catalog's auto-update installs a `pluginApi` 2 version of it. To port one, rebuild it against the SDK
+and republish; the catalog's `COMPATIBILITY.md` has the `pluginApi` to Fliks version row.
