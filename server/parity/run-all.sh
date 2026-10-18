@@ -32,7 +32,7 @@ stop_all() {
 cleanup() {
   trap - EXIT INT TERM
   stop_all
-  psql_admin -d postgres -At -c "SELECT datname FROM pg_database WHERE datname LIKE '${DBPFX}%'" 2>/dev/null |
+  psql_admin -d postgres -At -c "SELECT datname FROM pg_database WHERE datname LIKE '${DBPFX//_/\\_}%'" 2>/dev/null |
     while read -r d; do psql_admin -d postgres -c "DROP DATABASE IF EXISTS \"$d\" WITH (FORCE)" </dev/null 2>/dev/null; done
 }
 trap 'exit 130' INT TERM
@@ -116,7 +116,7 @@ SUMMARY=()
 FAILED=0
 run_mode() { # run_mode <engine up|down|stub> <providers 0|1> <filter>
   local engine=$1 prov=$2 filter=$3 tag=$1/prov$2 d=$RUN/target-$1-$2
-  local ENG_URL="" ENG_TOK="" HOST_TOK="" EPID=""
+  local ENG_URL="" ENG_TOK="" HOST_TOK=""
   log "mode engine=$engine providers=$prov"
   rm -rf "$d" "$FLIKS_PARITY_ROOT/data"; mkdir -p "$d"/{conf,cache,runtime}
   "$SERVER/parity/media-gen.sh" || { SUMMARY+=("$tag|ERROR|0|0|0|media-gen"); FAILED=1; return; }
@@ -125,8 +125,7 @@ run_mode() { # run_mode <engine up|down|stub> <providers 0|1> <filter>
       mkdir -p "$d/engine"
       start "engine-$1-$2" "$d" env FLIKS_ENGINE_TOKEN=pall-engine ENGINE_DATA_DIR="$d/engine/data" \
         FLIKS_CACHE_DIR="$d/engine/cache" FLIKS_TRANSCODE_DIR="$d/engine/transcode" "$ENGBIN" --listen 127.0.0.1:$P_ENGINE
-      EPID=${PIDS[-1]}
-      wait_http "http://127.0.0.1:$P_ENGINE/v1/hello" 20 || { log "engine did not start"; SUMMARY+=("$tag|ERROR|0|0|0|engine"); FAILED=1; return; }
+      wait_http "http://127.0.0.1:$P_ENGINE/v1/hello" 20 || { log "engine did not start"; SUMMARY+=("$tag|ERROR|0|0|0|engine"); FAILED=1; stop_all_but_stubs; return; }
       ENG_URL=http://127.0.0.1:$P_ENGINE ENG_TOK=pall-engine ;;
     stub) ENG_URL=http://127.0.0.1:$P_ESTUB ENG_TOK=stub ;;
   esac
@@ -143,10 +142,9 @@ run_mode() { # run_mode <engine up|down|stub> <providers 0|1> <filter>
   # the boot catalog pass would fetch the official source from github.io; the runner resets this DB first
   psql_admin -d "$DB" -c "TRUNCATE plugin_sources CASCADE" >/dev/null
   start "target-$1-$2" "$ROOT/backend" env -u TMDB_API_KEY -u TVDB_API_KEY -u DATABASE_URL -u INVOCATION_ID -u pm_id -u FLIKS_SUPERVISED "${penv[@]}" "$BIN"
-  local TPID=${PIDS[-1]}
   if ! wait_http "http://127.0.0.1:$P_TARGET/api/auth/login" 90; then
     log "target did not start, see $RUN/target-$1-$2.log"; SUMMARY+=("$tag|ERROR|0|0|0|target"); FAILED=1
-    kill -TERM -- "-$TPID" 2>/dev/null; return
+    stop_all_but_stubs; return
   fi
   if [ "$engine" = up ]; then
     sleep 2
@@ -154,10 +152,12 @@ run_mode() { # run_mode <engine up|down|stub> <providers 0|1> <filter>
       python3 -c 'import sys,json;d=json.load(sys.stdin);print(d.get("hostToken") or d.get("host_token") or "")')
   fi
   local out=$RUN/result-$1-$2.log
-  (cd "$SERVER" && env CARGO_MANIFEST_DIR="$SERVER/crates/server" PARITY_TARGET=http://127.0.0.1:$P_TARGET PARITY_DB=$DB PARITY_TPL=$TPL \
+  # own group like the stubs: a background job ignores SIGINT, so Ctrl-C alone would orphan it
+  (cd "$SERVER" && exec setsid env CARGO_MANIFEST_DIR="$SERVER/crates/server" PARITY_TARGET=http://127.0.0.1:$P_TARGET PARITY_DB=$DB PARITY_TPL=$TPL \
     PARITY_ENGINE=$engine PARITY_PROVIDERS=$prov PARITY_STUB=http://127.0.0.1:$P_PROV PARITY_HOST_TOKEN="$HOST_TOK" \
     PARITY_FRONT=$ENG_URL PARITY_LIVETV=http://127.0.0.1:$P_LIVETV PARITY_FILTER="$filter" \
-    "$TESTEXE" parity --ignored --nocapture) >"$out" 2>&1 &
+    "$TESTEXE" parity --ignored --nocapture) >"$out" 2>&1 3>&- </dev/null &
+  PIDS+=($!)
   wait $!
   local rc=$? line ok failed skipped dev
   line=$(grep -E '^parity: [0-9]+ passed' "$out" | tail -1)

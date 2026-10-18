@@ -24,6 +24,10 @@ The sections below describe the pieces `run-all.sh` scripts, for recording or de
 ```bash
 ./media-gen.sh      # tiny files under /tmp/fliks-parity (idempotent)
 ./seed/build.sh     # rebuilds template DB fliks_parity_tpl + seed/base.sql (drop the DBs freely)
+# template from the committed dump only (no fixtures needed):
+docker exec -i fliks-postgres-1 sh -c 'psql -U "$POSTGRES_USER" -qd postgres -c "DROP DATABASE IF EXISTS fliks_parity_tpl WITH (FORCE)" -c "CREATE DATABASE fliks_parity_tpl" && psql -U "$POSTGRES_USER" -qd fliks_parity_tpl' < seed/base.sql
+python3 external/stub.py 4964 &              # every run: the idle wait probes it (PARITY_STUB)
+python3 external/livetv/server.py 4961 &     # livetv scenarios: PARITY_LIVETV=http://127.0.0.1:4961
 ```
 
 From `server/`, with the `CARGO_*` env of `CLAUDE.md`:
