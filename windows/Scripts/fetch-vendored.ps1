@@ -3,9 +3,9 @@
     Fetch the Windows x64 binaries bundled into the Fliks server app.
 
 .DESCRIPTION
-    Downloads Node.js, PostgreSQL (EDB binaries) and FFmpeg (BtbN gpl full
+    Downloads PostgreSQL (EDB binaries) and FFmpeg (BtbN gpl full
     build — one binary covers QSV + AMF + NVENC + OpenCL) into
-    ..\Vendored\{node,pgsql,ffmpeg}. Idempotent: skips components already
+    ..\Vendored\{pgsql,ffmpeg}. Idempotent: skips components already
     present.
 #>
 [CmdletBinding()]
@@ -17,7 +17,6 @@ $vendored = Join-Path $root 'Vendored'
 New-Item -ItemType Directory -Force -Path $vendored | Out-Null
 
 # ── Versions ──
-$NodeVersion = '24.2.0'
 # EDB "binaries" zip (no installer) — verify the build suffix at
 # https://www.enterprisedb.com/download-postgresql-binaries
 $PgVersion = '18.0-1'
@@ -45,19 +44,6 @@ function Get-Archive([string]$url, [string]$dest, [string[]]$Exclude = @()) {
 
 Write-Host "==> Fetching vendored binaries to $vendored"
 
-# ── Node.js ──
-$nodeExe = Join-Path $vendored 'node\node.exe'
-if (Test-Path $nodeExe) {
-    Write-Host '    [skip] Node.js already present'
-} else {
-    $tmp = Join-Path ([IO.Path]::GetTempPath()) ([Guid]::NewGuid())
-    Get-Archive "https://nodejs.org/dist/v$NodeVersion/node-v$NodeVersion-win-x64.zip" $tmp
-    New-Item -ItemType Directory -Force -Path (Join-Path $vendored 'node') | Out-Null
-    Copy-Item (Join-Path $tmp "node-v$NodeVersion-win-x64\node.exe") (Join-Path $vendored 'node\node.exe')
-    Remove-Item -Recurse -Force $tmp
-    Write-Host "    [done] Node.js v$NodeVersion"
-}
-
 # ── PostgreSQL (EDB binaries) ──
 if (Test-Path (Join-Path $vendored 'pgsql\bin\postgres.exe')) {
     Write-Host '    [skip] PostgreSQL already present'
@@ -72,7 +58,7 @@ if (Test-Path (Join-Path $vendored 'pgsql\bin\postgres.exe')) {
 }
 
 # ── VC++ 2015-2022 runtime, app-local next to the exes that link it ──
-# The PG18 EDB and Node binaries are built with a recent VS toolset; on a host
+# The PG18 EDB binaries are built with a recent VS toolset; on a host
 # whose system MSVCP140.dll is older they crash (0xC0000005 ACCESS_VIOLATION —
 # seen at initdb). Windows searches the exe's own directory before System32, so
 # bundling the runtime beside each exe makes it load the correct version.
@@ -80,18 +66,16 @@ $vcDlls = @(
     'MSVCP140.dll', 'MSVCP140_1.dll', 'MSVCP140_2.dll', 'MSVCP140_atomic_wait.dll',
     'VCRUNTIME140.dll', 'VCRUNTIME140_1.dll', 'CONCRT140.dll'
 )
-foreach ($dir in @((Join-Path $vendored 'pgsql\bin'), (Join-Path $vendored 'node'))) {
-    foreach ($dll in $vcDlls) {
-        $src = Join-Path $env:SystemRoot "System32\$dll"
-        $dst = Join-Path $dir $dll
-        if ((Test-Path $src) -and -not (Test-Path $dst)) { Copy-Item $src $dst -Force }
-    }
+foreach ($dll in $vcDlls) {
+    $src = Join-Path $env:SystemRoot "System32\$dll"
+    $dst = Join-Path $vendored "pgsql\bin\$dll"
+    if ((Test-Path $src) -and -not (Test-Path $dst)) { Copy-Item $src $dst -Force }
 }
 $mp = Join-Path $vendored 'pgsql\bin\MSVCP140.dll'
 if (Test-Path $mp) {
     Write-Host "    [done] VC++ runtime bundled ($((Get-Item $mp).VersionInfo.FileVersion))"
 } else {
-    Write-Warning 'MSVCP140.dll not bundled; postgres/node may crash on hosts with an old VC++ runtime'
+    Write-Warning 'MSVCP140.dll not bundled; postgres may crash on hosts with an old VC++ runtime'
 }
 
 # ── FFmpeg (jellyfin-ffmpeg gpl) ──
@@ -113,6 +97,5 @@ if (Test-Path (Join-Path $vendored 'ffmpeg\bin\ffmpeg.exe')) {
 
 Write-Host ''
 Write-Host "==> Vendored binaries ready in $vendored"
-& (Join-Path $vendored 'node\node.exe') --version
 & (Join-Path $vendored 'pgsql\bin\postgres.exe') --version
 & (Join-Path $vendored 'ffmpeg\bin\ffmpeg.exe') -version | Select-Object -First 1

@@ -33,7 +33,7 @@ internal sealed class UpdateService
     public Task DownloadAsync(Action<int> progress) =>
         _manager.DownloadUpdatesAsync(_available!, progress);
 
-    /// <summary>Exits the process; postgres and node must already be stopped, since Velopack
+    /// <summary>Exits the process; postgres and the server must already be stopped, since Velopack
     /// kills whatever still holds files in the install folder.</summary>
     public void ApplyAndRestart() => _manager.ApplyUpdatesAndRestart(_available!.TargetFullRelease);
 }

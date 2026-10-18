@@ -130,7 +130,7 @@ internal sealed class PostgresManager(ushort port = 5433)
     public async Task<bool> IsReadyAsync()
     {
         // A real psql connection to the always-present `postgres` DB, not
-        // pg_isready: it verifies the exact capability the backend needs and
+        // pg_isready: it verifies the exact capability the server needs and
         // logs why it failed. 127.0.0.1 sidesteps the Windows localhost -> ::1
         // resolution that made the old pg_isready check time out.
         var r = await ProcessRunner.RunAsync(

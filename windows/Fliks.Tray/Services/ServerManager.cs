@@ -4,20 +4,18 @@ using Fliks.Tray.Utilities;
 
 namespace Fliks.Tray.Services;
 
-/// <summary>Backend environment injected into the Node process.</summary>
-internal sealed record BackendEnvironment(ushort Port, ushort DbPort)
+/// <summary>Environment injected into the engine and its fliks-server child.</summary>
+internal sealed record ServerEnvironment(ushort Port, ushort DbPort)
 {
     public IReadOnlyDictionary<string, string> AsEnvironment()
     {
-        // ffmpeg + pg_dump/psql first on PATH: the backend spawns them by name.
-        var nodeDir = Path.GetDirectoryName(AppPaths.NodeExe) ?? "";
+        // ffmpeg + pg_dump/psql first on PATH: the engine and the server spawn them by name.
         var systemPath = Environment.GetEnvironmentVariable("PATH") ?? "";
         var path = string.Join(Path.PathSeparator,
-            new[] { AppPaths.FfmpegBinDir, AppPaths.PgBinDir, nodeDir, systemPath });
+            new[] { AppPaths.FfmpegBinDir, AppPaths.PgBinDir, systemPath });
 
         return new Dictionary<string, string>
         {
-            ["NODE_ENV"] = "production",
             ["PORT"] = Port.ToString(),
             ["DB_HOST"] = "127.0.0.1",
             ["DB_PORT"] = DbPort.ToString(),
@@ -29,21 +27,17 @@ internal sealed record BackendEnvironment(ushort Port, ushort DbPort)
             ["FLIKS_CONF_DIR"] = AppPaths.ConfDir,
             ["FLIKS_TRANSCODE_DIR"] = AppPaths.TranscodeDir,
             ["PATH"] = path,
-            ["UV_THREADPOOL_SIZE"] = "16",
             ["FLIKS_CAST_DIR"] = AppPaths.CastDir,
-            ["FLIKS_NODE_BIN"] = AppPaths.NodeExe,
-            ["FLIKS_NEST_ENTRY"] = AppPaths.BackendMainJs,
             ["TMDB_API_KEY"] = BuildConfig.TmdbApiKey,
             ["TVDB_API_KEY"] = BuildConfig.TvdbApiKey,
         };
     }
 }
 
-/// <summary>Backend Node process: spawn, monitor, crash recovery, shutdown.
-/// The script runs by absolute path so node_modules resolves from the backend
-/// dir, while cwd stays on the writable data dir (images/, thumbnails/,
-/// backups/ are created there) — no symlinks or junctions.</summary>
-internal sealed class NodeManager
+/// <summary>The engine supervising fliks-server: spawn, monitor, crash recovery,
+/// shutdown. The cwd is the writable data dir (images/ and backups/ of existing
+/// installs live there).</summary>
+internal sealed class ServerManager
 {
     private Process? _process;
     private JobObject? _job;
@@ -51,31 +45,26 @@ internal sealed class NodeManager
     private readonly object _logGate = new();
     private bool _intentionalStop;
 
-    /// <summary>Fired when the backend exits unexpectedly (non-zero, not stopped
+    /// <summary>Fired when the server exits unexpectedly (non-zero, not stopped
     /// by us). The int is the exit code.</summary>
     public Action<int>? OnCrash { get; set; }
 
     public bool IsRunning => _process is { HasExited: false };
 
-    public async Task StartAsync(BackendEnvironment config, CancellationToken ct)
+    public async Task StartAsync(ServerEnvironment config, CancellationToken ct)
     {
         _intentionalStop = false;
         Directory.CreateDirectory(AppPaths.DataDir);
         Directory.CreateDirectory(AppPaths.LogsDir);
 
-        if (!File.Exists(AppPaths.NodeExe))
-            throw new FileNotFoundException($"node.exe not found: {AppPaths.NodeExe}");
-        if (!File.Exists(AppPaths.BackendMainJs))
-            throw new FileNotFoundException($"backend main.js not found: {AppPaths.BackendMainJs}");
-        Log.Info($"backend spawn: fliks-engine supervising fliks-server, node={AppPaths.NodeExe} nest={AppPaths.BackendMainJs} (cwd={AppPaths.DataDir})");
-
-        var engine = AppPaths.EngineExe ?? throw new FileNotFoundException("fliks-engine.exe not found beside node.exe");
+        var engine = AppPaths.EngineExe ?? throw new FileNotFoundException($"fliks-engine.exe not found in {AppPaths.BinDir}");
+        Log.Info($"server spawn: {engine} supervising fliks-server (cwd={AppPaths.DataDir})");
         var proc = new Process();
         proc.StartInfo.FileName = engine;
-        // The engine owns the public port; fliks-server listens on port + 1 behind it and spawns Nest.
+        // The engine owns the public port; fliks-server listens on port + 1 behind it.
         foreach (var a in new[] { "--supervise", "--public-listen", $"0.0.0.0:{config.Port}",
                      "--upstream", $"http://127.0.0.1:{config.Port + 1}", "--",
-                     Path.Combine(Path.GetDirectoryName(engine)!, "fliks-server.exe") })
+                     Path.Combine(AppPaths.BinDir, "fliks-server.exe") })
             proc.StartInfo.ArgumentList.Add(a);
         proc.StartInfo.WorkingDirectory = AppPaths.DataDir;
         proc.StartInfo.UseShellExecute = false;
@@ -84,15 +73,15 @@ internal sealed class NodeManager
         proc.StartInfo.RedirectStandardError = true;
         foreach (var (k, v) in config.AsEnvironment()) proc.StartInfo.Environment[k] = v;
 
-        // Windows doesn't kill children with their parent: node and its ffmpeg
-        // runs share a job, closed as soon as node exits, crash or not.
+        // Windows doesn't kill children with their parent: the engine, the server
+        // and their ffmpeg runs share a job, closed as soon as the engine exits.
         var job = new JobObject();
         proc.EnableRaisingEvents = true;
         proc.Exited += (_, _) =>
         {
             job.Dispose();
             var code = proc.ExitCode;
-            Log.Info($"backend exited: code={code} intentional={_intentionalStop}");
+            Log.Info($"server exited: code={code} intentional={_intentionalStop}");
             if (code != 0 && !_intentionalStop) OnCrash?.Invoke(code);
         };
 
@@ -101,7 +90,7 @@ internal sealed class NodeManager
         catch (System.ComponentModel.Win32Exception) when (proc.HasExited) { /* Exited already closed it */ }
         _job = job;
         _logStream = OpenDailyLog();
-        // Copy the child's raw bytes to the log — Node emits UTF-8, so passing
+        // Copy the child's raw bytes to the log — the server emits UTF-8, so passing
         // the bytes through untouched avoids any code-page transcode.
         PumpToLog(proc.StandardOutput.BaseStream);
         PumpToLog(proc.StandardError.BaseStream);
@@ -138,9 +127,9 @@ internal sealed class NodeManager
 
     private static FileStream OpenDailyLog()
     {
-        var file = Path.Combine(AppPaths.LogsDir, $"backend-{DateTime.Now:yyyy-MM-dd}.log");
+        var file = Path.Combine(AppPaths.LogsDir, $"server-{DateTime.Now:yyyy-MM-dd}.log");
         var fs = new FileStream(file, FileMode.Append, FileAccess.Write, FileShare.ReadWrite);
-        var header = Encoding.UTF8.GetBytes($"\n--- Fliks backend started at {DateTime.Now:O} ---\n");
+        var header = Encoding.UTF8.GetBytes($"\n--- Fliks server started at {DateTime.Now:O} ---\n");
         fs.Write(header, 0, header.Length);
         fs.Flush();
         return fs;
@@ -187,6 +176,6 @@ internal sealed class NodeManager
             }
             await Task.Delay(1000, ct);
         }
-        throw new TimeoutException("Backend did not become ready in time");
+        throw new TimeoutException("Server did not become ready in time");
     }
 }
