@@ -343,6 +343,7 @@ Core enforces these; exceeding one gets your call abandoned or your process kill
 | `hello` reply | 10 s | killed, restarted with backoff |
 | `health` reply | 3 s, asked every 15 s | 2 misses degrade, 4 recycle |
 | host call | 8 s | the call rejects; `library.ingest` is allowed 30 min |
+| outbound HTTP requests in flight | 32 per plugin | the 33rd waits for a slot, inside the call's deadline |
 | `shutdown` reply | 3 s, then 2 s before SIGKILL | killed |
 | stdout+stderr | 64 KB/min | output dropped for the rest of the minute, once with a warning |
 | heap (`memoryMb`) | 256 MB default | V8 old space only — nothing caps process RSS |
