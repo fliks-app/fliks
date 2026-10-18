@@ -301,8 +301,8 @@ installed plugin: `{ pluginId, kind, metrics }`. `metrics` is `null` for a `data
 instances — and for a `process` plugin that isn't currently running: never a row of zeros that
 reads like a healthy plugin. For a running `process` plugin, summed over its instances, it carries:
 
-- `hostCallCount` / `hostCallFailureCount` — every call the guest makes to the `host` and `db`
-  interfaces.
+- `hostCallCount` / `hostCallFailureCount` — every call the guest makes to the `host` interface;
+  `db` and `log` calls are not counted.
 - `hostCallP95Ms` — p95 duration over the most recent 256 host calls, not a time window, so a
   plugin that has been up for weeks still reports a bounded, recent figure. `null` before the first call.
 - `restartCount` — crashes since this plugin was registered.
@@ -347,7 +347,8 @@ instance dropped. The values are `server/docs/spec/plugins.md` rules 39-43 and t
 | `hello` | 10 s | crash, restarted with backoff |
 | `start` | 15 min | crash, restarted with backoff |
 | `health` | 3 s, asked every 15 s | a timeout is a crash; 2 `ok: false` replies degrade, 4 recycle |
-| `config-changed`, `shutdown` | 3 s | instance dropped |
+| `config-changed` | none of its own | runs inside the deadline of the call it precedes |
+| `shutdown` | 3 s | instance dropped |
 | proxied `http` | 180 s | 504, instance dropped |
 | pre-roll | 3 s, queue included | the item list is omitted |
 | `event` | 60 s | instance dropped |
