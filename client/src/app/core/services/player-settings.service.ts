@@ -100,10 +100,20 @@ export interface AudioStreamChoice {
   commentary?: boolean;
   audioDescription?: boolean;
   channels?: number;
+  /** Server-derived track markers (`commentary`, `original`, …). */
+  trackMarkers?: readonly string[];
+}
+
+/** Markers of a track nobody wants by default: another track of the language is picked over it. */
+const SIDE_TRACK_MARKERS = ['commentary', 'audioDescription', 'karaoke', 'musicAndEffects'];
+
+function isSideTrack(s: AudioStreamChoice): boolean {
+  return !!s.commentary || !!s.audioDescription || !!s.trackMarkers?.some((m) => SIDE_TRACK_MARKERS.includes(m));
 }
 
 function audioRole(s: AudioStreamChoice): 'main' | 'commentary' | 'ad' {
-  return s.commentary ? 'commentary' : s.audioDescription ? 'ad' : 'main';
+  if (s.commentary || s.trackMarkers?.includes('commentary')) return 'commentary';
+  return s.audioDescription || s.trackMarkers?.includes('audioDescription') ? 'ad' : 'main';
 }
 
 /** The remembered form of a track, `language:role:channels[:variant]`: what carries
@@ -164,19 +174,22 @@ export function matchRememberedAudio(
   return pool.find((i) => String(streams[i].channels ?? '') === channels) ?? pool[0];
 }
 
-/** Stream the language targets: a main track over a commentary or described
- *  one (unless nothing else carries the language), the default-flagged one first. */
+/** Stream the language targets: a main track over a commentary, described, karaoke or
+ *  music-and-effects one (unless nothing else carries the language), then the `original`-flagged
+ *  one when `preferOriginal`, then the default-flagged one. */
 export function pickAudioStreamForLanguage(
   streams: AudioStreamChoice[],
   language: string,
+  preferOriginal = false,
 ): number | undefined {
   const want = normalizeLangCode(language);
   const same = streams
     .map((s, i) => (normalizeLangCode(s.language) === want ? i : -1))
     .filter((i) => i >= 0);
-  const main = same.filter((i) => !streams[i].commentary && !streams[i].audioDescription);
+  const main = same.filter((i) => !isSideTrack(streams[i]));
   const pool = main.length ? main : same;
-  return pool.find((i) => streams[i].isDefault) ?? pool[0];
+  const original = preferOriginal ? pool.find((i) => streams[i].trackMarkers?.includes('original')) : undefined;
+  return original ?? pool.find((i) => streams[i].isDefault) ?? pool[0];
 }
 
 // ── Subtitle appearance maps ──
@@ -302,7 +315,7 @@ export class PlayerSettingsService {
     // Priority 2: the mode's target language.
     const lang = this.audioLanguage(originalLanguage);
     if (lang) {
-      const idx = pickAudioStreamForLanguage(audioStreams, lang);
+      const idx = pickAudioStreamForLanguage(audioStreams, lang, s.audioSelectionMode === 'original');
       if (idx != null) return idx;
     }
 

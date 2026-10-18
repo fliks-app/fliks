@@ -117,6 +117,36 @@ describe('PlayerSettingsService audio selection', () => {
     expect(matchRememberedAudio('fra:main:2', ep2)).toBeUndefined();
   });
 
+  describe('track markers', () => {
+    const ENG = [
+      { language: 'eng', trackMarkers: ['commentary'], isDefault: true },
+      { language: 'eng', trackMarkers: ['musicAndEffects'] },
+      { language: 'eng', trackMarkers: ['karaoke'] },
+      { language: 'eng', trackMarkers: ['audioDescription'] },
+      { language: 'eng', trackMarkers: ['atmos'] },
+    ];
+
+    it('never opens on a commentary, described, karaoke or M&E track when another one exists', () => {
+      const svc = make({ audioSelectionMode: 'preferred', preferredAudioLanguage: 'eng' });
+      expect(svc.resolveAudioStreamIndex(1, ENG, 1, null)).toBe(4);
+      expect(svc.resolveAudioStreamIndex(1, ENG.slice(0, 2), 1, null)).toBe(0);
+    });
+
+    it('prefers the original-flagged track in `original` mode only', () => {
+      const streams = [
+        { language: 'fra', isDefault: true },
+        { language: 'fra', trackMarkers: ['original'] },
+      ];
+      expect(make({ audioSelectionMode: 'original' }).resolveAudioStreamIndex(1, streams, 1, 'fr')).toBe(1);
+      const preferred = make({ audioSelectionMode: 'preferred', preferredAudioLanguage: 'fra' });
+      expect(preferred.resolveAudioStreamIndex(1, streams, 1, 'fr')).toBe(0);
+    });
+
+    it('remembers a commentary known from its title only as a commentary', () => {
+      expect(rememberedAudioKey({ language: 'eng', channels: 2, trackMarkers: ['commentary'] })).toBe('en:commentary:2');
+    });
+  });
+
   describe('language variant', () => {
     const dubs = [
       { language: 'por', languageTag: 'pt-BR', channels: 6 },
