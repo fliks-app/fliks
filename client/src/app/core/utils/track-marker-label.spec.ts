@@ -27,14 +27,13 @@ const EN = tr('en');
 const FR = tr('fr');
 
 describe('track marker labels', () => {
-  it('lists audio markers after the codec and layout, then a telling title', () => {
+  it('lists audio markers after the codec and layout, never the stream title', () => {
     const atmos = { language: 'eng', codec: 'eac3', channels: 6, trackMarkers: ['original', 'atmos'], title: 'English DDP 5.1 Atmos' };
     expect(formatAudioParts(atmos, EN, 1)).toEqual({ head: 'English', sub: 'EAC3 • 5.1 • Original • Atmos' });
     const comm = { language: 'eng', codec: 'aac', channels: 2, trackMarkers: ['commentary'], title: 'Commentary by the director' };
-    expect(formatAudioParts(comm, EN, 2).sub).toBe('AAC • 2.0 • Commentary • Commentary by the director');
-    expect(formatAudioParts(comm, FR, 2).sub).toBe('AAC • 2.0 • Commentaire • Commentary by the director');
-    expect(formatAudioParts({ ...comm, title: 'Commentary' }, EN, 2).sub).toBe('AAC • 2.0 • Commentary');
-    expect(formatAudioParts({ ...comm, title: 'Commentary' }, FR, 2).sub).toBe('AAC • 2.0 • Commentaire');
+    expect(formatAudioParts(comm, EN, 2).sub).toBe('AAC • 2.0 • Commentary');
+    expect(formatAudioParts(comm, FR, 2).sub).toBe('AAC • 2.0 • Commentaire');
+    expect(formatAudioParts({ ...comm, trackMarkers: [] }, EN, 2).sub).toBe('AAC • 2.0');
     expect(formatAudioLabel({ language: 'fre', codec: 'ac3', channels: 2, trackMarkers: ['audioDescription'] }, FR, 1))
       .toBe('Français (AC3 - 2.0 - Audiodescription)');
   });

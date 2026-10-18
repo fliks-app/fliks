@@ -55,34 +55,19 @@ describe('language tag in labels', () => {
 });
 
 describe('stream title next to a language tag', () => {
-  const sub = (s: object, t = fr) => formatSubtitleParts(s as never, t, 1).sub;
-
-  it('drops a title the region or script already says', () => {
-    expect(sub(spa419)).toBe('');
-    expect(sub(spa419, en)).toBe('');
-    expect(sub({ language: 'por', languageTag: 'pt-BR', title: 'Brazilian' })).toBe('');
-    expect(sub({ language: 'chi', languageTag: 'zh-Hant', title: 'Traditional' })).toBe('');
-    expect(sub({ language: 'chi', languageTag: 'zh-Hans', title: 'simplifié' })).toBe('');
-  });
-
-  it('keeps any title that says more', () => {
-    expect(sub({ ...spa419, title: 'Latin American (full)' })).toBe('Latin American (full)');
-    expect(sub({ ...spaES, title: 'Castilian' })).toBe('Castilian');
-  });
-
-  it('keeps the title when no region is shown', () => {
-    expect(sub({ language: 'spa', title: 'Latin American' })).toBe('Latin American');
-    expect(sub({ language: 'spa', languageTag: 'es', title: 'Latin American' })).toBe('Latin American');
+  it('is never shown', () => {
+    expect(formatSubtitleParts(spa419, fr, 1).sub).toBe('');
+    expect(formatSubtitleParts({ ...spaES, title: 'Castilian' }, fr, 1).sub).toBe('');
   });
 });
 
 describe('without Intl.DisplayNames', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('falls back to the plain head and keeps the title', () => {
+  it('falls back to the plain head', () => {
     vi.stubGlobal('Intl', { ...Intl, DisplayNames: undefined });
     const s = { ...spa419 };
-    expect(formatSubtitleParts(s, fr, 1)).toEqual({ head: 'Espagnol', sub: 'Latin American' });
+    expect(formatSubtitleParts(s, fr, 1)).toEqual({ head: 'Espagnol', sub: '' });
     expect(formatAudioLabel({ language: 'por', languageTag: 'pt-BR' }, fr, 1)).toBe('Portugais');
   });
 });
