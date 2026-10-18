@@ -106,7 +106,7 @@ services:
     environment:
       PORT: 3001
       FLIKS_NEST_URL: http://backend:3002
-      FLIKS_CAST_DIR: /src/backend/public
+      FLIKS_CAST_DIR: /src/server/public
       FLIKS_ENGINE_URL: http://engine:7400
       FLIKS_ENGINE_TOKEN: dev-engine-token
       FLIKS_BRIDGE_TOKEN: dev-bridge
@@ -122,7 +122,6 @@ services:
       SQLX_OFFLINE: 'true'
     volumes:
       - ./server:/src/server
-      - ./backend/public:/src/backend/public:ro
       - server-target:/cargo-target
       - server-registry:/usr/local/cargo/registry
 

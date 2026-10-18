@@ -131,7 +131,7 @@ run_mode() { # run_mode <engine up|down|stub> <providers 0|1> <filter>
   esac
   local penv=(DB_HOST=$DBHOST DB_PORT=5432 DB_USERNAME=$DBUSER DB_PASSWORD=$DBPASS DB_NAME=$DB
     PORT=$P_TARGET FLIKS_NEST_PORT=$P_NEST JWT_SECRET=parity-secret FLIKS_PLUGINS_DISABLED=1 FLIKS_DISABLE_UPDATE_CHECK=1
-    FLIKS_BRIDGE_TOKEN=pall-bridge FLIKS_CAST_DIR="$ROOT/backend/public" RUST_LOG=info
+    FLIKS_BRIDGE_TOKEN=pall-bridge FLIKS_CAST_DIR="$ROOT/server/public" RUST_LOG=info
     FLIKS_CONF_DIR="$d/conf" FLIKS_DATA_DIR="$FLIKS_PARITY_ROOT/data" FLIKS_CACHE_DIR="$d/cache" FLIKS_RUNTIME_DIR="$d/runtime"
     FLIKS_ENGINE_URL=$ENG_URL FLIKS_ENGINE_TOKEN=$ENG_TOK)
   # provider hosts are the stub in every mode, so a keyless run never leaves loopback

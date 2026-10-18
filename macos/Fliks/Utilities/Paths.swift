@@ -107,6 +107,8 @@ enum Paths {
     static let backendPackageJSON = resources.appendingPathComponent("backend/package.json")
     /// Built Angular client.
     static let clientDir         = resources.appendingPathComponent("client")
+    /// Cast receiver page, served at /cast (FLIKS_CAST_DIR).
+    static let castDir           = resources.appendingPathComponent("cast")
 
     // MARK: - Development fallbacks
 
@@ -150,6 +152,11 @@ enum Paths {
     static let effectiveBackendPackageJSON: URL = {
         if FileManager.default.fileExists(atPath: backendPackageJSON.path) { return backendPackageJSON }
         return repoRoot?.appendingPathComponent("backend/package.json") ?? backendPackageJSON
+    }()
+
+    static let effectiveCastDir: URL = {
+        if FileManager.default.fileExists(atPath: castDir.path) { return castDir }
+        return repoRoot?.appendingPathComponent("server/public") ?? castDir
     }()
 
     static let effectiveClientDir: URL = {

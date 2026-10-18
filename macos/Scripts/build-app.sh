@@ -191,7 +191,10 @@ mkdir -p "$RESOURCES/backend"
 cp -R "$REPO_ROOT/backend/dist" "$RESOURCES/backend/"
 cp -R "$REPO_ROOT/backend/node_modules" "$RESOURCES/backend/"
 cp "$REPO_ROOT/backend/package.json" "$RESOURCES/backend/"
-[ -d "$REPO_ROOT/backend/public" ] && cp -R "$REPO_ROOT/backend/public" "$RESOURCES/backend/"
+
+# ── Cast receiver page ──
+mkdir -p "$RESOURCES/cast"
+cp -R "$REPO_ROOT/server/public/"* "$RESOURCES/cast/"
 
 # ── Client ──
 echo "    [client] Copying Angular client..."

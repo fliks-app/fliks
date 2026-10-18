@@ -58,6 +58,11 @@ internal static class AppPaths
         Path.Combine(BaseDir, "client"),
         RepoRoot is null ? null : Path.Combine(RepoRoot, "client", "dist", "client", "browser"));
 
+    /// <summary>Cast receiver page, served at /cast (FLIKS_CAST_DIR).</summary>
+    public static string CastDir => ResolveDir(
+        Path.Combine(BaseDir, "cast"),
+        RepoRoot is null ? null : Path.Combine(RepoRoot, "server", "public"));
+
     /// <summary>Repo root when running from a dev checkout (climb until a
     /// backend/package.json is found); null in an installed build.</summary>
     public static readonly string? RepoRoot = FindRepoRoot();

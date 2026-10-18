@@ -134,7 +134,7 @@ RUN npm ci --omit=dev && npm cache clean --force
 COPY --from=backend-build /app/dist ./dist
 
 # Cast receiver page, served at /cast by fliks-server (default FLIKS_CAST_DIR=public)
-COPY backend/public ./public
+COPY server/public ./public
 
 # Copy fliks-server, the process the engine forwards to
 COPY --from=server-build /usr/local/bin/fliks-server /usr/local/bin/fliks-server

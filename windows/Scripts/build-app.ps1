@@ -94,9 +94,7 @@ Copy-Tree (Join-Path $repo 'backend\node_modules') (Join-Path $bundle 'backend\n
     '/XF', '*.map', '*.ts', '*.md', 'CHANGELOG*', 'HISTORY*', 'README*',
     '/XD', (Join-Path $repo 'backend\node_modules\typeorm\browser'))
 Copy-Item (Join-Path $repo 'backend\package.json') (Join-Path $bundle 'backend\package.json')
-if (Test-Path (Join-Path $repo 'backend\public')) {
-    Copy-Tree (Join-Path $repo 'backend\public') (Join-Path $bundle 'backend\public')
-}
+Copy-Tree (Join-Path $repo 'server\public') (Join-Path $bundle 'cast')
 
 New-Item -ItemType Directory -Force -Path (Join-Path $bundle 'client') | Out-Null
 Copy-Tree (Join-Path $repo 'client\dist\client\browser') (Join-Path $bundle 'client')

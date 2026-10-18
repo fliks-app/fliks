@@ -42,7 +42,7 @@ Replay target (Rust in front of Nest on :4849, run from `backend/` after `npm ru
 
 ```bash
 export DB_NAME=fliks_parity PORT=4849 JWT_SECRET=parity-secret FLIKS_PLUGINS_DISABLED=1 FLIKS_CONF_DIR=/tmp/fliks-parity/conf
-export FLIKS_CAST_DIR=$PWD/../backend/public   # from server/; without it bootstrap-cast-receiver-static fails unless cwd has public/
+export FLIKS_CAST_DIR=$PWD/public   # from server/; without it bootstrap-cast-receiver-static fails unless cwd has public/
 # engine up: also FLIKS_ENGINE_URL / FLIKS_ENGINE_TOKEN of a running engine, and PARITY_HOST_TOKEN for the runner
 (cd ../backend && exec "$CARGO_TARGET_DIR"/debug/fliks-server)
 ```
