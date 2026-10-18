@@ -55,8 +55,11 @@ ENTRYPOINT []
 ENV RUSTUP_HOME=/usr/local/rustup CARGO_HOME=/usr/local/cargo PATH=/usr/local/cargo/bin:$PATH
 RUN apt-get update && apt-get install -y --no-install-recommends curl gcc libc6-dev pkg-config libssl-dev \
   && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal \
-  && cargo install cargo-watch sqlx-cli --locked --no-default-features --features rustls,postgres \
-  && rm -rf /var/lib/apt/lists/* "$CARGO_HOME/registry"
+  && cargo install cargo-watch --locked \
+  && cargo install sqlx-cli --locked --no-default-features --features rustls,postgres \
+  && rm -rf /var/lib/apt/lists/* "$CARGO_HOME/registry" \
+  && mkdir -p "$CARGO_HOME/registry" /cargo-target \
+  && chmod -R a+rwX "$CARGO_HOME" /cargo-target
 
 FROM runtime-base AS runtime
 

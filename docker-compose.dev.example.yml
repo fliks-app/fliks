@@ -50,6 +50,9 @@ services:
       engine:
         condition: service_healthy
     working_dir: /src/server
+    # Files it writes under ./.dev/data stay yours; volumes made before this line was added are
+    # root-owned: `docker compose down -v` once.
+    user: '${FLIKS_UID:-1000}:${FLIKS_GID:-1000}'
     command: cargo watch -x 'run -p fliks-server'
     environment:
       PORT: 3001
@@ -68,7 +71,6 @@ services:
       SQLX_OFFLINE: 'true'
       # TMDB_API_KEY: ''
       # TVDB_API_KEY: ''
-      FLIKS_TRANSCODE_DIR: /tmp/transcode
       FLIKS_DATA_DIR: /src/data
     volumes:
       - ./server:/src/server
