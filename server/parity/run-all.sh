@@ -35,7 +35,6 @@ cleanup() {
   psql_admin -d postgres -At -c "SELECT datname FROM pg_database WHERE datname LIKE '${DBPFX}%'" 2>/dev/null |
     while read -r d; do psql_admin -d postgres -c "DROP DATABASE IF EXISTS \"$d\" WITH (FORCE)" </dev/null 2>/dev/null; done
 }
-trap cleanup EXIT
 trap 'exit 130' INT TERM
 
 # start <name> <cwd> <cmd...>: own process group (setsid), no inherited lock fd; the group id is recorded for teardown.
@@ -56,6 +55,7 @@ docker exec fliks-postgres-1 true 2>/dev/null || die "docker container fliks-pos
 for p in $P_ARR $P_LIVETV $P_EMBY $P_ESTUB $P_PROV $P_ENGINE $P_TARGET $P_NEST; do
   ss -ltn | grep -q "[:.]$p " && die "port $p is in use (4960-4999 are reserved for run-all.sh)"
 done
+trap cleanup EXIT # only now: a second run stopped by the port check must not drop the first run's databases
 mkdir -p "$RUN"
 export PATH=$SERVER/parity/bin:$PATH # pg_dump/psql run inside the postgres container
 rm -rf "$RUN"/{target-*,*.log}
