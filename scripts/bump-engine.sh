@@ -34,4 +34,5 @@ mv engine.lock.new engine.lock
 sed -i "s|^ARG ENGINE_IMAGE=.*|ARG ENGINE_IMAGE=ghcr.io/fliks-app/engine:$v|" Dockerfile
 sed -i -E "s|(fliks-engine-core = \{ git = [^}]*tag = )\"v[^\"]*\"|\1\"v$v\"|" server/crates/server/Cargo.toml
 (cd server && cargo update -p fliks-engine-core)
+(cd server/crates/plugin-sdk && cargo update -p fliks-engine-core)
 cat engine.lock
