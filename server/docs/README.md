@@ -88,6 +88,7 @@ Decided behaviour for the Rust port (security fixes F, correctness fixes C; D3).
 | F75 | the resolver denied a live viewer using the caller's group access, ending someone else's viewer | an owner mismatch is never a denial from the host; the engine's owner check answers 403 | none for owners |
 | F76 | `logoPath` of a channel was the provider URL until the logo was cached | every channel payload returns `null` until cached, then `/api/livetv/channels/<id>/logo` | clients already fall back when null |
 | F77 | a plugin webhook target that is an IPv6 literal was never checked (`hostname` keeps its brackets) | refused at registration like an IPv4 literal | none for public targets |
+| F78 | `FLIKS_PLUGINS_DISABLED=1` still refreshed every catalog source at boot and ran the `RefreshPluginSources` auto-update | no background catalog refresh (boot pass, `RefreshPluginSources`) and no auto-update while plugins are disabled; an admin's explicit source refresh or catalog inspect still fetches | none |
 
 Not done (user decision 2026-10-15): login rate limiting/lockout.
 
