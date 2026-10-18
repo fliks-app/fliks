@@ -3095,10 +3095,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.subtitleRequest++;
   }
 
-  /** Engines that pre-select a rendition by language (Shaka's adaptation criteria,
-   *  mpv's `alang`) get the target stream's, not the one the session started with. */
+  /** The target's language for engines that pre-select by it (Shaka, mpv `alang`), unless a
+   *  server master marks it DEFAULT: Shaka would skip that for a 2-channel track of the language. */
   private configureAudioLanguage(): void {
-    const language = this.targetAudioLanguage();
+    const serverMaster = !this.isOfflinePlayback && this.playbackMode() !== 'direct';
+    const language = serverMaster ? undefined : this.targetAudioLanguage();
     this.engine?.configure({
       preferredAudioLanguage: language ? normalizeLangCode(language) : '',
     });

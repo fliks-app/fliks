@@ -17,6 +17,7 @@ const player = vi.hoisted(() => {
     addEventListener: vi.fn(),
     removeEventListener: vi.fn(),
     getVariantTracks: vi.fn(),
+    selectVariantTrack: vi.fn(),
     getStats: vi.fn(),
     getTextTracks: vi.fn(),
     addTextTrackAsync: vi.fn(),
@@ -71,6 +72,23 @@ describe('ShakaEngine audio tracks', () => {
       ['shaka-4', false],
       ['shaka-7', true],
     ]);
+  });
+
+  it('holds an audio switch asked during load until the load resolves', async () => {
+    const engine = await initEngine();
+    let resolveLoad!: () => void;
+    player.load.mockReturnValue(new Promise<void>((r) => (resolveLoad = r)));
+    const commentary = { audioId: 9, videoId: 0, active: false };
+    player.getVariantTracks.mockReturnValue([{ audioId: 3, videoId: 0, active: true }, commentary]);
+
+    const loading = engine.load('master.m3u8');
+    const switching = engine.selectAudioTrack('shaka-9');
+    await Promise.resolve();
+    expect(player.selectVariantTrack).not.toHaveBeenCalled();
+
+    resolveLoad();
+    await Promise.all([loading, switching]);
+    expect(player.selectVariantTrack).toHaveBeenCalledWith(commentary, true);
   });
 });
 

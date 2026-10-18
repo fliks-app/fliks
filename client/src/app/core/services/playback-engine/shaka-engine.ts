@@ -193,8 +193,12 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
     this.shakaBuffering = false;
     this.sessionExpiredInFlight = false;
     this.sideloadedTextTracks.clear();
-    await this.player.load(url, startTime, mimeType);
+    this.loading = this.player.load(url, startTime, mimeType);
+    await this.loading;
   }
+
+  /** The load in flight or last made: an audio switch waits for it. */
+  private loading: Promise<void> | null = null;
 
   async unload(): Promise<void> {
     if (this.player) {
@@ -310,6 +314,8 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
 
   async selectAudioTrack(id: string): Promise<void> {
     if (!this.player || !id.startsWith('shaka-')) return;
+    // A switch made during load() is reported active while the rendition it opened on plays.
+    await this.loading?.catch(() => {});
 
     const audioId = parseInt(id.replace('shaka-', ''), 10);
     const variants = this.player.getVariantTracks();
