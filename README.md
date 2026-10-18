@@ -137,11 +137,11 @@ hand.
   search, the clients and their settings pages appear in the interface.
 - **Archives are signed**, and the signature is checked before anything
   is written to disk.
-- **A plugin that runs code runs apart.** There are two tiers: a `data`
-  plugin ships JSON and executes nothing at all, while a `process`
-  plugin gets its own child process under its own uid, plus its own
-  PostgreSQL role and schema. It cannot reach another plugin's tables,
-  or yours.
+- **A plugin that runs code runs apart.** A `data` plugin ships JSON
+  and executes nothing at all; a `process` plugin is a WebAssembly
+  component sandboxed by the server, with capped memory and run time,
+  one private folder, and its own PostgreSQL role and schema. It cannot
+  reach another plugin's tables, or yours.
 - **Plugins extend the interface**, not just the backend. Their pages,
   menu entries and settings appear where they belong and follow your
   permissions like everything else.
