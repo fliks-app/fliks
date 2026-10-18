@@ -12,6 +12,9 @@ on:
       - 'scripts/bump-engine.sh'
       - '.github/workflows/engine-lock.yml'
 
+permissions:
+  contents: read
+
 jobs:
   lock:
     runs-on: ubuntu-latest

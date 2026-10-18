@@ -8,7 +8,7 @@
 # Release tag `v*`       → also pulls the previous release for a delta package
 #   and uploads the release files, which the tray's updater reads.
 #
-# Sibling of macos-dmg.yml (SwiftUI server host). Keep the two in sync.
+# Sibling of macos-server-dmg.yml (SwiftUI server host). Keep the two in sync.
 name: Build Windows server
 
 on:
