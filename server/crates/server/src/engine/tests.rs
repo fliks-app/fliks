@@ -1204,16 +1204,22 @@ mod events {
     #[tokio::test]
     async fn restarts_on_every_adoption() {
         let f = Fake::start().await;
+        f.hello(Some(hello_body(&RUNTIME, "x")));
         f.script("GET", "/v1/sessions", vec![ok(json!([]))]);
         f.connections(vec![Conn::Hold(vec![]), Conn::Hold(vec![])]);
-        let e = runtime_engine(&f, fast()).await;
-        eventually("first connection", || f.connected_at().len() == 1).await;
+        // No idle watchdog reconnect: only the adoption may open the second connection.
+        let timing = Timing {
+            events_idle: Duration::from_secs(60),
+            ..fast()
+        };
+        let e = engine_with(&f.url, timing);
+        let mut rx = e.subscribe();
+        e.start_with(None, 4849).await;
+        assert!(matches!(next(&mut rx).await, Feed::Resync(..)));
         f.hello(Some(hello_body(&RUNTIME, "y")));
         tick(&e).await;
-        eventually("a second connection after the engine restarted", || {
-            f.connected_at().len() == 2
-        })
-        .await;
+        assert!(matches!(next(&mut rx).await, Feed::Resync(..)));
+        assert_eq!(f.connected_at().len(), 2);
         assert_eq!(f.seen("GET", "/v1/sessions").len(), 2);
     }
 
