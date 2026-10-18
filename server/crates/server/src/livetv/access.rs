@@ -108,6 +108,8 @@ async fn save(st: &AppState, before: &Groups, after: &Groups) -> sqlx::Result<()
             .await?;
     }
     tx.commit().await?;
+    let keys: Vec<String> = keys.iter().map(|k| (*k).to_owned()).collect();
+    crate::settings::notify_changed(st, &keys, None).await;
     Ok(())
 }
 

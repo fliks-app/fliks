@@ -9,6 +9,7 @@ const SECRET: &str = "0123456789abcdef0123456789abcdef";
 
 struct Ctx {
     app: Router,
+    st: AppState,
     admin: String,
     plain: String,
     pool: PgPool,
@@ -30,9 +31,10 @@ async fn ctx(pool: PgPool) -> Ctx {
         .unwrap();
         tokens.push(st.jwt.sign_access(id, name).unwrap().token);
     }
-    let app = app::router(st, None, "/nonexistent".into(), None);
+    let app = app::router(st.clone(), None, "/nonexistent".into(), None);
     Ctx {
         app,
+        st,
         plain: tokens.pop().unwrap(),
         admin: tokens.pop().unwrap(),
         pool,
@@ -325,6 +327,41 @@ async fn fs_browse_lists_sorted_directories_only(pool: PgPool) {
             .contains("ENOENT: no such file or directory, scandir")
     );
     std::fs::remove_dir_all(&root).unwrap();
+}
+
+/// Rules 12-13: one `settings.changed` domain event per written key, a kept secret included.
+#[sqlx::test(migrations = false)]
+async fn every_put_emits_settings_changed_per_key(pool: PgPool) {
+    use fliks_server::events::{Bus, DomainEvent};
+    let c = ctx(pool).await;
+    let mut rx = c.st.hub.subscribe();
+    let a = Some(c.admin.as_str());
+    for (uri, body) in [
+        ("/api/settings/seerr_api_key", json!({"value": "sk"})),
+        ("/api/settings/seerr_api_key", json!({"value": ""})),
+        (
+            "/api/settings",
+            json!({"data": {"seerr_api_key": "", "seerr_url": "http://s"}}),
+        ),
+    ] {
+        let (status, b) = call(&c.app, "PUT", uri, a, body).await;
+        assert!(status < 300, "{uri}: {b}");
+    }
+    let mut keys = vec![];
+    while let Ok(bus) = rx.try_recv() {
+        if let Bus::Domain(DomainEvent::SettingsChanged { key }) = &*bus {
+            keys.push(key.clone());
+        }
+    }
+    assert_eq!(
+        keys,
+        [
+            "seerr_api_key",
+            "seerr_api_key",
+            "seerr_api_key",
+            "seerr_url"
+        ]
+    );
 }
 
 /// `setup-checklist.md`: the seven items in order, dismissal stored compact, unknown keys 400.

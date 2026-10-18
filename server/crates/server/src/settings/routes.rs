@@ -81,6 +81,10 @@ pub(crate) async fn notify(st: &AppState, keys: &[String], origin: Option<&str>)
         st.engine.settings_changed(keys),
         st.qoe.settings_changed(keys)
     );
+    for key in keys {
+        st.hub
+            .emit_domain(crate::events::DomainEvent::SettingsChanged { key: key.clone() });
+    }
 }
 
 /// Values the engine would reject with its whole config (plan §15.1).

@@ -222,6 +222,7 @@ mod remote {
     async fn put_keeps_the_token_on_blank_or_absent_and_clears_it_on_null(pool: PgPool) {
         let c = ctx(pool, true).await;
         let (admin, _) = admin_and_plain(&c).await;
+        let mut rx = c.st.hub.subscribe();
         let put = |token: Option<Value>| {
             let mut body = json!({"url": c.fake.url, "pathMappings": []});
             if let Some(t) = token {
@@ -241,6 +242,20 @@ mod remote {
         let (_, b) = put(Some(Value::Null)).await;
         assert_eq!(setting(&c.pool, "engine_token").await, None);
         assert!(b.get("secretsSet").is_none());
+        let mut keys = vec![];
+        while let Ok(bus) = rx.try_recv() {
+            if let crate::events::Bus::Domain(crate::events::DomainEvent::SettingsChanged { key }) =
+                &*bus
+            {
+                keys.push(key.clone());
+            }
+        }
+        let token_writes = keys.iter().filter(|k| *k == "engine_token").count();
+        assert_eq!(
+            (keys.len(), token_writes),
+            (10, 2),
+            "a kept token is not announced as written"
+        );
     }
 
     #[sqlx::test(migrations = false)]

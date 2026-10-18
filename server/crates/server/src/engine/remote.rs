@@ -152,8 +152,9 @@ pub async fn put_remote(
     authed.require(Action::Manage, Subject::Settings)?;
     let dto = parse_put(&body).map_err(AppError::bad_request)?;
     let mappings = store::sanitize(dto.path_mappings);
-    store::write_engine_settings(&st.db, &dto.url, dto.token, &mappings).await?;
+    let keys = store::write_engine_settings(&st.db, &dto.url, dto.token, &mappings).await?;
     st.engine.reconfigure().await;
+    crate::settings::notify_changed(&st, &keys, None).await;
     snapshot(&st).await.map(Json)
 }
 

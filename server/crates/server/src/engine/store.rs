@@ -40,13 +40,13 @@ pub enum TokenWrite {
     Set(Option<String>),
 }
 
-/// The three engine keys in one transaction, `None` clearing.
+/// The three engine keys in one transaction, `None` clearing; returns the keys written, in order.
 pub async fn write_engine_settings(
     db: &PgPool,
     url: &str,
     token: TokenWrite,
     mappings: &[PathMapping],
-) -> sqlx::Result<()> {
+) -> sqlx::Result<Vec<String>> {
     let json =
         (!mappings.is_empty()).then(|| serde_json::to_string(mappings).expect("path mappings"));
     let mut rows = vec![(URL_KEY, Some(url.to_owned()))];
@@ -65,7 +65,8 @@ pub async fn write_engine_settings(
         .execute(&mut *tx)
         .await?;
     }
-    tx.commit().await
+    tx.commit().await?;
+    Ok(rows.into_iter().map(|(k, _)| k.to_owned()).collect())
 }
 
 /// `[{from, to}]` JSON text: entries with a non-string or blank side are dropped, anything else is `[]`.
