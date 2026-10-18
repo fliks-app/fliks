@@ -89,6 +89,7 @@ impl Request {
         self.timeout = t;
         self
     }
+    /// Bounds the whole exchange from the send; it only tightens: a longer one set later is ignored.
     pub fn deadline(mut self, d: Duration) -> Self {
         self.deadline = Some(self.deadline.map_or(d, |old| old.min(d)));
         self

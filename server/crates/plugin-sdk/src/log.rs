@@ -37,16 +37,19 @@ pub fn scrub(message: &str) -> String {
 
 /// `url` without its userinfo, query and fragment, for logs and stored errors.
 pub fn redact_url(url: &str) -> String {
-    let url = &url[..url.find(['?', '#']).unwrap_or(url.len())];
-    let Some(i) = url.find("://") else {
-        return url.to_owned();
-    };
-    let (scheme, rest) = url.split_at(i + 3);
-    let authority = &rest[..rest.find('/').unwrap_or(rest.len())];
-    match authority.rfind('@') {
-        Some(at) => format!("{scheme}{}", &rest[at + 1..]),
+    // Userinfo first, so a raw `?` or `#` in a password cannot hide its `@`.
+    let url = match url.find("://") {
+        Some(i) => {
+            let (scheme, rest) = url.split_at(i + 3);
+            let authority = &rest[..rest.find('/').unwrap_or(rest.len())];
+            match authority.rfind('@') {
+                Some(at) => format!("{scheme}{}", &rest[at + 1..]),
+                None => url.to_owned(),
+            }
+        }
         None => url.to_owned(),
-    }
+    };
+    url[..url.find(['?', '#']).unwrap_or(url.len())].to_owned()
 }
 
 #[macro_export]
@@ -97,5 +100,8 @@ mod tests {
         assert_eq!(redact_url("http://h/p@x?q"), "http://h/p@x");
         assert_eq!(redact_url("http://tok@h"), "http://h");
         assert_eq!(redact_url("not a url?k=v"), "not a url");
+        assert_eq!(redact_url("http://u:p?ss@h/x?q"), "http://h/x");
+        assert_eq!(redact_url("http://u:p#ss@h:1"), "http://h:1");
+        assert_eq!(redact_url("http://u:a@b@h/p"), "http://h/p");
     }
 }

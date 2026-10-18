@@ -44,9 +44,13 @@ pub struct Budget {
 }
 
 impl Budget {
+    /// A `d` past what `Instant` holds saturates to a far deadline.
     pub fn new(d: Duration) -> Budget {
+        let now = Instant::now();
+        let far = Duration::from_secs(100 * 365 * 86_400);
+        let end = now.checked_add(d).or_else(|| now.checked_add(far));
         Budget {
-            end: Instant::now() + d,
+            end: end.unwrap_or(now),
         }
     }
 
@@ -63,12 +67,17 @@ impl Budget {
         self.remaining().is_zero()
     }
 
-    /// `fraction` (clamped to 0..=1) of what remains, e.g. one indexer's share of a search.
+    /// `fraction` (clamped to 0..=1, NaN as 0) of what remains, e.g. one indexer's share.
     pub fn child(&self, fraction: f64) -> Budget {
         let now = Instant::now();
         let left = self.end.saturating_duration_since(now);
+        let f = if fraction.is_nan() {
+            0.0
+        } else {
+            fraction.clamp(0.0, 1.0)
+        };
         Budget {
-            end: now + left.mul_f64(fraction.clamp(0.0, 1.0)),
+            end: now + left.mul_f64(f),
         }
     }
 
@@ -99,5 +108,19 @@ mod tests {
         assert!(short.expired());
         assert_eq!(short.remaining(), Duration::ZERO);
         assert!(short.child(0.5).expired());
+    }
+
+    #[test]
+    fn budget_never_panics() {
+        let far = Budget::new(Duration::MAX);
+        assert!(far.remaining() > Duration::from_secs(50 * 365 * 86_400));
+        let b = Budget::new(Duration::from_secs(10));
+        for f in [f64::NAN, -1.0, f64::NEG_INFINITY] {
+            assert!(b.child(f).expired(), "{f}");
+        }
+        for f in [2.0, f64::INFINITY] {
+            assert!(b.child(f).end <= b.end && b.child(f).remaining() > Duration::from_secs(9));
+        }
+        assert!(far.child(1.0).remaining() > Duration::from_secs(50 * 365 * 86_400));
     }
 }
