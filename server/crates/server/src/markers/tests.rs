@@ -404,13 +404,13 @@ async fn a_route_run_reports_progress_and_releases_the_season(pool: PgPool) {
     );
     assert_eq!(body["body"]["seasonNumber"], 1);
     assert!(body["startedOn"].is_null() && body["endedOn"].is_null());
-    assert_eq!(
-        command_status(&c, body["id"].as_i64().unwrap()).await,
-        "completed"
-    );
     let mut names = vec![];
     let mut progress = vec![];
-    while let Ok(b) = rx.try_recv() {
+    while names.last().map(String::as_str) != Some("markers.season.completed") {
+        let b = tokio::time::timeout(Duration::from_secs(10), rx.recv())
+            .await
+            .expect("the season completes")
+            .unwrap();
         if let Bus::Sse(ev) = &*b {
             match ev {
                 SseEvent::TaskProgress {
@@ -425,6 +425,8 @@ async fn a_route_run_reports_progress_and_releases_the_season(pool: PgPool) {
                 } => {
                     assert_eq!(*intros_detected, 3);
                 }
+                // Debounced 250 ms: it lands mid-run only when the run is slower than that.
+                SseEvent::ActivityChanged {} => continue,
                 _ => {}
             }
             names.push(
@@ -442,6 +444,10 @@ async fn a_route_run_reports_progress_and_releases_the_season(pool: PgPool) {
             "command.completed",
             "markers.season.completed"
         ]
+    );
+    assert_eq!(
+        command_status(&c, body["id"].as_i64().unwrap()).await,
+        "completed"
     );
     assert_eq!(progress.first().unwrap(), "Fingerprinting 0/3");
     for m in [

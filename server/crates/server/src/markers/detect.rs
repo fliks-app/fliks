@@ -311,7 +311,7 @@ async fn run_detection(
     season: i32,
     info: SeasonInfo,
     priority: JobPriority,
-    _claim: Claim<i32>,
+    claim: Claim<i32>,
 ) {
     let id = activity_id(season);
     let run = async {
@@ -339,34 +339,43 @@ async fn run_detection(
                 None,
             );
         };
-        let (intros, outros) = detect_all(&st, season, Some(&progress), priority).await?;
-        finish(&st.db, cmd, "completed")
-            .await
-            .map_err(|e| e.to_string())?;
-        st.hub.emit(SseEvent::CommandCompleted {
-            name: COMMAND.into(),
-            status: "completed".into(),
-        });
-        st.hub.emit(SseEvent::MarkersSeasonCompleted {
-            media_id: i64::from(info.media_id),
-            season_id: i64::from(season),
-            season_number: i64::from(info.season_number),
-            intros_detected: intros + outros,
-        });
-        Ok::<(), String>(())
+        detect_all(&st, season, Some(&progress), priority).await
     }
     .await;
-    if let Err(e) = run {
-        tracing::error!("IntroDetection failed for season #{season}: {e}");
-        match finish(&st.db, cmd, "failed").await {
-            Ok(()) => st.hub.emit(SseEvent::CommandCompleted {
+    // Released before the command ends: a client retrying on its completion must not hit "running".
+    st.hub.activity().remove(&id);
+    drop(claim);
+    let run = match run {
+        Ok(n) => finish(&st.db, cmd, "completed")
+            .await
+            .map(|()| n)
+            .map_err(|e| e.to_string()),
+        Err(e) => Err(e),
+    };
+    match run {
+        Ok((intros, outros)) => {
+            st.hub.emit(SseEvent::CommandCompleted {
                 name: COMMAND.into(),
-                status: "failed".into(),
-            }),
-            Err(e) => tracing::error!("IntroDetection #{cmd} crashed: {e}"),
+                status: "completed".into(),
+            });
+            st.hub.emit(SseEvent::MarkersSeasonCompleted {
+                media_id: i64::from(info.media_id),
+                season_id: i64::from(season),
+                season_number: i64::from(info.season_number),
+                intros_detected: intros + outros,
+            });
+        }
+        Err(e) => {
+            tracing::error!("IntroDetection failed for season #{season}: {e}");
+            match finish(&st.db, cmd, "failed").await {
+                Ok(()) => st.hub.emit(SseEvent::CommandCompleted {
+                    name: COMMAND.into(),
+                    status: "failed".into(),
+                }),
+                Err(e) => tracing::error!("IntroDetection #{cmd} crashed: {e}"),
+            }
         }
     }
-    st.hub.activity().remove(&id);
 }
 
 /// Rule 13: bulk jobs; `subject` is the one the caller pre-registered the pending activity row under.
