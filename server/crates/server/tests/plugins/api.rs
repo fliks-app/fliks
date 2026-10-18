@@ -1079,3 +1079,31 @@ async fn installed_shapes_carry_the_client_keys() {
     h.finish().await;
     s.finish().await;
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn disabled_plugins_never_refresh_the_catalog() {
+    let Some(s) = Scratch::create("disabled_sources").await else {
+        return;
+    };
+    let h = harness_with(&s, "disabled_sources", Arc::new(|_| {}), |o| {
+        o.disabled = true
+    })
+    .await;
+    // An http URL would record a refresh error if any refresh ran.
+    sqlx::query("INSERT INTO plugin_sources (url) VALUES ('http://x/c.json')")
+        .execute(&s.pool)
+        .await
+        .unwrap();
+    fliks_server::plugins::sources::refresh_all(&h.st, false).await;
+    fliks_server::plugins::sources::refresh_and_update(&h.st)
+        .await
+        .unwrap();
+    let (at, err): (Option<chrono::DateTime<chrono::Utc>>, Option<String>) =
+        sqlx::query_as(r#"SELECT "lastRefreshedAt", "lastRefreshError" FROM plugin_sources"#)
+            .fetch_one(&s.pool)
+            .await
+            .unwrap();
+    assert_eq!((at, err), (None, None));
+    h.finish().await;
+    s.finish().await;
+}

@@ -139,8 +139,6 @@ run_mode() { # run_mode <engine up|down|stub> <providers 0|1> <filter>
     FLIKS_TMDB_IMAGE_URL=http://127.0.0.1:$P_PROV/img/t/p FLIKS_SUBTITLE_PROVIDERS_URL=http://127.0.0.1:$P_PROV)
   [ "$prov" = 1 ] && penv+=(TMDB_API_KEY=tmdb-parity TVDB_API_KEY=tvdb-parity)
   psql_admin -d postgres -c "DROP DATABASE IF EXISTS $DB WITH (FORCE)" -c "CREATE DATABASE $DB TEMPLATE $TPL"
-  # the boot catalog pass would fetch the official source from github.io; the runner resets this DB first
-  psql_admin -d "$DB" -c "TRUNCATE plugin_sources CASCADE" >/dev/null
   start "target-$1-$2" "$ROOT/backend" env -u TMDB_API_KEY -u TVDB_API_KEY -u DATABASE_URL -u INVOCATION_ID -u pm_id -u FLIKS_SUPERVISED "${penv[@]}" "$BIN"
   if ! wait_http "http://127.0.0.1:$P_TARGET/api/auth/login" 90; then
     log "target did not start, see $RUN/target-$1-$2.log"; SUMMARY+=("$tag|ERROR|0|0|0|target"); FAILED=1

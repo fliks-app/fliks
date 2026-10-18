@@ -309,7 +309,11 @@ fn stale(s: &Source) -> bool {
 }
 
 /// Every enabled source (the boot pass: only stale ones); one failure never stops the others.
+/// `FLIKS_PLUGINS_DISABLED=1` makes no catalog call at all.
 pub async fn refresh_all(st: &AppState, stale_only: bool) {
+    if st.plugins.opts.disabled {
+        return;
+    }
     let Ok(sources) = packages::sources(&st.db, true).await else {
         return;
     };
@@ -328,6 +332,9 @@ pub fn refresh_and_update(
     st: &AppState,
 ) -> futures_util::future::BoxFuture<'_, Result<(), String>> {
     Box::pin(async move {
+        if st.plugins.opts.disabled {
+            return Ok(());
+        }
         refresh_all(st, false).await;
         st.plugins.auto_update().await;
         Ok(())
