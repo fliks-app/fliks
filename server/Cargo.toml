@@ -16,3 +16,8 @@ regex = "1"
 fancy-regex = "0.14"
 regress = "0.12"
 unicode-normalization = "0.1"
+
+# Optimised deps: an unoptimised Cranelift makes every wasm compile in the plugin tests minutes long.
+[profile.dev.package."*"]
+opt-level = 1
+
