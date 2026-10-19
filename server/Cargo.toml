@@ -17,6 +17,10 @@ fancy-regex = "0.14"
 regress = "0.12"
 unicode-normalization = "0.1"
 
+# Backtraces keep line numbers; full debuginfo made a 1 GB dev binary and slow incremental builds.
+[profile.dev]
+debug = "line-tables-only"
+
 # Optimised deps: an unoptimised Cranelift makes every wasm compile in the plugin tests minutes long.
 [profile.dev.package."*"]
 opt-level = 1
