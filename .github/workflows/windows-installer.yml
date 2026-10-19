@@ -3,7 +3,7 @@
 #
 # Packaged with Velopack (per-user Setup.exe + update feed on the `win-server`
 # channel; the desktop client owns `win` in the same release).
-# PR / workflow_dispatch → builds the Setup.exe as a workflow artifact (fast: the
+# PR / main / dispatch   → builds the Setup.exe as a workflow artifact (fast: the
 #   vendored binaries and the client build are cached).
 # Release tag `v*`       → also pulls the previous release for a delta package
 #   and uploads the release files, which the tray's updater reads.
@@ -12,25 +12,32 @@
 name: Build Windows server
 
 on:
+  # main seeds the caches: a PR only restores caches from its own branch or the base branch.
+  # Path filters don't apply to tag pushes.
   push:
+    branches: [main]
     tags: ['v*']
-  pull_request:
-    paths:
+    paths: &paths
       - 'windows/**'
       - 'server/**'
+      - '!server/**/*.md'
       - '.github/workflows/windows-installer.yml'
+  pull_request:
+    paths: *paths
   workflow_dispatch:
 
-# Cancel a superseded run when a new commit is pushed to the same ref.
+# Cancel a superseded PR run; a main run must finish to save the caches.
 concurrency:
   group: windows-installer-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: write
 
 jobs:
   build-installer:
+    # Release PRs only bump versions; the tag build covers them.
+    if: ${{ !startsWith(github.head_ref, 'release-please--') }}
     runs-on: windows-latest
     env:
       IS_TAG: ${{ startsWith(github.ref, 'refs/tags/v') }}
