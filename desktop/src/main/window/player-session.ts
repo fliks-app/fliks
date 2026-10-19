@@ -5,8 +5,9 @@ import { MpvPlayer } from '../mpv/mpv-player';
 import { MacMpvPlayer, roundWindowBottomCorners } from '../mpv/mac-mpv-player';
 import type { PlayerBackend } from '../mpv/player-backend';
 import { createEmbedBackend } from './backends';
-import { setPlaybackKeepAwake, keepAwakeForState } from '../power';
-import { appendLog, echoRendererConsole, redactUrls } from '../log-file';
+import { setPlaybackKeepAwake } from '../power';
+import { forwardPlayerEvents } from './forward-events';
+import { echoRendererConsole } from '../log-file';
 import { IPC, type DesktopEvent, type DesktopRect } from '../../shared/contract';
 
 /**
@@ -221,7 +222,10 @@ export class PlayerSession {
       return;
     }
     this.mpv = mpv;
-    this.forwardEvents(this.mpv);
+    // A video gap (decoder re-init on a seek) then reads as loading, not a brand flash.
+    forwardPlayerEvents(this.mpv, (e) => this.emit(e), () => {
+      if (!this.frameWin.isDestroyed()) this.frameWin.setBackgroundColor('#000000');
+    });
     await this.mpv.start();
     this.emit({ type: 'ready' });
   }
@@ -239,48 +243,6 @@ export class PlayerSession {
     const backend = createEmbedBackend();
     const { args, env } = await backend.resolve(this.videoWin, mpvPath);
     return new MpvPlayer({ baseArgs: args, env, mpvPath });
-  }
-
-  private forwardEvents(mpv: PlayerBackend): void {
-    mpv.on('log', (s: string) => {
-      process.stderr.write(`[${Date.now()}][mpv] ${s}`);
-      // Only the failure levels reach the file: mpv's default `v` level logs
-      // every segment URL, and this write is synchronous on the main thread.
-      if (/^\[(error|fatal|warn)\]/.test(s)) appendLog(redactUrls(`[mpv] ${s.trimEnd()}`));
-    });
-    // Packaged builds have no console: these events go to the log file too (not timeUpdate, too frequent).
-    mpv.on('exit', (e) => {
-      const line = `[mpv] process exit ${JSON.stringify(e)}`;
-      console.error(line);
-      appendLog(line);
-    });
-    mpv.on('stateChanged', (p) => {
-      console.log('[player] state:', p.state);
-      appendLog(`[player] state: ${p.state}`);
-      setPlaybackKeepAwake(keepAwakeForState(p.state));
-      this.emit({ type: 'stateChanged', payload: p });
-    });
-    mpv.on('timeUpdate', (p) => this.emit({ type: 'timeUpdate', payload: p }));
-    mpv.on('tracksChanged', (p) => {
-      console.log('[player] tracks:', JSON.stringify(p));
-      this.emit({ type: 'tracksChanged', payload: p });
-    });
-    mpv.on('firstFrame', () => {
-      console.log('[player] firstFrame');
-      appendLog('[player] firstFrame');
-      setPlaybackKeepAwake(true);
-      // Now that playback owns the window, paint the frame black: a video gap
-      // (decoder re-init on a seek) then reads as loading, not a brand flash.
-      if (!this.frameWin.isDestroyed()) this.frameWin.setBackgroundColor('#000000');
-      this.emit({ type: 'firstFrame' });
-    });
-    mpv.on('error', (p) => {
-      const line = redactUrls(`[player] error: ${JSON.stringify(p)}`);
-      console.log(line);
-      appendLog(line);
-      setPlaybackKeepAwake(false);
-      this.emit({ type: 'error', payload: p });
-    });
   }
 
   private emit(event: DesktopEvent): void {

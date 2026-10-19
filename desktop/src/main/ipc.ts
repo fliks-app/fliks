@@ -1,7 +1,7 @@
 import { ipcMain } from 'electron';
 import { IPC } from '../shared/contract';
 import { redactQuery } from './log-file';
-import type { PlayerSession } from './window/player-session';
+import type { PlayerBackend } from './mpv/player-backend';
 import type {
   DesktopLoadOptions,
   DesktopMuteRange,
@@ -9,8 +9,18 @@ import type {
   DesktopSubtitleStyle,
 } from '../shared/contract';
 
-/** Wire the renderer→main invoke channels to the session's mpv player. */
-export function registerPlayerIpc(session: PlayerSession): void {
+/** What the renderer's player channels need from a platform: the player plus its window controls. */
+export interface PlayerIpcHost {
+  readonly player: PlayerBackend;
+  setFullscreen(enabled: boolean): void;
+  resize(rect: DesktopRect): void;
+  destroy(): Promise<void>;
+  /** Absent where the page is the visible surface and its CSS cursor already applies. */
+  setCursorVisible?(visible: boolean): void;
+}
+
+/** Wire the renderer→main invoke channels to the host's mpv player. */
+export function registerPlayerIpc(session: PlayerIpcHost): void {
   ipcMain.handle(IPC.load, (_e, opts: DesktopLoadOptions) => {
     console.log('[ipc] load:', redactQuery(opts.url), 'start=', opts.startTime ?? 0, 'headers=', Object.keys(opts.headers ?? {}).join(','));
     return session.player.load(opts);
@@ -46,8 +56,7 @@ export function registerPlayerIpc(session: PlayerSession): void {
     session.player.setSubtitleStyle(style),
   );
   ipcMain.handle(IPC.setFillScreen, (_e, fill: boolean) => session.player.setFillScreen(fill));
-  // The page is the visible surface here, so its CSS cursor already applies.
-  ipcMain.handle(IPC.setCursorVisible, () => {});
+  ipcMain.handle(IPC.setCursorVisible, (_e, visible: boolean) => session.setCursorVisible?.(visible));
   ipcMain.handle(IPC.setFullscreen, (_e, enabled: boolean) => session.setFullscreen(enabled));
   ipcMain.handle(IPC.resize, (_e, rect: DesktopRect) => session.resize(rect));
   ipcMain.handle(IPC.destroy, () => session.destroy());

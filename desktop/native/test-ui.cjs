@@ -16,7 +16,7 @@ app.whenReady().then(() => {
   win.webContents.on('paint', (e, dirty, image) => {
     painted++;
     const sz = image.getSize();
-    addon.uploadUi(image.getBitmap(), sz.width, sz.height);
+    addon.uploadUi(image.crop(dirty).toBitmap(), sz.width, sz.height, dirty.x, dirty.y, dirty.width, dirty.height);
   });
   setTimeout(() => {
     console.log('[test] paint events:', painted);

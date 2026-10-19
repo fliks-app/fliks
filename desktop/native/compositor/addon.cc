@@ -24,6 +24,7 @@
 
 #include <dlfcn.h>
 
+#include <algorithm>
 #include <atomic>
 #include <cstdio>
 #include <cstdlib>
@@ -132,6 +133,8 @@ struct GlState {
   int uiW = 0;
   int uiH = 0;
   bool uiDirty = false;
+  bool uiResized = false;
+  int uiDx0 = 0, uiDy0 = 0, uiDx1 = 0, uiDy1 = 0;  // union of the unuploaded dirty rects
 
   mpv_handle* mpv = nullptr;
   mpv_render_context* mpvGl = nullptr;
@@ -411,8 +414,20 @@ void RenderThreadMain(GlState* s) {
       if (s->uiDirty && !s->uiPending.empty()) {
         glBindTexture(GL_TEXTURE_2D, s->uiTex);
         glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, s->uiW, s->uiH, 0, GL_RGBA,
-                     GL_UNSIGNED_BYTE, s->uiPending.data());
+        if (s->uiResized) {
+          glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, s->uiW, s->uiH, 0, GL_RGBA,
+                       GL_UNSIGNED_BYTE, s->uiPending.data());
+          s->uiResized = false;
+        } else {
+          glPixelStorei(GL_UNPACK_ROW_LENGTH, s->uiW);
+          glPixelStorei(GL_UNPACK_SKIP_PIXELS, s->uiDx0);
+          glPixelStorei(GL_UNPACK_SKIP_ROWS, s->uiDy0);
+          glTexSubImage2D(GL_TEXTURE_2D, 0, s->uiDx0, s->uiDy0, s->uiDx1 - s->uiDx0,
+                          s->uiDy1 - s->uiDy0, GL_RGBA, GL_UNSIGNED_BYTE, s->uiPending.data());
+          glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+          glPixelStorei(GL_UNPACK_SKIP_PIXELS, 0);
+          glPixelStorei(GL_UNPACK_SKIP_ROWS, 0);
+        }
         s->uiDirty = false;
       }
     }
@@ -679,19 +694,43 @@ Napi::Value SetCursorVisible(const Napi::CallbackInfo& info) {
   return info.Env().Undefined();
 }
 
+// uploadUi(rectPixels, frameW, frameH, x, y, w, h): the dirty rect of a frameW x frameH bitmap.
 Napi::Value UploadUi(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
-  if (info.Length() < 3 || !info[0].IsBuffer()) return env.Undefined();
+  if (info.Length() < 7 || !info[0].IsBuffer()) return env.Undefined();
   auto buf = info[0].As<Napi::Buffer<uint8_t>>();
-  int w = info[1].As<Napi::Number>().Int32Value();
-  int h = info[2].As<Napi::Number>().Int32Value();
-  size_t need = static_cast<size_t>(w) * h * 4;
-  if (buf.Length() < need) return env.Undefined();
+  int fw = info[1].As<Napi::Number>().Int32Value();
+  int fh = info[2].As<Napi::Number>().Int32Value();
+  int x = info[3].As<Napi::Number>().Int32Value();
+  int y = info[4].As<Napi::Number>().Int32Value();
+  int w = info[5].As<Napi::Number>().Int32Value();
+  int h = info[6].As<Napi::Number>().Int32Value();
+  if (fw <= 0 || fh <= 0 || w <= 0 || h <= 0 || x < 0 || y < 0 || x + w > fw || y + h > fh)
+    return env.Undefined();
+  if (buf.Length() < static_cast<size_t>(w) * h * 4) return env.Undefined();
   {
     std::lock_guard<std::mutex> lk(g_state.uiMutex);
-    g_state.uiPending.assign(buf.Data(), buf.Data() + need);
-    g_state.uiW = w;
-    g_state.uiH = h;
+    if (fw != g_state.uiW || fh != g_state.uiH) {
+      g_state.uiPending.assign(static_cast<size_t>(fw) * fh * 4, 0);
+      g_state.uiW = fw;
+      g_state.uiH = fh;
+      g_state.uiResized = true;
+      g_state.uiDirty = false;
+    }
+    for (int r = 0; r < h; r++)
+      memcpy(g_state.uiPending.data() + (static_cast<size_t>(y + r) * fw + x) * 4,
+             buf.Data() + static_cast<size_t>(r) * w * 4, static_cast<size_t>(w) * 4);
+    if (g_state.uiDirty) {
+      g_state.uiDx0 = std::min(g_state.uiDx0, x);
+      g_state.uiDy0 = std::min(g_state.uiDy0, y);
+      g_state.uiDx1 = std::max(g_state.uiDx1, x + w);
+      g_state.uiDy1 = std::max(g_state.uiDy1, y + h);
+    } else {
+      g_state.uiDx0 = x;
+      g_state.uiDy0 = y;
+      g_state.uiDx1 = x + w;
+      g_state.uiDy1 = y + h;
+    }
     g_state.uiDirty = true;
   }
   return env.Undefined();
