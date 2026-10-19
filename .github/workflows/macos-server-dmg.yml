@@ -37,7 +37,7 @@ jobs:
       attestations: write
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       # ── Resolve version + patch Info.plist BEFORE build ──
       # The DMG name comes from Info.plist's CFBundleShortVersionString
@@ -59,7 +59,7 @@ jobs:
           echo "Patched Info.plist: CFBundleShortVersionString=$SHORT (from $RAW)"
 
       # ── Node.js for building the client ──
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 24
           cache: npm
@@ -69,7 +69,7 @@ jobs:
       - uses: ./.github/actions/setup-rust
 
       # Dependencies only: the workspace crates rebuild every run, which keeps the cache small.
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
           workspaces: server
@@ -87,7 +87,7 @@ jobs:
       # ── Build Angular client ──
       - name: Cache web build
         id: webcache
-        uses: actions/cache@v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: client/dist
           key: macos-web-${{ hashFiles('client/**', '!client/dist/**', '!client/node_modules/**', '!client/.angular/**', '!client/android/**', '!client/ios/**') }}
@@ -158,7 +158,7 @@ jobs:
 
       # ── Upload DMG as artifact (always) ──
       - name: Upload DMG artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: Fliks-Server-${{ steps.version.outputs.version }}-arm64.dmg
           path: macos/build/Fliks-*.dmg
