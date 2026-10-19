@@ -1,5 +1,5 @@
-# The engine release in engine.lock, the Dockerfile engine image and the server's engine crate tag move
-# together (scripts/bump-engine.sh); a hand edit of one of them goes red here.
+# The engine release in engine.lock, the Dockerfile engine image (tag and digest), the server's engine
+# crate tag and the Cargo.lock files move together (scripts/bump-engine.sh); a hand edit of one of them goes red here.
 name: Engine lock
 
 on:
@@ -9,6 +9,9 @@ on:
       - 'engine.lock'
       - 'Dockerfile'
       - 'server/crates/server/Cargo.toml'
+      - 'server/Cargo.lock'
+      - 'server/crates/plugin-sdk/Cargo.lock'
+      - '.github/scripts/check-engine-lock.sh'
       - 'scripts/bump-engine.sh'
       - '.github/workflows/engine-lock.yml'
 
@@ -21,10 +24,14 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Server engine tag and Dockerfile image match engine.lock
-        run: |
-          v="$(sed -n 's/^version=//p' engine.lock)"
-          t="$(sed -n 's/^fliks-engine-core = .*tag = "v\([^"]*\)".*/\1/p' server/crates/server/Cargo.toml)"
-          [ "$t" = "$v" ] || { echo "::error::fliks-engine-core tag is v$t, engine.lock says v$v"; exit 1; }
-          i="$(sed -n 's|^ARG ENGINE_IMAGE=ghcr.io/fliks-app/engine:||p' Dockerfile)"
-          [ "$i" = "$v" ] || { echo "::error::Dockerfile ENGINE_IMAGE is $i, engine.lock says $v"; exit 1; }
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Engine pins agree with each other and with the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: .github/scripts/check-engine-lock.sh
