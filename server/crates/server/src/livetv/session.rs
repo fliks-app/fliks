@@ -165,6 +165,8 @@ struct Hold {
     fed: Option<u32>,
     pending: bool,
     mode: Option<LiveMode>,
+    /// Who an open in flight belongs to (`None` for a hold rebuilt from the engine).
+    owner: Option<i32>,
 }
 
 #[derive(Default)]
@@ -322,9 +324,25 @@ pub async fn open(
     };
     let grace =
         grace_of(crate::settings::setting_value(&st.db, "livetv_slot_release_seconds").await?);
+    let cap = super::sync::setting_int(&st.db, "livetv_max_viewers_per_user", 0).await?;
     let token = super::playlist_file::uuid_v4();
     let (verdict, vetoes): (Option<AtCapacity>, Vec<bool>) = {
         let mut g = st.livetv.live.lock();
+        let held = g
+            .viewers
+            .values()
+            .filter(|v| v.user_id == Some(who.id))
+            .count()
+            + g.holds
+                .values()
+                .filter(|h| h.pending && h.owner == Some(who.id))
+                .count();
+        if cap > 0 && held as i64 >= cap {
+            return Err(PlayError::Object(
+                StatusCode::CONFLICT,
+                json!({"code": "livetv_user_at_capacity", "limit": cap}),
+            ));
+        }
         let now = Instant::now();
         let mut per_stream = Vec::with_capacity(streams.len());
         for s in &streams {
@@ -354,6 +372,7 @@ pub async fn open(
                 fed: None,
                 pending: true,
                 mode: None,
+                owner: Some(who.id),
             },
         );
         (per_stream.into_iter().next().flatten(), vetoes)
@@ -782,6 +801,7 @@ async fn restore_holds(st: &AppState, snaps: &[LiveSnapshot]) {
             fed: Some(s.upstream),
             pending: false,
             mode: Some(s.mode),
+            owner: None,
         });
     }
 }
@@ -881,7 +901,10 @@ pub async fn play(
         use_ts: use_ts.val().unwrap_or(false),
     };
     let opened = open(&st, id, &name, streams, &who, caps, device).await?;
-    let token = st.jwt.sign_stream(a.user.id, &a.user.username)?.token;
+    let token = st
+        .jwt
+        .sign_live(a.user.id, &a.user.username, &opened.session_id)?
+        .token;
     let enc = crate::engine::enc(&token);
     Ok((
         StatusCode::CREATED,

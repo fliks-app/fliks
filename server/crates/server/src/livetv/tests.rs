@@ -2224,6 +2224,62 @@ mod sessions {
     }
 
     #[sqlx::test(migrations = false)]
+    async fn a_user_at_the_viewer_cap_is_refused_until_a_viewer_leaves(pool: PgPool) {
+        let w = world(pool).await;
+        let c = &w.c;
+        sqlx::query(r#"UPDATE livetv_sources SET "maxStreams" = 0"#)
+            .execute(&c.pool)
+            .await
+            .unwrap();
+        sqlx::query(
+            "INSERT INTO app_settings (key, value) VALUES ('livetv_max_viewers_per_user', '1')",
+        )
+        .execute(&c.pool)
+        .await
+        .unwrap();
+        let (_, tok) = viewer(c, "capped", false).await;
+        let (_, other) = viewer(c, "free", false).await;
+        let app = &c.app;
+        let play = |tok: &str, channel: i32| {
+            let (tok, uri) = (
+                tok.to_owned(),
+                format!("/api/livetv/channels/{channel}/play"),
+            );
+            async move { call(app, "POST", &uri, &tok, Some(json!({}))).await }
+        };
+        c.fake.script(
+            "POST",
+            "/v1/live",
+            ["sid-1", "sid-2", "sid-3"]
+                .map(|sid| ok(open_answer(sid, SELF, "remux")))
+                .to_vec(),
+        );
+        let (s, b) = play(&tok, w.a).await;
+        assert_eq!(s, 201, "{b}");
+        let token = b["url"].as_str().unwrap().split("token=").nth(1).unwrap();
+        assert_eq!(
+            c.st.jwt.verify(token).unwrap().live.as_deref(),
+            Some("sid-1")
+        );
+        let (s, b) = play(&tok, w.b).await;
+        assert_eq!(
+            (s, b),
+            (409, json!({"code": "livetv_user_at_capacity", "limit": 1}))
+        );
+        assert_eq!(
+            c.fake.seen("POST", "/v1/live").len(),
+            1,
+            "refused before the engine"
+        );
+        assert_eq!(play(&other, w.b).await.0, 201, "the cap is per user");
+        c.fake
+            .script("DELETE", "/v1/sessions/sid-1", vec![status(204)]);
+        let (s, _) = call(&c.app, "DELETE", "/api/livetv/sessions/sid-1", &tok, None).await;
+        assert_eq!(s, 200);
+        assert_eq!(play(&tok, w.b).await.0, 201, "a free slot opens again");
+    }
+
+    #[sqlx::test(migrations = false)]
     async fn the_play_route_answers_the_contract_with_a_stream_token_in_the_url(pool: PgPool) {
         let w = world(pool).await;
         let c = &w.c;

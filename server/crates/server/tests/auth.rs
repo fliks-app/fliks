@@ -261,6 +261,25 @@ async fn token_and_user_validation(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
+async fn a_live_token_is_refused_by_every_extractor(pool: PgPool) {
+    let st = state(pool.clone()).await;
+    let id = user(&pool, "a", None, false, true).await;
+    let app = app(&st);
+    let live = st.jwt.sign_live(id, "a", "sid-1").unwrap().token;
+    assert_eq!(st.jwt.verify(&live).unwrap().live.as_deref(), Some("sid-1"));
+    for uri in ["/who", "/stream", "/session", "/optional"] {
+        let (s, _) = get_with(&app, uri, &[("authorization", &bearer(&live))]).await;
+        assert_eq!(s, 401, "{uri}");
+    }
+    assert_eq!(
+        get_with(&app, &format!("/stream?token={live}"), &[])
+            .await
+            .0,
+        401
+    );
+}
+
+#[sqlx::test(migrations = false)]
 async fn scoped_tokens_by_extractor(pool: PgPool) {
     let st = state(pool.clone()).await;
     let id = user(&pool, "a", None, false, true).await;

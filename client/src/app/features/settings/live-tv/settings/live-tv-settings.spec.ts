@@ -53,6 +53,7 @@ describe('LiveTvSettingsComponent - load', () => {
       livetv_probe_seconds: '6',
       livetv_stale_stream_days: '14',
       livetv_slot_release_seconds: '30',
+      livetv_max_viewers_per_user: '2',
       livetv_fast_zap: 'true',
     });
 
@@ -64,6 +65,7 @@ describe('LiveTvSettingsComponent - load', () => {
     expect(component.probeSeconds()).toBe(6);
     expect(component.staleStreamDays()).toBe(14);
     expect(component.slotReleaseSeconds()).toBe(30);
+    expect(component.maxViewersPerUser()).toBe(2);
     expect(component.fastZap()).toBe('true');
   });
 
@@ -78,6 +80,7 @@ describe('LiveTvSettingsComponent - load', () => {
     expect(component.probeSeconds()).toBe(3);
     expect(component.staleStreamDays()).toBe(7);
     expect(component.slotReleaseSeconds()).toBe(15);
+    expect(component.maxViewersPerUser()).toBe(0);
     expect(component.fastZap()).toBe('auto');
   });
 });
@@ -93,6 +96,13 @@ describe('LiveTvSettingsComponent - dirty tracking', () => {
     component.setInt(component.guideDaysPast, 'livetv_guide_days_past', 5);
 
     expect(changesOf(component)).toEqual({ livetv_guide_days_past: '5' });
+  });
+
+  it('sends the viewer cap as its own key', async () => {
+    const { component } = await ready({});
+    component.setInt(component.maxViewersPerUser, 'livetv_max_viewers_per_user', 3);
+
+    expect(changesOf(component)).toEqual({ livetv_max_viewers_per_user: '3' });
   });
 
   it('calls the API with only the changed key on save', async () => {

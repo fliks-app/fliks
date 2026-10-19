@@ -3112,6 +3112,7 @@
       "back_to_live": "Back to live"
     },
     "error_at_capacity": "{{sourceName}} has reached its limit of {{limit}} simultaneous streams. Try again in a moment.",
+    "error_user_at_capacity": "You are limited to {{limit}} simultaneous live streams. Close one and try again.",
     "error_play_failed": "Unable to start this channel.",
     "error_account_expired": "The {{sourceName}} subscription has expired.",
     "jobs": {
@@ -3265,6 +3266,8 @@
         "probe_seconds_help": "Raise it only if a channel looks dead because ffmpeg cannot detect its dimensions in time.",
         "slot_release_seconds": "Provider slot release delay (seconds)",
         "slot_release_seconds_help": "Raise it if your provider panel takes longer than this to free a connection slot after a stream closes.",
+        "max_viewers_per_user": "Simultaneous live viewers per user",
+        "max_viewers_per_user_help": "Most live streams one account can watch at once. 0 means no limit.",
         "section_maintenance": "Maintenance",
         "stale_stream_days": "Stale stream retention (days)",
         "stale_stream_days_help": "Lower it to drop vanished streams sooner; too low can drop a channel a single refresh simply missed.",

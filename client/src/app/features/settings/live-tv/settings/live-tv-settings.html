@@ -64,6 +64,14 @@
       <label class="label"><span class="label-text-alt text-base-content/50">{{ 'liveTv.admin.settings.slot_release_seconds_help' | translate }}</span></label>
     </div>
 
+    <div class="form-control">
+      <label class="label"><span class="label-text font-medium">{{ 'liveTv.admin.settings.max_viewers_per_user' | translate }}</span></label>
+      <input
+        type="number" min="0" step="1" class="input input-bordered w-full"
+        [ngModel]="maxViewersPerUser()" (ngModelChange)="setInt(maxViewersPerUser, 'livetv_max_viewers_per_user', $event)" />
+      <label class="label"><span class="label-text-alt text-base-content/50">{{ 'liveTv.admin.settings.max_viewers_per_user_help' | translate }}</span></label>
+    </div>
+
     <div class="divider">{{ 'liveTv.admin.settings.section_maintenance' | translate }}</div>
 
     <div class="form-control">
