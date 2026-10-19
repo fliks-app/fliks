@@ -2,7 +2,7 @@ import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { HttpClient } from '@angular/common/http';
 import { TranslateLoader, provideTranslateService } from '@ngx-translate/core';
-import { of, throwError } from 'rxjs';
+import { NEVER, of, throwError } from 'rxjs';
 import { SetupComponent } from './setup';
 import { ServerConfigService } from '../../core/services/server-config.service';
 import { AuthService } from '../../core/services/auth.service';
@@ -16,7 +16,7 @@ const httpsOnly = {
       : throwError(() => ({ status: 0 })),
 } as unknown as HttpClient;
 
-async function createComponent(http: HttpClient) {
+async function createComponent(http: HttpClient, activeUrl = '') {
   TestBed.configureTestingModule({
     providers: [
       provideZonelessChangeDetection(),
@@ -27,7 +27,11 @@ async function createComponent(http: HttpClient) {
       { provide: HttpClient, useValue: http },
       {
         provide: ServerConfigService,
-        useValue: { serverUrl: () => '', knownServers: signal([]) },
+        useValue: {
+          serverUrl: () => activeUrl,
+          knownServers: signal([]),
+          updateKnownServer: (_: string, c: { url: string }) => Promise.resolve(c.url),
+        },
       },
       {
         provide: AuthService,
@@ -73,6 +77,22 @@ describe('SetupComponent — https fallback', () => {
   });
 });
 
+describe('SetupComponent — editing during a test', () => {
+  it('cancels the pending test', async () => {
+    const hanging = { get: () => NEVER } as unknown as HttpClient;
+    const c = await createComponent(hanging);
+    c.url.set('http://slow.example.com');
+
+    const pending = c.test();
+    c.onUrlChange('http://other.example.com');
+    await pending;
+
+    expect(c.testing()).toBe(false);
+    expect(c.testResult()).toBeNull();
+    expect(c.url()).toBe('http://other.example.com');
+  });
+});
+
 describe('SetupComponent — known server', () => {
   const server = { url: 'https://fliks.example.com', name: null, lastUsedAt: 0, lastUsername: null };
 
@@ -98,5 +118,35 @@ describe('SetupComponent — known server', () => {
     expect(auth.switchToServer).not.toHaveBeenCalled();
     expect(TestBed.inject(ToastService).toasts()[0]?.type).toBe('error');
     expect(c.switchingTo()).toBeNull();
+  });
+});
+
+describe('SetupComponent — editing a known server', () => {
+  const server = { url: 'https://old.example.com', name: null, lastUsedAt: 0, lastUsername: null };
+
+  beforeAll(() => {
+    HTMLDialogElement.prototype.close ??= function (this: HTMLDialogElement) {
+      this.removeAttribute('open');
+    };
+  });
+
+  async function editTo(activeUrl: string) {
+    const c = await createComponent({} as HttpClient, activeUrl);
+    const auth = TestBed.inject(AuthService);
+    vi.spyOn(auth, 'switchToServer').mockResolvedValue();
+    c.editing.set(server);
+    c.editUrl.set('https://new.example.com');
+    await c.confirmEdit();
+    return auth;
+  }
+
+  it('reconnects to the new address when the active server moves', async () => {
+    const auth = await editTo(server.url);
+    expect(auth.switchToServer).toHaveBeenCalledWith('https://new.example.com');
+  });
+
+  it('leaves the active server alone when another one is edited', async () => {
+    const auth = await editTo('https://elsewhere.example.com');
+    expect(auth.switchToServer).not.toHaveBeenCalled();
   });
 });

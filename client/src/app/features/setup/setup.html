@@ -44,7 +44,7 @@
               <div class="dropdown dropdown-end" [class.dropdown-open]="openMenuFor() === server.url">
                 <button type="button" class="btn btn-ghost btn-sm btn-square" (click)="toggleMenu(server.url, $event)" [attr.aria-label]="'server_history.actions' | translate">⋯</button>
                 <ul class="dropdown-content menu bg-base-100 rounded-box shadow z-10 w-48 p-2">
-                  <li><button type="button" (click)="rename(server, $event)">{{ 'server_history.rename' | translate }}</button></li>
+                  <li><button type="button" (click)="edit(server, $event)">{{ 'common.edit' | translate }}</button></li>
                   <li><button type="button" (click)="forget(server, $event)" class="text-error">{{ 'server_history.forget' | translate }}</button></li>
                 </ul>
               </div>
@@ -60,7 +60,7 @@
           type="url"
           class="input input-bordered w-full"
           [ngModel]="url()"
-          (ngModelChange)="url.set($event)"
+          (ngModelChange)="onUrlChange($event)"
           (keydown.enter)="test()"
           placeholder="http://192.168.1.x:3000"
         />
@@ -109,25 +109,37 @@
   </div>
 </div>
 
-<dialog #renameDialog class="modal" (close)="renaming.set(null)">
+<dialog #editDialog class="modal" (close)="editing.set(null)">
   <div class="modal-box max-w-md">
-    <app-modal-header [title]="'server_history.rename' | translate" />
-    <form class="flex flex-col gap-4" (ngSubmit)="confirmRename()">
-      <input
-        type="text"
-        class="input input-bordered w-full"
-        name="serverName"
-        [placeholder]="renaming()?.url ?? ('server_history.rename_prompt' | translate)"
-        [attr.aria-label]="'server_history.rename_prompt' | translate"
-        [ngModel]="renameValue()"
-        (ngModelChange)="renameValue.set($event)"
-        autofocus
-      />
+    <app-modal-header [title]="'common.edit' | translate" />
+    <form class="flex flex-col gap-4" (ngSubmit)="confirmEdit()">
+      <label class="form-control w-full">
+        <span class="label-text">{{ 'server_history.rename_prompt' | translate }}</span>
+        <input
+          type="text"
+          class="input input-bordered w-full"
+          name="serverName"
+          [placeholder]="editing()?.url ?? ''"
+          [ngModel]="editName()"
+          (ngModelChange)="editName.set($event)"
+          autofocus
+        />
+      </label>
+      <label class="form-control w-full">
+        <span class="label-text">{{ 'setup.server_url' | translate }}</span>
+        <input
+          type="url"
+          class="input input-bordered w-full"
+          name="serverUrl"
+          [ngModel]="editUrl()"
+          (ngModelChange)="editUrl.set($event)"
+        />
+      </label>
       <app-modal-footer>
-        <button type="button" class="btn" (click)="closeRename()">
+        <button type="button" class="btn" (click)="closeEdit()">
           {{ 'common.cancel' | translate }}
         </button>
-        <button type="submit" class="btn btn-primary">
+        <button type="submit" class="btn btn-primary" [disabled]="!editUrl().trim()">
           {{ 'common.save' | translate }}
         </button>
       </app-modal-footer>

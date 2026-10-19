@@ -185,6 +185,19 @@ export class SessionStoreService {
     await this.mutate((list) => removeSession(list, serverUrl, userId));
   }
 
+  /** Re-key a server's sessions after its address changed; the newest wins on a clash. */
+  async moveServer(from: string, to: string): Promise<void> {
+    if (from === to) return;
+    const key = this._activeKey();
+    if (key?.startsWith(`${from}::`)) this._activeKey.set(to + key.slice(from.length));
+    await this.mutate((list) => {
+      const moved = list
+        .map((s) => (s.serverUrl === from ? { ...s, serverUrl: to } : s))
+        .sort((a, b) => b.lastUsedAt - a.lastUsedAt);
+      return moved.filter((s, i) => moved.findIndex((o) => isSame(o, s.serverUrl, s.user.id)) === i);
+    });
+  }
+
   /** Persist a rotation. Awaited before anything else touches the new pair:
    *  re-presenting a rotated token costs every session of the account. */
   async updateTokens(

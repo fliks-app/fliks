@@ -7,12 +7,13 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
-import { firstValueFrom, timeout } from 'rxjs';
+import { NEVER, Observable, Subject, firstValueFrom, takeUntil, timeout } from 'rxjs';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { ModalHeaderComponent } from '../../shared/components/modal-header';
 import { ModalFooterComponent } from '../../shared/components/modal-footer';
 import { ServerConfigService, KnownServer } from '../../core/services/server-config.service';
 import { AuthService } from '../../core/services/auth.service';
+import { SessionStoreService } from '../../core/services/session-store.service';
 import { ToastService } from '../../core/services/toast.service';
 
 /**
@@ -36,6 +37,7 @@ export function withHttpsFallback(base: string): string[] {
 export class SetupComponent {
   private readonly serverConfig = inject(ServerConfigService);
   private readonly auth = inject(AuthService);
+  private readonly sessions = inject(SessionStoreService);
   private readonly http = inject(HttpClient);
   private readonly translate = inject(TranslateService);
   private readonly toast = inject(ToastService);
@@ -53,20 +55,35 @@ export class SetupComponent {
   /** URL of the entry whose ⋯ menu is open, or null. */
   readonly openMenuFor = signal<string | null>(null);
   private readonly saveBtn = viewChild<ElementRef<HTMLButtonElement>>('saveBtn');
-  private readonly renameDialog = viewChild<ElementRef<HTMLDialogElement>>('renameDialog');
-  /** Server whose alias the rename dialog edits. */
-  readonly renaming = signal<KnownServer | null>(null);
-  readonly renameValue = signal('');
+  private readonly editDialog = viewChild<ElementRef<HTMLDialogElement>>('editDialog');
+  /** Server the edit dialog changes. */
+  readonly editing = signal<KnownServer | null>(null);
+  readonly editName = signal('');
+  readonly editUrl = signal('');
+  private testRun = 0;
+  private readonly cancelTest$ = new Subject<void>();
+
+  /** Editing the URL drops any running test and its now-stale result. */
+  onUrlChange(value: string) {
+    this.url.set(value);
+    this.testRun++;
+    this.cancelTest$.next();
+    this.testing.set(false);
+    this.testResult.set(null);
+  }
 
   async test() {
     const raw = this.url().trim().replace(/\/+$/, '');
     if (!raw) return;
 
+    const run = ++this.testRun;
     this.testing.set(true);
     this.testResult.set(null);
     try {
       for (const base of withHttpsFallback(raw)) {
-        if (await this.reachable(base)) {
+        const ok = await this.reachable(base, this.cancelTest$);
+        if (run !== this.testRun) return;
+        if (ok) {
           this.url.set(base);
           this.testResult.set({ ok: true, message: 'setup.test_success' });
           // Save is disabled until the test passes — hand it the focus once
@@ -77,15 +94,17 @@ export class SetupComponent {
       }
       this.testResult.set({ ok: false, message: 'setup.test_error' });
     } finally {
-      this.testing.set(false);
+      if (run === this.testRun) this.testing.set(false);
     }
   }
 
   /** 401 counts as reachable: the server answered, we're just not logged in. */
-  private async reachable(base: string): Promise<boolean> {
+  private async reachable(base: string, cancel$: Observable<void> = NEVER): Promise<boolean> {
     try {
       await firstValueFrom(
-        this.http.get(`${base}/api/auth/me`, { responseType: 'json' }).pipe(timeout(PROBE_TIMEOUT_MS)),
+        this.http
+          .get(`${base}/api/auth/me`, { responseType: 'json' })
+          .pipe(timeout(PROBE_TIMEOUT_MS), takeUntil(cancel$)),
       );
       return true;
     } catch (err: unknown) {
@@ -147,24 +166,26 @@ export class SetupComponent {
     await this.serverConfig.forgetKnownServer(server.url);
   }
 
-  rename(server: KnownServer, event: Event) {
+  edit(server: KnownServer, event: Event) {
     event.stopPropagation();
     this.openMenuFor.set(null);
-    this.renaming.set(server);
-    this.renameValue.set(server.name ?? '');
-    this.renameDialog()?.nativeElement.showModal();
+    this.editing.set(server);
+    this.editName.set(server.name ?? '');
+    this.editUrl.set(server.url);
+    this.editDialog()?.nativeElement.showModal();
   }
 
-  closeRename() {
-    this.renameDialog()?.nativeElement.close();
+  closeEdit() {
+    this.editDialog()?.nativeElement.close();
   }
 
-  /** An empty name clears the alias, so the row falls back to the URL. */
-  async confirmRename() {
-    const server = this.renaming();
+  async confirmEdit() {
+    const server = this.editing();
     if (!server) return;
-    await this.serverConfig.renameKnownServer(server.url, this.renameValue());
-    this.closeRename();
+    const url = await this.serverConfig.updateKnownServer(server.url, { name: this.editName(), url: this.editUrl() });
+    await this.sessions.moveServer(server.url, url);
+    this.closeEdit();
+    if (server.url === this.serverConfig.serverUrl() && url !== server.url) await this.switchTo(url);
   }
 
   /** Coarse human-readable freshness. */
