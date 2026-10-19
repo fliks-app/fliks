@@ -1,8 +1,9 @@
 package media.fliks.app;
 
+import static media.fliks.app.NativePlayerUtil.*;
+import media.fliks.app.NativePlayerUtil.PcmOnlyRenderersFactory;
+
 import android.graphics.Color;
-import android.media.MediaCodecInfo;
-import android.media.MediaCodecList;
 import android.os.Build;
 import android.net.Uri;
 import android.os.Handler;
@@ -37,15 +38,11 @@ import androidx.media3.exoplayer.DefaultRenderersFactory;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.LoadControl;
 import androidx.media3.exoplayer.PlayerMessage;
-import androidx.media3.exoplayer.audio.AudioCapabilities;
-import androidx.media3.exoplayer.audio.AudioSink;
-import androidx.media3.exoplayer.audio.DefaultAudioSink;
 import androidx.media3.exoplayer.analytics.AnalyticsListener;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
 import androidx.media3.exoplayer.upstream.CmcdConfiguration;
 import androidx.media3.session.MediaSession;
 import java.util.ArrayList;
-import android.content.Context;
 import java.util.List;
 import androidx.media3.ui.AspectRatioFrameLayout;
 import androidx.media3.ui.CaptionStyleCompat;
@@ -58,7 +55,6 @@ import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
 import java.util.HashMap;
-import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -617,22 +613,6 @@ public class NativePlayerPlugin extends Plugin {
     private final List<PlayerMessage> muteMessages = new ArrayList<>();
     private boolean muteSinkPlayer = false;
 
-    @OptIn(markerClass = UnstableApi.class)
-    private static final class PcmOnlyRenderersFactory extends DefaultRenderersFactory {
-        PcmOnlyRenderersFactory(Context context) { super(context); }
-
-        @Override
-        protected AudioSink buildAudioSink(Context context, boolean enableFloatOutput,
-                boolean enableAudioTrackPlaybackParams) {
-            // A context-less builder is required: with a context, media3 discards these capabilities.
-            return new DefaultAudioSink.Builder()
-                    .setAudioCapabilities(AudioCapabilities.DEFAULT_AUDIO_CAPABILITIES)
-                    .setEnableFloatOutput(enableFloatOutput)
-                    .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
-                    .build();
-        }
-    }
-
     @PluginMethod()
     public void setMuteRanges(PluginCall call) {
         JSArray raw = call.getArray("ranges", new JSArray());
@@ -920,14 +900,6 @@ public class NativePlayerPlugin extends Plugin {
         });
     }
 
-    private int parseColor(String hex, int fallback) {
-        try {
-            return Color.parseColor(hex);
-        } catch (Exception e) {
-            return fallback;
-        }
-    }
-
     // ── Display ──
 
     @PluginMethod()
@@ -992,11 +964,6 @@ public class NativePlayerPlugin extends Plugin {
         if (!(current instanceof FrameLayout.LayoutParams) || !sameParams((FrameLayout.LayoutParams) current, next)) {
             aspectFrame.setLayoutParams(next);
         }
-    }
-
-    private static boolean sameParams(FrameLayout.LayoutParams a, FrameLayout.LayoutParams b) {
-        return a.width == b.width && a.height == b.height
-                && a.leftMargin == b.leftMargin && a.topMargin == b.topMargin && a.gravity == b.gravity;
     }
 
     // ── Brightness ──
@@ -1118,29 +1085,6 @@ public class NativePlayerPlugin extends Plugin {
 
     // ── State ──
 
-    private static final Map<String, Boolean> HW_DECODER_CACHE = new HashMap<>();
-
-    private static synchronized boolean isHardwareDecoder(String name) {
-        Boolean cached = HW_DECODER_CACHE.get(name);
-        if (cached != null) return cached;
-        Boolean hw = null;
-        if (Build.VERSION.SDK_INT >= 29) {
-            for (MediaCodecInfo info : new MediaCodecList(MediaCodecList.ALL_CODECS).getCodecInfos()) {
-                if (info.getName().equals(name)) { hw = info.isHardwareAccelerated(); break; }
-            }
-        }
-        if (hw == null) {
-            String n = name.toLowerCase(Locale.ROOT);
-            hw = !(n.startsWith("omx.google.") || n.startsWith("c2.android.") || n.contains(".sw."));
-        }
-        HW_DECODER_CACHE.put(name, hw);
-        return hw;
-    }
-
-    private static Object orNull(Object v) {
-        return v != null ? v : org.json.JSONObject.NULL;
-    }
-
     @PluginMethod()
     public void getQoe(PluginCall call) {
         mainHandler.post(() -> {
@@ -1236,25 +1180,6 @@ public class NativePlayerPlugin extends Plugin {
         }
         return false;
     }
-
-    /** Draw a bitmap (PGS/VOBSUB) cue ourselves, pinned near the bottom of the
-     *  screen, aspect preserved — the built-in SubtitleView stretches/squishes
-     *  bitmaps. Sized from the video WIDTH so it stays consistent across
-     *  orientations (the letterboxed video height is tiny in portrait). Null
-     *  hides it. */
-    private static boolean isImageSubtitleMime(String mime) {
-        return MimeTypes.APPLICATION_PGS.equals(mime)
-                || MimeTypes.APPLICATION_VOBSUB.equals(mime)
-                || MimeTypes.APPLICATION_DVBSUBS.equals(mime);
-    }
-
-    /** Bitmap (burn-in-only) subtitle track. The modern subtitle pipeline
-     *  rewrites sampleMimeType to application/x-media3-cues and preserves the
-     *  original codec in `codecs`, so check both. */
-    private static boolean isImageSubtitle(androidx.media3.common.Format fmt) {
-        return isImageSubtitleMime(fmt.sampleMimeType) || isImageSubtitleMime(fmt.codecs);
-    }
-
     private JSArray buildAudioTrackList() {
         JSArray list = new JSArray();
         if (player == null) return list;
@@ -1283,17 +1208,6 @@ public class NativePlayerPlugin extends Plugin {
             }
         }
         return list;
-    }
-
-    /** Convert ISO 639-2/B or 639-1 language code to display name. */
-    private String langToDisplayName(String code) {
-        if (code == null || code.equals("und")) return "Unknown";
-        Locale loc = Locale.forLanguageTag(code);
-        String name = loc.getDisplayLanguage(Locale.getDefault());
-        if (!name.isEmpty() && !name.equals(code)) {
-            return name.substring(0, 1).toUpperCase() + name.substring(1);
-        }
-        return code;
     }
 
     private String lastEmittedState = "";
