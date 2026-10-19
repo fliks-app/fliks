@@ -17,7 +17,7 @@ it is NOT the menu-bar server host under `macos/`.
      addon.cc`, libmpv render API, self-compositing SDL/GL window); its
      property/event plumbing (`time-pos`, `demuxer-cache-time`,
      `paused-for-cache`, `timeUpdate`, `stateChanged`) lives in addon.cc + the
-     `addon.onEvent` / `emitPosition` wiring in `src/main/index.ts`.
+     `LinuxCompositorPlayer` (`src/main/mpv/linux-compositor-player.ts`, a `PlayerBackend`).
   2. **Windows** — `MpvPlayer` (`src/main/mpv/mpv-player.ts`) spawns an mpv
      **subprocess** embedded via `--wid` into a child HWND, controlled over
      JSON-IPC. **NOT used on Linux or macOS.**

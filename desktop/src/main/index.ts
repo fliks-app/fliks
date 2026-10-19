@@ -10,15 +10,10 @@ import { appendLog, echoRendererConsole, redactQuery } from './log-file';
 import { setupUpdater } from './updater';
 import { registerDownloadIpc } from './download';
 import { registerCastIpc } from './cast';
-import { setPlaybackKeepAwake, keepAwakeForState } from './power';
-import { IPC, type DesktopEvent, type DesktopMuteRange, type DesktopSubtitleStyle } from '../shared/contract';
-import { muteFilterCommands } from './mpv/edl-filter';
-import { FirstFrameGate } from './mpv/first-frame-gate';
-import { mpvLoadRequest, type MpvLoadRequest } from './mpv/load-options';
-import { mpvSubtitleProps } from './mpv/subtitle-style';
-import { parseTracks } from './mpv/tracks';
-import { QoeReader } from './mpv/qoe';
-import { MPV_STREAM_OPTIONS } from '../shared/mpv-stream-options';
+import { IPC, type DesktopEvent } from '../shared/contract';
+import { LinuxCompositorPlayer, type CompositorAddon } from './mpv/linux-compositor-player';
+import { forwardPlayerEvents } from './window/forward-events';
+import { registerPlayerIpc } from './ipc';
 
 // Velopack's install/update/uninstall hooks run and exit here, before any Electron startup.
 if (process.platform === 'win32') {
@@ -75,20 +70,6 @@ const HEIGHT = 800;
 // The native compositor addon (single SDL/GLES window: mpv video + OSR UI).
 // Loaded via a real require so esbuild leaves the .node resolution to runtime.
 const nativeRequire = createRequire(__filename);
-type Addon = {
-  start(o: { width: number; height: number; title: string; icon?: string }): void;
-  onEvent(cb: (json: string) => void): void;
-  onInput(cb: (json: string) => void): void;
-  uploadUi(buf: Buffer, w: number, h: number): void;
-  load(o: MpvLoadRequest & { subtitles?: unknown[] }): void;
-  command(args: string[]): void;
-  getProperty(name: string): string | null;
-  setProperty(name: string, value: string): void;
-  setFullscreen(enabled: boolean): void;
-  setCursorVisible(visible: boolean): void;
-  setCursorShape(shape: number): void;
-  stop(): void;
-};
 
 function webDir(): string {
   if (process.env.FLIKS_WEB_DIR) return process.env.FLIKS_WEB_DIR;
@@ -113,11 +94,6 @@ function compositorIcon(): string {
   const candidate = path.join(app.getAppPath(), 'build', 'icon.bmp');
   return fs.existsSync(candidate) ? candidate : '';
 }
-
-const num = (v: string | null): number => {
-  const n = v == null ? NaN : parseFloat(v);
-  return Number.isFinite(n) ? n : 0;
-};
 
 // Human host-OS name + version, resolved NATIVELY (the renderer's UA freezes the
 // OS version, so it can't produce these). Computed once and cached.
@@ -215,13 +191,6 @@ const WHEEL_PIXELS_PER_NOTCH = 100;
 
 let uiWin: BrowserWindow | null = null;
 const inputCounts: Record<string, number> = {};
-
-// Cadence of the periodic position emit while playing. The addon only observes
-// `time-pos` for duration/seek transitions, not as playback advances, so the
-// renderer's seekbar and its 10s save heartbeat stay frozen unless the main
-// process pushes the position itself. ~250ms (4Hz) keeps the bar smooth and
-// feeds the renderer's per-second stats refresh without flooding IPC.
-const POSITION_POLL_MS = 250;
 
 function send(ev: DesktopEvent): void {
   if (uiWin && !uiWin.isDestroyed()) uiWin.webContents.send(IPC.event, ev);
@@ -339,7 +308,7 @@ app.whenReady().then(async () => {
   }
   const addon = nativeRequire(
     path.join(nativeBase, 'native', 'build', 'Release', 'fliks_compositor.node'),
-  ) as Addon;
+  ) as CompositorAddon;
 
   // The OFFSCREEN window renders the Angular UI to a transparent bitmap; the
   // addon's SDL window is the only visible surface.
@@ -376,101 +345,22 @@ app.whenReady().then(async () => {
   // Chromium resolves the CSS cursor for the offscreen page and reports it
   // here; the pointer it applies to belongs to the compositor's window.
   uiWin.webContents.on('cursor-changed', (_e, type) => addon.setCursorShape(CURSOR_SHAPES[type] ?? 0));
-  uiWin.webContents.on('paint', (_e, _dirty, image) => {
-    const s = image.getSize();
-    if (s.width > 0) addon.uploadUi(image.toBitmap(), s.width, s.height);
+  uiWin.webContents.on('paint', (_e, dirty, image) => {
+    const { width, height } = image.getSize();
+    if (width <= 0) return;
+    // Offscreen paints at device scale 1, so the dirty rect is in bitmap pixels.
+    addon.uploadUi(image.crop(dirty).toBitmap(), width, height, dirty.x, dirty.y, dirty.width, dirty.height);
   });
   echoRendererConsole(uiWin.webContents);
 
-  addon.start({ width: WIDTH, height: HEIGHT, title: 'Fliks', icon: compositorIcon() });
-  // Apply the shared streaming/reconnect tuning (all runtime-mutable, set before
-  // the first load) so buffering + resume behaviour matches the other backends
-  // from one source of truth.
-  for (const [name, value] of MPV_STREAM_OPTIONS) addon.setProperty(name, value);
-
-  // Periodic position emit. The addon's `time-pos` observe doesn't push while
-  // playback advances, so poll mpv on a timer and forward a `timeUpdate` — this
-  // is what advances the seekbar and feeds the renderer's resume-save heartbeat.
-  let positionTimer: ReturnType<typeof setInterval> | null = null;
-  const emitPosition = (): void => {
-    send({
-      type: 'timeUpdate',
-      payload: {
-        position: num(addon.getProperty('time-pos')),
-        duration: num(addon.getProperty('duration')),
-        buffered: num(addon.getProperty('demuxer-cache-time')),
-      },
-    });
-  };
-  const startPositionTimer = (): void => {
-    if (positionTimer) return; // idempotent — never stack intervals
-    emitPosition(); // emit immediately so the bar doesn't wait a full tick
-    positionTimer = setInterval(emitPosition, POSITION_POLL_MS);
-  };
-  const stopPositionTimer = (): void => {
-    if (!positionTimer) return;
-    clearInterval(positionTimer);
-    positionTimer = null;
-  };
-
-  const firstFrameGate = new FirstFrameGate();
-
-  // mpv events → reshape to the DesktopEvent contract → renderer.
-  addon.onEvent((json) => {
-    let raw: any;
-    try {
-      raw = JSON.parse(json);
-    } catch {
-      return;
-    }
-    switch (raw.type) {
-      case 'timeUpdate':
-        // Read the real buffered position (matches the polled emitPosition).
-        // Hardcoding 0 here made bufferedEnd flip 0 <-> real as these events
-        // interleaved with the poll, so the seekbar's buffered zone flickered.
-        send({
-          type: 'timeUpdate',
-          payload: {
-            position: raw.position,
-            duration: raw.duration,
-            buffered: num(addon.getProperty('demuxer-cache-time')),
-          },
-        });
-        break;
-      case 'stateChanged':
-        // Only an actively-playing session should drive the position timer;
-        // pausing / ending / going idle stops it so a torn-down or paused
-        // player can't keep emitting (and leaking the interval).
-        if (raw.state === 'playing') startPositionTimer();
-        else stopPositionTimer();
-        setPlaybackKeepAwake(keepAwakeForState(raw.state));
-        send({ type: 'stateChanged', payload: { state: raw.state } });
-        break;
-      case 'tracksChanged':
-        send({ type: 'tracksChanged', payload: parseTracks(addon.getProperty('track-list')) });
-        break;
-      case 'firstFrame':
-        // mpv autoplays on load (addon forces pause=no) but may not emit a
-        // pause-property change, so the playing stateChanged can be missing on
-        // a fresh load — arm the timer on the first frame as well.
-        startPositionTimer();
-        setPlaybackKeepAwake(true);
-        firstFrameGate.release();
-        send({ type: 'firstFrame' });
-        break;
-      case 'error':
-        firstFrameGate.release();
-        stopPositionTimer();
-        setPlaybackKeepAwake(false);
-        send({ type: 'error', payload: { code: -1, message: raw.message ?? 'error' } });
-        break;
-      // The compositor owns the only visible window, so its close is the app's
-      // close: the offscreen BrowserWindow never fires window-all-closed.
-      case 'closed':
-        app.quit();
-        break;
-    }
+  const player = new LinuxCompositorPlayer(addon, {
+    width: WIDTH,
+    height: HEIGHT,
+    title: 'Fliks',
+    icon: compositorIcon(),
   });
+  forwardPlayerEvents(player, send);
+  await player.start();
 
   // SDL input (the addon owns the visible window) → the offscreen webContents.
   addon.onInput((json) => {
@@ -522,89 +412,18 @@ app.whenReady().then(async () => {
     }
   });
 
-  let muteRanges: DesktopMuteRange[] = [];
-  let muteFilterCount = 0;
-  const applyMuteRanges = () => {
-    const { commands, count } = muteFilterCommands(muteRanges, muteFilterCount);
-    muteFilterCount = count;
-    for (const cmd of commands) addon.command(cmd);
-  };
-
-  // Route the renderer's player IPC to the addon (control via mpv properties).
-  const qoe = new QoeReader();
-  ipcMain.handle(IPC.load, async (_e, opts) => {
-    qoe.reset();
-    console.log('[ipc] load', redactQuery(String(opts?.url)), 'start=', opts?.startTime, 'headers=', Object.keys(opts?.headers ?? {}).join(','));
-    // Global property, so it is always written — otherwise the previous file's
-    // rectangle would crop the next one.
-    addon.setProperty('video-crop', opts?.videoCrop ?? '');
-    applyMuteRanges();
-    addon.load(mpvLoadRequest(opts));
-    await firstFrameGate.wait();
-  });
-  ipcMain.handle(IPC.play, () => addon.setProperty('pause', 'no'));
-  ipcMain.handle(IPC.pause, () => addon.setProperty('pause', 'yes'));
-  ipcMain.handle(IPC.seek, (_e, position: number) => addon.command(['seek', String(position), 'absolute']));
-  ipcMain.handle(IPC.stop, () => {
-    firstFrameGate.release();
-    stopPositionTimer();
-    return addon.command(['stop']);
-  });
-  ipcMain.handle(IPC.setPlaybackRate, (_e, r: number) => addon.setProperty('speed', String(r)));
-  ipcMain.handle(IPC.setVolume, (_e, v: number) => addon.setProperty('volume', String(v)));
-  ipcMain.handle(IPC.setMuted, (_e, m: boolean) => addon.setProperty('mute', m ? 'yes' : 'no'));
-  ipcMain.handle(IPC.setMuteRanges, (_e, ranges: DesktopMuteRange[]) => {
-    muteRanges = ranges;
-    applyMuteRanges();
-  });
-  ipcMain.handle(IPC.getPosition, () => ({
-    position: num(addon.getProperty('time-pos')),
-    duration: num(addon.getProperty('duration')),
-    buffered: num(addon.getProperty('demuxer-cache-time')),
-  }));
-  ipcMain.handle(IPC.getQoe, () => qoe.read((n) => addon.getProperty(n)));
-  ipcMain.handle(IPC.getAudioTracks, () => parseTracks(addon.getProperty('track-list')).audioTracks);
-  ipcMain.handle(IPC.selectAudioTrack, (_e, id: string) => addon.setProperty('aid', id));
-  ipcMain.handle(IPC.getSubtitleTracks, () => parseTracks(addon.getProperty('track-list')).subtitleTracks);
-  ipcMain.handle(IPC.selectSubtitleTrack, (_e, id: string | null) => {
-    if (id == null) {
-      addon.setProperty('sid', 'no');
-      addon.setProperty('sub-visibility', 'no');
-    } else {
-      addon.setProperty('sid', id);
-      addon.setProperty('sub-visibility', 'yes');
-    }
-  });
-  // Sidecar subtitle: mpv parses the VTT once and seeks within it natively, so
-  // (unlike a single-segment HLS SUBTITLES rendition) cues don't re-inject and
-  // stack on seek. `cached` makes mpv reuse an already-loaded track for the same
-  // URL, so repeated picks of the same subtitle don't add duplicates.
-  ipcMain.handle(IPC.subAdd, (_e, url: string, label: string, language: string) =>
-    addon.command(['sub-add', url, 'cached', label ?? '', language ?? '']),
-  );
-  ipcMain.handle(IPC.setFillScreen, (_e, fill: boolean) =>
-    addon.setProperty('panscan', fill ? '1.0' : '0.0'),
-  );
-  ipcMain.handle(IPC.setCursorVisible, (_e, visible: boolean) => addon.setCursorVisible(visible));
-  ipcMain.handle(IPC.setFullscreen, (_e, enabled: boolean) => addon.setFullscreen(enabled));
-  ipcMain.handle(IPC.setSubtitleStyle, (_e, s: DesktopSubtitleStyle) => {
-    if (!s) return;
-    for (const [name, value] of mpvSubtitleProps(s)) addon.setProperty(name, value);
-  });
-  ipcMain.handle(IPC.resize, () => {});
-  ipcMain.handle(IPC.destroy, () => {
-    firstFrameGate.release();
-    stopPositionTimer();
-    muteRanges = [];
-    applyMuteRanges();
-    return addon.command(['stop']);
+  registerPlayerIpc({
+    player,
+    setFullscreen: (enabled) => addon.setFullscreen(enabled),
+    setCursorVisible: (visible) => addon.setCursorVisible(visible),
+    resize: () => {},
+    destroy: () => player.destroy(),
   });
 
   uiWin.loadURL(haveApp ? APP_URL : 'data:text/html,<body style="background:%231d232a"></body>');
   uiWin.webContents.once('did-finish-load', () => send({ type: 'ready' }));
 
   app.on('before-quit', () => {
-    stopPositionTimer();
     try {
       addon.stop();
     } catch {
