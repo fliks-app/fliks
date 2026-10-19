@@ -83,12 +83,14 @@ jobs:
       - name: build the fixture component
         working-directory: server/crates/plugin-sdk
         run: cargo xtask build examples/fixture-guest
+      - uses: taiki-e/install-action@nextest
       # Includes the plugin host tests (`--test plugins`), which fail under CI without the fixture.
-      - run: cargo test --workspace
+      # nextest pools every test binary instead of running them one after another; this workspace has no doctests.
+      - run: cargo nextest run --workspace
       - name: plugin SDK tests (harness on the fixture)
         working-directory: server/crates/plugin-sdk
         run: cargo test --workspace
-      # The binary `cargo test` built: `cargo run` would rebuild the deps without the dev-dependency features.
+      # The binary `cargo nextest` built: `cargo run` would rebuild the deps without the dev-dependency features.
       - name: openapi.json is current
         run: target/debug/fliks-server openapi | diff - openapi.json
       - name: sqlx offline cache is current
