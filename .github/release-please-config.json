@@ -63,6 +63,16 @@
           "jsonpath": "$.package[?(@.name.value=='fliks_domain')].version"
         },
         {
+          "type": "toml",
+          "path": "server/crates/plugin-sdk/Cargo.lock",
+          "jsonpath": "$.package[?(@.name.value=='fliks-server')].version"
+        },
+        {
+          "type": "toml",
+          "path": "server/crates/plugin-sdk/Cargo.lock",
+          "jsonpath": "$.package[?(@.name.value=='fliks_domain')].version"
+        },
+        {
           "type": "generic",
           "path": "macos/Fliks/Info.plist"
         },

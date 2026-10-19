@@ -59,7 +59,7 @@ jobs:
 
       - uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: latest-stable
+          xcode-version: '26.3'
 
       # The .xcodeproj isn't versioned — XcodeGen rebuilds it from project.yml.
       - name: Install XcodeGen

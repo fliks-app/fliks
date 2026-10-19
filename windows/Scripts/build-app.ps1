@@ -75,7 +75,7 @@ if ((Get-FileHash $engine -Algorithm SHA256).Hash -ne $lock['sha256_windows_x64'
 
 # fliks-server (Rust) sits beside the engine.
 Push-Location (Join-Path $repo 'server')
-try { cargo build --release -p fliks-server; if ($LASTEXITCODE) { throw 'cargo build failed' } } finally { Pop-Location }
+try { cargo build --release --locked -p fliks-server; if ($LASTEXITCODE) { throw 'cargo build failed' } } finally { Pop-Location }
 Copy-Item (Join-Path $repo 'server\target\release\fliks-server.exe') (Join-Path $bin 'fliks-server.exe')
 
 # Setup's extraction time follows the file count (each one is scanned by the antivirus), so

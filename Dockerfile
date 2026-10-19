@@ -6,7 +6,7 @@
 ARG ENGINE_IMAGE=ghcr.io/fliks-app/engine:0.5.0@sha256:89ab1db06df3b3413f3803b0217023c54c784c21e9588a7d1532f97818e25450
 
 # --- Stage 1: Build client ---
-FROM node:24-alpine AS client-build
+FROM node:24.22.0-alpine AS client-build
 WORKDIR /app
 COPY client/package.json client/package-lock.json ./
 RUN npm ci
@@ -16,7 +16,7 @@ RUN npx ng build --configuration=production
 # --- Stage 2: Build fliks-server (Rust) ---
 # Dependencies build in their own layer, keyed on the manifests: CI's layer cache keeps it,
 # while a BuildKit cache mount is lost with the runner.
-FROM lukemathwalker/cargo-chef:0.1.78-rust-1-bookworm AS server-chef
+FROM lukemathwalker/cargo-chef:0.1.78-rust-1.99.0-bookworm AS server-chef
 WORKDIR /server
 
 FROM server-chef AS server-plan
@@ -25,9 +25,9 @@ RUN cargo chef prepare --recipe-path recipe.json
 
 FROM server-chef AS server-build
 COPY --from=server-plan /server/recipe.json .
-RUN cargo chef cook --release -p fliks-server --recipe-path recipe.json
+RUN cargo chef cook --release --locked -p fliks-server --recipe-path recipe.json
 COPY server/ .
-RUN SQLX_OFFLINE=true cargo build --release -p fliks-server \
+RUN SQLX_OFFLINE=true cargo build --release --locked -p fliks-server \
     && cp target/release/fliks-server /usr/local/bin/fliks-server
 
 # --- Stage 3: Production runtime ---
