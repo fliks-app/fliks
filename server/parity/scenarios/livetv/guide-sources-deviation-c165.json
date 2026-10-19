@@ -1,0 +1,105 @@
+{
+  "deviation": "C165",
+  "ignore": [
+    "$..createdAt",
+    "$..updatedAt",
+    "$..lastSyncAt",
+    "$..logoPath"
+  ],
+  "name": "guide-sources-deviation-c165",
+  "seed": "livetv",
+  "steps": [
+    {
+      "as": "admin",
+      "body": {
+        "kind": "xmltv",
+        "name": "NoUrl"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "url must be set when kind is xmltv"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/livetv/admin/guide-sources"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "kind": "source",
+        "name": "NoParent"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "sourceId must be set when kind is source"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/livetv/admin/guide-sources"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "url": null
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "url must be set when kind is xmltv"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PATCH",
+      "path": "/api/livetv/admin/guide-sources/1"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "sourceId": null
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "sourceId must be set when kind is source"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PATCH",
+      "path": "/api/livetv/admin/guide-sources/2"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "kind": "source"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "sourceId must be set when kind is source"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PATCH",
+      "path": "/api/livetv/admin/guide-sources/1"
+    }
+  ]
+}

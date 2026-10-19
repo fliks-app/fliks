@@ -1,4 +1,4 @@
-import { Component, ElementRef, OnInit, effect, inject, signal, untracked, viewChild } from '@angular/core';
+import { Component, ElementRef, OnInit, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { SseService } from '../../../../core/services/sse.service';
@@ -60,6 +60,11 @@ export class LiveTvGuideAdminComponent implements OnInit {
   readonly formRefreshHours = signal(12);
   readonly formTimezoneOffset = signal(0);
   readonly formEnabled = signal(true);
+  /** Mirrors the server's requirement: an XMLTV feed needs a URL, a linked guide its parent source. */
+  readonly canSave = computed(() =>
+    this.formName().trim() !== '' &&
+    (this.formKind() === 'xmltv' ? this.formUrl().trim() !== '' : this.formSourceId() !== null),
+  );
 
   constructor() {
     effect(() => {
@@ -130,8 +135,8 @@ export class LiveTvGuideAdminComponent implements OnInit {
   }
 
   async save(): Promise<void> {
+    if (!this.canSave()) return;
     const name = this.formName().trim();
-    if (!name) return;
     const body = {
       name,
       kind: this.formKind(),

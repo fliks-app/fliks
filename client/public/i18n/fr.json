@@ -3243,6 +3243,8 @@
         "kind_xmltv": "Flux XMLTV",
         "kind_source": "Depuis une source TV en direct",
         "field_source": "Source",
+        "url_required": "Une URL de guide est requise.",
+        "source_required": "Choisissez la source Live TV dont tirer le guide.",
         "field_timezone_offset": "Décalage horaire (minutes)"
       },
       "settings": {

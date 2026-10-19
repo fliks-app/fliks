@@ -3243,6 +3243,8 @@
         "kind_xmltv": "XMLTV-Feed",
         "kind_source": "Von einer Live-TV-Quelle",
         "field_source": "Quelle",
+        "url_required": "Eine Programmführer-URL ist erforderlich.",
+        "source_required": "Wähle die Live-TV-Quelle, aus der der Programmführer stammt.",
         "field_timezone_offset": "Zeitzonen-Versatz (Minuten)"
       },
       "settings": {

@@ -115,6 +115,24 @@ fn row_errors(
     out
 }
 
+/// C165: what `kind` needs, reported only for the fields the payload sets (a stored row is never re-judged).
+fn link_errors(
+    kind: Option<&str>,
+    url: Option<&str>,
+    source_id: Option<i64>,
+    sets: [bool; 3],
+) -> Vec<String> {
+    let [kind_set, url_set, source_set] = sets;
+    let mut out = vec![];
+    if kind == Some("xmltv") && (kind_set || url_set) && url.is_none_or(|u| u.trim().is_empty()) {
+        out.push("url must be set when kind is xmltv".to_owned());
+    }
+    if kind == Some("source") && (kind_set || source_set) && source_id.is_none() {
+        out.push("sourceId must be set when kind is source".to_owned());
+    }
+    out
+}
+
 async fn source_exists(db: &PgPool, id: i64) -> sqlx::Result<bool> {
     sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM livetv_sources WHERE id = $1)")
         .bind(i32::try_from(id).unwrap_or(-1))
@@ -160,6 +178,12 @@ pub async fn create(
         priority.clone().val().unwrap_or(0),
     );
     b.errors.extend(merged);
+    b.errors.extend(link_errors(
+        kind.as_deref(),
+        url.clone().val().as_deref(),
+        source_id.clone().val(),
+        [true; 3],
+    ));
     if let Some(id) = source_id.clone().val()
         && !source_exists(&st.db, id).await?
     {
@@ -271,6 +295,23 @@ pub async fn update(
         &language.clone().val().or(stored.language.clone()),
         priority.clone().val().unwrap_or(i64::from(stored.priority)),
     );
+    let kind_now = kind.clone().val().unwrap_or(stored.kind.clone());
+    let url_now = if url.present() {
+        url.clone().val()
+    } else {
+        stored.url.clone()
+    };
+    let source_now = if source_id.present() {
+        source_id.clone().val()
+    } else {
+        stored.source_id.map(i64::from)
+    };
+    errors.extend(link_errors(
+        Some(&kind_now),
+        url_now.as_deref(),
+        source_now,
+        [kind.present(), url.present(), source_id.present()],
+    ));
     if let Some(sid) = source_id.clone().val()
         && !source_exists(&st.db, sid).await?
     {

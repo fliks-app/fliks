@@ -3243,6 +3243,8 @@
         "kind_xmltv": "Fuente XMLTV",
         "kind_source": "Desde una fuente de TV en directo",
         "field_source": "Fuente",
+        "url_required": "Se requiere una URL de guía.",
+        "source_required": "Elige la fuente de Live TV de la que tomar la guía.",
         "field_timezone_offset": "Desfase horario (minutos)"
       },
       "settings": {
