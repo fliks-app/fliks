@@ -25,19 +25,19 @@ public class CastPlugin: CAPPlugin, CAPBridgedPlugin, GCKSessionManagerListener,
         CAPPluginMethod(name: "setMuted", returnType: CAPPluginReturnPromise),
     ]
 
-    private var sessionManager: GCKSessionManager?
+    var sessionManager: GCKSessionManager?
     /** Receiver → sender channel for qoe samples and player errors, forwarded to JS verbatim. */
-    private var fliksChannel: GCKGenericChannel?
-    private var fliksChannelSession: GCKCastSession?
-    private static let fliksNamespace = "urn:x-cast:media.fliks.app"
-    private var pollTimer: Timer?
+    var fliksChannel: GCKGenericChannel?
+    var fliksChannelSession: GCKCastSession?
+    static let fliksNamespace = "urn:x-cast:media.fliks.app"
+    var pollTimer: Timer?
     /** LOAD calls awaiting the receiver's verdict, by request id: popping one settles it exactly once. */
-    private var pendingLoads: [Int: CAPPluginCall] = [:]
+    var pendingLoads: [Int: CAPPluginCall] = [:]
     /** Tracks whether the 1Hz media-status poll was running when the app
      *  backgrounded; restart it on foreground so we don't keep firing
      *  `evaluateJavaScript` against a paused WebView (fliks declares
      *  `UIBackgroundModes: audio`, so Timers keep running). */
-    private var pollWasActiveBeforeBackground = false
+    var pollWasActiveBeforeBackground = false
 
     // MARK: - Initialize
 
@@ -103,11 +103,11 @@ public class CastPlugin: CAPPlugin, CAPBridgedPlugin, GCKSessionManagerListener,
 
     // MARK: - Resume state
 
-    private static let resumeKey = "fliksCastResume"
+    static let resumeKey = "fliksCastResume"
     /** A connected session went through this process, so its end is a real stop. */
-    private var live = false
+    var live = false
     /** Resume state waiting for a resumed session's first media status. */
-    private var pendingResume: [String: Any]?
+    var pendingResume: [String: Any]?
 
     /// Keyed by the GCK session id so a process restart takes the session back and a later
     /// session never picks up an old cast's state. JSON: UserDefaults rejects the state's nulls.
@@ -123,7 +123,7 @@ public class CastPlugin: CAPPlugin, CAPBridgedPlugin, GCKSessionManagerListener,
         }
     }
 
-    private func savedResumeState(_ sessionID: String?) -> [String: Any]? {
+    func savedResumeState(_ sessionID: String?) -> [String: Any]? {
         guard let sessionID = sessionID,
               let data = UserDefaults.standard.data(forKey: Self.resumeKey),
               let saved = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -131,7 +131,7 @@ public class CastPlugin: CAPPlugin, CAPBridgedPlugin, GCKSessionManagerListener,
         return saved["state"] as? [String: Any]
     }
 
-    private func onConnected(_ session: GCKCastSession) {
+    func onConnected(_ session: GCKCastSession) {
         live = true
         attachFliksChannel(session)
         guard let resume = savedResumeState(session.sessionID), let client = session.remoteMediaClient else {
@@ -148,7 +148,7 @@ public class CastPlugin: CAPPlugin, CAPBridgedPlugin, GCKSessionManagerListener,
         }
     }
 
-    private func handBack(_ resume: [String: Any]) {
+    func handBack(_ resume: [String: Any]) {
         guard let data = try? JSONSerialization.data(withJSONObject: ["connected": true, "resume": resume]),
               let json = String(data: data, encoding: .utf8) else { return }
         startPolling()
@@ -177,7 +177,7 @@ public class CastPlugin: CAPPlugin, CAPBridgedPlugin, GCKSessionManagerListener,
         }
     }
 
-    private var sessionStarting = false
+    var sessionStarting = false
 
     @objc func requestSession(_ call: CAPPluginCall) {
         DispatchQueue.main.async { [weak self] in
@@ -193,7 +193,7 @@ public class CastPlugin: CAPPlugin, CAPBridgedPlugin, GCKSessionManagerListener,
         }
     }
 
-    private func pollForDialogDismiss() {
+    func pollForDialogDismiss() {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
             guard let self = self else { return }
 
@@ -429,215 +429,10 @@ public class CastPlugin: CAPPlugin, CAPBridgedPlugin, GCKSessionManagerListener,
         }
     }
 
-    private static func activeAudioTrackIDs(of client: GCKRemoteMediaClient) -> [NSNumber] {
+    static func activeAudioTrackIDs(of client: GCKRemoteMediaClient) -> [NSNumber] {
         guard let status = client.mediaStatus,
               let tracks = status.mediaInformation?.mediaTracks else { return [] }
         let audio = Set(tracks.filter { $0.type == .audio }.map { $0.identifier })
         return (status.activeTrackIDs ?? []).filter { audio.contains($0.intValue) }
-    }
-
-    // MARK: - Session Manager Listener
-
-    public func sessionManager(_ sessionManager: GCKSessionManager, didStart session: GCKCastSession) {
-        sessionStarting = false
-        onConnected(session)
-    }
-
-    public func sessionManager(_ sessionManager: GCKSessionManager, willStart session: GCKCastSession) {
-        sessionStarting = true
-    }
-
-    public func sessionManager(_ sessionManager: GCKSessionManager, didResumeCastSession session: GCKCastSession) {
-        onConnected(session)
-    }
-
-    public func sessionManager(_ sessionManager: GCKSessionManager, didEnd session: GCKSession, withError error: (any Error)?) {
-        if live { UserDefaults.standard.removeObject(forKey: Self.resumeKey) }
-        live = false
-        pendingResume = nil
-        detachFliksChannel()
-        stopPolling()
-        emitCastState(connected: false)
-    }
-
-    public func sessionManager(_ sessionManager: GCKSessionManager, didFailToStart session: GCKSession, withError error: any Error) {
-        stopPolling()
-        emitCastState(connected: false)
-        emitPickerDismissed()
-    }
-
-    private func detachFliksChannel() {
-        if let channel = fliksChannel { fliksChannelSession?.remove(channel) }
-        fliksChannel = nil
-        fliksChannelSession = nil
-    }
-
-    private func attachFliksChannel(_ session: GCKCastSession) {
-        if fliksChannelSession === session { return }
-        detachFliksChannel()
-        let channel = GCKGenericChannel(namespace: Self.fliksNamespace)
-        channel.delegate = self
-        session.add(channel)
-        fliksChannel = channel
-        fliksChannelSession = session
-    }
-
-    public func cast(_ channel: GCKGenericChannel, didReceiveTextMessage message: String, withNamespace protocolNamespace: String) {
-        let detail: [String: Any] = ["namespace": protocolNamespace, "message": message]
-        guard let data = try? JSONSerialization.data(withJSONObject: detail),
-              let json = String(data: data, encoding: .utf8) else { return }
-        let js = "window.dispatchEvent(new CustomEvent('castReceiverMessage', { detail: \(json) }));"
-        DispatchQueue.main.async { [weak self] in
-            self?.bridge?.webView?.evaluateJavaScript(js)
-        }
-    }
-
-    // MARK: - Discovery Manager Listener
-
-    public func didUpdateDeviceList() {
-        let dm = GCKCastContext.sharedInstance().discoveryManager
-        print("[CastPlugin] didUpdateDeviceList: deviceCount=\(dm.deviceCount)")
-        for i in 0..<dm.deviceCount {
-            let device = dm.device(at: i)
-            print("[CastPlugin]   device[\(i)]: \(device.friendlyName ?? "?") @ \(device.networkAddress.ipAddress ?? "?")")
-        }
-        emitAvailability(dm.deviceCount > 0)
-    }
-
-    /// Also fires castDevicesChanged: every caller of this reflects a device-list update,
-    /// and didUpdateDeviceList is the only discovery hook we want wired.
-    private func emitAvailability(_ available: Bool) {
-        let js = "window.dispatchEvent(new CustomEvent('castAvailabilityChanged', { detail: { available: \(available) } }));"
-            + "window.dispatchEvent(new CustomEvent('castDevicesChanged'));"
-        DispatchQueue.main.async { [weak self] in
-            self?.bridge?.webView?.evaluateJavaScript(js)
-        }
-    }
-
-    // MARK: - Polling
-
-    private func startPolling() {
-        stopPolling()
-        pollTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-            DispatchQueue.main.async {
-                self?.pollMediaState()
-            }
-        }
-    }
-
-    private func stopPolling() {
-        pollTimer?.invalidate()
-        pollTimer = nil
-    }
-
-    @objc private func appDidEnterBackground() {
-        pollWasActiveBeforeBackground = pollTimer != nil
-        stopPolling()
-    }
-
-    @objc private func appWillEnterForeground() {
-        if pollWasActiveBeforeBackground && currentSession?.remoteMediaClient != nil {
-            startPolling()
-        }
-        pollWasActiveBeforeBackground = false
-    }
-
-    private func pollMediaState() {
-        guard let client = currentSession?.remoteMediaClient,
-              let status = client.mediaStatus else { return }
-
-        let time = client.approximateStreamPosition()
-        let duration = status.mediaInformation?.streamDuration ?? 0
-        let paused = status.playerState == .paused
-        // Device (receiver) volume lives on the session, not media status —
-        // read it each tick so external changes mirror back into the slider.
-        let volume = currentSession?.currentDeviceVolume ?? 1
-        let muted = currentSession?.currentDeviceMuted ?? false
-
-        emitMediaUpdate(time: time, duration: duration, paused: paused, volume: volume, muted: muted)
-    }
-
-    // MARK: - Helpers
-
-    private var currentSession: GCKCastSession? {
-        return sessionManager?.currentCastSession
-    }
-
-    private func emitCastState(connected: Bool) {
-        let js = "window.dispatchEvent(new CustomEvent('castStateChanged', { detail: { connected: \(connected) } }));"
-        DispatchQueue.main.async { [weak self] in
-            self?.bridge?.webView?.evaluateJavaScript(js)
-        }
-    }
-
-    private func emitPickerDismissed() {
-        let js = "window.dispatchEvent(new CustomEvent('castPickerDismissed'));"
-        DispatchQueue.main.async { [weak self] in
-            self?.bridge?.webView?.evaluateJavaScript(js)
-        }
-    }
-
-    private func emitMediaUpdate(time: TimeInterval, duration: TimeInterval, paused: Bool, volume: Float, muted: Bool) {
-        let js = "window.dispatchEvent(new CustomEvent('castMediaUpdate', { detail: { currentTime: \(time), duration: \(duration), isPaused: \(paused), volume: \(volume), muted: \(muted) } }));"
-        DispatchQueue.main.async { [weak self] in
-            self?.bridge?.webView?.evaluateJavaScript(js)
-        }
-    }
-
-    /// Map the sender's subtitle presets (`size` / `color` / `shadow` /
-    /// `background`) onto Cast SDK's `GCKMediaTextTrackStyle`. Same
-    /// preset vocabulary as the local player settings — keeps a single
-    /// shared UI between both. nil spec → receiver-matching defaults.
-    private func buildTextTrackStyle(_ spec: [String: Any]?) -> GCKMediaTextTrackStyle {
-        let style = GCKMediaTextTrackStyle.createDefault()
-        style.fontGenericFamily = .sansSerif
-        let size = spec?["size"] as? String ?? "normal"
-        let color = spec?["color"] as? String ?? "white"
-        let shadow = spec?["shadow"] as? String ?? "drop"
-        let bg = spec?["background"] as? String ?? "transparent"
-        style.fontScale = mapSize(size)
-        style.foregroundColor = mapFgColor(color)
-        style.backgroundColor = mapBgColor(bg)
-        let edge = mapShadow(shadow)
-        style.edgeType = edge.type
-        style.edgeColor = edge.color
-        return style
-    }
-
-    /// Mirrors CAST_SUBTITLE_SIZE_SCALE (subtitle-presets.ts).
-    private func mapSize(_ name: String) -> CGFloat {
-        switch name {
-        case "xsmall": return 0.7
-        case "small": return 0.775
-        case "large": return 0.975
-        case "xlarge": return 1.1
-        default: return 0.85
-        }
-    }
-
-    private func mapFgColor(_ name: String) -> GCKColor {
-        switch name {
-        case "yellow": return GCKColor(uiColor: UIColor(red: 1, green: 1, blue: 0, alpha: 1))
-        case "green": return GCKColor(uiColor: UIColor(red: 0, green: 1, blue: 0, alpha: 1))
-        case "cyan": return GCKColor(uiColor: UIColor(red: 0, green: 1, blue: 1, alpha: 1))
-        default: return GCKColor(uiColor: .white)
-        }
-    }
-
-    private func mapBgColor(_ name: String) -> GCKColor {
-        switch name {
-        case "semi": return GCKColor(uiColor: UIColor(red: 0, green: 0, blue: 0, alpha: 0.5))
-        case "black": return GCKColor(uiColor: .black)
-        default: return GCKColor(uiColor: .clear)
-        }
-    }
-
-    private func mapShadow(_ name: String) -> (type: GCKMediaTextTrackStyleEdgeType, color: GCKColor) {
-        switch name {
-        case "none": return (.none, GCKColor(uiColor: .clear))
-        case "outline": return (.outline, GCKColor(uiColor: .black))
-        case "raised": return (.raised, GCKColor(uiColor: .black))
-        default: return (.dropShadow, GCKColor(uiColor: .black))
-        }
     }
 }
