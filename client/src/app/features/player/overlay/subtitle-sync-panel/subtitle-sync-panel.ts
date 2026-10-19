@@ -122,8 +122,8 @@ export class SubtitleSyncPanelComponent {
   /** Phone: the controls are hidden, so the panel fills the side (landscape) or the lower sheet (portrait). */
   protected readonly panelClass = computed(() =>
     this.phone()
-      ? 'p-3 gap-2 landscape:top-0 landscape:w-[40%] landscape:rounded-l-2xl portrait:inset-x-0 portrait:h-[55%] portrait:rounded-t-2xl'
-      : 'top-0 w-[32%] min-w-80 max-sm:w-full max-sm:min-w-0 p-4 gap-3 rounded-bl-2xl',
+      ? 'p-3 gap-2 landscape:top-0 landscape:w-[40%] portrait:inset-x-0 portrait:h-[55%] portrait:rounded-t-2xl'
+      : 'top-0 w-[32%] min-w-80 max-sm:w-full max-sm:min-w-0 p-4 gap-3',
   );
   protected readonly active = computed(
     () => new Set(activeCues(this.cues(), this.now(), this.offset())),
