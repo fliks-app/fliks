@@ -23,7 +23,6 @@ import com.google.android.gms.cast.MediaLoadRequestData;
 import com.google.android.gms.cast.MediaMetadata;
 import com.google.android.gms.cast.MediaStatus;
 import com.google.android.gms.cast.MediaTrack;
-import com.google.android.gms.cast.TextTrackStyle;
 import com.google.android.gms.cast.framework.CastContext;
 import com.google.android.gms.cast.framework.CastSession;
 import com.google.android.gms.cast.framework.SessionManager;
@@ -36,21 +35,13 @@ import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
 
-import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Capacitor plugin for Google Cast on Android.
- *
- * Usage from JS:
- *   await NativeCast.initialize({ appId: 'CC1AD845' });
- *   await NativeCast.requestSession();
- *   await NativeCast.loadMedia({ url, contentType, title, ... });
- *   await NativeCast.play() / pause() / seek({ time }) / stop();
- */
+/** Capacitor plugin for Google Cast on Android; JS side is `NativeCast` (initialize, requestSession, loadMedia, play,
+ *  pause, seek, stop). */
 @CapacitorPlugin(name = "NativeCast")
 public class CastPlugin extends Plugin {
     private static final String TAG = "CastPlugin";
@@ -83,10 +74,7 @@ public class CastPlugin extends Plugin {
     private boolean live = false;
     private static final long HUNT_MS = 60_000;
 
-    /**
-     * Cast session updates must stay on the main thread (same as Session / isConnected rules).
-     * Some Play Services versions invoke these callbacks off the UI thread.
-     */
+    /** Cast session updates stay on the main thread: some Play Services versions call these off the UI thread. */
     private final SessionManagerListener<CastSession> sessionListener = new SessionManagerListener<CastSession>() {
         @Override
         public void onSessionStarted(CastSession session, String sessionId) {
@@ -114,9 +102,8 @@ public class CastPlugin extends Plugin {
         }
         @Override
         public void onSessionStarting(CastSession session) {
-            // Must set immediately on the callback thread (volatile). If we only post to the main
-            // looper, MediaRouteChooserDialogFragment can be destroyed on the main thread before
-            // that runnable runs, and we wrongly fire castPickerDismissed (JS thinks user cancelled).
+            // Set immediately on the callback thread (volatile): posting to the main looper lets the chooser dialog be destroyed
+            // first, and castPickerDismissed would fire as if the user cancelled.
             sessionPending = true;
         }
         @Override
@@ -449,9 +436,8 @@ public class CastPlugin extends Plugin {
             .build();
     }
 
-    /** CALLBACK_FLAG_REQUEST_DISCOVERY is what makes the router discover at all:
-     *  registered without it, the callback fires but no provider ever scans, so
-     *  getRoutes() only ever holds the default route. */
+    /** CALLBACK_FLAG_REQUEST_DISCOVERY makes the router discover at all: without it no provider scans
+     *  and getRoutes() holds only the default route. */
     private void startRouteDiscovery() {
         if (routeDiscoveryActive) return;
         addRouteCallback();
@@ -573,9 +559,7 @@ public class CastPlugin extends Plugin {
                 call.reject("No matching Cast device");
                 return;
             }
-            // Selecting the route that is already selected transitions nothing, so no
-            // session callback ever comes: say what the state is instead of leaving the
-            // caller waiting on an event that cannot arrive.
+            // Selecting the already-selected route fires no session callback: report the state instead of leaving the caller waiting.
             if (id.equals(router.getSelectedRoute().getId())) {
                 boolean connected = castSession != null && castSession.isConnected();
                 Log.d(TAG, "selectCastDevice: already the selected route, connected=" + connected);
@@ -625,11 +609,8 @@ public class CastPlugin extends Plugin {
             .setContentType(contentType)
             .setMetadata(metadata);
 
-        // customData is the side-channel the Fliks Cast Receiver reads to
-        // identify the media (mediaId / episodeId) without parsing the URL.
-        // The Default Media Receiver ignores it harmlessly when used as a
-        // fallback receiver. Capacitor's JSObject IS-A JSONObject so it
-        // can be forwarded directly without re-parsing.
+        // customData is the side-channel the Fliks receiver reads to identify the media (mediaId, episodeId);
+        // the Default Media Receiver ignores it. JSObject is a JSONObject, so it is forwarded as is.
         JSObject customData = call.getObject("customData");
         if (customData != null) {
             mediaInfoBuilder.setCustomData(customData);
@@ -659,10 +640,8 @@ public class CastPlugin extends Plugin {
         if (!tracks.isEmpty()) {
             mediaInfoBuilder.setMediaTracks(tracks);
         }
-        // Always set the style — receiver fills its defaults when
-        // textTrackStyle is missing, masking the user's prefs whenever
-        // the LOAD has no preselected subtitle tracks.
-        mediaInfoBuilder.setTextTrackStyle(buildTextTrackStyle(styleSpec));
+        // Always set the style: the receiver's defaults otherwise mask the user's prefs when the LOAD has no preselected subtitle track.
+        mediaInfoBuilder.setTextTrackStyle(CastSubtitleStyle.build(styleSpec));
 
         MediaInfo mediaInfo = mediaInfoBuilder.build();
 
@@ -693,7 +672,7 @@ public class CastPlugin extends Plugin {
             pollHandler = mainHandler;
             pollHandler.postDelayed(() -> {
                 try {
-                    client.setTextTrackStyle(buildTextTrackStyle(styleSpec));
+                    client.setTextTrackStyle(CastSubtitleStyle.build(styleSpec));
                 } catch (Exception e) {
                     Log.w(TAG, "Failed to set track style", e);
                 }
@@ -709,81 +688,6 @@ public class CastPlugin extends Plugin {
 
             call.resolve();
         });
-    }
-
-    /**
-     * Map the sender's subtitle presets ({@code size} / {@code color} /
-     * {@code shadow} / {@code background}) onto Cast SDK's
-     * {@link TextTrackStyle}. Same preset vocabulary as the local
-     * player settings — keeps a single shared UI between both. When
-     * {@code spec} is null, returns the receiver-matching defaults.
-     */
-    private TextTrackStyle buildTextTrackStyle(JSObject spec) {
-        TextTrackStyle style = new TextTrackStyle();
-        style.setFontGenericFamily(TextTrackStyle.FONT_FAMILY_SANS_SERIF);
-        style.setWindowType(TextTrackStyle.WINDOW_TYPE_NONE);
-        style.setWindowColor(0x00000000);
-        String size = spec != null ? spec.optString("size", "normal") : "normal";
-        String color = spec != null ? spec.optString("color", "white") : "white";
-        String shadow = spec != null ? spec.optString("shadow", "drop") : "drop";
-        String bg = spec != null ? spec.optString("background", "transparent") : "transparent";
-        style.setFontScale(mapSize(size));
-        style.setForegroundColor(mapFgColor(color));
-        style.setBackgroundColor(mapBgColor(bg));
-        int[] edge = mapShadow(shadow);
-        style.setEdgeType(edge[0]);
-        style.setEdgeColor(edge[1]);
-        return style;
-    }
-
-    /** Mirrors CAST_SUBTITLE_SIZE_SCALE (subtitle-presets.ts). */
-    private static float mapSize(String name) {
-        switch (name) {
-            case "xsmall": return 0.7f;
-            case "small": return 0.775f;
-            case "large": return 0.975f;
-            case "xlarge": return 1.1f;
-            default: return 0.85f;
-        }
-    }
-
-    private static int mapFgColor(String name) {
-        switch (name) {
-            case "yellow": return 0xFFFFFF00;
-            case "green": return 0xFF00FF00;
-            case "cyan": return 0xFF00FFFF;
-            default: return 0xFFFFFFFF;
-        }
-    }
-
-    private static int mapBgColor(String name) {
-        switch (name) {
-            case "semi": return 0x80000000;
-            case "black": return 0xFF000000;
-            // Cast SDK on Android strips integer-color fields equal to
-            // 0 from the wire payload (treats them as "unset"), so the
-            // receiver falls through to CAF's built-in default — which
-            // happens to render an opaque black box. Use a non-zero
-            // value with alpha 0: still fully transparent visually,
-            // but serialised on the wire as #01000000 so the receiver
-            // sees an explicit transparent backgroundColor.
-            default: return 0x00010000;
-        }
-    }
-
-    /** Returns {edgeType, edgeColor}. */
-    private static int[] mapShadow(String name) {
-        switch (name) {
-            // Same wire-omission concern as transparent backgrounds —
-            // a 0 colour is stripped, the receiver picks its default.
-            // Edge isn't rendered when type=NONE so the visible result
-            // is the same; we keep the wire frame complete for
-            // determinism / debuggability.
-            case "none": return new int[] { TextTrackStyle.EDGE_TYPE_NONE, 0x00010000 };
-            case "outline": return new int[] { TextTrackStyle.EDGE_TYPE_OUTLINE, 0xFF000000 };
-            case "raised": return new int[] { TextTrackStyle.EDGE_TYPE_RAISED, 0xFF000000 };
-            default: return new int[] { TextTrackStyle.EDGE_TYPE_DROP_SHADOW, 0xFF000000 };
-        }
     }
 
     @PluginMethod()
@@ -875,24 +779,16 @@ public class CastPlugin extends Plugin {
             RemoteMediaClient client = getClient();
             if (client != null) {
                 int trackId = call.getInt("trackId", 0);
-                List<MediaTrack> tracks = mediaTracks(client);
-                long audioId = tracks != null ? activeTrackId(client, tracks, MediaTrack.TYPE_AUDIO) : -1;
-                setActiveTracks(client, audioId, trackId > 0 ? trackId : -1);
+                List<MediaTrack> tracks = CastTracks.mediaTracks(client);
+                long audioId = tracks != null ? CastTracks.activeTrackId(client, tracks, MediaTrack.TYPE_AUDIO) : -1;
+                CastTracks.setActiveTracks(client, audioId, trackId > 0 ? trackId : -1);
             }
             call.resolve();
         });
     }
 
-    /**
-     * Switch the active audio rendition on the receiver via the standard
-     * media bus (setActiveMediaTracks → EDIT_TRACKS_INFO). The receiver
-     * mirrors Shaka's HLS audio renditions into MediaInformation as
-     * AUDIO tracks, so Cast SDK's track-selection API drives the swap
-     * client-side without an ffmpeg restart.
-     *
-     * Resolves with {@code success: false} when no matching track is
-     * found — caller falls back to a full reload in that case.
-     */
+    /** Switches the receiver's audio rendition through setActiveMediaTracks (the receiver mirrors Shaka's HLS renditions as AUDIO tracks),
+     *  no ffmpeg restart. Resolves {@code success: false} when no track matches, so the caller falls back to a reload. */
     @PluginMethod()
     public void setActiveAudioLanguage(PluginCall call) {
         runOnMainThread(() -> {
@@ -903,14 +799,13 @@ public class CastPlugin extends Plugin {
                 call.resolve(new JSObject().put("success", false));
                 return;
             }
-            List<MediaTrack> tracks = mediaTracks(client);
+            List<MediaTrack> tracks = CastTracks.mediaTracks(client);
             if (tracks == null || tracks.isEmpty()) {
                 call.resolve(new JSObject().put("success", false));
                 return;
             }
-            // Match by NAME: it is unique per rendition and preserved verbatim from
-            // master.m3u8. Shaka rewrites LANGUAGE from ISO 639-2 (eng) to 639-1 (en), so
-            // language only stands in for a missing name when it is unambiguous.
+            // Match by NAME (unique per rendition, verbatim from master.m3u8): Shaka rewrites LANGUAGE from 639-2 to 639-1,
+            // so language only substitutes for a missing name when unambiguous.
             MediaTrack target = null;
             MediaTrack sameLanguage = null;
             int sameLanguageCount = 0;
@@ -931,43 +826,9 @@ public class CastPlugin extends Plugin {
                 call.resolve(new JSObject().put("success", false));
                 return;
             }
-            setActiveTracks(client, target.getId(), activeTrackId(client, tracks, MediaTrack.TYPE_TEXT));
+            CastTracks.setActiveTracks(client, target.getId(), CastTracks.activeTrackId(client, tracks, MediaTrack.TYPE_TEXT));
             call.resolve(new JSObject().put("success", true));
         });
-    }
-
-    /**
-     * The receiver's media tracks. MediaStatus' MediaInfo is preferred: it reflects
-     * receiver-side setMediaInformation() updates, where the audio renditions are published.
-     */
-    private static List<MediaTrack> mediaTracks(RemoteMediaClient client) {
-        MediaStatus status = client.getMediaStatus();
-        MediaInfo mediaInfo = status != null ? status.getMediaInfo() : null;
-        if (mediaInfo == null) mediaInfo = client.getMediaInfo();
-        return mediaInfo != null ? mediaInfo.getMediaTracks() : null;
-    }
-
-    /** The active track of one type, -1 when there is none. */
-    private static long activeTrackId(RemoteMediaClient client, List<MediaTrack> tracks, int type) {
-        MediaStatus status = client.getMediaStatus();
-        long[] active = status != null ? status.getActiveTrackIds() : null;
-        if (active == null) return -1;
-        for (long id : active) {
-            for (MediaTrack t : tracks) {
-                if (t.getId() == id && t.getType() == type) return id;
-            }
-        }
-        return -1;
-    }
-
-    /** setActiveMediaTracks replaces the whole active set, so audio and text go together (-1: none). */
-    private static void setActiveTracks(RemoteMediaClient client, long audioId, long textId) {
-        List<Long> ids = new ArrayList<>();
-        if (audioId >= 0) ids.add(audioId);
-        if (textId >= 0) ids.add(textId);
-        long[] newActive = new long[ids.size()];
-        for (int i = 0; i < newActive.length; i++) newActive[i] = ids.get(i);
-        client.setActiveMediaTracks(newActive);
     }
 
     private RemoteMediaClient getClient() {
@@ -1004,11 +865,8 @@ public class CastPlugin extends Plugin {
                     int state = status != null
                         ? status.getPlayerState()
                         : MediaStatus.PLAYER_STATE_UNKNOWN;
-                    // A fatal receiver error (e.g. a segment 410 after the live
-                    // session was GC'd) surfaces as IDLE with reason ERROR.
-                    // Signal JS once so the sender re-establishes a fresh
-                    // session; an in-flight recovery load goes IDLE/INTERRUPTED,
-                    // not ERROR, so it won't misfire.
+                    // A fatal receiver error (e.g. a segment 410 after the live session was GC'd) shows as IDLE with reason ERROR: signal JS
+                    // once to re-establish the session. A recovery load goes IDLE/INTERRUPTED, so it doesn't misfire.
                     if (state == MediaStatus.PLAYER_STATE_IDLE
                             && status.getIdleReason() == MediaStatus.IDLE_REASON_ERROR) {
                         if (!errorReported) {
@@ -1023,9 +881,7 @@ public class CastPlugin extends Plugin {
                         boolean buffering = state == MediaStatus.PLAYER_STATE_BUFFERING
                             || state == MediaStatus.PLAYER_STATE_LOADING;
                         if (time > 0) lastGoodPosition = time;
-                        // Device (receiver) volume isn't part of MediaStatus — read it
-                        // off the session each tick so external changes (TV remote, cast
-                        // dialog) mirror back into the sender slider within a poll.
+                        // Device volume isn't in MediaStatus: read it off the session each tick so TV remote or cast dialog changes reach the slider.
                         double volume = castSession.getVolume();
                         boolean muted = castSession.isMute();
                         notifyJSTime(time, duration, paused, buffering, volume, muted);

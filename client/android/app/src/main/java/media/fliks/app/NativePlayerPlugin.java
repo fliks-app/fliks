@@ -1,8 +1,9 @@
 package media.fliks.app;
 
+import static media.fliks.app.NativePlayerUtil.*;
+import media.fliks.app.NativePlayerUtil.PcmOnlyRenderersFactory;
+
 import android.graphics.Color;
-import android.media.MediaCodecInfo;
-import android.media.MediaCodecList;
 import android.os.Build;
 import android.net.Uri;
 import android.os.Handler;
@@ -37,15 +38,11 @@ import androidx.media3.exoplayer.DefaultRenderersFactory;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.LoadControl;
 import androidx.media3.exoplayer.PlayerMessage;
-import androidx.media3.exoplayer.audio.AudioCapabilities;
-import androidx.media3.exoplayer.audio.AudioSink;
-import androidx.media3.exoplayer.audio.DefaultAudioSink;
 import androidx.media3.exoplayer.analytics.AnalyticsListener;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
 import androidx.media3.exoplayer.upstream.CmcdConfiguration;
 import androidx.media3.session.MediaSession;
 import java.util.ArrayList;
-import android.content.Context;
 import java.util.List;
 import androidx.media3.ui.AspectRatioFrameLayout;
 import androidx.media3.ui.CaptionStyleCompat;
@@ -58,7 +55,6 @@ import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
 import java.util.HashMap;
-import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -86,28 +82,14 @@ public class NativePlayerPlugin extends Plugin {
     private DefaultHttpDataSource.Factory httpFactory;
     private String currentHlsUrl;
     private String lastAudioTracksJson = null;
-    // Cold-prepare bug bootstrap state. Media3 1.10.1's HLS source has
-    // a race on initial track surfacing when the variant carries EAC3
-    // (and especially EAC3-JOC Atmos) audio next to an fMP4 video
-    // track: the audio renderer enables first, the video format hasn't
-    // propagated yet when `selectTracks()` runs, so the video group
-    // is dropped from the selection and the renderer never allocates
-    // a decoder — playback stalls in BUFFERING with audio-only tracks.
-    // A user-issued seek unsticks it by forcing `selectTracks()` to
-    // re-run with the format now available; this flag arms a one-shot
-    // programmatic micro-seek in `onTracksChanged` that mimics that
-    // path when we detect the failure signature.
+    // Cold-prepare bootstrap: Media3 1.10.1's HLS source can drop the video group when EAC3 audio enables first, so no decoder
+    // is allocated and playback stalls in BUFFERING. A seek re-runs `selectTracks()`; this flag arms a one-shot micro-seek in `onTracksChanged`.
     private boolean videoBootstrapDone = false;
-    // Set once the first frame has been signalled to the WebView. Both
-    // onRenderedFirstFrame (unreliable on some devices: fires late or never)
-    // and the onIsPlayingChanged fallback dispatch the event, so this guard
-    // keeps them idempotent and stops a re-dispatch on every later resume.
-    // Reset on each load().
+    // Set once the first frame is signalled to the WebView, so `onRenderedFirstFrame` (unreliable on some devices)
+    // and the `onIsPlayingChanged` fallback don't both dispatch it. Reset on each load().
     private boolean firstFrameSignaled = false;
-    // Set when ExoPlayer's video renderer actually enables. Separates a
-    // healthy-but-slow start (renderer enabled, still fetching bytes) from the
-    // cold-prepare race below where the video renderer never enables — only the
-    // latter warrants the unstick seek. Reset on each load().
+    // Set when the video renderer enables: tells a slow start from the cold-prepare race, where only the latter
+    // needs the unstick seek. Reset on each load().
     private boolean videoRendererEnabled = false;
     // QoE counters, cumulative since the last load().
     private boolean qoeCmcd = false;
@@ -139,14 +121,8 @@ public class NativePlayerPlugin extends Plugin {
             wrapper = new FrameLayout(getContext());
             wrapper.setBackgroundColor(Color.BLACK);
 
-            // AspectRatioFrameLayout maintains video aspect ratio.
-            // SurfaceView (vs TextureView): the HW composer pushes the decoded
-            // buffer straight to the panel, preserving HDR10/HLG metadata. With
-            // TextureView the GPU composes the buffer as an SDR texture and the
-            // HDR signal is lost — visible as a black screen for HEVC HDR
-            // playback on devices that strict-reject mis-tagged buffers
-            // (Samsung S25 etc.).
-            //
+            // SurfaceView, not TextureView: the HW composer sends the buffer straight to the panel and keeps HDR10/HLG metadata;
+            // TextureView composes an SDR texture, a black screen for HEVC HDR on devices that reject mis-tagged buffers (Samsung S25).
             aspectFrame = new AspectRatioFrameLayout(getContext());
             aspectFrame.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FIT);
 
@@ -164,10 +140,8 @@ public class NativePlayerPlugin extends Plugin {
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     Gravity.CENTER));
 
-            // The decoder commits its first buffer to the still full-size surface
-            // before onVideoSizeChanged reaches this thread, so the frame shows
-            // stretched until the next layout. Lifted in emitFirstFrame(), which
-            // is queued after the size event, so the same traversal fixes both.
+            // The decoder commits its first buffer to the full-size surface before onVideoSizeChanged arrives, so it shows stretched;
+            // lifted in emitFirstFrame(), queued after the size event.
             shutter = new View(getContext());
             shutter.setBackgroundColor(Color.BLACK);
             wrapper.addView(shutter, new FrameLayout.LayoutParams(
@@ -178,12 +152,8 @@ public class NativePlayerPlugin extends Plugin {
             //          → 3+=WebView (controls)
             android.webkit.WebView webView = getBridge().getWebView();
             ViewGroup webViewParent = (ViewGroup) webView.getParent();
-            // Black on the parent ViewGroup covers the single-frame gap on
-            // player close: between removeView(wrapper) and the WebView
-            // re-rendering as opaque, the layout briefly shows whatever is
-            // behind webViewParent (the activity windowBackground, which on
-            // some Capacitor / device combos defaults to white despite the
-            // theme). BLACK here removes that window from ever showing.
+            // Black on the parent covers the one-frame gap on close, when the activity windowBackground (white on some
+            // Capacitor/device combos) would show between removeView(wrapper) and the WebView turning opaque.
             webViewParent.setBackgroundColor(Color.BLACK);
 
             webViewParent.addView(wrapper, 0, new FrameLayout.LayoutParams(
@@ -203,12 +173,8 @@ public class NativePlayerPlugin extends Plugin {
     @PluginMethod()
     public void destroy(PluginCall call) {
         mainHandler.post(() -> {
-            // Restore an opaque BLACK WebView FIRST, before removing the
-            // wrapper — between removeView(wrapper) and the next compositing
-            // pass the WebView would otherwise still be TRANSPARENT, exposing
-            // the activity windowBackground (Light theme = white) for one
-            // frame. Setting BLACK before the removeView calls means the
-            // very next composited frame already has BLACK in place.
+            // Restore the opaque BLACK WebView before removing the wrapper, or the transparent WebView exposes the
+            // windowBackground (white in the Light theme) for one frame.
             android.webkit.WebView webView = getBridge().getWebView();
             if (webView != null) webView.setBackgroundColor(Color.BLACK);
             stopPositionUpdates();
@@ -280,13 +246,8 @@ public class NativePlayerPlugin extends Plugin {
             cancelMuteMessages();
             if (player != null) player.release();
 
-            // SubtitleView holds whatever cues the previous player last emitted —
-            // ExoPlayer.release() doesn't drop them, and a fresh load (especially
-            // the silent session-expired recovery, which keeps the same view
-            // and just swaps the source URL) starts with text rendering
-            // disabled by default. The stale cue then sits on screen until the
-            // user manually seeks (which already clears it below) — clear here
-            // too so a load looks identical from the user's perspective.
+            // Clear stale cues: ExoPlayer.release() keeps them and a fresh load starts with text rendering disabled,
+            // so the old cue would sit on screen until a seek (notably after the silent session-expired recovery).
             if (this.subtitles != null) this.subtitles.clear();
 
             // A new item's crop (if any) is re-sent by the TS layer after load().
@@ -332,32 +293,17 @@ public class NativePlayerPlugin extends Plugin {
                 }
             }
 
-            // Offline: CacheDataSource (cached HLS) wrapped in DefaultDataSource
-            // (adds file:// support for local subtitle VTTs).
-            // Online: DefaultDataSource with HTTP factory.
+            // Offline: CacheDataSource in a DefaultDataSource (file:// for local VTTs). Online: DefaultDataSource with HTTP.
             final DataSource.Factory dataSourceFactory = offline
                     ? new DefaultDataSource.Factory(getContext(), FlixDownloadUtil.getCacheDataSourceFactory(getContext()))
                     : new DefaultDataSource.Factory(getContext(), httpFactory);
-            // Buffer sized as multiples of the production ~6s HLS segment: ~3
-            // segments (18s) min, up to ~8 segments (48s) ahead, so a slow
-            // segment fetch on a degraded link doesn't drain to empty and stall.
-            // 48s stays under the backend's 15-segment seek-restart threshold
-            // (~90s at 6s segments), so forward fill never forces an ffmpeg
-            // restart. bufferForPlaybackMs stays 500ms (vs ExoPlayer's 2500ms
-            // default) for a snappy start/seek; resume-after-rebuffer waits one
-            // full segment (6s) to avoid re-stalling mid-segment.
+            // Buffer in multiples of the ~6s HLS segment: 18s min, 48s max (under the backend's 90s seek-restart threshold),
+            // bufferForPlaybackMs 500ms for a snappy start, one full segment after a rebuffer.
             LoadControl loadControl = new DefaultLoadControl.Builder()
                     .setBufferDurationsMs(18000, 48000, 500, 6000)
                     .build();
-            // Renderers tuned for AV receivers / TVs that decode surround:
-            // - setEnableAudioFloatOutput(false) keeps the audio path on 16-bit
-            //   integer PCM, which is the only mode that allows AC-3 / E-AC-3
-            //   passthrough (float output forces ExoPlayer to decode + downmix
-            //   in the app, so the TV would only ever see stereo PCM).
-            // - setEnableDecoderFallback(true) lets the renderer fall back to
-            //   another decoder when the preferred one rejects the format
-            //   (e.g. some Android TV SoCs ship a buggy AC-3 decoder).
-            // Player volume is ignored on passthrough output, so a mute gate needs PCM.
+            // Renderers for AV receivers and TVs: 16-bit PCM (no float output) keeps AC-3/E-AC-3 passthrough possible;
+            // decoder fallback covers TV SoCs with a buggy AC-3 decoder. Volume is ignored on passthrough, so a mute gate needs PCM.
             muteSinkPlayer = muteRanges.length > 0;
             DefaultRenderersFactory renderersFactory =
                     (muteSinkPlayer
@@ -365,15 +311,8 @@ public class NativePlayerPlugin extends Plugin {
                             : new DefaultRenderersFactory(getContext()))
                             .setEnableAudioFloatOutput(false)
                             .setEnableDecoderFallback(true);
-            // DefaultMediaSourceFactory handles both URL autodetection
-            // (HLS for `.m3u8`, ProgressiveMediaSource for DirectPlay
-            // MP4) and the modern subtitle pipeline (parses external
-            // WebVTT to `application/x-media3-cues` via
-            // SubtitleExtractor before the TextRenderer sees them).
-            // Replicating that machinery with HlsMediaSource.Factory
-            // explicit means re-implementing internal Media3 APIs
-            // (`enableLazyLoadingWithSingleTrack` is package-private)
-            // — not worth the semantic-cleanliness trade-off.
+            // DefaultMediaSourceFactory autodetects HLS or progressive and runs the modern subtitle pipeline (external WebVTT
+            // to media3 cues); HlsMediaSource.Factory would mean re-implementing package-private Media3 APIs.
             DefaultMediaSourceFactory mediaSourceFactory =
                     new DefaultMediaSourceFactory(dataSourceFactory)
                             .setLoadErrorHandlingPolicy(new RetryHttp404LoadErrorPolicy());
@@ -393,9 +332,7 @@ public class NativePlayerPlugin extends Plugin {
                     .setSeekBackIncrementMs(10_000)
                     .setSeekForwardIncrementMs(10_000)
                     .build();
-            // CONTENT_TYPE_MOVIE flags the stream as cinematic so the framework
-            // routes it through the surround-capable HDMI path; without this
-            // (default UNKNOWN) some TVs negotiate a stereo-only PCM track.
+            // CONTENT_TYPE_MOVIE routes through the surround-capable HDMI path; the default UNKNOWN can negotiate stereo-only PCM.
             player.setAudioAttributes(
                     new AudioAttributes.Builder()
                             .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
@@ -432,10 +369,8 @@ public class NativePlayerPlugin extends Plugin {
 
                 @Override public void onIsPlayingChanged(boolean isPlaying) {
                     if (isPlaying) {
-                        // Playback is advancing ⇒ decoded frames are presenting.
-                        // Lift the loading veil now even if onRenderedFirstFrame
-                        // misfired, instead of waiting on the ~1 Hz position
-                        // fallback in native-engine.ts (which can't fire for ~2 s).
+                        // Playback advancing means frames are presenting: lift the loading veil even if onRenderedFirstFrame misfired,
+                        // instead of waiting ~2 s for the position fallback in native-engine.ts.
                         emitFirstFrame();
                         emitStateChanged("playing");
                     } else if (player.getPlaybackState() == Player.STATE_BUFFERING) {
@@ -463,17 +398,8 @@ public class NativePlayerPlugin extends Plugin {
                             pendingVideoHeight = -1;
                         }
                     }
-                    // Cold-prepare bootstrap. Fires at most once per load() to
-                    // recover from a Media3 1.10.1 race where every ExoPlayer
-                    // instance built after the first one in the same JVM gets
-                    // stuck: track selection completes, the audio renderer
-                    // prepares, but the video renderer silently never enables
-                    // and never allocates a decoder — state pins at BUFFERING
-                    // for the rest of the session. The bug reproduces reliably
-                    // on EAC3 5.1 sources (Atmos in particular) and is the same
-                    // hang a user-issued seek unsticks: `seekTo()` cancels the
-                    // in-flight loads and forces the source to re-run
-                    // `selectTracks()`, which wakes the renderer pipeline.
+                    // Cold-prepare bootstrap, at most once per load(): from the second ExoPlayer in a JVM (notably EAC3 5.1) the video renderer
+                    // may never enable and state pins at BUFFERING. A `seekTo()` cancels the loads and re-runs `selectTracks()`, which wakes it.
                     if (!videoBootstrapDone) {
                         boolean videoSelected = false;
                         boolean videoSupported = false;
@@ -488,16 +414,8 @@ public class NativePlayerPlugin extends Plugin {
                             }
                         }
                         if (videoSelected) {
-                            // Common case: video track picked. The watchdog only
-                            // issues the 1 ms unstick seek when the video renderer
-                            // never enabled (onVideoEnabled hasn't fired) AND state
-                            // is still BUFFERING — the exact cold-prepare signature.
-                            // A healthy-but-slow start has the renderer enabled and
-                            // is merely fetching, so it is left alone (seeking there
-                            // would cancel in-flight loads and delay the first
-                            // frame). Gating on the renderer signal lets the check
-                            // run early without punishing slow links. The seek is a
-                            // sub-frame nudge (1 ms ≪ one frame at 24 fps).
+                            // Video track picked: nudge with a 1 ms seek only if the video renderer never enabled (onVideoEnabled) and state is still
+                            // BUFFERING; a healthy slow start is left alone, as seeking would cancel in-flight loads. 1 ms is under one frame at 24 fps.
                             videoBootstrapDone = true;
                             mainHandler.postDelayed(() -> {
                                 if (player == null) return;
@@ -507,11 +425,7 @@ public class NativePlayerPlugin extends Plugin {
                                 }
                             }, 500);
                         } else if (videoSupported) {
-                            // Less common signature: the selector dropped the
-                            // video group entirely (audio surfaced first, the
-                            // video format hadn't propagated). 200 ms is enough
-                            // for the format to arrive before the recovery seek
-                            // re-runs the selection.
+                            // Video group dropped entirely (audio surfaced first): wait 200 ms for the format to arrive before the recovery seek.
                             videoBootstrapDone = true;
                             mainHandler.postDelayed(() -> {
                                 if (player == null) return;
@@ -542,11 +456,8 @@ public class NativePlayerPlugin extends Plugin {
 
             });
 
-            // The video renderer enabling is the signal that separates a
-            // healthy start from the cold-prepare race (where the video
-            // renderer never enables). The bootstrap watchdog reads this flag
-            // so it only issues the unstick seek when the renderer is genuinely
-            // stuck, not when a healthy start is merely slow to buffer.
+            // The video renderer enabling separates a healthy start from the cold-prepare race;
+            // the bootstrap watchdog reads it to seek only when genuinely stuck.
             player.addAnalyticsListener(new AnalyticsListener() {
                 @Override public void onVideoEnabled(
                         @NonNull AnalyticsListener.EventTime eventTime,
@@ -592,11 +503,8 @@ public class NativePlayerPlugin extends Plugin {
                     player.getTrackSelectionParameters().buildUpon()
                             .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
                             .build());
-            // seekTo BEFORE prepare: ExoPlayer queues the seek and applies it
-            // once sources are ready. Calling seekTo AFTER prepare can race with
-            // ProgressiveMediaPeriod (used by SubtitleConfiguration wrappers)
-            // mid-preparation and trip its `isPendingReset` assertion — surfaces
-            // as an intermittent IllegalStateException at startup (~1 in 6 plays).
+            // seekTo before prepare: after it, the seek can race ProgressiveMediaPeriod mid-preparation and trip `isPendingReset`
+            // (an intermittent IllegalStateException, about 1 in 6 plays).
             if (startTime > 0) player.seekTo((long) (startTime * 1000));
             player.prepare();
             player.setPlayWhenReady(true);
@@ -616,22 +524,6 @@ public class NativePlayerPlugin extends Plugin {
     private double[][] muteRanges = new double[0][];
     private final List<PlayerMessage> muteMessages = new ArrayList<>();
     private boolean muteSinkPlayer = false;
-
-    @OptIn(markerClass = UnstableApi.class)
-    private static final class PcmOnlyRenderersFactory extends DefaultRenderersFactory {
-        PcmOnlyRenderersFactory(Context context) { super(context); }
-
-        @Override
-        protected AudioSink buildAudioSink(Context context, boolean enableFloatOutput,
-                boolean enableAudioTrackPlaybackParams) {
-            // A context-less builder is required: with a context, media3 discards these capabilities.
-            return new DefaultAudioSink.Builder()
-                    .setAudioCapabilities(AudioCapabilities.DEFAULT_AUDIO_CAPABILITIES)
-                    .setEnableFloatOutput(enableFloatOutput)
-                    .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
-                    .build();
-        }
-    }
 
     @PluginMethod()
     public void setMuteRanges(PluginCall call) {
@@ -758,11 +650,8 @@ public class NativePlayerPlugin extends Plugin {
         double position = call.getDouble("position", 0.0);
         mainHandler.post(() -> {
             if (player != null) {
-                // Drop stale cues before the seek: SubtitleView holds whatever was
-                // last set until onCues fires again, and the TextRenderer may take
-                // several hundred ms to emit new cues for an external VTT after
-                // seekTo — leaving the previous line visible and reading as
-                // "subtitles shifted" until the next cue lands.
+                // Drop stale cues before the seek: SubtitleView keeps the last set until onCues fires, and an external VTT can take
+                // hundreds of ms after seekTo, reading as shifted subtitles.
                 if (subtitles != null) subtitles.clear();
                 player.seekTo(Math.round(position * 1000));
             }
@@ -920,14 +809,6 @@ public class NativePlayerPlugin extends Plugin {
         });
     }
 
-    private int parseColor(String hex, int fallback) {
-        try {
-            return Color.parseColor(hex);
-        } catch (Exception e) {
-            return fallback;
-        }
-    }
-
     // ── Display ──
 
     @PluginMethod()
@@ -994,11 +875,6 @@ public class NativePlayerPlugin extends Plugin {
         }
     }
 
-    private static boolean sameParams(FrameLayout.LayoutParams a, FrameLayout.LayoutParams b) {
-        return a.width == b.width && a.height == b.height
-                && a.leftMargin == b.leftMargin && a.topMargin == b.topMargin && a.gravity == b.gravity;
-    }
-
     // ── Brightness ──
 
     @PluginMethod()
@@ -1026,14 +902,8 @@ public class NativePlayerPlugin extends Plugin {
         int height = call.getInt("height", 0);
         mainHandler.post(() -> {
             if (player == null) {
-                // Called from JS before load() has built the ExoPlayer instance
-                // (player.ts pins a saved quality between createNativeEngine and
-                // engine.load to keep the bandwidth-probe phase off the wrong
-                // variant). Queue the height — onTracksChanged consumes
-                // pendingVideoHeight once load() runs and tracks resolve, so the
-                // pin still applies on the first track-selection pass. Resolve
-                // (not reject) — the caller doesn't await, and rejecting here
-                // surfaces as an "Uncaught (in promise)" console error.
+                // Called before load() built the player (player.ts pins a saved quality to keep the bandwidth probe off the wrong variant):
+                // queue the height for onTracksChanged. Resolve, don't reject: the caller doesn't await.
                 pendingVideoHeight = height > 0 ? height : -1;
                 call.resolve();
                 return;
@@ -1052,21 +922,14 @@ public class NativePlayerPlugin extends Plugin {
                 return;
             }
 
-            // Set a soft cap on max video size FIRST. This filters out
-            // higher-than-target variants from ExoPlayer's initial track
-            // selection — without it the player starts fetching the top
-            // rung from the master and only honours the override after
-            // onTracksChanged fires, costing a wasted ffmpeg session
-            // (visible in the backend log as 'Quality change [X]:
-            // 2160p-hdr → 1080p-hdr, killing old session').
+            // Soft-cap the max video size first so the initial track selection skips higher variants, which would otherwise
+            // cost a wasted ffmpeg session ('Quality change ... killing old session').
             player.setTrackSelectionParameters(
                     player.getTrackSelectionParameters().buildUpon()
                             .setMaxVideoSize(width, height)
                             .build());
-            // Then pin to the exact variant once it's known (onTracksChanged).
-            // The override is a manual pick, not just a cap, so a 2160p
-            // variant with height 2016 (cinema 4K) doesn't sneak in when
-            // the user picked 1080p.
+            // Then pin the exact variant once known (onTracksChanged): a manual pick, not just a cap,
+            // so a 2016-px cinema 4K can't slip in under a 1080p pick.
             if (!applyVideoOverrideByHeight(height)) {
                 pendingVideoHeight = height;
             } else {
@@ -1093,10 +956,7 @@ public class NativePlayerPlugin extends Plugin {
                 var fmt = mediaGroup.getFormat(i);
                 if (fmt.height <= 0) continue;
                 int diff = Math.abs(fmt.height - targetHeight);
-                // Tie-break by bitrate so that when a remux variant and a
-                // transcode profile share the same height (source 1080p +
-                // 1080p transcode), we pick the higher-bitrate remux and
-                // avoid spinning up a redundant FFmpeg session.
+                // Tie-break by bitrate: a remux and a transcode of the same height resolve to the remux, avoiding a redundant FFmpeg session.
                 if (diff < bestDiff
                         || (diff == bestDiff && fmt.bitrate > bestBitrate)) {
                     bestDiff = diff;
@@ -1117,29 +977,6 @@ public class NativePlayerPlugin extends Plugin {
     }
 
     // ── State ──
-
-    private static final Map<String, Boolean> HW_DECODER_CACHE = new HashMap<>();
-
-    private static synchronized boolean isHardwareDecoder(String name) {
-        Boolean cached = HW_DECODER_CACHE.get(name);
-        if (cached != null) return cached;
-        Boolean hw = null;
-        if (Build.VERSION.SDK_INT >= 29) {
-            for (MediaCodecInfo info : new MediaCodecList(MediaCodecList.ALL_CODECS).getCodecInfos()) {
-                if (info.getName().equals(name)) { hw = info.isHardwareAccelerated(); break; }
-            }
-        }
-        if (hw == null) {
-            String n = name.toLowerCase(Locale.ROOT);
-            hw = !(n.startsWith("omx.google.") || n.startsWith("c2.android.") || n.contains(".sw."));
-        }
-        HW_DECODER_CACHE.put(name, hw);
-        return hw;
-    }
-
-    private static Object orNull(Object v) {
-        return v != null ? v : org.json.JSONObject.NULL;
-    }
 
     @PluginMethod()
     public void getQoe(PluginCall call) {
@@ -1236,25 +1073,6 @@ public class NativePlayerPlugin extends Plugin {
         }
         return false;
     }
-
-    /** Draw a bitmap (PGS/VOBSUB) cue ourselves, pinned near the bottom of the
-     *  screen, aspect preserved — the built-in SubtitleView stretches/squishes
-     *  bitmaps. Sized from the video WIDTH so it stays consistent across
-     *  orientations (the letterboxed video height is tiny in portrait). Null
-     *  hides it. */
-    private static boolean isImageSubtitleMime(String mime) {
-        return MimeTypes.APPLICATION_PGS.equals(mime)
-                || MimeTypes.APPLICATION_VOBSUB.equals(mime)
-                || MimeTypes.APPLICATION_DVBSUBS.equals(mime);
-    }
-
-    /** Bitmap (burn-in-only) subtitle track. The modern subtitle pipeline
-     *  rewrites sampleMimeType to application/x-media3-cues and preserves the
-     *  original codec in `codecs`, so check both. */
-    private static boolean isImageSubtitle(androidx.media3.common.Format fmt) {
-        return isImageSubtitleMime(fmt.sampleMimeType) || isImageSubtitleMime(fmt.codecs);
-    }
-
     private JSArray buildAudioTrackList() {
         JSArray list = new JSArray();
         if (player == null) return list;
@@ -1285,27 +1103,13 @@ public class NativePlayerPlugin extends Plugin {
         return list;
     }
 
-    /** Convert ISO 639-2/B or 639-1 language code to display name. */
-    private String langToDisplayName(String code) {
-        if (code == null || code.equals("und")) return "Unknown";
-        Locale loc = Locale.forLanguageTag(code);
-        String name = loc.getDisplayLanguage(Locale.getDefault());
-        if (!name.isEmpty() && !name.equals(code)) {
-            return name.substring(0, 1).toUpperCase() + name.substring(1);
-        }
-        return code;
-    }
-
     private String lastEmittedState = "";
     private long lastNonBufferingAt = 0;
     private static final long BUFFERING_GUARD_MS = 300;
 
     private void emitStateChanged(String state) {
-        // Hysteresis on BUFFERING: ExoPlayer can briefly dip below the
-        // rebuffer threshold after a seek and oscillate ready ↔ buffering
-        // a few times in rapid succession. Swallow a BUFFERING emit if a
-        // playable state was reported < 300ms ago — wait for it to
-        // actually settle into BUFFERING before the spinner shows.
+        // Hysteresis on BUFFERING: ExoPlayer can oscillate ready/buffering after a seek, so swallow a BUFFERING emit
+        // within 300 ms of a playable state.
         long now = android.os.SystemClock.uptimeMillis();
         if ("buffering".equals(state) && now - lastNonBufferingAt < BUFFERING_GUARD_MS) {
             return;
@@ -1355,17 +1159,8 @@ public class NativePlayerPlugin extends Plugin {
         positionHandler = new Handler(Looper.getMainLooper());
         positionRunnable = new Runnable() {
             @Override public void run() {
-                // Emit while the player exists, not only while
-                // isPlaying() is true. NativeEngine's firstFrame
-                // fallback (in native-engine.ts) needs a second
-                // event with a growing position to clear the loading
-                // veil — gating on isPlaying() locked the UI on the
-                // spinner whenever Media3 spent its prepare time in
-                // STATE_BUFFERING (isPlaying() is false in that
-                // state). Was harmless when NativeEngine also polled
-                // getPosition() every second; that JS polling was
-                // dropped in commit 9e2269dc as redundant, which made
-                // this push the sole signal.
+                // Emit while the player exists, not only while isPlaying(): NativeEngine's firstFrame fallback needs a second event
+                // with a growing position, and isPlaying() is false in STATE_BUFFERING (JS polling was dropped in 9e2269dc).
                 emitPosition();
                 positionHandler.postDelayed(this, 1000);
             }
