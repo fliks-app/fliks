@@ -54,15 +54,7 @@ jobs:
 
       - name: Resolve version
         id: version
-        shell: bash
-        run: |
-          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-            echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
-          else
-            # Velopack only takes SemVer2.
-            base=$(jq -r '."."' .github/.release-please-manifest.json)
-            echo "version=${base}-dev.${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
-          fi
+        uses: ./.github/actions/resolve-version
 
       - uses: actions/setup-node@v6
         with:

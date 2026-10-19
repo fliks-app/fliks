@@ -1,0 +1,28 @@
+name: Resolve version
+description: The tag version on a release tag, else the override input, else the released version with a -dev.<run> suffix (valid SemVer2, which Velopack requires).
+inputs:
+  override:
+    description: Version to use outside a tag
+    default: ''
+outputs:
+  version:
+    description: Resolved version
+    value: ${{ steps.resolve.outputs.version }}
+runs:
+  using: composite
+  steps:
+    - id: resolve
+      shell: bash
+      env:
+        OVERRIDE: ${{ inputs.override }}
+      run: |
+        case "$GITHUB_REF" in
+          refs/tags/desktop-v*) v="${GITHUB_REF#refs/tags/desktop-v}" ;;
+          refs/tags/v*) v="${GITHUB_REF#refs/tags/v}" ;;
+          *)
+            base=$(jq -r '."."' .github/.release-please-manifest.json)
+            v="${OVERRIDE:-${base}-dev.${GITHUB_RUN_NUMBER}}"
+            ;;
+        esac
+        echo "version=$v" >> "$GITHUB_OUTPUT"
+        echo "Resolved version: $v"

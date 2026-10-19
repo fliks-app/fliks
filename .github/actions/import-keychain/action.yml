@@ -1,0 +1,31 @@
+name: Import signing certificate
+description: Imports a .p12 into a throwaway keychain added to the search list (login kept, so cloud-managed profiles still resolve).
+inputs:
+  p12-base64:
+    required: true
+  password:
+    required: true
+outputs:
+  keychain:
+    description: Path of the keychain
+    value: ${{ steps.import.outputs.keychain }}
+runs:
+  using: composite
+  steps:
+    - id: import
+      shell: bash
+      env:
+        P12_BASE64: ${{ inputs.p12-base64 }}
+        P12_PASSWORD: ${{ inputs.password }}
+      run: |
+        keychain="$RUNNER_TEMP/app-signing.keychain-db"
+        pw="$(openssl rand -base64 24)"
+        echo "$P12_BASE64" | base64 -d > "$RUNNER_TEMP/cert.p12"
+        security create-keychain -p "$pw" "$keychain"
+        security set-keychain-settings -lut 21600 "$keychain"
+        security unlock-keychain -p "$pw" "$keychain"
+        security import "$RUNNER_TEMP/cert.p12" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$keychain"
+        security set-key-partition-list -S apple-tool:,apple: -s -k "$pw" "$keychain"
+        security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+        rm -f "$RUNNER_TEMP/cert.p12"
+        echo "keychain=$keychain" >> "$GITHUB_OUTPUT"
