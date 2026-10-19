@@ -180,14 +180,14 @@ export function formatAudioLabel(
   return tail ? `${head} (${tail})` : head;
 }
 
-/** Two-part audio label for the menu: language head + details ("EAC3 • 5.1 • Atmos • title"). */
+/** Two-part audio label for the menu: language head + details ("EAC3 • 5.1 • Atmos"); the stream title is never shown. */
 export function formatAudioParts(
   audio: AudioLabelSource,
   translate: TranslateService,
   trackIndex?: number,
 ): { head: string; sub: string } {
-  const { head, details, title } = audioLabelParts(audio, translate, trackIndex);
-  return { head, sub: [...details, title].filter(Boolean).join(' • ') };
+  const { head, details } = audioLabelParts(audio, translate, trackIndex);
+  return { head, sub: details.join(' • ') };
 }
 
 export interface AudioLabelSource {
@@ -209,7 +209,7 @@ function audioLabelParts(audio: AudioLabelSource, translate: TranslateService, t
   const codec = (audio.codec ?? '').toUpperCase().replace('TRUEHD', 'TrueHD');
   const markers = trackMarkerLabels(audio.trackMarkers, translate);
   const details = [codec, audioChannelsLabel(audio.channels), ...markers].filter(Boolean);
-  return { head, details, title: audioTitleHint(audio, [head, ...markers, ...(audio.trackMarkers ?? [])], translate) };
+  return { head, details };
 }
 
 /** Localised labels of a track's markers; ids this client has no label for are skipped. */
@@ -228,22 +228,6 @@ export function trackMarkerLabels(
     .filter(Boolean);
 }
 
-const AUDIO_TITLE_NOISE =
-  /^(?:\d+(?:\.\d)?(?:ch)?|kbps|aac|ac-?3|e-?ac-?3|dd\+?|ddp\d*(?:\.\d)?|dolby|digital|plus|truehd|true|hd|atmos|dts|dts-hd|ma|hra|x|flac|opus|pcm|lpcm|mp3|stereo|mono|surround|channels?|audio|track)$/;
-
-/** The stream title, unless it only spells out the language, codec, layout or markers already shown
- *  ("English DDP 5.1", "Commentary"). */
-function audioTitleHint(audio: AudioLabelSource, shown: string[], translate: TranslateService): string {
-  const title = (audio.title ?? '').trim().replace(/\s+/g, ' ');
-  if (!title) return '';
-  const split = (s: string) => s.toLowerCase().split(/[^\p{L}\p{N}.+-]+/u).filter(Boolean);
-  const known = languageTagWords(audio.language, audio.languageTag, translate);
-  for (const s of [...shown, localizeLanguage(audio.language, translate), audio.language ?? '', normalizeLangCode(audio.language)]) {
-    split(s).forEach((w) => known.add(w));
-  }
-  return split(title).every((w) => known.has(w) || AUDIO_TITLE_NOISE.test(w)) ? '' : title;
-}
-
 /** Whether the pickers spell out the file format. Off unless the viewer asked
  *  for it in the subtitle settings. */
 export interface SubtitleLabelOptions {
@@ -258,7 +242,7 @@ export interface SubtitleLabelSource {
   relativePath?: string | null;
   providerType?: string | null;
   /** Embedded stream title; the language is often all the probe keeps, so it
-   *  is what tells two tracks of one language apart. */
+   *  tells two tracks of one language apart when neither has a marker. */
   title?: string | null;
   /** BCP-47 tag of an embedded track (`es-419`); label only, `language` stays canonical. */
   languageTag?: string | null;
@@ -273,9 +257,10 @@ const FLAG_MARKERS = ['forced', 'hearingImpaired'];
  * empty, equal (case-insensitive) to the language name or code, when it only
  * restates a flag already shown ("Forced", "SDH"), or when every word of it is
  * part of the region/script the head already spells out ("Latin American" next
- * to "Espagnol (Amérique latine)"). Anything else is kept.
+ * to "Espagnol (Amérique latine)"). Anything else is kept. A track with markers shows those only.
  */
 function subtitleTitleHint(sub: SubtitleLabelSource, translate: TranslateService): string {
+  if (sub.trackMarkers?.length) return '';
   const title = (sub.title ?? '').trim().replace(/\s+/g, ' ');
   if (!title) return '';
   const t = title.toLowerCase();

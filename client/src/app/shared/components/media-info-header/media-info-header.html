@@ -178,7 +178,7 @@
 <div class="hidden md:block tv:block relative">
 
   <div
-    class="flex gap-6 lg:gap-10 relative z-20"
+    class="flex gap-6 lg:gap-10 relative z-20 has-[.dropdown-open]:z-50"
     [style.padding-top]="!navbar.isHeroPage() || navbar.effectiveSidebarPinned() || tv.isTv() ? null : navbar.mobileNavbarVisible() ? 'calc(env(safe-area-inset-top, 0px) + 3rem)' : null"
   >
     <!-- Poster / Still (desktop only). Compact on the md-to-lg range (landscape
