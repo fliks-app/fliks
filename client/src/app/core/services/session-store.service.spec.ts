@@ -158,4 +158,21 @@ describe('SessionStoreService persistence', () => {
     expect(ids(a.forServer('https://b'))).toEqual([3]);
     expect(a.forServer('https://c')).toEqual([]);
   });
+
+  it('moves a server\'s sessions and active pointer to its new address', async () => {
+    const a = store();
+    await a.save(session('https://old', 1, { lastUsedAt: 10 }));
+    await a.save(session('https://new', 1, { lastUsedAt: 5, refreshToken: 'stale' }));
+    await a.save(session('https://b', 2));
+    await a.setActive('https://old', 1);
+
+    await a.moveServer('https://old', 'https://new');
+
+    const b = store();
+    await b.load();
+    expect(b.forServer('https://old')).toEqual([]);
+    expect(b.forServer('https://new').map((s) => s.refreshToken)).toEqual(['refresh-https://old-1']);
+    expect(b.active()?.serverUrl).toBe('https://new');
+    expect(ids(b.forServer('https://b'))).toEqual([2]);
+  });
 });

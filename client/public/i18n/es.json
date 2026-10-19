@@ -759,7 +759,6 @@
   "server_history": {
     "section_title": "Servidores recientes",
     "actions": "Acciones",
-    "rename": "Renombrar",
     "rename_prompt": "Nombre del servidor",
     "forget": "Olvidar",
     "relative": {

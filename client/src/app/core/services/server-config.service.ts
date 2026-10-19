@@ -120,13 +120,19 @@ export class ServerConfigService {
     await this.persistKnownServers();
   }
 
-  async renameKnownServer(url: string, name: string): Promise<void> {
+  /** An empty name clears the alias. A new URL replaces any other entry already on it.
+   *  Resolves to the entry's URL after the change. */
+  async updateKnownServer(url: string, changes: { name: string; url: string }): Promise<string> {
     const cleaned = url.replace(/\/+$/, '');
-    const trimmed = name.trim() || null;
+    const nextUrl = changes.url.trim().replace(/\/+$/, '') || cleaned;
+    const name = changes.name.trim() || null;
     this._knownServers.set(
-      this._knownServers().map((s) => (s.url === cleaned ? { ...s, name: trimmed } : s)),
+      this._knownServers()
+        .filter((s) => s.url === cleaned || s.url !== nextUrl)
+        .map((s) => (s.url === cleaned ? { ...s, url: nextUrl, name } : s)),
     );
     await this.persistKnownServers();
+    return nextUrl;
   }
 
   /** Username last seen on the active server, used to pre-fill the login form. */
