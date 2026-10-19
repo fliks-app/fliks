@@ -12,32 +12,7 @@ import { PopoverMenuComponent } from './popover-menu';
   selector: 'app-select-picker',
   standalone: true,
   imports: [PopoverMenuComponent],
-  template: `
-    <app-popover-menu
-      [open]="picker.open()"
-      [anchor]="picker.anchor()"
-      placement="bottom-start"
-      [heading]="picker.title()"
-      (closed)="picker.close()"
-    >
-      @for (opt of picker.options(); track opt.value) {
-        <button
-          type="button"
-          [disabled]="opt.disabled"
-          [attr.aria-current]="opt.selected ? 'true' : null"
-          class="dropdown-item"
-          [class.text-primary]="opt.selected"
-          [class.text-white]="!opt.selected"
-          (click)="picker.pick(opt.value)"
-        >
-          <span class="flex-1 truncate">{{ opt.label }}</span>
-          @if (opt.selected) {
-            <span class="w-2 h-2 rounded-full bg-primary shrink-0"></span>
-          }
-        </button>
-      }
-    </app-popover-menu>
-  `,
+  templateUrl: './select-picker.html',
 })
 export class SelectPickerComponent {
   protected readonly picker = inject(SelectPickerService);

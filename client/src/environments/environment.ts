@@ -4,8 +4,6 @@ export const environment = {
    *  release-please. Reported to the backend (non-web clients only) so the
    *  admin streams dashboard can show which app build a viewer is running. */
   version: '4.5.0', // x-release-please-version
-  /** Base URL pour ApiHandlerService (chemins versionnés sous /api). */
-  apiUrl: '/api',
   /**
    * Google Cast receiver app ID. Replace with the ID generated in the
    * Cast Developer Console (https://cast.google.com/publish/) after

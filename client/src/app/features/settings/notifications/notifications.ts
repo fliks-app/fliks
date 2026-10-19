@@ -216,7 +216,7 @@ export class NotificationsSettingsComponent implements OnInit {
       );
       this.testResult.set(r);
     } catch {
-      this.testResult.set({ ok: false, message: 'Connection test failed' });
+      this.testResult.set({ ok: false, message: this.translate.instant('settings.notifications.test_failed') });
     } finally {
       this.testLoading.set(false);
     }
@@ -285,7 +285,7 @@ export class NotificationsSettingsComponent implements OnInit {
       const httpErr = err as { error?: { message?: string } };
       void this.confirmation.alert({
         title: this.translate.instant('common.error'),
-        message: httpErr.error?.message ?? 'Error',
+        message: httpErr.error?.message ?? this.translate.instant('common.error'),
         variant: 'danger',
       });
     }

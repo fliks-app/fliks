@@ -199,7 +199,7 @@ export class RolesSettingsComponent implements OnInit {
       const httpErr = err as { error?: { message?: string } };
       void this.confirmation.alert({
         title: this.translate.instant('common.error'),
-        message: httpErr.error?.message ?? 'Error',
+        message: httpErr.error?.message ?? this.translate.instant('common.error'),
         variant: 'danger',
       });
     }

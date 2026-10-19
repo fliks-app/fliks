@@ -23,8 +23,7 @@ const FILTER_FROM_OPTIONS = 8;
 
 /**
  * Multi-select with a built-in filter: the trigger shows the picked options
- * as removable chips, the panel stays open while ticking several. Sibling of
- * `app-searchable-select`, which is the single-value form.
+ * as removable chips, the panel stays open while ticking several.
  *
  * The panel is an `app-popover-menu`, which floats it out of any scrolling
  * ancestor — `.modal-box` is `overflow-y: auto` and would clip it — and turns

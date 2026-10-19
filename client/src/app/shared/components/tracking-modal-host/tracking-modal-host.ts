@@ -11,7 +11,7 @@ import { TrackingStatusModalComponent } from '../tracking-status-modal/tracking-
   selector: 'app-tracking-modal-host',
   standalone: true,
   imports: [TrackingStatusModalComponent],
-  template: `<app-tracking-status-modal />`,
+  templateUrl: './tracking-modal-host.html',
 })
 export class TrackingModalHostComponent {
   private readonly service = inject(TrackingModalService);

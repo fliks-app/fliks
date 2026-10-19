@@ -231,17 +231,14 @@ export class RemoteService {
       // Same title, same position: the stream is being rebuilt underneath. The
       // reading on screen stays true, so keep it and just show it loading
       // rather than emptying the card between the two sessions.
-      console.debug('[remote] target stopped to rebuild its stream', targetId);
       return;
     }
     if (pending && SLOW_ACK_ACTIONS.has(pending)) {
       // A load or a next moves to another file, so what is on screen no longer
       // describes anything: name what is coming instead.
-      console.debug('[remote] target stopped to start another file', targetId, pending);
       this.noteLoadSent(null);
       return;
     }
-    console.debug('[remote] target reported it stopped playing', targetId);
     this.noteStopSent();
   }
 
@@ -504,7 +501,6 @@ export class RemoteService {
         }
         const silentFor = Date.now() - this.stateAt;
         if (listed && !listed.nowPlaying && this.reportedState() && silentFor > 15_000) {
-          console.debug('[remote] target reports nothing playing, clearing its state');
           this.reportedState.set(null);
         }
       }
@@ -644,7 +640,6 @@ export class RemoteService {
     // The target flushes one last heartbeat on its way out of the player; taking
     // it would put the stopped playback straight back on screen.
     if (this.stoppedSessionId && s.sessionId === this.stoppedSessionId) {
-      console.debug('[remote] ignoring the farewell heartbeat of', s.sessionId);
       return;
     }
     this.stoppedSessionId = null;

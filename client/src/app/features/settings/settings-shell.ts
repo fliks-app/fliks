@@ -7,6 +7,6 @@ import { RouterOutlet } from '@angular/router';
 @Component({
   selector: 'app-settings-shell',
   imports: [RouterOutlet],
-  template: `<div class="w-full"><router-outlet /></div>`,
+  templateUrl: './settings-shell.html',
 })
 export class SettingsShellComponent {}

@@ -37,7 +37,7 @@ export class SystemBackupsComponent implements OnInit {
       await this.load();
     } catch (err: unknown) {
       const httpErr = err as { error?: { message?: string } };
-      void this.confirmation.alert({ title: this.translate.instant('common.error'), message: httpErr.error?.message ?? 'Backup failed', variant: 'danger' });
+      void this.confirmation.alert({ title: this.translate.instant('common.error'), message: httpErr.error?.message ?? this.translate.instant('system.backup_failed'), variant: 'danger' });
     } finally { this.creating.set(false); }
   }
 
@@ -48,7 +48,7 @@ export class SystemBackupsComponent implements OnInit {
       void this.confirmation.alert({ title: this.translate.instant('common.success'), message: this.translate.instant('system.restore_ok'), variant: 'info' });
     } catch (err: unknown) {
       const httpErr = err as { error?: { message?: string } };
-      void this.confirmation.alert({ title: this.translate.instant('common.error'), message: httpErr.error?.message ?? 'Restore failed', variant: 'danger' });
+      void this.confirmation.alert({ title: this.translate.instant('common.error'), message: httpErr.error?.message ?? this.translate.instant('system.restore_failed'), variant: 'danger' });
     }
   }
 
@@ -59,7 +59,7 @@ export class SystemBackupsComponent implements OnInit {
       await this.load();
     } catch (err: unknown) {
       const httpErr = err as { error?: { message?: string } };
-      void this.confirmation.alert({ title: this.translate.instant('common.error'), message: httpErr.error?.message ?? 'Delete failed', variant: 'danger' });
+      void this.confirmation.alert({ title: this.translate.instant('common.error'), message: httpErr.error?.message ?? this.translate.instant('system.delete_backup_failed'), variant: 'danger' });
     }
   }
 

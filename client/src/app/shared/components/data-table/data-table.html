@@ -140,7 +140,7 @@
           </tr>
         </thead>
         <tbody>
-          @for (row of rows(); track $index) {
+          @for (row of rows(); track row.id) {
             <tr>
               @if (bulkSelect()) {
                 <td>

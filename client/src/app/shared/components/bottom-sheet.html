@@ -1,0 +1,46 @@
+@if (visible()) {
+  <!-- Backdrop — CSS @starting-style handles the fade-in declaratively
+       (browser interpolates from opacity 0 on element creation), so the
+       component does not need a JS-side toggling pattern.
+       Preventing the pointerdown default keeps the tap from blurring
+       whatever opened the sheet: focus used to leave and be restored a tick
+       later, which flickered the opener's ring off and back on. -->
+  <div
+    [class]="
+      'bottom-sheet-backdrop fixed inset-0 z-[100] transition-opacity duration-150 ' +
+      (showBackdrop() ? 'bg-black/60' : '')
+    "
+    [class.opacity-0]="dismissing()"
+    (pointerdown)="$event.preventDefault()"
+    (click)="dismiss()"
+  ></div>
+  <!-- Sheet -->
+  <div
+    #sheet
+    [class]="
+      'fixed bottom-0 z-[101] bg-neutral/95 backdrop-blur-xl rounded-t-2xl shadow-2xl max-h-[70vh] overflow-y-auto portrait:left-1 portrait:right-1 landscape:right-2 landscape:w-[28rem] landscape:max-w-md landscape:rounded-2xl landscape:bottom-1 ' +
+      (rightAligned() ? 'landscape:left-auto' : 'landscape:left-2 landscape:mx-auto')
+    "
+    [class.animate-slide-up]="!dismissing()"
+    [style.transform]="sheetTransform()"
+    [style.transition]="dragging() ? 'none' : 'transform 0.18s ease-out'"
+    [style.padding-bottom]="'env(safe-area-inset-bottom)'"
+    (touchstart)="onTouchStart($event)"
+    (touchmove)="onTouchMove($event)"
+    (touchend)="onTouchEnd()"
+  >
+    <!-- Drag handle + optional title. Sticky so the title survives
+         scrolling a long option list; the 4px gap below keeps it off the
+         first item's focus ring. -->
+    <div data-sheet-handle class="sticky top-0 z-10 bg-neutral pt-3 pb-1 mb-1 cursor-grab">
+      <div class="flex justify-center">
+        <div class="w-10 h-1 rounded-full bg-white/20"></div>
+      </div>
+      @if (heading()) {
+        <div class="menu-heading px-4 text-white/60">{{ heading() }}</div>
+      }
+    </div>
+    <!-- Content -->
+    <ng-content></ng-content>
+  </div>
+}

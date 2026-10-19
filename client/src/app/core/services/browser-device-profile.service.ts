@@ -298,13 +298,6 @@ export class BrowserDeviceProfileService {
   getProfile(): DeviceProfile {
     if (!this.cachedProfile) {
       this.cachedProfile = this.buildProfile();
-      // Diagnostic: confirm the audio capabilities we'll send to the
-      // backend on every playback request. Visible in chrome://inspect or
-      // via `adb logcat -s chromium` on Capacitor Android.
-      const dp = this.cachedProfile.directPlayProfiles[0];
-      console.log(
-        `[DeviceProfile] audioCodecs=${JSON.stringify(dp?.audioCodecs)} maxAudioChannels=${this.cachedProfile.maxAudioChannels} native=${Capacitor.isNativePlatform()}`,
-      );
     }
     // Re-read mutable overrides on every call so toggling them at
     // runtime (HDR setting in the player UI, `fliks.useTs` escape

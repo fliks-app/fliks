@@ -1670,10 +1670,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const streams = this.audioStreamInfo();
     return raw.map((t, i) => {
       const parts = streams[i] ? formatAudioParts(streams[i], this.translate, i + 1) : null;
+      const fallback = t.label || this.translate.instant('player.audio_track_n', { index: i + 1 });
       return {
         id: t.id,
-        label: streams[i] ? formatAudioLabel(streams[i], this.translate, i + 1) : t.label,
-        menuHead: parts?.head ?? t.label,
+        label: streams[i] ? formatAudioLabel(streams[i], this.translate, i + 1) : fallback,
+        menuHead: parts?.head ?? fallback,
         menuSub: parts?.sub ?? '',
         language: normalizeLangCode(t.language),
         selected: !!t.selected,
@@ -3520,13 +3521,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // watchdog fires on the same tick and reloads the engine — the very
       // black-screen reload the resume path exists to avoid.
       this.resetStallWatchdog();
-      void this.resumeAfterGap(gap);
+      void this.resumeAfterGap();
     } else if (
       this.resumeDue &&
       this.network.isOnline() &&
       now - this.lastResumeAt >= this.resumeRetryMs
     ) {
-      void this.resumeAfterGap(0);
+      void this.resumeAfterGap();
     }
   }
 
@@ -3539,7 +3540,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    * then beat once, so a session that is genuinely gone is caught now instead
    * of up to 10 s later. No engine reload: the picture and the sid survive.
    */
-  private async resumeAfterGap(gapMs: number): Promise<void> {
+  private async resumeAfterGap(): Promise<void> {
     if (this.destroyed || !this.mediaFileId) return;
     if (this.castService.isConnected()) return;
     if (!this.network.isOnline()) {
@@ -3548,11 +3549,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     }
     this.resumeDue = false;
     this.lastResumeAt = Date.now();
-    if (gapMs) {
-      console.log(
-        `[Player] resuming after a ${Math.round(gapMs / 1000)}s clock gap`,
-      );
-    }
     try {
       await this.authService.ensureStreamToken();
       await this.prewarmCurrentStream();

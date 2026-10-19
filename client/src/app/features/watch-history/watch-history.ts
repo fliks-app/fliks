@@ -123,8 +123,8 @@ export class WatchHistoryComponent implements OnInit, OnDestroy {
 
   async removeItem(item: WatchHistoryItem) {
     const confirmed = await this.confirmation.confirm({
-      title: 'Retirer',
-      message: `Retirer "${item.mediaTitle}" de l'historique ?`,
+      title: this.translate.instant('history.remove'),
+      message: this.translate.instant('history.remove_confirm', { title: item.mediaTitle }),
     });
     if (!confirmed) return;
     try {

@@ -499,7 +499,8 @@
     "empty": "Kein Wiedergabeverlauf.",
     "completed": "Abgeschlossen",
     "remove": "Aus dem Verlauf entfernen",
-    "mark_watched": "Als gesehen markieren"
+    "mark_watched": "Als gesehen markieren",
+    "remove_confirm": "„{{title}}“ aus dem Verlauf entfernen?"
   },
   "admin": {
     "title": "Administration",
@@ -1502,7 +1503,10 @@
     "col_log_message": "Meldung",
     "device_mobile_app_named": "{{name}} (Mobile App)",
     "device_named": "{{name}}",
-    "device_apple_tv": "Apple TV ({{os}})"
+    "device_apple_tv": "Apple TV ({{os}})",
+    "backup_failed": "Sicherung fehlgeschlagen",
+    "restore_failed": "Wiederherstellung fehlgeschlagen",
+    "delete_backup_failed": "Löschen fehlgeschlagen"
   },
   "qoe": {
     "title": "Wiedergabequalität",
@@ -2201,7 +2205,8 @@
       "name_required": "Der Name ist erforderlich.",
       "save_error": "Speichern nicht möglich.",
       "save": "Speichern",
-      "cancel": "Abbrechen"
+      "cancel": "Abbrechen",
+      "test_failed": "Verbindungstest fehlgeschlagen"
     },
     "media_servers": {
       "title": "Medienserver",

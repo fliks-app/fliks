@@ -499,7 +499,8 @@
     "empty": "Nenhum histórico de reprodução.",
     "completed": "Concluído",
     "remove": "Remover do histórico",
-    "mark_watched": "Marcar como visto"
+    "mark_watched": "Marcar como visto",
+    "remove_confirm": "Remover «{{title}}» do histórico?"
   },
   "admin": {
     "title": "Administração",
@@ -1502,7 +1503,10 @@
     "col_log_message": "Mensagem",
     "device_mobile_app_named": "{{name}} (Aplicação móvel)",
     "device_named": "{{name}}",
-    "device_apple_tv": "Apple TV ({{os}})"
+    "device_apple_tv": "Apple TV ({{os}})",
+    "backup_failed": "Falha ao criar a cópia de segurança",
+    "restore_failed": "Falha ao restaurar",
+    "delete_backup_failed": "Falha ao eliminar"
   },
   "qoe": {
     "title": "Qualidade de reprodução",
@@ -2201,7 +2205,8 @@
       "name_required": "O nome é obrigatório.",
       "save_error": "Não foi possível guardar.",
       "save": "Guardar",
-      "cancel": "Cancelar"
+      "cancel": "Cancelar",
+      "test_failed": "Falha no teste de ligação"
     },
     "media_servers": {
       "title": "Servidores de media",

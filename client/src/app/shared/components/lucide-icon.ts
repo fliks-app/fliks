@@ -33,26 +33,7 @@ import {
     LucideStar, LucideGlobe, LucideMonitor, LucidePopcorn,
     LucideClapperboard, LucideUsers, LucideFolder, LucideSwords,
   ],
-  template: `
-    @switch (name()) {
-      @case ('film') { <svg lucideFilm></svg> }
-      @case ('tv') { <svg lucideTv></svg> }
-      @case ('layout-grid') { <svg lucideLayoutGrid></svg> }
-      @case ('book') { <svg lucideBook></svg> }
-      @case ('gamepad-2') { <svg lucideGamepad2></svg> }
-      @case ('music') { <svg lucideMusic></svg> }
-      @case ('heart') { <svg lucideHeart></svg> }
-      @case ('star') { <svg lucideStar></svg> }
-      @case ('globe') { <svg lucideGlobe></svg> }
-      @case ('monitor') { <svg lucideMonitor></svg> }
-      @case ('popcorn') { <svg lucidePopcorn></svg> }
-      @case ('clapperboard') { <svg lucideClapperboard></svg> }
-      @case ('users') { <svg lucideUsers></svg> }
-      @case ('folder') { <svg lucideFolder></svg> }
-      @case ('swords') { <svg lucideSwords></svg> }
-      @default { <svg lucideLibrary></svg> }
-    }
-  `,
+  templateUrl: './lucide-icon.html',
   styles: [`:host { display: inline-flex; } svg { width: 100%; height: 100%; }`],
 })
 export class LucideIconComponent {

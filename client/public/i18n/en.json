@@ -499,7 +499,8 @@
     "empty": "No playback history.",
     "completed": "Completed",
     "remove": "Remove from history",
-    "mark_watched": "Mark as watched"
+    "mark_watched": "Mark as watched",
+    "remove_confirm": "Remove \"{{title}}\" from the history?"
   },
   "admin": {
     "title": "Administration",
@@ -1502,7 +1503,10 @@
     "col_log_message": "Message",
     "device_mobile_app_named": "{{name}} (Mobile app)",
     "device_named": "{{name}}",
-    "device_apple_tv": "Apple TV ({{os}})"
+    "device_apple_tv": "Apple TV ({{os}})",
+    "backup_failed": "Backup failed",
+    "restore_failed": "Restore failed",
+    "delete_backup_failed": "Delete failed"
   },
   "qoe": {
     "title": "Playback quality",
@@ -2201,7 +2205,8 @@
       "name_required": "The name is required.",
       "save_error": "Unable to save.",
       "save": "Save",
-      "cancel": "Cancel"
+      "cancel": "Cancel",
+      "test_failed": "Connection test failed"
     },
     "media_servers": {
       "title": "Media servers",
