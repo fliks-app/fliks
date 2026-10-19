@@ -104,7 +104,11 @@
       "discard_title": "Verschiebung verwerfen?",
       "discard_message": "Die an dieser Spur vorgenommene Zeitverschiebung wurde nicht gespeichert.",
       "discard": "Verwerfen",
-      "timeline_label": "Untertitel-Zeitleiste: Hoch und Runter verschieben das Timing um 100 ms"
+      "timeline_label": "Untertitel-Zeitleiste: Hoch und Runter verschieben das Timing um 100 ms",
+      "syncing": "Synchronisierung läuft…",
+      "cancel_sync": "Abbrechen",
+      "adjust_hint": "OK drücken zum Anpassen",
+      "adjusting_hint": "Esc oder Zurück drücken zum Beenden"
     },
     "subtitle_position_top": "Position oben",
     "audio": "Audio",
@@ -1226,6 +1230,8 @@
     "post_process_success": "Verarbeitung erfolgreich angewendet.",
     "blacklist_success": "Untertitel auf Blacklist gesetzt und gelöscht.",
     "sync_started": "Synchronisierung läuft...",
+    "sync_processing": "Synchronisierung läuft",
+    "action_cancel_sync": "Synchronisierung abbrechen",
     "sync_success": "Untertitel erfolgreich synchronisiert.",
     "col_sub_title": "Titel",
     "search": "Suchen",

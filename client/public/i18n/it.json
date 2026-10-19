@@ -104,7 +104,11 @@
       "discard_title": "Scartare lo scostamento?",
       "discard_message": "La modifica dei tempi di questa traccia non è stata salvata.",
       "discard": "Scarta",
-      "timeline_label": "Timeline dei sottotitoli: Su e Giù spostano i tempi di 100 ms"
+      "timeline_label": "Timeline dei sottotitoli: Su e Giù spostano i tempi di 100 ms",
+      "syncing": "Sincronizzazione in corso…",
+      "cancel_sync": "Annulla",
+      "adjust_hint": "Premi OK per regolare",
+      "adjusting_hint": "Premi Esc o Indietro per terminare"
     },
     "subtitle_position_top": "Posizione in alto",
     "audio": "Audio",
@@ -1226,6 +1230,8 @@
     "post_process_success": "Elaborazione applicata con successo.",
     "blacklist_success": "Sottotitolo aggiunto alla blacklist ed eliminato.",
     "sync_started": "Sincronizzazione in corso...",
+    "sync_processing": "Sincronizzazione in corso",
+    "action_cancel_sync": "Annulla la sincronizzazione",
     "sync_success": "Sottotitolo sincronizzato con successo.",
     "col_sub_title": "Titolo",
     "search": "Cerca",

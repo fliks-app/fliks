@@ -104,7 +104,11 @@
       "discard_title": "Abandonner le décalage ?",
       "discard_message": "Le décalage appliqué à cette piste n'a pas été enregistré.",
       "discard": "Abandonner",
-      "timeline_label": "Chronologie des sous-titres : Haut et Bas décalent le timing de 100 ms"
+      "timeline_label": "Chronologie des sous-titres : Haut et Bas décalent le timing de 100 ms",
+      "syncing": "Synchronisation en cours…",
+      "cancel_sync": "Annuler",
+      "adjust_hint": "Appuyez sur OK pour ajuster",
+      "adjusting_hint": "Appuyez sur Échap ou Retour pour terminer"
     },
     "subtitle_position_top": "Position haute",
     "audio": "Audio",
@@ -1226,6 +1230,8 @@
     "post_process_success": "Traitement appliqué avec succès.",
     "blacklist_success": "Sous-titre blacklisté et supprimé.",
     "sync_started": "Synchronisation en cours...",
+    "sync_processing": "Synchronisation en cours",
+    "action_cancel_sync": "Annuler la synchronisation",
     "sync_success": "Sous-titre synchronisé avec succès.",
     "col_sub_title": "Titre",
     "search": "Rechercher",

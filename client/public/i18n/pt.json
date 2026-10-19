@@ -104,7 +104,11 @@
       "discard_title": "Descartar o desvio?",
       "discard_message": "O ajuste de tempo desta faixa não foi guardado.",
       "discard": "Descartar",
-      "timeline_label": "Linha do tempo das legendas: Cima e Baixo deslocam o tempo 100 ms"
+      "timeline_label": "Linha do tempo das legendas: Cima e Baixo deslocam o tempo 100 ms",
+      "syncing": "Sincronização em curso…",
+      "cancel_sync": "Cancelar",
+      "adjust_hint": "Prima OK para ajustar",
+      "adjusting_hint": "Prima Esc ou Voltar para terminar"
     },
     "subtitle_position_top": "Posição superior",
     "audio": "Áudio",
@@ -1226,6 +1230,8 @@
     "post_process_success": "Processamento aplicado com sucesso.",
     "blacklist_success": "Legenda adicionada à blacklist e eliminada.",
     "sync_started": "Sincronização em curso...",
+    "sync_processing": "Sincronização em curso",
+    "action_cancel_sync": "Cancelar a sincronização",
     "sync_success": "Legenda sincronizada com sucesso.",
     "col_sub_title": "Título",
     "search": "Pesquisar",

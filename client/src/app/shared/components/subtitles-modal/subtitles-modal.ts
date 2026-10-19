@@ -155,6 +155,10 @@ export class SubtitlesModalComponent {
     void this.viewer()?.open(formatSubtitleLabel(this.withStreamInfo(sub), this.translate), url);
   }
 
+  protected isSyncing(sub: SubtitleFileRow): boolean {
+    return this.subActions.syncing().has(sub.id);
+  }
+
   /** Every present subtitle row has at least one action or an informational
    *  note (external → full menu, image track → OCR/burn-in note, embedded text
    *  → translate), so the Actions menu is always offered. */
@@ -166,6 +170,16 @@ export class SubtitlesModalComponent {
    *  actions panel: it renders the anchored dropdown on desktop and the sheet
    *  (submenus swapping in place) on touch and TV. */
   private buildSubActions(sub: SubtitleFileRow): CardAction[] {
+    if (this.isSyncing(sub)) {
+      return [
+        {
+          labelKey: 'media_detail.action_cancel_sync',
+          icon: 'ban',
+          tone: 'warning',
+          run: () => void this.subActions.cancelSync(this.mediaId(), sub.id),
+        },
+      ];
+    }
     // No cancel endpoint exists: Delete is the only way out of a stuck run, and it
     // doubles as the retry path since the row is the run's own marker.
     if (sub.status === 'processing') {
@@ -681,6 +695,7 @@ export class SubtitlesModalComponent {
     // Spinner for an empty list only; read untracked so the effects calling this don't depend
     // on the list they are about to replace.
     this.subtitlesLoading.set(untracked(() => this.filteredSubtitles().length === 0));
+    void this.subActions.refreshSyncing();
     try {
       this.subtitles.set(await this.subtitlesApi.getForMedia(mediaId, { force: true }));
       // Drop progress entries for translations that finished/failed so the map

@@ -159,6 +159,8 @@ export class SseService implements OnDestroy {
   readonly subtitleSynced = new Subject<number>();
   /** A subtitle sync that the server gave up on. */
   readonly subtitleSyncFailed = new Subject<{ subtitleId: number; error: string }>();
+  /** Id of a subtitle whose running or queued sync was cancelled. */
+  readonly subtitleSyncCancelled = new Subject<number>();
   /** A target leaving its player. A transient fact, so it cannot ride on
    *  `lastEvent`: the same handler emits `remote.targets_changed` right after
    *  it, which replaced the value before any effect had run. */
@@ -433,6 +435,9 @@ export class SseService implements OnDestroy {
       case 'subtitle.sync_failed':
         void invalidatePrefix('/api/media');
         this.subtitleSyncFailed.next({ subtitleId: Number(event['subtitleId']), error: String(event['error'] ?? '') });
+        break;
+      case 'subtitle.sync_cancelled':
+        this.subtitleSyncCancelled.next(Number(event['subtitleId']));
         break;
       case 'subtitle.synced':
       case 'subtitle.downloaded':

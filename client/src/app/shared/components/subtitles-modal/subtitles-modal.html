@@ -150,6 +150,12 @@
                           </span>
                         }
                       }
+                      @if (isSyncing(sub)) {
+                        <span class="badge badge-sm badge-warning gap-1">
+                          <span class="loading loading-spinner loading-xs"></span>
+                          {{ 'media_detail.sync_processing' | translate }}
+                        </span>
+                      }
                       @if (sub.status === 'failed') {
                         <app-error-badge
                           class="mr-1"

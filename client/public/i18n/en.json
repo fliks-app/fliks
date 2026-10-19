@@ -104,7 +104,11 @@
       "discard_title": "Discard the offset?",
       "discard_message": "The timing change you made on this track has not been saved.",
       "discard": "Discard",
-      "timeline_label": "Subtitle timeline: Up and Down shift the timing by 100 ms"
+      "timeline_label": "Subtitle timeline: Up and Down shift the timing by 100 ms",
+      "syncing": "Synchronizing…",
+      "cancel_sync": "Cancel",
+      "adjust_hint": "Press OK to adjust",
+      "adjusting_hint": "Press Esc or Back when done"
     },
     "subtitle_position_top": "Top position",
     "audio": "Audio",
@@ -1226,6 +1230,8 @@
     "post_process_success": "Processing applied successfully.",
     "blacklist_success": "Subtitle blacklisted and deleted.",
     "sync_started": "Sync in progress...",
+    "sync_processing": "Sync in progress",
+    "action_cancel_sync": "Cancel sync",
     "sync_success": "Subtitle synced successfully.",
     "col_sub_title": "Title",
     "search": "Search",
