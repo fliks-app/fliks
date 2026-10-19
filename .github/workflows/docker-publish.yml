@@ -100,11 +100,10 @@ jobs:
             TMDB_API_KEY=${{ secrets.TMDB_API_KEY }}
             TVDB_API_KEY=${{ secrets.TVDB_API_KEY }}
             ${{ github.event.inputs.engine_image && format('ENGINE_IMAGE={0}', github.event.inputs.engine_image) || '' }}
-          # Per-platform cache scope: amd64 and arm64 caches never share
-          # layers (different base manifest + apt arch), so a single
-          # `gha` scope just causes cross-eviction.
-          cache-from: type=gha,scope=${{ steps.sanitize.outputs.tag }}
-          cache-to: type=gha,mode=max,scope=${{ steps.sanitize.outputs.tag }}
+          # In the registry, not `gha`: the layers (compiled Rust dependencies included) would
+          # take half the repository's 10 GB Actions cache. Ad-hoc builds read it, never replace it.
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache-${{ steps.sanitize.outputs.tag }}
+          cache-to: ${{ github.event_name != 'workflow_dispatch' && format('type=registry,ref={0}/{1}:buildcache-{2},mode=max,image-manifest=true', env.REGISTRY, env.IMAGE_NAME, steps.sanitize.outputs.tag) || '' }}
 
       - name: Export digest
         run: |
