@@ -170,6 +170,15 @@ pub async fn library_exists(db: &PgPool, id: i32) -> sqlx::Result<bool> {
     .await
 }
 
+/// Serialises the duplicate check and the insert of one title's ADD requests until the transaction ends.
+pub async fn lock_title(tx: &mut PgConnection, tmdb_id: i32, media_type: &str) -> sqlx::Result<()> {
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtext($1))")
+        .bind(format!("requests:{media_type}:{tmdb_id}"))
+        .execute(tx)
+        .await?;
+    Ok(())
+}
+
 pub struct New<'a> {
     pub user_id: i32,
     pub kind: &'a str,
@@ -187,7 +196,7 @@ pub struct New<'a> {
     pub fanart_url: Option<&'a str>,
 }
 
-pub async fn insert(db: &PgPool, n: New<'_>) -> sqlx::Result<i32> {
+pub async fn insert(db: impl PgExecutor<'_>, n: New<'_>) -> sqlx::Result<i32> {
     sqlx::query_scalar!(
         r#"INSERT INTO requests ("userId", kind, "mediaType", "tmdbId", title, seasons, status,
         "approvedById", "qualityProfileId", "languageProfileId", "libraryId", "mediaId", "posterUrl", "fanartUrl")

@@ -583,6 +583,25 @@ async fn duplicates_series_seasons_and_profile_lock(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
+async fn concurrent_creates_of_one_title_leave_a_single_active_request(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (a, b, d, e) = tokio::join!(
+        call(&c, "POST", "/api/requests", &c.user, movie(90)),
+        call(&c, "POST", "/api/requests", &c.other, movie(90)),
+        call(&c, "POST", "/api/requests", &c.admin, movie(90)),
+        call(&c, "POST", "/api/requests", &c.user, movie(90)),
+    );
+    let codes = [a.0, b.0, d.0, e.0];
+    assert_eq!(codes.iter().filter(|s| **s == 201).count(), 1, "{codes:?}");
+    assert!(codes.iter().all(|s| matches!(s, 201 | 409)), "{codes:?}");
+    let rows: i64 = sqlx::query_scalar(r#"SELECT count(*) FROM requests WHERE "tmdbId" = 90"#)
+        .fetch_one(&c.pool())
+        .await
+        .unwrap();
+    assert_eq!(rows, 1);
+}
+
+#[sqlx::test(migrations = false)]
 async fn title_state_and_the_add_path_ignore_delete_rows(pool: PgPool) {
     let c = ctx(pool).await;
     q(

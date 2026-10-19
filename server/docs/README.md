@@ -246,6 +246,7 @@ A 500 or a half-written request is never part of the frozen contract:
 | C158 | the macOS and Windows bundles wrote Nest's output to `logs/backend-<date>.log` | `logs/server-<date>.log` holds the engine and `fliks-server` output; old files are left in place |
 | C159 | `/internal/**` answered Nest's `Cannot <METHOD>` 404 even with a client dir (strangler bridges) | no `/internal` route: it falls to the SPA fallback like any unknown non-`/api` path (the `Cannot` 404 when no client dir is set) |
 | C160 | `runDetection` released the season and dropped its activity row only after the final `commands` update and `command.completed`, so a retry on that signal could get 400 `Detection already running` | both happen as soon as the detection settles, before the `commands` update and the events |
+| C161 | two concurrent `POST /api/requests` of one title both passed the duplicate guard (read, then insert) and both created an active ADD request | the guard and the insert run in one transaction under a per-title advisory lock; the loser is the usual 409 (`requests.md` rule 12) |
 
 Frozen as is (decided): the heartbeat keeps its debounce entry after a failed history write and returns
 `sessionLost: false` when the engine session lives but presence cannot be rebuilt. Lists whose order comes
