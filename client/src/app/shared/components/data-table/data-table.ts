@@ -533,13 +533,7 @@ export class DataTableComponent implements OnInit {
   ): Promise<boolean> {
     let url = path;
     if (confirmKey && toggle) {
-      const { ok, toggle: checked } = await this.confirmation.confirmWithToggle({
-        title: this.translate.instant('common.confirm'),
-        message: this.translate.instant(confirmKey),
-        variant: 'danger',
-        toggleLabel: this.translate.instant(toggle.labelKey),
-        ...(toggle.hintKey ? { toggleHint: this.translate.instant(toggle.hintKey) } : {}),
-      });
+      const { ok, toggle: checked } = await this.confirmWithToggle(confirmKey, toggle);
       if (!ok) return false;
       url = `${path}${path.includes('?') ? '&' : '?'}${toggle.param}=${checked}`;
     } else if (confirmKey) {
@@ -554,6 +548,36 @@ export class DataTableComponent implements OnInit {
     return true;
   }
 
+  /** The toggle's last confirmed answer is remembered per label, so a choice made once sticks. */
+  private async confirmWithToggle(
+    confirmKey: string,
+    toggle: { labelKey: string; param: string; hintKey?: string },
+  ): Promise<{ ok: boolean; toggle: boolean }> {
+    const key = `confirmToggle.${toggle.labelKey}`;
+    let stored: string | null = null;
+    try {
+      stored = localStorage.getItem(key);
+    } catch {
+      /* storage unavailable: dialog falls back to its default */
+    }
+    const result = await this.confirmation.confirmWithToggle({
+      title: this.translate.instant('common.confirm'),
+      message: this.translate.instant(confirmKey),
+      variant: 'danger',
+      toggleLabel: this.translate.instant(toggle.labelKey),
+      ...(toggle.hintKey ? { toggleHint: this.translate.instant(toggle.hintKey) } : {}),
+      ...(stored !== null ? { toggleDefault: stored === 'true' } : {}),
+    });
+    if (result.ok) {
+      try {
+        localStorage.setItem(key, String(result.toggle));
+      } catch {
+        /* not persisted; the action still runs */
+      }
+    }
+    return result;
+  }
+
   /** One confirmation for a whole batch rather than one per row, mirroring `runHttpAction`'s own
    *  confirm+toggle contract. Kept separate (not shared code) so a single row's action keeps
    *  firing its request in the same microtask as a declined-confirm-free click always has. */
@@ -563,13 +587,7 @@ export class DataTableComponent implements OnInit {
   ): Promise<{ ok: boolean; toggleSuffix: string }> {
     if (!confirmKey) return { ok: true, toggleSuffix: '' };
     if (toggle) {
-      const { ok, toggle: checked } = await this.confirmation.confirmWithToggle({
-        title: this.translate.instant('common.confirm'),
-        message: this.translate.instant(confirmKey),
-        variant: 'danger',
-        toggleLabel: this.translate.instant(toggle.labelKey),
-        ...(toggle.hintKey ? { toggleHint: this.translate.instant(toggle.hintKey) } : {}),
-      });
+      const { ok, toggle: checked } = await this.confirmWithToggle(confirmKey, toggle);
       return { ok, toggleSuffix: ok ? `${toggle.param}=${checked}` : '' };
     }
     const ok = await this.confirmation.confirm({
