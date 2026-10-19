@@ -10,3 +10,13 @@ export const trailerPlaysInline =
 export function openTrailerExternally(key: string): void {
   window.open(`https://www.youtube.com/watch?v=${key}`, '_blank', 'noopener');
 }
+
+/** The YouTube key to play: a Trailer, else a Teaser, else any YouTube video. */
+export function bestTrailerKey(
+  videos: readonly { key: string; site: string; type: string }[] | null | undefined,
+): string | null {
+  const youtube = (videos ?? []).filter((v) => v.site === 'YouTube');
+  const pick =
+    youtube.find((v) => v.type === 'Trailer') ?? youtube.find((v) => v.type === 'Teaser') ?? youtube[0];
+  return pick?.key ?? null;
+}

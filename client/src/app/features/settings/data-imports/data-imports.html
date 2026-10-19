@@ -186,498 +186,259 @@
     </section>
 
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <!-- Radarr -->
-      <section class="card bg-base-200/60 border border-base-200">
-        <div class="card-body gap-4">
-          <div>
-            <h2 class="card-title text-lg">{{ 'import.radarr_title' | translate }}</h2>
-            <p class="text-sm text-base-content/60 mt-1">{{ 'import.radarr_desc' | translate }}</p>
-          </div>
-
-          <label class="form-control w-full">
-            <span class="label-text">{{ 'import.url_label' | translate }}</span>
-            <input
-              type="url"
-              class="input input-bordered input-sm w-full"
-              [placeholder]="'import.radarr_url_placeholder' | translate"
-              [ngModel]="radarrUrl()"
-              (ngModelChange)="radarrUrl.set($event)"
-            />
-          </label>
-
-          <label class="form-control w-full">
-            <span class="label-text">{{ 'import.api_key_label' | translate }}</span>
-            <input
-              type="password"
-              class="input input-bordered input-sm w-full"
-              [placeholder]="keyStored('radarr') && !keyCleared('radarr') && !radarrApiKey() ? secretMask : ('import.api_key_placeholder' | translate)"
-              [ngModel]="radarrApiKey()"
-              (ngModelChange)="onKeyInput('radarr', $event)"
-            />
-          <ng-container *ngTemplateOutlet="keyActions; context: { $implicit: 'radarr' }" />
-          </label>
-
-          <label class="form-control w-full">
-            <span class="label-text">{{ 'import.mode_label' | translate }}</span>
-            <select
-    appTvSelect
-              class="select select-bordered select-sm w-full"
-              [ngModel]="radarrMode()"
-              (ngModelChange)="radarrMode.set($event)"
-            >
-              <option value="skip">{{ 'import.mode_skip' | translate }}</option>
-              <option value="update">{{ 'import.mode_update' | translate }}</option>
-            </select>
-          </label>
-
-          <label class="label cursor-pointer justify-start gap-3">
-            <input
-              type="checkbox"
-              class="toggle toggle-sm"
-              [ngModel]="radarrImportSubs()"
-              (ngModelChange)="radarrImportSubs.set($event)"
-            />
-            <span class="label-text">{{ 'import.import_subtitles' | translate }}</span>
-          </label>
-
-          <label class="form-control w-full">
-            <span class="label-text">{{ 'settings.libraries.import_target' | translate }}</span>
-            <select
-    appTvSelect
-              class="select select-bordered select-sm w-full"
-              [ngModel]="radarrLibrary()"
-              (ngModelChange)="radarrLibrary.set($event)"
-              required
-            >
-              <option [ngValue]="null" disabled>
-                {{ 'settings.libraries.import_target_placeholder' | translate }}
-              </option>
-              @for (l of movieLibraries(); track l.id) {
-                <option [ngValue]="l.id">{{ l.name }}</option>
-              }
-            </select>
-          </label>
-
-          <div class="flex flex-wrap gap-2 pt-2">
-            <button
-              type="button"
-              class="btn btn-outline btn-sm"
-              [disabled]="!canSaveRadarr || radarrSaving()"
-              (click)="saveRadarrCredentials()"
-            >
-              @if (radarrSaving()) {
-                <span class="loading loading-spinner loading-xs"></span>
-              }
-              {{ 'common.save' | translate }}
-            </button>
-
-            <button
-              type="button"
-              class="btn btn-outline btn-sm"
-              [disabled]="!canSubmitRadarr || radarrTesting()"
-              (click)="testRadarr()"
-            >
-              @if (radarrTesting()) {
-                <span class="loading loading-spinner loading-xs"></span>
-              }
-              {{ 'settings.data_imports.test' | translate }}
-            </button>
-
-            <button
-              type="button"
-              class="btn btn-primary btn-sm"
-              [disabled]="radarrLoading() || radarrPreviewing() || !canImportRadarr"
-              (click)="openRadarrWizard()"
-            >
-              @if (radarrLoading() || radarrPreviewing()) {
-                <span class="loading loading-spinner loading-xs"></span>
-              } @else {
-                <svg lucideDownload class="h-4 w-4"></svg>
-              }
-              {{ 'import.continue_btn' | translate }}
-            </button>
-          </div>
-
-          @if (radarrTestResult(); as tr) {
-            <div
-              role="alert"
-              class="alert text-sm py-2"
-              [class.alert-success]="tr.ok"
-              [class.alert-error]="!tr.ok"
-            >
-              {{ tr.message }}
+      @for (card of arrCards; track card.provider) {
+        @let p = card.provider;
+        @let st = arr[p];
+        <section class="card bg-base-200/60 border border-base-200">
+          <div class="card-body gap-4">
+            <div>
+              <h2 class="card-title text-lg">{{ card.titleKey | translate }}</h2>
+              <p class="text-sm text-base-content/60 mt-1">{{ card.descKey | translate }}</p>
             </div>
-          }
 
-          @if (radarrError()) {
-            <div role="alert" class="alert alert-error text-sm">{{ radarrError() }}</div>
-          }
+            <label class="form-control w-full">
+              <span class="label-text">{{ 'import.url_label' | translate }}</span>
+              <input
+                type="url"
+                class="input input-bordered input-sm w-full"
+                [placeholder]="card.urlPlaceholderKey | translate"
+                [ngModel]="st.url()"
+                (ngModelChange)="st.url.set($event)"
+              />
+            </label>
 
-          @if (radarrResult(); as r) {
-            <div
-              role="alert"
-              class="alert text-sm"
-              [class.alert-success]="r.errors.length === 0"
-              [class.alert-warning]="r.errors.length > 0"
-            >
-              <div>
-                <p>{{ 'import.result_imported' | translate: { count: r.imported } }}</p>
-                @if (r.subtitlesImported) {
-                  <p class="mt-1">
-                    {{ 'import.result_subtitles' | translate: { count: r.subtitlesImported } }}
-                  </p>
+            <label class="form-control w-full">
+              <span class="label-text">{{ 'import.api_key_label' | translate }}</span>
+              <input
+                type="password"
+                class="input input-bordered input-sm w-full"
+                [placeholder]="keyStored(p) && !keyCleared(p) && !st.apiKey() ? secretMask : ('import.api_key_placeholder' | translate)"
+                [ngModel]="st.apiKey()"
+                (ngModelChange)="onKeyInput(p, $event)"
+              />
+            <ng-container *ngTemplateOutlet="keyActions; context: { $implicit: p }" />
+            </label>
+
+            <label class="form-control w-full">
+              <span class="label-text">{{ 'import.mode_label' | translate }}</span>
+              <select
+      appTvSelect
+                class="select select-bordered select-sm w-full"
+                [ngModel]="st.mode()"
+                (ngModelChange)="st.mode.set($event)"
+              >
+                <option value="skip">{{ 'import.mode_skip' | translate }}</option>
+                <option value="update">{{ 'import.mode_update' | translate }}</option>
+              </select>
+            </label>
+
+            <label class="label cursor-pointer justify-start gap-3">
+              <input
+                type="checkbox"
+                class="toggle toggle-sm"
+                [ngModel]="st.importSubs()"
+                (ngModelChange)="st.importSubs.set($event)"
+              />
+              <span class="label-text">{{ 'import.import_subtitles' | translate }}</span>
+            </label>
+
+            <label class="form-control w-full">
+              <span class="label-text">{{ 'settings.libraries.import_target' | translate }}</span>
+              <select
+      appTvSelect
+                class="select select-bordered select-sm w-full"
+                [ngModel]="st.library()"
+                (ngModelChange)="st.library.set($event)"
+                required
+              >
+                <option [ngValue]="null" disabled>
+                  {{ 'settings.libraries.import_target_placeholder' | translate }}
+                </option>
+                @for (l of card.libraries(); track l.id) {
+                  <option [ngValue]="l.id">{{ l.name }}</option>
                 }
-                @if (r.qualityProfilesCreated.length) {
-                  <p class="mt-1">
-                    {{
-                      'import.quality_profiles_created'
-                        | translate: { count: r.qualityProfilesCreated.length }
-                    }}: {{ r.qualityProfilesCreated.join(', ') }}
-                  </p>
+              </select>
+            </label>
+
+            <div class="flex flex-wrap gap-2 pt-2">
+              <button
+                type="button"
+                class="btn btn-outline btn-sm"
+                [disabled]="!arrCanSave(p) || st.saving()"
+                (click)="saveArrCredentials(p)"
+              >
+                @if (st.saving()) {
+                  <span class="loading loading-spinner loading-xs"></span>
                 }
-                @if (r.rootFoldersCreated.length) {
-                  <p class="mt-1">
-                    {{
-                      'import.root_folders_created'
-                        | translate: { count: r.rootFoldersCreated.length }
-                    }}: {{ r.rootFoldersCreated.join(', ') }}
-                  </p>
+                {{ 'common.save' | translate }}
+              </button>
+
+              <button
+                type="button"
+                class="btn btn-outline btn-sm"
+                [disabled]="!arrCanSubmit(p) || st.testing()"
+                (click)="testArr(p)"
+              >
+                @if (st.testing()) {
+                  <span class="loading loading-spinner loading-xs"></span>
                 }
-                @if (r.errors.length) {
-                  <p class="mt-1">
-                    {{ r.errors.length }} {{ 'import.result_errors' | translate }}:
-                    {{ r.errors.slice(0, 5).join(', ') }}
-                  </p>
+                {{ 'settings.data_imports.test' | translate }}
+              </button>
+
+              <button
+                type="button"
+                class="btn btn-primary btn-sm"
+                [disabled]="st.loading() || st.previewing() || !arrCanImport(p)"
+                (click)="openWizard(p)"
+              >
+                @if (st.loading() || st.previewing()) {
+                  <span class="loading loading-spinner loading-xs"></span>
+                } @else {
+                  <svg lucideDownload class="h-4 w-4"></svg>
                 }
+                {{ 'import.continue_btn' | translate }}
+              </button>
+            </div>
+
+            @if (st.testResult(); as tr) {
+              <div
+                role="alert"
+                class="alert text-sm py-2"
+                [class.alert-success]="tr.ok"
+                [class.alert-error]="!tr.ok"
+              >
+                {{ tr.message }}
               </div>
-            </div>
-          }
-        </div>
-      </section>
+            }
 
-      <!-- Sonarr -->
-      <section class="card bg-base-200/60 border border-base-200">
-        <div class="card-body gap-4">
-          <div>
-            <h2 class="card-title text-lg">{{ 'import.sonarr_title' | translate }}</h2>
-            <p class="text-sm text-base-content/60 mt-1">{{ 'import.sonarr_desc' | translate }}</p>
-          </div>
+            @if (st.error()) {
+              <div role="alert" class="alert alert-error text-sm">{{ st.error() }}</div>
+            }
 
-          <label class="form-control w-full">
-            <span class="label-text">{{ 'import.url_label' | translate }}</span>
-            <input
-              type="url"
-              class="input input-bordered input-sm w-full"
-              [placeholder]="'import.sonarr_url_placeholder' | translate"
-              [ngModel]="sonarrUrl()"
-              (ngModelChange)="sonarrUrl.set($event)"
-            />
-          </label>
-
-          <label class="form-control w-full">
-            <span class="label-text">{{ 'import.api_key_label' | translate }}</span>
-            <input
-              type="password"
-              class="input input-bordered input-sm w-full"
-              [placeholder]="keyStored('sonarr') && !keyCleared('sonarr') && !sonarrApiKey() ? secretMask : ('import.api_key_placeholder' | translate)"
-              [ngModel]="sonarrApiKey()"
-              (ngModelChange)="onKeyInput('sonarr', $event)"
-            />
-          <ng-container *ngTemplateOutlet="keyActions; context: { $implicit: 'sonarr' }" />
-          </label>
-
-          <label class="form-control w-full">
-            <span class="label-text">{{ 'import.mode_label' | translate }}</span>
-            <select
-    appTvSelect
-              class="select select-bordered select-sm w-full"
-              [ngModel]="sonarrMode()"
-              (ngModelChange)="sonarrMode.set($event)"
-            >
-              <option value="skip">{{ 'import.mode_skip' | translate }}</option>
-              <option value="update">{{ 'import.mode_update' | translate }}</option>
-            </select>
-          </label>
-
-          <label class="label cursor-pointer justify-start gap-3">
-            <input
-              type="checkbox"
-              class="toggle toggle-sm"
-              [ngModel]="sonarrImportSubs()"
-              (ngModelChange)="sonarrImportSubs.set($event)"
-            />
-            <span class="label-text">{{ 'import.import_subtitles' | translate }}</span>
-          </label>
-
-          <label class="form-control w-full">
-            <span class="label-text">{{ 'settings.libraries.import_target' | translate }}</span>
-            <select
-    appTvSelect
-              class="select select-bordered select-sm w-full"
-              [ngModel]="sonarrLibrary()"
-              (ngModelChange)="sonarrLibrary.set($event)"
-              required
-            >
-              <option [ngValue]="null" disabled>
-                {{ 'settings.libraries.import_target_placeholder' | translate }}
-              </option>
-              @for (l of seriesLibraries(); track l.id) {
-                <option [ngValue]="l.id">{{ l.name }}</option>
-              }
-            </select>
-          </label>
-
-          <div class="flex flex-wrap gap-2 pt-2">
-            <button
-              type="button"
-              class="btn btn-outline btn-sm"
-              [disabled]="!canSaveSonarr || sonarrSaving()"
-              (click)="saveSonarrCredentials()"
-            >
-              @if (sonarrSaving()) {
-                <span class="loading loading-spinner loading-xs"></span>
-              }
-              {{ 'common.save' | translate }}
-            </button>
-
-            <button
-              type="button"
-              class="btn btn-outline btn-sm"
-              [disabled]="!canSubmitSonarr || sonarrTesting()"
-              (click)="testSonarr()"
-            >
-              @if (sonarrTesting()) {
-                <span class="loading loading-spinner loading-xs"></span>
-              }
-              {{ 'settings.data_imports.test' | translate }}
-            </button>
-
-            <button
-              type="button"
-              class="btn btn-primary btn-sm"
-              [disabled]="sonarrLoading() || sonarrPreviewing() || !canImportSonarr"
-              (click)="openSonarrWizard()"
-            >
-              @if (sonarrLoading() || sonarrPreviewing()) {
-                <span class="loading loading-spinner loading-xs"></span>
-              } @else {
-                <svg lucideDownload class="h-4 w-4"></svg>
-              }
-              {{ 'import.continue_btn' | translate }}
-            </button>
-          </div>
-
-          @if (sonarrTestResult(); as tr) {
-            <div
-              role="alert"
-              class="alert text-sm py-2"
-              [class.alert-success]="tr.ok"
-              [class.alert-error]="!tr.ok"
-            >
-              {{ tr.message }}
-            </div>
-          }
-
-          @if (sonarrError()) {
-            <div role="alert" class="alert alert-error text-sm">{{ sonarrError() }}</div>
-          }
-
-          @if (sonarrResult(); as r) {
-            <div
-              role="alert"
-              class="alert text-sm"
-              [class.alert-success]="r.errors.length === 0"
-              [class.alert-warning]="r.errors.length > 0"
-            >
-              <div>
-                <p>{{ 'import.result_imported' | translate: { count: r.imported } }}</p>
-                @if (r.subtitlesImported) {
-                  <p class="mt-1">
-                    {{ 'import.result_subtitles' | translate: { count: r.subtitlesImported } }}
-                  </p>
-                }
-                @if (r.qualityProfilesCreated.length) {
-                  <p class="mt-1">
-                    {{
-                      'import.quality_profiles_created'
-                        | translate: { count: r.qualityProfilesCreated.length }
-                    }}: {{ r.qualityProfilesCreated.join(', ') }}
-                  </p>
-                }
-                @if (r.rootFoldersCreated.length) {
-                  <p class="mt-1">
-                    {{
-                      'import.root_folders_created'
-                        | translate: { count: r.rootFoldersCreated.length }
-                    }}: {{ r.rootFoldersCreated.join(', ') }}
-                  </p>
-                }
-                @if (r.errors.length) {
-                  <p class="mt-1">
-                    {{ r.errors.length }} {{ 'import.result_errors' | translate }}:
-                    {{ r.errors.slice(0, 5).join(', ') }}
-                  </p>
-                }
+            @if (st.result(); as r) {
+              <div
+                role="alert"
+                class="alert text-sm"
+                [class.alert-success]="r.errors.length === 0"
+                [class.alert-warning]="r.errors.length > 0"
+              >
+                <div>
+                  <p>{{ 'import.result_imported' | translate: { count: r.imported } }}</p>
+                  @if (r.subtitlesImported) {
+                    <p class="mt-1">
+                      {{ 'import.result_subtitles' | translate: { count: r.subtitlesImported } }}
+                    </p>
+                  }
+                  @if (r.qualityProfilesCreated.length) {
+                    <p class="mt-1">
+                      {{
+                        'import.quality_profiles_created'
+                          | translate: { count: r.qualityProfilesCreated.length }
+                      }}: {{ r.qualityProfilesCreated.join(', ') }}
+                    </p>
+                  }
+                  @if (r.rootFoldersCreated.length) {
+                    <p class="mt-1">
+                      {{
+                        'import.root_folders_created'
+                          | translate: { count: r.rootFoldersCreated.length }
+                      }}: {{ r.rootFoldersCreated.join(', ') }}
+                    </p>
+                  }
+                  @if (r.errors.length) {
+                    <p class="mt-1">
+                      {{ r.errors.length }} {{ 'import.result_errors' | translate }}:
+                      {{ r.errors.slice(0, 5).join(', ') }}
+                    </p>
+                  }
+                </div>
               </div>
-            </div>
-          }
-        </div>
-      </section>
+            }
+          </div>
+        </section>
+      }
     </div>
   }
 
   <!-- Path mapping wizards (one per provider). Rendered outside the cards so
        the modal backdrop covers the whole page. -->
-  @if (radarrShowWizard()) {
-    <div class="modal modal-open">
-      <div class="modal-box max-w-2xl">
-        <app-modal-header (closed)="cancelWizard('radarr')">
-          <div>
-            <h3 class="text-lg font-bold">{{ 'import.path_wizard.title' | translate }}</h3>
-            <p class="text-sm text-base-content/60 mt-1">
-              {{ 'import.path_wizard.description' | translate }}
-            </p>
-          </div>
-        </app-modal-header>
-
-        @if (radarrPreview(); as preview) {
-          @if (eligibleLocalLibraries('radarr').length === 0) {
-            <div role="alert" class="alert alert-warning mt-4 text-sm">
-              <div>
-                <p>{{ 'import.path_wizard.no_root_folders' | translate }}</p>
-                <button
-                  type="button"
-                  class="btn btn-sm btn-primary mt-3"
-                  (click)="goToLibraries('radarr')"
-                >
-                  {{ 'import.path_wizard.go_to_root_folders' | translate }}
-                </button>
-              </div>
+  @for (p of providers; track p) {
+    @let st = arr[p];
+    @if (st.showWizard()) {
+      <div class="modal modal-open">
+        <div class="modal-box max-w-2xl">
+          <app-modal-header (closed)="cancelWizard(p)">
+            <div>
+              <h3 class="text-lg font-bold">{{ 'import.path_wizard.title' | translate }}</h3>
+              <p class="text-sm text-base-content/60 mt-1">
+                {{ 'import.path_wizard.description' | translate }}
+              </p>
             </div>
-          } @else {
-            <div class="flex flex-col gap-3 mt-4">
-              @for (m of radarrMappings(); track m.remotePath) {
-                <div class="flex flex-col sm:flex-row sm:items-center gap-2">
-                  <code class="text-sm bg-base-300 px-2 py-1 rounded sm:flex-1 truncate">{{
-                    m.remotePath
-                  }}</code>
-                  <span class="text-base-content/40 hidden sm:inline">→</span>
-                  <select
-    appTvSelect
-                    class="select select-bordered select-sm sm:flex-1"
-                    [ngModel]="m.ignore ? IGNORE_VALUE : m.localLibraryId"
-                    (ngModelChange)="setMapping('radarr', m.remotePath, $event)"
+          </app-modal-header>
+
+          @if (st.preview(); as preview) {
+            @if (eligibleLocalLibraries(p).length === 0) {
+              <div role="alert" class="alert alert-warning mt-4 text-sm">
+                <div>
+                  <p>{{ 'import.path_wizard.no_root_folders' | translate }}</p>
+                  <button
+                    type="button"
+                    class="btn btn-sm btn-primary mt-3"
+                    (click)="goToLibraries(p)"
                   >
-                    <option [ngValue]="null">-</option>
-                    @for (lib of eligibleLocalLibraries('radarr'); track lib.id) {
-                      <option [ngValue]="lib.id">{{ lib.name }} ({{ lib.path }})</option>
-                    }
-                    <option [ngValue]="IGNORE_VALUE">
-                      {{ 'import.path_wizard.option_ignore' | translate }}
-                    </option>
-                  </select>
+                    {{ 'import.path_wizard.go_to_root_folders' | translate }}
+                  </button>
                 </div>
-              }
-            </div>
-          }
-        }
-
-        <app-modal-footer>
-          <button type="button" class="btn btn-ghost" (click)="cancelWizard('radarr')">
-            {{ 'import.path_wizard.cancel' | translate }}
-          </button>
-          @if (eligibleLocalLibraries('radarr').length > 0) {
-            <button
-              type="button"
-              class="btn btn-primary"
-              [disabled]="!radarrCanConfirm() || radarrLoading()"
-              (click)="confirmRadarrImport()"
-            >
-              @if (radarrLoading()) {
-                <span class="loading loading-spinner loading-xs"></span>
-              }
-              {{ 'import.path_wizard.confirm' | translate }}
-            </button>
-          }
-        </app-modal-footer>
-      </div>
-    </div>
-  }
-
-  @if (sonarrShowWizard()) {
-    <div class="modal modal-open">
-      <div class="modal-box max-w-2xl">
-        <app-modal-header (closed)="cancelWizard('sonarr')">
-          <div>
-            <h3 class="text-lg font-bold">{{ 'import.path_wizard.title' | translate }}</h3>
-            <p class="text-sm text-base-content/60 mt-1">
-              {{ 'import.path_wizard.description' | translate }}
-            </p>
-          </div>
-        </app-modal-header>
-
-        @if (sonarrPreview(); as preview) {
-          @if (eligibleLocalLibraries('sonarr').length === 0) {
-            <div role="alert" class="alert alert-warning mt-4 text-sm">
-              <div>
-                <p>{{ 'import.path_wizard.no_root_folders' | translate }}</p>
-                <button
-                  type="button"
-                  class="btn btn-sm btn-primary mt-3"
-                  (click)="goToLibraries('sonarr')"
-                >
-                  {{ 'import.path_wizard.go_to_root_folders' | translate }}
-                </button>
               </div>
-            </div>
-          } @else {
-            <div class="flex flex-col gap-3 mt-4">
-              @for (m of sonarrMappings(); track m.remotePath) {
-                <div class="flex flex-col sm:flex-row sm:items-center gap-2">
-                  <code class="text-sm bg-base-300 px-2 py-1 rounded sm:flex-1 truncate">{{
-                    m.remotePath
-                  }}</code>
-                  <span class="text-base-content/40 hidden sm:inline">→</span>
-                  <select
-    appTvSelect
-                    class="select select-bordered select-sm sm:flex-1"
-                    [ngModel]="m.ignore ? IGNORE_VALUE : m.localLibraryId"
-                    (ngModelChange)="setMapping('sonarr', m.remotePath, $event)"
-                  >
-                    <option [ngValue]="null">-</option>
-                    @for (lib of eligibleLocalLibraries('sonarr'); track lib.id) {
-                      <option [ngValue]="lib.id">{{ lib.name }} ({{ lib.path }})</option>
-                    }
-                    <option [ngValue]="IGNORE_VALUE">
-                      {{ 'import.path_wizard.option_ignore' | translate }}
-                    </option>
-                  </select>
-                </div>
-              }
-            </div>
+            } @else {
+              <div class="flex flex-col gap-3 mt-4">
+                @for (m of st.mappings(); track m.remotePath) {
+                  <div class="flex flex-col sm:flex-row sm:items-center gap-2">
+                    <code class="text-sm bg-base-300 px-2 py-1 rounded sm:flex-1 truncate">{{
+                      m.remotePath
+                    }}</code>
+                    <span class="text-base-content/40 hidden sm:inline">→</span>
+                    <select
+      appTvSelect
+                      class="select select-bordered select-sm sm:flex-1"
+                      [ngModel]="m.ignore ? IGNORE_VALUE : m.localLibraryId"
+                      (ngModelChange)="setMapping(p, m.remotePath, $event)"
+                    >
+                      <option [ngValue]="null">-</option>
+                      @for (lib of eligibleLocalLibraries(p); track lib.id) {
+                        <option [ngValue]="lib.id">{{ lib.name }} ({{ lib.path }})</option>
+                      }
+                      <option [ngValue]="IGNORE_VALUE">
+                        {{ 'import.path_wizard.option_ignore' | translate }}
+                      </option>
+                    </select>
+                  </div>
+                }
+              </div>
+            }
           }
-        }
 
-        <app-modal-footer>
-          <button type="button" class="btn btn-ghost" (click)="cancelWizard('sonarr')">
-            {{ 'import.path_wizard.cancel' | translate }}
-          </button>
-          @if (eligibleLocalLibraries('sonarr').length > 0) {
-            <button
-              type="button"
-              class="btn btn-primary"
-              [disabled]="!sonarrCanConfirm() || sonarrLoading()"
-              (click)="confirmSonarrImport()"
-            >
-              @if (sonarrLoading()) {
-                <span class="loading loading-spinner loading-xs"></span>
-              }
-              {{ 'import.path_wizard.confirm' | translate }}
+          <app-modal-footer>
+            <button type="button" class="btn btn-ghost" (click)="cancelWizard(p)">
+              {{ 'import.path_wizard.cancel' | translate }}
             </button>
-          }
-        </app-modal-footer>
+            @if (eligibleLocalLibraries(p).length > 0) {
+              <button
+                type="button"
+                class="btn btn-primary"
+                [disabled]="!st.canConfirm() || st.loading()"
+                (click)="confirmArrImport(p)"
+              >
+                @if (st.loading()) {
+                  <span class="loading loading-spinner loading-xs"></span>
+                }
+                {{ 'import.path_wizard.confirm' | translate }}
+              </button>
+            }
+          </app-modal-footer>
+        </div>
       </div>
-    </div>
+    }
   }
 </div>
 

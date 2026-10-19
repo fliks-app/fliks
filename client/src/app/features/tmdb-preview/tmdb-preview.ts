@@ -4,7 +4,6 @@ import {
   inject,
   computed,
   effect,
-  ElementRef,
   OnInit,
   OnDestroy,
   viewChild,
@@ -12,7 +11,6 @@ import {
 import { ActivatedRoute, Router } from '@angular/router';
 import { CurrencyPipe, DecimalPipe, NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { AuthService } from '../../core/services/auth.service';
 import {
@@ -33,6 +31,7 @@ import {
 } from '../../core/services/api/requests.service';
 import { RequestDeclineModalComponent } from '../requests/request-decline-modal/request-decline-modal.component';
 import { RequestEditModalComponent } from '../requests/request-edit-modal/request-edit-modal.component';
+import { RequestDeclineFlow, RequestEditFlow } from '../requests/request-flows';
 import { RequestModalComponent } from './components/request-modal/request-modal.component';
 import { ImportModalComponent } from './components/import-modal/import-modal.component';
 import { MediaType } from '../../core/enums/media-type.enum';
@@ -45,7 +44,9 @@ import { localizeLanguage } from '../../core/utils/language.utils';
 import { ClampToggleDirective } from '../../shared/directives/clamp-toggle.directive';
 import { CollapsibleSectionComponent } from '../../shared/components/collapsible-section/collapsible-section';
 import { PreviewSeasonsComponent } from './components/preview-seasons/preview-seasons.component';
-import { openTrailerExternally, trailerPlaysInline } from '../../shared/utils/trailer.util';
+import { MD_BREAKPOINT_QUERY, mediaQuerySignal } from '../../core/utils/viewport';
+import { bestTrailerKey } from '../../shared/utils/trailer.util';
+import { TrailerDialogComponent } from '../../shared/components/trailer-dialog/trailer-dialog';
 import { previewPosterName } from '../../shared/utils/view-transition';
 import { ImgFadeInDirective } from '../../shared/directives/img-fade-in.directive';
 import { CachedSrcDirective } from '../../shared/directives/cached-src.directive';
@@ -60,7 +61,7 @@ interface PreviewSeed {
 
 @Component({
   selector: 'app-tmdb-preview',
-  imports: [FormsModule, CurrencyPipe, DecimalPipe, NgTemplateOutlet, TranslatePipe, ResolveUrlPipe, LocaleDatePipe, RequestModalComponent, ImportModalComponent, MobileFanartHeroComponent, HorizontalScrollerComponent, ClampToggleDirective, CollapsibleSectionComponent, PreviewSeasonsComponent, ImgFadeInDirective, CachedSrcDirective, RequestDeclineModalComponent, RequestEditModalComponent, LucideFilm, LucideUser, LucidePlay, LucidePlus],
+  imports: [FormsModule, CurrencyPipe, DecimalPipe, NgTemplateOutlet, TranslatePipe, ResolveUrlPipe, LocaleDatePipe, RequestModalComponent, ImportModalComponent, MobileFanartHeroComponent, HorizontalScrollerComponent, ClampToggleDirective, CollapsibleSectionComponent, PreviewSeasonsComponent, ImgFadeInDirective, CachedSrcDirective, RequestDeclineModalComponent, RequestEditModalComponent, TrailerDialogComponent, LucideFilm, LucideUser, LucidePlay, LucidePlus],
   templateUrl: './tmdb-preview.html',
 })
 export class TmdbPreviewComponent implements OnInit, OnDestroy {
@@ -175,29 +176,17 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
     () => this.canImport() && !this.pendingBlocksImport(),
   );
 
-  readonly declineForId = signal<number | null>(null);
-  readonly declineReasonText = signal('');
   readonly actionBusyId = signal<number | null>(null);
 
-  readonly editingRequest = signal<FliksRequestRow | null>(null);
-  readonly editQualityProfileId = signal<number | null>(null);
-  readonly editLanguageProfileId = signal<number | null>(null);
-  readonly editLibraryId = signal<number | null>(null);
-  readonly editSaving = signal(false);
-
-  readonly compatibleLibraries = computed(() => {
-    const row = this.editingRequest();
-    if (!row) return [];
-    return this.libraries().filter((l) => l.mediaTypes.includes(row.mediaType));
-  });
 
   private readonly requestModal = viewChild(RequestModalComponent);
   private readonly importModal = viewChild(ImportModalComponent);
   private readonly declineModal = viewChild(RequestDeclineModalComponent);
   private readonly editModal = viewChild(RequestEditModalComponent);
-  private readonly trailerDialog =
-    viewChild<ElementRef<HTMLDialogElement>>('trailerDialog');
-  private readonly sanitizer = inject(DomSanitizer);
+  readonly decline = new RequestDeclineFlow(() => this.declineModal());
+  readonly edit = new RequestEditFlow(() => this.editModal(), () => this.libraries());
+  private readonly trailerDialog = viewChild(TrailerDialogComponent);
+  protected readonly desktopLayout = mediaQuerySignal(MD_BREAKPOINT_QUERY);
 
   // Guards navbar/navigate writes from a slow await that outlives the component.
   private destroyed = false;
@@ -246,38 +235,11 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
     return s ? 'discover.status_' + s.replace(/[\s-]+/g, '_') : '';
   });
 
-  /** Best trailer key: a YouTube Trailer, else Teaser, else any YouTube video. */
-  readonly trailerKey = computed<string | null>(() => {
-    const vids = (this.media()?.videos ?? []).filter((v) => v.site === 'YouTube');
-    const pick =
-      vids.find((v) => v.type === 'Trailer') ??
-      vids.find((v) => v.type === 'Teaser') ??
-      vids[0];
-    return pick?.key ?? null;
-  });
-
-  /** Sanitized embed URL, set only while the trailer dialog is open so the
-   *  player stops (and stops fetching) when it closes. */
-  readonly trailerEmbedUrl = signal<SafeResourceUrl | null>(null);
+  readonly trailerKey = computed(() => bestTrailerKey(this.media()?.videos));
 
   openTrailer() {
     const key = this.trailerKey();
-    if (!key) return;
-    if (!trailerPlaysInline) {
-      openTrailerExternally(key);
-      return;
-    }
-    this.trailerEmbedUrl.set(
-      this.sanitizer.bypassSecurityTrustResourceUrl(
-        `https://www.youtube.com/embed/${key}?autoplay=1`,
-      ),
-    );
-    this.trailerDialog()?.nativeElement.showModal();
-  }
-
-  closeTrailer() {
-    this.trailerDialog()?.nativeElement.close();
-    this.trailerEmbedUrl.set(null);
+    if (key) this.trailerDialog()?.open(key);
   }
 
   ngOnDestroy() {
@@ -400,63 +362,32 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
     }
   }
 
-  openDecline(id: number) {
-    this.declineForId.set(id);
-    this.declineReasonText.set('');
-    this.declineModal()?.showModal();
-  }
-
-  closeDecline() {
-    this.declineModal()?.close();
-    this.declineForId.set(null);
-  }
-
   async submitDecline() {
-    const id = this.declineForId();
+    const id = this.decline.forId();
     if (id == null) return;
     this.actionBusyId.set(id);
     try {
-      await this.requestsApi.decline(id, this.declineReasonText());
+      await this.requestsApi.decline(id, this.decline.reasonText());
       if (this.destroyed) return;
-      this.closeDecline();
+      this.decline.close();
       this.refreshPendingRequests();
     } finally {
       this.actionBusyId.set(null);
     }
   }
 
-  openEdit(row: FliksRequestRow) {
-    this.editingRequest.set(row);
-    this.editQualityProfileId.set(row.qualityProfileId);
-    this.editLanguageProfileId.set(row.languageProfileId);
-    this.editLibraryId.set(row.libraryId);
-    this.editModal()?.showModal();
-  }
-
-  closeEdit() {
-    this.editModal()?.close();
-    this.editingRequest.set(null);
-  }
-
   async saveEdit() {
-    const row = this.editingRequest();
+    const row = this.edit.row();
     if (!row) return;
-    this.editSaving.set(true);
+    this.edit.saving.set(true);
     try {
-      // Only send libraryId when it actually changed: re-sending an unchanged
-      // value would re-run the backend access check on a plain profile edit.
-      const libraryChanged = this.editLibraryId() !== row.libraryId;
-      await this.requestsApi.update(row.id, {
-        qualityProfileId: this.editQualityProfileId() ?? undefined,
-        languageProfileId: this.editLanguageProfileId() ?? undefined,
-        ...(libraryChanged ? { libraryId: this.editLibraryId() } : {}),
-      });
+      await this.requestsApi.update(row.id, this.edit.changes(row));
       if (this.destroyed) return;
       this.toast.success(this.translate.instant('requests.edit_success'));
-      this.closeEdit();
+      this.edit.close();
       this.refreshPendingRequests();
     } finally {
-      this.editSaving.set(false);
+      this.edit.saving.set(false);
     }
   }
 

@@ -77,6 +77,33 @@ type MappingSelectValue = number | typeof IGNORE_VALUE | null;
 /** `null` means no library selected yet; the import button stays disabled. */
 type LibrarySelection = number | null;
 
+/** One *arr provider's form, last result and path-mapping wizard. */
+class ArrState {
+  readonly url = signal('');
+  readonly apiKey = signal('');
+  readonly mode = signal<'skip' | 'update'>('skip');
+  readonly importSubs = signal(false);
+  readonly library = signal<LibrarySelection>(null);
+  readonly loading = signal(false);
+  readonly saving = signal(false);
+  readonly testing = signal(false);
+  readonly testResult = signal<{ ok: boolean; message: string } | null>(null);
+  readonly result = signal<ArrImportResult | null>(null);
+  readonly error = signal('');
+  readonly preview = signal<PreviewImportResult | null>(null);
+  readonly mappings = signal<PathMapping[]>([]);
+  readonly previewing = signal(false);
+  readonly showWizard = signal(false);
+  readonly canConfirm = computed(() =>
+    this.mappings().every((m) => m.ignore || m.localLibraryId != null),
+  );
+}
+
+const ARR_SETTINGS: Record<Provider, { url: string; apiKey: string }> = {
+  radarr: { url: SETTING_RADARR_URL, apiKey: SETTING_RADARR_API_KEY },
+  sonarr: { url: SETTING_SONARR_URL, apiKey: SETTING_SONARR_API_KEY },
+};
+
 @Component({
   selector: 'app-data-imports-settings',
   imports: [TvSelectDirective, 
@@ -125,7 +152,7 @@ export class DataImportsSettingsComponent implements OnInit {
   } | null>(null);
   readonly seerrLastSummary = signal<SeerrSummary | null>(null);
 
-  // ---- Radarr / Sonarr ----
+  // ---- Radarr / Sonarr (and their path mapping wizards) ----
   readonly libraries = signal<Library[]>([]);
   readonly movieLibraries = computed(() =>
     this.libraries().filter((l) => l.mediaTypes.includes('movie')),
@@ -134,52 +161,24 @@ export class DataImportsSettingsComponent implements OnInit {
     this.libraries().filter((l) => l.mediaTypes.includes('series')),
   );
 
-  readonly radarrUrl = signal('');
-  readonly radarrApiKey = signal('');
-  readonly radarrMode = signal<'skip' | 'update'>('skip');
-  readonly radarrImportSubs = signal(false);
-  readonly radarrLibrary = signal<LibrarySelection>(null);
-  readonly radarrLoading = signal(false);
-  readonly radarrSaving = signal(false);
-  readonly radarrTesting = signal(false);
-  readonly radarrTestResult = signal<{
-    ok: boolean;
-    message: string;
-  } | null>(null);
-  readonly radarrResult = signal<ArrImportResult | null>(null);
-  readonly radarrError = signal('');
-
-  readonly sonarrUrl = signal('');
-  readonly sonarrApiKey = signal('');
-  readonly sonarrMode = signal<'skip' | 'update'>('skip');
-  readonly sonarrImportSubs = signal(false);
-  readonly sonarrLibrary = signal<LibrarySelection>(null);
-  readonly sonarrLoading = signal(false);
-  readonly sonarrSaving = signal(false);
-  readonly sonarrTesting = signal(false);
-  readonly sonarrTestResult = signal<{
-    ok: boolean;
-    message: string;
-  } | null>(null);
-  readonly sonarrResult = signal<ArrImportResult | null>(null);
-  readonly sonarrError = signal('');
-
-  // ---- Path mapping wizard ----
-  readonly radarrPreview = signal<PreviewImportResult | null>(null);
-  readonly radarrMappings = signal<PathMapping[]>([]);
-  readonly radarrPreviewing = signal(false);
-  readonly radarrShowWizard = signal(false);
-  readonly radarrCanConfirm = computed(() =>
-    this.radarrMappings().every((m) => m.ignore || m.localLibraryId != null),
-  );
-
-  readonly sonarrPreview = signal<PreviewImportResult | null>(null);
-  readonly sonarrMappings = signal<PathMapping[]>([]);
-  readonly sonarrPreviewing = signal(false);
-  readonly sonarrShowWizard = signal(false);
-  readonly sonarrCanConfirm = computed(() =>
-    this.sonarrMappings().every((m) => m.ignore || m.localLibraryId != null),
-  );
+  readonly arr: Record<Provider, ArrState> = { radarr: new ArrState(), sonarr: new ArrState() };
+  readonly providers = ['radarr', 'sonarr'] as const;
+  readonly arrCards = [
+    {
+      provider: 'radarr',
+      titleKey: 'import.radarr_title',
+      descKey: 'import.radarr_desc',
+      urlPlaceholderKey: 'import.radarr_url_placeholder',
+      libraries: this.movieLibraries,
+    },
+    {
+      provider: 'sonarr',
+      titleKey: 'import.sonarr_title',
+      descKey: 'import.sonarr_desc',
+      urlPlaceholderKey: 'import.sonarr_url_placeholder',
+      libraries: this.seriesLibraries,
+    },
+  ] as const;
 
   readonly IGNORE_VALUE = IGNORE_VALUE;
 
@@ -251,10 +250,10 @@ export class DataImportsSettingsComponent implements OnInit {
           ),
         ]),
       );
-      this.radarrUrl.set(all[SETTING_RADARR_URL] ?? '');
-      this.radarrApiKey.set(all[SETTING_RADARR_API_KEY] ?? '');
-      this.sonarrUrl.set(all[SETTING_SONARR_URL] ?? '');
-      this.sonarrApiKey.set(all[SETTING_SONARR_API_KEY] ?? '');
+      for (const p of ['radarr', 'sonarr'] as const) {
+        this.arr[p].url.set(all[ARR_SETTINGS[p].url] ?? '');
+        this.arr[p].apiKey.set(all[ARR_SETTINGS[p].apiKey] ?? '');
+      }
       this.libraries.set(libs);
       this.embyServers.set(servers.filter((s) => s.type === 'emby'));
     } finally {
@@ -342,7 +341,7 @@ export class DataImportsSettingsComponent implements OnInit {
   }
 
   private keySig(p: 'seerr' | Provider) {
-    return p === 'seerr' ? this.seerrApiKey : this.apiKeySig(p);
+    return p === 'seerr' ? this.seerrApiKey : this.arr[p].apiKey;
   }
 
   private markStored(setting: string, typed: string) {
@@ -427,104 +426,59 @@ export class DataImportsSettingsComponent implements OnInit {
   // Radarr / Sonarr
   // ---------------------------------------------------------------------------
 
-  get canSaveRadarr(): boolean {
-    return this.canSave(this.radarrUrl(), SETTING_RADARR_API_KEY, this.radarrApiKey());
+  arrCanSave(p: Provider): boolean {
+    const st = this.arr[p];
+    return this.canSave(st.url(), ARR_SETTINGS[p].apiKey, st.apiKey());
   }
 
-  get canSubmitRadarr(): boolean {
-    return this.radarrUrl().trim().length > 0 && this.hasKey(SETTING_RADARR_API_KEY, this.radarrApiKey());
+  arrCanSubmit(p: Provider): boolean {
+    const st = this.arr[p];
+    return st.url().trim().length > 0 && this.hasKey(ARR_SETTINGS[p].apiKey, st.apiKey());
   }
 
   /** Import-specific gate: credentials AND a picked target library. */
-  get canImportRadarr(): boolean {
-    return this.canSubmitRadarr && this.radarrLibrary() != null;
+  arrCanImport(p: Provider): boolean {
+    return this.arrCanSubmit(p) && this.arr[p].library() != null;
   }
 
-  get canSaveSonarr(): boolean {
-    return this.canSave(this.sonarrUrl(), SETTING_SONARR_API_KEY, this.sonarrApiKey());
-  }
-
-  get canSubmitSonarr(): boolean {
-    return this.sonarrUrl().trim().length > 0 && this.hasKey(SETTING_SONARR_API_KEY, this.sonarrApiKey());
-  }
-
-  get canImportSonarr(): boolean {
-    return this.canSubmitSonarr && this.sonarrLibrary() != null;
-  }
-
-  async saveRadarrCredentials() {
-    if (this.radarrSaving()) return;
-    this.radarrSaving.set(true);
+  async saveArrCredentials(p: Provider) {
+    const st = this.arr[p];
+    const keys = ARR_SETTINGS[p];
+    if (st.saving()) return;
+    st.saving.set(true);
     try {
       await this.settingsApi.setBulk({
-        [SETTING_RADARR_URL]: this.radarrUrl().trim().replace(/\/$/, ''),
-        ...this.keyEntry(SETTING_RADARR_API_KEY, this.radarrApiKey(), SETTING_RADARR_API_KEY),
+        [keys.url]: st.url().trim().replace(/\/$/, ''),
+        ...this.keyEntry(keys.apiKey, st.apiKey(), keys.apiKey),
       });
-      this.markStored(SETTING_RADARR_API_KEY, this.radarrApiKey());
+      this.markStored(keys.apiKey, st.apiKey());
       this.toast.success(this.translate.instant('common.saved'));
     } finally {
-      this.radarrSaving.set(false);
+      st.saving.set(false);
     }
   }
 
-  async testRadarr() {
-    if (!this.canSubmitRadarr || this.radarrTesting()) return;
-    this.radarrTesting.set(true);
-    this.radarrTestResult.set(null);
+  async testArr(p: Provider) {
+    const st = this.arr[p];
+    if (!this.arrCanSubmit(p) || st.testing()) return;
+    st.testing.set(true);
+    st.testResult.set(null);
     try {
       const r = await firstValueFrom(
-        this.http.post<{ ok: boolean; message: string }>('/api/imports/radarr/test', {
-          url: this.radarrUrl().trim().replace(/\/$/, ''),
-          ...this.keyEntry('apiKey', this.radarrApiKey(), SETTING_RADARR_API_KEY),
+        this.http.post<{ ok: boolean; message: string }>(`/api/imports/${p}/test`, {
+          url: st.url().trim().replace(/\/$/, ''),
+          ...this.keyEntry('apiKey', st.apiKey(), ARR_SETTINGS[p].apiKey),
         }),
       );
-      this.radarrTestResult.set(r);
+      st.testResult.set(r);
     } catch (err: unknown) {
       const httpErr = err as { error?: { message?: string } };
-      this.radarrTestResult.set({
+      st.testResult.set({
         ok: false,
         message: httpErr.error?.message ?? this.translate.instant('common.error'),
       });
     } finally {
-      this.radarrTesting.set(false);
-    }
-  }
-
-  async saveSonarrCredentials() {
-    if (this.sonarrSaving()) return;
-    this.sonarrSaving.set(true);
-    try {
-      await this.settingsApi.setBulk({
-        [SETTING_SONARR_URL]: this.sonarrUrl().trim().replace(/\/$/, ''),
-        ...this.keyEntry(SETTING_SONARR_API_KEY, this.sonarrApiKey(), SETTING_SONARR_API_KEY),
-      });
-      this.markStored(SETTING_SONARR_API_KEY, this.sonarrApiKey());
-      this.toast.success(this.translate.instant('common.saved'));
-    } finally {
-      this.sonarrSaving.set(false);
-    }
-  }
-
-  async testSonarr() {
-    if (!this.canSubmitSonarr || this.sonarrTesting()) return;
-    this.sonarrTesting.set(true);
-    this.sonarrTestResult.set(null);
-    try {
-      const r = await firstValueFrom(
-        this.http.post<{ ok: boolean; message: string }>('/api/imports/sonarr/test', {
-          url: this.sonarrUrl().trim().replace(/\/$/, ''),
-          ...this.keyEntry('apiKey', this.sonarrApiKey(), SETTING_SONARR_API_KEY),
-        }),
-      );
-      this.sonarrTestResult.set(r);
-    } catch (err: unknown) {
-      const httpErr = err as { error?: { message?: string } };
-      this.sonarrTestResult.set({
-        ok: false,
-        message: httpErr.error?.message ?? this.translate.instant('common.error'),
-      });
-    } finally {
-      this.sonarrTesting.set(false);
+      st.testing.set(false);
     }
   }
 
@@ -539,60 +493,48 @@ export class DataImportsSettingsComponent implements OnInit {
    *   - Fliks has 0 root folders     → open wizard in "no roots configured" state
    *   - otherwise                    → open wizard with one row per remote root
    */
-  async openRadarrWizard() {
-    await this.openWizard('radarr');
-  }
+  async openWizard(provider: Provider) {
+    const st = this.arr[provider];
+    const url = st.url().trim();
+    if (!url || !this.arrCanSubmit(provider)) return;
+    const apiKey = this.keyEntry('apiKey', st.apiKey(), ARR_SETTINGS[provider].apiKey);
 
-  async openSonarrWizard() {
-    await this.openWizard('sonarr');
-  }
+    await this.saveArrCredentials(provider);
 
-  private async openWizard(provider: Provider) {
-    const url = this.urlSig(provider)().trim();
-    const canSubmit = provider === 'radarr' ? this.canSubmitRadarr : this.canSubmitSonarr;
-    if (!url || !canSubmit) return;
-    const apiKey = this.keyEntry(
-      'apiKey',
-      this.apiKeySig(provider)(),
-      provider === 'radarr' ? SETTING_RADARR_API_KEY : SETTING_SONARR_API_KEY,
-    );
-
-    if (provider === 'radarr') await this.saveRadarrCredentials();
-    else await this.saveSonarrCredentials();
-
-    this.previewingSig(provider).set(true);
-    this.errorSig(provider).set('');
-    this.resultSig(provider).set(null);
+    st.previewing.set(true);
+    st.error.set('');
+    st.result.set(null);
     try {
       const preview = await firstValueFrom(
         this.http.post<PreviewImportResult>(`/api/imports/${provider}/preview`, { url, ...apiKey }),
       );
-      this.previewSig(provider).set(preview);
+      st.preview.set(preview);
       if (preview.remoteRootFolders.length === 0) {
         await this.confirmImport(provider, []);
         return;
       }
-      this.mappingsSig(provider).set(
+      st.mappings.set(
         preview.remoteRootFolders.map((row) => ({
           remotePath: row.remotePath,
           localLibraryId: row.suggestedLocalLibraryId,
         })),
       );
-      this.showWizardSig(provider).set(true);
+      st.showWizard.set(true);
     } catch (err: unknown) {
       const httpErr = err as { error?: { message?: string } };
-      this.errorSig(provider).set(
+      st.error.set(
         httpErr.error?.message ?? this.translate.instant('import.path_wizard.preview_error'),
       );
     } finally {
-      this.previewingSig(provider).set(false);
+      st.previewing.set(false);
     }
   }
 
   cancelWizard(provider: Provider) {
-    this.showWizardSig(provider).set(false);
-    this.previewSig(provider).set(null);
-    this.mappingsSig(provider).set([]);
+    const st = this.arr[provider];
+    st.showWizard.set(false);
+    st.preview.set(null);
+    st.mappings.set([]);
   }
 
   /**
@@ -607,7 +549,7 @@ export class DataImportsSettingsComponent implements OnInit {
   }
 
   setMapping(provider: Provider, remotePath: string, value: MappingSelectValue) {
-    this.mappingsSig(provider).update((list) =>
+    this.arr[provider].mappings.update((list) =>
       list.map((m) =>
         m.remotePath === remotePath
           ? value === IGNORE_VALUE
@@ -623,87 +565,46 @@ export class DataImportsSettingsComponent implements OnInit {
    * The backend enforces the same rule; this just hides unselectable options.
    */
   eligibleLocalLibraries(provider: Provider) {
-    const preview = this.previewSig(provider)();
+    const st = this.arr[provider];
+    const preview = st.preview();
     if (!preview) return [];
-    const target = provider === 'radarr' ? this.radarrLibrary() : this.sonarrLibrary();
+    const target = st.library();
     if (typeof target !== 'number') return [];
     return preview.localLibraries.filter((lib) => lib.id === target);
   }
 
-  async confirmRadarrImport() {
-    await this.confirmImport('radarr', this.radarrMappings());
-  }
-
-  async confirmSonarrImport() {
-    await this.confirmImport('sonarr', this.sonarrMappings());
+  async confirmArrImport(provider: Provider) {
+    await this.confirmImport(provider, this.arr[provider].mappings());
   }
 
   private async confirmImport(provider: Provider, mappings: PathMapping[]) {
-    const url = this.urlSig(provider)().trim();
-    const canSubmit = provider === 'radarr' ? this.canSubmitRadarr : this.canSubmitSonarr;
-    if (!url || !canSubmit) return;
-    const apiKey = this.keyEntry(
-      'apiKey',
-      this.apiKeySig(provider)(),
-      provider === 'radarr' ? SETTING_RADARR_API_KEY : SETTING_SONARR_API_KEY,
-    );
+    const st = this.arr[provider];
+    const url = st.url().trim();
+    if (!url || !this.arrCanSubmit(provider)) return;
+    const apiKey = this.keyEntry('apiKey', st.apiKey(), ARR_SETTINGS[provider].apiKey);
 
-    this.showWizardSig(provider).set(false);
-    this.loadingSig(provider).set(true);
-    this.resultSig(provider).set(null);
-    this.errorSig(provider).set('');
-
-    const lib = provider === 'radarr' ? this.radarrLibrary() : this.sonarrLibrary();
-    const mode = provider === 'radarr' ? this.radarrMode() : this.sonarrMode();
-    const importSubs = provider === 'radarr' ? this.radarrImportSubs() : this.sonarrImportSubs();
+    st.showWizard.set(false);
+    st.loading.set(true);
+    st.result.set(null);
+    st.error.set('');
 
     try {
       const result = await firstValueFrom(
         this.http.post<ArrImportResult>(`/api/imports/${provider}`, {
           url,
           ...apiKey,
-          mode,
-          importSubtitles: importSubs,
+          mode: st.mode(),
+          importSubtitles: st.importSubs(),
           pathMappings: mappings,
-          ...this.libraryBody(lib),
+          ...this.libraryBody(st.library()),
         }),
       );
-      this.resultSig(provider).set(result);
+      st.result.set(result);
     } catch (err: unknown) {
       const httpErr = err as { error?: { message?: string } };
-      this.errorSig(provider).set(httpErr.error?.message ?? this.translate.instant('import.error'));
+      st.error.set(httpErr.error?.message ?? this.translate.instant('import.error'));
     } finally {
-      this.loadingSig(provider).set(false);
+      st.loading.set(false);
     }
-  }
-
-  // ---- Provider signal accessors (avoids duplicating the wizard pipeline) ----
-
-  private urlSig(p: Provider) {
-    return p === 'radarr' ? this.radarrUrl : this.sonarrUrl;
-  }
-  private apiKeySig(p: Provider) {
-    return p === 'radarr' ? this.radarrApiKey : this.sonarrApiKey;
-  }
-  private previewSig(p: Provider) {
-    return p === 'radarr' ? this.radarrPreview : this.sonarrPreview;
-  }
-  private mappingsSig(p: Provider) {
-    return p === 'radarr' ? this.radarrMappings : this.sonarrMappings;
-  }
-  private previewingSig(p: Provider) {
-    return p === 'radarr' ? this.radarrPreviewing : this.sonarrPreviewing;
-  }
-  private showWizardSig(p: Provider) {
-    return p === 'radarr' ? this.radarrShowWizard : this.sonarrShowWizard;
-  }
-  private loadingSig(p: Provider) {
-    return p === 'radarr' ? this.radarrLoading : this.sonarrLoading;
-  }
-  private resultSig(p: Provider) {
-    return p === 'radarr' ? this.radarrResult : this.sonarrResult;
-  }
-  private errorSig(p: Provider) {
-    return p === 'radarr' ? this.radarrError : this.sonarrError;
   }
 }

@@ -76,7 +76,7 @@
                   type="button"
                   class="hidden sm:inline-flex btn btn-warning btn-sm"
                   [disabled]="actionBusyId() === row.id"
-                  (click)="openDecline(row.id)"
+                  (click)="decline.open(row.id)"
                 >
                   {{ 'requests.decline' | translate }}
                 </button>
@@ -101,7 +101,7 @@
                     <svg lucideEllipsisVertical class="h-4 w-4"></svg>
                   </button>
                   @if (canEdit(row)) {
-                    <button type="button" class="dropdown-item text-white" (click)="openEdit(row)">
+                    <button type="button" class="dropdown-item text-white" (click)="edit.open(row)">
                       <svg lucidePencil class="h-4 w-4"></svg>
                       {{ 'requests.edit' | translate }}
                     </button>
@@ -262,13 +262,13 @@
                     type="button"
                     class="btn btn-warning btn-sm"
                     [disabled]="actionBusyId() === row.id"
-                    (click)="openDecline(row.id)"
+                    (click)="decline.open(row.id)"
                   >
                     {{ 'requests.decline' | translate }}
                   </button>
                 }
                 @if (canEdit(row)) {
-                  <button type="button" class="hidden sm:inline-flex btn btn-ghost btn-sm" (click)="openEdit(row)">
+                  <button type="button" class="hidden sm:inline-flex btn btn-ghost btn-sm" (click)="edit.open(row)">
                     {{ 'requests.edit' | translate }}
                   </button>
                 }
@@ -324,11 +324,11 @@
 </div>
 
 <app-request-decline-modal
-  [requestId]="declineForId()"
-  [reasonText]="declineReasonText()"
-  [submitBusy]="actionBusyId() === declineForId()"
-  (reasonTextChange)="declineReasonText.set($event)"
-  (dismissed)="closeDecline()"
+  [requestId]="decline.forId()"
+  [reasonText]="decline.reasonText()"
+  [submitBusy]="actionBusyId() === decline.forId()"
+  (reasonTextChange)="decline.reasonText.set($event)"
+  (dismissed)="decline.close()"
   (submitted)="submitDecline()"
 />
 
@@ -338,18 +338,18 @@
 />
 
 <app-request-edit-modal
-  [row]="editingRequest()"
+  [row]="edit.row()"
   [qualityProfiles]="qualityProfiles()"
   [languageProfiles]="languageProfiles()"
-  [libraries]="compatibleLibraries()"
-  [qualityProfileId]="editQualityProfileId()"
-  [languageProfileId]="editLanguageProfileId()"
-  [libraryId]="editLibraryId()"
-  [saving]="editSaving()"
-  (qualityProfileIdChange)="editQualityProfileId.set($event)"
-  (languageProfileIdChange)="editLanguageProfileId.set($event)"
-  (libraryIdChange)="editLibraryId.set($event)"
-  (dismissed)="closeEdit()"
+  [libraries]="edit.compatibleLibraries()"
+  [qualityProfileId]="edit.qualityProfileId()"
+  [languageProfileId]="edit.languageProfileId()"
+  [libraryId]="edit.libraryId()"
+  [saving]="edit.saving()"
+  (qualityProfileIdChange)="edit.qualityProfileId.set($event)"
+  (languageProfileIdChange)="edit.languageProfileId.set($event)"
+  (libraryIdChange)="edit.libraryId.set($event)"
+  (dismissed)="edit.close()"
   (save)="saveEdit()"
 />
 

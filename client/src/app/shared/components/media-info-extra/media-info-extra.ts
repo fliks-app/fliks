@@ -1,21 +1,19 @@
 import {
   Component,
-  ElementRef,
   computed,
   inject,
   input,
-  signal,
   viewChild,
 } from '@angular/core';
 import { CurrencyPipe } from '@angular/common';
-import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { LucidePlay } from '@lucide/angular';
 import { Media } from '../../../core/services/api/media.service';
 import { localizeLanguage } from '../../../core/utils/language.utils';
 import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
 import { CollapsibleSectionComponent } from '../collapsible-section/collapsible-section';
-import { openTrailerExternally, trailerPlaysInline } from '../../utils/trailer.util';
+import { bestTrailerKey } from '../../utils/trailer.util';
+import { TrailerDialogComponent } from '../trailer-dialog/trailer-dialog';
 
 /**
  * "Extra info" panel rendered on the media-detail page above the cast,
@@ -26,50 +24,20 @@ import { openTrailerExternally, trailerPlaysInline } from '../../utils/trailer.u
  */
 @Component({
   selector: 'app-media-info-extra',
-  imports: [LocaleDatePipe, CurrencyPipe, TranslatePipe, CollapsibleSectionComponent, LucidePlay],
+  imports: [LocaleDatePipe, CurrencyPipe, TranslatePipe, CollapsibleSectionComponent, LucidePlay, TrailerDialogComponent],
   templateUrl: './media-info-extra.html',
 })
 export class MediaInfoExtraComponent {
   private readonly translate = inject(TranslateService);
-  private readonly sanitizer = inject(DomSanitizer);
-  private readonly trailerDialog =
-    viewChild<ElementRef<HTMLDialogElement>>('trailerDialog');
+  private readonly trailerDialog = viewChild(TrailerDialogComponent);
 
   /** Best YouTube trailer key from the stored TMDB videos (Trailer → Teaser →
    *  any). Null when the imported metadata carries no video. */
-  readonly trailerKey = computed<string | null>(() => {
-    const vids = (this.media().metadata?.videos ?? []).filter(
-      (v) => v.site === 'YouTube',
-    );
-    const pick =
-      vids.find((v) => v.type === 'Trailer') ??
-      vids.find((v) => v.type === 'Teaser') ??
-      vids[0];
-    return pick?.key ?? null;
-  });
-
-  /** Sanitized embed URL, set only while the dialog is open so playback stops
-   *  on close. */
-  readonly trailerEmbedUrl = signal<SafeResourceUrl | null>(null);
+  readonly trailerKey = computed(() => bestTrailerKey(this.media().metadata?.videos));
 
   openTrailer() {
     const key = this.trailerKey();
-    if (!key) return;
-    if (!trailerPlaysInline) {
-      openTrailerExternally(key);
-      return;
-    }
-    this.trailerEmbedUrl.set(
-      this.sanitizer.bypassSecurityTrustResourceUrl(
-        `https://www.youtube.com/embed/${key}?autoplay=1`,
-      ),
-    );
-    this.trailerDialog()?.nativeElement.showModal();
-  }
-
-  closeTrailer() {
-    this.trailerDialog()?.nativeElement.close();
-    this.trailerEmbedUrl.set(null);
+    if (key) this.trailerDialog()?.open(key);
   }
 
   readonly media = input.required<Media>();

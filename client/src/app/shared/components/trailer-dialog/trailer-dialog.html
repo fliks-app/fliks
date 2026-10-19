@@ -1,0 +1,19 @@
+<dialog #dialog class="modal" (close)="embedUrl.set(null)">
+  <div class="modal-box max-w-3xl p-0 overflow-hidden bg-black relative">
+    <form method="dialog">
+      <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2 z-10 text-white" [attr.aria-label]="'common.close' | translate">✕</button>
+    </form>
+    <div class="aspect-video">
+      @if (embedUrl(); as url) {
+        <iframe
+          [src]="url"
+          class="w-full h-full"
+          allow="autoplay; encrypted-media; fullscreen"
+          referrerpolicy="strict-origin-when-cross-origin"
+          allowfullscreen
+        ></iframe>
+      }
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button tabindex="-1">close</button></form>
+</dialog>

@@ -38,6 +38,7 @@ import { TvSectionDirective } from '../../shared/directives/tv-section.directive
 import { AuthService } from '../../core/services/auth.service';
 import { RequestCardComponent } from '../requests/request-card/request-card';
 import { RequestDeclineModalComponent } from '../requests/request-decline-modal/request-decline-modal.component';
+import { RequestDeclineFlow } from '../requests/request-flows';
 import { libraryColorVar } from '../../core/constants/library-appearance';
 import { StorageScopeService } from '../../core/services/storage-scope.service';
 import { itemArtwork } from '../../shared/utils/media-artwork.util';
@@ -135,6 +136,7 @@ export class HomeComponent implements OnInit, OnDestroy {
     scrollKey: HomeComponent.SCROLL_KEY,
   });
   private readonly declineModal = viewChild(RequestDeclineModalComponent);
+  readonly decline = new RequestDeclineFlow(() => this.declineModal());
   private readonly detailModal = viewChild(DownloadDetailModalComponent);
 
   /** Media whose download-detail modal is open; its live progress is fed in. */
@@ -164,8 +166,6 @@ export class HomeComponent implements OnInit, OnDestroy {
    *  "Demandes récentes" zone. */
   readonly recentRequests = signal<FliksRequestRow[]>([]);
   readonly requestActionBusyId = signal<number | null>(null);
-  readonly declineForId = signal<number | null>(null);
-  readonly declineReasonText = signal('');
   private qualityProfileNames = signal<Map<number, string>>(new Map());
   private languageProfileNames = signal<Map<number, string>>(new Map());
 
@@ -568,26 +568,15 @@ export class HomeComponent implements OnInit, OnDestroy {
     this.detailModal()?.open();
   }
 
-  openDecline(id: number) {
-    this.declineForId.set(id);
-    this.declineReasonText.set('');
-    this.declineModal()?.showModal();
-  }
-
-  closeDecline() {
-    this.declineModal()?.close();
-    this.declineForId.set(null);
-  }
-
   async submitDecline() {
-    const id = this.declineForId();
+    const id = this.decline.forId();
     if (id == null) return;
     this.requestActionBusyId.set(id);
     try {
       this.patchRequest(
-        await this.requestsService.decline(id, this.declineReasonText()),
+        await this.requestsService.decline(id, this.decline.reasonText()),
       );
-      this.closeDecline();
+      this.decline.close();
     } catch {
       /* global error toast */
     } finally {
