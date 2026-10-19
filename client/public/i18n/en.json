@@ -2599,7 +2599,6 @@
       "upgrade_threshold_hint": "Subtitles below this score will be replaced if a better one is found.",
       "section_post_processing": "Post-processing",
       "auto_sync": "Automatically sync subtitles (ffsubsync/alass)",
-      "encode_utf8": "Re-encode to UTF-8 after download",
       "section_cleaning": "Cleaning",
       "remove_hi_tags": "Remove HI tags ([music], (sigh), ♪, etc.)",
       "ocr_burn_in_auto": "Prefer OCR of embedded image tracks over a download",

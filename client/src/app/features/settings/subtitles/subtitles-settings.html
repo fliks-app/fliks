@@ -84,12 +84,6 @@
           [label]="'settings.subtitles.auto_sync' | translate"
           toggleClass="toggle-sm toggle-primary" />
 
-        <app-toggle-field
-          [value]="encodeUtf8() === 'true'"
-          (valueChange)="encodeUtf8.set($event ? 'true' : 'false')"
-          [label]="'settings.subtitles.encode_utf8' | translate"
-          toggleClass="toggle-sm toggle-primary" />
-
         <div class="divider my-0"></div>
         <h2 class="card-title text-base">{{ 'settings.subtitles.section_cleaning' | translate }}</h2>
 

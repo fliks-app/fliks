@@ -2599,7 +2599,6 @@
       "upgrade_threshold_hint": "As legendas abaixo desta pontuação serão substituídas se for encontrada uma melhor.",
       "section_post_processing": "Pós-processamento",
       "auto_sync": "Sincronizar automaticamente as legendas (ffsubsync/alass)",
-      "encode_utf8": "Recodificar em UTF-8 após a transferência",
       "section_cleaning": "Limpeza",
       "remove_hi_tags": "Remover as tags HI ([música], (suspiro), ♪, etc.)",
       "ocr_burn_in_auto": "Preferir o OCR das faixas de imagem incorporadas a uma transferência",

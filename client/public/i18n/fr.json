@@ -2599,7 +2599,6 @@
       "upgrade_threshold_hint": "Les sous-titres en dessous de ce score seront remplacés si un meilleur est trouvé.",
       "section_post_processing": "Post-traitement",
       "auto_sync": "Synchroniser automatiquement les sous-titres (ffsubsync/alass)",
-      "encode_utf8": "Ré-encoder en UTF-8 après téléchargement",
       "section_cleaning": "Nettoyage",
       "remove_hi_tags": "Supprimer les tags HI ([musique], (soupir), ♪, etc.)",
       "ocr_burn_in_auto": "Préférer l'OCR des pistes image embarquées à un téléchargement",

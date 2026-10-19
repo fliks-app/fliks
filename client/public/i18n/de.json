@@ -2599,7 +2599,6 @@
       "upgrade_threshold_hint": "Untertitel unterhalb dieses Scores werden ersetzt, wenn ein besserer gefunden wird.",
       "section_post_processing": "Nachbearbeitung",
       "auto_sync": "Untertitel automatisch synchronisieren (ffsubsync/alass)",
-      "encode_utf8": "Nach dem Download in UTF-8 neu codieren",
       "section_cleaning": "Bereinigung",
       "remove_hi_tags": "HI-Tags entfernen ([Musik], (Seufzen), ♪ usw.)",
       "ocr_burn_in_auto": "OCR eingebetteter Bildspuren einem Download vorziehen",

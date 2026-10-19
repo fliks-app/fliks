@@ -29,7 +29,6 @@ export class SubtitlesSettingsComponent implements OnInit {
   readonly minScore = signal('70');
   readonly upgradeThreshold = signal('90');
   readonly autoSync = signal('false');
-  readonly encodeUtf8 = signal('true');
   readonly removeHiTags = signal('false');
   readonly burnInCovers = signal('false');
   readonly ocrBurnInAuto = signal('false');
@@ -45,7 +44,6 @@ export class SubtitlesSettingsComponent implements OnInit {
       this.minScore.set(map['subtitle_min_score'] ?? '70');
       this.upgradeThreshold.set(map['subtitle_upgrade_threshold'] ?? '90');
       this.autoSync.set(map['subtitle_auto_sync'] ?? 'false');
-      this.encodeUtf8.set(map['subtitle_encode_utf8'] ?? 'true');
       this.removeHiTags.set(map['subtitle_remove_hi_tags'] ?? 'false');
       this.burnInCovers.set(map['subtitle_burn_in_covers_language'] ?? 'false');
       this.ocrBurnInAuto.set(map['subtitle_ocr_burn_in_auto'] ?? 'false');
@@ -68,7 +66,6 @@ export class SubtitlesSettingsComponent implements OnInit {
         subtitle_min_score: this.minScore(),
         subtitle_upgrade_threshold: this.upgradeThreshold(),
         subtitle_auto_sync: this.autoSync(),
-        subtitle_encode_utf8: this.encodeUtf8(),
         subtitle_remove_hi_tags: this.removeHiTags(),
         subtitle_burn_in_covers_language: this.burnInCovers(),
         subtitle_ocr_burn_in_auto: this.ocrBurnInAuto(),
