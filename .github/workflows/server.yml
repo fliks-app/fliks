@@ -68,7 +68,7 @@ jobs:
           workspaces: server
       # The restore test runs pg_dump against the Postgres 18 service; the runner image ships 16.
       - name: PostgreSQL 18 client tools
-        run: .github/scripts/install-pg18-client.sh
+        run: ${{ github.workspace }}/.github/scripts/install-pg18-client.sh
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - name: plugin SDK fmt and clippy (native and wasm32-wasip2)
