@@ -123,4 +123,5 @@ jobs:
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
           workspaces: server
-      - run: cargo clippy --workspace --all-targets -- -D warnings
+      # What the Windows release build compiles: the integration tests are Unix-only.
+      - run: cargo clippy --workspace --lib --bins -- -D warnings
