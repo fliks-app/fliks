@@ -5,14 +5,13 @@ name: Server
 on:
   pull_request:
     branches: [main]
-    paths:
+    paths: &paths
       - 'server/**'
+      - '!server/**/*.md'
       - '.github/workflows/server.yml'
   push:
     branches: [main]
-    paths:
-      - 'server/**'
-      - '.github/workflows/server.yml'
+    paths: *paths
 
 permissions:
   contents: read
@@ -24,6 +23,8 @@ env:
 
 jobs:
   rust:
+    # Release PRs only bump versions; main re-runs this after the merge.
+    if: ${{ !startsWith(github.head_ref, 'release-please--') }}
     runs-on: ubuntu-latest
     services:
       postgres:
