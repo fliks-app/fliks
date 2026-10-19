@@ -17,6 +17,8 @@ sync() {
     --exclude '.git' --exclude '.build' --exclude 'DerivedData' \
     --exclude 'FliksTV.xcodeproj' --exclude 'last-shot.png' \
     "$LOCAL_DIR/" "$MAC:$REMOTE/"
+  # project.yml bundles ../client/public/i18n, so it must sit next to the synced project.
+  rsync -az --delete "$LOCAL_DIR/../client/public/i18n/" "$MAC:$(dirname "$REMOTE")/client/public/i18n/"
 }
 
 remote() { ssh "$MAC" "bash \"\$HOME/$REMOTE/scripts/remote-build.sh\" $*"; }

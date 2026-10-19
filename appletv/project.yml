@@ -19,6 +19,11 @@ targets:
     platform: tvOS
     sources:
       - Sources
+      # Folder references: the client translations are bundled as-is, the overlay carries the tvOS strings.
+      - path: ../client/public/i18n
+        type: folder
+      - path: Resources/i18n-overlay
+        type: folder
     # A written plist rather than GENERATE_INFOPLIST_FILE: App Transport
     # Security takes a dictionary, which the INFOPLIST_KEY_* settings can't
     # express.
