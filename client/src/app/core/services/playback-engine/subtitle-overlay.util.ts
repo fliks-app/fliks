@@ -43,6 +43,8 @@ export class SubtitleOverlay {
   private lastTime = 0;
   private bottom = '10vh';
   private top = '5vh';
+  private insetRight = 0;
+  private insetBottom = 0;
   /** Request counter; a handle older than the last applied selection is ignored. */
   private seq = 0;
   private applied = 0;
@@ -143,6 +145,14 @@ export class SubtitleOverlay {
     BANDS.forEach((b) => this.place(els[b], b));
   }
 
+  /** Keeps cues inside the part of the player a side panel or sheet leaves uncovered. */
+  setInset(right: number, bottom: number): void {
+    this.insetRight = right;
+    this.insetBottom = bottom;
+    const els = this.ensureEls();
+    if (els) BANDS.forEach((b) => this.place(els[b], b));
+  }
+
   destroy(): void {
     this.applied = ++this.seq;
     BANDS.forEach((b) => this.els?.[b].remove());
@@ -157,7 +167,9 @@ export class SubtitleOverlay {
   private place(el: HTMLDivElement, band: Band): void {
     const top = band === 'top';
     el.style.top = top ? this.top : '';
-    el.style.bottom = top ? 'auto' : this.bottom;
+    el.style.bottom = top ? 'auto' : this.insetBottom ? `calc(${this.bottom} + ${this.insetBottom}px)` : this.bottom;
+    el.style.left = this.insetRight ? `calc((100% - ${this.insetRight}px) / 2)` : '50%';
+    el.style.maxWidth = this.insetRight ? `calc(0.8 * (100vw - ${this.insetRight}px))` : '80vw';
   }
 
   private ensureEls(): Record<Band, HTMLDivElement> | null {

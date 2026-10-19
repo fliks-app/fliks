@@ -6,6 +6,7 @@
   scrollbar-width: thin;
   scrollbar-color: rgb(255 255 255 / 0.4) transparent;
   overscroll-behavior: contain;
+  mask-image: linear-gradient(transparent, #000 24px, #000 calc(100% - 24px), transparent);
   user-select: none;
 }
 

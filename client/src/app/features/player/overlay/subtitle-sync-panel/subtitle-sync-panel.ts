@@ -119,8 +119,6 @@ export class SubtitleSyncPanelComponent {
   protected readonly rulerPx = RULER_PX;
   protected readonly chevronPx = CHEVRON_PX;
   protected readonly scrollbarW = signal(0);
-  /** Height of the controls bar, kept clear below the panel. */
-  protected readonly barH = signal(0);
   /** Phone: the controls are hidden, so the panel fills the side (landscape) or the lower sheet (portrait). */
   protected readonly panelClass = computed(() =>
     this.phone()
@@ -177,10 +175,18 @@ export class SubtitleSyncPanelComponent {
       };
       new ResizeObserver(measure).observe(el);
       measure();
-      const bar = document.querySelector('[data-controls-bottom]');
-      if (bar) {
-        new ResizeObserver(() => this.barH.set(bar.getBoundingClientRect().height)).observe(bar);
-        this.barH.set(bar.getBoundingClientRect().height);
+      const panel = this.host.nativeElement.querySelector<HTMLElement>('[data-subtitle-sync]');
+      const player = panel?.closest<HTMLElement>('.player-container');
+      if (panel && player) {
+        const inset = () => {
+          const p = panel.getBoundingClientRect();
+          const c = player.getBoundingClientRect();
+          // A side panel narrows the free area; a full-width sheet raises it.
+          if (p.width < c.width * 0.9) this.overlay.setInset(c.right - p.left, 0);
+          else this.overlay.setInset(0, c.bottom - p.top);
+        };
+        new ResizeObserver(inset).observe(panel);
+        inset();
       }
       el.focus({ preventScroll: true });
       this.raf = requestAnimationFrame(this.tick);
