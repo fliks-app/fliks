@@ -4,13 +4,15 @@ import {
   type AudioTrack,
   type EngineStats,
   type EngineQoeSample,
+  type EngineConfig,
+  type TextTrackHandle,
+  type TextTrackPick,
   pausedFlagForState,
 } from './playback-engine';
 import {
-  NATIVE_SUBTITLE_SIZE_SCALE,
-  SUBTITLE_FG_HEX,
-  SUBTITLE_BG_ARGB,
-  SUBTITLE_EDGE_KEY,
+  toNativeSubtitleStyle,
+  type NativeSubtitleStyle,
+  type SubtitleStyleSettings,
 } from '../../utils/subtitle-presets';
 import { normalizeLangCode } from '../../utils/language.utils';
 import type { TimeRange } from '../../utils/edl-policy';
@@ -77,14 +79,7 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
   private _preferredAudioLanguage?: string;
   private _videoCrop?: string;
 
-  private _subtitleStyle: {
-    fontScale: number;
-    foregroundColor: string;
-    backgroundColor: string;
-    edgeType: string;
-    bottomMarginPercent: number;
-    topMarginPercent?: number;
-  } | null = null;
+  private _subtitleStyle: NativeSubtitleStyle | null = null;
   private _fillScreen = false;
 
   // ── Lifecycle ──
@@ -263,7 +258,8 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
     return { language, forced, index, source };
   }
 
-  selectTextTrack(track: any): void {
+  selectTextTrack(handle: TextTrackHandle | null): void {
+    const track = handle as TextTrackPick | null;
     this._desiredSubtitle =
       track && typeof track === 'object' && track.language
         ? {
@@ -317,22 +313,8 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
 
   /** Match NativeEngine.setSubtitleStyle: maps the player's preset keys to the
    *  native style payload and pushes it to mpv. */
-  setSubtitleStyle(settings: {
-    size: string;
-    color: string;
-    shadow: string;
-    background: string;
-    bottomMargin: number;
-    topMargin?: number;
-  }): void {
-    this._subtitleStyle = {
-      fontScale: NATIVE_SUBTITLE_SIZE_SCALE[settings.size] ?? 1.0,
-      foregroundColor: SUBTITLE_FG_HEX[settings.color] ?? '#FFFFFF',
-      backgroundColor: SUBTITLE_BG_ARGB[settings.background] ?? 'transparent',
-      edgeType: SUBTITLE_EDGE_KEY[settings.shadow] ?? 'drop_shadow',
-      bottomMarginPercent: settings.bottomMargin,
-      topMarginPercent: settings.topMargin,
-    };
+  setSubtitleStyle(settings: SubtitleStyleSettings): void {
+    this._subtitleStyle = toNativeSubtitleStyle(settings);
     if (this._initialized) {
       this.bridge.setSubtitleStyle(this._subtitleStyle).catch(() => {});
     }
@@ -384,23 +366,11 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
     }
   }
 
-  // ── Quality ──
-  // mpv selects one HLS variant when it opens the master playlist and never
-  // switches mid-playback — there is no in-engine ABR to drive. The rung is
-  // pinned server-side via `startQuality` before load (player.ts
-  // resolveStartQuality), so variant pinning here is a no-op (kept for the
-  // PlaybackEngine contract).
-  getVariantTracks(): any[] {
-    return [];
-  }
-  selectVariantTrack(_track: any, _clearBuffer?: boolean): void {
-    /* no-op: mpv already opened its single pinned variant */
-  }
-  configure(config: any): void {
-    // No ABR knob to honour (see above); the only one is the preferred audio
-    // language, threaded to mpv as `alang` on the next load so it auto-selects
-    // the right rendition on every reconfig (mirrors the Shaka engine's
-    // preferredAudioLanguage).
+  // ── Tuning ──
+  // mpv opens one HLS variant and never switches: the rung is pinned server-side
+  // via `startQuality`, so there is no ABR to drive, only the audio language and crop.
+  configure(config: EngineConfig): void {
+    // The language reaches mpv as `alang` on the next load, like Shaka's preferredAudioLanguage.
     if (config && typeof config.preferredAudioLanguage === 'string') {
       this._preferredAudioLanguage = config.preferredAudioLanguage || undefined;
     }

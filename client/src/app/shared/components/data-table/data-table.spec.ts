@@ -12,6 +12,7 @@ import { SseService } from '../../../core/services/sse.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { SKIP_ERROR_TOAST } from '../../../core/interceptors/error.interceptor';
 import { HttpContext } from '@angular/common/http';
+import type { TableRowActionId } from '../../../core/plugin-ui/ui-contribution';
 import { ListAction, RowAction, TableColumn, TableFilter, TableRow } from './data-table.types';
 
 const COLUMNS: TableColumn[] = [{ key: 'name', labelKey: 'x.name' }];
@@ -123,7 +124,7 @@ describe('DataTableComponent — characterisation', () => {
   it('omits a row action whose actionId is unknown to the host', async () => {
     const fixture = await createComponent({
       http: { get: () => of([{ id: 1, name: 'A' }]) },
-      rowActions: [{ kind: 'action', labelKey: 'x.doit', actionId: 'core.unknown' }],
+      rowActions: [{ kind: 'action', labelKey: 'x.doit', actionId: 'core.unknown' as TableRowActionId }],
       resolveAction: () => undefined,
     });
     expect(fixture.componentInstance.visibleActions({ id: 1, name: 'A' })).toHaveLength(0);
@@ -133,8 +134,8 @@ describe('DataTableComponent — characterisation', () => {
     const handler = vi.fn();
     const fixture = await createComponent({
       http: { get: () => of([{ id: 1, name: 'A' }]) },
-      rowActions: [{ kind: 'action', labelKey: 'x.doit', actionId: 'core.known' }],
-      resolveAction: (id) => (id === 'core.known' ? handler : undefined),
+      rowActions: [{ kind: 'action', labelKey: 'x.doit', actionId: 'table.open-media' }],
+      resolveAction: (id) => (id === 'table.open-media' ? handler : undefined),
     });
     const [item] = fixture.componentInstance.visibleActions({ id: 1, name: 'A' });
     expect(item).toBeDefined();
@@ -146,8 +147,8 @@ describe('DataTableComponent — characterisation', () => {
     const handler = vi.fn();
     const fixture = await createComponent({
       http: { get: () => of([{ id: 1, name: 'A' }]) },
-      rowActions: [{ kind: 'action', labelKey: 'x.doit', actionId: 'core.known' }],
-      resolveAction: (id) => (id === 'core.known' ? handler : undefined),
+      rowActions: [{ kind: 'action', labelKey: 'x.doit', actionId: 'table.open-media' }],
+      resolveAction: (id) => (id === 'table.open-media' ? handler : undefined),
     });
     const kebab = fixture.nativeElement.querySelector('tbody td button') as HTMLButtonElement;
     kebab.click();

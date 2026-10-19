@@ -6,6 +6,7 @@
  * the Shaka/ExoPlayer event shape.
  */
 
+import type shaka from 'shaka-player';
 import { isUndecodableError } from './playback-error';
 import type { TimeRange } from '../../utils/edl-policy';
 
@@ -22,7 +23,7 @@ export interface AudioTrack {
   supported?: boolean;
 }
 
-export interface SubtitleTrack {
+export interface EngineSubtitleTrack {
   id: string;
   label: string;
   url: string;
@@ -32,7 +33,7 @@ export interface SubtitleTrack {
   forced?: boolean;
 }
 
-export type PlaybackState = 'idle' | 'playing' | 'paused' | 'buffering' | 'ended' | 'error';
+export type EngineState = 'idle' | 'playing' | 'paused' | 'buffering' | 'ended' | 'error';
 
 /**
  * The paused flag implied by a transport state, or `undefined` when the state
@@ -42,7 +43,7 @@ export type PlaybackState = 'idle' | 'playing' | 'paused' | 'buffering' | 'ended
  * flag — and the play/pause button — alone. Shared by every consumer that
  * mirrors engine state so the rule lives in one place.
  */
-export function pausedFlagForState(state: PlaybackState): boolean | undefined {
+export function pausedFlagForState(state: EngineState): boolean | undefined {
   if (state === 'playing') return false;
   if (state === 'paused' || state === 'idle') return true;
   return undefined;
@@ -117,8 +118,54 @@ export function hasQoeData(s: EngineQoeSample): boolean {
   ].some((v) => v != null);
 }
 
+/** An HLS rendition as Shaka lists it; the only engine that reports them. */
+export type VariantTrack = shaka.extern.Track;
+
+/** What a native player can be asked for: a resolution ceiling rather than a rendition. */
+export type VariantSize = Pick<VariantTrack, 'width' | 'height'>;
+
+/** Opaque to the player: what `addTextTrack` returns, handed back to `selectTextTrack` next to the
+ *  pick's descriptor ({@link TextTrackPick}). Each engine builds and reads its own. */
+export type TextTrackHandle = object;
+
+/** The fields the mpv and ExoPlayer engines read off the handle they gave out. */
+export interface TextTrackPick {
+  language?: string;
+  forced?: boolean;
+  index?: number;
+  source?: string | null;
+  embIndex?: number | null;
+  image?: boolean;
+}
+
+interface RetryParameters {
+  timeout?: number;
+  connectionTimeout?: number;
+  maxAttempts?: number;
+  baseDelay?: number;
+}
+
+/** The knobs core turns, in Shaka's own configuration shape; other engines read what applies. */
+export interface EngineConfig {
+  abr?: {
+    enabled?: boolean;
+    defaultBandwidthEstimate?: number;
+    useNetworkInformation?: boolean;
+    switchInterval?: number;
+    bandwidthUpgradeTarget?: number;
+    bandwidthDowngradeTarget?: number;
+    restrictToElementSize?: boolean;
+    advanced?: { minTotalBytes?: number; slowHalfLife?: number };
+  };
+  streaming?: { bufferBehind?: number; retryParameters?: RetryParameters; maxDisabledTime?: number };
+  manifest?: { retryParameters?: RetryParameters };
+  preferredAudioLanguage?: string;
+  /** mpv crop rectangle (`WxH+X+Y`), or null to clear it. */
+  videoCrop?: string | null;
+}
+
 export type EngineEventMap = {
-  stateChanged: { state: PlaybackState };
+  stateChanged: { state: EngineState };
   timeUpdate: { position: number; duration: number; buffered: number };
   // `errorKey` is an i18n key the engine resolves the user-facing message
   // from (raw `message` stays for the console). Engines that surface
@@ -344,14 +391,17 @@ export interface PlaybackEngine {
     label: string,
     forced?: boolean,
     index?: number,
-  ): Promise<any>;
-  selectTextTrack(track: any): void;
+  ): Promise<TextTrackHandle>;
+  selectTextTrack(track: TextTrackHandle | null): void;
   setTextVisibility(visible: boolean): void;
 
-  // ── Quality (Shaka variant tracks) ──
-  getVariantTracks(): any[];
-  selectVariantTrack(track: any, clearBuffer?: boolean): void;
-  configure(config: any): void;
+  // ── Quality and tuning — only the engines with something to tune implement these ──
+  /** The renditions an adaptive engine can pin; absent where the platform owns ABR. */
+  getVariantTracks?(): VariantTrack[];
+  /** Pins a rendition (Shaka) or caps the resolution (native players). */
+  selectVariantTrack?(track: VariantTrack | VariantSize, clearBuffer?: boolean): void;
+  /** Applies the keys the engine understands and ignores the rest. */
+  configure?(config: EngineConfig): void;
 
   // ── Stats ──
   getStats(): EngineStats;

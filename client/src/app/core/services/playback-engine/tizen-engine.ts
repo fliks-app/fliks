@@ -4,7 +4,7 @@ import {
   EngineQoeSample,
   EngineStats,
   PlaybackEngine,
-  PlaybackState,
+  EngineState,
 } from './playback-engine';
 import { SubtitleOverlay, type SubtitleHandle } from './subtitle-overlay.util';
 import type { TimeRange } from '../../utils/edl-policy';
@@ -744,15 +744,6 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
   }): void {
     this.subtitles.setStyle(style);
   }
-
-  // ── Quality — AVPlay handles ABR internally ────────────────────────
-
-  getVariantTracks(): unknown[] { return []; }
-  selectVariantTrack(_track: unknown, _clearBuffer?: boolean): void {
-    /* AVPlay does its own ABR; manual pinning would need
-       setStreamingProperty('AVAILABLE_BITRATE', '<min~max>'). */
-  }
-  configure(_config: unknown): void { /* Shaka-specific */ }
 
   // ── Stats ───────────────────────────────────────────────────────────
 

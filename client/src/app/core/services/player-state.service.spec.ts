@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { describe, expect, it, vi } from 'vitest';
 import { TranslateService } from '@ngx-translate/core';
 import { PlayerStateService } from './player-state.service';
-import type { PlaybackEngine, PlaybackState } from './playback-engine/playback-engine';
+import type { PlaybackEngine, EngineState } from './playback-engine/playback-engine';
 
 /** Records the handlers `bindEngine` registers so a test can fire them. */
 function fakeEngine() {
@@ -32,7 +32,7 @@ function setup() {
   const service = TestBed.inject(PlayerStateService);
   const { engine, fire } = fakeEngine();
   service.bindEngine(engine);
-  const state = (s: PlaybackState) => fire('stateChanged', { state: s });
+  const state = (s: EngineState) => fire('stateChanged', { state: s });
   return { service, state, fire };
 }
 

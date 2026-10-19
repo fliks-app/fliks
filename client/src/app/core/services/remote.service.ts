@@ -3,7 +3,7 @@ import { HttpClient, HttpContext, HttpErrorResponse } from '@angular/common/http
 import { NavigationEnd, Router } from '@angular/router';
 import { Subject, filter, firstValueFrom } from 'rxjs';
 import { TranslateService } from '@ngx-translate/core';
-import { RemoteCommand, RemoteQualityRung, SseService } from './sse.service';
+import { RemoteCommand, RemoteState, SseService } from './sse.service';
 import { SKIP_ERROR_TOAST } from '../interceptors/error.interceptor';
 import { ToastService } from './toast.service';
 import { CastSettingsService } from './cast-settings.service';
@@ -13,31 +13,8 @@ import { parseAudioIndex } from '../utils/player.utils';
 
 export type RemoteAction = RemoteCommand['action'];
 
-export interface RemoteNowPlaying {
-  sessionId: string;
-  mediaId: number | null;
-  mediaFileId: number;
-  episodeId?: number | null;
-  mediaTitle: string | null;
-  episodeLabel: string | null;
-  posterUrl: string | null;
-  fanartUrl?: string | null;
-  positionSeconds: number;
-  durationSeconds: number;
-  state: 'playing' | 'paused' | 'buffering';
-  volume: number | null;
-  muted: boolean | null;
-  supportsVolume: boolean;
-  subtitleId: string | null;
-  quality: string | null;
-  /** The target's own ladder: the only id space it accepts for a quality change. */
-  qualities: RemoteQualityRung[] | null;
-  autoplayBlocked: boolean;
-  /** The target has an item queued after this one. */
-  hasNext: boolean;
-  audioTrackIndex: number | null;
-  subtitleTrackIndex: number | null;
-}
+/** What a target reports it is playing: the heartbeat minus its routing fields. */
+export type RemoteNowPlaying = Omit<RemoteState, 'type' | 'targetId' | 'lastCmdId'>;
 
 export interface RemoteTarget {
   targetId: string;

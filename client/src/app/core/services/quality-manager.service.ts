@@ -1,6 +1,6 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { TranslateService } from '@ngx-translate/core';
-import type { PlaybackEngine } from './playback-engine/playback-engine';
+import type { PlaybackEngine, VariantTrack } from './playback-engine/playback-engine';
 import { bucketResolutionLabel, widthForProfile, type PlaybackMode } from '../utils/player.utils';
 import { PlayerSettingsService } from './player-settings.service';
 
@@ -33,9 +33,9 @@ const ABR_DEFAULT_BANDWIDTH_ESTIMATE = 100_000_000;
  * Find a variant track by profile name in the variant URL (e.g. '480p' matches '/480p/').
  * Returns null if no match found.
  */
-export function findVariantByProfileName(tracks: any[], profileName: string): any | null {
+export function findVariantByProfileName(tracks: VariantTrack[], profileName: string): VariantTrack | null {
   const path = `/${profileName}/`;
-  return tracks.find((t: any) => t.originalVideoId?.includes(path)) ?? null;
+  return tracks.find((t) => t.originalVideoId?.includes(path)) ?? null;
 }
 
 /**
@@ -43,12 +43,12 @@ export function findVariantByProfileName(tracks: any[], profileName: string): an
  * pick the largest height that is ≤ targetHeight.
  * If none fits (all tracks are above target), pick the smallest.
  */
-export function findBestVariantForHeight(tracks: any[], targetHeight: number): any {
-  const below = tracks.filter((t: any) => (t.height ?? 0) <= targetHeight);
+export function findBestVariantForHeight(tracks: VariantTrack[], targetHeight: number): VariantTrack {
+  const below = tracks.filter((t) => (t.height ?? 0) <= targetHeight);
   if (below.length) {
-    return below.reduce((a: any, b: any) => ((a.height ?? 0) >= (b.height ?? 0) ? a : b));
+    return below.reduce((a, b) => ((a.height ?? 0) >= (b.height ?? 0) ? a : b));
   }
-  return tracks.reduce((a: any, b: any) => ((a.height ?? 0) <= (b.height ?? 0) ? a : b));
+  return tracks.reduce((a, b) => ((a.height ?? 0) <= (b.height ?? 0) ? a : b));
 }
 
 /**
@@ -166,7 +166,7 @@ export class QualityManagerService {
       if (playbackMode !== 'direct') {
         // ABR for HLS: enable + trim buffer to 5s so ABR can switch quality quickly.
         // The server restarts FFmpeg at the new quality from the current segment.
-        engine.configure({
+        engine.configure?.({
           abr: {
             enabled: true,
             defaultBandwidthEstimate: ABR_DEFAULT_BANDWIDTH_ESTIMATE,
@@ -193,19 +193,19 @@ export class QualityManagerService {
               // weight on the overall estimate — protects against the
               // transcode-warmup outlier dragging ABR down.
               slowHalfLife: 30,
-            } as any,
+            },
           },
           streaming: { bufferBehind: 5 },
         });
       } else {
-        engine.configure({ abr: { enabled: true } });
+        engine.configure?.({ abr: { enabled: true } });
       }
       return;
     }
 
     // Disable ABR and lock to a specific variant
-    engine.configure({ abr: { enabled: false } });
-    const allTracks = engine.getVariantTracks();
+    engine.configure?.({ abr: { enabled: false } });
+    const allTracks = engine.getVariantTracks?.() ?? [];
 
     if (!allTracks.length) {
       // No variant tracks (native player) — use profile maxWidth to set
@@ -218,23 +218,23 @@ export class QualityManagerService {
           widthForProfile(option.id) ??
           Math.round((option.height * 16) / 9));
       const h = isOriginal ? 99999 : option.height;
-      engine.selectVariantTrack({ height: h, width: w }, true);
+      engine.selectVariantTrack?.({ height: h, width: w }, true);
       return;
     }
 
     // Preserve current audio track: filter variants to those matching the active audioId
-    const activeTrack = allTracks.find((t: any) => t.active);
+    const activeTrack = allTracks.find((t) => t.active);
     const activeAudioId = activeTrack?.audioId;
     const tracks =
       activeAudioId != null
-        ? allTracks.filter((t: any) => t.audioId === activeAudioId)
+        ? allTracks.filter((t) => t.audioId === activeAudioId)
         : allTracks;
     const candidates = tracks.length ? tracks : allTracks;
 
     const wasPaused = engine.paused;
 
     const target = option.id === 'original'
-      ? candidates.reduce((a: any, b: any) => ((a.height ?? 0) >= (b.height ?? 0) ? a : b))
+      ? candidates.reduce((a, b) => ((a.height ?? 0) >= (b.height ?? 0) ? a : b))
       : findVariantByProfileName(candidates, option.id)
         ?? findBestVariantForHeight(candidates, option.height);
 
@@ -243,10 +243,10 @@ export class QualityManagerService {
     // in-flight segment requests (init.mp4).
     if (target && activeTrack && target.id === activeTrack.id) return;
     // Deduplicate by video height — multi-audio creates N variants per resolution.
-    const uniqueHeights = new Set(candidates.map((t: any) => t.height));
+    const uniqueHeights = new Set(candidates.map((t) => t.height));
     if (uniqueHeights.size <= 1) return;
 
-    engine.selectVariantTrack(target, true);
+    engine.selectVariantTrack?.(target, true);
 
     // Restore pause state — clearBuffer can trigger autoplay
     if (wasPaused) engine.pause();

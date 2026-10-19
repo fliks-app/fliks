@@ -7,7 +7,7 @@ import { QoeReporter, newPlaybackId } from './qoe-reporter.service';
 import type { QoeRecoveryReason } from './api/qoe-api.service';
 import { CastSettingsService } from './cast-settings.service';
 import { StreamingApiService, type PlayMethod } from './api/streaming-api.service';
-import { SubtitlesApiService } from './api/subtitles-api.service';
+import { SubtitlesApiService, type SubtitleFileRow } from './api/subtitles-api.service';
 import { AppSettingsService } from './app-settings.service';
 import { buildSubtitleTracks } from '../utils/subtitle-tracks';
 import { normalizeLangCode } from '../utils/language.utils';
@@ -1027,7 +1027,7 @@ export class CastPlayerService {
       needsMediaFetch
         ? this.mediaService.getOne(opts.mediaId).catch(() => null)
         : Promise.resolve(null),
-      this.subtitlesApi.getForMedia(opts.mediaId).catch(() => [] as any[]),
+      this.subtitlesApi.getForMedia(opts.mediaId).catch(() => [] as SubtitleFileRow[]),
       needsSavedState
         ? this.streamingApi
             .getPlaybackState(opts.mediaId, opts.episodeId)
@@ -1039,7 +1039,7 @@ export class CastPlayerService {
     let streamInfo = opts.streamInfo;
     let fanartUrl = opts.fanartUrl ?? null;
     if (mediaResult) {
-      const file = mediaResult.files?.find((f: any) => f.id === opts.mediaFileId);
+      const file = mediaResult.files?.find((f) => f.id === opts.mediaFileId);
       streamInfo = file?.streamInfo ?? opts.streamInfo;
       if (!fanartUrl && mediaResult.fanartUrl) fanartUrl = mediaResult.fanartUrl;
     }

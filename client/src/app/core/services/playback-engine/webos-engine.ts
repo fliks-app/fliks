@@ -536,12 +536,6 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
     this.subtitles.setStyle(style);
   }
 
-  // ── Quality — native ABR ────────────────────────────────────────────
-
-  getVariantTracks(): unknown[] { return []; }
-  selectVariantTrack(_track: unknown, _clearBuffer?: boolean): void { /* native ABR; pinned via reload */ }
-  configure(_config: unknown): void { /* Shaka-specific */ }
-
   // ── Stats ───────────────────────────────────────────────────────────
 
   /** Chromium recreates its media player on load(), so counters can restart at 0 under a stale baseline. */

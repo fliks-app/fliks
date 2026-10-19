@@ -6,8 +6,11 @@ import {
   EngineQoeSample,
   EngineStats,
   PlaybackEngine,
-  PlaybackState,
+  EngineState,
+  EngineConfig,
   SeekRange,
+  TextTrackHandle,
+  VariantTrack,
 } from './playback-engine';
 import { normalizeLangCode } from '../../utils/language.utils';
 import type { TimeRange } from '../../utils/edl-policy';
@@ -81,7 +84,7 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
       this.player.configure({
         textDisplayFactory: (player: shaka.Player) =>
           new shaka.text.UITextDisplayer(player),
-      } as any);
+      });
     }
 
     await this.player.attach(video);
@@ -100,7 +103,7 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
       // otherwise show a forced track in the audio language on every load.
       accessibility: { handleForcedSubtitlesAutomatically: false },
       cmcd: { enabled: true, useHeaders: false },
-    } as any);
+    });
 
     this.installSessionExpiredFilter();
     this.bridgeVideoEvents();
@@ -125,7 +128,7 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
     if (!this.player) return;
     const ne = this.player.getNetworkingEngine?.();
     if (!ne) return;
-    ne.registerResponseFilter((type, response: any) => {
+    ne.registerResponseFilter((type, response) => {
       if (response?.status !== 410) return;
       const RequestType = shaka.net.NetworkingEngine.RequestType;
       // SEGMENT covers init + media segments (the basic enum doesn't
@@ -144,7 +147,7 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
       // every retried 410); cleared after a tick so a later, unrelated
       // error from the bridge isn't accidentally suppressed.
       setTimeout(() => { this.sessionExpiredInFlight = false; }, 2000);
-      this.emit('sessionExpired', undefined as any);
+      this.emit('sessionExpired', undefined);
       throw new shaka.util.Error(
         shaka.util.Error.Severity.CRITICAL,
         shaka.util.Error.Category.NETWORK,
@@ -296,14 +299,14 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
 
     // Deduplicate by audioId (each audio track appears in multiple variants
     // for different video qualities).
-    const seen = new Map<number, any>();
+    const seen = new Map<number, shaka.extern.Track>();
     for (const v of variants) {
       if (v.audioId != null && !seen.has(v.audioId)) {
         seen.set(v.audioId, v);
       }
     }
 
-    const activeAudioId = variants.find((v: any) => v.active)?.audioId;
+    const activeAudioId = variants.find((v) => v.active)?.audioId;
     return Array.from(seen.entries()).map(([audioId, v]) => ({
       id: `shaka-${audioId}`,
       label: `${v.language ?? 'und'} (${v.audioCodec ?? '?'}${v.channelsCount ? ' ' + v.channelsCount + 'ch' : ''})`,
@@ -319,12 +322,12 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
 
     const audioId = parseInt(id.replace('shaka-', ''), 10);
     const variants = this.player.getVariantTracks();
-    const active = variants.find((v: any) => v.active);
+    const active = variants.find((v) => v.active);
 
     // Prefer a variant that keeps the current videoId (quality) while switching audio.
     const target =
-      variants.find((v: any) => v.audioId === audioId && v.videoId === active?.videoId)
-      ?? variants.find((v: any) => v.audioId === audioId);
+      variants.find((v) => v.audioId === audioId && v.videoId === active?.videoId)
+      ?? variants.find((v) => v.audioId === audioId);
 
     if (target) {
       const wasPlaying = this.video ? !this.video.paused : false;
@@ -345,7 +348,7 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
     label: string,
     forced?: boolean,
     index = 0,
-  ): Promise<any> {
+  ): Promise<TextTrackHandle> {
     if (!this.player) throw new Error('ShakaEngine not initialised');
     // An HLS SUBTITLES rendition is matched by (language, forced), then by `index`
     // (the ordinal among tracks sharing both). Language codes are normalised: the
@@ -353,7 +356,7 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
     // a substitute.
     const want = normalizeLangCode(language);
     const sideloaded = new Set([...this.sideloadedTextTracks.values()].map((t) => t.id));
-    const renditions: any[] = this.player.getTextTracks().filter((t) => !sideloaded.has(t.id));
+    const renditions = this.player.getTextTracks().filter((t) => !sideloaded.has(t.id));
     const sameLangForced = renditions.filter(
       (t) => normalizeLangCode(t.language) === want && !!t.forced === !!forced,
     );
@@ -373,25 +376,16 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
     return track;
   }
 
-  selectTextTrack(track: any): void {
+  selectTextTrack(track: TextTrackHandle | null): void {
     if (!track) return;
-    this.player?.selectTextTrack(track);
-    try {
-      (this.player as any)?.setTextVisibility(true);
-    } catch {
-      // Shaka may throw if no text tracks exist
-    }
+    this.player?.selectTextTrack(track as shaka.extern.TextTrack);
   }
 
   setTextVisibility(visible: boolean): void {
-    // Shaka 5.x merged text visibility into track selection: the standalone
-    // `setTextVisibility(boolean)` method was removed, so the old bare call
-    // threw (silently caught) and disabling subtitles never took effect.
-    // Showing is handled by `selectTextTrack(track)` in selectTextTrack();
-    // to hide, deselect the track with `selectTextTrack(null)`.
+    // Shaka 5 has no visibility flag: selecting a track shows it, deselecting hides it.
     if (visible) return;
     try {
-      (this.player as any)?.selectTextTrack(null);
+      this.player?.selectTextTrack(null);
     } catch {
       // no player / no active text track
     }
@@ -399,15 +393,15 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
 
   // ─── Quality (variant tracks) ──────────────────────────────────────
 
-  getVariantTracks(): any[] {
+  getVariantTracks(): VariantTrack[] {
     return this.player?.getVariantTracks() ?? [];
   }
 
-  selectVariantTrack(track: any, clearBuffer?: boolean): void {
+  selectVariantTrack(track: VariantTrack, clearBuffer?: boolean): void {
     this.player?.selectVariantTrack(track, clearBuffer);
   }
 
-  configure(config: any): void {
+  configure(config: EngineConfig): void {
     this.player?.configure(config);
   }
 
@@ -418,7 +412,7 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
       | { droppedFrames?: number; streamBandwidth?: number }
       | undefined;
 
-    const activeTrack = this.player?.getVariantTracks()?.find((t: any) => t.active);
+    const activeTrack = this.player?.getVariantTracks()?.find((t) => t.active);
 
     return {
       droppedFrames: shakaStats?.droppedFrames ?? 0,
@@ -428,7 +422,7 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
             width: activeTrack.width ?? undefined,
             height: activeTrack.height ?? undefined,
             videoBandwidth: activeTrack.videoBandwidth ?? undefined,
-            audioBandwidth: (activeTrack as any).audioBandwidth ?? undefined,
+            audioBandwidth: activeTrack.audioBandwidth ?? undefined,
             videoCodec: activeTrack.videoCodec ?? undefined,
             audioCodec: activeTrack.audioCodec ?? undefined,
           }
@@ -522,7 +516,7 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
       // fires only after a frame has actually been presented to the
       // compositor (the DOM 'playing' event can precede the first paint).
       if (!this.firstFrameEmitted) {
-        const rvfc = (video as any).requestVideoFrameCallback;
+        const rvfc = video.requestVideoFrameCallback;
         const fire = () => this.emitFirstFrameOnce();
         if (typeof rvfc === 'function') rvfc.call(video, fire);
         else fire();
@@ -536,7 +530,7 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
 
     this.addVideoListener('ended', () => {
       this.emit('stateChanged', { state: 'ended' });
-      this.emit('ended', undefined as any);
+      this.emit('ended', undefined);
     });
 
     // Output level / mute — the single mirror back to the UI slider.
@@ -603,11 +597,12 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
 
   private bridgeShakaEvents(): void {
     // Shaka holds playback at its rebuffering goal without a DOM waiting/stalled event.
-    this.addShakaListener('buffering', (e: any) => {
+    this.addShakaListener('buffering', (ev) => {
+      const { buffering } = ev as unknown as { buffering: boolean };
       const video = this.video;
-      this.shakaBuffering = !!e.buffering;
+      this.shakaBuffering = buffering;
       if (!video || video.ended) return;
-      if (e.buffering) {
+      if (buffering) {
         if (!video.paused) this.emitBuffering();
       } else {
         this.bufferingEmitted = false;
@@ -616,8 +611,8 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
     });
 
     // Shaka error events (separate from HTMLVideoElement errors)
-    this.addShakaListener('error', (e: any) => {
-      const detail = e.detail;
+    this.addShakaListener('error', (ev) => {
+      const detail = (ev as unknown as { detail?: shaka.util.Error }).detail;
       if (this.sessionExpiredInFlight) {
         // 410 recovery is taking over — swallow the fatal-error event
         // so the UI doesn't render the error overlay before the engine
