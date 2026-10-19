@@ -7,7 +7,9 @@ export interface MediaServerRow {
   name: string;
   type: string;
   url: string;
+  /** Always `''`: the server never returns the stored key. */
   apiKey: string;
+  apiKeySet: boolean;
   events: string[];
   enabled: boolean;
 }
@@ -22,7 +24,8 @@ export interface CreateMediaServerBody {
   name: string;
   type: string;
   url: string;
-  apiKey?: string;
+  /** Absent or `''` keeps the stored key, `null` clears it. */
+  apiKey?: string | null;
   events?: string[];
   enabled?: boolean;
 }

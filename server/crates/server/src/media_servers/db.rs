@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use serde::Serialize;
 use sqlx::{PgPool, types::Json};
 
-/// The entity as Nest serialises it, `apiKey` in clear (rule 7).
+/// The entity as the API serialises it: `apiKey` is always `""`, `apiKeySet` says whether a key is stored (F79).
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Server {
@@ -16,9 +16,15 @@ pub struct Server {
     pub name: String,
     pub r#type: String,
     pub url: String,
+    #[serde(serialize_with = "blank")]
     pub api_key: Option<String>,
+    pub api_key_set: bool,
     pub events: Json<Vec<String>>,
     pub enabled: bool,
+}
+
+fn blank<S: serde::Serializer>(_: &Option<String>, s: S) -> Result<S::Ok, S::Error> {
+    s.serialize_str("")
 }
 
 /// Columns a create or update writes.
@@ -36,6 +42,7 @@ pub async fn list(db: &PgPool) -> sqlx::Result<Vec<Server>> {
         Server,
         r#"SELECT id, "createdAt" AS "created_at!", "updatedAt" AS "updated_at!", name,
                   type::text AS "type!", url, "apiKey" AS api_key,
+                  COALESCE("apiKey" <> '', false) AS "api_key_set!",
                   events AS "events!: Json<Vec<String>>", enabled
            FROM media_servers ORDER BY name COLLATE "C", id"#
     )
@@ -48,6 +55,7 @@ pub async fn enabled(db: &PgPool) -> sqlx::Result<Vec<Server>> {
         Server,
         r#"SELECT id, "createdAt" AS "created_at!", "updatedAt" AS "updated_at!", name,
                   type::text AS "type!", url, "apiKey" AS api_key,
+                  COALESCE("apiKey" <> '', false) AS "api_key_set!",
                   events AS "events!: Json<Vec<String>>", enabled
            FROM media_servers WHERE enabled ORDER BY id"#
     )
@@ -60,6 +68,7 @@ pub async fn find(db: &PgPool, id: i32) -> sqlx::Result<Option<Server>> {
         Server,
         r#"SELECT id, "createdAt" AS "created_at!", "updatedAt" AS "updated_at!", name,
                   type::text AS "type!", url, "apiKey" AS api_key,
+                  COALESCE("apiKey" <> '', false) AS "api_key_set!",
                   events AS "events!: Json<Vec<String>>", enabled
            FROM media_servers WHERE id = $1"#,
         id

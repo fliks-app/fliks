@@ -89,6 +89,7 @@ Decided behaviour for the Rust port (security fixes F, correctness fixes C; D3).
 | F76 | `logoPath` of a channel was the provider URL until the logo was cached | every channel payload returns `null` until cached, then `/api/livetv/channels/<id>/logo` | clients already fall back when null |
 | F77 | a plugin webhook target that is an IPv6 literal was never checked (`hostname` keeps its brackets) | refused at registration like an IPv4 literal | none for public targets |
 | F78 | `FLIKS_PLUGINS_DISABLED=1` still refreshed every catalog source at boot and ran the `RefreshPluginSources` auto-update | no background catalog refresh (boot pass, `RefreshPluginSources`) and no auto-update while plugins are disabled; an admin's explicit source refresh or catalog inspect still fetches | none |
+| F79 | `GET`/`POST`/`PUT /api/media-servers*` return the stored `apiKey` (the Emby token) in clear, and a `PUT` with `apiKey: ""` stored the empty string | `apiKey` is always `""`, `apiKeySet: boolean` says whether one is stored; a write with `apiKey` absent or `""` keeps the stored key, a non-empty string replaces it, `null` clears it | the edit form starts empty with an "unchanged" hint; a 4.x client re-sending `""` keeps the key but can no longer clear it |
 
 Not done (user decision 2026-10-15): login rate limiting/lockout.
 

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, \"createdAt\" AS \"created_at!\", \"updatedAt\" AS \"updated_at!\", name,\n                  type::text AS \"type!\", url, \"apiKey\" AS api_key,\n                  events AS \"events!: Json<Vec<String>>\", enabled\n           FROM media_servers WHERE enabled ORDER BY id",
+  "query": "SELECT id, \"createdAt\" AS \"created_at!\", \"updatedAt\" AS \"updated_at!\", name,\n                  type::text AS \"type!\", url, \"apiKey\" AS api_key,\n                  COALESCE(\"apiKey\" <> '', false) AS \"api_key_set!\",\n                  events AS \"events!: Json<Vec<String>>\", enabled\n           FROM media_servers WHERE enabled ORDER BY id",
   "describe": {
     "columns": [
       {
@@ -40,11 +40,16 @@
       },
       {
         "ordinal": 7,
+        "name": "api_key_set!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 8,
         "name": "events!: Json<Vec<String>>",
         "type_info": "Jsonb"
       },
       {
-        "ordinal": 8,
+        "ordinal": 9,
         "name": "enabled",
         "type_info": "Bool"
       }
@@ -60,9 +65,10 @@
       null,
       false,
       true,
+      null,
       false,
       false
     ]
   },
-  "hash": "4e149ee161516b4ead87673830168c5baab9b592c4d715baf76cd5ba3740b4c3"
+  "hash": "a5fe6d20eb77e7b7eb4cc5a552c70ee6c1270dc0e8bafedde4c08e7c56b28ae1"
 }

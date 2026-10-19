@@ -55,6 +55,7 @@ export class MediaServersSettingsComponent implements OnInit {
   readonly formType = signal('emby');
   readonly formUrl = signal('');
   readonly formApiKey = signal('');
+  readonly formApiKeySet = signal(false);
   readonly formEnabled = signal(true);
   readonly formEvents = signal<string[]>([]);
 
@@ -93,6 +94,7 @@ export class MediaServersSettingsComponent implements OnInit {
     this.formName.set(this.typeLabel(firstType));
     this.formUrl.set('');
     this.formApiKey.set('');
+    this.formApiKeySet.set(false);
     this.formEnabled.set(true);
     this.formEvents.set([...(this.serverTypes()[0]?.supportedEvents ?? [])]);
     this.testResult.set(null);
@@ -104,7 +106,8 @@ export class MediaServersSettingsComponent implements OnInit {
     this.formName.set(row.name);
     this.formType.set(row.type);
     this.formUrl.set(row.url);
-    this.formApiKey.set(row.apiKey);
+    this.formApiKey.set('');
+    this.formApiKeySet.set(row.apiKeySet);
     this.formEnabled.set(row.enabled);
     this.formEvents.set([...row.events]);
     this.testResult.set(null);
@@ -155,11 +158,12 @@ export class MediaServersSettingsComponent implements OnInit {
     const url = this.formUrl().trim();
     if (!url) return;
 
+    const apiKey = this.formApiKey().trim();
     const body = {
       name,
       type: this.formType(),
       url: url.replace(/\/$/, ''),
-      apiKey: this.formApiKey().trim(),
+      ...(apiKey || this.editingId() === null ? { apiKey } : {}),
       events: this.formEvents(),
       enabled: this.formEnabled(),
     };
@@ -177,7 +181,7 @@ export class MediaServersSettingsComponent implements OnInit {
     }
   }
 
-  /** name/type/url are required by the DTO even on update, so the row's own values ride along. */
+  /** name/type/url are required by the DTO even on update, so the row's own values ride along; the stored key is kept by omission. */
   async toggleEnabled(row: MediaServerRow): Promise<void> {
     this.togglingId.set(row.id);
     try {
@@ -185,7 +189,6 @@ export class MediaServersSettingsComponent implements OnInit {
         name: row.name,
         type: row.type,
         url: row.url,
-        apiKey: row.apiKey,
         events: row.events,
         enabled: !row.enabled,
       });

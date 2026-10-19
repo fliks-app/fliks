@@ -224,9 +224,11 @@ pub async fn update(
     let dto = Dto::parse(body(req).await?)?;
     dto.reject_nulls()?;
     let cur = one(&st, id).await?;
-    let api_key = match &dto.api_key {
-        Some(k) => k.as_deref(),
-        None => cur.api_key.as_deref(),
+    // F79: absent or "" keeps the stored key, null clears it.
+    let api_key = match dto.api_key.as_ref() {
+        Some(None) => None,
+        Some(Some(k)) if !k.is_empty() => Some(k.as_str()),
+        _ => cur.api_key.as_deref(),
     };
     let events = dto.events.flatten().unwrap_or(cur.events.0);
     db::update(
