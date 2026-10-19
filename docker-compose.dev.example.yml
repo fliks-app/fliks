@@ -58,6 +58,7 @@ services:
       PORT: 3001
       FLIKS_CAST_DIR: /src/server/public
       FLIKS_ENGINE_URL: http://engine:7400
+      FLIKS_HOST_URL: http://server:3001
       FLIKS_ENGINE_TOKEN: dev-engine-token
       DB_HOST: postgres
       DB_PORT: 5432
