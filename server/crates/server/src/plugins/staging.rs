@@ -66,8 +66,9 @@ impl Staging {
         }
     }
 
-    pub fn discard(&self, id: &str) {
-        let _ = std::fs::remove_dir_all(self.root.join(id));
+    /// False when no such directory existed.
+    pub fn discard(&self, id: &str) -> bool {
+        std::fs::remove_dir_all(self.root.join(id)).is_ok()
     }
 
     /// The hourly sweep: directories older than one hour.
@@ -104,6 +105,9 @@ mod tests {
         assert_eq!(s.stage(b"one", "manual").unwrap().0, a);
         s.sweep();
         assert!(s.read(&a).is_some());
+        assert!(s.discard(&a));
+        assert!(!s.discard(&a));
+        assert_eq!(s.stage(b"one", "manual").unwrap().0, a);
         let old = SystemTime::now() - Duration::from_secs(7200);
         std::fs::File::open(root.join(&a))
             .unwrap()

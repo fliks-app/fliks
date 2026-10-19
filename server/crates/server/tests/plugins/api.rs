@@ -155,7 +155,8 @@ async fn install_pipeline_refusals_and_signatures() {
         (Some("failed"), Some("invalid-route-path")),
         "{r}"
     );
-    // Five staged uploads at most.
+    // Five staged uploads at most; discarding one frees its slot.
+    let mut staged = None;
     for i in 0..6 {
         let mut d = json!({"id": format!("acme.d{i}"),"pluginApi":2,"name":"D","version":"1.0.0","fliks":">=5.0.0 <6.0.0",
             "author":"a","description":"d","license":"MIT","logo":"logo.svg","kind":"data"});
@@ -163,6 +164,7 @@ async fn install_pipeline_refusals_and_signatures() {
         let (st, r) = h.upload(&data_archive(&d)).await;
         if i < 5 {
             assert_eq!(st, 201, "{r}");
+            staged = r["stagingId"].as_str().map(str::to_owned);
         } else {
             assert_eq!(
                 (st, r["code"].as_str()),
@@ -171,6 +173,19 @@ async fn install_pipeline_refusals_and_signatures() {
             );
         }
     }
+    let uri = format!("/api/plugins/import/{}", staged.unwrap());
+    assert_eq!(h.call("DELETE", &uri, Some(&h.user), None).await.0, 403);
+    assert_eq!(h.call("DELETE", &uri, Some(&h.admin), None).await.0, 204);
+    let (st, r) = h.call("DELETE", &uri, Some(&h.admin), None).await;
+    assert_eq!(
+        (st, r["code"].as_str()),
+        (404, Some("PLUGIN_STAGING_NOT_FOUND"))
+    );
+    let bad = "/api/plugins/import/..%2f..";
+    assert_eq!(h.call("DELETE", bad, Some(&h.admin), None).await.0, 400);
+    let d = json!({"id": "acme.d9","pluginApi":2,"name":"D9","version":"1.0.0","fliks":">=5.0.0 <6.0.0",
+        "author":"a","description":"d","license":"MIT","logo":"logo.svg","kind":"data"});
+    assert_eq!(h.upload(&data_archive(&d)).await.0, 201);
     h.finish().await;
     s.finish().await;
 }

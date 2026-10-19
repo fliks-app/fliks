@@ -137,6 +137,10 @@ export class PluginsApiService {
     );
   }
 
+  discardStaged(stagingId: string) {
+    return firstValueFrom(this.http.delete<void>(`/api/plugins/import/${stagingId}`));
+  }
+
   uninstall(pluginId: string) {
     return firstValueFrom(this.http.delete<void>(`/api/plugins/${pluginId}`));
   }

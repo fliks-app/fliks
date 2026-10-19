@@ -1,4 +1,4 @@
-<dialog #dialog class="modal">
+<dialog #dialog class="modal" (close)="discardUnconfirmed()">
   <div class="modal-box max-w-lg">
     @if (report(); as r) {
       @if (!r.installable) {
