@@ -207,10 +207,24 @@ async fn call(
     token: &str,
     body: Option<Value>,
 ) -> (u16, Value) {
+    call_with(app, method, uri, token, body, &[]).await
+}
+
+async fn call_with(
+    app: &Router,
+    method: &str,
+    uri: &str,
+    token: &str,
+    body: Option<Value>,
+    headers: &[(&str, &str)],
+) -> (u16, Value) {
     let mut req = Request::builder()
         .method(method)
         .uri(uri)
         .header("authorization", format!("Bearer {token}"));
+    for (k, v) in headers {
+        req = req.header(*k, *v);
+    }
     let body = match body {
         Some(b) => {
             req = req.header("content-type", "application/json");
@@ -287,6 +301,26 @@ const PLAYLIST: &str = "#EXTM3U max-conn=\"3\"\n\
 #EXTINF:-1 group-title=\"Adult XXX\",Naughty\nhttp://h/live/u/p/103.ts\n";
 
 // ================================================================================================
+const ASYNC: [(&str, &str); 1] = [("prefer", "respond-async")];
+
+/// The status of the newest `commands` row of `name`, once it has left `queued` and `running`.
+async fn settled(pool: &PgPool, name: &str) -> String {
+    for _ in 0..100 {
+        let s: Option<String> = sqlx::query_scalar(
+            "SELECT status FROM commands WHERE name = $1 AND status NOT IN ('queued', 'running') ORDER BY id DESC LIMIT 1",
+        )
+        .bind(name)
+        .fetch_optional(pool)
+        .await
+        .unwrap();
+        if let Some(s) = s {
+            return s;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    panic!("{name} never settled");
+}
+
 // sources and their sync
 
 mod sources_sync {
@@ -535,6 +569,60 @@ mod sources_sync {
             sync::sync(&c.st, id).await.is_ok(),
             "the claim is released with the sync"
         );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_respond_async_sync_answers_202_and_runs_on_under_its_command(pool: PgPool) {
+        let c = ctx(pool).await;
+        {
+            let mut p = c.prov.lock().unwrap();
+            p.playlist = PLAYLIST.into();
+            p.delay_ms = 300;
+        }
+        let (_, token) = viewer(&c, "admin", true).await;
+        let id = source(&c, "S", "m3u", &format!("{}/playlist.m3u", c.base), 0).await;
+        let uri = format!("/api/livetv/admin/sources/{id}/sync");
+        let (s, body) = call_with(&c.app, "POST", &uri, &token, None, &ASYNC).await;
+        assert_eq!(s, 202);
+        assert_eq!(
+            (&body["name"], &body["status"], &body["body"]),
+            (
+                &json!("LiveTvSourceSync"),
+                &json!("queued"),
+                &json!({"sourceId": id})
+            )
+        );
+        let (s, _) = call_with(&c.app, "POST", &uri, &token, None, &ASYNC).await;
+        assert_eq!(s, 409, "the claim is held while the sync runs");
+        assert_eq!(settled(&c.pool, "LiveTvSourceSync").await, "completed");
+        assert_eq!(count(&c.pool, "livetv_channels").await, 3);
+        let (s, body) = call(&c.app, "POST", &uri, &token, None).await;
+        assert_eq!(
+            (s, &body["ok"]),
+            (201, &json!(true)),
+            "no header, no change"
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_respond_async_sync_that_ends_not_ok_is_a_failed_command(pool: PgPool) {
+        let c = ctx(pool).await;
+        let (_, token) = viewer(&c, "admin", true).await;
+        let id = source(&c, "S", "m3u", &format!("{}/missing.m3u", c.base), 0).await;
+        let uri = format!("/api/livetv/admin/sources/{id}/sync");
+        let (s, _) = call_with(&c.app, "POST", &uri, &token, None, &ASYNC).await;
+        assert_eq!(s, 202);
+        assert_eq!(settled(&c.pool, "LiveTvSourceSync").await, "failed");
+        let (s, _) = call_with(
+            &c.app,
+            "POST",
+            "/api/livetv/admin/sources/999/sync",
+            &token,
+            None,
+            &ASYNC,
+        )
+        .await;
+        assert_eq!(s, 404, "an unknown source is refused before any 202");
     }
 
     #[sqlx::test(migrations = false)]
@@ -1028,6 +1116,40 @@ mod guide_import {
             Err(sync::SyncError::Running)
         ));
         assert!(first.await.unwrap().unwrap().ok);
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_respond_async_guide_sync_answers_202_and_runs_on_under_its_command(pool: PgPool) {
+        let c = ctx(pool).await;
+        {
+            let mut p = c.prov.lock().unwrap();
+            p.guide = feed();
+            p.delay_ms = 300;
+        }
+        let (_, token) = viewer(&c, "admin", true).await;
+        let g = guide_source(&c, "A", "/guide.xml").await;
+        let uri = format!("/api/livetv/admin/guide-sources/{g}/sync");
+        let (s, body) = call_with(&c.app, "POST", &uri, &token, None, &ASYNC).await;
+        assert_eq!(s, 202);
+        assert_eq!(
+            (&body["name"], &body["body"]),
+            (&json!("LiveTvGuideSync"), &json!({"guideSourceId": g}))
+        );
+        let (s, _) = call_with(&c.app, "POST", &uri, &token, None, &ASYNC).await;
+        assert_eq!(s, 409);
+        assert_eq!(settled(&c.pool, "LiveTvGuideSync").await, "completed");
+        let (s, body) = call(&c.app, "POST", &uri, &token, None).await;
+        assert_eq!((s, &body["ok"]), (201, &json!(true)));
+        let (s, _) = call_with(
+            &c.app,
+            "POST",
+            "/api/livetv/admin/guide-sources/999/sync",
+            &token,
+            None,
+            &ASYNC,
+        )
+        .await;
+        assert_eq!(s, 404);
     }
 
     #[sqlx::test(migrations = false)]

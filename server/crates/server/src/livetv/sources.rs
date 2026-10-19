@@ -6,7 +6,7 @@ use super::{
     model::{SOURCE_COLS, Source},
     net::Validators,
     playlist_file::{self, Upload},
-    sync::{self, SyncError, SyncResult},
+    sync::{self, SyncError},
 };
 use crate::{
     http::{
@@ -19,7 +19,8 @@ use crate::{
 use axum::{
     Json,
     extract::{DefaultBodyLimit, Multipart, State, multipart::MultipartRejection},
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
+    response::{IntoResponse, Response},
 };
 use chrono::SecondsFormat;
 use fliks_domain::{
@@ -547,18 +548,25 @@ pub async fn upload(
     ))
 }
 
-#[utoipa::path(post, path = "/api/livetv/admin/sources/{id}/sync", responses((status = 201), (status = 409)))]
+#[utoipa::path(post, path = "/api/livetv/admin/sources/{id}/sync", responses((status = 201), (status = 202), (status = 409)))]
 pub async fn sync_route(
     State(st): State<AppState>,
     a: Authed,
+    headers: HeaderMap,
     id: PathParams<String>,
-) -> Result<(StatusCode, Json<SyncResult>), AppError> {
+) -> Result<Response, AppError> {
     admin(&a)?;
     let id = int_param(&id.0)?;
-    match sync::sync(&st, id).await {
-        Ok(r) => Ok((StatusCode::CREATED, Json(r))),
-        Err(SyncError::Running) => Err(AppError::conflict("errors.already_running")),
-        Err(SyncError::NotFound(id)) => Err(not_found(id)),
-        Err(SyncError::Db(e)) => Err(e.into()),
-    }
+    let done = if sync::wants_async(&headers) {
+        sync::start(&st, id).await.map(sync::accepted)
+    } else {
+        sync::sync(&st, id)
+            .await
+            .map(|r| (StatusCode::CREATED, Json(r)).into_response())
+    };
+    done.map_err(|e| match e {
+        SyncError::Running => AppError::conflict("errors.already_running"),
+        SyncError::NotFound(id) => not_found(id),
+        SyncError::Db(e) => e.into(),
+    })
 }

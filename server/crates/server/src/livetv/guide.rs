@@ -7,7 +7,7 @@ use super::{
     lineup,
     model::{GUIDE_SOURCE_COLS, GuideSource, PROGRAM_COLS, Program, SOURCE_COLS, Source},
     net::{self, Identity, Opts, Validators},
-    sync::{Flight, SyncError, find_source, setting_int},
+    sync::{Flight, SyncError, accepted, detach, find_source, outcome, setting_int, wants_async},
 };
 use crate::{
     http::{
@@ -15,12 +15,14 @@ use crate::{
         auth::Authed,
         validate::{PathParams, ValidJson, int_param},
     },
+    jobs::Command,
     state::AppState,
 };
 use axum::{
     Json,
     extract::{Query, State},
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
+    response::{IntoResponse, Response},
 };
 use chrono::{DateTime, Duration, Utc};
 use fliks_domain::{
@@ -356,6 +358,29 @@ pub async fn sync(st: &AppState, id: i32) -> Result<GuideSyncResult, SyncError> 
     let Some(_flight) = Flight::claim(st, "LiveTvGuideSync", id) else {
         return Err(SyncError::Running);
     };
+    run_claimed(st, id).await
+}
+
+/// The async twin of `sync` (C164): the queued row of a sync that runs on.
+pub async fn start(st: &AppState, id: i32) -> Result<Command, SyncError> {
+    let Some(flight) = Flight::claim(st, "LiveTvGuideSync", id) else {
+        return Err(SyncError::Running);
+    };
+    find(&st.db, id).await?.ok_or(SyncError::NotFound(id))?;
+    let work = move |st: AppState| async move {
+        outcome(run_claimed(&st, id).await.map(|r| (r.ok, r.error)))
+    };
+    Ok(detach(
+        st,
+        flight,
+        "LiveTvGuideSync",
+        json!({"guideSourceId": id}),
+        work,
+    )
+    .await?)
+}
+
+async fn run_claimed(st: &AppState, id: i32) -> Result<GuideSyncResult, SyncError> {
     let source = find(&st.db, id).await?.ok_or(SyncError::NotFound(id))?;
     match run(st, &source).await {
         Ok(r) => Ok(r),
@@ -376,20 +401,27 @@ pub async fn sync(st: &AppState, id: i32) -> Result<GuideSyncResult, SyncError> 
     }
 }
 
-#[utoipa::path(post, path = "/api/livetv/admin/guide-sources/{id}/sync", responses((status = 201), (status = 409)))]
+#[utoipa::path(post, path = "/api/livetv/admin/guide-sources/{id}/sync", responses((status = 201), (status = 202), (status = 409)))]
 pub async fn sync_route(
     State(st): State<AppState>,
     a: Authed,
+    headers: HeaderMap,
     id: PathParams<String>,
-) -> Result<(StatusCode, Json<GuideSyncResult>), AppError> {
+) -> Result<Response, AppError> {
     admin(&a)?;
     let id = int_param(&id.0)?;
-    match sync(&st, id).await {
-        Ok(r) => Ok((StatusCode::CREATED, Json(r))),
-        Err(SyncError::Running) => Err(AppError::conflict("errors.already_running")),
-        Err(SyncError::NotFound(id)) => Err(not_found(id)),
-        Err(SyncError::Db(e)) => Err(e.into()),
-    }
+    let done = if wants_async(&headers) {
+        start(&st, id).await.map(accepted)
+    } else {
+        sync(&st, id)
+            .await
+            .map(|r| (StatusCode::CREATED, Json(r)).into_response())
+    };
+    done.map_err(|e| match e {
+        SyncError::Running => AppError::conflict("errors.already_running"),
+        SyncError::NotFound(id) => not_found(id),
+        SyncError::Db(e) => e.into(),
+    })
 }
 
 /// The feed url of a guide source: its own, or its parent source's guide (rule 9).

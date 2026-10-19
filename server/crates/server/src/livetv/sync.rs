@@ -5,7 +5,17 @@ use super::{
     model::{SOURCE_COLS, Source},
     net::Validators,
 };
-use crate::{notifications, state::AppState};
+use crate::{
+    events::Hub,
+    jobs::{Command, Trigger, execute, insert_queued_with_body, mark_running},
+    notifications,
+    state::AppState,
+};
+use axum::{
+    Json,
+    http::{HeaderMap, StatusCode},
+    response::{IntoResponse, Response},
+};
 use chrono::{DateTime, Utc};
 use fliks_domain::livetv::{
     access::iso,
@@ -61,25 +71,85 @@ impl From<sqlx::Error> for SyncError {
 }
 
 /// Registers the activity `<kind>:<id>` for the life of the guard: the single-flight gate of rule 33.
-pub struct Flight<'a> {
-    st: &'a AppState,
+pub struct Flight {
+    hub: Hub,
     id: String,
 }
 
-impl<'a> Flight<'a> {
-    pub fn claim(st: &'a AppState, kind: &str, id: i32) -> Option<Self> {
+impl Flight {
+    pub fn claim(st: &AppState, kind: &str, id: i32) -> Option<Self> {
         let name = format!("{kind}:{id}");
         st.hub
             .activity()
             .claim(&name, kind, None, None, None, None)
-            .then_some(Self { st, id: name })
+            .then(|| Self {
+                hub: st.hub.clone(),
+                id: name,
+            })
     }
 }
 
-impl Drop for Flight<'_> {
+impl Drop for Flight {
     fn drop(&mut self) {
-        self.st.hub.activity().remove(&self.id);
+        self.hub.activity().remove(&self.id);
     }
+}
+
+/// `Prefer: respond-async` among the request's preferences.
+pub fn wants_async(headers: &HeaderMap) -> bool {
+    headers
+        .get_all("prefer")
+        .iter()
+        .filter_map(|v| v.to_str().ok())
+        .flat_map(|v| v.split(','))
+        .any(|p| {
+            p.split(';')
+                .next()
+                .is_some_and(|t| t.trim().eq_ignore_ascii_case("respond-async"))
+        })
+}
+
+/// Runs a claimed sync detached under a queued `commands` row; the claim is held until it ends.
+pub async fn detach<F, Fut>(
+    st: &AppState,
+    flight: Flight,
+    name: &'static str,
+    body: Value,
+    work: F,
+) -> sqlx::Result<Command>
+where
+    F: FnOnce(AppState) -> Fut + Send + 'static,
+    Fut: std::future::Future<Output = Result<(), String>> + Send,
+{
+    let cmd = insert_queued_with_body(&st.db, name, Trigger::Manual, Some(body)).await?;
+    let (st, id) = (st.clone(), cmd.id);
+    tokio::spawn(async move {
+        if let Err(e) = mark_running(&st.db, id).await {
+            tracing::error!("Command {name}: cannot record running: {e}");
+        }
+        execute(&st, id, name, "failed", work(st.clone())).await;
+        drop(flight);
+    });
+    Ok(cmd)
+}
+
+/// A sync that ended `ok:false` is a failed command, like a thrown one.
+pub fn outcome(r: Result<(bool, Option<String>), SyncError>) -> Result<(), String> {
+    match r {
+        Ok((true, _)) => Ok(()),
+        Ok((false, error)) => Err(error.unwrap_or_default()),
+        Err(e) => Err(format!("{e:?}")),
+    }
+}
+
+/// The 202 of a `Prefer: respond-async` sync.
+pub fn accepted(cmd: Command) -> Response {
+    (
+        StatusCode::ACCEPTED,
+        [("preference-applied", "respond-async")],
+        Json(cmd),
+    )
+        .into_response()
 }
 
 pub async fn find_source(db: &PgPool, id: i32) -> sqlx::Result<Option<Source>> {
@@ -104,6 +174,26 @@ pub async fn sync(st: &AppState, id: i32) -> Result<SyncResult, SyncError> {
         return Err(SyncError::Running);
     };
     run(st, id).await
+}
+
+/// The async twin of `sync` (C164): the queued row of a sync that runs on.
+pub async fn start(st: &AppState, id: i32) -> Result<Command, SyncError> {
+    let Some(flight) = Flight::claim(st, "LiveTvSourceSync", id) else {
+        return Err(SyncError::Running);
+    };
+    find_source(&st.db, id)
+        .await?
+        .ok_or(SyncError::NotFound(id))?;
+    let work =
+        move |st: AppState| async move { outcome(run(&st, id).await.map(|r| (r.ok, r.error))) };
+    Ok(detach(
+        st,
+        flight,
+        "LiveTvSourceSync",
+        json!({"sourceId": id}),
+        work,
+    )
+    .await?)
 }
 
 async fn mark(db: &PgPool, id: i32, ok: bool, error: Option<&str>) -> sqlx::Result<()> {

@@ -296,6 +296,9 @@ function queryParams(
   return out;
 }
 
+/** The server answers 202 and syncs on; the page follows `command.completed`. */
+const RESPOND_ASYNC = { Prefer: 'respond-async' };
+
 @Injectable({ providedIn: 'root' })
 export class LiveTvApiService {
   private readonly http = inject(HttpClient);
@@ -428,7 +431,9 @@ export class LiveTvApiService {
   }
 
   syncSource(id: number) {
-    return firstValueFrom(this.http.post<void>(`/api/livetv/admin/sources/${id}/sync`, {}));
+    return firstValueFrom(
+      this.http.post<void>(`/api/livetv/admin/sources/${id}/sync`, {}, { headers: RESPOND_ASYNC }),
+    );
   }
 
   // ── Admin: channels ──
@@ -479,7 +484,9 @@ export class LiveTvApiService {
   }
 
   syncGuideSource(id: number) {
-    return firstValueFrom(this.http.post<void>(`/api/livetv/admin/guide-sources/${id}/sync`, {}));
+    return firstValueFrom(
+      this.http.post<void>(`/api/livetv/admin/guide-sources/${id}/sync`, {}, { headers: RESPOND_ASYNC }),
+    );
   }
 
   getMatchReport() {

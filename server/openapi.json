@@ -910,6 +910,9 @@
           "201": {
             "description": ""
           },
+          "202": {
+            "description": ""
+          },
           "409": {
             "description": ""
           }
@@ -1011,6 +1014,9 @@
         "operationId": "sync_route",
         "responses": {
           "201": {
+            "description": ""
+          },
+          "202": {
             "description": ""
           },
           "409": {

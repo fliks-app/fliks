@@ -3117,6 +3117,7 @@
     "jobs": {
       "sourceRefresh": "Actualización de fuentes de TV en directo",
       "sourceSync": "Sincronización de fuente de Live TV",
+      "guideSync": "Sincronización de guía de Live TV",
       "guideRefresh": "Actualización de la guía de TV en directo",
       "guidePrune": "Limpieza de la guía de TV en directo"
     },
