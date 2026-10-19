@@ -61,12 +61,6 @@ jobs:
             echo "version=${base}-dev.${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: client/package-lock.json
-
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Cache server build
@@ -78,6 +72,18 @@ jobs:
             server/target
           key: win-server-${{ hashFiles('server/Cargo.lock') }}
           restore-keys: win-server-
+
+      # The server crate's compile is most of the job: run it while the steps below set up and build
+      # the rest. build-app.ps1's own cargo build waits on its lock, then finds it done or shows the errors.
+      - name: Start server build
+        working-directory: server
+        run: Start-Process cargo -ArgumentList 'build', '--release', '-p', 'fliks-server' -NoNewWindow -RedirectStandardError "$env:RUNNER_TEMP\cargo.log"
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: client/package-lock.json
 
       - uses: actions/setup-dotnet@v4
         with:
