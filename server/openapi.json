@@ -1749,7 +1749,7 @@
         "tags": [
           "media::write"
         ],
-        "summary": "`PATCH /api/media/:id/library` (rule 29): the row moves, the files do not.",
+        "summary": "`PATCH /api/media/:id/library` (rule 29): 409 for a media with files (C170, `code: media_has_files`), which a move cannot carry.",
         "operationId": "patch_library",
         "responses": {
           "200": {

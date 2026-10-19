@@ -1,7 +1,7 @@
 //! `/api/media` read routes: C10-C12, F22 and the library ACL on a small fixture (the rest is parity).
 use axum::{Router, body::Body, http::Request};
 use fliks_server::{config::Config, media, state::AppState};
-use serde_json::Value;
+use serde_json::{Value, json};
 use sqlx::PgPool;
 use tower::ServiceExt;
 
@@ -44,10 +44,22 @@ async fn ctx(pool: PgPool) -> Ctx {
 
 impl Ctx {
     async fn get(&self, token: &str, uri: &str) -> (u16, Value) {
+        self.send("GET", token, uri, None).await
+    }
+
+    async fn send(
+        &self,
+        method: &str,
+        token: &str,
+        uri: &str,
+        body: Option<Value>,
+    ) -> (u16, Value) {
         let req = Request::builder()
+            .method(method)
             .uri(uri)
             .header("authorization", format!("Bearer {token}"))
-            .body(Body::empty())
+            .header("content-type", "application/json")
+            .body(body.map_or_else(Body::empty, |b| Body::from(b.to_string())))
             .unwrap();
         let res = self.app.clone().oneshot(req).await.unwrap();
         let status = res.status().as_u16();
@@ -159,4 +171,39 @@ async fn stream_info_tracks_carry_their_markers(pool: PgPool) {
     );
     let (_, other) = c.get(&c.admin, "/api/media/2").await;
     assert!(other["files"][0]["streamInfo"].is_null());
+}
+
+/// C170: a move cannot carry files, so a media that has some answers 409 and stays put.
+#[sqlx::test(migrations = false)]
+async fn moving_a_media_with_files_is_a_409(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    sqlx::query(r#"INSERT INTO media (id, title, year, type, "libraryId", "folderName") VALUES (5, 'Empty', 2000, 'movie', 1, 'e')"#)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let to = |id: i32, lib: i32| {
+        (
+            format!("/api/media/{id}/library"),
+            json!({"libraryId": lib}),
+        )
+    };
+    let (u, b) = to(1, 2);
+    let (s, r) = c.send("PATCH", &c.admin, &u, Some(b)).await;
+    assert_eq!((s, r["code"].as_str()), (409, Some("media_has_files")));
+    assert!(
+        r["message"]
+            .as_str()
+            .is_some_and(|m| m.starts_with("This media has files"))
+    );
+    let (_, m) = c.get(&c.admin, "/api/media/1").await;
+    assert_eq!(m["libraryId"], 1);
+    let (u, b) = to(1, 1);
+    assert_eq!(
+        c.send("PATCH", &c.admin, &u, Some(b)).await.0,
+        200,
+        "same library moves nothing"
+    );
+    let (u, b) = to(5, 2);
+    let (s, r) = c.send("PATCH", &c.admin, &u, Some(b)).await;
+    assert_eq!((s, r["libraryId"].clone()), (200, json!(2)));
 }

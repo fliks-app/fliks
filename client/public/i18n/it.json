@@ -2790,6 +2790,7 @@
     "404": "Risorsa non trovata",
     "409": "Conflitto: la risorsa esiste già",
     "already_running": "Questa operazione è già in corso.",
+    "media_has_files": "Un titolo con file non può essere spostato in un'altra libreria: i suoi file resterebbero dove sono.",
     "media_already_in_playlist": "Questo file multimediale è già nella playlist",
     "playlist_add_target_required": "Nessun file multimediale, episodio o stagione indicato",
     "translation_disabled": "La traduzione dei sottotitoli è disattivata.",

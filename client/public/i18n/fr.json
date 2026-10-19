@@ -2790,6 +2790,7 @@
     "404": "Ressource introuvable",
     "409": "Conflit : la ressource existe déjà",
     "already_running": "Cette opération est déjà en cours.",
+    "media_has_files": "Un titre qui a des fichiers ne peut pas changer de bibliothèque : ses fichiers resteraient en place.",
     "media_already_in_playlist": "Ce média est déjà dans la liste",
     "playlist_add_target_required": "Aucun média, épisode ou saison indiqué",
     "translation_disabled": "La traduction des sous-titres est désactivée.",

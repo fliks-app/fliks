@@ -9,6 +9,7 @@
           name="library"
           appTvSelect
           [ngModel]="selectedLibraryId()"
+          [disabled]="libraryLocked()"
           (ngModelChange)="selectedLibraryIdChange.emit($event)"
         >
           <option [ngValue]="null">{{ 'media_detail.no_library' | translate }}</option>
@@ -16,6 +17,9 @@
             <option [ngValue]="l.id">{{ l.name }}</option>
           }
         </select>
+        @if (libraryLocked()) {
+          <span class="label-text-alt opacity-60">{{ 'errors.media_has_files' | translate }}</span>
+        }
       </label>
       <label class="form-control w-full">
         <span class="label-text">{{ 'media_detail.provider_section_title' | translate }}</span>

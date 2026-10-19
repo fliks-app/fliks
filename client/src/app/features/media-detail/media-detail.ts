@@ -738,6 +738,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
 
   readonly libraries = signal<LibrarySummary[]>([]);
   readonly selectedLibraryId = signal<number | null>(null);
+  readonly mediaHasFiles = computed(() => !!this.media()?.files?.length);
   readonly selectedProvider = signal<'tmdb' | 'tvdb' | null>(null);
   readonly libraryPatchSaving = signal(false);
   readonly libraryPatchSaved = signal(false);

@@ -2790,6 +2790,7 @@
     "404": "Ressource nicht gefunden",
     "409": "Konflikt: die Ressource existiert bereits",
     "already_running": "Das läuft bereits.",
+    "media_has_files": "Ein Titel mit Dateien kann nicht in eine andere Bibliothek verschoben werden: Die Dateien würden zurückbleiben.",
     "media_already_in_playlist": "Dieses Medium ist bereits in der Liste",
     "playlist_add_target_required": "Kein Medium, keine Folge oder Staffel angegeben",
     "translation_disabled": "Die Untertitelübersetzung ist deaktiviert.",
