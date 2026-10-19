@@ -13,7 +13,7 @@ pub struct Root(PathBuf);
 impl Root {
     /// The root must exist and be a directory: nothing ever creates it here (C51).
     pub fn open(library_path: &str) -> io::Result<Root> {
-        let c = fs::canonicalize(library_path)?;
+        let c = dunce::canonicalize(library_path)?;
         if !c.is_dir() {
             return Err(io::Error::new(
                 io::ErrorKind::NotADirectory,
@@ -55,7 +55,7 @@ fn resolve_existing(p: &Path) -> Option<PathBuf> {
     }
     let mut cur = p;
     loop {
-        if let Ok(real) = fs::canonicalize(cur) {
+        if let Ok(real) = dunce::canonicalize(cur) {
             let rest = p.strip_prefix(cur).ok()?;
             if rest
                 .components()
@@ -102,7 +102,7 @@ pub fn rel_under(dir: &Path, abs: &Path) -> Option<String> {
 
 /// A source file: resolved through symlinks and required to be a regular file (F47).
 pub fn regular_source(p: &Path) -> io::Result<(PathBuf, fs::Metadata)> {
-    let real = fs::canonicalize(p)?;
+    let real = dunce::canonicalize(p)?;
     let meta = fs::metadata(&real)?;
     if !meta.is_file() {
         return Err(io::Error::new(
@@ -389,19 +389,19 @@ pub fn removable_media_dir(
     if !meta.is_dir() {
         return Ok(Some(dir));
     }
-    let real = fs::canonicalize(&dir).map_err(|e| e.to_string())?;
+    let real = dunce::canonicalize(&dir).map_err(|e| e.to_string())?;
     if !real.starts_with(root.path()) || real == root.path() {
         return Err("folder outside the library root".into());
     }
     let hit = |list: &[PathBuf]| {
         list.iter()
-            .filter_map(|p| fs::canonicalize(p).ok().or_else(|| Some(p.clone())))
+            .filter_map(|p| dunce::canonicalize(p).ok().or_else(|| Some(p.clone())))
             .any(|p| overlaps(&real, &p))
     };
     // Roots at or above our own root contain every media folder of it by construction.
     let others: Vec<PathBuf> = library_roots
         .iter()
-        .filter_map(|p| fs::canonicalize(p).ok())
+        .filter_map(|p| dunce::canonicalize(p).ok())
         .filter(|p| !root.path().starts_with(p))
         .collect();
     if hit(&others) {

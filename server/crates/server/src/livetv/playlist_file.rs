@@ -26,8 +26,8 @@ fn managed_in(location: &str, dir: &Path) -> bool {
         return false;
     }
     let resolved = lexical_resolve(&std::env::current_dir().unwrap_or_default(), location);
-    let real = std::fs::canonicalize(&resolved).unwrap_or(resolved);
-    let dir = std::fs::canonicalize(dir)
+    let real = dunce::canonicalize(&resolved).unwrap_or(resolved);
+    let dir = dunce::canonicalize(dir)
         .unwrap_or_else(|_| lexical_resolve(Path::new("/"), &dir.to_string_lossy()));
     real.starts_with(dir)
 }

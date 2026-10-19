@@ -8,7 +8,7 @@ use std::path::PathBuf;
 
 /// `realpath` of `raw`, which must sit under the `realpath` of one of `roots`.
 pub fn contained(raw: &str, roots: &[String]) -> Result<PathBuf, HostError> {
-    let real = std::fs::canonicalize(raw).map_err(|e| {
+    let real = dunce::canonicalize(raw).map_err(|e| {
         if e.kind() == std::io::ErrorKind::NotFound {
             host_err(
                 "ERR_NOT_FOUND",
@@ -20,7 +20,7 @@ pub fn contained(raw: &str, roots: &[String]) -> Result<PathBuf, HostError> {
     })?;
     let inside = roots
         .iter()
-        .filter_map(|r| std::fs::canonicalize(r).ok())
+        .filter_map(|r| dunce::canonicalize(r).ok())
         .any(|root| real.starts_with(&root));
     if inside {
         Ok(real)

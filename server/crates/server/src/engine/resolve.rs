@@ -346,9 +346,7 @@ async fn resolve_file(
     tokio::fs::metadata(&absolute)
         .await
         .map_err(|_| Fail::Denied)?;
-    let real = tokio::fs::canonicalize(&absolute)
-        .await
-        .map_err(|_| Fail::Denied)?;
+    let real = dunce::canonicalize(&absolute).map_err(|_| Fail::Denied)?;
     if !real.starts_with(&root) {
         return Err(Fail::Denied);
     }
@@ -392,9 +390,7 @@ async fn subtitle_on_disk(
         .ok_or(Fail::Denied)?;
     let dirs = media.dirs("no root").map_err(|_| Fail::Denied)?;
     let absolute = dirs.resolve_file(stored.trim()).map_err(|_| Fail::Denied)?;
-    tokio::fs::canonicalize(&absolute)
-        .await
-        .map_err(|_| Fail::Denied)
+    dunce::canonicalize(&absolute).map_err(|_| Fail::Denied)
 }
 
 /// `getAccessibleLibraryIds`: every library for an admin or `manage:all`, else the user's grants; a media

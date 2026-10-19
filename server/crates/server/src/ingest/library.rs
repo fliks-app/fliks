@@ -260,7 +260,7 @@ impl Ctx<'_> {
             Err(e) => return Ok(Placed::Error(format!("{name}: {e}"))),
         };
         // Rule 13: a file already at its layout path is linked where it is.
-        let at_dest = fs::canonicalize(dir.join(&file)).is_ok_and(|d| d == src);
+        let at_dest = dunce::canonicalize(dir.join(&file)).is_ok_and(|d| d == src);
         let src_size = fs::metadata(&src).map_or(0, |m| m.len());
         if !at_dest {
             let same_size = |p: &Path| fs::metadata(p).is_ok_and(|m| m.len() == src_size);
