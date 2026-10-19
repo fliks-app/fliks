@@ -64,14 +64,13 @@ internal sealed class PostgresManager(ushort port = 5433)
     /// <summary>Start the server and wait until it accepts connections.</summary>
     public async Task StartAsync(CancellationToken ct)
     {
-        // No -w and no output capture: pg_ctl spawns postgres and returns at
-        // once, leaving it detached. Readiness is confirmed by WaitForReadyAsync
-        // below. (Capturing here would make pg_ctl hang on the inherited pipe —
-        // see ProcessRunner.captureOutput.)
+        // -W (pg_ctl waits by default) and no output capture: pg_ctl returns at once and
+        // WaitForReadyAsync covers crash recovery; capturing hangs on the inherited pipe.
         var result = await ProcessRunner.RunAsync(
             Tool("pg_ctl"),
             new[]
             {
+                "-W",
                 "-D", _dataDir,
                 "-l", _logFile,
                 "-o", $"-p {port}",

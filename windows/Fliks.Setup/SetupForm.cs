@@ -222,6 +222,8 @@ internal sealed class SetupForm : Form
             }
             _bar.Value = 1f;
 
+            // Set by the tray when its startup fails; it must exist before the tray runs.
+            using var startFailed = new System.Threading.EventWaitHandle(false, System.Threading.EventResetMode.ManualReset, "Fliks.Setup.ServerStartFailed");
             // Velopack's silent mode doesn't start the app; the root stub survives updates.
             Process.Start(new ProcessStartInfo(Path.Combine(_config.InstallDir, _config.MainExe))
             {
@@ -239,10 +241,14 @@ internal sealed class SetupForm : Form
             Enter(new Stage("Starting the server…", "This step can take 1 to 2 minutes.", Bar: true, Indeterminate: true));
             // .NET Framework's HttpClient does proxy discovery and the connect synchronously on the
             // calling thread, which froze the window while the server wasn't listening yet.
-            if (await Task.Run(() => WaitForServerAsync(port, TimeSpan.FromMinutes(10))))
+            if (await Task.Run(() => WaitForServerAsync(port, startFailed, TimeSpan.FromMinutes(10))))
             {
                 // The tray opens the browser once the server answers.
                 Close();
+            }
+            else if (startFailed.WaitOne(0))
+            {
+                Enter(new Stage("The server did not start.", "Its error is in the tray.", Bar: false, Danger: true, Primary: "Close", OnPrimary: Close));
             }
             else
             {
@@ -292,11 +298,11 @@ internal sealed class SetupForm : Form
         }
     }
 
-    private static async Task<bool> WaitForServerAsync(int port, TimeSpan timeout)
+    private static async Task<bool> WaitForServerAsync(int port, System.Threading.WaitHandle failed, TimeSpan timeout)
     {
         using var http = new HttpClient(new HttpClientHandler { UseProxy = false }) { Timeout = TimeSpan.FromSeconds(2) };
         var deadline = DateTime.UtcNow + timeout;
-        while (DateTime.UtcNow < deadline)
+        while (DateTime.UtcNow < deadline && !failed.WaitOne(0))
         {
             try
             {
