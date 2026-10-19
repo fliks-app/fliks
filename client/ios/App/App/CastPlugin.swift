@@ -33,10 +33,8 @@ public class CastPlugin: CAPPlugin, CAPBridgedPlugin, GCKSessionManagerListener,
     var pollTimer: Timer?
     /** LOAD calls awaiting the receiver's verdict, by request id: popping one settles it exactly once. */
     var pendingLoads: [Int: CAPPluginCall] = [:]
-    /** Tracks whether the 1Hz media-status poll was running when the app
-     *  backgrounded; restart it on foreground so we don't keep firing
-     *  `evaluateJavaScript` against a paused WebView (fliks declares
-     *  `UIBackgroundModes: audio`, so Timers keep running). */
+    /// Whether the media-status poll ran at backgrounding; restarted on foreground (Timers keep running
+    /// under `UIBackgroundModes: audio`, so it would hit a paused WebView).
     var pollWasActiveBeforeBackground = false
 
     // MARK: - Initialize
@@ -49,9 +47,7 @@ public class CastPlugin: CAPPlugin, CAPBridgedPlugin, GCKSessionManagerListener,
             self.sessionManager = GCKCastContext.sharedInstance().sessionManager
             self.sessionManager?.add(self)
 
-            // Pause/resume the media-status poll on app background to
-            // avoid wasted bridge round-trips while the WebView is
-            // suspended.
+            // Pause the media-status poll in the background: the WebView is suspended, so bridge round-trips are wasted.
             NotificationCenter.default.addObserver(
                 self,
                 selector: #selector(self.appDidEnterBackground),
@@ -329,9 +325,7 @@ public class CastPlugin: CAPPlugin, CAPBridgedPlugin, GCKSessionManagerListener,
             if !tracks.isEmpty {
                 builder.mediaTracks = tracks
             }
-            // Always set the style — receiver fills its defaults when
-            // textTrackStyle is missing, masking the user's prefs
-            // whenever the LOAD has no preselected subtitle tracks.
+            // Always set the style: the receiver's defaults otherwise mask the user's prefs when the LOAD has no preselected subtitle track.
             let spec = call.getObject("textTrackStyle")
             builder.textTrackStyle = self?.buildTextTrackStyle(spec)
 

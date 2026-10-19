@@ -62,12 +62,8 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     var fillScreen = false
     var videoCrop: VideoCrop?
     var savedBrightness: CGFloat?
-    /// Cues are pulled off the selected legible track via this output with
-    /// player rendering suppressed, then drawn by `subtitleOverlay` so the app
-    /// fully controls styling and no system caption box appears. Inside PiP
-    /// (where the overlay isn't captured) suppression is lifted so the native
-    /// track draws into the mirrored layer instead. `applySubtitleRendering`
-    /// is the single place that decides which of the two draws.
+    /// Cues are pulled off the legible track with player rendering suppressed and drawn by `subtitleOverlay`;
+    /// `applySubtitleRendering` decides when PiP lifts that, so the native track draws into the mirrored layer.
     var subtitleOutput: AVPlayerItemLegibleOutput?
     var subtitleOverlay: SubtitleOverlayView?
     var currentSubtitleStyle = SubtitleStyle()
@@ -75,9 +71,8 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     /// Legible option deselected to clear the native caption while leaving PiP,
     /// restored once PiP has fully exited.
     var pipDeselectedSubtitle: AVMediaSelectionOption?
-    /// Selection groups for the current item. Loaded asynchronously once the
-    /// item is ready (the synchronous asset accessor is gone since iOS 16) so
-    /// every track call site can stay synchronous.
+    /// Selection groups for the current item, loaded asynchronously once it is ready
+    /// (the synchronous asset accessor is gone since iOS 16) so call sites stay synchronous.
     var audibleGroup: AVMediaSelectionGroup?
     var legibleGroup: AVMediaSelectionGroup?
     lazy var nowPlaying = NowPlayingController(
@@ -90,23 +85,15 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     /// Exposed for PipPlugin to access the player.
     public var activePlayer: AVPlayer? { player }
 
-    /// Re-present the AVPlayerLayer after a background round-trip or a PiP
-    /// exit. iOS can release the layer's backing render surface for the
-    /// off-screen scene (and an auto-PiP exit can leave the inline layer
-    /// detached) while AVPlayer keeps decoding audio and the subtitle overlay
-    /// keeps drawing — so the inline video returns black over the container's
-    /// black backdrop. Rebinding the player, re-stamping the frame and (when
-    /// the layer isn't presenting) toggling videoGravity force a recomposite.
-    /// Idempotent; safe to call when already presenting.
+    /// Re-presents the AVPlayerLayer after a background round-trip or PiP exit, when iOS can release its
+    /// render surface and the video returns black: rebind, re-stamp the frame, toggle videoGravity. Idempotent.
     func reassertVideoPresentation() {
         DispatchQueue.main.async { [weak self] in
             guard let self = self,
                   let layer = self.playerLayer,
                   let player = self.player,
                   let view = self.playerView else { return }
-            // Diagnostic — surfaces on-device whether the returning layer is
-            // detached / not-ready (vs ready-but-black) so the recomposite
-            // path can be tuned from real logs.
+            // Diagnostic: tells a detached or not-ready returning layer from a ready-but-black one.
             let state = "ready=\(layer.isReadyForDisplay) attached=\(layer.player != nil) size=\(Int(view.bounds.width))x\(Int(view.bounds.height))"
             self.bridge?.webView?.evaluateJavaScript("console.warn('[NativePlayer] reassert: \(state)');")
 
@@ -224,11 +211,8 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             self.player?.pause()
             self.subtitleOverlay?.render([])
 
-            // Audio session can be flipped out of `.playback` by a phone
-            // call, route change, or Siri. AppDelegate sets it once at
-            // launch — reasserting on every load defends against any
-            // subsequent corruption that would otherwise have AVPlayer
-            // start with audio in a mute or downmixed state.
+            // Reassert `.playback` on every load: a call, route change or Siri can flip the session out of it,
+            // and AVPlayer would start muted or downmixed.
             self.ensureAudioSessionActive()
 
             let item = self.buildPlayerItem(url: url, assetHeaders: headers)
@@ -272,11 +256,8 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
-    /// Debug-only manifest dump. Captures the exact CODECS / BANDWIDTH /
-    /// VIDEO-RANGE the player sees, so a `-12927` rejection that comes
-    /// back with an empty `errorLog` can be reproduced from the trace.
-    /// Skipped in release builds (the extra fetch adds 100ms-3s of
-    /// cellular latency to every load).
+    /// Debug-only manifest dump (CODECS, BANDWIDTH, VIDEO-RANGE) to reproduce a `-12927` with an empty
+    /// `errorLog`; skipped in release, the extra fetch adds up to 3s of cellular latency.
     func dumpManifestForDebug(url: URL, headers: [String: String]) {
         #if DEBUG
         guard url.absoluteString.contains(".m3u8") else { return }
@@ -308,19 +289,12 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             }
             try session.setActive(true)
         } catch {
-            // Best effort. AVPlayer keeps playing on whatever session
-            // state was active before — degraded audio is preferable to
-            // a hard load failure.
+            // Best effort: degraded audio beats a hard load failure.
         }
     }
 
-    /// Build the AVPlayerItem with a 4-second forward buffer hint.
-    /// `preferredForwardBufferDuration = 4` (≈ one full GOP-cut HLS
-    /// segment plus margin) gives AVPlayer a consistent prebuffer
-    /// target before it flips `timeControlStatus` to `.playing` —
-    /// without it, the default "as needed" heuristic can start
-    /// audio decode while video is still resolving its first IDR
-    /// and we briefly hear sound over a black frame at startup.
+    /// 4-second forward buffer hint (about one HLS segment plus margin): without it AVPlayer can start audio
+    /// decode while video still resolves its first IDR, and sound plays over a black frame.
     func buildPlayerItem(url: URL, assetHeaders: [String: String]) -> AVPlayerItem {
         let assetOptions: [String: Any]? = assetHeaders.isEmpty
             ? nil
@@ -337,21 +311,8 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         return item
     }
 
-    /// Attach the new item to the existing AVPlayer (via
-    /// `replaceCurrentItem`) when one exists, otherwise spin up a fresh
-    /// player + layer. Reusing the player keeps observers, audio session
-    /// bindings, and PiP wiring stable across loads — the previous
-    /// "new AVPlayer per load" pattern left a small window where the
-    /// PipPlugin could still hold the prior layer's player while we
-    /// were swapping in the next one.
-    ///
-    /// No initial bitrate / resolution caps. We used to clamp these to
-    /// the device's native screen to fight per-rung FFmpeg session
-    /// thrash, but the cap also silently rejected the single-variant
-    /// HDR pass-through manifest when source resolution exceeded the
-    /// screen (-12927 with an empty errorLog). ABR runs freely now;
-    /// `setMaxResolution` from the engine still applies a cap when the
-    /// user explicitly picks a quality.
+    /// Reuses the existing AVPlayer via `replaceCurrentItem` (observers, audio session and PiP stay wired), else creates one.
+    /// No initial bitrate cap: it rejected the single-variant HDR manifest (-12927); `setMaxResolution` caps on an explicit pick.
     @discardableResult
     func attachPlayerItem(_ item: AVPlayerItem) -> AVPlayer {
         // Groups belong to the outgoing asset — selecting one of its options
@@ -388,21 +349,8 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         return player
     }
 
-    /// Seek (frame-accurate, `.zero` tolerance on both sides) then
-    /// kick `play()`. The zero tolerance is the critical bit: with the
-    /// default `±infinity` tolerance, AVPlayer is free to snap each
-    /// stream to its own nearest keyframe — audio AAC frames sit at
-    /// every ~21 ms, video keyframes only at IDR boundaries (every
-    /// segment, ~3 s). That asymmetry would let audio land 0-3 s
-    /// before video → the "big A/V desync on resume that goes away
-    /// after a close + reopen" symptom (reopen used `startTime=0`,
-    /// which skipped the seek entirely).
-    ///
-    /// `play()` runs outside any seek completion handler. Apple's docs
-    /// say the completion may report `finished=false` when AVPlayer
-    /// pre-empts our seek with its own status-flip seek; conditioning
-    /// play on that flag would leave playback paused forever in that
-    /// race.
+    /// Frame-accurate seek (`.zero` tolerance) then `play()`: the default tolerance snaps audio and video to different
+    /// keyframes, a 0-3 s A/V desync. `play()` stays outside the completion handler, which may report `finished=false`.
     func startPlayback(player: AVPlayer, startTime: Double) {
         if startTime > 0 {
             applyMuteGate(at: startTime)
@@ -435,17 +383,8 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             }
             let cmTime = CMTime(seconds: position, preferredTimescale: 1000)
             self?.applyMuteGate(at: position)
-            // Resolve only AFTER AVPlayer finishes the seek. Resolving
-            // synchronously (the old behaviour) made the JS layer think
-            // the engine was at `position` immediately, the seek-lock
-            // released, and the next time-observer tick with a still-
-            // mid-seek `player.currentTime()` (often 0 because CMTime
-            // briefly becomes .indefinite during the transition)
-            // snapped the seekbar back to 0 before AVPlayer settled at
-            // the target — the visible "forward → back to 0 → forward"
-            // hop. Apple guarantees the completion fires even when our
-            // seek is pre-empted by a subsequent seek (finished=false),
-            // so this never hangs.
+            // Resolve only after the seek finishes: resolving early let a mid-seek `currentTime()` (often 0) snap the
+            // seekbar back before AVPlayer settled. The completion fires even when the seek is pre-empted.
             player.seek(
                 to: cmTime,
                 toleranceBefore: .zero,
@@ -521,9 +460,7 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             }
 
             item.select(group.options[index], in: group)
-            // Surface the new selected-state so the audio menu updates — the
-            // AVPlayer media-selection change emits no event of its own
-            // (Android's onTracksChanged does this automatically).
+            // Surface the selected state: an AVPlayer media-selection change emits no event of its own.
             self?.emitTracksChanged()
             call.resolve()
         }
@@ -552,9 +489,8 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
-    /// The cached legible group, read from the asset again while it is empty:
-    /// the `.readyToPlay` load can settle before the asset lists its options
-    /// and nothing else refills the cache for that item.
+    /// The cached legible group, re-read from the asset while empty: `.readyToPlay` can settle before the
+    /// asset lists its options and nothing else refills the cache for that item.
     @MainActor
     func loadedLegibleGroup() async -> AVMediaSelectionGroup? {
         if let group = legibleGroup, !group.options.isEmpty { return group }
@@ -617,10 +553,8 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
-    /// Attach a legible output to the item with player rendering suppressed:
-    /// cues are delivered to the delegate (and drawn by `subtitleOverlay`)
-    /// while AVPlayer draws no caption box. `.sourceAndRulesOnly` keeps the
-    /// system's user-preference styling (the box) out of the delivered cues.
+    /// Attaches a legible output with player rendering suppressed: cues go to the delegate and `subtitleOverlay`.
+    /// `.sourceAndRulesOnly` keeps the system's boxed caption styling out of them.
     func attachLegibleOutput(to item: AVPlayerItem) {
         let output = AVPlayerItemLegibleOutput()
         output.textStylingResolution = .sourceAndRulesOnly
@@ -630,10 +564,8 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         applySubtitleRendering()
     }
 
-    /// AVPlayer draws the (boxed) native caption where the overlay can't be
-    /// seen: on an AirPlay receiver and in the PiP window. Otherwise the
-    /// overlay draws, hidden through the PiP exit animation so it doesn't
-    /// overlap the native caption still fading out.
+    /// AVPlayer draws the native (boxed) caption where the overlay can't be seen: AirPlay receiver and PiP window.
+    /// Otherwise the overlay draws, hidden through the PiP exit animation.
     func applySubtitleRendering() {
         let native = externalPlaybackActive || pipPhase == .active
         subtitleOutput?.suppressesPlayerRendering = !native
@@ -641,9 +573,8 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         if native { subtitleOverlay?.render([]) }
     }
 
-    /// PiP enter / will-stop. PiP mirrors the AVPlayerLayer, not the overlay.
-    /// Will-stop also clears the native caption; the overlay is revealed only
-    /// once PiP has fully exited (`finishSubtitlePiPExit`).
+    /// PiP mirrors the AVPlayerLayer, not the overlay. Will-stop also clears the native caption;
+    /// the overlay is revealed once PiP has fully exited (`finishSubtitlePiPExit`).
     public func setSubtitleRenderingForPiP(_ inPiP: Bool) {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
@@ -664,9 +595,8 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
-    /// Deselect the legible option to drop the caption the player rendered
-    /// during PiP (re-suppressing alone leaves the last cue frozen on screen).
-    /// The option is remembered so cue delivery can be restored on exit.
+    /// Deselects the legible option to drop the caption rendered during PiP (re-suppressing leaves the last cue
+    /// frozen); the option is remembered to restore cue delivery on exit.
     func clearNativeCaption() {
         guard let item = player?.currentItem,
               let group = legibleGroup else { return }
@@ -682,10 +612,8 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         pipDeselectedSubtitle = nil
     }
 
-    /// The overlay is a subview on the phone, so a receiver never sees it:
-    /// while AirPlay carries the video, AVPlayer renders the native caption.
-    /// Emits on every call, but only a change touches the subtitle state, which
-    /// PiP also drives.
+    /// The overlay is a phone subview a receiver never sees, so AVPlayer renders the native caption over AirPlay.
+    /// Emits on every call; only a change touches the subtitle state, which PiP also drives.
     func setExternalPlayback(_ active: Bool) {
         defer { emitExternalPlayback(active) }
         guard active != externalPlaybackActive else { return }
@@ -865,12 +793,8 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
                 item.preferredMaximumResolution = .zero
                 item.preferredPeakBitRate = 0  // 0 = no limit
             } else {
-                // AVPlayer HLS has no "disable ABR" switch. Combining a tight
-                // resolution cap with a peak-bitrate ceiling just above the
-                // target profile forces AVPlayer to pick that rung and prevents
-                // upward switches. Downward switching under real congestion is
-                // still possible — Apple's ABR can't be hard-locked without
-                // rewriting the master playlist to expose a single rung.
+                // AVPlayer HLS has no ABR off switch: a tight resolution cap plus a peak-bitrate ceiling just above the
+                // target profile pins that rung and blocks upward switches; downward switching under congestion remains.
                 item.preferredMaximumResolution = CGSize(width: width, height: height)
                 item.preferredPeakBitRate = Self.peakBitRateForHeight(height)
             }
@@ -878,10 +802,8 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
-    /// Peak bitrate ceiling (bps) tuned just above the transcode profile for
-    /// the given target height. Keeps AVPlayer pinned to that rung instead of
-    /// upgrading to the next profile. Mirrors backend PROFILES in
-    /// transcoding.service.ts — update both if bitrates change.
+    /// Peak bitrate ceiling (bps) just above the transcode profile for the target height, pinning that rung.
+    /// Mirrors backend PROFILES in transcoding.service.ts: update both.
     static func peakBitRateForHeight(_ height: Int) -> Double {
         switch height {
         case 2160...: return 40_000_000   // profile 20M → cap 40M (no upper profile)

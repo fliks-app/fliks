@@ -33,12 +33,8 @@ extension NativePlayerPlugin {
             DispatchQueue.main.async { self?.layoutVideoLayer() }
         }
 
-        // Item status. `.initial` catches a warm asset that flipped to
-        // `.readyToPlay` between item creation and observer attach, so the
-        // track list still surfaces. Play / pause / buffer state is owned by
-        // the `timeControlStatus` observer below, not this one — here
-        // `.readyToPlay` only publishes tracks and `.failed` raises the
-        // terminal error.
+        // Item status. `.initial` catches a warm asset already `.readyToPlay`. Play/pause/buffer is owned by the
+        // `timeControlStatus` observer; here `.readyToPlay` only publishes tracks and `.failed` raises the terminal error.
         statusObserver = player.currentItem?.observe(
             \.status, options: [.initial, .new]
         ) { [weak self] item, _ in
@@ -46,23 +42,15 @@ extension NativePlayerPlugin {
             case .readyToPlay:
                 DispatchQueue.main.async { self?.nowPlaying.refresh() }
                 self?.emitTracksChanged()
-                // AVPlayer often reports `.readyToPlay` before the
-                // alternate-audio rendition playlists have been fetched, so
-                // the `.audible` selection group is still empty. Without
-                // this re-emit the client's `audioTracksChanged` upgrade
-                // guard rejects the short list, leaves the `si-*` fallback
-                // in place, and every language switch falls back to a full
-                // backend reload (re-encode). See issue #378.
+                // `.readyToPlay` often precedes the alternate-audio playlists, leaving the `.audible` group empty: re-emit,
+                // or the client's `audioTracksChanged` guard rejects the short list and every language switch reloads (#378).
                 self?.ensureMediaSelectionPopulated()
             case .failed:
                 let nsError = item.error as NSError?
                 let msg = nsError?.localizedDescription ?? "Playback failed"
                 let code = nsError?.code ?? -1
-                // Dump the AVPlayerItem error log to the console — each
-                // entry carries the exact failing URI (which segment),
-                // errorStatusCode, and errorComment (Apple's own
-                // description). With raw -12927 we're blind; with this
-                // we see WHY AVPlayer rejected the variant.
+                // Dump the item error log to the console: each entry carries the failing URI, status code and Apple's comment,
+                // which a bare -12927 hides.
                 var details: [String] = []
                 if let log = item.errorLog() {
                     for entry in log.events {
@@ -77,11 +65,8 @@ extension NativePlayerPlugin {
             }
         }
 
-        // AVPlayerItem error log — fires on every recoverable / fatal
-        // network or codec event during playback. More verbose than the
-        // single `.status == .failed` emit above (which only fires once,
-        // and with a single error). This catches per-segment failures,
-        // codec validation hiccups, and ABR-related rejections.
+        // AVPlayerItem error log: per-segment failures, codec validation hiccups and ABR rejections,
+        // beyond the single `.status == .failed` emit above.
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(handleNewErrorLogEntry(_:)),
@@ -89,21 +74,11 @@ extension NativePlayerPlugin {
             object: player.currentItem
         )
 
-        // Single source of truth for play / pause / buffer. With
-        // `automaticallyWaitsToMinimizeStalling = true` AVPlayer signals a
-        // stall and its recovery through `timeControlStatus`, not `rate`
-        // (which holds at the requested value across a re-buffer) — so a
-        // `\.rate` observer never fires when playback resumes and the JS
-        // spinner would latch. `.waitingToPlayAtSpecifiedRate` is buffering,
-        // `.playing` is started/resumed, `.paused` is user pause or stop.
-        // `.initial` publishes the status at attach so a warm reload that is
-        // already `.playing` emits too; a cold load reports `.paused` here,
-        // harmlessly, just before play() starts it.
+        // Single source of truth for play/pause/buffer: with `automaticallyWaitsToMinimizeStalling` a stall and its recovery
+        // show in `timeControlStatus`, not `rate`. `.initial` publishes the status at attach so a warm `.playing` reload emits.
         timeControlObserver = player.observe(\.timeControlStatus, options: [.initial, .new]) { [weak self] player, _ in
-            // Screen stays awake while advancing or stalled mid-play; a pause
-            // (user pause or end of item) lets it sleep. KVO can land off the
-            // main thread, so the UIKit flag has to be hopped over.
-            // Over AirPlay the receiver shows the video: the phone may sleep.
+            // Screen stays awake while advancing or stalled mid-play (not over AirPlay); KVO may land off the main thread,
+            // so the UIKit flag is hopped over.
             let awake = player.timeControlStatus != .paused && !player.isExternalPlaybackActive
             DispatchQueue.main.async { UIApplication.shared.isIdleTimerDisabled = awake }
             DispatchQueue.main.async { self?.nowPlaying.refresh() }
@@ -121,14 +96,8 @@ extension NativePlayerPlugin {
             }
         }
 
-        // First-frame painted — flip the Angular fanart/spinner off.
-        // `AVPlayerLayer.isReadyForDisplay` is the canonical signal that
-        // the layer has decoded + composited a frame to the surface;
-        // mirrors ExoPlayer's `onRenderedFirstFrame` on Android.
-        // `.initial` catches a layer already ready at observer attach (warm
-        // reload); KVO otherwise fires on each `isReadyForDisplay` transition.
-        // The `firstFrameEmitted` flag makes the emit one-shot, dropping the
-        // `false` values and any later re-ready toggles across re-buffers.
+        // First frame painted: `AVPlayerLayer.isReadyForDisplay` (as ExoPlayer's `onRenderedFirstFrame`) flips the fanart off.
+        // `.initial` catches an already-ready layer; `firstFrameEmitted` keeps the emit one-shot.
         if let layer = playerLayer {
             firstFrameObserver = layer.observe(\.isReadyForDisplay, options: [.initial, .new]) { [weak self] layer, _ in
                 guard let self = self, layer.isReadyForDisplay, !self.firstFrameEmitted else { return }
@@ -161,12 +130,8 @@ extension NativePlayerPlugin {
             object: player.currentItem
         )
 
-        // Returning from background / becoming active: iOS can drop the
-        // AVPlayerLayer's backing surface for the off-screen scene (or an
-        // auto-PiP exit leaves the inline layer detached) while audio and the
-        // subtitle overlay keep running — the video returns black. Re-present
-        // it. Torn down by removeObservers() and re-added on the next load(),
-        // matching the item observers above.
+        // On return from background iOS can drop the AVPlayerLayer's surface (or an auto-PiP exit leaves it detached)
+        // while audio runs, so the video is black: re-present it. Removed by removeObservers(), re-added on load().
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(handleAppDidForeground),
@@ -198,10 +163,8 @@ extension NativePlayerPlugin {
               let log = item.errorLog(),
               let entry = log.events.last else { return }
         let msg = "[\(entry.errorDomain) \(entry.errorStatusCode)] \(entry.errorComment ?? "—") uri=\(entry.uri ?? "—")"
-        // Dump to the JS console (Safari Web Inspector / app log) only.
-        // These entries fire on recoverable per-segment network / codec
-        // hiccups, so they are deliberately not raised as a UI error
-        // event — only the terminal `.status == .failed` path does that.
+        // Console only: these recoverable per-segment hiccups are not raised as a UI error;
+        // only the terminal `.status == .failed` path does that.
         let escaped = msg.replacingOccurrences(of: "'", with: "\\'")
         let js = "console.warn('[NativePlayer] errorLog:', '\(escaped)');"
         DispatchQueue.main.async { [weak self] in
@@ -209,9 +172,8 @@ extension NativePlayerPlugin {
         }
     }
 
-    /// A receiver that cannot play the stream stops the player without an item
-    /// error: the only trace is a drop to rate 0 nobody asked for (a pause from
-    /// the app reports `.setRateCalled`, an interruption its own reason).
+    /// A receiver that cannot play the stream stops the player without an item error: the only trace is an unrequested
+    /// drop to rate 0 (an app pause reports `.setRateCalled`, an interruption its own reason).
     @objc private func handleRateChange(_ notification: Notification) {
         let reason = notification.userInfo?[AVPlayer.rateDidChangeReasonKey] as? AVPlayer.RateDidChangeReason
         DispatchQueue.main.async { [weak self] in
@@ -331,9 +293,7 @@ extension NativePlayerPlugin {
 
     func emitError(code: Int, message: String) {
         let safeMsg = message.replacingOccurrences(of: "'", with: "\\'")
-        // Always log to console.error so the failure is visible in Safari
-        // Web Inspector regardless of whether the Angular layer surfaces
-        // the dispatched event.
+        // Always console.error so the failure shows in Safari Web Inspector whether or not Angular surfaces the event.
         let js = """
         console.error('[NativePlayer] error', \(code), '\(safeMsg)');
         window.dispatchEvent(new CustomEvent('nativePlayerError', { detail: { code: \(code), message: '\(safeMsg)' } }));

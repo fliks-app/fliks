@@ -152,10 +152,8 @@ extension CastPlugin {
         }
     }
 
-    /// Map the sender's subtitle presets (`size` / `color` / `shadow` /
-    /// `background`) onto Cast SDK's `GCKMediaTextTrackStyle`. Same
-    /// preset vocabulary as the local player settings — keeps a single
-    /// shared UI between both. nil spec → receiver-matching defaults.
+    /// Maps the sender's subtitle presets (`size`, `color`, `shadow`, `background`, same vocabulary as the local player)
+    /// onto `GCKMediaTextTrackStyle`; nil spec gives the receiver's defaults.
     func buildTextTrackStyle(_ spec: [String: Any]?) -> GCKMediaTextTrackStyle {
         let style = GCKMediaTextTrackStyle.createDefault()
         style.fontGenericFamily = .sansSerif
