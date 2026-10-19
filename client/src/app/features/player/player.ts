@@ -4247,6 +4247,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.subtitleSyncOpener = opener;
     this.subtitleSyncOpen.set(true);
     this.hideSoftSubtitle();
+    const tracks = this.syncTextTracks();
+    if (!tracks.some((s) => s.id === this.activeSubtitleId()) && tracks.length) void this.onSelectSubtitleById(tracks[0].id);
   }
 
   protected onCloseSubtitleSync() {

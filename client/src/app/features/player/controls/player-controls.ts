@@ -448,11 +448,13 @@ export class PlayerControlsComponent {
     },
   ];
 
-  /** Resync needs the manage permission and a text track the engine renders locally. */
-  readonly canSyncSubtitle = computed(() => {
-    const sub = this.availableSubtitles().find((s) => s.id === this.activeSubtitleId());
-    return !!sub && !sub.isImage && !sub.burnIn && !this.castConnected() && this.auth.hasPermission('subtitles.manage');
-  });
+  /** Resync needs the manage permission and a text track; opening it selects one if none is active. */
+  readonly canSyncSubtitle = computed(
+    () =>
+      this.availableSubtitles().some((s) => !s.isImage && !s.burnIn) &&
+      !this.castConnected() &&
+      this.auth.hasPermission('subtitles.manage'),
+  );
 
   protected openSyncPanel() {
     this.openSubtitleSync.emit(this.dropdownTrigger);
