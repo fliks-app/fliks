@@ -63,8 +63,8 @@
         </div>
         @for (v of visible(); track v.index) {
           <div
-            class="sync-cue absolute overflow-hidden px-2 text-center leading-snug"
-            [class]="active().has(v.index) ? 'text-xl font-semibold text-white opacity-100' : 'text-sm text-white/70 opacity-50'"
+            class="sync-cue absolute px-2 text-center leading-snug"
+            [class]="active().has(v.index) ? 'z-10 h-auto! rounded bg-black/60 font-semibold text-white opacity-100 ' + (phone() ? 'text-base' : 'text-xl') : 'line-clamp-2 text-sm text-white/70 opacity-50'"
             [style.left.px]="rulerPx + chevronPx"
             [style.right.px]="chevronPx"
             [style.top.px]="boxTop(v.box, base(), viewH())"
