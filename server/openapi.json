@@ -1966,6 +1966,17 @@
             "description": ""
           }
         }
+      },
+      "delete": {
+        "tags": [
+          "routes_media"
+        ],
+        "operationId": "cancel_sync",
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
       }
     },
     "/api/media/{id}/subtitles/{subtitleId}/translate": {

@@ -184,6 +184,12 @@ pub enum SseEvent {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         media_id: Option<i64>,
     },
+    #[serde(rename = "subtitle.sync_cancelled")]
+    SubtitleSyncCancelled {
+        subtitle_id: i64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        media_id: Option<i64>,
+    },
     #[serde(rename = "subtitle.downloaded")]
     SubtitleDownloaded {
         media_id: i64,

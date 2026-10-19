@@ -39,6 +39,8 @@ struct Item {
     completed_at: Option<i64>,
     subject: Subject,
     options: Options,
+    job_id: Option<String>,
+    cancelled: bool,
 }
 
 impl Item {
@@ -76,6 +78,65 @@ impl Queue {
 
     pub fn snapshot(&self) -> Vec<Value> {
         self.lock().0.iter().map(Item::json).collect()
+    }
+
+    /// Records the engine job of a running item; true when a cancel was already asked.
+    fn attach(&self, id: i32, job_id: &str) -> bool {
+        let mut q = self.lock();
+        let Some(i) =
+            q.0.iter_mut()
+                .find(|i| i.subtitle_id == id && i.status == "running")
+        else {
+            return false;
+        };
+        i.job_id = Some(job_id.to_owned());
+        i.cancelled
+    }
+
+    fn is_cancelled(&self, id: i32) -> bool {
+        self.lock()
+            .0
+            .iter()
+            .any(|i| i.subtitle_id == id && i.status == "running" && i.cancelled)
+    }
+}
+
+/// Cancels a queued item (dropped) or a running one (its engine job is cancelled and its slot
+/// settles without touching the subtitle); `locked` stays as `enqueue` left it, like a failure.
+pub async fn cancel(st: &AppState, id: i32) {
+    let (subject, job_id) = {
+        let mut q = st.subtitles.sync.lock();
+        let Some(pos) =
+            q.0.iter()
+                .position(|i| i.subtitle_id == id && matches!(i.status, "queued" | "running"))
+        else {
+            return;
+        };
+        if q.0[pos].status == "queued" {
+            let item = q.0.remove(pos);
+            st.hub.activity().remove(&activity_id(id));
+            (item.subject, None)
+        } else {
+            // A running item settles through its `Slot`; one without a job yet is cancelled by `attach`.
+            q.0[pos].cancelled = true;
+            (q.0[pos].subject.clone(), q.0[pos].job_id.clone())
+        }
+    };
+    if let Some(job) = job_id
+        && let Err(e) = st.engine.cancel_job(&job).await
+    {
+        tracing::warn!("Cancelling the sync job of subtitle #{id} failed: {e}");
+    }
+    if let Some(media_id) = subject.media_id {
+        events::emit(
+            st,
+            i32::try_from(media_id).unwrap_or_default(),
+            SseEvent::SubtitleSyncCancelled {
+                subtitle_id: id.into(),
+                media_id: Some(media_id),
+            },
+        )
+        .await;
     }
 }
 
@@ -153,6 +214,8 @@ pub async fn enqueue(st: &AppState, id: i32, options: Options) -> Result<Value, 
         completed_at: None,
         subject: subject.clone(),
         options,
+        job_id: None,
+        cancelled: false,
     };
     let out = item.json();
     {
@@ -248,6 +311,7 @@ impl Drop for Slot {
                     .find(|i| i.subtitle_id == self.id && i.status == "running")
             {
                 match res {
+                    _ if item.cancelled => {}
                     Ok(()) => item.status = "completed",
                     Err(e) => {
                         item.status = "failed";
@@ -256,6 +320,7 @@ impl Drop for Slot {
                 }
                 item.completed_at = Some(now_ms());
             }
+            q.0.retain(|i| !(i.subtitle_id == self.id && i.cancelled));
             q.1 = q.1.saturating_sub(1);
         }
         self.st.hub.activity().remove(&activity_id(self.id));
@@ -398,7 +463,19 @@ pub async fn do_sync(st: &AppState, id: i32, o: &Options) -> Result<(), String> 
         }),
         force: false,
     };
-    let outcome = match st.engine.run_job(&req, None).await {
+    let job_id = st
+        .engine
+        .submit_job(&req)
+        .await
+        .map_err(|e| e.to_string())?;
+    if st.subtitles.sync.attach(id, &job_id) {
+        let _ = st.engine.cancel_job(&job_id).await;
+    }
+    let job = st.engine.wait_job(job_id, &req, None).await;
+    if st.subtitles.sync.is_cancelled(id) {
+        return Err("Sync cancelled".into());
+    }
+    let outcome = match job {
         Ok(JobResult::SubtitleSync { subtitle }) => dirs
             .rewrite(&stored, subtitle.text.as_bytes())
             .map_err(|e| e.text()),
