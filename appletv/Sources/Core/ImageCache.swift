@@ -1,3 +1,4 @@
+import ImageIO
 import SwiftUI
 import UIKit
 
@@ -8,7 +9,7 @@ enum ImageCache {
     static let memory: NSCache<NSURL, UIImage> = {
         let cache = NSCache<NSURL, UIImage>()
         cache.countLimit = 200
-        cache.totalCostLimit = 80 * 1024 * 1024 // ~80 MB of decoded images
+        cache.totalCostLimit = 80 * 1024 * 1024 // decoded bytes (bytesPerRow x height)
         return cache
     }()
 
@@ -23,12 +24,27 @@ enum ImageCache {
         URLCache.shared.removeAllCachedResponses()
     }
 
+    /// Longest edge kept in memory: a full-screen backdrop on a 1080p tvOS display.
+    private static let maxPixelSize = 1920
+
+    /// Decodes at most `maxPixelSize` on the longest edge, so a large poster never sits decoded at full size.
+    private static func downsampled(_ data: Data) -> UIImage? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary),
+              let cg = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                  kCGImageSourceCreateThumbnailFromImageAlways: true,
+                  kCGImageSourceCreateThumbnailWithTransform: true,
+                  kCGImageSourceShouldCacheImmediately: true,
+                  kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
+              ] as CFDictionary) else { return nil }
+        return UIImage(cgImage: cg)
+    }
+
     /// Decoded image for a URL — memory cache when warm, otherwise fetched and cached.
     static func load(_ url: URL) async -> UIImage? {
         if let hit = memory.object(forKey: url as NSURL) { return hit }
         guard let (data, _) = try? await URLSession.shared.data(from: url),
-              let img = UIImage(data: data) else { return nil }
-        memory.setObject(img, forKey: url as NSURL, cost: data.count)
+              let img = downsampled(data), let cg = img.cgImage else { return nil }
+        memory.setObject(img, forKey: url as NSURL, cost: cg.bytesPerRow * cg.height)
         return img
     }
 
