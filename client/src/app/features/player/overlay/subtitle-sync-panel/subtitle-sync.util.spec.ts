@@ -1,5 +1,6 @@
 import {
   PX_PER_SEC,
+  SmoothClock,
   activeCues,
   contentHeight,
   boxTop,
@@ -58,6 +59,18 @@ describe('subtitle sync maths', () => {
       { start: 0.1, end: 1, text: 'b' },
     ]);
     expect(b.top).toBeGreaterThanOrEqual(a.top + a.height);
+  });
+
+  it('advances every frame between bursty time samples', () => {
+    const clock = new SmoothClock();
+    clock.read(10, 0, true);
+    const a = clock.read(10, 16, true);
+    const b = clock.read(10, 32, true);
+    expect(a).toBeGreaterThan(10);
+    expect(b).toBeGreaterThan(a);
+    expect(clock.read(10.25, 250, true)).toBeCloseTo(10.25, 1);
+    expect(clock.read(5, 266, true)).toBe(5);
+    expect(clock.read(5, 1000, false)).toBe(5);
   });
 
   it('formats the offset with its sign', () => {

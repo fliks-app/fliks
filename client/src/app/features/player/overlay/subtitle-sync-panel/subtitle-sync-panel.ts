@@ -36,6 +36,7 @@ import {
   KEY_STEP_SEC,
   PX_PER_SEC,
   SETTLE_MS,
+  SmoothClock,
   activeCues,
   contentHeight,
   boxTop,
@@ -72,6 +73,8 @@ export class SubtitleSyncPanelComponent {
   readonly duration = input(0);
   /** Current video time in seconds, read every frame. */
   readonly timeSource = input.required<() => number>();
+  readonly paused = input(true);
+  readonly playbackRate = input(1);
   /** Element to refocus on close. */
   readonly opener = input<HTMLElement | null>(null);
 
@@ -118,6 +121,8 @@ export class SubtitleSyncPanelComponent {
   private readonly scroller = viewChild.required<ElementRef<HTMLElement>>('scroller');
   private readonly syncDialog = viewChild.required<ElementRef<HTMLDialogElement>>('syncDialog');
   private readonly overlay = new SubtitleOverlay(1, 'fliks-sync-subtitle');
+  private readonly clock = new SmoothClock();
+  private t = 0;
   private lastWritten = 0;
   private interacting = false;
   private pointerDown = false;
@@ -200,7 +205,7 @@ export class SubtitleSyncPanelComponent {
   // One frame: follow the video, or, while the user scrolls, derive the offset from where they are.
   private readonly tick = () => {
     const el = this.scroller().nativeElement;
-    const t = this.timeSource()();
+    const t = (this.t = this.clock.read(this.timeSource()(), performance.now(), !this.paused(), this.playbackRate()));
     if (this.interacting) {
       this.offset.set(offsetFromScroll(el.scrollTop, t, this.base(), PX_PER_SEC));
     } else if (Math.abs(el.scrollTop - scrollTopForTime(t)) >= 0.5) {
@@ -242,7 +247,7 @@ export class SubtitleSyncPanelComponent {
   private commit() {
     if (!this.interacting) return;
     const el = this.scroller().nativeElement;
-    const off = Math.round(offsetFromScroll(el.scrollTop, this.timeSource()(), this.base(), PX_PER_SEC) * 1000) / 1000;
+    const off = Math.round(offsetFromScroll(el.scrollTop, this.t, this.base(), PX_PER_SEC) * 1000) / 1000;
     this.interacting = false;
     this.offset.set(off);
     this.base.set(off);

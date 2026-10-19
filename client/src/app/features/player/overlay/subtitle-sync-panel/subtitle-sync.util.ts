@@ -73,6 +73,27 @@ export function visibleCues(
   return out;
 }
 
+/** Engines report time in bursts; this extrapolates between samples and eases into each new one. */
+export class SmoothClock {
+  private sample = NaN;
+  private sampledAt = 0;
+  private shown = 0;
+  private last = 0;
+
+  read(sample: number, nowMs: number, playing: boolean, rate = 1): number {
+    if (sample !== this.sample) {
+      this.sample = sample;
+      this.sampledAt = nowMs;
+    }
+    const target = playing ? sample + Math.min(1, ((nowMs - this.sampledAt) / 1000) * rate) : sample;
+    const dt = (nowMs - this.last) / 1000;
+    this.last = nowMs;
+    if (!playing || Math.abs(target - this.shown) > 0.5) this.shown = target;
+    else this.shown += dt * rate + (target - this.shown) * 0.1;
+    return this.shown;
+  }
+}
+
 export function formatOffset(offset: number): string {
   return `${offset >= 0 ? '+' : '-'}${Math.abs(offset).toFixed(2)} s`;
 }

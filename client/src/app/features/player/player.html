@@ -219,6 +219,8 @@
       [mediaFileId]="syncMediaFileId"
       [duration]="duration()"
       [timeSource]="subtitleTime"
+      [paused]="paused()"
+      [playbackRate]="playbackRate()"
       [opener]="subtitleSyncOpener"
       (selectTrack)="onSelectSubtitleById($event)"
       (contentChanged)="onSubtitleContentChanged($event)"
