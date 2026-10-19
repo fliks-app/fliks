@@ -6,7 +6,7 @@ import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { registerAppSchemePrivileged, registerAppProtocol, APP_URL } from './protocol';
 import { installCorsBypass } from './cors';
-import { appendLog, redactQuery } from './log-file';
+import { appendLog, echoRendererConsole, redactQuery } from './log-file';
 import { setupUpdater } from './updater';
 import { registerDownloadIpc } from './download';
 import { registerCastIpc } from './cast';
@@ -264,10 +264,10 @@ async function startUiOnly(haveApp: boolean): Promise<void> {
     webPreferences: {
       preload: path.join(app.getAppPath(), 'dist', 'preload', 'index.cjs'),
       contextIsolation: true,
-      sandbox: false,
+      sandbox: true,
     },
   });
-  uiWin.webContents.on('console-message', (_e, _l, m) => console.log('[renderer]', m));
+  echoRendererConsole(uiWin.webContents);
   await uiWin.loadURL(rendererUrl(haveApp));
   send({ type: 'ready' });
 }
@@ -355,7 +355,7 @@ app.whenReady().then(async () => {
       offscreen: true,
       preload: path.join(app.getAppPath(), 'dist', 'preload', 'index.cjs'),
       contextIsolation: true,
-      sandbox: false,
+      sandbox: true,
       // Trusted client → reach the user's server regardless of CORS/mixed
       // content (cors.ts still reflects ACAO). Same as the embed path + mobile.
       webSecurity: false,
@@ -380,7 +380,7 @@ app.whenReady().then(async () => {
     const s = image.getSize();
     if (s.width > 0) addon.uploadUi(image.toBitmap(), s.width, s.height);
   });
-  uiWin.webContents.on('console-message', (_e, _l, m) => console.log('[renderer]', m));
+  echoRendererConsole(uiWin.webContents);
 
   addon.start({ width: WIDTH, height: HEIGHT, title: 'Fliks', icon: compositorIcon() });
   // Apply the shared streaming/reconnect tuning (all runtime-mutable, set before
@@ -534,7 +534,7 @@ app.whenReady().then(async () => {
   const qoe = new QoeReader();
   ipcMain.handle(IPC.load, async (_e, opts) => {
     qoe.reset();
-    console.log('[ipc] load', opts?.url, 'start=', opts?.startTime, 'headers=', Object.keys(opts?.headers ?? {}).join(','));
+    console.log('[ipc] load', redactQuery(String(opts?.url)), 'start=', opts?.startTime, 'headers=', Object.keys(opts?.headers ?? {}).join(','));
     // Global property, so it is always written — otherwise the previous file's
     // rectangle would crop the next one.
     addon.setProperty('video-crop', opts?.videoCrop ?? '');

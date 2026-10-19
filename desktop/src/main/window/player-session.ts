@@ -6,7 +6,7 @@ import { MacMpvPlayer, roundWindowBottomCorners } from '../mpv/mac-mpv-player';
 import type { PlayerBackend } from '../mpv/player-backend';
 import { createEmbedBackend } from './backends';
 import { setPlaybackKeepAwake, keepAwakeForState } from '../power';
-import { appendLog } from '../log-file';
+import { appendLog, echoRendererConsole, redactUrls } from '../log-file';
 import { IPC, type DesktopEvent, type DesktopRect } from '../../shared/contract';
 
 /**
@@ -129,7 +129,7 @@ export class PlayerSession {
       webPreferences: {
         preload: preloadPath,
         contextIsolation: true,
-        sandbox: false,
+        sandbox: true,
         // Trusted client: the bundled Angular app (fliks://, a secure origin)
         // must reach the user's server even when it's plain HTTP on a LAN —
         // disable web security to allow that cross-origin/mixed-content fetch,
@@ -139,11 +139,7 @@ export class PlayerSession {
       },
     });
 
-    // Surface the Angular app's console (device detection, engine selection,
-    // errors) in the main process log.
-    this.uiWin.webContents.on('console-message', (_e, _level, message) => {
-      console.log('[renderer]', message);
-    });
+    echoRendererConsole(this.uiWin.webContents);
     this.uiWin.webContents.on('render-process-gone', (_e, details) =>
       console.error('[uiWin render-process-gone]', JSON.stringify(details)),
     );
@@ -250,14 +246,9 @@ export class PlayerSession {
       process.stderr.write(`[${Date.now()}][mpv] ${s}`);
       // Only the failure levels reach the file: mpv's default `v` level logs
       // every segment URL, and this write is synchronous on the main thread.
-      if (/^\[(error|fatal|warn)\]/.test(s)) appendLog(`[mpv] ${s.trimEnd()}`);
+      if (/^\[(error|fatal|warn)\]/.test(s)) appendLog(redactUrls(`[mpv] ${s.trimEnd()}`));
     });
-    // A packaged GUI build has no console, so anything that only reaches
-    // `console.*` is unretrievable in the field. These four are what separate a
-    // playback glitch's causes from one another — an `error` followed by a
-    // `firstFrame` is a re-open, a lone `buffering` is a cache underrun, and
-    // neither is an event below the IPC layer — so they go to the file too.
-    // Deliberately not `timeUpdate`: it fires several times a second.
+    // Packaged builds have no console: these events go to the log file too (not timeUpdate, too frequent).
     mpv.on('exit', (e) => {
       const line = `[mpv] process exit ${JSON.stringify(e)}`;
       console.error(line);
@@ -284,8 +275,9 @@ export class PlayerSession {
       this.emit({ type: 'firstFrame' });
     });
     mpv.on('error', (p) => {
-      console.log('[player] error:', JSON.stringify(p));
-      appendLog(`[player] error: ${JSON.stringify(p)}`);
+      const line = redactUrls(`[player] error: ${JSON.stringify(p)}`);
+      console.log(line);
+      appendLog(line);
       setPlaybackKeepAwake(false);
       this.emit({ type: 'error', payload: p });
     });
