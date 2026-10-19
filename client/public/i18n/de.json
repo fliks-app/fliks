@@ -2203,6 +2203,7 @@
       "field_type": "Servertyp",
       "field_url": "Server-URL",
       "field_api_key": "API-Schlüssel",
+      "field_api_key_unchanged": "Leer lassen, um den aktuellen Schlüssel zu behalten.",
       "field_events": "Auslösende Ereignisse",
       "field_enabled": "Server aktiv",
       "test_connection": "Verbindung testen",

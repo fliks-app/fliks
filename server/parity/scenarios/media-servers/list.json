@@ -1,5 +1,5 @@
 {
-  "deviation": null,
+  "deviation": "F79",
   "ignore": [
     "$..createdAt",
     "$..updatedAt"
@@ -12,7 +12,8 @@
       "expect": {
         "body": [
           {
-            "apiKey": "wrong",
+            "apiKey": "",
+            "apiKeySet": true,
             "enabled": true,
             "events": [],
             "id": 4,
@@ -21,7 +22,8 @@
             "url": "http://127.0.0.1:4962/401"
           },
           {
-            "apiKey": "parity-key",
+            "apiKey": "",
+            "apiKeySet": true,
             "enabled": true,
             "events": [
               "library.rescan",
@@ -33,7 +35,8 @@
             "url": "http://127.0.0.1:4962/ok"
           },
           {
-            "apiKey": "parity-key",
+            "apiKey": "",
+            "apiKeySet": true,
             "enabled": true,
             "events": [],
             "id": 5,
@@ -42,7 +45,8 @@
             "url": "http://127.0.0.1:4962/nousers"
           },
           {
-            "apiKey": "parity-key",
+            "apiKey": "",
+            "apiKeySet": true,
             "enabled": true,
             "events": [],
             "id": 6,
@@ -51,7 +55,8 @@
             "url": "http://127.0.0.1:4962/slow"
           },
           {
-            "apiKey": "parity-key",
+            "apiKey": "",
+            "apiKeySet": true,
             "enabled": false,
             "events": [],
             "id": 2,
@@ -60,7 +65,8 @@
             "url": "http://127.0.0.1:4962/ok/"
           },
           {
-            "apiKey": "plex-key",
+            "apiKey": "",
+            "apiKeySet": true,
             "enabled": true,
             "events": [],
             "id": 3,

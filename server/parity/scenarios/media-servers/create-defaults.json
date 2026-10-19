@@ -1,5 +1,5 @@
 {
-  "deviation": null,
+  "deviation": "F79",
   "ignore": [
     "$..createdAt",
     "$..updatedAt"
@@ -20,6 +20,7 @@
       "expect": {
         "body": {
           "apiKey": "",
+          "apiKeySet": false,
           "enabled": true,
           "events": [],
           "id": 7,

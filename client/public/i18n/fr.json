@@ -2203,6 +2203,7 @@
       "field_type": "Type de serveur",
       "field_url": "URL du serveur",
       "field_api_key": "Cle API",
+      "field_api_key_unchanged": "Laissez vide pour conserver la cle actuelle.",
       "field_events": "Evenements declencheurs",
       "field_enabled": "Serveur actif",
       "test_connection": "Tester la connexion",

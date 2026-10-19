@@ -343,7 +343,7 @@ async fn crud_validation_and_acl(pool: PgPool) {
     .await;
     assert_eq!(
         (s, b["apiKey"].clone(), b["name"].clone()),
-        (200, Value::Null, json!("b2"))
+        (200, json!(""), json!("b2"))
     );
     let (s, b) = call(
         &c,
@@ -354,11 +354,7 @@ async fn crud_validation_and_acl(pool: PgPool) {
     )
     .await;
     assert_eq!(s, 200);
-    assert_eq!(
-        b["apiKey"],
-        Value::Null,
-        "absent apiKey keeps the stored value"
-    );
+    assert_eq!((&b["apiKey"], &b["apiKeySet"]), (&json!(""), &json!(false)));
     let (s, b) = call(&c, "GET", "/api/media-servers/999", &c.admin, None).await;
     assert_eq!(
         (s, b["message"].as_str()),
@@ -394,6 +390,65 @@ async fn crud_validation_and_acl(pool: PgPool) {
         .0,
         404
     );
+}
+
+/// F79: no response carries the key; absent or "" keeps it, a new string replaces it, null clears it.
+#[sqlx::test(migrations = false)]
+async fn api_key_is_redacted_and_kept(pool: PgPool) {
+    let c = ctx(pool).await;
+    let id = add_server(&c, "ok", &[], true).await;
+    let uri = format!("/api/media-servers/{id}");
+    let stored = || async {
+        sqlx::query_scalar::<_, Option<String>>(
+            r#"SELECT "apiKey" FROM media_servers WHERE id = $1"#,
+        )
+        .bind(id as i32)
+        .fetch_one(&c.st.db)
+        .await
+        .unwrap()
+    };
+    let redacted = |b: &Value, set: bool| {
+        assert_eq!(
+            (&b["apiKey"], &b["apiKeySet"]),
+            (&json!(""), &json!(set)),
+            "{b}"
+        );
+    };
+    redacted(&call(&c, "GET", &uri, &c.admin, None).await.1, true);
+    redacted(
+        &call(&c, "GET", "/api/media-servers", &c.admin, None)
+            .await
+            .1[0],
+        true,
+    );
+    let put = |extra: Value| {
+        let mut body = json!({"name": "n", "type": "emby", "url": "http://u", "enabled": false});
+        body.as_object_mut()
+            .unwrap()
+            .extend(extra.as_object().unwrap().clone());
+        call(&c, "PUT", &uri, &c.admin, Some(body))
+    };
+    for keep in [json!({}), json!({"apiKey": ""})] {
+        let (s, b) = put(keep).await;
+        assert_eq!(s, 200);
+        redacted(&b, true);
+        assert_eq!(stored().await.as_deref(), Some("tok"));
+    }
+    let (_, b) = put(json!({"apiKey": "fresh"})).await;
+    redacted(&b, true);
+    assert_eq!(stored().await.as_deref(), Some("fresh"));
+    let (_, b) = put(json!({"apiKey": null})).await;
+    redacted(&b, false);
+    assert_eq!(stored().await, None);
+    let (_, b) = call(
+        &c,
+        "POST",
+        "/api/media-servers",
+        &c.admin,
+        Some(json!({"name":"m","type":"emby","url":"u"})),
+    )
+    .await;
+    redacted(&b, false);
 }
 
 #[sqlx::test(migrations = false)]
