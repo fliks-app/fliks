@@ -271,7 +271,7 @@ async fn crud_validation_and_acl(pool: PgPool) {
         "/api/media-servers",
         &c.admin,
         Some(
-            json!({"name":"b","type":"emby","url":"x","events":null,"enabled":null,"apiKey":null}),
+            json!({"name":"b","type":"emby","url":"http://x","events":null,"enabled":null,"apiKey":null}),
         ),
     )
     .await;
@@ -290,7 +290,7 @@ async fn crud_validation_and_acl(pool: PgPool) {
         "POST",
         "/api/media-servers",
         &c.admin,
-        Some(json!({"name":"a","type":"plex","url":"y"})),
+        Some(json!({"name":"a","type":"plex","url":"http://y"})),
     )
     .await;
     let (_, l) = call(&c, "GET", "/api/media-servers", &c.admin, None).await;
@@ -315,7 +315,7 @@ async fn crud_validation_and_acl(pool: PgPool) {
             "enabled must be a boolean value"
         ])
     );
-    let body = json!({"name":"b2","type":"emby","url":"u"});
+    let body = json!({"name":"b2","type":"emby","url":"http://u"});
     for bad in [json!({"events": null}), json!({"enabled": null})] {
         let mut m = body.clone();
         m.as_object_mut()
@@ -445,10 +445,70 @@ async fn api_key_is_redacted_and_kept(pool: PgPool) {
         "POST",
         "/api/media-servers",
         &c.admin,
-        Some(json!({"name":"m","type":"emby","url":"u"})),
+        Some(json!({"name":"m","type":"emby","url":"http://u"})),
     )
     .await;
     redacted(&b, false);
+}
+
+/// C169: a write is checked on what it changes; a stored row a 4.x toggle re-sends still passes.
+#[sqlx::test(migrations = false)]
+async fn url_and_events_are_validated_on_change(pool: PgPool) {
+    let c = ctx(pool).await;
+    let msg = |b: &Value| b["message"][0].as_str().unwrap_or_default().to_owned();
+    for (url, events, want) in [
+        ("emby:8096", json!([]), "url must be a URL address"),
+        ("ftp://emby", json!([]), "url must be a URL address"),
+        ("http://", json!([]), "url must be a URL address"),
+        (
+            "https://emby",
+            json!(["nope"]),
+            "each value in events must be one of",
+        ),
+    ] {
+        let body = json!({"name": "n", "type": "emby", "url": url, "events": events});
+        let (s, b) = call(&c, "POST", "/api/media-servers", &c.admin, Some(body)).await;
+        assert_eq!(s, 400, "{url}");
+        assert!(msg(&b).starts_with(want), "{b}");
+    }
+    let plex =
+        json!({"name": "n", "type": "plex", "url": "HTTPS://plex", "events": ["library.rescan"]});
+    let (s, b) = call(&c, "POST", "/api/media-servers", &c.admin, Some(plex)).await;
+    assert_eq!((s, msg(&b).as_str()), (400, "type plex supports no events"));
+
+    let legacy: i32 = sqlx::query_scalar(
+        r#"INSERT INTO media_servers (name, type, url, events) VALUES ('old', 'emby', 'ftp://old', '["bogus"]') RETURNING id"#,
+    )
+    .fetch_one(&c.st.db)
+    .await
+    .unwrap();
+    let uri = format!("/api/media-servers/{legacy}");
+    let put = |extra: Value| {
+        let mut body = json!({"name": "old", "type": "emby", "url": "ftp://old", "events": ["bogus"], "enabled": false});
+        body.as_object_mut()
+            .unwrap()
+            .extend(extra.as_object().unwrap().clone());
+        call(&c, "PUT", &uri, &c.admin, Some(body))
+    };
+    assert_eq!(
+        put(json!({})).await.0,
+        200,
+        "the stored values are re-sent unchanged"
+    );
+    assert_eq!(put(json!({"name": "renamed"})).await.0, 200);
+    assert_eq!(put(json!({"url": "ftp://other"})).await.0, 400);
+    assert_eq!(put(json!({"events": ["bogus", "x"]})).await.0, 400);
+    assert_eq!(
+        put(json!({"type": "plex"})).await.0,
+        400,
+        "a new type re-checks the events"
+    );
+    let fixed = json!({"url": "http://new", "events": ["media.deleted"]});
+    let (s, b) = put(fixed).await;
+    assert_eq!(
+        (s, &b["url"], &b["events"]),
+        (200, &json!("http://new"), &json!(["media.deleted"]))
+    );
 }
 
 #[sqlx::test(migrations = false)]
@@ -490,7 +550,7 @@ async fn test_connection_modes(pool: PgPool) {
         "POST",
         "/api/media-servers",
         &c.admin,
-        Some(json!({"name":"p","type":"plex","url":"u"})),
+        Some(json!({"name":"p","type":"plex","url":"http://u"})),
     )
     .await;
     let (s, b) = call(
@@ -756,7 +816,7 @@ async fn import_guards_and_failures(pool: PgPool) {
         "POST",
         "/api/media-servers",
         &c.admin,
-        Some(json!({"name":"p","type":"plex","url":"u"})),
+        Some(json!({"name":"p","type":"plex","url":"http://u"})),
     )
     .await;
     let (s, b) = call(

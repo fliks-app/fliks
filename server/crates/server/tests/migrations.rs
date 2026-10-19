@@ -431,7 +431,7 @@ async fn m1785600_skips_unexpected_setting_shapes(pool: PgPool) {
 }
 
 const TYPEORM_VERSIONS: i64 = 81;
-const SQL_FILES: i64 = 88;
+const SQL_FILES: i64 = 89;
 const LAST_TYPEORM_VERSION: i64 = 1_786_300_000_000;
 
 #[sqlx::test(migrations = false)]
@@ -481,7 +481,7 @@ async fn adopting_a_typeorm_database_matches_a_fresh_one(pool: PgPool) {
         "a TypeORM migration re-ran"
     );
     let new_rows = ledger.iter().filter(|r| r.0 > LAST_TYPEORM_VERSION);
-    assert!(new_rows.clone().count() == 7 && new_rows.into_iter().all(|r| r.1 > 0));
+    assert!(new_rows.clone().count() == 8 && new_rows.into_iter().all(|r| r.1 > 0));
 
     let fresh_db = "fliks_p7_fresh";
     for stmt in [
@@ -617,5 +617,40 @@ async fn m1786700_iso_ms_ignores_the_session_time_zone(pool: PgPool) {
             "2026-01-02T03:04:05.678Z".into(),
             "2026-01-02T02:04:05.678Z".into()
         )
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn m1787200_normalises_media_server_urls_and_events(pool: PgPool) {
+    apply_until(&pool, 1_787_200_000_000).await;
+    sql(
+        &pool,
+        r#"INSERT INTO media_servers (id, name, type, url, events) VALUES
+           (1, 'a', 'emby', 'emby:8096', '["library.rescan", "bogus", "media.deleted"]'),
+           (2, 'b', 'emby', ' https://ok/ ', '[]'),
+           (3, 'c', 'emby', 'ftp://x', '["library.rescan"]'),
+           (4, 'd', 'plex', 'plex.lan', '["library.rescan"]'),
+           (5, 'e', 'emby', '', '[1, null, "file.deleted"]')"#,
+    )
+    .await;
+    apply_only(&pool, 1_787_200_000_000).await;
+    let got: Vec<(i32, String, String)> = rows(
+        &pool,
+        "SELECT id, url, events::text FROM media_servers ORDER BY id",
+    )
+    .await;
+    assert_eq!(
+        got,
+        vec![
+            (
+                1,
+                "http://emby:8096".into(),
+                r#"["library.rescan", "media.deleted"]"#.into()
+            ),
+            (2, " https://ok/ ".into(), "[]".into()),
+            (3, "ftp://x".into(), r#"["library.rescan"]"#.into()),
+            (4, "http://plex.lan".into(), "[]".into()),
+            (5, "".into(), r#"["file.deleted"]"#.into()),
+        ]
     );
 }
