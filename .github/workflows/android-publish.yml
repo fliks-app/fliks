@@ -84,7 +84,16 @@ jobs:
           distribution: temurin
           java-version: 21
 
+      # Read-only: a tag can't save a cache other refs restore; native-build.yml seeds it from main.
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          build-root-directory: client/android
+          cache-read-only: true
+
+      # Only what the build compiles against; the default set pulls the emulator (see native-build.yml).
       - uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools platforms;android-36'
 
       - name: Install client dependencies
         run: npm ci
@@ -105,18 +114,21 @@ jobs:
           echo "${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}" \
             | base64 -d > android/app/fliks-upload.jks
 
-      - name: Assemble signed release AAB
-        # Skipped in APK-only mode (`apk_tag` dispatch) — that path attaches a
-        # sideload build to an existing release and never touches Play Store.
-        if: github.event.inputs.apk_tag == ''
+      # One Gradle run for both outputs: the AAB (skipped in APK-only mode, `apk_tag`) and,
+      # on a tag or an `apk_tag` dispatch, the sideload APK with the same release signingConfig.
+      - name: Assemble signed release
         env:
           ORG_GRADLE_PROJECT_FLIKS_VERSION_CODE: ${{ steps.vcode.outputs.value }}
           ORG_GRADLE_PROJECT_FLIKS_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_PASSWORD }}
           ORG_GRADLE_PROJECT_FLIKS_KEY_ALIAS: ${{ secrets.ANDROID_UPLOAD_KEY_ALIAS }}
           ORG_GRADLE_PROJECT_FLIKS_KEY_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEY_PASSWORD }}
+          APK_TAG: ${{ github.event.inputs.apk_tag }}
         run: |
+          tasks=()
+          [ -z "$APK_TAG" ] && tasks+=(bundleRelease)
+          if [[ "$GITHUB_REF" == refs/tags/v* || -n "$APK_TAG" ]]; then tasks+=(assembleRelease); fi
           cd android
-          ./gradlew bundleRelease
+          ./gradlew "${tasks[@]}"
 
       - name: Upload the signed AAB for the Play Store job
         if: github.event.inputs.apk_tag == ''
@@ -125,20 +137,6 @@ jobs:
           name: signed-aab
           path: client/android/app/build/outputs/bundle/release/app-release.aab
           retention-days: 1
-
-      # Signed APK for direct sideloading, attached to the GitHub release.
-      # Runs on every `v*` tag push, and on an `apk_tag` dispatch that targets
-      # an already-released tag. Same release signingConfig that signs the AAB.
-      - name: Assemble signed release APK
-        if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.apk_tag != ''
-        env:
-          ORG_GRADLE_PROJECT_FLIKS_VERSION_CODE: ${{ steps.vcode.outputs.value }}
-          ORG_GRADLE_PROJECT_FLIKS_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_PASSWORD }}
-          ORG_GRADLE_PROJECT_FLIKS_KEY_ALIAS: ${{ secrets.ANDROID_UPLOAD_KEY_ALIAS }}
-          ORG_GRADLE_PROJECT_FLIKS_KEY_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEY_PASSWORD }}
-        run: |
-          cd android
-          ./gradlew assembleRelease
 
       - name: Stage signed APK with a versioned name
         if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.apk_tag != ''
