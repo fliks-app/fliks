@@ -1,0 +1,59 @@
+# Angular unit tests (client/**/*.spec.ts) and the Electron desktop typecheck and tests. Neither ran in CI
+# before: native-build.yml only compiles the shells.
+name: Client
+
+on:
+  pull_request:
+    branches: [main]
+    paths: &paths
+      - 'client/**'
+      - 'desktop/**'
+      - '!**/*.md'
+      - '.github/workflows/client.yml'
+  push:
+    branches: [main]
+    paths: *paths
+
+concurrency:
+  group: client-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  client:
+    # Release PRs only bump versions; main re-runs this after the merge.
+    if: ${{ !startsWith(github.head_ref, 'release-please--') }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - run: npm ci
+      - run: npx ng test --watch=false
+
+  desktop:
+    if: ${{ !startsWith(github.head_ref, 'release-please--') }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          # The tests run .ts files directly: Node 24 strips the types.
+          node-version: 24
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      # Scripts off: the Electron binary download is not needed to typecheck or test.
+      - run: npm ci --ignore-scripts
+      - run: npm run typecheck
+      - run: npm test

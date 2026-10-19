@@ -1,7 +1,7 @@
 import { HttpRequest, HttpResponse } from '@angular/common/http';
 import { of, throwError } from 'rxjs';
 import { vi } from 'vitest';
-import { cacheInterceptor, isCacheable } from './cache.interceptor';
+import { cacheInterceptor, clearRequestCache, isCacheable } from './cache.interceptor';
 
 describe('cache.interceptor — what may be cached', () => {
   it('caches the core reads it was built for', () => {
@@ -36,9 +36,11 @@ describe('cache.interceptor — mutations', () => {
   const post = new HttpRequest('POST', '/api/playback/progress', {});
   let open: ReturnType<typeof vi.fn>;
 
-  beforeEach(() => {
+  // The connection is module state: a spec that ran earlier in the same worker may have opened it.
+  beforeEach(async () => {
     open = vi.fn(() => ({}));
     vi.stubGlobal('indexedDB', { open });
+    await clearRequestCache();
   });
   afterEach(() => vi.unstubAllGlobals());
 

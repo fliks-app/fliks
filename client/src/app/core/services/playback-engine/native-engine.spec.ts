@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { NativeEngine } from './native-engine';
+import type { NativeEngine as NativeEngineType } from './native-engine';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const plugin = vi.hoisted(() => ({
   create: vi.fn(() => Promise.resolve()),
@@ -13,10 +13,16 @@ const plugin = vi.hoisted(() => ({
   getQoe: vi.fn(() => Promise.resolve({ engine: 'exoplayer' })),
 }));
 
-vi.mock('@capacitor/core', () => ({
-  registerPlugin: () => plugin,
-  Capacitor: { isNativePlatform: () => false, getPlatform: () => 'web' },
-}));
+// Loaded after the mock: other specs mock @capacitor/core differently and share the plugin module.
+let NativeEngine: typeof import('./native-engine').NativeEngine;
+beforeAll(async () => {
+  vi.resetModules();
+  vi.doMock('@capacitor/core', () => ({
+    registerPlugin: () => plugin,
+    Capacitor: { isNativePlatform: () => false, getPlatform: () => 'web' },
+  }));
+  ({ NativeEngine } = await import('./native-engine'));
+});
 
 const rect = { x: 0, y: 138, width: 1920, height: 804 };
 
@@ -96,7 +102,7 @@ describe('NativeEngine subtitle resolution', () => {
   const track = (id: string, language: string, extra: Record<string, unknown> = {}) => ({
     id, language, label: id, ...extra,
   });
-  const pick = async (engine: NativeEngine, language: string, extra: Record<string, unknown> = {}) => {
+  const pick = async (engine: NativeEngineType, language: string, extra: Record<string, unknown> = {}) => {
     engine.selectTextTrack({ language, ...extra });
     await vi.waitFor(() => expect(plugin.getSubtitleTracks).toHaveBeenCalled());
     await Promise.resolve();
