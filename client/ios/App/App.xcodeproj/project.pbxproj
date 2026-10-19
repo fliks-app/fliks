@@ -22,9 +22,12 @@
 		F1000001AAAA000000000001 /* FlksViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA000000000011 /* FlksViewController.swift */; };
 		F1000001AAAA000000000002 /* HdrPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA000000000012 /* HdrPlugin.swift */; };
 		F1000001AAAA000000000003 /* NativePlayerPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA000000000013 /* NativePlayerPlugin.swift */; };
+		F1000001AAAA000000000A22 /* NativePlayerObservers.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA000000000A21 /* NativePlayerObservers.swift */; };
+		F1000001AAAA000000000A12 /* NativePlayerTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA000000000A11 /* NativePlayerTypes.swift */; };
 		F1000001AAAA000000000004 /* ImmersivePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA000000000014 /* ImmersivePlugin.swift */; };
 		F1000001AAAA000000000005 /* PipPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA000000000015 /* PipPlugin.swift */; };
 		F1000001AAAA000000000006 /* CastPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA000000000016 /* CastPlugin.swift */; };
+		F1000001AAAA000000000B12 /* CastPluginListeners.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA000000000B11 /* CastPluginListeners.swift */; };
 		F1000001AAAA000000000007 /* AudioCapabilitiesPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA000000000017 /* AudioCapabilitiesPlugin.swift */; };
 		F1000001AAAA0000000000C8 /* VideoCapabilitiesPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA0000000000C9 /* VideoCapabilitiesPlugin.swift */; };
 		F1000001AAAA000000000008 /* SubtitleOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA000000000018 /* SubtitleOverlayView.swift */; };
@@ -83,9 +86,12 @@
 		F1000001AAAA000000000011 /* FlksViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlksViewController.swift; sourceTree = "<group>"; };
 		F1000001AAAA000000000012 /* HdrPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HdrPlugin.swift; sourceTree = "<group>"; };
 		F1000001AAAA000000000013 /* NativePlayerPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativePlayerPlugin.swift; sourceTree = "<group>"; };
+		F1000001AAAA000000000A21 /* NativePlayerObservers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativePlayerObservers.swift; sourceTree = "<group>"; };
+		F1000001AAAA000000000A11 /* NativePlayerTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativePlayerTypes.swift; sourceTree = "<group>"; };
 		F1000001AAAA000000000014 /* ImmersivePlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImmersivePlugin.swift; sourceTree = "<group>"; };
 		F1000001AAAA000000000015 /* PipPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PipPlugin.swift; sourceTree = "<group>"; };
 		F1000001AAAA000000000016 /* CastPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CastPlugin.swift; sourceTree = "<group>"; };
+		F1000001AAAA000000000B11 /* CastPluginListeners.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CastPluginListeners.swift; sourceTree = "<group>"; };
 		F1000001AAAA000000000017 /* AudioCapabilitiesPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioCapabilitiesPlugin.swift; sourceTree = "<group>"; };
 		F1000001AAAA0000000000C9 /* VideoCapabilitiesPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoCapabilitiesPlugin.swift; sourceTree = "<group>"; };
 		F1000001AAAA000000000018 /* SubtitleOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubtitleOverlayView.swift; sourceTree = "<group>"; };
@@ -155,11 +161,14 @@
 				F1000001AAAA000000000011 /* FlksViewController.swift */,
 				F1000001AAAA000000000012 /* HdrPlugin.swift */,
 				F1000001AAAA000000000013 /* NativePlayerPlugin.swift */,
+				F1000001AAAA000000000A21 /* NativePlayerObservers.swift */,
+				F1000001AAAA000000000A11 /* NativePlayerTypes.swift */,
 				F1000001AAAA000000000014 /* ImmersivePlugin.swift */,
 				F1000001AAAA00000000001A /* OrientationPlugin.swift */,
 				F1000001AAAA00000000001B /* BackGesturePlugin.swift */,
 				F1000001AAAA000000000015 /* PipPlugin.swift */,
 				F1000001AAAA000000000016 /* CastPlugin.swift */,
+				F1000001AAAA000000000B11 /* CastPluginListeners.swift */,
 				F1000001AAAA000000000017 /* AudioCapabilitiesPlugin.swift */,
 				F1000001AAAA0000000000C9 /* VideoCapabilitiesPlugin.swift */,
 				F1000001AAAA000000000018 /* SubtitleOverlayView.swift */,
@@ -366,11 +375,14 @@
 				F1000001AAAA000000000001 /* FlksViewController.swift in Sources */,
 				F1000001AAAA000000000002 /* HdrPlugin.swift in Sources */,
 				F1000001AAAA000000000003 /* NativePlayerPlugin.swift in Sources */,
+				F1000001AAAA000000000A22 /* NativePlayerObservers.swift in Sources */,
+				F1000001AAAA000000000A12 /* NativePlayerTypes.swift in Sources */,
 				F1000001AAAA000000000004 /* ImmersivePlugin.swift in Sources */,
 				F1000001AAAA00000000000A /* OrientationPlugin.swift in Sources */,
 				F1000001AAAA00000000000B /* BackGesturePlugin.swift in Sources */,
 				F1000001AAAA000000000005 /* PipPlugin.swift in Sources */,
 				F1000001AAAA000000000006 /* CastPlugin.swift in Sources */,
+				F1000001AAAA000000000B12 /* CastPluginListeners.swift in Sources */,
 				F1000001AAAA000000000007 /* AudioCapabilitiesPlugin.swift in Sources */,
 				F1000001AAAA0000000000C8 /* VideoCapabilitiesPlugin.swift in Sources */,
 				F1000001AAAA000000000008 /* SubtitleOverlayView.swift in Sources */,

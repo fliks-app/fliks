@@ -5,57 +5,6 @@ import AVKit
 import CoreMedia
 import UIKit
 
-/// Letterbox crop of the video, in source pixels.
-struct VideoCrop: Equatable {
-    var x: CGFloat
-    var y: CGFloat
-    var width: CGFloat
-    var height: CGFloat
-    var sourceWidth: CGFloat
-    var sourceHeight: CGFloat
-}
-
-/// Mirrors `computeVideoCropStyle` (player.utils.ts): the AVPlayerLayer frame
-/// that maps the crop rect onto the container, aspect-fit or aspect-fill.
-enum VideoCropLayout {
-    /// `display` is the presented size (anamorphic-corrected); nil falls back to the source size.
-    static func layerFrame(container: CGSize, crop: VideoCrop?, display: CGSize?, fill: Bool) -> CGRect? {
-        guard let crop = crop,
-              container.width > 0, container.height > 0,
-              crop.sourceWidth > 0, crop.sourceHeight > 0,
-              crop.width > 0, crop.height > 0 else { return nil }
-        if crop.width >= crop.sourceWidth && crop.height >= crop.sourceHeight { return nil }
-        var dw = crop.sourceWidth
-        var dh = crop.sourceHeight
-        if let d = display, d.width > 0, d.height > 0 {
-            dw = d.width
-            dh = d.height
-        }
-        let sx = dw / crop.sourceWidth
-        let sy = dh / crop.sourceHeight
-        let cropW = crop.width * sx
-        let cropH = crop.height * sy
-        let scaleX = container.width / cropW
-        let scaleY = container.height / cropH
-        let scale = fill ? max(scaleX, scaleY) : min(scaleX, scaleY)
-        return CGRect(
-            x: (container.width - cropW * scale) / 2 - crop.x * sx * scale,
-            y: (container.height - cropH * scale) / 2 - crop.y * sy * scale,
-            width: dw * scale,
-            height: dh * scale
-        )
-    }
-}
-
-/// Clips the AVPlayerLayer, which the plugin may size beyond bounds to crop the video.
-private class PlayerContainerView: UIView {
-    var onLayout: (() -> Void)?
-
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        onLayout?()
-    }
-}
 
 /**
  * Capacitor plugin wrapping AVPlayer for native HLS playback on iOS.
@@ -90,48 +39,43 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "setMuteRanges", returnType: CAPPluginReturnPromise),
     ]
 
-    private var player: AVPlayer?
-    private var playerLayer: AVPlayerLayer?
-    private var playerView: UIView?
-    private var timeObserver: Any?
+    var player: AVPlayer?
+    var playerLayer: AVPlayerLayer?
+    var playerView: UIView?
+    var timeObserver: Any?
     /// Content-second ranges to silence. Nothing else in this plugin touches
     /// `isMuted`, so the gate owns it outright.
-    private var muteRanges: [(start: Double, end: Double)] = []
-    private var muteBoundaryObserver: Any?
+    var muteRanges: [(start: Double, end: Double)] = []
+    var muteBoundaryObserver: Any?
     /// `allowsExternalPlayback` before the gate disabled it (nil = not engaged).
-    private var externalPlaybackBeforeMute: Bool?
-    private var statusObserver: NSKeyValueObservation?
-    private var timeControlObserver: NSKeyValueObservation?
-    private var firstFrameObserver: NSKeyValueObservation?
-    private var presentationSizeObserver: NSKeyValueObservation?
-    private var externalPlaybackObserver: NSKeyValueObservation?
-    private var externalPlaybackActive = false
-    private enum PipPhase { case inactive, active, exiting }
-    private var pipPhase = PipPhase.inactive
-    private var subtitleSelectionGeneration = 0
-    private var firstFrameEmitted = false
-    private var fillScreen = false
-    private var videoCrop: VideoCrop?
-    private var savedBrightness: CGFloat?
-    /// Cues are pulled off the selected legible track via this output with
-    /// player rendering suppressed, then drawn by `subtitleOverlay` so the app
-    /// fully controls styling and no system caption box appears. Inside PiP
-    /// (where the overlay isn't captured) suppression is lifted so the native
-    /// track draws into the mirrored layer instead. `applySubtitleRendering`
-    /// is the single place that decides which of the two draws.
-    private var subtitleOutput: AVPlayerItemLegibleOutput?
-    private var subtitleOverlay: SubtitleOverlayView?
-    private var currentSubtitleStyle = SubtitleStyle()
-    private let legibleQueue = DispatchQueue(label: "fliks.subtitle.legible")
+    var externalPlaybackBeforeMute: Bool?
+    var statusObserver: NSKeyValueObservation?
+    var timeControlObserver: NSKeyValueObservation?
+    var firstFrameObserver: NSKeyValueObservation?
+    var presentationSizeObserver: NSKeyValueObservation?
+    var externalPlaybackObserver: NSKeyValueObservation?
+    var externalPlaybackActive = false
+    enum PipPhase { case inactive, active, exiting }
+    var pipPhase = PipPhase.inactive
+    var subtitleSelectionGeneration = 0
+    var firstFrameEmitted = false
+    var fillScreen = false
+    var videoCrop: VideoCrop?
+    var savedBrightness: CGFloat?
+    /// Cues are pulled off the legible track with player rendering suppressed and drawn by `subtitleOverlay`;
+    /// `applySubtitleRendering` decides when PiP lifts that, so the native track draws into the mirrored layer.
+    var subtitleOutput: AVPlayerItemLegibleOutput?
+    var subtitleOverlay: SubtitleOverlayView?
+    var currentSubtitleStyle = SubtitleStyle()
+    let legibleQueue = DispatchQueue(label: "fliks.subtitle.legible")
     /// Legible option deselected to clear the native caption while leaving PiP,
     /// restored once PiP has fully exited.
-    private var pipDeselectedSubtitle: AVMediaSelectionOption?
-    /// Selection groups for the current item. Loaded asynchronously once the
-    /// item is ready (the synchronous asset accessor is gone since iOS 16) so
-    /// every track call site can stay synchronous.
-    private var audibleGroup: AVMediaSelectionGroup?
-    private var legibleGroup: AVMediaSelectionGroup?
-    private lazy var nowPlaying = NowPlayingController(
+    var pipDeselectedSubtitle: AVMediaSelectionOption?
+    /// Selection groups for the current item, loaded asynchronously once it is ready
+    /// (the synchronous asset accessor is gone since iOS 16) so call sites stay synchronous.
+    var audibleGroup: AVMediaSelectionGroup?
+    var legibleGroup: AVMediaSelectionGroup?
+    lazy var nowPlaying = NowPlayingController(
         emitEvent: { [weak self] name in self?.emitWindowEvent(name) },
         didSeek: { [weak self] in self?.emitTimeUpdate() }
     )
@@ -141,23 +85,15 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     /// Exposed for PipPlugin to access the player.
     public var activePlayer: AVPlayer? { player }
 
-    /// Re-present the AVPlayerLayer after a background round-trip or a PiP
-    /// exit. iOS can release the layer's backing render surface for the
-    /// off-screen scene (and an auto-PiP exit can leave the inline layer
-    /// detached) while AVPlayer keeps decoding audio and the subtitle overlay
-    /// keeps drawing — so the inline video returns black over the container's
-    /// black backdrop. Rebinding the player, re-stamping the frame and (when
-    /// the layer isn't presenting) toggling videoGravity force a recomposite.
-    /// Idempotent; safe to call when already presenting.
+    /// Re-presents the AVPlayerLayer after a background round-trip or PiP exit, when iOS can release its
+    /// render surface and the video returns black: rebind, re-stamp the frame, toggle videoGravity. Idempotent.
     func reassertVideoPresentation() {
         DispatchQueue.main.async { [weak self] in
             guard let self = self,
                   let layer = self.playerLayer,
                   let player = self.player,
                   let view = self.playerView else { return }
-            // Diagnostic — surfaces on-device whether the returning layer is
-            // detached / not-ready (vs ready-but-black) so the recomposite
-            // path can be tuned from real logs.
+            // Diagnostic: tells a detached or not-ready returning layer from a ready-but-black one.
             let state = "ready=\(layer.isReadyForDisplay) attached=\(layer.player != nil) size=\(Int(view.bounds.width))x\(Int(view.bounds.height))"
             self.bridge?.webView?.evaluateJavaScript("console.warn('[NativePlayer] reassert: \(state)');")
 
@@ -275,11 +211,8 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             self.player?.pause()
             self.subtitleOverlay?.render([])
 
-            // Audio session can be flipped out of `.playback` by a phone
-            // call, route change, or Siri. AppDelegate sets it once at
-            // launch — reasserting on every load defends against any
-            // subsequent corruption that would otherwise have AVPlayer
-            // start with audio in a mute or downmixed state.
+            // Reassert `.playback` on every load: a call, route change or Siri can flip the session out of it,
+            // and AVPlayer would start muted or downmixed.
             self.ensureAudioSessionActive()
 
             let item = self.buildPlayerItem(url: url, assetHeaders: headers)
@@ -307,7 +240,7 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
-    private func parseHeaders(_ raw: [String: Any]?) -> [String: String] {
+    func parseHeaders(_ raw: [String: Any]?) -> [String: String] {
         var out: [String: String] = [:]
         for (key, value) in raw ?? [:] {
             if let str = value as? String { out[key] = str }
@@ -315,7 +248,7 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         return out
     }
 
-    private func logLoad(urlString: String, startTime: Double) {
+    func logLoad(urlString: String, startTime: Double) {
         let safeUrl = urlString.replacingOccurrences(of: "'", with: "\\'")
         let js = "console.warn('[NativePlayer] load', '\(safeUrl)', 'startTime=\(startTime)');"
         DispatchQueue.main.async { [weak self] in
@@ -323,12 +256,9 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
-    /// Debug-only manifest dump. Captures the exact CODECS / BANDWIDTH /
-    /// VIDEO-RANGE the player sees, so a `-12927` rejection that comes
-    /// back with an empty `errorLog` can be reproduced from the trace.
-    /// Skipped in release builds (the extra fetch adds 100ms-3s of
-    /// cellular latency to every load).
-    private func dumpManifestForDebug(url: URL, headers: [String: String]) {
+    /// Debug-only manifest dump (CODECS, BANDWIDTH, VIDEO-RANGE) to reproduce a `-12927` with an empty
+    /// `errorLog`; skipped in release, the extra fetch adds up to 3s of cellular latency.
+    func dumpManifestForDebug(url: URL, headers: [String: String]) {
         #if DEBUG
         guard url.absoluteString.contains(".m3u8") else { return }
         var req = URLRequest(url: url)
@@ -347,7 +277,7 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         #endif
     }
 
-    private func ensureAudioSessionActive() {
+    func ensureAudioSessionActive() {
         let session = AVAudioSession.sharedInstance()
         do {
             if session.category != .playback {
@@ -359,20 +289,13 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             }
             try session.setActive(true)
         } catch {
-            // Best effort. AVPlayer keeps playing on whatever session
-            // state was active before — degraded audio is preferable to
-            // a hard load failure.
+            // Best effort: degraded audio beats a hard load failure.
         }
     }
 
-    /// Build the AVPlayerItem with a 4-second forward buffer hint.
-    /// `preferredForwardBufferDuration = 4` (≈ one full GOP-cut HLS
-    /// segment plus margin) gives AVPlayer a consistent prebuffer
-    /// target before it flips `timeControlStatus` to `.playing` —
-    /// without it, the default "as needed" heuristic can start
-    /// audio decode while video is still resolving its first IDR
-    /// and we briefly hear sound over a black frame at startup.
-    private func buildPlayerItem(url: URL, assetHeaders: [String: String]) -> AVPlayerItem {
+    /// 4-second forward buffer hint (about one HLS segment plus margin): without it AVPlayer can start audio
+    /// decode while video still resolves its first IDR, and sound plays over a black frame.
+    func buildPlayerItem(url: URL, assetHeaders: [String: String]) -> AVPlayerItem {
         let assetOptions: [String: Any]? = assetHeaders.isEmpty
             ? nil
             : ["AVURLAssetHTTPHeaderFieldsKey": assetHeaders]
@@ -388,23 +311,10 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         return item
     }
 
-    /// Attach the new item to the existing AVPlayer (via
-    /// `replaceCurrentItem`) when one exists, otherwise spin up a fresh
-    /// player + layer. Reusing the player keeps observers, audio session
-    /// bindings, and PiP wiring stable across loads — the previous
-    /// "new AVPlayer per load" pattern left a small window where the
-    /// PipPlugin could still hold the prior layer's player while we
-    /// were swapping in the next one.
-    ///
-    /// No initial bitrate / resolution caps. We used to clamp these to
-    /// the device's native screen to fight per-rung FFmpeg session
-    /// thrash, but the cap also silently rejected the single-variant
-    /// HDR pass-through manifest when source resolution exceeded the
-    /// screen (-12927 with an empty errorLog). ABR runs freely now;
-    /// `setMaxResolution` from the engine still applies a cap when the
-    /// user explicitly picks a quality.
+    /// Reuses the existing AVPlayer via `replaceCurrentItem` (observers, audio session and PiP stay wired), else creates one.
+    /// No initial bitrate cap: it rejected the single-variant HDR manifest (-12927); `setMaxResolution` caps on an explicit pick.
     @discardableResult
-    private func attachPlayerItem(_ item: AVPlayerItem) -> AVPlayer {
+    func attachPlayerItem(_ item: AVPlayerItem) -> AVPlayer {
         // Groups belong to the outgoing asset — selecting one of its options
         // on the new item would raise.
         audibleGroup = nil
@@ -439,22 +349,9 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         return player
     }
 
-    /// Seek (frame-accurate, `.zero` tolerance on both sides) then
-    /// kick `play()`. The zero tolerance is the critical bit: with the
-    /// default `±infinity` tolerance, AVPlayer is free to snap each
-    /// stream to its own nearest keyframe — audio AAC frames sit at
-    /// every ~21 ms, video keyframes only at IDR boundaries (every
-    /// segment, ~3 s). That asymmetry would let audio land 0-3 s
-    /// before video → the "big A/V desync on resume that goes away
-    /// after a close + reopen" symptom (reopen used `startTime=0`,
-    /// which skipped the seek entirely).
-    ///
-    /// `play()` runs outside any seek completion handler. Apple's docs
-    /// say the completion may report `finished=false` when AVPlayer
-    /// pre-empts our seek with its own status-flip seek; conditioning
-    /// play on that flag would leave playback paused forever in that
-    /// race.
-    private func startPlayback(player: AVPlayer, startTime: Double) {
+    /// Frame-accurate seek (`.zero` tolerance) then `play()`: the default tolerance snaps audio and video to different
+    /// keyframes, a 0-3 s A/V desync. `play()` stays outside the completion handler, which may report `finished=false`.
+    func startPlayback(player: AVPlayer, startTime: Double) {
         if startTime > 0 {
             applyMuteGate(at: startTime)
             let cmTime = CMTime(seconds: startTime, preferredTimescale: 1000)
@@ -486,17 +383,8 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             }
             let cmTime = CMTime(seconds: position, preferredTimescale: 1000)
             self?.applyMuteGate(at: position)
-            // Resolve only AFTER AVPlayer finishes the seek. Resolving
-            // synchronously (the old behaviour) made the JS layer think
-            // the engine was at `position` immediately, the seek-lock
-            // released, and the next time-observer tick with a still-
-            // mid-seek `player.currentTime()` (often 0 because CMTime
-            // briefly becomes .indefinite during the transition)
-            // snapped the seekbar back to 0 before AVPlayer settled at
-            // the target — the visible "forward → back to 0 → forward"
-            // hop. Apple guarantees the completion fires even when our
-            // seek is pre-empted by a subsequent seek (finished=false),
-            // so this never hangs.
+            // Resolve only after the seek finishes: resolving early let a mid-seek `currentTime()` (often 0) snap the
+            // seekbar back before AVPlayer settled. The completion fires even when the seek is pre-empted.
             player.seek(
                 to: cmTime,
                 toleranceBefore: .zero,
@@ -572,9 +460,7 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             }
 
             item.select(group.options[index], in: group)
-            // Surface the new selected-state so the audio menu updates — the
-            // AVPlayer media-selection change emits no event of its own
-            // (Android's onTracksChanged does this automatically).
+            // Surface the selected state: an AVPlayer media-selection change emits no event of its own.
             self?.emitTracksChanged()
             call.resolve()
         }
@@ -591,7 +477,7 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
 
     /// Subtitle rows for JS. displayName == the manifest NAME (the rendition's
     /// stable id); the engine matches the picked track by it.
-    private static func subtitleTracks(_ group: AVMediaSelectionGroup) -> [[String: Any]] {
+    static func subtitleTracks(_ group: AVMediaSelectionGroup) -> [[String: Any]] {
         group.options.enumerated().map { index, option in
             let locale = option.locale ?? Locale(identifier: "und")
             return [
@@ -603,11 +489,10 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
-    /// The cached legible group, read from the asset again while it is empty:
-    /// the `.readyToPlay` load can settle before the asset lists its options
-    /// and nothing else refills the cache for that item.
+    /// The cached legible group, re-read from the asset while empty: `.readyToPlay` can settle before the
+    /// asset lists its options and nothing else refills the cache for that item.
     @MainActor
-    private func loadedLegibleGroup() async -> AVMediaSelectionGroup? {
+    func loadedLegibleGroup() async -> AVMediaSelectionGroup? {
         if let group = legibleGroup, !group.options.isEmpty { return group }
         guard let item = player?.currentItem else { return nil }
         let group = try? await item.asset.loadMediaSelectionGroup(for: .legible)
@@ -668,11 +553,9 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
-    /// Attach a legible output to the item with player rendering suppressed:
-    /// cues are delivered to the delegate (and drawn by `subtitleOverlay`)
-    /// while AVPlayer draws no caption box. `.sourceAndRulesOnly` keeps the
-    /// system's user-preference styling (the box) out of the delivered cues.
-    private func attachLegibleOutput(to item: AVPlayerItem) {
+    /// Attaches a legible output with player rendering suppressed: cues go to the delegate and `subtitleOverlay`.
+    /// `.sourceAndRulesOnly` keeps the system's boxed caption styling out of them.
+    func attachLegibleOutput(to item: AVPlayerItem) {
         let output = AVPlayerItemLegibleOutput()
         output.textStylingResolution = .sourceAndRulesOnly
         output.setDelegate(self, queue: legibleQueue)
@@ -681,20 +564,17 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         applySubtitleRendering()
     }
 
-    /// AVPlayer draws the (boxed) native caption where the overlay can't be
-    /// seen: on an AirPlay receiver and in the PiP window. Otherwise the
-    /// overlay draws, hidden through the PiP exit animation so it doesn't
-    /// overlap the native caption still fading out.
-    private func applySubtitleRendering() {
+    /// AVPlayer draws the native (boxed) caption where the overlay can't be seen: AirPlay receiver and PiP window.
+    /// Otherwise the overlay draws, hidden through the PiP exit animation.
+    func applySubtitleRendering() {
         let native = externalPlaybackActive || pipPhase == .active
         subtitleOutput?.suppressesPlayerRendering = !native
         subtitleOverlay?.isHidden = native || pipPhase == .exiting
         if native { subtitleOverlay?.render([]) }
     }
 
-    /// PiP enter / will-stop. PiP mirrors the AVPlayerLayer, not the overlay.
-    /// Will-stop also clears the native caption; the overlay is revealed only
-    /// once PiP has fully exited (`finishSubtitlePiPExit`).
+    /// PiP mirrors the AVPlayerLayer, not the overlay. Will-stop also clears the native caption;
+    /// the overlay is revealed once PiP has fully exited (`finishSubtitlePiPExit`).
     public func setSubtitleRenderingForPiP(_ inPiP: Bool) {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
@@ -715,17 +595,16 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
-    /// Deselect the legible option to drop the caption the player rendered
-    /// during PiP (re-suppressing alone leaves the last cue frozen on screen).
-    /// The option is remembered so cue delivery can be restored on exit.
-    private func clearNativeCaption() {
+    /// Deselects the legible option to drop the caption rendered during PiP (re-suppressing leaves the last cue
+    /// frozen); the option is remembered to restore cue delivery on exit.
+    func clearNativeCaption() {
         guard let item = player?.currentItem,
               let group = legibleGroup else { return }
         pipDeselectedSubtitle = item.currentMediaSelection.selectedMediaOption(in: group)
         item.select(nil, in: group)
     }
 
-    private func restoreLegibleSelection() {
+    func restoreLegibleSelection() {
         guard let option = pipDeselectedSubtitle,
               let item = player?.currentItem,
               let group = legibleGroup else { return }
@@ -733,18 +612,16 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         pipDeselectedSubtitle = nil
     }
 
-    /// The overlay is a subview on the phone, so a receiver never sees it:
-    /// while AirPlay carries the video, AVPlayer renders the native caption.
-    /// Emits on every call, but only a change touches the subtitle state, which
-    /// PiP also drives.
-    private func setExternalPlayback(_ active: Bool) {
+    /// The overlay is a phone subview a receiver never sees, so AVPlayer renders the native caption over AirPlay.
+    /// Emits on every call; only a change touches the subtitle state, which PiP also drives.
+    func setExternalPlayback(_ active: Bool) {
         defer { emitExternalPlayback(active) }
         guard active != externalPlaybackActive else { return }
         externalPlaybackActive = active
         applySubtitleRendering()
     }
 
-    private func emitExternalPlayback(_ active: Bool) {
+    func emitExternalPlayback(_ active: Bool) {
         let js = "window.dispatchEvent(new CustomEvent('nativePlayerExternalPlaybackChanged', { detail: { active: \(active) } }));"
         bridge?.webView?.evaluateJavaScript(js)
     }
@@ -770,18 +647,18 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
 
     /// Muted on [start - lead, end): the observer fires at or after its boundary, so the
     /// lead keeps the start from being late and the end can only be late, never early.
-    private static let muteLead = 0.05
+    static let muteLead = 0.05
 
-    private func inMuteRange(_ t: Double) -> Bool {
+    func inMuteRange(_ t: Double) -> Bool {
         muteRanges.contains { t >= $0.start - Self.muteLead && t < $0.end }
     }
 
-    private func applyMuteGate(at position: Double) {
+    func applyMuteGate(at position: Double) {
         guard let player = player else { return }
         player.isMuted = position.isFinite && inMuteRange(position)
     }
 
-    private func installMuteBoundaries() {
+    func installMuteBoundaries() {
         removeMuteBoundaries()
         guard let player = player else { return }
         if muteRanges.isEmpty {
@@ -797,7 +674,7 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         applyMuteGate(at: player.currentTime().seconds)
     }
 
-    private func removeMuteBoundaries() {
+    func removeMuteBoundaries() {
         if let obs = muteBoundaryObserver {
             player?.removeTimeObserver(obs)
             muteBoundaryObserver = nil
@@ -806,7 +683,7 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
 
     /// `isMuted` may not reach an AirPlay video receiver, so the video stays on
     /// the phone while ranges exist; the previous setting returns once cleared.
-    private func syncExternalPlaybackForMute() {
+    func syncExternalPlaybackForMute() {
         guard let player = player else { return }
         if muteRanges.isEmpty {
             if let prev = externalPlaybackBeforeMute {
@@ -860,7 +737,7 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
 
     /// The layer follows the container unless a crop applies, in which case its
     /// frame is computed exactly so `.resizeAspect` adds no bars of its own.
-    private func layoutVideoLayer() {
+    func layoutVideoLayer() {
         guard let layer = playerLayer, let view = playerView else { return }
         let display = player?.currentItem?.presentationSize
         let cropped = VideoCropLayout.layerFrame(
@@ -916,12 +793,8 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
                 item.preferredMaximumResolution = .zero
                 item.preferredPeakBitRate = 0  // 0 = no limit
             } else {
-                // AVPlayer HLS has no "disable ABR" switch. Combining a tight
-                // resolution cap with a peak-bitrate ceiling just above the
-                // target profile forces AVPlayer to pick that rung and prevents
-                // upward switches. Downward switching under real congestion is
-                // still possible — Apple's ABR can't be hard-locked without
-                // rewriting the master playlist to expose a single rung.
+                // AVPlayer HLS has no ABR off switch: a tight resolution cap plus a peak-bitrate ceiling just above the
+                // target profile pins that rung and blocks upward switches; downward switching under congestion remains.
                 item.preferredMaximumResolution = CGSize(width: width, height: height)
                 item.preferredPeakBitRate = Self.peakBitRateForHeight(height)
             }
@@ -929,11 +802,9 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
-    /// Peak bitrate ceiling (bps) tuned just above the transcode profile for
-    /// the given target height. Keeps AVPlayer pinned to that rung instead of
-    /// upgrading to the next profile. Mirrors backend PROFILES in
-    /// transcoding.service.ts — update both if bitrates change.
-    private static func peakBitRateForHeight(_ height: Int) -> Double {
+    /// Peak bitrate ceiling (bps) just above the transcode profile for the target height, pinning that rung.
+    /// Mirrors backend PROFILES in transcoding.service.ts: update both.
+    static func peakBitRateForHeight(_ height: Int) -> Double {
         switch height {
         case 2160...: return 40_000_000   // profile 20M → cap 40M (no upper profile)
         case 1080..<2160: return 12_000_000  // profile 8M, next 20M
@@ -974,7 +845,7 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     /// Frame rate and codec of the enabled video track; HLS exposes the live rate only on the item track.
-    private static func videoTrackInfo(_ item: AVPlayerItem?) -> (fps: Double?, codec: String?) {
+    static func videoTrackInfo(_ item: AVPlayerItem?) -> (fps: Double?, codec: String?) {
         guard let track = item?.tracks.first(where: { $0.isEnabled && $0.assetTrack?.mediaType == .video }) else {
             return (nil, nil)
         }
@@ -990,9 +861,9 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         return (fps, codec)
     }
 
-    private var decodedEstimate = DecodedEstimate()
+    var decodedEstimate = DecodedEstimate()
 
-    private func qoe(_ item: AVPlayerItem?, ahead: Double?) -> [String: Any] {
+    func qoe(_ item: AVPlayerItem?, ahead: Double?) -> [String: Any] {
         let events = item?.accessLog()?.events ?? []
         let last = events.last
         let dropped = events.map(\.numberOfDroppedVideoFrames).filter { $0 >= 0 }.reduce(0, +)
@@ -1038,394 +909,6 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             call.resolve()
         }
     }
-
-    // MARK: - Private Helpers
-
-    private func setupObservers() {
-        guard let player = player else { return }
-
-        // Periodic time observer (every second)
-        timeObserver = player.addPeriodicTimeObserver(
-            forInterval: CMTime(seconds: 1, preferredTimescale: 1000),
-            queue: .main
-        ) { [weak self] _ in
-            self?.emitTimeUpdate()
-        }
-
-        installMuteBoundaries()
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(handleTimeJumped(_:)),
-            name: AVPlayerItem.timeJumpedNotification,
-            object: player.currentItem
-        )
-
-        // Anamorphic sources report their display size only once loaded.
-        presentationSizeObserver = player.currentItem?.observe(
-            \.presentationSize, options: [.new]
-        ) { [weak self] _, _ in
-            DispatchQueue.main.async { self?.layoutVideoLayer() }
-        }
-
-        // Item status. `.initial` catches a warm asset that flipped to
-        // `.readyToPlay` between item creation and observer attach, so the
-        // track list still surfaces. Play / pause / buffer state is owned by
-        // the `timeControlStatus` observer below, not this one — here
-        // `.readyToPlay` only publishes tracks and `.failed` raises the
-        // terminal error.
-        statusObserver = player.currentItem?.observe(
-            \.status, options: [.initial, .new]
-        ) { [weak self] item, _ in
-            switch item.status {
-            case .readyToPlay:
-                DispatchQueue.main.async { self?.nowPlaying.refresh() }
-                self?.emitTracksChanged()
-                // AVPlayer often reports `.readyToPlay` before the
-                // alternate-audio rendition playlists have been fetched, so
-                // the `.audible` selection group is still empty. Without
-                // this re-emit the client's `audioTracksChanged` upgrade
-                // guard rejects the short list, leaves the `si-*` fallback
-                // in place, and every language switch falls back to a full
-                // backend reload (re-encode). See issue #378.
-                self?.ensureMediaSelectionPopulated()
-            case .failed:
-                let nsError = item.error as NSError?
-                let msg = nsError?.localizedDescription ?? "Playback failed"
-                let code = nsError?.code ?? -1
-                // Dump the AVPlayerItem error log to the console — each
-                // entry carries the exact failing URI (which segment),
-                // errorStatusCode, and errorComment (Apple's own
-                // description). With raw -12927 we're blind; with this
-                // we see WHY AVPlayer rejected the variant.
-                var details: [String] = []
-                if let log = item.errorLog() {
-                    for entry in log.events {
-                        details.append(
-                            "[\(entry.errorDomain) \(entry.errorStatusCode)] \(entry.errorComment ?? "—") uri=\(entry.uri ?? "—")"
-                        )
-                    }
-                }
-                self?.emitError(code: code, message: msg + (details.isEmpty ? "" : "\n" + details.joined(separator: "\n")))
-            default:
-                break
-            }
-        }
-
-        // AVPlayerItem error log — fires on every recoverable / fatal
-        // network or codec event during playback. More verbose than the
-        // single `.status == .failed` emit above (which only fires once,
-        // and with a single error). This catches per-segment failures,
-        // codec validation hiccups, and ABR-related rejections.
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(handleNewErrorLogEntry(_:)),
-            name: AVPlayerItem.newErrorLogEntryNotification,
-            object: player.currentItem
-        )
-
-        // Single source of truth for play / pause / buffer. With
-        // `automaticallyWaitsToMinimizeStalling = true` AVPlayer signals a
-        // stall and its recovery through `timeControlStatus`, not `rate`
-        // (which holds at the requested value across a re-buffer) — so a
-        // `\.rate` observer never fires when playback resumes and the JS
-        // spinner would latch. `.waitingToPlayAtSpecifiedRate` is buffering,
-        // `.playing` is started/resumed, `.paused` is user pause or stop.
-        // `.initial` publishes the status at attach so a warm reload that is
-        // already `.playing` emits too; a cold load reports `.paused` here,
-        // harmlessly, just before play() starts it.
-        timeControlObserver = player.observe(\.timeControlStatus, options: [.initial, .new]) { [weak self] player, _ in
-            // Screen stays awake while advancing or stalled mid-play; a pause
-            // (user pause or end of item) lets it sleep. KVO can land off the
-            // main thread, so the UIKit flag has to be hopped over.
-            // Over AirPlay the receiver shows the video: the phone may sleep.
-            let awake = player.timeControlStatus != .paused && !player.isExternalPlaybackActive
-            DispatchQueue.main.async { UIApplication.shared.isIdleTimerDisabled = awake }
-            DispatchQueue.main.async { self?.nowPlaying.refresh() }
-            switch player.timeControlStatus {
-            case .paused:
-                self?.emitStateChanged("paused")
-            case .waitingToPlayAtSpecifiedRate:
-                // The periodic push stops with the picture: a stall must read the buffer it starts on.
-                self?.emitTimeUpdate()
-                self?.emitStateChanged("buffering")
-            case .playing:
-                self?.emitStateChanged("playing")
-            @unknown default:
-                break
-            }
-        }
-
-        // First-frame painted — flip the Angular fanart/spinner off.
-        // `AVPlayerLayer.isReadyForDisplay` is the canonical signal that
-        // the layer has decoded + composited a frame to the surface;
-        // mirrors ExoPlayer's `onRenderedFirstFrame` on Android.
-        // `.initial` catches a layer already ready at observer attach (warm
-        // reload); KVO otherwise fires on each `isReadyForDisplay` transition.
-        // The `firstFrameEmitted` flag makes the emit one-shot, dropping the
-        // `false` values and any later re-ready toggles across re-buffers.
-        if let layer = playerLayer {
-            firstFrameObserver = layer.observe(\.isReadyForDisplay, options: [.initial, .new]) { [weak self] layer, _ in
-                guard let self = self, layer.isReadyForDisplay, !self.firstFrameEmitted else { return }
-                self.firstFrameEmitted = true
-                self.emitFirstFrame()
-            }
-        }
-
-        externalPlaybackObserver = player.observe(\.isExternalPlaybackActive, options: [.initial, .new]) { [weak self] player, _ in
-            let active = player.isExternalPlaybackActive
-            DispatchQueue.main.async {
-                guard let self = self else { return }
-                UIApplication.shared.isIdleTimerDisabled = player.timeControlStatus != .paused && !active
-                self.setExternalPlayback(active)
-            }
-        }
-
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(handleRateChange(_:)),
-            name: AVPlayer.rateDidChangeNotification,
-            object: player
-        )
-
-        // Ended detection
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(playerDidFinishPlaying),
-            name: .AVPlayerItemDidPlayToEndTime,
-            object: player.currentItem
-        )
-
-        // Returning from background / becoming active: iOS can drop the
-        // AVPlayerLayer's backing surface for the off-screen scene (or an
-        // auto-PiP exit leaves the inline layer detached) while audio and the
-        // subtitle overlay keep running — the video returns black. Re-present
-        // it. Torn down by removeObservers() and re-added on the next load(),
-        // matching the item observers above.
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(handleAppDidForeground),
-            name: UIApplication.willEnterForegroundNotification,
-            object: nil
-        )
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(handleAppDidForeground),
-            name: UIApplication.didBecomeActiveNotification,
-            object: nil
-        )
-    }
-
-    @objc private func handleTimeJumped(_ notification: Notification) {
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self, let p = self.player else { return }
-            self.applyMuteGate(at: p.currentTime().seconds)
-            self.emitTimeUpdate()
-        }
-    }
-
-    @objc private func handleAppDidForeground() {
-        reassertVideoPresentation()
-    }
-
-    @objc private func handleNewErrorLogEntry(_ notification: Notification) {
-        guard let item = notification.object as? AVPlayerItem,
-              let log = item.errorLog(),
-              let entry = log.events.last else { return }
-        let msg = "[\(entry.errorDomain) \(entry.errorStatusCode)] \(entry.errorComment ?? "—") uri=\(entry.uri ?? "—")"
-        // Dump to the JS console (Safari Web Inspector / app log) only.
-        // These entries fire on recoverable per-segment network / codec
-        // hiccups, so they are deliberately not raised as a UI error
-        // event — only the terminal `.status == .failed` path does that.
-        let escaped = msg.replacingOccurrences(of: "'", with: "\\'")
-        let js = "console.warn('[NativePlayer] errorLog:', '\(escaped)');"
-        DispatchQueue.main.async { [weak self] in
-            self?.bridge?.webView?.evaluateJavaScript(js)
-        }
-    }
-
-    /// A receiver that cannot play the stream stops the player without an item
-    /// error: the only trace is a drop to rate 0 nobody asked for (a pause from
-    /// the app reports `.setRateCalled`, an interruption its own reason).
-    @objc private func handleRateChange(_ notification: Notification) {
-        let reason = notification.userInfo?[AVPlayer.rateDidChangeReasonKey] as? AVPlayer.RateDidChangeReason
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
-            guard self.externalPlaybackActive,
-                  let player = self.player, player.rate == 0,
-                  reason == nil || reason == .setRateFailed,
-                  !self.atEnd(player) else { return }
-            self.emitExternalPlaybackFailed(reason: "rate dropped to 0 (\(reason?.rawValue ?? "no reason"))")
-        }
-    }
-
-    private func emitExternalPlaybackFailed(reason: String) {
-        let data = try? JSONSerialization.data(withJSONObject: ["reason": reason])
-        let detail = data.flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
-        bridge?.webView?.evaluateJavaScript("window.dispatchEvent(new CustomEvent('nativePlayerExternalPlaybackFailed', { detail: \(detail) }));")
-    }
-
-    private func atEnd(_ player: AVPlayer) -> Bool {
-        guard let duration = player.currentItem?.duration.seconds, duration.isFinite else { return false }
-        return player.currentTime().seconds >= duration - 1
-    }
-
-    @objc private func playerDidFinishPlaying() {
-        emitStateChanged("ended")
-    }
-
-    private func removeObservers() {
-        removeMuteBoundaries()
-        if let obs = timeObserver {
-            player?.removeTimeObserver(obs)
-            timeObserver = nil
-        }
-        statusObserver?.invalidate()
-        statusObserver = nil
-        presentationSizeObserver?.invalidate()
-        presentationSizeObserver = nil
-        firstFrameObserver?.invalidate()
-        firstFrameObserver = nil
-        timeControlObserver?.invalidate()
-        timeControlObserver = nil
-        externalPlaybackObserver?.invalidate()
-        externalPlaybackObserver = nil
-        NotificationCenter.default.removeObserver(self)
-    }
-
-    private func cleanup() {
-        removeObservers()
-        setExternalPlayback(false)
-        player?.pause()
-        player = nil
-        externalPlaybackBeforeMute = nil
-        muteRanges = []
-        nowPlaying.deactivate(releaseSession: true)
-        playerLayer?.removeFromSuperlayer()
-        playerLayer = nil
-        playerView?.removeFromSuperview()
-        playerView = nil
-        videoCrop = nil
-        fillScreen = false
-        subtitleOutput = nil
-        subtitleOverlay?.removeFromSuperview()
-        subtitleOverlay = nil
-
-        // Restore brightness
-        if let saved = savedBrightness {
-            UIScreen.main.brightness = saved
-            savedBrightness = nil
-        }
-
-        // Allow screen to sleep
-        UIApplication.shared.isIdleTimerDisabled = false
-    }
-
-    private func getBufferedPosition() -> Double {
-        guard let ranges = player?.currentItem?.loadedTimeRanges else { return 0 }
-        if let range = ranges.last?.timeRangeValue {
-            let end = CMTimeGetSeconds(range.start) + CMTimeGetSeconds(range.duration)
-            return end.isFinite ? end : 0
-        }
-        return 0
-    }
-
-    // MARK: - Event Emitters
-
-    private func emitStateChanged(_ state: String) {
-        let js = "window.dispatchEvent(new CustomEvent('nativePlayerStateChanged', { detail: { state: '\(state)' } }));"
-        DispatchQueue.main.async { [weak self] in
-            self?.bridge?.webView?.evaluateJavaScript(js)
-        }
-    }
-
-    private func emitWindowEvent(_ name: String) {
-        let js = "window.dispatchEvent(new CustomEvent('\(name)'));"
-        DispatchQueue.main.async { [weak self] in
-            self?.bridge?.webView?.evaluateJavaScript(js)
-        }
-    }
-
-    private func emitFirstFrame() {
-        let js = "window.dispatchEvent(new CustomEvent('nativePlayerFirstFrame'));"
-        DispatchQueue.main.async { [weak self] in
-            self?.bridge?.webView?.evaluateJavaScript(js)
-        }
-    }
-
-    private func emitTimeUpdate() {
-        let pos = player?.currentTime().seconds ?? 0
-        let dur = player?.currentItem?.duration.seconds ?? 0
-        let buf = getBufferedPosition()
-
-        let js = "window.dispatchEvent(new CustomEvent('nativePlayerTimeUpdate', { detail: { position: \(pos.isFinite ? pos : 0), duration: \(dur.isFinite ? dur : 0), buffered: \(buf) } }));"
-        DispatchQueue.main.async { [weak self] in
-            self?.bridge?.webView?.evaluateJavaScript(js)
-        }
-    }
-
-    private func emitError(code: Int, message: String) {
-        let safeMsg = message.replacingOccurrences(of: "'", with: "\\'")
-        // Always log to console.error so the failure is visible in Safari
-        // Web Inspector regardless of whether the Angular layer surfaces
-        // the dispatched event.
-        let js = """
-        console.error('[NativePlayer] error', \(code), '\(safeMsg)');
-        window.dispatchEvent(new CustomEvent('nativePlayerError', { detail: { code: \(code), message: '\(safeMsg)' } }));
-        """
-        DispatchQueue.main.async { [weak self] in
-            self?.bridge?.webView?.evaluateJavaScript(js)
-        }
-    }
-
-    private func ensureMediaSelectionPopulated(retries: Int = 8) {
-        guard let item = player?.currentItem else { return }
-        let asset = item.asset
-        Task { @MainActor [weak self] in
-            let audible = try? await asset.loadMediaSelectionGroup(for: .audible)
-            let legible = try? await asset.loadMediaSelectionGroup(for: .legible)
-            guard let self = self, self.player?.currentItem === item else { return }
-            self.audibleGroup = audible
-            self.legibleGroup = legible
-            if (audible?.options.count ?? 0) > 0 || (legible?.options.count ?? 0) > 0 {
-                self.emitTracksChanged()
-                return
-            }
-            if retries > 0 {
-                try? await Task.sleep(nanoseconds: 250_000_000)
-                self.ensureMediaSelectionPopulated(retries: retries - 1)
-            }
-        }
-    }
-
-    private func emitTracksChanged() {
-        guard let item = player?.currentItem else { return }
-
-        var audioTracks: [[String: Any]] = []
-        if let group = audibleGroup {
-            let selected = item.currentMediaSelection.selectedMediaOption(in: group)
-            for (index, option) in group.options.enumerated() {
-                let locale = option.locale ?? Locale(identifier: "und")
-                audioTracks.append([
-                    "id": "audio-\(index)",
-                    "language": locale.language.languageCode?.identifier ?? "und",
-                    "label": option.displayName,
-                    "selected": option == selected,
-                ])
-            }
-        }
-
-        let subtitleTracks = legibleGroup.map(Self.subtitleTracks) ?? []
-
-        let audioData = try? JSONSerialization.data(withJSONObject: audioTracks)
-        let audioJson = String(data: audioData ?? Data(), encoding: .utf8) ?? "[]"
-        let subData = try? JSONSerialization.data(withJSONObject: subtitleTracks)
-        let subJson = String(data: subData ?? Data(), encoding: .utf8) ?? "[]"
-
-        let js = "window.dispatchEvent(new CustomEvent('nativePlayerTracksChanged', { detail: { audioTracks: \(audioJson), subtitleTracks: \(subJson) } }));"
-        DispatchQueue.main.async { [weak self] in
-            self?.bridge?.webView?.evaluateJavaScript(js)
-        }
-    }
 }
 
 // MARK: - Legible output delegate
@@ -1446,21 +929,5 @@ extension NativePlayerPlugin: AVPlayerItemLegibleOutputPushDelegate {
         DispatchQueue.main.async { [weak self] in
             self?.subtitleOverlay?.render(cues, top: top)
         }
-    }
-}
-
-/// Running decoded-frame estimate: each sample adds the newly watched seconds at the current rate,
-/// so a frame-rate change never rescales the history. Restarts with a new AVPlayerItem.
-struct DecodedEstimate {
-    private var item: ObjectIdentifier?
-    private var watched = 0.0
-    private var decoded = 0.0
-
-    mutating func update(item new: AVPlayerItem?, watched total: Double, fps: Double?) -> Int? {
-        let id = new.map(ObjectIdentifier.init)
-        if id != item { self = DecodedEstimate(item: id) }
-        decoded += max(total - watched, 0) * (fps ?? 0)
-        watched = total
-        return decoded > 0 ? Int(decoded.rounded()) : nil
     }
 }
