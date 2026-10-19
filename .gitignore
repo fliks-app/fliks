@@ -60,7 +60,10 @@ store/**/*.wgt
 store/**/*.ipk
 store/**/*.ipa
 volumes/*
-/scripts/
+# Local scripts stay untracked; the ones the docs and CI name are shared.
+/scripts/*
+!/scripts/bump-engine.sh
+!/scripts/with-test-postgres.sh
 logos/
 plans/
 # Scratch documentation stays local; the plugin contract is shared, so it is tracked.
