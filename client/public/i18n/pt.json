@@ -3112,6 +3112,7 @@
       "back_to_live": "Voltar ao direto"
     },
     "error_at_capacity": "{{sourceName}} atingiu o limite de {{limit}} transmissões simultâneas. Tente novamente dentro de momentos.",
+    "error_user_at_capacity": "O limite é de {{limit}} transmissões em direto em simultâneo por conta. Feche uma e tente novamente.",
     "error_play_failed": "Não foi possível iniciar este canal.",
     "error_account_expired": "A subscrição de {{sourceName}} expirou.",
     "jobs": {
@@ -3265,6 +3266,8 @@
         "probe_seconds_help": "Aumente apenas se um canal parecer inativo porque o ffmpeg não deteta as suas dimensões a tempo.",
         "slot_release_seconds": "Atraso de libertação de vaga do fornecedor (segundos)",
         "slot_release_seconds_help": "Aumente se o painel do seu fornecedor demorar mais do que isto a libertar uma ligação depois de um fluxo fechar.",
+        "max_viewers_per_user": "Espectadores em direto em simultâneo por utilizador",
+        "max_viewers_per_user_help": "Número máximo de transmissões em direto que uma conta pode ver ao mesmo tempo. 0 significa sem limite.",
         "section_maintenance": "Manutenção",
         "stale_stream_days": "Retenção de fluxos desaparecidos (dias)",
         "stale_stream_days_help": "Reduza para remover mais depressa os fluxos desaparecidos; um valor demasiado baixo pode remover um canal que uma única atualização simplesmente não detetou.",

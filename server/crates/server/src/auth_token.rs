@@ -23,6 +23,8 @@ struct SignClaims<'a> {
     username: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
     scope: Option<TokenScope>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    live: Option<&'a str>,
     iat: i64,
     exp: i64,
 }
@@ -32,6 +34,8 @@ struct SignClaims<'a> {
 pub struct Claims {
     pub sub: i32,
     pub scope: Option<TokenScope>,
+    /// The live viewer session a token is bound to: it opens that data plane and nothing else.
+    pub live: Option<String>,
     pub exp: i64,
 }
 
@@ -71,7 +75,7 @@ impl Jwt {
     }
 
     pub fn sign_access(&self, user_id: i32, username: &str) -> Result<Signed, AppError> {
-        self.sign(user_id, username, None, self.access_ttl_secs)
+        self.sign(user_id, username, None, self.access_ttl_secs, None)
     }
 
     pub fn sign_stream(&self, user_id: i32, username: &str) -> Result<Signed, AppError> {
@@ -80,11 +84,28 @@ impl Jwt {
             username,
             Some(TokenScope::Stream),
             self.stream_ttl_secs,
+            None,
+        )
+    }
+
+    pub fn sign_live(&self, user_id: i32, username: &str, sid: &str) -> Result<Signed, AppError> {
+        self.sign(
+            user_id,
+            username,
+            Some(TokenScope::Stream),
+            self.stream_ttl_secs,
+            Some(sid),
         )
     }
 
     pub fn sign_cast(&self, user_id: i32, username: &str) -> Result<Signed, AppError> {
-        self.sign(user_id, username, Some(TokenScope::Stream), CAST_TTL_SECS)
+        self.sign(
+            user_id,
+            username,
+            Some(TokenScope::Stream),
+            CAST_TTL_SECS,
+            None,
+        )
     }
 
     fn sign(
@@ -93,8 +114,9 @@ impl Jwt {
         username: &str,
         scope: Option<TokenScope>,
         ttl_secs: u64,
+        live: Option<&str>,
     ) -> Result<Signed, AppError> {
-        self.sign_at(Utc::now().timestamp(), sub, username, scope, ttl_secs)
+        self.sign_at(Utc::now().timestamp(), sub, username, scope, ttl_secs, live)
     }
 
     fn sign_at(
@@ -104,12 +126,14 @@ impl Jwt {
         username: &str,
         scope: Option<TokenScope>,
         ttl_secs: u64,
+        live: Option<&str>,
     ) -> Result<Signed, AppError> {
         let exp = iat.saturating_add(i64::try_from(ttl_secs).unwrap_or(i64::MAX));
         let claims = SignClaims {
             sub,
             username,
             scope,
+            live,
             iat,
             exp,
         };

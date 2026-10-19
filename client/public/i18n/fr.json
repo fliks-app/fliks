@@ -3112,6 +3112,7 @@
       "back_to_live": "Revenir au direct"
     },
     "error_at_capacity": "{{sourceName}} a atteint sa limite de {{limit}} flux simultanés. Réessayez dans un instant.",
+    "error_user_at_capacity": "La limite est de {{limit}} flux live simultanés par compte. Fermez-en un et réessayez.",
     "error_play_failed": "Impossible de démarrer cette chaîne.",
     "error_account_expired": "L’abonnement {{sourceName}} a expiré.",
     "jobs": {
@@ -3265,6 +3266,8 @@
         "probe_seconds_help": "Augmentez cette valeur uniquement si une chaîne semble morte parce que ffmpeg ne détecte pas ses dimensions à temps.",
         "slot_release_seconds": "Délai de libération de créneau fournisseur (secondes)",
         "slot_release_seconds_help": "Augmentez cette valeur si votre panel fournisseur met plus de temps que cela à libérer une connexion après la fermeture d'un flux.",
+        "max_viewers_per_user": "Spectateurs live simultanés par utilisateur",
+        "max_viewers_per_user_help": "Nombre maximal de flux live qu'un même compte peut regarder en même temps. 0 signifie aucune limite.",
         "section_maintenance": "Entretien",
         "stale_stream_days": "Rétention des flux disparus (jours)",
         "stale_stream_days_help": "Baissez cette valeur pour supprimer plus vite les flux disparus ; trop bas, une chaîne juste absente d'une synchronisation peut être supprimée à tort.",

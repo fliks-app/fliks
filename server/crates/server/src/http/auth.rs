@@ -244,7 +244,11 @@ async fn authenticate(parts: &Parts, state: &AppState) -> Result<Option<Authed>,
     let Some(token) = token_of(parts) else {
         return Ok(None);
     };
-    let claims = state.jwt.verify(&token).ok_or_else(unauthorized)?;
+    let claims = state
+        .jwt
+        .verify(&token)
+        .filter(|c| c.live.is_none())
+        .ok_or_else(unauthorized)?;
     let (user, role) = load_enabled(&state.db, claims.sub)
         .await?
         .ok_or_else(unauthorized)?;

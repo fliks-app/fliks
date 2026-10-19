@@ -629,6 +629,31 @@ mod resolve {
     }
 
     #[sqlx::test(migrations = false)]
+    async fn a_live_token_opens_only_its_own_viewer(pool: PgPool) {
+        let w = world(pool).await;
+        let live =
+            w.c.st
+                .jwt
+                .sign_live(w.member.0, "member", "sid-x")
+                .unwrap()
+                .token;
+        let ask = |media: Value, purpose: &str| {
+            resolve(
+                &w,
+                json!({"mediaId": media, "credential": live, "purpose": purpose}),
+            )
+        };
+        let (_, own) = ask(json!("sid-x"), "live").await;
+        assert_eq!(
+            own,
+            json!({"allow": false, "ownerId": w.member.0.to_string(), "ttlS": 60.0}),
+            "its own sid reaches the viewer lookup (unknown to the fake engine)"
+        );
+        assert_eq!(ask(json!("sid-y"), "live").await.1, denied());
+        assert_eq!(ask(json!(w.file), "stream").await.1, denied());
+    }
+
+    #[sqlx::test(migrations = false)]
     async fn a_live_denial_names_a_known_user_and_never_an_unknown_one(pool: PgPool) {
         let w = world(pool).await;
         let ask = |credential: String, purpose: &str| {

@@ -3112,6 +3112,7 @@
       "back_to_live": "Zurück zum Live-Signal"
     },
     "error_at_capacity": "{{sourceName}} hat sein Limit von {{limit}} gleichzeitigen Streams erreicht. Versuchen Sie es gleich erneut.",
+    "error_user_at_capacity": "Das Limit liegt bei {{limit}} gleichzeitigen Live-Streams pro Konto. Schließen Sie einen und versuchen Sie es erneut.",
     "error_play_failed": "Dieser Sender konnte nicht gestartet werden.",
     "error_account_expired": "Das Abonnement von {{sourceName}} ist abgelaufen.",
     "jobs": {
@@ -3265,6 +3266,8 @@
         "probe_seconds_help": "Nur erhöhen, wenn ein Sender tot wirkt, weil ffmpeg seine Abmessungen nicht rechtzeitig erkennt.",
         "slot_release_seconds": "Freigabeverzögerung des Anbieter-Slots (Sekunden)",
         "slot_release_seconds_help": "Erhöhen, wenn Ihr Anbieter-Panel länger als diese Zeit braucht, um eine Verbindung nach dem Schließen eines Streams freizugeben.",
+        "max_viewers_per_user": "Gleichzeitige Live-Zuschauer pro Benutzer",
+        "max_viewers_per_user_help": "Höchstzahl an Live-Streams, die ein Konto gleichzeitig ansehen kann. 0 bedeutet kein Limit.",
         "section_maintenance": "Wartung",
         "stale_stream_days": "Aufbewahrung verschwundener Streams (Tage)",
         "stale_stream_days_help": "Verringern, um verschwundene Streams schneller zu entfernen; zu niedrig kann einen Sender entfernen, den ein einzelner Abgleich nur verpasst hat.",

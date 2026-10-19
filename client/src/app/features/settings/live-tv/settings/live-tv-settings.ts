@@ -36,6 +36,7 @@ export class LiveTvSettingsComponent implements OnInit {
   readonly probeSeconds = signal(3);
   readonly staleStreamDays = signal(7);
   readonly slotReleaseSeconds = signal(15);
+  readonly maxViewersPerUser = signal(0);
   readonly fastZap = signal<FastZapMode>('auto');
 
   /** Only the keys the admin actually touched are sent, so an untouched field
@@ -59,6 +60,7 @@ export class LiveTvSettingsComponent implements OnInit {
       this.probeSeconds.set(parseIntOr(map['livetv_probe_seconds'], 3));
       this.staleStreamDays.set(parseIntOr(map['livetv_stale_stream_days'], 7));
       this.slotReleaseSeconds.set(parseIntOr(map['livetv_slot_release_seconds'], 15));
+      this.maxViewersPerUser.set(parseIntOr(map['livetv_max_viewers_per_user'], 0));
       const rawFastZap = map['livetv_fast_zap'];
       this.fastZap.set(rawFastZap === 'true' || rawFastZap === 'false' ? rawFastZap : 'auto');
     } catch {
@@ -112,6 +114,7 @@ export class LiveTvSettingsComponent implements OnInit {
     set('livetv_probe_seconds', String(this.probeSeconds()));
     set('livetv_stale_stream_days', String(this.staleStreamDays()));
     set('livetv_slot_release_seconds', String(this.slotReleaseSeconds()));
+    set('livetv_max_viewers_per_user', String(this.maxViewersPerUser()));
     set('livetv_fast_zap', this.fastZap() === 'auto' ? null : this.fastZap());
     return changes;
   }

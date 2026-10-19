@@ -188,6 +188,17 @@ describe('LivePlayerComponent — handlePlayError', () => {
     expect(router.navigate).not.toHaveBeenCalled();
   });
 
+  it('surfaces the per-user viewer cap 409 on the retry overlay without navigating away', () => {
+    const { component, router } = createComponent();
+
+    component.handlePlayError(
+      new HttpErrorResponse({ status: 409, error: { code: 'livetv_user_at_capacity', limit: 1 } }),
+    );
+
+    expect(component.playbackError()?.userMessage).toContain('error_user_at_capacity');
+    expect(router.navigate).not.toHaveBeenCalled();
+  });
+
   it('surfaces an expired-account 503 on the retry overlay without navigating away', () => {
     const { component, router } = createComponent();
 

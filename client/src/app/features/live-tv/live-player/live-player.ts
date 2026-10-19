@@ -444,9 +444,11 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
             sourceName: body.sourceName ?? '',
             limit: body.limit ?? 0,
           })
-        : body?.code === 'livetv_account_expired'
-          ? this.translate.instant('liveTv.error_account_expired', { sourceName: body.sourceName ?? '' })
-          : this.translate.instant('liveTv.error_play_failed');
+        : err instanceof HttpErrorResponse && err.status === 409 && body?.code === 'livetv_user_at_capacity'
+          ? this.translate.instant('liveTv.error_user_at_capacity', { limit: body.limit ?? 0 })
+          : body?.code === 'livetv_account_expired'
+            ? this.translate.instant('liveTv.error_account_expired', { sourceName: body.sourceName ?? '' })
+            : this.translate.instant('liveTv.error_play_failed');
     const { source, code } = classifyPlaybackError(err);
     this.playbackError.set({ userMessage, source, code });
   }
