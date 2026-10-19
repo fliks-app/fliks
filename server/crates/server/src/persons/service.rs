@@ -60,7 +60,7 @@ FROM persons p WHERE p.id = $1"#,
     .await
 }
 
-/// Rules 2-7: every person by name for a blank `q`, else prefix terms ANDed, best rank first, 50 at most.
+/// Rules 2-7: the first 1000 persons by name for a blank `q`, else prefix terms ANDed, best rank first, 50 at most.
 pub async fn search(db: &PgPool, q: &str) -> Result<Vec<Value>, sqlx::Error> {
     if q.is_empty() {
         return sqlx::query_scalar!(
@@ -69,7 +69,7 @@ pub async fn search(db: &PgPool, q: &str) -> Result<Vec<Value>, sqlx::Error> {
     'birthday', p.birthday, 'deathday', p.deathday, 'placeOfBirth', p."placeOfBirth",
     'knownForDepartment', p."knownForDepartment", 'departments', p.departments,
     'metadataRefreshedAt', iso_ms(p."metadataRefreshedAt")) AS "json!: Value"
-FROM persons p ORDER BY p.name ASC, p.id ASC"#
+FROM persons p ORDER BY p.name ASC, p.id ASC LIMIT 1000"#
         )
         .fetch_all(db)
         .await;
