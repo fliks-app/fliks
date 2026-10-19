@@ -424,7 +424,8 @@ export class DataTableComponent implements OnInit {
   private rowAllows(condition: TableRowCondition | undefined, row: TableRow): boolean {
     if (!condition) return true;
     if (!(condition.key in row)) return false;
-    return condition.in.includes(row[condition.key] ?? null);
+    const value = row[condition.key];
+    return value != null && condition.in.includes(value);
   }
 
   /** A `proxy` path may carry `:id` — the row's own, never the declared pattern. */

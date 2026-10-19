@@ -56,7 +56,7 @@ import {
 } from '../../core/services/player-settings.service';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 
-import type { AudioTrack, PlaybackEngine, QoeSample } from '../../core/services/playback-engine/playback-engine';
+import type { AudioTrack, PlaybackEngine, QoeSample, VariantTrack } from '../../core/services/playback-engine/playback-engine';
 import { QoeReporter } from '../../core/services/qoe-reporter.service';
 import type { QoeRecoveryReason } from '../../core/services/api/qoe-api.service';
 import { PlayerQoe, PlayheadWatch, frozenAfterMs, type ReloadWhy } from './player-qoe';
@@ -1246,7 +1246,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
             // variant-switch chatter mid-playback. The backend serves a
             // single-variant master playlist in that case so there's only one
             // track anyway.
-            this.engine!.configure({
+            this.engine!.configure?.({
               abr: {
                 enabled: savedQualityId === 'auto',
                 defaultBandwidthEstimate: 100_000_000,
@@ -3112,7 +3112,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private configureAudioLanguage(): void {
     const serverMaster = !this.isOfflinePlayback && this.playbackMode() !== 'direct';
     const language = serverMaster ? undefined : this.targetAudioLanguage();
-    this.engine?.configure({
+    this.engine?.configure?.({
       preferredAudioLanguage: language ? normalizeLangCode(language) : '',
     });
   }
@@ -4551,7 +4551,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private applyVideoCrop(): void {
     const c = this.activeCropRect();
     if (this.isDesktopNative) {
-      this.engine?.configure({
+      this.engine?.configure?.({
         videoCrop: c ? `${c.width}x${c.height}+${c.x}+${c.y}` : null,
       });
       this.desktopCropApplied.set(!!c && !!this.engine);
@@ -4744,8 +4744,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }
 
   /** Get the currently active variant track. */
-  private getActiveVariant(): any | null {
-    return this.engine?.getVariantTracks()?.find((t: any) => t.active) ?? null;
+  private getActiveVariant(): VariantTrack | null {
+    return this.engine?.getVariantTracks?.().find((t) => t.active) ?? null;
   }
 
   /** Where the load in flight is seeking to; see {@link savePosition}. */

@@ -83,3 +83,34 @@ export const SUBTITLE_EDGE_KEY: Record<string, string> = {
   outline: 'outline',
   raised: 'raised',
 };
+
+/** The player's subtitle preset keys, as it hands them to an engine. */
+export interface SubtitleStyleSettings {
+  size: string;
+  color: string;
+  shadow: string;
+  background: string;
+  bottomMargin: number;
+  topMargin?: number;
+}
+
+/** The style payload the ExoPlayer/AVPlayer plugins and mpv all take. */
+export interface NativeSubtitleStyle {
+  fontScale: number;
+  foregroundColor: string;
+  backgroundColor: string;
+  edgeType: string;
+  bottomMarginPercent: number;
+  topMarginPercent?: number;
+}
+
+export function toNativeSubtitleStyle(settings: SubtitleStyleSettings): NativeSubtitleStyle {
+  return {
+    fontScale: NATIVE_SUBTITLE_SIZE_SCALE[settings.size] ?? 1.0,
+    foregroundColor: SUBTITLE_FG_HEX[settings.color] ?? '#FFFFFF',
+    backgroundColor: SUBTITLE_BG_ARGB[settings.background] ?? 'transparent',
+    edgeType: SUBTITLE_EDGE_KEY[settings.shadow] ?? 'drop_shadow',
+    bottomMarginPercent: settings.bottomMargin,
+    topMarginPercent: settings.topMargin,
+  };
+}

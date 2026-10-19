@@ -1,8 +1,8 @@
 export type {
   PlaybackEngine,
   AudioTrack,
-  SubtitleTrack,
-  PlaybackState,
+  EngineSubtitleTrack,
+  EngineState,
   EngineEvent,
   EngineEventMap,
   EngineStats,

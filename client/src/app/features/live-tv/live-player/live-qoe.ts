@@ -1,4 +1,4 @@
-import type { PlaybackEngine, PlaybackState, QoeSample } from '../../../core/services/playback-engine/playback-engine';
+import type { PlaybackEngine, EngineState, QoeSample } from '../../../core/services/playback-engine/playback-engine';
 import type { QoeReporter } from '../../../core/services/qoe-reporter.service';
 import { PlayerQoe, PlayheadWatch, frozenAfterMs } from '../../player/player-qoe';
 
@@ -40,7 +40,7 @@ export class LiveQoe {
     this.timer = setInterval(() => this.tick(), TICK_MS);
   }
 
-  onState(state: PlaybackState): void {
+  onState(state: EngineState): void {
     if (!this.sid || !this.timer) return;
     if (state === 'error' || state === 'ended') {
       this.halt();
