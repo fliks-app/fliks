@@ -100,5 +100,5 @@ EXPOSE 4848
 HEALTHCHECK --interval=30s --timeout=15s --start-period=60s --retries=3 \
   CMD ["fliks-server", "healthcheck"]
 
-# The engine owns the public port and forwards non-media routes to fliks-server on 4849.
-CMD ["fliks-engine", "--supervise", "--upstream", "http://127.0.0.1:4849", "--", "fliks-server"]
+# The engine owns the public port (PORT) and forwards non-media routes to fliks-server on 4849.
+CMD ["sh", "-c", "exec fliks-engine --supervise --upstream http://127.0.0.1:4849 --public-listen 0.0.0.0:${PORT:-4848} -- fliks-server"]
