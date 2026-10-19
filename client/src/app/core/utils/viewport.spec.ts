@@ -4,19 +4,19 @@ import { vi } from 'vitest';
 import { mediaQuerySignal } from './viewport';
 
 describe('mediaQuerySignal', () => {
-  const original = window.matchMedia;
-  afterEach(() => {
-    window.matchMedia = original;
-  });
+  afterEach(() => vi.unstubAllGlobals());
 
   function fakeMatchMedia(matches: boolean) {
     let listener: ((e: MediaQueryListEvent) => void) | null = null;
     const remove = vi.fn();
-    window.matchMedia = vi.fn(() => ({
-      matches,
-      addEventListener: (_: string, fn: (e: MediaQueryListEvent) => void) => (listener = fn),
-      removeEventListener: remove,
-    })) as unknown as typeof window.matchMedia;
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn(() => ({
+        matches,
+        addEventListener: (_: string, fn: (e: MediaQueryListEvent) => void) => (listener = fn),
+        removeEventListener: remove,
+      })),
+    );
     return { fire: (m: boolean) => listener?.({ matches: m } as MediaQueryListEvent), remove };
   }
 
@@ -36,8 +36,7 @@ describe('mediaQuerySignal', () => {
   });
 
   it('reads true where matchMedia is missing', () => {
-    // @ts-expect-error simulate an environment without matchMedia
-    window.matchMedia = undefined;
+    vi.stubGlobal('matchMedia', undefined);
     const sig = runInInjectionContext(TestBed.inject(Injector), () => mediaQuerySignal('(min-width: 768px)'));
     expect(sig()).toBe(true);
   });
