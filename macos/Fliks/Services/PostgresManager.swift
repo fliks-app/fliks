@@ -213,16 +213,12 @@ actor PostgresManager {
         let configFile = dataDir.appendingPathComponent("postgresql.conf")
         var config = try String(contentsOf: configFile, encoding: .utf8)
 
-        let tweaks = """
-
-        # --- Fliks embedded settings ---
-        listen_addresses = 'localhost'
-        shared_buffers = '128MB'
-        max_connections = 50
-        logging_collector = on
-        log_directory = '\(Paths.logsDir.path)'
-        """
-        config.append(tweaks)
+        // Shared with the Windows shell: scripts/embedded-postgres.conf, bundled as a resource.
+        guard let template = Bundle.main.url(forResource: "embedded-postgres", withExtension: "conf"),
+              let tweaks = try? String(contentsOf: template, encoding: .utf8) else {
+            throw PostgresError.initFailed("embedded-postgres.conf is missing from the app bundle")
+        }
+        config.append(tweaks.replacingOccurrences(of: "@LOG_DIR@", with: Paths.logsDir.path))
         try config.write(to: configFile, atomically: true, encoding: .utf8)
     }
 }

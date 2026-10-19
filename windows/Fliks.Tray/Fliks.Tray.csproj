@@ -15,6 +15,7 @@
        single-file publish (a side file next to the exe isn't reliable). -->
   <ItemGroup>
     <EmbeddedResource Include="Resources\fliks.ico" Condition="Exists('Resources\fliks.ico')" />
+    <EmbeddedResource Include="..\..\scripts\embedded-postgres.conf" LogicalName="embedded-postgres.conf" />
   </ItemGroup>
 
   <ItemGroup>
