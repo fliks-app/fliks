@@ -2,14 +2,15 @@ import {
   PX_PER_SEC,
   SmoothClock,
   activeCues,
-  contentHeight,
+  TimeMap,
   boxTop,
   layoutCues,
   formatOffset,
   isUserScroll,
   offsetFromScroll,
-  scrollTopForTime,
   visibleCues,
+  visibleTicks,
+  formatClock,
 } from './subtitle-sync.util';
 
 const cues = [
@@ -19,19 +20,28 @@ const cues = [
 ];
 
 describe('subtitle sync maths', () => {
-  it('centres time t at scrollTop t*scale with half-viewport padding', () => {
-    expect(scrollTopForTime(10)).toBe(10 * PX_PER_SEC);
-    expect(contentHeight(120, 400)).toBe(120 * PX_PER_SEC + 400);
-    expect(boxTop(layoutCues(cues)[0], 0, 400)).toBe(PX_PER_SEC + 200);
+  it('maps cue starts to their box tops and round-trips, even in dense dialogue', () => {
+    const dense = Array.from({ length: 20 }, (_, i) => ({ start: i, end: i + 1, text: `c${i}` }));
+    for (const [list, base] of [[cues, 0], [cues, 1.5], [dense, 0], [dense, -2]] as const) {
+      const boxes = layoutCues(list);
+      const map = new TimeMap(list, boxes, base);
+      list.forEach((c, i) => {
+        expect(map.px(c.start + base)).toBeCloseTo(boxes[i].top + base * PX_PER_SEC);
+        expect(map.time(map.px(c.start + base))).toBeCloseTo(c.start + base);
+      });
+      if (base >= 0) expect(map.px(0)).toBeCloseTo(0);
+      expect(map.time(map.px(7.3))).toBeCloseTo(7.3);
+    }
+    const map = new TimeMap(dense, layoutCues(dense), 0);
+    expect(map.px(19)).toBeGreaterThan(19 * PX_PER_SEC);
   });
 
   it('turns a scroll away from now into the offset that brings the centred cue to now', () => {
-    // centre shows list position 12 s while video is at 10 s, list laid out with offset 0.5
-    const off = offsetFromScroll(12 * PX_PER_SEC, 10, 0.5);
+    const map = new TimeMap(cues, layoutCues(cues), 0.5);
+    // scrolled to the list position of video time 12 while the video is at 10, list laid out with 0.5
+    const off = offsetFromScroll(map.px(12), 10, map);
     expect(off).toBeCloseTo(-1.5);
-    // the cue that sat at 12 s (start 11.5 unshifted) now starts at 11.5 - 1.5 = 10
-    expect(11.5 + off).toBeCloseTo(10);
-    expect(offsetFromScroll(10 * PX_PER_SEC, 10, 0.5)).toBeCloseTo(0.5);
+    expect(offsetFromScroll(map.px(10), 10, map)).toBeCloseTo(0.5);
   });
 
   it('finds the cues active under an offset', () => {
@@ -76,5 +86,16 @@ describe('subtitle sync maths', () => {
   it('formats the offset with its sign', () => {
     expect(formatOffset(1.2)).toBe('+1.20 s');
     expect(formatOffset(-0.5)).toBe('-0.50 s');
+  });
+
+  it('puts a labelled tick every 5 s at video time, under the centre line when scrolled to it', () => {
+    const map = new TimeMap(cues, layoutCues(cues), 0);
+    const ticks = visibleTicks(map, map.px(60), 400, 3600);
+    const at60 = ticks.find((t) => t.time === 60)!;
+    expect(at60.label).toBe('01:00');
+    expect(at60.top).toBeCloseTo(map.px(60) + 200);
+    expect(ticks.find((t) => t.time === 61)!.label).toBeNull();
+    expect(ticks[0].time).toBeGreaterThanOrEqual(0);
+    expect(formatClock(3725)).toBe('1:02:05');
   });
 });

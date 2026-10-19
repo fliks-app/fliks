@@ -15,6 +15,7 @@ import {
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
+import { LucideChevronLeft, LucideChevronRight } from '@lucide/angular';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { ConfirmationService } from '../../../../core/services/confirmation.service';
 import { DismissableStackService } from '../../../../core/services/dismissable-stack.service';
@@ -38,20 +39,22 @@ import {
   SETTLE_MS,
   SmoothClock,
   activeCues,
-  contentHeight,
   boxTop,
   layoutCues,
   formatOffset,
   isUserScroll,
   offsetFromScroll,
-  scrollTopForTime,
+  TimeMap,
   visibleCues,
+  visibleTicks,
+  RULER_PX,
+  CHEVRON_PX,
 } from './subtitle-sync.util';
 
 /** Side panel to preview a subtitle track against the playing video and shift its timing. */
 @Component({
   selector: 'app-subtitle-sync-panel',
-  imports: [FormsModule, TranslatePipe, TvSelectDirective, SyncReferenceSelectComponent],
+  imports: [FormsModule, LucideChevronLeft, LucideChevronRight, TranslatePipe, TvSelectDirective, SyncReferenceSelectComponent],
   templateUrl: './subtitle-sync-panel.html',
   styleUrl: './subtitle-sync-panel.scss',
 })
@@ -97,13 +100,22 @@ export class SubtitleSyncPanelComponent {
   private readonly viewTop = signal(0);
   protected readonly now = signal(0);
   protected readonly busy = signal(false);
-  protected readonly syncing = signal(false);
+  protected readonly grabbing = signal(false);
+  /** D-pad edit mode of the list: Up/Down shift the offset until Back or Escape. */
+  protected readonly editing = signal(false);
+  /** The server queue is the source: it survives a reopen of the panel. */
+  protected readonly syncing = computed(() => this.subtitleActions.syncing().has(this.subtitle().subtitleDbId ?? 0));
 
-  protected readonly height = computed(() => contentHeight(this.duration(), this.viewH()));
   private readonly boxes = computed(() => layoutCues(this.cues()));
+  private readonly timeMap = computed(() => new TimeMap(this.cues(), this.boxes(), this.base()));
+  protected readonly height = computed(() => this.timeMap().height(this.duration(), this.viewH()));
   protected readonly visible = computed(() =>
     visibleCues(this.cues(), this.boxes(), this.base(), this.viewTop(), this.viewH()),
   );
+  protected readonly ticks = computed(() => visibleTicks(this.timeMap(), this.viewTop(), this.viewH(), this.duration()));
+  protected readonly rulerPx = RULER_PX;
+  protected readonly chevronPx = CHEVRON_PX;
+  protected readonly scrollbarW = signal(0);
   /** Height of the controls bar, kept clear below the panel. */
   protected readonly barH = signal(0);
   protected readonly active = computed(
@@ -142,14 +154,19 @@ export class SubtitleSyncPanelComponent {
     this.dismissStack.push(close);
     inject(DestroyRef).onDestroy(() => {
       this.dismissStack.remove(close);
+      this.dismissStack.remove(this.stopEdit);
       cancelAnimationFrame(this.raf);
       clearTimeout(this.settleTimer);
       this.overlay.destroy();
     });
     afterNextRender(() => {
       const el = this.scroller().nativeElement;
-      new ResizeObserver(() => this.viewH.set(el.clientHeight)).observe(el);
-      this.viewH.set(el.clientHeight);
+      const measure = () => {
+        this.viewH.set(el.clientHeight);
+        this.scrollbarW.set(el.offsetWidth - el.clientWidth);
+      };
+      new ResizeObserver(measure).observe(el);
+      measure();
       const bar = document.querySelector('[data-controls-bottom]');
       if (bar) {
         new ResizeObserver(() => this.barH.set(bar.getBoundingClientRect().height)).observe(bar);
@@ -177,14 +194,15 @@ export class SubtitleSyncPanelComponent {
         void this.loadCues(url);
       });
     });
+    void this.subtitleActions.refreshSyncing();
+    effect(() => {
+      if (this.syncing()) this.stopEdit();
+    });
     this.sse.subtitleSynced.pipe(takeUntilDestroyed()).subscribe((id) => {
-      if (!this.syncing() || id !== this.subtitle().subtitleDbId) return;
-      this.syncing.set(false);
-      this.contentChanged.emit(this.subtitle().id);
+      if (id === this.subtitle().subtitleDbId) this.contentChanged.emit(this.subtitle().id);
     });
     this.sse.subtitleSyncFailed.pipe(takeUntilDestroyed()).subscribe(({ subtitleId }) => {
-      if (!this.syncing() || subtitleId !== this.subtitle().subtitleDbId) return;
-      this.syncing.set(false);
+      if (subtitleId !== this.subtitle().subtitleDbId) return;
       this.toast.error(this.translate.instant('player.subtitle_sync.sync_failed'));
     });
   }
@@ -207,10 +225,13 @@ export class SubtitleSyncPanelComponent {
     const el = this.scroller().nativeElement;
     const t = (this.t = this.clock.read(this.timeSource()(), performance.now(), !this.paused(), this.playbackRate()));
     if (this.interacting) {
-      this.offset.set(offsetFromScroll(el.scrollTop, t, this.base(), PX_PER_SEC));
-    } else if (Math.abs(el.scrollTop - scrollTopForTime(t)) >= 0.5) {
-      el.scrollTop = scrollTopForTime(t);
-      this.lastWritten = el.scrollTop;
+      this.offset.set(offsetFromScroll(el.scrollTop, t, this.timeMap()));
+    } else {
+      const top = this.timeMap().px(t);
+      if (Math.abs(el.scrollTop - top) >= 0.5) {
+        el.scrollTop = top;
+        this.lastWritten = el.scrollTop;
+      }
     }
     this.viewTop.set(Math.floor(el.scrollTop / Math.max(1, this.viewH() / 2)) * (this.viewH() / 2));
     this.now.set(Math.round(t * 20) / 20);
@@ -225,14 +246,38 @@ export class SubtitleSyncPanelComponent {
 
   /** Marks a user gesture; the offset is committed once it has been quiet for {@link SETTLE_MS}. */
   protected touch(down = false) {
+    if (this.syncing()) return;
     this.interacting = true;
     if (down) this.pointerDown = true;
     this.armSettle();
   }
 
+  protected onPointerDown(e: PointerEvent) {
+    const el = this.scroller().nativeElement;
+    // Touch scrolls natively; a mouse grabs the list, except on its scrollbar.
+    if (e.pointerType !== 'mouse') {
+      this.touch(true);
+      return;
+    }
+    if (e.button !== 0 || e.offsetX >= el.clientWidth || this.syncing()) return;
+    el.setPointerCapture(e.pointerId);
+    this.grabbing.set(true);
+    this.touch(true);
+  }
+
+  protected onPointerMove(e: PointerEvent) {
+    if (this.grabbing()) this.scroller().nativeElement.scrollTop -= e.movementY;
+  }
+
+  protected onWheel(e: WheelEvent) {
+    if (this.syncing()) e.preventDefault();
+    else this.touch();
+  }
+
   @HostListener('window:pointerup')
   @HostListener('window:pointercancel')
   protected onPointerUp() {
+    this.grabbing.set(false);
     if (!this.pointerDown) return;
     this.pointerDown = false;
     this.armSettle();
@@ -247,23 +292,32 @@ export class SubtitleSyncPanelComponent {
   private commit() {
     if (!this.interacting) return;
     const el = this.scroller().nativeElement;
-    const off = Math.round(offsetFromScroll(el.scrollTop, this.t, this.base(), PX_PER_SEC) * 1000) / 1000;
+    const off = Math.round(offsetFromScroll(el.scrollTop, this.t, this.timeMap()) * 1000) / 1000;
     this.interacting = false;
     this.offset.set(off);
     this.base.set(off);
   }
 
   protected onKeyDown(e: KeyboardEvent) {
-    if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+    if (!this.editing()) {
+      if (e.key !== 'Enter' || this.syncing()) return;
+      this.editing.set(true);
+      this.dismissStack.push(this.stopEdit);
+    } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
       const off = Math.round((this.offset() + (e.key === 'ArrowUp' ? KEY_STEP_SEC : -KEY_STEP_SEC)) * 1000) / 1000;
       this.offset.set(off);
       this.base.set(off);
-    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
-      this.host.nativeElement.querySelector<HTMLElement>('[data-sync-footer] button:not([disabled])')?.focus();
-    } else return;
+    } else if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
     e.preventDefault();
     e.stopPropagation();
   }
+
+  /** Leaves edit mode and keeps the offset; also the dismiss-stack entry of that mode. */
+  protected readonly stopEdit = () => {
+    if (!this.editing()) return;
+    this.editing.set(false);
+    this.dismissStack.remove(this.stopEdit);
+  };
 
   protected async changeTrack(id: string) {
     if (id === this.subtitle().id) return;
@@ -283,6 +337,11 @@ export class SubtitleSyncPanelComponent {
       cancelLabel: this.translate.instant('common.cancel'),
       variant: 'warning',
     });
+  }
+
+  protected cancelSync() {
+    const dbId = this.subtitle().subtitleDbId;
+    if (dbId) void this.subtitleActions.cancelSync(this.mediaId(), dbId);
   }
 
   protected reset() {
@@ -333,7 +392,6 @@ export class SubtitleSyncPanelComponent {
     if (!dbId) return;
     const reference = this.syncReference();
     this.syncDialog().nativeElement.close();
-    this.syncing.set(true);
     await this.subtitleActions.sync(this.mediaId(), dbId, reference !== 'auto' ? { reference } : {});
   }
 }

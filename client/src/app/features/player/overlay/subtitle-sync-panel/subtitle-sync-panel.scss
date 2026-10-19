@@ -6,8 +6,12 @@
   scrollbar-width: thin;
   scrollbar-color: rgb(255 255 255 / 0.4) transparent;
   overscroll-behavior: contain;
+  user-select: none;
 }
 
 .sync-cue {
   transition: opacity 120ms, font-size 120ms;
+}
+.sync-wrap:has(.sync-scroller:focus-visible) .sync-hint {
+  display: block;
 }
