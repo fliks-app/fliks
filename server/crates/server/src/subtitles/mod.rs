@@ -178,6 +178,7 @@ use utoipa::OpenApi;
     routes_media::post_process,
     routes_media::ocr,
     routes_media::sync,
+    routes_media::cancel_sync,
     routes_media::sync_queue,
     routes_media::translate,
     translation_providers::available,
@@ -304,7 +305,7 @@ pub fn router() -> Router<AppState> {
         )
         .route(
             "/api/media/{id}/subtitles/{subtitleId}/sync",
-            post(routes_media::sync),
+            post(routes_media::sync).delete(routes_media::cancel_sync),
         )
         .route(
             "/api/media/{id}/subtitles/{subtitleId}/translate",

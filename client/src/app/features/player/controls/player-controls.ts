@@ -16,6 +16,7 @@ import {
 import { DeviceService } from '../../../core/services/device.service';
 import { TvService } from '../../../core/services/tv.service';
 import type { EdlRange } from '../../../core/utils/edl-policy';
+import { AuthService } from '../../../core/services/auth.service';
 import { DismissableStackService } from '../../../core/services/dismissable-stack.service';
 import {
   PlayerSettings,
@@ -134,6 +135,7 @@ interface AppearanceRow {
 export class PlayerControlsComponent {
   private readonly device = inject(DeviceService);
   private readonly dismissStack = inject(DismissableStackService);
+  private readonly auth = inject(AuthService);
   private readonly playerSettings = inject(PlayerSettingsService);
   private readonly tv = inject(TvService);
   private readonly appSettings = inject(AppSettingsService);
@@ -405,6 +407,9 @@ export class PlayerControlsComponent {
    */
   readonly panelOpenChange = output<boolean>();
 
+  /** Opens the subtitle resync panel; carries the menu trigger so focus can return to it. */
+  readonly openSubtitleSync = output<HTMLElement | null>();
+
   /** AVPlay only takes integer trick-play rates (it drives them from the HLS
    *  I-frame rendition, one on-demand encode per frame), so fractional steps
    *  raise INVALID_PARAMETER and anything past 2x outruns the server. LG's
@@ -442,6 +447,20 @@ export class PlayerControlsComponent {
       options: BOTTOM_MARGIN_OPTIONS.map((v) => ({ value: v, label: `${v}%` })),
     },
   ];
+
+  /** Resync needs the manage permission and a text track; opening it selects one if none is active. */
+  readonly canSyncSubtitle = computed(
+    () =>
+      this.availableSubtitles().some((s) => !s.isImage && !s.burnIn) &&
+      !this.castConnected() &&
+      this.auth.hasPermission('subtitles.manage'),
+  );
+
+  protected openSyncPanel() {
+    this.openSubtitleSync.emit(this.dropdownTrigger);
+    this.closeDropdown();
+    this.closeSheet();
+  }
 
   /** The leaf row being edited, or undefined on the track/appearance panels. */
   readonly activeAppearanceRow = computed(() =>

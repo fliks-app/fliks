@@ -488,6 +488,15 @@ pub async fn sync(
     Ok((StatusCode::CREATED, Json(item)))
 }
 
+#[utoipa::path(delete, path = "/api/media/{id}/subtitles/{subtitleId}/sync", responses((status = 204)))]
+pub async fn cancel_sync(State(st): State<AppState>, a: Authed, ids: Two) -> Res<StatusCode> {
+    policy(&a, Action::Create)?;
+    let PathParams((id, sub)) = ids?;
+    gate_subtitle(&st, &a, id, sub).await?;
+    super::sync::cancel(&st, sub).await;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 #[utoipa::path(get, path = "/api/media/sync-queue", responses((status = 200)))]
 pub async fn sync_queue(State(st): State<AppState>, a: Authed) -> Res<Json<Vec<Value>>> {
     policy(&a, Action::Read)?;

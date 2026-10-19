@@ -135,7 +135,7 @@
   @if (!inPipMode()) {
   <app-player-controls
     (interacted)="chrome.onInteraction()"
-    [visible]="chrome.visible()"
+    [visible]="chrome.visible() && !syncHidesControls()"
     [seekOsd]="chrome.seekOsd()"
     [paused]="uiPaused()"
     [loading]="loading()"
@@ -159,7 +159,7 @@
     [isNative]="isNative"
     [isDesktop]="isDesktopNative"
     (togglePlay)="onTogglePlay()"
-    (tapOverlay)="chrome.toggle()"
+    (tapOverlay)="onTapOverlay()"
     (seek)="onSeek($event)"
     (seekDragChange)="onSeekDragChange($event)"
     (volumeChange)="onVolumeChange($event)"
@@ -207,7 +207,25 @@
     [showPreRollSkip]="preRollSkippable()"
     (skipPreRoll)="skipPreRoll()"
     (panelOpenChange)="chrome.onPanelOpenChange($event)"
+    (openSubtitleSync)="onOpenSubtitleSync($event)"
   />
+  }
+
+  @if (subtitleSyncOpen() && syncSubtitle(); as sub) {
+    <app-subtitle-sync-panel
+      [subtitle]="sub"
+      [subtitles]="syncTextTracks()"
+      [mediaId]="syncMediaId"
+      [mediaFileId]="syncMediaFileId"
+      [duration]="duration()"
+      [timeSource]="subtitleTime"
+      [paused]="paused()"
+      [playbackRate]="playbackRate()"
+      [opener]="subtitleSyncOpener"
+      (selectTrack)="onSelectSubtitleById($event)"
+      (contentChanged)="onSubtitleContentChanged($event)"
+      (closed)="onCloseSubtitleSync()"
+    />
   }
 
   <app-player-stats-overlay

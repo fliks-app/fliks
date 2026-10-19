@@ -917,3 +917,71 @@ async fn the_sync_queue_dedupes_live_items_and_runs_each_with_its_own_options(po
         .collect();
     assert_eq!(sent, [json!(30.0), json!(30.0), json!(10.0)]);
 }
+
+#[sqlx::test]
+async fn cancelling_a_sync_drops_a_queued_item_and_settles_a_running_one(pool: PgPool) {
+    let c = ctx(pool).await;
+    let mut ids = vec![];
+    for n in ["a", "b", "c"] {
+        let stored = format!("Movie.2020.1080p.BluRay.x264-GRP.{n}.srt");
+        std::fs::write(c.dir.join(&stored), SRT).unwrap();
+        ids.push(row(&c, "en", "disk", Some(&stored), None, None).await);
+    }
+    c.fake.script(
+        "POST",
+        "/v1/jobs",
+        ["j1", "j2"].map(|j| ok(json!({"jobId": j}))).to_vec(),
+    );
+    for j in ["j1", "j2"] {
+        let gone = job_snapshot(
+            j,
+            "SubtitleSync",
+            "cancelled",
+            Value::Null,
+            Some("cancelled"),
+        );
+        c.fake.script(
+            "GET",
+            &format!("/v1/jobs/{j}"),
+            vec![crate::engine::testkit::slow(300, ok(gone))],
+        );
+    }
+    c.fake.script("DELETE", "/v1/jobs/j1", vec![ok(json!({}))]);
+    let uri = |id: i32| format!("/api/media/{}/subtitles/{id}/sync", c.media);
+    for id in &ids {
+        call(&c, "POST", &uri(*id), &c.admin, Some(json!({}))).await;
+    }
+    let status = |id: i32| {
+        c.st.subtitles
+            .sync
+            .snapshot()
+            .into_iter()
+            .find(|i| i["subtitleId"] == id)
+            .map(|i| i["status"].clone())
+    };
+    assert_eq!(status(ids[2]), Some(json!("queued")));
+    // The queued item is dropped; the running one asks the engine to cancel its job.
+    assert_eq!(
+        call(&c, "DELETE", &uri(ids[2]), &c.admin, None).await.0,
+        204
+    );
+    assert_eq!(status(ids[2]), None);
+    assert_eq!(
+        call(&c, "DELETE", &uri(ids[0]), &c.admin, None).await.0,
+        204
+    );
+    assert_eq!(c.fake.seen("DELETE", "/v1/jobs/j1").len(), 1);
+    until("slot settled", || async { status(ids[0]).is_none() }).await;
+    // Nothing is written back and no failure is recorded; the lock stays like after a failure.
+    let (synced, failed, locked): (bool, bool, bool) =
+        sqlx::query_as(r#"SELECT synced, "syncFailed", locked FROM subtitle_files WHERE id = $1"#)
+            .bind(ids[0])
+            .fetch_one(&c.pool)
+            .await
+            .unwrap();
+    assert_eq!((synced, failed, locked), (false, false, true));
+    assert_eq!(
+        std::fs::read_to_string(c.dir.join("Movie.2020.1080p.BluRay.x264-GRP.a.srt")).unwrap(),
+        SRT
+    );
+}

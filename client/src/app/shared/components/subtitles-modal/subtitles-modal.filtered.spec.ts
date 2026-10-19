@@ -27,7 +27,7 @@ const providers = (getForMedia: () => Promise<SubtitleFileRow[]>) => [
       loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } },
     }),
     { provide: SubtitlesApiService, useValue: { getForMedia } },
-    { provide: SubtitleActionsService, useValue: {} },
+    { provide: SubtitleActionsService, useValue: { syncing: () => new Set(), refreshSyncing: () => Promise.resolve() } },
     { provide: TranslationProvidersApiService, useValue: {} },
     { provide: ConfirmationService, useValue: {} },
     { provide: ToastService, useValue: { success: () => {}, error: () => {}, info: () => {} } },

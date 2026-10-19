@@ -167,6 +167,10 @@ export class SubtitlesApiService {
     );
   }
 
+  cancelSync(mediaId: number, subtitleId: number) {
+    return firstValueFrom(this.http.delete<void>(`/api/media/${mediaId}/subtitles/${subtitleId}/sync`));
+  }
+
   getSyncQueue() {
     return firstValueFrom(
       this.http.get<SyncQueueItem[]>('/api/media/sync-queue'),

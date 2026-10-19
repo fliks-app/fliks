@@ -121,6 +121,7 @@ import { WebVideoCropController } from './web-video-crop-controller';
 import { EdlController } from './edl-controller';
 import { isMutedAt } from '../../core/utils/edl-policy';
 import { PlayerStatsOverlayComponent, PlayerStats } from './overlay/player-stats-overlay';
+import { SubtitleSyncPanelComponent } from './overlay/subtitle-sync-panel/subtitle-sync-panel';
 import { DefaultFocusDirective } from '../../shared/directives/default-focus.directive';
 
 /**
@@ -175,7 +176,7 @@ class PausableTimeout {
 }
 
 @Component({
-  imports: [TranslatePipe, LucideAirplay, LucideInfo, LucideVolumeX, LucideX, PlayerControlsComponent, PlayerStatsOverlayComponent, PlayerErrorOverlayComponent, DefaultFocusDirective],
+  imports: [TranslatePipe, LucideAirplay, LucideInfo, LucideVolumeX, LucideX, PlayerControlsComponent, PlayerStatsOverlayComponent, SubtitleSyncPanelComponent, PlayerErrorOverlayComponent, DefaultFocusDirective],
   templateUrl: './player.html',
   providers: [ControlsVisibilityService, CopyFallbackController, WebVideoCropController],
   encapsulation: ViewEncapsulation.None,
@@ -4224,8 +4225,54 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       embIndex: sub.id.startsWith('emb-') ? Number(sub.id.slice(4)) : null,
       image: sub.isImage,
     });
-    try { engine.setTextVisibility(true); } catch {}
+    // The resync panel previews the cues itself, so the engine stays hidden meanwhile.
+    if (this.subtitleSyncOpen()) this.hideSoftSubtitle();
+    else try { engine.setTextVisibility(true); } catch {}
     return true;
+  }
+
+  // ── Subtitle resync panel ──
+
+  readonly subtitleSyncOpen = signal(false);
+  /** The panel takes the controls' place: none are shown, a tap plays or pauses. */
+  protected readonly syncHidesControls = this.subtitleSyncOpen.asReadonly();
+  protected subtitleSyncOpener: HTMLElement | null = null;
+  protected readonly syncSubtitle = computed(
+    () => this.availableSubtitles().find((s) => s.id === this.activeSubtitleId()) ?? null,
+  );
+  protected readonly syncTextTracks = computed(() => this.availableSubtitles().filter((s) => !s.isImage && !s.burnIn));
+  protected readonly subtitleTime = () => this.engine?.currentTime ?? 0;
+  protected get syncMediaId() { return this.mediaId; }
+  protected get syncMediaFileId() { return this.mediaFileId; }
+
+  protected onTapOverlay() {
+    if (this.syncHidesControls()) this.onTogglePlay();
+    else this.chrome.toggle();
+  }
+
+  protected onOpenSubtitleSync(opener: HTMLElement | null) {
+    this.subtitleSyncOpener = opener;
+    this.subtitleSyncOpen.set(true);
+    this.hideSoftSubtitle();
+    const tracks = this.syncTextTracks();
+    if (!tracks.some((s) => s.id === this.activeSubtitleId()) && tracks.length) void this.onSelectSubtitleById(tracks[0].id);
+  }
+
+  protected onCloseSubtitleSync() {
+    this.subtitleSyncOpen.set(false);
+    const sub = this.syncSubtitle();
+    if (!sub || this.burnsIn(sub)) return;
+    this.showSoftSubtitle(sub, this.subtitleRequest).catch((e) => console.error('[Player] restore subtitle failed:', e));
+  }
+
+  /** A new URL makes engines (Shaka caches sideloaded tracks by URL) load the edited file. */
+  protected onSubtitleContentChanged(id: string) {
+    const rev = `rev=${Date.now()}`;
+    this.availableSubtitles.update((list) =>
+      list.map((s) => (s.id === id ? { ...s, url: s.url.replace(/[?&]rev=\d+/, '') + (s.url.includes('?') ? '&' : '?') + rev } : s)),
+    );
+    // ExoPlayer reads subtitles at load(), so a new file needs a stream reload.
+    if (this.isNative && !this.isDesktopNative) void this.reloadStream(undefined, { reason: 'other' });
   }
 
   /** Re-selects the active subtitle after a reload, which engines drop across load().
@@ -4292,6 +4339,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // the press swallowed to merely wake the bar. The guards below honour this.
     const activeEl = document.activeElement as HTMLElement | null;
     const cueFocused = !!activeEl?.closest('.player-floating-cue');
+    // The sync panel owns its keys; only Back still reaches the handlers below.
+    if (!isBackKey && activeEl?.closest('app-subtitle-sync-panel')) return;
 
     // Controls hidden + Left/Right: raise the seek-only OSD and hand the press
     // to the seekbar, which owns the scrub from there (accelerating step, one

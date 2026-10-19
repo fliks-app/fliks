@@ -1,4 +1,4 @@
-//! Wire events (`docs/spec/events-hub.md`, Events): the 39 `SseEvent` types, the 11 `DomainEvent`
+//! Wire events (`docs/spec/events-hub.md`, Events): the 40 `SseEvent` types, the 11 `DomainEvent`
 //! types and the plugin envelope. Field names and omission rules follow `JSON.stringify` of Nest's objects.
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
@@ -176,6 +176,19 @@ pub enum SseEvent {
         media_id: Option<i64>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         automatic: Option<bool>,
+    },
+    #[serde(rename = "subtitle.sync_failed")]
+    SubtitleSyncFailed {
+        subtitle_id: i64,
+        error: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        media_id: Option<i64>,
+    },
+    #[serde(rename = "subtitle.sync_cancelled")]
+    SubtitleSyncCancelled {
+        subtitle_id: i64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        media_id: Option<i64>,
     },
     #[serde(rename = "subtitle.downloaded")]
     SubtitleDownloaded {
@@ -530,13 +543,14 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    /// One minimal wire sample per `SseEvent` type of the spec table (39).
+    /// One minimal wire sample per `SseEvent` type of the spec table (40).
     fn samples() -> Vec<Value> {
         let sub = json!({"title": "T"});
         vec![
             json!({"type":"sse.connected","connectionId":"c"}),
             json!({"type":"task.progress","command":"c","current":1,"total":2,"message":"m","subject":sub}),
             json!({"type":"subtitle.synced","subtitleId":1,"language":"en"}),
+            json!({"type":"subtitle.sync_failed","subtitleId":1,"error":"e","mediaId":2}),
             json!({"type":"subtitle.downloaded","mediaId":1,"title":"t","language":"en","provider":"p"}),
             json!({"type":"subtitle.failed","mediaId":1,"title":"t","language":"en","error":"e","scope":"daily"}),
             json!({"type":"subtitle.list_changed","mediaId":1}),
@@ -584,7 +598,7 @@ mod tests {
     #[test]
     fn every_type_round_trips_to_the_same_json() {
         let all = samples();
-        assert_eq!(all.len(), 39);
+        assert_eq!(all.len(), 40);
         for want in all {
             let ev: SseEvent = serde_json::from_value(want.clone()).unwrap();
             assert_eq!(serde_json::to_value(&ev).unwrap(), want);

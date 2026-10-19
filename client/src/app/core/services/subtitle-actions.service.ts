@@ -1,6 +1,7 @@
-import { Injectable, inject, WritableSignal } from '@angular/core';
+import { Injectable, inject, signal, WritableSignal } from '@angular/core';
 import { TranslateService } from '@ngx-translate/core';
 import { SubtitlesApiService, SubtitleFileRow, SyncOptions } from './api/subtitles-api.service';
+import { SseService } from './sse.service';
 import { ToastService } from './toast.service';
 
 /**
@@ -13,10 +14,46 @@ export class SubtitleActionsService {
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
 
+  /** Ids of the subtitles whose sync is queued or running on the server. */
+  readonly syncing = signal<ReadonlySet<number>>(new Set());
+
+  constructor() {
+    const sse = inject(SseService);
+    const stop = (id: number) => this.setSyncing(id, false);
+    sse.subtitleSynced.subscribe(stop);
+    sse.subtitleSyncFailed.subscribe(({ subtitleId }) => stop(subtitleId));
+    sse.subtitleSyncCancelled.subscribe(stop);
+  }
+
+  private setSyncing(id: number, on: boolean) {
+    this.syncing.update((s) => {
+      if (s.has(id) === on) return s;
+      const next = new Set(s);
+      if (on) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }
+
+  /** Reads the server queue, the source of truth after a reload or a reopen. */
+  async refreshSyncing() {
+    try {
+      const queue = await this.subtitlesApi.getSyncQueue();
+      this.syncing.set(new Set(queue.filter((i) => i.status === 'queued' || i.status === 'running').map((i) => i.subtitleId)));
+    } catch { /* global interceptor */ }
+  }
+
   async sync(mediaId: number, subtitleId: number, options: SyncOptions) {
-    this.toast.info(this.translate.instant('media_detail.sync_started'));
     try {
       await this.subtitlesApi.sync(mediaId, subtitleId, options);
+      this.setSyncing(subtitleId, true);
+    } catch { /* global interceptor */ }
+  }
+
+  async cancelSync(mediaId: number, subtitleId: number) {
+    try {
+      await this.subtitlesApi.cancelSync(mediaId, subtitleId);
+      this.setSyncing(subtitleId, false);
     } catch { /* global interceptor */ }
   }
 

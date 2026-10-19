@@ -56,6 +56,16 @@ impl Engine {
         on_progress: Option<Progress>,
     ) -> Result<JobResult, EngineError> {
         let id = self.submit_job(req).await?;
+        self.wait_job(id, req, on_progress).await
+    }
+
+    /// Waits for a job already submitted (`submit_job`), for callers that need its id to cancel it.
+    pub async fn wait_job(
+        &self,
+        id: String,
+        req: &JobRequest,
+        on_progress: Option<Progress>,
+    ) -> Result<JobResult, EngineError> {
         let (done, ended) = oneshot::channel();
         self.inner
             .jobs
