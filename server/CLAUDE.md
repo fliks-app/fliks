@@ -1,6 +1,6 @@
 # fliks-server workspace
 
-The Fliks HTTP server (Rust), run behind the `fliks-engine` supervisor. Plan: `~/Documents/clement/code/fliks-handoff/phase2-plan.md`.
+The Fliks HTTP server (Rust), run behind the `fliks-engine` supervisor.
 
 ## Crates
 
