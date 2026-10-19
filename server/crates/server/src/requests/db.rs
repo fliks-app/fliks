@@ -381,6 +381,16 @@ pub async fn linked(
     .await
 }
 
+/// Media that still have an `approved` or `processing` ADD request linked (the reconcile's work list).
+pub async fn media_with_open_adds(db: &PgPool) -> sqlx::Result<Vec<i32>> {
+    sqlx::query_scalar!(
+        r#"SELECT DISTINCT "mediaId" AS "id!" FROM requests
+        WHERE kind = 'add' AND "mediaId" IS NOT NULL AND status IN ('approved', 'processing')"#
+    )
+    .fetch_all(db)
+    .await
+}
+
 /// `onMediaImported`: link, and approve a pending row (the importer approves when known).
 pub async fn adopt(db: &PgPool, id: i32, media_id: i32, approver: Option<i32>) -> sqlx::Result<()> {
     sqlx::query!(

@@ -15,7 +15,7 @@ use axum::{
     routing::{get, post},
 };
 
-pub use lifecycle::{Lifecycle, MediaRef, spawn};
+pub use lifecycle::{Lifecycle, MediaRef, spawn, spawn_reconcile};
 pub use routes::*;
 pub use rules::{
     __path_rule_create, __path_rule_get, __path_rule_list, __path_rule_remove, __path_rule_update,
