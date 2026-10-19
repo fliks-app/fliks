@@ -22,6 +22,10 @@ permissions:
 
 jobs:
   build-and-publish:
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -61,6 +65,12 @@ jobs:
         with:
           name: webos-ipk
           path: ${{ steps.art.outputs.dir }}/*.ipk
+
+      - name: Attest build provenance
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
+        with:
+          subject-path: ${{ steps.art.outputs.dir }}/*.ipk
 
       - name: Attach to release
         if: startsWith(github.ref, 'refs/tags/v')

@@ -39,6 +39,10 @@ permissions:
 
 jobs:
   build-installer:
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
     # Release PRs only bump versions; the tag build covers them.
     if: ${{ !startsWith(github.head_ref, 'release-please--') }}
     runs-on: windows-latest
@@ -141,6 +145,12 @@ jobs:
           if-no-files-found: error
           # Already compressed: zipping it again only costs time.
           compression-level: 0
+
+      - name: Attest build provenance
+        if: env.IS_TAG == 'true'
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
+        with:
+          subject-path: windows/build/Setup/*-Setup.exe
 
       # `gh release upload` only POSTs the assets; editing the release itself (as
       # `vpk upload github` or the action we used before do) is refused with the job token.

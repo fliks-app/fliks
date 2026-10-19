@@ -31,6 +31,10 @@ permissions:
 
 jobs:
   build-dmg:
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v6
@@ -159,6 +163,12 @@ jobs:
           name: Fliks-Server-${{ steps.version.outputs.version }}-arm64.dmg
           path: macos/build/Fliks-*.dmg
           if-no-files-found: error
+
+      - name: Attest build provenance
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
+        with:
+          subject-path: macos/build/Fliks-*.dmg
 
       # ── Attach DMG to GitHub Release (tag pushes only) ──
       - name: Attach to GitHub Release

@@ -53,6 +53,10 @@ permissions:
 
 jobs:
   build:
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
     name: ${{ matrix.os }} → ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
     strategy:
@@ -401,6 +405,12 @@ jobs:
             ForEach-Object FullName
           $files += "desktop/release/setup/Fliks-Client-$env:VERSION-Setup.exe"
           gh release upload "${{ github.ref_name }}" @files --clobber
+
+      - name: Attest build provenance
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
+        with:
+          subject-path: ${{ matrix.artifact_glob }}
 
       # ── Upload the installers + update metadata as a workflow artifact ──
       # On tag builds electron-builder already attached these to the Release; the
