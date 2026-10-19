@@ -9,7 +9,7 @@
 
 - The video/streaming engine lives in github.com/fliks-app/engine; its protocol is that repo's `PROTOCOL.md`.
 - Background media jobs (sprites, keyframe scan, intro fingerprint, subtitle extraction) are engine jobs, run through the engine client in `server/crates/server/src/engine/`.
-- Bump it with `scripts/bump-engine.sh <version>`, which rewrites `engine.lock` (version + sha256 per platform, for the desktop bundles), the `ENGINE_IMAGE` default in the `Dockerfile` (`ghcr.io/fliks-app/engine:<version>`) and the `fliks-engine-core` tag of `server/crates/server/Cargo.toml`; `engine-lock.yml` fails a PR where they disagree.
+- Bump it with `scripts/bump-engine.sh <version>`, which rewrites `engine.lock` (version + sha256 per platform, for the desktop bundles), the `ENGINE_IMAGE` default in the `Dockerfile` (`ghcr.io/fliks-app/engine:<version>@sha256:<digest>`) and the `fliks-engine-core` tag of `server/crates/server/Cargo.toml` (and both `Cargo.lock`); `engine-lock.yml` fails a PR where they disagree.
 - The image is built `FROM` the engine image (`ARG ENGINE_IMAGE`): ffmpeg, mkvmerge, fpcalc, OpenCL and the `fliks-engine` binary are defined in the engine repo, not here. Test an unreleased engine with `--build-arg ENGINE_IMAGE=ghcr.io/fliks-app/engine:main` (or the `engine_image` input of the publish workflow).
 - The dev stack (`docker-compose.dev.example.yml`) mirrors production: the engine (`../fliks-engine`, cargo watch) is the front door on :3000 and forwards to `server` (`fliks-server`, cargo watch on `server/`, :3001), the whole HTTP API. Run `scripts/bump-engine.sh --local ../fliks-engine` to build the server against a local engine checkout.
 

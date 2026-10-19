@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Usage: scripts/bump-engine.sh <version>          rewrite engine.lock, the Dockerfile engine image and the server's engine tag (e.g. 0.4.1)
+# Usage: scripts/bump-engine.sh <version>          rewrite engine.lock, the Dockerfile engine image (tag + digest) and the server's engine tag (e.g. 0.4.1)
 #        scripts/bump-engine.sh --local <checkout> patch the server's engine crate to <checkout> (untracked server/.cargo/config.toml)
 #                                          (needs `cargo update -p fliks-engine-core`; never commit the patched Cargo.lock)
 set -euo pipefail
@@ -31,7 +31,8 @@ gh release download "v$v" -R fliks-app/engine -p 'fliks-engine-*.sha256' -D "$tm
     done
 } > engine.lock.new
 mv engine.lock.new engine.lock
-sed -i "s|^ARG ENGINE_IMAGE=.*|ARG ENGINE_IMAGE=ghcr.io/fliks-app/engine:$v|" Dockerfile
+digest="$(docker buildx imagetools inspect "ghcr.io/fliks-app/engine:$v" --format '{{.Manifest.Digest}}')"
+sed -i "s|^ARG ENGINE_IMAGE=.*|ARG ENGINE_IMAGE=ghcr.io/fliks-app/engine:$v@$digest|" Dockerfile
 sed -i -E "s|(fliks-engine-core = \{ git = [^}]*tag = )\"v[^\"]*\"|\1\"v$v\"|" server/crates/server/Cargo.toml
 (cd server && cargo update -p fliks-engine-core)
 (cd server/crates/plugin-sdk && cargo update -p fliks-engine-core)
