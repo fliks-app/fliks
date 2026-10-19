@@ -28,6 +28,7 @@ use utoipa::OpenApi;
     ui,
     import_inspect,
     import_confirm,
+    import_discard,
     sources_list,
     sources_create,
     sources_update,
@@ -67,6 +68,10 @@ pub fn router() -> Router<AppState> {
         .route(
             "/api/plugins/import/confirm",
             with_proxy(post(import_confirm)),
+        )
+        .route(
+            "/api/plugins/import/{stagingId}",
+            with_proxy(delete(import_discard)),
         )
         .route(
             "/api/plugins/sources",
@@ -292,6 +297,24 @@ pub async fn import_confirm(
     let (sid, sha) = confirm_dto(&v)?;
     let r = st.plugins.confirm(&sid, &sha).await.map_err(inst)?;
     Ok((StatusCode::CREATED, Json(r)).into_response())
+}
+
+#[utoipa::path(delete, path = "/api/plugins/import/{stagingId}", responses((status = 204)))]
+pub async fn import_discard(State(st): State<AppState>, a: Authed, Path(id): Path<String>) -> Res {
+    need(&a, Action::Manage)?;
+    if !matches_hex(&Value::String(id.clone()), 32) {
+        return Err(app(AppError::bad_request(
+            "stagingId must match /^[0-9a-f]{32}$/ regular expression",
+        )));
+    }
+    if !st.plugins.staging.discard(&id) {
+        return Err(inst(ie(
+            StatusCode::NOT_FOUND,
+            "PLUGIN_STAGING_NOT_FOUND",
+            format!("no staged upload \"{id}\""),
+        )));
+    }
+    Ok(StatusCode::NO_CONTENT.into_response())
 }
 
 fn source_summary(s: &packages::Source) -> Value {

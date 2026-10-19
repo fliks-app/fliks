@@ -39,6 +39,8 @@ export class PluginInstallConsentComponent {
   readonly confirming = signal(false);
   readonly error = signal('');
 
+  private stagingId: string | null = null;
+
   readonly installed = output<PluginInstallResult>();
 
   readonly trust = computed(() => trustBadgeFor(this.report()?.signature));
@@ -55,6 +57,7 @@ export class PluginInstallConsentComponent {
 
   open(report: PluginInspectReport): void {
     this.report.set(report);
+    this.stagingId = report.stagingId ?? null;
     this.acknowledged.set(false);
     this.confirming.set(false);
     this.error.set('');
@@ -63,6 +66,13 @@ export class PluginInstallConsentComponent {
 
   close(): void {
     this.dialogRef().nativeElement.close();
+  }
+
+  /** Cancel, backdrop and Esc all land here: free the staging slot instead of waiting for the sweep. */
+  discardUnconfirmed(): void {
+    const id = this.stagingId;
+    this.stagingId = null;
+    if (id) void this.api.discardStaged(id).catch(() => undefined);
   }
 
   /** `ui:<slot>` / `config:<id>` / `scope:<name>` / `ingestroot:<path>` / `job:<name>` / `webhook`
@@ -97,6 +107,7 @@ export class PluginInstallConsentComponent {
     this.error.set('');
     try {
       const result = await this.api.confirm(report.stagingId, report.sha256);
+      this.stagingId = null;
       this.close();
       this.installed.emit(result);
     } catch (err: unknown) {

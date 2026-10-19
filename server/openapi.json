@@ -2846,6 +2846,17 @@
         }
       }
     },
+    "/api/plugins/import/{stagingId}": {
+      "delete": {
+        "tags": [],
+        "operationId": "import_discard",
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/plugins/metrics": {
       "get": {
         "tags": [],
