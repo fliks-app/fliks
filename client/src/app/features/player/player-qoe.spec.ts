@@ -89,6 +89,7 @@ describe('PlayheadWatch', () => {
     expect(w.frozenSince).toBe(1_000);
     expect(new PlayheadWatch(0).carryOver(2_000, 1_900, 5, 5)).toBe(false);
     expect(new PlayheadWatch(0).carryOver(2_000, 1_000, 5, 6)).toBe(false);
+    expect(new PlayheadWatch(0).carryOver(5_000, 1_000, 5, 5, 1_000)).toBe(false);
   });
 });
 

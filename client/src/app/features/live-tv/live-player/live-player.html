@@ -34,7 +34,7 @@
   <app-player-controls
     [visible]="chrome.visible()"
     [paused]="paused()"
-    [loading]="loading()"
+    [spinner]="!playbackError() && loading()"
     [videoStarted]="true"
     [currentTime]="dvrPosition()"
     [duration]="dvrWindow()"
