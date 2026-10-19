@@ -187,12 +187,7 @@ async fn backup_and_restore_on_a_scratch_database() {
     if !have("pg_dump") || !have("psql") {
         return;
     }
-    let data = std::env::temp_dir().join(format!(
-        "fliks-parity/s5-system/data-{}",
-        fliks_server::config::random_hex(4)
-    ));
-    // SAFETY: set before any thread reads it; this binary has one test.
-    unsafe { std::env::set_var("FLIKS_DATA_DIR", &data) };
+    let _ = std::fs::remove_dir_all(fliks_server::system::backup::dir());
     let scratch = Scratch::create(&url, None).await;
     let old = Scratch::create(
         &url,
@@ -209,7 +204,7 @@ async fn backup_and_restore_on_a_scratch_database() {
         }
     })
     .await;
-    let _ = std::fs::remove_dir_all(&data);
+    let _ = std::fs::remove_dir_all(fliks_server::system::backup::dir());
     let (scratch, old, url) = match body {
         Ok(t) => t,
         Err(e) => {

@@ -151,4 +151,4 @@ Parity scenarios (§5.3), dir `server/parity/scenarios/remote/`:
 - `remote-fanout-state-to-grantee` and `remote-fanout-revoke-announces` (two SSE streams, assert `remote.state`/`remote.targets_changed` arrival; cache window 30 s means the revoke scenario asserts the `targets_changed`, not state silence).
 Ignore paths: `$..createdAt`, `$..cmdId` (uuid), `$..id` on grant rows, `$..code` (random), `$..expiresAt`.
 
-Struck at S9 (`node-removal.md` §5 item 6): `remote-can-control` and `remote-grant-code` were never generated as `server/fixtures` sets; the Rust tests in `crates/server/tests/remote.rs` cover the rules instead.
+Struck at S9 (`node-removal.md` §5 item 6): `remote-can-control` and `remote-grant-code` were never generated as `server/fixtures` sets; the Rust tests in `crates/server/tests/it/remote.rs` cover the rules instead.

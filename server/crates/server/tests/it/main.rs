@@ -1,0 +1,25 @@
+//! Every integration test in one binary: each file would otherwise link the whole server on its own.
+mod auth;
+mod auth_routes;
+mod backup_restore;
+mod heartbeat;
+mod importers;
+mod libraries;
+mod media;
+mod media_servers;
+mod metadata;
+mod migrations;
+mod notifications;
+mod parity;
+mod playback;
+mod playlists;
+mod plugins;
+mod profiles;
+mod remote;
+mod requests;
+mod roles;
+mod routes;
+mod settings;
+mod social;
+mod topology;
+mod users;

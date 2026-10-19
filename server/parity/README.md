@@ -33,8 +33,8 @@ python3 external/livetv/server.py 4961 &     # livetv scenarios: PARITY_LIVETV=h
 From `server/`, with the `CARGO_*` env of `CLAUDE.md`:
 
 ```bash
-cargo test -p fliks-server --test parity -- --ignored --nocapture 2>&1 | tail -40   # replay on :4849; PARITY_FILTER=<substring>
-PARITY_RECORD=1 cargo test -p fliks-server --test parity -- --ignored --nocapture   # fills only the steps without `expect`
+cargo test -p fliks-server --test it parity::parity -- --ignored --nocapture 2>&1 | tail -40   # replay on :4849; PARITY_FILTER=<substring>
+PARITY_RECORD=1 cargo test -p fliks-server --test it parity::parity -- --ignored --nocapture   # fills only the steps without `expect`
 ```
 
 Target (`fliks-server` alone on :4849, a scratch database reset as in the template step above):
@@ -49,7 +49,7 @@ export FLIKS_CAST_DIR=$PWD/public   # from server/
 Record mode never overwrites an existing `expect`: an expectation recorded from Nest only changes in a PR that names the
 `docs/README.md` Deviations row it implements (a `deviation` scenario with a hand-written `expect`).
 Keys added to the contract after the recordings (spec rules marked additive, e.g. `trackMarkers`) are listed in
-`ADDITIVE` (`crates/server/tests/parity.rs`) and never compared.
+`ADDITIVE` (`crates/server/tests/it/parity.rs`) and never compared.
 
 - Actors log in as `<name>` / `<name>-pass` (`admin user readonly other manager`); `engine` sends Bearer `PARITY_HOST_TOKEN`.
 - Seed profiles: a scenario `"seed": "<name>"` other than `base` runs on `base` plus `seed/<name>.sql` (built once per run as `<tpl>_<name>`); `PARITY_DB` / `PARITY_TPL` rename the working and template databases so runs can be parallel. `media-query` adds 31 media, a `noread` actor and the catalog fixtures of `docs/spec/media-query.md`.

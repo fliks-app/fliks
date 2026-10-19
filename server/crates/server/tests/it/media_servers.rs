@@ -23,10 +23,10 @@ use std::{
 use tower::ServiceExt;
 
 const SECRET: &str = "0123456789abcdef0123456789abcdef";
-const USERS: &str = include_str!("../../../fixtures/media-servers/emby/users.json");
-const SERIES: &str = include_str!("../../../fixtures/media-servers/emby/series.json");
-const ITEMS: &str = include_str!("../../../fixtures/media-servers/emby/items.json");
-const INFO: &str = include_str!("../../../fixtures/media-servers/emby/system-info.json");
+const USERS: &str = include_str!("../../../../fixtures/media-servers/emby/users.json");
+const SERIES: &str = include_str!("../../../../fixtures/media-servers/emby/series.json");
+const ITEMS: &str = include_str!("../../../../fixtures/media-servers/emby/items.json");
+const INFO: &str = include_str!("../../../../fixtures/media-servers/emby/system-info.json");
 
 #[derive(Clone, Default)]
 struct Hits(Arc<Mutex<Vec<(String, String)>>>);

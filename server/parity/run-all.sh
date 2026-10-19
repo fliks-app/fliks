@@ -63,12 +63,12 @@ rm -rf "$RUN"/{target-*,*.log}
 # ---- build once ----
 log "building fliks-server (parity feature) and the parity runner"
 (cd "$SERVER" && $HEAVY cargo build -p fliks-server --features parity) || die "cargo build failed"
-TESTEXE=$(cd "$SERVER" && $HEAVY cargo test -p fliks-server --features parity --test parity --no-run --message-format=json 2>/dev/null |
+TESTEXE=$(cd "$SERVER" && $HEAVY cargo test -p fliks-server --features parity --test it --no-run --message-format=json 2>/dev/null |
   python3 -c 'import sys,json
 for l in sys.stdin:
     try: m=json.loads(l)
     except ValueError: continue
-    if m.get("executable") and m.get("target",{}).get("name")=="parity": print(m["executable"])' | tail -1)
+    if m.get("executable") and m.get("target",{}).get("name")=="it": print(m["executable"])' | tail -1)
 [ -x "$TESTEXE" ] || die "parity runner binary not found"
 BIN=$CARGO_TARGET_DIR/debug/fliks-server
 
@@ -148,7 +148,7 @@ run_mode() { # run_mode <engine up|down|stub> <providers 0|1> <filter>
   (cd "$SERVER" && exec setsid env CARGO_MANIFEST_DIR="$SERVER/crates/server" PARITY_TARGET=http://127.0.0.1:$P_TARGET PARITY_DB=$DB PARITY_TPL=$TPL \
     PARITY_ENGINE=$engine PARITY_PROVIDERS=$prov PARITY_STUB=http://127.0.0.1:$P_PROV PARITY_HOST_TOKEN="$HOST_TOK" \
     PARITY_FRONT=$ENG_URL PARITY_LIVETV=http://127.0.0.1:$P_LIVETV PARITY_FILTER="$filter" \
-    "$TESTEXE" parity --ignored --nocapture) >"$out" 2>&1 3>&- </dev/null &
+    "$TESTEXE" parity::parity --ignored --nocapture) >"$out" 2>&1 3>&- </dev/null &
   PIDS+=($!)
   wait $!
   local rc=$? line ok failed skipped dev
