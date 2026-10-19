@@ -1,5 +1,4 @@
 import type { Episode, Media, Season } from '../../core/services/api/media.service';
-import type { SubtitleFileRow } from '../../core/services/api/subtitles-api.service';
 
 /**
  * Chemin « sur le disque » pour l’affichage : dossier racine du média + chemin relatif
@@ -110,18 +109,6 @@ export function seasonsVisibleWithDiskFilter(media: Media, onlyOnDisk: boolean):
 
 export type MediaFileRow = NonNullable<Media['files']>[number];
 
-/** Plus d’une version fichier → afficher un `<select>` pour choisir la qualité / la piste. */
-export function hasMultipleFileQualityChoices(files: MediaFileRow[]): boolean {
-  return files.length > 1;
-}
-
-/** Libellé d’option : qualité seule, ou qualité + taille si plusieurs fichiers ont la même étiquette. */
-export function fileQualityOptionLabel(f: MediaFileRow, siblings: MediaFileRow[]): string {
-  const same = siblings.filter((x) => x.quality === f.quality).length;
-  if (same > 1) return `${f.quality} · ${formatMediaDetailBytes(f.size)}`;
-  return f.quality;
-}
-
 /** Fichiers média explicitement liés à cet épisode (episodeId). */
 export function filesForEpisode(
   files: Media['files'],
@@ -132,15 +119,3 @@ export function filesForEpisode(
   );
 }
 
-/** Sous-titres rattachés à un épisode (episodeId ou fichier média de l’épisode). */
-export function subtitlesForEpisode(
-  all: SubtitleFileRow[],
-  episodeId: number,
-  files: { id: number; episodeId?: number | null }[] | undefined,
-): SubtitleFileRow[] {
-  return all.filter((s) => {
-    if (s.episodeId === episodeId) return true;
-    const f = files?.find((x) => x.id === s.mediaFileId);
-    return f?.episodeId === episodeId;
-  });
-}

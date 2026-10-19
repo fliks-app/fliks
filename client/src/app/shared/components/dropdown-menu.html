@@ -1,0 +1,26 @@
+<ng-template #triggerTpl><ng-content select="[trigger]"></ng-content></ng-template>
+<ng-template #itemsTpl><ng-content></ng-content></ng-template>
+
+@if (useDropdown()) {
+  <div class="dropdown" [class]="dropdownClasses()">
+    <div appDropdownToggle class="contents">
+      <ng-container *ngTemplateOutlet="triggerTpl"></ng-container>
+    </div>
+    <div
+      tabindex="0"
+      class="dropdown-content bg-base-200 rounded-box shadow-xl min-w-60 p-1 z-[101] overflow-y-auto overflow-x-hidden whitespace-nowrap"
+      [class]="maxHeight()"
+    >
+      <ng-container *ngTemplateOutlet="itemsTpl"></ng-container>
+    </div>
+  </div>
+} @else {
+  <div class="contents" (click)="open.set(true)">
+    <ng-container *ngTemplateOutlet="triggerTpl"></ng-container>
+  </div>
+  <app-bottom-sheet #sheet [open]="open()" [heading]="heading()" (closed)="open.set(false)">
+    <div data-tv-modal class="px-2 pb-2" (click)="onItemsClick($event)">
+      <ng-container *ngTemplateOutlet="itemsTpl"></ng-container>
+    </div>
+  </app-bottom-sheet>
+}

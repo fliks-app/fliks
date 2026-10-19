@@ -487,7 +487,7 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
       tracks.push({
         id: 'audio-' + i,
         language: t.language || 'und',
-        label: t.label || t.language || 'Track ' + (i + 1),
+        label: t.label || t.language || '',
         selected: !!t.enabled,
       });
     }

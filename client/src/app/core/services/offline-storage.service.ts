@@ -182,7 +182,6 @@ export class OfflineStorageService {
       const op: any = storage.store(hlsUrl, { title: meta.title, episode: meta.episode ?? '' });
       // storage.store() returns an AbortableOperation — await its .promise
       const stored = await (op.promise ?? op);
-      console.log('[Shaka offline] store result:', stored);
       const offlineUri: string | undefined = stored?.offlineUri;
       if (offlineUri) {
         this.setShakaOfflineUri(mediaFileId, offlineUri);

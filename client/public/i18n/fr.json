@@ -499,7 +499,8 @@
     "empty": "Aucun historique de lecture.",
     "completed": "Terminé",
     "remove": "Supprimer de l'historique",
-    "mark_watched": "Marquer comme vu"
+    "mark_watched": "Marquer comme vu",
+    "remove_confirm": "Retirer « {{title}} » de l'historique ?"
   },
   "admin": {
     "title": "Administration",
@@ -1502,7 +1503,10 @@
     "col_log_message": "Message",
     "device_mobile_app_named": "{{name}} (Application mobile)",
     "device_named": "{{name}}",
-    "device_apple_tv": "Apple TV ({{os}})"
+    "device_apple_tv": "Apple TV ({{os}})",
+    "backup_failed": "Échec de la sauvegarde",
+    "restore_failed": "Échec de la restauration",
+    "delete_backup_failed": "Échec de la suppression"
   },
   "qoe": {
     "title": "Qualité de lecture",
@@ -2201,7 +2205,8 @@
       "name_required": "Le nom est obligatoire.",
       "save_error": "Enregistrement impossible.",
       "save": "Enregistrer",
-      "cancel": "Annuler"
+      "cancel": "Annuler",
+      "test_failed": "Échec du test de connexion"
     },
     "media_servers": {
       "title": "Serveurs de medias",

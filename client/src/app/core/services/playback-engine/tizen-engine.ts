@@ -662,7 +662,7 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
         return {
           id: 'avplay-audio-' + t.index,
           language: meta.language ?? 'und',
-          label: meta.label ?? meta.language ?? 'Track ' + t.index,
+          label: meta.label ?? meta.language ?? '',
         } as AudioTrack;
       });
       if (this._audioTracks.length > 0) this.emitAudioTracks();

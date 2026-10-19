@@ -280,35 +280,29 @@ export class CastPlayerService {
       ?.getInstance?.()
       ?.getCurrentSession?.();
     if (!session) {
-      console.log('[fliks-cast/sender] probe skipped: no session');
       return;
     }
     const deviceName = session.getCastDevice?.()?.friendlyName;
     if (!deviceName) {
-      console.log('[fliks-cast/sender] probe skipped: no friendlyName');
       return;
     }
     // Skip if we already have caps for this device — the probe is idempotent
     // but each round-trip is ~150–300 ms and slows the first loadMedia.
     const cached = this.castSettings.getDeviceCapabilities(deviceName);
     if (cached) {
-      console.log('[fliks-cast/sender] probe skipped (cached):', deviceName, cached);
       return;
     }
 
     const namespace = 'urn:x-cast:app.fliks.caps';
-    console.log('[fliks-cast/sender] probing', deviceName, 'on', namespace);
     await new Promise<void>((resolve) => {
       let settled = false;
       const finish = (reason: string) => {
         if (settled) return;
         settled = true;
-        console.log('[fliks-cast/sender] probe finished:', reason);
         try { session.removeMessageListener?.(namespace, listener); } catch { /* noop */ }
         resolve();
       };
       const listener = (_ns: string, raw: string) => {
-        console.log('[fliks-cast/sender] probe reply raw:', raw);
         try {
           const data = JSON.parse(raw);
           if (data?.type !== 'caps') return;

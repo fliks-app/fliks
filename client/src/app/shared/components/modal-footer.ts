@@ -11,7 +11,7 @@ import {
  */
 @Component({
   selector: 'app-modal-footer',
-  template: '<ng-content />',
+  templateUrl: './modal-footer.html',
   host: {
     class: 'modal-action border-t border-base-200 bg-base-100',
     '[class]': `flush() ? 'shrink-0 mt-0 px-5 sm:px-6 pt-3 pb-4' : 'modal-footer-bar'`,

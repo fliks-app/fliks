@@ -7,7 +7,7 @@ import { MediaDetailIdentifyModalComponent } from '../../../features/media-detai
   selector: 'app-identify-modal-host',
   standalone: true,
   imports: [MediaDetailIdentifyModalComponent],
-  template: `<app-media-detail-identify-modal (identified)="service.markIdentified()" />`,
+  templateUrl: './identify-modal-host.html',
 })
 export class IdentifyModalHostComponent {
   protected readonly service = inject(IdentifyModalService);

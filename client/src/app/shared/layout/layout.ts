@@ -345,9 +345,6 @@ export class LayoutComponent implements OnInit, OnDestroy {
         this.refreshCounts();
       }, { once: true });
     }
-    if (this.device.isTv()) {
-      console.debug('[layout] remote-control entry point suppressed on tv: no controller UI on the 10-foot surface');
-    }
     // DownloadManagerService is activated by injection (effect in constructor)
     this.pageScroller.changes().pipe(takeUntilDestroyed(this.destroyRef)).subscribe(this.onScroll);
     if (this.isNative) {

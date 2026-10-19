@@ -499,7 +499,8 @@
     "empty": "Nessuna cronologia di riproduzione.",
     "completed": "Completato",
     "remove": "Rimuovi dalla cronologia",
-    "mark_watched": "Segna come visto"
+    "mark_watched": "Segna come visto",
+    "remove_confirm": "Rimuovere «{{title}}» dalla cronologia?"
   },
   "admin": {
     "title": "Amministrazione",
@@ -1502,7 +1503,10 @@
     "col_log_message": "Messaggio",
     "device_mobile_app_named": "{{name}} (App mobile)",
     "device_named": "{{name}}",
-    "device_apple_tv": "Apple TV ({{os}})"
+    "device_apple_tv": "Apple TV ({{os}})",
+    "backup_failed": "Backup non riuscito",
+    "restore_failed": "Ripristino non riuscito",
+    "delete_backup_failed": "Eliminazione non riuscita"
   },
   "qoe": {
     "title": "Qualità di riproduzione",
@@ -2201,7 +2205,8 @@
       "name_required": "Il nome è obbligatorio.",
       "save_error": "Salvataggio non riuscito.",
       "save": "Salva",
-      "cancel": "Annulla"
+      "cancel": "Annulla",
+      "test_failed": "Test di connessione non riuscito"
     },
     "media_servers": {
       "title": "Server multimediali",
