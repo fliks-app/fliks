@@ -1,5 +1,5 @@
 {
-  "deviation": null,
+  "deviation": "C170",
   "ignore": [
     "$..createdAt",
     "$..updatedAt",
@@ -15,75 +15,12 @@
       },
       "expect": {
         "body": {
-          "addedById": null,
-          "additionalFanartUrls": [],
-          "alternativeTitles": [],
-          "digitalRelease": null,
-          "fanartUrl": null,
-          "files": [
-            {
-              "episodeId": null,
-              "id": 103,
-              "language": "en",
-              "mediaId": 104,
-              "osdbBytesize": null,
-              "osdbHash": null,
-              "quality": "WEBDL-1080p",
-              "relativePath": "Work Solo (2019).mkv",
-              "size": 73237,
-              "streamInfo": null
-            }
-          ],
-          "folderName": "Work Solo (2019)",
-          "genres": [],
-          "id": 104,
-          "imdbId": null,
-          "inCinemas": null,
-          "languageProfile": null,
-          "languageProfileId": null,
-          "library": {
-            "color": "#3b82f6",
-            "defaultLanguageProfileId": null,
-            "defaultQualityProfileId": null,
-            "icon": "film",
-            "id": 1,
-            "label": null,
-            "mediaTypes": [
-              "movie"
-            ],
-            "metadataLanguage": null,
-            "metadataRegion": null,
-            "name": "Movies",
-            "path": "/tmp/fliks-parity/media/movies",
-            "preferredProvider": null
-          },
-          "libraryId": 1,
-          "logoUrl": null,
-          "metadata": null,
-          "minimumAvailability": "released",
-          "monitored": true,
-          "originalTitle": null,
-          "overview": "Own folder",
-          "path": "/tmp/fliks-parity/media/movies/Work Solo (2019)",
-          "physicalRelease": null,
-          "posterUrl": null,
-          "preferredProvider": null,
-          "qualityProfile": null,
-          "qualityProfileId": null,
-          "rating": null,
-          "releaseDate": null,
-          "runtime": null,
-          "seasons": [],
-          "status": "released",
-          "title": "Work Solo",
-          "tmdbCollectionId": null,
-          "tmdbCollectionName": null,
-          "tmdbId": 5104,
-          "tvdbId": null,
-          "type": "movie",
-          "year": 2019
+          "code": "media_has_files",
+          "error": "Conflict",
+          "message": "This media has files and cannot be moved to another library",
+          "statusCode": 409
         },
-        "status": 200
+        "status": 409
       },
       "method": "PATCH",
       "path": "/api/media/104/library"

@@ -2790,6 +2790,7 @@
     "404": "Resource not found",
     "409": "Conflict: the resource already exists",
     "already_running": "This is already running.",
+    "media_has_files": "A title with files cannot be moved to another library: its files would stay behind.",
     "media_already_in_playlist": "This media is already in the playlist",
     "playlist_add_target_required": "No media, episode or season specified",
     "translation_disabled": "Subtitle translation is disabled.",

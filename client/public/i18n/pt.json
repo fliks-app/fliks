@@ -2790,6 +2790,7 @@
     "404": "Recurso não encontrado",
     "409": "Conflito: o recurso já existe",
     "already_running": "Isto já está em execução.",
+    "media_has_files": "Um título com ficheiros não pode ser movido para outra biblioteca: os seus ficheiros ficariam onde estão.",
     "media_already_in_playlist": "Este media já está na lista",
     "playlist_add_target_required": "Nenhum media, episódio ou temporada indicado",
     "translation_disabled": "A tradução de legendas está desativada.",

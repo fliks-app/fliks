@@ -11,7 +11,12 @@ use crate::{
     libraries::{accessible_library_ids, assert_media_accessible},
     state::AppState,
 };
-use axum::{Json, extract::State, http::StatusCode};
+use axum::{
+    Json,
+    extract::State,
+    http::StatusCode,
+    response::{IntoResponse, Response},
+};
 use fliks_domain::acl::{Action, Subject};
 use serde_json::{Value, json};
 use sqlx::{PgConnection, Postgres, QueryBuilder};
@@ -298,18 +303,31 @@ async fn move_target(st: &AppState, a: &Authed, library_id: i32) -> Result<(), A
     Ok(())
 }
 
-/// `PATCH /api/media/:id/library` (rule 29): the row moves, the files do not.
+/// `PATCH /api/media/:id/library` (rule 29): 409 for a media with files (C170, `code: media_has_files`), which a move cannot carry.
 #[utoipa::path(patch, path = "/api/media/{id}/library", responses((status = 200)))]
 pub async fn patch_library(
     State(st): State<AppState>,
     a: Authed,
     id: Result<PathParams<i32>, AppError>,
     ValidJson(v): ValidJson<Value>,
-) -> Result<Json<Value>, AppError> {
+) -> Result<Response, AppError> {
     let id = gate(&st, &a, Action::Update, id).await?;
     let b = Body::new(v, &["libraryId"])?;
     let lib = b.required(b.id("libraryId")?, "libraryId", "must be an integer number")?;
     move_target(&st, &a, lib).await?;
+    let current = sqlx::query!(
+        r#"SELECT "libraryId" AS library_id,
+                  EXISTS (SELECT 1 FROM media_files WHERE "mediaId" = $1) AS "has_files!"
+           FROM media WHERE id = $1"#,
+        id
+    )
+    .fetch_optional(&st.db)
+    .await?;
+    if current.is_some_and(|c| c.has_files && c.library_id != Some(lib)) {
+        let body = json!({"statusCode": 409, "error": "Conflict", "code": "media_has_files",
+            "message": "This media has files and cannot be moved to another library"});
+        return Ok((StatusCode::CONFLICT, Json(body)).into_response());
+    }
     sqlx::query!(
         r#"UPDATE media SET "libraryId" = $1 WHERE id = $2"#,
         lib,
@@ -317,7 +335,7 @@ pub async fn patch_library(
     )
     .execute(&st.db)
     .await?;
-    Ok(Json(detail_or_404(&st, &a, id).await?))
+    Ok(Json(detail_or_404(&st, &a, id).await?).into_response())
 }
 
 async fn profile_exists(st: &AppState, language: bool, id: i32) -> Result<(), AppError> {

@@ -30,6 +30,8 @@ export class MediaDetailLibraryModalComponent {
   readonly selectedProvider = input<'tmdb' | 'tvdb' | null>(null);
   readonly saving = input(false);
   readonly saved = input(false);
+  /** A media with files cannot change library: the server refuses it (409). */
+  readonly libraryLocked = input(false);
 
   readonly selectedLibraryIdChange = output<number | null>();
   readonly selectedProviderChange = output<'tmdb' | 'tvdb' | null>();

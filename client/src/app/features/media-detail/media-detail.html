@@ -409,6 +409,7 @@
       <app-media-detail-library-modal
         [libraries]="libraries()"
         [selectedLibraryId]="selectedLibraryId()"
+        [libraryLocked]="mediaHasFiles()"
         [selectedProvider]="selectedProvider()"
         [saving]="libraryPatchSaving()"
         [saved]="libraryPatchSaved()"

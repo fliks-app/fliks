@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT \"libraryId\" AS library_id,\n                  EXISTS (SELECT 1 FROM media_files WHERE \"mediaId\" = $1) AS \"has_files!\"\n           FROM media WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "library_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "has_files!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      true,
+      null
+    ]
+  },
+  "hash": "a9c742933e16920b979bc0c356e141c8af83b2aedba7b7bc051ab0c6096c83c4"
+}
