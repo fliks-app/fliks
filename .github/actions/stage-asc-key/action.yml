@@ -1,0 +1,29 @@
+name: Stage App Store Connect API key
+description: Decodes the .p8 key to a file (the path Xcode looks it up at by default).
+inputs:
+  key-id:
+    required: true
+  key-p8-base64:
+    required: true
+  path:
+    description: Destination, default ~/.appstoreconnect/private_keys/AuthKey_<key-id>.p8
+    default: ''
+outputs:
+  path:
+    description: Where the key was written
+    value: ${{ steps.stage.outputs.path }}
+runs:
+  using: composite
+  steps:
+    - id: stage
+      shell: bash
+      env:
+        KEY_ID: ${{ inputs.key-id }}
+        KEY_P8: ${{ inputs.key-p8-base64 }}
+        DEST: ${{ inputs.path }}
+      run: |
+        p8="${DEST:-$HOME/.appstoreconnect/private_keys/AuthKey_$KEY_ID.p8}"
+        mkdir -p "$(dirname "$p8")"
+        echo "$KEY_P8" | base64 -d > "$p8"
+        chmod 600 "$p8"
+        echo "path=$p8" >> "$GITHUB_OUTPUT"
