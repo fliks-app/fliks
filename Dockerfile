@@ -14,12 +14,20 @@ COPY client/ .
 RUN npx ng build --configuration=production
 
 # --- Stage 2: Build fliks-server (Rust) ---
-FROM rust:1-bookworm AS server-build
+# Dependencies build in their own layer, keyed on the manifests: CI's layer cache keeps it,
+# while a BuildKit cache mount is lost with the runner.
+FROM lukemathwalker/cargo-chef:0.1.78-rust-1-bookworm AS server-chef
 WORKDIR /server
+
+FROM server-chef AS server-plan
 COPY server/ .
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/server/target \
-    SQLX_OFFLINE=true cargo build --release -p fliks-server \
+RUN cargo chef prepare --recipe-path recipe.json
+
+FROM server-chef AS server-build
+COPY --from=server-plan /server/recipe.json .
+RUN cargo chef cook --release -p fliks-server --recipe-path recipe.json
+COPY server/ .
+RUN SQLX_OFFLINE=true cargo build --release -p fliks-server \
     && cp target/release/fliks-server /usr/local/bin/fliks-server
 
 # --- Stage 3: Production runtime ---
