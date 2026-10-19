@@ -1,5 +1,8 @@
 {
-  "deviation": "F79",
+  "deviation": [
+    "F79",
+    "C169"
+  ],
   "ignore": [
     "$..createdAt",
     "$..updatedAt"
@@ -15,7 +18,7 @@
         "events": null,
         "name": "",
         "type": "jellyfin",
-        "url": "x"
+        "url": "http://x"
       },
       "expect": {
         "body": {
@@ -26,7 +29,7 @@
           "id": 7,
           "name": "",
           "type": "jellyfin",
-          "url": "x"
+          "url": "http://x"
         },
         "status": 201
       },

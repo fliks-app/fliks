@@ -150,6 +150,44 @@ impl Dto {
     }
 }
 
+/// C169: checks only what the write changes, so a stored row re-sent by a 4.x toggle passes.
+fn validate(dto: &Dto, cur: Option<&Server>) -> Res<()> {
+    let mut msgs = vec![];
+    if cur.is_none_or(|c| c.url != dto.url)
+        && !reqwest::Url::parse(&dto.url)
+            .is_ok_and(|u| matches!(u.scheme(), "http" | "https") && u.has_host())
+    {
+        msgs.push("url must be a URL address".to_owned());
+    }
+    let events: &[String] = match (&dto.events, cur) {
+        (Some(Some(e)), _) => e,
+        (_, Some(c)) => &c.events.0,
+        _ => &[],
+    };
+    if cur.is_none_or(|c| c.r#type != dto.r#type || c.events.0 != events) {
+        let supported: &[&str] = if dto.r#type == emby::TYPE {
+            &emby::EVENTS
+        } else {
+            &[]
+        };
+        if events.iter().any(|e| !supported.contains(&e.as_str())) {
+            msgs.push(if supported.is_empty() {
+                format!("type {} supports no events", dto.r#type)
+            } else {
+                format!(
+                    "each value in events must be one of the following values: {}",
+                    supported.join(", ")
+                )
+            });
+        }
+    }
+    if msgs.is_empty() {
+        Ok(())
+    } else {
+        Err(AppError::bad_request(msgs))
+    }
+}
+
 /// Body parsing after the policy check, as Nest's guards run before its pipes.
 async fn body(req: Request) -> Res<Value> {
     let ValidJson(v) = ValidJson::<Value>::from_request(req, &()).await?;
@@ -180,6 +218,7 @@ pub async fn create(
 ) -> Res<(StatusCode, Json<Server>)> {
     a.require(Action::Manage, Subject::Settings)?;
     let dto = Dto::parse(body(req).await?)?;
+    validate(&dto, None)?;
     let events = dto.events.flatten().unwrap_or_default();
     let id = db::insert(
         &st.db,
@@ -224,6 +263,7 @@ pub async fn update(
     let dto = Dto::parse(body(req).await?)?;
     dto.reject_nulls()?;
     let cur = one(&st, id).await?;
+    validate(&dto, Some(&cur))?;
     // F79: absent or "" keeps the stored key, null clears it.
     let api_key = match dto.api_key.as_ref() {
         Some(None) => None,
