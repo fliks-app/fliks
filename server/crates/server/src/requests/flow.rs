@@ -13,7 +13,7 @@ use crate::{
     state::AppState,
 };
 use axum::http::StatusCode;
-use chrono::{Days, Local};
+use chrono::Utc;
 use fliks_domain::acl::{Action, Subject};
 use serde_json::{Map, Value, json};
 use std::time::Duration;
@@ -129,15 +129,7 @@ async fn check_quota(st: &AppState, a: &Authed, media_type: &str) -> Res<()> {
         0 => 7,
         n => n,
     };
-    let now = Local::now();
-    let days = Days::new(u64::from(period.unsigned_abs()));
-    let since = if period >= 0 {
-        now.checked_sub_days(days)
-    } else {
-        now.checked_add_days(days)
-    }
-    .unwrap_or_else(|| now - chrono::Duration::days(i64::from(period)))
-    .to_utc();
+    let since = Utc::now() - chrono::Duration::days(i64::from(period));
     let count = db::quota_count(&st.db, a.user.id, media_type, since).await?;
     if count >= i64::from(limit) {
         return Err(AppError::forbidden(format!(

@@ -248,6 +248,7 @@ A 500 or a half-written request is never part of the frozen contract:
 | C160 | `runDetection` released the season and dropped its activity row only after the final `commands` update and `command.completed`, so a retry on that signal could get 400 `Detection already running` | both happen as soon as the detection settles, before the `commands` update and the events |
 | C161 | two concurrent `POST /api/requests` of one title both passed the duplicate guard (read, then insert) and both created an active ADD request | the guard and the insert run in one transaction under a per-title advisory lock; the loser is the usual 409 (`requests.md` rule 12) |
 | C162 | a request whose `import.complete` or `acquisition.grabbed` event was lost (server down, dropped) stayed `approved`/`processing` although its scope was on disk, until the next event for that media | a reconcile at startup and hourly runs the `import.complete` rule over every media with an open ADD request; no API or payload change (`requests.md` rule 44) |
+| C163 | the request quota window started `periodDays` calendar days back on the server-local calendar, so it was 23 or 25 hours off across a DST change | the window is `periodDays × 24 h` back from now (UTC days); no payload change (`requests.md` rule 13) |
 
 Frozen as is (decided): the heartbeat keeps its debounce entry after a failed history write and returns
 `sessionLost: false` when the engine session lives but presence cannot be rebuilt. Lists whose order comes
