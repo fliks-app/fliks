@@ -69,15 +69,11 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - name: Cache server build
-        uses: actions/cache@v4
+      # Dependencies only: the workspace crates rebuild every run, which keeps the cache small.
+      - uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            server/target
-          key: win-server-${{ hashFiles('server/Cargo.lock') }}
-          restore-keys: win-server-
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+          workspaces: server
 
       - uses: actions/setup-dotnet@v4
         with:

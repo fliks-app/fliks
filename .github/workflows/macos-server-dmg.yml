@@ -3,13 +3,28 @@
 #
 # Triggers:
 #   - release tag `v*` (from release-please) → attaches DMG to the release
-#   - manual workflow_dispatch               → uploads artifact for testing
+#   - push to main / manual workflow_dispatch → uploads artifact for testing
+#
+# Sibling of windows-installer.yml. Keep the two in sync.
 name: Build macOS server
 
 on:
+  # main seeds the caches: a tag or another branch can't restore a cache saved on a tag.
+  # Path filters don't apply to tag pushes.
   push:
+    branches: [main]
     tags: ['v*']
+    paths:
+      - 'macos/**'
+      - 'client/**'
+      - 'server/**'
+      - '!server/**/*.md'
+      - '.github/workflows/macos-server-dmg.yml'
   workflow_dispatch:
+
+# A main run must finish to save the caches.
+concurrency:
+  group: macos-server-dmg-${{ github.ref }}
 
 permissions:
   contents: write
@@ -54,15 +69,11 @@ jobs:
       # ── Rust for fliks-server (built by build-app) ──
       - uses: dtolnay/rust-toolchain@stable
 
-      - name: Cache server build
-        uses: actions/cache@v4
+      # Dependencies only: the workspace crates rebuild every run, which keeps the cache small.
+      - uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            server/target
-          key: macos-server-${{ hashFiles('server/Cargo.lock') }}
-          restore-keys: macos-server-
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+          workspaces: server
 
       # ── Homebrew dependencies ──
       # ffmpeg is not installed here — fetch-vendored.sh downloads jellyfin-ffmpeg.
@@ -75,7 +86,15 @@ jobs:
         run: ./Scripts/fetch-vendored.sh
 
       # ── Build Angular client ──
+      - name: Cache web build
+        id: webcache
+        uses: actions/cache@v4
+        with:
+          path: client/dist
+          key: macos-web-${{ hashFiles('client/package-lock.json', 'client/src/**', 'client/angular.json', 'client/tsconfig*.json') }}
+
       - name: Build client
+        if: steps.webcache.outputs.cache-hit != 'true'
         working-directory: client
         run: |
           npm ci
