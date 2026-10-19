@@ -1189,6 +1189,92 @@ mod guide_import {
     }
 
     #[sqlx::test(migrations = false)]
+    async fn a_guide_source_needs_what_its_kind_reads(pool: PgPool) {
+        let c = ctx(pool).await;
+        let (_, token) = viewer(&c, "admin", true).await;
+        let parent = source(&c, "P", "m3u", "http://h/x", 0).await;
+        let url_msg = json!(["url must be set when kind is xmltv"]);
+        let parent_msg = json!(["sourceId must be set when kind is source"]);
+        let post = |body: Value| {
+            call(
+                &c.app,
+                "POST",
+                "/api/livetv/admin/guide-sources",
+                &token,
+                Some(body),
+            )
+        };
+        for (body, msg) in [
+            (json!({"name": "n", "kind": "xmltv"}), &url_msg),
+            (json!({"name": "n", "kind": "source"}), &parent_msg),
+        ] {
+            let (s, b) = post(body).await;
+            assert_eq!((s, &b["message"]), (400, msg));
+        }
+        let (s, _) = post(json!({"name": "a", "kind": "xmltv", "url": "http://h/g.xml"})).await;
+        assert_eq!(s, 201);
+        let (s, _) = post(json!({"name": "b", "kind": "source", "sourceId": parent})).await;
+        assert_eq!(s, 201);
+        assert_eq!(count(&c.pool, "livetv_guide_sources").await, 2);
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_patch_fails_only_for_the_requirement_it_sets(pool: PgPool) {
+        let c = ctx(pool).await;
+        let (_, token) = viewer(&c, "admin", true).await;
+        let parent = source(&c, "P", "m3u", "http://h/x", 0).await;
+        let row = |name: &'static str,
+                   kind: &'static str,
+                   url: Option<&'static str>,
+                   sid: Option<i32>| {
+            let pool = c.pool.clone();
+            async move {
+                sqlx::query_scalar::<_, i32>(r#"INSERT INTO livetv_guide_sources (name, kind, url, "sourceId") VALUES ($1, $2, $3, $4) RETURNING id"#)
+                    .bind(name).bind(kind).bind(url).bind(sid)
+                    .fetch_one(&pool).await.unwrap()
+            }
+        };
+        let bare = row("bare", "xmltv", None, None).await;
+        let linked = row("linked", "source", None, Some(parent)).await;
+        let feed = row("feed", "xmltv", Some("http://h/g.xml"), None).await;
+        let (app, token) = (&c.app, &token);
+        let patch = |id: i32, body: Value| async move {
+            let uri = format!("/api/livetv/admin/guide-sources/{id}");
+            call(app, "PATCH", &uri, token, Some(body)).await
+        };
+        for (id, body) in [
+            (bare, json!({"enabled": false})),
+            (bare, json!({"sourceId": parent})),
+            (linked, json!({"name": "renamed"})),
+            (
+                linked,
+                json!({"kind": "xmltv", "url": "http://h/g.xml", "sourceId": null}),
+            ),
+        ] {
+            let (s, b) = patch(id, body.clone()).await;
+            assert_eq!(s, 200, "{body}: {b}");
+        }
+        let (s, b) = patch(bare, json!({"kind": "xmltv"})).await;
+        assert_eq!(
+            (s, &b["message"]),
+            (400, &json!(["url must be set when kind is xmltv"]))
+        );
+        let (s, _) = patch(feed, json!({"url": null})).await;
+        assert_eq!(s, 400);
+        let (s, b) = patch(feed, json!({"kind": "source"})).await;
+        assert_eq!(
+            (s, &b["message"]),
+            (400, &json!(["sourceId must be set when kind is source"]))
+        );
+        let (s, _) = patch(
+            row("l2", "source", None, Some(parent)).await,
+            json!({"sourceId": null}),
+        )
+        .await;
+        assert_eq!(s, 400);
+    }
+
+    #[sqlx::test(migrations = false)]
     async fn prune_removes_both_sides_of_the_window(pool: PgPool) {
         let c = ctx(pool).await;
         let g: i32 = sqlx::query_scalar(

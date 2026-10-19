@@ -154,6 +154,9 @@
         <label class="form-control w-full">
           <span class="label-text">{{ 'liveTv.admin.sources.field_url' | translate }}</span>
           <input type="url" class="input input-bordered input-sm w-full" [ngModel]="formUrl()" (ngModelChange)="formUrl.set($event)" />
+          @if (!formUrl().trim()) {
+            <span class="label-text-alt text-error">{{ 'liveTv.admin.guide.url_required' | translate }}</span>
+          }
         </label>
       } @else {
         <label class="form-control w-full">
@@ -163,6 +166,9 @@
               <option [ngValue]="s.id">{{ s.name }}</option>
             }
           </select>
+          @if (formSourceId() === null) {
+            <span class="label-text-alt text-error">{{ 'liveTv.admin.guide.source_required' | translate }}</span>
+          }
         </label>
       }
       <div class="grid grid-cols-2 gap-3">
@@ -182,7 +188,7 @@
     </div>
     <app-modal-footer flush>
       <button type="button" class="btn btn-ghost" (click)="closeEditor()" [disabled]="saving()">{{ 'common.cancel' | translate }}</button>
-      <button type="button" class="btn btn-primary" (click)="save()" [disabled]="saving()">
+      <button type="button" class="btn btn-primary" (click)="save()" [disabled]="saving() || !canSave()">
         @if (saving()) {
           <span class="loading loading-spinner loading-sm"></span>
         }
