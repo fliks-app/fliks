@@ -1,3 +1,4 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
 import { describe, expect, it, vi } from 'vitest';
 import { TranslateService } from '@ngx-translate/core';
@@ -106,6 +107,13 @@ describe('PlayerStateService.failWith', () => {
     const { service } = setup();
     service.failWith(undefined, { source: 'session' });
     expect(service.error()?.source).toBe('session');
+  });
+
+  it("shows the server's reason for a failed playback-info request", () => {
+    const { service } = setup();
+    const msg = service.failWith(new HttpErrorResponse({ status: 404, error: { message: 'Invalid file path' } }));
+    expect(msg).toBe('Invalid file path');
+    expect(service.error()?.code).toBe(404);
   });
 });
 

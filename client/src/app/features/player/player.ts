@@ -998,7 +998,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       let playbackInfoPromise: ReturnType<StreamingApiService['getPlaybackInfo']> | null = null;
       const requestPlaybackInfo = () => {
         if (this.isOfflinePlayback || playbackInfoPromise) return;
-        playbackInfoPromise = this.negotiatePlayback(resumeTime);
+        // The launch failure path shows the server's reason in its own toast and card.
+        playbackInfoPromise = this.negotiatePlayback(resumeTime, {}, { skipErrorToast: true });
       };
       // Mint the long-lived stream JWT in parallel with media/state/playback-info
       // load instead of serially before engine init — it's on the time-to-first-
@@ -2989,6 +2990,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private negotiatePlayback(
     startAt?: number,
     over: Partial<{ fileId: number; profile: DeviceProfile; burnInId: number | null; quality: string }> = {},
+    opts?: { skipErrorToast?: boolean },
   ): Promise<PlaybackInfoResponse> {
     const fileId = over.fileId ?? this.mediaFileId;
     const onScreen = fileId === this.mediaFileId;
@@ -3007,6 +3009,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       request.audioStreamIndex,
       request.quality,
       startAt,
+      undefined,
+      opts,
     );
   }
 

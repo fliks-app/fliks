@@ -1,4 +1,5 @@
 import { Injectable, computed, effect, inject, signal } from '@angular/core';
+import { HttpErrorResponse } from '@angular/common/http';
 import { TranslateService } from '@ngx-translate/core';
 import { pausedFlagForState, type PlaybackEngine } from './playback-engine/playback-engine';
 import {
@@ -9,6 +10,7 @@ import {
   type PlaybackError,
 } from './playback-engine/playback-error';
 import type { PlaybackMode } from '../utils/player.utils';
+import { translatedServerMessage } from '../utils/server-message';
 
 /** localStorage key for the persisted output level (a bare 0..1 number). */
 const VOLUME_KEY = 'player.volume';
@@ -154,9 +156,12 @@ export class PlayerStateService {
     const source = opts?.source ?? classified.source;
     const code = classified.code;
     const err = e as { category?: number; severity?: number; data?: unknown[]; message?: string } | null | undefined;
-    const userMessage = this.translate.instant(
-      userMessageKeyFor({ source, code, category: err?.category, dolbyVision: opts?.dolbyVision }),
-    );
+    // The server's reason (missing file, no root folder) says more than a generic line.
+    const userMessage =
+      (e instanceof HttpErrorResponse ? translatedServerMessage(e.error?.message, this.translate) : null) ??
+      this.translate.instant(
+        userMessageKeyFor({ source, code, category: err?.category, dolbyVision: opts?.dolbyVision }),
+      );
     this.setError(userMessage, {
       source,
       code,
