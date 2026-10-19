@@ -395,7 +395,8 @@ private struct SkipCueStyle: ButtonStyle {
         item.externalMetadata = base
         guard let url = ImageURL.build(found?.episode.stillUrl ?? media.posterUrl).flatMap(URL.init(string:)) else { return }
         Task {
-            guard let data = await ImageCache.load(url)?.jpegData(compressionQuality: 0.85),
+            // The image endpoint serves JPEG: hand the cached bytes over, no decode and re-encode.
+            guard let (data, _) = try? await URLSession.shared.data(from: url),
                   player?.currentItem === item else { return }
             item.externalMetadata = base + [Self.metadataItem(.commonIdentifierArtwork, data as NSData, dataType: kCMMetadataBaseDataType_JPEG)]
         }
