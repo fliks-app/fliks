@@ -1,10 +1,6 @@
 import { Capacitor } from '@capacitor/core';
 import type { PlaybackEngine } from './playback-engine';
-import { ShakaEngine } from './shaka-engine';
-import { NativeEngine } from './native-engine';
-import { DesktopEngine } from './desktop-engine';
-import { TizenEngine, isTizenAvplayAvailable } from './tizen-engine';
-import { WebOsEngine } from './webos-engine';
+import { isTizenAvplayAvailable } from './tizen-engine';
 
 export type EngineSurfaceKind = 'shaka' | 'webos' | 'tizen' | 'native' | 'desktop';
 
@@ -62,18 +58,19 @@ export function releaseEngineSurface(): void {
   document.documentElement.classList.remove('native-player-active');
 }
 
-function engineFor(kind: EngineSurfaceKind): PlaybackEngine {
+/** Loaded on demand: Shaka is ~780 KB that no native or TV engine needs. */
+async function engineFor(kind: EngineSurfaceKind): Promise<PlaybackEngine> {
   switch (kind) {
     case 'tizen':
-      return new TizenEngine();
+      return new (await import('./tizen-engine')).TizenEngine();
     case 'webos':
-      return new WebOsEngine();
+      return new (await import('./webos-engine')).WebOsEngine();
     case 'native':
-      return new NativeEngine();
+      return new (await import('./native-engine')).NativeEngine();
     case 'desktop':
-      return new DesktopEngine();
+      return new (await import('./desktop-engine')).DesktopEngine();
     default:
-      return new ShakaEngine();
+      return new (await import('./shaka-engine')).ShakaEngine();
   }
 }
 
@@ -83,8 +80,8 @@ export async function createEngineSurface(opts: {
   video: HTMLVideoElement;
   container?: HTMLElement | null;
 }): Promise<EngineSurface> {
+  const engine = await engineFor(opts.kind);
   const target = applySurfaceContract(opts.kind, opts.video, opts.container);
-  const engine = engineFor(opts.kind);
   await engine.init(target);
   return { engine, kind: opts.kind, usesNativeSurface: usesNativeSurface(opts.kind) };
 }
