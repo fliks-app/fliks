@@ -324,6 +324,8 @@ pub async fn create(st: &AppState, a: &Authed, mut dto: CreateRequest) -> Res<Va
         return create_delete(st, a, &dto).await;
     }
     check_quota(st, a, &dto.media_type).await?;
+    let mut tx = st.db.begin().await?;
+    db::lock_title(&mut tx, dto.tmdb_id, &dto.media_type).await?;
     assert_no_active_duplicate(st, &dto).await?;
     if let Some(l) = dto.library_id {
         assert_can_use_library(st, a, l).await?;
@@ -359,7 +361,7 @@ pub async fn create(st: &AppState, a: &Authed, mut dto: CreateRequest) -> Res<Va
         None
     };
     let id = db::insert(
-        &st.db,
+        &mut *tx,
         db::New {
             user_id: a.user.id,
             kind: "add",
@@ -378,6 +380,7 @@ pub async fn create(st: &AppState, a: &Authed, mut dto: CreateRequest) -> Res<Va
         },
     )
     .await?;
+    tx.commit().await?;
 
     st.hub.emit_domain(DomainEvent::RequestCreated {
         request_id: i64::from(id),
