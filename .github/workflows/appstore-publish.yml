@@ -57,12 +57,11 @@ jobs:
 
       # Apple raised the minimum SDK to iOS 26 (Xcode 26.x) on the
       # 2026 cutover — anything older fails altool validation with
-      # "SDK version issue". `latest-stable` rides along when GitHub
-      # bumps the macos-15 image; pin to `'26.x'` explicitly to
-      # freeze a known-good combo.
+      # "SDK version issue". Pinned so a runner image bump
+      # can't change the SDK; raise it deliberately.
       - uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: latest-stable
+          xcode-version: '26.3'
 
       - name: Install client dependencies
         run: npm ci

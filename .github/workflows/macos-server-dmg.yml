@@ -67,7 +67,7 @@ jobs:
           cache-dependency-path: client/package-lock.json
 
       # ── Rust for fliks-server (built by build-app) ──
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: ./.github/actions/setup-rust
 
       # Dependencies only: the workspace crates rebuild every run, which keeps the cache small.
       - uses: Swatinem/rust-cache@v2

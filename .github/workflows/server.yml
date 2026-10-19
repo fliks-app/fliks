@@ -53,10 +53,7 @@ jobs:
       FLIKS_TEST_WASM_DIR: ${{ github.workspace }}/server/crates/plugin-sdk/target/wasm32-wasip2/release
     steps:
       - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
-          targets: wasm32-wasip2
+      - uses: ./.github/actions/setup-rust
       - uses: Swatinem/rust-cache@v2
         with:
           # PR caches would evict main's from the repository's 10 GB.

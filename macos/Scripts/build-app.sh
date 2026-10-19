@@ -107,7 +107,7 @@ chmod +x "$RESOURCES/bin/fliks-engine"
 
 # ── fliks-server (Rust, built here; runs behind the engine) ──
 echo "    [server] Building fliks-server..."
-(cd "$REPO_ROOT/server" && cargo build --release -p fliks-server)
+(cd "$REPO_ROOT/server" && cargo build --release --locked -p fliks-server)
 cp "$REPO_ROOT/server/target/release/fliks-server" "$RESOURCES/bin/"
 
 # ── PostgreSQL (from Homebrew installed, needs dylib bundling) ──
