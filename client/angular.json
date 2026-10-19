@@ -36,8 +36,25 @@
               "budgets": [
                 {
                   "type": "initial",
-                  "maximumWarning": "2MB",
-                  "maximumError": "4MB"
+                  "maximumWarning": "1.5MB",
+                  "maximumError": "1.75MB"
+                },
+                {
+                  "type": "bundle",
+                  "name": "player",
+                  "maximumWarning": "160kB",
+                  "maximumError": "200kB"
+                },
+                {
+                  "type": "bundle",
+                  "name": "media-detail",
+                  "maximumWarning": "300kB",
+                  "maximumError": "360kB"
+                },
+                {
+                  "type": "anyScript",
+                  "maximumWarning": "900kB",
+                  "maximumError": "1MB"
                 },
                 {
                   "type": "anyComponentStyle",
@@ -62,7 +79,9 @@
                 "fonts": true
               },
               "budgets": [
-                { "type": "initial", "maximumWarning": "2MB", "maximumError": "5MB" }
+                { "type": "initial", "maximumWarning": "1.5MB", "maximumError": "2MB" },
+                { "type": "bundle", "name": "player", "maximumWarning": "170kB", "maximumError": "210kB" },
+                { "type": "anyScript", "maximumWarning": "900kB", "maximumError": "1MB" }
               ]
             },
             "webos": {
@@ -75,7 +94,9 @@
                 "fonts": true
               },
               "budgets": [
-                { "type": "initial", "maximumWarning": "2MB", "maximumError": "5MB" }
+                { "type": "initial", "maximumWarning": "1.5MB", "maximumError": "2MB" },
+                { "type": "bundle", "name": "player", "maximumWarning": "170kB", "maximumError": "210kB" },
+                { "type": "anyScript", "maximumWarning": "900kB", "maximumError": "1MB" }
               ]
             }
           },

@@ -1,6 +1,7 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import {
   applySurfaceContract,
+  createEngineSurface,
   engineSurfaceKind,
   releaseEngineSurface,
   usesNativeSurface,
@@ -69,5 +70,20 @@ describe('applySurfaceContract', () => {
     applySurfaceContract('native', video, container);
     releaseEngineSurface();
     expect(hasHook()).toBe(false);
+  });
+});
+
+describe('createEngineSurface', () => {
+  afterEach(() => releaseEngineSurface());
+
+  it('builds the engine of the requested kind and applies its surface contract', async () => {
+    const video = document.createElement('video');
+    Object.defineProperty(video, 'audioTracks', { value: new EventTarget() });
+    document.body.appendChild(video);
+    const { engine, kind, usesNativeSurface: native } = await createEngineSurface({ kind: 'webos', video });
+    expect(kind).toBe('webos');
+    expect(native).toBe(false);
+    expect(engine.constructor.name).toBe('WebOsEngine');
+    video.remove();
   });
 });

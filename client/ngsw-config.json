@@ -11,6 +11,16 @@
           "/index.html",
           "/manifest.webmanifest",
           "/*.css",
+          "/main-*.js"
+        ]
+      }
+    },
+    {
+      "name": "chunks",
+      "installMode": "lazy",
+      "updateMode": "prefetch",
+      "resources": {
+        "files": [
           "/*.js"
         ]
       }
