@@ -52,7 +52,7 @@ fn media_dir(media: &MediaRow) -> Result<(fsx::Root, PathBuf), AppError> {
     let dir = root
         .media_dir(media.folder_name.as_deref())
         .map_err(AppError::bad_request)?;
-    let real = fs::canonicalize(&dir).map_err(|_| missing(&dir.to_string_lossy()))?;
+    let real = dunce::canonicalize(&dir).map_err(|_| missing(&dir.to_string_lossy()))?;
     if !real.is_dir() || !real.starts_with(root.path()) {
         return Err(missing(&dir.to_string_lossy()));
     }
@@ -540,7 +540,7 @@ pub async fn link_in_place(
     let Ok((real, meta)) = fsx::regular_source(abs) else {
         return Ok(Err("not a regular file".into()));
     };
-    let real_dir = fs::canonicalize(&dir).unwrap_or(dir.clone());
+    let real_dir = dunce::canonicalize(&dir).unwrap_or(dir.clone());
     let Some(rel) = fsx::rel_under(&real_dir, &real).filter(|_| root.contains(&real, false)) else {
         return outside();
     };

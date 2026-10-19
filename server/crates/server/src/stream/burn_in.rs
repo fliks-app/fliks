@@ -56,9 +56,7 @@ pub async fn resolve(
         if trimmed.is_empty() || !absolute.starts_with(&file.root) {
             return Err(missing());
         }
-        let real = tokio::fs::canonicalize(&absolute)
-            .await
-            .map_err(|_| missing())?;
+        let real = dunce::canonicalize(&absolute).map_err(|_| missing())?;
         (
             Some(real.to_string_lossy().into_owned()),
             None,

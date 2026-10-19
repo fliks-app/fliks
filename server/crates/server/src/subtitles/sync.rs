@@ -383,7 +383,7 @@ fn reference(raw: Option<&str>, dirs: &Dirs) -> Result<SyncReference, String> {
             .ok_or_else(bad)?,
         )
     };
-    let real = std::fs::canonicalize(&abs).map_err(|_| bad())?;
+    let real = dunce::canonicalize(&abs).map_err(|_| bad())?;
     let ext = real
         .extension()
         .and_then(|e| e.to_str())

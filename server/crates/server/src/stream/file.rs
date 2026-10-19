@@ -106,9 +106,7 @@ pub async fn resolve_file(
     let meta = tokio::fs::metadata(&absolute).await.map_err(|_| {
         AppError::not_found(format!("File not found on disk: {}", absolute.display()))
     })?;
-    let real = tokio::fs::canonicalize(&absolute)
-        .await
-        .map_err(|_| invalid())?;
+    let real = dunce::canonicalize(&absolute).map_err(|_| invalid())?;
     if !real.starts_with(&root) {
         return Err(invalid());
     }

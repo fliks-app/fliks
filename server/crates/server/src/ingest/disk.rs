@@ -751,8 +751,9 @@ async fn link_files(
             let name = file_name(Path::new(&f.path));
             // F47: an in-place reorganize moves files that are already in this library, nothing else.
             if d.transfer.is_none()
-                && !fsx::Root::open(&lib.path)
-                    .is_ok_and(|r| fs::canonicalize(&f.path).is_ok_and(|p| r.contains(&p, false)))
+                && !fsx::Root::open(&lib.path).is_ok_and(|r| {
+                    dunce::canonicalize(&f.path).is_ok_and(|p| r.contains(&p, false))
+                })
             {
                 errors.push(format!("{name}: file outside the library root"));
                 continue;
@@ -1245,7 +1246,7 @@ async fn find_or_create_unmatched(
             if d.transfer.is_none() {
                 let outside = || AppError::bad_request("File outside the library root");
                 let root = fsx::Root::open(&lib.path).map_err(|_| outside())?;
-                let real = fs::canonicalize(&sample).map_err(|_| outside())?;
+                let real = dunce::canonicalize(&sample).map_err(|_| outside())?;
                 if !root.contains(&real, false) || !root.contains(&art_dir, true) {
                     return Err(outside());
                 }
