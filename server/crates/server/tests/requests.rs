@@ -524,6 +524,30 @@ async fn quota_counts_only_pending_and_approved_adds_and_blocks_at_the_limit(poo
 }
 
 #[sqlx::test(migrations = false)]
+async fn the_quota_window_is_the_period_in_24_hour_days(pool: PgPool) {
+    let c = ctx(pool).await;
+    q(
+        &c.pool(),
+        r#"UPDATE users SET "movieQuotaLimit" = 1, "quotaPeriodDays" = 3 WHERE username = 'user'"#,
+    )
+    .await;
+    let (s, _) = call(&c, "POST", "/api/requests", &c.user, movie(55)).await;
+    assert_eq!(s, 201);
+    for (age, want) in [("71 hours", 403), ("73 hours", 201)] {
+        q(
+            &c.pool(),
+            &format!(
+                r#"UPDATE requests SET "createdAt" = now() - interval '{age}' WHERE "tmdbId" = 55"#
+            ),
+        )
+        .await;
+        let (s, _) = call(&c, "POST", "/api/requests", &c.user, movie(56)).await;
+        assert_eq!(s, want, "{age}");
+        q(&c.pool(), r#"DELETE FROM requests WHERE "tmdbId" = 56"#).await;
+    }
+}
+
+#[sqlx::test(migrations = false)]
 async fn duplicates_series_seasons_and_profile_lock(pool: PgPool) {
     let c = ctx(pool).await;
     q(&c.pool(), "INSERT INTO quality_profiles (id, name, cutoff, items) VALUES (1, 'HD', 1, '[]'), (2, 'SD', 1, '[]')").await;

@@ -188,6 +188,21 @@ async fn self_update_rules(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
+async fn a_quota_period_below_one_day_is_refused(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (admin, t) = c.user("admin", "[]", true).await;
+    for days in [-1, 0] {
+        let (s, _) = put(&c, &t, admin, json!({"quotaPeriodDays": days})).await;
+        assert_eq!(s, 400, "{days}");
+    }
+    assert_eq!(
+        put(&c, &t, admin, json!({"quotaPeriodDays": 1})).await.0,
+        200
+    );
+    assert_eq!(c.column::<i32>(admin, "quotaPeriodDays").await, 1);
+}
+
+#[sqlx::test(migrations = false)]
 async fn admin_guards_f10(pool: PgPool) {
     let c = ctx(pool).await;
     let (admin, tadmin) = c.user("admin", "[]", true).await;
