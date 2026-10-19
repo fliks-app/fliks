@@ -16,7 +16,8 @@ export type TvPlatform = 'androidtv' | 'tizen' | 'webos' | null;
  */
 export type DesktopPlatform = 'electron' | null;
 
-const TABLET_MIN_WIDTH = 768;
+/** Android's sw600dp tablet cut, on the shorter side so the launch orientation doesn't matter. */
+const TABLET_MIN_SHORT_SIDE = 600;
 const OVERRIDE_KEY = 'fliks.deviceOverride';
 const TV_PLATFORM_OVERRIDE_KEY = 'fliks.tvPlatformOverride';
 
@@ -92,10 +93,10 @@ export function detectDevice(): DetectResult {
   // 7. Coarse pointer → touch device, split by viewport
   const coarse = mm && mm('(pointer: coarse)').matches;
   if (coarse) {
-    const vw = window.innerWidth || document.documentElement.clientWidth || 0;
+    const side = Math.min(window.innerWidth, window.innerHeight);
     return {
       input: 'touch',
-      formFactor: vw < TABLET_MIN_WIDTH ? 'phone' : 'tablet',
+      formFactor: side < TABLET_MIN_SHORT_SIDE ? 'phone' : 'tablet',
       tvPlatform: null,
     };
   }
@@ -130,7 +131,7 @@ interface DetectResult {
  *  5. TV-only UA sniff (BRAVIA / SHIELD / Fire TV / GoogleTV) on native Android.
  *  6. URL `?tv=1` / `?tablet=1` / `?phone=1` (persisted in localStorage) for QA.
  *     `?tvplatform=tizen|webos|androidtv` pins the platform when forcing TV.
- *  7. `(pointer: coarse)` → phone if vw < 768, tablet otherwise.
+ *  7. `(pointer: coarse)` → phone if the shorter viewport side is < 600, tablet otherwise.
  *  8. Default → desktop + mouse.
  *
  * `body.{tv,tablet,phone}` classes are kept in sync so global Tailwind/CSS variants
