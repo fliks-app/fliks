@@ -97,6 +97,8 @@
       "track": "Pista de subtítulos",
       "save": "Guardar",
       "sync_other": "Sincronizar con otra pista",
+      "reset": "Restablecer",
+      "sync_failed": "Falló la sincronización de los subtítulos",
       "apply": "Aplicar",
       "embedded_hint": "Los subtítulos incrustados no se pueden guardar ni sincronizar. La vista previa sigue funcionando.",
       "discard_title": "¿Descartar el desfase?",

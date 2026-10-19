@@ -97,6 +97,8 @@
       "track": "Traccia dei sottotitoli",
       "save": "Salva",
       "sync_other": "Sincronizza su un'altra traccia",
+      "reset": "Ripristina",
+      "sync_failed": "Sincronizzazione dei sottotitoli non riuscita",
       "apply": "Applica",
       "embedded_hint": "I sottotitoli incorporati non possono essere salvati né sincronizzati. L'anteprima continua a funzionare.",
       "discard_title": "Scartare lo scostamento?",

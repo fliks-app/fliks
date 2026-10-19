@@ -49,7 +49,10 @@ export class SubtitleOverlay {
 
   /** Multiplies every preset on the ladder, so a platform can shift the whole
    *  scale without redefining the presets. */
-  constructor(private readonly sizeScale = 1) {}
+  constructor(
+    private readonly sizeScale = 1,
+    private readonly idPrefix = 'fliks-tv-subtitle',
+  ) {}
 
   /** Fetch and parse a remote WebVTT file; rejects when it cannot be loaded. */
   async load(url: string): Promise<SubtitleHandle> {
@@ -169,7 +172,7 @@ export class SubtitleOverlay {
     }
     const make = (band: Band) => {
       const el = document.createElement('div');
-      el.id = band === 'top' ? 'fliks-tv-subtitle-top' : 'fliks-tv-subtitle';
+      el.id = band === 'top' ? `${this.idPrefix}-top` : this.idPrefix;
       el.style.cssText = [
         'position: absolute',
         'left: 50%',

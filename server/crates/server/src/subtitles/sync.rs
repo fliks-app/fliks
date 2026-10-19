@@ -415,6 +415,16 @@ pub async fn do_sync(st: &AppState, id: i32, o: &Options) -> Result<(), String> 
         .bind(msg)
         .execute(&st.db)
         .await;
+        events::emit(
+            st,
+            media.id,
+            SseEvent::SubtitleSyncFailed {
+                subtitle_id: id.into(),
+                error: detail.chars().take(2000).collect(),
+                media_id: Some(media.id.into()),
+            },
+        )
+        .await;
         return Err(format!("Sync failed: {detail}"));
     }
     sqlx::query(r#"UPDATE subtitle_files SET synced = true, status = 'synced', "syncFailed" = false, "errorMessage" = NULL WHERE id = $1"#)

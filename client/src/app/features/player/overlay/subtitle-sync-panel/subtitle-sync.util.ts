@@ -1,8 +1,9 @@
 import type { VttCue } from '../../../../core/services/playback-engine/subtitle-overlay.util';
 
 /** Pixels of list per second of video: the single zoom knob of the panel. */
-export const PX_PER_SEC = 60;
-export const MIN_CUE_PX = 28;
+export const PX_PER_SEC = 20;
+export const MIN_CUE_PX = 48;
+const CUE_GAP_PX = 4;
 /** Quiet time after the last user scroll event before the offset is committed. */
 export const SETTLE_MS = 200;
 export const KEY_STEP_SEC = 0.1;
@@ -10,10 +11,26 @@ export const KEY_STEP_SEC = 0.1;
 /** Content is padded by half a viewport so both ends of the video reach the centre line. */
 export const contentHeight = (duration: number, viewH: number, scale = PX_PER_SEC) => duration * scale + viewH;
 
-export const cueTop = (c: VttCue, offset: number, viewH: number, scale = PX_PER_SEC) =>
-  (c.start + offset) * scale + viewH / 2;
-
 export const cueHeight = (c: VttCue, scale = PX_PER_SEC) => Math.max(MIN_CUE_PX, (c.end - c.start) * scale);
+
+export interface CueBox {
+  top: number;
+  height: number;
+}
+
+/** Cue boxes at offset 0; a cue that would overlap the previous one is pushed below it. */
+export function layoutCues(cues: readonly VttCue[], scale = PX_PER_SEC): CueBox[] {
+  let bottom = -Infinity;
+  return cues.map((c) => {
+    const height = cueHeight(c, scale);
+    const top = Math.max(c.start * scale, bottom + CUE_GAP_PX);
+    bottom = top + height;
+    return { top, height };
+  });
+}
+
+export const boxTop = (b: CueBox, offset: number, viewH: number, scale = PX_PER_SEC) =>
+  b.top + offset * scale + viewH / 2;
 
 /** scrollTop that puts the centre line on video time `t`. */
 export const scrollTopForTime = (t: number, scale = PX_PER_SEC) => t * scale;
@@ -39,17 +56,19 @@ export function activeCues(cues: readonly VttCue[], t: number, offset: number): 
 /** Cues overlapping one viewport above and below the one at `scrollTop`. */
 export function visibleCues(
   cues: readonly VttCue[],
+  boxes: readonly CueBox[],
   offset: number,
   scrollTop: number,
   viewH: number,
   scale = PX_PER_SEC,
-): { cue: VttCue; index: number }[] {
+): { cue: VttCue; box: CueBox; index: number }[] {
   const lo = scrollTop - viewH;
   const hi = scrollTop + 2 * viewH;
-  const out: { cue: VttCue; index: number }[] = [];
+  const out: { cue: VttCue; box: CueBox; index: number }[] = [];
   cues.forEach((cue, index) => {
-    const top = cueTop(cue, offset, viewH, scale);
-    if (top <= hi && top + cueHeight(cue, scale) >= lo) out.push({ cue, index });
+    const box = boxes[index];
+    const top = boxTop(box, offset, viewH, scale);
+    if (top <= hi && top + box.height >= lo) out.push({ cue, box, index });
   });
   return out;
 }

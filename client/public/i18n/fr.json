@@ -97,6 +97,8 @@
       "track": "Piste de sous-titres",
       "save": "Enregistrer",
       "sync_other": "Synchroniser sur une autre piste",
+      "reset": "Réinitialiser",
+      "sync_failed": "La synchronisation des sous-titres a échoué",
       "apply": "Appliquer",
       "embedded_hint": "Les sous-titres intégrés ne peuvent être ni enregistrés ni synchronisés. L'aperçu reste disponible.",
       "discard_title": "Abandonner le décalage ?",

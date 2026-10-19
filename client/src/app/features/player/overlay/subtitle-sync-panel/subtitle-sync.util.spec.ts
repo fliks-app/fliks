@@ -2,7 +2,8 @@ import {
   PX_PER_SEC,
   activeCues,
   contentHeight,
-  cueTop,
+  boxTop,
+  layoutCues,
   formatOffset,
   isUserScroll,
   offsetFromScroll,
@@ -20,7 +21,7 @@ describe('subtitle sync maths', () => {
   it('centres time t at scrollTop t*scale with half-viewport padding', () => {
     expect(scrollTopForTime(10)).toBe(10 * PX_PER_SEC);
     expect(contentHeight(120, 400)).toBe(120 * PX_PER_SEC + 400);
-    expect(cueTop(cues[0], 0, 400)).toBe(PX_PER_SEC + 200);
+    expect(boxTop(layoutCues(cues)[0], 0, 400)).toBe(PX_PER_SEC + 200);
   });
 
   it('turns a scroll away from now into the offset that brings the centred cue to now', () => {
@@ -40,15 +41,23 @@ describe('subtitle sync maths', () => {
   });
 
   it('keeps only cues within one viewport of the scroll position', () => {
-    const idx = visibleCues(cues, 0, 0, 400).map((v) => v.index);
+    const idx = visibleCues(cues, layoutCues(cues), 0, 0, 400).map((v) => v.index);
     expect(idx).toEqual([0, 1]);
-    expect(visibleCues(cues, 0, 100 * PX_PER_SEC, 400).map((v) => v.index)).toEqual([2]);
+    expect(visibleCues(cues, layoutCues(cues), 0, 100 * PX_PER_SEC, 400).map((v) => v.index)).toEqual([2]);
   });
 
   it('tells programmatic scrolls from user ones', () => {
     expect(isUserScroll(600.4, 600, false)).toBe(false);
     expect(isUserScroll(640, 600, false)).toBe(true);
     expect(isUserScroll(600, 600, true)).toBe(true);
+  });
+
+  it('pushes overlapping cues below the previous one', () => {
+    const [a, b] = layoutCues([
+      { start: 0, end: 1, text: 'a' },
+      { start: 0.1, end: 1, text: 'b' },
+    ]);
+    expect(b.top).toBeGreaterThanOrEqual(a.top + a.height);
   });
 
   it('formats the offset with its sign', () => {

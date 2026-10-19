@@ -97,6 +97,8 @@
       "track": "Faixa de legendas",
       "save": "Guardar",
       "sync_other": "Sincronizar com outra faixa",
+      "reset": "Repor",
+      "sync_failed": "A sincronização das legendas falhou",
       "apply": "Aplicar",
       "embedded_hint": "As legendas incorporadas não podem ser guardadas nem sincronizadas. A pré-visualização continua a funcionar.",
       "discard_title": "Descartar o desvio?",

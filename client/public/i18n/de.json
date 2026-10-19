@@ -97,6 +97,8 @@
       "track": "Untertitelspur",
       "save": "Speichern",
       "sync_other": "Mit anderer Spur synchronisieren",
+      "reset": "Zurücksetzen",
+      "sync_failed": "Synchronisierung der Untertitel fehlgeschlagen",
       "apply": "Anwenden",
       "embedded_hint": "Eingebettete Untertitel können weder gespeichert noch synchronisiert werden. Die Vorschau funktioniert weiterhin.",
       "discard_title": "Verschiebung verwerfen?",

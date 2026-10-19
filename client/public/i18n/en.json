@@ -97,6 +97,8 @@
       "track": "Subtitle track",
       "save": "Save",
       "sync_other": "Synchronize on other track",
+      "reset": "Reset",
+      "sync_failed": "Subtitle sync failed",
       "apply": "Apply",
       "embedded_hint": "Embedded subtitles cannot be saved or synchronized. The preview still works.",
       "discard_title": "Discard the offset?",

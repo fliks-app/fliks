@@ -38,8 +38,8 @@ import {
   SETTLE_MS,
   activeCues,
   contentHeight,
-  cueHeight,
-  cueTop,
+  boxTop,
+  layoutCues,
   formatOffset,
   isUserScroll,
   offsetFromScroll,
@@ -82,8 +82,7 @@ export class SubtitleSyncPanelComponent {
 
   protected readonly formatOffset = formatOffset;
   protected readonly scale = PX_PER_SEC;
-  protected readonly cueTop = cueTop;
-  protected readonly cueHeight = cueHeight;
+  protected readonly boxTop = boxTop;
 
   protected readonly textTracks = computed(() => this.subtitles().filter((s) => !s.isImage && !s.burnIn));
   protected readonly editable = computed(() => !!this.subtitle().subtitleDbId && !this.subtitle().id.startsWith('emb-'));
@@ -98,9 +97,12 @@ export class SubtitleSyncPanelComponent {
   protected readonly syncing = signal(false);
 
   protected readonly height = computed(() => contentHeight(this.duration(), this.viewH()));
+  private readonly boxes = computed(() => layoutCues(this.cues()));
   protected readonly visible = computed(() =>
-    visibleCues(this.cues(), this.base(), this.viewTop(), this.viewH()),
+    visibleCues(this.cues(), this.boxes(), this.base(), this.viewTop(), this.viewH()),
   );
+  /** Height of the controls bar, kept clear below the panel. */
+  protected readonly barH = signal(0);
   protected readonly active = computed(
     () => new Set(activeCues(this.cues(), this.now(), this.offset())),
     { equal: (a, b) => a.size === b.size && [...a].every((i) => b.has(i)) },
@@ -115,7 +117,7 @@ export class SubtitleSyncPanelComponent {
 
   private readonly scroller = viewChild.required<ElementRef<HTMLElement>>('scroller');
   private readonly syncDialog = viewChild.required<ElementRef<HTMLDialogElement>>('syncDialog');
-  private readonly overlay = new SubtitleOverlay();
+  private readonly overlay = new SubtitleOverlay(1, 'fliks-sync-subtitle');
   private lastWritten = 0;
   private interacting = false;
   private pointerDown = false;
@@ -129,7 +131,7 @@ export class SubtitleSyncPanelComponent {
         this.syncDialog().nativeElement.close();
         return true;
       }
-      this.cancel();
+      void this.requestClose();
       return;
     };
     this.dismissStack.push(close);
@@ -143,6 +145,11 @@ export class SubtitleSyncPanelComponent {
       const el = this.scroller().nativeElement;
       new ResizeObserver(() => this.viewH.set(el.clientHeight)).observe(el);
       this.viewH.set(el.clientHeight);
+      const bar = document.querySelector('[data-controls-bottom]');
+      if (bar) {
+        new ResizeObserver(() => this.barH.set(bar.getBoundingClientRect().height)).observe(bar);
+        this.barH.set(bar.getBoundingClientRect().height);
+      }
       el.focus({ preventScroll: true });
       this.raf = requestAnimationFrame(this.tick);
     });
@@ -169,6 +176,11 @@ export class SubtitleSyncPanelComponent {
       if (!this.syncing() || id !== this.subtitle().subtitleDbId) return;
       this.syncing.set(false);
       this.contentChanged.emit(this.subtitle().id);
+    });
+    this.sse.subtitleSyncFailed.pipe(takeUntilDestroyed()).subscribe(({ subtitleId }) => {
+      if (!this.syncing() || subtitleId !== this.subtitle().subtitleDbId) return;
+      this.syncing.set(false);
+      this.toast.error(this.translate.instant('player.subtitle_sync.sync_failed'));
     });
   }
 
@@ -238,7 +250,7 @@ export class SubtitleSyncPanelComponent {
 
   protected onKeyDown(e: KeyboardEvent) {
     if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-      const off = Math.round((this.offset() + (e.key === 'ArrowUp' ? -KEY_STEP_SEC : KEY_STEP_SEC)) * 1000) / 1000;
+      const off = Math.round((this.offset() + (e.key === 'ArrowUp' ? KEY_STEP_SEC : -KEY_STEP_SEC)) * 1000) / 1000;
       this.offset.set(off);
       this.base.set(off);
     } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
@@ -268,8 +280,13 @@ export class SubtitleSyncPanelComponent {
     });
   }
 
-  protected cancel() {
+  protected reset() {
     this.offset.set(0);
+    this.base.set(0);
+  }
+
+  protected async requestClose() {
+    if (this.dirty() && !(await this.confirmDiscard())) return;
     this.close();
   }
 

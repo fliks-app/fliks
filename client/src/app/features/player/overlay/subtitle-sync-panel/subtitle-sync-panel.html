@@ -1,10 +1,17 @@
 <div
   data-subtitle-sync
-  class="absolute z-50 top-0 right-0 bottom-28 w-[32%] min-w-80 max-sm:w-full max-sm:min-w-0 flex flex-col gap-3 p-4 bg-black/70 backdrop-blur-sm text-white select-none"
+  [style.bottom.px]="barH()"
+  class="absolute z-50 top-0 right-0 w-[32%] min-w-80 max-sm:w-full max-sm:min-w-0 flex flex-col gap-3 p-4 bg-black/70 backdrop-blur-sm text-white select-none"
 >
   <div class="flex items-center gap-2">
     <h2 class="flex-1 text-sm font-medium text-white/80">{{ 'player.subtitle_sync.title' | translate }}</h2>
     <span class="badge badge-neutral font-mono" [class.badge-warning]="dirty()">{{ formatOffset(offset()) }}</span>
+    <button
+      type="button"
+      class="btn btn-ghost btn-xs btn-circle text-white/60 hover:text-white text-lg leading-none"
+      [attr.aria-label]="'player.close' | translate"
+      (click)="requestClose()"
+    >&times;</button>
   </div>
 
   <select
@@ -40,8 +47,8 @@
           <div
             class="sync-cue absolute left-0 right-0 overflow-hidden px-2 text-center leading-snug"
             [class]="active().has(v.index) ? 'text-xl font-semibold text-white opacity-100' : 'text-sm text-white/70 opacity-50'"
-            [style.top.px]="cueTop(v.cue, base(), viewH())"
-            [style.height.px]="cueHeight(v.cue)"
+            [style.top.px]="boxTop(v.box, base(), viewH())"
+            [style.height.px]="v.box.height"
             [innerHTML]="v.cue.text"
           ></div>
         }
@@ -55,7 +62,7 @@
   }
 
   <div data-sync-footer class="flex flex-wrap justify-end gap-2">
-    <button type="button" class="btn btn-ghost btn-sm" (click)="cancel()">{{ 'common.cancel' | translate }}</button>
+    <button type="button" class="btn btn-ghost btn-sm" [disabled]="!dirty()" (click)="reset()">{{ 'player.subtitle_sync.reset' | translate }}</button>
     <button type="button" class="btn btn-sm" [disabled]="!editable() || syncing()" (click)="openSyncModal()">
       {{ 'player.subtitle_sync.sync_other' | translate }}
     </button>

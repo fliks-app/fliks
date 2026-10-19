@@ -4262,6 +4262,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.availableSubtitles.update((list) =>
       list.map((s) => (s.id === id ? { ...s, url: s.url.replace(/[?&]rev=\d+/, '') + (s.url.includes('?') ? '&' : '?') + rev } : s)),
     );
+    // ExoPlayer reads subtitles at load(), so a new file needs a stream reload.
+    if (this.isNative && !this.isDesktopNative) void this.reloadStream(undefined, { reason: 'other' });
   }
 
   /** Re-selects the active subtitle after a reload, which engines drop across load().
