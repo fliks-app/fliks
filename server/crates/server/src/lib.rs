@@ -102,6 +102,7 @@ pub async fn serve(cfg: Config) -> Result<(), BoxError> {
     state.engine.start(state.db.clone(), state.cfg.port).await;
     remote::init(&state);
     requests::spawn(&state);
+    requests::spawn_reconcile(&state);
     let cfg = state.cfg.clone();
     let system = state.system.clone();
     let hub = state.hub.clone();

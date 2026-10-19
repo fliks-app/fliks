@@ -169,6 +169,19 @@ impl Lifecycle {
         Ok(())
     }
 
+    /// Rule 43: `on_import_complete` over every media with an open request, for events that never arrived.
+    pub async fn reconcile(&self) {
+        let ids = match db::media_with_open_adds(&self.st.db).await {
+            Ok(ids) => ids,
+            Err(e) => return tracing::warn!("request reconcile failed: {e}"),
+        };
+        for id in ids {
+            if let Err(e) = self.on_import_complete(id).await {
+                tracing::warn!("request reconcile failed for media#{id}: {e:?}");
+            }
+        }
+    }
+
     /// Declines the active ADD requests of the media and unlinks it (rules 38, 40).
     async fn decline_linked(&self, media_id: i32, reason: &str) -> Res<()> {
         for r in db::linked(&self.st.db, media_id, Some("add"), &db::IN_FLIGHT).await? {
@@ -231,6 +244,22 @@ pub(super) fn scope_covered(scope: Option<&[i64]>, eps: &[db::Ep]) -> bool {
         }
     }
     checked
+}
+
+/// One reconcile at startup, then hourly (rule 43); the cron timer dies with the runtime.
+pub fn spawn_reconcile(st: &AppState) {
+    let lc = Lifecycle::of(st);
+    let first = lc.clone();
+    tokio::spawn(async move { first.reconcile().await });
+    crate::jobs::spawn_cron(
+        "0 * * * *",
+        crate::jobs::server_tz(),
+        chrono::Utc::now,
+        move || {
+            let lc = lc.clone();
+            tokio::spawn(async move { lc.reconcile().await });
+        },
+    );
 }
 
 /// The two event subscriptions of rule 34, at-most-once: `import.complete` and `acquisition.grabbed`.

@@ -1127,6 +1127,36 @@ async fn import_complete_needs_a_file_for_a_movie(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
+async fn reconcile_makes_open_requests_available_when_their_scope_is_on_disk(pool: PgPool) {
+    let c = ctx(pool).await;
+    let p = c.pool();
+    for (id, tmdb, file) in [(18, 97, true), (19, 98, false)] {
+        q(&p, &format!(r#"INSERT INTO media (id, title, type, "tmdbId", "libraryId") VALUES ({id}, 'M', 'movie', {tmdb}, 1)"#)).await;
+        if file {
+            q(&p, &format!(r#"INSERT INTO media_files ("relativePath", size, quality, language, "streamInfo", "mediaId") VALUES ('m.mkv', 1, 'WEBDL-1080p', 'en', '{{}}', {id})"#)).await;
+        }
+    }
+    // approved and processing with a file, approved without, pending with a file (never touched)
+    for (tmdb, media, status) in [
+        (97, 18, "approved"),
+        (97, 18, "processing"),
+        (98, 19, "approved"),
+        (97, 18, "pending"),
+    ] {
+        q(&p, &format!(r#"INSERT INTO requests ("userId", kind, "mediaType", "tmdbId", title, status, "mediaId") VALUES (1, 'add', 'movie', {tmdb}, 'M', '{status}', {media})"#)).await;
+    }
+    let lc = Lifecycle::of(&c.st);
+    lc.reconcile().await;
+    lc.reconcile().await;
+    let st: Vec<String> = sqlx::query_scalar("SELECT status::text FROM requests ORDER BY id")
+        .fetch_all(&p)
+        .await
+        .unwrap();
+    assert_eq!(st, ["available", "available", "approved", "pending"]);
+    assert_eq!(c.notified("request.available").await.len(), 2);
+}
+
+#[sqlx::test(migrations = false)]
 async fn the_event_subscriptions_drive_the_lifecycle(pool: PgPool) {
     let c = ctx(pool).await;
     let p = c.pool();
