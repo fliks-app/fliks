@@ -7,13 +7,8 @@ import com.google.android.gms.cast.TextTrackStyle;
 final class CastSubtitleStyle {
     private CastSubtitleStyle() {}
 
-    /**
-     * Map the sender's subtitle presets ({@code size} / {@code color} /
-     * {@code shadow} / {@code background}) onto Cast SDK's
-     * {@link TextTrackStyle}. Same preset vocabulary as the local
-     * player settings — keeps a single shared UI between both. When
-     * {@code spec} is null, returns the receiver-matching defaults.
-     */
+    /** Maps the sender's subtitle presets ({@code size}, {@code color}, {@code shadow}, {@code background}) onto {@link TextTrackStyle};
+     *  a null {@code spec} gives the receiver-matching defaults. */
     static TextTrackStyle build(JSObject spec) {
         TextTrackStyle style = new TextTrackStyle();
         style.setFontGenericFamily(TextTrackStyle.FONT_FAMILY_SANS_SERIF);
@@ -56,13 +51,8 @@ final class CastSubtitleStyle {
         switch (name) {
             case "semi": return 0x80000000;
             case "black": return 0xFF000000;
-            // Cast SDK on Android strips integer-color fields equal to
-            // 0 from the wire payload (treats them as "unset"), so the
-            // receiver falls through to CAF's built-in default — which
-            // happens to render an opaque black box. Use a non-zero
-            // value with alpha 0: still fully transparent visually,
-            // but serialised on the wire as #01000000 so the receiver
-            // sees an explicit transparent backgroundColor.
+            // Cast SDK strips integer colors equal to 0 from the wire (read as unset), so the receiver would default to an opaque
+            // black box: use alpha 0 with a non-zero value (#01000000), still transparent, sent as an explicit backgroundColor.
             default: return 0x00010000;
         }
     }
@@ -70,11 +60,8 @@ final class CastSubtitleStyle {
     /** Returns {edgeType, edgeColor}. */
     private static int[] mapShadow(String name) {
         switch (name) {
-            // Same wire-omission concern as transparent backgrounds —
-            // a 0 colour is stripped, the receiver picks its default.
-            // Edge isn't rendered when type=NONE so the visible result
-            // is the same; we keep the wire frame complete for
-            // determinism / debuggability.
+            // Same wire omission as transparent backgrounds: a 0 color is stripped. The edge isn't drawn when type=NONE,
+            // the non-zero value just keeps the frame complete.
             case "none": return new int[] { TextTrackStyle.EDGE_TYPE_NONE, 0x00010000 };
             case "outline": return new int[] { TextTrackStyle.EDGE_TYPE_OUTLINE, 0xFF000000 };
             case "raised": return new int[] { TextTrackStyle.EDGE_TYPE_RAISED, 0xFF000000 };

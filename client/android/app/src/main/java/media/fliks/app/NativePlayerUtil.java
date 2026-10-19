@@ -74,11 +74,8 @@ final class NativePlayerUtil {
     }
 
 
-    /** Draw a bitmap (PGS/VOBSUB) cue ourselves, pinned near the bottom of the
-     *  screen, aspect preserved — the built-in SubtitleView stretches/squishes
-     *  bitmaps. Sized from the video WIDTH so it stays consistent across
-     *  orientations (the letterboxed video height is tiny in portrait). Null
-     *  hides it. */
+    /** Draws a bitmap (PGS/VOBSUB) cue near the bottom, aspect preserved (SubtitleView squishes bitmaps), sized from the video
+     *  WIDTH to stay consistent across orientations; null hides it. */
     static boolean isImageSubtitleMime(String mime) {
         return MimeTypes.APPLICATION_PGS.equals(mime)
                 || MimeTypes.APPLICATION_VOBSUB.equals(mime)
@@ -86,8 +83,7 @@ final class NativePlayerUtil {
     }
 
 
-    /** Bitmap (burn-in-only) subtitle track. The modern subtitle pipeline
-     *  rewrites sampleMimeType to application/x-media3-cues and preserves the
+    /** Bitmap (burn-in-only) subtitle track: the modern pipeline rewrites sampleMimeType to media3 cues and keeps the
      *  original codec in `codecs`, so check both. */
     static boolean isImageSubtitle(androidx.media3.common.Format fmt) {
         return isImageSubtitleMime(fmt.sampleMimeType) || isImageSubtitleMime(fmt.codecs);

@@ -40,15 +40,8 @@ import org.json.JSONObject;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Capacitor plugin for Google Cast on Android.
- *
- * Usage from JS:
- *   await NativeCast.initialize({ appId: 'CC1AD845' });
- *   await NativeCast.requestSession();
- *   await NativeCast.loadMedia({ url, contentType, title, ... });
- *   await NativeCast.play() / pause() / seek({ time }) / stop();
- */
+/** Capacitor plugin for Google Cast on Android; JS side is `NativeCast` (initialize, requestSession, loadMedia, play,
+ *  pause, seek, stop). */
 @CapacitorPlugin(name = "NativeCast")
 public class CastPlugin extends Plugin {
     private static final String TAG = "CastPlugin";
@@ -81,10 +74,7 @@ public class CastPlugin extends Plugin {
     private boolean live = false;
     private static final long HUNT_MS = 60_000;
 
-    /**
-     * Cast session updates must stay on the main thread (same as Session / isConnected rules).
-     * Some Play Services versions invoke these callbacks off the UI thread.
-     */
+    /** Cast session updates stay on the main thread: some Play Services versions call these off the UI thread. */
     private final SessionManagerListener<CastSession> sessionListener = new SessionManagerListener<CastSession>() {
         @Override
         public void onSessionStarted(CastSession session, String sessionId) {
@@ -112,9 +102,8 @@ public class CastPlugin extends Plugin {
         }
         @Override
         public void onSessionStarting(CastSession session) {
-            // Must set immediately on the callback thread (volatile). If we only post to the main
-            // looper, MediaRouteChooserDialogFragment can be destroyed on the main thread before
-            // that runnable runs, and we wrongly fire castPickerDismissed (JS thinks user cancelled).
+            // Set immediately on the callback thread (volatile): posting to the main looper lets the chooser dialog be destroyed
+            // first, and castPickerDismissed would fire as if the user cancelled.
             sessionPending = true;
         }
         @Override
@@ -447,9 +436,8 @@ public class CastPlugin extends Plugin {
             .build();
     }
 
-    /** CALLBACK_FLAG_REQUEST_DISCOVERY is what makes the router discover at all:
-     *  registered without it, the callback fires but no provider ever scans, so
-     *  getRoutes() only ever holds the default route. */
+    /** CALLBACK_FLAG_REQUEST_DISCOVERY makes the router discover at all: without it no provider scans
+     *  and getRoutes() holds only the default route. */
     private void startRouteDiscovery() {
         if (routeDiscoveryActive) return;
         addRouteCallback();
@@ -571,9 +559,7 @@ public class CastPlugin extends Plugin {
                 call.reject("No matching Cast device");
                 return;
             }
-            // Selecting the route that is already selected transitions nothing, so no
-            // session callback ever comes: say what the state is instead of leaving the
-            // caller waiting on an event that cannot arrive.
+            // Selecting the already-selected route fires no session callback: report the state instead of leaving the caller waiting.
             if (id.equals(router.getSelectedRoute().getId())) {
                 boolean connected = castSession != null && castSession.isConnected();
                 Log.d(TAG, "selectCastDevice: already the selected route, connected=" + connected);
@@ -623,11 +609,8 @@ public class CastPlugin extends Plugin {
             .setContentType(contentType)
             .setMetadata(metadata);
 
-        // customData is the side-channel the Fliks Cast Receiver reads to
-        // identify the media (mediaId / episodeId) without parsing the URL.
-        // The Default Media Receiver ignores it harmlessly when used as a
-        // fallback receiver. Capacitor's JSObject IS-A JSONObject so it
-        // can be forwarded directly without re-parsing.
+        // customData is the side-channel the Fliks receiver reads to identify the media (mediaId, episodeId);
+        // the Default Media Receiver ignores it. JSObject is a JSONObject, so it is forwarded as is.
         JSObject customData = call.getObject("customData");
         if (customData != null) {
             mediaInfoBuilder.setCustomData(customData);
@@ -657,9 +640,7 @@ public class CastPlugin extends Plugin {
         if (!tracks.isEmpty()) {
             mediaInfoBuilder.setMediaTracks(tracks);
         }
-        // Always set the style — receiver fills its defaults when
-        // textTrackStyle is missing, masking the user's prefs whenever
-        // the LOAD has no preselected subtitle tracks.
+        // Always set the style: the receiver's defaults otherwise mask the user's prefs when the LOAD has no preselected subtitle track.
         mediaInfoBuilder.setTextTrackStyle(CastSubtitleStyle.build(styleSpec));
 
         MediaInfo mediaInfo = mediaInfoBuilder.build();
@@ -806,16 +787,8 @@ public class CastPlugin extends Plugin {
         });
     }
 
-    /**
-     * Switch the active audio rendition on the receiver via the standard
-     * media bus (setActiveMediaTracks → EDIT_TRACKS_INFO). The receiver
-     * mirrors Shaka's HLS audio renditions into MediaInformation as
-     * AUDIO tracks, so Cast SDK's track-selection API drives the swap
-     * client-side without an ffmpeg restart.
-     *
-     * Resolves with {@code success: false} when no matching track is
-     * found — caller falls back to a full reload in that case.
-     */
+    /** Switches the receiver's audio rendition through setActiveMediaTracks (the receiver mirrors Shaka's HLS renditions as AUDIO tracks),
+     *  no ffmpeg restart. Resolves {@code success: false} when no track matches, so the caller falls back to a reload. */
     @PluginMethod()
     public void setActiveAudioLanguage(PluginCall call) {
         runOnMainThread(() -> {
@@ -831,9 +804,8 @@ public class CastPlugin extends Plugin {
                 call.resolve(new JSObject().put("success", false));
                 return;
             }
-            // Match by NAME: it is unique per rendition and preserved verbatim from
-            // master.m3u8. Shaka rewrites LANGUAGE from ISO 639-2 (eng) to 639-1 (en), so
-            // language only stands in for a missing name when it is unambiguous.
+            // Match by NAME (unique per rendition, verbatim from master.m3u8): Shaka rewrites LANGUAGE from 639-2 to 639-1,
+            // so language only substitutes for a missing name when unambiguous.
             MediaTrack target = null;
             MediaTrack sameLanguage = null;
             int sameLanguageCount = 0;
@@ -893,11 +865,8 @@ public class CastPlugin extends Plugin {
                     int state = status != null
                         ? status.getPlayerState()
                         : MediaStatus.PLAYER_STATE_UNKNOWN;
-                    // A fatal receiver error (e.g. a segment 410 after the live
-                    // session was GC'd) surfaces as IDLE with reason ERROR.
-                    // Signal JS once so the sender re-establishes a fresh
-                    // session; an in-flight recovery load goes IDLE/INTERRUPTED,
-                    // not ERROR, so it won't misfire.
+                    // A fatal receiver error (e.g. a segment 410 after the live session was GC'd) shows as IDLE with reason ERROR: signal JS
+                    // once to re-establish the session. A recovery load goes IDLE/INTERRUPTED, so it doesn't misfire.
                     if (state == MediaStatus.PLAYER_STATE_IDLE
                             && status.getIdleReason() == MediaStatus.IDLE_REASON_ERROR) {
                         if (!errorReported) {
@@ -912,9 +881,7 @@ public class CastPlugin extends Plugin {
                         boolean buffering = state == MediaStatus.PLAYER_STATE_BUFFERING
                             || state == MediaStatus.PLAYER_STATE_LOADING;
                         if (time > 0) lastGoodPosition = time;
-                        // Device (receiver) volume isn't part of MediaStatus — read it
-                        // off the session each tick so external changes (TV remote, cast
-                        // dialog) mirror back into the sender slider within a poll.
+                        // Device volume isn't in MediaStatus: read it off the session each tick so TV remote or cast dialog changes reach the slider.
                         double volume = castSession.getVolume();
                         boolean muted = castSession.isMute();
                         notifyJSTime(time, duration, paused, buffering, volume, muted);
