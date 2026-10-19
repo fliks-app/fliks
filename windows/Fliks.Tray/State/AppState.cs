@@ -85,6 +85,9 @@ internal sealed class AppState
         {
             Log.Error($"startup failed: {ex}");
             State = ServerState.Errored(ex.Message);
+            // Lets a running installer stop waiting for the server.
+            if (EventWaitHandle.TryOpenExisting("Fliks.Setup.ServerStartFailed", out var setup))
+                using (setup) setup.Set();
         }
     }
 
