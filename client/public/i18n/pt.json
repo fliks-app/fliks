@@ -1229,7 +1229,6 @@
     "fps_to": "Framerate de destino",
     "post_process_success": "Processamento aplicado com sucesso.",
     "blacklist_success": "Legenda adicionada à blacklist e eliminada.",
-    "sync_started": "Sincronização em curso...",
     "sync_processing": "Sincronização em curso",
     "action_cancel_sync": "Cancelar a sincronização",
     "sync_success": "Legenda sincronizada com sucesso.",

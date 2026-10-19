@@ -1229,7 +1229,6 @@
     "fps_to": "Framerate cible",
     "post_process_success": "Traitement appliqué avec succès.",
     "blacklist_success": "Sous-titre blacklisté et supprimé.",
-    "sync_started": "Synchronisation en cours...",
     "sync_processing": "Synchronisation en cours",
     "action_cancel_sync": "Annuler la synchronisation",
     "sync_success": "Sous-titre synchronisé avec succès.",

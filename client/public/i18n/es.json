@@ -1229,7 +1229,6 @@
     "fps_to": "Framerate de destino",
     "post_process_success": "Procesamiento aplicado correctamente.",
     "blacklist_success": "Subtítulo añadido a la lista negra y eliminado.",
-    "sync_started": "Sincronización en curso...",
     "sync_processing": "Sincronización en curso",
     "action_cancel_sync": "Cancelar la sincronización",
     "sync_success": "Subtítulo sincronizado correctamente.",

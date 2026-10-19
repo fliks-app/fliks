@@ -44,7 +44,6 @@ export class SubtitleActionsService {
   }
 
   async sync(mediaId: number, subtitleId: number, options: SyncOptions) {
-    this.toast.info(this.translate.instant('media_detail.sync_started'));
     try {
       await this.subtitlesApi.sync(mediaId, subtitleId, options);
       this.setSyncing(subtitleId, true);

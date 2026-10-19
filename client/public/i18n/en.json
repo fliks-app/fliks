@@ -1229,7 +1229,6 @@
     "fps_to": "Target framerate",
     "post_process_success": "Processing applied successfully.",
     "blacklist_success": "Subtitle blacklisted and deleted.",
-    "sync_started": "Sync in progress...",
     "sync_processing": "Sync in progress",
     "action_cancel_sync": "Cancel sync",
     "sync_success": "Subtitle synced successfully.",

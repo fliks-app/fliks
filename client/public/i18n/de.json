@@ -1229,7 +1229,6 @@
     "fps_to": "Ziel-Framerate",
     "post_process_success": "Verarbeitung erfolgreich angewendet.",
     "blacklist_success": "Untertitel auf Blacklist gesetzt und gelöscht.",
-    "sync_started": "Synchronisierung läuft...",
     "sync_processing": "Synchronisierung läuft",
     "action_cancel_sync": "Synchronisierung abbrechen",
     "sync_success": "Untertitel erfolgreich synchronisiert.",
