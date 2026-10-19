@@ -1,5 +1,6 @@
 <!-- ===== MOBILE layout ===== -->
-<div class="md:hidden tv:hidden">
+@if (!desktopLayout()) {
+<div>
   <app-mobile-fanart-hero
     class="block"
     [appSpoiler]="spoilerImage()"
@@ -173,9 +174,11 @@
 
   </div>
 </div>
+}
 
 <!-- ===== DESKTOP layout ===== -->
-<div class="hidden md:block tv:block relative">
+@if (desktopLayout()) {
+<div class="relative">
 
   <div
     class="flex gap-6 lg:gap-10 relative z-20 has-[.dropdown-open]:z-50"
@@ -384,6 +387,7 @@
     </div>
   </div>
 </div>
+}
 
 <!-- Download status / progress chip, shared by the mobile metadata row and the
      desktop action row. Clickable (opens the detail modal) only while a grab is

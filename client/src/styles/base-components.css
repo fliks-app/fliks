@@ -1,0 +1,577 @@
+@layer base {
+  :is(a, button, select, input, [role="button"], [tabindex]) {
+    @apply rounded-lg;
+  }
+}
+/* The cues sit above the controls bar, so the ring's low z-index would drop
+   them behind it while focused. */
+.player-floating-cue:focus-visible {
+  z-index: 50;
+}
+
+/* A scroll container clips at its padding box, and as soon as one axis
+   scrolls CSS forces the other out of `visible` — so the ring above is cut
+   off the left and right edges of any full-width focusable inside one.
+   Reserve the ring's 4px and pull it straight back out of the layout, so the
+   content keeps its original alignment. Put it on the scrolling element.
+   Vertical side is padding only: a negative block margin would let scrolled
+   content bleed over the element above (often a menu title). `scroll-py` makes
+   D-pad `scrollIntoView({block:'nearest'})` stop 4px short so it uncovers the
+   ring instead of aligning the item flush with the clipped edge. */
+.scroll-ring-safe {
+  @apply px-1 -mx-1 py-1 scroll-py-1;
+}
+
+/* A page's own heading. Narrow screens get the name from the chrome around the
+   page, so it stays announced but undrawn until there is room. Declared once:
+   nine templates each carried their own copy and two had already drifted. */
+.page-title {
+  @apply sr-only lg:not-sr-only text-2xl font-bold;
+}
+
+/* The title above a menu's items. Shared by the dropdown and the sheet, which
+   styled it separately and drifted: the dropdown had no top padding at all.
+   Each surface still owns its own colour and horizontal padding. */
+.menu-heading {
+  @apply pt-2 pb-2 text-center text-sm font-medium truncate;
+}
+
+/* Opt-out for focusables that paint their own focus affordance (e.g.
+   round avatar with a ring-primary on the inner div). The default
+   rectangle would draw a competing outer ring around the card. */
+[data-no-focus-ring]:focus-visible,
+[data-no-focus-ring]:focus {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* Ghost buttons in the player stay ghost while focused: they sit on video, where
+   daisyUI's focus fill only obscures the frame and the primary ring is already
+   the cue. Scoped to the player on purpose — elsewhere that fill IS the wanted
+   focus affordance, and suppressing it left the bar with no visible state. */
+body.tv app-player-controls .btn-ghost:focus,
+body.tv app-player-controls .btn-ghost:focus-visible {
+  background-color: transparent !important;
+  --btn-bg: rgba(0, 0, 0, 0) !important;
+}
+/* Cards / list items — gentle scale on keyboard / D-pad focus so the
+   selected card "lifts" off the grid. Smaller bump on desktop (mouse
+   users already get hover feedback), bigger on TV for the 10-foot UI. */
+app-media-card figure:focus-visible,
+[data-home-focus]:focus-visible,
+app-mosaic-card button:focus-visible .mosaic-art {
+  transform: scale(1.04);
+  transition: transform 0.15s ease-out;
+}
+body.tv .media-card:focus-within,
+body.tv app-media-card figure:focus-visible,
+body.tv [data-home-focus]:focus-visible,
+body.tv [data-tv-focusable]:focus-visible,
+body.tv app-mosaic-card button:focus-visible .mosaic-art {
+  transform: scale(1.06);
+}
+/* Slide the caption clear of the art the lift above scales over it. Global, not
+   component `styles:` — those bypass the downlevel `:focus-visible` → `:focus`. */
+app-media-card figure + div,
+app-mosaic-card .mosaic-art + div {
+  transition: transform 0.15s ease-out;
+}
+app-media-card figure:focus-visible + div,
+app-mosaic-card button:focus-visible .mosaic-art + div {
+  transform: translateY(0.6rem);
+}
+
+/* Fade each row of a list in after the one above it. Applied to the CHILDREN
+   rather than through a wrapper per row: a section that renders nothing must
+   leave no element behind, or the parent's `gap` would open a hole for it.
+   `backwards` holds the row invisible through its delay. */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+.stagger-children > * {
+  animation: fade-in 320ms ease-out backwards;
+}
+.stagger-children > *:nth-child(1) { animation-delay: 0ms; }
+.stagger-children > *:nth-child(2) { animation-delay: 80ms; }
+.stagger-children > *:nth-child(3) { animation-delay: 160ms; }
+.stagger-children > *:nth-child(4) { animation-delay: 240ms; }
+.stagger-children > *:nth-child(5) { animation-delay: 320ms; }
+.stagger-children > *:nth-child(6) { animation-delay: 400ms; }
+.stagger-children > *:nth-child(7) { animation-delay: 480ms; }
+.stagger-children > *:nth-child(n + 8) { animation-delay: 560ms; }
+
+@keyframes fade-out {
+  to {
+    opacity: 0;
+  }
+}
+.skeleton-out {
+  animation: fade-out 600ms ease-out forwards;
+}
+
+/* View transitions are off on TV (see app.config), so a navigation would be an
+   abrupt swap — fade the routed content in instead. */
+/* Opacity only, never `transform`: an element with a running transform becomes
+   the containing block for its `position: fixed` descendants, so the library's
+   alphabet index centred itself on <main> for the length of this animation and
+   then jumped into place when it ended. */
+@keyframes page-enter {
+  from {
+    opacity: 0;
+  }
+}
+body.tv main.page-enter {
+  animation: page-enter 220ms ease-out;
+}
+/* Closing the player already animates the swap; fading the destination in from
+   `opacity: 0` underneath would show the app background through it. */
+html.vt-player-close body.tv main.page-enter {
+  animation: none;
+}
+
+/* CDK's content wrapper ships `contain: content`, which clips a card's focus
+   ring and scale-up where they overflow its row. */
+.library-viewport .cdk-virtual-scroll-content-wrapper {
+  contain: none;
+}
+
+/* `<main>` reserves the fixed chrome's space on every route, computed once in
+   layout.ts and exposed as CSS vars. */
+app-layout main {
+  padding-block: var(--chrome-top, 0px) var(--chrome-bottom, 0px);
+}
+/* A hero page runs its fanart under the transparent navbar, so it keeps the
+   gap and drops the bar's height. A class rather than a term in
+   `--chrome-top`: NavbarService toggles it synchronously while the outgoing
+   page is deactivated, which is early enough for the cached page the router
+   is about to reattach to be laid out with its final padding. A value that
+   only lands at the next change detection arrives after that layout, and
+   iOS 18.7 WebKit never re-lays a subtree out for a parent's padding change. */
+body.hero-page app-layout main {
+  padding-top: 1rem;
+}
+
+/* Smooth is for D-pad focus-into-view; the router's own jump to the top of a
+   page being entered must not animate. */
+html.tv-host.nav-scroll-instant {
+  scroll-behavior: auto;
+}
+
+/* An option that is only marked unavailable because it IS the current selection
+   must stay focusable — a D-pad has to be able to land on it — so it carries
+   `aria-disabled` instead of `disabled`, which removes an element from the
+   focus order entirely. It still reads and behaves as unavailable. */
+[aria-disabled='true'] {
+  opacity: 0.6;
+  cursor: default;
+}
+[aria-disabled='true']:hover {
+  background-color: transparent !important;
+}
+
+/* Promote the card rails to their own composited scroll layer. Without it the
+   TV WebView re-rasterizes the whole rail on every frame of a smooth
+   horizontal scroll — measured on a Tizen 9 panel, 7.7 s of raster and 3.1 s of
+   commit over 20 D-pad steps, against 3.4 s / 0.7 s once composited. TV only:
+   the promotion costs layer memory and no other form factor scrolls these rails
+   one animated step at a time. */
+body.tv [data-scroller] {
+  will-change: scroll-position;
+}
+/* End room for the last card, matching what the first one gets at scrollLeft 0.
+   The negative margin cancels the rail's gap, so this adds 16px, not 40. */
+body.tv [data-scroller]::after {
+  content: '';
+  flex: 0 0 1rem;
+  margin-left: -1.5rem;
+}
+
+/* Run the focus lift on the compositor. The scale itself is cheap; animating it
+   on an unpromoted element is not — the TV WebView repaints the card and
+   everything overlapping it on every frame of the transition. Measured over 20
+   D-pad steps in the library: 7.8 s of raster unpromoted, 2.2 s promoted, 1.3 s
+   with no transition at all. Windowing keeps the rendered card count low enough
+   that a layer each is affordable. */
+body.tv app-media-card figure,
+body.tv app-media-card figure + div {
+  will-change: transform;
+}
+
+/* Card labels are sized in rem (text-sm / text-xs), so the body.tv 18px font
+   bump doesn't reach them — they read tiny from the couch. Enlarge the title
+   and subtitle across every TV. */
+body.tv app-media-card h3 {
+  font-size: 1.25rem;
+}
+body.tv app-media-card p {
+  font-size: 0.95rem;
+  /* text-base-content/50 dims via color-mix, which the TV WebView (Chrome 85)
+     can't parse — its downlevel fallback drops the alpha, so the subtitle lands
+     at full colour. Force the colour and dim with the opacity property. */
+  color: var(--color-base-content);
+  opacity: 0.5;
+}
+
+/* Card focus — Lumen "lit-from-within" ring inspired by
+   mediaplatform-hub/frontend-tv: 2 px spacer in the surface colour,
+   4 px primary ring outside that, plus a soft primary glow and a
+   drop shadow so the focused card lifts off the rail on any bg.
+   Spread sits at 0 offset (against the element edge) so it follows
+   the card's `border-radius` — needed because Tizen 6.5 Chromium 85
+   would otherwise paint a rectangle (outline-without-radius). */
+app-media-card figure:focus-visible,
+[data-home-focus]:focus-visible,
+app-mosaic-card button:focus-visible .mosaic-art {
+  outline: none !important;
+  box-shadow:
+    0 0 0 2px var(--color-base-100, #1d232a),
+    0 0 0 6px var(--color-primary, #7a3ff2),
+    0 0 18px -4px var(--color-primary, #7a3ff2),
+    0 8px 22px rgb(0 0 0 / 35%) !important;
+}
+/* TVs run on mid-range SoCs where blurred box-shadows are the most expensive
+   thing on the compositor, and D-pad nav rapidly moves focus card-to-card —
+   each move would re-paint the 18px glow + 22px drop-shadow blur regions.
+   Drop the blurs on every TV, keep the crisp 2-step ring (cheap, no blur).
+   Desktop keeps the full Lumen look. */
+body.tv app-media-card figure:focus-visible,
+body.tv [data-home-focus]:focus-visible,
+body.tv app-mosaic-card button:focus-visible .mosaic-art {
+  box-shadow:
+    0 0 0 2px var(--color-base-100, #1d232a),
+    0 0 0 6px var(--color-primary, #7a3ff2) !important;
+}
+/* Rounded corners without an ancestor clip. This WebView drops a `border-radius`
+   + `overflow: hidden` clip once the box is composited — the mosaic art is, both
+   from its own focus scale and from a child's fade — so the art squared off while
+   loading and while focus moved. Every layer rounds itself instead, which the
+   compositor always honours. The nth-child arms mirror mosaic-card's 2x2 grid:
+   each quadrant only rounds the corner of the card it actually sits in. */
+body.tv .mosaic-art > * {
+  border-radius: inherit;
+}
+body.tv .mosaic-art > * > img {
+  border-radius: 0;
+}
+body.tv .mosaic-art > * > img:nth-child(1) {
+  border-top-left-radius: inherit;
+}
+body.tv .mosaic-art > * > img:nth-child(2) {
+  border-top-right-radius: inherit;
+}
+body.tv .mosaic-art > * > img:nth-child(3) {
+  border-bottom-left-radius: inherit;
+}
+body.tv .mosaic-art > * > img:nth-child(4) {
+  border-bottom-right-radius: inherit;
+}
+/* An animation rather than a transition on the artwork reveal: a route restored
+   from the reuse cache re-inserts the subtree, which replays animations but
+   leaves an already-settled transition alone — the grid came back bare. */
+@keyframes card-img-reveal {
+  from {
+    opacity: 0;
+  }
+}
+.card-img-reveal {
+  animation: card-img-reveal 200ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .card-img-reveal {
+    animation: none;
+  }
+}
+/* Held until the next navigation, so art that lands from the revalidation
+   behind a restored page stays as quiet as the art already on it. Through the
+   duration, never `animation: none`: dropping the name and putting it back is
+   a new animation, so the next forward navigation replayed the reveal on every
+   card at once and its snapshot came out with grey boxes for artwork. */
+html.nav-back .card-img-reveal {
+  animation-duration: 0s;
+  /* `appSpoiler` puts a `transition` on the same img for its blur, and dropping
+     `opacity-0` on load rides it — so the artwork faded in on the way back even
+     with the reveal neutralised. Keep the blur eased, take opacity out. */
+  transition-property: filter, transform;
+}
+
+/* The opacity animation promotes the img to its own layer, and this WebView then
+   drops the figure's radius clip for everything painted after it — the bottom
+   edge squares off for the length of the fade. */
+body.tv app-media-card figure img,
+body.tv .mosaic-art img {
+  transition: none !important;
+  animation: none !important;
+}
+
+/* Resting cards carry shadow-md (a blurred shadow) re-rasterised for every
+   visible card on each scroll frame — drop it on TV; the focus ring is the
+   only affordance the 10-foot UI needs. */
+body.tv app-media-card figure:not(:focus-visible) {
+  box-shadow: none;
+}
+/* Smaller media-card footprint on AndroidTV: visually the same layout but
+   ~10 % shorter cards, which both reduces image decode pressure (smaller
+   thumb pixels rendered → less GPU work per scroll) and fits a couple more
+   cards in a row for denser browsing. Targets the `sm:` Tailwind widths
+   only — TV viewports always cross the 640 px breakpoint, so this is the
+   width that actually paints. Other form factors are untouched. */
+@media (min-width: 640px) {
+  body.tv-androidtv app-media-card.sm\:w-40 { width: 7.5rem; }    /* 160px → 120px (portrait) */
+  body.tv-androidtv app-media-card > .sm\:w-72 { width: 13rem; }  /* 288px → 208px (landscape) */
+  /* Library cards on the home page (linear pill with icon + name). Same
+     ~17 % reduction so they line up visually with the media-card width
+     and the row keeps a consistent density. */
+  body.tv-androidtv [data-home-focus^="library:"].sm\:w-48 { width: 10rem; }   /* 192px → 160px */
+  body.tv-androidtv [data-home-focus^="library:"].sm\:h-28 { height: 6rem; }   /* 112px → 96px */
+}
+
+/* Touch-only UI elements should be hidden on TV */
+body.tv [data-touch-only] {
+  display: none !important;
+}
+
+/* DaisyUI v5 component radii flow through three theme tokens
+   (`--radius-selector`, `--radius-field`, `--radius-box`). The default
+   light/dark themes redeclare them to `.25rem`/`.5rem` at
+   `:root,[data-theme=light]`, which wins by source order over our
+   `:root,[data-theme]` block at the top of this file. At the TV's 1080p
+   viewport scaled by Tizen, .25rem reads as effectively square corners
+   on `.btn`, `.input`, `.select`, `.textarea`, `.badge`, `.tab`,
+   `.card`, `.alert`, `.modal-box`, etc. Re-assert the rounder intent
+   with a higher-specificity selector that descendants inherit through. */
+body.tv {
+  --radius-selector: 1rem;
+  --radius-field: 1rem;
+  --radius-box: 0.5rem;
+}
+/* `.radio` and `.btn-circle` use `border-radius: calc(infinity * 1px)`
+   which Chromium 85 drops entirely; restate with a finite sentinel so
+   the circular shape survives the downlevel pipeline. */
+body.tv .radio,
+body.tv .btn-circle {
+  border-radius: 9999px;
+}
+
+/* Tailwind v4 emits `.rounded-full { border-radius: calc(infinity * 1px) }`.
+   Chromium 85 (Tizen 6.5 / webOS 6) doesn't recognise the CSS Values L4
+   `infinity` keyword, the declaration is dropped, and every `rounded-full`
+   element (avatars, pills, FABs, the seekbar track + thumb) falls back to
+   square corners. Re-state the same intent with a finite `9999px`
+   sentinel so the value parses on the TV WebView. Scoped to `body.tv`
+   so the modern bundle keeps the wide-gamut form. */
+body.tv .rounded-full {
+  border-radius: 9999px;
+}
+/* Seekbar thumb on TV — the inner div uses Tailwind's `rounded-full` which
+   the rule above already fixes the track of, but we additionally force
+   `border-radius: 50%` on the drag handle so a future markup tweak (e.g.
+   dropping the utility class) still renders it as a perfect circle. The
+   seekbar is a custom div-based scrubber (not `<input type=range>`), so
+   the absolutely-positioned thumb child of `app-seekbar` is the target. */
+body.tv app-seekbar div.absolute.rounded-full.bg-white {
+  border-radius: 50%;
+}
+
+/* Tailwind v4 opacity-modifier utilities like `bg-base-100/80`, `via-base-
+   100/30`, `to-base-100/50` emit `color-mix(in oklab, ...)` for the actual
+   colour and a non-color-mix fallback that resolves to the FULL-opacity base
+   colour. Chromium 85 has no `color-mix()`, takes the fallback, and the
+   media-info-header / tmdb-preview fanart overlays end up as a solid wall
+   of base-100 hiding the fanart entirely. Restore the dimming intent with
+   element opacity (overlay divs have no children, so this matches the
+   visual without needing colour-channel maths). */
+body.tv .bg-base-100\/80 {
+  background-color: var(--color-base-100);
+  opacity: 0.8;
+}
+body.tv .via-base-100\/30 {
+  --tw-gradient-via: transparent;
+}
+body.tv .to-base-100\/50 {
+  --tw-gradient-to: transparent;
+}
+
+/* Dropdowns are click-driven (`.dropdown-open` toggled by
+   `appDropdownToggle`). Neutralise DaisyUI's `:focus-within` fallback so
+   tabbing onto a trigger never auto-opens the menu — Tab/D-pad focus alone
+   should be a focus move, not an open. `display` is part of the transition
+   (`allow-discrete`) so the panel animates on close before it's hidden;
+   `@starting-style` gives the matching open animation. Unsupported engines
+   (old TV Chromium) ignore both and just toggle instantly. */
+.dropdown > .dropdown-content {
+  opacity: 0;
+  transform: scale(0.96);
+  transform-origin: top;
+  transition:
+    opacity 0.15s ease,
+    transform 0.15s ease,
+    display 0.15s allow-discrete;
+}
+.dropdown.dropdown-end > .dropdown-content {
+  transform-origin: top right;
+}
+.dropdown.dropdown-top > .dropdown-content {
+  transform-origin: bottom;
+}
+.dropdown.dropdown-open > .dropdown-content {
+  opacity: 1;
+  transform: scale(1);
+  @starting-style {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+.dropdown:not(.dropdown-open) > .dropdown-content {
+  display: none !important;
+}
+
+/* Open/close animation for the anchored popover panels.
+   They live under an Angular `@if`, so the base class animates the entry on
+   insert and `animate.leave="popover-pop-leaving"` holds the node in the DOM
+   for the exit before removal (same approach as card-actions-panel). */
+.popover-pop-in {
+  transform-origin: top;
+  animation: popover-pop 0.15s ease;
+}
+@keyframes popover-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+.popover-pop-leaving {
+  animation: popover-pop-out 0.12s ease forwards;
+}
+@keyframes popover-pop-out {
+  to {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+
+/* Sheet submenu navigation: the panel swaps in place, so the incoming list
+   slides in from the side it conceptually comes from. */
+.panel-slide-fwd {
+  animation: panel-slide-fwd 0.18s ease;
+}
+@keyframes panel-slide-fwd {
+  from {
+    opacity: 0;
+    transform: translateX(30%);
+  }
+}
+.panel-slide-back {
+  animation: panel-slide-back 0.18s ease;
+}
+@keyframes panel-slide-back {
+  from {
+    opacity: 0;
+    transform: translateX(-30%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .panel-slide-fwd,
+  .panel-slide-back {
+    animation: none;
+  }
+}
+
+/* Modal chrome in a padded `.modal-box`: the header and footer bleed out of its
+   1.5rem padding so their rule reaches both edges, the way a `p-0` box's flex
+   column does it. Real CSS, not utilities — the negative margins live in a host
+   binding, which Tailwind's scanner does not pick up. */
+.modal-header-bar {
+  margin: -1.5rem -1.5rem 1rem;
+  padding: 1.25rem 1.5rem 0.75rem;
+}
+.modal-footer-bar {
+  margin: 1.5rem -1.5rem -1.5rem;
+  padding: 1rem 1.5rem;
+}
+
+/* Shared item style for app-dropdown-menu (desktop dropdown + mobile/TV
+   bottom sheet). Caller adds a colour utility (`text-white`, `text-error`,
+   …) and an icon — everything else (padding, hover, focus, layout) lives
+   here so each menu item stays a one-liner.
+   `focus-visible` (not plain `focus`) so the highlight only shows on
+   keyboard / D-pad navigation. A touch tap auto-focuses the item which
+   would otherwise leave a lingering "selected" tint on phones and
+   tablets after the sheet closes. */
+.dropdown-item {
+  @apply w-full flex items-center gap-3 px-3 py-2 text-left text-base rounded-lg cursor-pointer hover:bg-white/5 focus-visible:bg-white/10 focus-visible:outline-none active:bg-white/10 disabled:opacity-40;
+}
+/* `hover:bg-white/5` is ~4 RGB levels, invisible from a couch. Focus stays
+   ahead of it thanks to the global focus ring. */
+html.tv-webos .dropdown-item:hover {
+  background-color: color-mix(in oklab, var(--color-white) 12%, transparent);
+}
+
+/* TV (Tizen 6.5 / webOS 6 — Chromium ~85): daisyUI v5's `.toggle` relies on
+   modern features that don't survive the downlevel pipeline:
+   - `color-mix()` resolves to `rgba(0,0,0,0)`, so `--input-color` is transparent
+     → the dot (`background-color: currentcolor`) is invisible, and the pill's
+     `box-shadow: 0 1px currentColor inset` also collapses, leaving the
+     unchecked pill with no background at all.
+   - `:has(>input:checked)` is stripped by `strip-unsupported-selectors`, taking
+     the entire `.toggle:checked, .toggle[aria-checked=true], .toggle:has(...)`
+     branch with it on the `:before { opacity: 0 }` rule. The dot animation
+     driven by `grid-template-columns` still works for the bare `:checked`
+     branch, so we drive position from `:checked` directly.
+   - `aspect-ratio` is Chrome 88+; spell out width/height in rem units.
+   Markup is `<input type="checkbox" class="toggle">` so `:checked` matches the
+   toggle element itself — no `:has()` needed. */
+/* Target `html.tv-host` rather than `body.tv` so the override also reaches
+   toggles inside `<app-dropdown-menu>`'s bottom-sheet, which gets reparented
+   under `<html>` (sibling of `<body>`) to escape the drawer-content stacking
+   context. Both classes are toggled in sync by DeviceService. */
+html.tv-host .toggle {
+  --input-color: var(--color-base-content);
+  color: var(--color-base-content);
+  /* Unchecked pill: muted grey so the white dot has visible contrast.
+     Uses a translucent base-content colour — works on both light & dark
+     themes (darkens on light bg, lightens on dark bg). */
+  background-color: rgba(128, 128, 128, 0.35);
+  /* DaisyUI v5's default `border-radius: var(--rounded-btn)` is stripped
+     by the downlevel CSS pipeline on Tizen 6.5 (Chromium 85) — explicit
+     pill radius so the toggle stays rounded AND the box-shadow focus
+     ring inherits it. Without this, focus paints a rectangle around the
+     pill. */
+  border-radius: 9999px;
+}
+html.tv-host .toggle:before {
+  width: 1.125rem;
+  height: 1.125rem;
+  background-color: var(--color-base-100, #fff);
+  border-radius: 9999px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  outline: none;
+  /* Force the dot fully opaque in every state — the base daisyUI rule
+     `.toggle:checked:before { opacity: 0 }` survives downlevel and would
+     otherwise hide the dot whenever the parent's `:before` is targeted
+     by the checked branch. */
+  opacity: 1;
+}
+html.tv-host .toggle.toggle-sm:before {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+/* Checked state: pill darkens, dot stays light. The parent's
+   `grid-template-columns` transition (already in core CSS) animates the
+   dot from the left column to the right column. We do NOT use
+   `:has(:checked)` — stripped by the pipeline. */
+html.tv-host .toggle:checked,
+html.tv-host .toggle[aria-checked='true'] {
+  background-color: var(--color-base-content);
+  --input-color: var(--color-base-content);
+}
+html.tv-host .toggle:checked:before,
+html.tv-host .toggle[aria-checked='true']:before {
+  background-color: var(--color-base-100, #fff);
+  opacity: 1;
+}
+html.tv-host .toggle-primary:checked,
+html.tv-host .toggle-primary[aria-checked='true'] {
+  background-color: var(--color-primary);
+}

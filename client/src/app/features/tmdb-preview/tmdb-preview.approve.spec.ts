@@ -120,7 +120,7 @@ describe('TmdbPreviewComponent.saveEdit', () => {
   it('does not toast success once the component was destroyed while saving', async () => {
     const { fixture, toast } = createHarness();
     fixture.detectChanges();
-    fixture.componentInstance.editingRequest.set(FAKE_EDIT_ROW);
+    fixture.componentInstance.edit.row.set(FAKE_EDIT_ROW);
 
     const pending = fixture.componentInstance.saveEdit();
     fixture.destroy();
@@ -137,7 +137,7 @@ describe('TmdbPreviewComponent.submitDecline', () => {
     const { fixture, list } = createHarness();
     // media must be loaded first: refreshPendingRequests is a no-op without it.
     await fixture.componentInstance.ngOnInit();
-    fixture.componentInstance.declineForId.set(5);
+    fixture.componentInstance.decline.forId.set(5);
 
     const pending = fixture.componentInstance.submitDecline();
     fixture.destroy();

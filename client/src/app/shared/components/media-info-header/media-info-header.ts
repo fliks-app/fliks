@@ -72,6 +72,7 @@ import {
 import type { UiContribution } from '@fliks/plugin-ui';
 import { CachedSrcDirective } from '../../directives/cached-src.directive';
 import { normalizeLangTag } from '../../../core/utils/language.utils';
+import { MD_BREAKPOINT_QUERY, mediaQuerySignal } from '../../../core/utils/viewport';
 
 /** One `media.actions` contribution resolved to something the template can
  *  render directly — visibility, handler and icon fallback already decided. */
@@ -156,6 +157,9 @@ export class MediaInfoHeaderComponent {
   readonly navbar = inject(NavbarService);
   readonly tv = inject(TvService);
   private readonly device = inject(DeviceService);
+  private readonly mdUp = mediaQuerySignal(MD_BREAKPOINT_QUERY);
+  /** The desktop tree from `md` up, and always on a TV (`tv:` in CSS); the mobile one otherwise. */
+  protected readonly desktopLayout = computed(() => this.device.isTv() || this.mdUp());
   readonly auth = inject(AuthService);
   private readonly playable = inject(PlayableMediaService);
   private readonly spoilers = inject(SpoilerService);

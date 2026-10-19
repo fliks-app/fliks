@@ -1,0 +1,466 @@
+/* `tv:` variant — applies when body.tv is set. Lets responsive utilities
+   target Android TV without depending on viewport width breakpoints (a
+   1080p TV reports innerWidth=960 due to DPR=2, so it falls into the md
+   range and Tailwind packs the same column count as a portrait tablet). */
+@custom-variant tv (body.tv &);
+
+/* webOS reports `(hover: none)` even though the Magic Remote is a real
+   pointer, so Tailwind's default gate leaves every `hover:` utility inert on
+   LG. Re-open the variant there — and only there, since a touch device that
+   reports no hover would latch the state after a tap. Scoped to <html>, not
+   <body>: dropdown-menu and popover-menu reparent their host to
+   `document.documentElement`, outside <body>. */
+@custom-variant hover {
+  @media (hover: hover) {
+    &:hover {
+      @slot;
+    }
+  }
+  html.tv-webos &:hover {
+    @slot;
+  }
+}
+
+/* daisyUI authors its component hover states in its own `@media (hover: hover)`
+   block, which the variant above can't reach — mirrored here so LG gets them
+   too. Re-check the list against the built CSS on a daisyUI upgrade. */
+html.tv-webos .btn:hover {
+  --btn-bg: var(--btn-color, var(--color-base-200));
+}
+html.tv-webos .tab:hover {
+  color: var(--color-base-content);
+}
+html.tv-webos .dock > *:hover {
+  opacity: 80%;
+}
+html.tv-webos .link-hover:hover {
+  text-decoration-line: underline;
+}
+html.tv-webos .link-primary:hover {
+  color: var(--color-primary);
+}
+html.tv-webos .table tr.row-hover:hover,
+html.tv-webos .table tr.row-hover:nth-child(2n):hover {
+  background-color: var(--color-base-200);
+}
+html.tv-webos .table-zebra tbody tr.row-hover:hover,
+html.tv-webos .table-zebra tbody tr.row-hover:where(:nth-child(2n)):hover {
+  background-color: var(--color-base-300);
+}
+
+/* Rounder corners for all DaisyUI components */
+:root, [data-theme] {
+  /* Page padding — <main>, the topbars, and anything that bleeds out of them. */
+  --page-p: 1rem;
+  --radius-selector: 1rem;
+  --radius-field: 1rem;
+  --radius-box: 0.5rem;
+  --focus-ring:
+    0 0 0 2px var(--color-base-100, #1d232a),
+    0 0 0 4px var(--color-primary, #7a3ff2);
+}
+
+/* Active menu item styled like the hover state. daisyUI's neutral default is
+   darker than base-100 in the dark theme, so it reads as a hole. */
+.menu {
+  --menu-active-bg: color-mix(in oklab, var(--color-base-content) 10%, transparent);
+  --menu-active-fg: var(--color-base-content);
+}
+
+/* Thinner focus outline on form fields. Suppress daisyUI's border on focus —
+   the focus ring (outline) is the only visual cue we want, the extra white
+   border doubled up with the ring looks noisy.
+
+   A select uses `:focus-visible` rather than `:focus`: it has no caret, so a
+   tap has nothing left to show once the ring is suppressed, and dropping the
+   border too made a tapped field look borderless. Text fields keep `:focus` —
+   their caret is the indication and the ring is not the only cue. */
+.select:focus-visible, .input:focus, .input:focus-within, .textarea:focus {
+  outline-width: 1px;
+  outline-offset: 0px;
+  border-color: transparent;
+}
+
+/* Squared on the class rather than via `--radius-selector`: `.toggle` derives
+   its pill shape from that same token and needs the large value. */
+.checkbox {
+  border-radius: 0.25rem;
+}
+
+/* daisyUI draws the dropdown chevron ~16px from the trailing edge but only
+   reserves 1.75rem of end padding, so the value text crowds the arrow. Give
+   every select a touch more trailing room (logical property keeps it RTL-safe).
+   The chevron position is size-independent, so one value fits every modifier. */
+.select {
+  padding-inline-end: 2.25rem;
+}
+
+/* daisyUI ships `.tab` flat by default, which makes the global focus ring
+   (a box-shadow that traces border-radius) render as a square notched
+   into the otherwise rounded UI. Give every tab the same radius as the
+   rest of the design tokens so the ring reads consistently — inside
+   `.tabs-boxed` they still nest cleanly under the larger container. */
+.tab {
+  border-radius: var(--radius-box, 0.5rem);
+}
+
+/* Flex children inherit `min-width: auto`, which prevents inner text from
+   wrapping inside DaisyUI labels — the label expands to the longest line
+   instead, causing horizontal overflow. Force the side div + alt text to
+   shrink so paragraphs wrap normally. DaisyUI also applies `white-space:
+   nowrap` to `.label-text*` spans, which we override to allow line breaks. */
+.label.cursor-pointer > div,
+.label > .label-text-alt {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.label .label-text,
+.label .label-text-alt {
+  white-space: normal;
+}
+
+/* Global background veil — sits over the fanart image inside
+   `<app-background>`. Hard-coded rgba so the rule survives the
+   Tizen / webOS downlevel pass (Chromium 85 doesn't grok
+   `color-mix`, and the preset-env fallback for Tailwind's
+   `bg-base-100/N` drops the alpha and yields a 100%-opaque veil).
+   `#1d232a` matches daisyUI's dark theme `--color-base-100`. */
+.app-bg-veil {
+  background-color: var(--bg-veil);
+}
+
+/* Home library pill. The tint and border are an overlay dimmed by `opacity`
+   rather than a `color-mix()` alpha, which the TV WebView can't parse. */
+.library-card {
+  position: relative;
+}
+.library-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 1px solid var(--lib-color);
+  border-radius: inherit;
+  background: linear-gradient(135deg, var(--lib-color), transparent);
+  opacity: 0.2;
+}
+/* Lift the icon and label over that overlay — it is a positioned child, so
+   static content would otherwise paint under it. */
+.library-card > * {
+  position: relative;
+}
+
+/* The two veils the fanart is read through, named so an element captured apart
+   from the page can rebuild the same stack over its own copy of the picture. */
+:root {
+  --sidebar-veil: rgba(29, 35, 42, 0.4);
+  --bg-veil: rgba(29, 35, 42, 0.95);
+}
+
+/* Sidebar veil when a fanart background is showing — frosted
+   look without depending on Tailwind's color-mix-based
+   `bg-base-100/40`. Phones/tablets/desktop: 40 % alpha. TV: a
+   little stronger so the menu text doesn't bleed into the fanart. */
+.app-sidebar-veil {
+  background-color: var(--sidebar-veil);
+}
+body.tv .app-sidebar-veil {
+  background-color: rgba(29, 35, 42, 0.55);
+}
+
+/* Topbar veil when a fanart background is showing. Non-TV gets a
+   light frosted-glass tint; TV stays fully transparent so the
+   fanart reads cleanly across the top of the screen at 10-foot
+   viewing distance. */
+.app-navbar-veil {
+  background-color: rgba(29, 35, 42, 0.4);
+}
+body.tv .app-navbar-veil {
+  background-color: transparent;
+}
+
+/* Native app (Capacitor): offset content from system bars */
+body.native {
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+/* Player goes fullscreen — override safe area padding */
+body.native.immersive {
+  padding: 0 !important;
+}
+/* Suppress browser-style text / image selection on Capacitor builds.
+   A long-press on iOS (and on some Android builds) otherwise opens the
+   system "Copy / Save Image" menu when the user just meant to focus or
+   hold a media card. Inputs, textareas and explicit `[contenteditable]`
+   regions are re-enabled below so forms and dialogs still work. The
+   `.select-text` opt-in lets specific surfaces (e.g. release notes,
+   stack traces in the debug panel) keep selection if we want it.
+
+   Scoped to <html>, not <body>: overlays are reparented under <html> to
+   escape stacking contexts, so a body-scoped rule never reaches a sheet's
+   own poster and title. */
+html.native,
+html.native * {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-user-drag: none;
+}
+html.native input,
+html.native textarea,
+html.native [contenteditable="true"],
+html.native [contenteditable=""],
+html.native .select-text,
+html.native .select-text * {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
+}
+
+/* Native player (ExoPlayer/AVPlayer behind WebView) — force ALL layers transparent
+   so the native video surface shows through the WebView. */
+html.native-player-active {
+  background: transparent !important;
+}
+html.native-player-active body {
+  background: transparent !important;
+}
+html.native-player-active .drawer,
+html.native-player-active .drawer-content,
+html.native-player-active app-root,
+html.native-player-active app-layout,
+html.native-player-active main,
+html.native-player-active router-outlet + *,
+html.native-player-active app-player,
+html.native-player-active app-live-player {
+  background: transparent !important;
+}
+/* The decoder draws on a surface behind the WebView, so the player's own
+   backdrop has to get out of the way or it shows as a black picture. */
+.native-player {
+  background-color: transparent !important;
+}
+/* The backdrop reaches the player route from the app root, and its veil paints
+   an opaque tint the video would sit behind. Hidden rather than undisplayed:
+   coming back from `display: none` counts as entering, which replays the
+   layers' `@starting-style` and fades in an image that never left. */
+html.native-player-active app-background {
+  visibility: hidden !important;
+}
+/* Pages with hero fanart — content extends behind status bar */
+body.native.hero-page {
+  padding-top: 0 !important;
+}
+
+/* Landscape: fanart edge-to-edge into side safe areas (browser + native); body/main padding keeps content safe */
+@media (orientation: landscape) {
+  body.hero-page .hero-fanart-bleed {
+    margin-left: calc(-1 * var(--page-p) - env(safe-area-inset-left, 0px));
+    margin-right: calc(-1 * var(--page-p) - env(safe-area-inset-right, 0px));
+  }
+}
+
+/* Mobile navbar: legibility of white icons on fanart (toolbar only — reset inside user menu panel) */
+.nav-hero-icons svg {
+  filter: drop-shadow(0 1px 1px rgb(0 0 0 / 0.28)) drop-shadow(0 0 2px rgb(0 0 0 / 0.12));
+}
+.nav-hero-icons .dropdown-content svg {
+  filter: none;
+}
+
+@theme {
+  --breakpoint-3xl: 120rem;
+  --breakpoint-4xl: 160rem;
+  --breakpoint-5xl: 240rem;
+}
+
+/* Skip rendering of off-screen grid items — massive perf win for long lists */
+.cv-auto {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 10rem;
+}
+
+/* Browsers without `aspect-ratio` (the TV WebView's Chromium 85) ignore the
+   poster figure's aspect-2/3, so it reserves no height and the lazy <img>
+   only claims space once it decodes — every decode mid-scroll reflows the
+   whole non-virtualized library grid. A ratio `::before` reserves the box
+   instead, and the content is lifted out of the flow over it.
+   Modern browsers keep the native aspect-ratio path (this block is skipped).
+
+   The ratio goes on the pseudo-element rather than the box itself
+   (`height: 0` + `padding-bottom`): a zero-height content box breaks the
+   `overflow: hidden` + `border-radius` clip on this WebView, which square off
+   the corners of every card that rounds its art. */
+@supports not (aspect-ratio: 1 / 1) {
+  app-media-card figure.aspect-2\/3::before,
+  .animate-pulse .aspect-2\/3::before {
+    content: '';
+    display: block;
+    padding-bottom: 150%;
+  }
+  app-media-card figure.aspect-video::before,
+  .animate-pulse .aspect-video::before,
+  app-watch-history .aspect-video::before,
+  app-received-recommendations-card .aspect-video::before,
+  app-profile-recommendations .aspect-video::before,
+  app-playlist-detail .aspect-video::before,
+  app-media-info-extra .aspect-video::before {
+    content: '';
+    display: block;
+    padding-bottom: 56.25%;
+  }
+  /* Mosaic art: playlists, genres, collections. */
+  .animate-pulse .aspect-square::before,
+  .mosaic-art::before {
+    content: '';
+    display: block;
+    padding-bottom: 100%;
+  }
+  /* `h-full` resolves to zero against the auto height the ::before produces, so
+     every layer that filled the box has to be positioned instead. */
+  app-media-card figure.aspect-2\/3 > img,
+  app-media-card figure.aspect-video > img,
+  app-received-recommendations-card .aspect-video > img,
+  app-profile-recommendations .aspect-video > img,
+  app-playlist-detail .aspect-video > img,
+  app-media-info-extra .aspect-video > iframe,
+  .mosaic-art > * {
+    position: absolute;
+    inset: 0;
+  }
+  /* daisyUI's `.loading` takes its height from `aspect-ratio` alone, so without
+     it the spinner is zero-height. Mirror the width ladder it does set. */
+  .loading {
+    height: calc(var(--size-selector, 0.25rem) * 6);
+  }
+  .loading-xs {
+    height: calc(var(--size-selector, 0.25rem) * 4);
+  }
+  .loading-sm {
+    height: calc(var(--size-selector, 0.25rem) * 5);
+  }
+  .loading-md {
+    height: calc(var(--size-selector, 0.25rem) * 6);
+  }
+  .loading-lg {
+    height: calc(var(--size-selector, 0.25rem) * 7);
+  }
+  .loading-xl {
+    height: calc(var(--size-selector, 0.25rem) * 8);
+  }
+}
+
+@keyframes slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.animate-slide-in {
+  animation: slide-in-right 0.3s ease-out;
+}
+
+@keyframes slide-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-up {
+  animation: slide-up 0.18s ease-out;
+}
+
+/* Indeterminate seekbar loading sweep: a full-width gradient strip whose
+   transparent edges keep the reset from 100%→-100% from reading as a hard
+   gap, so the highlight appears to drift across the track on a loop. */
+@keyframes seekbar-indeterminate {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+.animate-seekbar-indeterminate {
+  animation: seekbar-indeterminate 1.4s ease-in-out infinite;
+  will-change: transform;
+}
+
+/* Honour reduced-motion: drop the loop, leaving a soft static highlight. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-seekbar-indeterminate {
+    animation: none;
+  }
+}
+
+/* Floating player cues (skip-intro / next-episode) carry an in-button
+   countdown: a dimmed overlay anchored to the right edge that retracts from
+   full width to nothing, "filling" the button as its on-screen window elapses.
+   The duration is bound inline so it tracks the parent's retract timer. */
+@keyframes player-cue-sweep {
+  from {
+    width: 100%;
+  }
+  to {
+    width: 0%;
+  }
+}
+
+.player-cue-progress {
+  animation-name: player-cue-sweep;
+  animation-timing-function: linear;
+  animation-fill-mode: both;
+}
+
+/* Reduced-motion: skip the sweep, leaving the button at full brightness; the
+   parent timer still retracts the cue on schedule. */
+@media (prefers-reduced-motion: reduce) {
+  .player-cue-progress {
+    animation: none;
+    width: 0;
+  }
+
+  .player-floating-cue {
+    transition: none;
+  }
+
+  .player-controls-reveal {
+    animation: none;
+  }
+}
+
+/* Plays whenever a controls row mounts — i.e. when the seek OSD escalates to
+   the full bar. `--reveal-from` points the slide at the nearest screen edge. */
+@keyframes player-controls-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(var(--reveal-from, 0.5rem));
+  }
+}
+.player-controls-reveal {
+  animation: player-controls-reveal 200ms ease-out;
+}
+
+/* The cue sits low while the controls are hidden and lifts clear of the
+   controls bar when it comes up, mirroring the subtitle shift. */
+.player-floating-cue {
+  --cue-bottom: 5rem;
+  right: calc(max(var(--ctrl-px, 1rem), env(safe-area-inset-right)) + 0.25rem + var(--ctrl-inset, 0px));
+  bottom: max(var(--cue-bottom), calc(var(--cue-bottom) + env(safe-area-inset-bottom)));
+  transition: bottom 200ms ease;
+}
+.player-floating-cue.controls-visible {
+  --cue-bottom: 10.5rem;
+}
+/* Middle rung: the seek OSD is a fraction of the full bar's height. */
+.player-floating-cue.controls-seek {
+  --cue-bottom: 7rem;
+}

@@ -15,11 +15,11 @@
                 {{ 'requests.approve' | translate }}
               </button>
               <button type="button" class="btn btn-ghost btn-sm"
-                      [disabled]="actionBusyId() === r.id" (click)="openEdit(r)">
+                      [disabled]="actionBusyId() === r.id" (click)="edit.open(r)">
                 {{ 'requests.edit' | translate }}
               </button>
               <button type="button" class="btn btn-ghost btn-sm text-error"
-                      [disabled]="actionBusyId() === r.id" (click)="openDecline(r.id)">
+                      [disabled]="actionBusyId() === r.id" (click)="decline.open(r.id)">
                 {{ 'requests.decline' | translate }}
               </button>
             </span>
@@ -51,7 +51,8 @@
 } @else {
 
   <!-- ===== MOBILE layout ===== -->
-  <div class="md:hidden">
+  @if (!desktopLayout()) {
+  <div>
     <app-mobile-fanart-hero [fanartUrl]="hero()?.fanartUrl" [viewTransitionName]="posterTransitionName()" />
 
     <div data-hero-lead class="px-1 -mt-16 relative z-10">
@@ -191,12 +192,14 @@
       }
     </div>
   </div>
+  }
 
   <!-- ===== DESKTOP layout =====
        Page-wide fanart is handled by BackgroundService (same as
        media-detail) — no inline bleed div here. md+ matches the
        breakpoint media-info-header uses for its own desktop split. -->
-  <div class="hidden md:block relative">
+  @if (desktopLayout()) {
+  <div class="relative">
     <div
       class="flex gap-6 lg:gap-10 relative z-20"
       [style.padding-top]="!navbar.isHeroPage() || navbar.effectiveSidebarPinned() || tv.isTv() ? null : navbar.mobileNavbarVisible() ? 'calc(env(safe-area-inset-top, 0px) + 3rem)' : null"
@@ -388,6 +391,7 @@
       </div>
     </div>
   </div>
+  }
 
   @if (type() === 'series') {
     <section class="px-1 md:px-0 mt-8">
@@ -438,26 +442,7 @@
   }
 }
 
-<!-- Trailer player -->
-<dialog #trailerDialog class="modal" (close)="trailerEmbedUrl.set(null)">
-  <div class="modal-box max-w-3xl p-0 overflow-hidden bg-black relative">
-    <form method="dialog">
-      <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2 z-10 text-white" [attr.aria-label]="'common.close' | translate">✕</button>
-    </form>
-    <div class="aspect-video">
-      @if (trailerEmbedUrl(); as url) {
-        <iframe
-          [src]="url"
-          class="w-full h-full"
-          allow="autoplay; encrypted-media; fullscreen"
-          referrerpolicy="strict-origin-when-cross-origin"
-          allowfullscreen
-        ></iframe>
-      }
-    </div>
-  </div>
-  <form method="dialog" class="modal-backdrop"><button tabindex="-1">close</button></form>
-</dialog>
+<app-trailer-dialog #trailerDialog />
 
 <app-request-modal
   [qualityProfiles]="qualityProfiles()"
@@ -468,27 +453,27 @@
 
 <app-import-modal />
 <app-request-decline-modal
-  [requestId]="declineForId()"
-  [reasonText]="declineReasonText()"
+  [requestId]="decline.forId()"
+  [reasonText]="decline.reasonText()"
   [submitBusy]="actionBusyId() !== null"
-  (reasonTextChange)="declineReasonText.set($event)"
-  (dismissed)="closeDecline()"
+  (reasonTextChange)="decline.reasonText.set($event)"
+  (dismissed)="decline.close()"
   (submitted)="submitDecline()"
 />
 
 <app-request-edit-modal
-  [row]="editingRequest()"
+  [row]="edit.row()"
   [qualityProfiles]="qualityProfiles()"
   [languageProfiles]="languageProfiles()"
-  [libraries]="compatibleLibraries()"
-  [qualityProfileId]="editQualityProfileId()"
-  [languageProfileId]="editLanguageProfileId()"
-  [libraryId]="editLibraryId()"
-  [saving]="editSaving()"
-  (qualityProfileIdChange)="editQualityProfileId.set($event)"
-  (languageProfileIdChange)="editLanguageProfileId.set($event)"
-  (libraryIdChange)="editLibraryId.set($event)"
-  (dismissed)="closeEdit()"
+  [libraries]="edit.compatibleLibraries()"
+  [qualityProfileId]="edit.qualityProfileId()"
+  [languageProfileId]="edit.languageProfileId()"
+  [libraryId]="edit.libraryId()"
+  [saving]="edit.saving()"
+  (qualityProfileIdChange)="edit.qualityProfileId.set($event)"
+  (languageProfileIdChange)="edit.languageProfileId.set($event)"
+  (libraryIdChange)="edit.libraryId.set($event)"
+  (dismissed)="edit.close()"
   (save)="saveEdit()"
 />
 

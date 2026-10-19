@@ -239,7 +239,7 @@
                 [languageProfileName]="languageProfileDisplay(req.languageProfileId)"
                 [busy]="requestActionBusyId() === req.id"
                 (approve)="approveRequest($event)"
-                (decline)="openDecline($event)"
+                (decline)="decline.open($event)"
                 (badgeClick)="onBadgeClick(req)"
               />
             }
@@ -288,11 +288,11 @@
 </div>
 
 <app-request-decline-modal
-  [requestId]="declineForId()"
-  [reasonText]="declineReasonText()"
-  [submitBusy]="requestActionBusyId() === declineForId()"
-  (reasonTextChange)="declineReasonText.set($event)"
-  (dismissed)="closeDecline()"
+  [requestId]="decline.forId()"
+  [reasonText]="decline.reasonText()"
+  [submitBusy]="requestActionBusyId() === decline.forId()"
+  (reasonTextChange)="decline.reasonText.set($event)"
+  (dismissed)="decline.close()"
   (submitted)="submitDecline()"
 />
 

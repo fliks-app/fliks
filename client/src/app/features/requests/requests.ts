@@ -32,6 +32,7 @@ import { RequestPosterComponent } from './request-poster';
 import { RequestDeclineModalComponent } from './request-decline-modal/request-decline-modal.component';
 import { RequestViewDeclineModalComponent } from './request-view-decline-modal/request-view-decline-modal.component';
 import { RequestEditModalComponent } from './request-edit-modal/request-edit-modal.component';
+import { RequestDeclineFlow, RequestEditFlow } from './request-flows';
 import { DropdownMenuComponent } from '../../shared/components/dropdown-menu';
 import { SseService } from '../../core/services/sse.service';
 import {
@@ -100,8 +101,6 @@ export class RequestsComponent implements OnInit, OnDestroy {
   readonly loading = signal(false);
   readonly statusFilter = signal<FliksRequestStatus | ''>('');
   readonly kindFilter = signal<RequestKind | ''>('');
-  readonly declineForId = signal<number | null>(null);
-  readonly declineReasonText = signal('');
   /** Read-only modal: motif affiché après un refus. */
   readonly viewDeclineReasonModal = signal<{
     mediaTitle: string;
@@ -114,19 +113,9 @@ export class RequestsComponent implements OnInit, OnDestroy {
   readonly languageProfiles = signal<{ id: number; name: string }[]>([]);
   /** Libraries the caller can target — used by the edit modal's picker. */
   readonly libraries = signal<LibrarySummary[]>([]);
-  readonly editingRequest = signal<FliksRequestRow | null>(null);
-  readonly editQualityProfileId = signal<number | null>(null);
-  readonly editLanguageProfileId = signal<number | null>(null);
-  readonly editLibraryId = signal<number | null>(null);
-  readonly editSaving = signal(false);
 
-  /** Libraries compatible with the request being edited (filtered by its
-   *  media type), the set offered in the edit modal's library picker. */
-  readonly compatibleLibraries = computed(() => {
-    const row = this.editingRequest();
-    if (!row) return [];
-    return this.libraries().filter((l) => l.mediaTypes.includes(row.mediaType));
-  });
+  readonly decline = new RequestDeclineFlow(() => this.declineModal());
+  readonly edit = new RequestEditFlow(() => this.editModal(), () => this.libraries());
 
   private page = 1;
 
@@ -266,17 +255,6 @@ export class RequestsComponent implements OnInit, OnDestroy {
     );
   }
 
-  openDecline(id: number) {
-    this.declineForId.set(id);
-    this.declineReasonText.set('');
-    this.declineModal()?.showModal();
-  }
-
-  closeDecline() {
-    this.declineModal()?.close();
-    this.declineForId.set(null);
-  }
-
   openViewDeclineReason(row: FliksRequestRow) {
     const reason = row.declinedReason?.trim();
     if (row.status !== 'declined' || !reason) return;
@@ -290,13 +268,13 @@ export class RequestsComponent implements OnInit, OnDestroy {
   }
 
   async submitDecline() {
-    const id = this.declineForId();
+    const id = this.decline.forId();
     if (id == null) return;
     this.actionBusyId.set(id);
     try {
-      const updated = await this.requestsService.decline(id, this.declineReasonText());
+      const updated = await this.requestsService.decline(id, this.decline.reasonText());
       this.patchRow(updated);
-      this.closeDecline();
+      this.decline.close();
     } finally {
       this.actionBusyId.set(null);
     }
@@ -338,39 +316,19 @@ export class RequestsComponent implements OnInit, OnDestroy {
     }
   }
 
-  openEdit(row: FliksRequestRow) {
-    this.editingRequest.set(row);
-    this.editQualityProfileId.set(row.qualityProfileId);
-    this.editLanguageProfileId.set(row.languageProfileId);
-    this.editLibraryId.set(row.libraryId);
-    this.editModal()?.showModal();
-  }
-
-  closeEdit() {
-    this.editModal()?.close();
-    this.editingRequest.set(null);
-  }
-
   async saveEdit() {
-    const row = this.editingRequest();
+    const row = this.edit.row();
     if (!row) return;
-    this.editSaving.set(true);
+    this.edit.saving.set(true);
     try {
-      // Only send libraryId when it actually changed: re-sending an unchanged
-      // value would re-run the backend access check on a plain profile edit.
-      const libraryChanged = this.editLibraryId() !== row.libraryId;
-      const updated = await this.requestsService.update(row.id, {
-        qualityProfileId: this.editQualityProfileId() ?? undefined,
-        languageProfileId: this.editLanguageProfileId() ?? undefined,
-        ...(libraryChanged ? { libraryId: this.editLibraryId() } : {}),
-      });
+      const updated = await this.requestsService.update(row.id, this.edit.changes(row));
       this.patchRow(updated);
       this.toast.success(this.translate.instant('requests.edit_success'));
-      this.closeEdit();
+      this.edit.close();
     } catch {
       // error toast handled by interceptor
     } finally {
-      this.editSaving.set(false);
+      this.edit.saving.set(false);
     }
   }
 
