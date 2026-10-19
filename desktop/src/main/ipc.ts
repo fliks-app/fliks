@@ -1,5 +1,6 @@
 import { ipcMain } from 'electron';
 import { IPC } from '../shared/contract';
+import { redactQuery } from './log-file';
 import type { PlayerSession } from './window/player-session';
 import type {
   DesktopLoadOptions,
@@ -11,7 +12,7 @@ import type {
 /** Wire the renderer→main invoke channels to the session's mpv player. */
 export function registerPlayerIpc(session: PlayerSession): void {
   ipcMain.handle(IPC.load, (_e, opts: DesktopLoadOptions) => {
-    console.log('[ipc] load:', opts.url, 'start=', opts.startTime ?? 0, 'headers=', Object.keys(opts.headers ?? {}).join(','));
+    console.log('[ipc] load:', redactQuery(opts.url), 'start=', opts.startTime ?? 0, 'headers=', Object.keys(opts.headers ?? {}).join(','));
     return session.player.load(opts);
   });
   ipcMain.handle(IPC.play, () => {

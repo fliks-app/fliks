@@ -1,4 +1,4 @@
-import { app } from 'electron';
+import { app, type WebContents } from 'electron';
 import { appendFileSync, mkdirSync, statSync, truncateSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -36,4 +36,14 @@ export function appendLog(line: string): void {
 export function redactQuery(url: string): string {
   const i = url.indexOf('?');
   return i === -1 ? url : `${url.slice(0, i)}?<redacted>`;
+}
+
+/** `redactQuery` for every URL embedded in free text (mpv stderr, error JSON). */
+export function redactUrls(text: string): string {
+  return text.replace(/(https?:\/\/[^\s"'?]+)\?[^\s"']*/g, '$1?<redacted>');
+}
+
+/** Echo the page console to stdout in dev only; a packaged build never prints page URLs. */
+export function echoRendererConsole(wc: WebContents): void {
+  if (!app.isPackaged) wc.on('console-message', (_e, _l, m) => console.log('[renderer]', m));
 }
