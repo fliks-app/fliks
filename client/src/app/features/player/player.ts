@@ -4234,8 +4234,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   // ── Subtitle resync panel ──
 
   readonly subtitleSyncOpen = signal(false);
-  /** On a phone the panel takes the screen: no controls, a tap plays or pauses. */
-  protected readonly syncHidesControls = computed(() => this.subtitleSyncOpen() && this.device.isPhone());
+  /** The panel takes the controls' place: none are shown, a tap plays or pauses. */
+  protected readonly syncHidesControls = this.subtitleSyncOpen.asReadonly();
   protected subtitleSyncOpener: HTMLElement | null = null;
   protected readonly syncSubtitle = computed(
     () => this.availableSubtitles().find((s) => s.id === this.activeSubtitleId()) ?? null,

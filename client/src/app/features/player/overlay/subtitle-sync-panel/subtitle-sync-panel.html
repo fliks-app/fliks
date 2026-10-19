@@ -1,9 +1,8 @@
 <div
   data-subtitle-sync
   data-tv-modal
-  [style.bottom.px]="phone() ? 0 : barH()"
   [class]="panelClass()"
-  class="absolute z-50 right-0 flex flex-col bg-black/70 backdrop-blur-sm text-white select-none"
+  class="absolute z-50 right-0 bottom-0 flex flex-col bg-black/70 backdrop-blur-sm text-white select-none"
 >
   <div class="flex items-center gap-2" role="group" [attr.aria-label]="'player.subtitle_sync.title' | translate">
     <select
@@ -64,7 +63,7 @@
         @for (v of visible(); track v.index) {
           <div
             class="sync-cue absolute px-2 text-center leading-snug"
-            [class]="active().has(v.index) ? 'z-10 h-auto! rounded bg-black/60 font-semibold text-white opacity-100 ' + (phone() ? 'text-base' : 'text-xl') : 'line-clamp-2 text-sm text-white/70 opacity-50'"
+            [class]="active().has(v.index) ? 'z-10 h-auto! font-semibold text-white opacity-100 ' + (phone() ? 'text-base' : 'text-xl') : 'line-clamp-2 text-sm text-white/70 opacity-50'"
             [style.left.px]="rulerPx + chevronPx"
             [style.right.px]="chevronPx"
             [style.top.px]="boxTop(v.box, base(), viewH())"
