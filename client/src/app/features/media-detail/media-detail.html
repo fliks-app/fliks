@@ -1,8 +1,6 @@
 <div appTvSection appDefaultFocus="[autofocus]" class="flex flex-col gap-4">
   @if (loading()) {
-    <!-- Skeleton: mirrors app-media-info-header's geometry — its md/tv split, the
-         mobile hero's height ladder and the poster-vs-still shapes — so nothing
-         reflows when the data lands. -->
+    <!-- Skeleton mirrors app-media-info-header's geometry so nothing reflows when data lands. -->
     <div class="animate-pulse">
       <div class="md:hidden tv:hidden">
         <div
@@ -48,10 +46,10 @@
           [title]="m.title"
           [mediaId]="m.id"
           [episodeId]="ep.id"
-          [episodeLabel]="episodeLabel() ?? episodeSeed()?.label ?? null"
+          [episodeLabel]="episodeView.episodeLabel() ?? episodeSeed()?.label ?? null"
           [rating]="null"
-          [dateLabel]="episodeDateLabel()"
-          [runtime]="episodeDisplayRuntime()"
+          [dateLabel]="episodeView.episodeDateLabel()"
+          [runtime]="episodeView.episodeDisplayRuntime()"
           [overview]="ep.overview ?? null"
           [monitored]="ep.monitored"
           [fanartUrl]="ep.stillUrl ?? m.fanartUrl ?? null"
@@ -62,65 +60,65 @@
           (openDownloadDetail)="openDownloadDetailModal()"
           [spoilerImage]="episodeSpoilerImage()"
           [spoilerOverview]="episodeSpoilerOverview()"
-          [backRoute]="episodeSeriesRoute()"
+          [backRoute]="episodeView.episodeSeriesRoute()"
           [subtitles]="subtitleSection()?.headerSubtitles() ?? []"
           [ocrLanguages]="subtitleSection()?.ocrInProgress() ?? []"
           [translations]="subtitleSection()?.translationInProgress() ?? []"
-          [files]="episodeFiles()"
-          [selectedFileId]="episodeActiveFileId()"
+          [files]="episodeView.episodeFiles()"
+          [selectedFileId]="episodeView.episodeActiveFileId()"
           [qualityProfileName]="m.qualityProfile?.name ?? null"
           [canDelete]="canDelete()"
           [isAdmin]="isAdmin()"
-          [canRequest]="canRequest()"
-          [userHasOpenWholeRequest]="hasBlockingRequest()"
-          [releasesLoading]="epReleasesLoading()"
-          [grabBusy]="epHeaderGrabBusy()"
+          [canRequest]="requestFlow.canRequest()"
+          [userHasOpenWholeRequest]="requestFlow.hasBlockingRequest()"
+          [releasesLoading]="grabs.epReleasesLoading()"
+          [grabBusy]="grabs.epHeaderGrabBusy()"
           [identified]="!unidentified()"
           (selectedFileIdChange)="selectedFileId.set($event)"
           (openDownload)="openDownloadModal()"
           (refreshMetadata)="refreshMetadata()"
           (toggleMonitored)="toggleMonitored()"
-          (loadReleases)="loadFocusedEpisodeReleases()"
-          (grabBest)="grabEpisodeBest(m.id, ep.id)"
+          (loadReleases)="grabs.loadFocusedEpisodeReleases()"
+          (grabBest)="grabs.grabEpisodeBest(m.id, ep.id)"
           (identify)="openIdentifyModal()"
-          (openAnalyze)="openAnalyzeModal()"
+          (openAnalyze)="analyze.open()"
           (editSubtitles)="openSubtitles()"
-          (episodeWatchedToggled)="onEpisodeWatchedToggledFromHeader($event)"
-          (requestMedia)="openRequestForMedia()"
+          (episodeWatchedToggled)="watched.onEpisodeToggledFromHeader($event)"
+          (requestMedia)="requestFlow.openForMedia()"
           (addToPlaylist)="openAddToPlaylist()"
           (recommend)="openRecommend()"
-          [liked]="focusedLiked()"
-          (likeToggled)="toggleLike()"
+          [liked]="like.focusedLiked()"
+          (likeToggled)="like.toggle()"
           (openTracking)="openTracking({ kind: 'episode', episodeId: ep.id })"
         />
 
         @if (focusedSeason(); as s) {
-          @if (currentSeasonEpisodes().length > 1) {
+          @if (episodeView.currentSeasonEpisodes().length > 1) {
             <app-media-detail-seasons
               [media]="m"
               [selectedSeason]="s"
               [activeSeasonId]="s.id"
-              [filteredEpisodes]="currentSeasonEpisodes()"
+              [filteredEpisodes]="episodeView.currentSeasonEpisodes()"
               [activeEpisodeId]="ep.id"
-              [watchedEpisodeIds]="watchedEpisodeIds()"
-              [episodeProgress]="episodeProgress()"
+              [watchedEpisodeIds]="watched.episodeIds()"
+              [episodeProgress]="watched.episodeProgress()"
               [hideControls]="true"
               [sectionTitle]="'media_detail.more_from_season' | translate: { season: s.seasonNumber }"
-              [likedEpisodeIds]="likeState().episodeIds"
-              (toggleEpisodeLike)="toggleEpisodeLike($event)"
-              (toggleEpisodeWatched)="onToggleEpisodeWatched(m.id, $event.episode, $event.watched)"
+              [likedEpisodeIds]="like.state().episodeIds"
+              (toggleEpisodeLike)="like.toggleEpisode($event)"
+              (toggleEpisodeWatched)="watched.onToggleEpisodeWatched(m.id, $event.episode, $event.watched)"
             />
           }
         }
 
-        @if (seasonsRow().length > 1) {
+        @if (episodeView.seasonsRow().length > 1) {
           <div class="divider my-6"></div>
           <app-collapsible-section
             [heading]="'media_detail.other_seasons_of' | translate: { title: m.title }"
             persistKey="otherSeasons"
           >
             <app-horizontal-scroller>
-              @for (other of seasonsRow(); track other.id) {
+              @for (other of episodeView.seasonsRow(); track other.id) {
                 <!-- Opens the page it sits on, so its picture has no hero to
                      pair with: stamped, it would morph into itself. -->
                 <app-media-card
@@ -129,14 +127,14 @@
                   [imageUrl]="other.posterUrl ?? m.posterUrl"
                   [title]="other.seasonNumber | seasonLabel"
                   [subtitle]="other.episodes.length + ' ' + ('media_detail.episodes' | translate)"
-                  [link]="seasonLink(m, other)"
+                  [link]="episodeView.seasonLink(m, other)"
                   [posterMorph]="false"
                   [interactiveWatched]="true"
-                  [status]="seasonFullyWatched(other) ? 'watched' : null"
+                  [status]="watched.seasonFullyWatched(other) ? 'watched' : null"
                   [highlighted]="other.id === focusedSeason()?.id"
-                  [liked]="seasonLiked(other.id)"
-                  (likeToggled)="toggleSeasonLike(other.id)"
-                  (watchedToggled)="onToggleSeasonWatched(m.id, other, $event)"
+                  [liked]="like.seasonLiked(other.id)"
+                  (likeToggled)="like.toggleSeason(other.id)"
+                  (watchedToggled)="watched.onToggleSeasonWatched(m.id, other, $event)"
                 />
               }
             </app-horizontal-scroller>
@@ -151,14 +149,14 @@
         <app-subtitles-modal
           [mediaId]="m.id"
           [episodeId]="ep.id"
-          [selectedFileId]="episodeActiveFileId()"
-          [streamSubtitles]="episodeActiveFile()?.streamInfo?.subtitles"
+          [selectedFileId]="episodeView.episodeActiveFileId()"
+          [streamSubtitles]="episodeView.episodeActiveFile()?.streamInfo?.subtitles"
           [canManage]="canManageSubtitles()"
           [searchDisabled]="!ep.hasFile"
           [languageProfileId]="m.languageProfile?.id ?? null"
         />
 
-        @if (episodeActiveFile(); as sf) {
+        @if (episodeView.episodeActiveFile(); as sf) {
           <div class="divider my-6"></div>
           <app-media-file-info
             [file]="sf"
@@ -166,7 +164,7 @@
             [canDelete]="canDelete()"
             [canManageSubtitles]="canManageSubtitles()"
             [canEditMedia]="canEditProfiles()"
-            [fileId]="episodeActiveFileId()"
+            [fileId]="episodeView.episodeActiveFileId()"
             [mediaId]="m.id"
             [episodeId]="ep.id"
             (subtitlesChanged)="reloadSubtitles()"
@@ -186,9 +184,9 @@
           [runtime]="displayRuntime()"
           [overview]="m.overview"
           [genres]="m.genres ?? []"
-          [resumeEpisodeLabel]="resumeEpisodeLabel()"
-          [resumeEpisodeId]="nextPlayEpisodeId()"
-          [resumeMediaFileId]="nextPlayMediaFileId()"
+          [resumeEpisodeLabel]="episodeView.resumeEpisodeLabel()"
+          [resumeEpisodeId]="episodeView.nextPlayEpisodeId()"
+          [resumeMediaFileId]="episodeView.nextPlayMediaFileId()"
           [status]="m.status"
           [monitored]="m.monitored"
           [libraryName]="m.library?.name ?? null"
@@ -204,15 +202,15 @@
           [files]="m.type === 'series' ? (m.files ?? []) : mediaFiles()"
           [selectedFileId]="activeFileId()"
           [mediaType]="m.type"
-          [seriesFullyWatched]="seriesFullyWatched()"
+          [seriesFullyWatched]="watched.seriesFullyWatched()"
           [canEditProfiles]="canEditProfiles()"
           [canDelete]="canDelete()"
           [isAdmin]="isAdmin()"
-          [canRequest]="canRequest()"
-          [userHasOpenWholeRequest]="hasBlockingRequest()"
-          [canRequestDeletion]="showRequestDeletion()"
-          [releasesLoading]="releasesLoading()"
-          [grabBusy]="movieHeaderGrabBusy()"
+          [canRequest]="requestFlow.canRequest()"
+          [userHasOpenWholeRequest]="requestFlow.hasBlockingRequest()"
+          [canRequestDeletion]="requestFlow.showRequestDeletion()"
+          [releasesLoading]="grabs.releasesLoading()"
+          [grabBusy]="grabs.movieHeaderGrabBusy()"
           [monitoredLoading]="monitoredLoading()"
           [deleteLoading]="deleteLoading()"
           [identified]="!unidentified()"
@@ -223,18 +221,18 @@
           (refreshMetadata)="refreshMetadata()"
           (toggleMonitored)="toggleMonitored()"
           (deleteMedia)="deleteMedia()"
-          (loadReleases)="loadReleases()"
-          (grabBest)="grabBest()"
+          (loadReleases)="grabs.loadReleases()"
+          (grabBest)="grabs.grabBest()"
           (identify)="openIdentifyModal()"
-          (openAnalyze)="openAnalyzeModal()"
-          (seriesWatchedToggled)="onSeriesWatchedToggled($event)"
+          (openAnalyze)="analyze.open()"
+          (seriesWatchedToggled)="watched.onSeriesToggled($event)"
           (editSubtitles)="openSubtitles()"
-          (requestMedia)="openRequestForMedia()"
-          (requestDeletion)="requestDeletion()"
+          (requestMedia)="requestFlow.openForMedia()"
+          (requestDeletion)="requestFlow.requestDeletion()"
           (addToPlaylist)="openAddToPlaylist()"
           (recommend)="openRecommend()"
-          [liked]="focusedLiked()"
-          (likeToggled)="toggleLike()"
+          [liked]="like.focusedLiked()"
+          (likeToggled)="like.toggle()"
           (openTracking)="openTracking(m.type === 'movie' ? { kind: 'movie' } : { kind: 'series' })"
           [badge]="headerBadge()"
           (openDownloadDetail)="openDownloadDetailModal()"
@@ -300,33 +298,33 @@
           <app-media-detail-seasons
             [media]="m"
             [selectedSeason]="activeSeason(m)"
-            [watchedEpisodeIds]="watchedEpisodeIds()"
-            [episodeProgress]="episodeProgress()"
+            [watchedEpisodeIds]="watched.episodeIds()"
+            [episodeProgress]="watched.episodeProgress()"
             [activeSeasonId]="activeSeasonId()"
             [episodesHasFileOnly]="episodesHasFileOnly()"
             [filteredEpisodes]="activeSeason(m) ? filteredSeasonEpisodes(activeSeason(m)!) : []"
-            [seasonReleasesLoading]="seasonReleasesLoading()"
-            [seasonReleasesOpenId]="seasonReleasesOpen()"
-            [seasonGrabBusy]="seasonGrabBusy()"
-            [seasonGrabBestBusyIds]="seasonGrabBestBusy()"
+            [seasonReleasesLoading]="grabs.seasonReleasesLoading()"
+            [seasonReleasesOpenId]="grabs.seasonReleasesOpen()"
+            [seasonGrabBusy]="grabs.seasonGrabBusy()"
+            [seasonGrabBestBusyIds]="grabs.seasonGrabBestBusy()"
             [seasonBusyId]="seasonBusy()"
-            [seasonWatchedBusyId]="seasonWatchedBusy()"
+            [seasonWatchedBusyId]="watched.seasonBusy()"
             [isAdmin]="isAdmin()"
-            [canRequest]="canRequest()"
-            [userRequestedSeasonNumbers]="requestedSeasons()"
-            [likedSeasonIds]="likeState().seasonIds"
-            [likedEpisodeIds]="likeState().episodeIds"
-            (toggleEpisodeLike)="toggleEpisodeLike($event)"
+            [canRequest]="requestFlow.canRequest()"
+            [userRequestedSeasonNumbers]="requestFlow.requestedSeasons()"
+            [likedSeasonIds]="like.state().seasonIds"
+            [likedEpisodeIds]="like.state().episodeIds"
+            (toggleEpisodeLike)="like.toggleEpisode($event)"
             (selectSeason)="selectSeason($event)"
             (episodesHasFileOnlyChange)="setEpisodesHasFileOnly($event)"
-            (loadSeasonReleases)="loadSeasonReleases(m.id, $event)"
-            (grabSeason)="grabSeasonAuto(m.id, $event)"
+            (loadSeasonReleases)="grabs.loadSeasonReleases(m.id, $event)"
+            (grabSeason)="grabs.grabSeasonAuto(m.id, $event)"
             (toggleSeasonMonitored)="toggleSeasonMonitored($event)"
-            (toggleSeasonWatched)="onToggleSeasonWatched(m.id, $event.season, $event.watched)"
-            (toggleEpisodeWatched)="onToggleEpisodeWatched(m.id, $event.episode, $event.watched)"
-            (requestSeason)="openRequestForSeason($event)"
+            (toggleSeasonWatched)="watched.onToggleSeasonWatched(m.id, $event.season, $event.watched)"
+            (toggleEpisodeWatched)="watched.onToggleEpisodeWatched(m.id, $event.episode, $event.watched)"
+            (requestSeason)="requestFlow.openForSeason($event)"
             (viewSeasonTracking)="openTracking({ kind: 'season', seasonNumber: $event })"
-            (toggleSeasonLike)="toggleSeasonLike($event)"
+            (toggleSeasonLike)="like.toggleSeason($event)"
             (recommendSeason)="recommendSeason($event)"
           />
         }
@@ -347,49 +345,49 @@
       <app-releases-modal
         #movieReleasesModal
         [title]="'media_detail.releases_title' | translate"
-        [releases]="releases()"
-        [indexers]="releasesIndexers()"
-        [loading]="releasesLoading()"
-        [searched]="releasesSearched()"
-        [error]="releasesError()"
-        [emptyMessage]="releasesEmptyMessage()"
-        [grabBusy]="grabBusy()"
-        [grabState]="grabState()"
+        [releases]="grabs.releases()"
+        [indexers]="grabs.releasesIndexers()"
+        [loading]="grabs.releasesLoading()"
+        [searched]="grabs.releasesSearched()"
+        [error]="grabs.releasesError()"
+        [emptyMessage]="grabs.releasesEmptyMessage()"
+        [grabBusy]="grabs.grabBusy()"
+        [grabState]="grabs.grabState()"
         [canGrab]="canGrab()"
         grabPrefix="r"
-        (grab)="grabRelease($event.release, $event.key)"
+        (grab)="grabs.grabRelease($event.release, $event.key)"
       />
 
       <app-releases-modal
         #episodeReleasesModal
         [title]="'media_detail.ep_releases_title' | translate"
-        [releases]="epReleases()"
-        [indexers]="epReleasesIndexers()"
-        [loading]="epReleasesLoading()"
-        [searched]="epReleasesSearched()"
-        [error]="epReleasesError()"
-        [emptyMessage]="epReleasesEmptyMessage()"
-        [grabBusy]="epGrabBusy()"
-        [grabState]="epGrabState()"
+        [releases]="grabs.epReleases()"
+        [indexers]="grabs.epReleasesIndexers()"
+        [loading]="grabs.epReleasesLoading()"
+        [searched]="grabs.epReleasesSearched()"
+        [error]="grabs.epReleasesError()"
+        [emptyMessage]="grabs.epReleasesEmptyMessage()"
+        [grabBusy]="grabs.epGrabBusy()"
+        [grabState]="grabs.epGrabState()"
         [canGrab]="canGrab()"
         grabPrefix="ep"
-        (grab)="grabEpisodeRelease(m.id, selectedEpisodeId()!, $event.release, $event.key)"
+        (grab)="grabs.grabEpisodeRelease(m.id, grabs.selectedEpisodeId()!, $event.release, $event.key)"
       />
 
       <app-releases-modal
         #seasonReleasesModal
         [title]="'media_detail.season_packs_title' | translate"
-        [releases]="seasonReleases()"
-        [indexers]="seasonReleasesIndexers()"
-        [loading]="seasonReleasesLoading()"
+        [releases]="grabs.seasonReleases()"
+        [indexers]="grabs.seasonReleasesIndexers()"
+        [loading]="grabs.seasonReleasesLoading()"
         [searched]="true"
-        [error]="seasonReleasesError()"
-        [emptyMessage]="seasonReleasesEmptyMessage()"
-        [grabBusy]="seasonGrabBusy()"
-        [grabState]="seasonReleaseGrabState()"
+        [error]="grabs.seasonReleasesError()"
+        [emptyMessage]="grabs.seasonReleasesEmptyMessage()"
+        [grabBusy]="grabs.seasonGrabBusy()"
+        [grabState]="grabs.seasonReleaseGrabState()"
         [showCfScore]="false"
         grabPrefix="s"
-        (grab)="onGrabSeasonReleaseFromModal(m.id, $event.release, $event.key)"
+        (grab)="grabs.onGrabSeasonReleaseFromModal(m.id, $event.release, $event.key)"
       />
 
       <app-media-detail-profiles-modal
@@ -493,11 +491,7 @@
   }
 </ng-template>
 
-<!-- Analyse modal — admin-only post-import analysis re-runs. Native
-     <dialog> + showModal() gives focus trapping, Tab cycling and
-     Escape-to-close for free; the <form method="dialog"> backdrop
-     dismisses on outside click. Rescan stays on /rescan (full-disk
-     superset) and disables the granular options when ticked. -->
+<!-- Analyse modal (admin-only): Rescan hits /rescan (superset) and disables the granular options when ticked. -->
 <dialog
   #analyzeDialog
   class="modal"
@@ -522,8 +516,8 @@
           #firstAnalyzeOption
           type="checkbox"
           class="checkbox checkbox-primary mt-0.5"
-          [checked]="analyzeOpts().rescan"
-          (change)="setAnalyzeOpt('rescan', $any($event.target).checked)"
+          [checked]="analyze.opts().rescan"
+          (change)="analyze.setOpt('rescan', $any($event.target).checked)"
         />
         <span>
           <span class="font-medium block">{{ 'media_detail.analyze_rescan' | translate }}</span>
@@ -534,14 +528,14 @@
       </label>
       <label
         class="flex items-start gap-3 cursor-pointer"
-        [class.opacity-50]="analyzeOpts().rescan"
+        [class.opacity-50]="analyze.opts().rescan"
       >
         <input
           type="checkbox"
           class="checkbox checkbox-primary mt-0.5"
-          [checked]="analyzeOpts().sprites"
-          [disabled]="analyzeOpts().rescan"
-          (change)="setAnalyzeOpt('sprites', $any($event.target).checked)"
+          [checked]="analyze.opts().sprites"
+          [disabled]="analyze.opts().rescan"
+          (change)="analyze.setOpt('sprites', $any($event.target).checked)"
         />
         <span>
           <span class="font-medium block">{{ 'media_detail.analyze_sprites' | translate }}</span>
@@ -552,14 +546,14 @@
       </label>
       <label
         class="flex items-start gap-3 cursor-pointer"
-        [class.opacity-50]="analyzeOpts().rescan"
+        [class.opacity-50]="analyze.opts().rescan"
       >
         <input
           type="checkbox"
           class="checkbox checkbox-primary mt-0.5"
-          [checked]="analyzeOpts().crop"
-          [disabled]="analyzeOpts().rescan"
-          (change)="setAnalyzeOpt('crop', $any($event.target).checked)"
+          [checked]="analyze.opts().crop"
+          [disabled]="analyze.opts().rescan"
+          (change)="analyze.setOpt('crop', $any($event.target).checked)"
         />
         <span>
           <span class="font-medium block">{{ 'media_detail.analyze_crop' | translate }}</span>
@@ -570,14 +564,14 @@
       </label>
       <label
         class="flex items-start gap-3 cursor-pointer"
-        [class.opacity-50]="analyzeOpts().rescan"
+        [class.opacity-50]="analyze.opts().rescan"
       >
         <input
           type="checkbox"
           class="checkbox checkbox-primary mt-0.5"
-          [checked]="analyzeOpts().subtitleCache"
-          [disabled]="analyzeOpts().rescan"
-          (change)="setAnalyzeOpt('subtitleCache', $any($event.target).checked)"
+          [checked]="analyze.opts().subtitleCache"
+          [disabled]="analyze.opts().rescan"
+          (change)="analyze.setOpt('subtitleCache', $any($event.target).checked)"
         />
         <span>
           <span class="font-medium block">{{
@@ -588,17 +582,17 @@
           }}</span>
         </span>
       </label>
-      @if (analyzeShowMarkers()) {
+      @if (analyze.showMarkers()) {
         <label
           class="flex items-start gap-3 cursor-pointer"
-          [class.opacity-50]="analyzeOpts().rescan"
+          [class.opacity-50]="analyze.opts().rescan"
         >
           <input
             type="checkbox"
             class="checkbox checkbox-primary mt-0.5"
-            [checked]="analyzeOpts().markers"
-            [disabled]="analyzeOpts().rescan"
-            (change)="setAnalyzeOpt('markers', $any($event.target).checked)"
+            [checked]="analyze.opts().markers"
+            [disabled]="analyze.opts().rescan"
+            (change)="analyze.setOpt('markers', $any($event.target).checked)"
           />
           <span>
             <span class="font-medium block">{{ 'media_detail.analyze_markers' | translate }}</span>
@@ -610,27 +604,23 @@
       }
     </div>
     <app-modal-footer>
-      <button type="button" class="btn btn-ghost" (click)="closeAnalyzeModal()">
+      <button type="button" class="btn btn-ghost" (click)="analyze.close()">
         {{ 'common.cancel' | translate }}
       </button>
       <button
         type="button"
         class="btn btn-primary"
-        [disabled]="analyzeRunning() || !analyzeHasSelection()"
-        (click)="runAnalyze()"
+        [disabled]="analyze.running() || !analyze.hasSelection()"
+        (click)="analyze.run()"
       >
-        @if (analyzeRunning()) {
+        @if (analyze.running()) {
           <span class="loading loading-spinner loading-sm"></span>
         }
         {{ 'media_detail.analyze_apply' | translate }}
       </button>
     </app-modal-footer>
   </div>
-  <!-- Backdrop close: clicking outside submits the dialog-method form,
-       which the browser handles natively. The button is removed from the
-       keyboard tab/arrow order so spatial-nav doesn't pick it as a
-       neighbour (its rect spans the whole viewport, so otherwise every
-       up/down between checkboxes would land here). -->
+  <!-- Backdrop close: kept out of the tab/arrow order, its viewport-wide rect would otherwise win spatial-nav between checkboxes. -->
   <form method="dialog" class="modal-backdrop">
     <button type="submit" tabindex="-1" aria-hidden="true">close</button>
   </form>
@@ -638,13 +628,13 @@
 
 <!-- Request modal — only relevant for users who can request (regular
      requesters). Profiles + libraries already loaded by media-detail. -->
-@if (canRequest()) {
+@if (requestFlow.canRequest()) {
   <app-request-modal
     #requestModal
     [qualityProfiles]="qualityProfileOptions()"
     [languageProfiles]="languageProfileOptions()"
     [libraries]="libraries()"
     [librariesLoading]="profilesOptionsLoading()"
-    (requested)="onRequestSubmitted()"
+    (requested)="requestFlow.onSubmitted()"
   />
 }
