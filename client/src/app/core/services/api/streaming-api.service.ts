@@ -1,10 +1,11 @@
 import { Injectable, inject } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpContext } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { AuthService } from '../auth.service';
 import { ServerConfigService } from '../server-config.service';
 import { CastService } from '../cast.service';
 import { CACHE_BYPASS_HEADER } from '../../interceptors/cache.interceptor';
+import { SKIP_ERROR_TOAST } from '../../interceptors/error.interceptor';
 import {
   BrowserDeviceProfileService,
   DeviceProfile,
@@ -496,6 +497,7 @@ export class StreamingApiService {
     startQuality?: string,
     startAt?: number,
     download?: boolean,
+    opts?: { skipErrorToast?: boolean },
   ): Promise<PlaybackInfoResponse> {
     const query = this.buildQuery({
       token: this.playbackToken ?? undefined,
@@ -509,7 +511,10 @@ export class StreamingApiService {
       this.http.post<PlaybackInfoResponse>(
         `/api/stream/${mediaFileId}/playback-info${query ? `?${query}` : ''}`,
         deviceProfile,
-        { headers: this.sseConnectionHeaders() },
+        {
+          headers: this.sseConnectionHeaders(),
+          context: new HttpContext().set(SKIP_ERROR_TOAST, !!opts?.skipErrorToast),
+        },
       ),
     );
   }
