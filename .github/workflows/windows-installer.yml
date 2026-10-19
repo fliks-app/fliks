@@ -17,13 +17,16 @@ on:
   push:
     branches: [main]
     tags: ['v*']
-    paths: &paths
+    paths:
       - 'windows/**'
       - 'server/**'
       - '!server/**/*.md'
       - '.github/workflows/windows-installer.yml'
+  # A server-only PR is covered by the Windows clippy job of server.yml.
   pull_request:
-    paths: *paths
+    paths:
+      - 'windows/**'
+      - '.github/workflows/windows-installer.yml'
   workflow_dispatch:
 
 # Cancel a superseded PR run; a main run must finish to save the caches.
@@ -88,7 +91,7 @@ jobs:
           path: windows/Vendored
           key: win-vendored-${{ hashFiles('windows/Scripts/fetch-vendored.ps1') }}
 
-      # Client build output, keyed on its sources + lockfile.
+      # Client build output, keyed on every client file that can reach it (public/, i18n, ngsw-config...).
       # A change touching only windows/** (the tray) hits this cache and skips
       # the slow web build entirely.
       - name: Cache web build
@@ -96,7 +99,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: client/dist
-          key: win-web-${{ hashFiles('client/package-lock.json', 'client/src/**', 'client/angular.json', 'client/tsconfig*.json') }}
+          key: win-web-${{ hashFiles('client/**', '!client/dist/**', '!client/node_modules/**', '!client/.angular/**', '!client/android/**', '!client/ios/**') }}
 
       - name: Install vpk
         run: dotnet tool install -g vpk --version 1.2.161

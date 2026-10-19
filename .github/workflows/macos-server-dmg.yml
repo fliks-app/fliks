@@ -91,7 +91,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: client/dist
-          key: macos-web-${{ hashFiles('client/package-lock.json', 'client/src/**', 'client/angular.json', 'client/tsconfig*.json') }}
+          key: macos-web-${{ hashFiles('client/**', '!client/dist/**', '!client/node_modules/**', '!client/.angular/**', '!client/android/**', '!client/ios/**') }}
 
       - name: Build client
         if: steps.webcache.outputs.cache-hit != 'true'
