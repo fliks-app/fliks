@@ -3117,6 +3117,7 @@
     "jobs": {
       "sourceRefresh": "Live TV source refresh",
       "sourceSync": "Live TV source sync",
+      "guideSync": "Live TV guide sync",
       "guideRefresh": "Live TV guide refresh",
       "guidePrune": "Live TV guide cleanup"
     },

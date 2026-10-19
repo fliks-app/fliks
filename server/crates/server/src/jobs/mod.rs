@@ -8,7 +8,8 @@ mod routes;
 mod runner;
 
 pub use audit::{
-    Command, Trigger, any_active, finish, insert_queued_with_body, mark_running, run_audited, sweep,
+    Command, Trigger, any_active, execute, finish, insert_queued_with_body, mark_running,
+    run_audited, sweep,
 };
 pub use cron::{parse as parse_cron, server_tz, spawn as spawn_cron};
 pub use names::is_core;

@@ -1,6 +1,7 @@
-import { Component, ElementRef, OnInit, inject, signal, viewChild } from '@angular/core';
+import { Component, ElementRef, OnInit, effect, inject, signal, untracked, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
+import { SseService } from '../../../../core/services/sse.service';
 import { ToastService } from '../../../../core/services/toast.service';
 import { ConfirmationService } from '../../../../core/services/confirmation.service';
 import {
@@ -34,6 +35,7 @@ export class LiveTvGuideAdminComponent implements OnInit {
   private readonly api = inject(LiveTvApiService);
   private readonly translate = inject(TranslateService);
   private readonly toast = inject(ToastService);
+  private readonly sse = inject(SseService);
   private readonly confirmation = inject(ConfirmationService);
   private readonly editorDialog = viewChild<ElementRef<HTMLDialogElement>>('editorDialog');
 
@@ -58,6 +60,18 @@ export class LiveTvGuideAdminComponent implements OnInit {
   readonly formRefreshHours = signal(12);
   readonly formTimezoneOffset = signal(0);
   readonly formEnabled = signal(true);
+
+  constructor() {
+    effect(() => {
+      const event = this.sse.lastEvent();
+      if (event?.type === 'command.completed' && event['name'] === 'LiveTvGuideSync') {
+        untracked(() => {
+          void this.api.listGuideSources().then((rows) => this.rows.set(rows)).catch(() => {});
+          void this.loadReport();
+        });
+      }
+    });
+  }
 
   ngOnInit(): void {
     void this.api.listSources().then((s) => this.sources.set(s)).catch(() => {});

@@ -1,8 +1,9 @@
-import { Component, ElementRef, OnInit, inject, signal, computed, viewChild } from '@angular/core';
+import { Component, ElementRef, OnInit, effect, inject, signal, computed, untracked, viewChild } from '@angular/core';
 import { NgClass } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { ConfirmationService } from '../../../../core/services/confirmation.service';
+import { SseService } from '../../../../core/services/sse.service';
 import { ToastService } from '../../../../core/services/toast.service';
 import {
   LiveTvApiService,
@@ -49,6 +50,7 @@ export class LiveTvSourcesComponent implements OnInit {
   private readonly api = inject(LiveTvApiService);
   private readonly translate = inject(TranslateService);
   private readonly toast = inject(ToastService);
+  private readonly sse = inject(SseService);
   private readonly confirmation = inject(ConfirmationService);
   private readonly editorDialog = viewChild<ElementRef<HTMLDialogElement>>('editorDialog');
 
@@ -117,6 +119,15 @@ export class LiveTvSourcesComponent implements OnInit {
       };
     }
     return null;
+  }
+
+  constructor() {
+    effect(() => {
+      const event = this.sse.lastEvent();
+      if (event?.type === 'command.completed' && event['name'] === 'LiveTvSourceSync') {
+        untracked(() => void this.api.listSources().then((rows) => this.rows.set(rows)).catch(() => {}));
+      }
+    });
   }
 
   ngOnInit(): void {
