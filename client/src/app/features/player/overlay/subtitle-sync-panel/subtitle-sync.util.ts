@@ -125,6 +125,8 @@ export function visibleCues(
 export const TICK_SEC = 1;
 export const LABEL_EVERY = 5;
 export const RULER_PX = 48;
+/** Room for `h:mm:ss` labels once the video reaches an hour. */
+export const RULER_HOURS_PX = 64;
 export const CHEVRON_PX = 20;
 
 export interface Tick {

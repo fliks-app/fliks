@@ -50,7 +50,7 @@
       (blur)="stopEdit()"
     >
       <div class="relative w-full" [style.height.px]="height()">
-        <div class="absolute inset-y-0 left-0 border-r border-white/20" [style.width.px]="rulerPx" aria-hidden="true">
+        <div class="absolute inset-y-0 left-0 border-r border-white/20" [style.width.px]="rulerW()" aria-hidden="true">
           @for (t of ticks(); track t.time) {
             <div class="absolute right-0 flex -translate-y-1/2 items-center justify-end gap-1" [style.top.px]="t.top">
               @if (t.label) {
@@ -64,7 +64,7 @@
           <div
             class="sync-cue absolute px-2 text-center leading-snug"
             [class]="active().has(v.index) ? 'z-10 h-auto! font-semibold text-white opacity-100 ' + (phone() ? 'text-base' : 'text-xl') : 'line-clamp-2 text-sm text-white/70 opacity-50'"
-            [style.left.px]="rulerPx + chevronPx"
+            [style.left.px]="rulerW() + chevronPx"
             [style.right.px]="chevronPx"
             [style.top.px]="boxTop(v.box, base(), viewH())"
             [style.height.px]="v.box.height"
@@ -78,7 +78,7 @@
     } @else if (!syncing()) {
       <p class="sync-hint pointer-events-none absolute inset-x-0 bottom-2 mx-auto hidden w-fit rounded bg-black/70 px-2 py-1 text-xs text-white/80">{{ 'player.subtitle_sync.adjust_hint' | translate }}</p>
     }
-    <svg lucideChevronRight class="pointer-events-none absolute top-1/2 h-5 w-5 -translate-y-1/2 text-white" [style.left.px]="rulerPx" aria-hidden="true"></svg>
+    <svg lucideChevronRight class="pointer-events-none absolute top-1/2 h-5 w-5 -translate-y-1/2 text-white" [style.left.px]="rulerW()" aria-hidden="true"></svg>
     <svg lucideChevronLeft class="pointer-events-none absolute top-1/2 h-5 w-5 -translate-y-1/2 text-white" [style.right.px]="scrollbarW()" aria-hidden="true"></svg>
   </div>
 

@@ -49,6 +49,7 @@ import {
   TimeMap,
   visibleCues,
   visibleTicks,
+  RULER_HOURS_PX,
   RULER_PX,
   CHEVRON_PX,
 } from './subtitle-sync.util';
@@ -116,7 +117,7 @@ export class SubtitleSyncPanelComponent {
     visibleCues(this.cues(), this.boxes(), this.base(), this.viewTop(), this.viewH()),
   );
   protected readonly ticks = computed(() => visibleTicks(this.timeMap(), this.viewTop(), this.viewH(), this.duration()));
-  protected readonly rulerPx = RULER_PX;
+  protected readonly rulerW = computed(() => (this.duration() >= 3600 ? RULER_HOURS_PX : RULER_PX));
   protected readonly chevronPx = CHEVRON_PX;
   protected readonly scrollbarW = signal(0);
   /** Phone: the controls are hidden, so the panel fills the side (landscape) or the lower sheet (portrait). */
