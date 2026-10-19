@@ -176,7 +176,7 @@ pub async fn sync(st: &AppState, id: i32) -> Result<SyncResult, SyncError> {
     run(st, id).await
 }
 
-/// The async twin of `sync` (C161): the queued row of a sync that runs on.
+/// The async twin of `sync` (C164): the queued row of a sync that runs on.
 pub async fn start(st: &AppState, id: i32) -> Result<Command, SyncError> {
     let Some(flight) = Flight::claim(st, "LiveTvSourceSync", id) else {
         return Err(SyncError::Running);
