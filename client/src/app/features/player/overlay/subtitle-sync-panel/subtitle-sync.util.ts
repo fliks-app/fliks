@@ -8,6 +8,9 @@ const CUE_GAP_PX = 4;
 export const SETTLE_MS = 200;
 export const KEY_STEP_SEC = 0.1;
 
+/** Offset step of a key repeat after the key has been held `heldMs`: a single press stays fine. */
+export const holdStep = (heldMs: number) => (heldMs < 500 ? KEY_STEP_SEC : heldMs < 1500 ? 0.25 : 0.5);
+
 export const cueHeight = (c: VttCue, scale = PX_PER_SEC) => Math.max(MIN_CUE_PX, (c.end - c.start) * scale);
 
 export interface CueBox {

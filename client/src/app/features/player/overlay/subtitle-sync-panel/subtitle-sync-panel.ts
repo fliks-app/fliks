@@ -34,6 +34,7 @@ import {
 } from '../../../../core/services/api/subtitles-api.service';
 import type { SubtitleOption } from '../../../../core/services/track-manager.service';
 import {
+  holdStep,
   KEY_STEP_SEC,
   PX_PER_SEC,
   SETTLE_MS,
@@ -137,6 +138,7 @@ export class SubtitleSyncPanelComponent {
   private t = 0;
   private lastWritten = 0;
   private interacting = false;
+  private heldSince = 0;
   private pointerDown = false;
   private settleTimer?: ReturnType<typeof setTimeout>;
   private raf = 0;
@@ -304,7 +306,9 @@ export class SubtitleSyncPanelComponent {
       this.editing.set(true);
       this.dismissStack.push(this.stopEdit);
     } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-      const off = Math.round((this.offset() + (e.key === 'ArrowUp' ? KEY_STEP_SEC : -KEY_STEP_SEC)) * 1000) / 1000;
+      if (!e.repeat) this.heldSince = performance.now();
+      const step = e.repeat ? holdStep(performance.now() - this.heldSince) : KEY_STEP_SEC;
+      const off = Math.round((this.offset() + (e.key === 'ArrowUp' ? step : -step)) * 1000) / 1000;
       this.offset.set(off);
       this.base.set(off);
     } else if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;

@@ -11,6 +11,7 @@ import {
   visibleCues,
   visibleTicks,
   formatClock,
+  holdStep,
 } from './subtitle-sync.util';
 
 const cues = [
@@ -97,5 +98,9 @@ describe('subtitle sync maths', () => {
     expect(ticks.find((t) => t.time === 61)!.label).toBeNull();
     expect(ticks[0].time).toBeGreaterThanOrEqual(0);
     expect(formatClock(3725)).toBe('1:02:05');
+  });
+
+  it('speeds the key repeat up the longer the key is held', () => {
+    expect([0, 499, 500, 1499, 1500, 5000].map(holdStep)).toEqual([0.1, 0.1, 0.25, 0.25, 0.5, 0.5]);
   });
 });
