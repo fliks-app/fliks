@@ -198,15 +198,11 @@ internal sealed class PostgresManager(ushort port = 5433)
         var configFile = Path.Combine(_dataDir, "postgresql.conf");
         // Postgres accepts forward slashes on Windows and requires them here.
         var logDir = AppPaths.LogsDir.Replace('\\', '/');
-        var tweaks = $"""
-
-            # --- Fliks embedded settings ---
-            listen_addresses = 'localhost'
-            shared_buffers = '128MB'
-            max_connections = 50
-            logging_collector = on
-            log_directory = '{logDir}'
-            """;
+        // Shared with the macOS shell: scripts/embedded-postgres.conf, embedded in the assembly.
+        using var stream = typeof(PostgresManager).Assembly.GetManifestResourceStream("embedded-postgres.conf")
+            ?? throw new InvalidOperationException("embedded-postgres.conf is not embedded in the assembly");
+        using var reader = new StreamReader(stream);
+        var tweaks = reader.ReadToEnd().Replace("@LOG_DIR@", logDir);
         File.AppendAllText(configFile, tweaks);
     }
 }
