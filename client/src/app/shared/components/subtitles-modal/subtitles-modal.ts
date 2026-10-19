@@ -17,7 +17,6 @@ import {
   LucideUpload,
 } from '@lucide/angular';
 import { LocalizeLanguagePipe } from '../../../core/pipes/localize-language.pipe';
-import { SubtitleStatusPipe } from '../../../core/pipes/subtitle-status.pipe';
 import { formatSubtitleLabel, formatSubtitleParts } from '../../../core/utils/player.utils';
 import { embeddedSubtitleTag, embeddedSubtitleTitle, type SubtitleStreams } from '../../../core/utils/subtitle-tracks';
 import { localizeLanguage } from '../../../core/utils/language.utils';
@@ -57,6 +56,7 @@ import { PaginationComponent } from '../pagination/pagination';
 import { MediaDetailSubtitleSearchModalComponent } from '../../../features/media-detail/components/media-detail-subtitle-search-modal/media-detail-subtitle-search-modal.component';
 import type { MediaInfoHeaderSubtitle } from '../media-info-header/media-info-header';
 import { ModalHeaderComponent } from '../modal-header';
+import { SyncReferenceSelectComponent } from '../sync-reference-select/sync-reference-select';
 import { ModalFooterComponent } from '../modal-footer';
 import { ErrorBadgeComponent } from '../error-badge';
 
@@ -74,13 +74,14 @@ interface SubtitleRow {
  */
 @Component({
   selector: 'app-subtitles-modal',
-  imports: [TvSelectDirective, 
+  imports: [
+    TvSelectDirective,
     ModalFooterComponent,
+    SyncReferenceSelectComponent,
     ModalHeaderComponent,
     FormsModule,
     TranslatePipe,
     LocalizeLanguagePipe,
-    SubtitleStatusPipe,
     SubtitleFilenamePipe,
     PaginationComponent,
     ErrorBadgeComponent,

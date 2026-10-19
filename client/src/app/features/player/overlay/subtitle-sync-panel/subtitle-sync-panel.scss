@@ -1,0 +1,13 @@
+:host {
+  display: contents;
+}
+
+.sync-scroller {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(255 255 255 / 0.4) transparent;
+  overscroll-behavior: contain;
+}
+
+.sync-cue {
+  transition: opacity 120ms, font-size 120ms;
+}

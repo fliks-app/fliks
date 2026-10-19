@@ -207,7 +207,23 @@
     [showPreRollSkip]="preRollSkippable()"
     (skipPreRoll)="skipPreRoll()"
     (panelOpenChange)="chrome.onPanelOpenChange($event)"
+    (openSubtitleSync)="onOpenSubtitleSync($event)"
   />
+  }
+
+  @if (subtitleSyncOpen() && syncSubtitle(); as sub) {
+    <app-subtitle-sync-panel
+      [subtitle]="sub"
+      [subtitles]="syncTextTracks()"
+      [mediaId]="syncMediaId"
+      [mediaFileId]="syncMediaFileId"
+      [duration]="duration()"
+      [timeSource]="subtitleTime"
+      [opener]="subtitleSyncOpener"
+      (selectTrack)="onSelectSubtitleById($event)"
+      (contentChanged)="onSubtitleContentChanged($event)"
+      (closed)="onCloseSubtitleSync()"
+    />
   }
 
   <app-player-stats-overlay

@@ -626,6 +626,11 @@
         <svg lucideChevronRight class="h-4 w-4 text-white/40 shrink-0"></svg>
       </button>
     }
+    @if (canSyncSubtitle()) {
+      <button data-panel-row="sync" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white hover:bg-white/10 active:bg-white/10" (click)="openSyncPanel()">
+        <span class="flex-1 text-left">{{ 'player.subtitle_sync.open' | translate }}</span>
+      </button>
+    }
   } @else if (activeAppearanceRow(); as row) {
     <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white hover:bg-white/10 active:bg-white/10 mb-1" (click)="openSubtitlesPanel('appearance')">
       <svg lucideArrowLeft class="h-4 w-4 text-white/60 shrink-0"></svg>

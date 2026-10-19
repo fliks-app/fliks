@@ -1,0 +1,87 @@
+<div
+  data-subtitle-sync
+  class="absolute z-50 top-0 right-0 bottom-28 w-[32%] min-w-80 max-sm:w-full max-sm:min-w-0 flex flex-col gap-3 p-4 bg-black/70 backdrop-blur-sm text-white select-none"
+>
+  <div class="flex items-center gap-2">
+    <h2 class="flex-1 text-sm font-medium text-white/80">{{ 'player.subtitle_sync.title' | translate }}</h2>
+    <span class="badge badge-neutral font-mono" [class.badge-warning]="dirty()">{{ formatOffset(offset()) }}</span>
+  </div>
+
+  <select
+    appTvSelect
+    class="select select-bordered select-sm w-full bg-black/40"
+    [attr.aria-label]="'player.subtitle_sync.track' | translate"
+    [ngModel]="subtitle().id"
+    (ngModelChange)="changeTrack($event)"
+  >
+    @for (sub of textTracks(); track sub.id) {
+      <option [value]="sub.id">{{ sub.menuHead || sub.label }}{{ sub.menuSub ? ' - ' + sub.menuSub : '' }}</option>
+    }
+  </select>
+
+  <div class="relative flex-1 min-h-0">
+    <div
+      #scroller
+      tabindex="0"
+      role="listbox"
+      data-tv-skip-spatial
+      data-tv-own-vertical
+      class="sync-scroller absolute inset-0 overflow-y-auto rounded-lg outline-offset-2 focus-visible:outline-2 focus-visible:outline-white/60"
+      [attr.aria-label]="'player.subtitle_sync.timeline_label' | translate"
+      (scroll)="onScroll()"
+      (wheel)="touch()"
+      (touchstart)="touch(true)"
+      (touchend)="onPointerUp()"
+      (pointerdown)="touch(true)"
+      (keydown)="onKeyDown($event)"
+    >
+      <div class="relative w-full" [style.height.px]="height()">
+        @for (v of visible(); track v.index) {
+          <div
+            class="sync-cue absolute left-0 right-0 overflow-hidden px-2 text-center leading-snug"
+            [class]="active().has(v.index) ? 'text-xl font-semibold text-white opacity-100' : 'text-sm text-white/70 opacity-50'"
+            [style.top.px]="cueTop(v.cue, base(), viewH())"
+            [style.height.px]="cueHeight(v.cue)"
+            [innerHTML]="v.cue.text"
+          ></div>
+        }
+      </div>
+    </div>
+    <div class="pointer-events-none absolute inset-x-0 top-1/2 h-px bg-white/70"></div>
+  </div>
+
+  @if (!editable()) {
+    <p class="text-xs text-white/60">{{ 'player.subtitle_sync.embedded_hint' | translate }}</p>
+  }
+
+  <div data-sync-footer class="flex flex-wrap justify-end gap-2">
+    <button type="button" class="btn btn-ghost btn-sm" (click)="cancel()">{{ 'common.cancel' | translate }}</button>
+    <button type="button" class="btn btn-sm" [disabled]="!editable() || syncing()" (click)="openSyncModal()">
+      {{ 'player.subtitle_sync.sync_other' | translate }}
+    </button>
+    <button type="button" class="btn btn-primary btn-sm" [disabled]="!editable() || busy() || syncing() || !dirty()" (click)="save()">
+      {{ 'player.subtitle_sync.save' | translate }}
+    </button>
+  </div>
+</div>
+
+<dialog #syncDialog class="modal">
+  <div class="modal-box max-w-md">
+    <h3 class="text-lg font-bold">{{ 'player.subtitle_sync.sync_other' | translate }}</h3>
+    <div class="mt-4">
+      <app-sync-reference-select
+        [(value)]="syncReference"
+        [audioStreams]="audioStreams()"
+        [subtitleStreams]="subtitleStreams()"
+        [externalRefs]="externalRefs()"
+      />
+    </div>
+    <div class="modal-action">
+      <button type="button" class="btn btn-ghost" (click)="syncDialog.close()">{{ 'common.cancel' | translate }}</button>
+      <button type="button" class="btn btn-primary" (click)="applySync()">{{ 'player.subtitle_sync.apply' | translate }}</button>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button type="button" tabindex="-1" (click)="syncDialog.close()">close</button>
+  </form>
+</dialog>

@@ -155,6 +155,8 @@ export class SseService implements OnDestroy {
   /** Commands are transient intent: a last-value signal would let a state
    *  frame overwrite one before its consumer ran, losing it with no trace. */
   readonly commands = new Subject<RemoteCommand>();
+  /** Id of a subtitle whose server-side sync just finished. */
+  readonly subtitleSynced = new Subject<number>();
   /** A target leaving its player. A transient fact, so it cannot ride on
    *  `lastEvent`: the same handler emits `remote.targets_changed` right after
    *  it, which replaced the value before any effect had run. */
@@ -434,6 +436,7 @@ export class SseService implements OnDestroy {
         // or ending minutes after the request returned), so no client mutation invalidated
         // the cached subtitle list — drop the media cache here so the next fetch is fresh.
         void invalidatePrefix('/api/media');
+        if (event.type === 'subtitle.synced') this.subtitleSynced.next(Number(event['subtitleId']));
         // Toasts are handled by the media-detail component (only on the right page).
         break;
       case 'subtitle.translation_progress': {

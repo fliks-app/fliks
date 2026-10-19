@@ -1,0 +1,46 @@
+<label class="form-control w-full">
+  <span class="label-text">{{ 'media_detail.sync_reference' | translate }}</span>
+  <select
+    appTvSelect
+    class="select select-bordered select-sm w-full"
+    [ngModel]="value()"
+    (ngModelChange)="value.set($event)"
+  >
+    <option value="auto">{{ 'media_detail.sync_reference_auto' | translate }}</option>
+    @if (audioStreams().length) {
+      <optgroup [label]="'media_detail.sync_audio_tracks' | translate">
+        @for (s of audioStreams(); track s.streamIndex) {
+          <option [value]="'audio:' + s.streamIndex">
+            {{ s.language | localizeLanguage }} - {{ s.codec }}
+            @if (s.title) {
+              ({{ s.title }})
+            }
+          </option>
+        }
+      </optgroup>
+    }
+    @if (subtitleStreams().length) {
+      <optgroup [label]="'media_detail.sync_subtitle_tracks' | translate">
+        @for (s of subtitleStreams(); track s.streamIndex) {
+          <option [value]="'subtitle:' + s.streamIndex">
+            {{ s.language | localizeLanguage }} - {{ s.codec }}
+            @if (s.title) {
+              ({{ s.title }})
+            }
+          </option>
+        }
+      </optgroup>
+    }
+    @if (externalRefs().length) {
+      <optgroup [label]="'media_detail.sync_external_subtitles' | translate">
+        @for (s of externalRefs(); track s.id) {
+          <option [value]="'file:' + s.relativePath">
+            {{ s.language | localizeLanguage }} - {{ s.providerType }} ({{
+              s.status | subtitleStatus
+            }})
+          </option>
+        }
+      </optgroup>
+    }
+  </select>
+</label>
