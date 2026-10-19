@@ -1,13 +1,15 @@
 <div
   data-subtitle-sync
   data-tv-modal
-  [style.bottom.px]="barH()"
-  class="absolute z-50 top-0 right-0 w-[32%] min-w-80 max-sm:w-full max-sm:min-w-0 flex flex-col gap-3 p-4 bg-black/70 rounded-bl-2xl backdrop-blur-sm text-white select-none"
+  [style.bottom.px]="phone() ? 0 : barH()"
+  [class]="panelClass()"
+  class="absolute z-50 right-0 flex flex-col bg-black/70 backdrop-blur-sm text-white select-none"
 >
   <div class="flex items-center gap-2" role="group" [attr.aria-label]="'player.subtitle_sync.title' | translate">
     <select
       appTvSelect
-      class="select select-bordered select-sm min-w-0 flex-1 truncate bg-black/40"
+      class="select select-bordered min-w-0 flex-1 truncate bg-black/40"
+      [class]="phone() ? 'select-xs' : 'select-sm'"
       [attr.aria-label]="'player.subtitle_sync.track' | translate"
       [ngModel]="subtitle().id"
       [disabled]="syncing()"
@@ -17,7 +19,7 @@
         <option [value]="sub.id">{{ sub.menuHead || sub.label }}{{ sub.menuSub ? ' - ' + sub.menuSub : '' }}</option>
       }
     </select>
-    <span class="badge badge-neutral font-mono" [class.badge-warning]="dirty()">{{ formatOffset(offset()) }}</span>
+    <span class="badge badge-neutral font-mono" [class.badge-sm]="phone()" [class.badge-warning]="dirty()">{{ formatOffset(offset()) }}</span>
     <button
       type="button"
       class="btn btn-ghost btn-xs btn-circle text-white/60 hover:text-white text-lg leading-none"
@@ -81,7 +83,7 @@
     <svg lucideChevronLeft class="pointer-events-none absolute top-1/2 h-5 w-5 -translate-y-1/2 text-white" [style.right.px]="scrollbarW()" aria-hidden="true"></svg>
   </div>
 
-  @if (syncing()) {
+  @if (syncing() && !phone()) {
     <div class="flex items-center gap-2 rounded-lg bg-white/10 px-3 py-2 text-sm" role="status">
       <span class="loading loading-spinner loading-sm"></span>
       <span class="flex-1">{{ 'player.subtitle_sync.syncing' | translate }}</span>
@@ -93,15 +95,37 @@
     <p class="text-xs text-white/60">{{ 'player.subtitle_sync.embedded_hint' | translate }}</p>
   }
 
-  <div data-sync-footer class="flex flex-wrap justify-end gap-2">
-    <button type="button" class="btn btn-ghost btn-sm" [disabled]="!dirty() || syncing()" (click)="reset()">{{ 'player.subtitle_sync.reset' | translate }}</button>
-    <button type="button" class="btn btn-sm" [disabled]="!editable() || syncing()" (click)="openSyncModal()">
-      {{ 'player.subtitle_sync.sync_other' | translate }}
-    </button>
-    <button type="button" class="btn btn-primary btn-sm" [disabled]="!editable() || busy() || syncing() || !dirty()" (click)="save()">
-      {{ 'player.subtitle_sync.save' | translate }}
-    </button>
-  </div>
+  @if (phone()) {
+    <div data-sync-footer class="flex items-center justify-end gap-2">
+      @if (syncing()) {
+        <div class="flex flex-1 items-center gap-2 text-xs" role="status">
+          <span class="loading loading-spinner loading-xs"></span>
+          <span class="flex-1 truncate">{{ 'player.subtitle_sync.syncing' | translate }}</span>
+          <button type="button" class="btn btn-ghost btn-xs" (click)="cancelSync()">{{ 'player.subtitle_sync.cancel_sync' | translate }}</button>
+        </div>
+      } @else {
+        <button type="button" class="btn btn-ghost btn-sm btn-square" [disabled]="!dirty()" [attr.aria-label]="'player.subtitle_sync.reset' | translate" [attr.title]="'player.subtitle_sync.reset' | translate" (click)="reset()">
+          <svg lucideRotateCcw class="h-5 w-5"></svg>
+        </button>
+        <button type="button" class="btn btn-sm btn-square" [disabled]="!editable()" [attr.aria-label]="'player.subtitle_sync.sync_other' | translate" [attr.title]="'player.subtitle_sync.sync_other' | translate" (click)="openSyncModal()">
+          <svg lucideWandSparkles class="h-5 w-5"></svg>
+        </button>
+        <button type="button" class="btn btn-primary btn-sm btn-square" [disabled]="!editable() || busy() || !dirty()" [attr.aria-label]="'player.subtitle_sync.save' | translate" [attr.title]="'player.subtitle_sync.save' | translate" (click)="save()">
+          <svg lucideCheck class="h-5 w-5"></svg>
+        </button>
+      }
+    </div>
+  } @else {
+    <div data-sync-footer class="flex flex-wrap justify-end gap-2">
+      <button type="button" class="btn btn-ghost btn-sm" [disabled]="!dirty() || syncing()" (click)="reset()">{{ 'player.subtitle_sync.reset' | translate }}</button>
+      <button type="button" class="btn btn-sm" [disabled]="!editable() || syncing()" (click)="openSyncModal()">
+        {{ 'player.subtitle_sync.sync_other' | translate }}
+      </button>
+      <button type="button" class="btn btn-primary btn-sm" [disabled]="!editable() || busy() || syncing() || !dirty()" (click)="save()">
+        {{ 'player.subtitle_sync.save' | translate }}
+      </button>
+    </div>
+  }
 </div>
 
 <dialog #syncDialog class="modal">

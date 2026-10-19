@@ -135,7 +135,7 @@
   @if (!inPipMode()) {
   <app-player-controls
     (interacted)="chrome.onInteraction()"
-    [visible]="chrome.visible()"
+    [visible]="chrome.visible() && !syncHidesControls()"
     [seekOsd]="chrome.seekOsd()"
     [paused]="uiPaused()"
     [loading]="loading()"
@@ -159,7 +159,7 @@
     [isNative]="isNative"
     [isDesktop]="isDesktopNative"
     (togglePlay)="onTogglePlay()"
-    (tapOverlay)="chrome.toggle()"
+    (tapOverlay)="onTapOverlay()"
     (seek)="onSeek($event)"
     (seekDragChange)="onSeekDragChange($event)"
     (volumeChange)="onVolumeChange($event)"

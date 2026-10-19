@@ -4234,6 +4234,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   // ── Subtitle resync panel ──
 
   readonly subtitleSyncOpen = signal(false);
+  /** On a phone the panel takes the screen: no controls, a tap plays or pauses. */
+  protected readonly syncHidesControls = computed(() => this.subtitleSyncOpen() && this.device.isPhone());
   protected subtitleSyncOpener: HTMLElement | null = null;
   protected readonly syncSubtitle = computed(
     () => this.availableSubtitles().find((s) => s.id === this.activeSubtitleId()) ?? null,
@@ -4242,6 +4244,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   protected readonly subtitleTime = () => this.engine?.currentTime ?? 0;
   protected get syncMediaId() { return this.mediaId; }
   protected get syncMediaFileId() { return this.mediaFileId; }
+
+  protected onTapOverlay() {
+    if (this.syncHidesControls()) this.onTogglePlay();
+    else this.chrome.toggle();
+  }
 
   protected onOpenSubtitleSync(opener: HTMLElement | null) {
     this.subtitleSyncOpener = opener;

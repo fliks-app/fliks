@@ -15,8 +15,9 @@ import {
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
-import { LucideChevronLeft, LucideChevronRight } from '@lucide/angular';
+import { LucideCheck, LucideChevronLeft, LucideChevronRight, LucideRotateCcw, LucideWandSparkles } from '@lucide/angular';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
+import { DeviceService } from '../../../../core/services/device.service';
 import { ConfirmationService } from '../../../../core/services/confirmation.service';
 import { DismissableStackService } from '../../../../core/services/dismissable-stack.service';
 import { restoreOpenerFocus } from '../../../../core/services/focusable.constants';
@@ -55,7 +56,7 @@ import {
 /** Side panel to preview a subtitle track against the playing video and shift its timing. */
 @Component({
   selector: 'app-subtitle-sync-panel',
-  imports: [FormsModule, LucideChevronLeft, LucideChevronRight, TranslatePipe, TvSelectDirective, SyncReferenceSelectComponent],
+  imports: [FormsModule, LucideCheck, LucideChevronLeft, LucideChevronRight, LucideRotateCcw, LucideWandSparkles, TranslatePipe, TvSelectDirective, SyncReferenceSelectComponent],
   templateUrl: './subtitle-sync-panel.html',
   styleUrl: './subtitle-sync-panel.scss',
 })
@@ -69,6 +70,7 @@ export class SubtitleSyncPanelComponent {
   private readonly subtitleActions = inject(SubtitleActionsService);
   private readonly toast = inject(ToastService);
   private readonly sse = inject(SseService);
+  protected readonly phone = inject(DeviceService).isPhone;
 
   readonly subtitle = input.required<SubtitleOption>();
   readonly subtitles = input<SubtitleOption[]>([]);
@@ -119,6 +121,12 @@ export class SubtitleSyncPanelComponent {
   protected readonly scrollbarW = signal(0);
   /** Height of the controls bar, kept clear below the panel. */
   protected readonly barH = signal(0);
+  /** Phone: the controls are hidden, so the panel fills the side (landscape) or the lower sheet (portrait). */
+  protected readonly panelClass = computed(() =>
+    this.phone()
+      ? 'p-3 gap-2 landscape:top-0 landscape:w-[40%] landscape:rounded-l-2xl portrait:inset-x-0 portrait:h-[55%] portrait:rounded-t-2xl'
+      : 'top-0 w-[32%] min-w-80 max-sm:w-full max-sm:min-w-0 p-4 gap-3 rounded-bl-2xl',
+  );
   protected readonly active = computed(
     () => new Set(activeCues(this.cues(), this.now(), this.offset())),
     { equal: (a, b) => a.size === b.size && [...a].every((i) => b.has(i)) },
