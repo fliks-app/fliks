@@ -10,9 +10,12 @@ import {
   RouteReuseStrategy,
 } from '@angular/router';
 import { filter, Observable, Subject, take } from 'rxjs';
+import { DeviceService } from './device.service';
 
 /** Cap on live detached trees; a handful of libraries visited in one tab, bounding the pathological per-param leak. */
-const MAX_CACHE_SIZE = 10;
+export const MAX_CACHE_SIZE = 10;
+/** A TV's WebView has a fraction of the memory: keep only the pages a back press is likely to return to. */
+export const TV_MAX_CACHE_SIZE = 3;
 
 /**
  * Detaches and caches the DOM of routes flagged with `data: { reuse: true }`.
@@ -43,6 +46,7 @@ export class CachingReuseStrategy implements RouteReuseStrategy {
   private nextRouteId = 0;
 
   private readonly injector = inject(Injector);
+  private readonly maxSize = inject(DeviceService).isTv() ? TV_MAX_CACHE_SIZE : MAX_CACHE_SIZE;
 
   private readonly attachedSubject = new Subject<string>();
   private readonly detachedSubject = new Subject<string>();
@@ -112,7 +116,7 @@ export class CachingReuseStrategy implements RouteReuseStrategy {
       if (existing && existing !== handle) this.destroyHandle(existing);
       this.cache.delete(key);
       this.cache.set(key, handle);
-      while (this.cache.size > MAX_CACHE_SIZE) {
+      while (this.cache.size > this.maxSize) {
         const oldestKey = this.cache.keys().next().value as string;
         const oldest = this.cache.get(oldestKey);
         this.cache.delete(oldestKey);

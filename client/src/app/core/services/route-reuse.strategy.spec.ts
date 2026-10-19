@@ -10,9 +10,8 @@ import {
 } from '@angular/router';
 import { Subject } from 'rxjs';
 import { vi } from 'vitest';
-import { CachingReuseStrategy } from './route-reuse.strategy';
-
-const MAX_CACHE_SIZE = 10;
+import { DeviceService } from './device.service';
+import { CachingReuseStrategy, MAX_CACHE_SIZE, TV_MAX_CACHE_SIZE } from './route-reuse.strategy';
 
 function snapshotFor(route: Route, params: Record<string, string> = {}): ActivatedRouteSnapshot {
   return { routeConfig: route, params } as unknown as ActivatedRouteSnapshot;
@@ -30,10 +29,14 @@ function handleWithDestroy(): DetachedRouteHandle & FakeHandle {
 describe('CachingReuseStrategy', () => {
   let events: Subject<unknown>;
 
-  function setup() {
+  function setup(isTv = false) {
     events = new Subject<unknown>();
     TestBed.configureTestingModule({
-      providers: [provideZonelessChangeDetection(), { provide: Router, useValue: { events } }],
+      providers: [
+        provideZonelessChangeDetection(),
+        { provide: Router, useValue: { events } },
+        { provide: DeviceService, useValue: { isTv: () => isTv } },
+      ],
     });
     return TestBed.inject(CachingReuseStrategy);
   }
@@ -90,6 +93,16 @@ describe('CachingReuseStrategy', () => {
     expect(handles[1].destroy).toHaveBeenCalledTimes(1);
     expect(strategy.shouldAttach(snapshotFor(route, { libraryName: 'lib0' }))).toBe(true);
     expect(strategy.shouldAttach(snapshotFor(route, { libraryName: 'lib1' }))).toBe(false);
+  });
+
+  it('keeps fewer pages alive on a TV', () => {
+    const strategy = setup(true);
+    const route: Route = { path: 'libraries/:libraryName' };
+    const handles = Array.from({ length: TV_MAX_CACHE_SIZE + 1 }, () => handleWithDestroy());
+    handles.forEach((h, i) => strategy.store(snapshotFor(route, { libraryName: `lib${i}` }), h));
+
+    expect(handles[0].destroy).toHaveBeenCalledTimes(1);
+    expect(handles[1].destroy).not.toHaveBeenCalled();
   });
 
   it('VERDICT: attach fires at NavigationEnd, never while retrieve builds the router state', () => {

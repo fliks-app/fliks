@@ -246,7 +246,8 @@ export class HomeComponent implements OnInit, OnDestroy {
    *  device this one is driving. The server announces every session stop to all
    *  of the account's connections, so one subscription covers both. */
   private readonly playbackStopped = this.sse.stopped.subscribe(() => {
-    if (!this.visibleSections().some((s) => s.type === 'continue-watching')) return;
+    // A parked page refetches everything when it comes back.
+    if (this.routeFresh() || !this.visibleSections().some((s) => s.type === 'continue-watching')) return;
     this.streamingApi
       .getContinueWatching(undefined, { force: true })
       .then((list) => this.continueWatchingRaw.set(list))
