@@ -320,8 +320,8 @@ export interface PlaybackEngine {
   readonly supportsVolume: boolean;
   /** False when `timeUpdate.buffered` is not a real read-ahead (it then just echoes the playhead). */
   readonly measuresBuffer?: boolean;
-  /** How often `currentTime` refreshes when slower than a frame (native players: 1 s); a playhead
-   *  that stays put for less than that is not frozen. */
+  /** How often `currentTime` refreshes when slower than a frame (native players: 1 s, and only while
+   *  playing); a playhead that stays put for less than that is not frozen. */
   readonly positionUpdateMs?: number;
   /** Silences `ranges` (content seconds, sorted, disjoint) without touching the user's mute/volume.
    *  Persists across loads until replaced; [] clears. */

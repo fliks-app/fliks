@@ -126,10 +126,13 @@ export class PlayheadWatch {
     this.lastPos = pos;
   }
 
-  /** The engine stopped buffering but the playhead never moved: keep the episode open from its start. */
-  carryOver(now: number, startAt: number, startPos: number, pos: number): boolean {
+  /** The engine stopped buffering but the playhead never moved: keep the episode open from its start.
+   *  A coarse position (`positionUpdateMs`) can't move during buffering, so it proves nothing. */
+  carryOver(now: number, startAt: number, startPos: number, pos: number, positionUpdateMs?: number): boolean {
     this.lastAdvanceAt = now;
-    if (this.frozenSince || now - startAt < MIN_STALL_MS || Math.abs(pos - startPos) >= 0.05) return false;
+    if (positionUpdateMs || this.frozenSince || now - startAt < MIN_STALL_MS || Math.abs(pos - startPos) >= 0.05) {
+      return false;
+    }
     this.lastPos = pos;
     this.frozenSince = startAt;
     return true;

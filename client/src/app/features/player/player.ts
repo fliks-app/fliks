@@ -2721,7 +2721,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         if (
           started &&
           !this.paused() &&
-          this.playheadWatch.carryOver(Date.now(), this.bufferStartAt, this.bufferStartPos, pos)
+          this.playheadWatch.carryOver(
+            Date.now(),
+            this.bufferStartAt,
+            this.bufferStartPos,
+            pos,
+            this.engine?.positionUpdateMs,
+          )
         ) {
           this.frozenSince.set(this.bufferStartAt);
           frozenSince = this.bufferStartAt;

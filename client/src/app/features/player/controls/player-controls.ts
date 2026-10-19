@@ -255,8 +255,8 @@ export class PlayerControlsComponent {
    *  seek, the way TV players surface a scrub OSD instead of the toolbar. */
   readonly seekOsd = input(false);
   readonly paused = input(true);
-  readonly loading = input(false);
-  readonly buffering = input(false);
+  /** The player's centered spinner is up; the big center buttons step aside for it. */
+  readonly spinner = input(false);
   /** True once the first decoded frame is on the surface. Hides the big
    *  mobile play/pause button on cold start so it doesn't overlay the
    *  centered loading spinner before any frame has rendered. */
