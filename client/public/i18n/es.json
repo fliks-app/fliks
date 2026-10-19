@@ -2599,7 +2599,6 @@
       "upgrade_threshold_hint": "Los subtítulos por debajo de esta puntuación se reemplazarán si se encuentra uno mejor.",
       "section_post_processing": "Post-procesamiento",
       "auto_sync": "Sincronizar automáticamente los subtítulos (ffsubsync/alass)",
-      "encode_utf8": "Recodificar a UTF-8 tras la descarga",
       "section_cleaning": "Limpieza",
       "remove_hi_tags": "Eliminar las etiquetas HI ([música], (suspiro), ♪, etc.)",
       "ocr_burn_in_auto": "Preferir el OCR de las pistas de imagen incrustadas a una descarga",

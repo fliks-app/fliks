@@ -128,5 +128,3 @@ Parity scenarios (`server/parity/scenarios/subtitle-files/`, Nest recorded on ge
 ## Open questions
 
 None.
-
-Follow-up (issue, client cleanup, no contract change): the subtitle settings page still offers the `subtitle_encode_utf8` toggle, which the server ignores from S6 (rule 29). Issue text: "Subtitles settings: remove the 'encode as UTF-8' toggle (`subtitle_encode_utf8`). fliks-server decodes legacy encodings when it writes a sidecar and no longer re-encodes files afterwards, so the key has no effect; it stays accepted by `PUT /api/settings` for older clients."
