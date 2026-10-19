@@ -1,10 +1,4 @@
-/**
- * Merge a stored user order with the currently-available set: items still
- * available keep their saved position, items never seen before are appended
- * in their canonical (`defaults`) order, and items that disappeared are
- * dropped silently. Lifted out of `HomeSettingsService.resolve()` so a
- * second consumer (the plugin nav order) doesn't reimplement it.
- */
+/** Merges a stored order with the available set: saved positions kept, new items appended in `defaults` order, vanished ones dropped. */
 export function mergeOrdered<T>(
   saved: T[],
   defaults: T[],

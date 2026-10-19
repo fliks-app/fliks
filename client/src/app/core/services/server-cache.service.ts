@@ -2,22 +2,8 @@ import { Injectable, inject } from '@angular/core';
 import { clearRequestCache } from '../interceptors/cache.interceptor';
 import { CachingReuseStrategy } from './route-reuse.strategy';
 
-/**
- * Single-call wipe of every "server data" cache the app keeps locally so a
- * fresh session never inherits the previous one's view. Called from:
- *
- * - `AuthService.logout()` / `login()` — different user implies different
- *   permissions, different libraries, different home rows.
- * - User-menu / select-user "Switch user" — same as above.
- * - User-menu / select-user "Change server" — IDs are scoped to the server,
- *   reusing them across servers would surface ghosts.
- * - Storage settings → "Vider le cache" — user-initiated reset.
- *
- * Explicitly preserved: downloaded media (file IDs are server-scoped but
- * the user opted into them), the stored sessions (credentials, not view data —
- * AuthService owns their lifecycle), UI prefs (sidebar pinned, player
- * settings, etc.).
- */
+/** Wipes every local "server data" cache so a new session (login/logout, switch user/server, "Vider le cache") never inherits the last view.
+ *  Preserved: downloaded media, stored sessions (AuthService owns them) and UI prefs. */
 @Injectable({ providedIn: 'root' })
 export class ServerCacheService {
   private readonly reuseStrategy = inject(CachingReuseStrategy);

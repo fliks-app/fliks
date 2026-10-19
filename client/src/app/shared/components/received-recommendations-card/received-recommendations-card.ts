@@ -29,13 +29,8 @@ import { LikesApiService } from '../../../core/services/api/likes-api.service';
 import { CachedSrcDirective } from '../../directives/cached-src.directive';
 import { itemArtwork } from '../../utils/media-artwork.util';
 
-/**
- * Home widget listing content other members have recommended to the viewer,
- * styled like the follow-requests card. Each row links to the recommended
- * title and can be dismissed. Renders nothing when there are none (or on TV,
- * where the social surface is hidden). Refreshes live on the
- * `social.content_recommended` SSE.
- */
+/** Home widget of content other members recommended (linked, dismissible), live via `social.content_recommended` SSE;
+ *  renders nothing when empty or on TV, where the social surface is hidden. */
 @Component({
   selector: 'app-received-recommendations-card',
   imports: [

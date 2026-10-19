@@ -4,9 +4,7 @@ import { NavigationEnd, NavigationStart, Router, Scroll } from '@angular/router'
 import { Capacitor } from '@capacitor/core';
 import { DeviceService } from './device.service';
 
-/**
- * Allows child pages to communicate with the navbar (e.g., hero pages setting a title).
- */
+/** Lets child pages communicate with the navbar (e.g. hero pages setting a title). */
 @Injectable({ providedIn: 'root' })
 export class NavbarService {
   /** When set, the navbar shows this title instead of "Fliks" on scroll. */
@@ -25,30 +23,16 @@ export class NavbarService {
   readonly scrollAtTop = signal(true);
   /** True when at least one in-app navigation has happened since entering — used to gate back buttons. */
   readonly canGoBack = signal(false);
-  /**
-   * User preference: whether the sidebar should stay pinned at lg breakpoint
-   * even on form-factors that default to a drawer (tablet). Persisted in
-   * localStorage, and on by default: wherever the pin is offered there is room
-   * for the column, and the drawer made every navigation a two-step. Desktop is
-   * always pinned regardless of this flag; phones never have a sidebar.
-   */
+  /** Whether the sidebar stays pinned at lg on form factors that default to a drawer (tablet); persisted, on by default. Desktop always pins, phones never. */
   readonly sidebarPinned = signal(
     localStorage.getItem('fliks.sidebarPinned') !== 'false',
   );
-  /** Effective pin state for layout decisions — auto-disabled on narrow
-   *  screens (e.g. tablet portrait < lg) where a pinned drawer would eat too
-   *  much horizontal space and leave the user without the standard mobile
-   *  navbar (= no back button, no title). Never on a TV: the main layout there
-   *  is a 10-foot browse surface and a permanent column steals from it, and
-   *  focus would have one more region to escape on every screen. The user's
-   *  stored preference is preserved for the form factors that can use it. */
+  /** Effective pin state: off on narrow screens and always off on TV (10-foot surface); the stored preference is kept. */
   readonly effectiveSidebarPinned = computed(
     () => this.sidebarPinned() && this.isLargeScreen() && !this.device.isTv(),
   );
 
-  /** Whether the layout shows the sidebar as a permanent column. Desktop always
-   *  does; a tablet does when the pin is in effect. Stated here rather than in
-   *  the template so the form-factor list lives in one place. */
+  /** Whether the layout shows the sidebar as a permanent column; keeps the form-factor list in one place. */
   readonly sidebarDocked = computed(
     () => this.device.isDesktop() || this.effectiveSidebarPinned(),
   );
@@ -58,9 +42,7 @@ export class NavbarService {
   private readonly location = inject(Location);
   /** Stack of in-app URLs we've visited (most recent last, current excluded). */
   private readonly history: string[] = [];
-  /** Set while goBack() is navigating, so the NavigationEnd it triggers is
-   *  treated as a "pop" (don't push the URL we're leaving back onto the
-   *  stack — that would create a forward/back loop). */
+  /** Set while goBack() navigates, so its NavigationEnd counts as a "pop" and doesn't re-push the URL we leave. */
   private isPoppingBack = false;
   /** Claims the very next NavigationStart as this goBack()'s own, closed there
    *  so a push starting in the same window isn't misread as a return too. */
@@ -78,19 +60,12 @@ export class NavbarService {
       this.isLargeScreen.set(mq.matches);
       mq.addEventListener('change', (e) => this.isLargeScreen.set(e.matches));
     }
-    // Empty, not `router.url`: this service is constructed before the router's
-    // initial navigation, so seeding it would push a phantom '/' entry and make
-    // the first hardware-back press on the entry screen a no-op redirect.
+    // Empty, not `router.url`: seeding before the initial navigation would push a phantom '/' entry.
     let lastUrl = '';
     this.router.events.subscribe((e) => {
       if (e instanceof NavigationStart) {
-        // A page returned to must look exactly as it was left, where a page
-        // opened is a fresh screen. Not `isPoppingBack`: the top-level nav
-        // entries set that too, and opening a screen from the sidebar is not a
-        // return. The class drives the CSS side of that (the artwork reveal
-        // replays whenever a cached subtree is re-inserted).
-        // backNavPending, not lastWasBack: it must not survive into a push that
-        // starts before lastWasBack's later, .then()-driven reset.
+        // A returned-to page must look as left; not `isPoppingBack` (top-level nav sets it too). backNavPending, not lastWasBack:
+        // it must not survive into a push that starts before lastWasBack's .then() reset.
         const back = e.navigationTrigger === 'popstate' || this.backNavPending;
         this.backNavPending = false;
         this.navigatedBack.set(back);
@@ -102,19 +77,9 @@ export class NavbarService {
       if (e instanceof Scroll) {
         document.documentElement.classList.remove('nav-scroll-instant');
       }
-      // Browser back/forward: mirror the pop on our internal stack so the
-      // next in-app back button doesn't re-push the URL we just left (which
-      // would let goBack() walk *forward* into the page the user came back
-      // from — e.g. media-detail → player → browser-back → "Retour" would
-      // otherwise reopen the player).
+      // Browser back/forward: mirror the pop on our stack so goBack() doesn't walk forward into the page just left.
       if (e instanceof NavigationStart && e.navigationTrigger === 'popstate') {
-        // Only treat a popstate as a back-pop when it lands on the URL at the
-        // top of our own stack. A stray popstate that doesn't (e.g. Android
-        // dismissing the soft keyboard pops an IME history entry) must NOT set
-        // isPoppingBack — otherwise it swallows the push for the *next* real
-        // navigation, leaving that page with no back arrow and a dead back
-        // gesture (reproduced by tapping a card from search with the keyboard
-        // still open).
+        // Only a popstate landing on the top of our stack is a back-pop; a stray one (Android IME history entry) would swallow the next push.
         if (this.history[this.history.length - 1] === e.url) {
           this.isPoppingBack = true;
           this.history.pop();
@@ -138,18 +103,11 @@ export class NavbarService {
           !lastUrl.startsWith('/watch') &&
           this.pathOf(lastUrl) !== this.pathOf(e.urlAfterRedirects)
         ) {
-          // Only a real page change (path differs) pushes a back entry. A
-          // query-only change on the same path — library tabs, filters, sort,
-          // all written with replaceUrl — is in-page state, so back returns to
-          // the previous PAGE, not the previous tab, matching browser back.
+          // Only a path change pushes a back entry; query-only changes (tabs, filters, sort) are in-page state.
           this.history.push(lastUrl);
         }
         lastUrl = e.urlAfterRedirects;
-        // Our own stack is empty right after a hard refresh (in-memory state
-        // doesn't survive reload), but the real browser session history does
-        // — fall back to it so the arrow doesn't vanish. Skipped on native:
-        // Capacitor's WebView doesn't reliably track window.history either
-        // (see goBack()'s comment).
+        // Our stack is empty after a hard refresh: fall back to browser history. Skipped on native, where the WebView doesn't track it (see goBack()).
         const hasRealHistory = !this.isNative && window.history.length > 1;
         this.canGoBack.set(
           !rootEntry && (this.history.length > 0 || hasRealHistory) && this.router.url !== '/',
@@ -158,9 +116,7 @@ export class NavbarService {
     });
   }
 
-  /** Depth of the back stack. Read by the iOS swipe-back to keep its own stack
-   *  of page snapshots aligned with this one without re-deriving which
-   *  navigations count as a push. */
+  /** Depth of the back stack; the iOS swipe-back reads it to keep its page-snapshot stack aligned. */
   get backDepth(): number {
     return this.history.length;
   }
@@ -172,35 +128,20 @@ export class NavbarService {
   }
 
 
-  /**
-   * Mark the next navigation as a "going back" event so the resulting
-   * NavigationEnd doesn't push the URL we're leaving onto the history stack.
-   * Used by callers that navigate via Router directly (e.g. the player's
-   * onBack() does a replaceUrl jump to the media detail) but want the
-   * subsequent back press to skip over the URL they came from.
-   */
+  /** Mark the next navigation as "going back" so its NavigationEnd doesn't push the URL we leave; for callers navigating via Router directly. */
   markAsBackNavigation() {
     this.isPoppingBack = true;
   }
 
-  /**
-   * Navigate back in browser history when possible; otherwise fall back to a
-   * provided route (useful for deep-link entries where there is no history).
-   * When no fallback is given and there's no history, goes to the home page.
-   */
+  /** Navigate back in history when possible, else to `fallback` (or home if none given). */
   /** Set when goBack() is currently navigating; consumed by the destination
    *  page's ngOnInit to decide between restoring focus vs. landing default. */
   readonly lastWasBack = signal(false);
 
-  /** Whether the navigation in flight is a return, held until the next one so
-   *  a page restored from the reuse cache can tell which it is. Wider than
-   *  {@link lastWasBack}: the browser and gesture back never go through
-   *  goBack(). */
+  /** Whether the navigation in flight is a return, held until the next one; wider than {@link lastWasBack} (browser and gesture back skip goBack()). */
   readonly navigatedBack = signal(false);
 
-  /** A macrotask later, so the destination's ngOnInit still observes `true`,
-   *  but a later programmatic nav from that page sees `false`. Runs on
-   *  rejection too — a resolver error must not leave this stuck. */
+  /** Reset a macrotask later so the destination's ngOnInit still sees `true`; runs on rejection too. */
   private resetLastWasBack(): void {
     // backNavPending is normally already closed by its own NavigationStart;
     // cleared here too as a backstop if that navigation never started one.
@@ -241,16 +182,9 @@ export class NavbarService {
     }
   }
 
-  /** True when the top mobile navbar is actually rendered. The layout hides
-   *  it on tablet when the user has pinned the sidebar (drawer takes over the
-   *  primary nav), so we must mirror that condition — pages relying on this
-   *  signal (e.g. media-info-header's back button) would otherwise leave the
-   *  user without a back affordance and without the hero-page top padding. */
+  /** True when the top mobile navbar is rendered; hidden on tablet when the sidebar is pinned, so back-button pages must mirror that. */
   readonly mobileNavbarVisible = computed(() => {
-    // Mirror the layout's actual navbar visibility, not just the form-factor:
-    // - desktop is always pinned → navbar hidden at lg+
-    // - a tablet is user-pinnable → navbar hidden only when the user pinned
-    //   the sidebar (effectiveSidebarPinned, which never holds on a TV)
+    // Mirror the layout's navbar visibility: hidden at lg+ on desktop, and on tablet only when the sidebar is pinned.
     if (this.isLargeScreen() && this.device.isDesktop()) return false;
     // One test now that the pin itself rules out a TV: naming the form factors
     // twice let the two drift apart.

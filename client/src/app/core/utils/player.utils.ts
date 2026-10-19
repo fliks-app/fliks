@@ -5,15 +5,8 @@ import type { EngineStats } from '../services/playback-engine/playback-engine';
 import type { AudioStreamInfo, VideoStreamInfo } from '../services/api/media.service';
 import type { PlayerStats } from '../../features/player/overlay/player-stats-overlay';
 
-/** Pixel widths backing each ladder rung id (must match the backend
- *  `PROFILES` table). Used by NativeEngine + quality-manager to set
- *  ExoPlayer's max-resolution constraint; ExoPlayer matches tracks by
- *  exact width × height, so a 1px mismatch silently picks the wrong
- *  rung.
- *
- *  `original` is intentionally absent — call sites that need it pass a
- *  sentinel resolution directly (the source dimensions, or 99999 when
- *  the source isn't known yet). */
+/** Pixel widths per ladder rung id (must match the backend `PROFILES`); ExoPlayer matches tracks by exact width x height.
+ *  `original` is absent: callers pass a sentinel resolution (source dimensions, or 99999 if unknown). */
 export const PROFILE_WIDTHS: Record<string, number> = {
   '2160p': 3840,
   '1080p': 1920,
@@ -24,26 +17,14 @@ export const PROFILE_WIDTHS: Record<string, number> = {
   '144p': 256,
 };
 
-/** Resolve a quality id (`'1080p'`, `'1080p-hdr'`, `'eco-1080p'`,
- *  `'original'`, …) to the rung width. Strips the `eco-` prefix (the
- *  low-consumption rung shares its sibling's resolution) and any `-hdr`
- *  suffix. Returns `undefined` for unknown ids so the caller can apply its
- *  own fallback. */
+/** Resolves a quality id to its rung width, stripping `eco-` and `-hdr`; undefined for unknown ids. */
 export function widthForProfile(id: string): number | undefined {
   const base = id.replace(/^eco-/, '').replace(/-hdr$/, '');
   return PROFILE_WIDTHS[base];
 }
 
-/**
- * Bucket a width × height pair to a display label (`"4K"`, `"1080p"`,
- * `"720p"`, …). Uses ceilings on **both** axes — anamorphic and scope
- * crops (e.g. 1918×872, 1920×800) would mis-bucket with a width-only or
- * height-only threshold because their non-primary axis sits one or two
- * pixels below the round number. Mirrors the backend's `resolveQuality`
- * bucketing so the badge matches the parsed quality stored on the file.
- *
- * Returns null when neither dimension is known.
- */
+/** Buckets width x height into a label ("4K", "1080p"...) using ceilings on both axes, since scope crops (1920x800) miss single-axis thresholds.
+ *  Mirrors the backend's `resolveQuality`; null when neither dimension is known. */
 export function bucketResolutionLabel(
   width?: number | null,
   height?: number | null,
@@ -58,12 +39,7 @@ export function bucketResolutionLabel(
   return '4K';
 }
 
-/**
- * Extract the resolution token (`"1080p"`, `"4K"`, …) from a parsed
- * quality name like `"HDTV-1080p"` or `"WEBDL-2160p"`. Quality strings
- * without a resolution suffix (`"CAM"`, `"DVD"`, …) return null so
- * callers can fall back to dimension-based bucketing.
- */
+/** Extracts the resolution token from a parsed quality name ("HDTV-1080p"); null when there is none ("CAM", "DVD"). */
 export function resolutionFromQualityName(
   quality?: string | null,
 ): string | null {
@@ -109,9 +85,7 @@ export function parseAudioIndex(trackId: string): number {
   return parseInt(trackId.replace(/^(si-|shaka-|audio-)/, ''), 10);
 }
 
-/** Canonical codec name for a subtitle sidecar, inferred from its file
- *  extension. External subs (downloaded, disk-scanned) carry no ffprobe
- *  codec, so the extension is the authoritative format hint. */
+/** Canonical codec for a subtitle sidecar from its extension; external subs carry no ffprobe codec. */
 function subtitleCodecFromPath(relativePath: string): string {
   const ext = relativePath.slice(relativePath.lastIndexOf('.') + 1).toLowerCase();
   switch (ext) {
@@ -127,10 +101,7 @@ function subtitleCodecFromPath(relativePath: string): string {
   }
 }
 
-/** Map a subtitle codec (an ffprobe name, or one inferred from the sidecar
- *  extension) to a short user-facing tag (SRT, ASS, VTT, PGS, …). Returns
- *  an empty string when the format can't be determined, so the caller shows
- *  no tag rather than a misleading default. */
+/** Maps a subtitle codec (ffprobe name or extension-inferred) to a short tag (SRT, ASS...); empty when unknown, rather than a misleading default. */
 function shortSubtitleCodec(codec: string | null | undefined, relativePath: string | null | undefined): string {
   let c = (codec ?? '').toLowerCase();
   if (!c && relativePath) c = subtitleCodecFromPath(relativePath);
@@ -157,19 +128,8 @@ export function audioChannelsLabel(channels: number | null | undefined): string 
   return `${channels}.0`;
 }
 
-/**
- * Render an audio track as a dropdown label. Used by both the player and
- * the media-detail audio menu so the text matches in both places.
- *
- * Format: `"<langue> (CODEC - channels - markers)"`, e.g. `"Français (EAC3 - 5.1 - Atmos)"`.
- * Each part is dropped when missing.
- *
- * `trackIndex` is the 1-based position of the track in the file's audio
- * list — used to produce a translated `Piste N` / `Audio N` head when
- * the language tag is `und` / `xx`, so the dropdown doesn't surface
- * `und` to the user. Omit the index to keep the literal `und` head
- * (callers with no track-list position to number).
- */
+/** Renders an audio track as `"Français (EAC3 - 5.1 - Atmos)"`, dropping missing parts; shared by player and detail menus.
+ *  `trackIndex` (1-based) numbers `und` / `xx` tracks as `Piste N`; omit it to keep the literal `und`. */
 export function formatAudioLabel(
   audio: AudioLabelSource,
   translate: TranslateService,
@@ -252,13 +212,8 @@ export interface SubtitleLabelSource {
 
 const FLAG_MARKERS = ['forced', 'hearingImpaired'];
 
-/**
- * The stream title worth showing next to the language, or ''. Dropped when
- * empty, equal (case-insensitive) to the language name or code, when it only
- * restates a flag already shown ("Forced", "SDH"), or when every word of it is
- * part of the region/script the head already spells out ("Latin American" next
- * to "Espagnol (Amérique latine)"). Anything else is kept. A track with markers shows those only.
- */
+/** The stream title worth showing next to the language, or '': dropped when empty, equal to the language, a restated flag ("Forced", "SDH"),
+ *  or fully covered by the head's region/script. A track with markers shows those only. */
 function subtitleTitleHint(sub: SubtitleLabelSource, translate: TranslateService): string {
   if (sub.trackMarkers?.length) return '';
   const title = (sub.title ?? '').trim().replace(/\s+/g, ' ');
@@ -277,13 +232,7 @@ function subtitleTitleHint(sub: SubtitleLabelSource, translate: TranslateService
   return known.size && words.every((w) => known.has(w)) ? '' : title;
 }
 
-/**
- * Render a subtitle as a dropdown label. Mirrors {@link formatAudioLabel} so
- * the player and media-detail subtitle menus stay consistent.
- *
- * Format: `"<lang> (title) (hearing-impaired) (forced) (CODEC)"`, every parenthesised
- * part localised and omitted when the corresponding flag is absent.
- */
+/** Renders a subtitle as `"<lang> (title) (hearing-impaired) (forced) (CODEC)"`, localised; mirrors {@link formatAudioLabel}. */
 export function formatSubtitleLabel(
   sub: SubtitleLabelSource,
   translate: TranslateService,
@@ -308,11 +257,7 @@ export function formatSubtitleLabel(
   return parts.length ? `${head} (${parts.join(') (')})` : head;
 }
 
-/**
- * Two-part subtitle label for the player menu: the language on top and the
- * details ("Latin American • SRT • forced • translated") as a subline, joined with " • ".
- * Every flag label is localised.
- */
+/** Two-part subtitle label: the language, then details ("Latin American • SRT • forced") as a subline. */
 export function formatSubtitleParts(
   sub: SubtitleLabelSource,
   translate: TranslateService,
@@ -488,10 +433,7 @@ export interface BuildPlayerStatsParams {
   sourceAudioStreams: AudioStreamInfo[] | undefined;
 }
 
-/** Pure derivation of the stats-overlay panel from the negotiated
- *  playback-info, engine stats and player UI state. Extracted out of
- *  PlayerComponent so this formatting logic is unit-testable without
- *  mounting the component. */
+/** Pure derivation of the stats-overlay panel from playback-info, engine stats and UI state. */
 export function buildPlayerStats(p: BuildPlayerStatsParams): PlayerStats {
   const { pi, engineStats, translate } = p;
   const src = pi?.source;
@@ -512,9 +454,7 @@ export function buildPlayerStats(p: BuildPlayerStatsParams): PlayerStats {
   // Audio is decided independently: a lower video rung still copies a
   // supported audio track (e.g. AC3 5.1) verbatim, so reflect audioCopyStream.
   const effectiveAudioCopy = pi?.audioCopyStream ?? true;
-  // Per-track audio decision for the ACTIVE track. availableAudioTracks is in
-  // streamInfo.audio order (the i-th track maps to streamInfo.audio[i]), so
-  // the selected track's position is its backend audioTracks index.
+  // availableAudioTracks follows streamInfo.audio order, so the selected position is its backend audioTracks index.
   const activeAudioPos = p.availableAudioTracks.findIndex(
     (t) => t.id === p.activeAudioTrackId,
   );
@@ -735,9 +675,7 @@ export function buildPlayerStats(p: BuildPlayerStatsParams): PlayerStats {
     .map(reasonLabel);
 
   // --- Audio ---
-  // `audioTracks: []` (or an explicitly empty source streamInfo.audio when
-  // offline) means the file truly has none; undefined means unknown metadata,
-  // not "no audio"; keep showing the section rather than assume neither.
+  // An empty `audioTracks` means no audio; undefined means unknown metadata, so keep the section.
   const sourceAudioStreams = p.sourceAudioStreams;
   const hasAudio =
     pi?.audioTracks != null
@@ -750,11 +688,7 @@ export function buildPlayerStats(p: BuildPlayerStatsParams): PlayerStats {
   const selectedAudio = p.availableAudioTracks.find(
     (t) => t.id === p.activeAudioTrackId,
   );
-  // Show the audio NAME exactly as the track selector renders it:
-  // selectedAudio.label is built by formatAudioLabel, which localizes the
-  // language and falls back to "Piste audio N" for untagged tracks instead of
-  // a raw "Und". Fall back to formatAudioLabel on the source's primary stream
-  // when no track is selected yet (tracks not populated).
+  // Name as the track selector renders it (formatAudioLabel); before tracks populate, use the source's primary stream.
   const audioLabel =
     selectedAudio?.label ??
     formatAudioLabel(

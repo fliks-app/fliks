@@ -106,20 +106,11 @@ export class LayoutComponent implements OnInit, OnDestroy {
   readonly sse = inject(SseService);
   private readonly appResume = inject(AppResumeService);
   private readonly downloadManager = inject(DownloadManagerService);
-  // Instantiate eagerly from the shell so it records the page the user was on
-  // BEFORE the first player open. It is `providedIn: 'root'` but otherwise only
-  // injected by the player, which is created too late (during the → /watch nav)
-  // to observe the launching page — leaving the player's onBack without a
-  // previousUrl on the first play and forcing a replaceUrl that strands a
-  // history entry (back button then needs two presses to leave the detail page).
+  // Instantiate eagerly so it records the launching page BEFORE the player opens (the player injects it too late).
   private readonly navHistory = inject(NavigationHistoryService);
   private readonly addToPlaylistSvc = inject(AddToPlaylistService);
   private readonly addToPlaylistModal = viewChild(AddToPlaylistModalComponent);
-  // Bridge the global "add to playlist" requests (from cards / the media-detail
-  // header) to the single modal instance mounted in the layout. The request is
-  // consumed (cleared) once handed over, so it can't reopen the modal when this
-  // layout is re-created — e.g. after exiting the player, which lives on a route
-  // OUTSIDE this shell, so the shell is destroyed on play and rebuilt on exit.
+  // Bridge global "add to playlist" requests to the modal in this layout; consumed once so a rebuilt shell (player is outside it) doesn't reopen it.
   private readonly addToPlaylistBridge = effect(() => {
     const req = this.addToPlaylistSvc.request();
     const modal = this.addToPlaylistModal();
@@ -172,10 +163,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
   );
   readonly navbarHidden = signal(false);
   readonly navbarTransparent = this.navbar.navbarTransparent;
-  /** The hero logo URL whose image failed to load. The backend can hand back a
-   *  logo path for media whose file was never stored (or got cleaned up), so
-   *  the URL is truthy but 404s — fall back to the title instead of a broken
-   *  image. Keyed by URL so it resets automatically on the next hero page. */
+  /** Hero logo URL whose image failed to load (the backend may return a path for a file never stored): fall back to the title. */
   private readonly failedHeroLogoUrl = signal<string | null>(null);
   readonly showHeroLogo = computed(
     () => !!this.navbar.heroLogoUrl() && this.failedHeroLogoUrl() !== this.navbar.heroLogoUrl(),
@@ -185,14 +173,8 @@ export class LayoutComponent implements OnInit, OnDestroy {
   }
   readonly isHomeRoute = signal(this.router.url === '/' || this.router.url.startsWith('/?'));
 
-  /** Fixed navbar's own clearance: its height (0 on TV, where it doesn't
-   *  reserve space) plus safe area — 0 wherever the mobile-style navbar
-   *  itself is hidden (desktop, or a pinned tablet sidebar).
-   *  Deliberately hero-blind: a hero page takes the space back through
-   *  `body.hero-page` in CSS (styles.css), which NavbarService toggles
-   *  synchronously — a value that only lands at the next change detection
-   *  reaches a reattached cached page after WebKit has already laid it out,
-   *  and iOS 18.7 never re-lays it out for a parent's padding change. */
+  /** Fixed navbar's own clearance: height (0 on TV) plus safe area; 0 where the mobile navbar is hidden.
+   *  Hero-blind on purpose: `body.hero-page` (styles.css) applies synchronously, a later value lets iOS 18.7 never re-lay out a cached page. */
   private readonly navbarSpacerHeight = computed(() => {
     if (!this.navbar.mobileNavbarVisible()) return '0px';
     if (this.tv.isTv()) return '0px';
@@ -209,10 +191,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
     return `calc(${dock} + 1rem)`;
   });
 
-  // Sync Android status bar icons with navbar state. App is dark-only, so the
-  // bar gets dark icons (light=true) only when the navbar is fully visible
-  // (non-transparent) and would otherwise blend with white text on its own
-  // dark bg — which is never the case here, hence always light=false.
+  // Android status bar icons: the app is dark-only, so light=false always.
   private readonly statusBarEffect = Capacitor.isNativePlatform() ? effect(() => {
     // Read the signal so the effect re-runs when transparency flips, in case
     // future code wants to react to it.
@@ -236,11 +215,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
   private restoreFallback: ReturnType<typeof setTimeout> | undefined;
   private scrollRaf: number | null = null;
   private topSentinelObserver?: IntersectionObserver;
-  /** TV never hides the navbar, so the scroll handler would exist only to
-   *  recompute `scrollAtTop` — and reading the scroll offset flushes whatever
-   *  layout the frame has dirtied, which on a long document is a full relayout.
-   *  The sentinel below reports the same thing with no layout read at all, so
-   *  the handler is skipped there entirely. */
+  /** TV never hides the navbar, so skip the scroll handler: reading the offset forces a layout; the sentinel below reports `scrollAtTop` without it. */
   private readonly onScroll = () => {
     if (this.device.isTv() || this.scrollRaf !== null) return;
     this.scrollRaf = requestAnimationFrame(() => {
@@ -318,9 +293,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
     const event = this.sse.lastEvent();
     if (!event) return;
     switch (event.type) {
-      // import.complete / import.failed are user-targeted (only the requester
-      // receives them), so library counts ride the broadcast queue.updated that
-      // follows every import — otherwise non-requesters' sidebars go stale.
+      // import.complete / import.failed reach only the requester, so library counts ride the broadcast queue.updated after each import.
       case 'queue.updated':
       case 'stalled.removed':
       case 'request.approved':
@@ -382,9 +355,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
     this.syncNavbarTitleFromRoute();
   }
 
-  /** A navigation swaps pages before the router restores the scroll, so reads
-   *  in between report the offset of the page being left. Seed the state the
-   *  restore is about to produce and hold reads until it lands. */
+  /** Pages swap before the router restores scroll, so reads in between report the old page: seed the restored state and hold reads. */
   private beginScrollRestore(): void {
     this.restorePending.set(true);
     this.navbarHidden.set(false);
@@ -403,9 +374,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
     requestAnimationFrame(() =>
       requestAnimationFrame(() => {
         this.restorePending.set(false);
-        // Adopt the restored offset instead of reading it: a restore is not a
-        // gesture, and against a zero baseline it reads as one long scroll
-        // down — which hid the navbar on every return to a scrolled page.
+        // Adopt the restored offset instead of reading it: against a zero baseline it reads as a scroll down and hides the navbar.
         const y = this.pageScroller.offset();
         this.lastScrollY = y;
         this.navbar.scrollAtTop.set(y < 20);
@@ -413,10 +382,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
     );
   }
 
-  /** Restart the page-enter animation. Re-adding the class a frame later is
-   *  what lets the same animation run again — reading a layout property to
-   *  force the reflow synchronously costs a full-document relayout, which on
-   *  a long library page lands right where the spinner should stay smooth. */
+  /** Restart the page-enter animation by re-adding the class a frame later; a forced synchronous reflow is a full-document relayout. */
   private replayPageEnter(): void {
     if (!this.device.isTv()) return;
     const main = document.querySelector('main');
@@ -425,12 +391,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
     requestAnimationFrame(() => main.classList.add('page-enter'));
   }
 
-  /**
-   * Applies `data.titleKey` from the deepest activated route (skipped on hero pages).
-   * Routes without `titleKey` manage their own title via NavbarService (set in ngOnInit,
-   * cleared in ngOnDestroy) — so we don't clear here, otherwise component-set titles get
-   * wiped by the NavigationEnd that fires right after their setPageTitle call.
-   */
+  /** Applies `data.titleKey` from the deepest activated route (skipped on hero pages); routes without it set their own title, so don't clear here. */
   private syncNavbarTitleFromRoute() {
     let key: string | undefined;
     let r = this.router.routerState.snapshot.root;
@@ -498,10 +459,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
 
 
 
-  /** Bottom-dock search button: same-route click should re-focus the
-   *  input and re-open the soft keyboard. The default Router behaviour
-   *  no-ops on a same-URL navigation, so the click handler signals the
-   *  search page via {@link SearchStateService.requestFocus}. */
+  /** Bottom-dock search button: a same-URL navigation no-ops, so the click signals the search page via {@link SearchStateService.requestFocus}. */
   onSearchNavClick(): void {
     if (this.router.url.split('?')[0] === '/search') this.searchState.requestFocus();
   }

@@ -4,12 +4,7 @@ import {
   SocialApiService,
 } from '../../core/services/api/social-api.service';
 
-/**
- * Shared profile state for the `profile/:userId` route subtree. Provided at the
- * parent route so the header (parent) and the routed children (overview,
- * followers/following, recommendations) read the same loaded aggregate from a
- * single fetch, and follow/unfollow mutations are reflected everywhere.
- */
+/** Profile state for the `profile/:userId` subtree, provided at the parent route so the header and children share one fetch and see follow/unfollow changes. */
 @Injectable()
 export class ProfileContextService {
   private readonly api = inject(SocialApiService);

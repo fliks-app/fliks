@@ -17,9 +17,7 @@ import { TvSelectDirective } from '../../../../shared/directives/tv-select.direc
 import { LocaleDatePipe } from '../../../../core/pipes/locale-date.pipe';
 import { EnabledSwitchComponent } from '../../../../shared/components/enabled-switch';
 
-/** Xtream panels answer a free-form `status` string, never validated against an
- *  enum; only these four values are known across the providers seen in the wild.
- *  Anything else still displays, untranslated, rather than being hidden. */
+/** Xtream `status` is free-form and unvalidated; only these four values are known, anything else displays untranslated rather than hidden. */
 const ACCOUNT_STATUS_BADGES: Record<string, { labelKey: string; cls: string }> = {
   active: { labelKey: 'liveTv.admin.sources.account_status_active', cls: 'badge-success' },
   expired: { labelKey: 'liveTv.admin.sources.account_status_expired', cls: 'badge-error' },

@@ -12,10 +12,7 @@ import {
   LucideSettings,
 } from '@lucide/angular';
 
-/**
- * Renders a `settings.page` contribution's icon by name — a plugin can name
- * any string; unrecognised names fall back to a generic circle, never blank.
- */
+/** Renders a `settings.page` contribution's icon by name; unrecognised names fall back to a generic circle, never blank. */
 @Component({
   selector: 'app-settings-icon',
   standalone: true,

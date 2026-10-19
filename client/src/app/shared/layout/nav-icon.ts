@@ -12,10 +12,7 @@ import {
   LucideCircle,
 } from '@lucide/angular';
 
-/**
- * Renders a nav contribution's icon by name. A plugin can name any string —
- * unrecognised names fall back to a generic circle, never a blank space.
- */
+/** Renders a nav contribution's icon by name; a plugin can name any string, so unknown names fall back to a generic circle. */
 @Component({
   selector: 'app-nav-icon',
   standalone: true,

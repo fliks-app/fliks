@@ -137,14 +137,9 @@ export interface PlaybackInfoResponse {
   edl?: EdlRange[];
   /** Plugin-named items to play before the main video. Read at launch only. */
   preRoll?: PreRollItem[];
-  /** Server-issued live-session identifier. The client embeds it in every
-   *  subsequent `PUT /api/playback/media/:id/state` (heartbeat) and on
-   *  the `DELETE /api/stream/sessions/:sid` unload signal so the
-   *  backend can match the client back to its in-memory session record. */
+  /** Server-issued live-session id, sent on every heartbeat and on the `DELETE /api/stream/sessions/:sid` unload signal. */
   sessionId?: string;
-  /** Profile hash this session's transcode cache is keyed under, or
-   *  `null` for DirectPlay. Surfaced for the admin dashboard and for
-   *  future multi-device match logic; not required by the player. */
+  /** Profile hash this session's transcode cache is keyed under, or `null` for DirectPlay; shown on the admin dashboard. */
   profileHash?: string | null;
 }
 
@@ -170,14 +165,8 @@ export interface PlaybackState {
   lastPlayedAt: string;
 }
 
-/**
- * Response from the heartbeat endpoint (PUT /playback/media/:id/state).
- * `sessionLost: true` means the carried `sid` is no longer known to
- * the backend (restart, GC, …) — caller must re-issue `playback-info`
- * and reload the stream URL with the fresh sid. `state` carries the
- * persisted PlaybackState row when the call flushed to the DB
- * (debounced); the field is omitted on a no-op tick.
- */
+/** Heartbeat response; `sessionLost: true` means the `sid` is unknown to the backend, so re-issue `playback-info` and reload.
+ * `state` is present only when the call flushed to the DB (debounced). */
 export interface HeartbeatResponse {
   sessionLost?: true;
   state?: PlaybackState;
@@ -215,9 +204,7 @@ export interface RecommendationItem {
     /** Extra fanarts variants — same role as on {@link Media}. */
     additionalFanartUrls: string[];
     genres: string[];
-    /** False when the recommendation is requested-but-not-yet-downloaded
-     *  (no files / no episodes on disk). Drives the missing-files cross
-     *  overlay on the home recommendations row. */
+    /** False when requested but not yet downloaded; drives the missing-files overlay on the recommendations row. */
     available: boolean;
   };
   becauseTitle: string;
@@ -255,15 +242,7 @@ export class StreamingApiService {
     return id ? { [SSE_CONNECTION_HEADER]: id } : undefined;
   }
 
-  /**
-   * Token embedded into every streaming URL (manifest, segment, subtitle,
-   * thumbnail). Prefers the long-lived (12h) stream token when present —
-   * playback engines bake the URL at \`load()\` and can't be refreshed
-   * mid-stream, so a film longer than the 1h access-token TTL would
-   * break otherwise. Falls back to the access token before the player
-   * has had a chance to call \`AuthService.ensureStreamToken()\` (e.g.
-   * a thumbnail fetched from a list view).
-   */
+  /** Token embedded in every streaming URL: the long-lived stream token when present (engines bake the URL at `load()`), else the access token. */
   private get playbackToken(): string | null {
     return this.auth.playbackToken;
   }
@@ -351,9 +330,7 @@ export class StreamingApiService {
     return { path, remux: new URLSearchParams(query).get('remux') === '1' };
   }
 
-  /** Same composition as {@link buildPlayUrl}, absolute through the Cast
-   *  receiver's stream base and its own token; never `device`. DirectPlay keeps
-   *  its raw-file URL and mime, though the Cast profile doesn't negotiate it. */
+  /** Same composition as {@link buildPlayUrl}, absolute through the Cast receiver's stream base and own token; never `device`. */
   buildAbsolutePlayUrl(
     pi: { playMethod: PlayMethod; playUrl: string; contentType?: string },
     castToken: string,
@@ -484,11 +461,7 @@ export class StreamingApiService {
     );
   }
 
-  /**
-   * Ask the backend to decide how to play this file based on client capabilities.
-   * `startQuality` / `startAt` let the backend pre-spawn ffmpeg at the right
-   * variant straight from this call (saves the master.m3u8 round-trip).
-   */
+  /** Asks the backend how to play this file; `startQuality`/`startAt` let it pre-spawn ffmpeg at the right variant. */
   getPlaybackInfo(
     mediaFileId: number,
     deviceProfile: DeviceProfile,
@@ -598,9 +571,7 @@ export class StreamingApiService {
       durationSeconds: number;
       mediaFileId: number;
       episodeId?: number;
-      // Live-session heartbeat fields. Only present once the player has
-      // received a `sessionId` from `getPlaybackInfo`; the backend
-      // tolerates their absence (unauthenticated paths, or before it arrives).
+      // Live-session heartbeat fields, present once `getPlaybackInfo` returned a `sessionId`; the backend tolerates their absence.
       sessionId?: string;
       state?: LivePlaybackState;
       quality?: string | null;
@@ -705,10 +676,7 @@ export class StreamingApiService {
     );
   }
 
-  /**
-   * Mark every episode of a series as watched/unwatched in a single request.
-   * The caller should refresh the episode watched list after this.
-   */
+  /** Marks every episode of a series (un)watched in one request; callers refresh the episode watched list after. */
   toggleSeriesWatched(mediaId: number, watched: boolean) {
     return firstValueFrom(
       this.http.post<{ watched: boolean }>(
@@ -739,19 +707,14 @@ export class StreamingApiService {
     );
   }
 
-  /** HDR→SDR tone-mapping algorithms the server can actually run.
-   *  Drives the admin streaming-settings dropdown so platforms / hosts
-   *  that lack a given filter graph (no OpenCL stack, no Intel iGPU, …)
-   *  don't get to pick an option that would fail at session time. */
+  /** HDR to SDR tone-mapping algorithms the server can run; keeps the admin dropdown from offering ones that fail at session time. */
   getTonemapAlgos() {
     return firstValueFrom(
       this.http.get<{ available: string[] }>('/api/stream/info/tonemap-algos'),
     );
   }
 
-  /** GPU render nodes the server detected, with a friendly label and
-   *  accel kind. Drives the admin streaming-settings device picker so a
-   *  multi-GPU host can pin transcoding to a specific adapter. */
+  /** GPU render nodes the server detected, with label and accel kind; lets a multi-GPU host pin transcoding. */
   /** Resolved tuning values for the admin form: the saved setting when there
    *  is one, otherwise what the env vars / host resolve to. */
   getEffectiveSettings() {

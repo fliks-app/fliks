@@ -61,10 +61,7 @@ export class ConfirmationModalComponent {
   });
 
   constructor() {
-    // Open through the native dialog API so the confirmation lands in the
-    // browser top layer — above any modal already opened with showModal()
-    // (e.g. the subtitles modal). A CSS/z-index modal can never sit above a
-    // top-layer one.
+    // Open via the native dialog API: the top layer sits above any showModal() dialog, which a z-index modal never can.
     effect(() => {
       const el = this.dialog()?.nativeElement;
       if (!el) return;
@@ -76,9 +73,7 @@ export class ConfirmationModalComponent {
     });
   }
 
-  /** ESC / backdrop dismissal closes the native dialog — resolve the pending
-   *  request the same way the buttons would. No-op when a button already
-   *  resolved it (the service calls are idempotent). */
+  /** ESC/backdrop closes the native dialog: resolve the pending request like the buttons (idempotent, so a no-op if one already did). */
   onDialogClose() {
     if (!this.confirmService.state()) return;
     if (this.dismissLabel()) this.confirmService.dismiss();

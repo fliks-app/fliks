@@ -10,10 +10,7 @@ const STORAGE_KEY = 'fliks_server_url';
 const KNOWN_SERVERS_KEY = 'fliks_known_servers';
 const MAX_KNOWN_SERVERS = 10;
 
-/**
- * One server URL the user previously connected to. The `name` is an optional
- * user-supplied alias; `lastUsername` lets the login form pre-fill on return.
- */
+/** A server URL the user connected to; `name` is an optional alias, `lastUsername` pre-fills the login form. */
 export interface KnownServer {
   url: string;
   name: string | null;
@@ -29,9 +26,7 @@ export class ServerConfigService {
   readonly serverUrl = this._serverUrl.asReadonly();
   readonly knownServers = this._knownServers.asReadonly();
   readonly isConfigured = computed(() => this._serverUrl().length > 0);
-  /** "Native" = the app runs standalone, with no backend host serving its
-   * shell. See {@link IS_STANDALONE_BUNDLE}. Plain boolean so the dozens of
-   * existing `if (serverConfig.isNative)` call sites stay non-reactive. */
+  /** Standalone app with no backend serving its shell (see {@link IS_STANDALONE_BUNDLE}); a plain boolean keeps call sites non-reactive. */
   readonly isNative = IS_STANDALONE_BUNDLE;
   /** @deprecated Same as `isNative` since Smart TV got folded in.
    *  Kept as a signal alias for call sites still using it. */
@@ -66,14 +61,7 @@ export class ServerConfigService {
     await writePreference(STORAGE_KEY, canonical);
   }
 
-  /**
-   * Follow any redirect the host issues on its first request (e.g. an
-   * http→https upgrade) and return the post-redirect base. A 301/302 downgrades
-   * a POST to GET, so a server reached through such a redirect would turn the
-   * login POST into `GET /api/auth/login`. Storing the canonical base makes
-   * every API call hit the final host directly. Best effort: the entered URL is
-   * kept on any network/CORS failure.
-   */
+  /** Follows the host's first redirect (e.g. http to https): a 301/302 turns the login POST into a GET. Best effort, keeps the entered URL on network/CORS failure. */
   private async resolveCanonicalUrl(base: string): Promise<string> {
     if (!base) return base;
     const probe = '/api/auth/me';

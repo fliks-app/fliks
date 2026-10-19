@@ -59,25 +59,14 @@ export class StreamingSettingsComponent implements OnInit {
   /** False when this host's ffmpeg build can't pause a run mid-stream (no
    *  stdin key, no POSIX fallback: a Windows build without the key). */
   readonly throttleAvailable = signal(true);
-  /** How the "Auto" quality resolves: 'directplay' tries Direct Play first
-   *  (zero transcoding when compatible), 'abr' always uses the adaptive HLS
-   *  ladder. Explicit quality picks are unaffected. */
+  /** 'directplay' tries Direct Play first, 'abr' always uses the HLS ladder; explicit quality picks are unaffected. */
   readonly autoQualityMode = signal<'directplay' | 'abr'>('directplay');
   readonly autoQualityModes = ['directplay', 'abr'] as const;
-  /** When embedded subtitles are extracted to WebVTT. Extraction reads the
-   *  whole container, so this only picks where that read happens — every mode
-   *  still extracts on demand for a track nobody prepared. */
-  /** Tonemap algorithms the server reports as runnable on this host.
-   *  When the list has a single entry (`['auto']` — e.g. macOS, or a
-   *  Linux box with no OpenCL stack and no Intel iGPU), we hide the
-   *  whole row in the template: the select would carry no meaningful
-   *  choice. */
+  /** A single entry (`['auto']`, e.g. macOS or no OpenCL/iGPU) hides the template row: nothing to choose. */
   readonly tonemapAlgosAvailable = signal<string[]>(['auto']);
   /** Selected GPU render node, or 'auto' to let the backend pick. */
   readonly gpuRenderNode = signal('auto');
-  /** GPU render nodes the server detected. The device-picker row in the
-   *  template only shows when more than one is present — a single-GPU
-   *  host has nothing to choose. */
+  /** The device-picker row shows only with more than one GPU. */
   readonly gpus = signal<{ renderNode: string; label: string; kind: string; accel: string }[]>([]);
 
   async ngOnInit() {
@@ -99,14 +88,9 @@ export class StreamingSettingsComponent implements OnInit {
       );
       this.tonemapAlgosAvailable.set(algos.available ?? ['auto']);
       this.gpus.set(gpusResp.gpus ?? []);
-      // Pre-fill from the resolved values, not the raw keys: an unset field
-      // must show what the server actually uses, or the form would claim
-      // "auto" while an env var drives the session, and saving would replace
-      // an env-configured value with a default.
+      // Pre-fill from resolved values: raw keys would show "auto" while an env var drives the session, and saving would overwrite it.
       const algo = effective?.tonemapAlgo ?? all['streaming_tonemap_algo'] ?? 'auto';
-      // A value this host can't run (e.g. opencl after a driver change broke
-      // the probe) collapses back to 'auto', or the select would show an
-      // option it doesn't have.
+      // A value this host can't run (e.g. opencl after a driver change) collapses to 'auto' so the select shows an option it has.
       this.tonemapAlgo.set(
         this.tonemapAlgosAvailable().includes(algo) ? algo : 'auto',
       );

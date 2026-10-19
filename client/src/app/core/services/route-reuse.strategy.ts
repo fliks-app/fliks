@@ -17,26 +17,8 @@ export const MAX_CACHE_SIZE = 10;
 /** A TV's WebView has a fraction of the memory: keep only the pages a back press is likely to return to. */
 export const TV_MAX_CACHE_SIZE = 3;
 
-/**
- * Detaches and caches the DOM of routes flagged with `data: { reuse: true }`.
- *
- * Without this strategy, Angular destroys the component on navigate-away and
- * recreates it on return — the user sees the spinner / empty state again
- * even when the underlying HTTP cache has the data.
- *
- * With it, the page DOM, signals, scroll position and focus are preserved.
- * The opt-in is per route to avoid keeping unstable pages alive (player,
- * settings forms, etc.) and to bound memory.
- *
- * Parameterized routes (e.g. `libraries/:libraryName`) are cached per param
- * value — two distinct values get distinct cache entries so navigating
- * between them does not cross-pollute state.
- *
- * Components on cached routes don't receive ngOnInit / ngOnDestroy when
- * navigating in or out — subscribe to `attached$` / `detached$` instead and
- * filter by `keyFor(this.route.snapshot)` to refresh stale data, restore TV
- * focus, or persist state.
- */
+/** Detaches and caches the DOM of routes flagged `data: { reuse: true }`, preserving signals, scroll and focus; opt-in to bound memory and skip unstable pages.
+ *  Cached routes get no ngOnInit/ngOnDestroy: use `attached$` / `detached$` filtered by `keyFor(this.route.snapshot)`; parameterized routes cache per param value. */
 @Injectable({ providedIn: 'root' })
 export class CachingReuseStrategy implements RouteReuseStrategy {
   /** Cache keyed by `keyFor(snapshot)` so different param values cache separately. */
@@ -55,13 +37,7 @@ export class CachingReuseStrategy implements RouteReuseStrategy {
   /** Fires (with the route key) when a route is detached and kept alive in cache. */
   readonly detached$: Observable<string> = this.detachedSubject.asObservable();
 
-  /**
-   * Stable cache key for a snapshot. Combines the routeConfig identity (each
-   * Route object gets a generated id on first sight via WeakMap) with a
-   * normalized serialization of the snapshot's own params, so two snapshots
-   * sharing the same config but differing on params produce distinct keys.
-   * Returns null for routes without a routeConfig (root, redirects).
-   */
+  /** Stable cache key: routeConfig identity (WeakMap-generated id) plus normalized params; null without a routeConfig (root, redirects). */
   keyFor(snapshot: ActivatedRouteSnapshot): string | null {
     const cfg = snapshot.routeConfig;
     if (!cfg) return null;
@@ -171,11 +147,7 @@ export class CachingReuseStrategy implements RouteReuseStrategy {
     // A page that drives itself off the route params keeps its instance across
     // them, so nothing under it is rebuilt when only a param moves.
     if (future.routeConfig?.data?.['reuseOnParamChange']) return true;
-    // For routes flagged `reuse: true` we need stricter behavior: two distinct
-    // param values (e.g. /libraries/Movies vs /libraries/Series) must each
-    // detach so their state lands in its own cache slot. Without this guard
-    // Angular would keep the same component instance and only emit param
-    // changes, defeating per-param caching.
+    // Reuse routes must detach per param value (/libraries/Movies vs /Series), or Angular keeps one instance and only emits param changes.
     if (future.routeConfig?.data?.['reuse']) {
       return this.keyFor(future) === this.keyFor(current);
     }

@@ -202,9 +202,7 @@ export class PlaylistDetailComponent {
     return [...groups.values()];
   });
 
-  /** Grouped-view root entries (movies + one block per series), ordered by
-   *  first appearance in the current playlist order. This root order is what
-   *  the user reorders in grouped view. */
+  /** Grouped-view root entries (movies + one block per series) in first-appearance order: the order the user reorders. */
   readonly groupedEntries = computed<PlaylistGroupedEntry[]>(() => {
     const seriesById = new Map<number, PlaylistSeriesGroup>();
     for (const g of this.seriesGroups()) seriesById.set(g.seriesId, g);
@@ -252,9 +250,7 @@ export class PlaylistDetailComponent {
 
   // ── Playback ──
 
-  /** Items in the exact order the grouped view shows them (movies + series
-   *  blocks, episodes in series order) — this is the order playback follows, so
-   *  the queue never diverges from what the user sees. */
+  /** Items in the grouped view's order (movies, series blocks, episodes in series order): playback follows it so the queue matches what is shown. */
   readonly orderedItems = computed<PlaylistItem[]>(() => {
     const out: PlaylistItem[] = [];
     for (const e of this.groupedEntries()) {
@@ -319,9 +315,7 @@ export class PlaylistDetailComponent {
         undefined,
         item.episode?.id ?? undefined,
       );
-      // On an auto-remove playlist the server drops the row once it is watched
-      // (owner-scoped), so mirror that by removing it from the list instead of
-      // just flagging it.
+      // The server drops a watched row on auto-remove playlists (owner-scoped): mirror it by removing, not flagging.
       if (state.completed && this.playlist()?.autoRemoveWatched && this.isOwner()) {
         this.items.update((list) => list.filter((i) => i.itemId !== item.itemId));
       } else {

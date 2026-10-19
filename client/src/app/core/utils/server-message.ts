@@ -1,10 +1,7 @@
 import type { TranslateService } from '@ngx-translate/core';
 
-/**
- * What a server-supplied message should read as. A backend may answer a translation key
- * (the English-only rule keeps user-facing copy out of the API), an English sentence, or
- * an array of validation messages. An unknown key would otherwise reach the user raw.
- */
+/** What a server-supplied message should read as: a translation key (the API keeps user-facing copy English-only), an English sentence,
+ *  or validation messages; an unknown key must not reach the user raw. */
 export function translatedServerMessage(
   message: unknown,
   translate: TranslateService,

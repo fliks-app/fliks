@@ -53,9 +53,7 @@ export class LiveTvAccessComponent implements OnInit {
   /** Restricted groups missing from the live lineup, mapped to when their access clears. */
   readonly vanishing = signal<Map<string, string>>(new Map());
   readonly togglingGroups = signal<Set<string>>(new Set());
-  /** Chains every save after the one before it: two toggles fired before the
-   *  first resolves must not both read the same stale snapshot, or the second
-   *  full-list replacement silently drops the first toggle's change. */
+  /** Chains saves so two quick toggles don't read the same stale snapshot and the second full-list replacement drop the first. */
   private pendingSave: Promise<void> = Promise.resolve();
 
   /** The restricted-groups setting can outlive the group itself (source removed,

@@ -41,9 +41,7 @@
       [hint]="'settings.streaming.auto_crop_help' | translate"
     />
 
-    <!-- Throttle streaming runs against the viewer's playhead: pauses far
-         ahead, resumes as the viewer catches up. Disabled when this host's
-         ffmpeg build can't actually pause a run (Windows without the key). -->
+    <!-- Throttle follows the viewer's playhead (pause ahead, resume on catch-up); disabled when ffmpeg can't pause a run (Windows without the key). -->
     <app-toggle-field
       [(value)]="throttleEnabled"
       [label]="'settings.streaming.throttle_enabled' | translate"

@@ -21,11 +21,7 @@ import { TvService } from '../../../core/services/tv.service';
 import { getDeviceName, getOrCreateDeviceId } from '../../../core/utils/device-info';
 import { formatTime } from '../../../core/utils/player.utils';
 
-/**
- * Which accounts may control this device, and which devices this account may
- * control. Consent is a code read off the granting device's screen: standing in
- * front of it is the proof, so no social relationship is involved.
- */
+/** Which accounts may control this device and vice versa; consent is a code read off the granting device's screen, so being in front of it is the proof. */
 @Component({
   selector: 'app-remote-settings',
   imports: [DatePipe, FormsModule, TranslatePipe, ToggleFieldComponent],

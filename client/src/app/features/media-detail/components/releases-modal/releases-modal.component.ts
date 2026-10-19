@@ -77,14 +77,8 @@ export class ReleasesModalComponent {
     if (active !== null && !roster.some((ix) => ix.id === active)) this.activeTab.set(null);
   });
 
-  /**
-   * Everything the picker will ever show: the profile's allowed qualities exactly — not a
-   * ceiling. A release above them is not wanted and one below them is not a fallback, so
-   * neither is listed. Other rejections (size, seeders, language, blocklist) still show, and
-   * still confirm before grabbing: those are judgements, this one is the profile itself.
-   *
-   * Filtered here rather than in the row list, so a tab's count can never promise rows it hides.
-   */
+  /** What the picker shows: exactly the profile's allowed qualities (above is unwanted, below no fallback); other rejections still show and confirm.
+   * Filtered here, not in the row list, so a tab count never promises hidden rows. */
   private readonly offered = computed(() => this.releases().filter((r) => r.allowed));
 
   readonly tabs = computed<TabView[]>(() => {
@@ -118,11 +112,7 @@ export class ReleasesModalComponent {
     return tab === null ? all : all.filter((r) => r.sourceId === tab);
   });
 
-  /** The open tab has nothing to show *yet*, which is not the same as nothing to show: either
-   *  the whole search has not answered, or the single indexer this tab follows is still
-   *  running. Rows win as soon as there are any, so progress never hides results — and once the
-   *  search has answered nothing spins, so a roster left with a stale `pending` entry cannot
-   *  strand a tab on a spinner that never resolves. */
+  /** The open tab has nothing *yet*: the search or this tab's indexer is still running. Rows win once present; once the search answered nothing spins. */
   readonly showSpinnerPanel = computed(() => {
     if (this.visibleReleases().length || !this.loading()) return false;
     const tab = this.activeTab();
@@ -130,9 +120,7 @@ export class ReleasesModalComponent {
     return this.indexers().some((ix) => ix.id === tab && ix.state === 'pending');
   });
 
-  /** Why the open tab has nothing. "Found nothing" and "never answered" look identical in an
-   *  empty list but call for different fixes, so the panel names which one it is; the whole
-   *  search falls back to the caller's message (no quality profile, for instance). */
+  /** Why the open tab is empty: "found nothing" and "never answered" call for different fixes; the whole search uses the caller's message. */
   readonly emptyPanel = computed<{ icon: 'none' | 'failed' | 'skipped'; key: string }>(() => {
     const tab = this.activeTab();
     if (tab === null) return { icon: 'none', key: this.emptyMessage() };

@@ -1,6 +1,4 @@
-<!-- The tooltip rides on a wrapper: `filter: blur()` would blur its
-     pseudo-element bubble along with the text, and `w-fit` keeps the bubble
-     over a short synopsis. -->
+<!-- Tooltip on a wrapper: `filter: blur()` would blur its bubble too, and `w-fit` keeps the bubble over a short synopsis. -->
 <div
   class="block w-fit max-w-full"
   [class.tooltip]="spoilerText.masked()"

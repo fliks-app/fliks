@@ -1,16 +1,8 @@
 import { Injectable } from '@angular/core';
 import { Observable, Subject } from 'rxjs';
 
-/**
- * Broadcasts a "the app came back to the foreground after a meaningful spell
- * in the background" signal so data pages can silently refresh themselves.
- *
- * Native only: the root {@link App} component feeds it from Capacitor's
- * `pause` / `resume` listeners (web/desktop never call it, so `resume$` simply
- * never emits there). The threshold filters out brief interruptions — Control
- * Centre, a permission sheet, a glance at the app switcher — where the backend
- * data can't realistically have changed and a refetch would be wasted work.
- */
+/** Signals the app returned to the foreground after a meaningful time in the background, so data pages can refresh silently.
+ *  Native only (fed from Capacitor `pause`/`resume`); the threshold skips brief interruptions that can't have changed backend data. */
 @Injectable({ providedIn: 'root' })
 export class AppResumeService {
   /** Minimum time backgrounded before a resume counts as refresh-worthy. */
@@ -32,12 +24,7 @@ export class AppResumeService {
     this.backgroundedAt = Date.now();
   }
 
-  /**
-   * Call when the app returns to the foreground (Capacitor `resume`). Emits
-   * `resume$` iff it had been backgrounded long enough to be worth a refetch.
-   * Clears the marker so a second resume without an intervening pause is a
-   * no-op.
-   */
+  /** Call on Capacitor `resume`: emits `resume$` only if backgrounded long enough; clears the marker so a repeat resume is a no-op. */
   markResumed(): void {
     const at = this.backgroundedAt;
     this.backgroundedAt = null;

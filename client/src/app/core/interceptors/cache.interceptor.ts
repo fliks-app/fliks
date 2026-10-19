@@ -1,16 +1,7 @@
 import { HttpInterceptorFn, HttpResponse } from '@angular/common/http';
 import { Observable, of, tap } from 'rxjs';
 
-/**
- * Stale-while-revalidate HTTP cache for GET /api/* requests.
- *
- * - Cache hit + fresh → return cached response, done.
- * - Cache hit + stale → return cached response, revalidate in background.
- * - Cache miss + online → fetch, cache, return.
- * - Cache miss + offline → let the request fail naturally.
- *
- * Storage: IndexedDB ("fliks-api-cache" database).
- */
+/** Stale-while-revalidate IndexedDB cache ("fliks-api-cache") for GET /api/*: stale hits revalidate in background, offline misses fail naturally. */
 
 export const REQUEST_CACHE_DB = 'fliks-api-cache';
 const DB_NAME = REQUEST_CACHE_DB;
@@ -24,15 +15,11 @@ const CACHEABLE_PREFIXES = [
   '/api/playback/history',
   '/api/playback/watched-ids',
   '/api/libraries/mine',
-  // Form-population endpoints — change rarely, dominate the media-detail
-  // page load when reopened (profiles modal + library picker). SWR keeps
-  // them fresh in the background without blocking render.
+  // Rarely-changing form-population endpoints that dominate media-detail reopen; SWR refreshes them without blocking render.
   '/api/libraries',
   '/api/profiles/quality',
   '/api/profiles/language',
-  // Title details barely change; the request-poster fallback (rows without
-  // stored local art) re-fetches them on every cold page open otherwise.
-  // Only the pure provider reads — see EXCLUDED_PATTERNS for the rest.
+  // Title details barely change and the request-poster fallback re-fetches them cold; provider reads only (see EXCLUDED_PATTERNS).
   '/api/metadata',
 ];
 
@@ -45,14 +32,10 @@ const EXCLUDED_PREFIXES = [
   '/api/plugins',
 ];
 
-// Live query endpoints (external providers) — never cache. A stale hit here
-// returns an old (often empty) result and only revalidates in the
-// background, so the caller never sees the real response.
+// Live provider queries are never cached: a stale hit returns an old (often empty) result and only revalidates in background.
 const EXCLUDED_PATTERNS = [
   /\/api\/media\/\d+\/subtitles\/search/,
-  // These carry existingMediaId — library state, not provider metadata. Caching it
-  // pins a title to "not in the library" long after it was added, so the card keeps
-  // its add badge and routes to the add page instead of the library one.
+  // These carry existingMediaId (library state): caching pins a title to "not in the library" after it was added.
   /^\/api\/metadata\/(search|trending|popular|upcoming|discover)\//,
 ];
 
@@ -112,13 +95,7 @@ function prune(db: IDBDatabase): void {
   } catch { /* ignore */ }
 }
 
-/**
- * Wipe the cache's IDB store. Closes the module-level connection first
- * so `indexedDB.deleteDatabase` doesn't get stuck in the `blocked` state
- * (which then makes a subsequent delete hang forever waiting behind the
- * previous never-completed delete). Resolves within a short ceiling so a
- * stuck IDB doesn't gate a login spinner.
- */
+/** Wipe the IDB store, closing the module-level connection first so `deleteDatabase` can't hang `blocked`; bounded so it never gates a login spinner. */
 export function clearRequestCache(): Promise<void> {
   cacheGeneration++;
   const closeExisting = dbPromise
@@ -149,10 +126,7 @@ export function clearRequestCache(): Promise<void> {
         done();
         return;
       }
-      // Safety net: some Capacitor WebViews never fire any of the events
-      // when another tab/process holds a connection. Don't gate the UI on
-      // it — the data is small (TTL-capped per-entry) and any stragglers
-      // are overwritten on the next put().
+      // Safety net: some Capacitor WebViews fire no event when another process holds a connection; stragglers are overwritten on next put().
       setTimeout(done, 500);
     });
   });
@@ -170,9 +144,7 @@ async function getCached(url: string): Promise<CacheEntry | null> {
   } catch { return null; }
 }
 
-/** Defer the write past the render. `store.put` structured-clones the whole
- *  body on the main thread — a 700-item library list stalls it long enough to
- *  stutter the loading spinner — and nothing reads the entry back this frame. */
+/** Defer the write past render: `store.put` structured-clones the body on the main thread (a 700-item list stutters the spinner). */
 function putCacheWhenIdle(url: string, body: any, generation: number): void {
   const write = () => void putCache(url, body, generation);
   const ric = (globalThis as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => void })
@@ -225,9 +197,7 @@ function resourcePrefix(url: string): string {
   return m?.[1] ?? url;
 }
 
-/** Opt-in hint for callers that want the freshest data on this specific
- *  request even when a fresh cache entry exists. Stripped before the
- *  request leaves the interceptor — the backend has no use for it. */
+/** Opt-in: force fresh data for this request despite a fresh entry; stripped before it leaves the interceptor. */
 export const CACHE_BYPASS_HEADER = 'X-Cache-Bypass';
 
 export const cacheInterceptor: HttpInterceptorFn = (req, next) => {

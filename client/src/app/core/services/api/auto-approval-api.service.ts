@@ -2,11 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 
-/**
- * Every set criterion must match; an unset one matches anything, so `{}`
- * auto-approves every request. `userIds` and `roleIds` are OR'd together.
- * Rules are OR'd: one match approves.
- */
+/** Every set criterion must match and an unset one matches anything (`{}` approves all); `userIds`/`roleIds` are OR'd, as are rules. */
 export interface AutoApprovalCriteria {
   userIds?: number[];
   roleIds?: number[];

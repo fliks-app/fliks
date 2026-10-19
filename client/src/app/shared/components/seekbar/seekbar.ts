@@ -35,9 +35,7 @@ export class SeekbarComponent {
   readonly variant = input<'player' | 'cast'>('player');
   readonly showTooltip = input(true);
   readonly showBuffered = input(true);
-  /** Drives an indeterminate sweep across the track while the engine is
-   *  fetching/buffering, so the bar reads as "working" even when the
-   *  playhead isn't advancing. */
+  /** Indeterminate sweep while the engine buffers, so the bar reads as working even when the playhead is still. */
   readonly loading = input(false);
   readonly chapters = input<{ startSeconds: number; endSeconds: number; title?: string }[]>([]);
   /** Drawn as tinted bands on the unplayed track so the user can see what they
@@ -63,14 +61,10 @@ export class SeekbarComponent {
   readonly dragTime = signal(0);
   readonly seekPending = signal(false);
   private seekTarget = 0;
-  /** A seek is not always granted: a live player clamps one that falls outside
-   *  its window, so the playhead never reaches the target and the bar would sit
-   *  on the requested position for the rest of the session. */
+  /** A live player may clamp a seek outside its window, so the playhead never reaches the target; this bounds the wait. */
   private seekDeadline = 0;
 
-  /** Keyboard / D-pad scrub holds the preview open: there is no cursor parked
-   *  on the bar to keep it alive the way a pointer drag has, so it would blink
-   *  away the instant the key lifts. */
+  /** Keeps the preview open after a key scrub: no parked cursor keeps it alive as in a pointer drag. */
   readonly keyScrubbing = signal(false);
   private keyPreviewTimer: ReturnType<typeof setTimeout> | null = null;
   private static readonly KEY_PREVIEW_LINGER_MS = 2200;
@@ -99,10 +93,7 @@ export class SeekbarComponent {
     );
   });
 
-  /** Signed offset from the playhead while a scrub accumulates, which is what
-   *  makes the accelerating step legible instead of surprising. The player
-   *  freezes `currentTime` for the duration of the scrub, so this reads the
-   *  whole run rather than the last press. */
+  /** Signed offset from the playhead during a scrub; the player freezes `currentTime`, so this reads the whole run. */
   readonly previewDelta = computed(() => {
     if (!this.dragging() && !this.keyScrubbing()) return 0;
     return Math.round(this.previewTime() - this.currentTime());
@@ -182,11 +173,7 @@ export class SeekbarComponent {
   readonly displayTime = computed(() => {
     if (this.dragging()) return this.dragTime();
     if (this.seekPending()) {
-      // Only consider the seek settled once the playhead reached the target
-      // AND buffering finished. Clearing on position alone, while the engine is
-      // still buffering (loading), drops the determinate fill into the
-      // indeterminate sweep for a frame — the white bar flickering away right
-      // as the seek lands (very visible on Tizen, where the seek re-buffers).
+      // Settled only once the playhead reached the target AND buffering ended, or the fill flickers into the sweep (Tizen re-buffers on seek).
       const landed = Math.abs(this.currentTime() - this.seekTarget) < 2 && !this.loading();
       if (landed || Date.now() > this.seekDeadline) {
         setTimeout(() => this.seekPending.set(false), 0);
@@ -212,9 +199,7 @@ export class SeekbarComponent {
     return Math.min(100, ((d - end) / d) * 100);
   });
 
-  /** A live bar offers only a slice of its span. A pointer or key that runs
-   *  past either edge stops there instead of asking for a seek the player
-   *  would refuse. Inert on VOD, where both bounds are the whole bar. */
+  /** A live bar offers only a slice of its span: stop at the edges instead of requesting a refused seek. Inert on VOD. */
   private clampToSeekable(seconds: number): number {
     const d = this.duration() || 0;
     const end = this.seekableEnd() > 0 ? Math.min(this.seekableEnd(), d) : d;
@@ -232,30 +217,11 @@ export class SeekbarComponent {
     return (this.displayTime() / d) * 100;
   });
 
-  /** Show the determinate position fill whenever the media is loaded, i.e. we
-   *  have a real position to draw. Deliberately independent of `loading` and
-   *  `seekPending`: a seek re-buffers and the playhead jumps to the target a
-   *  frame before `loading` flips true, so any condition mixing those signals
-   *  races and drops the fill for a frame between seek-end and resume — on the
-   *  browser as much as on Tizen. The indeterminate sweep is reserved for the
-   *  cold start (no position yet, `duration === 0`); `displayTime` still parks
-   *  the fill on the seek target while buffering. */
+  /** Position fill whenever media is loaded. Independent of `loading`/`seekPending`: mixing them races and drops the fill between seek end and resume. */
   readonly showPositionFill = computed(() => this.duration() > 0);
 
-  /** Track height + tint class string. Slim baseline (`h-1`),
-   *  thickens to `h-2.5` during interaction:
-   *  - active drag (\`dragging\`)
-   *  - mouse hover (\`hovering\` signal, driven by pointermove)
-   *  - keyboard / TV-remote focus (\`group-focus-visible:\`)
-   *
-   *  Hover is gated on the explicit signal rather than \`group-hover:\`
-   *  because mobile browsers leave \`:hover\` sticky after a tap — the
-   *  bar would stay thick after the user released. The signal is
-   *  never set during touch drag (onProgressHover early-returns) so
-   *  it cleanly reverts on touch end. The dot syntax in Tailwind
-   *  utilities (\`h-1\`) can't be expressed via \`[class.h-1]\`
-   *  bindings — Angular's class-toggle syntax stops at the dot — so
-   *  the class list is assembled here. */
+  /** Track height + tint: `h-1` baseline, `h-2.5` while dragging, hovering or focused. Hover uses a signal, not `group-hover:`
+   *  (sticky after a tap on mobile); classes are built here since `[class.h-1]` can't express a dot. */
   readonly trackClass = computed(() => {
     if (this.variant() === 'cast') return 'h-1 bg-base-300';
     const thick = this.dragging() || this.hovering();
@@ -263,11 +229,7 @@ export class SeekbarComponent {
     return `${base} ${thick ? 'h-2.5' : 'h-1'}`;
   });
 
-  /** Full class list for the indeterminate sweep overlay. The player rides on
-   *  top of video (white reads on any frame); the cast card uses theme
-   *  surfaces, so there the sweep tracks the foreground colour to stay visible
-   *  on light + dark. Assembled here (like trackClass) so a single `[class]`
-   *  binding owns the element — no static/bound merge to reason about. */
+  /** Sweep overlay classes: white over video in the player, foreground colour on theme surfaces in the cast card. */
   readonly loadingSweepClass = computed(() => {
     const via = this.variant() === 'cast' ? 'via-base-content/40' : 'via-white/60';
     return `absolute inset-0 pointer-events-none bg-gradient-to-r from-transparent ${via} to-transparent animate-seekbar-indeterminate`;
@@ -277,20 +239,11 @@ export class SeekbarComponent {
   private readonly previewScale = computed(() => {
     const meta = this.spriteMetadata();
     if (!meta) return 1.5;
-    // The 10-foot UI needs a far bigger frame, and capping width alone leaves a
-    // wide film short: sprites are a fixed 240 px wide with the height taken
-    // from the source aspect, so 2.40:1 is 240x100 against 16:9's 240x135.
-    // Bounding the height as well lands every aspect on the same height and
-    // lets the width grow instead.
+    // 10-foot UI: bound the height as well as the width, or a wide film (2.40:1 sprites are 240x100) stays short.
     if (this.tv.isTv()) {
       return Math.min(2.5, 420 / meta.thumbWidth, 170 / meta.thumbHeight);
     }
-    // Tighter cap on phones: the tooltip lives directly above the
-    // seekbar, which sits directly above the mobile big buttons (rewind
-    // / play / forward), and a wide thumbnail visually crowds that
-    // stack on small viewports. Gate on the SHORTER viewport dimension
-    // so landscape phones (e.g. S25 at 915×412) still get the small
-    // cap — width alone misses them because landscape > 640 px wide.
+    // Tighter cap on phones so the tooltip doesn't crowd the big buttons below; shorter viewport side so landscape phones (>640 wide) still match.
     const shortSide = Math.min(window.innerWidth, window.innerHeight);
     const maxW = shortSide < 640 ? 144 : 224;
     return Math.min(1.5, maxW / meta.thumbWidth);
@@ -329,11 +282,7 @@ export class SeekbarComponent {
 
   readonly tooltipLeft = computed(() => {
     const pct = this.dragging() || this.keyScrubbing() ? this.displayPercent() : this.hoverPercent();
-    // Centre the tooltip on the seek point (the element carries
-    // `-translate-x-1/2`). Plain `%` only — a CSS min()/calc() cap is ignored
-    // by Tizen's older Chromium in `left`, which left the preview stuck
-    // off-centre on the TV. The tooltip can overshoot the frame edges (the
-    // left side already did); a CSS-only right cap needs min()/clamp().
+    // Plain `%` only: Tizen's older Chromium ignores a CSS min()/calc() cap in `left`, leaving the preview off-centre.
     return `${pct}%`;
   });
 
@@ -413,24 +362,12 @@ export class SeekbarComponent {
     this.hovering.set(false);
   }
 
-  /**
-   * Keyboard handler — only active while the seekbar itself has focus.
-   *
-   * Tap ←/→: seek ±10s. Hold: enters scrub mode and accelerates the step
-   * based on how long the key has been held (10s → 30s → 60s → 5min). The
-   * preview tooltip follows dragTime; the player seek is deferred until the
-   * user stops pressing, so a whole run is one seek and one transcode respawn.
-   */
+  /** Key handler: tap seeks +-10s, hold scrubs with growing steps; the seek is deferred until the key stops, so a run is one seek. */
   private scrubStartedAt = 0;
   private scrubCommitTimer: ReturnType<typeof setTimeout> | null = null;
-  /** Idle gap that ends a scrub run. Long enough to tap again and keep adding
-   *  to the same offset — a release used to commit at once, which reset the
-   *  readout to +10 on every press and left no way to build a bigger jump.
-   *  A held key repeats far faster than this, so holding is unaffected. */
+  /** Idle gap that ends a scrub run: long enough to tap again and keep adding; a held key repeats faster. */
   private static readonly SCRUB_IDLE_MS = 700;
-  /** A scrub that lands this close to a chapter edge takes the edge instead.
-   *  Only applied to the accumulated key scrub — snapping a pointer drag would
-   *  fight a deliberate, precise one. */
+  /** A key scrub landing this close to a chapter edge takes the edge; not applied to pointer drags (would fight precision). */
   private static readonly CHAPTER_SNAP_S = 5;
 
   onKeydown(e: KeyboardEvent) {
@@ -486,9 +423,7 @@ export class SeekbarComponent {
     if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
     // Restart the window rather than commit: the user may still be tapping.
     this.scheduleScrubCommit();
-    // A real hold auto-repeats keydown with no keyup in between, so this only
-    // fires between separate taps: reset the acceleration clock here so the
-    // idle gap between taps doesn't count as held time (the run/offset survive).
+    // Taps are separate keydowns: reset the acceleration clock so the idle gap isn't counted as held time.
     this.scrubStartedAt = Date.now();
   }
 
@@ -523,9 +458,7 @@ export class SeekbarComponent {
     }
   }
 
-  /** Jump to the next / previous chapter start. Measured from `displayTime`,
-   *  not the preview: with no scrub in flight the preview reports the pointer
-   *  (0 on a remote), which would step from the head of the file. */
+  /** Next/previous chapter start, measured from `displayTime`: with no scrub the preview reads the pointer (0 on a remote). */
 
   private snapToChapter(target: number): number {
     let best = target;

@@ -35,23 +35,12 @@ interface LeafRow {
 
 interface SeasonRow {
   seasonNumber: number;
-  /** One row per download. The season itself carries no folded status: with
-   *  concurrent episodes it could only ever be a rollup that contradicts the
-   *  rows under it. */
+  /** One row per download; the season carries no rollup status, which would contradict concurrent episode rows. */
   leaves: LeafRow[];
 }
 
-/**
- * Detail view behind the header / request download badge. The badge can only
- * fold several concurrent downloads into one chip; this modal is where they come
- * apart — one bar, speed and ETA per download, under the season it belongs to.
- * No rollup above them: with concurrent episodes it could only ever be an
- * aggregate that contradicts the rows beneath it. A movie has a single download
- * and no season dimension, so it keeps a single headline instead.
- *
- * The parent passes its live `progress` so the modal keeps updating from SSE
- * while it stays open.
- */
+/** Detail view behind the header / request download badge: one bar, speed and ETA per download under its season, no rollup above them.
+ *  A movie has a single download, so it keeps one headline; the parent passes live `progress` so SSE updates continue. */
 @Component({
   selector: 'app-download-detail-modal',
   standalone: true,

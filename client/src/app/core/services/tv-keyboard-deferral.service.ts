@@ -8,16 +8,8 @@ const TEXT_ENTRY =
 /** Marks a `readonly` we added, so a genuinely read-only field is left alone. */
 const DEFERRED = 'data-tv-keyboard-deferred';
 
-/**
- * On TV, merely focusing a text field pops the system keyboard over the whole
- * screen — so walking a form with the D-pad becomes a fight to dismiss it. The
- * field is held `readonly` while focused, which the WebView takes as "nothing
- * to type here", and released on the deliberate press (Enter / OK / click)
- * that actually means the user wants to type.
- *
- * Document-level so it covers every field in the app without each form opting
- * in, and inert on any other form factor.
- */
+/** On TV a focused text field pops the system keyboard, so it is held `readonly` while focused and released on a deliberate press (Enter/OK/click).
+ * Document-level so every field is covered without opt-in; inert on other form factors. */
 @Injectable({ providedIn: 'root' })
 export class TvKeyboardDeferralService {
   private readonly device = inject(DeviceService);

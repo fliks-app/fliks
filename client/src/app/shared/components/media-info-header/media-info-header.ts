@@ -185,10 +185,7 @@ export class MediaInfoHeaderComponent {
   readonly resumeMediaFileId = input<number | undefined>(undefined);
   readonly status = input<string | null>(null);
 
-  /**
-   * `2021 · 42min · Terminé`. Joined rather than separated in the template so
-   * the dot only lands between values the provider actually gave.
-   */
+  /** `2021 · 42min · Terminé`, joined so the dot only lands between values the provider gave. */
   readonly metaLine = computed(() => {
     const parts: string[] = [];
     const date = this.dateLabel();
@@ -250,22 +247,15 @@ export class MediaInfoHeaderComponent {
   /** Viewer can submit a request (regular requester role). Surfaces the
    *  Demander entry in the More dropdown when the item is missing. */
   readonly canRequest = input(false);
-  /** Viewer already has an active request on the current scope (movie
-   *  for movies / whole-series for series). When true the Demander
-   *  entry is hidden — the backend would refuse the duplicate anyway. */
+  /** Viewer already has an open request on this scope; hides the Demander entry since the backend would refuse a duplicate. */
   readonly userHasOpenWholeRequest = input(false);
-  /** Viewer can ask an admin to delete this title from the library (a
-   *  requester without the direct `media.delete` permission, with no pending
-   *  deletion request already on the title). Surfaces the deletion entry in
-   *  the More dropdown. */
+  /** Requester without `media.delete` and no pending deletion request; shows the deletion entry in the More dropdown. */
   readonly canRequestDeletion = input(false);
   readonly releasesLoading = input(false);
   readonly grabBusy = input<string | null>(null);
   readonly monitoredLoading = input(false);
   readonly deleteLoading = input(false);
-  /** Status badge rendered next to the kebab menu (download progress, or the
-   *  monitored state), or null to show none. A clickable badge emits
-   *  openDownloadDetail. */
+  /** Status badge beside the kebab menu (download progress or monitored state); a clickable one emits openDownloadDetail. */
   readonly badge = input<MediaInfoHeaderBadge | null>(null);
 
   /** False when the title has no metadata-provider id; gates the refresh-metadata action. */
@@ -277,11 +267,7 @@ export class MediaInfoHeaderComponent {
 
   // ── Inputs: series-specific ──
   readonly mediaType = input<string>('movie');
-  /**
-   * Derived watched status for a series (true iff every downloaded episode in a
-   * non-special season is marked as watched). Used instead of a series-level
-   * PlaybackState row, which does not exist for series.
-   */
+  /** True iff every downloaded episode of non-special seasons is watched; series have no PlaybackState row. */
   readonly seriesFullyWatched = input<boolean>(false);
   /** A series root marks every episode at once, so it needs no selected file;
    *  a movie or a single episode toggles one file and does need one. */
@@ -345,9 +331,7 @@ export class MediaInfoHeaderComponent {
 
   // ── Load playback state + watched when media/episode changes ──
 
-  /** `mediaId:episodeId` of the last playback-state load. Angular reuses this
-   *  component between two episodes of the same show, so the identity has to
-   *  be tracked to drop the previous episode's resume state. */
+  /** `mediaId:episodeId` of the last load: Angular reuses the component across episodes, so the identity drops the previous resume state. */
   private lastPlaybackKey: string | null = null;
 
   private readonly loadPlaybackEffect = effect(() => this.reloadPlaybackState());
@@ -356,10 +340,7 @@ export class MediaInfoHeaderComponent {
    *  inputs, so the effect alone never fires again after a playback session. */
   reloadPlaybackState(): void {
     const mediaId = this.mediaId();
-    // A series page has no episode context of its own, but it does know which
-    // episode its resume button targets. Without this fallback it asked for the
-    // media-level row (episode IS NULL) and showed that position against an
-    // episode-specific label.
+    // A series page falls back to its resume button's episode, else it would show the media-level position against an episode label.
     const episodeId = this.episodeId() ?? this.resumeEpisodeId();
     if (!mediaId) return;
 
@@ -372,10 +353,7 @@ export class MediaInfoHeaderComponent {
     }
 
 
-    // Watched state: a series root toggle marks every episode at once, so it
-    // reads the aggregate `seriesFullyWatched` input (see parent). Keyed on the
-    // episode input rather than the resume fallback below — the resume
-    // episode's own flag would disagree with what the toggle does.
+    // A series root toggle marks every episode, so it reads the aggregate `seriesFullyWatched`, keyed on the episode input rather than the resume fallback.
     if (this.mediaType() === 'series' && !this.episodeId()) {
       this.watched.set(this.seriesFullyWatched());
     } else {
@@ -386,9 +364,7 @@ export class MediaInfoHeaderComponent {
     }
 
     if (this.mediaType() === 'series' && !episodeId) {
-      // A series' own row (episode IS NULL) is never its resume target, so
-      // reading it here only flashes a bar that the real episode then clears.
-      // The parent resolves `resumeEpisodeId` a moment later and re-runs this.
+      // A series' own row is never its resume target; the parent resolves `resumeEpisodeId` shortly and re-runs this.
       return;
     }
 
@@ -581,10 +557,7 @@ export class MediaInfoHeaderComponent {
     if (!file?.streamInfo?.video?.[0]) return null;
     const v = file.streamInfo.video[0];
     const parts: string[] = [];
-    // Prefer the parsed quality stored on the file — the backend's
-    // resolveQuality already handles letterbox crops correctly using
-    // ceilings on both axes. Fall back to dimension bucketing for
-    // files imported before the quality was parsed.
+    // Prefer the stored parsed quality (backend resolveQuality handles letterbox crops); bucket by dimensions for files imported before it existed.
     const res =
       resolutionFromQualityName(file.quality) ??
       bucketResolutionLabel(v.width, v.height);
@@ -684,12 +657,7 @@ export class MediaInfoHeaderComponent {
     surface: 'detail',
   }));
 
-  /**
-   * Visibility rules the closed `when` vocabulary can't express — an OR, or a
-   * fact that isn't a permission (a sharing preference, in-flight request
-   * state). `when` already gated everything it can; this only narrows
-   * further, and only for the three ids that need it.
-   */
+  /** Visibility the `when` vocabulary can't express (an OR, or non-permission facts); only narrows, for three ids. */
   private readonly extraGuards: Record<string, () => boolean> = {
     'core.recommend': () => !this.auth.sharingDisabled(),
     'core.request_media': () => {
@@ -723,10 +691,7 @@ export class MediaInfoHeaderComponent {
     'media.request-deletion': () => this.requestDeletion.emit(),
   };
 
-  /** Core's list merged with the registry's plugin contributions, sorted by
-   *  weight then id, `when`-filtered, with the action resolved to a handler.
-   *  An unknown actionId or action.kind drops the row rather than rendering
-   *  a broken one. */
+  /** Core list merged with plugin contributions, sorted by weight then id and `when`-filtered; unknown actionId/kind drops the row. */
   readonly menuItems = computed<ResolvedMediaAction[]>(() => {
     return resolveMenuContributions({
       contributions: [...CORE_MEDIA_ACTIONS, ...this.pluginUi.contributionsFor('media.actions'),
@@ -771,12 +736,7 @@ export class MediaInfoHeaderComponent {
     return item.icon;
   }
 
-  /**
-   * Hands the resolved rows to the shared card actions panel, anchored to the
-   * ⋯ button that was clicked. The panel owns the chrome on every form factor —
-   * anchored dropdown on desktop, bottom sheet on touch and TV — so this header
-   * no longer carries a menu of its own.
-   */
+  /** Hands the rows to the shared card actions panel anchored to the clicked button; the panel owns the chrome per form factor. */
   openActionsMenu(anchor: HTMLElement) {
     const items = this.menuItems();
     if (!items.length) return;

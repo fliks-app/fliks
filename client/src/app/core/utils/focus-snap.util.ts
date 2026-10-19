@@ -1,9 +1,5 @@
-/**
- * Pull a card row to the top of the viewport when focus enters it from
- * outside — the spatial-nav default `focus()` scrolls instantly and drops the
- * user mid-row. Shared by `app-horizontal-scroller` and `[appTvRowSnap]`, the
- * two row flavours, so a fix lands on both.
- */
+/** Pulls a card row to the top of the viewport when focus enters it from outside (spatial-nav's instant `focus()` scroll leaves the user mid-row);
+ *  shared by `app-horizontal-scroller` and `[appTvRowSnap]`. */
 export function snapRowOnFocus(
   event: FocusEvent,
   host: HTMLElement,
@@ -11,9 +7,7 @@ export function snapRowOnFocus(
 ): void {
   const from = event.relatedTarget as Node | null;
   if (from && host.contains(from)) return;
-  // Clicking a card focuses it too, and pulling the page under the cursor
-  // mid-click is never wanted. Chromium 76 (Tizen) throws on the selector —
-  // those builds are D-pad only, where every focus deserves the snap.
+  // Skip on click (pulling the page mid-click is unwanted); Chromium 76 (Tizen) throws on the selector, but those builds are D-pad only.
   try {
     const target = event.target as HTMLElement | null;
     if (target && !target.matches(':focus-visible')) return;

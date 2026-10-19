@@ -66,11 +66,7 @@ const BADGE_CLASSES: Readonly<Record<BadgeTone, string>> = {
   ghost: 'badge-ghost',
 };
 
-/**
- * The `table` view kind: declared columns, declared row actions, no
- * client-side sorting beyond one declared default, no pluggable cell
- * renderers. Deliberately not a general grid.
- */
+/** The `table` view kind: declared columns and row actions, one declared default sort, no pluggable renderers; deliberately not a general grid. */
 @Component({
   selector: 'app-data-table',
   imports: [
@@ -130,9 +126,7 @@ export class DataTableComponent implements OnInit {
   readonly busy = signal<string | null>(null);
   readonly listActionBusy = signal<string | null>(null);
 
-  /** Ids ticked in the selection column. Not pruned on reload (unlike provider-list): `refreshMs`
-   *  polling reloads this table every couple of seconds and must not wipe a selection under the
-   *  user's hands, so a stale id just falls out of `selectedRows` until its row reappears. */
+  /** Not pruned on reload: `refreshMs` polling must not wipe a selection under the user's hands; a stale id just drops out of `selectedRows`. */
   readonly selectedIds = signal<ReadonlySet<TableRow['id']>>(new Set());
   readonly bulkBusy = signal(false);
 
@@ -202,12 +196,7 @@ export class DataTableComponent implements OnInit {
     await this.loadRows();
   }
 
-  /**
-   * Every automatic trigger — a poll tick, an event the page declared — funnels here, so a
-   * burst of events costs one fetch. The trailing timer keeps the last trigger rather than
-   * dropping it, which is what would leave the table showing a state the server has left.
-   * Nothing fires while the tab is hidden: a backgrounded queue is not being read.
-   */
+  /** All automatic triggers funnel here so a burst costs one fetch; the trailing timer keeps the last trigger, and nothing fires while the tab is hidden. */
   private requestRefresh(): void {
     if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
       this.refreshPendingOnVisible = true;
@@ -255,9 +244,7 @@ export class DataTableComponent implements OnInit {
     } catch {
       if (seq === this.loadSeq) this.listError.set(this.translate.instant(this.loadErrorKey()));
     } finally {
-      // The newest load clears the spinner whatever raised it. Skipping this
-      // when the newest happens to be a silent auto-refresh stranded the
-      // spinner for good: the load it superseded is barred from clearing it.
+      // The newest load clears the spinner whatever raised it; a superseded load is barred from clearing it.
       if (seq === this.loadSeq) this.loading.set(false);
     }
   }
@@ -314,10 +301,7 @@ export class DataTableComponent implements OnInit {
     return typeof value === 'number' ? formatSpeed(value) : String(value ?? '');
   }
 
-  /**
-   * The badge class for a cell, or null to render it as text. `*` catches every value the
-   * column didn't name; an unknown tone falls back to `ghost` rather than reaching the DOM.
-   */
+  /** `*` catches values the column didn't name; an unknown tone falls back to `ghost`; null renders as text. */
   badgeClass(col: Pick<TableColumn, 'badges'>, value: CellValue): string | null {
     const tones = col.badges;
     if (!tones) return null;
@@ -355,10 +339,7 @@ export class DataTableComponent implements OnInit {
     this.rowDetailDialog()?.nativeElement.close();
   }
 
-  /** The 0–100 fill for a badged cell that declares `progressField`, or null to render the
-   *  badge flat. A row reporting no number yet (an unreachable client) is not 0%, and one
-   *  sitting at 100 has nothing left to report — what it is doing now is the state beside it,
-   *  an import or a seed, not a percentage of itself. */
+  /** 0-100 fill for a badge with `progressField`, else null: a missing number is not 0%, and 100 has nothing left to report. */
   cellProgress(col: TableColumn, row: TableRow): number | null {
     if (!col.progressField) return null;
     const value = row[col.progressField];
@@ -522,10 +503,7 @@ export class DataTableComponent implements OnInit {
     }
   }
 
-  /** Returns false without calling anything when the user declines the confirm — not an error.
-   *  A `confirmToggle` rides along as a query param, so its answer reaches the route that acts
-   *  on it rather than being decided again server-side. Declared without a `confirmKey` it is
-   *  dropped: there is no dialog to render it in, and sending its default silently is worse. */
+  /** False without calling anything when the confirm is declined. `confirmToggle` rides as a query param, and is dropped without a `confirmKey` (no dialog to show it). */
   private async runHttpAction(
     method: 'POST' | 'DELETE',
     path: string,
@@ -579,9 +557,7 @@ export class DataTableComponent implements OnInit {
     return result;
   }
 
-  /** One confirmation for a whole batch rather than one per row, mirroring `runHttpAction`'s own
-   *  confirm+toggle contract. Kept separate (not shared code) so a single row's action keeps
-   *  firing its request in the same microtask as a declined-confirm-free click always has. */
+  /** One confirmation per batch, mirroring `runHttpAction`; kept separate so a single row's request still fires in the same microtask. */
   private async confirmBatch(
     confirmKey?: string,
     toggle?: { labelKey: string; param: string; hintKey?: string },
@@ -650,9 +626,7 @@ export class DataTableComponent implements OnInit {
     return col ? this.cellLabel(col, row[col.key]) : String(row.id);
   }
 
-  /** `proxy` actions only: `route`/`action`/`detail` have no batch meaning against a selection.
-   *  One not allowed by every selected row's `visibleWhen` still renders, disabled, rather than
-   *  disappearing: the button's absence would be read as "not offered" instead of "not now". */
+  /** `proxy` actions only; one not allowed by every selected row's `visibleWhen` renders disabled, since absence would read as "not offered". */
   readonly batchActions = computed(() => {
     const rows = this.selectedRows();
     return this.rowActions()
@@ -668,13 +642,8 @@ export class DataTableComponent implements OnInit {
     return { context: new HttpContext().set(SKIP_ERROR_TOAST, true) };
   }
 
-  /**
-   * Runs one request per selected row, sequentially, and reports once. Sequential on purpose: a
-   * burst of parallel writes against a plugin's own database buys nothing and turns one slow row
-   * into a spike the far end may rate-limit. The confirmation (and its toggle) is asked once for
-   * the whole batch, never once per row, and the loop never stops early: every row that can be
-   * written is written.
-   */
+  /** Sequential on purpose: parallel writes against a plugin's database buy nothing and risk rate limiting.
+   * Confirmation asked once per batch; the loop never stops early. */
   async runBatch(action: Extract<RowAction, { kind: 'proxy' }>): Promise<void> {
     const rows = this.selectedRows();
     if (rows.length === 0) return;

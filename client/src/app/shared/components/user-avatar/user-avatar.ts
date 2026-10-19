@@ -10,12 +10,7 @@ import { LucideCheck } from '@lucide/angular';
 import { ServerConfigService } from '../../../core/services/server-config.service';
 import { initialsAvatar } from '../../../core/utils/initials-avatar';
 
-/**
- * A user's avatar, falling back to initials on a colour hashed from the name —
- * including when the picture fails to load, since an avatar URL outlives its
- * file. The URL is resolved in a computed so it follows the server URL, which a
- * pure pipe cannot.
- */
+/** A user's avatar, falling back to hashed-color initials also when the picture fails (URLs outlive files); the URL is computed so it follows the server URL, unlike a pure pipe. */
 @Component({
   selector: 'app-user-avatar',
   imports: [TranslatePipe, LucideCheck],

@@ -20,17 +20,8 @@ export interface DefaultFocusTarget {
   focusIdAttr: string;
 }
 
-/**
- * Applies a page's default focus on arrival (Home → first library, Library →
- * first card, detail → Play button), gated to keyboard / TV input so mouse and
- * touch users never get focus stolen or a ring painted. Restores the previously
- * focused item on back-navigation. Resolution is visibility-aware: responsive
- * layouts render hidden duplicates (e.g. a mobile + desktop Play button), and
- * focusing a `display:none` one leaves the page unfocused — so we skip hidden
- * matches and fall back to the first visible focusable. The declared target
- * often renders after an async data load, so when it isn't there yet we wait
- * for it via a MutationObserver. Shared by every page via the directive.
- */
+/** Applies a page's default focus on arrival (keyboard/TV only) and restores the prior focus on back-nav. Skips `display:none` duplicates,
+ *  falling back to the first visible focusable, and waits via MutationObserver for targets rendered after async loads. */
 @Injectable({ providedIn: 'root' })
 export class DefaultFocusService {
   private readonly device = inject(DeviceService);
@@ -51,9 +42,7 @@ export class DefaultFocusService {
     );
   }
 
-  /** Focus the page's default target on arrival — the previously focused item
-   *  on back-nav, else the declared first element. If the declared target isn't
-   *  rendered yet (async load), wait for it. No-op for mouse / touch. */
+  /** Focus the default target on arrival (previous item on back-nav, else the declared one), waiting if not rendered yet. No-op for mouse/touch. */
   applyOnArrival(t: DefaultFocusTarget): void {
     this.stopWaiting();
     if (!this.shouldAutoFocus()) return;
@@ -77,9 +66,7 @@ export class DefaultFocusService {
     if (id) this.focusMemory.save(t.focusKey, id);
   }
 
-  /** Register a page's default-focus target so spatial-nav can land on it when
-   *  nothing is focused (e.g. first key press after a cold load, where the
-   *  arrival-time pass was skipped because the user hadn't used the keyboard). */
+  /** Register a default-focus target so spatial-nav can land on it when nothing is focused (e.g. first key press after a cold load). */
   register(getTarget: () => DefaultFocusTarget): void {
     this.registered.add(getTarget);
   }
@@ -88,9 +75,7 @@ export class DefaultFocusService {
     this.registered.delete(getTarget);
   }
 
-  /** The active page's default focusable — the only registered target whose host
-   *  is still connected (cached/detached pages are skipped). Consulted by
-   *  spatial-nav instead of blindly focusing the first document focusable. */
+  /** The active page's default focusable: the registered target whose host is still connected (detached pages are skipped). */
   currentTarget(): HTMLElement | null {
     for (const get of this.registered) {
       const t = get();

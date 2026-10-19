@@ -3,27 +3,8 @@ import { Capacitor } from '@capacitor/core';
 import { CardAction, CardActionsService } from '../../core/services/card-actions.service';
 import { TvService } from '../../core/services/tv.service';
 
-/**
- * Apposed on a card's focusable host (e.g. the `<figure tabindex="0">` of a
- * MediaCard). Wires up the platform-specific gesture that opens the contextual
- * actions panel:
- *
- *   • TV → registers the actions while the host is focused; the service-level
- *     ContextMenu listener does the rest.
- *   • Mobile (native) → registers actions on touchstart, opens the panel after
- *     a 500 ms hold (long-press), and cancels if the finger moves or lifts.
- *   • Web desktop → no-op (cards keep their inline hover overlays).
- *
- * Usage:
- *   ```html
- *   <figure
- *     [appCardActions]="cardActions()"
- *     [actionsTitle]="title()"
- *     tabindex="0"
- *     (click)="open()"
- *   />
- *   ```
- */
+/** Put on a card's focusable host to open the contextual actions panel: TV registers actions on focus,
+ * native mobile on a 500 ms long-press (cancelled on move/lift); web desktop is a no-op. */
 @Directive({
   selector: '[appCardActions]',
   standalone: true,
@@ -137,11 +118,7 @@ export class CardActionsDirective implements OnDestroy {
     this.cancelLongPress();
     if (!this.longPressFired) return;
     this.longPressFired = false;
-    // WebKit hit-tests the compatibility click at the release point, which is
-    // now the sheet backdrop the hold just mounted — it would dismiss the panel
-    // the same gesture opened. preventDefault on touchend suppresses that
-    // click; the capture-phase swallower covers the WebView that fires it
-    // anyway.
+    // WebKit hit-tests the compat click at the release point (the new sheet backdrop) and would dismiss the panel; swallow it.
     if (e.cancelable) e.preventDefault();
     this.swallowNextClick();
   }

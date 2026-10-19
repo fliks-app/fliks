@@ -8,10 +8,8 @@ import { RemotePlaybackTarget } from './remote-playback-target';
 import { RemoteService } from './remote.service';
 import { ServerConfigService } from './server-config.service';
 
-/** Mirrors the remote target this phone drives into an Android media notification
- *  and applies its controls. The position is read untracked: the native side
- *  extrapolates it between state changes. Cast keeps the Cast SDK's notification,
- *  which Play Services would otherwise duplicate. */
+/** Mirrors the remote target this phone drives into an Android media notification and applies its controls.
+ *  Position is read untracked (native extrapolates it); Cast keeps the Cast SDK's notification, which Play Services would duplicate. */
 @Injectable({ providedIn: 'root' })
 export class RemoteNotificationService {
   private readonly device = inject(DeviceService);

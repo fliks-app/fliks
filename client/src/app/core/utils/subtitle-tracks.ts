@@ -81,15 +81,8 @@ export function subtitleManifestRank(key: string): number {
   return key.startsWith('emb-') ? n : 1_000_000 + n;
 }
 
-/**
- * Single source of truth for a media file's selectable subtitle list, shared by
- * the player and cast pickers so they can't drift. Languages come out canonical
- * (ISO 639-1), which is what every comparison downstream assumes. Drops burn-required tracks
- * when `hideBurnIn`, classifies image vs text, and dedupes external subs by id
- * and embedded subs by stream index. Callers map the result to their own shape
- * (label, url, …). `streams` (the file's `streamInfo.subtitles`) supplies the
- * embedded titles and language tags.
- */
+/** Single source of truth for a file's selectable subtitles, shared by player and cast pickers; languages are canonical ISO 639-1.
+ * Drops burn-required tracks on `hideBurnIn`, dedupes external by id and embedded by stream index; `streams` supplies embedded titles/tags. */
 export function buildSubtitleTracks(
   subs: SubtitleRowLike[],
   mediaFileId: number,

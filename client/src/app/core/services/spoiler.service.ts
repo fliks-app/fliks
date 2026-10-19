@@ -2,11 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { TranslateService } from '@ngx-translate/core';
 import { AuthService } from './auth.service';
 
-/**
- * Account-level anti-spoiler preferences, resolved per episode. Each method
- * answers "does this element need masking for an episode in that watched
- * state" — the master switch plus the per-element opt-out.
- */
+/** Account-level anti-spoiler preferences, resolved per episode watched state: the master switch plus per-element opt-out. */
 @Injectable({ providedIn: 'root' })
 export class SpoilerService {
   private readonly auth = inject(AuthService);

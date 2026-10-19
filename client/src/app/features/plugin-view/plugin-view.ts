@@ -51,11 +51,8 @@ interface PluginTestConnectionResponse {
   detail?: string;
 }
 
-/**
- * `app_settings` stores every value as text, and the form model is typed: a `toggle` handed the
- * string "false" renders checked, and a `number` handed "60" is a string in a numeric field.
- * An unset number stays empty rather than becoming 0 — that is what "no cleanup" means.
- */
+/** `app_settings` stores text but the form is typed (a "false" toggle renders checked), so values are coerced;
+ *  an unset number stays empty, which is what "no cleanup" means. */
 /** A `status` item has no `fields`/`kind: 'group'` of its own to recurse into — only a bare
  *  field or a group's own fields are operator-editable settings. */
 function flattenFields(items: readonly FormItem[]): FieldDef[] {
@@ -109,10 +106,7 @@ const PLUGIN_PROVIDER_LABELS: ProviderListLabels = {
   testConnectionKey: 'provider_list.test_connection',
 };
 
-/**
- * Resolves `plugins/:pluginId/:view` to a declared `ConfigPage` and renders
- * it with the matching renderer for its `kind` — `form` when absent.
- */
+/** Resolves `plugins/:pluginId/:view` to a `ConfigPage` and renders it by `kind` (`form` when absent). */
 @Component({
   selector: 'app-plugin-view',
   imports: [TranslatePipe, LucideTriangleAlert, SchemaFormComponent, ProviderListComponent, DataTableComponent],
@@ -139,12 +133,7 @@ export class PluginViewComponent implements OnDestroy {
 
   readonly page = computed<AnyConfigPage | undefined>(() => this.registry.configPage(this.pluginId(), this.view()));
 
-  /**
-   * A plugin route is resolved at runtime, so it carries no `data.titleKey` for
-   * the layout to read and the navbar fell back to the app name. The page's own
-   * label is the title, set here and cleared on the way out — the convention
-   * {@link NavbarService} documents for routes that name themselves.
-   */
+  /** Plugin routes carry no `data.titleKey`, so the page's own label is the title, set here and cleared on exit ({@link NavbarService}). */
   private readonly navbar = inject(NavbarService);
   private readonly pageTitleEffect = effect(() => {
     const key = this.page()?.labelKey;
@@ -310,18 +299,14 @@ export class PluginViewComponent implements OnDestroy {
     };
   }
 
-  /** `messageKey` names an entry in the plugin's own manifest `i18n` dict — merged into the
-   *  active language by `PluginI18nService` at boot, so it resolves the same way a `labelKey`
-   *  does. A miss (a manifest/plugin-code mismatch) falls back rather than printing the raw key. */
+  /** `messageKey` names an entry in the plugin manifest `i18n` dict (merged by `PluginI18nService`); a miss falls back instead of printing the key. */
   private resolvePluginMessage(messageKey: string, detail?: string): string {
     const resolved = this.translate.instant(messageKey);
     const base = resolved === messageKey ? this.translate.instant('provider_list.test_unknown_result') : resolved;
     return detail ? `${base} - ${detail}` : base;
   }
 
-  /** `actions[].scope: 'row'` — every entry renders its own button. `route` is only
-   *  host-prefixed here; substituting the row's `:id` is `ProviderListComponent`'s job,
-   *  since only it holds the row. */
+  /** `actions[].scope: 'row'`: `route` is only host-prefixed here; `ProviderListComponent` substitutes the row's `:id`. */
   providerRowActions(view: ProvidersView): ProviderRowAction[] {
     return (view.actions ?? [])
       .filter((a) => a.scope === 'row' && a.slot !== 'cooldown-reset')
@@ -366,13 +351,8 @@ export class PluginViewComponent implements OnDestroy {
       }));
   }
 
-  /**
-   * Only `kind: 'proxy'` carries a plugin-relative path — `route`/`action` resolve in-app.
-   *
-   * `when` is evaluated here rather than in `<app-data-table>`: it reads the viewer, and a
-   * generic table has no business knowing about permissions. The row-scoped `visibleWhen`
-   * rides through untouched — only the table holds a row.
-   */
+  /** Only `kind: 'proxy'` carries a plugin-relative path. `when` is evaluated here, not in `<app-data-table>`, which shouldn't know about permissions;
+   *  the row-scoped `visibleWhen` passes through. */
   tableRowActions(view: TableView): RowAction[] {
     return (view.rowActions ?? [])
       .filter((a) => evaluateWhen(a.when, this.whenContext()))
@@ -409,11 +389,7 @@ export class PluginViewComponent implements OnDestroy {
     };
   }
 
-  /** Resolves a `TableRowActionId` against its row — today only jumping to that row's own media
-   *  page via its `mediaId`/`mediaType` columns; anything else renders no button.
-   *
-   *  A row naming an episode lands on that episode rather than on the series root: a queue row
-   *  is read to reach the thing it is downloading, and a series page does not say which. */
+  /** Resolves a `TableRowActionId` against its row (today: jump to its media page); an episode row lands on the episode, not the series root. */
   tableResolveAction = (actionId: string, row: TableRow): (() => void) | undefined => {
     if (!isTableRowActionId(actionId)) return undefined;
     const id = row['mediaId'];

@@ -66,12 +66,7 @@ interface SubtitleRow {
   missing: boolean;
 }
 
-/**
- * Self-contained subtitles modal: loads, displays, searches and manages
- * subtitles for a media (or a single episode when `episodeId` is set).
- * Exposes {@link show} / {@link close} so parents can open it from e.g.
- * a header dropdown without owning any of the internal state.
- */
+/** Self-contained subtitles modal for a media (or one episode via `episodeId`); open it with {@link show} / {@link close}. */
 @Component({
   selector: 'app-subtitles-modal',
   imports: [
@@ -159,16 +154,12 @@ export class SubtitlesModalComponent {
     return this.subActions.syncing().has(sub.id);
   }
 
-  /** Every present subtitle row has at least one action or an informational
-   *  note (external → full menu, image track → OCR/burn-in note, embedded text
-   *  → translate), so the Actions menu is always offered. */
+  /** Every present row has an action or note (external: menu, image track: OCR/burn-in note, embedded text: translate), so Actions is always offered. */
   protected rowHasActions(_sub: SubtitleFileRow): boolean {
     return true;
   }
 
-  /** Everything the row offers, as one declarative tree handed to the shared
-   *  actions panel: it renders the anchored dropdown on desktop and the sheet
-   *  (submenus swapping in place) on touch and TV. */
+  /** The row's offerings as one declarative tree for the shared actions panel (dropdown on desktop, sheet on touch / TV). */
   private buildSubActions(sub: SubtitleFileRow): CardAction[] {
     if (this.isSyncing(sub)) {
       return [
@@ -479,9 +470,7 @@ export class SubtitlesModalComponent {
       .map((s) => localizeLanguage(s.language, this.translate)),
   );
 
-  /** Localized languages (with live percentage) of translation runs still in
-   *  progress, surfaced by the detail page as a "traduction en cours" progress
-   *  bar. `percent` is null until the first batch reports. */
+  /** Localized languages and live percent of in-progress translation runs, for the detail page's progress bar; `percent` is null until the first batch. */
   readonly translationInProgress = computed<{ language: string; percent: number | null }[]>(() => {
     return this.filteredSubtitles()
       .filter((s) => s.status === 'processing' && s.providerType === 'translated')
@@ -491,9 +480,7 @@ export class SubtitlesModalComponent {
       }));
   });
 
-  /** Translation percentage for a PROCESSING row: the live event when one has
-   *  arrived, else what the server reported when the list was fetched, so a
-   *  client that joined mid-run still shows a bar. */
+  /** Percent for a PROCESSING row: the live event, else the server's value at fetch time so a mid-run joiner still sees a bar. */
   protected translationPercent(sub: SubtitleFileRow): number | null {
     return this.sse.translationProgress()[sub.id] ?? sub.translationProgress ?? null;
   }
@@ -826,9 +813,7 @@ export class SubtitlesModalComponent {
     this.ocrLangDialog()?.nativeElement.showModal();
   }
 
-  /** Display label for a translated sub's provider column: the admin-given
-   *  provider name (snapshotted at translation time), falling back to the engine
-   *  and then a generic "translated" for rows created before provenance existed. */
+  /** Provider label: the admin-given name (snapshotted at translation time), else the engine, else "translated" for rows predating provenance. */
   translationServiceLabel(sub: SubtitleFileRow): string {
     if (sub.translationProviderName) return sub.translationProviderName;
     switch (sub.translationEngine) {

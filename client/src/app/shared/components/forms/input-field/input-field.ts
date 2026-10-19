@@ -13,14 +13,7 @@ export type InputFieldType =
   | 'number'
   | 'search';
 
-/**
- * DaisyUI input with label + optional hint. Two-way `[(value)]`.
- *
- * <app-input-field
- *   [(value)]="seerrUrl"
- *   [label]="'URL' | translate"
- *   placeholder="http://seerr:5055" />
- */
+/** DaisyUI input with label and optional hint; two-way `[(value)]`. */
 @Component({
   selector: 'app-input-field',
   imports: [FormsModule],

@@ -19,12 +19,7 @@ import {
 import { normalizeLangCode } from '../../utils/language.utils';
 import type { TimeRange } from '../../utils/edl-policy';
 
-/**
- * PlaybackEngine implementation backed by the NativePlayer Capacitor plugin
- * (ExoPlayer on Android, AVPlayer on iOS).
- *
- * The native player renders behind the WebView — the Angular UI sits on top.
- */
+/** PlaybackEngine backed by the NativePlayer Capacitor plugin (ExoPlayer/AVPlayer), rendering behind the WebView. */
 export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngine {
   readonly positionUpdateMs = 1_000;
   private _currentTime = 0;
@@ -39,25 +34,14 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
 
   private listeners: Array<{ event: string; fn: EventListener }> = [];
 
-  /** Last `timeUpdate.position` seen, used to detect that playback is
-   *  actually advancing (Android's onRenderedFirstFrame is unreliable on
-   *  some devices: it fires late or never on transcode → ABR switches,
-   *  leaving the UI stuck on the loading spinner even though the stream
-   *  is playing). When position grows between two updates, we know
-   *  frames are decoding and can fire 'firstFrame' ourselves as a
-   *  belt-and-suspenders signal. */
+  /** Android's onRenderedFirstFrame fires late or never on some devices; a growing position emits 'firstFrame' ourselves. */
   private lastTimeUpdatePos = -1;
 
   // ── Subtitles ──
-  // Subtitles ship as HLS SUBTITLES renditions in the master playlist; the
-  // native player (AVPlayer legible group / ExoPlayer text tracks) renders
-  // them in its own pipeline so they show in PiP / AirPlay — no app overlay.
+  // Native HLS SUBTITLES renditions render in the player's own pipeline, so they show in PiP/AirPlay with no app overlay.
   /** Player's own id ("text-N") of the currently selected track. */
   private _activeTrackId: string | null = null;
-  /** Desired subtitle (by language/forced), kept until the player surfaces
-   *  its text tracks. The default/saved selection is applied right after
-   *  load() — before ExoPlayer has parsed the manifest's text tracks — so we
-   *  hold the intent and (re)apply it on `nativePlayerTracksChanged`. */
+  /** Desired subtitle, held because the default is applied right after load() before ExoPlayer parses text tracks; re-applied on `nativePlayerTracksChanged`. */
   private _desiredSubtitle: {
     language: string;
     forced: boolean;
@@ -93,9 +77,7 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
     this.unbindWindowEvents();
     this._activeTrackId = null;
     this._crop = null;
-    // Drop engine event subscribers (every other engine does this in destroy).
-    // Without it, each player navigation leaks the previous component's
-    // listeners onto the long-lived NativePlayer bridge.
+    // Without this each navigation leaks listeners onto the long-lived NativePlayer bridge.
     this.clearHandlers();
     await NativePlayer.destroy();
   }
@@ -145,10 +127,7 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
       await NativePlayer.setCrop(this._crop).catch(() => {});
     }
 
-    // A new MediaItem resurfaces fresh text tracks: drop the stale resolved
-    // id and let the desired selection (kept across a silent reload —
-    // session-expired recovery, cast handoff) re-apply against the new track
-    // list once `nativePlayerTracksChanged` fires.
+    // A new MediaItem resurfaces text tracks: drop the stale id; the desired selection re-applies on `nativePlayerTracksChanged`.
     this._activeTrackId = null;
     this._nativeSubtitleTracks = [];
   }
@@ -279,12 +258,7 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
     NativePlayer.setPlaybackRate({ rate });
   }
 
-  // Volume + muted are intentionally local-only. Native playback uses
-  // the system volume slider on Android / iOS, so the in-app slider is
-  // hidden under `isMobileTouch()` in `player-controls.html`. The
-  // setters exist to satisfy the PlaybackEngine contract uniformly with
-  // ShakaEngine, but they don't reach the native player — the host OS
-  // is the source of truth for output level.
+  // Volume and muted are local-only: the host OS owns output level, the setters just satisfy the PlaybackEngine contract.
   get volume(): number { return this._volume; }
   readonly supportsVolume = false;
 
@@ -309,8 +283,7 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
   }
 
   // ── Subtitles ──
-  // Subtitles are preloaded at load() time. addTextTrack finds the matching
-  // preloaded track by URL and returns its ExoPlayer text track index.
+  // Preloaded at load(); addTextTrack matches by URL and returns the ExoPlayer text track index.
 
   private _subtitleUrls: string[] = [];
 
@@ -326,11 +299,7 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
     forced = false,
     index = 0,
   ): Promise<{ language: string; forced: boolean; index: number }> {
-    // Subtitles are HLS SUBTITLES renditions; the player surfaces them as
-    // native text tracks. Return the desired track descriptor — actual
-    // selection is resolved against the player's reported tracks (by language
-    // + the ordinal among same-language tracks), which only appear after the
-    // manifest is parsed (see resolveSubtitle).
+    // Returns only the descriptor; selection resolves against the player's tracks once the manifest is parsed (see resolveSubtitle).
     return { language, forced, index };
   }
 
@@ -359,21 +328,13 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
     }
   }
 
-  /** Map the desired subtitle (by language) to the player's own track id and
-   *  select it. No-op until the player has surfaced its text tracks — the
-   *  `nativePlayerTracksChanged` handler re-runs this, so a default selection
-   *  applied right after load() takes effect as soon as the tracks are ready
-   *  (fixes "subtitle selected by default but hidden" on ExoPlayer). */
+  /** No-op until the player surfaces text tracks; the `nativePlayerTracksChanged` handler re-runs it. */
   private resolveSubtitle(): void {
     if (!this._desiredSubtitle) return;
     const { language, forced, image, index } = this._desiredSubtitle;
     const want = normalizeLangCode(language);
     const tracks = this._nativeSubtitleTracks;
-    // Match image-ness first so a same-language text track isn't picked over
-    // the chosen image one (or vice versa), then narrow by forced, using the
-    // ordinal to pick the Nth track that shares (language, image, forced) so
-    // several same-language subs can each be selected. Fall back to language
-    // alone on a tag mismatch, never to another language.
+    // Match image-ness, then forced, then the ordinal among same (language, image, forced) tracks; fall back to language alone, never another language.
     const sameTagged = tracks.filter(
       (t) =>
         normalizeLangCode(t.language) === want &&
@@ -395,9 +356,7 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
     }
   }
 
-  /** Refresh the reported text-track list, then (re)apply the desired
-   *  selection. Queried from the plugin because the Android bridge reports an
-   *  empty subtitle list on the track-change event. */
+  /** Queried from the plugin because the Android bridge reports an empty list on the track-change event. */
   private refreshSubtitleTracks(): void {
     NativePlayer.getSubtitleTracks()
       .then(({ tracks }) => {
@@ -456,9 +415,7 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
       this._state = detail.state;
       this._paused = detail.state === 'paused' || detail.state === 'idle';
       this.emit('stateChanged', { state: detail.state });
-      // Surface end-of-stream so the player can advance to the next episode /
-      // exit; the bridge reports it via stateChanged but the dedicated 'ended'
-      // event (in EngineEventMap) was never emitted.
+      // The bridge reports end-of-stream only via stateChanged; emit 'ended' so the player can advance.
       if (detail.state === 'ended') this.emit('ended', undefined);
     });
 
@@ -468,12 +425,7 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
       this._duration = d.duration;
       this._buffered = d.buffered;
       this.emit('timeUpdate', d);
-      // Fallback for the missing onRenderedFirstFrame case: native only
-      // fires nativePlayerTimeUpdate when `player.isPlaying()`, so a
-      // position that grows between two updates is a strong signal that
-      // decoded frames are flowing. We use the second observation (not
-      // the first) because a seek-resume's initial update can land at
-      // position=T before any frame has rendered.
+      // Native sends timeUpdate only while playing, so growth between two updates means frames flow; the second sample is used since a seek-resume's first can precede any render.
       if (
         !this.firstFrameEmitted &&
         this.lastTimeUpdatePos >= 0 &&
@@ -486,12 +438,7 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
 
     bind('nativePlayerError', (e: Event) => {
       const d = (e as CustomEvent).detail;
-      // ExoPlayer / AVPlayer hide the HTTP status of the failing
-      // segment fetch — we can't tell a 410 (session expired) from a
-      // 5xx (ffmpeg crash). Heuristic: if a frame has played and we
-      // haven't tried recovery yet, treat the first error as a
-      // possible session-expired and let the player attempt a single
-      // /playback-info + reload before surfacing a fatal error.
+      // The HTTP status of the failed segment is hidden (410 vs 5xx): after a played frame, treat the first error as possible session expiry and try one reload.
       if (this.maybeEmitSessionExpired({ source: 'native', code: d.code })) return;
       this._state = 'error';
       this.emit('error', { ...d, source: 'native' });

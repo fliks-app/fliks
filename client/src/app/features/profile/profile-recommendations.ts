@@ -18,9 +18,7 @@ import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { CachedSrcDirective } from '../../shared/directives/cached-src.directive';
 import { itemArtwork } from '../../shared/utils/media-artwork.util';
 
-/** The profile "recommendations" tab, own-profile only: content other members
- *  recommended to the viewer, and content the viewer recommended to others.
- *  Rendered as compact tables so the recipient/sender is always visible. */
+/** The own-profile "recommendations" tab: content recommended to the viewer and by them, as compact tables. */
 @Component({
   selector: 'app-profile-recommendations',
   imports: [
@@ -38,9 +36,7 @@ export class ProfileRecommendationsComponent {
   readonly received = signal<ReceivedRecommendation[]>([]);
   readonly sent = signal<SentRecommendation[]>([]);
 
-  /** The profile being viewed, read straight from the parent route param so the
-   *  redirect below is authoritative during navigation (the shared aggregate
-   *  still holds the previously-viewed profile while its reload is in flight). */
+  /** The viewed profile from the parent route param, so the redirect below is authoritative while the shared aggregate still holds the previous profile. */
   private readonly viewedId = toSignal(
     (this.route.parent ?? this.route).paramMap.pipe(
       map((pm) => Number(pm.get('userId'))),
@@ -51,9 +47,7 @@ export class ProfileRecommendationsComponent {
   private loadedFor = 0;
 
   constructor() {
-    // This tab is personal (the endpoints are always about the caller). If the
-    // viewer deep-links to someone else's /recommendations, bounce them to that
-    // profile's overview.
+    // This tab is personal; bounce deep-links to someone else's /recommendations to that profile's overview.
     effect(() => {
       const viewedId = this.viewedId();
       const myId = this.auth.user()?.id;

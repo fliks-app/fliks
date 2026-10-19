@@ -108,9 +108,7 @@ export class RequestModalComponent {
     mediaType: MediaType;
     tmdbId: number;
     alreadyRequestedSeasons?: number[];
-    /** Pre-tick these season numbers on open (the user can still
-     *  un-tick them or add more). Filtered against
-     *  `alreadyRequestedSeasons` so we never re-add disabled rows. */
+    /** Pre-ticks these seasons on open (still editable), filtered against `alreadyRequestedSeasons`. */
     preselectedSeasons?: number[];
     /** Set when an active request already fixes this series' profiles: the
      *  quality/language selectors are pre-filled with these and locked. */
@@ -143,10 +141,7 @@ export class RequestModalComponent {
         .getSeasonStubs('tmdb', String(params.tmdbId))
         .then((s) => {
           this.seasons.set(s);
-          // Default empty unless the caller passed `preselectedSeasons`
-          // (e.g. the season-level Demander entry pre-fills the season
-          // it was clicked on). Already-requested rows are filtered out
-          // — they're disabled and can't be re-picked anyway.
+          // Default empty unless `preselectedSeasons` is passed; already-requested rows are disabled, so filter them out.
           const taken = this.alreadyRequestedSeasons();
           this.selectedSeasons.set(
             new Set(

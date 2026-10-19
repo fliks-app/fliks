@@ -13,15 +13,7 @@ import {
   BG_OPTIONS,
 } from '../../../features/playback-settings/playback-options';
 
-/**
- * Subtitle appearance preset selectors (size / colour / shadow /
- * background), shared between the local player settings and the Cast
- * settings page so users see one familiar form everywhere.
- *
- * The values stay raw preset strings (`small`, `white`, `drop`,
- * `transparent`, …); each consumer is free to interpret them — Shaka CSS
- * for local playback, Cast `TextTrackStyle` mapping for the receiver.
- */
+/** Subtitle appearance preset selectors shared by player and Cast settings; values stay raw presets (`small`, `white`, `drop`…) each consumer interprets. */
 @Component({
   selector: 'app-subtitle-appearance',
   standalone: true,

@@ -6,10 +6,7 @@
   display: none;
 }
 
-/* Large edge scroll affordances. Centred on the row, they fade in while the
-   row is hovered and scroll one viewport-width on click. Pointer-only — on
-   touch they get in the way of swiping, and on a D-pad-only TV the row is
-   driven by spatial navigation. */
+/* Large edge scroll affordances: fade in on row hover, scroll one viewport-width on click. Pointer-only (they obstruct swiping; TV rows use spatial nav). */
 .scroll-edge {
   position: absolute;
   top: 50%;
@@ -49,9 +46,7 @@
   transform: translateY(-50%) scale(0.97);
 }
 
-/* webOS is exempt from both gates: the Magic Remote is a real pointer, even
-   though the platform reports `(hover: none)`. The arrows stay `tabindex="-1"`
-   so D-pad navigation never lands on them. */
+/* webOS is exempt from both gates: the Magic Remote is a real pointer despite `(hover: none)`; arrows stay `tabindex="-1"` so D-pad skips them. */
 :host-context(html.tv-host:not(.tv-webos)) .scroll-edge {
   display: none;
 }

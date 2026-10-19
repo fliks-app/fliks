@@ -8,9 +8,7 @@
 
         <!-- Close only: the centred poster below says what is playing, so there
              is no header rule and no second thumbnail beside it. -->
-        <!-- The notch inset belongs to the fullscreen form, which is a
-             breakpoint and not a device: a tablet wide enough for the floating
-             card was still paying for a notch it does not have there. -->
+        <!-- The notch inset belongs to the fullscreen form, a breakpoint not a device: a tablet with the floating card has no notch. -->
         <div class="flex items-center justify-end px-4 shrink-0
                     pt-[calc(env(safe-area-inset-top)/2+24px)]
                     max-lg:landscape:pt-3 lg:pt-3">
@@ -47,10 +45,7 @@
             </div>
           </div>
         } @else {
-        <!-- Poster beside the controls on a short, wide phone, above them when
-             the viewport is tall, and in the header of the desktop card, which
-             `lg:contents` keeps as a single column. Every two-column rule is
-             scoped `max-lg:` because a desktop viewport is landscape too. -->
+        <!-- Poster beside the controls on a short, wide phone, above when tall; every two-column rule is `max-lg:` since desktop is landscape too. -->
         <div class="flex-1 min-h-0 flex flex-col max-lg:landscape:flex-row max-lg:landscape:items-stretch lg:contents">
 
         <!-- Poster, centred on every surface. The desktop card is content-sized,
@@ -119,9 +114,7 @@
             </div>
           </div>
 
-          <!-- Playback buttons. Three columns rather than a centred flex row:
-               the next-episode button appears mid-playback, and a flex row
-               would have slid the play button off centre under a thumb. -->
+          <!-- Playback buttons in three columns: the mid-playback next-episode button would slide a flex row's play button off centre. -->
           <div class="grid grid-cols-[1fr_auto_1fr] items-center gap-6 lg:gap-4">
             <button class="btn btn-ghost btn-circle lg:btn-sm justify-self-end" (click)="t.seek(t.currentTime() - 10)">
               <svg lucideRotateCcw class="h-7 w-7 lg:h-5 lg:w-5"></svg>
@@ -153,9 +146,7 @@
             </div>
           </div>
 
-          <!-- Volume. Hidden where the target's platform owns the level: its
-               engine can only pretend to set one, and a dead slider is worse
-               than none. -->
+          <!-- Volume: hidden where the target's platform owns the level (its engine can only pretend to set one). -->
           @if (t.canSetVolume()) {
             <div class="flex items-center justify-center gap-2">
               <button class="btn btn-ghost btn-sm btn-circle" [attr.aria-label]="'player.volume' | translate" (click)="t.toggleMute()">

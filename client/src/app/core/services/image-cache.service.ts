@@ -18,16 +18,8 @@ const MAX_ENTRIES = 800;
  *  more than a couple at once visibly stalls a scrolling grid. */
 const MAX_CONCURRENT_STORES = 2;
 
-/**
- * On-disk cache for server artwork on native.
- *
- * The WebView's own URL cache is the only thing holding images there — no
- * service worker runs under Capacitor — and it is capacity-evicted and expires
- * with `Cache-Control`, so offline the grid comes up with a random subset of
- * its posters. This keeps a copy the app controls.
- *
- * Web is a no-op: the Angular service worker already caches `/api/images/**`.
- */
+/** On-disk artwork cache on native, where the capacity-evicted WebView cache leaves a random subset of posters offline.
+ *  Web is a no-op: the Angular service worker already caches `/api/images/**`. */
 @Injectable({ providedIn: 'root' })
 export class ImageCacheService {
   private readonly network = inject(NetworkService);
@@ -55,11 +47,7 @@ export class ImageCacheService {
     await this.resolveBaseUri();
   }
 
-  /**
-   * Same as {@link resolve} but without the bridge, so a binding can set `src`
-   * in the same frame. Null when the answer isn't already in memory — the
-   * caller falls back to the async path.
-   */
+  /** Like {@link resolve} without the bridge so `src` binds in the same frame; null when not already in memory. */
   resolveNow(remoteUrl: string): string | null {
     if (!this.cacheable(remoteUrl)) return remoteUrl;
     if (!this.baseUriValue) return null;
@@ -71,10 +59,7 @@ export class ImageCacheService {
     return Capacitor.convertFileSrc(`${this.baseUriValue}/${entry[0]}`);
   }
 
-  /**
-   * URL to actually render for a remote image: the on-disk copy when there is
-   * one, otherwise the remote URL — with a copy queued for next time.
-   */
+  /** URL to render: the on-disk copy if any, else the remote URL with a copy queued for next time. */
   async resolve(remoteUrl: string): Promise<string> {
     if (!this.cacheable(remoteUrl)) return remoteUrl;
     this.load();
@@ -224,11 +209,7 @@ export class ImageCacheService {
   }
 }
 
-/** FNV-1a over the URL with any `token` query param stripped first — a Live
- *  TV logo's auth token rotates with the session, but it's the same image, and
- *  hashing it in would churn the cache on every rotation. The size param and
- *  the server host both still matter, and the digest keeps the result safe as
- *  a filename. */
+/** FNV-1a over the URL minus any `token` param (a Live TV logo's rotating token is the same image); size and host still count. */
 export function cacheKey(url: string): string {
   const stable = stripToken(url);
   let hash = 0x811c9dc5;

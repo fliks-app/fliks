@@ -1,10 +1,5 @@
 @if (visible()) {
-  <!-- Backdrop — CSS @starting-style handles the fade-in declaratively
-       (browser interpolates from opacity 0 on element creation), so the
-       component does not need a JS-side toggling pattern.
-       Preventing the pointerdown default keeps the tap from blurring
-       whatever opened the sheet: focus used to leave and be restored a tick
-       later, which flickered the opener's ring off and back on. -->
+  <!-- Backdrop: CSS @starting-style fades it in. Preventing the pointerdown default keeps the tap from blurring the opener (its ring flickered). -->
   <div
     [class]="
       'bottom-sheet-backdrop fixed inset-0 z-[100] transition-opacity duration-150 ' +
@@ -29,9 +24,7 @@
     (touchmove)="onTouchMove($event)"
     (touchend)="onTouchEnd()"
   >
-    <!-- Drag handle + optional title. Sticky so the title survives
-         scrolling a long option list; the 4px gap below keeps it off the
-         first item's focus ring. -->
+    <!-- Drag handle + optional title; sticky so the title survives scrolling, the 4px gap keeps it off the first item's focus ring. -->
     <div data-sheet-handle class="sticky top-0 z-10 bg-neutral pt-3 pb-1 mb-1 cursor-grab">
       <div class="flex justify-center">
         <div class="w-10 h-1 rounded-full bg-white/20"></div>

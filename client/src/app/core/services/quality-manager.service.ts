@@ -19,30 +19,17 @@ export interface QualityOption {
 /** Persisted user choice for quality (same key across sessions). */
 const PLAYER_QUALITY_STORAGE_KEY = 'player.qualityId';
 
-/**
- * ABR: prefer starting at 720p+ and staying there when possible; below 720 only
- * when no variant meets the restriction (very slow network / low source res).
- */
-// Seed the ABR bandwidth estimator high so Shaka picks the top variant on
-// the first segment instead of probing low→high (which fetches a throw-away
-// low-quality init+seg-0 before upgrading). Once the first segment's real
-// bandwidth is observed, ABR recalibrates within seconds.
+/** ABR: prefer starting at 720p+ and staying there; go below only when no variant meets the restriction. */
+// Seed high so Shaka picks the top variant on the first segment; ABR recalibrates once real bandwidth is observed.
 const ABR_DEFAULT_BANDWIDTH_ESTIMATE = 100_000_000;
 
-/**
- * Find a variant track by profile name in the variant URL (e.g. '480p' matches '/480p/').
- * Returns null if no match found.
- */
+/** Find a variant track by profile name in its URL (e.g. '480p' matches '/480p/'), or null. */
 export function findVariantByProfileName(tracks: VariantTrack[], profileName: string): VariantTrack | null {
   const path = `/${profileName}/`;
   return tracks.find((t) => t.originalVideoId?.includes(path)) ?? null;
 }
 
-/**
- * Find the best variant track for a target height:
- * pick the largest height that is ≤ targetHeight.
- * If none fits (all tracks are above target), pick the smallest.
- */
+/** Largest variant height ≤ targetHeight; the smallest if none fits. */
 export function findBestVariantForHeight(tracks: VariantTrack[], targetHeight: number): VariantTrack {
   const below = tracks.filter((t) => (t.height ?? 0) <= targetHeight);
   if (below.length) {
@@ -51,10 +38,7 @@ export function findBestVariantForHeight(tracks: VariantTrack[], targetHeight: n
   return tracks.reduce((a, b) => ((a.height ?? 0) <= (b.height ?? 0) ? a : b));
 }
 
-/**
- * Id of the highest-resolution rung in a quality list, excluding 'auto'.
- * Undefined for an empty (or auto-only) list.
- */
+/** Id of the highest-resolution rung excluding 'auto'; undefined for an empty or auto-only list. */
 export function highestRungId(options: QualityOption[]): string | undefined {
   const rungs = options.filter((q) => q.id !== 'auto');
   if (!rungs.length) return undefined;
@@ -69,11 +53,7 @@ export class QualityManagerService {
   readonly availableQualities = signal<QualityOption[]>([]);
   readonly activeResolution = signal('');
 
-  /**
-   * Build the quality options list from playback info.
-   * The backend sends an authoritative, device-aware list in `qualities` — we
-   * only prepend "Auto" and hand it to the UI.
-   */
+  /** Build the quality options from playback info: the backend's authoritative `qualities` list plus "Auto". */
   buildQualityOptions(playbackInfo: {
     playMethod: string;
     videoCopyStream: boolean;
@@ -108,47 +88,22 @@ export class QualityManagerService {
     this.availableQualities.set(visible);
   }
 
-  /** Id of the highest rung currently offered (excluding 'auto') — pins a
-   *  no-ABR engine (desktop mpv) to a single variant in 'auto' instead of
-   *  handing it the full backend ladder. The list is already device- and
-   *  source-aware (and eco-filtered by {@link buildQualityOptions}), so no
-   *  extra filtering here. */
+  /** Id of the highest rung offered (excluding 'auto'); pins a no-ABR engine (desktop mpv) to one variant. */
   topRungId(): string | undefined {
     return highestRungId(this.availableQualities());
   }
 
-  /**
-   * Restore the persisted rung BEFORE negotiating playback, so the id we send
-   * is the id the session is created with. Applied verbatim: the backend owns
-   * the ladder and resolves a rung minted on another one
-   * (`eco-1080p` → `eco-1080p-hdr`), which no client-side guess can do.
-   */
+  /** Restore the persisted rung BEFORE negotiating playback; applied verbatim since the backend resolves rungs minted on another ladder. */
   restorePreference(): void {
     this.activeQualityId.set(this.readFromStorage() ?? 'auto');
   }
 
-  /**
-   * Adopt the rung the backend reports for the session just negotiated. The
-   * selector then always names what is actually served — a request the backend
-   * could not honour never lingers as a phantom active rung, which used to
-   * swallow the next click on the rung it claimed to be on.
-   */
+  /** Adopt the rung the backend reports for the negotiated session, so the selector names what is served. */
   adoptNegotiatedQuality(id: string | undefined): void {
     if (id) this.activeQualityId.set(id);
   }
 
-  /**
-   * Select a quality option: configure ABR or lock to a specific variant.
-   *
-   * @param option        Quality option to apply
-   * @param engine        Playback engine (Shaka/Native/Cast)
-   * @param playbackMode  Current playback mode ('direct' | 'remux' | 'transcode')
-   * @param force         If true, apply even if already the active quality
-   * @param persist       If true, write the choice to localStorage. False for
-   *                      internal restore / fallback calls so a media that
-   *                      lacks the user's preferred rung doesn't silently
-   *                      overwrite the app-level preference with "auto".
-   */
+  /** Select a quality option: configure ABR or lock to a variant. `persist` false for internal restore/fallback calls so they don't overwrite the preference. */
   selectQuality(
     option: QualityOption,
     engine: PlaybackEngine | null,
@@ -170,10 +125,7 @@ export class QualityManagerService {
           abr: {
             enabled: true,
             defaultBandwidthEstimate: ABR_DEFAULT_BANDWIDTH_ESTIMATE,
-            // useNetworkInformation: navigator.connection values are usually
-            // conservative (and unsupported on some browsers), which drags
-            // ABR toward low variants at startup. Seed from our estimate and
-            // let Shaka measure actual throughput from real segments.
+            // useNetworkInformation is conservative or unsupported; seed from our estimate and let Shaka measure real segments.
             useNetworkInformation: false,
             switchInterval: 5,              // Re-evaluate every 5s (default: 8)
             bandwidthUpgradeTarget: 0.7,    // Upgrade at 70% headroom (default: 0.85 = more conservative)
@@ -182,16 +134,9 @@ export class QualityManagerService {
             // a 4K rung on a 1080p view only wastes bandwidth and stalls slow links.
             restrictToElementSize: true,
             advanced: {
-              // Require 5 MB of observed data before ABR makes decisions.
-              // FFmpeg transcode startup makes the first segment arrive 10-30s
-              // after request on 4K/HDR sources; with the default 128 KB
-              // threshold Shaka treats that single slow seg as network
-              // saturation and downgrades before playback even starts.
+              // 5 MB observed before ABR decides: a slow FFmpeg first segment would otherwise read as saturation at the 128 KB default.
               minTotalBytes: 5_000_000,
-              // Smooth the bandwidth estimator over a longer window (default
-              // slowHalfLife is ~9s). 30s means one slow segment has less
-              // weight on the overall estimate — protects against the
-              // transcode-warmup outlier dragging ABR down.
+              // Longer window (default ~9s) so a transcode-warmup outlier weighs less.
               slowHalfLife: 30,
             },
           },
@@ -208,9 +153,7 @@ export class QualityManagerService {
     const allTracks = engine.getVariantTracks?.() ?? [];
 
     if (!allTracks.length) {
-      // No variant tracks (native player) — use profile maxWidth to set
-      // resolution constraint. Must match backend PROFILES exactly to
-      // avoid off-by-one with ExoPlayer track selection.
+      // No variant tracks (native player): use profile maxWidth; must match backend PROFILES exactly (ExoPlayer off-by-one).
       const isOriginal = option.id === 'original';
       const w = isOriginal
         ? 99999
@@ -238,9 +181,7 @@ export class QualityManagerService {
       : findVariantByProfileName(candidates, option.id)
         ?? findBestVariantForHeight(candidates, option.height);
 
-    // Skip if already on the target variant, only one video resolution exists,
-    // or no active track yet (just loaded) — avoids clearBuffer which cancels
-    // in-flight segment requests (init.mp4).
+    // Skip when already on the target, one resolution exists or no active track yet: avoids clearBuffer cancelling init.mp4.
     if (target && activeTrack && target.id === activeTrack.id) return;
     // Deduplicate by video height — multi-audio creates N variants per resolution.
     const uniqueHeights = new Set(candidates.map((t) => t.height));
@@ -252,10 +193,7 @@ export class QualityManagerService {
     if (wasPaused) engine.pause();
   }
 
-  /**
-   * After buildQualityOptions + adoptNegotiatedQuality: re-apply the active
-   * rung to the engine with force=true.
-   */
+  /** After buildQualityOptions + adoptNegotiatedQuality: re-apply the active rung to the engine with force=true. */
   applyQualityPreferenceAfterLoad(
     engine: PlaybackEngine | null,
     playbackMode: PlaybackMode,
@@ -280,25 +218,12 @@ export class QualityManagerService {
     }
   }
 
-  /**
-   * Human-readable resolution label from width/height. Delegates to
-   * the shared bucketing helper so anamorphic / scope crops bucket the
-   * same way the file badge does (e.g. 1918×872 → 1080p, not 720p).
-   */
+  /** Resolution label from width/height via the shared bucketing helper (anamorphic/scope crops, e.g. 1918×872 → 1080p). */
   resolutionLabel(w?: number, h?: number): string {
     return bucketResolutionLabel(w, h) ?? (w && h ? `${w}x${h}` : '?');
   }
 
-  /**
-   * Map a variant track's dimensions to its transcode profile name. Uses
-   * the shared {@link bucketResolutionLabel} so a letterboxed 1918×872
-   * variant maps to "1080p" instead of falling through to "720p" — same
-   * fix as the file-badge bucketing.
-   *
-   * Accepts width as well as height because Shaka variants for cropped
-   * sources expose their cropped dimensions; height alone is misleading
-   * for anamorphic / scope tracks.
-   */
+  /** Map a variant's dimensions to its transcode profile name via {@link bucketResolutionLabel}; width matters since cropped sources expose cropped dimensions. */
   transcodeTierFromVariantHeight(h: number, w?: number): string | null {
     if (h <= 0) return null;
     const label = bucketResolutionLabel(w, h);

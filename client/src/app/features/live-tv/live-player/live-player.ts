@@ -158,18 +158,11 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
    *  a `computed` reading `Date.now()` would keep its tune-in value forever. */
   private readonly now = signal(Date.now());
 
-  /**
-   * Wall-clock instant the playhead is showing. `seekRange.end` only moves when
-   * the manifest refreshes, so `now - (edge - position)` gains a second per
-   * second between refreshes and jumps back on each one. The playhead itself
-   * runs smoothly, so it carries the time; the clock is only re-anchored when
-   * the two genuinely diverge, which a refresh never does.
-   */
+  /** Wall-clock instant the playhead shows. `seekRange.end` only moves on manifest refresh, so the playhead carries the time;
+   *  the clock re-anchors only when the two genuinely diverge, which a refresh never does. */
   private readonly playheadWall = signal(0);
   private clockAnchor: { position: number; wall: number } | null = null;
-  /** A live player sits a few segments behind the manifest edge and never
-   *  catches up, so that distance is not a delay the viewer chose. The smallest
-   *  one seen is the live point; anything beyond it is deliberate rewind. */
+  /** A live player sits a few segments behind the edge and never catches up: the smallest latency seen is the live point, beyond it is deliberate rewind. */
   private baselineLatencyMs = Number.POSITIVE_INFINITY;
   /** Distance from the manifest edge. Seek targets are expressed against it,
    *  unlike `behindLive`, which is what the viewer chose to rewind. */
@@ -194,13 +187,7 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
     return end > start ? { start, end } : null;
   });
 
-  /**
-   * The seekbar reads as the current programme, because that is what a viewer
-   * is watching: "22 minutes into a 52 minute episode", not a position inside a
-   * rolling buffer. Without a guide it falls back to the window the session
-   * advertises, a fixed scale: the amount retained so far is a moving target,
-   * and a bar whose total grows under the playhead reads as a runaway clock.
-   */
+  /** Seekbar reads as the current programme; without a guide it uses the advertised window, a fixed scale (a growing total reads as a runaway clock). */
   readonly dvrWindow = computed(() => {
     const span = this.programmeSpan();
     if (!span) return this.session()?.dvrWindowSeconds ?? 0;
@@ -306,9 +293,7 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
     else releasePlayerOrientation(this.landscapeOnOpen);
   }
 
-  /** Hardware back and desktop Escape reach every player through app.ts, which
-   *  routes anything under /watch here rather than popping the history itself.
-   *  Same ladder as on-demand playback: the panel, then the bar, then out. */
+  /** Hardware back and desktop Escape arrive via app.ts for anything under /watch; same ladder as on-demand: panel, bar, out. */
   private readonly onPlayerBackEvent = (): void => {
     if (this.miniGuideOpen()) {
       this.closeMiniGuide();
@@ -425,9 +410,7 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
     }
   }
 
-  /** Only a channel that genuinely can't be played (gone, or out of reach)
-   *  sends the viewer back; everything else — capacity, a transient 5xx, a
-   *  timeout — surfaces on the retry overlay instead, same as an engine error. */
+  /** Only a gone or unreachable channel sends the viewer back; capacity, transient 5xx and timeouts surface on the retry overlay. */
   private handlePlayError(err: unknown): void {
     if (err instanceof HttpErrorResponse && (err.status === 404 || err.status === 403)) {
       this.toast.error(this.translate.instant('liveTv.error_play_failed'));
@@ -507,9 +490,7 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
       this.muted.set(muted);
     });
     engine.on('timeUpdate', ({ position }) => {
-      // The seekable range, not `buffered`: on a live stream the buffer ends a
-      // few seconds ahead of the playhead, so seeking against it lands outside
-      // the window and the player snaps back to the edge.
+      // Use the seekable range, not `buffered`: live buffer ends seconds ahead of the playhead, so seeking against it snaps back to the edge.
       this.now.set(Date.now());
       const { start, end } = engine.seekRange;
       const edge = Math.max(end, position);
@@ -569,11 +550,7 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
     void engine.seek(this.liveEdge() - this.behindLiveForBarPosition(seconds));
   }
 
-  /**
-   * Bar position to seconds behind the live edge, clamped to what the window
-   * actually retains: the bar can show a whole programme while only its tail is
-   * still on disk, and a seek into the missing part would stall the player.
-   */
+  /** Bar position to seconds behind live, clamped to what the window retains (the bar may show a whole programme, only its tail is on disk). */
   private behindLiveForBarPosition(seconds: number): number {
     const span = this.programmeSpan();
     const wanted = span
@@ -779,11 +756,7 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
     };
   });
 
-  /**
-   * Keeps the playhead's wall clock. A seek moves `position`, so the mapping
-   * still holds and needs no reset; only a rebased timeline (a respawn, a
-   * discontinuity) drifts far enough to warrant re-anchoring.
-   */
+  /** Keeps the playhead wall clock; a seek keeps the mapping valid, only a rebased timeline (respawn, discontinuity) needs re-anchoring. */
   private trackPlayheadClock(position: number, behind: number): void {
     const now = Date.now();
     const measured = now - behind * 1000;

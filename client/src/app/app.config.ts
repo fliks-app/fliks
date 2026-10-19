@@ -28,9 +28,7 @@ import { detectDevice, viewTransitionsEnabled } from './core/services/device.ser
 import { HttpBackend, provideHttpClient, withInterceptors, withXhr } from '@angular/common/http';
 import { provideTranslateService, TranslateLoader } from '@ngx-translate/core';
 
-// Register CLDR data for every shipped UI language so DatePipe / DecimalPipe /
-// CurrencyPipe honour the active locale (resolved below) instead of the Angular
-// default. Registration is idempotent on Angular's side.
+// CLDR data for every shipped UI language so Date/Decimal/Currency pipes honour the active locale.
 [localeEn, localeFr, localeEs, localeDe, localeIt, localePt].forEach(registerLocaleData);
 import { routes } from './app.routes';
 import { resolveInitialLocale, DEFAULT_LOCALE } from './core/constants/app-locale';
@@ -70,12 +68,8 @@ import {
   slidePage,
 } from './shared/utils/page-slide';
 
-/** Read the persisted server URL, sessions and credentials before bootstrap:
- *  guards, interceptors and the first /auth/me all depend on them. Resolves
- *  even on a storage failure, or the app would never leave its splash screen.
- *  The plugin UI registry loads last — it needs the session for the
- *  authenticated request, and it fails open internally so it can never
- *  delay this past its own short timeout. */
+/** Reads the persisted server URL, sessions and credentials before bootstrap; resolves even on storage failure or the splash never ends.
+ * The plugin UI registry loads last (needs the session) and fails open within its own short timeout. */
 export function loadPersistedState(): Promise<unknown> {
   const serverConfig = inject(ServerConfigService);
   const sessions = inject(SessionStoreService);
@@ -95,9 +89,7 @@ const POSTER_IN_CLASS = 'vt-poster-in';
 const POSTER_OUT_CLASS = 'vt-poster-out';
 const NATIVE_PLAYER_CLASS = 'native-player-active';
 const IS_TV = detectDevice().formFactor === 'tv';
-// The desktop shell composites the video under its own UI bitmap, so an empty
-// snapshot reveals the frame; a phone or a TV surface sits behind the WebView
-// and reveals black instead.
+// The desktop shell composites video under its UI bitmap, so an empty snapshot reveals the frame; phone/TV surfaces reveal black.
 const IS_DESKTOP_SHELL =
   typeof window !== 'undefined' &&
   (!!window.fliksDesktop || /\bElectron\//.test(navigator.userAgent));
@@ -119,29 +111,18 @@ export const appConfig: ApplicationConfig = {
         ? []
         : [
             withViewTransitions({
-              // The launch navigation has no previous page to morph from, and its
-              // snapshot capture never completes under Capacitor's splash: `ready`
-              // rejects on Chromium's 4 s timeout, and the splash only hides once
-              // the navigation does.
+              // No previous page to morph from, and the snapshot never completes under Capacitor's splash (`ready` rejects after 4 s), which holds the splash.
               skipInitialTransition: true,
-              // Which animation a navigation gets, in one place: the player's own,
-              // the poster morph, the stack slide, or none — in which case the
-              // transition is dropped rather than run empty.
+              // Picks the animation per navigation (player's own, poster morph, stack slide) and drops the transition if none applies.
               onViewTransitionCreated: ({ transition, from, to }) => {
-                // getCurrentNavigation(), not history.state: with Angular's default
-                // (deferred) URL update, the browser state isn't swapped in here yet.
-                // Also true on a popstate back to a root page: extras.state is
-                // restored from history.state there, so this flattens the stack too.
+                // getCurrentNavigation(), not history.state: with deferred URL update the browser state isn't swapped in yet.
+                // Also true on a popstate back to a root page, which flattens the stack too.
                 const rootEntry =
                   !!inject(Router).getCurrentNavigation()?.extras.state?.['rootEntry'];
-                // Consumed first, before any guard below can return early and
-                // strand it for a tap that never asked for it. Root chrome switches
-                // root rather than stacking, so it spends the arming without using it.
+                // Consumed before any guard can return early and strand it; root chrome switches root, so it spends the arming without using it.
                 const armed = consumeArmed() && !rootEntry;
                 if (rootEntry) resetStack();
-                // The native gesture already animated the trip; settle its pop before
-                // any guard below can return early and strand it — backgrounding mid-
-                // gesture included.
+                // The native gesture already animated the trip; settle its pop before any guard returns early (backgrounding mid-gesture included).
                 if (swipeBackActive()) releaseStackedPop(from, to);
                 // A transition begun while backgrounded can resume on the next dock tap.
                 if (document.hidden) {
@@ -158,10 +139,7 @@ export const appConfig: ApplicationConfig = {
                 }
                 const closingPlayer =
                   leafRoutePath(from) === WATCH_PATH && leafRoutePath(to) !== WATCH_PATH;
-                // A native surface renders outside the WebView, and the class that
-                // lets it through has made every layer transparent — the old
-                // snapshot is an empty rectangle, so animating it paints black over
-                // the destination.
+                // Native surfaces render outside the WebView under a class making every layer transparent, so the old snapshot is empty and would paint black.
                 if (
                   closingPlayer &&
                   !IS_DESKTOP_SHELL &&
@@ -176,26 +154,17 @@ export const appConfig: ApplicationConfig = {
                   transition.skipTransition();
                   return;
                 }
-                // Opening the player animates itself, and the root pair is off,
-                // so there is nothing to capture. Skipping keeps the stamp the
-                // eventual back morph pairs with, which clearing below would
-                // drop, leaving the returning page with only half a pair.
+                // Opening the player animates itself and the root pair is off; skip, keeping the stamp the back morph pairs with.
                 if (leafRoutePath(to) === WATCH_PATH) {
                   transition.skipTransition();
                   return;
                 }
                 // A stamp outlives its navigation so the back morph can pair it.
                 clearStalePosterStamps(from, to);
-                // Leaving the player is the one navigation that re-enables the
-                // root pair: the closing player has to shrink over the page
-                // behind it, which only exists inside the transition.
+                // Leaving the player re-enables the root pair: the closing player must shrink over the page behind it.
                 if (closingPlayer) classUntilDone(transition, PLAYER_CLOSE_CLASS);
-                // The morph is tuned per direction: the box grows into a
-                // poster one way and collapses onto a card the other.
-                // A card on a poster page opening its sibling: the stack owns
-                // that pair where it slides, the morph wherever it does not. The
-                // stamp is what tells the two apart from a rail whose links open
-                // the page it sits on, which has no second half at all.
+                // Morph is tuned per direction. For a card opening its poster-page sibling the stack slides that pair, else the morph;
+                // the stamp tells it from a rail whose links open the page they sit on.
                 const sibling =
                   betweenPosterPages(from, to) && !pageSlideAvailable() && hasPosterStamp();
                 const posterTrip =
@@ -212,9 +181,7 @@ export const appConfig: ApplicationConfig = {
                 // Counted only once its slide actually ran, or a push skipped
                 // for want of a dock would owe a pop that never showed.
                 if (direction === 'push') confirmPush(slid);
-                // Nothing would move. A transition still lifts every named hero
-                // out of its page, cross-fading it against a copy of itself and
-                // holding the page's own swap behind snapshots until it ends.
+                // Nothing would move, yet a transition would cross-fade each named hero against itself and hold the page swap behind snapshots.
                 if (!posterTrip && !closingPlayer && !slid) {
                   transition.skipTransition();
                   return;
@@ -227,10 +194,7 @@ export const appConfig: ApplicationConfig = {
     { provide: RouteReuseStrategy, useExisting: CachingReuseStrategy },
     provideHttpClient(
       withXhr(),
-      // cacheInterceptor must run BEFORE serverUrlInterceptor: the cache keys on
-      // logical paths (/api/...). Once serverUrl rewrites them to absolute URLs
-      // (native), every startsWith('/api/...') check inside the cache misses,
-      // so on native nothing was cached and invalidation never fired.
+      // cacheInterceptor must run BEFORE serverUrlInterceptor: the cache keys on logical /api/... paths, which serverUrl rewrites to absolute URLs on native.
       withInterceptors([
         cacheInterceptor,
         serverUrlInterceptor,

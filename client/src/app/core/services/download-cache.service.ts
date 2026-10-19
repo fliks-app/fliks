@@ -38,13 +38,10 @@ export interface DownloadTask {
   createdAt: string;
   /** HLS URL used for the download — needed for native offline playback via CacheDataSource. */
   hlsUrl?: string;
-  /** Bytes the finished download occupies on device. Measured once it lands —
-   *  the figure the backends report mid-transfer is the part received so far,
-   *  which is not what a "size on disk" column should show. */
+  /** Bytes the finished download occupies on device, measured once it lands (mid-transfer figures are the part received). */
   sizeBytes?: number;
-  /** Pre-downloaded subtitle metadata for offline playback. `trackKey` is the subtitle's
-   *  online id (`emb-<streamIndex>` / `ext-<id>`); tasks saved before it lack it, and
-   *  before the descriptors (`hearingImpaired`, `codec`…) only `label` describes the track. */
+  /** Pre-downloaded subtitle metadata for offline playback. `trackKey` is the online id (`emb-<streamIndex>` / `ext-<id>`);
+   *  older tasks lack it, and before the descriptors only `label` describes the track. */
   offlineSubtitles?: OfflineSubtitle[];
   /** Letterbox rectangle the player removes at playback; absent when the copy was cropped server-side. */
   offlineCrop?: OfflineCrop;
@@ -63,14 +60,8 @@ export interface DownloadTask {
 const STORAGE_KEY = 'fliks.downloads.cache';
 const LOCAL_IDS_KEY = 'fliks.downloads.localIds';
 
-/**
- * Tracks device download progress (in-memory signals) and
- * persists task list for offline access (localStorage).
- *
- * Persistence is isolated per (server, user): a shared device never leaks one
- * account's downloads into another's list, and colliding mediaFileIds across
- * servers can't cross-surface.
- */
+/** Tracks device download progress (in-memory signals) and persists the task list (localStorage), isolated per (server, user)
+ *  so shared devices and colliding mediaFileIds never cross-surface. */
 @Injectable({ providedIn: 'root' })
 export class DownloadCacheService {
   private readonly auth = inject(AuthService);

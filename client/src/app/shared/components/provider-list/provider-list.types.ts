@@ -1,10 +1,6 @@
 import type { FieldDef, TableColumn } from '@fliks/plugin-ui';
 
-/**
- * The generic shape a provider-list consumer's wire format already fits.
- * Extra backend-specific fields (e.g. subtitle providers' rate-limit state)
- * pass through untouched — the renderer never reads them.
- */
+/** The generic shape a provider-list wire format fits; backend-specific extras (e.g. rate-limit state) pass through unread. */
 export interface ProviderInstance {
   id: number;
   name: string;
@@ -44,9 +40,7 @@ export interface ProviderListAction {
   run: () => Promise<void>;
 }
 
-/** A row-scope action (`ProvidersConfigPage.actions[].scope: 'row'`), host-prefixed but with
- *  `:id` still in `route` — substituting it against the row, and never firing if a placeholder
- *  survives that, is this component's job because only it holds the row. */
+/** A row-scope action, host-prefixed with `:id` still in `route`: the component substitutes it per row and never fires if a placeholder survives. */
 export interface ProviderRowAction {
   labelKey: string;
   method: 'GET' | 'POST' | 'DELETE';

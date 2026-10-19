@@ -1,9 +1,6 @@
 import type { Episode, Media, Season } from '../../core/services/api/media.service';
 
-/**
- * Chemin « sur le disque » pour l’affichage : dossier racine du média + chemin relatif
- * enregistré en base (sans toucher aux données existantes).
- */
+/** Chemin « sur le disque » pour l’affichage : dossier racine du média + chemin relatif enregistré en base. */
 export function displayMediaFilePath(
   mediaPath: string | null | undefined,
   relativePath: string,
@@ -50,12 +47,7 @@ export function filterSeasonEpisodesOnDisk(
   return eps.filter((e) => onDisk.has(e.episodeNumber));
 }
 
-/**
- * Episode numbers in a season whose content is on disk — own file (`hasFile`)
- * OR covered by a multi-episode file (inside an owner's
- * `[episodeNumber..endEpisodeNumber]`). Mirror of the backend
- * `episode-coverage.util`. Use this, not raw `hasFile`, for "missing" logic.
- */
+/** Episode numbers on disk: own file (`hasFile`) or covered by a multi-episode file's range; mirrors backend `episode-coverage.util`. Use this for "missing" logic. */
 export function onDiskEpisodeNumbers(episodes: Episode[]): Set<number> {
   const numbers = new Set<number>();
   for (const owner of episodes) {
@@ -69,12 +61,7 @@ export function onDiskEpisodeNumbers(episodes: Episode[]): Set<number> {
   return numbers;
 }
 
-/**
- * Drop episodes whose number is covered by another episode's range
- * (a single S07E25-E26.mkv → E25 row owns the range, E26 row is still
- * created by the provider but hidden here so it doesn't show up as a
- * separate "missing" tile).
- */
+/** Hides an episode covered by another's range (S07E25-E26.mkv): the provider still creates the E26 row, which would show as "missing". */
 export function hideShadowedEpisodes(episodes: Episode[]): Episode[] {
   const shadowed = new Set<number>();
   for (const e of episodes) {

@@ -10,17 +10,8 @@ import { SubtitleOverlay, type SubtitleHandle } from './subtitle-overlay.util';
 import type { TimeRange } from '../../utils/edl-policy';
 import { MuteGate } from './mute-gate';
 
-/**
- * Samsung Tizen AVPlay backend.
- *
- * `webapis.avplay` is a process-wide singleton bound to the
- * `<object id="fliks-avplay" type="application/avplayer">` declared at
- * HTML parse time (creating it dynamically silently fails). The video
- * surface renders on a hardware plane BEHIND the WebView; DOM overlays
- * paint on top of transparent CSS regions driven by
- * `html.native-player-active`. HEVC / AV1 / Dolby decoding and HLS ABR
- * are handled natively — Shaka chokes on Tizen 6.5 MSE quirks.
- */
+/** Samsung Tizen AVPlay backend: a singleton bound to the `<object id="fliks-avplay">` declared at HTML parse time (dynamic creation fails),
+ * rendering on a plane behind the WebView; HEVC/AV1/Dolby and ABR are native since Shaka chokes on Tizen 6.5 MSE. */
 
 declare const webapis: {
   avplay: {
@@ -101,9 +92,7 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
   /** Most recently `init()`'d instance. The shared AVPlay surface and
    *  native listener fan out to whoever holds this slot. */
   private static activeEngine: TizenEngine | null = null;
-  /** `setListener` is append-only on Tizen 6.5 — calling it more than
-   *  ~20 times exits the WAS process. Install once per process and
-   *  dispatch through `activeEngine`. */
+  /** `setListener` is append-only on Tizen 6.5 (about 20 calls exit the WAS process): install once, dispatch via `activeEngine`. */
   private static listenerInstalled = false;
 
   private avObject: HTMLObjectElement | null = null;
@@ -142,18 +131,12 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
   };
   private readonly releaseOnUnload = () => this.applyTvMute(false);
 
-  /** Timestamp of the last resume issued from PAUSED. AVPlay can throw a
-   *  transient network-shaped error while re-priming the decoder on resume;
-   *  treating that as a lost session and reloading the whole stream is what made
-   *  a quick pause→play flash black and re-buffer. Errors within
-   *  {@link RESUME_ERROR_GRACE_MS} of a resume are swallowed — if playback is
-   *  genuinely wedged the player's stall watchdog still recovers it. */
+  /** Time of the last resume from PAUSED: errors within {@link RESUME_ERROR_GRACE_MS} are AVPlay re-priming the decoder and are swallowed;
+   * the stall watchdog still recovers a wedged stream. */
   private _lastResumeAt = 0;
   private static readonly RESUME_ERROR_GRACE_MS = 5000;
 
-  /** DOM-rendered subtitle overlay shared with the webOS engine. AVPlay's
-   *  `setExternalSubtitlePath` only accepts local file paths, not HTTPS,
-   *  so we parse VTT ourselves and paint cues into a positioned div. */
+  /** `setExternalSubtitlePath` only takes local paths, not HTTPS, so VTT is parsed and painted in a DOM overlay. */
   private readonly subtitles = new SubtitleOverlay();
 
   // ── Lifecycle ───────────────────────────────────────────────────────
@@ -186,9 +169,7 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
       window.removeEventListener('resize', this.orientationHandler);
       this.orientationHandler = null;
     }
-    // Only stop the shared AVPlay surface if this engine still owns it — a
-    // stale engine tearing down after a newer one took over must not stop
-    // the newer engine's playback.
+    // A stale engine tearing down must not stop the newer engine's playback.
     if (TizenEngine.activeEngine === this) {
       try {
         const s = webapis.avplay.getState();
@@ -202,10 +183,7 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
     this.clearHandlers();
   }
 
-  /** Stop the shared AVPlay surface and drop the transparent-page class,
-   *  but only while this engine still owns the singleton. A stale load()
-   *  settling after a newer engine took over must not stop the newer
-   *  engine's playback. Mirrors the ownership guard in destroy(). */
+  /** Ownership guard as in destroy(): a stale load() must not stop the newer engine's playback. */
   private stopIfOwner(): void {
     if (TizenEngine.activeEngine !== this) return;
     try { webapis.avplay.stop(); } catch { /* ok */ }
@@ -228,9 +206,7 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
   private _crop: { x: number; y: number; width: number; height: number } | null = null;
   private _sourceSize = { width: 0, height: 0 };
 
-  /** Crop the letterbox bars on the video plane. Kept across load() and
-   *  re-applied post-prepare (the ROI can't be set before), only setCrop changes
-   *  it. Returns whether the crop will be in effect. */
+  /** Kept across load() and re-applied after prepare (the ROI can't be set before); returns whether the crop will be in effect. */
   setCrop(
     rect: { x: number; y: number; width: number; height: number } | null | undefined,
     sourceWidth: number,
@@ -289,9 +265,7 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
     } catch { /* ok */ }
     webapis.avplay.open(safeUrl);
 
-    // Cap AVPlay's ABR band — segments below 2 Mbps are useless on a
-    // TV display and the constant rung-switching they trigger drains
-    // the HW decoder. STARTBITRATE pins the opening rung high.
+    // Bands below 2 Mbps are useless on a TV and their rung-switching drains the HW decoder; STARTBITRATE pins the opening rung high.
     try {
       webapis.avplay.setStreamingProperty(
         'ADAPTIVE_INFO',
@@ -299,10 +273,7 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
       );
     } catch { /* old firmware — default ABR is fine */ }
 
-    // Seeding the resume position in IDLE pre-prepare lets AVPlay
-    // request the right segment first instead of the "play from 0 →
-    // seek to X" round-trip (which on slow backends races with FFmpeg
-    // segment generation and 404s).
+    // Seeding the position in IDLE avoids the play-from-0-then-seek round-trip that races FFmpeg segment generation and 404s.
     if (startTime !== undefined && startTime > 0) {
       try { webapis.avplay.seekTo(Math.round(startTime * 1000)); } catch { /* ok */ }
     }
@@ -387,10 +358,7 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
     this.emit('stateChanged', { state: 'buffering' });
   }
   private handleBufferingComplete(): void {
-    // AVPlay fires this while PAUSED too (seekTo is valid from PAUSED, and the
-    // buffering callbacks are state-independent). Emitting nothing there left
-    // `buffering` latched with no other path to clear it, so a paused seek sat
-    // on the spinner until the user pressed play.
+    // AVPlay also fires this while PAUSED; emit anyway or `buffering` stays latched until play.
     this.emit('stateChanged', { state: this._paused ? 'paused' : 'playing' });
   }
   private handleCurrentPlayTime(ms: number): void {
@@ -406,31 +374,17 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
     if (ms > 0) this.emitFirstFrameOnce();
   }
   private handleError(err: unknown): void {
-    // Seek failures go through `runSeek`'s per-call error path (which
-    // reloads). The global onerror fires for them too — suppress the
-    // duplicate so the player UI doesn't surface a "Playback error"
-    // on top of an in-flight recovery.
+    // Seek failures take `runSeek`'s error path (reload); suppress the duplicate global error during recovery.
     if (this._seekInFlight) return;
     const msg = String(err);
     if (msg.includes('SEEK_FAILED')) return;
 
-    // A transient error right after a resume is AVPlay re-priming the decoder,
-    // not a lost backend session — swallow it instead of triggering a full
-    // reload (which flashes black + re-buffers on every pause→play). AVPlay
-    // usually recovers on its own; a genuinely wedged playhead is caught by the
-    // player's stall watchdog.
+    // A transient error right after resume is AVPlay re-priming the decoder, not a lost session; the stall watchdog catches a wedged playhead.
     if (Date.now() - this._lastResumeAt < TizenEngine.RESUME_ERROR_GRACE_MS) {
       return;
     }
 
-    // AVPlay swallows the HTTP status of the failed segment fetch — we
-    // can't tell a 410 (session expired) from a 500 (ffmpeg crash) from
-    // here. Heuristic: if playback was healthy (firstFrame fired, no
-    // pending seek) and the connection errored mid-stream, optimistically
-    // ask the player for one cheap recovery attempt before surfacing the
-    // fatal error. If recovery succeeds the engine reloads transparently;
-    // if it fails the next error after `recoveryAttempted` falls through
-    // to the regular error path.
+    // AVPlay hides the segment HTTP status (410 vs 500): if playback was healthy, try one cheap recovery before surfacing the fatal error.
     if (
       /CONNECTION|HTTP|NETWORK|PLAYER_ERROR_INVALID_URI/i.test(msg) &&
       this.maybeEmitSessionExpired()
@@ -452,9 +406,7 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
     try {
       const s = webapis.avplay.getState();
       if (s === 'PAUSED') {
-        // Mark the resume so a transient AVPlay error while re-priming the
-        // decoder isn't mistaken for a lost session (see handleError). Fall
-        // back to play() on firmware without resume() rather than no-op.
+        // Marks the resume (see handleError); falls back to play() on firmware without resume().
         this._lastResumeAt = Date.now();
         if (typeof webapis.avplay.resume === 'function') webapis.avplay.resume();
         else webapis.avplay.play();
@@ -524,10 +476,7 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
                 reject(new Error(`seek failed: ${err}`));
                 return;
               }
-              // Recover by reloading at the target. Clear the in-flight flag
-              // and drop any seek queued during this failed one first, so the
-              // reload's own seek isn't blocked and a now-stale pending seek
-              // isn't replayed on top of the recovered position.
+              // Clear the in-flight flag and drop the queued seek first, so the reload's seek isn't blocked and no stale seek replays.
               this._seekInFlight = false;
               this._pendingSeek = null;
               try {
@@ -566,9 +515,7 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
   get buffered(): number { return this._buffered; }
   get playbackRate(): number { return this._playbackRate; }
   set playbackRate(rate: number) {
-    // setSpeed takes a long (1/2/4/8/16, negatives for reverse) from
-    // READY/PLAYING/PAUSED; a refusal stays silent, and the getter keeps
-    // reporting the rate that really applied.
+    // setSpeed takes a long (1/2/4/8/16, negatives for reverse); a refusal stays silent and the getter reports the applied rate.
     if (!Number.isInteger(rate)) {
       console.warn('[tizen-engine] setSpeed', rate, 'dropped, not an integer');
       return;
@@ -698,12 +645,8 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
     if (!m) return;
     const index = Number(m[1]);
     try {
-      // `setSelectTrack` accepts AUDIO only in READY (Smooth Streaming) or
-      // PLAYING — PAUSED is documented for TEXT tracks alone. Calling it from
-      // PAUSED left the stream running while getState() kept reporting PAUSED,
-      // so the UI showed a paused player that was still playing. Enter the
-      // documented state, switch, then restore the user's intent; play() is
-      // valid from PAUSED and pause() from PLAYING.
+      // `setSelectTrack` takes AUDIO only in READY or PLAYING (from PAUSED the stream runs while getState() says PAUSED):
+      // switch from the documented state, then restore pause.
       const wasPaused = webapis.avplay.getState() === 'PAUSED';
       if (wasPaused) webapis.avplay.play();
       webapis.avplay.setSelectTrack('AUDIO', index);
@@ -785,13 +728,7 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
   }
 }
 
-/**
- * `localStorage['fliks.avtest']` selects an alternate URL for AVPlay
- * compatibility testing — '1' / 'master' point at Apple reference
- * streams, 'fmp4ref' at a known-broken-on-Tizen sample, 'variant'
- * rewrites our master to its 1080p child playlist, 'encoded'
- * percent-encodes JWT dots in the token. Anything else passes through.
- */
+/** `localStorage['fliks.avtest']` picks an alternate AVPlay test URL ('1'/'master', 'fmp4ref', 'variant', 'encoded'); else passes through. */
 function resolveAvtestUrl(url: string): string {
   const flag =
     typeof localStorage !== 'undefined' ? localStorage.getItem('fliks.avtest') : null;
@@ -821,11 +758,7 @@ interface AvplayTrackMeta {
   label?: string;
 }
 
-/**
- * `extra_info` is a JSON-ish blob whose shape depends on the firmware.
- * 2020+ Q-series TVs return stringified JSON; older builds return a
- * flat ":"/"|"-separated string.
- */
+/** `extra_info` shape is firmware-dependent: stringified JSON on 2020+ Q-series, a ":"/"|"-separated string on older builds. */
 function parseAvplayExtraInfo(raw: string): AvplayTrackMeta {
   if (!raw) return {};
   try {

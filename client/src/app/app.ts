@@ -70,11 +70,8 @@ export class App implements OnInit, OnDestroy {
   private backButtonListener?: { remove: () => Promise<void> };
   private visibilityListener?: () => void;
 
-  /** The stream belongs to the app root, not to a page: `watch/:mediaFileId`
-   *  is a sibling of the layout route, so a cold deep-link into the player
-   *  previously had no stream at all: invisible as a target and deaf to any
-   *  command. An effect, not a one-shot: the service closes the stream on a
-   *  session change and needs re-opening for the next account. */
+  /** The stream belongs to the app root: `watch/:mediaFileId` is a sibling of the layout route and would have none on a cold deep-link.
+   *  An effect, since the service closes the stream on a session change and must reopen it. */
   private readonly sseBootstrap = effect(() => {
     const authenticated = this.auth.isAuthenticated();
     untracked(() => {
@@ -107,15 +104,11 @@ export class App implements OnInit, OnDestroy {
     document.addEventListener('visibilitychange', this.visibilityListener);
 
     if (Capacitor.isNativePlatform()) {
-      // On <html> as well as <body>: overlays (sheets, popovers) are
-      // reparented under <html> to escape stacking contexts, and a
-      // body-scoped selector never reaches them.
+      // On <html> too: overlays are reparented under <html>, out of reach of body-scoped selectors.
       document.documentElement.classList.add('native');
       document.body.classList.add('native');
 
-      // Hide the native splash on the first NavigationEnd. The splash sits in
-      // launchAutoHide:false mode so the WebView's loading state is fully
-      // covered — we dismiss it once Angular has rendered actual content.
+      // Hide the native splash (launchAutoHide:false) on the first NavigationEnd, once real content has rendered.
       this.router.events.pipe(
         filter((e): e is NavigationEnd => e instanceof NavigationEnd),
         take(1),
@@ -124,12 +117,8 @@ export class App implements OnInit, OnDestroy {
         // the splash fades out — otherwise the user briefly sees a blank app.
         requestAnimationFrame(() => {
           void SplashScreen.hide({ fadeOutDuration: 200 });
-          // On a cold start the status bar is left opaque (a black strip under
-          // it) until a relayout, because the splash teardown drops the window
-          // insets that drive env(safe-area-inset-*). Re-assert edge-to-edge a
-          // short beat after hide() — once the window has settled the insets
-          // re-publish and the status bar goes transparent. (Chaining directly
-          // on hide() resolves too early and the re-assert doesn't take.)
+          // Cold start: splash teardown drops the window insets, leaving the status bar opaque; re-assert edge-to-edge after hide() settles
+          // (chaining directly on hide() resolves too early).
           if (Capacitor.getPlatform() === 'android') {
             const Immersive = registerPlugin<{ applyEdgeToEdge(): Promise<void> }>('Immersive');
             setTimeout(() => void Immersive.applyEdgeToEdge().catch(() => {}), 200);
@@ -165,23 +154,11 @@ export class App implements OnInit, OnDestroy {
       });
     }
 
-    // Browser/desktop Escape mirrors the hardware back button: closes the
-    // topmost dismissable layer (open dropdown, bottom sheet, modal) if
-    // any, else falls through to route-level back. Skip when focus is on
-    // a form control whose native Escape behaviour is preferable:
-    //  - INPUT / TEXTAREA / contentEditable: cancel inline edits without
-    //    navigating away.
-    //  - SELECT: close the native option list while keeping focus on the
-    //    select (our preventDefault would otherwise blur it, dropping
-    //    focus to <body>).
+    // Escape mirrors hardware back (topmost dismissable layer, else route back), except on form controls
+    // (INPUT / TEXTAREA / contentEditable / SELECT) whose native Escape is preferable.
     this.escapeKeyListener = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
-      // Defer to the browser's default Escape when focus is on a form
-      // control. `closest()` catches the open-select case where Chrome
-      // dispatches keydown on the focused <option> rather than the
-      // <select> itself — both resolve to the same <select> ancestor.
-      // `activeElement` is a second signal in case the browser routes
-      // the event to <document> while the dropdown is open.
+      // Defer to the native Escape on form controls; `closest()` covers Chrome dispatching on the open <option>, `activeElement` covers <document>.
       const target = e.target as HTMLElement | null;
       const active = document.activeElement as HTMLElement | null;
       const isFormControl = (el: HTMLElement | null) =>
@@ -193,12 +170,7 @@ export class App implements OnInit, OnDestroy {
     };
     window.addEventListener('keydown', this.escapeKeyListener, true);
 
-    // Smart TV "Return" remote key. Capacitor's `backButton` event never
-    // fires here (Tizen/webOS don't run through Capacitor), so without an
-    // explicit handler the player gets stuck with no way out. The button
-    // surfaces as keyCode 10009 on Tizen and 461 (`key: 'GoBack'`) on
-    // webOS — physical buttons, no Android-style back gesture. Same logic
-    // as the Capacitor handler, factored out into `handleBackButton`.
+    // Smart TV "Return" key: Capacitor's `backButton` never fires on Tizen/webOS; keyCode 10009 on Tizen, 461 (`GoBack`) on webOS.
     const platform = this.tv.tvPlatform();
     if (platform === 'tizen' || platform === 'webos') {
       const handler = (e: KeyboardEvent) => {
@@ -217,15 +189,8 @@ export class App implements OnInit, OnDestroy {
     }
   }
 
-  /** Track input modality (keyboard / D-pad vs pointer / touch) and
-   *  toggle `html.keyboard-modality`. CSS gates `:focus-visible`
-   *  visuals on it so an iOS long-press — which Safari WebKit
-   *  incorrectly classifies as a focus-visible trigger — doesn't
-   *  paint the high-contrast focus ring on the card the user was
-   *  trying to context-tap. The class flips on the first
-   *  navigation-key press and clears on the next pointer / touch
-   *  interaction. TV stays focused-visible regardless (`html.tv-host`
-   *  short-circuits the suppression rule in styles.css). */
+  /** Toggles `html.keyboard-modality` on keyboard / D-pad vs pointer / touch use; CSS gates `:focus-visible` on it
+   *  because Safari treats an iOS long-press as focus-visible. `html.tv-host` bypasses the suppression. */
   private initInputModalityTracking(): void {
     const NAV_KEYS = new Set([
       'Tab',
@@ -244,9 +209,7 @@ export class App implements OnInit, OnDestroy {
       // escape stacking contexts, so a body-scoped rule can't reach them.
       document.documentElement.classList.toggle('keyboard-modality', on);
     };
-    // Capture, like the pointer listeners below: the components that own these
-    // keys stopPropagation them (a select opening its picker, spatial nav), so a
-    // bubble-phase listener never sees the press that starts a keyboard session.
+    // Capture phase: components owning these keys stopPropagation them, so a bubble listener would miss the press.
     window.addEventListener(
       'keydown',
       (e) => {
@@ -262,13 +225,9 @@ export class App implements OnInit, OnDestroy {
     });
   }
 
-  /** Hardware-back common path — Capacitor (Android/iOS) and Tizen share
-   *  the same close/dismiss/exit sequence so the UX matches across
-   *  platforms. The only thing that differs is the event source. */
+  /** Hardware-back common path shared by Capacitor and Tizen; only the event source differs. */
   private handleBackButton(): void {
-    // A focused <select> means its picker is open (or about to open
-    // when the user pressed Enter). Blur to close it before any
-    // route-level back logic fires.
+    // A focused <select> means its picker is open; blur it to close before route-level back.
     const active = document.activeElement as HTMLElement | null;
     if (active?.tagName === 'SELECT') {
       active.blur();
@@ -288,35 +247,23 @@ export class App implements OnInit, OnDestroy {
     if (this.dismissStack.dismissTop()) {
       return;
     }
-    // Close an open native <dialog> modal (subtitles editor, confirm, …) before
-    // any route-level back — Escape / hardware-back on an open modal should just
-    // close it, not navigate away. Topmost (last in DOM) first.
+    // Close an open native <dialog> (topmost first) before any route-level back.
     const openDialogs = document.querySelectorAll<HTMLDialogElement>('dialog[open]');
     if (openDialogs.length) {
       openDialogs[openDialogs.length - 1].close();
       return;
     }
-    // On /watch, defer to the player's own back handler so the hardware
-    // back / gesture matches the in-UI back arrow (replaceUrl to the
-    // media detail page rather than history.back which can land on the
-    // tile the user came from — different from the arrow's behaviour).
+    // On /watch defer to the player's back handler, which replaces the URL with the detail page instead of history.back().
     if (this.router.url.startsWith('/watch')) {
       window.dispatchEvent(new CustomEvent('app:playerBack'));
       return;
     }
-    // Capacitor's `canGoBack` reflects WebView full-page history, which
-    // SPAs (Angular Router uses pushState) never grow. NavbarService
-    // tracks NavigationEnd events and navigates explicitly to the
-    // previous in-app URL — `window.history.back()` doesn't reliably
-    // pop pushState entries on Capacitor's Android WebView.
+    // Capacitor's `canGoBack` never grows for pushState SPAs, and `history.back()` is unreliable on Android's WebView; NavbarService navigates explicitly.
     if (this.navbar.canGoBack()) {
       this.navbar.goBack();
       return;
     }
-    // Top-level with no in-app history: leave the app. We preventDefault'd
-    // the Return key above (to suppress the WebApp default exit prompt), so
-    // re-fire the platform's own exit explicitly — Tizen's application.exit,
-    // webOS's platformBack (returns to the launcher / previous app).
+    // Top level without in-app history: leave the app; Return was preventDefault'd, so fire Tizen's application.exit / webOS's platformBack.
     const platform = this.tv.tvPlatform();
     if (platform === 'tizen') {
       // Samsung certification: Return on the top-level page must ask before

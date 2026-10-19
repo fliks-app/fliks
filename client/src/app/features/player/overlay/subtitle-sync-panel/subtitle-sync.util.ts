@@ -29,9 +29,8 @@ export function layoutCues(cues: readonly VttCue[], scale = PX_PER_SEC): CueBox[
   });
 }
 
-/** Video time <-> list pixel, one continuous monotonic map for the list laid out with offset
- *  `base`: linear between cue starts (anchors), {@link PX_PER_SEC} outside them. Pushed-down cues
- *  stretch the list, so dense dialogue scrolls faster while the cue under the centre stays on time. */
+/** Video time <-> list pixel, one monotonic map for the list at offset `base`: linear between cue starts (anchors),
+ *  {@link PX_PER_SEC} outside; pushed-down cues stretch the list so the cue under the centre stays on time. */
 export class TimeMap {
   private readonly xs: number[] = [];
   private readonly ys: number[] = [];

@@ -22,30 +22,16 @@ export function targetsActiveServer(url: string, base: string): boolean {
   }
 }
 
-/**
- * En mode web : envoie les cookies (session JWT) sur les appels API.
- * En mode natif (Capacitor) ou sur Smart TV : ajoute le header
- * Authorization Bearer. Les bundles standalone (Capacitor et TV) servent
- * depuis `file://` et ne reçoivent pas les cookies cross-origin, donc le
- * jeton doit voyager dans l'en-tête.
- *
- * Sur 401, on tente un refresh via le refresh-token stocké puis on
- * rejoue la requête originale avec le nouvel access token. La logique
- * single-flight (mutualisée côté AuthService) garantit qu'une rafale
- * de 401s simultanés ne déclenche qu'un seul rotate.
- */
+/** Web: sends cookies; native (Capacitor) and Smart TV: adds `Authorization: Bearer`, as `file://` bundles get no cross-origin cookies.
+ * On 401, refreshes once (single-flight in AuthService) and replays the request. */
 export const credentialsInterceptor: HttpInterceptorFn = (req, next) => {
   const serverConfig = inject(ServerConfigService);
   const auth = inject(AuthService);
 
-  // Credentials only ever go to the active server. An absolute URL pointing
-  // somewhere else is a probe of a host the user typed (setup's "test this
-  // server"), and attaching the session to it would hand it to that host.
+  // Credentials go only to the active server: an absolute URL elsewhere is a typed host being probed.
   if (!targetsActiveServer(req.url, serverConfig.serverUrl())) return next(req);
 
-  // The refresh endpoint itself never gets the Bearer header (it
-  // accepts only the body refreshToken) nor a retry loop — if it 401s
-  // it's terminal.
+  // The refresh endpoint takes only the body refreshToken, never the Bearer header or a retry; its 401 is terminal.
   const isRefreshCall = req.url.includes('/api/auth/refresh');
   if (isRefreshCall) {
     return serverConfig.isNative

@@ -84,9 +84,7 @@
 
     <div class="divider">{{ 'liveTv.admin.settings.section_zap' | translate }}</div>
 
-    <!-- Unset on the server is not "off": it means the backend decides from
-         detected hardware acceleration. The select spells that out as "auto"
-         instead of collapsing it into a boolean. -->
+    <!-- Unset means the backend decides from detected hardware acceleration, not "off"; the select spells it out as "auto". -->
     <div class="form-control">
       <label class="label"><span class="label-text font-medium">{{ 'liveTv.admin.settings.fast_zap' | translate }}</span></label>
       <select

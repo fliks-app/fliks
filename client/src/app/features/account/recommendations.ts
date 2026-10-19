@@ -5,11 +5,7 @@ import { StreamingApiService } from '../../core/services/api/streaming-api.servi
 import { ConfirmationService } from '../../core/services/confirmation.service';
 import { ToastService } from '../../core/services/toast.service';
 
-/**
- * Account → Recommendations: lets the user undo every previous "Retirer de
- * cette liste" gesture. The dismissed list is otherwise hidden — without
- * this surface they had no way to bring those titles back.
- */
+/** Account → Recommendations: lets the user undo every "Retirer de cette liste" dismissal. */
 @Component({
   selector: 'app-account-recommendations',
   imports: [TranslatePipe, LucideRotateCcw],

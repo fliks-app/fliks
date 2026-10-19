@@ -28,13 +28,8 @@ export function normalizeToSupportedLocale(
   return SUPPORTED_LOCALE_CODES.includes(base) ? base : null;
 }
 
-/**
- * Resolve the initial UI language synchronously (used by both LOCALE_ID and
- * ngx-translate at bootstrap): the user's explicit override wins, else the
- * first browser/OS language we support (navigator.languages reflects the OS
- * language in Capacitor + Smart-TV WebViews too), else the default (English).
- * Reads localStorage directly so it needs no DI at config time.
- */
+/** Resolves the initial UI language synchronously for LOCALE_ID and ngx-translate: user override, else the first supported
+ *  navigator language (also the OS language in Capacitor / Smart-TV WebViews), else English; reads localStorage directly (no DI at config time). */
 export function resolveInitialLocale(): string {
   try {
     const raw = localStorage.getItem('display.settings');

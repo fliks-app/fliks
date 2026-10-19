@@ -15,26 +15,16 @@ import { translatedServerMessage } from '../utils/server-message';
 /** localStorage key for the persisted output level (a bare 0..1 number). */
 const VOLUME_KEY = 'player.volume';
 
-/**
- * Shared playback state signals that any UI component can read.
- *
- * Call `bindEngine()` after creating or switching the PlaybackEngine —
- * the service listens to engine events and keeps every signal up-to-date.
- */
+/** Shared playback state signals; call `bindEngine()` after creating or switching the engine to keep them updated. */
 @Injectable({ providedIn: 'root' })
 export class PlayerStateService {
   readonly loading = signal(true);
   readonly videoStarted = signal(false);
   readonly error = signal<PlaybackError | null>(null);
-  /** True when the current error is a stream-level decode/format failure a
-   *  fresh session cannot fix (see {@link isUndecodableError}). The stall
-   *  watchdog reads it to stop looping lost-session recovery on a codec the
-   *  browser can't decode — that only flaps the card/spinner. */
+  /** Stream-level decode/format failure a fresh session can't fix (see {@link isUndecodableError}); stops the stall watchdog's recovery loop. */
   readonly fatalNoRetry = signal(false);
   readonly paused = signal(true);
-  /** A session autoplays: until the engine reports `playing`, or the viewer
-   *  pauses or the launch fails, it is in flight. Engines report
-   *  `paused`/`buffering` between ready and playing. */
+  /** In flight until the engine reports `playing`, the viewer pauses or launch fails; engines report `paused`/`buffering` before playing. */
   readonly startingPlayback = signal(true);
   /** Set when the browser refused to start playback without a user gesture, and
    *  cleared as soon as anything actually plays. */
@@ -45,9 +35,7 @@ export class PlayerStateService {
   );
   readonly currentTime = signal(0);
   readonly duration = signal(0);
-  /** Raw output level (0..1), independent of {@link muted}. Mirrors the engine
-   *  and is restored from localStorage on startup. Kept even while muted so
-   *  unmuting recovers the exact level. */
+  /** Raw output level (0..1), independent of {@link muted} so unmuting recovers it; restored from localStorage. */
   readonly volume = signal(this.loadVolume());
   /** Mute flag, mirrored from the engine. Intentionally NOT persisted — a new
    *  session starts unmuted so the player never opens on an unexplained silence. */
@@ -55,43 +43,25 @@ export class PlayerStateService {
   readonly playbackRate = signal(1);
   readonly buffering = signal(false);
   readonly bufferedEnd = signal(0);
-  /** Latched when the engine reaches the natural end of the stream; cleared by
-   *  {@link reset} on the next load. The player watches it to auto-advance the
-   *  queue. */
+  /** Latched at the natural end of the stream, cleared by {@link reset} on next load; the player auto-advances the queue on it. */
   readonly ended = signal(false);
   readonly playbackMode = signal<PlaybackMode>('direct');
   readonly hwAccel = signal('none');
 
-  /** True while a seek gesture is in flight — set by the player while
-   *  the user drags the seekbar or holds an arrow key, and during the
-   *  short window after a `seek()` call where the engine still emits
-   *  intermediate `timeUpdate` events for the OLD position before it
-   *  catches up to the target. While set, the engine→state mirror
-   *  ignores `position` updates so the seekbar stays pinned at the
-   *  user's commit value instead of bouncing back to whatever the
-   *  engine reports mid-seek. */
+  /** True during a seek gesture or the short window where the engine still emits `timeUpdate` for the old position;
+   * the engine-to-state mirror then ignores `position` so the seekbar stays pinned. */
   readonly seekLocked = signal(false);
 
   private readonly translate = inject(TranslateService);
   private engine: PlaybackEngine | null = null;
 
-  /** Last playhead position seen on `timeUpdate`. A moving playhead while not
-   *  paused is the reliable cross-engine "frames are flowing" signal used to
-   *  clear a latched buffering spinner. */
+  /** Last playhead seen on `timeUpdate`; a moving playhead while not paused clears a latched buffering spinner. */
   private lastBufferingPos = -1;
 
-  /** True while a lost-session recovery is re-minting the sid and reloading
-   *  the engine. The reload tears the current stream down, so the engine
-   *  briefly emits a fatal error (Shaka's `<video>` element error, ExoPlayer's
-   *  one-shot error bridge) that recovery is about to resolve. While set, that
-   *  error surfaces as buffering — the spinner — instead of the terminal
-   *  "Playback error" overlay. Owned by PlayerComponent's recovery flow. */
+  /** Set while lost-session recovery reloads the engine; its transient fatal error then surfaces as buffering, not the error overlay. Owned by PlayerComponent. */
   private recovering = false;
 
-  /** Live check for whether the current media is Dolby Vision served untouched
-   *  (DirectPlay/DirectStream). Read at error time — not cached — so a mid-session
-   *  play-method change (e.g. a quality switch to a tonemapped transcode) is
-   *  always reflected. Registered once by PlayerComponent. */
+  /** Read at error time, not cached, so a mid-session play-method change is reflected. Registered once by PlayerComponent. */
   private dolbyVisionProbe: (() => boolean) | null = null;
 
   constructor() {
@@ -130,9 +100,7 @@ export class PlayerStateService {
     this.dolbyVisionProbe = probe;
   }
 
-  /** Set the error card from a translated one-liner plus optional
-   *  diagnostics (code / category / variant / data). Central writer so the
-   *  fatal-no-retry classification stays in one place. */
+  /** Sets the error card from a translated line plus diagnostics; the only writer, so fatal-no-retry classification stays in one place. */
   setError(
     userMessage: string,
     extra?: Partial<Omit<PlaybackError, 'userMessage'>>,
@@ -182,10 +150,7 @@ export class PlayerStateService {
       this.muted.set(e.muted);
     });
 
-    // Push the current level/mute onto the freshly-created engine so a new
-    // <video> (or mpv instance) plays at the value the slider already shows,
-    // instead of its own default — otherwise a re-created engine desyncs the
-    // audio from the UI until the user next touches the slider.
+    // Push the level/mute onto the new engine so it doesn't play at its own default while the slider shows another value.
     engine.volume = this.volume();
     engine.muted = this.muted();
 
@@ -195,15 +160,11 @@ export class PlayerStateService {
       if (e.state === 'playing' || e.state === 'error' || e.state === 'ended') {
         this.startingPlayback.set(false);
       }
-      // Never latch it while paused: the only clear path needs a playhead that
-      // advances, so a stall reported after a pause would spin forever and the
-      // play button hides behind it. The engine re-reports on resume.
+      // Never latch while paused: the only clear path needs an advancing playhead, so the spinner would hide the play button.
       const buffering =
         (e.state === 'buffering' || (this.recovering && e.state === 'error')) &&
         !this.paused();
-      // Anchor the playhead reference as buffering begins so the timeUpdate clear
-      // below fires on real forward progress, not the position jump a seek into
-      // the stall produces — otherwise the spinner clears before playback resumes.
+      // Anchor the playhead as buffering begins so the clear fires on real progress, not the jump from a seek into the stall.
       if (buffering && !this.buffering()) {
         this.lastBufferingPos = this.engine?.currentTime ?? this.lastBufferingPos;
       }
@@ -216,12 +177,7 @@ export class PlayerStateService {
           source: 'engine',
         });
       }
-      // videoStarted is intentionally NOT flipped here — Shaka emits 'playing'
-      // on DOM 'play' (= play() called), well before the first frame is
-      // actually painted. PlayerComponent owns the flip per engine, always via
-      // the engine 'firstFrame' event: rvfc on the local <video> for Shaka,
-      // ExoPlayer onRenderedFirstFrame (with an onIsPlayingChanged fallback)
-      // for native.
+      // videoStarted is not flipped here: 'playing' fires on play(), before the first frame; PlayerComponent flips it on the engine 'firstFrame' event.
     });
 
     engine.on('ended', () => {
@@ -232,10 +188,7 @@ export class PlayerStateService {
       if (!this.seekLocked()) this.currentTime.set(e.position);
       if (e.duration > 0) this.duration.set(e.duration);
       this.bufferedEnd.set(e.buffered);
-      // A moving playhead while not paused means frames are flowing — clear a
-      // latched buffering spinner. Some engines (notably iOS AVPlayer recovering
-      // from a stall) never emit a 'playing' stateChanged after a re-buffer, so
-      // the spinner would otherwise stay up over correctly-playing video.
+      // Some engines (iOS AVPlayer after a re-buffer) never emit 'playing', so a moving playhead is what clears the spinner.
       if (
         !this.seekLocked() &&
         !this.paused() &&
@@ -254,11 +207,8 @@ export class PlayerStateService {
       }
       this.startingPlayback.set(false);
       const source = e.source ?? 'engine';
-      // A DV passthrough that fails to decode wins over everything else (even a
-      // platform errorKey): tell the user Dolby Vision failed on this device.
-      // Otherwise prefer the engine's explicit i18n key (Tizen/webOS surface
-      // platform strings), else map source/code/category to a category message.
-      // The raw fields are kept for the diagnostics block regardless.
+      // A DV passthrough decode failure wins over everything (even a platform errorKey); otherwise the engine's i18n key, else a source/code/category message.
+      // The raw fields are kept for diagnostics regardless.
       const dvFailure =
         (this.dolbyVisionProbe?.() ?? false) &&
         !isNetworkOrAbort({ source, code: e.code, category: e.category });

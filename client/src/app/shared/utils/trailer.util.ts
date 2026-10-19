@@ -1,6 +1,5 @@
-/** The YouTube embed rejects any non-http(s) origin with player error 153, but the
- *  fallback below only lands where a shell catches `window.open`: iOS and desktop.
- *  The TV bundles (`file:`) have none, so they keep the embed. */
+/** The YouTube embed rejects non-http(s) origins (error 153); the fallback only works where a shell catches `window.open` (iOS, desktop),
+ * so TV `file:` bundles keep the embed. */
 const EXTERNAL_OPEN_SCHEMES = ['capacitor:', 'fliks:'];
 
 export const trailerPlaysInline =

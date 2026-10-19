@@ -15,11 +15,7 @@ import { SseService } from '../../../core/services/sse.service';
 import { TvService } from '../../../core/services/tv.service';
 import { UserAvatarComponent } from '../user-avatar/user-avatar';
 
-/**
- * Home widget listing incoming follow requests to accept/reject, styled like
- * the setup checklist. Renders nothing when there are none (or on TV, where the
- * social surface is hidden). Refreshes live on the `social.follow_request` SSE.
- */
+/** Home widget listing incoming follow requests; renders nothing when there are none or on TV, and refreshes on the `social.follow_request` SSE. */
 @Component({
   selector: 'app-follow-requests-card',
   imports: [UserAvatarComponent, RouterLink, TranslatePipe, LucideCheck, LucideX],

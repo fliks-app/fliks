@@ -1,6 +1,4 @@
-<!-- The sidebar is pinned from `lg` up, which covers desktop and TV alike: an
-     admin surface wants its sections in view, not behind a hamburger. Below
-     `lg` the checkbox drives a transient drawer. -->
+<!-- Sidebar pinned from `lg` (desktop and TV): an admin surface wants sections in view; below `lg` a checkbox drives a transient drawer. -->
 <div class="drawer min-h-screen lg:drawer-open">
   <input [id]="drawerId()" #drawerToggle type="checkbox" class="drawer-toggle" />
   <div class="drawer-content flex flex-col relative min-w-0">

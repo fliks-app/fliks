@@ -64,9 +64,7 @@ export class QuickConnectWaitComponent implements OnInit, OnDestroy {
     this.view.set('starting');
     try {
       this.deviceId = await getOrCreateDeviceId();
-      // Resolve the real OS name+version natively (Electron bridge / Capacitor);
-      // shown as a second line and sent for the approver + admin dashboard. The
-      // device name itself stays the recognizable getDeviceName() label.
+      // Native OS name+version shown as a second line for the approver and admin dashboard; the device name stays the getDeviceName() label.
       await this.systemInfo.ready();
       this.systemName.set(this.systemInfo.systemName());
       // Prefer the real user-assigned device name ("MacBook de Clément") over the

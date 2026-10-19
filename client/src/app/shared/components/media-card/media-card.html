@@ -23,10 +23,7 @@
     (keydown.space)="onCardClick(); $event.preventDefault()"
   >
     @if (_img() && !imgFailed()) {
-      <!-- Concentric with the figure's clip, which loses the border width when the
-           card is highlighted. Bound rather than fixed at the smaller value: a
-           view transition snapshots this img out of that clip, so its own radius
-           is the only one the poster morph has. -->
+      <!-- Concentric with the figure's clip (which loses the border width when highlighted); bound because the view transition snapshots this img out of that clip. -->
       <img
         #cardImg
         [cachedSrc]="_img()! | resolveUrl:'thumb'"
@@ -54,9 +51,7 @@
       </div>
     }
 
-    <!-- Badges, progress and hover affordances. Grouped so a single
-         view-transition-name lifts them above the poster that morphs onto
-         this card, which would otherwise hide them for the whole animation. -->
+    <!-- Badges, progress and hover affordances grouped so one view-transition-name lifts them above the morphing poster. -->
     <div #cardOverlay data-card-overlay class="absolute inset-0 z-10 pointer-events-none">
 
     <!-- Rating badge (bottom-left, portrait only) -->

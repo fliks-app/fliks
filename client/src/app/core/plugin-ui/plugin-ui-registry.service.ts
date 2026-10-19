@@ -8,12 +8,7 @@ import type { PluginUiEntry } from './plugin-ui-response';
 /** Bounds the boot-blocking wait: a dead plugin endpoint must never hold the splash. */
 const FETCH_TIMEOUT_MS = 3000;
 
-/**
- * Fetches `GET /api/plugins/ui` once at app init and caches it. Every other
- * consumer reads the cache — nothing here ever refetches. On any error,
- * timeout or malformed payload it fails open to an empty registry, so a
- * Fliks with no plugins and one with a broken plugin endpoint boot identically.
- */
+/** Fetches `GET /api/plugins/ui` once at app init and caches it; any error, timeout or malformed payload fails open to an empty registry. */
 @Injectable({ providedIn: 'root' })
 export class PluginUiRegistryService {
   private readonly http = inject(HttpClient);
@@ -85,11 +80,7 @@ export class PluginUiRegistryService {
     return entry?.releasePicker ? { pluginId: entry.pluginId, routes: entry.releasePicker } : null;
   }
 
-  /**
-   * Every plugin's `i18n[lang]` dict combined; undefined when none ship that locale.
-   * Ordered by plugin id and first-declared wins, so one plugin can never redefine
-   * another's key — and the winner does not change when install order does.
-   */
+  /** Every plugin's `i18n[lang]` dict combined (undefined if none ship it); ordered by plugin id, first-declared wins, independent of install order. */
   i18nFor(lang: string): Record<string, string> | undefined {
     let merged: Record<string, string> | undefined;
     const ordered = [...this.entries].sort((a, b) => (a.pluginId < b.pluginId ? -1 : a.pluginId > b.pluginId ? 1 : 0));

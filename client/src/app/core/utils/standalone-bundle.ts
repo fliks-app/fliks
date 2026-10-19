@@ -1,11 +1,7 @@
 import { Capacitor } from '@capacitor/core';
 
-/**
- * True when the app runs as a standalone bundle with no backend host serving its
- * shell — Capacitor, Smart TV, Android TV, desktop. Such a bundle resolves every
- * `/api/...` call against a server URL the user picked and authenticates with a
- * Bearer token it owns; web builds ride the httpOnly access cookie instead.
- */
+/** True when the app runs as a standalone bundle with no backend serving its shell (Capacitor, Smart TV, Android TV, desktop):
+ *  `/api/...` resolves against the user-picked server with an owned Bearer token; web builds use the httpOnly cookie. */
 export const IS_STANDALONE_BUNDLE = (() => {
   if (Capacitor.isNativePlatform()) return true;
   if (typeof navigator === 'undefined') return false;
@@ -21,11 +17,7 @@ const APP_ENTRY_URL =
   : location.protocol === 'file:' ? location.href
   : `${location.origin}/`;
 
-/**
- * Restart the app from its entry document. `location.reload()` would not do: the
- * TV bundles run from `file://` with pushState routing, so the current URL is a
- * virtual path with no file behind it.
- */
+/** Restarts the app from its entry document; `location.reload()` fails on TV bundles (`file://` with pushState, so the URL has no file behind it). */
 export function restartApp(): void {
   location.replace(APP_ENTRY_URL);
 }

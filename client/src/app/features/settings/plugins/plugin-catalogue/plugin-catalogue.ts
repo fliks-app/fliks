@@ -33,9 +33,7 @@ export class PluginCatalogueComponent implements OnInit {
   /** Installed version per plugin id — what makes "already installed" and "out of date"
    *  distinguishable on a card. */
   readonly installedVersions = input<ReadonlyMap<string, string>>(new Map());
-  /** `plugins.allow_older_versions`: off, a card installs the newest and nothing else; on, it
-   *  splits into an action and a version picker. The list itself is whatever the source cached —
-   *  which the compatibility setting has already widened or narrowed. */
+  /** `plugins.allow_older_versions`: off installs only the newest; on, a card splits into an action and a version picker. */
   readonly allowOlderVersions = input(false);
 
   /** A version was inspected and staged; the parent owns the consent sheet and opens it with this report. */
@@ -78,9 +76,7 @@ export class PluginCatalogueComponent implements OnInit {
     }
   }
 
-  /** The version this card would install, when it is not the one already installed. Null when
-   *  the plugin is absent or already on the catalogue's newest. The list is ordered oldest to
-   *  newest by core's parser, so the last entry is the target without a semver comparison. */
+  /** The version this card would install if not already installed; null when absent or on the newest. The list is ordered oldest to newest by core's parser, so the last entry is the target. */
   updateTarget(row: CatalogueRow): string | null {
     const installed = this.installedVersions().get(row.plugin.id);
     if (!installed || !row.latestVersion) return null;

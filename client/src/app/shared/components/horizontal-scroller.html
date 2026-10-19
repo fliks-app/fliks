@@ -7,11 +7,7 @@
   </div>
 }
 
-<!-- Scroll affordances overlay the row's edges and fade in on hover; the
-     scroller itself owns the smooth scroll. Vertical / horizontal padding
-     (with matching negative margin so neighbours don't shift) makes room
-     for the focus ring + media-card scale-up — both extend past the row and
-     would otherwise be clipped by overflow-x:auto's implicit overflow-y. -->
+<!-- Edge affordances fade in on hover. Padding with matching negative margin makes room for the focus ring and card scale-up, which overflow-x:auto would otherwise clip. -->
 <div
   class="relative scroll-wrap"
   (mousemove)="onPointerMove($event)"

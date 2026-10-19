@@ -54,9 +54,7 @@ export class SearchStateService {
   /** True once a discover query has been applied (rows → results grid). */
   readonly discoverActive = signal(false);
 
-  /** Any narrowing filter is set (genre / rating / year). Sort alone doesn't
-   *  count — it only reorders an already-filtered or queried set. Drives the
-   *  auto-apply and the single Clear button. */
+  /** Any narrowing filter (genre/rating/year); sort alone doesn't count. Drives the auto-apply and the Clear button. */
   readonly filtersEngaged = computed(
     () =>
       this.discoverSelectedGenres().size > 0 ||
@@ -84,20 +82,14 @@ export class SearchStateService {
     this.discoverResults.set([]);
     this.discoverActive.set(false);
   }
-  /** Counter incremented whenever a caller (e.g. the bottom-dock
-   *  search button) asks the search page to refocus its input.
-   *  Search page watches this in an effect — using a counter (not a
-   *  boolean) so back-to-back requests both fire. */
+  /** A counter, not a boolean, so back-to-back refocus requests both fire the search page's effect. */
   readonly focusRequestId = signal(0);
 
   requestFocus(): void {
     this.focusRequestId.update((n) => n + 1);
   }
 
-  /** A TMDB genre id a caller (e.g. a profile taste chip) asked to preload into
-   *  the discover panel. An id (not a name) keeps it language-proof. Carries a
-   *  monotonic counter so repeat requests refire the search page's effect even
-   *  when the route is reused. */
+  /** A TMDB genre id (language-proof) to preload into the discover panel; the counter refires the effect on a reused route. */
   readonly genreFilterRequest = signal<{ genreId: number; n: number } | null>(
     null,
   );
@@ -107,9 +99,7 @@ export class SearchStateService {
     this.genreFilterRequest.set({ genreId, n: ++this.genreFilterCounter });
   }
 
-  /** External results for the "add to library" section: only titles NOT already
-   *  in the library (owned ones move to {@link ownedExternalResults}). Narrowed
-   *  by the discover panel filters (genre/year/rating) while a query is active. */
+  /** Only titles not already in the library (owned ones go to {@link ownedExternalResults}); narrowed by the panel filters while a query is active. */
   readonly filteredExternalResults = computed(() => {
     const localTmdbIds = new Set(this.localResults().map(m => m.tmdbId));
     const rows = this.externalResults().filter(
@@ -118,10 +108,7 @@ export class SearchStateService {
     return this.applyPanelFilters(rows);
   });
 
-  /** Library titles the provider matched by other metadata (franchise, keywords,
-   *  alternative titles…) that the local title search missed — e.g. a spin-off
-   *  whose title doesn't contain the searched franchise name. Surfaced in the
-   *  library section so owned matches show at the top. Deduped against local. */
+  /** Library titles the provider matched by other metadata (franchise, keywords) that the title search missed, deduped against local. */
   readonly ownedExternalResults = computed(() => {
     const localTmdbIds = new Set(this.localResults().map(m => m.tmdbId));
     const rows = this.externalResults().filter(
@@ -130,10 +117,7 @@ export class SearchStateService {
     return this.applyPanelFilters(rows);
   });
 
-  /** Narrow external rows by the discover panel filters, then sort only when the
-   *  user picked a rating/recency sort (the default keeps provider relevance).
-   *  Genre matches by TMDB id (search results carry ids, not names) with a name
-   *  fallback for providers that return names. No-op when no filter is engaged. */
+  /** Sorts only on a rating/recency pick (default keeps provider relevance); genre matches by TMDB id with a name fallback. */
   private applyPanelFilters(
     rows: MetadataSearchResult[],
   ): MetadataSearchResult[] {

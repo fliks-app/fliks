@@ -29,14 +29,7 @@ export interface DisplayDownloadTask extends DownloadTask {
   downloadProgress?: number;
 }
 
-/**
- * Downloads page.
- *
- * Data sources:
- *   - DownloadCacheService (localStorage): task metadata and status
- *   - Java service (native): real-time progress/status
- *   - DownloadManagerService events: real-time progress (web + native)
- */
+/** Downloads page: DownloadCacheService (localStorage) for task metadata, the native Java service and DownloadManagerService events for live progress. */
 @Component({
   selector: 'app-downloads',
   imports: [
@@ -73,10 +66,7 @@ export class DownloadsComponent implements OnInit, OnDestroy {
   protected readonly formatBytes = formatBytes;
 
 
-  /**
-   * Native/web state — synced on every load().
-   * Key = taskId, Value = { progress, status }.
-   */
+  /** Native/web state synced on every load(), keyed by taskId. */
   private readonly nativeState = signal<Map<number, { progress: number; status: string }>>(new Map());
 
   /** React to download manager events for real-time UI updates */

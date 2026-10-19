@@ -55,12 +55,7 @@ import { PopoverMenuComponent } from '../popover-menu';
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 import { CachedSrcDirective } from '../../directives/cached-src.directive';
 
-/**
- * Singleton actions menu for cards, mounted once at the layout level. It reads
- * its content from `CardActionsService` and delegates all chrome — anchored
- * dropdown on desktop, bottom sheet on touch/TV, positioning, focus, spatial-nav
- * scoping and dismiss — to `app-popover-menu`.
- */
+/** Singleton cards actions menu mounted at layout level; reads `CardActionsService` and delegates all chrome to `app-popover-menu`. */
 @Component({
   selector: 'app-card-actions-panel',
   standalone: true,
@@ -117,9 +112,7 @@ export class CardActionsPanelComponent {
   private readonly tv = inject(TvService);
   private readonly device = inject(DeviceService);
 
-  /** Same condition `app-popover-menu` uses to render a sheet instead of an
-   *  anchored dropdown: there is no room beside the panel for a flyout, so a
-   *  submenu takes over the sheet with a back row. */
+  /** Same condition `app-popover-menu` uses for a sheet over a dropdown: no room for a flyout, so a submenu takes over with a back row. */
   protected readonly sheet = computed(() => this.tv.isTv() || this.device.isTouch());
 
   readonly actions = computed(() => this.service.actions() ?? []);
@@ -128,9 +121,7 @@ export class CardActionsPanelComponent {
   readonly imageAspect = this.service.imageAspect;
   readonly subtitle = this.service.subtitle;
 
-  /** `button` drops the menu under the ⋯ trigger, right edges flush;
-   *  `card-top` overlays the card from its top edge; `card` centres it under
-   *  the card figure. */
+  /** `button` under the ⋯ trigger, right edges flush; `card-top` overlays from the card's top edge; `card` centres under the figure. */
   readonly placement = computed(() => {
     switch (this.service.placement()) {
       case 'button':

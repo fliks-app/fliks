@@ -13,11 +13,7 @@ export interface PlaybackOption {
   sub?: string;
 }
 
-/**
- * One playback surface for the cast-overlay UI: a Chromecast session or a
- * remote target, whichever is active. Keeps the control component and its
- * template ignorant of which device is actually being driven.
- */
+/** One playback surface (Chromecast session or remote target), keeping the control component ignorant of which device is driven. */
 export interface PlaybackTarget {
   readonly buffering: Signal<boolean>;
   readonly currentTime: Signal<number>;

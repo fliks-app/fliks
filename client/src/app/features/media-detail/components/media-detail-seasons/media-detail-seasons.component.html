@@ -248,13 +248,9 @@
     } @else if (filteredEpisodes().length > 0 && showEpisodeList()) {
       <ul class="divide-y divide-base-content/10 border-t border-base-content/10">
         @for (ep of filteredEpisodes(); track ep.id) {
-          <!-- Two columns, and only the synopsis's span changes with the
-               breakpoint: full width under the image on a phone, beside it from
-               sm. A grid keeps that to one copy of the text. -->
+          <!-- Two columns; only the synopsis span changes (under the image on phone, beside it from sm), so one copy of the text. -->
           <li appTvRow class="grid grid-cols-[auto_1fr] gap-x-3 sm:gap-x-4 gap-y-1.5 py-3">
-              <!-- The tile is app-media-card with its caption dropped: the episode
-                   badge, missing cross, progress, hover play and watched toggle all
-                   come from the one implementation instead of a lookalike. -->
+              <!-- app-media-card with its caption dropped: badge, progress, play and watched toggle come from the one implementation. -->
               <app-media-card #stillCard [aspect]="'landscape'"
                 class="sm:row-span-2"
                 [posterMorph]="episodeMorph()"
@@ -315,9 +311,7 @@
         }
       </ul>
     } @else if (filteredEpisodes().length > 0) {
-      <!-- Same top rule and inset as the list, so toggling views doesn't shift
-           the block; the padding stands in for a list row's own. Only where the
-           toggle exists: the "more from season" row has nothing to switch to. -->
+      <!-- Same top rule and inset as the list so toggling views doesn't shift the block; only where the toggle exists. -->
       <ng-template #episodeRow>
         <app-horizontal-scroller>
         @for (ep of filteredEpisodes(); track ep.id) {

@@ -12,13 +12,7 @@ const STATUS_KEYS: Record<string, string> = {
   missing: 'media_detail.subtitle_missing',
 };
 
-/**
- * Resolve a subtitle row's stored status to its display label. An unmapped
- * status falls through to its raw value rather than an empty cell.
- *
- * Impure because the translation table loads asynchronously and changes when
- * the user switches locale.
- */
+/** Resolve a subtitle row's stored status to its label, falling back to the raw value. Impure: the translation table loads asynchronously and changes with locale. */
 @Pipe({ name: 'subtitleStatus', pure: false })
 export class SubtitleStatusPipe implements PipeTransform {
   private readonly translate = inject(TranslateService);

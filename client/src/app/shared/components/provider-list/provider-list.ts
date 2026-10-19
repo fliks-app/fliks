@@ -44,22 +44,15 @@ interface RowActionResultView {
   result: NonNullable<ProviderRowAction['result']>;
 }
 
-/** Substitutes a row action route's `:id` with the row's own id — null (never a request) when
- *  there was no `:id` to substitute, or any `:token` placeholder survives that, so a mistyped
- *  or list-scope route can never fire with a literal placeholder still in its path. */
+/** Substitutes a row action route's `:id` with the row's id; null when no `:id` was there or any `:token` placeholder survives, so a request never fires with one. */
 export function resolveRowActionRoute(route: string, id: number | string): string | null {
   if (!route.includes(':id')) return null;
   const resolved = route.replace(':id', String(id));
   return /:[A-Za-z_]/.test(resolved) ? null : resolved;
 }
 
-/**
- * The `providers` view kind from the plugin plan: a CRUD list of instances,
- * each edited by `<app-schema-form>` built from the driver's own fields.
- * `listUrl` is the only route the component knows — CRUD is plain REST
- * (`GET/POST listUrl`, `PUT/DELETE listUrl/:id`) and it never interprets
- * `settings`, so it stays ignorant of whatever protocol a driver speaks.
- */
+/** The `providers` view kind: a CRUD list of instances, each edited by `<app-schema-form>` from the driver's fields.
+ * `listUrl` is the only route it knows (plain REST); it never interprets `settings`. */
 @Component({
   selector: 'app-provider-list',
   imports: [
@@ -110,9 +103,7 @@ export class ProviderListComponent implements OnInit {
   readonly listActions = input<readonly ProviderListAction[]>([]);
   /** Rendered per row (`ProvidersConfigPage.actions[].scope: 'row'`) — every entry gets its own button. */
   readonly rowActions = input<readonly ProviderRowAction[]>([]);
-  /** The action that clears a row's cooldown, rendered beside the cooldown itself rather than
-   *  as another button in the actions cell. Routed through `runRowAction`, so it keeps that
-   *  path's confirmation, busy state and reload. */
+  /** Clears a row's cooldown, rendered beside it; routed through `runRowAction` for its confirmation, busy state and reload. */
   readonly cooldownAction = input<ProviderRowAction | null>(null);
   /** Matches subtitle-providers' current UX: renaming the draft to the driver's label while creating. */
   readonly autoFillNameFromImplementation = input(false);
@@ -179,12 +170,7 @@ export class ProviderListComponent implements OnInit {
     this.reorderable() ? [...this.rows()].sort((a, b) => a.priority - b.priority) : this.rows(),
   );
 
-  /**
-   * What the table renders: the display order, then the name filter, then the chosen sort.
-   *
-   * `moveRow` deliberately keeps reading `orderedRows`: the swap it performs is over the real
-   * priority order, and a filtered or renamed-sorted view would swap the wrong pair.
-   */
+  /** Display order, then name filter, then sort. `moveRow` reads `orderedRows` instead: a filtered or sorted view would swap the wrong pair. */
   readonly visibleRows = computed(() => {
     const needle = this.filterText().trim().toLowerCase();
     const rows = needle
@@ -218,12 +204,7 @@ export class ProviderListComponent implements OnInit {
     return this.implementations().find((i) => i.implementation === first) ?? null;
   });
 
-  /**
-   * Fields the bulk editor offers: the implementation's tuning knobs, plus priority when the page
-   * has one. What identifies one instance is left out, because the same value written to every
-   * selected row is meaningless or destructive there: a `url` is the row (twelve indexers pointed
-   * at one tracker), and a credential belongs to whatever that url is.
-   */
+  /** Bulk-editable fields: tuning knobs plus priority; identifying ones (`url`, credentials) are left out as writing one value to every row is destructive. */
   readonly bulkFields = computed<readonly FieldDef[]>(
     () =>
       this.bulkImplementation()
@@ -595,13 +576,8 @@ export class ProviderListComponent implements OnInit {
     this.selectedIds.set(new Set());
   }
 
-  /**
-   * Runs one request per selected row, sequentially, and reports once. Sequential on purpose: a
-   * dozen parallel writes against a plugin's own database buy nothing and turn one slow row into
-   * a burst the far end may rate-limit. Each request suppresses the global error toast so the
-   * summary is the only thing the user reads, and the loop never stops early: the rows that can
-   * be written are written.
-   */
+  /** Runs one request per selected row sequentially (parallel writes just risk rate limits) and reports once;
+   * each suppresses the global error toast and the loop never stops early. */
   private async runOverSelection(
     call: (row: ProviderInstance) => Promise<unknown>,
     okKey: string,
@@ -699,11 +675,7 @@ export class ProviderListComponent implements OnInit {
 
   readonly bulkNothingApplied = computed(() => this.bulkApply().size === 0);
 
-  /**
-   * Applies only the ticked fields to every selected row. Each row is persisted minus its entity
-   * metadata, with its own settings spread under the changes: a field nobody ticked keeps
-   * whatever that row had, which is the difference between a bulk edit and twelve identical rows.
-   */
+  /** Applies only the ticked fields to every selected row, spreading each row's own settings under the changes. */
   async saveBulkEdit(): Promise<void> {
     const applied = this.bulkApply();
     if (applied.size === 0) return;

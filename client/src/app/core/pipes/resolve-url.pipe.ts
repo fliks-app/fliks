@@ -21,24 +21,14 @@ export function imageUrlWithSize(url: string, size: ImageSize): string {
   return `${url}${sep}size=${size}`;
 }
 
-/** A same-origin web request already carries the auth cookie; native/TV clients
- *  fetch cross-origin and can't attach one, so the token rides in the query,
- *  exactly like an HLS segment URL (see `livetv.controller.ts`'s `withToken`). */
+/** Same-origin web requests carry the auth cookie; native/TV clients are cross-origin, so the token rides in the query like an HLS segment URL (see `withToken`). */
 export function withLiveTvLogoToken(url: string, token: string | null): string {
   if (!token || !url.startsWith(LIVETV_LOGO_PATH)) return url;
   const sep = url.includes('?') ? '&' : '?';
   return `${url}${sep}token=${encodeURIComponent(token)}`;
 }
 
-/**
- * Resolves a relative URL against the configured server base. When given a
- * second argument matching one of our local image sizes (thumb / medium /
- * full), appends `?size=…` so the backend serves the matching pre-generated
- * variant. The size param is appended ONLY for `/api/images/...` URLs — a
- * remote URL (TMDB direct, manual override) is left untouched and the
- * backend falls back to `full` for older entities that haven't been
- * refreshed since multi-size support landed.
- */
+/** Resolves a relative URL against the server base; a local size (thumb / medium / full) appends `?size=…` ONLY for `/api/images/...` URLs, remote URLs stay untouched. */
 @Pipe({ name: 'resolveUrl', standalone: true })
 export class ResolveUrlPipe implements PipeTransform {
   private readonly config = inject(ServerConfigService);

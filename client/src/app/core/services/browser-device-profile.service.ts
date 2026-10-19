@@ -28,9 +28,7 @@ interface AudioCapabilitiesPlugin {
   getSupported(): Promise<{
     codecs: string[];
     maxChannels: number;
-    /** Per-codec max decodable channel count (lowercased codec → channels).
-     *  Lets the backend allow AAC 7.1 while downmixing EAC-3 7.1 on a device
-     *  whose EAC-3 decoder tops out at 5.1. */
+    /** Per-codec max decodable channel count (lowercased codec → channels). */
     channelsByCodec?: Record<string, number>;
   }>;
 }
@@ -41,9 +39,7 @@ interface NativeVideoCaps {
   hevcMain10: boolean;
   av1Main10: boolean;
   containers: string[];
-  /** Per-codec max decodable resolution (codec key → {width, height}) from the
-   *  device's MediaCodec VideoCapabilities. Absent on platforms whose plugin
-   *  doesn't report it, leaving the codec unconstrained as before. */
+  /** Per-codec max decodable resolution from MediaCodec VideoCapabilities; absent = unconstrained. */
   resolutions?: Record<string, { width: number; height: number }>;
   /** Android only: DV profiles the device's decoders report (not yet
    *  intersected with the display; see `VideoCapabilitiesPlugin.java`). */
@@ -56,12 +52,7 @@ interface VideoCapabilitiesPlugin {
 }
 const VideoCaps = registerPlugin<VideoCapabilitiesPlugin>('VideoCapabilities');
 
-/** Probe Tizen's `webapis.avinfo.isHdrTvSupport()` synchronously. The
- *  Samsung runtime exposes a panel-level HDR capability flag that's
- *  more reliable than `matchMedia('(dynamic-range: high)')` on
- *  Chromium 85 (which often returns false even on Q-series HDR sets).
- *  Returns false on any non-Tizen target or when the API call throws,
- *  so the call site can fall back to the matchMedia path. */
+/** Tizen panel-level HDR flag; more reliable than matchMedia on Chromium 85. False off Tizen or on throw. */
 function isTizenHdrCapable(): boolean {
   try {
     const w = window as unknown as {
@@ -74,10 +65,7 @@ function isTizenHdrCapable(): boolean {
   }
 }
 
-/**
- * Builds a DeviceProfile by probing actual browser capabilities via canPlayType()
- * and MediaSource.isTypeSupported().
- */
+/** Builds a DeviceProfile by probing browser capabilities via canPlayType() and MediaSource.isTypeSupported(). */
 
 export interface DirectPlayProfile {
   containers: string[];
@@ -109,11 +97,8 @@ export interface DeviceProfile {
   /** Client crops the detected black bars itself (mpv `video-crop` on
    *  desktop, a CSS transform for web/Shaka). False for native/TV. */
   cropsBlackBarsLocally?: boolean;
-  /** Client can present single-layer Dolby Vision (P5 / 8.x) directly, so the
-   *  backend DirectPlays the original container untouched instead of tonemapping
-   *  P5 to SDR. iOS/Android report it from the native probe (DV HW decoder / DV
-   *  panel type); webOS OLEDs assume it when the panel is HDR. Web/Shaka and
-   *  Tizen stay false. Absent = false on the backend. */
+  /** Client can present single-layer Dolby Vision (P5 / 8.x) directly, so DirectPlay skips tonemapping.
+   *  Absent = false on the backend. */
   supportsDolbyVision?: boolean;
   /** DV profiles this device can decode AND present, e.g. `[5, 8]`. Sent only
    *  when the server advertises `deviceProfileExtensions` and non-empty. */
@@ -127,33 +112,19 @@ export interface DeviceProfile {
   /** Real host OS name+version ("macOS 26", "iOS 18.5") resolved natively; the
    *  admin label prefers this over the UA-derived OS (which the UA freezes). */
   systemName?: string;
-  /** Fliks client build version ("1.15.2"). Sent only by non-web clients
-   *  (native app / TV / desktop): a browser always runs the server's current
-   *  build, so a version there is redundant. Shown on the admin dashboard. */
+  /** Fliks client build version, sent only by non-web clients (a browser always runs the server's build). */
   appVersion?: string;
-  /** Hard force MPEG-TS HLS for every transcode session of this client.
-   *  Defaults to `false`; the only switch in shipping configs is the
-   *  narrower `useTsOnSingleAudio` below. Opt-in via
-   *  `localStorage['fliks.useTs'] = '1'` as an emergency escape hatch
-   *  for future firmware regressions. */
+  /** Hard force MPEG-TS HLS for every transcode session; opt-in via `localStorage['fliks.useTs'] = '1'`. */
   useTs?: boolean;
 
-  /** Force MPEG-TS only when the source has at most one audio track. Required
-   *  by Tizen: AVPlay fetches init.mp4 then seg-0 and stalls there on a
-   *  single-audio fMP4 variant, CMAF rewrite notwithstanding (issue #148). */
+  /** Force MPEG-TS only when the source has at most one audio track (Tizen AVPlay stalls on single-audio fMP4). */
   useTsOnSingleAudio?: boolean;
 
-  /** Client consumes HLS `SUBTITLES` renditions from the master playlist
-   *  natively (cues render inside the player pipeline, so they show in
-   *  Picture-in-Picture / AirPlay). When false the backend omits the
-   *  subtitle group and the client renders subtitles itself from a sidecar
-   *  VTT. True for phone/desktop (iOS, Android, web/Shaka); false for TVs,
-   *  whose AVPlay/webOS cue APIs are limited so they keep a DOM overlay. */
+  /** Client renders HLS `SUBTITLES` renditions natively; when false the backend omits them and the client
+   *  renders a sidecar VTT itself (TVs). */
   supportsHlsSubtitles?: boolean;
 
-  /** Engine surfaces one audio track per LANGUAGE rather than one per
-   *  rendition (webOS). The backend then publishes one rendition per
-   *  language, the picked track winning its own. */
+  /** Engine surfaces one audio track per language (webOS), so the backend publishes one rendition per language. */
   dedupesAudioByLanguage?: boolean;
 
   /** Engine names a single muxed audio track from a URI-less `EXT-X-MEDIA` (AVKit). */
@@ -162,48 +133,32 @@ export interface DeviceProfile {
   /** Engine accelerates HLS from an `EXT-X-I-FRAME-STREAM-INF` rendition. */
   supportsIFrameTrickPlay?: boolean;
 
-  /** Engine renders bitmap (PGS/VOBSUB) subtitles itself (ExoPlayer, mpv), but
-   *  only from a DirectPlay container; any other delivery burns them in. False
-   *  engines (iOS AVPlayer, web/Shaka, Tizen, webOS) always burn them in. */
+  /** Engine renders bitmap (PGS/VOBSUB) subtitles itself, only from a DirectPlay container; otherwise burned in. */
   supportsImageSubtitles?: boolean;
 
-  /** Engine fetches seg-0 when it loads the playlist and then seeks to the
-   *  resume point — true for the web/Shaka path (and the Cast receiver). The
-   *  backend uses it to decide whether to pre-spawn the seg-0 early-start
-   *  companion. Native engines (AVPlayer/ExoPlayer/AVPlay/webOS) seek straight
-   *  to the target segment and never request seg-0, so they send false and the
-   *  backend skips the companion (a wasted parallel transcode for them). */
+  /** Engine fetches seg-0 when loading the playlist, then seeks (web/Shaka, Cast receiver); native engines send
+   *  false so the backend skips the seg-0 early-start companion. */
   probesSegZero?: boolean;
 
-  /** Client engine can play a raw progressive file (DirectPlay served as-is).
-   *  True for every shipping engine; `false` makes the backend skip DirectPlay
-   *  and fall back to DirectStream (remux to HLS). Unset = true. */
+  /** Client can play a raw progressive file; false makes the backend fall back to DirectStream. Unset = true. */
   supportsDirectPlay?: boolean;
 
   /** Client engine switches audio tracks inside a raw DirectPlay file.
    *  `false` sends a picked non-first track through HLS. Unset = true. */
   switchesDirectPlayAudio?: boolean;
 
-  /** Client can switch HLS variants at runtime (real ABR). `false` (e.g.
-   *  embedded mpv, which picks one variant when it opens the master and
-   *  never switches again) tells the backend to collapse the master to a
-   *  single variant instead of the full ladder. Unset = true. */
+  /** Client can switch HLS variants at runtime; false collapses the master to a single variant. Unset = true. */
   supportsAbr?: boolean;
 
   /** One-shot per-request override (never part of the cached profile): asks
    *  the backend to transcode instead of a DirectStream copy it can't decode. */
   rejectCopy?: boolean;
 
-  /** One-shot per-request override (never part of the cached profile): a text
-   *  subtitle is on screen on an engine that can't sideload it into a raw file,
-   *  so the backend keeps the copy but leaves DirectPlay for the HLS master. */
+  /** One-shot per-request override (not cached): text subtitle on an engine that can't sideload it into a raw file. */
   needsHlsSubtitles?: boolean;
 }
 
-/** Containers AVPlay demuxes, from Samsung's published media specification
- *  (identical across the 2019-2025 model years). Over-declaring is safe: Direct
- *  Play also requires the video AND audio codec to match the same profile
- *  entry, so an AVI carrying MPEG-4 ASP still falls through to a transcode. */
+/** Containers AVPlay demuxes (Samsung media spec). Over-declaring is safe: Direct Play also needs the codecs to match. */
 const TIZEN_CONTAINERS = ['mp4', 'mkv', 'mov', 'ts', 'm2ts', 'avi', 'webm'];
 
 /** True when `localStorage['fliks.useTs']` is set to a truthy value.
@@ -292,24 +247,17 @@ export class BrowserDeviceProfileService {
     return Promise.race([this.desktopProbe, new Promise<void>((r) => setTimeout(r, timeoutMs))]);
   }
 
-  /**
-   * Build the device profile. Cached after first call.
-   */
+  /** Build the device profile. Cached after first call. */
   getProfile(): DeviceProfile {
     if (!this.cachedProfile) {
       this.cachedProfile = this.buildProfile();
     }
-    // Re-read mutable overrides on every call so toggling them at
-    // runtime (HDR setting in the player UI, `fliks.useTs` escape
-    // hatch in `localStorage`) doesn't require a page reload — the
-    // next playback-info will pick up the change.
+    // Mutable overrides (HDR setting, `fliks.useTs`) are re-read on every call.
     const useTsOverride = readUseTsOverride();
     const forceDisableHdr = this.playerSettings.get().forceDisableHdr;
     const needsOverride =
       forceDisableHdr || useTsOverride !== !!this.cachedProfile.useTs;
-    // systemName resolves asynchronously (native bridge / Capacitor Device), so
-    // overlay the current value on every call rather than baking a possibly-empty
-    // value into the cache.
+    // systemName resolves asynchronously, so overlay it on every call instead of caching it.
     const systemName = this.systemInfo.systemName() || undefined;
     // An unadvertised server 400s on an unknown field; an empty list is
     // redundant with the boolean fallback. Omit it in both cases.
@@ -349,8 +297,7 @@ export class BrowserDeviceProfileService {
     const hasMSE = typeof MediaSource !== 'undefined' && !!MediaSource.isTypeSupported;
 
     // --- Detect supported containers ---
-    // Probed WITH a representative codec: a bare container mime (no `codecs`)
-    // is ambiguous and Chromium answers false for it, emptying the list.
+    // Probed WITH a representative codec: a bare container mime is ambiguous and Chromium answers false.
     const containers: string[] = [];
     if (this.testCodec(video, hasMSE, 'video/mp4', 'avc1.42E01E')) {
       containers.push('mp4', 'm4v', 'mov');
@@ -375,17 +322,10 @@ export class BrowserDeviceProfileService {
       });
     }
 
-    // HEVC — re-enabled on Smart TV. AVPlay on Tizen 6.5 decodes HEVC
-    // natively in HW; the earlier `InvalidAccessError` we attributed to
-    // `hvc1` actually came from the master-playlist setup we've since
-    // fixed (sequence, `setListener` ordering, MPEG-TS branch). Letting
-    // the backend pick HEVC again skips a transcode for HEVC sources on
-    // Q-series TVs.
+    // HEVC on Smart TV: AVPlay decodes it natively in HW.
     const isTv = this.device.isTv();
     const tvPlatform = this.device.tvPlatform();
-    // The engine-behavioural flags below come from one declarative row
-    // keyed on the engine kind (platform + native split). Adding a
-    // platform is a single row in `engine-traits.ts`.
+    // Engine-behavioural flags come from one declarative row in `engine-traits.ts`.
     const traits = this.engineTraits();
     if (
       this.testCodec(video, hasMSE, 'video/mp4', 'hvc1.1.6.L120.B0') ||
@@ -402,15 +342,7 @@ export class BrowserDeviceProfileService {
       });
     }
 
-    // AV1 — disabled on TV. Two unrelated reasons stack:
-    //   1. Backend's `libsvtav1` rung is misconfigured (Max Bitrate <
-    //      Target Bitrate → encoder exits 234), so any AV1 selection
-    //      cascades into a 404 storm. Same bug we hit before reverting
-    //      the AVPlay migration.
-    //   2. AVPlay's HLS demuxer accepts AV1 in fMP4 but not consistently
-    //      across firmware revisions — keeping it off the TV profile
-    //      until we move to direct-play DASH.
-    // Both go away on non-TV bundles where browser MSE drives playback.
+    // AV1 off on TV: AVPlay's HLS demuxer accepts it inconsistently across firmware.
     if (!isTv && this.testCodec(video, hasMSE, 'video/mp4', 'av01.0.08M.08')) {
       videoCodecs.push('av1');
       const maxBitDepth = this.testCodec(video, hasMSE, 'video/mp4', 'av01.0.08M.10') ? 10 : 8;
@@ -432,14 +364,8 @@ export class BrowserDeviceProfileService {
       videoCodecs.push('vp8');
     }
 
-    // Native engines (Capacitor: ExoPlayer on Android, AVPlayer on iOS) decode
-    // through the OS media stack, not the WebView — whose MSE under-reports
-    // HEVC/AV1 on Android even when the device decodes them, forcing needless
-    // H.264 transcodes. When the native video-capability plugin answered, trust
-    // it for video codecs, their conditions, and the containers it can demux
-    // (incl. mkv on ExoPlayer). Smart TVs (Tizen AVPlay / webOS) run as web
-    // apps with no plugin: declare HEVC for them too, since their WebView MSE
-    // probe can miss it while the panel hardware-decodes it.
+    // Native engines decode via the OS stack, whose capabilities beat the WebView's MSE probe: trust the plugin.
+    // Smart TVs have no plugin: declare HEVC for them, their WebView probe can miss it.
     if (this.nativeVideo && this.nativeVideo.videoCodecs.length) {
       const nv = this.nativeVideo;
       // AVPlayer decodes what the WebView's WebKit probes, so its level ceiling
@@ -495,9 +421,7 @@ export class BrowserDeviceProfileService {
       });
     }
 
-    // Tizen: take the containers Samsung publishes for the TV's own demuxer.
-    // The WebView probe above answers for a pipeline that never plays here.
-    // https://developer.samsung.com/smarttv/develop/specifications/media-specifications/2022-tv-video-specifications.html
+    // Tizen: use Samsung's published demuxer containers; the WebView probe answers for a pipeline that never plays.
     if (tvPlatform === 'tizen') {
       for (const c of TIZEN_CONTAINERS) {
         if (!containers.includes(c)) containers.push(c);
@@ -505,19 +429,14 @@ export class BrowserDeviceProfileService {
     }
 
     // --- Detect supported audio codecs ---
-    // On native, the platform plugin (AudioCapabilities) is the source of
-    // truth — playback goes through ExoPlayer / AVPlayer, not the WebView,
-    // so the WebView's canPlayType is irrelevant (and unreliable: some
-    // WebViews report ec-3 positive on devices that have no decoder).
+    // On native the platform plugin is the source of truth; WebView canPlayType is unreliable (false ec-3 positives).
     let audioCodecs: string[];
     if (this.nativeAudio) {
       audioCodecs = [...this.nativeAudio.codecs];
     } else {
       audioCodecs = [];
       if (this.testCodec(video, hasMSE, 'audio/mp4', 'mp4a.40.2')) audioCodecs.push('aac');
-      // MP3 probed wrapped in MP4 (mp4a.6B/mp4a.69), the form we deliver —
-      // Chrome's MSE rejects it though 'audio/mpeg' passes. webOS plays it
-      // through its native <video>.
+      // MP3 probed wrapped in MP4 (mp4a.6B/mp4a.69), the form we deliver; Chrome's MSE rejects it though 'audio/mpeg' passes.
       if (
         this.testCodec(video, hasMSE, 'audio/mp4', 'mp4a.6B') ||
         this.testCodec(video, hasMSE, 'audio/mp4', 'mp4a.69') ||
@@ -543,10 +462,7 @@ export class BrowserDeviceProfileService {
       maxAudioChannels = ctx.destination.maxChannelCount || 2;
       ctx.close();
     } catch { /* fallback to stereo */ }
-    // The native plugin reports the real DECODE capability (Android: per-codec
-    // getMaxInputChannelCount; iOS: device-class estimate) — the device decodes
-    // this many channels and the OS downmixes to the actual output, so a 5.1/
-    // 7.1 source DirectPlays instead of a server-side downmix.
+    // The plugin reports real DECODE channels; the OS downmixes to the output, so 5.1/7.1 sources DirectPlay.
     if (this.nativeAudio) {
       maxAudioChannels = Math.max(maxAudioChannels, this.nativeAudio.maxChannels);
     }
@@ -555,10 +471,7 @@ export class BrowserDeviceProfileService {
     const audioChannelsByCodec =
       this.nativeAudio?.channelsByCodec ??
       (tvPlatform ? undefined : { aac: 8, opus: 8, flac: 8 });
-    // TVs: the WebView's AudioContext caps at 2ch, but the playback pipeline
-    // (webOS <video>, Tizen AVPlay) decodes Dolby and renders/passes it (TV
-    // speakers downmix, eARC passes through). Declaring 5.1 when AC3/EAC3 is
-    // supported lets the backend copy multichannel Dolby instead of downmixing.
+    // TVs: the WebView's AudioContext caps at 2ch but the pipeline decodes Dolby, so declare 5.1 for AC3/EAC3.
     if (
       (tvPlatform === 'webos' || tvPlatform === 'tizen') &&
       (audioCodecs.includes('eac3') || audioCodecs.includes('ac3'))
@@ -566,11 +479,7 @@ export class BrowserDeviceProfileService {
       maxAudioChannels = Math.max(maxAudioChannels, 6);
     }
 
-    // Desktop native shell (Electron + embedded mpv): mpv/ffmpeg decode
-    // virtually any codec/container, but the Chromium MSE probe wildly
-    // under-reports (no HEVC, no E-AC3), which would force the backend to
-    // transcode everything. Advertise mpv's broad capability set so sources
-    // Direct Play / copy straight through.
+    // Desktop shell: mpv decodes virtually any codec but the Chromium MSE probe under-reports, so advertise mpv's set.
     if (this.device.isDesktopNative()) {
       containers.length = 0;
       containers.push('mp4', 'mkv', 'webm', 'mov', 'ts', 'm4v', 'avi', 'flv');
@@ -595,13 +504,7 @@ export class BrowserDeviceProfileService {
       // Use native plugin result (pre-fetched in constructor). Default true if not yet resolved.
       supportsHdr = this.nativeHdr ?? true;
     } else if (isTizenHdrCapable()) {
-      // Tizen Smart TV: the panel-level capability is reported by
-      // `webapis.avinfo.isHdrTvSupport()`. This bypasses the
-      // `matchMedia('(dynamic-range: high)')` probe, which is
-      // unreliable in Chromium 85 on TVs that DO support HDR (matchMedia
-      // returns false even on Q-series sets). Combine with the
-      // 10-bit codec check so we don't promise HDR on a Main-only
-      // profile somehow.
+      // Tizen: use `isHdrTvSupport()` (matchMedia is unreliable on Chromium 85), combined with a 10-bit codec check.
       const has10bitCodec = codecConditions.some(c => (c.maxBitDepth ?? 0) >= 10);
       supportsHdr = has10bitCodec;
     } else {
@@ -610,25 +513,17 @@ export class BrowserDeviceProfileService {
       supportsHdr = hdrDisplay && has10bitCodec;
     }
 
-    // mpv tone-maps HDR down to an SDR display on its own (the macOS layer does
-    // it whenever the screen has no EDR headroom), so the server can copy the
-    // bitstream instead of re-encoding it.
+    // mpv tone-maps HDR to an SDR display itself, so the server can copy the bitstream.
     const tonemapsHdrLocally = this.device.isDesktopNative() && !supportsHdr;
     // A plain browser always runs the server's current build, so only the
     // installed clients report a build version worth surfacing.
     const isWeb =
       !Capacitor.isNativePlatform() && !isTv && !this.device.isDesktopNative();
-    // `video-crop` cuts the bars at the VO: free, and hwdec-safe unlike a lavfi
-    // crop. Every mpv backend qualifies, the Linux render API included, since
-    // they all run the gl_video renderer that applies the rectangle.
-    // The web (Shaka) path crops the same way in CSS, see `WebVideoCropController`.
+    // `video-crop` cuts bars at the VO (hwdec-safe) on every mpv backend; web crops in CSS, see `WebVideoCropController`.
     const cropsBlackBarsLocally =
       this.device.isDesktopNative() || isWeb || this.nativeCropsBlackBars() || isTizenCropSupported();
 
-    // DV profiles this device can decode AND present, gated under supportsHdr.
-    // iOS/Android resolve it natively; web/webOS probe per codec string. Samsung
-    // TVs have no Dolby Vision, and a WebView probe would ask the wrong decoder
-    // (AVPlay plays, not <video>).
+    // DV profiles the device can decode AND present, gated under supportsHdr; Samsung TVs have no Dolby Vision.
     const dolbyVisionProfiles: number[] = !supportsHdr || tvPlatform === 'tizen'
       ? []
       : Capacitor.isNativePlatform()
@@ -636,9 +531,7 @@ export class BrowserDeviceProfileService {
           ? (this.nativeDvProfiles ?? this.nativeVideo?.dolbyVisionProfiles ?? [5, 8])
           : []
         : this.probeDolbyVisionProfiles(video, hasMSE);
-    // mpv decodes raw dual-layer P7 fine and tone-maps it locally on an SDR
-    // display, so list it regardless of supportsHdr; unlike 5/8, presenting
-    // it doesn't need an HDR display.
+    // mpv decodes dual-layer P7 and tone-maps it locally, so list it regardless of supportsHdr.
     if (this.device.isDesktopNative() && !dolbyVisionProfiles.includes(7)) {
       dolbyVisionProfiles.push(7);
     }
@@ -677,50 +570,30 @@ export class BrowserDeviceProfileService {
       useTs,
       // Tizen alone needs MPEG-TS on single-audio sources (issue #148).
       useTsOnSingleAudio: traits.useTsOnSingleAudio,
-      // Players that decode the master SUBTITLES renditions natively (iOS
-      // AVPlayer, Android ExoPlayer — phone and TV alike, web Shaka) render
-      // cues inside the player pipeline. Only Tizen and webOS opt out: their
-      // AVPlay/webOS cue APIs are limited, so those engines drive a DOM
-      // overlay fed by sidecar VTT instead of the HLS renditions.
+      // Only Tizen and webOS opt out of native SUBTITLES renditions: their cue APIs are limited, so they use a DOM overlay.
       supportsHlsSubtitles: traits.supportsHlsSubtitles,
       dedupesAudioByLanguage: traits.dedupesAudioByLanguage,
       supportsMuxedAudioRendition: traits.supportsMuxedAudioRendition,
       supportsIFrameTrickPlay: traits.supportsIFrameTrickPlay,
       supportsImageSubtitles: traits.supportsImageSubtitles,
-      // Only the web/Shaka path probes seg-0 on a load-then-seek; that is
-      // exactly the `!isNative` engine branch (Capacitor mobile + every TV go
-      // through native players that seek straight to the resume segment). The
-      // Cast receiver sets this true in its own profile.
+      // Only the web/Shaka path probes seg-0 on load-then-seek; the Cast receiver sets this true in its own profile.
       probesSegZero: traits.probesSegZero,
-      // Every shipping engine opens a raw progressive file: Shaka, ExoPlayer/
-      // AVPlayer, webOS <video>, and Tizen AVPlay, whose `open()` takes any
-      // remote URI and demuxes MKV itself.
+      // Every shipping engine opens a raw progressive file (Tizen AVPlay demuxes MKV itself).
       supportsDirectPlay: traits.supportsDirectPlay,
       // Only web probes it (every other engine switches natively); skip Firefox,
       // whose `audioTracks` toggle doesn't switch what plays.
       switchesDirectPlayAudio: isWeb
         ? 'audioTracks' in HTMLMediaElement.prototype && detectBrowser(navigator.userAgent) !== 'Firefox'
         : undefined,
-      // `false` only for the desktop mpv engine (see engine-traits.ts): the
-      // backend then collapses the master to a single variant instead of
-      // handing a no-ABR client the full ladder.
+      // False only for the desktop mpv engine (see engine-traits.ts).
       supportsAbr: traits.supportsAbr,
     };
   }
 
-  // ---------------------------------------------------------------------------
-  // Probing helpers
-  // ---------------------------------------------------------------------------
+  // --- Probing helpers ---
 
-  /** Codec support gate for the device profile sent to the backend.
-   *
-   *  Browser playback runs through Shaka + MSE, so the codec list MUST be
-   *  what MSE.isTypeSupported accepts. `canPlayType` can return `"maybe"`
-   *  for codecs MSE actually rejects (HEVC on Chrome Linux is the
-   *  textbook case), and the truthy `"maybe"` would let the backend
-   *  pick a codec that Chrome's SourceBuffer refuses at appendBuffer
-   *  time — surfaces to the user as Shaka error 3014
-   *  MEDIA_SOURCE_OPERATION_FAILED on every first segment. */
+  /** Codec gate for the backend profile: browser playback runs through MSE, so require isTypeSupported
+   *  (canPlayType's "maybe" can pass codecs MSE rejects, e.g. HEVC on Chrome Linux). */
   private testCodec(video: HTMLVideoElement, hasMSE: boolean, mime: string, codec: string): boolean {
     const full = codec ? `${mime}; codecs="${codec}"` : mime;
     if (hasMSE) return MediaSource.isTypeSupported(full);
@@ -743,9 +616,7 @@ export class BrowserDeviceProfileService {
     return profiles;
   }
 
-  /** Turn the native plugin's per-codec decode ceiling into a codec-condition
-   *  fragment. Empty when the plugin didn't report a resolution for this codec,
-   *  leaving it unconstrained (the backend then Direct Plays any resolution). */
+  /** Turn the plugin's per-codec decode ceiling into a codec-condition fragment; empty when unreported. */
   private nativeResCondition(
     nv: NativeVideoCaps,
     key: string,

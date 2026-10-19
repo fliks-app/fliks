@@ -16,14 +16,7 @@ import { normalizeLangCode } from '../../utils/language.utils';
 import type { TimeRange } from '../../utils/edl-policy';
 import { MuteGate } from './mute-gate';
 
-/**
- * Shaka Player implementation of the PlaybackEngine interface.
- *
- * Wraps shaka.Player and the underlying HTMLVideoElement into the unified
- * engine API so player.ts doesn't interact with Shaka directly.
- *
- * This is a plain TypeScript class with NO Angular dependencies.
- */
+/** Shaka implementation of PlaybackEngine; plain TypeScript with no Angular dependencies. */
 export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngine {
 
   private player: shaka.Player | null = null;
@@ -33,11 +26,7 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
   private videoListeners: Array<{ event: string; handler: EventListener }> = [];
   private shakaListeners: Array<{ event: string; handler: EventListener }> = [];
 
-  /** Set briefly after the 410 response filter has emitted
-   *  `sessionExpired`. Shaka also surfaces the thrown filter error
-   *  through its `error` event — we suppress the bridged `error`
-   *  emission for one tick so the UI doesn't flash a fatal-error overlay
-   *  on top of the in-flight recovery. */
+  /** Set after the 410 filter emits `sessionExpired`; suppresses the bridged `error` for one tick so no fatal overlay shows during recovery. */
   private sessionExpiredInFlight = false;
 
   /** The user's own mute; `video.muted` is this OR the EDL gate. */
@@ -72,13 +61,7 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
 
     this.player = new shaka.Player();
 
-    // Switch to UITextDisplayer (DOM-based) before attach so the player
-    // never instantiates the default NativeTextDisplayer. UITextDisplayer
-    // renders every line of a multi-line cue as a `.shaka-text-wrapper`
-    // flex child of `.shaka-text-container`, so font-size / line-height /
-    // inter-line spacing become real CSS properties we can override —
-    // unlike native VTTCue rendering, where Shaka flattens nested cues
-    // into separate VTTCues whose stacking the browser controls.
+    // UITextDisplayer renders each cue line as a DOM node, so font-size/line-height/spacing are overridable CSS, unlike native VTTCue rendering.
     if (video.parentElement) {
       this.player.setVideoContainer(video.parentElement);
       this.player.configure({
@@ -110,20 +93,8 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
     this.bridgeShakaEvents();
   }
 
-  /**
-   * NetworkingEngine response filter that turns the backend's 410
-   * "session_expired" body into a synchronous `sessionExpired` engine
-   * event. Without it Shaka would retry the segment per its
-   * `streaming.retryParameters` schedule (~5 attempts, exponential
-   * backoff → ~2 min before the heartbeat-driven recovery #302 kicks
-   * in). Reacting on the very first 410 collapses that window down to
-   * the time it takes to call /playback-info + reload (~1 s).
-   *
-   * Throwing a 1001 BAD_HTTP_STATUS error from the filter aborts
-   * Shaka's retry loop and surfaces as a regular `error` event, so the
-   * engine never silently swallows the failure if no listener consumes
-   * the `sessionExpired` signal.
-   */
+  /** Turns the backend's 410 "session_expired" into a `sessionExpired` event, skipping Shaka's multi-minute retry backoff.
+   * Throws a 1001 BAD_HTTP_STATUS to abort retries, so the failure still surfaces as an `error` if unconsumed. */
   private installSessionExpiredFilter(): void {
     if (!this.player) return;
     const ne = this.player.getNetworkingEngine?.();
@@ -143,9 +114,7 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
       } catch { /* malformed body — fall through and trust the status */ }
       if (body?.code && body.code !== 'session_expired') return;
       this.sessionExpiredInFlight = true;
-      // Window covers Shaka's own retry burst (the filter throws on
-      // every retried 410); cleared after a tick so a later, unrelated
-      // error from the bridge isn't accidentally suppressed.
+      // Covers Shaka's retry burst (the filter throws on each 410); cleared after a tick so unrelated errors aren't suppressed.
       setTimeout(() => { this.sessionExpiredInFlight = false; }, 2000);
       this.emit('sessionExpired', undefined);
       throw new shaka.util.Error(
@@ -350,10 +319,7 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
     index = 0,
   ): Promise<TextTrackHandle> {
     if (!this.player) throw new Error('ShakaEngine not initialised');
-    // An HLS SUBTITLES rendition is matched by (language, forced), then by `index`
-    // (the ordinal among tracks sharing both). Language codes are normalised: the
-    // manifest may say `en` where the option says `eng`. Another language is never
-    // a substitute.
+    // Matched by (language, forced), then `index` among tracks sharing both; codes are normalised (`en` vs `eng`) and another language is never a substitute.
     const want = normalizeLangCode(language);
     const sideloaded = new Set([...this.sideloadedTextTracks.values()].map((t) => t.id));
     const renditions = this.player.getTextTracks().filter((t) => !sideloaded.has(t.id));
@@ -512,9 +478,7 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
 
     this.addVideoListener('playing', () => {
       this.emitPlayingUnlessStarved();
-      // Emit firstFrame ONCE, gated on requestVideoFrameCallback so it
-      // fires only after a frame has actually been presented to the
-      // compositor (the DOM 'playing' event can precede the first paint).
+      // Gated on requestVideoFrameCallback: the DOM 'playing' event can precede the first paint.
       if (!this.firstFrameEmitted) {
         const rvfc = video.requestVideoFrameCallback;
         const fire = () => this.emitFirstFrameOnce();
@@ -559,10 +523,7 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
     });
   }
 
-  /** Human-readable summary of the variant playing at error time —
-   *  `hvc1.1.6.L120 1920×1080 @3.0Mb/s · ec-3`. Surfaced on the error card
-   *  so a decode failure shows exactly which codec/level/tier the browser
-   *  choked on (the whole point of the Safari HEVC diagnosis). */
+  /** Variant at error time (`hvc1.1.6.L120 1920×1080 @3.0Mb/s · ec-3`), shown on the error card to expose the failing codec/level. */
   private activeVariantString(): string | undefined {
     const v = this.player?.getVariantTracks?.().find((t: any) => t.active);
     if (!v) return undefined;
@@ -614,9 +575,7 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
     this.addShakaListener('error', (ev) => {
       const detail = (ev as unknown as { detail?: shaka.util.Error }).detail;
       if (this.sessionExpiredInFlight) {
-        // 410 recovery is taking over — swallow the fatal-error event
-        // so the UI doesn't render the error overlay before the engine
-        // reloads with a fresh sid.
+        // 410 recovery is taking over; no error overlay before the reload.
         return;
       }
       console.error('[Shaka] Player error:', detail?.code, detail?.category, detail?.message, detail?.data);
@@ -632,10 +591,7 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
       this.emit('stateChanged', { state: 'error' });
     });
 
-    // Fires when manifest is parsed / variants become available / adaptation
-    // happens. Forward as audioTracksChanged so the player can upgrade from
-    // the si-* streamInfo fallback (used when tracks aren't ready at startup)
-    // to the real shaka-* tracks as soon as Shaka has them.
+    // Forwarded so the player upgrades from the si-* streamInfo fallback to the real shaka-* tracks once available.
     const emitAudioTracks = () => {
       const tracks = this.getAudioTracks();
       if (tracks.length > 0) this.emit('audioTracksChanged', { tracks });

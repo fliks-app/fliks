@@ -16,22 +16,13 @@ export interface ReleaseSearchSinks {
   indexers: WritableSignal<IndexerRosterEntry[]>;
 }
 
-/** Correlation token, not a credential — the server scopes delivery to the account. Built
- *  without `crypto.randomUUID`, which is unavailable on the plain-HTTP LAN origins a
- *  self-hosted install is routinely reached on. */
+/** Correlation token, not a credential (the server scopes delivery to the account); no `crypto.randomUUID`, absent on plain-HTTP LAN origins. */
 function searchToken(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-/**
- * Runs one release search and applies the partial results the plugin pushes while its
- * indexers answer.
- *
- * Each `search.partial` carries the complete list re-ranked by the server, so a coalesced
- * signal update that skips an intermediate event loses nothing: the newest emission is
- * always the most complete one. The HTTP answer remains the authority, and with no event
- * stream at all this degrades to exactly the previous behaviour — one list, at the end.
- */
+/** Runs one release search, applying the partial results the plugin pushes while indexers answer. Each `search.partial` is the complete re-ranked list,
+ *  so a skipped intermediate event loses nothing; the HTTP answer stays authoritative, and without events it yields one list at the end. */
 @Injectable({ providedIn: 'root' })
 export class ReleaseSearchStreamService {
   private readonly sse = inject(SseService);

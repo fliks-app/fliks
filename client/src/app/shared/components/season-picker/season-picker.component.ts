@@ -9,12 +9,7 @@ export interface SeasonPickerRow {
   episodeCount: number;
 }
 
-/**
- * Season table with a per-row toggle and a select-all header. Shared by the
- * request modal (pick what to ask for) and the add-to-library modal (pick what
- * to monitor), which differ only in the badge wording and in which rows are
- * locked.
- */
+/** Season table with per-row toggle and select-all, shared by the request and add-to-library modals (differing in badge wording and locked rows). */
 @Component({
   selector: 'app-season-picker',
   imports: [TranslatePipe, SeasonLabelPipe],

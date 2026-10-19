@@ -23,22 +23,8 @@ interface FieldError {
 }
 
 
-/**
- * Renders a `FormItem[]` as DaisyUI controls, delegating to the shared
- * `forms/` components. An unmatched `field.type` renders nothing — it must
- * never blank out or break the rest of the form.
- *
- * `secret: true` fields: clearing one back to blank (or never touching it)
- * drops the key from `value` instead of writing `''`, so a save built from
- * `value()` never overwrites a stored credential with emptiness — the server
- * never echoes a secret back, so "blank" and "untouched" are indistinguishable
- * on purpose. `required` is not enforced on secret fields: the component has
- * no create/edit context to know whether blank means "unset" or "keep as is".
- *
- * `secretsSet` names the keys that already hold a stored value: those render
- * masked, with an erase action that writes `null` — the JSON Merge Patch
- * (RFC 7396) spelling of "remove this member".
- */
+/** Renders a `FormItem[]` as DaisyUI controls; an unmatched `field.type` renders nothing. `secret` fields drop their key from `value` when blank (never overwrite a stored credential),
+ *  skip `required`, and when in `secretsSet` render masked with an erase action writing `null` (RFC 7396 remove). */
 @Component({
   selector: 'app-schema-form',
   imports: [

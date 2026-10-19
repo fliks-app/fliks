@@ -1,9 +1,4 @@
-/**
- * Derives a deterministic { initials, hue } pair from a string. Used as a
- * fallback when a user (or anything else with a name) has no real avatar —
- * we render the initials on a colored circle whose hue is hashed from the
- * name so the same user always gets the same color.
- */
+/** Deterministic { initials, hue } for avatar-less users: the hue is hashed from the name so the same user always gets the same color. */
 export function initialsAvatar(name: string): { initials: string; hue: number } {
   const trimmed = (name ?? '').trim();
   if (!trimmed) return { initials: '?', hue: 0 };

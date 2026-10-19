@@ -10,9 +10,7 @@
     <h1 class="text-2xl font-bold">{{ libraryName() }}</h1>
   }
 
-  <!-- View tabs — a spatial-nav row so `↑` from the content below lands on the
-       tabs (the nearest registered container) instead of bridging past them to
-       the fixed topbar. -->
+  <!-- View tabs: a spatial-nav row so `↑` from below lands on them instead of bridging to the fixed topbar. -->
   <nav appTvRow class="flex items-center gap-1 overflow-x-auto py-2 -my-2 px-2 -mx-2">
     <button
       type="button"
@@ -69,10 +67,7 @@
   <app-import-progress-banner />
 
   @if (viewMode() === 'all') {
-    <!-- Toolbar: count + sort + order + filter + search. Carries the grid's
-         own right padding, so the filter button lines up with the right edge
-         of the cards and the search input never runs under the sticky
-         alphabet column it passes through while scrolling. -->
+    <!-- Toolbar: carries the grid's right padding so the filter aligns with the cards and search clears the alphabet column. -->
     <div
       class="flex flex-wrap items-center gap-2 tv:pr-4"
       [class.pr-8]="sortBy() === 'title' && sortOrder() === 'ASC'"
@@ -135,9 +130,7 @@
         </button>
       </div>
 
-      <!-- Filter button + search input share an inline flex wrapper so they
-           wrap together to a new line on narrow viewports (rather than the
-           filter staying with the sort group while the search jumps below). -->
+      <!-- Filter and search share a wrapper so they wrap together on narrow viewports. -->
       <div class="flex items-center gap-2 ml-auto flex-1 min-w-40 max-w-md">
         <!-- A form so the virtual keyboard's Enter key submits and dismisses it. -->
         <form class="relative flex-1" (ngSubmit)="dismissKeyboard(searchInput)">
@@ -290,21 +283,9 @@
       </div>
     </div>
 
-    <!-- Alphabet sidebar — only meaningful when items are actually
-         ordered alphabetically (sort=title ASC). Any other sort
-         would make the letter jumps random, so we hide it.
-         `position: fixed` rather than sticky: sticky would un-stick
-         whenever the cards grid is shorter than the viewport (no
-         containing block to anchor against), leaving the alphabet
-         floating against the cards instead of the viewport mid.
-         Fixed keeps it nailed to the right side at vertical center
-         regardless of how many items the grid holds. -->
+    <!-- Alphabet sidebar: only for sort=title ASC. `fixed`, not sticky, which un-sticks when the grid is shorter than the viewport. -->
     @if (sortBy() === 'title' && sortOrder() === 'ASC') {
-      <!-- Centred by a full-height flex strip, not by `top-1/2` +
-           `-translate-y-1/2`: a percentage translate is resolved against the
-           element's OWN height, so the column drops half a screen whenever that
-           height isn't settled yet. `justify-center` only ever needs the
-           viewport's. The strip is click-through; the letters are not. -->
+      <!-- Centred by a full-height click-through flex strip: a percentage translate resolves against the element's own unsettled height. -->
       <nav data-alpha-index class="library-alphabet fixed inset-y-0 right-4 z-20 flex flex-col items-center justify-center gap-0 select-none pointer-events-none">
         @for (letter of alphabet; track letter) {
           <button
@@ -403,9 +384,7 @@
           [minBufferPx]="rowHeight() * 2"
           [maxBufferPx]="rowHeight() * 4"
           class="flex-1 min-w-0 library-viewport">
-          <!-- The right padding clears the alphabet column: it sits at `right-4`
-               and is `w-4` wide, so anything under 2rem lets the cards slide
-               under the letters. -->
+          <!-- Right padding clears the alphabet column (`right-4` + `w-4`): under 2rem cards slide under the letters. -->
           <div *cdkVirtualFor="let row of gridRows(); trackBy: trackRow"
                #cardRow
                [class.pr-8]="sortBy() === 'title' && sortOrder() === 'ASC'"
@@ -550,9 +529,7 @@
         </app-horizontal-scroller>
       }
 
-      <!-- Recommendations grid — same column rhythm as the main `all`
-           grid so the suggestions feel like a continuation of the same
-           page rather than a separate component. -->
+      <!-- Recommendations grid: same column rhythm as the `all` grid. -->
       @if (suggestionsRecommendations().length) {
         <h2 class="text-lg font-semibold mt-2">{{ 'home.recommendations' | translate }}</h2>
         <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 tv:grid-cols-6 gap-1.5 sm:gap-4 tv:gap-8">
@@ -591,10 +568,7 @@
         <p class="text-lg">{{ 'library.genres_empty' | translate }}</p>
       </div>
     } @else {
-      <!-- Genre grid — Emby-style: each card is a 4-poster mosaic
-           (when posters are available) or a folder icon, with the
-           genre name below. Click → pivot to `all` with the genre
-           filter applied. -->
+      <!-- Genre grid: 4-poster mosaic (or folder icon) per genre; click pivots to `all` with the genre filter. -->
       <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 tv:grid-cols-6 gap-3 sm:gap-4 tv:gap-8">
         @for (g of genresList(); track g.genre) {
           <app-mosaic-card

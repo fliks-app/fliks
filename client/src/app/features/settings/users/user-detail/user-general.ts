@@ -44,10 +44,7 @@ export class UserGeneralComponent implements OnInit {
   readonly formIsAdmin = signal(false);
   readonly formEnabled = signal(true);
   readonly formRequirePasswordChange = signal(false);
-  /**
-   * Libraries the user can access. Stored as a Set so the template's
-   * checkbox toggles are O(1) — converted to a sorted array on save.
-   */
+  /** A Set for O(1) checkbox toggles; converted to a sorted array on save. */
   readonly formLibraryIds = signal<ReadonlySet<number>>(new Set());
   readonly libraries = signal<Library[]>([]);
 

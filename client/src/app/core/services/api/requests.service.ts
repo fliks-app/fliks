@@ -44,9 +44,7 @@ export interface RequestMedia {
   id: number;
   title: string;
   year: number | null;
-  /** Whether the library media is monitored — an approved request whose media
-   *  is monitored is being worked on (shown as "monitored" rather than just
-   *  "approved"). */
+  /** Whether the library media is monitored: an approved request with monitored media shows as "monitored", not just "approved". */
   monitored?: boolean;
   /** Local `/api/images` paths of the imported media — secondary art source
    *  for requests created before local request art existed. */
@@ -89,9 +87,7 @@ export interface RequestsPage {
   total: number;
 }
 
-/** Aggregate active-request state for a title, across all users (no
- *  requester identity). Drives the global "already requested" gate and the
- *  series per-season + profile-lock UI. */
+/** Aggregate active-request state for a title across all users (no requester identity); drives the "already requested" gate and the series season/profile-lock UI. */
 export interface TitleRequestState {
   requested: boolean;
   wholeSeriesRequested: boolean;

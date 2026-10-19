@@ -229,14 +229,7 @@ export class OrphanScanPanelComponent {
     }
   }
 
-  /**
-   * Queue every detected group for import into a library that now exists.
-   * A group the admin left untouched takes the provider's first result; a
-   * group with no pick (no match, or explicitly deselected) is added unmatched.
-   * A group whose search errored is left alone (still visible with its alert)
-   * rather than queued unmatched. Returns once the batch is queued: the
-   * server imports in the background.
-   */
+  /** Queues every group: untouched takes the provider's first result, no pick is added unmatched, a group whose search errored is left alone. Returns once queued; the server imports in the background. */
   async importAll(libraryId: number): Promise<{ queued: number; unmatched: number; failed: number }> {
     const pending = this.groups()
       .map((g, i) => (g.done ? -1 : i))
@@ -463,11 +456,7 @@ export class OrphanScanPanelComponent {
     }
   }
 
-  /**
-   * Pick the most accurate match for every remaining group and link it.
-   * "Most accurate" = best year + title score; ties keep the provider's own
-   * relevance order (earliest result wins).
-   */
+  /** "Most accurate" = best year + title score; ties keep the provider's relevance order. */
   async autoImportAll() {
     this.autoImporting.set(true);
     try {

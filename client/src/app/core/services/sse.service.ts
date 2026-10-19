@@ -89,9 +89,7 @@ const LIVENESS_TIMEOUT_MS = 80_000;
 const LIVENESS_CHECK_MS = 5_000;
 const DIAL_TIMEOUT_MS = 10_000;
 
-/** Series/movie title plus episode identity, kept as separate fields so a season
- *  import can lay them out rather than parsing a flattened string. `seasonNumber`
- *  alone (no `episodeNumber`) describes a whole-season task. */
+/** Title plus episode identity as separate fields so a season import can lay them out; `seasonNumber` alone means a whole-season task. */
 export interface MediaProgressSubject {
   title: string;
   mediaId?: number;
@@ -148,9 +146,7 @@ export class SseService implements OnDestroy {
   /** `connected` (folded with the device's own network state) debounced by
    *  {@link UNREACHABLE_DEBOUNCE_MS}. Read by the layout shell to show its banner. */
   readonly serverUnreachable = signal(false);
-  /** `deviceId#tabNonce`. Stable across this tab's SSE reconnects: unlike
-   *  `connectionId`, reminted server-side every time: and unique per screen,
-   *  unlike the device id, which two tabs of one browser share. */
+  /** `deviceId#tabNonce`: stable across this tab's SSE reconnects (unlike `connectionId`) and unique per screen (unlike the device id). */
   readonly targetId = signal<string | null>(null);
   /** Commands are transient intent: a last-value signal would let a state
    *  frame overwrite one before its consumer ran, losing it with no trace. */
@@ -161,13 +157,9 @@ export class SseService implements OnDestroy {
   readonly subtitleSyncFailed = new Subject<{ subtitleId: number; error: string }>();
   /** Id of a subtitle whose running or queued sync was cancelled. */
   readonly subtitleSyncCancelled = new Subject<number>();
-  /** A target leaving its player. A transient fact, so it cannot ride on
-   *  `lastEvent`: the same handler emits `remote.targets_changed` right after
-   *  it, which replaced the value before any effect had run. */
+  /** A target leaving its player; transient, so not on `lastEvent`, which `remote.targets_changed` replaces before any effect runs. */
   readonly stopped = new Subject<string>();
-  /** Own signal rather than `lastEvent`: this fires every 10s per playing
-   *  session for every device of the account, and `lastEvent` is read inside
-   *  effects by a dozen unrelated components. */
+  /** Own signal: fires every 10s per playing session for every device, and `lastEvent` is read by a dozen unrelated effects. */
   readonly remoteState = signal<RemoteState | null>(null);
   private eventSource: EventSource | null = null;
   private deviceIdPromise: Promise<string> | null = null;
@@ -182,17 +174,13 @@ export class SseService implements OnDestroy {
   private unreachableTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
-    // The stream is authenticated as one account: re-dial on a session change.
-    // Re-opened here, not left to the app's auth effect: that one may run first,
-    // and this close would abort its dial mid-flight.
+    // Re-dial on a session change; re-opened here since the app's auth effect may run first and this close would abort its dial.
     effect(() => {
       this.auth.sessionEpoch();
       untracked(() => {
         this.close();
         if (this.auth.isAuthenticated()) void this.connect();
-        // Progress is keyed by media, not by account. Dropping it with the
-        // stream that fed it also stops the sweep timer of a session nobody
-        // is watching any more.
+        // Progress is keyed by media, not account; dropping it also stops the sweep timer of an unwatched session.
         this.downloadProgress.reset();
         this.activeProgress.set(new Map());
       });
@@ -274,16 +262,12 @@ export class SseService implements OnDestroy {
 
     const generation = this.generation;
     const targetId = await this.resolveTargetId();
-    // A logout or account switch during the await would otherwise leave this
-    // continuation opening a stream: and registering a target: for the
-    // session that just ended.
+    // A logout or account switch during the await must not open a stream or register a target for the ended session.
     if (generation !== this.generation || this.eventSource) return;
     this.targetId.set(targetId);
     currentTargetId.set(targetId);
 
-    // One builder for both branches: the web path has no query string while
-    // the native path carries `?token=`, so appending by hand yields
-    // `?token=...?device=...` and breaks exactly the TV and mobile targets.
+    // One builder: the web path has no query string, native carries `?token=`, so manual appending yields `?token=...?device=...` on TV and mobile.
     const params = new URLSearchParams();
     params.set('device', targetId);
     params.set('ff', this.device.formFactor());
@@ -339,10 +323,7 @@ export class SseService implements OnDestroy {
           if (typeof id === 'string' && id) {
             this.connectionId.set(id);
           }
-          // The server replays its live leaves right after this event, so the
-          // burst that follows is a full snapshot. Everything else finished
-          // while we were disconnected: nothing announces that, and a leaf kept
-          // here shows a download badge that never goes away.
+          // The server replays its live leaves after this event, so the burst is a full snapshot; anything else finished while disconnected would keep a stale badge.
           this.downloadProgress.reset();
           this.activeProgress.set(new Map());
           // A reconnect means we don't know what we missed while disconnected.
@@ -390,14 +371,8 @@ export class SseService implements OnDestroy {
     };
   }
 
-  /** Cached: the device id is a persisted async read, so only the very first
-   *  connect pays for it.
-   *
-   *  A standalone shell (Capacitor, TV, desktop) has exactly one webview, so it
-   *  gets a bare device id. That makes its target id survive a relaunch, which
-   *  is what lets the server evict the previous, already-dead connection: a
-   *  killed webview sends no FIN, so the socket alone never reveals it. Only a
-   *  browser needs the per-tab suffix, because only a browser has tabs. */
+  /** Cached: the device id is a persisted async read. A standalone shell has one webview, so it gets a bare id that survives relaunch,
+   * letting the server evict the dead connection (a killed webview sends no FIN); only browsers need the per-tab suffix. */
   private async resolveTargetId(): Promise<string> {
     this.deviceIdPromise ??= getOrCreateDeviceId();
     const deviceId = await this.deviceIdPromise;
@@ -443,9 +418,7 @@ export class SseService implements OnDestroy {
       case 'subtitle.downloaded':
       case 'subtitle.failed':
       case 'subtitle.list_changed':
-        // These land asynchronously (an import storing embedded tracks, an OCR run starting
-        // or ending minutes after the request returned), so no client mutation invalidated
-        // the cached subtitle list — drop the media cache here so the next fetch is fresh.
+        // These land asynchronously (import, OCR), so no client mutation invalidated the cached subtitle list; drop the media cache.
         void invalidatePrefix('/api/media');
         if (event.type === 'subtitle.synced') this.subtitleSynced.next(Number(event['subtitleId']));
         // Toasts are handled by the media-detail component (only on the right page).
@@ -459,9 +432,7 @@ export class SseService implements OnDestroy {
         break;
       }
       case 'download.progress': {
-        // An empty `downloads` retires the media, so an event that carries no array at all must
-        // be ignored rather than read as one: "said nothing" and "said nothing is running" are
-        // opposite statements, and only the second may erase what is on screen.
+        // An empty `downloads` retires the media, so a missing array must be ignored: only an explicit empty one may erase what is on screen.
         const downloads = event['downloads'];
         if (!Array.isArray(downloads)) break;
         this.downloadProgress.applyProgress({
@@ -571,9 +542,7 @@ export class SseService implements OnDestroy {
     }
   }
 
-  /** Keep only the given subtitle ids in the translation-progress map — called
-   *  after the modal reloads on a terminal event so finished/failed runs don't
-   *  leave orphan entries behind. */
+  /** Keeps only the given ids in the translation-progress map so finished/failed runs leave no orphans after a terminal event. */
   retainTranslationProgress(activeIds: number[]) {
     this.translationProgress.update((m) => {
       const next: Record<number, number> = {};

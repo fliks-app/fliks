@@ -9,10 +9,7 @@ import { Subject } from 'rxjs';
 import { normalizeLangCode } from '../utils/language.utils';
 import type { QoeSample } from './playback-engine';
 
-/** Custom Cast message namespace shared between the Fliks receiver and
- *  every sender. Used today for receiver → sender error forwarding;
- *  reserved for any future bidirectional control message. Keep in sync
- *  with `cast-receiver/receiver.js`. */
+/** Custom Cast message namespace; keep in sync with `cast-receiver/receiver.js`. */
 const FLIKS_CAST_NAMESPACE = 'urn:x-cast:media.fliks.app';
 
 /** Receiver → sender playback-quality push; the sender folds it into its heartbeat. */
@@ -24,9 +21,7 @@ interface ReceiverQoe {
   sample: QoeSample;
 }
 
-/** Receiver → sender error payload. Fields mirror what the receiver
- *  pushes via `fliksBus.broadcast`; everything is optional because the
- *  receiver is forward-compatible with older senders. */
+/** Receiver to sender error payload; all fields optional for forward-compatibility with older senders. */
 interface ReceiverPlayerError {
   kind: 'player_error';
   at?: number;
@@ -55,19 +50,11 @@ export interface CastMediaInfo {
   subtitle?: string;
   posterUrl?: string;
   currentTime?: number;
-  /** When false, the receiver loads the media paused; defaults to autoplay.
-   *  Recovery reloads pass the receiver's current pause state so a paused cast
-   *  isn't force-resumed. */
+  /** When false the receiver loads paused; recovery reloads pass the current pause state so a paused cast isn't resumed. */
   autoplay?: boolean;
   subtitles?: { url: string; language: string; label: string }[];
   activeSubtitleTrackId?: number;
-  /**
-   * IDs forwarded to the Fliks Cast Receiver via `customData`. Reserved
-   * for receiver-side features that need to identify the media without
-   * re-parsing the stream URL — queue / next-episode, skip-intro
-   * markers, watch-history sync. Optional today; ignored by the
-   * Default Media Receiver fallback.
-   */
+  /** IDs forwarded to the Fliks receiver via `customData`; ignored by the Default Media Receiver fallback. */
   mediaId?: number;
   episodeId?: number;
   /** `.edl` ranges on the cast stream's timeline; the receiver applies them. */
@@ -95,9 +82,7 @@ interface NativeCastLoadOpts {
   activeSubtitleTrackId: number;
   autoplay: boolean;
   customData?: Record<string, unknown>;
-  /** Optional — when present, native plugin builds the platform's
-   *  text-track-style equivalent (TextTrackStyle on Android, GCKMedia-
-   *  TextTrackStyle on iOS) and attaches to MediaInformation. */
+  /** Mapped to the platform's native text-track style on Android and iOS and attached to MediaInformation. */
   textTrackStyle?: CastSubtitleStyle;
   /** The same styling already in Cast wire form. The desktop bridge talks the
    *  protocol directly and has no platform type to map the presets onto. */
@@ -115,9 +100,7 @@ export interface CastTextTrackStyle {
 }
 
 interface NativeCastPlugin {
-  /** `connected` + `resume` (the state last given to setResumeState) when a
-   *  session outlived the WebView or the app process. A session resumed later
-   *  brings `resume` on `castStateChanged`. */
+  /** `connected` + `resume` when a session outlived the WebView or app process; a later resume arrives on `castStateChanged`. */
   initialize(opts: { appId: string }): Promise<{
     available: boolean;
     connected?: boolean;
@@ -154,11 +137,8 @@ export interface CastDevice {
   connected?: boolean;
 }
 
-/** The Electron main process exposes the very same surface as the Capacitor
- *  plugin (see `desktop/src/shared/contract.ts`), plus an event subscription:
- *  contextIsolation keeps preload-world objects out of the page, so the desktop
- *  events arrive here and get re-dispatched as the window events the plugin
- *  fires natively. */
+/** Same surface as the Capacitor plugin (see `desktop/src/shared/contract.ts`) plus an event subscription,
+ * since contextIsolation keeps preload objects out of the page and events are re-dispatched as window events. */
 interface DesktopCastBridge extends NativeCastPlugin {
   on(handler: (event: { name: string; detail: unknown }) => void): () => void;
 }
@@ -174,15 +154,9 @@ const CAST_APP_ID = environment.castAppId;
 /** Ceiling on a connect attempt: a cold receiver launch is ~2 s on a Chromecast. */
 const CONNECT_TIMEOUT_MS = 30_000;
 
-/** Collapse a rapid seek burst (scrubbing / repeated ±10 taps) into a leading
- *  dispatch plus one trailing dispatch, so the Cast receiver's Shaka isn't hit
- *  with a storm of raw SEEK commands — that thrashes its independent audio and
- *  video buffers into settling at different targets, which reads as A/V desync. */
+/** Coalesces a seek burst into a leading plus one trailing dispatch; raw SEEK storms leave the receiver's A/V buffers at different targets. */
 const CAST_SEEK_COALESCE_MS = 220;
-/** After dispatching a seek, the receiver keeps echoing the OLD position for a
- *  beat; ignore those echoes until it reaches the target or this window elapses,
- *  so the seekbar pins at the target instead of bouncing back (and so successive
- *  ±10 taps accumulate off the pinned target, not the lagging receiver time). */
+/** The receiver echoes the old position after a seek; ignore echoes until the target is reached or this window elapses. */
 const CAST_SEEK_SETTLE_MS = 2500;
 /** How close a receiver time must be to the target to count as "arrived". */
 const CAST_SEEK_CONVERGE_TOL = 1.5;
@@ -198,10 +172,7 @@ export class CastService implements OnDestroy {
   /** Set when a session survived a WebView reload or a process restart: the state
    *  the player saved with {@link saveResumeState}. */
   readonly resumedState = signal<unknown>(null);
-  /** True while waiting for the Cast session to establish. Written only through
-   *  {@link beginConnecting} / {@link endConnecting}: the trigger it drives is
-   *  disabled while it is set, so a connect whose outcome never arrives would
-   *  wedge the picker until the app restarts. */
+  /** Write only via {@link beginConnecting} / {@link endConnecting}: the trigger is disabled while set, so a lost outcome would wedge the picker. */
   readonly connecting = signal(false);
   private connectTimeout: ReturnType<typeof setTimeout> | null = null;
   readonly currentTime = signal(0);
@@ -238,15 +209,11 @@ export class CastService implements OnDestroy {
   /** Every `player_error` the receiver reports, for QoE. */
   readonly receiverError$ = new Subject<{ code?: number; category: string; message?: string }>();
 
-  /** Whether a native-process Cast sender backs this client — the Capacitor
-   *  plugin on mobile, the Electron main process on desktop. Without one we are
-   *  in a browser and drive the Cast Web SDK instead. */
+  /** Native Cast sender (Capacitor plugin or Electron main); without one we drive the Cast Web SDK in a browser. */
   private readonly bridge = inject(CAST_BRIDGE).plugin;
   private readonly hasCastBridge = Capacitor.isNativePlatform() || !!DesktopCast;
 
-  /** True when the backing sender enumerates devices itself, so the picker
-   *  lists them instead of offering the single row that opens the browser's
-   *  own Cast dialog. */
+  /** True when the sender lists devices itself, else the picker offers the single row opening the browser's Cast dialog. */
   readonly enumerates = this.hasCastBridge;
   private readonly castSettings = inject(CastSettingsService);
   private readonly toast = inject(ToastService);
@@ -284,9 +251,7 @@ export class CastService implements OnDestroy {
     this.endConnecting();
   }
 
-  // ---------------------------------------------------------------------------
-  // Initialization
-  // ---------------------------------------------------------------------------
+  // ---- Initialization ----
 
   saveResumeState(state: unknown): void {
     if (this.hasCastBridge) void this.bridge.setResumeState?.({ state }).catch(() => {});
@@ -458,10 +423,7 @@ export class CastService implements OnDestroy {
     }
   }
 
-  /** Wires the receiver-side custom message bus to the sender's toast.
-   *  CAF auto-removes the listener when the session is torn down, but we
-   *  guard against re-adding on the same session so a reconnect with the
-   *  same id doesn't stack listeners and double-toast the same error. */
+  /** Guards against re-adding on the same session so a reconnect doesn't stack listeners and double-toast. */
   private attachReceiverMessageListener(session: any) {
     const sessionId = session?.getSessionId?.();
     if (sessionId && sessionId === this.errorListenerSessionId) return;
@@ -502,11 +464,7 @@ export class CastService implements OnDestroy {
     }
   }
 
-  /** Whether a receiver error is worth a fresh-stream reload rather than a
-   *  toast: a 410 (live session GC'd), Shaka's NETWORK category (1001-1006,
-   *  the 410 surfaces here as BAD_HTTP_STATUS), or CAF's network/HLS-network
-   *  detailed codes (300-399). Anything else (decode, unsupported codec) a
-   *  reload can't fix, so it falls through to the toast. */
+  /** Worth a fresh-stream reload: 410, Shaka NETWORK errors (1001-1006) or CAF network codes (300-399); anything else toasts. */
   private isRecoverableReceiverError(p: ReceiverPlayerError): boolean {
     if (p.httpStatus === 410) return true;
     const shaka = p.shakaErrorCode;
@@ -517,9 +475,6 @@ export class CastService implements OnDestroy {
   }
 
   private handleReceiverError(payload: ReceiverPlayerError) {
-    // Map the Shaka error code to a translation key when we recognise it
-    // so the toast wording is actionable; fall back to a generic message
-    // with the raw code for everything else.
     const knownKey = `cast.error.shaka_${payload.shakaErrorCode}`;
     const fallbackKey = 'cast.error.generic';
     const params = {
@@ -539,9 +494,7 @@ export class CastService implements OnDestroy {
     this.toast.error(message);
   }
 
-  // ---------------------------------------------------------------------------
-  // Public API
-  // ---------------------------------------------------------------------------
+  // ---- Public API ----
 
   requestSession() {
     this.beginConnecting();
@@ -572,9 +525,7 @@ export class CastService implements OnDestroy {
     this.connecting.set(false);
   }
 
-  /** List Cast devices visible to native discovery. Web has no enumeration
-   *  API, so this always resolves empty: the picker shows a single row that
-   *  falls back to `requestSession()` there instead. */
+  /** Web has no enumeration API, so this resolves empty and the picker falls back to `requestSession()`. */
   async getCastDevices(): Promise<CastDevice[]> {
     if (!this.hasCastBridge) return [];
     try {
@@ -588,9 +539,7 @@ export class CastService implements OnDestroy {
     }
   }
 
-  /** Select a device from `castDevices()`: native only. Rejects when the
-   *  route disappeared between listing and selection; the caller (the
-   *  picker) surfaces that as a toast rather than looking stuck. */
+  /** Native only; rejects if the route vanished between listing and selection, which the picker surfaces as a toast. */
   async selectCastDevice(id: string): Promise<void> {
     this.beginConnecting();
     try {
@@ -603,9 +552,7 @@ export class CastService implements OnDestroy {
 
   /** Rejects when the receiver refuses the LOAD. */
   async loadMedia(info: CastMediaInfo) {
-    // Drop any armed/settling seek from a prior stream so a trailing dispatch
-    // can't fire onto the freshly loaded session (quality change, recovery,
-    // sessionLost reload) at a stale target.
+    // Drops a pending seek from a prior stream so a trailing dispatch can't hit the new session at a stale target.
     this.clearSeekCoalescing();
     this.cancelTextReapply();
     this.wantedTextTrackId = info.activeSubtitleTrackId ?? 0;
@@ -621,9 +568,7 @@ export class CastService implements OnDestroy {
   }
 
   private async sendLoad(info: CastMediaInfo): Promise<void> {
-    // Forwarded to the receiver. Fields here MUST stay JSON-serialisable
-    // and free of secrets — `customData` is logged in plain text by the
-    // CAF debug overlay.
+    // Must stay JSON-serialisable and secret-free: `customData` is logged in plain text by the CAF debug overlay.
     const customData = {
       title: info.title,
       subtitle: info.subtitle,
@@ -685,10 +630,7 @@ export class CastService implements OnDestroy {
         return track;
       });
     }
-    // Always send the style: receiver bakes in its defaults when
-    // textTrackStyle is missing, so skipping it here would mask the
-    // user's prefs for any LOAD that happened to omit tracks (e.g.
-    // movie cast with no preselected sub).
+    // Always sent: the receiver applies its own defaults when the style is missing, masking the user's prefs.
     mediaInfo.textTrackStyle = this.buildWebTextTrackStyle(subtitleStyle);
 
     const request = new chrome.cast.media.LoadRequest(mediaInfo);
@@ -733,9 +675,7 @@ export class CastService implements OnDestroy {
     this.remotePlayerController.playOrPause();
   }
 
-  /** Set the receiver output level (0..1). Dragging the slider up lifts a mute,
-   *  mirroring the local player. Signals are set optimistically so the slider
-   *  is responsive; the receiver echo (web event / native poll) confirms. */
+  /** Raising the slider lifts a mute; signals are set optimistically and confirmed by the receiver echo. */
   setVolume(level: number) {
     const v = Math.min(1, Math.max(0, level));
     this.volume.set(v);
@@ -758,9 +698,6 @@ export class CastService implements OnDestroy {
   }
 
   toggleMute() {
-    // Toggle audible/silent (mirrors the local player): when already silent —
-    // muted or level at 0 — restore sound and bump a zero level to full so the
-    // button never sticks on mute.
     const silent = this.muted() || this.volume() === 0;
     if (!silent) { this.setMuted(true); return; }
     this.setMuted(false);
@@ -773,18 +710,11 @@ export class CastService implements OnDestroy {
     // Whether a prior seek is still in flight — captured BEFORE the window is
     // refreshed below (mirrorReceiverTime zeroes it once the receiver arrives).
     const settling = this.seekSettleUntil > Date.now();
-    // Pin the bar at the target and mark the seek in-flight BEFORE dispatching,
-    // so a burst reads the pinned target (accumulating ±10 taps correctly) and
-    // stale receiver echoes can't bounce it back (see mirrorReceiverTime).
+    // Pin the target and mark the seek in flight before dispatching, so bursts accumulate and stale echoes can't bounce it back.
     this.pendingSeekTarget = target;
     this.currentTime.set(target);
     this.seekSettleUntil = Date.now() + CAST_SEEK_SETTLE_MS;
-    // Leading edge only while idle: a lone tap dispatches immediately and stays
-    // snappy. Once a seek is in flight, every further tap folds into the single
-    // trailing dispatch instead of firing its own raw seek, so the receiver runs
-    // ONE buffer-flush cycle for the final target. Raw back-to-back seeks
-    // interrupt the receiver's independent audio and video refills mid-append,
-    // leaving the two buffers settled at different targets (A/V desync).
+    // Leading edge only while idle; later taps fold into one trailing dispatch so the receiver runs a single buffer flush (A/V desync otherwise).
     if (!settling) this.dispatchSeek(target);
     // Trailing edge: (re)arm; once the burst stops, send the final settled target
     // (skipped when it equals the leading dispatch, i.e. a lone seek).
@@ -809,10 +739,7 @@ export class CastService implements OnDestroy {
     this.remotePlayerController?.seek();
   }
 
-  /** Mirror a receiver position echo into `currentTime`, unless a coalesced seek
-   *  is still settling and this echo is the receiver's pre-seek position — hold
-   *  the pinned target until it arrives (within tolerance) or the settle window
-   *  elapses, so the bar doesn't bounce back and can't wedge on a new load. */
+  /** Holds the pinned target while a settling seek still echoes the pre-seek position, until it arrives or the window elapses. */
   private mirrorReceiverTime(t: number) {
     if (this.seekSettleUntil > 0) {
       const target = this.pendingSeekTarget;
@@ -872,16 +799,7 @@ export class CastService implements OnDestroy {
     this.textReapplyTimer = null;
   }
 
-  /**
-   * Switch the active audio rendition by language + name through the
-   * standard CAF media bus. The receiver mirrors Shaka's HLS audio
-   * renditions into MediaInformation with type=AUDIO so each becomes a
-   * regular CAF Track addressable via EditTracksInfoRequest (web) or
-   * RemoteMediaClient.setActiveMediaTracks (native).
-   *
-   * Returns false when no matching track is found — caller falls back
-   * to a full ffmpeg-restart reload in that case.
-   */
+  /** Switches the audio rendition by language + name via the CAF media bus; returns false if no track matches (caller does a full reload). */
   async setActiveAudioLanguage(language: string, name: string): Promise<boolean> {
     await this.pendingLoad;
     if (this.hasCastBridge) {
@@ -913,14 +831,7 @@ export class CastService implements OnDestroy {
     return this.applyActiveTracks({ audioId: target.trackId });
   }
 
-  /**
-   * Send an EditTracksInfoRequest with the union of AUDIO + TEXT active IDs.
-   * CAF replaces the whole active set in one shot, so we have to send both
-   * to keep them alive. Field semantics:
-   *   - undefined → keep current active track of that type
-   *   - null      → disable that track type
-   *   - number    → set as new active track of that type
-   */
+  /** CAF replaces the whole active set, so AUDIO and TEXT ids are sent together: undefined keeps, null disables, number sets. */
   private applyActiveTracks(update: {
     audioId?: number | null;
     textId?: number | null;
@@ -944,10 +855,7 @@ export class CastService implements OnDestroy {
     return true;
   }
 
-  /** Map subtitle presets (size / colour / shadow / background — the same
-   *  vocabulary the local player uses) onto the web Cast SDK's
-   *  `TextTrackStyle`. Native plugins replicate this mapping for parity
-   *  so the receiver sees identical Cast values regardless of sender. */
+  /** Native plugins replicate this mapping so the receiver sees identical values regardless of sender. */
   private buildWebTextTrackStyle(s: CastSubtitleStyle) {
     const wire = buildCastTextTrackStyle(s);
     const style = new chrome.cast.media.TextTrackStyle();
@@ -971,14 +879,7 @@ function buildCastTextTrackStyle(s: CastSubtitleStyle): CastTextTrackStyle {
   };
 }
 
-// Cast Web SDK wire format mappings. The size-scale table is
-// **intentionally smaller** than the Native one (see
-// `utils/subtitle-presets.ts`) — Cast receivers render at a larger
-// base size, so the same `'normal'` preset would look oversized at
-// 1.0. Colour and edge tables stay local because Cast uses
-// `#RRGGBBAA` (alpha last) while the native side uses `#RRGGBB` and
-// Android-format `#AARRGGBB`. Centralising those would force a
-// runtime byte-shuffle for no readability gain.
+// Smaller than the Native scale (Cast renders larger); colour/edge tables stay local since Cast uses `#RRGGBBAA`.
 const SUB_SIZE_SCALE = CAST_SUBTITLE_SIZE_SCALE;
 
 const SUB_FG_COLOR: Record<string, string> = {

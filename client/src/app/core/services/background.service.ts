@@ -11,11 +11,7 @@ const AMBIENT_TTL = 5 * 60 * 1000;
 /** Settings and admin pages take no backdrop at all. */
 const BARE_ROUTES = ['/app-settings', '/account', '/admin'];
 
-/**
- * Global page-background image. A media page declares its own fanart and wins
- * while it is on screen; every other page shows the ambient image, drawn from
- * the viewer's recommendations and held across navigations.
- */
+/** Global page background: a media page's own fanart wins while on screen, other pages show the ambient image held across navigations. */
 @Injectable({ providedIn: 'root' })
 export class BackgroundService {
   private readonly router = inject(Router);

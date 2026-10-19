@@ -1,18 +1,7 @@
 import { Directive, ElementRef, OnDestroy, computed, effect, inject, input, signal } from '@angular/core';
 
-/**
- * Drives a show-more / show-less toggle for a `line-clamp-*` paragraph. CSS
- * can't report that a clamp took effect, so the overflow is measured — and
- * re-measured on every resize, since a paragraph hidden by a responsive
- * `md:hidden` wrapper measures as zero-height until its layout is visible.
- *
- * Usage:
- *   <p appClampToggle #syn="clampToggle" [class.line-clamp-4]="!syn.expanded()">{{ text }}</p>
- *   @if (syn.showToggle()) { <button (click)="syn.toggle()">…</button> }
- *
- * Bind the text (`[appClampToggle]="text"`) when it can change in place, so
- * the paragraph collapses and re-measures instead of keeping a stale verdict.
- */
+/** Drives a show-more / show-less toggle for a `line-clamp-*` paragraph by measuring overflow (CSS can't report a clamp), re-measured on resize
+ *  since a `md:hidden` ancestor measures zero. Usage: `<p appClampToggle #syn="clampToggle" ...>`; bind the text (`[appClampToggle]="text"`) if it changes in place. */
 @Directive({
   selector: '[appClampToggle]',
   standalone: true,

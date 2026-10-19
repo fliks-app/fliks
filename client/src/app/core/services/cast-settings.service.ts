@@ -1,12 +1,6 @@
 import { Injectable, signal } from '@angular/core';
 
-/** Subtitle appearance presets — same vocabulary as the local player
- *  settings (`SubtitleAppearanceComponent`). Each consumer translates
- *  the presets to its native rendering: Shaka CSS for local playback,
- *  Cast SDK `TextTrackStyle` enums + `#AARRGGBB` colours for the
- *  receiver. Storing presets (rather than RGB / numeric scale) keeps
- *  one shared UI between local and Cast and matches user expectations
- *  ("Normal / Grand", "Blanc / Jaune") rather than raw values. */
+/** Subtitle presets, same vocabulary as the local player settings; each consumer maps them to its rendering (Shaka CSS, Cast `TextTrackStyle`). */
 export interface CastSubtitleStyle {
   size: string;        // 'xsmall' | 'small' | 'normal' | 'large' | 'xlarge'
   color: string;       // 'white' | 'yellow' | 'green' | 'cyan'
@@ -15,9 +9,7 @@ export interface CastSubtitleStyle {
 }
 
 export interface CastDeviceCapabilities {
-  /** Audio codecs `MediaSource.isTypeSupported` accepts on the receiver
-   *  (`'aac' | 'aac-he' | 'ac3' | 'eac3' | 'opus'`). What MSE accepts —
-   *  may differ from the firmware's HDMI-passthrough capability set. */
+  /** Codecs `MediaSource.isTypeSupported` accepts on the receiver, which may differ from the HDMI-passthrough set. */
   audioCodecs: string[];
   /** Video codecs `MediaSource.isTypeSupported` accepts on the receiver. */
   videoCodecs: string[];
@@ -28,22 +20,15 @@ export interface CastSettings {
   maxQuality: string; // 'original' | '2160p' | '1080p' | '720p' | '480p'
   audioChannels: number; // 2 = stereo, 6 = 5.1, 8 = 7.1
   subtitleStyle: CastSubtitleStyle;
-  /** List household members' devices among the remote targets. Holding the
-   *  permission is not the same as wanting the longer list every day, so this
-   *  is a per-device display choice rather than a second capability. */
+  /** Per-device display choice: holding the permission doesn't mean wanting the longer list daily. */
   showHouseholdTargets: boolean;
-  /** Capabilities cache, keyed by Cast device friendly name. Populated on
-   *  first session via the `urn:x-cast:app.fliks.caps` namespace probe so
-   *  subsequent sessions to the same device skip the round-trip. */
+  /** Cache keyed by device friendly name, filled by the `urn:x-cast:app.fliks.caps` probe so later sessions skip the round-trip. */
   capabilities?: Record<string, CastDeviceCapabilities>;
 }
 
 const STORAGE_KEY = 'cast.settings';
 
-/** Defaults match the receiver's bake-in (`cast-receiver/receiver.js`)
- *  so the user-never-opened-settings path is visually identical
- *  whether the receiver applies its fallback or the sender forwards
- *  these presets. */
+/** Match the receiver's bake-in (`cast-receiver/receiver.js`) so a first run looks the same whoever applies the fallback. */
 export const DEFAULT_CAST_SUBTITLE_STYLE: CastSubtitleStyle = {
   size: 'normal',
   color: 'white',
@@ -64,12 +49,7 @@ export class CastSettingsService {
   readonly settings = signal<CastSettings>(this.load());
 
   constructor() {
-    // First-run: persist the defaults so the cast-settings form, the
-    // localStorage payload, and what the sender actually transmits to
-    // the receiver all stay in lockstep. Without this seed, an empty
-    // storage would still work in-memory (the signal is hydrated from
-    // DEFAULTS), but a hard reload, a second tab, or any future code
-    // path that re-reads storage would diverge silently.
+    // First-run seed keeps the form, localStorage and what the sender transmits in lockstep; unseeded, a reload or second tab would diverge.
     try {
       if (!localStorage.getItem(STORAGE_KEY)) {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(this.settings()));
@@ -103,9 +83,7 @@ export class CastSettingsService {
     return this.settings();
   }
 
-  /** Look up cached MSE-codec capabilities for a Cast device. Returns
-   *  `null` on first sight; the sender then probes the receiver and
-   *  calls {@link setDeviceCapabilities} to populate the cache. */
+  /** `null` on first sight; the sender then probes and calls {@link setDeviceCapabilities}. */
   getDeviceCapabilities(deviceName: string): CastDeviceCapabilities | null {
     const caps = this.settings().capabilities?.[deviceName];
     return caps ?? null;

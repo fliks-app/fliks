@@ -1,18 +1,8 @@
 import { Injectable, Signal, computed, inject } from '@angular/core';
 import { DeviceService, TvPlatform } from './device.service';
 
-/**
- * Compatibility façade over {@link DeviceService}.
- *
- * Historically owned the `body.tv` toggling and TV detection. That logic now
- * lives in `DeviceService`, which also distinguishes phone vs tablet. This
- * façade is kept so existing consumers (TvSpatialNavService, CardActions,
- * PlayerControls, …) keep their imports until migrated.
- *
- * `tvPlatform` exposes which TV OS is underneath (when any) so per-OS glue
- * (Tizen `tvinputdevice`, webOS `platformBack`) can branch without leaking
- * an OS name into UI code that only cares about the 10-foot form factor.
- */
+/** Compatibility façade over {@link DeviceService} for existing consumers.
+ * `tvPlatform` exposes the TV OS (Tizen, webOS) so per-OS glue can branch without leaking OS names into UI code. */
 @Injectable({ providedIn: 'root' })
 export class TvService {
   private readonly device = inject(DeviceService);

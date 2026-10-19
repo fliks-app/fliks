@@ -7,21 +7,8 @@ import {
   restoreOpenerFocus,
 } from '../../core/services/focusable.constants';
 
-/**
- * Click-driven `.dropdown-open` toggle for any DaisyUI dropdown trigger.
- *
- * DaisyUI's default open mechanism is `:focus-within`, which we neutralise
- * globally so Tab / D-pad focus alone never auto-opens a dropdown. With
- * focus-within out, this directive provides the click / keyboard activation
- * path. Outside clicks and the back button (via DismissableStackService)
- * close the dropdown.
- *
- * Usage:
- *   <div class="dropdown">
- *     <div appDropdownToggle tabindex="0" role="button">…</div>
- *     <div class="dropdown-content">…</div>
- *   </div>
- */
+/** Click-driven `.dropdown-open` toggle for DaisyUI dropdowns, whose `:focus-within` opening is neutralised globally;
+ *  outside clicks and back (DismissableStackService) close it. Usage: `<div appDropdownToggle tabindex="0" role="button">` beside `.dropdown-content`. */
 
 @Directive({
   selector: '[appDropdownToggle]',
@@ -31,10 +18,7 @@ import {
   },
 })
 export class DropdownToggleDirective implements OnDestroy {
-  /** Close handler of the dropdown currently open, if any. Opening a
-   *  dropdown closes this one first so only one stays open — the trigger's
-   *  `stopPropagation` otherwise stops an open dropdown's outside-click
-   *  handler from firing when another trigger is clicked. */
+  /** Close handler of the open dropdown: opening another closes it first, since the trigger's `stopPropagation` blocks outside-click handlers. */
   private static openClose: (() => void) | null = null;
 
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
@@ -79,10 +63,7 @@ export class DropdownToggleDirective implements OnDestroy {
 
     dropdown.classList.add('dropdown-open');
     const content = dropdown.querySelector<HTMLElement>('.dropdown-content');
-    // Move focus into the menu so arrow keys step between items
-    // (spatial-nav scopes nav to `.dropdown-open .dropdown-content`)
-    // and keyboard users can act without an extra Tab. Standard ARIA
-    // menu pattern.
+    // Focus into the menu so arrows step between items (spatial-nav scopes to `.dropdown-open .dropdown-content`), per the ARIA menu pattern.
     queueMicrotask(() => {
       focusOverlayEntry(initialOverlayFocus(content));
     });
@@ -95,19 +76,11 @@ export class DropdownToggleDirective implements OnDestroy {
     DropdownToggleDirective.openClose = close;
     this.dismissStack.push(close);
     this.outsideClickHandler = (e: MouseEvent) => {
-      // Close on any click that isn't the trigger itself: outside the
-      // dropdown (typical click-out) AND inside the dropdown-content
-      // (menu item picked → action handled elsewhere, dropdown should
-      // dismiss). The trigger is handled by its own (click) toggle.
+      // Close on any click except the trigger (handled by its own toggle): outside, or a picked item inside the content.
       if (this.host.nativeElement.contains(e.target as Node)) return;
       close();
     };
-    // Tab trap: spatial-nav already scopes arrow keys when focus is
-    // inside `.dropdown-open .dropdown-content`, but Tab uses the
-    // browser's native focus order and walks straight out. Wrap Tab /
-    // Shift+Tab at the menu boundaries so keyboard users stay inside
-    // until they explicitly dismiss (Escape via DismissableStackService,
-    // click outside, or pick an item).
+    // Tab trap: Tab uses the native focus order and would walk out of the menu; wrap it at the boundaries until dismissed.
     this.tabKeyHandler = (e: KeyboardEvent) => {
       if (e.key !== 'Tab' || !content) return;
       const items = Array.from(

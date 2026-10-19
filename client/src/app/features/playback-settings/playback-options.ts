@@ -2,11 +2,7 @@
 
 import { SUBTITLE_LANGUAGE_CODES } from '../../core/constants/subtitle-languages';
 
-/**
- * The languages a preference can name: the canonical app list, so the picker
- * can't drift from what the server stores, plus the empty "no preference".
- * Labels come from `LocalizeLanguagePipe`, which is already translated.
- */
+/** Preference languages: the canonical app list (so the picker can't drift from the server) plus the empty "no preference"; labels come pre-translated from `LocalizeLanguagePipe`. */
 export const LANGUAGE_CODE_OPTIONS: readonly string[] = ['', ...SUBTITLE_LANGUAGE_CODES];
 
 export const AUDIO_SELECTION_MODE_OPTIONS = [

@@ -31,12 +31,7 @@ export class InfiniteScrollList<T extends { id: number }> {
     this.batchSize = batchSize;
   }
 
-  /**
-   * Replace all items. Preserves the current visible window (capped to the
-   * new length) — collapsing back to `batchSize` on every reload would shrink
-   * the page under a user who'd scrolled past the first batch, breaking
-   * scroll restoration on route reattach.
-   */
+  /** Replace all items, keeping the visible window (capped to the new length): collapsing to `batchSize` breaks scroll restoration on reattach. */
   setItems(items: T[], titleFn?: (item: T) => string) {
     this.allItems = items;
     if (titleFn) this.titleFn = titleFn;
@@ -57,9 +52,7 @@ export class InfiniteScrollList<T extends { id: number }> {
     return this.allItems;
   }
 
-  /** The letter section item `index` falls in — the alphabet index reads this
-   *  from the rendered row rather than from the DOM, which under virtual
-   *  scrolling only holds a handful of rows. */
+  /** The letter section of item `index`, read from the model since virtual scrolling renders only a few rows. */
   letterAt(index: number): string {
     let current = this.letterBoundaries[0]?.letter ?? '';
     for (const b of this.letterBoundaries) {
@@ -84,9 +77,7 @@ export class InfiniteScrollList<T extends { id: number }> {
     this.updateVisible();
   }
 
-  /** Coalesce scroll-driven work into one frame: the active-letter tracker
-   *  reads geometry, and doing that per scroll event forces a layout flush on
-   *  every one of them. */
+  /** Coalesce scroll-driven work into one frame: the letter tracker reads geometry, forcing a layout flush per event. */
   private scheduleScrollWork() {
     if (this.scrollRaf !== null) return;
     this.scrollRaf = requestAnimationFrame(() => {
@@ -95,12 +86,7 @@ export class InfiniteScrollList<T extends { id: number }> {
     });
   }
 
-  /**
-   * Scroll to the first item matching a letter.
-   * @param letter   The alphabet letter (or '#' for non-alpha).
-   * @param titleFn  Extract the sortable title from an item.
-   * @param idPrefix DOM id prefix (e.g. 'movie', 'person').
-   */
+  /** Scroll to the first item matching a letter ('#' for non-alpha); `idPrefix` is the DOM id prefix (e.g. 'movie'). */
   scrollToLetter(
     letter: string,
     titleFn: (item: T) => string,

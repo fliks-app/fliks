@@ -1,15 +1,8 @@
 import { Pipe, PipeTransform, inject } from '@angular/core';
 import { TranslateService } from '@ngx-translate/core';
 
-/**
- * Formats a date in the currently-selected language's convention (fr →
- * DD/MM/YYYY, en → M/D/YYYY, …). Impure so it re-renders on a live language
- * switch — Angular's DatePipe can't, since `LOCALE_ID` is fixed at bootstrap.
- * Pass `Intl.DateTimeFormatOptions` (e.g. `{ dateStyle: 'long' }` or
- * `{ dateStyle: 'short', timeStyle: 'short' }`) for other shapes; the default
- * is a numeric date. Date-only strings (`YYYY-MM-DD`) format in UTC to avoid an
- * off-by-one day.
- */
+/** Formats a date in the selected language's convention; impure so it follows a live language switch (DatePipe's `LOCALE_ID` is fixed at bootstrap).
+ * Date-only strings (`YYYY-MM-DD`) format in UTC to avoid an off-by-one day. */
 @Pipe({ name: 'localeDate', standalone: true, pure: false })
 export class LocaleDatePipe implements PipeTransform {
   private readonly translate = inject(TranslateService);

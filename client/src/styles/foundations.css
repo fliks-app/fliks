@@ -1,15 +1,7 @@
-/* `tv:` variant — applies when body.tv is set. Lets responsive utilities
-   target Android TV without depending on viewport width breakpoints (a
-   1080p TV reports innerWidth=960 due to DPR=2, so it falls into the md
-   range and Tailwind packs the same column count as a portrait tablet). */
+/* `tv:` variant (body.tv): a 1080p TV reports innerWidth=960 (DPR 2), so width breakpoints would pack tablet columns. */
 @custom-variant tv (body.tv &);
 
-/* webOS reports `(hover: none)` even though the Magic Remote is a real
-   pointer, so Tailwind's default gate leaves every `hover:` utility inert on
-   LG. Re-open the variant there — and only there, since a touch device that
-   reports no hover would latch the state after a tap. Scoped to <html>, not
-   <body>: dropdown-menu and popover-menu reparent their host to
-   `document.documentElement`, outside <body>. */
+/* webOS reports `(hover: none)` despite its pointer remote; re-open hover there only, scoped to <html> since popover hosts reparent outside <body>. */
 @custom-variant hover {
   @media (hover: hover) {
     &:hover {
@@ -21,9 +13,7 @@
   }
 }
 
-/* daisyUI authors its component hover states in its own `@media (hover: hover)`
-   block, which the variant above can't reach — mirrored here so LG gets them
-   too. Re-check the list against the built CSS on a daisyUI upgrade. */
+/* Mirrors daisyUI's `@media (hover: hover)` states, which the variant above can't reach; re-check on daisyUI upgrades. */
 html.tv-webos .btn:hover {
   --btn-bg: var(--btn-color, var(--color-base-200));
 }
@@ -67,14 +57,7 @@ html.tv-webos .table-zebra tbody tr.row-hover:where(:nth-child(2n)):hover {
   --menu-active-fg: var(--color-base-content);
 }
 
-/* Thinner focus outline on form fields. Suppress daisyUI's border on focus —
-   the focus ring (outline) is the only visual cue we want, the extra white
-   border doubled up with the ring looks noisy.
-
-   A select uses `:focus-visible` rather than `:focus`: it has no caret, so a
-   tap has nothing left to show once the ring is suppressed, and dropping the
-   border too made a tapped field look borderless. Text fields keep `:focus` —
-   their caret is the indication and the ring is not the only cue. */
+/* Focus ring is the only cue, so drop daisyUI's border; selects use `:focus-visible` as they have no caret to show on tap. */
 .select:focus-visible, .input:focus, .input:focus-within, .textarea:focus {
   outline-width: 1px;
   outline-offset: 0px;
@@ -87,28 +70,17 @@ html.tv-webos .table-zebra tbody tr.row-hover:where(:nth-child(2n)):hover {
   border-radius: 0.25rem;
 }
 
-/* daisyUI draws the dropdown chevron ~16px from the trailing edge but only
-   reserves 1.75rem of end padding, so the value text crowds the arrow. Give
-   every select a touch more trailing room (logical property keeps it RTL-safe).
-   The chevron position is size-independent, so one value fits every modifier. */
+/* daisyUI reserves only 1.75rem of end padding but draws the chevron about 16px in; extra room keeps text off it (size-independent, RTL-safe). */
 .select {
   padding-inline-end: 2.25rem;
 }
 
-/* daisyUI ships `.tab` flat by default, which makes the global focus ring
-   (a box-shadow that traces border-radius) render as a square notched
-   into the otherwise rounded UI. Give every tab the same radius as the
-   rest of the design tokens so the ring reads consistently — inside
-   `.tabs-boxed` they still nest cleanly under the larger container. */
+/* daisyUI tabs are square, so the focus ring (a box-shadow tracing the radius) looks notched; use the design-token radius. */
 .tab {
   border-radius: var(--radius-box, 0.5rem);
 }
 
-/* Flex children inherit `min-width: auto`, which prevents inner text from
-   wrapping inside DaisyUI labels — the label expands to the longest line
-   instead, causing horizontal overflow. Force the side div + alt text to
-   shrink so paragraphs wrap normally. DaisyUI also applies `white-space:
-   nowrap` to `.label-text*` spans, which we override to allow line breaks. */
+/* Flex children keep `min-width: auto` and daisyUI sets `white-space: nowrap` on `.label-text*`, so labels overflow instead of wrapping. */
 .label.cursor-pointer > div,
 .label > .label-text-alt {
   min-width: 0;
@@ -119,12 +91,7 @@ html.tv-webos .table-zebra tbody tr.row-hover:where(:nth-child(2n)):hover {
   white-space: normal;
 }
 
-/* Global background veil — sits over the fanart image inside
-   `<app-background>`. Hard-coded rgba so the rule survives the
-   Tizen / webOS downlevel pass (Chromium 85 doesn't grok
-   `color-mix`, and the preset-env fallback for Tailwind's
-   `bg-base-100/N` drops the alpha and yields a 100%-opaque veil).
-   `#1d232a` matches daisyUI's dark theme `--color-base-100`. */
+/* Hard-coded rgba: Chromium 85 lacks `color-mix` and the downlevel `bg-base-100/N` fallback drops alpha; `#1d232a` is daisyUI dark `--color-base-100`. */
 .app-bg-veil {
   background-color: var(--bg-veil);
 }
@@ -156,10 +123,7 @@ html.tv-webos .table-zebra tbody tr.row-hover:where(:nth-child(2n)):hover {
   --bg-veil: rgba(29, 35, 42, 0.95);
 }
 
-/* Sidebar veil when a fanart background is showing — frosted
-   look without depending on Tailwind's color-mix-based
-   `bg-base-100/40`. Phones/tablets/desktop: 40 % alpha. TV: a
-   little stronger so the menu text doesn't bleed into the fanart. */
+/* Frosted sidebar veil without Tailwind's color-mix; stronger on TV so menu text doesn't bleed into the fanart. */
 .app-sidebar-veil {
   background-color: var(--sidebar-veil);
 }
@@ -167,10 +131,7 @@ body.tv .app-sidebar-veil {
   background-color: rgba(29, 35, 42, 0.55);
 }
 
-/* Topbar veil when a fanart background is showing. Non-TV gets a
-   light frosted-glass tint; TV stays fully transparent so the
-   fanart reads cleanly across the top of the screen at 10-foot
-   viewing distance. */
+/* Light tint on non-TV; fully transparent on TV so the fanart reads cleanly at 10-foot distance. */
 .app-navbar-veil {
   background-color: rgba(29, 35, 42, 0.4);
 }
@@ -187,17 +148,8 @@ body.native {
 body.native.immersive {
   padding: 0 !important;
 }
-/* Suppress browser-style text / image selection on Capacitor builds.
-   A long-press on iOS (and on some Android builds) otherwise opens the
-   system "Copy / Save Image" menu when the user just meant to focus or
-   hold a media card. Inputs, textareas and explicit `[contenteditable]`
-   regions are re-enabled below so forms and dialogs still work. The
-   `.select-text` opt-in lets specific surfaces (e.g. release notes,
-   stack traces in the debug panel) keep selection if we want it.
-
-   Scoped to <html>, not <body>: overlays are reparented under <html> to
-   escape stacking contexts, so a body-scoped rule never reaches a sheet's
-   own poster and title. */
+/* Disables selection on Capacitor builds (long-press opens the system Copy/Save Image menu); inputs and `.select-text` opt back in.
+ * Scoped to <html> since overlays are reparented there, out of reach of a body-scoped rule. */
 html.native,
 html.native * {
   -webkit-user-select: none;
@@ -239,10 +191,7 @@ html.native-player-active app-live-player {
 .native-player {
   background-color: transparent !important;
 }
-/* The backdrop reaches the player route from the app root, and its veil paints
-   an opaque tint the video would sit behind. Hidden rather than undisplayed:
-   coming back from `display: none` counts as entering, which replays the
-   layers' `@starting-style` and fades in an image that never left. */
+/* Hidden, not `display: none`: leaving `none` replays the layers' `@starting-style` and fades in an image that never left. */
 html.native-player-active app-background {
   visibility: hidden !important;
 }
@@ -279,17 +228,7 @@ body.native.hero-page {
   contain-intrinsic-size: auto 10rem;
 }
 
-/* Browsers without `aspect-ratio` (the TV WebView's Chromium 85) ignore the
-   poster figure's aspect-2/3, so it reserves no height and the lazy <img>
-   only claims space once it decodes — every decode mid-scroll reflows the
-   whole non-virtualized library grid. A ratio `::before` reserves the box
-   instead, and the content is lifted out of the flow over it.
-   Modern browsers keep the native aspect-ratio path (this block is skipped).
-
-   The ratio goes on the pseudo-element rather than the box itself
-   (`height: 0` + `padding-bottom`): a zero-height content box breaks the
-   `overflow: hidden` + `border-radius` clip on this WebView, which square off
-   the corners of every card that rounds its art. */
+/* Chromium 85 TV WebView lacks `aspect-ratio`; a `::before` ratio box reserves the poster height (not `height: 0` + padding, which breaks the overflow/radius clip). */
 @supports not (aspect-ratio: 1 / 1) {
   app-media-card figure.aspect-2\/3::before,
   .animate-pulse .aspect-2\/3::before {
@@ -377,9 +316,7 @@ body.native.hero-page {
   animation: slide-up 0.18s ease-out;
 }
 
-/* Indeterminate seekbar loading sweep: a full-width gradient strip whose
-   transparent edges keep the reset from 100%→-100% from reading as a hard
-   gap, so the highlight appears to drift across the track on a loop. */
+/* Full-width gradient strip with transparent edges so the 100% to -100% reset doesn't read as a gap. */
 @keyframes seekbar-indeterminate {
   from {
     transform: translateX(-100%);
@@ -401,10 +338,7 @@ body.native.hero-page {
   }
 }
 
-/* Floating player cues (skip-intro / next-episode) carry an in-button
-   countdown: a dimmed overlay anchored to the right edge that retracts from
-   full width to nothing, "filling" the button as its on-screen window elapses.
-   The duration is bound inline so it tracks the parent's retract timer. */
+/* In-button countdown overlay retracting right to left; duration bound inline to track the parent's timer. */
 @keyframes player-cue-sweep {
   from {
     width: 100%;

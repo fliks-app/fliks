@@ -3,18 +3,8 @@ import { BackgroundService } from '../../../core/services/background.service';
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 import { CachedSrcDirective } from '../../directives/cached-src.directive';
 
-/**
- * Page-wide background renderer. Mounted at the app root, above the outlet
- * every route swaps through, so the image covers everything — including under
- * the sidebar. It has to sit above the outlet rather than in the layout: the
- * player is a top-level route and would take the layout, and this, with it.
- *
- * Crossfade: a ring of three layers. The next url is written into the layer
- * nobody can see, brought up only once its image has decoded (an <img> keeps
- * painting its old image until then), and fades in over the outgoing image,
- * which stays fully opaque underneath so the fade goes image to image and
- * never dips through the base colour. Only a fade to nothing dims a layer.
- */
+/** Page-wide background, mounted above the route outlet (the player is a top-level route and would take a layout-level one with it).
+ *  Crossfade ring of three layers: the next url fades in over the opaque outgoing image once decoded; only a fade to nothing dims a layer. */
 const LAYERS = 3;
 
 @Component({

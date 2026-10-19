@@ -19,10 +19,7 @@ function weighted(rows: QoeDeviceSummary[], pick: (r: QoeDeviceSummary) => numbe
   return n ? known.reduce((a, r) => a + pick(r)! * r.sessions, 0) / n : null;
 }
 
-/**
- * Merges the server's per-raw-label rows into the devices the admin recognises: a user agent changes with every
- * browser version, so one "Chrome on Linux" arrives as several rows.
- */
+/** Merges per-raw-label server rows into recognised devices: a user agent changes per browser version, so one "Chrome on Linux" arrives as several rows. */
 export function mergeDevices(rows: QoeDeviceSummary[], labelOf: (r: QoeDeviceSummary) => string): DeviceRow[] {
   const groups = new Map<string, QoeDeviceSummary[]>();
   for (const r of rows) {

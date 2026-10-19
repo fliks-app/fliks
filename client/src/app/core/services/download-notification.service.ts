@@ -53,10 +53,7 @@ const DownloadNotification = Capacitor.isNativePlatform()
   ? registerPlugin<DownloadNotificationPlugin>('DownloadNotification')
   : null;
 
-/**
- * Bridge to native ExoPlayer DownloadManager (Android) / AVAssetDownloadTask (iOS).
- * Web: no-op (Shaka offline handles everything in JS).
- */
+/** Bridge to the native ExoPlayer DownloadManager (Android) / AVAssetDownloadTask (iOS); no-op on web (Shaka offline). */
 @Injectable({ providedIn: 'root' })
 export class DownloadNotificationService {
   private readonly isNative = Capacitor.isNativePlatform();
@@ -83,22 +80,13 @@ export class DownloadNotificationService {
     }
   }
 
-  /**
-   * Start an HLS download via the native platform's download manager.
-   * `notif` carries pre-translated banner copy for iOS completion/failure
-   * notifications (ignored on Android, which builds its own foreground-service
-   * notification).
-   */
+  /** Starts an HLS download via the native manager; `notif` is pre-translated iOS banner copy (Android builds its own). */
   startDownload(id: string, hlsUrl: string, token: string, notif?: DownloadNotifStrings): void {
     if (!this.isNative || !DownloadNotification) return;
     DownloadNotification.startDownload({ id, hlsUrl, token, ...(notif ?? {}) }).catch(() => {});
   }
 
-  /**
-   * iOS: resolve the local `file://` URL of a completed download for offline
-   * playback. Returns null on Android (offline playback there replays the
-   * remote HLS URL through ExoPlayer's CacheDataSource) or when not found.
-   */
+  /** iOS: local `file://` URL of a completed download; null on Android (replays the remote HLS URL via ExoPlayer cache) or when not found. */
   async getOfflineUrl(id: string): Promise<string | null> {
     if (!DownloadNotification || !DownloadNotification.getOfflineUrl) return null;
     try {
@@ -109,10 +97,7 @@ export class DownloadNotificationService {
     }
   }
 
-  /** Update the copy on the iOS Live Activity tracking the download queue.
-   *  Gated on the platform, not on the method existing: registerPlugin hands
-   *  back a proxy that fabricates a wrapper for any name, so an Android call
-   *  would cross the bridge only to be rejected as unimplemented. */
+  /** Updates the iOS Live Activity copy; gated on platform since registerPlugin's proxy fabricates any method and Android would reject it. */
   setActivityCopy(copy: DownloadActivityCopy): void {
     if (!DownloadNotification || Capacitor.getPlatform() !== 'ios') return;
     DownloadNotification.setActivityCopy(copy).catch(() => {});

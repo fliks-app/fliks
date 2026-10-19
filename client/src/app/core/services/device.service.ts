@@ -3,17 +3,9 @@ import { Capacitor } from '@capacitor/core';
 
 export type InputMode = 'mouse' | 'touch' | 'dpad';
 export type FormFactor = 'desktop' | 'phone' | 'tablet' | 'tv';
-/**
- * OS underneath a `formFactor=tv`. Drives platform-specific glue (remote
- * key registration, exit handling, store packaging) without leaking into
- * UI gates — those should read `formFactor === 'tv'` for visual rules
- * and the platform enum only for OS-bound capabilities.
- */
+/** OS under a `formFactor=tv`: drives platform glue (remote keys, exit, packaging); UI gates should read `formFactor` instead. */
 export type TvPlatform = 'androidtv' | 'tizen' | 'webos' | null;
-/**
- * Desktop shell underneath a `formFactor=desktop`. Drives the native-player
- * engine selection and packaging glue, the desktop counterpart of TvPlatform.
- */
+/** Desktop shell under a `formFactor=desktop`; drives native-player engine selection, the counterpart of TvPlatform. */
 export type DesktopPlatform = 'electron' | null;
 
 /** Android's sw600dp tablet cut, on the shorter side so the launch orientation doesn't matter. */
@@ -48,9 +40,7 @@ function readOverride(): DetectResult | null {
   }
   }
 
-/** Form factor, input modality and TV OS for the current environment.
- *  Module-scope so bootstrap-time providers can branch on it before the
- *  injector exists (see app.config: view transitions are off on TV). */
+/** Form factor, input modality and TV OS; module-scope so bootstrap-time providers can branch before the injector exists. */
 export function detectDevice(): DetectResult {
   if (typeof window === 'undefined') {
     return { input: 'mouse', formFactor: 'desktop', tvPlatform: null };
@@ -105,10 +95,7 @@ export function detectDevice(): DetectResult {
   return { input: 'mouse', formFactor: 'desktop', tvPlatform: null };
   }
 
-/**
- * Whether router view transitions are registered, and so whether the player's
- * closing animation is theirs to run rather than the player's own.
- */
+/** Whether router view transitions are registered, i.e. whether the player's closing animation is theirs to run. */
 export function viewTransitionsEnabled(): boolean {
   return typeof document !== 'undefined' && !!document.startViewTransition;
 }
@@ -119,25 +106,8 @@ interface DetectResult {
   tvPlatform: TvPlatform;
 }
 
-/**
- * Single source of truth for input modality and form-factor. Two orthogonal axes
- * because they don't always correlate (e.g. tablet + Bluetooth keyboard, TV + mouse).
- *
- * Detection order, highest confidence first:
- *  1. UA marker `AndroidTV/\d` injected by MainActivity in `UI_MODE_TYPE_TELEVISION`.
- *  2. Tizen UA (`Tizen` or `SMART-TV`) → Samsung Smart TV.
- *  3. webOS UA (`Web0S`/`webOS`) → LG Smart TV.
- *  4. `(pointer: none)` media query — only D-pads, no pointer at all.
- *  5. TV-only UA sniff (BRAVIA / SHIELD / Fire TV / GoogleTV) on native Android.
- *  6. URL `?tv=1` / `?tablet=1` / `?phone=1` (persisted in localStorage) for QA.
- *     `?tvplatform=tizen|webos|androidtv` pins the platform when forcing TV.
- *  7. `(pointer: coarse)` → phone if the shorter viewport side is < 600, tablet otherwise.
- *  8. Default → desktop + mouse.
- *
- * `body.{tv,tablet,phone}` classes are kept in sync so global Tailwind/CSS variants
- * can drive 10-foot UI overrides without each component branching on the signal.
- * `body.tv-{platform}` lets per-OS CSS hooks attach to the same source of truth.
- */
+/** Single source of truth for input modality and form factor (two orthogonal axes), detected in decreasing confidence order;
+ *  `?tv=1`/`?tablet=1`/`?phone=1` force one for QA. Keeps `body.{tv,tablet,phone}` and `body.tv-{platform}` classes in sync. */
 @Injectable({ providedIn: 'root' })
 export class DeviceService {
   readonly input = signal<InputMode>('mouse');
@@ -154,17 +124,12 @@ export class DeviceService {
   readonly isTouch = computed(() => this.input() === 'touch');
   readonly isDpad = computed(() => this.input() === 'dpad');
 
-  /** A download link reaches a real file only in a browser or the Electron
-   *  shell. The Capacitor WebViews have no download handler (Android needs
-   *  `setDownloadListener`, iOS a `WKDownloadDelegate`) and a TV has nowhere to
-   *  put one, so the link would silently do nothing there. */
+  /** Downloads work only in a browser or Electron: Capacitor WebViews have no download handler and a TV has nowhere to save. */
   readonly canSaveFiles = computed(
     () => !this.isTv() && (this.isDesktopNative() || !Capacitor.isNativePlatform()),
   );
 
-  /** A file picker reaches the OS on every platform but a TV, which has no
-   *  local storage to browse. Both Capacitor WebViews handle <input type=file>
-   *  natively, unlike downloads. */
+  /** A file picker works everywhere but TV (no local storage); both Capacitor WebViews handle <input type=file>. */
   readonly canPickFiles = computed(() => !this.isTv());
 
   /** Android's picker filters by MIME and its table maps none of the sidecar
@@ -239,9 +204,7 @@ export class DeviceService {
     body.classList.toggle('phone', this.formFactor() === 'phone');
     html.classList.toggle('tv-host', this.formFactor() === 'tv');
 
-    // Per-platform hook so CSS can target a specific TV OS without
-    // duplicating the formFactor check in every selector. Mirrored on <html>
-    // because overlays are reparented there, out of <body>'s reach.
+    // Per-OS hook for CSS, mirrored on <html> because overlays are reparented out of <body>.
     const platforms: TvPlatform[] = ['androidtv', 'tizen', 'webos'];
     for (const p of platforms) {
       const on = this.tvPlatform() === p;

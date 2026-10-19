@@ -24,12 +24,8 @@ interface AutoTarget {
   watched: boolean;
 }
 
-/**
- * Syncs offline downloads with the user's autoDownload playlists (native mobile
- * and the Electron desktop — never on TV or web). Downloads not-yet-watched
- * items that aren't on device and removes auto-managed downloads once watched;
- * manual downloads are never touched.
- */
+/** Syncs offline downloads with the user's autoDownload playlists (native mobile and Electron, never TV or web): downloads unwatched items
+ *  and removes auto-managed ones once watched; manual downloads are untouched. */
 @Injectable({ providedIn: 'root' })
 export class AutoDownloadService {
   /** True on native mobile (iOS/Android) and the Electron desktop, where an

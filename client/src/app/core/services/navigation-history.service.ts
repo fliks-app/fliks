@@ -2,14 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { NavigationEnd, Router } from '@angular/router';
 import { filter } from 'rxjs';
 
-/**
- * Tracks the URL the user was on right before the current navigation.
- *
- * Used by the player's onBack to decide between popping /watch via
- * history.back() (when the previous entry is already the target — avoids
- * a duplicate history entry from replaceUrl) and an explicit
- * router.navigate(target, replaceUrl).
- */
+/** Tracks the URL before the current navigation, so the player's onBack can `history.back()` when the previous entry is already the target, avoiding a duplicate from replaceUrl. */
 @Injectable({ providedIn: 'root' })
 export class NavigationHistoryService {
   private readonly router = inject(Router);

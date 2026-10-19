@@ -194,10 +194,7 @@
   </div>
   }
 
-  <!-- ===== DESKTOP layout =====
-       Page-wide fanart is handled by BackgroundService (same as
-       media-detail) — no inline bleed div here. md+ matches the
-       breakpoint media-info-header uses for its own desktop split. -->
+  <!-- ===== DESKTOP layout ===== md+ matches media-info-header's desktop split; fanart comes from BackgroundService. -->
   @if (desktopLayout()) {
   <div class="relative">
     <div
@@ -290,9 +287,7 @@
             <p class="mt-4 text-base-content/90 leading-relaxed whitespace-pre-line">{{ m.overview }}</p>
           }
 
-          <!-- Secondary metadata grid — kept inline because tmdb-preview's
-               `MetadataDetails` doesn't fit `app-media-info-extra`'s
-               `Media` input. Same visual cadence as that component. -->
+          <!-- Secondary metadata grid, inline because `MetadataDetails` doesn't fit `app-media-info-extra`'s `Media` input. -->
           <div class="grid grid-cols-2 gap-x-8 gap-y-3 text-sm mt-6">
             @if (directors().length) {
               <div>

@@ -49,10 +49,7 @@ export type TimelineStep =
   | { kind: 'event'; at: number; event: QoeEventRow }
   | { kind: 'end'; at: number | null };
 
-/**
- * The rail in time order: each session, then its events by start. What opened a session (a quality change, a
- * recovery…) happens at its start, so it is part of the session's step rather than a step of its own.
- */
+/** The rail in time order: each session, then its events by start; what opened a session happens at its start, so it is part of that step. */
 export function timelineSteps(tl: Timeline, endMs: number | null): TimelineStep[] {
   const steps: TimelineStep[] = [];
   tl.blocks.forEach((block, index) => {

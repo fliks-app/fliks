@@ -1,8 +1,4 @@
-/**
- * Artwork for a feed row (continue-watching, likes, recommendations). The still
- * wins when there is one: the row points at an episode, so the series poster
- * would show the wrong thing.
- */
+/** Artwork for a feed row: the still wins when present, since an episode row's series poster would show the wrong thing. */
 export function itemArtwork(item: {
   stillUrl?: string | null;
   fanartUrl?: string | null;

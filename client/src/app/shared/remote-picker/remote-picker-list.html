@@ -1,8 +1,6 @@
 <div class="border-b border-white/10 px-3 pt-2 pb-2 mb-1 flex items-center justify-between gap-6">
   <p class="font-semibold text-white">{{ 'remote.picker_title' | translate }}</p>
-  <!-- Adding a device means reading a code off its own screen, so this only
-       points at the page that shows and claims one. Not offered over a running
-       session (`delegate`): the navigation would tear the playback down. -->
+  <!-- Adding a device reads a code off its own screen, so this only links to the page that shows it; hidden over a running session (`delegate`), as navigating would tear playback down. -->
   @if (!delegate()) {
     <a
       class="btn btn-ghost btn-xs btn-circle text-white shrink-0"

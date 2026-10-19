@@ -29,10 +29,7 @@ export interface PlayContext {
   tracks?: LaunchTracks;
 }
 
-/**
- * Shared logic for media detail pages (movie + episode):
- * play, toggleWatched, loadWatchedState, Cast integration.
- */
+/** Shared play/watched/Cast logic for media detail pages (movie + episode). */
 @Injectable({ providedIn: 'root' })
 export class PlayableMediaService {
   private readonly router = inject(Router);
@@ -76,9 +73,7 @@ export class PlayableMediaService {
         mediaId: ctx.mediaId,
         mediaFileId: ctx.fileId,
         episodeId: ctx.episodeId,
-        // The launcher's own position, not the target's: a remote launch counts
-        // for whoever started it, so the target's account may have none at all
-        // and would restart the title from the beginning.
+        // The launcher's position, not the target's: a remote launch counts for whoever started it, and the target's account may have none.
         positionSeconds: fromStart ? 0 : ctx.positionSeconds,
         ...launchTracksToWire(launchPickFor(ctx.tracks, ctx.fileId)),
       });
@@ -101,12 +96,7 @@ export class PlayableMediaService {
       const qp: any = { mediaId: ctx.mediaId };
       if (ctx.episodeId) qp.episodeId = ctx.episodeId;
       if (fromStart) qp.t = 0;
-      // Pass fanartUrl + stillUrl via router state so the player can
-      // paint the backdrop on its first tick — without it the image
-      // only appears after the media API call returns AND the image
-      // finishes downloading (~1s+ on cold network), leaving a long
-      // black phase. Player prefers `stillUrl` over `fanartUrl` when
-      // both are present (episode-accurate backdrop on series).
+      // Router state lets the player paint the backdrop on first tick instead of after the API call and download; `stillUrl` wins over `fanartUrl`.
       this.router.navigate(['/watch', ctx.fileId], {
         queryParams: qp,
         state: {
@@ -115,24 +105,14 @@ export class PlayableMediaService {
           tracks: ctx.tracks ?? null,
         },
       });
-      // Warm the stale-while-revalidate cache for the media-detail page
-      // the user will land on when they back out of the player. The
-      // detail's `getOne` / cast / crew responses get stored under
-      // `/api/media/<id>*` keys in `fliks-api-cache` (60 min TTL), so the
-      // back-navigation renders instantly instead of spinning on a cold
-      // network round-trip.
+      // Warms the SWR cache (60 min TTL) so backing out of the player renders the detail page instantly.
       void this.mediaService.getOne(ctx.mediaId).catch(() => {});
       void this.mediaService.getCast(ctx.mediaId).catch(() => {});
       void this.mediaService.getCrew(ctx.mediaId).catch(() => {});
     }
   }
 
-  /**
-   * Start playback of a playlist: registers the ordered queue, resolves the
-   * launched item's file and opens the player (or Cast) on it. Subsequent items
-   * are advanced by the player as each one finishes (when `autoplay`). Returns
-   * false when the launched item has no playable file (caller surfaces the UX).
-   */
+  /** Registers the ordered queue and opens the player (or Cast); the player advances items on `autoplay`. Returns false when the item has no playable file. */
   async playFromPlaylist(
     playlistId: number,
     items: QueueItem[],

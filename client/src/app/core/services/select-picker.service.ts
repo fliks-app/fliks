@@ -8,9 +8,7 @@ export interface SelectPickerOption {
   disabled: boolean;
 }
 
-/** The field's visible label, so a select gets a sheet title without every
- *  call site repeating one. A wrapping daisyUI label also holds the hint text,
- *  hence the `.label-text` lookup before falling back to the whole label. */
+/** Visible label for the sheet title: a wrapping daisyUI label also holds hint text, hence `.label-text` before the whole label. */
 function fieldLabel(select: HTMLSelectElement): string {
   const aria = select.getAttribute('aria-label')?.trim();
   if (aria) return aria;
@@ -22,12 +20,7 @@ function fieldLabel(select: HTMLSelectElement): string {
   return text?.trim().replace(/[\s\u00a0]*:$/, '') ?? '';
 }
 
-/**
- * Singleton state for the TV-friendly <select> picker. The native picker on
- * Android WebView mixes inconsistent behaviours (option cycling, tab-style
- * jumps, partial back-button support). Selects opted-in via `appTvSelect`
- * route through this service to a styled popover instead.
- */
+/** Singleton state for the TV-friendly <select> picker: Android WebView's native picker behaves inconsistently, so `appTvSelect` selects use a styled popover. */
 @Injectable({ providedIn: 'root' })
 export class SelectPickerService {
   readonly open = signal(false);
@@ -64,9 +57,7 @@ export class SelectPickerService {
     const sel = this.currentSelect;
     this.open.set(false);
     this.currentSelect = null;
-    // Restore focus to the trigger so a subsequent Enter / Space re-opens the
-    // picker: the browser drops focus to <body> when the popover unmounts. The
-    // modality test lives in `restoreOpenerFocus`, which every overlay shares.
+    // Restore focus to the trigger (the browser drops it to <body> on unmount) so Enter/Space re-opens; modality is tested in `restoreOpenerFocus`.
     restoreOpenerFocus(sel);
   }
 }

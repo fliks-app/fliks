@@ -217,9 +217,7 @@ export interface MediaPage {
   total: number;
 }
 
-/** One row of the library Genres tab: a genre, how many media carry it,
- *  and the URLs of the first up-to-4 posters (rendered as a mosaic
- *  when populated, fallback folder icon when empty). */
+/** One Genres tab row: genre, media count, and up to 4 poster URLs for the mosaic. */
 export interface GenreSummary {
   genre: string;
   count: number;
@@ -547,9 +545,7 @@ export class MediaService {
     return firstValueFrom(this.http.post<Media>(`/api/media/${id}/refresh`, {}));
   }
 
-  /** Re-point a media at another work. Synchronous, unlike the refresh above:
-   *  the response is the re-identified media, and an id already held by another
-   *  title comes back as a 409. */
+  /** Synchronous, unlike the refresh above: returns the re-identified media, and an id held by another title is a 409. */
   identify(
     id: number,
     target: { tmdbId?: number; tvdbId?: number; imdbId?: string; preferredProvider?: string },

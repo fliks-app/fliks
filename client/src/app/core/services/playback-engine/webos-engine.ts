@@ -16,42 +16,11 @@ import { MuteGate } from './mute-gate';
  *  native ABR ramps. ~8 Mbps suits a TV display. */
 const WEBOS_START_BITRATE = 8_000_000;
 
-/** Collapse a burst of out-of-buffer seeks (repeated remote presses) into a
- *  single reload after the user settles. Rapid `<video>` reloads crash the
- *  webOS media pipeline, so this debounce is load-bearing, not cosmetic. */
+/** Debounce for out-of-buffer seeks: rapid `<video>` reloads crash the webOS pipeline, so this is load-bearing. */
 const SEEK_DEBOUNCE_MS = 280;
 
-/**
- * LG webOS native backend.
- *
- * webOS renders the HTML5 `<video>` element on its own hardware media
- * pipeline — native HLS, HW decode of HEVC (8/10-bit), AV1 and Dolby
- * (AC3/EAC3) pass-through, plus HDR. It's a normal in-WebView element
- * (no transparent hardware plane like Tizen AVPlay), so we drive the same
- * `<video>` the Shaka path uses.
- *
- * Two webOS-specific behaviours are handled here:
- *
- *  - `mediaOption`: webOS takes a JSON blob on the `<source>` `type`
- *    attribute that the media pipeline consumes. We use `playTime.start`
- *    for a NATIVE resume and `adaptiveStreaming.bps.start` to open at a
- *    high ABR rung (the native ABR otherwise opens at the lowest rung and
- *    ramps slowly). A firmware that rejects the schema falls back to a
- *    plain `src` load so playback still works.
- *
- *  - Reload-on-seek: our backend serves a full VOD playlist but only
- *    transcodes around the current position; seeking far away makes it
- *    return a transient 503 for the target segment while ffmpeg respawns
- *    there. Shaka/ExoPlayer retry the 503; the native `<video>` does NOT —
- *    a `currentTime` seek to an ungenerated segment sticks in `seeking`
- *    forever. So an out-of-buffer seek RELOADS the stream positioned at the
- *    target (same path as resume, which works), while in-buffer seeks stay
- *    instant via native `currentTime`.
- *
- * Stream URLs carry the auth token as a query param, so the element needs
- * no request headers. Subtitles use the shared {@link SubtitleOverlay}
- * because webOS gives no styleable cue API for the renditions we emit.
- */
+/** LG webOS backend driving the shared `<video>`; `mediaOption` gives native resume and a high ABR start.
+ *  Out-of-buffer seeks reload at the target, since a native seek sticks on the backend's transient 503. */
 export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngine {
   private video: HTMLVideoElement | null = null;
   /** Taken at the first sample after a load: the counters only restart once Chromium recreates its player. */
@@ -67,9 +36,7 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
    *  a mediaOption rejection is recovered via the fallback, not surfaced. */
   private loadingPhase = false;
 
-  /** Optimistic position reported while a seek settles, so the seekbar stays
-   *  pinned and relative (±10s) steps accumulate even though the real clock
-   *  hasn't moved yet (reload-based seeks take a few seconds). */
+  /** Optimistic position while a seek settles, so the seekbar stays pinned and ±10s steps accumulate. */
   private seekIntent: number | null = null;
   /** Latest out-of-buffer seek target awaiting a (debounced) reload. */
   private pendingReloadTarget: number | null = null;
@@ -193,11 +160,7 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
     add('error', () => {
       if (this.loadingPhase) return; // recovered via the load() fallback
       const err = v.error;
-      // Network / unsupported-source errors mid-playback are the signature
-      // of a backend 410 on a segment (LiveSession gone) or any other
-      // transient stream loss the recovery flow handles. Optimistically
-      // route the first one to `sessionExpired`; the player swaps to a
-      // fresh sid via /playback-info. Repeat errors fall through to fatal.
+      // A mid-playback network/unsupported-source error is the signature of a segment 410 (LiveSession gone): the first one goes to `sessionExpired`.
       const networkShaped =
         err?.code === MediaError.MEDIA_ERR_NETWORK ||
         err?.code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED;
@@ -211,9 +174,7 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
       this.emit('stateChanged', { state: 'error' });
     });
 
-    // The native pipeline fills AudioTrackList as it opens the stream, well
-    // after `loadedmetadata`, and refills it on every reload-seek — a one-shot
-    // read after load would miss it.
+    // The pipeline fills AudioTrackList after `loadedmetadata` and refills it on every reload-seek, so don't read it once.
     const audioList = (v as unknown as { audioTracks?: EventTarget }).audioTracks;
     if (audioList) {
       const onAudioTracks = () =>
@@ -257,11 +218,7 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
         // Preferred path: native resume + start-bitrate via mediaOption.
         await this.attachAndPlay(url, start, true);
       } catch (e) {
-        // Only a mediaOption *schema* rejection (firmware refusing the
-        // <source type> payload, surfaced as a media error) is worth a plain-src
-        // retry — plain src still plays, with resume via a post-load seek. A
-        // load timeout means the stream itself is slow; retrying would just burn
-        // another 30s (60s total), so surface it instead of falling back.
+        // Only a mediaOption schema rejection merits a plain-src retry; a load timeout means a slow stream, so surface it (a retry burns another 30s).
         if (e instanceof Error && e.name === 'WebOsLoadTimeout') throw e;
         await this.attachAndPlay(url, start, false);
       }
@@ -360,12 +317,7 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
     this.seekIntent = target;
     this.muteGate?.sync();
 
-    // Forward in-buffer: native seek is instant and the UA coalesces rapid
-    // ones. Backward seeks are NOT done natively even when "in buffer" — on
-    // webOS a backward native seek into an on-demand transcode sticks in
-    // `seeking` forever (the pipeline re-requests the behind-playhead segment,
-    // gets a 503, and never retries). See #279 for the proper backend fix
-    // (long-poll segments) that will let us drop the reload path entirely.
+    // Forward in-buffer seeks are native and instant; backward ones stick in `seeking` on webOS (503 on the behind-playhead segment), so they reload.
     const backward = target < v.currentTime - 0.5;
     if (!backward && this.isBuffered(target)) {
       this.pendingReloadTarget = null;
@@ -374,12 +326,7 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
       return;
     }
 
-    // Backward, or forward out-of-buffer: a native seek would request an
-    // un-transcoded segment, get a 503, and stick in `seeking` forever.
-    // Reload positioned at the target (the resume path, which works) — but
-    // DEBOUNCED + single-flight: a burst of small backward steps must
-    // collapse to one reload, because rapid `<video>` reloads crash the
-    // webOS pipeline.
+    // Backward or out-of-buffer: reload at the target (the resume path), debounced + single-flight since rapid reloads crash the pipeline.
     this.pendingReloadTarget = target;
     this.clearSeekDebounce();
     this.seekDebounceTimer = setTimeout(() => {
@@ -397,9 +344,7 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
     this.reloadInFlight = true;
     this.loadInternal(setStartAt(this.loadedUrl, target), target)
       .catch(() => {
-        // loadInternal does not emit during its loading phase, so a failed
-        // reload-seek would leave seekIntent pinning the seekbar at the
-        // unreachable target forever — clear it so the bar tracks the real clock.
+        // loadInternal doesn't emit while loading: clear seekIntent so a failed reload-seek doesn't pin the seekbar.
         this.seekIntent = null;
       })
       .finally(() => {
@@ -416,9 +361,7 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
     }
   }
 
-  /** Whether `pos` sits inside a buffered range with enough margin to play
-   *  from (epsilon at the start, ≥0.5s ahead) — so a native seek serves it
-   *  instantly instead of triggering a reload. */
+  /** Whether `pos` sits in a buffered range with enough margin to play from, so a native seek serves it. */
   private isBuffered(pos: number): boolean {
     const v = this.video;
     if (!v) return false;
@@ -597,11 +540,7 @@ function setStartAt(url: string, position: number): string {
   return url + (url.includes('?') ? '&' : '?') + 'startAt=' + p;
 }
 
-/**
- * Build the `<source>` `type` with webOS's `mediaOption` JSON. `playTime.start`
- * resumes natively (ms); `adaptiveStreaming.bps.start` opens HLS at a high rung.
- * Unknown keys are ignored by the pipeline, so this is safe to send always.
- */
+/** Build the `<source>` `type` with webOS's `mediaOption` JSON (native resume, high HLS start rung); unknown keys are ignored. */
 function webOsSourceType(url: string, startTime: number): string {
   const isHls = /\.m3u8(\?|$)/i.test(url);
   const option: Record<string, unknown> = {};

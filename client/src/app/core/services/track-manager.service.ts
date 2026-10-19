@@ -28,9 +28,7 @@ export interface SubtitleOption {
   languageTag?: string | null;
   /** True for bitmap subs (PGS/VOBSUB), regardless of how they're shown. */
   isImage?: boolean;
-  /** True for a bitmap sub, embedded or external: it is burned in server-side
-   *  unless the engine renders it from the playback in hand (the player decides
-   *  per playback, see `PlayerComponent.burnsIn`). */
+  /** True for a bitmap sub: burned in server-side unless the engine renders it (decided per playback, see `PlayerComponent.burnsIn`). */
   burnIn: boolean;
   /** Database subtitle ID (for burn-in request) */
   subtitleDbId?: number;
@@ -69,16 +67,7 @@ export class TrackManagerService {
 
   // ── Audio track methods ──
 
-  /**
-   * Auto-select audio track based on user preferences.
-   *
-   * @param tracks        Available audio tracks
-   * @param mediaId       Media ID (series/movie)
-   * @param mediaFileId   Media file ID
-   * @param activeAudioTrackId  Currently active audio track ID
-   * @param onSelect      Callback invoked with the track ID to select
-   * @param originalLanguage The title's original language, for `original` mode
-   */
+  /** Auto-select the audio track from user preferences; `originalLanguage` serves `original` mode. */
   autoSelectAudioTrack(
     tracks: { id: string; language: string }[],
     mediaId: number,
@@ -166,15 +155,7 @@ export class TrackManagerService {
     return { label: formatSubtitleLabel(sub, this.translate, trackNumber, opts), menuHead: parts.head, menuSub: parts.sub };
   }
 
-  /**
-   * Load subtitle options from the API and embedded stream info.
-   *
-   * @param mediaId       Media ID
-   * @param mediaFileId   Media file ID
-   * @param streamingApi  StreamingApiService for building subtitle URLs
-   * @param media         Media object (needs `files[].streamInfo`)
-   * @returns Array of subtitle options
-   */
+  /** Load subtitle options from the API and embedded stream info (`media.files[].streamInfo`). */
   async loadSubtitles(
     mediaId: number,
     mediaFileId: number,
@@ -238,21 +219,8 @@ export class TrackManagerService {
     }
   }
 
-  /**
-   * Auto-select subtitle based on user preferences (mode: off/intelligent/always).
-   * Burn-in subtitles are excluded to avoid triggering a stream reload during init.
-   *
-   * @param subtitles          All available subtitle options
-   * @param audioTracks        Available audio tracks
-   * @param activeAudioTrackId Currently active audio track ID
-   * @param mediaFileId        Media file ID (for remembered selections)
-   * @param onSelect           Callback to apply the selected subtitle (or null for none)
-   * @param mediaId            Media ID the remembered selection is keyed by
-   * @param audioLanguage      Language of the audio stream that will play, when known
-   *                           before any engine lists a track: it wins over `audioTracks`
-   * @param picked             The viewer's pick for this launch (`null`: Off), honoured before
-   *                           any rule; an id not in `subtitles` is ignored
-   */
+  /** Auto-select a subtitle per mode (off/intelligent/always); burn-in subs excluded to avoid a stream reload during init.
+   *  `audioLanguage` (known before engines list tracks) wins over `audioTracks`; `picked` (null = Off) beats any rule. */
   async autoSelectSubtitle(
     subtitles: SubtitleOption[],
     audioTracks: { id: string; language: string }[],
@@ -271,11 +239,7 @@ export class TrackManagerService {
       return;
     }
 
-    // Exclude burn-in subs (PGS, DVD, etc.) — selecting them calls reloadStream() to bake
-    // the subtitle into the video server-side, which kills the active transcode session.
-    // During init the transcode just started (possibly with a seek), so reloading would
-    // spawn a 3rd ffmpeg process and cause Shaka error 1003. Users can still pick burn-in
-    // subs manually from the subtitle menu.
+    // Burn-in subs are excluded: selecting one reloads the stream and would spawn a 3rd ffmpeg during init (Shaka error 1003); still manual-pickable.
     const subs = subtitles.filter((s) => !s.isImage);
     if (!subs.length && !subtitles.length) return;
 
@@ -367,10 +331,7 @@ export function trackForStreamIndex<T extends { id: string; language: string }>(
   return tracks.find((t) => normalizeLangCode(t.language) === lang);
 }
 
-/** The reverse of {@link trackForStreamIndex}: the `streams` index an engine track plays.
- *  A folded track stands for several streams of its language; `hint` (the index already
- *  targeted) wins when it is one of them, so a report of the folded track keeps a pick of
- *  its commentary rendition. Undefined when the track or the streams are unknown. */
+/** Reverse of {@link trackForStreamIndex}: the `streams` index a track plays; `hint` wins when the folded track covers it. Undefined if unknown. */
 export function streamIndexForTrack(
   trackId: string,
   tracks: { id: string; language: string }[],
@@ -393,13 +354,7 @@ function isMachine(s: SubtitleOption): boolean {
   return s.providerType === 'translated' || s.providerType === 'ocr';
 }
 
-/**
- * The track auto-selection settles on, in one preference order: the wanted
- * forced-ness first, then the viewer's hearing-impaired preference, then a real
- * track over a machine-made one. Every criterion is a preference, not a filter
- * (a language with nothing but an SDH track still gets subtitles), except
- * `only`, which drops non-forced tracks outright for the modes that mean it.
- */
+/** Auto-selection order: wanted forced-ness, hearing-impaired preference, then real over machine-made; all preferences except `only`, which drops non-forced. */
 export function pickSubtitle(
   subs: SubtitleOption[],
   language: string,

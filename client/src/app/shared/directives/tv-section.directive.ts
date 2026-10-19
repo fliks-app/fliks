@@ -1,24 +1,8 @@
 import { Directive, ElementRef, inject, OnDestroy, OnInit, input } from '@angular/core';
 import { TvSpatialNavService } from '../../core/services/tv-spatial-nav.service';
 
-/**
- * Marks a region as a vertical-orientation container in the spatial-nav
- * tree. `↑/↓` step between this section's direct navigable children
- * (registered sub-containers + focusable leaves), `←/→` walk inside its
- * sub-containers as defined by their own orientation.
- *
- * Pages opt in by wrapping their main scroll surface:
- *
- *   <main appTvSection> ... </main>
- *
- * Registers on every form factor — desktop keyboard users get the same
- * tree-aware nav as TV D-pad. Companion to `[appTvRow]` for horizontal
- * regions.
- *
- * Set `[appTvSectionWrap]="true"` to make ↑ from the first child wrap to
- * the last (rare; typically left off so the user doesn't loop the whole
- * page accidentally).
- */
+/** Marks a region as a vertical spatial-nav container: `↑/↓` step between its direct navigable children, `←/→` walk inside sub-containers.
+ *  Registers on every form factor; companion to `[appTvRow]`. `[appTvSectionWrap]="true"` wraps ↑ from the first child to the last (rare). */
 @Directive({
   selector: '[appTvSection]',
   standalone: true,

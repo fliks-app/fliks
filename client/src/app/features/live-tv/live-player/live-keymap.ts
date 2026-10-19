@@ -1,6 +1,4 @@
-/** What a remote press means in the live player, decided before anything is
- *  done about it. Kept apart from the component because the rule that matters
- *  is a contract, not an effect: a visible overlay owns the D-pad. */
+/** What a remote press means in the live player, kept apart from the component because the rule is a contract: a visible overlay owns the D-pad. */
 export type LiveKeyAction =
   | { kind: 'none' }
   | { kind: 'zap'; by: 1 | -1 }

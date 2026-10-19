@@ -5,14 +5,7 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
-/**
- * DaisyUI toggle (switch) with optional hint underneath. Two-way `[(value)]`.
- *
- * <app-toggle-field
- *   [(value)]="autoSkipIntro"
- *   [label]="'playback_settings.player_auto_skip_intro' | translate"
- *   [hint]="'playback_settings.player_auto_skip_intro_hint' | translate" />
- */
+/** DaisyUI toggle (switch) with optional hint underneath; two-way `[(value)]`. */
 @Component({
   selector: 'app-toggle-field',
   imports: [FormsModule],

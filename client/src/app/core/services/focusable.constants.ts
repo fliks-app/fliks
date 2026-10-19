@@ -1,12 +1,5 @@
-/**
- * The set of elements treated as focus targets by both spatial navigation
- * (D-pad / arrow keys) and the default-focus pass. Kept in one place so the two
- * agree — a divergence makes the default-focus landing differ from what the
- * first D-pad press then discovers, causing focus to jump.
- *
- * `[tabindex="-1"]` is excluded (explicit opt-out); media-card figures and other
- * custom targets carry `tabindex="0"` or `[data-tv-focusable]`.
- */
+/** Elements treated as focus targets by both spatial navigation and default focus; one place so the two agree.
+ *  `[tabindex="-1"]` is an explicit opt-out; custom targets carry `tabindex="0"` or `[data-tv-focusable]`. */
 export const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"]), [data-tv-focusable]';
 
@@ -14,33 +7,16 @@ export const FOCUSABLE_SELECTOR =
 export const TABBABLE_SELECTOR =
   'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-/**
- * Where focus lands when an overlay (bottom sheet, dropdown, popover) opens:
- * the option marking the current selection when there is one, otherwise the
- * first tabbable. The three markers below are the ones the app uses —
- * `aria-disabled` is set by `SelectedOptionDirective` (and is preferred over
- * `disabled` precisely so the current value stays in the focus order), while
- * `autofocus` and `aria-current` are set by hand at a few call sites.
- */
-/**
- * Whether focus should be handed back to whatever opened an overlay. Only a
- * keyboard or a D-pad needs it: on touch it would mark a control the user is no
- * longer on, and refocusing a `<select>` on iOS reopens the native picker we
- * just replaced.
- */
+/** Where focus lands when an overlay opens: the current-selection option, else the first tabbable.
+ *  `aria-disabled` (from `SelectedOptionDirective`) keeps the current value in the focus order. */
+/** Whether focus returns to the overlay's opener: only keyboard/D-pad (on touch it marks a control the user left, and iOS `<select>` reopens the picker). */
 export function wantsFocusRestore(): boolean {
   if (typeof document === 'undefined') return false;
   const c = document.documentElement.classList;
   return c.contains('keyboard-modality') || c.contains('tv-host');
 }
 
-/**
- * Settle focus after an overlay closes. A keyboard or D-pad gets it back on the
- * opener, so the next Enter reopens it. Touch gets it taken off: the overlay
- * backdrop deliberately does not blur (that is what kept the ring from
- * flickering), so without this the opener kept a focus mark for a control the
- * user had already left. One rule for every overlay that closes.
- */
+/** Settle focus after an overlay closes: keyboard/D-pad refocus the opener, touch blurs it (the backdrop deliberately doesn't blur). */
 export function restoreOpenerFocus(opener: HTMLElement | null | undefined): void {
   if (!opener?.isConnected) return;
   if (wantsFocusRestore()) {
@@ -64,9 +40,7 @@ function scrollerOf(el: HTMLElement): HTMLElement | null {
   return null;
 }
 
-/** Scroll `el`'s own scroller so it sits centered below any sticky header, unless it
- *  is already fully visible. Computed on `scrollTop`: `scrollIntoView` can also move
- *  the locked page, and the sheet's smooth `scroll-behavior` must not animate it. */
+/** Center `el` in its own scroller below any sticky header unless fully visible; uses `scrollTop` since `scrollIntoView` can move the locked page. */
 export function centerInScroller(el: HTMLElement | null | undefined): void {
   const box = el && scrollerOf(el);
   if (!el || !box || !box.clientHeight) return;
@@ -101,18 +75,13 @@ export function initialOverlayFocus(root: ParentNode | null | undefined): HTMLEl
   if (!root) return null;
   for (const marker of ['[autofocus]', ...SELECTED_MARKERS]) {
     const el = root.querySelector<HTMLElement>(marker);
-    // Only the opt-out half of isFocusCandidate: this can run before layout, so
-    // a rendered-size check would always reject and fall through to the first
-    // item.
+    // Opt-out check only: this can run before layout, where a size check would always reject.
     if (el && !isFocusOptedOut(el)) return el;
   }
   return root.querySelector<HTMLElement>(TABBABLE_SELECTOR);
 }
 
-/**
- * A horizontally scrolling rail. Arrow keys stay inside one while stepping,
- * and its off-screen cards remain valid targets.
- */
+/** A horizontally scrolling rail: arrow keys stay inside one while stepping and its off-screen cards remain valid targets. */
 export const SCROLLER_SELECTOR = '[data-scroller], .flex.overflow-x-auto';
 
 /** Laid out and painted: not detached, zero-sized, hidden or display:none. */
@@ -124,14 +93,8 @@ export function isRendered(el: HTMLElement, style?: CSSStyleDeclaration): boolea
   return s.visibility !== 'hidden' && s.display !== 'none';
 }
 
-/**
- * Whether focus may land on `el`. Every skip rule lives here so the passes
- * that hunt for a target — tree step, document scan, default focus — can't
- * drift apart; a new rule (`inert` was the last one) is added once.
- *
- * Pass `style` when the caller already resolved it, to save a second
- * `getComputedStyle` per element on a whole-document scan.
- */
+/** Whether focus may land on `el`; every skip rule lives here so the tree step, document scan and default focus can't drift.
+ *  Pass `style` when already resolved to save a `getComputedStyle` per element. */
 export function isFocusCandidate(
   el: HTMLElement,
   style?: CSSStyleDeclaration,
@@ -146,9 +109,6 @@ export function isFocusOptedOut(el: HTMLElement): boolean {
   // `a[href]` matches regardless of tabindex, so a media-card's inner links
   // (tabindex=-1 on TV) would otherwise show up as separate targets.
   if (el.getAttribute('tabindex') === '-1') return true;
-  // `[inert]`: a collapsed section keeps its content laid out, just inert, so it
-  // measures as visible but refuses focus and dead-ends the move.
-  // `.modal-backdrop`: its click-outside button spans the viewport, so it wins
-  // every direction from inside a dialog and paints a full-screen focus ring.
+  // `[inert]` sections stay laid out and measure visible; `.modal-backdrop`'s full-viewport button would win every direction.
   return !!el.closest('[inert], .modal-backdrop');
 }

@@ -1,17 +1,5 @@
-/**
- * Resolve a genre *name* to its TMDB genre id, language-independently.
- *
- * Taste-profile chips carry genre names captured on the media at add time,
- * which may be English ("Drama") on older items or French ("Drame") on newer
- * ones (TMDB is queried in fr-FR today). The discover panel filters by genre
- * id, and TMDB ids are stable across languages — so we map the name to an id
- * through a normalized EN/FR alias table rather than matching display strings.
- *
- * Ids target the movie catalogue (the discover grid's default); TV-only genres
- * map to their closest movie equivalent so a chip always yields a usable
- * filter. A caller can pass a live genre list (e.g. the fr-FR list fetched from
- * TMDB) as a fallback for names the static table doesn't cover.
- */
+/** Resolves a genre name (EN or FR, as stored on older/newer items) to a language-independent TMDB id via an alias table; ids target the movie catalogue,
+ * TV-only genres map to the nearest equivalent, and a live genre list can be passed as fallback. */
 
 /** Lowercase, strip accents, drop separators — so "Science-Fiction",
  *  "Science Fiction" and "science fiction" all collapse to one key. */

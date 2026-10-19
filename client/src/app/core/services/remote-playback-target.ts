@@ -12,16 +12,10 @@ import { buildSubtitleTracks } from '../utils/subtitle-tracks';
 import { formatSubtitleParts, formatSubtitleLabel, SpriteMetadata } from '../utils/player.utils';
 import { PlaybackOption, PlaybackTarget } from './playback-target';
 
-/** Whether `app-cast-overlay` is showing the remote-target control card.
- *  The remote picker (`shared/remote-picker`) flips it on after picking a
- *  target; this adapter's `disconnect` and `expanded` are its only other users. */
+/** Whether `app-cast-overlay` shows the remote-target card; set by the remote picker (`shared/remote-picker`) after picking a target. */
 export const remoteOverlayOpen = signal(false);
 
-/**
- * Drives the cast-overlay UI from a remote target instead of a Chromecast
- * session. Track lists come from the played file's streamInfo, fetched here
- * once the target reports what it's playing.
- */
+/** Drives the cast-overlay UI from a remote target; track lists come from the played file's streamInfo, fetched once the target reports playback. */
 @Injectable({ providedIn: 'root' })
 export class RemotePlaybackTarget implements PlaybackTarget {
   private readonly remote = inject(RemoteService);
@@ -38,9 +32,7 @@ export class RemotePlaybackTarget implements PlaybackTarget {
   /** A selected target is present even with nothing playing: releasing it is
    *  an explicit action, not a side effect of stopping the media. */
   readonly hasMedia = computed(() => this.remote.isRemoting());
-  /** Only a real pause, never buffering: a target filling its buffer is on its
-   *  way to playing, and showing a play icon there invites a press that would
-   *  stop it. */
+  /** Only a real pause, never buffering: a play icon on a buffering target invites a press that would stop it. */
   readonly isPaused = computed(() => this.remote.targetState()?.state === 'paused');
   /** Also while the target rebuilds its stream for a quality change: the card
    *  keeps its poster and position and simply reads as loading. */
@@ -240,9 +232,7 @@ export class RemotePlaybackTarget implements PlaybackTarget {
       console.warn('[remote] stop requested with no selected target');
       return;
     }
-    // Keep the target selected: stopping the media is not giving the device
-    // back. The card closes because there is nothing left in it to act on, and
-    // the top-bar chip reopens it.
+    // Stopping the media doesn't give the device back: keep the target selected; the top-bar chip reopens the card.
     void this.remote.send(targetId, { action: 'stop' });
     remoteOverlayOpen.set(false);
   }
@@ -252,9 +242,7 @@ export class RemotePlaybackTarget implements PlaybackTarget {
     remoteOverlayOpen.set(false);
   }
 
-  /** Reuse the very builder the target runs, rather than assembling a second
-   *  list here: a different set of options produced different rows, so the
-   *  controller's selection named a track the target did not have. */
+  /** Reuse the target's own builder: a second list produced different rows, so the selection named a track the target lacked. */
   private async loadTracks(mediaId: number, mediaFileId: number): Promise<void> {
     try {
       const media = await this.mediaService.getOne(mediaId).catch(() => null);

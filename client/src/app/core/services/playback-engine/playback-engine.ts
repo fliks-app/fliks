@@ -1,18 +1,11 @@
-/**
- * Unified playback engine interface.
- * Implementations: ShakaEngine (web) and NativeEngine (Android/iOS).
- * Cast bypasses this abstraction — CastPlayerService talks to the
- * Chromecast SDK directly because the receiver-side API doesn't fit
- * the Shaka/ExoPlayer event shape.
- */
+/** Unified playback engine interface (ShakaEngine on web, NativeEngine on Android/iOS).
+ * Cast bypasses it: CastPlayerService talks to the Chromecast SDK directly. */
 
 import type shaka from 'shaka-player';
 import { isUndecodableError } from './playback-error';
 import type { TimeRange } from '../../utils/edl-policy';
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
+// ---- Types ----
 
 export interface AudioTrack {
   id: string;
@@ -35,14 +28,8 @@ export interface EngineSubtitleTrack {
 
 export type EngineState = 'idle' | 'playing' | 'paused' | 'buffering' | 'ended' | 'error';
 
-/**
- * The paused flag implied by a transport state, or `undefined` when the state
- * shouldn't move it. Only the definitive states ('playing' vs 'paused'/'idle')
- * decide paused; 'buffering' and 'error' are loading/overlay states, so a
- * transient buffering (e.g. mpv core-idle racing the pause property) leaves the
- * flag — and the play/pause button — alone. Shared by every consumer that
- * mirrors engine state so the rule lives in one place.
- */
+/** The paused flag implied by a transport state, or `undefined` to leave it alone.
+ * 'buffering' and 'error' never move it, so a transient buffering doesn't flip the play/pause button. */
 export function pausedFlagForState(state: EngineState): boolean | undefined {
   if (state === 'playing') return false;
   if (state === 'paused' || state === 'idle') return true;
@@ -167,13 +154,7 @@ export interface EngineConfig {
 export type EngineEventMap = {
   stateChanged: { state: EngineState };
   timeUpdate: { position: number; duration: number; buffered: number };
-  // `errorKey` is an i18n key the engine resolves the user-facing message
-  // from (raw `message` stays for the console). Engines that surface
-  // platform-specific strings (Tizen AVPlay, webOS MediaError) set it so the
-  // overlay shows translated text instead of an untranslated native string.
-  // The optional diagnostic fields (`source`/`category`/`severity`/`data`/
-  // `variant`) let Shaka/media errors carry their full context to the error
-  // card — the raw Shaka `error.data[]`, the failing variant codec, etc.
+  // `errorKey` is an i18n key for the user-facing message (raw `message` is for the console); the optional diagnostic fields carry full Shaka/media context to the error card.
   error: {
     code: number;
     message: string;
@@ -185,27 +166,13 @@ export type EngineEventMap = {
     variant?: string;
   };
   audioTracksChanged: { tracks: AudioTrack[] };
-  /** Output level or mute state changed on the engine. Every engine emits this
-   *  as the single source of truth for the UI volume slider — the video-element
-   *  engines (Shaka/webOS) bridge the DOM `volumechange`, the rest emit it from
-   *  their volume/muted setters. `volume` is the raw level (0..1), independent
-   *  of `muted`, so a mute never loses the retained level. */
+  /** Single source of truth for the UI volume slider; `volume` is the raw 0..1 level, independent of `muted`. */
   volumechange: { volume: number; muted: boolean };
   ended: void;
-  /** Fires when the first video frame is presented to the screen.
-   *  Distinct from `stateChanged: 'playing'` which fires on play() (the
-   *  user-facing first frame is what matters for the loading veil). */
+  /** First video frame presented; distinct from `stateChanged: 'playing'`, which fires on play(). */
   firstFrame: void;
-  /** Backend returned 410 Gone with `code: 'session_expired'` on a
-   *  segment / playlist request — the LiveSession registered at
-   *  /playback-info is gone (typical after a backend restart or a
-   *  long-idle GC). The player should mint a fresh sid via a new
-   *  /playback-info call and reload the engine. Shaka detects this via
-   *  a NetworkingEngine response filter; native players (AVPlay / iOS /
-   *  Android) can't read the response body so they translate any
-   *  segment-level HTTP error during stable playback into this event
-   *  and the player tries one cheap recovery before surfacing a fatal
-   *  error to the UI. */
+  /** Backend 410 `session_expired`: the player mints a fresh sid and reloads.
+   * Native players can't read the response body, so they map any segment error during stable playback to this. */
   sessionExpired: void;
   /** The AirPlay receiver stopped playback it could not play (native iOS).
    *  No item error comes with it, the player just pauses. */
@@ -218,15 +185,9 @@ export type EngineEventHandler<E extends EngineEvent> = (
   data: EngineEventMap[E],
 ) => void;
 
-// ---------------------------------------------------------------------------
-// Base class — shared event bus
-// ---------------------------------------------------------------------------
+// ---- Base class (shared event bus) ----
 
-/** Common event-bus plumbing for every PlaybackEngine. Subclasses
- *  inherit on/off and call `this.emit(event, data)` from their own
- *  bridge code (video element listeners, Capacitor window events, Cast
- *  polling). Keeps the typed handler map identical across engines so
- *  divergence on event semantics can't sneak in by accident. */
+/** Event-bus plumbing for every PlaybackEngine; subclasses call `this.emit(event, data)`, keeping the typed handler map identical. */
 export interface SeekRange {
   start: number;
   end: number;
@@ -250,21 +211,11 @@ export abstract class AbstractPlaybackEngine {
 
   private handlers = new Map<EngineEvent, Set<EngineEventHandler<any>>>();
 
-  /** Whether `firstFrame` has been emitted for the current load. Subclasses
-   *  drive the emit via {@link emitFirstFrameOnce} and clear it in load() via
-   *  {@link resetFirstFrame}; the recovery heuristic reads it so a pre-frame
-   *  failure goes straight to a fatal error instead of optimistic recovery. */
+  /** Whether `firstFrame` was emitted for this load; the recovery heuristic reads it so a pre-frame failure is fatal. */
   protected firstFrameEmitted = false;
 
-  /** One-shot guard for the optimistic session-expired recovery. The native /
-   *  desktop / TV engines can't read the HTTP status of a failed segment fetch,
-   *  so the first error during stable playback is routed to `sessionExpired`
-   *  (which makes the player mint a fresh sid + reload). A second error before
-   *  the guard is re-armed falls through to a fatal `error`, so a reload that
-   *  immediately re-fails can't loop forever. Re-armed only by
-   *  {@link resetRecoveryGuard} — never on every load() — so a recovery reload
-   *  doesn't reset its own budget. Shaka reads a real 410 instead and never
-   *  touches this. */
+  /** One-shot guard for optimistic session-expired recovery (native engines can't read HTTP status).
+   * Re-armed only by {@link resetRecoveryGuard}, never per load(), so a failing reload can't loop. */
   protected recoveryAttempted = false;
 
   on<E extends EngineEvent>(event: E, handler: EngineEventHandler<E>): void {
@@ -288,9 +239,7 @@ export abstract class AbstractPlaybackEngine {
     this.handlers.clear();
   }
 
-  /** Re-arm the optimistic-recovery one-shot. Called by the player on a
-   *  user-initiated (re)load and after a recovery sustains playback. No-op in
-   *  effect for engines that read a real HTTP status (Shaka). */
+  /** Re-arms the optimistic-recovery one-shot on a user-initiated (re)load and after a recovery sustains playback. */
   resetRecoveryGuard(): void {
     this.recoveryAttempted = false;
   }
@@ -301,22 +250,15 @@ export abstract class AbstractPlaybackEngine {
     this.firstFrameEmitted = false;
   }
 
-  /** Emit `firstFrame` exactly once per load. Subclasses call this from
-   *  whichever signal first proves a frame was presented (rvfc, position
-   *  delta, native first-frame callback). */
+  /** Emits `firstFrame` once per load, from whichever signal first proves a frame was presented. */
   protected emitFirstFrameOnce(): void {
     if (this.firstFrameEmitted) return;
     this.firstFrameEmitted = true;
     this.emit('firstFrame', undefined);
   }
 
-  /** Route a post-first-frame stream error to a single optimistic
-   *  `sessionExpired` recovery. Returns true when it consumed the error (the
-   *  caller should stop and not surface a fatal error), false when the guard
-   *  is spent / no frame has played and the caller must fall through to a real
-   *  error. Engines with a platform-specific precondition (e.g. a
-   *  network-shaped error string) gate on it before calling this. An `err`
-   *  the classifier reads as undecodable is never a session expiry. */
+  /** Routes a post-first-frame error to one optimistic `sessionExpired`; true when consumed, false when the caller must surface a real error.
+   * Undecodable errors are never a session expiry. */
   protected maybeEmitSessionExpired(err?: Parameters<typeof isUndecodableError>[0]): boolean {
     if (err && isUndecodableError(err)) return false;
     if (this.firstFrameEmitted && !this.recoveryAttempted) {
@@ -328,9 +270,7 @@ export abstract class AbstractPlaybackEngine {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Interface
-// ---------------------------------------------------------------------------
+// ---- Interface ----
 
 export interface PlaybackEngine {
   // ── Lifecycle ──
@@ -338,10 +278,7 @@ export interface PlaybackEngine {
   destroy(): Promise<void>;
   load(url: string, startTime?: number, mimeType?: string, headers?: Record<string, string>): Promise<void>;
   unload(): Promise<void>;
-  /** Re-arm the native optimistic-recovery one-shot guard. No-op on engines
-   *  that read a real HTTP status (Shaka). Called on a user-initiated
-   *  (re)load and after a recovery sustains playback. Provided by
-   *  {@link AbstractPlaybackEngine}. */
+  /** Re-arms the native optimistic-recovery guard; provided by {@link AbstractPlaybackEngine}. */
   resetRecoveryGuard(): void;
 
   // ── Playback ──
@@ -354,16 +291,12 @@ export interface PlaybackEngine {
   readonly duration: number;
   readonly paused: boolean;
   readonly buffered: number;
-  /** What the player will actually let a seek land on. On a live stream this is
-   *  the sliding window, and it is the only honest answer to how far back the
-   *  viewer can go: `duration` is infinite and `buffered` is a few seconds. */
+  /** What a seek can land on: on live it is the sliding window, since `duration` is infinite and `buffered` a few seconds. */
   readonly seekRange: SeekRange;
   playbackRate: number;
   volume: number;
   muted: boolean;
-  /** False where the platform owns the level and the setter can only pretend
-   *  (AVPlay, and the Capacitor players until they expose one). A UI must hide
-   *  its slider instead of offering a control that silently does nothing. */
+  /** False where the platform owns the level (AVPlay, Capacitor players); the UI must hide its slider. */
   readonly supportsVolume: boolean;
   /** False when `timeUpdate.buffered` is not a real read-ahead (it then just echoes the playhead). */
   readonly measuresBuffer?: boolean;
@@ -379,12 +312,7 @@ export interface PlaybackEngine {
   selectAudioTrack(id: string): Promise<void>;
 
   // ── Subtitles ──
-  // Subtitles are HLS SUBTITLES renditions in the master playlist; each
-  // engine maps a chosen track to its player's own track by (language,
-  // forced) and returns a handle for `selectTextTrack`. `forced`
-  // disambiguates a full vs forced track of the same language; `index`
-  // disambiguates several tracks that share the same (language, forced) —
-  // it's the 0-based ordinal among them, matching the manifest order.
+  // Tracks map by (language, forced); `index` is the 0-based manifest-order ordinal among tracks sharing both.
   addTextTrack(
     url: string,
     language: string,

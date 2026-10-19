@@ -19,10 +19,7 @@ import { refusalMessageKey } from '../plugin-refusal';
 import { ModalHeaderComponent } from '../../../../shared/components/modal-header';
 import { ModalFooterComponent } from '../../../../shared/components/modal-footer';
 
-/**
- * The install consent sheet. Owns the confirm call itself — the caller only
- * needs to open it with an inspect report and listen for `installed`.
- */
+/** The install consent sheet; owns the confirm call, so callers only open it with an inspect report and listen for `installed`. */
 @Component({
   selector: 'app-plugin-install-consent',
   imports: [ModalFooterComponent, ModalHeaderComponent, FormsModule, TranslatePipe],

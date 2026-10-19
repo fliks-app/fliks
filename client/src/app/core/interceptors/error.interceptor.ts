@@ -29,19 +29,12 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
           ? new HttpErrorResponse({ status: 0, statusText: 'Timeout', url: req.urlWithParams })
           : caught;
       if (err.status === 0 && req.url.includes('/api/')) network.reportDoubt();
-      // Show toasts for client errors (400-499 except 408) + 500 + 503.
-      // Skip: i18n, network errors, gateway errors, timeouts, offline, and
-      // 401 — the auth guard handles unauth state by redirecting to the user
-      // picker; toasting the 401 just adds noise on top of that flow. 503 is
-      // what an installed-but-unreachable plugin returns — the one 5xx an
-      // admin most needs surfaced.
+      // Toasts for 400-499 except 408, plus 500 and 503 (an unreachable plugin); 401 is skipped since the auth guard already redirects.
       const showToast =
         (err.status >= 400 && err.status < 500 && err.status !== 408 && err.status !== 401) ||
         err.status === 500 ||
         err.status === 503;
-      // Discover/search/browse GETs degrade in place (stale cache or empty
-      // rows), so an upstream 500 there must not spray toasts — one discover
-      // open fires several parallel metadata calls at once.
+      // Discover/search/browse GETs degrade in place, and one open fires several parallel metadata calls, so a 500 there must not spray toasts.
       const softMetadataGet =
         req.method === 'GET' && req.url.includes('/api/metadata') && err.status === 500;
       // Health is polled while the server restarts, so a failed probe is expected.

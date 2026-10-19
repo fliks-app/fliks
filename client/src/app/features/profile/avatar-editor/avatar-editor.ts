@@ -15,14 +15,8 @@ const VIEWPORT = 256;
 /** Side of the square image produced for upload (px). */
 const OUTPUT = 512;
 
-/**
- * Client-side avatar cropper. Opened with a picked image {@link open}, it lets
- * the user pan (drag) and zoom (slider) a square region, then emits a
- * 512×512 JPEG blob through {@link cropped} — the server stores the bytes
- * as-is, so no image processing is needed backend-side. The crop is previewed
- * as a circle (how avatars render everywhere) while the exported file stays
- * square (the circle's bounding box).
- */
+/** Client-side avatar cropper: pan/zoom a circle preview, emit a 512×512 JPEG via {@link cropped} (stored as-is by the server);
+ *  the exported file stays square (the circle's bounding box). */
 @Component({
   selector: 'app-avatar-editor',
   imports: [ModalFooterComponent, ModalHeaderComponent, TranslatePipe],
