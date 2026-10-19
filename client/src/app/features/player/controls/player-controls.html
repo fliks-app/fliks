@@ -100,13 +100,12 @@
 ></div>
 
 <!-- Mobile: big center controls (rewind / play / forward).
-     The play/pause button is kept in the layout (only `invisible`) while
-     loading/buffering so the seek arrows don't slide inward — the centered
-     spinner overlay sits in its place. -->
+     Hidden while loading/buffering: the centered spinner overlay sits alone. -->
 @if (isMobileTouch() && videoStarted() && !seekOsd()) {
   <div
     class="player-controls-reveal [--reveal-from:0px] absolute inset-0 z-50 flex items-center justify-center pointer-events-none transition-opacity duration-200"
     [class.opacity-0]="!visible()"
+    [class.invisible]="loading() || buffering()"
   >
     <div class="flex items-center gap-6">
       <!-- lucide:rotate-ccw -->
@@ -114,7 +113,7 @@
         <svg lucideRotateCcw class="h-7 w-7" [strokeWidth]="1.5"></svg>
       </button>
       <!-- lucide:play / lucide:pause -->
-      <button type="button" class="p-6 -m-2 text-white active:scale-90 transition-transform pointer-events-auto" [class.pointer-events-none]="!visible()" [class.invisible]="loading() || buffering()" [attr.aria-label]="(paused() ? 'player.play' : 'player.pause') | translate" [attr.aria-pressed]="!paused()" (click)="togglePlay.emit(); $event.stopPropagation()">
+      <button type="button" class="p-6 -m-2 text-white active:scale-90 transition-transform pointer-events-auto" [class.pointer-events-none]="!visible()" [attr.aria-label]="(paused() ? 'player.play' : 'player.pause') | translate" [attr.aria-pressed]="!paused()" (click)="togglePlay.emit(); $event.stopPropagation()">
         @if (paused()) {
           <svg xmlns="http://www.w3.org/2000/svg" class="h-14 w-14 drop-shadow-lg" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z"/></svg>
         } @else {
