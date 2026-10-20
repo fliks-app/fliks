@@ -90,7 +90,7 @@
     </div>
   }
 
-  @if (adminMessage(); as msg) {
+  @if (remote.adminMessage(); as msg) {
     <div
       class="absolute left-1/2 -translate-x-1/2 z-[60] w-[min(90%,28rem)]"
       style="top: max(1.5rem, env(safe-area-inset-top))"
@@ -101,7 +101,7 @@
         <button
           type="button"
           class="btn btn-ghost btn-xs btn-square"
-          (click)="dismissAdminMessage()"
+          (click)="remote.dismissAdminMessage()"
           [attr.aria-label]="'common.close_notification' | translate"
         >
           <svg lucideX class="h-4 w-4"></svg>
@@ -135,7 +135,7 @@
   @if (!inPipMode()) {
   <app-player-controls
     (interacted)="chrome.onInteraction()"
-    [visible]="chrome.visible() && !syncHidesControls()"
+    [visible]="chrome.visible() && !subs.syncHidesControls()"
     [seekOsd]="chrome.seekOsd()"
     [paused]="uiPaused()"
     [spinner]="spinnerVisible()"
@@ -149,11 +149,11 @@
     [mediaTitle]="mediaTitle()"
     [logoUrl]="mediaLogoUrl()"
     [episodeTitle]="displayEpisodeTitle()"
-    [hasNext]="upNext() !== null"
-    [nextLabelKey]="nextLabelKey()"
-    [queueItems]="preRollActive() ? [] : queueItems()"
-    [queueIndex]="queueIndex()"
-    (selectQueueItem)="playQueueItem($event)"
+    [hasNext]="queueCtl.upNext() !== null"
+    [nextLabelKey]="queueCtl.nextLabelKey()"
+    [queueItems]="preRollActive() ? [] : queueCtl.queueItems()"
+    [queueIndex]="queueCtl.queueIndex()"
+    (selectQueueItem)="queueCtl.playQueueItem($event)"
     [activeQualityLabel]="activeQualityLabel()"
     [isNative]="isNative"
     [isDesktop]="isDesktopNative"
@@ -168,13 +168,13 @@
     [canLockOrientation]="canLockOrientation"
     [orientationLocked]="orientationLocked()"
     (toggleOrientationLock)="onToggleOrientationLock()"
-    [availableSubtitles]="availableSubtitles()"
+    [availableSubtitles]="subs.availableSubtitles()"
     [availableQualities]="availableQualities()"
-    [activeSubtitleId]="activeSubtitleId()"
+    [activeSubtitleId]="subs.activeSubtitleId()"
     [activeQualityId]="activeQualityId()"
     [availableAudioTracks]="availableAudioTracks()"
     [activeAudioTrackId]="activeAudioTrackId()"
-    (selectSubtitle)="onSelectSubtitleById($event)"
+    (selectSubtitle)="subs.selectById($event)"
     (selectQuality)="onSelectQualityById($event)"
     (selectAudioTrack)="onSelectAudioTrack($event)"
     [statsVisible]="statsVisible()"
@@ -196,34 +196,34 @@
     [introMarker]="introMarker()"
     [outroMarker]="outroMarker()"
     [edlRanges]="edlRanges()"
-    [showSkipIntro]="skipIntroVisible() || commercialCueVisible()"
-    [skipCueKey]="skipCueKey()"
-    [skipCueLabel]="commercialCueVisible() ? 'player.edl.skip_commercial' : 'player.skip_intro'"
-    [showNextCue]="nextEpisodeVisible()"
-    [cueDurationMs]="cueRevealMs"
-    (skipIntro)="onSkipCue()"
-    (next)="advance()"
+    [showSkipIntro]="cues.skipIntroVisible() || cues.commercialCueVisible()"
+    [skipCueKey]="cues.skipCueKey()"
+    [skipCueLabel]="cues.commercialCueVisible() ? 'player.edl.skip_commercial' : 'player.skip_intro'"
+    [showNextCue]="cues.nextEpisodeVisible()"
+    [cueDurationMs]="cues.cueRevealMs"
+    (skipIntro)="cues.onSkipCue()"
+    (next)="queueCtl.advance()"
     [showPreRollSkip]="preRollSkippable()"
     (skipPreRoll)="skipPreRoll()"
     (panelOpenChange)="chrome.onPanelOpenChange($event)"
-    (openSubtitleSync)="onOpenSubtitleSync($event)"
+    (openSubtitleSync)="subs.onOpenSubtitleSync($event)"
   />
   }
 
-  @if (subtitleSyncOpen() && syncSubtitle(); as sub) {
+  @if (subs.subtitleSyncOpen() && subs.syncSubtitle(); as sub) {
     <app-subtitle-sync-panel
       [subtitle]="sub"
-      [subtitles]="syncTextTracks()"
+      [subtitles]="subs.syncTextTracks()"
       [mediaId]="syncMediaId"
       [mediaFileId]="syncMediaFileId"
       [duration]="duration()"
-      [timeSource]="subtitleTime"
+      [timeSource]="subs.subtitleTime"
       [paused]="paused()"
       [playbackRate]="playbackRate()"
-      [opener]="subtitleSyncOpener"
-      (selectTrack)="onSelectSubtitleById($event)"
-      (contentChanged)="onSubtitleContentChanged($event)"
-      (closed)="onCloseSubtitleSync()"
+      [opener]="subs.subtitleSyncOpener"
+      (selectTrack)="subs.selectById($event)"
+      (contentChanged)="subs.onSubtitleContentChanged($event)"
+      (closed)="subs.onCloseSubtitleSync()"
     />
   }
 
