@@ -1,4 +1,4 @@
-use super::{db, recommend};
+use super::{db, recommend, watched};
 use crate::{
     http::{
         AppError,
@@ -323,7 +323,8 @@ pub async fn toggle_watched(
     ValidJson(body): ValidJson<ToggleBody>,
 ) -> Result<(StatusCode, Json<Value>), AppError> {
     let episode = body.episode_id.filter(|e| *e != 0);
-    let saved = db::toggle_watched(&st.db, a.user.id, media, body.media_file_id, episode).await?;
+    let saved =
+        watched::toggle_watched(&st.db, a.user.id, media, body.media_file_id, episode).await?;
     Ok((StatusCode::CREATED, Json(saved)))
 }
 
@@ -334,7 +335,7 @@ pub async fn toggle_series_watched(
     PathParams(media): PathParams<i32>,
     ValidJson(body): ValidJson<WatchedBody>,
 ) -> Result<(StatusCode, Json<Value>), AppError> {
-    db::toggle_series_watched(&st.db, a.user.id, media, body.on()).await?;
+    watched::toggle_series_watched(&st.db, a.user.id, media, body.on()).await?;
     Ok((StatusCode::CREATED, Json(json!({"watched": body.on()}))))
 }
 
@@ -354,6 +355,6 @@ pub async fn toggle_season_watched(
     {
         return Err(AppError::not_found("not_found"));
     }
-    db::toggle_season_watched(&st.db, a.user.id, media, season, body.on()).await?;
+    watched::toggle_season_watched(&st.db, a.user.id, media, season, body.on()).await?;
     Ok((StatusCode::CREATED, Json(json!({"watched": body.on()}))))
 }
