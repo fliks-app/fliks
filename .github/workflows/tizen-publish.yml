@@ -23,6 +23,10 @@ permissions:
 
 jobs:
   build-and-publish:
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -92,6 +96,12 @@ jobs:
           path: |
             client/dist/Fliks-*.wgt
             client/dist/store/Fliks-*-store.wgt
+
+      - name: Attest build provenance
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
+        with:
+          subject-path: client/dist/Fliks-*.wgt
 
       - name: Attach to release
         if: startsWith(github.ref, 'refs/tags/v')

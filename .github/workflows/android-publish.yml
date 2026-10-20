@@ -56,6 +56,10 @@ permissions:
 
 jobs:
   build-and-publish:
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
     # `amazon_tag` re-publishes an already-attached APK to Amazon only.
     if: github.event.inputs.amazon_tag == ''
     runs-on: ubuntu-latest
@@ -148,6 +152,12 @@ jobs:
           cp android/app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/$dest"
           echo "path=$dest" >> "$GITHUB_OUTPUT"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Attest build provenance
+        if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.apk_tag != ''
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
+        with:
+          subject-path: ${{ steps.apk.outputs.path }}
 
       - name: Attach signed APK to the GitHub release
         if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.apk_tag != ''

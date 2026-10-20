@@ -1,0 +1,44 @@
+# Publishes SHA256SUMS on a release from the digests GitHub computed for its assets. Every release
+# workflow attaches its own files, so this reruns after each of them and rewrites the whole list.
+name: Release checksums
+
+on:
+  workflow_run:
+    workflows:
+      - Build Windows server
+      - Build macOS server
+      - Desktop release
+      - Publish Android to Stores
+      - Publish LG webOS package
+      - Publish Samsung Tizen widget
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag, e.g. v5.0.0'
+        required: true
+
+concurrency:
+  group: release-checksums
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  checksums:
+    # workflow_run's head_branch is the tag name for a tag push.
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && startsWith(github.event.workflow_run.head_branch, 'v'))
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      TAG: ${{ inputs.tag || github.event.workflow_run.head_branch }}
+    steps:
+      - name: Write SHA256SUMS from the asset digests
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" \
+            --jq '.assets[] | select(.name != "SHA256SUMS" and (.digest // "" | startswith("sha256:"))) | "\(.digest | ltrimstr("sha256:"))  \(.name)"' \
+            | sort -k2 > SHA256SUMS
+          test -s SHA256SUMS || { echo "::error::no asset with a sha256 digest on $TAG"; exit 1; }
+          cat SHA256SUMS
+          gh release upload "$TAG" SHA256SUMS --clobber -R "$GITHUB_REPOSITORY"
