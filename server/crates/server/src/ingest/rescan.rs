@@ -132,7 +132,11 @@ pub async fn rescan_files(
     )
     .fetch_all(&st.db)
     .await?;
-    let (_, dir) = match media_dir(&media) {
+    let m = media.clone();
+    let found = tokio::task::spawn_blocking(move || media_dir(&m))
+        .await
+        .map_err(|e| AppError::internal(e.to_string()))?;
+    let (_, dir) = match found {
         Ok(d) => d,
         Err(_) if rows.is_empty() => return Ok(Counts::default()),
         Err(e) => return Err(e),
@@ -164,7 +168,7 @@ pub async fn rescan_files(
         for r in &rows {
             if let Some(rel) = fsx::safe_rel(&r.rel) {
                 let p = dir.join(rel);
-                if fs::metadata(&p).is_ok_and(|m| m.is_file()) {
+                if tokio::fs::metadata(&p).await.is_ok_and(|m| m.is_file()) {
                     w.files.push(p);
                 }
             }
@@ -216,7 +220,7 @@ pub async fn rescan_files(
         .filter(|r| on_disk.contains(norm(&r.rel).as_str()))
     {
         let abs = dir.join(norm(&r.rel));
-        let Ok(meta) = fs::metadata(&abs) else {
+        let Ok(meta) = tokio::fs::metadata(&abs).await else {
             continue;
         };
         let disk_size = meta.len() as i64;
@@ -287,7 +291,7 @@ pub async fn rescan_files(
     }
 
     for (rel, abs) in disk.iter().filter(|(r, _)| !linked.contains(r)) {
-        let Ok(meta) = fs::metadata(abs) else {
+        let Ok(meta) = tokio::fs::metadata(abs).await else {
             continue;
         };
         let name = file_name(abs);
@@ -473,7 +477,7 @@ pub async fn enrich_from_disk(st: &AppState, file_id: i32) -> Result<(), AppErro
         tracing::warn!("enrich: file #{file_id} has no contained path");
         return Ok(());
     };
-    let Ok(meta) = fs::metadata(&abs) else {
+    let Ok(meta) = tokio::fs::metadata(&abs).await else {
         tracing::warn!(
             "enrich: file #{file_id} missing on disk \"{}\"",
             abs.display()
@@ -634,7 +638,7 @@ pub async fn analyze(st: &AppState, media_id: i32, o: Analyze) -> Result<(), App
         let Some((abs, info)) = super::post_import::file_path(st, id).await? else {
             continue;
         };
-        if !abs.exists() {
+        if !tokio::fs::try_exists(&abs).await.unwrap_or(false) {
             tracing::warn!(
                 "analyzeMedia[#{media_id}]: file off-disk, skipping \"{}\"",
                 abs.display()

@@ -403,7 +403,9 @@ async fn load_source_srt(
             .resolve_file(stored)
             .map_err(|_| other("source subtitle path is invalid".into()))?;
         if source.codec.as_deref() == Some("subrip") || stored.to_lowercase().ends_with(".srt") {
-            let bytes = std::fs::read(&abs).map_err(|e| other(e.to_string()))?;
+            let bytes = tokio::fs::read(&abs)
+                .await
+                .map_err(|e| other(e.to_string()))?;
             return Ok(decode_text(&bytes));
         }
         let info = info.unwrap_or_else(empty_info);

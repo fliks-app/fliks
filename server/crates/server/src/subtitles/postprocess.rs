@@ -84,7 +84,7 @@ pub async fn apply(
             "Cannot post-process a {ext} subtitle"
         )));
     }
-    let raw = std::fs::read(&abs).map_err(|e| {
+    let raw = tokio::fs::read(&abs).await.map_err(|e| {
         tracing::error!(error = %e, "post-process read");
         AppError::plain(
             axum::http::StatusCode::INTERNAL_SERVER_ERROR,
@@ -120,7 +120,7 @@ pub async fn apply(
         .to_owned();
     if converted
         && name != format!("{stem}.srt")
-        && stem_target_exists(&abs, &format!("{stem}.srt"))
+        && stem_target_exists(&abs, &format!("{stem}.srt")).await
     {
         return Err(AppError::conflict("Target subtitle already exists"));
     }
@@ -157,7 +157,9 @@ pub async fn apply(
         .map_or(Value::Null, |r| r.json()))
 }
 
-fn stem_target_exists(abs: &std::path::Path, name: &str) -> bool {
-    abs.parent()
-        .is_some_and(|d| std::fs::symlink_metadata(d.join(name)).is_ok())
+async fn stem_target_exists(abs: &std::path::Path, name: &str) -> bool {
+    match abs.parent() {
+        Some(d) => tokio::fs::symlink_metadata(d.join(name)).await.is_ok(),
+        None => false,
+    }
 }
