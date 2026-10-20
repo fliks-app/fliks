@@ -112,7 +112,7 @@ jobs:
       # transitive deps (@electron/rebuild, node-abi, app-builder-lib) require
       # Node >= 22.12, so the runner uses 22. The addon's Electron 42 ABI is
       # pinned via node-gyp --target/--dist-url and is independent of host Node.
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           cache: npm
