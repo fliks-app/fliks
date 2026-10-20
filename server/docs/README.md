@@ -259,6 +259,7 @@ A 500 or a half-written request is never part of the frozen contract:
 | C170 | `PATCH /api/media/:id/library` moved a media that has files without moving them: `Media.path` pointed at a missing folder, the file rows were orphaned and a later delete removed `newLibrary/folderName` | 409 `{code: 'media_has_files', message}` and nothing changes (a `libraryId` equal to the current one is a no-op); the files are not moved | the edit dialog locks the library select with an explanation; a 4.x client shows the error toast |
 | C171 | `GET /api/persons/search` with a blank `q` returned every person, biographies included, with no limit | the first 1000 by name; a person past it is found by name | the persons page lists at most 1000 without a search |
 | C172 | an SSE connection's frame queue was unbounded: a client that stopped reading made server memory grow | the queue holds 1024 frames; a connection that overflows is closed and the client reconnects (`events-hub.md` rule 15a) | none: clients already reconnect on a dropped stream |
+| C173 | an image source of up to 268 402 689 pixels (about 1 GiB decoded) was decoded once per variant | one decode per source, refused over 40 000 000 pixels: the full file is kept, its resized variants are not made (`image-store.md` rule 9) | none: artwork is far smaller |
 
 Frozen as is (decided): the heartbeat keeps its debounce entry after a failed history write and returns
 `sessionLost: false` when the engine session lives but presence cannot be rebuilt. Lists whose order comes

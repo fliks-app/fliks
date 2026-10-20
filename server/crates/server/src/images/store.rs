@@ -21,8 +21,8 @@ const MAX_DOWNLOAD_BYTES: usize = 20 * 1024 * 1024;
 const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(15);
 const NETWORK_SLOTS: usize = 3;
 const JPEG_QUALITY: u8 = 90;
-/// sharp's default input limit (16383 x 16383).
-const MAX_PIXELS: u64 = 268_402_689;
+/// Largest source decoded: 160 MB as RGBA, far above any artwork.
+const MAX_PIXELS: u64 = 40_000_000;
 
 pub struct ImageStore {
     /// `None` is the shared data directory, resolved on first use.
@@ -107,20 +107,29 @@ fn flatten(img: &DynamicImage) -> image::RgbImage {
     out
 }
 
-/// Fixed width, aspect kept, never enlarged; PNG for logos, JPEG q90 otherwise.
-fn resized(bytes: &[u8], width: u32, png: bool) -> Option<Vec<u8>> {
+/// The source decoded once, within the pixel and allocation limits.
+fn decode(bytes: &[u8]) -> Option<DynamicImage> {
     let (_, w, h) = probe(bytes)?;
     if u64::from(w) * u64::from(h) > MAX_PIXELS {
         return None;
     }
-    let img = ImageReader::new(Cursor::new(bytes))
+    let mut reader = ImageReader::new(Cursor::new(bytes))
         .with_guessed_format()
-        .ok()?
-        .decode()
         .ok()?;
+    let mut limits = image::Limits::default();
+    limits.max_alloc = Some(MAX_PIXELS * 8);
+    reader.limits(limits);
+    reader.decode().ok()
+}
+
+/// Fixed width, aspect kept, never enlarged; PNG for logos, JPEG q90 otherwise.
+fn resized(img: &DynamicImage, width: u32, png: bool) -> Option<Vec<u8>> {
+    let (w, h) = (img.width(), img.height());
+    let resized;
     let img = if w > width {
         let nh = ((u64::from(h) * u64::from(width) + u64::from(w) / 2) / u64::from(w)).max(1);
-        img.resize_exact(width, nh as u32, FilterType::Lanczos3)
+        resized = img.resize_exact(width, nh as u32, FilterType::Lanczos3);
+        &resized
     } else {
         img
     };
@@ -131,12 +140,20 @@ fn resized(bytes: &[u8], width: u32, png: bool) -> Option<Vec<u8>> {
             .write_image(&rgba, rgba.width(), rgba.height(), ColorType::Rgba8.into())
             .ok()?;
     } else {
-        let rgb = flatten(&img);
+        let rgb = flatten(img);
         JpegEncoder::new_with_quality(&mut out, JPEG_QUALITY)
             .write_image(&rgb, rgb.width(), rgb.height(), ColorType::Rgb8.into())
             .ok()?;
     }
     Some(out)
+}
+
+/// Every width from one decode; all `None` when the source does not decode.
+fn resized_all(bytes: &[u8], widths: &[u32], png: bool) -> Vec<Option<Vec<u8>>> {
+    match decode(bytes) {
+        Some(img) => widths.iter().map(|w| resized(&img, *w, png)).collect(),
+        None => vec![None; widths.len()],
+    }
 }
 
 impl ImageStore {
@@ -268,12 +285,13 @@ impl ImageStore {
         let png = is_png(t);
         let bytes = Arc::new(bytes);
         let _cpu = self.cpu.acquire().await.ok()?;
-        for (px, dest) in targets {
-            let b = bytes.clone();
-            let out = tokio::task::spawn_blocking(move || resized(&b, px, png))
-                .await
-                .ok()
-                .flatten();
+        let widths: Vec<u32> = targets.iter().map(|(px, _)| *px).collect();
+        let b = bytes.clone();
+        let n = widths.len();
+        let outs = tokio::task::spawn_blocking(move || resized_all(&b, &widths, png))
+            .await
+            .unwrap_or_else(|_| vec![None; n]);
+        for ((px, dest), out) in targets.into_iter().zip(outs) {
             match out {
                 Some(out) => {
                     if let Err(e) = write_atomic(&dest, &out).await {
@@ -877,6 +895,21 @@ mod tests {
         let url = f.serve("poster.jpg", jpeg(300, 450));
         f.store.download_and_store(&url, &t).await.unwrap();
         assert!(f.store.has_image(&t));
+    }
+
+    #[test]
+    fn a_source_over_the_pixel_limit_is_not_decoded() {
+        let mut png = vec![];
+        PngEncoder::new(&mut png)
+            .write_image(&vec![0; 7000 * 6001], 7000, 6001, ColorType::L8.into())
+            .unwrap();
+        assert!(decode(&png).is_none());
+        assert!(
+            resized_all(&png, &[185, 500], false)
+                .iter()
+                .all(Option::is_none)
+        );
+        assert!(decode(&jpeg(40, 30)).is_some());
     }
 
     #[test]
