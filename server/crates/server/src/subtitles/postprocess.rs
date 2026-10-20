@@ -25,10 +25,7 @@ fn number(params: &Value, key: &str, default: f64) -> Result<f64, AppError> {
     match params.get(key) {
         None | Some(Value::Null) => Ok(default),
         Some(Value::Number(n)) => n.as_f64().filter(|f| f.is_finite()).ok_or_else(bad),
-        Some(Value::String(s)) => s
-            .trim()
-            .parse::<f64>()
-            .ok()
+        Some(Value::String(s)) => fliks_domain::media::query::js_number(s)
             .filter(|f| f.is_finite())
             .ok_or_else(bad),
         _ => Err(bad()),

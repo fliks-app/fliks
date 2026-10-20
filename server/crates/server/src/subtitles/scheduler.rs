@@ -27,14 +27,7 @@ struct Opts {
 
 /// `Number(x)` finite, else the default (C59).
 fn number(v: Option<String>, default: f64) -> f64 {
-    v.map(|s| s.trim().to_owned())
-        .and_then(|s| {
-            if s.is_empty() {
-                Some(0.0)
-            } else {
-                s.parse::<f64>().ok()
-            }
-        })
+    v.and_then(|s| fliks_domain::media::query::js_number(&s))
         .filter(|n| n.is_finite())
         .unwrap_or(default)
 }

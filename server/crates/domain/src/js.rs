@@ -1,5 +1,6 @@
 //! JavaScript semantics the ported code depends on.
 use serde::Deserialize;
+use serde_json::{Number, Value};
 
 /// `String.prototype.trim` / `\s` whitespace.
 pub fn is_ws(c: char) -> bool {
@@ -18,6 +19,52 @@ pub fn iso(t: chrono::DateTime<chrono::Utc>) -> String {
 /// `Date.now()`.
 pub fn now_ms() -> i64 {
     chrono::Utc::now().timestamp_millis()
+}
+
+/// `Number.prototype.toString` of a JSON number: shortest round-trip digits, never `1.0`.
+pub fn number_string(n: &Number) -> String {
+    const SAFE: u64 = 1 << 53;
+    if let Some(i) = n.as_i64().filter(|i| i.unsigned_abs() <= SAFE) {
+        return i.to_string();
+    }
+    let f = n.as_f64().unwrap_or_default();
+    let a = f.abs();
+    if f == 0.0 {
+        "0".into()
+    } else if !(1e-6..1e21).contains(&a) {
+        format!("{f:e}").replace('e', "e+").replace("e+-", "e-")
+    } else if a < SAFE as f64 {
+        f.to_string()
+    } else {
+        // Past 2^53 JS pads the shortest digits with zeros where Rust prints the exact value.
+        let e = format!("{a:e}");
+        let (m, exp) = e.split_once('e').unwrap_or((&e, "0"));
+        let digits: String = m.chars().filter(|c| *c != '.').collect();
+        let len = exp.parse::<usize>().unwrap_or(0) + 1;
+        format!("{}{digits:0<len$}", if f < 0.0 { "-" } else { "" })
+    }
+}
+
+/// `String(v)` of a JSON value.
+pub fn js_string(v: &Value) -> String {
+    match v {
+        Value::Null => "null".into(),
+        Value::Bool(b) => b.to_string(),
+        Value::Number(n) => number_string(n),
+        Value::String(s) => s.clone(),
+        Value::Array(a) => a
+            .iter()
+            .map(|x| {
+                if x.is_null() {
+                    String::new()
+                } else {
+                    js_string(x)
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(","),
+        Value::Object(_) => "[object Object]".into(),
+    }
 }
 
 /// `Math.round`: halves toward +infinity.
@@ -194,4 +241,22 @@ pub(crate) fn multiline(p: &str) -> String {
         }
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn numbers_print_like_number_to_string() {
+        let n = |s: &str| number_string(&serde_json::from_str(s).unwrap());
+        assert_eq!(n("1.0"), "1");
+        assert_eq!(n("0.1"), "0.1");
+        assert_eq!(n("1e-6"), "0.000001");
+        assert_eq!(n("1.5e-7"), "1.5e-7");
+        assert_eq!(n("1e21"), "1e+21");
+        assert_eq!(n("9007199254740993"), "9007199254740992");
+        assert_eq!(n("1152921504606846976"), "1152921504606847000");
+        assert_eq!(n("-1152921504606846976"), "-1152921504606847000");
+    }
 }

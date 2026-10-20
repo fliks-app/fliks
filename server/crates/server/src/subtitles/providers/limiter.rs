@@ -86,12 +86,8 @@ impl Table {
 pub struct Limiter(Mutex<Table>);
 
 fn number(h: &HeaderMap, k: &str) -> Option<f64> {
-    let v = h.get(k)?.to_str().ok()?.trim();
-    Some(if v.is_empty() {
-        0.0
-    } else {
-        v.parse().unwrap_or(f64::NAN)
-    })
+    let v = h.get(k)?.to_str().ok()?;
+    Some(fliks_domain::media::query::js_number(v).unwrap_or(f64::NAN))
 }
 
 impl Limiter {

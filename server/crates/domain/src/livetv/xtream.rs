@@ -1,5 +1,5 @@
 //! Xtream panel links and API answers (`livetv-sources.md` rules 17-21).
-use crate::js::{self, encode_uri_component, rx};
+use crate::js::{self, encode_uri_component, js_string, rx};
 use chrono::{DateTime, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -106,40 +106,6 @@ pub fn pick_output_format(allowed: &[String]) -> String {
         "ts".into()
     } else {
         allowed[0].clone()
-    }
-}
-
-/// JS `String(v)` for the JSON values a panel sends.
-pub fn js_string(v: &Value) -> String {
-    match v {
-        Value::Null => "null".into(),
-        Value::String(s) => s.clone(),
-        Value::Bool(b) => b.to_string(),
-        Value::Number(n) => n
-            .as_i64()
-            .map(|i| i.to_string())
-            .or_else(|| {
-                n.as_f64().map(|f| {
-                    if f.fract() == 0.0 && f.abs() < 1e21 {
-                        format!("{f:.0}")
-                    } else {
-                        f.to_string()
-                    }
-                })
-            })
-            .unwrap_or_default(),
-        Value::Array(a) => a
-            .iter()
-            .map(|x| {
-                if x.is_null() {
-                    String::new()
-                } else {
-                    js_string(x)
-                }
-            })
-            .collect::<Vec<_>>()
-            .join(","),
-        Value::Object(_) => "[object Object]".into(),
     }
 }
 

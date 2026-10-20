@@ -1,6 +1,7 @@
 //! Body and query checks with class-validator's messages (`auth.md` rule 16): every failing rule of
 //! every field, unknown keys first, `IsOptional` letting `null` through.
 use crate::http::AppError;
+use fliks_domain::media::query::js_number;
 use serde_json::{Map, Value};
 
 /// A field of a body: missing, `null` (which `IsOptional` lets through) or a checked value.
@@ -301,35 +302,6 @@ pub fn query_int(
         errors.push(format!("{key} must be an integer number"));
     }
     whole.map(|n| n.clamp(i64::MIN as f64, i64::MAX as f64) as i64)
-}
-
-/// JS `Number(text)`: blank is 0, a plain decimal or hex/octal/binary literal a number, anything else NaN (`None`).
-pub fn js_number(raw: &str) -> Option<f64> {
-    let t = fliks_domain::js::trim(raw);
-    if t.is_empty() {
-        return Some(0.0);
-    }
-    let radix = |p: &str, r| {
-        let (head, digits) = (t.get(..2)?, t.get(2..)?);
-        (head.eq_ignore_ascii_case(p) && !digits.is_empty())
-            .then(|| u64::from_str_radix(digits, r).ok().map(|n| n as f64))
-            .flatten()
-    };
-    let decimal = t
-        .bytes()
-        .all(|b| b.is_ascii_digit() || b"+-.eE".contains(&b))
-        .then(|| t.parse::<f64>().ok())
-        .flatten();
-    let infinity = match t {
-        "Infinity" | "+Infinity" => Some(f64::INFINITY),
-        "-Infinity" => Some(f64::NEG_INFINITY),
-        _ => None,
-    };
-    radix("0x", 16)
-        .or(radix("0o", 8))
-        .or(radix("0b", 2))
-        .or(decimal)
-        .or(infinity)
 }
 
 /// `@Transform(({value}) => value === 'true' || value === true)` on a query flag: only `true` is true.
