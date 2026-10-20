@@ -57,6 +57,9 @@ export class PlayerStateService {
 
   /** Last playhead seen on `timeUpdate`; a moving playhead while not paused clears a latched buffering spinner. */
   private lastBufferingPos = -1;
+  /** Widest playhead step between two `timeUpdate`s of real playback (1 s ticks at up to 2x); a longer one is a seek or a
+   *  reloaded stream landing on its start position, not frames flowing. */
+  private static readonly MAX_PLAYBACK_STEP = 3;
 
   /** Set while lost-session recovery reloads the engine; its transient fatal error then surfaces as buffering, not the error overlay. Owned by PlayerComponent. */
   private recovering = false;
@@ -195,7 +198,8 @@ export class PlayerStateService {
         !this.seekLocked() &&
         !this.paused() &&
         this.buffering() &&
-        e.position !== this.lastBufferingPos
+        e.position > this.lastBufferingPos &&
+        e.position - this.lastBufferingPos <= PlayerStateService.MAX_PLAYBACK_STEP
       ) {
         this.buffering.set(false);
       }
