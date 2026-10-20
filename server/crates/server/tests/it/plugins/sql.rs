@@ -166,7 +166,7 @@ async fn db_driver() {
     );
     // The `db-driver` vectors: node-pg with the download plugin's parsers, as that plugin saw each value.
     let file: Value =
-        serde_json::from_str(include_str!("../../../../fixtures/db-driver/cases.json")).unwrap();
+        serde_json::from_str(include_str!("../../../../../fixtures/db-driver/cases.json")).unwrap();
     let mut failed = vec![];
     for c in file["cases"].as_array().unwrap() {
         let (sql, params) = (c["input"]["sql"].as_str().unwrap(), &c["input"]["params"]);

@@ -358,9 +358,7 @@ async fn password_change_revokes_every_session_and_share_disabled_tears_down(poo
 
 #[sqlx::test(migrations = false)]
 async fn avatar_upload_and_clear(pool: PgPool) {
-    let dir = std::env::temp_dir().join(format!("fliks-users-test-{}", std::process::id()));
-    // SAFETY: only this test reads FLIKS_DATA_DIR.
-    unsafe { std::env::set_var("FLIKS_DATA_DIR", &dir) };
+    let dir = fliks_server::paths::data_dir();
     let c = ctx(pool).await;
     let (a, ta) = c.user("a", "[]", false).await;
     let send = |ct: &str, name: &str, data: &[u8]| {
@@ -412,5 +410,4 @@ async fn avatar_upload_and_clear(pool: PgPool) {
     let (s, b) = c.call("DELETE", "/api/users/me/avatar", &ta, None).await;
     assert_eq!((s, &b["avatar"]), (200, &Value::Null));
     assert!(!file.exists());
-    let _ = std::fs::remove_dir_all(dir);
 }
