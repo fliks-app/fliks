@@ -1,7 +1,7 @@
 //! Restricted groups (`livetv-access.md` rules 5-8, 21-28): the pure decisions around the three settings.
 use super::names::fold_group_key;
-use crate::js;
-use chrono::{DateTime, Duration, SecondsFormat, Utc};
+use crate::js::{self, iso};
+use chrono::{DateTime, Duration, Utc};
 use fancy_regex::Regex;
 use serde::Serialize;
 use std::{collections::HashSet, sync::LazyLock};
@@ -177,10 +177,6 @@ pub struct Expiry {
     pub vanished: Vec<(String, String)>,
     pub changed: bool,
     pub expired: Vec<String>,
-}
-
-pub fn iso(t: DateTime<Utc>) -> String {
-    t.to_rfc3339_opts(SecondsFormat::Millis, true)
 }
 
 /// `expireVanishedGroups` without its writes: marks candidates missing from the live set, clears

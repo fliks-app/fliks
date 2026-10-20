@@ -2,6 +2,7 @@
 //! the engine bodies; batching, retry and prompts are `fliks_domain::translation`.
 use super::Shared;
 use crate::http::AppError;
+use crate::sync::MutexExt;
 use axum::http::StatusCode;
 use fliks_domain::translation::{
     Attempt, BATCH_SIZE, BatchError, Driver, Limits, MAX_OUTPUT_TOKENS, Pacer, Post,
@@ -431,8 +432,7 @@ impl Driver for Engine<'_> {
         self.sh
             .pacing
             .0
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .lock_clean()
             .try_reserve(key, allowance, tokens, now)
     }
 

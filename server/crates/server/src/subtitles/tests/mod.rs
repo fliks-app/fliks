@@ -5,6 +5,7 @@ mod routes;
 mod scheduler;
 mod translation;
 
+use crate::sync::MutexExt;
 use axum::{
     Router,
     body::Bytes,
@@ -92,7 +93,7 @@ async fn handle(
         body: body.to_vec(),
     };
     let (dynamic, r) = {
-        let mut st = s.lock().unwrap();
+        let mut st = s.lock_clean();
         st.seen.push(seen.clone());
         let dynamic = st
             .dynamic
@@ -152,8 +153,7 @@ impl Stub {
 
     pub fn on(&self, method: &str, path: &str, replies: Vec<Reply>) -> &Self {
         self.state
-            .lock()
-            .unwrap()
+            .lock_clean()
             .rules
             .push((method.into(), path.into(), replies.into()));
         self
@@ -167,8 +167,7 @@ impl Stub {
         f: impl Fn(&Seen) -> Reply + Send + Sync + 'static,
     ) -> &Self {
         self.state
-            .lock()
-            .unwrap()
+            .lock_clean()
             .dynamic
             .push((method.into(), path.into(), Arc::new(f)));
         self
@@ -176,8 +175,7 @@ impl Stub {
 
     pub fn seen(&self, method: &str, path: &str) -> Vec<Seen> {
         self.state
-            .lock()
-            .unwrap()
+            .lock_clean()
             .seen
             .iter()
             .filter(|s| s.method == method && s.path == path)
@@ -186,7 +184,7 @@ impl Stub {
     }
 
     pub fn all(&self) -> Vec<Seen> {
-        self.state.lock().unwrap().seen.clone()
+        self.state.lock_clean().seen.clone()
     }
 }
 

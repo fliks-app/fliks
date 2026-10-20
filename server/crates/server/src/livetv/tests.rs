@@ -1,6 +1,7 @@
 //! Live TV against a real database, a fake provider and a fake engine: the sync, the guide import, the
 //! session control plane and the resolver (ports of `livetv-session.service.spec.ts` and the sync specs).
 use super::{guide, session, sources, sync};
+use crate::sync::MutexExt;
 use crate::{
     app,
     config::Config,
@@ -56,7 +57,7 @@ type Shared = Arc<Mutex<Provider>>;
 async fn serve(State(p): State<Shared>, headers: HeaderMap, req: Request) -> Response {
     let path = req.uri().path().to_owned();
     let (delay, etag, playlist, guide, cut, gz) = {
-        let mut g = p.lock().unwrap();
+        let mut g = p.lock_clean();
         g.hits
             .push(format!("{path}?{}", req.uri().query().unwrap_or_default()));
         g.agents.push(
@@ -329,7 +330,7 @@ mod sources_sync {
     #[sqlx::test(migrations = false)]
     async fn a_sync_creates_disabled_channels_and_a_second_one_updates_in_place(pool: PgPool) {
         let c = ctx(pool).await;
-        c.prov.lock().unwrap().playlist = PLAYLIST.into();
+        c.prov.lock_clean().playlist = PLAYLIST.into();
         let id = source(&c, "S", "m3u", &format!("{}/playlist.m3u", c.base), 0).await;
         let r = sync::sync(&c.st, id).await.unwrap();
         assert_eq!(
@@ -361,7 +362,7 @@ mod sources_sync {
     #[sqlx::test(migrations = false)]
     async fn a_manual_limit_survives_the_headers_max_conn(pool: PgPool) {
         let c = ctx(pool).await;
-        c.prov.lock().unwrap().playlist = PLAYLIST.into();
+        c.prov.lock_clean().playlist = PLAYLIST.into();
         let id = source(&c, "S", "m3u", &format!("{}/playlist.m3u", c.base), 1).await;
         sqlx::query(r#"UPDATE livetv_sources SET "maxStreamsIsManual" = true WHERE id = $1"#)
             .bind(id)
@@ -382,7 +383,7 @@ mod sources_sync {
     async fn an_unchanged_etag_is_not_modified_and_leaves_the_lineup(pool: PgPool) {
         let c = ctx(pool).await;
         {
-            let mut p = c.prov.lock().unwrap();
+            let mut p = c.prov.lock_clean();
             p.playlist = PLAYLIST.into();
             p.etag = Some("\"v1\"");
         }
@@ -397,16 +398,16 @@ mod sources_sync {
                 .await
                 .unwrap();
         assert_eq!(etag.as_deref(), Some("\"v1\""));
-        assert_eq!(c.prov.lock().unwrap().hits.len(), 2);
+        assert_eq!(c.prov.lock_clean().hits.len(), 2);
     }
 
     #[sqlx::test(migrations = false)]
     async fn a_response_that_lost_most_of_the_lineup_is_refused(pool: PgPool) {
         let c = ctx(pool).await;
-        c.prov.lock().unwrap().playlist = PLAYLIST.into();
+        c.prov.lock_clean().playlist = PLAYLIST.into();
         let id = source(&c, "S", "m3u", &format!("{}/playlist.m3u", c.base), 0).await;
         sync::sync(&c.st, id).await.unwrap();
-        c.prov.lock().unwrap().playlist =
+        c.prov.lock_clean().playlist =
             "#EXTM3U\n#EXTINF:-1,One HD\nhttp://h/live/u/p/101.ts\n".into();
         let r = sync::sync(&c.st, id).await.unwrap();
         assert!(!r.ok && r.channel_count == 3);
@@ -454,7 +455,7 @@ mod sources_sync {
     #[sqlx::test(migrations = false)]
     async fn streams_unseen_for_the_window_go_with_their_empty_channels(pool: PgPool) {
         let c = ctx(pool).await;
-        c.prov.lock().unwrap().playlist = PLAYLIST.into();
+        c.prov.lock_clean().playlist = PLAYLIST.into();
         let id = source(&c, "S", "m3u", &format!("{}/playlist.m3u", c.base), 0).await;
         let old = channel(&c.pool, "Gone", "News", true).await;
         let s = stream(&c.pool, old, id, "http://h/old", 0).await;
@@ -476,7 +477,7 @@ mod sources_sync {
     #[sqlx::test(migrations = false)]
     async fn an_entry_folds_onto_the_first_same_named_channel_of_another_source(pool: PgPool) {
         let c = ctx(pool).await;
-        c.prov.lock().unwrap().playlist = PLAYLIST.into();
+        c.prov.lock_clean().playlist = PLAYLIST.into();
         let other = source(&c, "Other", "m3u", "http://h/x", 0).await;
         let ch = channel(&c.pool, "Two", "Sport", true).await;
         stream(&c.pool, ch, other, "http://h/two", 0).await;
@@ -500,7 +501,7 @@ mod sources_sync {
     #[sqlx::test(migrations = false)]
     async fn the_adult_guard_restricts_a_new_adult_group(pool: PgPool) {
         let c = ctx(pool).await;
-        c.prov.lock().unwrap().playlist = PLAYLIST.into();
+        c.prov.lock_clean().playlist = PLAYLIST.into();
         let id = source(&c, "S", "m3u", &format!("{}/playlist.m3u", c.base), 0).await;
         sync::sync(&c.st, id).await.unwrap();
         assert_eq!(
@@ -522,7 +523,7 @@ mod sources_sync {
         pool: PgPool,
     ) {
         let c = ctx(pool).await;
-        c.prov.lock().unwrap().playlist = PLAYLIST.into();
+        c.prov.lock_clean().playlist = PLAYLIST.into();
         let id = source(&c, "S", "m3u", &format!("{}/playlist.m3u", c.base), 0).await;
         sqlx::query(r#"INSERT INTO app_settings (key, value) VALUES ('livetv_restricted_groups', '["Vanished"]'), ('livetv_stale_stream_days', '0')"#)
             .execute(&c.pool)
@@ -552,7 +553,7 @@ mod sources_sync {
     async fn two_syncs_of_one_source_do_not_overlap(pool: PgPool) {
         let c = ctx(pool).await;
         {
-            let mut p = c.prov.lock().unwrap();
+            let mut p = c.prov.lock_clean();
             p.playlist = PLAYLIST.into();
             p.delay_ms = 400;
         }
@@ -575,7 +576,7 @@ mod sources_sync {
     async fn a_respond_async_sync_answers_202_and_runs_on_under_its_command(pool: PgPool) {
         let c = ctx(pool).await;
         {
-            let mut p = c.prov.lock().unwrap();
+            let mut p = c.prov.lock_clean();
             p.playlist = PLAYLIST.into();
             p.delay_ms = 300;
         }
@@ -679,7 +680,7 @@ mod sources_sync {
     #[sqlx::test(migrations = false)]
     async fn the_probe_reads_a_lineup_and_suggests_the_panel_behind_an_uploaded_file(pool: PgPool) {
         let c = ctx(pool).await;
-        c.prov.lock().unwrap().playlist = PLAYLIST.into();
+        c.prov.lock_clean().playlist = PLAYLIST.into();
         let mut suggestion = None;
         let url = format!("{}/playlist.m3u", c.base);
         let who: sources::Who = (None, None, None, None, None);
@@ -742,7 +743,7 @@ mod sources_sync {
                 .starts_with("Refused: \"127.0.0.1\" resolves to an internal address"),
             "{b}"
         );
-        assert_eq!(c.prov.lock().unwrap().hits.len(), 0, "nothing was fetched");
+        assert_eq!(c.prov.lock_clean().hits.len(), 0, "nothing was fetched");
     }
 
     #[sqlx::test(migrations = false)]
@@ -960,7 +961,7 @@ mod guide_import {
         let c = ctx(pool).await;
         lineup(&c).await;
         let extra = channel(&c.pool, "Unwanted", "News", false).await;
-        c.prov.lock().unwrap().guide = feed();
+        c.prov.lock_clean().guide = feed();
         let g = guide_source(&c, "A", "/guide.xml").await;
         let r = guide::sync(&c.st, g).await.unwrap();
         assert_eq!((r.ok, r.program_count, r.channels_touched), (true, 3, 2));
@@ -989,7 +990,7 @@ mod guide_import {
     async fn a_resync_replaces_its_own_rows_and_leaves_a_sibling_alone(pool: PgPool) {
         let c = ctx(pool).await;
         lineup(&c).await;
-        c.prov.lock().unwrap().guide = feed();
+        c.prov.lock_clean().guide = feed();
         let a = guide_source(&c, "A", "/guide.xml").await;
         let b = guide_source(&c, "B", "/guide.xml").await;
         guide::sync(&c.st, a).await.unwrap();
@@ -1010,11 +1011,11 @@ mod guide_import {
         let c = ctx(pool).await;
         lineup(&c).await;
         let ok_feed = feed();
-        c.prov.lock().unwrap().guide = ok_feed.clone();
+        c.prov.lock_clean().guide = ok_feed.clone();
         let g = guide_source(&c, "A", "/guide.xml").await;
         guide::sync(&c.st, g).await.unwrap();
         {
-            let mut p = c.prov.lock().unwrap();
+            let mut p = c.prov.lock_clean();
             p.guide = ok_feed.clone();
             p.cut_guide_at = Some(ok_feed.len() - 40);
         }
@@ -1040,7 +1041,7 @@ mod guide_import {
         let c = ctx(pool).await;
         lineup(&c).await;
         {
-            let mut p = c.prov.lock().unwrap();
+            let mut p = c.prov.lock_clean();
             p.guide = feed();
             p.gzip_guide = true;
         }
@@ -1053,11 +1054,11 @@ mod guide_import {
     async fn an_empty_feed_is_an_error_and_a_channel_only_one_is_not(pool: PgPool) {
         let c = ctx(pool).await;
         lineup(&c).await;
-        c.prov.lock().unwrap().guide = b"<tv></tv>".to_vec();
+        c.prov.lock_clean().guide = b"<tv></tv>".to_vec();
         let g = guide_source(&c, "E", "/guide.xml").await;
         let r = guide::sync(&c.st, g).await.unwrap();
         assert_eq!(r.error.as_deref(), Some("empty guide feed"));
-        c.prov.lock().unwrap().guide =
+        c.prov.lock_clean().guide =
             br#"<tv><channel id="one.fr"><display-name>One</display-name></channel></tv>"#.to_vec();
         let r = guide::sync(&c.st, g).await.unwrap();
         assert_eq!((r.ok, r.program_count), (true, 0));
@@ -1071,7 +1072,7 @@ mod guide_import {
             .execute(&c.pool)
             .await
             .unwrap();
-        c.prov.lock().unwrap().guide = feed();
+        c.prov.lock_clean().guide = feed();
         let g = guide_source(&c, "A", "/guide.xml").await;
         guide::sync(&c.st, g).await.unwrap();
         assert_eq!(titles(&c.pool, g).await, ["Later One", "Now One"]);
@@ -1085,7 +1086,7 @@ mod guide_import {
             .execute(&c.pool)
             .await
             .unwrap();
-        c.prov.lock().unwrap().guide = feed();
+        c.prov.lock_clean().guide = feed();
         let g = guide_source(&c, "A", "/guide.xml").await;
         guide::sync(&c.st, g).await.unwrap();
         let mins: f64 = sqlx::query_scalar(
@@ -1103,7 +1104,7 @@ mod guide_import {
     async fn a_second_sync_while_one_runs_is_refused(pool: PgPool) {
         let c = ctx(pool).await;
         {
-            let mut p = c.prov.lock().unwrap();
+            let mut p = c.prov.lock_clean();
             p.guide = feed();
             p.delay_ms = 400;
         }
@@ -1122,7 +1123,7 @@ mod guide_import {
     async fn a_respond_async_guide_sync_answers_202_and_runs_on_under_its_command(pool: PgPool) {
         let c = ctx(pool).await;
         {
-            let mut p = c.prov.lock().unwrap();
+            let mut p = c.prov.lock_clean();
             p.guide = feed();
             p.delay_ms = 300;
         }
@@ -1156,7 +1157,7 @@ mod guide_import {
     async fn a_kind_source_feed_uses_the_parents_guide_and_agent(pool: PgPool) {
         let c = ctx(pool).await;
         lineup(&c).await;
-        c.prov.lock().unwrap().guide = feed();
+        c.prov.lock_clean().guide = feed();
         let parent = source(&c, "P", "m3u", "http://h/x", 0).await;
         sqlx::query(r#"UPDATE livetv_sources SET "guideUrls" = $2, "userAgent" = 'ParentAgent/1' WHERE id = $1"#)
             .bind(parent)
@@ -1172,7 +1173,7 @@ mod guide_import {
         let r = guide::sync(&c.st, g).await.unwrap();
         assert!(r.ok, "{r:?}");
         assert_eq!(
-            c.prov.lock().unwrap().agents.last().map(String::as_str),
+            c.prov.lock_clean().agents.last().map(String::as_str),
             Some("ParentAgent/1")
         );
         let none: i32 = sqlx::query_scalar(

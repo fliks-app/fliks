@@ -21,6 +21,7 @@ pub mod translation_providers;
 
 pub mod events;
 
+use crate::sync::MutexExt;
 use providers::limiter::Limiter;
 use std::{collections::HashMap, sync::Mutex};
 
@@ -115,15 +116,11 @@ impl Shared {
 
     /// The percent of a running translation, absent when none runs.
     pub fn translation_progress(&self, id: i32) -> Option<i32> {
-        self.progress
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .get(&id)
-            .copied()
+        self.progress.lock_clean().get(&id).copied()
     }
 
     pub fn set_translation_progress(&self, id: i32, pct: Option<i32>) {
-        let mut p = self.progress.lock().unwrap_or_else(|e| e.into_inner());
+        let mut p = self.progress.lock_clean();
         match pct {
             Some(v) => p.insert(id, v),
             None => p.remove(&id),

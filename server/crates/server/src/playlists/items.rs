@@ -10,7 +10,7 @@ use crate::{
     state::AppState,
 };
 use axum::{Json, extract::State, http::StatusCode};
-use chrono::{DateTime, SecondsFormat, Utc};
+use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use sqlx::{PgConnection, types::Json as Jsonb};
@@ -48,9 +48,7 @@ fn iso_times(v: &mut Value) {
         if let Some(t) = parsed {
             o.insert(
                 k.into(),
-                t.with_timezone(&Utc)
-                    .to_rfc3339_opts(SecondsFormat::Millis, true)
-                    .into(),
+                fliks_domain::js::iso(t.with_timezone(&Utc)).into(),
             );
         }
     }

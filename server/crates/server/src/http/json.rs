@@ -1,10 +1,10 @@
 /// `DateTime<Utc>` as JS `toISOString()` (`2026-01-02T03:04:05.678Z`): `#[serde(with = "iso_ms")]`.
 pub mod iso_ms {
-    use chrono::{DateTime, SecondsFormat, Utc};
+    use chrono::{DateTime, Utc};
     use serde::{Deserialize, Deserializer, Serializer};
 
     pub fn serialize<S: Serializer>(dt: &DateTime<Utc>, s: S) -> Result<S::Ok, S::Error> {
-        s.serialize_str(&dt.to_rfc3339_opts(SecondsFormat::Millis, true))
+        s.serialize_str(&fliks_domain::js::iso(*dt))
     }
 
     pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<DateTime<Utc>, D::Error> {

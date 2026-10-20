@@ -15,7 +15,7 @@ use axum::{
     http::{HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
 };
-use chrono::{DateTime, SecondsFormat, Utc};
+use chrono::{DateTime, Utc};
 use fliks_domain::{
     acl::{Action, Subject},
     edl::{MAX_EDL_BYTES, parse_edl},
@@ -265,7 +265,7 @@ fn scan(
         }
         let mtime = meta
             .modified()
-            .map(|t| DateTime::<Utc>::from(t).to_rfc3339_opts(SecondsFormat::Millis, true))
+            .map(|t| fliks_domain::js::iso(DateTime::<Utc>::from(t)))
             .unwrap_or_default();
         out.push(Companion {
             name: name.to_owned(),

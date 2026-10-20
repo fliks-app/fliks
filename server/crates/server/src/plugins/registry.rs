@@ -1,5 +1,6 @@
 //! The in-memory registry (`plugins.md` rules 7-11, Host design): manifests, route tables,
 //! declared permissions, webhooks, release picker and player; plus the registration checks.
+use crate::sync::RwLockExt;
 use fliks_domain::acl::Permissions;
 use fliks_domain::net::{Class, classify};
 use fliks_domain::plugins::{self as dp, route::Matcher};
@@ -117,10 +118,10 @@ pub struct Declared {
 
 impl Registry {
     fn r(&self) -> std::sync::RwLockReadGuard<'_, Tables> {
-        self.0.read().unwrap_or_else(|e| e.into_inner())
+        self.0.read_clean()
     }
     fn w(&self) -> std::sync::RwLockWriteGuard<'_, Tables> {
-        self.0.write().unwrap_or_else(|e| e.into_inner())
+        self.0.write_clean()
     }
 
     pub fn get(&self, id: &str) -> Option<Registered> {

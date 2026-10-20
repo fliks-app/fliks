@@ -23,7 +23,7 @@ use tower::ServiceExt;
 use tower_http::services::ServeFile;
 
 /// F36: a dump holds every secret, so the backup routes need `manage:all`.
-fn admin(a: &Authed) -> Result<(), AppError> {
+fn manage_all(a: &Authed) -> Result<(), AppError> {
     a.require(Action::Manage, Subject::All)
 }
 
@@ -154,14 +154,14 @@ pub async fn stats(State(st): State<AppState>, a: Authed) -> Result<Json<Value>,
 
 #[utoipa::path(post, path = "/api/system/backup", responses((status = 201)))]
 pub async fn backup_create(State(st): State<AppState>, a: Authed) -> Result<Response, AppError> {
-    admin(&a)?;
+    manage_all(&a)?;
     let made = detached(async move { backup::create(&st.cfg, &backup::dir()).await }).await?;
     Ok((StatusCode::CREATED, Json(made)).into_response())
 }
 
 #[utoipa::path(get, path = "/api/system/backups", responses((status = 200)))]
 pub async fn backup_list(a: Authed) -> Result<Json<Vec<backup::Entry>>, AppError> {
-    admin(&a)?;
+    manage_all(&a)?;
     Ok(Json(backup::list(&backup::dir()).await))
 }
 
@@ -171,7 +171,7 @@ pub async fn backup_restore(
     a: Authed,
     req: Request,
 ) -> Result<StatusCode, AppError> {
-    admin(&a)?;
+    manage_all(&a)?;
     let ValidJson(body) = ValidJson::<Value>::from_request(req, &()).await?;
     let name = backup::js_string(body.get("filename"));
     if !body.get("filename").is_some_and(Value::is_string) {
@@ -203,7 +203,7 @@ pub async fn backup_download(
     Path(name): Path<String>,
     req: Request,
 ) -> Result<Response, AppError> {
-    admin(&a)?;
+    manage_all(&a)?;
     let path = backup::locate(&backup::dir(), &name).await?;
     let meta = tokio::fs::metadata(&path)
         .await
@@ -236,7 +236,7 @@ pub async fn backup_download(
 
 #[utoipa::path(delete, path = "/api/system/backups/{name}", responses((status = 200)))]
 pub async fn backup_delete(a: Authed, Path(name): Path<String>) -> Result<Json<Value>, AppError> {
-    admin(&a)?;
+    manage_all(&a)?;
     backup::delete(&backup::dir(), &name).await?;
     Ok(Json(json!({"ok": true})))
 }

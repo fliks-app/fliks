@@ -7,6 +7,7 @@ use super::{
     },
     *,
 };
+use crate::sync::MutexExt;
 use fliks_engine_core::api::{
     BgJobState, EngineEvent, FingerprintWindow, HeartbeatRequest, JobKind, JobRequest, JobResult,
     MediaRef, SessionAction,
@@ -962,7 +963,7 @@ mod jobs {
             async move {
                 e.run_job(
                     &fingerprint_request(),
-                    Some(Arc::new(move |p| sink.lock().unwrap().push(p))),
+                    Some(Arc::new(move |p| sink.lock_clean().push(p))),
                 )
                 .await
             }
@@ -972,7 +973,7 @@ mod jobs {
         let result: JobResult = serde_json::from_value(fingerprint_result()).unwrap();
         e.job_ended("j1", BgJobState::Done, Some(result.clone()), None);
         assert_eq!(run.await.unwrap().unwrap(), result);
-        assert_eq!(*progress.lock().unwrap(), [50.0]);
+        assert_eq!(*progress.lock_clean(), [50.0]);
         assert_eq!(
             f.seen("POST", "/v1/jobs")[0].body["kind"]["type"],
             "Fingerprint"

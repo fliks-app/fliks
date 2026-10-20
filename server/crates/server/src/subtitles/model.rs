@@ -91,9 +91,7 @@ impl Row {
     }
 }
 
-pub fn iso(t: DateTime<Utc>) -> String {
-    t.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
-}
+pub use fliks_domain::js::iso;
 
 /// An insert; unset options stay NULL, flags default like the column defaults.
 #[derive(Debug, Clone, Default)]

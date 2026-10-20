@@ -1,6 +1,6 @@
 //! Database backups (`docs/spec/system.md` rules 14-25): `pg_dump` to a file, `psql` replay.
 use crate::{config::Config, db, http::AppError, jobs, paths};
-use chrono::{SecondsFormat, Utc};
+use chrono::Utc;
 use serde::Serialize;
 use serde_json::Value;
 use sqlx::PgPool;
@@ -116,9 +116,7 @@ async fn run_tool(cfg: &Config, cmd: &str, args: &[String], stdout: Stdio) -> Re
 
 /// Rule 17.
 pub async fn create(cfg: &Config, dir: &Path) -> Result<Made, AppError> {
-    let stamp = Utc::now()
-        .to_rfc3339_opts(SecondsFormat::Millis, true)
-        .replace([':', '.'], "-");
+    let stamp = fliks_domain::js::iso(Utc::now()).replace([':', '.'], "-");
     let filename = format!("fliks-backup-{stamp}.sql");
     tracing::info!("Creating backup: {filename}");
     mkdir_private(dir).map_err(|e| internal(format!("cannot create the backup directory: {e}")))?;
@@ -182,7 +180,7 @@ pub async fn list(dir: &Path) -> Vec<Entry> {
         }
         let date = meta.modified().map_or_else(
             |_| String::new(),
-            |t| chrono::DateTime::<Utc>::from(t).to_rfc3339_opts(SecondsFormat::Millis, true),
+            |t| fliks_domain::js::iso(chrono::DateTime::<Utc>::from(t)),
         );
         out.push(Entry {
             filename,

@@ -1,4 +1,5 @@
 //! `HostHardwareService` (spec rule 47): the engine's detected capabilities and the admin GPU pin.
+use crate::sync::MutexExt;
 use crate::{engine, state::AppState};
 use fliks_engine_core::api::{Capabilities, Gpu, StreamingConfig};
 use std::sync::Mutex;
@@ -17,7 +18,7 @@ pub struct Hardware(Mutex<Inner>);
 
 impl Hardware {
     fn lock(&self) -> std::sync::MutexGuard<'_, Inner> {
-        self.0.lock().unwrap_or_else(|e| e.into_inner())
+        self.0.lock_clean()
     }
 
     /// `none` before any detection.

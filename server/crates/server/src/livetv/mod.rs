@@ -17,11 +17,21 @@ pub mod sync;
 #[cfg(test)]
 mod tests;
 
-use crate::state::AppState;
+use crate::{
+    http::{AppError, auth::Authed},
+    state::AppState,
+};
 use axum::{
     Router,
     routing::{delete, get, patch, post, put},
 };
+
+pub(crate) fn admin(a: &Authed) -> Result<(), AppError> {
+    a.require(
+        fliks_domain::acl::Action::Manage,
+        fliks_domain::acl::Subject::Settings,
+    )
+}
 
 /// Process-wide live TV state: the access mutex and the viewers and holds.
 #[derive(Default)]

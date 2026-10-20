@@ -1,6 +1,7 @@
 //! The search and upgrade passes: tick claims, manual triggers, OCR-first, burn-in, auto-sync, upgrades.
 use super::{files::*, routes::*, *};
 use crate::engine::testkit::ok;
+use crate::sync::MutexExt;
 use serde_json::{Value, json};
 use sqlx::PgPool;
 use std::sync::Mutex;
@@ -75,10 +76,10 @@ async fn a_tick_skips_a_held_claim_and_leaves_its_last_run_alone(pool: PgPool) {
     let a = c.st.jobs.claim("SubtitleSearch").unwrap();
     let b = c.st.jobs.claim("SubtitleUpgrade").unwrap();
     crate::subtitles::scheduler::tick(&c.st, &last).await;
-    assert_eq!(*last.lock().unwrap(), (0, 0));
+    assert_eq!(*last.lock_clean(), (0, 0));
     drop((a, b));
     crate::subtitles::scheduler::tick(&c.st, &last).await;
-    let (s, u) = *last.lock().unwrap();
+    let (s, u) = *last.lock_clean();
     assert!(s > 0 && u > 0);
     // The claim is released at the end of the pass.
     assert!(c.st.jobs.claim("SubtitleSearch").is_some());

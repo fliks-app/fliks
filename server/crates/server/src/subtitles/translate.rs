@@ -6,6 +6,7 @@ use super::{
     service::{clean_options, flag_on},
     translation as engines, translation_providers as providers,
 };
+use crate::sync::MutexExt;
 use crate::{events::SseEvent, http::AppError, state::AppState};
 use fliks_domain::{
     language::normalize_language_code,
@@ -34,7 +35,7 @@ pub struct Permit<'a>(&'a Gate);
 
 impl Drop for Permit<'_> {
     fn drop(&mut self) {
-        let mut a = self.0.active.lock().unwrap_or_else(|e| e.into_inner());
+        let mut a = self.0.active.lock_clean();
         *a = a.saturating_sub(1);
         drop(a);
         self.0.freed.notify_one();
@@ -49,7 +50,7 @@ impl Gate {
             // Registered before the check, so a release in between is not lost.
             waiting.as_mut().enable();
             {
-                let mut a = self.active.lock().unwrap_or_else(|e| e.into_inner());
+                let mut a = self.active.lock_clean();
                 if *a < limit {
                     *a += 1;
                     return Permit(self);
@@ -240,13 +241,16 @@ async fn run(
                 },
             )
             .await;
-            let _ = sqlx::query(
+            if let Err(e) = sqlx::query(
                 r#"UPDATE subtitle_files SET status = 'failed', "errorMessage" = $2 WHERE id = $1"#,
             )
             .bind(placeholder)
             .bind(translation_error_message(&e))
             .execute(&st.db)
-            .await;
+            .await
+            {
+                tracing::warn!("translation failure of subtitle #{placeholder} not stored: {e}");
+            }
         }
     }
 }

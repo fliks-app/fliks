@@ -1,5 +1,5 @@
 //! Uploaded playlists (`livetv-sources.md` rules 12-16): kept with the data, never in the cache.
-use crate::{engine::resolve::lexical_resolve, paths::data_dir};
+use crate::{engine::resolve::lexical_resolve, events::uuid_v4, paths::data_dir};
 use std::{
     path::{Path, PathBuf},
     time::UNIX_EPOCH,
@@ -58,22 +58,6 @@ pub fn stored_name(original: &str) -> String {
         stem
     };
     format!("{stem}-{}.m3u", uuid_v4())
-}
-
-pub fn uuid_v4() -> String {
-    let mut b = [0u8; 16];
-    getrandom::fill(&mut b).expect("random bytes");
-    b[6] = (b[6] & 0x0f) | 0x40;
-    b[8] = (b[8] & 0x3f) | 0x80;
-    let h: String = b.iter().map(|x| format!("{x:02x}")).collect();
-    format!(
-        "{}-{}-{}-{}-{}",
-        &h[..8],
-        &h[8..12],
-        &h[12..16],
-        &h[16..20],
-        &h[20..]
-    )
 }
 
 /// A writer into a temp file next to its destination; `finish` renames it, a drop removes it.

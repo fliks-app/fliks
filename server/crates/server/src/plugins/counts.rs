@@ -1,4 +1,5 @@
 //! The `counts.set` push cache (`counts.md` rules 12-15, C95): per plugin, per key.
+use crate::sync::MutexExt;
 use std::collections::HashMap;
 use std::sync::Mutex;
 
@@ -16,8 +17,7 @@ impl Counts {
             return Err("counts.set: value must be a safe integer".into());
         }
         self.0
-            .lock()
-            .unwrap()
+            .lock_clean()
             .entry(plugin.to_owned())
             .or_default()
             .insert(key.to_owned(), value);
@@ -26,7 +26,7 @@ impl Counts {
 
     /// Summed over the plugins that pushed it; `None` when none ever did.
     pub fn get(&self, key: &str) -> Option<u64> {
-        let all = self.0.lock().unwrap();
+        let all = self.0.lock_clean();
         let mut seen = false;
         let total = all
             .values()
@@ -37,7 +37,7 @@ impl Counts {
     }
 
     pub fn forget(&self, plugin: &str) {
-        self.0.lock().unwrap().remove(plugin);
+        self.0.lock_clean().remove(plugin);
     }
 }
 

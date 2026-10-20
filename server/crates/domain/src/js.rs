@@ -10,6 +10,16 @@ pub fn trim(s: &str) -> &str {
     s.trim_matches(is_ws)
 }
 
+/// `Date.prototype.toISOString`: millisecond precision, `Z`.
+pub fn iso(t: chrono::DateTime<chrono::Utc>) -> String {
+    t.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+}
+
+/// `Date.now()`.
+pub fn now_ms() -> i64 {
+    chrono::Utc::now().timestamp_millis()
+}
+
 /// `Math.round`: halves toward +infinity.
 pub(crate) fn round(x: f64) -> f64 {
     let f = x.floor();

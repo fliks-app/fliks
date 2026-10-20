@@ -2,6 +2,7 @@
 //! the user routes, the logo and prefs routes and the admin catalog.
 use super::{
     access::{denied_groups, permissions},
+    admin,
     dto::{Body, Opt, Query as Q, query_flag, query_int},
     model::{CHANNEL_COLS, Channel, ChannelItem, SOURCE_COLS, STREAM_COLS, Source, Stream},
 };
@@ -143,10 +144,6 @@ impl<'a> Visible<'a> {
 
 fn read(a: &Authed) -> Result<(), AppError> {
     a.require(Action::Read, Subject::LiveTvChannel)
-}
-
-fn admin(a: &Authed) -> Result<(), AppError> {
-    a.require(Action::Manage, Subject::Settings)
 }
 
 pub async fn denied_for(st: &AppState, a: &Authed) -> sqlx::Result<Vec<String>> {

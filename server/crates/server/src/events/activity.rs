@@ -3,6 +3,7 @@ use super::{
     event::{Num, Subject},
     hub::Shared,
 };
+use crate::sync::MutexExt;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
@@ -248,7 +249,7 @@ impl Activity {
     }
 
     fn state(&self) -> std::sync::MutexGuard<'_, State> {
-        self.state.lock().unwrap_or_else(|e| e.into_inner())
+        self.state.lock_clean()
     }
 }
 

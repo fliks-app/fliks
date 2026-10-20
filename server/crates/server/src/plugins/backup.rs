@@ -177,7 +177,7 @@ impl Plugins {
         let pkg = self.find_installed(id).await?;
         let head = format!(
             r#"{{"exportedAt":{},"formatVersion":1,"pluginId":{},"pluginVersion":{},"settings":{},"tables":{{"#,
-            json!(chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)),
+            json!(fliks_domain::js::iso(chrono::Utc::now())),
             json!(id),
             json!(pkg.version),
             Value::Object(self.owned_settings(id).await.map_err(internal)?),

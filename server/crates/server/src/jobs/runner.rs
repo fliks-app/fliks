@@ -1,6 +1,7 @@
 //! The cron runner (`scheduler.md` rules 8, 19, 26) and the in-process "already running" set (C22).
 use super::{audit, bodies, cron, names};
 use crate::state::AppState;
+use crate::sync::MutexExt;
 use std::{
     collections::HashSet,
     sync::{Arc, Mutex},
@@ -22,14 +23,11 @@ pub const RESTORE: &str = "Restore";
 impl Running {
     /// A restore holds its claim: nothing new may start.
     pub fn is_restoring(&self) -> bool {
-        self.0
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .contains(RESTORE)
+        self.0.lock_clean().contains(RESTORE)
     }
 
     pub fn claim(self: &Arc<Self>, name: &str) -> Option<Claim> {
-        let mut set = self.0.lock().unwrap_or_else(|e| e.into_inner());
+        let mut set = self.0.lock_clean();
         let free = if name == RESTORE {
             set.is_empty()
         } else {
@@ -45,11 +43,7 @@ impl Running {
 
 impl Drop for Claim {
     fn drop(&mut self) {
-        self.set
-            .0
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .remove(&self.name);
+        self.set.0.lock_clean().remove(&self.name);
     }
 }
 

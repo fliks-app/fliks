@@ -7,6 +7,7 @@ use super::{
     service::{self, Search},
     sync::{self, episode_of, progress_subject},
 };
+use crate::sync::MutexExt;
 use crate::{http::AppError, state::AppState};
 use fliks_domain::subtitle_flags::{
     Flags, LanguageItem, Servable, has_covering_sub, is_ocr_supported_codec,
@@ -542,10 +543,10 @@ pub(crate) async fn tick(st: &AppState, last: &Mutex<(i64, i64)>) {
     let now = chrono::Utc::now().timestamp_millis();
     let search_interval = number(setting(st, "subtitle_search_interval").await, 360.0) * 60_000.0;
     let upgrade_interval = number(setting(st, "subtitle_upgrade_interval").await, 720.0) * 60_000.0;
-    let (ls, lu) = *last.lock().unwrap_or_else(|e| e.into_inner());
+    let (ls, lu) = *last.lock_clean();
     if (now - ls) as f64 >= search_interval {
         if let Some(_claim) = st.jobs.claim("SubtitleSearch") {
-            last.lock().unwrap_or_else(|e| e.into_inner()).0 = now;
+            last.lock_clean().0 = now;
             if let Err(e) = search_missing(st).await {
                 tracing::error!("SubtitleSearch: {e}");
             }
@@ -555,7 +556,7 @@ pub(crate) async fn tick(st: &AppState, last: &Mutex<(i64, i64)>) {
     }
     if (now - lu) as f64 >= upgrade_interval {
         if let Some(_claim) = st.jobs.claim("SubtitleUpgrade") {
-            last.lock().unwrap_or_else(|e| e.into_inner()).1 = now;
+            last.lock_clean().1 = now;
             if let Err(e) = upgrade(st).await {
                 tracing::error!("SubtitleUpgrade: {e}");
             }

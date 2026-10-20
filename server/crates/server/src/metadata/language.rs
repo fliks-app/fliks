@@ -1,4 +1,5 @@
 //! Global `metadata_language` / `metadata_region`, read once and dropped when either changes (rule 23).
+use crate::sync::MutexExt;
 use fliks_domain::metadata::language::{Resolved, resolve};
 use sqlx::PgPool;
 use std::sync::{Arc, Mutex};
@@ -35,7 +36,7 @@ impl LanguageCache {
     }
 
     pub fn invalidate(&self) {
-        let mut s = self.slot.lock().expect("slot");
+        let mut s = self.slot.lock_clean();
         s.value = None;
         s.epoch += 1;
     }
@@ -59,12 +60,12 @@ impl LanguageCache {
     }
 
     async fn global(&self) -> Result<Global, sqlx::Error> {
-        if let Some(v) = self.slot.lock().expect("slot").value.clone() {
+        if let Some(v) = self.slot.lock_clean().value.clone() {
             return Ok(v);
         }
         let _gate = self.load.lock().await;
         let epoch = {
-            let s = self.slot.lock().expect("slot");
+            let s = self.slot.lock_clean();
             if let Some(v) = s.value.clone() {
                 return Ok(v);
             }
@@ -81,7 +82,7 @@ impl LanguageCache {
                 .and_then(|r| r.value.clone())
         };
         let v: Global = Arc::new((get("metadata_language"), get("metadata_region")));
-        let mut s = self.slot.lock().expect("slot");
+        let mut s = self.slot.lock_clean();
         if s.epoch == epoch {
             s.value = Some(v.clone());
         }

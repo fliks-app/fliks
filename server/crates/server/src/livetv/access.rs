@@ -1,6 +1,6 @@
 //! Who may see which channel group (`livetv-access.md` rules 4-8, 21-30): the three settings and the
 //! grants as one `State`, serialised by one mutex, and the admin routes over it.
-use super::dto::Body;
+use super::{admin, dto::Body};
 use crate::{
     http::{
         AppError,
@@ -11,12 +11,9 @@ use crate::{
     state::AppState,
 };
 use axum::{Json, extract::State};
-use fliks_domain::{
-    acl::{Action, Subject},
-    livetv::access::{
-        EXEMPT_KEY, RESTRICTED_KEY, State as Groups, VANISHED_KEY, read_group_set, read_vanished,
-        restricted_view, write_vanished,
-    },
+use fliks_domain::livetv::access::{
+    EXEMPT_KEY, RESTRICTED_KEY, State as Groups, VANISHED_KEY, read_group_set, read_vanished,
+    restricted_view, write_vanished,
 };
 use serde_json::{Value, json};
 use sqlx::{PgPool, Postgres, Transaction};
@@ -168,10 +165,6 @@ pub async fn denied_groups(
         &granted,
         permissions,
     ))
-}
-
-fn admin(a: &Authed) -> Result<(), AppError> {
-    a.require(Action::Manage, Subject::Settings)
 }
 
 #[utoipa::path(get, path = "/api/livetv/admin/access/restricted-groups", responses((status = 200)))]

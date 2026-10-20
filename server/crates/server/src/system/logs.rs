@@ -1,5 +1,6 @@
 //! The in-memory log ring behind `GET /api/system/logs` (`docs/spec/system.md` rules 26-30).
-use chrono::{SecondsFormat, Utc};
+use crate::sync::MutexExt;
+use chrono::Utc;
 use serde::Serialize;
 use std::{
     collections::VecDeque,
@@ -22,7 +23,7 @@ pub struct Entry {
 static RING: LazyLock<Mutex<VecDeque<Entry>>> = LazyLock::new(Mutex::default);
 
 fn ring() -> std::sync::MutexGuard<'static, VecDeque<Entry>> {
-    RING.lock().unwrap_or_else(|e| e.into_inner())
+    RING.lock_clean()
 }
 
 /// A line whose context is not a `tracing` target (`plugin:<id>`, `plugins.md` rule 45).
@@ -32,7 +33,7 @@ pub fn push(level: &'static str, context: &str, message: String) {
         r.pop_front();
     }
     r.push_back(Entry {
-        timestamp: Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
+        timestamp: fliks_domain::js::iso(Utc::now()),
         level,
         context: context.to_owned(),
         message,

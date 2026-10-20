@@ -17,7 +17,7 @@ pub struct Connection {
 impl Connection {
     /// `ConnectionJSON`: settings redacted (F5, F28).
     pub fn json(&self) -> Value {
-        let ms = |t: &DateTime<Utc>| t.to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        let ms = |t: &DateTime<Utc>| fliks_domain::js::iso(*t);
         json!({
             "id": self.id,
             "createdAt": ms(&self.created_at),

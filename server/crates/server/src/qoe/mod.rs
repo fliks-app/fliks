@@ -11,6 +11,7 @@ pub use routes::{
     sessions, summary,
 };
 
+use crate::sync::MutexExt;
 use crate::{events::event::PlayState, presence::LiveSession};
 use chrono::{DateTime, Duration as Span, Local, NaiveDateTime, Utc};
 use fliks_domain::qoe::{
@@ -202,7 +203,7 @@ impl Qoe {
     }
 
     fn map(&self) -> MutexGuard<'_, HashMap<String, Tracker>> {
-        self.0.trackers.lock().unwrap_or_else(|e| e.into_inner())
+        self.0.trackers.lock_clean()
     }
 
     pub fn enabled(&self) -> bool {
@@ -229,7 +230,7 @@ impl Qoe {
 
     /// Supplies `(activeTranscodes, activeSessions)` for the server load of a stall; read on demand.
     pub fn set_load_probe(&self, probe: impl Fn() -> (u32, u32) + Send + Sync + 'static) {
-        *self.0.load_probe.lock().unwrap_or_else(|e| e.into_inner()) = Some(Arc::new(probe));
+        *self.0.load_probe.lock_clean() = Some(Arc::new(probe));
     }
 
     /// Running live TV transcodes, added to the count.
@@ -290,12 +291,7 @@ impl Qoe {
     }
 
     fn server_load(&self) -> Option<ServerLoad> {
-        let probe = self
-            .0
-            .load_probe
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .clone();
+        let probe = self.0.load_probe.lock_clean().clone();
         let (transcodes, sessions) = probe.map_or((0, 0), |p| p());
         Some(ServerLoad {
             active_transcodes: transcodes + self.0.live_transcodes.load(Ordering::Relaxed),

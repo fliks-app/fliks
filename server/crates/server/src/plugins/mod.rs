@@ -31,6 +31,7 @@ pub mod webhooks;
 
 use crate::ingest::KeyedLocks;
 use crate::state::AppState;
+use crate::sync::{MutexExt, RwLockExt};
 use packages::Package;
 use registry::{Fail, Registered, Registry, fail};
 use runtime::{Env, HostConfig, PluginRt, Shared, SpawnError, State};
@@ -202,13 +203,13 @@ impl Plugins {
     }
 
     pub fn rt(&self, id: &str) -> Option<Arc<PluginRt>> {
-        self.host.get()?.live.read().unwrap().get(id).cloned()
+        self.host.get()?.live.read_clean().get(id).cloned()
     }
 
     pub fn live(&self) -> Vec<Arc<PluginRt>> {
         self.host
             .get()
-            .map(|h| h.live.read().unwrap().values().cloned().collect())
+            .map(|h| h.live.read_clean().values().cloned().collect())
             .unwrap_or_default()
     }
 
@@ -220,8 +221,7 @@ impl Plugins {
     pub fn state_of(&self, id: &str) -> Option<State> {
         self.rt(id).map(|r| r.state()).or_else(|| {
             self.db_waits
-                .lock()
-                .unwrap()
+                .lock_clean()
                 .contains_key(id)
                 .then_some(State::Degraded)
         })
@@ -229,7 +229,7 @@ impl Plugins {
 
     /// The `statusReason` of a registration waiting for the database (C109).
     pub fn db_wait_reason(&self, id: &str) -> Option<String> {
-        self.db_waits.lock().unwrap().get(id).map(|w| w.1.clone())
+        self.db_waits.lock_clean().get(id).map(|w| w.1.clone())
     }
 
     /// The breaker message, else (down) the stderr tail, else the foreign-key advisory.
@@ -242,8 +242,7 @@ impl Plugins {
             return m;
         }
         self.fk_warnings
-            .lock()
-            .unwrap()
+            .lock_clean()
             .get(id)
             .cloned()
             .unwrap_or_default()
@@ -253,14 +252,14 @@ impl Plugins {
         let rt = self
             .host
             .get()
-            .and_then(|h| h.live.write().unwrap().remove(id));
+            .and_then(|h| h.live.write_clean().remove(id));
         if let Some(rt) = rt {
             rt.stop().await;
         }
     }
 
     fn drop_crons(&self, id: &str) {
-        for h in self.crons.lock().unwrap().remove(id).unwrap_or_default() {
+        for h in self.crons.lock_clean().remove(id).unwrap_or_default() {
             h.abort();
         }
     }
@@ -277,7 +276,7 @@ impl Plugins {
 
     /// Withdraws what the plugin offers and stops it; routes and permissions stay (503, not 403).
     pub async fn unregister(&self, id: &str) {
-        self.db_waits.lock().unwrap().remove(id);
+        self.db_waits.lock_clean().remove(id);
         self.stop_rt(id).await;
         self.drop_crons(id);
         self.counts.forget(id);
@@ -359,7 +358,7 @@ impl Plugins {
     /// Rule 7 up to the end of `hello`, under the caller's per-id lock.
     pub async fn register(&self, pkg: &Package) -> Result<Pending, Fail> {
         let id = pkg.plugin_id.clone();
-        self.db_waits.lock().unwrap().remove(&id);
+        self.db_waits.lock_clean().remove(&id);
         match self.try_register(pkg).await {
             Ok(p) => Ok(p),
             Err(f) => {
@@ -380,8 +379,7 @@ impl Plugins {
         let generation = self.wait_gen.fetch_add(1, Ordering::SeqCst);
         let reason = format!("{}: {}", f.reason, f.detail);
         self.db_waits
-            .lock()
-            .unwrap()
+            .lock_clean()
             .insert(pkg.plugin_id.clone(), (generation, reason));
         let pkg = pkg.clone();
         tokio::spawn(async move {
@@ -391,7 +389,7 @@ impl Plugins {
                 tokio::time::sleep(cfg.ladder.get(attempt).copied().unwrap_or(cfg.db_retry)).await;
                 let pending = {
                     let _l = me.lock(id).await;
-                    if me.db_waits.lock().unwrap().get(id).map(|w| w.0) != Some(generation) {
+                    if me.db_waits.lock_clean().get(id).map(|w| w.0) != Some(generation) {
                         return;
                     }
                     let r = me.try_register(&pkg).await;
@@ -401,7 +399,7 @@ impl Plugins {
                         me.fail(id, f.clone()).await;
                         continue;
                     }
-                    me.db_waits.lock().unwrap().remove(id);
+                    me.db_waits.lock_clean().remove(id);
                     match r {
                         Ok(p) => Ok(p),
                         Err(f) => Err(me.fail(id, f).await),
@@ -555,11 +553,11 @@ impl Plugins {
         let rt = PluginRt::new(sh, m.clone(), &loaded.component, pkg.network_internal)
             .map_err(|e| fail("invalid-component", e.to_string()))?;
         {
-            let mut t = rt.timings.lock().unwrap();
+            let mut t = rt.timings.lock_clean();
             t.compile = loaded.elapsed;
             t.cache_hit = loaded.cache_hit;
         }
-        host.live.write().unwrap().insert(id.clone(), rt.clone());
+        host.live.write_clean().insert(id.clone(), rt.clone());
         match rt.hello().await {
             Ok(()) => {}
             Err(SpawnError::Mismatch(d)) => return Err(fail("manifest-mismatch", d)),
@@ -737,7 +735,7 @@ impl Plugins {
                 )
             })
             .collect();
-        self.crons.lock().unwrap().insert(id.to_owned(), handles);
+        self.crons.lock_clean().insert(id.to_owned(), handles);
     }
 
     /// Registers under the lock, waits outside it, persists the outcome when `persist`.
@@ -865,7 +863,7 @@ impl Plugins {
 
     /// C112: every plugin stops before a restore replays.
     pub async fn stop_all(&self) {
-        self.db_waits.lock().unwrap().clear();
+        self.db_waits.lock_clean().clear();
         let ids: Vec<String> = self.live().iter().map(|r| r.sh.id.to_string()).collect();
         for id in ids {
             let _l = self.lock(&id).await;
@@ -929,7 +927,7 @@ impl Plugins {
                 names.join(", ")
             )
         };
-        self.fk_warnings.lock().unwrap().insert(id.to_owned(), msg);
+        self.fk_warnings.lock_clean().insert(id.to_owned(), msg);
     }
 
     /// Rule 51: the winning `ui.player.preRollRoute`, 3 s including the queue; `None` on any failure.

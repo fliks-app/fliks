@@ -1,6 +1,7 @@
 //! Per-plugin Postgres (`plugins.md` rule 35, SQL section): own role (C119), own schema,
 //! text-format params, the deadline cancel and the `unavailable` code.
 use super::runtime::{DbError, Param, RowSet, Value};
+use crate::sync::MutexExt;
 use bytes::BytesMut;
 use chrono::DateTime;
 use sqlx::{PgPool, Postgres, Transaction};
@@ -429,7 +430,7 @@ impl PluginDb {
             .map_err(|_| err(UNAVAILABLE, "connection pool wait exceeded"))?
             .expect("never closed");
         let pooled = {
-            let mut idle = self.idle.lock().unwrap();
+            let mut idle = self.idle.lock_clean();
             idle.retain(|(c, at)| !c.is_closed() && at.elapsed() < IDLE_CLOSE);
             idle.pop()
         };
@@ -601,7 +602,7 @@ impl Lease {
         self.busy = false;
         let c = self.client.take().expect("leased");
         if c.batch_execute("DISCARD ALL").await.is_ok() {
-            self.db.idle.lock().unwrap().push((c, Instant::now()));
+            self.db.idle.lock_clean().push((c, Instant::now()));
         }
         r
     }
@@ -617,7 +618,7 @@ impl Drop for Lease {
                 let _ = c.cancel_token().cancel_query(NoTls).await;
             }
             if c.batch_execute("DISCARD ALL").await.is_ok() {
-                db.idle.lock().unwrap().push((c, Instant::now()));
+                db.idle.lock_clean().push((c, Instant::now()));
             }
         });
     }
@@ -785,9 +786,9 @@ pub(crate) fn value(ty: &Type, b: &[u8]) -> Option<Value> {
             Value::Text(match us {
                 i64::MAX => "infinity".into(),
                 i64::MIN => "-infinity".into(),
-                us => DateTime::from_timestamp_micros(us + PG_EPOCH_SECS * 1_000_000)?
-                    .format("%Y-%m-%dT%H:%M:%S%.3fZ")
-                    .to_string(),
+                us => fliks_domain::js::iso(DateTime::from_timestamp_micros(
+                    us + PG_EPOCH_SECS * 1_000_000,
+                )?),
             })
         }
         "json" => Value::Json(std::str::from_utf8(b).ok()?.to_owned()),

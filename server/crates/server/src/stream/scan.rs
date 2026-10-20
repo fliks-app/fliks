@@ -1,6 +1,7 @@
 //! Source scans, the scan backfill and the stale-probe rescan (spec rules 48-51).
 use super::{BACKFILL_EVERY, file::resolve_file};
 use crate::state::AppState;
+use crate::sync::MutexExt;
 use fliks_engine_core::api::{JobPriority, JobRequest, JobResult, MediaInfo, MediaRef, SourceScan};
 use serde_json::Value;
 use std::{
@@ -27,7 +28,7 @@ pub struct Scans {
 }
 
 fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
-    m.lock().unwrap_or_else(|e| e.into_inner())
+    m.lock_clean()
 }
 
 /// What the stored scan is checked against: the bytes' size and mtime.

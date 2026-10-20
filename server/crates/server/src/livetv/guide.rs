@@ -1,6 +1,7 @@
 //! The guide (`livetv-guide.md`): guide source CRUD, the streamed XMLTV sync, the match report and the
 //! user reads (`on-now`, `guide`, `programs/:id`, `search`).
 use super::{
+    admin,
     channels::{Visible, denied_for, like_pattern, text_filter},
     dto::{Body, Opt, Query as Q, query_flag, query_int},
     feed::{self, Item},
@@ -42,10 +43,6 @@ const DEFAULT_PROGRAMME_MINUTES: i64 = 30;
 const PAGE_SIZE: i64 = 50;
 const CHUNK: usize = 1000;
 const I32: std::ops::RangeInclusive<i64> = i32::MIN as i64..=i32::MAX as i64;
-
-fn admin(a: &Authed) -> Result<(), AppError> {
-    a.require(Action::Manage, Subject::Settings)
-}
 
 fn read(a: &Authed) -> Result<(), AppError> {
     a.require(Action::Read, Subject::LiveTvChannel)

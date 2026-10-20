@@ -11,6 +11,7 @@ pub mod transfer;
 mod tests;
 
 use crate::state::AppState;
+use crate::sync::MutexExt;
 use fliks_domain::naming::{NamingFormats, formats_from_rows};
 use fliks_engine_core::api::MediaInfo;
 use sqlx::PgPool;
@@ -34,7 +35,7 @@ impl<K> Default for KeyedLocks<K> {
 impl<K: Eq + Hash + Clone> KeyedLocks<K> {
     pub async fn lock(&self, key: K) -> OwnedMutexGuard<()> {
         let m = {
-            let mut map = self.0.lock().expect("keyed locks");
+            let mut map = self.0.lock_clean();
             map.retain(|_, m| Arc::strong_count(m) > 1);
             map.entry(key).or_default().clone()
         };

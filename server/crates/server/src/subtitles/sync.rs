@@ -4,11 +4,13 @@ use super::{
     files::{self, Dirs, FileRow, MediaCtx},
     model::{self, Row},
 };
+use crate::sync::MutexExt;
 use crate::{
     events::{SseEvent, Subject},
     http::AppError,
     state::AppState,
 };
+use fliks_domain::js::now_ms;
 use fliks_domain::srt::decode_text;
 use fliks_engine_core::api::{
     JobKind, JobPriority, JobRequest, JobResult, MediaInfo, MediaRef, SubtitleFormat, SubtitleText,
@@ -67,13 +69,9 @@ impl Item {
 #[derive(Default)]
 pub struct Queue(Mutex<(Vec<Item>, usize)>);
 
-fn now_ms() -> i64 {
-    chrono::Utc::now().timestamp_millis()
-}
-
 impl Queue {
     fn lock(&self) -> std::sync::MutexGuard<'_, (Vec<Item>, usize)> {
-        self.0.lock().unwrap_or_else(|e| e.into_inner())
+        self.0.lock_clean()
     }
 
     pub fn snapshot(&self) -> Vec<Value> {
@@ -485,13 +483,16 @@ pub async fn do_sync(st: &AppState, id: i32, o: &Options) -> Result<(), String> 
     if let Err(detail) = outcome {
         tracing::error!("Subtitle sync failed for #{id}: {detail}");
         let msg: String = detail.chars().take(2000).collect();
-        let _ = sqlx::query(
+        if let Err(e) = sqlx::query(
             r#"UPDATE subtitle_files SET "syncFailed" = true, "errorMessage" = $2 WHERE id = $1"#,
         )
         .bind(id)
         .bind(msg)
         .execute(&st.db)
-        .await;
+        .await
+        {
+            tracing::warn!("sync failure of subtitle #{id} not stored: {e}");
+        }
         events::emit(
             st,
             media.id,

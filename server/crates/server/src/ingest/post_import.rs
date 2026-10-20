@@ -1,5 +1,6 @@
 //! Post-import queue and settle timer (`ingest.md` rules 34-37): in memory, lost on restart.
 use super::fsx;
+use crate::sync::MutexExt;
 use crate::{
     events::{Num, SseEvent, Subject},
     state::AppState,
@@ -48,7 +49,7 @@ fn progress(st: &AppState, done: u64, total: u64, subject: Option<Subject>) {
 
 impl Queue {
     fn lock(&self) -> std::sync::MutexGuard<'_, Q> {
-        self.q.lock().expect("post-import queue")
+        self.q.lock_clean()
     }
 
     pub fn enqueue(&self, st: &AppState, file_id: i32) {
@@ -254,20 +255,10 @@ impl Settle {
         let st2 = st.clone();
         let h = tokio::spawn(async move {
             tokio::time::sleep(SETTLE).await;
-            st2.ingest
-                .settle
-                .0
-                .lock()
-                .expect("settle")
-                .remove(&media_id);
+            st2.ingest.settle.0.lock_clean().remove(&media_id);
             settled(&st2, media_id).await;
         });
-        if let Some(old) = self
-            .0
-            .lock()
-            .expect("settle")
-            .insert(media_id, h.abort_handle())
-        {
+        if let Some(old) = self.0.lock_clean().insert(media_id, h.abort_handle()) {
             old.abort();
         }
     }
