@@ -1,5 +1,93 @@
 # Changelog
 
+## [5.0.0](https://github.com/fliks-app/fliks/compare/v4.5.0...v5.0.0) (2026-10-20)
+
+
+### ⚠ BREAKING CHANGES
+
+* **server:** the Node runtime and the NestJS backend are gone. FLIKS_NEST_URL, FLIKS_NEST_CMD, FLIKS_NEST_PORT, FLIKS_NODE_BIN, FLIKS_NEST_ENTRY and FLIKS_BRIDGE_TOKEN are no longer read; pluginApi 1 plugins no longer load; GET /api/system/logs returns the fliks-server log only; the macOS and Windows bundles keep fliks-engine and fliks-server in bin/ and log to server-<date>.log.
+* playback answers 503 and imports fail without a reachable engine; the image and the desktop launchers always start the engine in front of Node.
+
+### Features
+
+* **client:** remember a confirm dialog's toggle choice ([#1789](https://github.com/fliks-app/fliks/issues/1789)) ([9041784](https://github.com/fliks-app/fliks/commit/9041784311b1449181c8c4c35d65aa64956ddd8f))
+* **livetv:** cap live viewers per user and bind the live token to its session ([#1785](https://github.com/fliks-app/fliks/issues/1785)) ([dccf09d](https://github.com/fliks-app/fliks/commit/dccf09ddb7432f34fd6b322f4b3e7bc8b88fead2))
+* **livetv:** run source and guide syncs in the background on request ([#1781](https://github.com/fliks-app/fliks/issues/1781)) ([458e586](https://github.com/fliks-app/fliks/commit/458e58660e068f11c9680ba715ae6e00451e18ef))
+* **livetv:** validate the url and parent source of a guide source on save ([#1783](https://github.com/fliks-app/fliks/issues/1783)) ([8dfffdc](https://github.com/fliks-app/fliks/commit/8dfffdc701e7f6b221249dfa46d7279edccd88d2))
+* **player:** add a subtitle resync panel ([#1792](https://github.com/fliks-app/fliks/issues/1792)) ([f9bc574](https://github.com/fliks-app/fliks/commit/f9bc574e9ed8e8d890f692824ffa1383ff4d34fc))
+* **player:** show track markers in the audio and subtitle menus ([#1768](https://github.com/fliks-app/fliks/issues/1768)) ([bdd983f](https://github.com/fliks-app/fliks/commit/bdd983f5a9654ba042e7d431c230c5f3cf86de46)), closes [#1763](https://github.com/fliks-app/fliks/issues/1763)
+* **plugin-sdk:** async runtime, budgets and scrubbed logging ([#1758](https://github.com/fliks-app/fliks/issues/1758)) ([ef3190d](https://github.com/fliks-app/fliks/commit/ef3190df1dce252a88eda554fbfcb9f4e1ab5b81))
+* **plugins:** add a route to discard a staged upload ([#1784](https://github.com/fliks-app/fliks/issues/1784)) ([4567652](https://github.com/fliks-app/fliks/commit/4567652071e9fcad9df2145e85fcf07e0cbcb044))
+* **requests:** reconcile requests whose import event was lost ([#1780](https://github.com/fliks-app/fliks/issues/1780)) ([ce8d41f](https://github.com/fliks-app/fliks/commit/ce8d41f5eac96cf5da9cd0f5b1845e3e99a59b6e)), closes [#1746](https://github.com/fliks-app/fliks/issues/1746)
+* run streaming, media jobs and live tv through fliks-engine ([509d5bf](https://github.com/fliks-app/fliks/commit/509d5bf12091fb71e603d5d4fa39939c4d42a0cf))
+* run the backend under fliks-engine supervise ([#1662](https://github.com/fliks-app/fliks/issues/1662)) ([15332f0](https://github.com/fliks-app/fliks/commit/15332f01f45ebcbf12094e21c2977e782954bc9f))
+* **server-db:** convert typeorm migrations and adopt the ledger ([#1678](https://github.com/fliks-app/fliks/issues/1678)) ([9371069](https://github.com/fliks-app/fliks/commit/9371069b259ddc865eac5cdcbb5fd3df8d32e430))
+* **server:** add the fliks-server workspace skeleton ([3e6d432](https://github.com/fliks-app/fliks/commit/3e6d432356d55f6e947f281760b46ae33722a21c))
+* **server:** add the nest route manifest ([#1675](https://github.com/fliks-app/fliks/issues/1675)) ([85da4dc](https://github.com/fliks-app/fliks/commit/85da4dc697056706f95519d50e033be60dbcc92a))
+* **server:** adopt engine 0.4.1 live capacity veto, owner denial ([#1756](https://github.com/fliks-app/fliks/issues/1756)) ([8ae8eec](https://github.com/fliks-app/fliks/commit/8ae8eec68902640e202e9a9f7cb7b2499ddd2993))
+* **server:** cap in-flight outbound requests per plugin ([#1760](https://github.com/fliks-app/fliks/issues/1760)) ([8d1e840](https://github.com/fliks-app/fliks/commit/8d1e840cf63877c109ad68194f5c53097139ca35))
+* **server:** remove the nest backend, fliks-server serves everything ([#1761](https://github.com/fliks-app/fliks/issues/1761)) ([f0998e7](https://github.com/fliks-app/fliks/commit/f0998e79792a16bda7d8edd15e35b733f0f1ea32))
+* **server:** s0 foundation, fliks-server in front of nest ([#1694](https://github.com/fliks-app/fliks/issues/1694)) ([39d011b](https://github.com/fliks-app/fliks/commit/39d011b79c8df675174fe72be48924abb179c1d5))
+* **server:** s1 identity and settings in rust ([#1710](https://github.com/fliks-app/fliks/issues/1710)) ([cf358f5](https://github.com/fliks-app/fliks/commit/cf358f55e0d7e00dec570e3d86356c838c0e1dc2))
+* **server:** s2 realtime and playback in rust ([#1720](https://github.com/fliks-app/fliks/issues/1720)) ([1b3651e](https://github.com/fliks-app/fliks/commit/1b3651edceb9c099e0b3e0055c4c990bc16570df))
+* **server:** s3 catalog read side in rust ([#1726](https://github.com/fliks-app/fliks/issues/1726)) ([bc5665d](https://github.com/fliks-app/fliks/commit/bc5665d4b068b54546bcab32e9fba2663fc9bb14))
+* **server:** s4 notifications, social, likes and playlists in rust ([#1734](https://github.com/fliks-app/fliks/issues/1734)) ([ed47b97](https://github.com/fliks-app/fliks/commit/ed47b977c8cc7afb15861443656deb997f66e9a7))
+* **server:** s5 library, ingest, importers, metadata, requests and system in rust ([#1749](https://github.com/fliks-app/fliks/issues/1749)) ([a037f93](https://github.com/fliks-app/fliks/commit/a037f93985e584695b02ae2f7d7a0df71aee01ce))
+* **server:** s6 subtitles in rust ([#1751](https://github.com/fliks-app/fliks/issues/1751)) ([8b6483c](https://github.com/fliks-app/fliks/commit/8b6483c3a627a1a22a4c567bf375918514e45f1d))
+* **server:** s7 live tv in rust ([#1752](https://github.com/fliks-app/fliks/issues/1752)) ([6d41c5e](https://github.com/fliks-app/fliks/commit/6d41c5ed984ec2221fbe69b405852e9273bbb530))
+* **server:** s8 wasm plugin host in rust ([#1753](https://github.com/fliks-app/fliks/issues/1753)) ([8cb55fe](https://github.com/fliks-app/fliks/commit/8cb55fee135d7842d816f33625919cd3fb33c58f))
+* **setup:** edit a known server and cancel a test on url change ([#1794](https://github.com/fliks-app/fliks/issues/1794)) ([2518152](https://github.com/fliks-app/fliks/commit/25181529136093b8f51610213bacef8fe0b3145b))
+* **subtitles:** strip hearing-impaired annotations when translating ([#1859](https://github.com/fliks-app/fliks/issues/1859)) ([913bc68](https://github.com/fliks-app/fliks/commit/913bc683f9c6173d97e7f1c324d38102ae696f5d))
+
+
+### Bug Fixes
+
+* **backend:** read class-level policies and drop the db in dump-routes ([#1679](https://github.com/fliks-app/fliks/issues/1679)) ([4611676](https://github.com/fliks-app/fliks/commit/46116766f50a329de927f7b48c92e419e1878afd))
+* **client:** keep fewer cached pages on tv and stop a parked home refetching ([#1817](https://github.com/fliks-app/fliks/issues/1817)) ([10d970c](https://github.com/fliks-app/fliks/commit/10d970c39e4999a2d54bb7c2b9021a5aed58d2f1))
+* **client:** track dropdowns above the sidebar, markers without titles ([#1772](https://github.com/fliks-app/fliks/issues/1772)) ([5655a4d](https://github.com/fliks-app/fliks/commit/5655a4da12cd66b83baf7ef938a651cf47b9445d))
+* **client:** translate leftover strings, drop dead code and debug logs ([#1809](https://github.com/fliks-app/fliks/issues/1809)) ([47ccc6c](https://github.com/fliks-app/fliks/commit/47ccc6c198ce0b7c54489dcfea209a737e36708f))
+* **deps:** bump shaka-player to 5.3.1 ([#1791](https://github.com/fliks-app/fliks/issues/1791)) ([94b7c4d](https://github.com/fliks-app/fliks/commit/94b7c4d1a5a258bfa3f17bb4a8e9bcfd9cbade3e))
+* **deps:** pin shaka-player to 5.1 so relative stream urls keep their host ([#1800](https://github.com/fliks-app/fliks/issues/1800)) ([269c169](https://github.com/fliks-app/fliks/commit/269c169a89c9ecfa13992ea1a1077e400eafa439))
+* **desktop:** redact stream tokens from logs and sandbox the renderers ([#1808](https://github.com/fliks-app/fliks/issues/1808)) ([949e73b](https://github.com/fliks-app/fliks/commit/949e73ba05cb20f03f29548d612c9ea110916034))
+* **docker:** listen on PORT again ([#1793](https://github.com/fliks-app/fliks/issues/1793)) ([82046a2](https://github.com/fliks-app/fliks/commit/82046a2984486c367266e7a34f26c01a68892cf8))
+* **docker:** point the dev engine at the server's resolver ([#1773](https://github.com/fliks-app/fliks/issues/1773)) ([c45b78b](https://github.com/fliks-app/fliks/commit/c45b78b031983a9fa19e1143cccd32967d486a65))
+* **media-servers:** redact the stored api key in responses ([#1786](https://github.com/fliks-app/fliks/issues/1786)) ([ed0297e](https://github.com/fliks-app/fliks/commit/ed0297e44b97fe96516d8d34a7b0553bf056275c))
+* **media-servers:** validate url and events on write ([#1787](https://github.com/fliks-app/fliks/issues/1787)) ([c0830f4](https://github.com/fliks-app/fliks/commit/c0830f454ffe8c06ad9d86f62cd0222016a53922))
+* **media:** answer 409 when moving a media with files to another library ([#1788](https://github.com/fliks-app/fliks/issues/1788)) ([10994a8](https://github.com/fliks-app/fliks/commit/10994a8fef19998da49d5df9d25b0b41db01f465))
+* **pip:** size subtitles to the PiP window on iOS and Android ([#1856](https://github.com/fliks-app/fliks/issues/1856)) ([bcc2ce0](https://github.com/fliks-app/fliks/commit/bcc2ce02825ec9f1c5181753d9c07d3543bd9cb2))
+* **player:** hide mobile play/pause under the spinner and drop it on resume ([#1795](https://github.com/fliks-app/fliks/issues/1795)) ([f1d4863](https://github.com/fliks-app/fliks/commit/f1d4863b28797b72dc2f94a4c07658e32e3f42eb))
+* **player:** hold the spinner through a quality switch instead of showing play ([#1853](https://github.com/fliks-app/fliks/issues/1853)) ([ed0800e](https://github.com/fliks-app/fliks/commit/ed0800e65c520cae09687b23463f90a8c66152e1))
+* **player:** keep the spinner when a reloaded stream lands on its start ([#1855](https://github.com/fliks-app/fliks/issues/1855)) ([eeabb35](https://github.com/fliks-app/fliks/commit/eeabb351c3ac993617e721ca25ca3711db08bb38))
+* **player:** show one toast with the server's reason when playback fails to start ([#1798](https://github.com/fliks-app/fliks/issues/1798)) ([2fbed56](https://github.com/fliks-app/fliks/commit/2fbed56e2da99b3246d109a9bcd8feedad7c5522))
+* **player:** start on the audio rendition the server marks default ([#1765](https://github.com/fliks-app/fliks/issues/1765)) ([46ff798](https://github.com/fliks-app/fliks/commit/46ff798e5a1e260ab19c5f11c0034b37ff4d7a49))
+* **plugin-sdk:** return the response when the upload stream fails late ([#1762](https://github.com/fliks-app/fliks/issues/1762)) ([0a125c8](https://github.com/fliks-app/fliks/commit/0a125c8813e2e360e8ceeb881d71f9d931aa97bb))
+* **plugins:** create the migration ledger only when missing ([#1857](https://github.com/fliks-app/fliks/issues/1857)) ([2e096ed](https://github.com/fliks-app/fliks/commit/2e096eda00425c1ef7bb0ffd1d97973a8930f53b))
+* **requests:** count the quota window in UTC days ([#1782](https://github.com/fliks-app/fliks/issues/1782)) ([e1fec6c](https://github.com/fliks-app/fliks/commit/e1fec6c71e17c15bceac06a221754ff58b5e941e)), closes [#1747](https://github.com/fliks-app/fliks/issues/1747)
+* **requests:** serialize the duplicate check and the insert per title ([#1779](https://github.com/fliks-app/fliks/issues/1779)) ([3696dc2](https://github.com/fliks-app/fliks/commit/3696dc20488fba7ddaa51e1f80ac78f33804e7f5)), closes [#1745](https://github.com/fliks-app/fliks/issues/1745)
+* **server:** bound the sse queue of each connection ([#1833](https://github.com/fliks-app/fliks/issues/1833)) ([a744c38](https://github.com/fliks-app/fliks/commit/a744c38db0ef14af7d8c17c81c9ed15ce216d05d))
+* **server:** cap the blank person search at 1000 rows ([#1826](https://github.com/fliks-app/fliks/issues/1826)) ([bf16272](https://github.com/fliks-app/fliks/commit/bf1627239e730062460fac496159724d477c92d8))
+* **server:** compare canonical paths without the windows verbatim prefix ([#1797](https://github.com/fliks-app/fliks/issues/1797)) ([1c837d3](https://github.com/fliks-app/fliks/commit/1c837d35f02653ff1c8d25561a6d8bc2929e0700))
+* **server:** release a marker detection before ending its command ([#1769](https://github.com/fliks-app/fliks/issues/1769)) ([e17f5ad](https://github.com/fliks-app/fliks/commit/e17f5ad657c6494a8cbe4b5ba9b2c77e298d6659))
+* **server:** skip catalog refresh while plugins are disabled ([#1759](https://github.com/fliks-app/fliks/issues/1759)) ([897cbe7](https://github.com/fliks-app/fliks/commit/897cbe70205ec97d99aed924958c0bdce7ce1b0d))
+* **spatial-nav:** focus preview actions and restore search focus on back ([#1854](https://github.com/fliks-app/fliks/issues/1854)) ([d964454](https://github.com/fliks-app/fliks/commit/d9644548e420f5f7fa9b5870f3559cc8230b74df))
+* **subtitles:** remove the encode-as-UTF-8 toggle from the settings page ([#1778](https://github.com/fliks-app/fliks/issues/1778)) ([3ca12a3](https://github.com/fliks-app/fliks/commit/3ca12a3d71e71a814380ff145f054ebba55fa9fd))
+* **system:** size the logs table to the remaining viewport height ([#1858](https://github.com/fliks-app/fliks/issues/1858)) ([63b02b5](https://github.com/fliks-app/fliks/commit/63b02b5fa60a3d92d16d6998e4fa22a09c313cc9))
+* **windows:** survive postgres crash recovery and report a failed start in the installer ([#1796](https://github.com/fliks-app/fliks/issues/1796)) ([ec5af68](https://github.com/fliks-app/fliks/commit/ec5af686467343edf827ce74059d331e1e237644))
+
+
+### Performance Improvements
+
+* **appletv:** downsample images and cost the cache by decoded size ([#1813](https://github.com/fliks-app/fliks/issues/1813)) ([88f3b05](https://github.com/fliks-app/fliks/commit/88f3b05f048d2dfe0b044b9a4f831254fd083ad8))
+* **client:** load engines on demand, stop prefetching lazy chunks, add budgets ([#1825](https://github.com/fliks-app/fliks/issues/1825)) ([2569908](https://github.com/fliks-app/fliks/commit/2569908d41151ae54f38ea93cdad159747440b1c))
+* **server:** apply the provider seasons in one transaction before any download ([#1830](https://github.com/fliks-app/fliks/issues/1830)) ([6942c58](https://github.com/fliks-app/fliks/commit/6942c588db36969899282f8be6010ba3b2db4fb7))
+* **server:** assign the matched guide channels in one statement ([#1832](https://github.com/fliks-app/fliks/issues/1832)) ([825d0a7](https://github.com/fliks-app/fliks/commit/825d0a7077566c4253b61f70b5a09b29a5f37797))
+* **server:** decode each image source once and cap it at 40 megapixels ([#1841](https://github.com/fliks-app/fliks/issues/1841)) ([fcf03b4](https://github.com/fliks-app/fliks/commit/fcf03b493cf0dbd57981441e41dbbf05fa4fe4dd))
+* **server:** index the foreign keys behind the hot lookups ([#1822](https://github.com/fliks-app/fliks/issues/1822)) ([c1cd5a4](https://github.com/fliks-app/fliks/commit/c1cd5a4ee69dc10a66d987db0820457b3eec8d38))
+* **server:** move the blocking filesystem calls out of async code ([#1834](https://github.com/fliks-app/fliks/issues/1834)) ([7b6946b](https://github.com/fliks-app/fliks/commit/7b6946be234c62f13088c198c56cacbb18d926e2))
+* **server:** page acquisition candidates by keyset instead of a cached full list ([#1845](https://github.com/fliks-app/fliks/issues/1845)) ([c1cdde7](https://github.com/fliks-app/fliks/commit/c1cdde73bb636dabe470962dd138e974ab74ee0b))
+* **server:** stream the plugin export instead of building it in memory ([#1843](https://github.com/fliks-app/fliks/issues/1843)) ([c3b6840](https://github.com/fliks-app/fliks/commit/c3b6840c771dde73151a0e03db6f24cf763a1413))
+* **server:** use mimalloc on linux ([#1851](https://github.com/fliks-app/fliks/issues/1851)) ([c7a27fa](https://github.com/fliks-app/fliks/commit/c7a27faaa84e2b1b10f7b7a50b19b28f7e16cd6a))
+
 ## [4.5.0](https://github.com/fliks-app/fliks/compare/v4.4.0...v4.5.0) (2026-10-13)
 
 
