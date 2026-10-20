@@ -121,6 +121,8 @@ import { WebVideoCropController } from './web-video-crop-controller';
 import { EdlController } from './edl-controller';
 import { CueController } from './cue-controller';
 import { QueueController } from './queue-controller';
+import { RemoteController } from './remote-controller';
+import { KeyboardController } from './keyboard-controller';
 import { isMutedAt } from '../../core/utils/edl-policy';
 import { PlayerStatsOverlayComponent, PlayerStats } from './overlay/player-stats-overlay';
 import { SubtitleSyncPanelComponent } from './overlay/subtitle-sync-panel/subtitle-sync-panel';
@@ -129,7 +131,7 @@ import { DefaultFocusDirective } from '../../shared/directives/default-focus.dir
 @Component({
   imports: [TranslatePipe, LucideAirplay, LucideInfo, LucideVolumeX, LucideX, PlayerControlsComponent, PlayerStatsOverlayComponent, SubtitleSyncPanelComponent, PlayerErrorOverlayComponent, DefaultFocusDirective],
   templateUrl: './player.html',
-  providers: [ControlsVisibilityService, CopyFallbackController, WebVideoCropController, QueueController],
+  providers: [ControlsVisibilityService, CopyFallbackController, WebVideoCropController, QueueController, RemoteController],
   encapsulation: ViewEncapsulation.None,
   styles: [`
     .player-container {
@@ -570,61 +572,39 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.wasCasting = casting;
   });
 
-  // Admin message overlay — rendered inside the player container so it stays
-  // visible in browser fullscreen (the global toast layer sits outside the
-  // fullscreened element and gets clipped).
-  readonly adminMessage = signal<string | null>(null);
-  private adminMessageTimer: ReturnType<typeof setTimeout> | null = null;
-
-  private showAdminMessage(text: string) {
-    if (this.adminMessageTimer) clearTimeout(this.adminMessageTimer);
-    this.adminMessage.set(text);
-    this.adminMessageTimer = setTimeout(() => this.adminMessage.set(null), 6000);
-  }
-
-  dismissAdminMessage() {
-    if (this.adminMessageTimer) clearTimeout(this.adminMessageTimer);
-    this.adminMessageTimer = null;
-    this.adminMessage.set(null);
-  }
-
-  // Remote control: listen for admin commands via SSE
-  private readonly remoteCommandEffect = effect(() => {
-    const event = this.sseService.lastEvent();
-    if (!event || event.type !== 'player.command') return;
-    const cmd = event as any;
-    const currentUserId = this.authService.user()?.id;
-    if (cmd.mediaFileId !== this.mediaFileId || cmd.userId !== currentUserId) return;
-
-    // The same user can watch the same file on several devices at once —
-    // only the targeted live session should react.
-    if (cmd.sessionId) {
-      const sid = this.activeSessionId();
-      if (!sid || cmd.sessionId !== sid) return;
-    }
-
-    if (cmd.action === 'message') {
-      const text = (cmd.message as string)?.trim();
-      if (text) this.showAdminMessage(text);
-      return;
-    }
-
-    if (this.castService.isConnected()) {
-      if (cmd.action === 'pause') this.castService.pause();
-      else if (cmd.action === 'play') this.castService.play();
-      else if (cmd.action === 'stop') { this.castService.disconnect(); this.onBack(); }
-    } else if (this.engine) {
-      if (cmd.action === 'pause') void this.pausePlayback();
-      else if (cmd.action === 'play') this.engine.play().catch(() => {});
-      else if (cmd.action === 'stop') this.onBack();
-    }
+  private readonly keyboard = new KeyboardController({
+    chrome: this.chrome,
+    engine: () => this.engine,
+    controls: () => this.controls(),
+    isTv: () => this.device.isTv(),
+    playbackRate: () => this.playbackRate(),
+    onTogglePlay: () => this.onTogglePlay(),
+    onSeek: (t) => this.onSeek(t),
+    onToggleFullscreen: () => this.onToggleFullscreen(),
+    onToggleMute: () => this.onToggleMute(),
+    onTogglePip: () => this.onTogglePip(),
+    toggleStats: () => this.statsVisible.set(!this.statsVisible()),
+    onBack: () => this.onBack(),
+    onSpeedChange: (r) => this.onSpeedChange(r),
+    stepFrame: (d) => this.stepFrame(d),
   });
-
-  // Remote control: user-facing commands, already validated (expiry/unknown
-  // action) by RemoteService: no mediaFileId/sessionId filter needed, delivery
-  // is per-connection. Distinct from the admin `player.command` effect above.
-  private readonly remoteCommandSub: Subscription =
-    this.remoteService.validated.subscribe((cmd) => void this.applyRemoteCommand(cmd));
+  protected readonly remote = inject(RemoteController);
+  private readonly _remoteAttach = (this.remote.attach({
+    mediaFileId: () => this.mediaFileId,
+    activeSessionId: () => this.activeSessionId(),
+    engine: () => this.engine,
+    duration: () => this.duration(),
+    pausePlayback: () => this.pausePlayback(),
+    onBack: () => this.onBack(),
+    onTogglePlay: () => this.onTogglePlay(),
+    onSeek: (t) => this.onSeek(t),
+    savePosition: (force) => this.savePosition(force),
+    localAudioTrackId: (i) => this.availableAudioTracks()[i]?.id,
+    onSelectAudioTrack: (id) => this.onSelectAudioTrack(id),
+    onSelectSubtitleById: (id) => this.onSelectSubtitleById(id),
+    onSelectQualityById: (id) => this.onSelectQualityById(id),
+  }), null);
+  private readonly remoteCommandEffect = effect(() => this.remote.onAdminEvent());
 
   // Immersive mode: landscape=always, portrait=only while playing with controls hidden
   private readonly immersiveEffect = effect(() => {
@@ -1303,7 +1283,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (this.destroyed) return;
 
     // Keyboard shortcuts
-    document.addEventListener('keydown', this.onKeyDown);
+    document.addEventListener('keydown', this.keyboard.onKeyDown);
 
     // Best-effort cleanup on page unload. `pagehide` is added alongside
     // `beforeunload` because iOS Safari/WebView frequently skips `beforeunload`
@@ -1331,7 +1311,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.webCrop.destroy();
     this.detachAirPlay();
     if (this.forcedSaveTrailing) clearTimeout(this.forcedSaveTrailing);
-    this.remoteCommandSub.unsubscribe();
+    this.remote.dispose();
     this.savePosition();
     this.qoe.setStalled(false, { sessionId: this.activeSessionId(), position: this.engine?.currentTime ?? 0 });
     this.qoe.flushKeepalive(this.activeSessionId());
@@ -1361,8 +1341,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (this.statsInterval) clearInterval(this.statsInterval);
     if (this.playheadInterval) clearInterval(this.playheadInterval);
     if (this.recoverRetryTimer) clearTimeout(this.recoverRetryTimer);
-    if (this.adminMessageTimer) clearTimeout(this.adminMessageTimer);
-    document.removeEventListener('keydown', this.onKeyDown);
+    document.removeEventListener('keydown', this.keyboard.onKeyDown);
     window.removeEventListener('beforeunload', this.onBeforeUnload);
     window.removeEventListener('pagehide', this.onBeforeUnload);
     window.removeEventListener('app:playerBack', this.onPlayerBackEvent);
@@ -2106,124 +2085,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    *  desync from what a local control just did (see RemoteService docs).
    *  A rejected/unresolvable command returns without acking so the
    *  controller's timeout, not a false ack, reports the truth. */
-  private async applyRemoteCommand(cmd: RemoteCommand): Promise<void> {
-    const casting = this.castService.isConnected();
-    switch (cmd.action) {
-      case 'play':
-        if (casting) {
-          this.castService.play();
-        } else if (this.engine) {
-          this.state.paused.set(false);
-          this.engine.play().catch(() => this.state.paused.set(this.engine?.paused ?? true));
-        }
-        break;
-      case 'pause':
-        if (casting) {
-          this.castService.pause();
-        } else if (this.engine) {
-          void this.pausePlayback();
-        }
-        // A remote pause is a remote viewer stepping in, so surface the controls
-        // the way a local pause does rather than freezing on a bare frame.
-        this.chrome.show();
-        break;
-      case 'playpause':
-        if (casting) this.castService.togglePlayPause();
-        else this.onTogglePlay();
-        this.chrome.show();
-        break;
-      case 'seek':
-        if (cmd.positionSeconds === undefined) {
-          console.warn('[remote] seek command missing positionSeconds', cmd.cmdId);
-          return;
-        }
-        if (casting) {
-          this.castService.seek(cmd.positionSeconds);
-        } else {
-          if (!this.duration()) {
-            console.warn('[remote] dropping seek received before duration is known', cmd.cmdId);
-            return;
-          }
-          this.onSeek(cmd.positionSeconds);
-        }
-        break;
-      case 'volume':
-        if (cmd.level === undefined) {
-          console.warn('[remote] volume command missing level', cmd.cmdId);
-          return;
-        }
-        if (casting) this.castService.setVolume(cmd.level);
-        else if (this.engine) this.engine.volume = cmd.level;
-        break;
-      case 'mute':
-        if (cmd.muted === undefined) {
-          console.warn('[remote] mute command missing muted flag', cmd.cmdId);
-          return;
-        }
-        if (casting) this.castService.setMuted(cmd.muted);
-        else if (this.engine) this.engine.muted = cmd.muted;
-        break;
-      case 'next':
-        if (!this.queueCtl.upNext()) {
-          console.warn('[remote] next: no item to advance to', cmd.cmdId);
-          return;
-        }
-        void this.queueCtl.advance();
-        break;
-      case 'audio':
-        if (!cmd.trackId) {
-          console.warn('[remote] audio command missing trackId', cmd.cmdId);
-          return;
-        }
-        if (casting) {
-          const idx = parseAudioIndex(cmd.trackId);
-          if (Number.isNaN(idx)) {
-            console.warn('[remote] cast cannot resolve audio track', cmd.trackId);
-            return;
-          }
-          await this.castPlayerService.changeAudio(idx);
-        } else {
-          const idx = parseAudioIndex(cmd.trackId);
-          const local = Number.isFinite(idx)
-            ? this.availableAudioTracks()[idx]?.id
-            : undefined;
-          if (!local) {
-            console.warn('[remote] no local audio track at index', cmd.trackId);
-            return;
-          }
-          try {
-            await this.onSelectAudioTrack(local);
-          } catch (err: unknown) {
-            console.warn('[remote] audio switch failed', cmd.trackId, err);
-          }
-        }
-        break;
-      case 'subtitle':
-        if (casting) await this.castPlayerService.selectSubtitle(cmd.subtitleId ?? null);
-        else await this.onSelectSubtitleById(cmd.subtitleId ?? null);
-        break;
-      case 'quality':
-        if (!cmd.qualityId) {
-          console.warn('[remote] quality without a qualityId', cmd.cmdId);
-          break;
-        }
-        if (casting) await this.castPlayerService.changeQuality(cmd.qualityId);
-        else await this.onSelectQualityById(cmd.qualityId);
-        break;
-      case 'stop':
-        if (casting) this.castService.disconnect();
-        this.remoteService.markApplied(cmd.cmdId);
-        void this.savePosition(true);
-        this.onBack();
-        return;
-      case 'load':
-        // RemoteService owns 'load' end-to-end; never republished to this Subject.
-        return;
-    }
-    this.remoteService.markApplied(cmd.cmdId);
-    await this.savePosition(true);
-  }
-
   private readonly autoplayClearEffect = effect(() => {
     if (!this.state.videoStarted()) return;
     untracked(() => {
@@ -3892,166 +3753,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     void this.savePosition(true);
   };
   private spriteAbort?: AbortController;
-
-  // ── Keyboard handler ──
-
-  private onKeyDown = (e: KeyboardEvent) => {
-    if ((e.target as HTMLElement).tagName === 'INPUT') return;
-    if (!this.engine) return;
-
-    // When controls are hidden, the first remote press should only WAKE
-    // them — never activate the invisible button that happens to be
-    // focused. Without this, Enter/OK on TV silently triggers the back
-    // arrow (the first focusable inside the controls bar) and quits
-    // the player. We swallow the event after `showControls` so the
-    // default activation path doesn't fire.
-    // EXCLUSION: the Tizen Return key (keyCode 10009 / `XF86Back`) must
-    // bubble up to the window-level handler in `app.ts` — otherwise the
-    // user can't exit the player. Same for `Escape` on dev keyboards.
-    // Tizen reports 10009 with no reliable `e.key` on older firmware, so
-    // `keyCode` stays load-bearing; read it through a plain typed view to
-    // keep clear of the lib.dom `keyCode` deprecation.
-    const tizenKeyCode = (e as { keyCode: number }).keyCode;
-    const isBackKey = tizenKeyCode === 10009 || e.key === 'XF86Back' || e.key === 'GoBack' || e.key === 'Escape';
-
-    // A floating cue (skip-intro / next-episode) stays visible and actionable
-    // even while the controls bar is hidden. So — unlike a hidden bar control —
-    // a focused cue must receive its activation key directly rather than have
-    // the press swallowed to merely wake the bar. The guards below honour this.
-    const activeEl = document.activeElement as HTMLElement | null;
-    const cueFocused = !!activeEl?.closest('.player-floating-cue');
-    // The sync panel owns its keys; only Back still reaches the handlers below.
-    if (!isBackKey && activeEl?.closest('app-subtitle-sync-panel')) return;
-
-    // Controls hidden + Left/Right: raise the seek-only OSD and hand the press
-    // to the seekbar, which owns the scrub from there (accelerating step, one
-    // deferred seek for the whole run) on keyboard and TV remote alike.
-    const isSeekArrow = e.key === 'ArrowLeft' || e.key === 'ArrowRight';
-    if (!this.chrome.visible() && isSeekArrow) {
-      e.preventDefault();
-      e.stopPropagation();
-      this.chrome.show(true);
-      this.controls()?.scrubFromKey(e);
-      return;
-    }
-
-    // OK on a hidden bar raises it instead of pressing the invisible button it
-    // holds, the back arrow being the first one. Every form factor, unlike the
-    // TV-only rule below: a keyboard reaches the same invisible button.
-    if (e.key === 'Enter' && !cueFocused && !this.chrome.visible()) {
-      this.chrome.show();
-      e.preventDefault();
-      e.stopPropagation();
-      return;
-    }
-
-    // TV only: any other key while the bar is hidden just WAKES it — never
-    // activates the invisible focused button (e.g. OK would hit the back arrow
-    // and quit). A focused cue is exempt: it's visible, so OK should act on it.
-    // The back key bubbles to app.ts so the user can still exit.
-    if (!isBackKey && !cueFocused && !this.chrome.visible() && this.device.isTv()) {
-      this.chrome.show();
-      e.preventDefault();
-      e.stopPropagation();
-      return;
-    }
-
-    // ArrowLeft/Right are claimed by the seekbar when it owns focus, and used
-    // for D-pad navigation between controls otherwise. Skip them here unless
-    // no control has focus (in which case keep the "background" seek).
-    const arrowSeekAllowed = !activeEl || activeEl === document.body;
-
-    switch (e.key) {
-      case ' ':
-      case 'k':
-        // Space is the universal activation key on buttons / links. When
-        // the controls bar is shown and focus sits on an interactive
-        // element inside it, let the native activation fire instead of
-        // hijacking the press for play/pause. 'k' has no such overload —
-        // it always toggles playback.
-        if (
-          e.key === ' ' &&
-          (cueFocused ||
-            (this.chrome.visible() &&
-              activeEl &&
-              activeEl !== document.body &&
-              activeEl.closest('app-player-controls')))
-        ) {
-          return; // fall through to native activation
-        }
-        e.preventDefault();
-        this.onTogglePlay();
-        break;
-      // The trailing chrome.show() restarts the countdown for every seek
-      // below; without it a seek made while the stream is still loading lets
-      // the first-frame effect snap the bar shut under the user.
-      case 'ArrowLeft':
-        if (!arrowSeekAllowed) break;
-        e.preventDefault();
-        this.onSeek(this.engine.currentTime - 10);
-        break;
-      case 'ArrowRight':
-        if (!arrowSeekAllowed) break;
-        e.preventDefault();
-        this.onSeek(this.engine.currentTime + 10);
-        break;
-      case 'j':
-        e.preventDefault();
-        this.onSeek(this.engine.currentTime - 30);
-        break;
-      case 'l':
-        e.preventDefault();
-        this.onSeek(this.engine.currentTime + 30);
-        break;
-      case 'f':
-        e.preventDefault();
-        this.onToggleFullscreen();
-        break;
-      case 'm':
-        e.preventDefault();
-        this.onToggleMute();
-        break;
-      case 'p':
-        e.preventDefault();
-        this.onTogglePip();
-        break;
-      case 's':
-        e.preventDefault();
-        if (e.shiftKey) {
-          this.statsVisible.set(!this.statsVisible());
-        }
-        break;
-      case 'Escape':
-        e.preventDefault();
-        if (this.chrome.visible()) {
-          this.chrome.hide();
-          return; // skip the trailing chrome.show() — we want them hidden
-        }
-        this.onBack();
-        break;
-      case '<':
-        e.preventDefault();
-        this.onSpeedChange(Math.max(0.25, this.playbackRate() - 0.25));
-        break;
-      case '>':
-        e.preventDefault();
-        this.onSpeedChange(Math.min(2, this.playbackRate() + 0.25));
-        break;
-      case ',':
-      case '.':
-        e.preventDefault();
-        this.stepFrame(e.key === '.' ? 1 : -1);
-        break;
-    }
-    // Don't wake controls for the back key — the user wants to LEAVE.
-    // `app.ts` listens on `window` and dispatches `app:playerBack`,
-    // which (with no controls shown) goes straight to `onBack()`.
-    // Without this guard, the trailing `chrome.show()` fired first,
-    // `onPlayerBackEvent` then saw controls visible and only hid them
-    // — so Return-on-TV looked stuck. A focused cue is likewise left
-    // alone: acting on it shouldn't drag the whole bar onto the screen.
-    if (!isBackKey && !cueFocused) this.chrome.show(isSeekArrow && this.chrome.seekOsd());
-  };
 
   // ── Event handlers ──
 

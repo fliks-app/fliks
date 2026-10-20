@@ -557,7 +557,7 @@ describe('PlayerComponent startup pause', () => {
   it('a remote pause during launch shows play', async () => {
     const h = createHarness();
     h.state.reset();
-    await h.component.applyRemoteCommand({ action: 'pause' });
+    await h.component['remote'].applyRemoteCommand({ action: 'pause' });
     expect(h.state.startingPlayback()).toBe(false);
     expect(h.state.uiPaused()).toBe(true);
   });
@@ -695,7 +695,7 @@ describe('PlayerComponent seek OSD', () => {
   it('an arrow on a hidden bar raises the seek-only OSD and hands the press to the seekbar', () => {
     const h = hiddenBar();
 
-    h.component.onKeyDown(press('ArrowRight'));
+    h.component['keyboard'].onKeyDown(press('ArrowRight'));
 
     expect(h.component.chrome.visible()).toBe(true);
     expect(h.component.chrome.seekOsd()).toBe(true);
@@ -707,11 +707,11 @@ describe('PlayerComponent seek OSD', () => {
   it('a further arrow keeps the OSD, any other key escalates to the full bar', () => {
     const h = hiddenBar();
 
-    h.component.onKeyDown(press('ArrowLeft'));
-    h.component.onKeyDown(press('ArrowLeft'));
+    h.component['keyboard'].onKeyDown(press('ArrowLeft'));
+    h.component['keyboard'].onKeyDown(press('ArrowLeft'));
     expect(h.component.chrome.seekOsd()).toBe(true);
 
-    h.component.onKeyDown(press('a'));
+    h.component['keyboard'].onKeyDown(press('a'));
     expect(h.component.chrome.seekOsd()).toBe(false);
     expect(h.component.chrome.visible()).toBe(true);
   });
@@ -719,7 +719,7 @@ describe('PlayerComponent seek OSD', () => {
   it('hiding from the OSD fades out as-is, without flashing the full bar in', () => {
     const h = hiddenBar();
 
-    h.component.onKeyDown(press('ArrowRight'));
+    h.component['keyboard'].onKeyDown(press('ArrowRight'));
     h.component.chrome.hide();
 
     expect(h.component.chrome.visible()).toBe(false);
@@ -733,7 +733,7 @@ describe('PlayerComponent seek OSD', () => {
     const h = hiddenBar();
     const e = press('Enter');
 
-    h.component.onKeyDown(e);
+    h.component['keyboard'].onKeyDown(e);
 
     expect(h.component.chrome.visible()).toBe(true);
     // Swallowed: the first focusable in the bar is the back arrow, and
@@ -745,7 +745,7 @@ describe('PlayerComponent seek OSD', () => {
     const h = hiddenBar();
     expect(h.component.nativeSubtitleBottomBump()).toBe(0);
 
-    h.component.onKeyDown(press('ArrowRight'));
+    h.component['keyboard'].onKeyDown(press('ArrowRight'));
     expect(h.component.nativeSubtitleBottomBump()).toBe(5);
 
     h.component.chrome.show();
