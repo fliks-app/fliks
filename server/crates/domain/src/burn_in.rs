@@ -1,59 +1,6 @@
-//! Subtitle burn-in filter building and the text-rendition mapping; DB and disk access stay with the caller.
+//! Text-rendition mapping of the HLS master; DB and disk access stay with the caller.
 use crate::language::normalize_language_code;
 use serde::{Deserialize, Serialize};
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum BurnInType {
-    Text,
-    Image,
-}
-
-#[derive(Clone, Debug, PartialEq, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct BurnInInfo {
-    #[serde(rename = "type")]
-    pub kind: BurnInType,
-    pub video_path: String,
-    #[serde(default)]
-    pub subtitle_path: Option<String>,
-    #[serde(default)]
-    pub subtitle_ordinal: Option<u32>,
-    /// Source time cue 0 of a text file sits at (the container start).
-    #[serde(default)]
-    pub cue_offset_seconds: Option<f64>,
-}
-
-/// JS `toFixed(6)` rounds an exact tie up; Rust rounds it to even.
-fn to_fixed6(v: f64) -> String {
-    let tie = (v * 128.0).fract() == 0.0 && format!("{v:.7}").ends_with('5');
-    format!("{:.6}", if tie { v + 1e-9 } else { v })
-}
-
-/// Seconds as a signed `setpts` term, microsecond precision.
-fn pts_term(sign: f64, seconds: f64) -> String {
-    let v = sign * seconds;
-    let n: f64 = to_fixed6(v.abs()).parse().unwrap_or(0.0);
-    format!("{}{n}/TB", if v < 0.0 { '-' } else { '+' })
-}
-
-/// Renders `subtitle_filter` against cue time: under `-copyts` frames carry source PTS.
-pub fn at_cue_time(subtitle_filter: &str, cue_offset_seconds: f64) -> String {
-    if cue_offset_seconds == 0.0 {
-        return subtitle_filter.to_owned();
-    }
-    format!(
-        "setpts=PTS{},{subtitle_filter},setpts=PTS{}",
-        pts_term(-1.0, cue_offset_seconds),
-        pts_term(1.0, cue_offset_seconds)
-    )
-}
-
-fn escape(path: &str) -> String {
-    path.replace('\\', "\\\\")
-        .replace(':', "\\:")
-        .replace('\'', "'\\''")
-}
 
 /// `path.extname` lower-cased: from the last dot of the basename, none for a leading dot.
 fn extname(path: &str) -> String {
@@ -62,24 +9,6 @@ fn extname(path: &str) -> String {
         Some(i) if i > 0 && base != ".." => base[i..].to_lowercase(),
         _ => String::new(),
     }
-}
-
-/// The `-vf` filter for text burn-in; `None` for image subtitles (overlaid by the engine).
-pub fn build_filter(info: &BurnInInfo) -> Option<String> {
-    if info.kind != BurnInType::Text {
-        return None;
-    }
-    if let Some(path) = &info.subtitle_path {
-        let esc = escape(path);
-        let filter = match extname(path).as_str() {
-            ".ass" | ".ssa" => format!("ass='{esc}'"),
-            _ => format!("subtitles='{esc}'"),
-        };
-        return Some(at_cue_time(&filter, info.cue_offset_seconds.unwrap_or(0.0)));
-    }
-    // Embedded text: the video file is the subtitle source.
-    info.subtitle_ordinal
-        .map(|o| format!("subtitles='{}':si={o}", escape(&info.video_path)))
 }
 
 const IMAGE_CODECS: [&str; 4] = ["hdmv_pgs_subtitle", "dvd_subtitle", "dvb_subtitle", "xsub"];
