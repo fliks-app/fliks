@@ -4,6 +4,7 @@ mod beat;
 mod db;
 mod recommend;
 mod routes;
+mod watched;
 
 pub use beat::{__path_heartbeat, Debounce, heartbeat};
 pub use db::{find_state, history as user_history};

@@ -1,4 +1,5 @@
 //! TMDB / TVDB clients and `/api/metadata/*` (`docs/spec/metadata.md`); other domains call `Metadata` in process.
+mod credits;
 mod http;
 mod language;
 mod map;

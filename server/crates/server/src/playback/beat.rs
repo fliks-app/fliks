@@ -1,5 +1,5 @@
 //! `PUT /api/playback/media/{mediaId}/state` (`docs/spec/heartbeat.md`): the client's heartbeat.
-use super::db::{self, Watch};
+use super::watched::{self, Watch};
 use crate::{
     engine::EngineError,
     events::{
@@ -39,7 +39,7 @@ impl Debounce {
         let last = map.get(key).copied();
         let seeked = last.is_none_or(|(_, p)| (pos - p).abs() > SEEK_SECONDS);
         let due = now - last.map_or(0, |(at, _)| at) >= DEBOUNCE_MS;
-        let go = state_changed || db::completes(pos, dur) || seeked || due;
+        let go = state_changed || watched::completes(pos, dur) || seeked || due;
         if go {
             map.insert(key.to_owned(), (now, pos));
             map.retain(|_, (at, _)| *at >= now - PRUNE_MS);
@@ -321,7 +321,7 @@ pub async fn heartbeat(
         file,
         episode: episode.and_then(|e| i32::try_from(e).ok()),
     };
-    let saved = db::record_watch(&st.db, history_user, media, &watch).await?;
+    let saved = watched::record_watch(&st.db, history_user, media, &watch).await?;
     Ok(reply(lost, Some(saved)))
 }
 
