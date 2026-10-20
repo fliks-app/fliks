@@ -155,6 +155,7 @@ export class PlayerStateService {
     engine.muted = this.muted();
 
     engine.on('stateChanged', (e) => {
+      if (this.reloads > 0 && (e.state === 'idle' || e.state === 'paused' || e.state === 'playing')) return;
       const paused = pausedFlagForState(e.state);
       if (paused !== undefined) this.paused.set(paused);
       if (e.state === 'playing' || e.state === 'error' || e.state === 'ended') {
@@ -190,6 +191,7 @@ export class PlayerStateService {
       this.bufferedEnd.set(e.buffered);
       // Some engines (iOS AVPlayer after a re-buffer) never emit 'playing', so a moving playhead is what clears the spinner.
       if (
+        this.reloads === 0 &&
         !this.seekLocked() &&
         !this.paused() &&
         this.buffering() &&
@@ -229,6 +231,19 @@ export class PlayerStateService {
         message: e.message,
       });
     });
+  }
+
+  private reloads = 0;
+
+  /** Brackets an engine reload: the old stream's tail and the teardown report `playing`/`idle`/`paused`, none of
+   *  them the viewer's choice, so the spinner holds, past the end of the load too, until playback resumes. Returns
+   *  the end callback. */
+  beginReload(): () => void {
+    this.reloads++;
+    this.buffering.set(true);
+    return () => {
+      if (--this.reloads === 0) this.buffering.set(!this.paused());
+    };
   }
 
   /** Reset all signals for a new playback session. */
