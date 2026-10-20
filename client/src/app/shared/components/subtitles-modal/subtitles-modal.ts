@@ -67,6 +67,16 @@ interface SubtitleRow {
 }
 
 /** Self-contained subtitles modal for a media (or one episode via `episodeId`); open it with {@link show} / {@link close}. */
+const TRANSLATE_REMOVE_HI_KEY = 'subtitles.translateRemoveHi';
+
+function readTranslateRemoveHi(): boolean {
+  try {
+    return localStorage.getItem(TRANSLATE_REMOVE_HI_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
 @Component({
   selector: 'app-subtitles-modal',
   imports: [
@@ -388,6 +398,9 @@ export class SubtitlesModalComponent {
    *  user picks one (default preselected). */
   readonly translationProviders = signal<AvailableTranslationProvider[]>([]);
   readonly selectedTranslationProviderId = signal<number | null>(null);
+  /** Set when the subtitle being translated carries HI tags: only then is the strip toggle shown. */
+  readonly translateSourceHi = signal(false);
+  readonly translateRemoveHi = signal(readTranslateRemoveHi());
   /** The language dialog drives OCR (pick before converting), relabel (reassign
    *  an existing subtitle's language) and translate (pick the target language). */
   readonly langDialogMode = signal<'ocr' | 'relabel' | 'translate'>('ocr');
@@ -844,6 +857,7 @@ export class SubtitlesModalComponent {
     this.selectedTranslationProviderId.set((providers.find((p) => p.isDefault) ?? providers[0]).id);
     const src = (sub.language ?? '').toLowerCase();
     this.langDialogMode.set('translate');
+    this.translateSourceHi.set(sub.hearingImpaired);
     this.ocrTargetId.set(sub.id);
     this.ocrLang.set(src === 'en' ? 'fr' : 'en');
     this.ocrLangDialog()?.nativeElement.showModal();
@@ -876,6 +890,7 @@ export class SubtitlesModalComponent {
         id,
         this.ocrLang(),
         this.selectedTranslationProviderId() ?? undefined,
+        this.translateSourceHi() && this.translateRemoveHi(),
       );
     } else {
       void this.subActions.setLanguage(
@@ -885,6 +900,15 @@ export class SubtitlesModalComponent {
         this.subtitleActionBusy,
         this.ocrLang(),
       );
+    }
+  }
+
+  setTranslateRemoveHi(on: boolean) {
+    this.translateRemoveHi.set(on);
+    try {
+      localStorage.setItem(TRANSLATE_REMOVE_HI_KEY, String(on));
+    } catch {
+      /* private mode: the choice just isn't remembered */
     }
   }
 
@@ -903,7 +927,12 @@ export class SubtitlesModalComponent {
     this.toast.info(this.translate.instant('media_detail.ocr_started'));
   }
 
-  private async triggerTranslate(subtitleId: number, targetLanguage: string, providerId?: number) {
+  private async triggerTranslate(
+    subtitleId: number,
+    targetLanguage: string,
+    providerId: number | undefined,
+    removeHiTags: boolean,
+  ) {
     await this.subActions.translateSubtitle(
       this.mediaId(),
       subtitleId,
@@ -911,6 +940,7 @@ export class SubtitlesModalComponent {
       this.subtitleActionBusy,
       targetLanguage,
       providerId,
+      removeHiTags,
     );
     this.toast.info(this.translate.instant('media_detail.translation_started'));
   }

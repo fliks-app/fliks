@@ -106,11 +106,12 @@ export class SubtitlesApiService {
     subtitleId: number,
     targetLanguage: string,
     providerId?: number,
+    removeHiTags = false,
   ) {
     return firstValueFrom(
       this.http.post<SubtitleFileRow | null>(
         `/api/media/${mediaId}/subtitles/${subtitleId}/translate`,
-        { targetLanguage, ...(providerId != null ? { providerId } : {}) },
+        { targetLanguage, removeHiTags, ...(providerId != null ? { providerId } : {}) },
       ),
     );
   }
