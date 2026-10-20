@@ -119,66 +119,17 @@ import { ControlsVisibilityService } from './controls/controls-visibility';
 import { CopyFallbackController } from './copy-fallback-controller';
 import { WebVideoCropController } from './web-video-crop-controller';
 import { EdlController } from './edl-controller';
+import { CueController } from './cue-controller';
+import { QueueController } from './queue-controller';
 import { isMutedAt } from '../../core/utils/edl-policy';
 import { PlayerStatsOverlayComponent, PlayerStats } from './overlay/player-stats-overlay';
 import { SubtitleSyncPanelComponent } from './overlay/subtitle-sync-panel/subtitle-sync-panel';
 import { DefaultFocusDirective } from '../../shared/directives/default-focus.directive';
 
-/**
- * A one-shot timer that can be paused and resumed without losing the time it
- * has left. Backs the floating cues' auto-retract: the countdown freezes while
- * the controls bar is up (the user is plainly engaged) and resumes the instant
- * it hides, so a cue never vanishes out from under an interacting viewer.
- */
-class PausableTimeout {
-  private handle: ReturnType<typeof setTimeout> | null = null;
-  private remainingMs = 0;
-  private resumedAt = 0;
-
-  constructor(private readonly onElapsed: () => void) {}
-
-  /** (Re)start from a full duration, discarding any prior run. */
-  start(durationMs: number): void {
-    this.cancel();
-    this.remainingMs = durationMs;
-    this.run();
-  }
-
-  /** Freeze the countdown, banking the time left. No-op unless running. */
-  pause(): void {
-    if (this.handle === null) return;
-    clearTimeout(this.handle);
-    this.handle = null;
-    this.remainingMs -= Date.now() - this.resumedAt;
-  }
-
-  /** Resume a paused countdown from where it stopped. No-op unless paused. */
-  resume(): void {
-    if (this.handle !== null || this.remainingMs <= 0) return;
-    this.run();
-  }
-
-  /** Stop and forget — the cue is gone for good. */
-  cancel(): void {
-    if (this.handle !== null) clearTimeout(this.handle);
-    this.handle = null;
-    this.remainingMs = 0;
-  }
-
-  private run(): void {
-    this.resumedAt = Date.now();
-    this.handle = setTimeout(() => {
-      this.handle = null;
-      this.remainingMs = 0;
-      this.onElapsed();
-    }, this.remainingMs);
-  }
-}
-
 @Component({
   imports: [TranslatePipe, LucideAirplay, LucideInfo, LucideVolumeX, LucideX, PlayerControlsComponent, PlayerStatsOverlayComponent, SubtitleSyncPanelComponent, PlayerErrorOverlayComponent, DefaultFocusDirective],
   templateUrl: './player.html',
-  providers: [ControlsVisibilityService, CopyFallbackController, WebVideoCropController],
+  providers: [ControlsVisibilityService, CopyFallbackController, WebVideoCropController, QueueController],
   encapsulation: ViewEncapsulation.None,
   styles: [`
     .player-container {
@@ -377,9 +328,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private saveInterval: ReturnType<typeof setInterval> | null = null;
   /** {@link completePostLoadSetup} runs once per mount, from the first load or its copy fallback. */
   private firstLoadSetupDone = false;
-  private readonly skipIntroCue = new PausableTimeout(() => this.skipIntroVisible.set(false));
-  private readonly nextEpisodeCue = new PausableTimeout(() => this.nextEpisodeVisible.set(false));
-  private readonly commercialCue = new PausableTimeout(() => this.commercialCueVisible.set(false));
   /** True while the user is actively dragging / scrubbing the seekbar. */
   private readonly seekDragging = signal(false);
   private statsInterval: ReturnType<typeof setInterval> | null = null;
@@ -476,6 +424,23 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }), null);
   private readonly copyFallback = inject(CopyFallbackController);
   private readonly _copyFallbackAttach = (this.copyFallback.attach(this), null);
+  protected readonly queueCtl = inject(QueueController);
+  private readonly _queueAttach = (this.queueCtl.attach({
+    media: () => this.media,
+    mediaId: () => this.mediaId,
+    mediaFileId: () => this.mediaFileId,
+    episodeId: () => this.episodeId,
+    mediaLoadedTick: () => this.mediaLoadedTick(),
+    preRollActive: () => this.preRollActive(),
+    hasEngine: () => !!this.engine,
+    engineDuration: () => this.engine?.duration,
+    duration: () => this.duration(),
+    isOfflinePlayback: () => this.isOfflinePlayback,
+    reloadingStream: () => this.reloadingStream,
+    clearEdlEnded: () => { this.edlEnded = false; },
+    setFanartUrl: (url) => this.fanartUrl.set(url),
+    reloadForEpisode: (fileId, mediaId, episodeId) => this.reloadForEpisode(fileId, mediaId, episodeId),
+  }), null);
   readonly webCrop = inject(WebVideoCropController);
 
   /** Not casting, and not on a pre-roll item: only then is the local playhead the one being watched. */
@@ -493,7 +458,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.edlEnded = true;
       void this.pausePlayback();
       this.state.ended.set(true);
-      if (!this.autoplayEnabled() || !this.upNext()) void this.markCurrentComplete();
+      if (!this.queueCtl.autoplayEnabled() || !this.queueCtl.upNext()) void this.queueCtl.markCurrentComplete();
     },
   });
   private edlEnded = false;
@@ -1031,7 +996,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
         const file = media.files?.find((f: any) => f.id === this.mediaFileId);
         this.applyEpisodeMetadata();
-        this.syncSeriesQueue();
+        this.queueCtl.syncSeriesQueue();
 
         // Use duration from streamInfo (reliable, from ffprobe)
         const si = file?.streamInfo as any;
@@ -1392,9 +1357,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     }
     this.spriteAbort?.abort();
     if (this.saveInterval) clearInterval(this.saveInterval);
-    this.skipIntroCue.cancel();
-    this.nextEpisodeCue.cancel();
-    this.commercialCue.cancel();
+    this.cues.cancelTimers();
     if (this.statsInterval) clearInterval(this.statsInterval);
     if (this.playheadInterval) clearInterval(this.playheadInterval);
     if (this.recoverRetryTimer) clearTimeout(this.recoverRetryTimer);
@@ -1581,10 +1544,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
             artworkUrl: art ? this.serverConfig.resolveUrl(imageUrlWithSize(art, 'medium')) : undefined,
           };
         };
-        engine.onNext = () => void this.advance();
-        engine.onPrevious = () => void this.playQueueItem(this.queue.index() - 1);
+        engine.onNext = () => void this.queueCtl.advance();
+        engine.onPrevious = () => void this.queueCtl.playQueueItem(this.queue.index() - 1);
         engine.onStop = () => this.onBack();
-        engine.onToggleLike = () => void this.notificationLike.toggle();
+        engine.onToggleLike = () => void this.queueCtl.notificationLike.toggle();
       }
     }
     this.wireNativePlayerEngine(engine);
@@ -1957,108 +1920,22 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   // ── Skip-intro UX ──
 
-  /** True when the cursor is inside the detected intro window. */
-  readonly inIntroRange = computed(
-    () => !this.preRollActive() && inIntroRange(this.introMarker(), this.currentTime()),
-  );
-
-  // ── Timed reveal of the floating intro / next-episode cues ──
-  // A cue surfaces for a short window when the playhead enters its marker
-  // range, then retracts on its own; a progress sweep inside the button counts
-  // that window down. Revealing once per range entry (latched via the *Armed
-  // flags) stops the cue re-popping every frame while the playhead sits inside
-  // the range — the latch only re-arms once the playhead has left and re-entered.
-
-  /** Lifetime of a floating cue, in ms — also the duration of its progress
-   *  sweep, forwarded to the controls so the timer and the animation stay in
-   *  lockstep. */
-  readonly cueRevealMs = 10000;
-  readonly skipIntroVisible = signal(false);
-  readonly nextEpisodeVisible = signal(false);
-  /** Skip ad cue, shown on the skip-intro button while a commercial is not auto-skipped. */
-  readonly commercialCueVisible = signal(false);
-  private commercialCueKey: string | null = null;
-  /** Identity of the cue on the button, so its sweep and countdown restart when it changes. */
-  readonly skipCueKey = computed(() => {
-    const c = this.commercialCueVisible() ? this.edl.commercialCue() : null;
-    return c ? `ad:${c.fileId}:${c.index}` : 'intro';
+  protected readonly cues = new CueController({
+    edl: this.edl,
+    chrome: this.chrome,
+    preRollActive: () => this.preRollActive(),
+    introMarker: () => this.introMarker(),
+    outroMarker: () => this.outroMarker(),
+    currentTime: () => this.currentTime(),
+    upNext: () => this.queueCtl.upNext(),
+    engaged: () => this.chrome.visible() || (this.controls()?.cueFocused() ?? false),
+    hasEngine: () => !!this.engine,
+    seek: (t) => this.seekInternal(t),
   });
-  private skipIntroCueArmed = false;
-  private nextEpisodeCueArmed = false;
-
-  /** Show a cue and arm its retract, replacing any pending one. The retract
-   *  starts frozen if the controls bar is already up — the cue waits for the
-   *  viewer's attention to leave before counting itself down. */
-  private revealCue(visible: WritableSignal<boolean>, cue: PausableTimeout): void {
-    visible.set(true);
-    cue.start(this.cueRevealMs);
-    if (untracked(this.chrome.visible)) cue.pause();
-  }
-
-  /** Hide a cue and cancel its pending retract. */
-  private hideCue(visible: WritableSignal<boolean>, cue: PausableTimeout): void {
-    cue.cancel();
-    visible.set(false);
-  }
-
-  /** Freeze both cues' retract timers while the cue is engaged — the controls
-   *  bar is up, or the cue itself holds focus (a keyboard / D-pad user has
-   *  navigated to it) — and resume them once it isn't. The sweep and countdown
-   *  in the controls component freeze on the same conditions, so all three
-   *  representations of the window stay in lockstep. */
-  private readonly cueTimerPauseEffect = effect(() => {
-    const engaged =
-      this.chrome.visible() || (this.controls()?.cueFocused() ?? false);
-    if (engaged) {
-      this.skipIntroCue.pause();
-      this.nextEpisodeCue.pause();
-      this.commercialCue.pause();
-    } else {
-      this.skipIntroCue.resume();
-      this.nextEpisodeCue.resume();
-      this.commercialCue.resume();
-    }
-  });
-
-  /** Reveal the skip-intro cue once each time the playhead enters the intro. */
-  private readonly skipIntroCueEffect = effect(() => {
-    if (this.inIntroRange()) {
-      if (this.skipIntroCueArmed) return;
-      this.skipIntroCueArmed = true;
-      this.revealCue(this.skipIntroVisible, this.skipIntroCue);
-    } else if (this.skipIntroCueArmed) {
-      this.skipIntroCueArmed = false;
-      this.hideCue(this.skipIntroVisible, this.skipIntroCue);
-    }
-  });
-
-  /** Reveal the Skip ad cue once each time the playhead enters an unskipped commercial. */
-  private readonly commercialCueEffect = effect(() => {
-    const c = this.edl.commercialCue();
-    const key = c ? `${c.fileId}:${c.index}` : null;
-    if (key === this.commercialCueKey) return;
-    this.commercialCueKey = key;
-    if (key === null) this.hideCue(this.commercialCueVisible, this.commercialCue);
-    else this.revealCue(this.commercialCueVisible, this.commercialCue);
-  });
-
-  /** Skip button click: the commercial when its cue is up, else the intro. */
-  onSkipCue(): void {
-    if (!this.commercialCueVisible()) return this.skipIntro();
-    const t = this.edl.skipCommercial();
-    if (t !== null) this.seekInternal(t);
-    this.chrome.resetHideTimer();
-  }
-
-  /** Player-controls click handler — seek to the end of the intro. */
-  skipIntro(): void {
-    const m = this.introMarker();
-    if (!m || !this.engine) return;
-    const t = this.edl.resolveSeek(m.endSeconds);
-    if (t === null) return;
-    this.seekInternal(t);
-    this.chrome.resetHideTimer();
-  }
+  private readonly cueTimerPauseEffect = effect(() => this.cues.syncTimers());
+  private readonly skipIntroCueEffect = effect(() => this.cues.syncIntroCue());
+  private readonly commercialCueEffect = effect(() => this.cues.syncCommercialCue());
+  private readonly nextEpisodeCueEffect = effect(() => this.cues.syncNextEpisodeCue());
 
   /**
    * Auto-skip when the cursor enters the intro window AND the user has the
@@ -2066,160 +1943,20 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    * was no recent manual seek (2s cooldown).
    */
   private readonly autoSkipEffect = effect(() => {
-    if (!this.inIntroRange()) return;
+    if (!this.cues.inIntroRange()) return;
     if (!this.playerSettings.get().autoSkipIntro) return;
     if (Date.now() < this.autoSkipSuppressedUntil) return;
     const epId = this.episodeId ?? -1;
     if (this.autoSkipFiredForEpisode === epId) return;
     this.autoSkipFiredForEpisode = epId;
-    this.skipIntro();
+    this.cues.skipIntro();
   });
 
-  // ── Next-episode UX (outro) ──
+  private readonly notificationLikeEffect = effect(() => this.queueCtl.trackNotificationLike());
+  private readonly notificationNavEffect = effect(() => this.queueCtl.syncNotificationNav());
+  private readonly autoAdvanceEffect = effect(() => this.queueCtl.autoAdvance());
 
-  /**
-   * Next episode to play for the current series — returned with its media
-   * file so the "Épisode suivant" button can navigate directly. Returns null
-   * for movies or when the series is on its last episode.
-   */
-  readonly nextEpisodeContext = computed<{
-    episodeId: number;
-    mediaFileId: number;
-  } | null>(() => {
-    this.mediaLoadedTick();
-    const m = this.media;
-    const currentEpId = this.episodeId;
-    if (!m || m.type !== 'series' || !currentEpId || !m.seasons?.length) return null;
-    // Flatten episodes in S/E order (skip specials: seasonNumber <= 0).
-    const flat: { seasonNumber: number; episodeNumber: number; id: number }[] = [];
-    for (const s of m.seasons) {
-      if ((s.seasonNumber ?? 0) <= 0) continue;
-      for (const ep of s.episodes ?? []) {
-        flat.push({
-          seasonNumber: s.seasonNumber,
-          episodeNumber: ep.episodeNumber ?? 0,
-          id: ep.id,
-        });
-      }
-    }
-    flat.sort(
-      (a, b) =>
-        a.seasonNumber - b.seasonNumber || a.episodeNumber - b.episodeNumber,
-    );
-    const idx = flat.findIndex((e) => e.id === currentEpId);
-    if (idx < 0 || idx >= flat.length - 1) return null;
-    const next = flat[idx + 1];
-    const file = (m.files ?? []).find((f) => f.episodeId === next.id);
-    if (!file) return null;
-    return { episodeId: next.id, mediaFileId: file.id };
-  });
-
-  /** The item that plays next: the queue's next entry (a playlist item, or the
-   *  next episode of the series queue). Null when nothing follows or there's no
-   *  queue (a standalone film). Drives the skip control and auto-advance alike. */
-  readonly upNext = computed<QueueItem | null>(() =>
-    this.preRollActive() ? null : this.queue.active() ? this.queue.peekNext() : null,
-  );
-
-  /** Whether the current context advances automatically when a stream ends: the
-   *  per-playlist flag for a playlist queue, else the global player setting
-   *  (series episodes). */
-  readonly autoplayEnabled = computed<boolean>(() =>
-    this.queue.source() === 'playlist'
-      ? this.queue.autoplay()
-      : this.playerSettings.settings().autoPlayNext,
-  );
-
-  /** i18n key for the next-item affordance — an episode reads "next episode",
-   *  a queue that moves to a movie reads the generic "play next". */
-  readonly nextLabelKey = computed(() =>
-    this.upNext()?.episodeId != null ? 'player.next_episode' : 'player.play_next',
-  );
-
-  /** The active queue's items + cursor for the in-player queue list (empty when
-   *  no queue is driving playback, e.g. a standalone film or a lone series). */
-  readonly queueItems = computed(() => this.queue.items());
-  readonly queueIndex = computed(() => this.queue.index());
-
-  /** True when the cursor is inside the detected outro window. */
-  readonly inOutroRange = computed(
-    () => inOutroRange(this.outroMarker(), this.currentTime()),
-  );
-
-  /** True when the playhead is in the outro and something follows — gates the
-   *  timed reveal of the floating skip cue. */
-  readonly showNextEpisodeButton = computed(
-    () => this.inOutroRange() && this.upNext() !== null,
-  );
-
-  /** Reveal the next-episode cue once each time the playhead enters the outro. */
-  private readonly notificationLike = new NotificationLike(inject(LikesApiService));
-  private readonly notificationLikeEffect = effect(() => {
-    this.mediaLoadedTick();
-    if (!this.device.isAndroidNative() || !this.playerSettings.settings().backgroundAudio) return;
-    untracked(() => void this.notificationLike.track(this.mediaId, this.episodeId));
-  });
-
-  private readonly notificationQueueEffect = effect(() => {
-    const hasNext = this.upNext() !== null;
-    const hasPrevious = !this.preRollActive() && this.queue.active() && this.queue.index() > 0;
-    const liked = this.notificationLike.liked();
-    // Nothing to step through outside a queue (a film): ±10 s instead.
-    const seekButtons = !this.queue.active();
-    if (this.device.isAndroidNative() || this.device.isIosNative()) {
-      NativePlayer.setQueueNav({ hasPrevious, hasNext, liked, seekButtons }).catch(() => {});
-    }
-  });
-
-  private readonly nextEpisodeCueEffect = effect(() => {
-    if (this.showNextEpisodeButton()) {
-      if (this.nextEpisodeCueArmed) return;
-      this.nextEpisodeCueArmed = true;
-      this.revealCue(this.nextEpisodeVisible, this.nextEpisodeCue);
-    } else if (this.nextEpisodeCueArmed) {
-      this.nextEpisodeCueArmed = false;
-      this.hideCue(this.nextEpisodeVisible, this.nextEpisodeCue);
-    }
-  });
-
-  /** Auto-advance when a stream reaches its natural end and the context allows
-   *  it. {@link PlayerStateService.ended} latches on the engine 'ended' event
-   *  and is cleared by the reload's state reset, so this fires once per item.
-   *  Never advances while an error card is up: a mid-stream failure must not be
-   *  mistaken for a natural end and skip the item. */
-  private readonly autoAdvanceEffect = effect(() => {
-    if (!this.state.ended()) return;
-    if (this.state.error()) return;
-    if (!this.autoplayEnabled()) return;
-    if (!this.upNext()) return;
-    void this.advance();
-  });
-
-  /** Set the episode label + still backdrop from {@link media} and the current
-   *  {@link episodeId} (no-op for movies). Shared by the initial load and the
-   *  in-place episode switch so the loading backdrop matches what's about to
-   *  play — the episode still (stored locally) is preferred over series fanart. */
-  /** Populate the queue with the current series' episodes (S/E order, only ones
-   *  with a file) so the queue list + auto-advance work for a series played
-   *  outside a playlist — wherever an episode is opened (Continue Watching,
-   *  detail page, …). No-op while a playlist owns the queue; clears the queue
-   *  for movies or when the current episode has no queue-able siblings. */
-  private syncSeriesQueue(): void {
-    if (this.queue.source() === 'playlist') return; // the playlist owns the queue
-    const m = this.media;
-    if (!m || !this.episodeId) {
-      this.queue.clear();
-      return;
-    }
-    const items = buildSeriesQueueItems(m);
-    const idx = items.findIndex((it) => it.episodeId === this.episodeId);
-    if (idx < 0 || items.length <= 1) {
-      this.queue.clear();
-      return;
-    }
-    this.queue.start(items, idx, { source: 'series', sourceId: m.id, autoplay: false });
-  }
-
+  /** Sets the episode label and still backdrop (no-op for movies); the still beats series fanart. */
   private applyEpisodeMetadata(): void {
     // A movie (or an item with no episode) carries no episode label — clear any
     // that lingered from a previous episode when a queue crosses into a movie.
@@ -2293,7 +2030,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // Recompute next-item context + refresh the episode label / backdrop.
       this.mediaLoadedTick.update((v) => v + 1);
       this.applyEpisodeMetadata();
-      this.syncSeriesQueue();
+      this.queueCtl.syncSeriesQueue();
 
       const file = this.currentFile();
       const knownDuration = (file?.streamInfo as any)?.durationSeconds;
@@ -2339,168 +2076,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.reloadLoadPending = false;
       this.state.loading.set(false);
     }
-  }
-
-  /** Mark the item currently playing as completed server-side, so advancing
-   *  past it (auto or manual) counts as watched.
-   *  Backend threshold: position >= duration - 30s OR position >= duration * 0.9. */
-  private async markCurrentComplete(): Promise<void> {
-    if (!this.mediaId || this.preRollActive()) return;
-    const dur =
-      (this.castService.isConnected()
-        ? this.castService.duration()
-        : this.engine?.duration) ||
-      this.duration() ||
-      0;
-    if (dur <= 0) return;
-    try {
-      await this.streamingApi.updatePlaybackState(this.mediaId, {
-        positionSeconds: dur,
-        durationSeconds: dur,
-        mediaFileId: this.mediaFileId,
-        episodeId: this.episodeId,
-      });
-    } catch {
-      /* non-blocking — advance even if the update fails */
-    }
-  }
-
-  /** Guards {@link advance} against re-entry while a switch is resolving (a
-   *  manual click racing the end-of-stream auto-advance, or the effect
-   *  re-firing before the reload's state reset clears `ended`). */
-  private advancing = false;
-
-  /** Resolve a queue item's playable file id — carried on series-next items,
-   *  looked up lazily (media fetch) for playlist items. Null when the item's
-   *  media has no available file. */
-  private async resolveItemFileId(item: QueueItem): Promise<number | null> {
-    if (item.mediaFileId != null) return item.mediaFileId;
-    const media = await this.mediaService.getOne(item.mediaId).catch(() => null);
-    return media ? (resolvePlayableFile(media, item.episodeId)?.id ?? null) : null;
-  }
-
-  /** Advance to {@link upNext}: mark the current item watched, resolve the next
-   *  playable file (series-next carries it; playlist items resolve lazily) and
-   *  load it in place — reusing the mounted player so there's no close/reopen
-   *  flash, updating the URL (the /watch route is reused, so no remount).
-   *  Offline and Cast keep the full remount: their source isn't a re-negotiable
-   *  local stream. Drives both the manual skip control and auto-advance.
-   *
-   *  Playlist items whose file is unavailable (e.g. not downloaded yet) are
-   *  skipped so a gap in the middle doesn't dead-end the rest of the queue. */
-  async advance(): Promise<void> {
-    // Don't stack on an in-flight quality/audio reload: it would move the queue
-    // cursor while the current item is still (re)loading. The manual control
-    // stays usable once the reload settles.
-    if (this.advancing || this.reloadingStream) return;
-    if (!this.upNext()) {
-      console.warn('[player] advance: no next item in the queue');
-      return;
-    }
-    this.advancing = true;
-    try {
-      await this.markCurrentComplete();
-
-      // Pick the next playable item. For a queue, walk the cursor forward over
-      // any unavailable items; series-next always resolves to a stored file.
-      let item: QueueItem | null;
-      let mediaFileId: number | null;
-      let skipped = 0;
-      if (this.queue.active()) {
-        item = this.queue.advance();
-        mediaFileId = item ? await this.resolveItemFileId(item) : null;
-        while (item && mediaFileId == null) {
-          skipped++;
-          item = this.queue.advance();
-          mediaFileId = item ? await this.resolveItemFileId(item) : null;
-        }
-      } else {
-        item = this.upNext();
-        mediaFileId = item?.mediaFileId ?? null;
-      }
-
-      if (!item || mediaFileId == null) {
-        if (skipped > 0) {
-          this.toast.error(this.translate.instant('player.next_unavailable'));
-        }
-        return;
-      }
-
-      await this.loadItem(item, mediaFileId);
-    } finally {
-      this.advancing = false;
-    }
-  }
-
-  /** Jump to an explicit queue item (the user picked it in the queue list).
-   *  Unlike {@link advance} it does NOT mark the current item watched — a jump
-   *  isn't finishing — and it does not skip: the user chose this item. */
-  async playQueueItem(index: number): Promise<void> {
-    if (this.advancing || this.reloadingStream || this.preRollActive()) return;
-    if (index === this.queue.index()) return; // already playing it
-    const item = this.queue.items()[index];
-    if (!item) return;
-    this.advancing = true;
-    try {
-      const mediaFileId = await this.resolveItemFileId(item);
-      if (mediaFileId == null) {
-        this.toast.error(this.translate.instant('player.next_unavailable'));
-        return;
-      }
-      this.queue.setIndex(index);
-      await this.loadItem(item, mediaFileId);
-    } finally {
-      this.advancing = false;
-    }
-  }
-
-  /** Load a resolved queue item into the mounted player (in place, no remount)
-   *  or via a full remount for offline / Cast. Shared by {@link advance} and
-   *  {@link playQueueItem}; the cursor is expected to already point at `item`. */
-  private async loadItem(item: QueueItem, mediaFileId: number): Promise<void> {
-    // Committing to the item — clear the end-of-stream latch so a reload that
-    // no-ops can't leave it set and re-trigger the auto-advance effect.
-    this.state.ended.set(false);
-    this.edlEnded = false;
-
-    const qp: Record<string, number> = { mediaId: item.mediaId };
-    if (item.episodeId) qp['episodeId'] = item.episodeId;
-    const sourceId = this.queue.sourceId();
-    // Only a playlist queue is re-established from the URL; a series queue is
-    // rebuilt from the loaded media, so it needs no param.
-    if (this.queue.source() === 'playlist' && sourceId != null) {
-      qp['playlistId'] = sourceId;
-    }
-
-    const canReloadInPlace =
-      !!this.engine && !this.isOfflinePlayback && !this.castService.isConnected();
-    if (canReloadInPlace) {
-      // Match the incoming item's backdrop during the brief reload (the episode
-      // still, else the media fanart) so it's not the outgoing frame.
-      const backdrop = item.stillUrl ?? item.fanartUrl;
-      if (backdrop) this.fanartUrl.set(this.serverConfig.resolveUrl(backdrop));
-      // replaceUrl + markAsBackNavigation keep both histories clear of the old
-      // item so Back never reopens the player. Route reuse → no remount.
-      this.navbar.markAsBackNavigation();
-      void this.router.navigate(['/watch', mediaFileId], {
-        queryParams: qp,
-        replaceUrl: true,
-      });
-      await this.reloadForEpisode(mediaFileId, item.mediaId, item.episodeId);
-      return;
-    }
-
-    // Offline / Cast fallback: detour through `/` to force a fresh remount (the
-    // default router would otherwise reuse the component and never re-read the
-    // snapshot params).
-    void this.router
-      .navigateByUrl('/', { skipLocationChange: true })
-      .then(() =>
-        this.router.navigate(['/watch', mediaFileId], {
-          queryParams: qp,
-          replaceUrl: true,
-        }),
-      );
   }
 
   onVolumeChange(vol: number) {
@@ -2589,11 +2164,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         else if (this.engine) this.engine.muted = cmd.muted;
         break;
       case 'next':
-        if (!this.upNext()) {
+        if (!this.queueCtl.upNext()) {
           console.warn('[remote] next: no item to advance to', cmd.cmdId);
           return;
         }
-        void this.advance();
+        void this.queueCtl.advance();
         break;
       case 'audio':
         if (!cmd.trackId) {
@@ -3846,7 +3421,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         // A finished episode returns to the NEXT episode's detail page so the
         // user lands ready to continue; an episode left mid-watch returns to
         // its own page (to resume).
-        const next = this.nextEpisodeContext();
+        const next = this.queueCtl.nextEpisodeContext();
         const epId =
           this.episodeFinished() && next ? next.episodeId : this.episodeId;
         target = `/series/${this.mediaId}/episode/${epId}`;
@@ -4886,7 +4461,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       payload.supportsVolume = this.engine?.supportsVolume ?? true;
       payload.subtitleId = onReceiver ? onReceiver.subtitleId : this.activeSubtitleId();
       payload.autoplayBlocked = this.autoplayBlocked();
-      payload.hasNext = this.upNext() !== null;
+      payload.hasNext = this.queueCtl.upNext() !== null;
       // While casting, CastPlayerService's own heartbeat carries the receiver's sample.
       if (!this.castService.isConnected() && this.engine) {
         payload.qoe = this.qoe.current(sessionId) ?? undefined;
