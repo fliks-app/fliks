@@ -260,6 +260,7 @@ A 500 or a half-written request is never part of the frozen contract:
 | C171 | `GET /api/persons/search` with a blank `q` returned every person, biographies included, with no limit | the first 1000 by name; a person past it is found by name | the persons page lists at most 1000 without a search |
 | C172 | an SSE connection's frame queue was unbounded: a client that stopped reading made server memory grow | the queue holds 1024 frames; a connection that overflows is closed and the client reconnects (`events-hub.md` rule 15a) | none: clients already reconnect on a dropped stream |
 | C173 | an image source of up to 268 402 689 pixels (about 1 GiB decoded) was decoded once per variant | one decode per source, refused over 40 000 000 pixels: the full file is kept, its resized variants are not made (`image-store.md` rule 9) | none: artwork is far smaller |
+| C174 | `acquisition.candidates` built the whole wanted list for the first page, cached it for 60 s and paged it by offset | keyset cursor on `(mediaId, season id, episode id)`: a page reads only the media after the cursor, in batches; no cache (`plugins.md` rule 31) | none: the cursor is opaque to plugins |
 
 Frozen as is (decided): the heartbeat keeps its debounce entry after a failed history write and returns
 `sessionLost: false` when the engine session lives but presence cannot be rebuilt. Lists whose order comes

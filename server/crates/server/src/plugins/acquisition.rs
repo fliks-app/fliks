@@ -17,11 +17,8 @@ use fliks_domain::release::scoring::{
 use serde_json::Value;
 use sqlx::{FromRow, PgPool};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
-use std::sync::Mutex;
-use std::time::{Duration, Instant};
 
 const MAX_LIMIT: u32 = 500;
-const PAGE_CACHE: Duration = Duration::from_secs(60);
 const PACK_MIN_SHARE: f64 = 0.5;
 
 #[derive(FromRow, Clone)]
@@ -595,72 +592,69 @@ async fn count_by_season(
     Ok(rows.into_iter().collect())
 }
 
-type Cached = (String, Instant, Vec<t::AcquisitionTarget>);
+/// Media scanned per step of a page: bounds what one `candidates` call loads.
+const BATCH: usize = 100;
 
-fn page_cache() -> &'static Mutex<HashMap<String, Cached>> {
-    static C: std::sync::OnceLock<Mutex<HashMap<String, Cached>>> = std::sync::OnceLock::new();
-    C.get_or_init(Mutex::default)
+type Key = (u32, u32, u32);
+
+fn key(tg: &t::AcquisitionTarget) -> Key {
+    (
+        tg.media_id,
+        tg.season.as_ref().map_or(0, |s| s.id),
+        tg.episode.as_ref().map_or(0, |e| e.id),
+    )
 }
 
-/// Drops the plugin's cached candidates page (uninstall).
-pub fn forget(plugin: &str) {
-    page_cache().lock().unwrap().remove(plugin);
+fn parse_cursor(c: &str) -> Option<Key> {
+    let mut p = c.trim().split('.').map(|n| n.parse::<u32>().ok());
+    Some((p.next()??, p.next()??, p.next()??))
 }
 
-fn page(targets: &[t::AcquisitionTarget], cursor: Option<&str>, limit: usize) -> t::CandidatesPage {
-    let offset = cursor
-        .and_then(|c| c.trim().parse::<usize>().ok())
-        .unwrap_or(0);
-    let items: Vec<_> = targets.iter().skip(offset).take(limit).cloned().collect();
-    let next = offset + items.len();
-    t::CandidatesPage {
-        cursor: (next < targets.len()).then(|| next.to_string()),
-        items,
-    }
+/// The ids of the next monitored media from `from`, in order.
+async fn media_batch(
+    db: &PgPool,
+    from: i32,
+    ids: Option<&[i32]>,
+    kind: Option<t::MediaKind>,
+) -> sqlx::Result<Vec<i32>> {
+    let kind = kind.map(|k| {
+        if matches!(k, t::MediaKind::Movie) {
+            "movie"
+        } else {
+            "series"
+        }
+    });
+    sqlx::query_scalar(
+        r#"SELECT id FROM media WHERE monitored AND id >= $1 AND ($2::int[] IS NULL OR id = ANY($2))
+             AND ($3::text IS NULL OR type::text = $3) ORDER BY id LIMIT $4"#,
+    )
+    .bind(from)
+    .bind(ids)
+    .bind(kind)
+    .bind(BATCH as i64)
+    .fetch_all(db)
+    .await
 }
 
-/// `acquisition.candidates`: movies, season packs and episodes, sorted, paged by offset.
-/// `on` is the validated `availableOn`.
-pub async fn candidates(
-    st: &AppState,
-    plugin: &str,
-    q: t::CandidatesQuery,
+/// The movies, season packs and episodes wanted among `ids`.
+async fn targets_for(
+    db: &PgPool,
+    ids: &[i32],
+    kind: Option<t::MediaKind>,
     on: NaiveDate,
-) -> sqlx::Result<t::CandidatesPage> {
-    let db = &st.db;
-    let limit = q.limit.clamp(1, MAX_LIMIT) as usize;
-    let mut ids: Option<Vec<i32>> = q
-        .media_ids
-        .as_ref()
-        .map(|v| v.iter().map(|i| *i as i32).collect());
-    if let Some(v) = ids.as_mut() {
-        v.sort();
-    }
-    let key = format!(
-        "{:?}|{:?}|{}",
-        q.kind.map(|k| matches!(k, t::MediaKind::Movie)),
-        ids,
-        q.available_on
-    );
-    if q.cursor.is_some()
-        && let Some((k, at, targets)) = page_cache().lock().unwrap().get(plugin)
-        && *k == key
-        && at.elapsed() < PAGE_CACHE
-    {
-        return Ok(page(targets, q.cursor.as_deref(), limit));
-    }
-    let ids = ids.filter(|v| !v.is_empty());
+) -> sqlx::Result<Vec<t::AcquisitionTarget>> {
+    let ids = Some(ids);
     let today = Utc::now().date_naive();
     let mut targets = vec![];
-    if !matches!(q.kind, Some(t::MediaKind::Series)) {
-        for (m, files, d) in movie_targets(db, ids.as_deref()).await? {
+    if !matches!(kind, Some(t::MediaKind::Series)) {
+        for (m, files, d) in movie_targets(db, ids).await? {
             if available(&m, on) {
                 targets.extend(target(&m, Some(d), &files));
             }
         }
     }
-    if !matches!(q.kind, Some(t::MediaKind::Movie)) {
-        let eps: Vec<EpTarget> = episode_targets(db, ids.as_deref(), today)
+    if !matches!(kind, Some(t::MediaKind::Movie)) {
+        let eps: Vec<EpTarget> = episode_targets(db, ids, today)
             .await?
             .into_iter()
             .filter(|e| e.episode.air_date.is_none_or(|d| d <= on))
@@ -718,19 +712,49 @@ pub async fn candidates(
             }
         }
     }
-    targets.sort_by_key(|tg| {
-        (
-            tg.media_id,
-            tg.season.as_ref().map_or(0, |s| s.id),
-            tg.episode.as_ref().map_or(0, |e| e.id),
-        )
-    });
-    let out = page(&targets, q.cursor.as_deref(), limit);
-    page_cache()
-        .lock()
-        .unwrap()
-        .insert(plugin.to_owned(), (key, Instant::now(), targets));
-    Ok(out)
+    targets.sort_by_key(key);
+    Ok(targets)
+}
+
+/// `acquisition.candidates`: movies, season packs and episodes, sorted, paged by keyset: the cursor
+/// names the last item returned. `on` is the validated `availableOn`.
+pub async fn candidates(
+    db: &PgPool,
+    q: t::CandidatesQuery,
+    on: NaiveDate,
+) -> sqlx::Result<t::CandidatesPage> {
+    let limit = q.limit.clamp(1, MAX_LIMIT) as usize;
+    let ids: Option<Vec<i32>> = q
+        .media_ids
+        .as_ref()
+        .map(|v| v.iter().map(|i| *i as i32).collect::<Vec<_>>())
+        .filter(|v| !v.is_empty());
+    let after = q.cursor.as_deref().and_then(parse_cursor);
+    let mut from = after.map_or(0, |k| k.0 as i32);
+    let mut items: Vec<t::AcquisitionTarget> = vec![];
+    while items.len() <= limit {
+        let batch = media_batch(db, from, ids.as_deref(), q.kind).await?;
+        let Some(last) = batch.last() else { break };
+        from = last + 1;
+        let full = batch.len() == BATCH;
+        let found = targets_for(db, &batch, q.kind, on).await?;
+        items.extend(
+            found
+                .into_iter()
+                .filter(|tg| after.is_none_or(|a| key(tg) > a)),
+        );
+        if !full {
+            break;
+        }
+    }
+    let more = items.len() > limit;
+    items.truncate(limit);
+    let cursor = items
+        .last()
+        .filter(|_| more)
+        .map(key)
+        .map(|(m, s, e)| format!("{m}.{s}.{e}"));
+    Ok(t::CandidatesPage { cursor, items })
 }
 
 fn wit_coverage(c: &ReleaseCoverage) -> t::ReleaseCoverage {
@@ -1149,6 +1173,41 @@ pub async fn score(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[sqlx::test(migrations = false)]
+    async fn candidates_page_by_keyset_across_media_batches(db: PgPool) {
+        crate::db::migrate(&db).await.unwrap();
+        sqlx::raw_sql(
+            r#"INSERT INTO quality_profiles (id, name, cutoff, items) VALUES (1, 'P', 18, '[]');
+               INSERT INTO libraries (id, name, path) VALUES (1, 'L', '/m');
+               INSERT INTO media (title, year, type, status, "libraryId", "qualityProfileId", "folderName", monitored)
+                 SELECT 'm' || n, 2000, 'movie', 'released', 1, 1, 'm' || n, n % 5 <> 0 FROM generate_series(1, 250) n;"#,
+        )
+        .execute(&db)
+        .await
+        .unwrap();
+        let mut seen = vec![];
+        let mut cursor = None;
+        loop {
+            let q = t::CandidatesQuery {
+                kind: None,
+                media_ids: None,
+                available_on: "2030-01-01".into(),
+                limit: 70,
+                cursor,
+            };
+            let page = candidates(&db, q, NaiveDate::from_ymd_opt(2030, 1, 1).unwrap())
+                .await
+                .unwrap();
+            seen.extend(page.items.iter().map(|i| i.media_id));
+            match page.cursor {
+                Some(c) => cursor = Some(c),
+                None => break,
+            }
+        }
+        let want: Vec<u32> = (1..=250).filter(|n| n % 5 != 0).collect();
+        assert_eq!(seen, want);
+    }
 
     #[test]
     fn published_dates() {

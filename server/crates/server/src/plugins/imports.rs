@@ -158,7 +158,6 @@ impl host::Host for Ctx {
         q: t::CandidatesQuery,
     ) -> Result<t::CandidatesPage, HostError> {
         let app = self.app();
-        let id = self.sh.id.clone();
         call!(
             self,
             "acquisition.candidates",
@@ -170,7 +169,7 @@ impl host::Host for Ctx {
                     .then(|| chrono::NaiveDate::parse_from_str(&q.available_on, "%Y-%m-%d").ok())
                     .flatten()
                     .ok_or_else(|| host_err("ERR_VALIDATION", "availableOn must be YYYY-MM-DD"))?;
-                super::acquisition::candidates(&app, &id, q, on)
+                super::acquisition::candidates(&app.db, q, on)
                     .await
                     .map_err(db_err)
             }
