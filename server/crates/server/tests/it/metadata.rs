@@ -587,6 +587,18 @@ async fn person_search(pool: PgPool) {
     assert_eq!(names(&search("?q=jean%20luc").await.1), ["Jean-Luc Godard"]);
     assert_eq!(names(&search("?q=am%C3%A9lie").await.1), ["Amélie Poulain"]);
     assert_eq!(names(&search("").await.1).len(), 5);
+    sqlx::query(
+        r#"INSERT INTO persons (id, provider, "tmdbId", name)
+           SELECT 10000 + g, 'tmdb', 10000 + g, 'Zz ' || g FROM generate_series(1, 1000) g"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    assert_eq!(names(&search("").await.1).len(), 1000, "C171");
+    sqlx::query("DELETE FROM persons WHERE name LIKE 'Zz %'")
+        .execute(&pool)
+        .await
+        .unwrap();
     assert_eq!(names(&search("?q=%20%20").await.1)[0], "Amélie Poulain");
     for q in [
         "%28", "a%26", "x%21", "a%3Ab", "%27", "a%7Cb", "-", "a%5Cb", "%3A",
