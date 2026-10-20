@@ -946,7 +946,10 @@ async fn cancelling_a_sync_drops_a_queued_item_and_settles_a_running_one(pool: P
             vec![crate::engine::testkit::slow(300, ok(gone))],
         );
     }
-    c.fake.script("DELETE", "/v1/jobs/j1", vec![ok(json!({}))]);
+    for j in ["j1", "j2"] {
+        c.fake
+            .script("DELETE", &format!("/v1/jobs/{j}"), vec![ok(json!({}))]);
+    }
     let uri = |id: i32| format!("/api/media/{}/subtitles/{id}/sync", c.media);
     for id in &ids {
         call(&c, "POST", &uri(*id), &c.admin, Some(json!({}))).await;
@@ -970,8 +973,10 @@ async fn cancelling_a_sync_drops_a_queued_item_and_settles_a_running_one(pool: P
         call(&c, "DELETE", &uri(ids[0]), &c.admin, None).await.0,
         204
     );
-    assert_eq!(c.fake.seen("DELETE", "/v1/jobs/j1").len(), 1);
     until("slot settled", || async { status(ids[0]).is_none() }).await;
+    // The two running items race for their job ids: whichever holds the cancelled one is deleted.
+    let deletes = ["j1", "j2"].map(|j| c.fake.seen("DELETE", &format!("/v1/jobs/{j}")).len());
+    assert_eq!(deletes.iter().sum::<usize>(), 1);
     // Nothing is written back and no failure is recorded; the lock stays like after a failure.
     let (synced, failed, locked): (bool, bool, bool) =
         sqlx::query_as(r#"SELECT synced, "syncFailed", locked FROM subtitle_files WHERE id = $1"#)
