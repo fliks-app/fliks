@@ -74,9 +74,7 @@ export class SubtitleController {
     return subtitleManifestRank(s.trackKey ?? s.id);
   }
 
-  /** 0-based ordinal of a soft subtitle among the tracks that share its
-   *  (language, forced) — several same-language subs can't be told apart by
-   *  language alone, so the engines pick the Nth one. */
+  /** 0-based ordinal of a soft subtitle among tracks sharing its (language, forced); the engines pick the Nth. */
   subtitleOrdinal(sub: SubtitleOption): number {
     const peers = this.availableSubtitles()
       .filter(
@@ -184,9 +182,8 @@ export class SubtitleController {
     return true;
   }
 
-  /** Re-selects the active subtitle after a reload, which engines drop across load().
-   *  A reload that changed the play mode can change how a bitmap sub must be shown:
-   *  one the engine rendered in DirectPlay is burned in once the stream is HLS. */
+  /** Re-selects the active subtitle after a reload (engines drop it across load()); a reload that changed the
+   *  play mode can change how a bitmap sub is shown: engine-rendered in DirectPlay, burned in on HLS. */
   async restoreSubtitle(position: number): Promise<void> {
     const id = this.activeSubtitleId();
     const sub = id ? this.availableSubtitles().find((s) => s.id === id) : undefined;
@@ -234,9 +231,8 @@ export class SubtitleController {
     if (this.host.readsSubtitlesAtLoad()) void this.host.reloadStream(undefined, { reason: 'other' });
   }
 
-  /** Whether `sub` reaches the screen burned into the video: a bitmap subtitle is
-   *  rendered by the engine only when it can AND this playback carries the track,
-   *  which only a DirectPlay container does. */
+  /** Whether `sub` is burned into the video: a bitmap sub is engine-rendered only when it can be and the
+   *  playback carries the track, which only a DirectPlay container does. */
   private burnsIn(sub: SubtitleOption): boolean {
     if (!sub.burnIn) return false;
     const rendersFromContainer =

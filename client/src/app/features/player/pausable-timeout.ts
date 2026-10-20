@@ -1,9 +1,5 @@
-/**
- * A one-shot timer that can be paused and resumed without losing the time it
- * has left. Backs the floating cues' auto-retract: the countdown freezes while
- * the controls bar is up (the user is plainly engaged) and resumes the instant
- * it hides, so a cue never vanishes out from under an interacting viewer.
- */
+/** A one-shot timer that pauses and resumes without losing its remaining time; backs the floating cues'
+ *  auto-retract, frozen while the controls bar is up. */
 export class PausableTimeout {
   private handle: ReturnType<typeof setTimeout> | null = null;
   private remainingMs = 0;

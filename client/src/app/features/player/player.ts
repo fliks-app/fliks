@@ -130,12 +130,8 @@ import { DefaultFocusDirective } from '../../shared/directives/default-focus.dir
   styles: [`
     .player-container {
       position: fixed;
-      /* 'inset: 0' pins all four edges to the layout viewport. On iOS
-         Safari with the bottom URL bar, the layout viewport ignores the
-         chrome so 'bottom: 0' lands BEHIND it — explicit 'height: 100dvh'
-         caps the container to the visible (dynamic) viewport and pulls
-         the seekbar above the URL bar. '100vh' is the fallback for
-         browsers without dvh support (Tizen Chrome 85 — no URL bar). */
+      /* 100dvh caps the container to the visible viewport above iOS Safari's bottom URL bar; 100vh is the
+         fallback for browsers without dvh (Tizen Chrome 85). */
       inset: 0;
       height: 100vh;
       height: 100dvh;
@@ -199,23 +195,13 @@ import { DefaultFocusDirective } from '../../shared/directives/default-focus.dir
       width: 100%;
       height: 100%;
       object-fit: contain;
-      /* Override Tailwind preflight's max-width:100%/height:auto for
-       * video: it leaves the element at its intrinsic size when the
-       * container grows beyond the decoded frame's natural width,
-       * which surfaces as black bars on all four sides instead of
-       * letterboxing on the short axis only. The !important here only
-       * has to beat preflight (specificity 0,0,0 via :where) so it's
-       * cheap. */
+      /* Override Tailwind preflight's max-width/height:auto, which leaves black bars on all four sides instead
+         of letterboxing the short axis. */
       max-width: none !important;
       max-height: none !important;
     }
-    /* Lift native subtitles by the user's configured bottom margin
-       (--cue-bottom-margin, set per-video by applySubtitleStyle), and bump
-       further when the controls bar is visible so cues clear it. We
-       toggle the class directly on the <video> — toggling on an ancestor
-       isn't always enough to trigger a style recalc on UA-shadow
-       pseudo-elements in Chromium. WebKit pseudo covers Chromium + Safari
-       + WKWebView, which is what we target. */
+    /* Lift native subtitles by --cue-bottom-margin, more when controls show; toggled on the <video> itself
+       because an ancestor toggle may not restyle the UA-shadow pseudo in Chromium. */
     .player-video::-webkit-media-text-track-display {
       transition: transform 200ms ease;
       transform: translateY(calc(-1 * var(--cue-bottom-margin, 0vh)));
@@ -254,12 +240,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private readonly translate = inject(TranslateService);
   private readonly title = inject(Title);
 
-  /** Set the browser tab title from the loaded media. The player route lives
-   *  outside the main layout, so the layout's title effect doesn't run here —
-   *  without this the tab keeps whichever title the previous page set (e.g.
-   *  "Accueil" when launched from the home continue-watching row). Keep that
-   *  previous title until the media name resolves so the tab doesn't flicker
-   *  through a bare app name in between. */
+  /** Set the tab title from the loaded media (the player route is outside the layout's title effect); keeps the
+   *  previous title until the name resolves so the tab doesn't flicker. */
   private readonly tabTitleEffect = effect(() => {
     const media = this.mediaTitle();
     const episode = this.episodeTitle();
@@ -274,17 +256,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private readonly qualityManager = inject(QualityManagerService);
   readonly device = inject(DeviceService);
 
-  /** Reset the singleton PlayerStateService synchronously at field-init
-   *  time so that effects declared further down (e.g. `autoHideOnPlay`)
-   *  don't see lingering `videoStarted=true` / `paused=false` from the
-   *  previous session. `state.reset()` is also called in
-   *  `ngAfterViewInit` but that happens after the first effect pass. */
+  /** Reset the singleton state at field-init: effects below run before ngAfterViewInit's reset. */
   private readonly _stateReset = (this.state.reset(), null);
 
-  /** Register the live DV-passthrough probe once. Read at error time, so it
-   *  reflects the current play method even after a mid-session quality switch.
-   *  `reset()` (called again on episode reload) must not clear it, hence a
-   *  one-shot registration here rather than a per-load sync. */
+  /** One-shot DV-passthrough probe, read at error time; a per-load `reset()` must not clear it. */
   private readonly _dvProbe = (
     this.state.setDolbyVisionProbe(() => this.isDolbyVisionPassthrough()),
     null
@@ -294,26 +269,17 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private readonly containerEl = viewChild<ElementRef<HTMLDivElement>>('playerContainer');
   private readonly controls = viewChild(PlayerControlsComponent);
 
-  /** Active engine (Shaka for web HLS, Native for Android/iOS). Cast
-   *  bypasses the engine abstraction and is driven by `castPlayerService`
-   *  + `castService` directly. */
+  /** Active engine (Shaka on web, Native on Android/iOS); Cast is driven by castPlayerService + castService. */
   private engine: PlaybackEngine | null = null;
   readonly isNativeEngine = signal(false);
-  /** True when AVPlay (Samsung TV native HW decoder) is driving playback —
-   *  same UX treatment as a Capacitor native engine: the WebView paints on
-   *  top of a transparent layer above the hardware video surface. */
+  /** AVPlay (Samsung TV HW decoder) is driving playback: same UX as a Capacitor native engine. */
   readonly isTizenEngine = signal(false);
-  /** Tizen WebApp running on a Samsung TV with AVPlay available. Distinct
-   *  from `isNative` (Capacitor) and from `device.isTv()` (which is true
-   *  on any TV form factor including the placeholder browser preview). */
+  /** Tizen WebApp with AVPlay available; distinct from `isNative` (Capacitor) and `device.isTv()` (any TV form
+   *  factor, including the browser preview). */
   readonly isTizen = isTizenAvplayAvailable();
-  /** LG webOS TV. Plays through the native `<video>` media pipeline
-   *  (HW HEVC/AV1, Dolby, HDR, native HLS) — a regular in-WebView element,
-   *  so it groups with the Shaka UX, not the transparent-plane native one. */
+  /** LG webOS uses a regular `<video>`, so it groups with the Shaka UX, not the transparent-plane native one. */
   readonly isWebOs = this.device.tvPlatform() === 'webos';
-  /** Native desktop shell (Electron + embedded mpv). Plays through the
-   *  DesktopEngine — same transparent-overlay UX as the Capacitor native
-   *  engine, with mpv behind the UI instead of ExoPlayer/AVPlayer. */
+  /** Electron shell with embedded mpv: same transparent-overlay UX as the Capacitor native engine. */
   readonly isDesktopNative = this.device.desktopPlatform() === 'electron';
 
   /** Template binding — true when using native (ExoPlayer/AVPlayer) engine. */
@@ -329,10 +295,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private statsInterval: ReturnType<typeof setInterval> | null = null;
   private playheadInterval: ReturnType<typeof setInterval> | null = null;
   private subtitleStyleEl: HTMLStyleElement | null = null;
-  /** Stall watchdog: last position we saw the playhead at, and when. If the
-   *  playhead doesn't advance for {@link stallTimeoutMs} while the player is
-   *  meant to be playing (a silent transcode death or a wedged buffer), we
-   *  treat it like a lost session and reload at the current position. */
+  /** Stall watchdog: last playhead position and when seen. No advance for {@link stallTimeoutMs} while playing
+   *  (dead transcode, wedged buffer) reloads at the current position. */
   private lastProgressPos = 0;
   private lastProgressAt = 0;
   private readonly stallTimeoutMs = 15_000;
@@ -343,21 +307,16 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   /** Buffering right after a reload or track switch finishes is that switch settling, not a stall. */
   private qoeGraceUntil = 0;
   private readonly seekStallGraceMs = 32_000;
-  // Desktop mpv far-seek → reload thresholds: forward slack above mpv's cache
-  // end, and the backward window still served from its back-cache. A seek
-  // outside this band reloads at the offset instead of seeking in place.
+  // Desktop mpv far-seek thresholds: forward slack above its cache end, and the back-cache window still served;
+  // seeks outside the band reload at the offset.
   private readonly desktopSeekCacheSlackS = 1;
   private readonly desktopSeekBackWindowS = 15;
-  /** A 1 s tick that comes back this late means the process was frozen — the
-   *  machine slept, or the tab was throttled — not that time passed normally.
-   *  Nothing else in the app notices a wake: `visibilitychange` doesn't fire
+  /** A 1 s tick this late means the process was frozen (sleep, throttled tab); `visibilitychange` doesn't fire
    *  for a sleep, so the clock gap is the signal. */
   private static readonly wakeGapMs = 5_000;
   private lastTickAt = 0;
-  /** A heartbeat that died on the network — typically the seconds right after
-   *  a wake, before Wi-Fi is back — leaves us blind to whether the session
-   *  survived. Retry the resume path once we're online instead of swallowing
-   *  the answer we never received. */
+  /** A heartbeat lost on the network (e.g. right after a wake) leaves the session state unknown; retry the
+   *  resume path once online. */
   private resumeDue = false;
   private lastResumeAt = 0;
   private readonly resumeRetryMs = 5_000;
@@ -376,9 +335,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   readonly muted = this.state.muted;
   readonly buffering = this.state.buffering;
   readonly bufferedEnd = this.state.bufferedEnd;
-  /** Nothing has painted yet, so the spinner stands in for the video. A refused
-   *  autoplay is not that: the media is ready and paused, and the play button
-   *  under the spinner is the real state to show. */
+  /** Spinner stands in for the video until first paint, except on a refused autoplay (ready, paused: show
+   *  play). */
   readonly spinnerVisible = computed(
     () =>
       !this.autoplayBlocked() &&
@@ -393,10 +351,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   readonly activeQualityId = this.qualityManager.activeQualityId;
   readonly availableQualities = this.qualityManager.availableQualities;
   readonly activeResolution = this.qualityManager.activeResolution;
-  /** Label for the currently picked quality, mirroring the per-rung
-   *  label in the dropdown (`q.label`) — so the header row stays in
-   *  sync with the list and never surfaces internal ids like
-   *  `1080p-hdr`. Falls back to the id before the quality list has loaded. */
+  /** Label of the picked quality, matching the dropdown's `q.label` (never ids like `1080p-hdr`); id until
+   *  loaded. */
   readonly activeQualityLabel = computed(() => {
     const id = this.activeQualityId();
     if (id === 'auto') {
@@ -492,9 +448,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   readonly chapters = signal<{ startSeconds: number; endSeconds: number; title?: string }[]>([]);
   /** Set after a manual seek to suppress auto-skip for a short window. */
   private autoSkipSuppressedUntil = 0;
-  /** Timestamp of the last processed play/pause toggle — coalesces rapid
-   *  taps so a burst can't interleave a play()/pause() with an in-flight
-   *  MSE append and drift A/V. */
+  /** Last processed play/pause toggle; coalesces rapid taps so play()/pause() can't interleave with an MSE
+   *  append. */
   private lastTogglePlayAt = 0;
   /** Coalesce window for play/pause toggles. Sized to bridge an MSE append,
    *  not human double-tap cadence. */
@@ -534,10 +489,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     return buildCastAudioOptions(this.currentFile()?.streamInfo?.audio, this.translate);
   });
 
-  /** True on every standalone bundle (Capacitor + Smart TV). Drives the
-   *  controls bar: fullscreen toggle hidden, PiP toggle hidden, dpad-
-   *  friendly defaults. Sourced from ServerConfigService so the rule
-   *  matches the rest of the app instead of probing Capacitor directly. */
+  /** True on every standalone bundle (Capacitor + Smart TV): hides fullscreen/PiP toggles. From
+   *  ServerConfigService. */
   readonly isNative = this.serverConfig.isNative;
   /** Player-close animation duration; must match the `player-close` keyframes. */
   private static readonly closeAnimationMs = 200;
@@ -630,37 +583,22 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     Pip.updatePlaybackState({ playing: !this.uiPaused() }).catch(() => {});
   });
 
-  /** Hide the controls bar the moment the first frame of the new
-   *  session is painted. Uses `videoStarted` (per-session, set after
-   *  the engine actually surfaces a frame) rather than `paused` —
-   *  the `paused` signal is on a singleton service, so opening a
-   *  second video would inherit `paused = false` from the previous
-   *  session and the effect would fire before this video has even
-   *  loaded.
-   *  `chrome.visible` is read through `untracked` so the effect
-   *  only reacts to videoStarted transitions — without it, the
-   *  user moving the mouse (which calls `chrome.show()`) would
-   *  re-fire this effect and re-hide them immediately, making the
-   *  cursor / bar impossible to keep visible. Subsequent pause /
-   *  resume cycles fall through to the existing auto-hide timer +
-   *  user-interaction reveal. */
+  /** Hide the controls bar once the first frame paints. Keyed on per-session `videoStarted` (the singleton
+   *  `paused` is stale across videos); `chrome.visible` is read untracked so mouse moves don't re-hide it. */
 
   /** Re-apply native subtitle style on controls show/hide so the bottom-margin
       bump kicks in. Browser playback uses CSS instead — see styles below. */
   private readonly subtitleControlsMarginEffect = effect(() => {
     this.nativeSubtitleBottomBump();
-    // webOS drives the same DOM subtitle overlay as the native engines but
-    // reports isNativeEngine=false (it keeps the Shaka UX), so it needs an
-    // explicit branch — otherwise the margin stays pinned at its load-time
-    // value (controls visible → offset) and never settles flush on hide.
+    // webOS drives the DOM subtitle overlay but reports isNativeEngine=false, so it needs an explicit branch or
+    // the margin never settles on controls hide.
     if ((this.isNativeEngine() || this.isWebOs) && this.engine) {
       this.applyNativeSubtitleStyle();
     }
   });
 
-  /** Mirror the fill-screen toggle onto engines that paint outside the <video>
-      element (ExoPlayer / AVPlayer) — the object-fit binding in the template
-      only reaches the browser path. Duck-typed like the subtitle style. */
+  /** Mirror fill-screen onto engines painting outside the <video> (ExoPlayer/AVPlayer); duck-typed like the
+   *  subtitle style. */
   private readonly fillScreenEffect = effect(() => {
     const fill = this.fillScreen();
     const engine = this.engine as NativeEngine | null;
@@ -671,10 +609,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.applyVideoCrop();
   });
 
-  /** Push appearance to the active renderer whenever the settings change, so the
-      in-player subtitle appearance panel lands on the cue without a reload.
-      Untracked: the appliers also read chrome.visible(), whose margin bump the
-      effect above already owns — tracking it here would re-style on every toggle. */
+  /** Push subtitle appearance to the active renderer on settings change. Untracked: the chrome.visible margin
+   *  bump is owned by the effect above. */
   private readonly subtitleAppearanceEffect = effect(() => {
     this.playerSettings.settings();
     untracked(() => {
@@ -705,9 +641,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   /** Bumped whenever {@link media} is (re)assigned so reactive computeds re-run. */
   private readonly mediaLoadedTick = signal(0);
-  /** The audio the viewer is meant to hear: an index into the file's
-   *  `streamInfo.audio`. The one source of truth every load path negotiates and
-   *  configures from; the engine's own track is reconciled to it, never the reverse. */
+  /** The audio the viewer should hear (index into `streamInfo.audio`): every load path configures from it, and
+   *  the engine's track is reconciled to it, never the reverse. */
   private activeAudioStreamIndex: number | undefined;
   /** The picks made before pressing play; held until the file they were made on has opened. */
   private launchTracks: LaunchTracks | null = null;
@@ -723,9 +658,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   /** Files an AirPlay receiver refused in HDR: renegotiated SDR from then on. */
   private readonly sdrFallbackFileIds = new Set<number>();
 
-  /** `deviceProfileService.getProfile()`, with `rejectCopy` forced on when
-   *  {@link CopyFallbackController} has confirmed `mediaFileId` an offender,
-   *  and HDR off once an AirPlay receiver refused it. */
+  /** `deviceProfileService.getProfile()` with `rejectCopy` forced when {@link CopyFallbackController} flagged
+   *  the file, and HDR off once an AirPlay receiver refused it. */
   private deviceProfileFor(mediaFileId: number): DeviceProfile {
     let profile = this.deviceProfileService.getProfile();
     if (this.copyFallback.shouldForceRejectCopy(mediaFileId)) {
@@ -770,10 +704,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   readonly episodeTitle = signal('');
   readonly fanartUrl = signal<string | null>(null);
 
-  /** Low-quality variant of `fanartUrl` for the loading backdrop's
-   *  LQIP layer. Only kicks in for our own `/api/images/...` URLs
-   *  (which support `?size=thumb`); remote / data URLs fall through
-   *  as-is so the layer paints the same image as the full-res one. */
+  /** Low-quality `fanartUrl` for the backdrop LQIP layer; only our `/api/images/...` URLs support
+   *  `?size=thumb`. */
   readonly fanartThumbUrl = computed(() => {
     const url = this.fanartUrl();
     if (!url) return null;
@@ -787,10 +719,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    *  error diagnostics so a failed open shows which endpoint/format was tried. */
   private lastStreamUrl = '';
 
-  /** Live-session id to bind the next stream request to. While casting
-   *  the receiver's session id wins (its segments come from a separate
-   *  ffmpeg job under the cast device profile); otherwise the local
-   *  browser's session id. */
+  /** Live-session id for the next stream request: the cast receiver's while casting (separate ffmpeg job). */
   private activeSessionId(): string | undefined {
     if (this.castService.isConnected()) {
       return (
@@ -803,10 +732,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   readonly playerStats = computed<PlayerStats | null>(() => {
     if (!this.statsVisible()) return null;
 
-    // Read signals so Angular tracks them as dependencies. NB: currentTime()
-    // is deliberately NOT read here — it ticks ~4Hz and nothing below uses it,
-    // so the stats panel refreshes off statsRefreshTick (1Hz) instead.
-    // Read here so an engine-level track switch (no playback-info refetch) reruns this.
+    // currentTime() is deliberately not read (~4Hz, unused): the stats panel refreshes off statsRefreshTick
+    // (1Hz). Read here so an engine-level track switch (no playback-info refetch) reruns this.
     const quality = this.activeQualityId();
     void this.statsRefreshTick();
     const activeAudioTrackId = this.activeAudioTrackId();
@@ -870,13 +797,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const video = this.videoEl()?.nativeElement;
     if (video) this.detachAirPlay = this.airPlay.attachVideo(video);
 
-    // Eager backdrop from router state — set BEFORE any await so the
-    // loading screen renders on the first tick instead of popping in
-    // only after the media API + image download (~1s+ later). The
-    // image is already in the browser cache from the source tile/header.
-    // `stillUrl` (episode thumbnail) wins over `fanartUrl` when both
-    // are passed: a series viewer recognises the episode they just
-    // selected, not the show's hero.
+    // Eager backdrop from router state, set before any await so the loading screen renders on the first tick.
+    // `stillUrl` (episode thumbnail) wins over `fanartUrl`: viewers recognise the episode they selected.
     const navState = (this.router.getCurrentNavigation()?.extras?.state ?? history.state) as { fanartUrl?: string | null; stillUrl?: string | null; tracks?: LaunchTracks | null } | null;
     this.launchTracks = navState?.tracks ?? null;
     const eagerBackdrop = navState?.stillUrl ?? navState?.fanartUrl;
@@ -890,10 +812,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.episodeId = qp['episodeId'] ? +qp['episodeId'] : undefined;
     const resumeTime = 't' in qp ? +qp['t'] : undefined;
 
-    // A playlist launch registers the queue before navigating and passes its id.
-    // Consume it only when it matches; any other entry point drops the queue
-    // (a series queue is rebuilt from the media once it loads — see
-    // syncSeriesQueue — so we never inherit a stale "up next" here).
+    // A playlist launch registers its queue and passes the id; consume it only on a match, any other entry
+    // drops the queue (a series queue is rebuilt by syncSeriesQueue once the media loads).
     const playlistId = qp['playlistId'] ? +qp['playlistId'] : undefined;
     if (
       playlistId &&
@@ -928,10 +848,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
             ?.offlineCrop ?? null;
       }
 
-      // playback-info runs as soon as the media is known: the audio index it
-      // carries decides which rendition the master marks DEFAULT, and the
-      // native players start on that one. startQuality/startAt let the backend
-      // pre-spawn ffmpeg right here (instead of waiting for master.m3u8).
+      // playback-info runs once the media is known: its audio index picks the DEFAULT rendition, and
+      // startQuality/startAt let the backend pre-spawn ffmpeg.
       await this.deviceProfileService.whenDesktopProbed();
       // The service is app-scoped: without this the request would carry the
       // previous media's rung instead of the user's saved one.
@@ -942,10 +860,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         // The launch failure path shows the server's reason in its own toast and card.
         playbackInfoPromise = this.negotiatePlayback(resumeTime, {}, { skipErrorToast: true });
       };
-      // Mint the long-lived stream JWT in parallel with media/state/playback-info
-      // load instead of serially before engine init — it's on the time-to-first-
-      // frame critical path. Awaited just before the manifest/Bearer headers are
-      // built (below).
+      // Minted in parallel with the other loads (time-to-first-frame critical path); awaited before headers are
+      // built.
       const streamTokenPromise = this.isOfflinePlayback
         ? null
         : this.authService.ensureStreamToken();
@@ -987,9 +903,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         }
       }
 
-      // Offline: /api/playback/media/… is uncacheable and the server is out of
-      // reach anyway, so the resume point comes from what this device recorded
-      // the last time it played the file.
+      // Offline the server is unreachable, so the resume point comes from what this device recorded last.
       if (startTime == null && this.isOfflinePlayback && this.mediaId) {
         const local = this.offlineSync.resumePositionFor(this.mediaId, this.episodeId);
         if (local && local.positionSeconds > 10) startTime = local.positionSeconds;
@@ -1057,28 +971,15 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
         const mode = this.playbackMode();
 
-        // Make sure a fresh long-lived stream JWT (12h) is cached before
-        // we build the manifest/segment URLs and the Bearer headers
-        // passed to ExoPlayer / AVPlay / Shaka. Those engines bake auth
-        // at \`load()\` and never re-ask Angular for a fresh credential —
-        // the regular 1h access token would expire mid-film.
+        // Cache a fresh 12h stream JWT before building URLs and Bearer headers: ExoPlayer/AVPlay/Shaka bake
+        // auth at load() and the 1h access token would expire mid-film.
         if (streamTokenPromise) await streamTokenPromise;
 
-        // ── Engine selection ──
-        // Native (Capacitor) always goes through the platform player —
-        // ExoPlayer on Android (incl. TV), AVPlayer on iOS. They beat the
-        // WebView's HTMLMediaElement on every axis we care about: HW
-        // decoding, HEVC/AV1 support, HDR, Atmos passthrough, lower latency.
-        // Samsung Tizen goes through AVPlay for the same reasons (HW HEVC/
-        // AV1, Dolby Atmos passthrough, transparent video surface behind
-        // the WebView — Shaka chokes on Tizen 6.5 MSE: e.g. EAC3 audio
-        // claims support but `addSourceBuffer` throws).
-        // Web (browser) keeps the Shaka path.
+        // Native (Capacitor) uses the platform player, Samsung Tizen uses AVPlay (Shaka's MSE chokes on Tizen
+        // 6.5: EAC3 claims support but `addSourceBuffer` throws); web keeps Shaka.
         if (this.isTizen || this.isWebOs) {
-          // Both TV pipelines (Samsung AVPlay, LG native <video>) share the
-          // same shape: a native HW decoder with a DOM subtitle overlay and
-          // the streamInfo audio fallback — no Shaka/MSE. They differ only in
-          // the engine instance.
+          // Both TV pipelines (AVPlay, LG native <video>) share one shape: HW decoder, DOM subtitle overlay,
+          // streamInfo audio fallback, no Shaka/MSE. Only the engine instance differs.
           if (this.isWebOs) {
             await this.createWebOsEngine();
           } else {
@@ -1087,10 +988,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           }
           this.applyNativeSubtitleStyle();
 
-          // Subtitle fetch in parallel with engine load — AVPlay's
-          // `setExternalSubtitlePath` waits for the player to be in
-          // READY/PLAYING state, so we load(...) first, then attach
-          // the active subtitle after prepareAsync resolves.
+          // Fetched in parallel with engine load; AVPlay's `setExternalSubtitlePath` needs READY/PLAYING, so
+          // the active subtitle is attached after prepareAsync resolves.
           const tvSubsPromise = this.itemSubtitles();
 
           // Auth rides in the URL query (?token=); the Bearer header is for
@@ -1105,20 +1004,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           await this.prepareLoad();
           await this.engine!.load(tizenUrl, startTime, tizenMimeType, headers);
 
-          // Subtitles loaded — expose to the picker. The full auto-pick path
-          // (remembered selection, language match, forced subs) runs once for
-          // all engines further down via the shared `autoSelectSubtitle`, so we
-          // don't pre-select here (that earlier pass was a redundant, less
-          // complete duplicate — it skipped visibility / burn-in handling).
+          // Expose to the picker only: auto-pick runs once for all engines in `autoSelectSubtitle` below (it
+          // handles visibility and burn-in).
           const subs = await tvSubsPromise;
           this.subs.availableSubtitles.set(subs);
         } else if (this.isDesktopNative || this.isNative) {
-          // Native player path (Electron+mpv on desktop, ExoPlayer/AVPlayer on
-          // Capacitor mobile). Subtitles arrive as HLS SUBTITLES renditions in
-          // the master playlist, so the player doesn't depend on this fetch.
-          // Run it in parallel and resolve it after load() (like the Shaka path
-          // below) — awaiting it before load() only adds a network round-trip
-          // to the time-to-first-frame critical path.
+          // Subtitles arrive as HLS SUBTITLES renditions, so load() doesn't depend on this fetch; resolved
+          // after load() like the Shaka path, as awaiting it first delays the first frame.
           void this.itemSubtitles();
 
           if (this.isDesktopNative) await this.createDesktopEngine();
@@ -1134,12 +1026,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
             this.authService.streamToken() ?? this.authService.accessToken;
           const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
 
-          // HLS transcode/remux — apply quality constraint before load to
-          // stop ExoPlayer from picking 4K on a phone (slow transcode →
-          // A/V desync). `auto`: no constraint, ExoPlayer's ABR picks
-          // adaptively. `original`: pin to source dimensions so ABR
-          // can't downgrade (the user explicitly forced top quality).
-          // Specific rung: pin to that rung's width/height.
+          // Pin the quality constraint before load so ExoPlayer can't pick 4K on a phone (A/V desync): `auto`
+          // leaves ABR free, `original` pins source dimensions, a specific rung pins its width/height.
           if (mode !== 'direct') {
             const savedQualityId = this.activeQualityId();
             if (savedQualityId !== 'auto') {
@@ -1183,10 +1071,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
               );
             }
 
-            // Disable ABR when a specific quality is saved — avoids background
-            // variant-switch chatter mid-playback. The backend serves a
-            // single-variant master playlist in that case so there's only one
-            // track anyway.
+            // A saved quality disables ABR; the backend serves a single-variant master, so there's one track
+            // anyway.
             this.engine!.configure?.({
               abr: {
                 enabled: savedQualityId === 'auto',
@@ -1216,10 +1102,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
             });
           }
 
-          // `buildPlayUrl` threads `startTime` into HLS URLs so the
-          // backend pre-spawns FFmpeg at the right offset + applies the
-          // quality-change grace period; direct play gets the explicit
-          // `video/mp4` mimeType for Shaka.
+          // `buildPlayUrl` threads `startTime` into HLS URLs (backend pre-spawns FFmpeg at the offset); direct
+          // play gets the explicit `video/mp4` mimeType for Shaka.
           const { url: shakaUrl, mimeType: shakaMimeType } = this.buildPlayUrl({
             startTime,
           });
@@ -1281,10 +1165,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // Keyboard shortcuts
     document.addEventListener('keydown', this.keyboard.onKeyDown);
 
-    // Best-effort cleanup on page unload. `pagehide` is added alongside
-    // `beforeunload` because iOS Safari/WebView frequently skips `beforeunload`
-    // (bfcache, app backgrounding) — `pagehide` fires reliably there, so the
-    // ffmpeg session is released instead of lingering until its idle GC.
+    // Best-effort cleanup on unload; `pagehide` too because iOS Safari/WebView often skips `beforeunload`
+    // (bfcache, backgrounding), which would leave the ffmpeg session until its idle GC.
     window.addEventListener('beforeunload', this.onBeforeUnload);
     window.addEventListener('pagehide', this.onBeforeUnload);
 
@@ -1295,9 +1177,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       window.addEventListener('pipAction', this.onPipAction as EventListener);
       Pip.setAutoEnter({ enabled: true }).catch(() => {});
     }
-    // Hardware back / gesture back: app.ts dispatches 'app:playerBack' when
-    // the user is on /watch so it routes through the same onBack() as the
-    // back arrow (replaceUrl to media detail rather than history.back).
+    // app.ts dispatches 'app:playerBack' on hardware/gesture back while on /watch, so it takes the same
+    // onBack() path as the back arrow (replaceUrl to media detail).
     window.addEventListener('app:playerBack', this.onPlayerBackEvent);
   }
 
@@ -1460,11 +1341,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.isNativeEngine.set(false);
     this.state.bindEngine(engine);
 
-    // videoStarted is flipped on the engine 'firstFrame' event — emitted
-    // once a frame has actually been presented to the compositor (Shaka:
-    // requestVideoFrameCallback ; native: ExoPlayer onRenderedFirstFrame).
-    // The DOM 'playing' event can precede first paint by a tick or two,
-    // which would hide the fanart backdrop before the video shows.
+    // videoStarted flips on the engine 'firstFrame' (frame presented to the compositor); the DOM 'playing'
+    // event can precede first paint and would hide the fanart backdrop too early.
     engine.on('firstFrame', () => {
       this.state.videoStarted.set(true);
     });
@@ -1473,9 +1351,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }
 
   private async createWebOsEngine(): Promise<void> {
-    // webOS plays through the same visible <video> the Shaka path uses —
-    // the platform pipeline decodes natively. No transparent hardware
-    // plane (Tizen/Capacitor), so the Shaka UX (isNativeEngine=false) fits.
+    // webOS plays through the same visible <video> as Shaka, with no transparent hardware plane, so the Shaka
+    // UX (isNativeEngine=false) fits.
     const { engine } = await this.createSurface('webos');
     this.engine = engine;
     this.isNativeEngine.set(false);
@@ -1492,10 +1369,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const { engine } = await this.createSurface('tizen');
     this.engine = engine;
     this.isTizenEngine.set(true);
-    // Group with the native-engine UX (transparent overlay, controls hidden
-    // on idle, no Shaka-specific buffering hooks). Without this flag, code
-    // paths gated on `!isNativeEngine()` would treat AVPlay as a Shaka
-    // session and (e.g.) try to attach <video> listeners we no longer own.
+    // Group with the native-engine UX; code gated on `!isNativeEngine()` would otherwise treat AVPlay as a
+    // Shaka session and attach <video> listeners we no longer own.
     this.isNativeEngine.set(true);
     this.state.bindEngine(engine);
 
@@ -1545,33 +1420,27 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     return surface;
   }
 
-  /** Shared wiring for the transparent-overlay native engines (Capacitor
-   *  ExoPlayer/AVPlayer and Electron mpv): bind state, surface the first frame
-   *  and arm session-expired recovery. */
+  /** Shared wiring for the transparent-overlay native engines (ExoPlayer/AVPlayer, Electron mpv): bind state,
+   *  surface the first frame, arm session-expired recovery. */
   private wireNativePlayerEngine(engine: PlaybackEngine): void {
     this.wireAudioTracks(engine);
     this.engine = engine;
     this.isNativeEngine.set(true);
     this.state.bindEngine(engine);
 
-    // videoStarted flips on the engine 'firstFrame' event so the
-    // spinner+fanart stay until the surface is actually painting. No separate
-    // stateChanged 'playing' hook needed — that can precede the first frame.
+    // videoStarted flips on 'firstFrame' so spinner+fanart stay until the surface paints; a 'playing'
+    // stateChanged hook would be too early.
     engine.on('firstFrame', () => {
       this.state.videoStarted.set(true);
     });
     this.wireErrorRecovery(engine);
 
-    // Engine audio tracks may emit multiple times (e.g. rendition switch) —
-    // never overwrite a good list with a smaller one. BUT always let
-    // engine-sourced tracks (audio-* / shaka-*) replace the streamInfo
-    // fallback (si-*), even at equal length — their IDs enable client-side
-    // PID switching instead of a full backend reload.
+    // Engines may re-emit audio tracks (e.g. rendition switch): never replace a good list with a smaller one,
+    // except engine-sourced tracks (audio-*/shaka-*), which always replace the si-* fallback (PID switching).
   }
 
-  /** The playing file's audio stream info, in the order engines list tracks.
-   *  Offline there's no media loaded, so it's the metadata captured on the
-   *  download task at download time. */
+  /** The playing file's audio stream info, in engine track order; offline it is the metadata captured at
+   *  download. */
   private audioStreamInfo(): AudioStreamChoice[] {
     if (this.isOfflinePlayback) {
       const task = this.dlCache
@@ -1625,9 +1494,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     return this.availableAudioTracks().find((t) => t.id === trackId)?.supported !== false;
   }
 
-  /** Takes a report of the audio tracks the engine (or the streamInfo fallback)
-   *  offers: refreshes the menu list, never shrinking it on a partial report, then
-   *  reconciles the engine's active track with the target. */
+  /** Takes the audio tracks the engine (or streamInfo fallback) offers: refreshes the menu, never shrinking it
+   *  on a partial report, then reconciles the engine's active track with the target. */
   private adoptAudioTracks(raw: AudioTrack[]): void {
     const tracks = this.describeAudioTracks(raw);
     if (!tracks.length) return;
@@ -1639,10 +1507,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.reconcileAudio(list, list.some((t) => t.id === active) ? active : null);
   }
 
-  /** Makes the engine play the target audio and the menu show it. `engineActive`
-   *  is the track the engine says it plays, null when it doesn't say. A switch
-   *  already asked for counts as done until the engine reports it, so a late or
-   *  stale report neither repeats the request nor loops. */
+  /** Makes the engine play the target audio and the menu show it; `engineActive` is null if the engine is
+   *  silent. A requested switch counts as done until reported, so a stale report neither repeats nor loops. */
   private reconcileAudio(tracks: AudioOption[], engineActive: string | null): void {
     const idx = this.activeAudioStreamIndex;
     const target = idx == null ? undefined : trackForStreamIndex(idx, this.audioStreamInfo(), tracks);
@@ -1673,9 +1539,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   onTogglePlay() {
     if (!this.engine) return;
-    // Coalesce rapid taps (spacebar / k / button spam): a second toggle
-    // inside this window is dropped so a burst can't interleave a
-    // play()/pause() with an in-flight MSE append and desync A/V.
+    // Coalesce rapid taps: a second toggle inside this window is dropped so play()/pause() can't interleave
+    // with an in-flight MSE append and desync A/V.
     const now = Date.now();
     if (now - this.lastTogglePlayAt < this.togglePlayCoalesceMs) return;
     this.lastTogglePlayAt = now;
@@ -1686,11 +1551,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       const t = this.edl.resolveSeek(0);
       if (t !== null) this.seekInternal(t);
     }
-    // Decide off what the control shows, so a tap during launch pauses.
-    // Reflect the target in the UI immediately instead of waiting for the
-    // engine's `stateChanged` round-trip (on the desktop mpv backend that loop
-    // — IPC → mpv property-observe → IPC back — can lag ~1s). The engine event
-    // reasserts the real state, and a rejected command reverts to it.
+    // Decide off what the control shows, so a tap during launch pauses. Reflect the target in the UI at once
+    // (desktop mpv's stateChanged loop can lag ~1s); the engine event reasserts, a rejected command reverts.
     if (this.uiPaused()) {
       this.state.paused.set(false);
       this.engine.play().catch(() => this.state.paused.set(this.engine?.paused ?? true));
@@ -1713,17 +1575,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   onSeekDragChange(dragging: boolean) {
     this.seekDragging.set(dragging);
     if (dragging) {
-      // Freeze the engine→state mirror while the user is dragging /
-      // scrubbing the seekbar — otherwise the player's `timeUpdate`
-      // stream keeps pushing the bar back to the live position under
-      // the user's finger / arrow keys. The drag itself pins the controls
-      // open through the chrome pin.
+      // Freeze the engine→state mirror while dragging so `timeUpdate` doesn't push the bar back under the
+      // user's finger; the drag pins the controls open through the chrome pin.
       this.state.seekLocked.set(true);
     } else {
       this.chrome.resetHideTimer();
-      // Don't release the lock here: `onSeek` is about to fire with
-      // the commit value and schedules its own release once the
-      // engine catches up to the target.
+      // Keep the lock: `onSeek` fires next with the commit value and schedules its own release.
     }
   }
 
@@ -1752,11 +1609,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   /** Seek with the lock and the desktop far-seek reload; not a user seek for the intro auto-skip. */
   private seekInternal(t: number) {
     if (this.engine) {
-      // Lock the mirror BEFORE issuing the seek so transient
-      // `timeUpdate` events fired while the engine still reports the
-      // OLD position can't bounce the seekbar back. The local
-      // `state.currentTime.set(t)` pins the bar at the user's target
-      // until `awaitSeekUnlock` lets the engine resume driving it.
+      // Lock before seeking so `timeUpdate` events still reporting the OLD position can't bounce the bar back;
+      // `state.currentTime.set(t)` pins it at the target until `awaitSeekUnlock` releases.
       this.state.seekLocked.set(true);
       this.state.currentTime.set(t);
       // A seek to 0 is the user's, not an unsettled load.
@@ -1765,9 +1619,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       if (this.desktopFarSeekNeedsReload(t)) void this.seekByReload(t);
       else void this.awaitSeekUnlock(t);
     }
-    // Every engine funnels through here, unlike the DOM `seeked` event, which
-    // only exists where there is a <video>: without this a desktop or native
-    // seek reached a controller only on the next heartbeat.
+    // Every engine funnels through here, unlike the DOM `seeked` event (<video> only), so desktop/native seeks
+    // reach a controller before the next heartbeat.
     void this.savePosition(true);
   }
 
@@ -1780,41 +1633,18 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.onSeek(this.engine.currentTime + direction / fps);
   }
 
-  /** Generation counter — every `onSeek` bumps it and the corresponding
-   *  `awaitSeekUnlock` checks it before mutating state. Lets a newer
-   *  seek invalidate an older one mid-flight (e.g. user holds an
-   *  arrow key: each commit cancels the previous unlock loop). */
+  /** Generation counter bumped by every `onSeek`, so a newer seek invalidates an older `awaitSeekUnlock`
+   *  mid-flight (e.g. a held arrow key). */
   private seekGeneration = 0;
 
-  /** Await the engine's actual seek completion before lifting the
-   *  state lock. Two phases:
-   *    1. Wait for `engine.seek(target)`'s Promise — engines resolve
-   *       this when their internal seek state machine has dispatched
-   *       the request, which for HLS-fMP4 means the variant playlist
-   *       has been re-parsed and the new segment buffer is being
-   *       requested. Failure (Promise reject) keeps the lock on so
-   *       the bar stays pinned at the user's target while the
-   *       `engine.error` event surfaces a playback error UI.
-   *    2. After the promise resolves, poll the engine's reported
-   *       `currentTime` until it lands within 2s of the target. This
-   *       catches engines (notably Shaka) that resolve their seek
-   *       Promise as soon as the seek is queued, before the
-   *       demuxer / decoder has actually moved.
-   *
-   *  Backward seeks that fall outside the cached segment range
-   *  trigger a backend ffmpeg respawn (~10–20 s on long seeks); the
-   *  30 s ceiling is sized for that. If convergence never happens we
-   *  forcibly unlock so the user isn't stranded — the next live
-   *  `timeUpdate` will take over the bar from the engine's actual
-   *  position rather than the (now stale) target. */
+  /** Await the engine's seek completion before lifting the state lock: its promise (a reject keeps the lock),
+   *  then poll `currentTime` to within 2s (Shaka resolves early); force-unlocks after 30 s (ffmpeg respawn). */
   private async awaitSeekUnlock(target: number): Promise<void> {
     const gen = ++this.seekGeneration;
     try {
       await this.engine?.seek(target);
     } catch {
-      // Engine rejected the seek (network error, codec stall, …).
-      // Leave the lock on — the bar stays at the user's target and
-      // the playback-error state surfaces via `state.error`.
+      // Engine rejected the seek: keep the lock; the error surfaces via `state.error`.
       return;
     }
     // AVPlay has no getSpeed(), so a rate it drops on its own is invisible:
@@ -1856,10 +1686,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     );
   }
 
-  /** Far-seek path: reload the stream anchored at `target` (a fresh session
-   *  prewarmed at the offset) rather than seeking in place, then release the
-   *  seekbar lock once the playhead converges. Serialised against any other
-   *  reload via {@link reloadingStream}. */
+  /** Far-seek path: reload the stream anchored at `target` instead of seeking in place, then release the
+   *  seekbar lock once the playhead converges. Serialised against other reloads via {@link reloadingStream}. */
   private async seekByReload(target: number): Promise<void> {
     const gen = ++this.seekGeneration;
     if (this.reloadingStream) {
@@ -1912,11 +1740,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private readonly commercialCueEffect = effect(() => this.cues.syncCommercialCue());
   private readonly nextEpisodeCueEffect = effect(() => this.cues.syncNextEpisodeCue());
 
-  /**
-   * Auto-skip when the cursor enters the intro window AND the user has the
-   * setting on AND we haven't already auto-skipped this episode AND there
-   * was no recent manual seek (2s cooldown).
-   */
+  /** Auto-skip when the cursor enters the intro window, the setting is on, this episode wasn't already
+   *  auto-skipped, and there was no manual seek in the last 2s. */
   private readonly autoSkipEffect = effect(() => {
     if (!this.cues.inIntroRange()) return;
     if (!this.playerSettings.get().autoSkipIntro) return;
@@ -1951,13 +1776,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     }
   }
 
-  /** Switch to another episode of the open series without tearing the player
-   *  down: reuse the engine and swap the source (same path as
-   *  {@link doReloadStream}), refreshing the episode-scoped state — markers,
-   *  chapters, subtitles, sprites, metadata and resume position. The only
-   *  visible change is the new episode's backdrop during the brief reload, so
-   *  there's no close/reopen flash. Serialised against quality / audio reloads
-   *  via {@link reloadingStream}. */
+  /** Switch to another episode of the open series without tearing the player down: swap the source like {@link
+   *  doReloadStream} and refresh episode-scoped state. Serialised via {@link reloadingStream}. */
   private async reloadForEpisode(
     mediaFileId: number,
     mediaId: number,
@@ -1979,9 +1799,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.qoe.reset();
       this.recoveryEpisode = null;
       this.edlEnded = false;
-      // Drop the outgoing episode's negotiated info so a failure before the
-      // new getPlaybackInfo resolves reports no playMethod/hwAccel rather
-      // than the previous episode's stale values.
+      // Drop the outgoing episode's info so an early failure doesn't report its stale playMethod/hwAccel.
       this.playbackInfo = null;
       this.resetTrackState();
 
@@ -2055,18 +1873,15 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   onVolumeChange(vol: number) {
     if (!this.engine) return;
-    // Dragging the slider sets the level and lifts a mute — the state signals
-    // update via the engine's `volumechange` event, keeping the display in
-    // lockstep with the real output on every engine.
+    // Dragging sets the level and lifts a mute; state signals follow the engine's `volumechange` event.
     this.engine.volume = vol;
     if (vol > 0 && this.engine.muted) this.engine.muted = false;
   }
 
   onToggleMute() {
     if (!this.engine) return;
-    // Toggle audible/silent, not the raw mute flag: when already silent —
-    // either muted or the level dragged to 0 — a click restores sound, bumping
-    // a zero level back to full so the button never appears stuck on mute.
+    // Toggle audible/silent, not the raw mute flag: when silent (muted or level 0) a click restores sound,
+    // bumping level 0 to full so the button never looks stuck.
     const silent = this.engine.muted || this.engine.volume === 0;
     if (silent) {
       this.engine.muted = false;
@@ -2076,11 +1891,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     }
   }
 
-  /** Apply one validated remote command. Every branch is absolute /
-   *  state-setting: never a toggle: so a retry or a double-tap can't
-   *  desync from what a local control just did (see RemoteService docs).
-   *  A rejected/unresolvable command returns without acking so the
-   *  controller's timeout, not a false ack, reports the truth. */
+  /** Once playback starts, clear the autoplay-blocked flag and report it to remote controllers. */
   private readonly autoplayClearEffect = effect(() => {
     if (!this.state.videoStarted()) return;
     untracked(() => {
@@ -2090,9 +1901,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     });
   });
 
-  /** A local pause reaches a remote controller on the next heartbeat, so
-   *  without this it lags up to the 10s save interval. Every transport source
-   *  funnels through the engine's state, so one effect covers them all. */
+  /** A local pause reaches a remote controller only on the next heartbeat (up to 10s); one effect on the engine
+   *  state covers every transport source. */
   private lastReportedPaused: { fileId: number; paused: boolean } | null = null;
   private readonly transportReportEffect = effect(() => {
     const paused = this.uiPaused();
@@ -2103,9 +1913,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    *  path moves this flag around while there is nothing worth reporting. */
   private reportTransportChange(paused: boolean): void {
     if (!this.state.videoStarted()) return;
-    // Keyed by file: an episode switch dips through paused while `videoStarted`
-    // is false, so the dip is never reported, and a memory carried over from
-    // the previous episode then suppressed the report that playback resumed.
+    // Keyed by file: an episode switch dips through paused while `videoStarted` is false, so a memory carried
+    // over from the previous episode must not suppress the resume report.
     const last = this.lastReportedPaused;
     if (last && last.fileId === this.mediaFileId && last.paused === paused) return;
     this.lastReportedPaused = { fileId: this.mediaFileId, paused };
@@ -2241,11 +2050,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.engine.setFullscreen(!this.engine.fullscreen);
       return;
     }
-    // iOS Safari rejects the standard Fullscreen API on arbitrary elements
-    // (and `document.fullscreenEnabled` is false). The only path to a
-    // fullscreen video there is the `webkitEnterFullscreen` API on the
-    // <video> tag itself, which surfaces the native iOS player overlay.
-    // Detect by capability, not UA, so iPadOS-as-desktop-mode still works.
+    // iOS Safari rejects the Fullscreen API on arbitrary elements; only the <video> tag's
+    // `webkitEnterFullscreen` works. Detect by capability, not UA, so iPadOS desktop mode still works.
     if (!document.fullscreenEnabled) {
       const video = this.videoEl()?.nativeElement as (HTMLVideoElement & {
         webkitEnterFullscreen?: () => void;
@@ -2400,13 +2206,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     }
   }
 
-  /**
-   * Resolve the `startQuality` wire value: the explicit rung id, or — only
-   * in 'auto' — the top rung when the active engine has no client-side ABR,
-   * so a no-ABR engine (desktop mpv) still gets pinned to a single variant
-   * instead of the full backend ladder. Single source for every
-   * playback-info / stream-url call site.
-   */
+  /** Resolve the `startQuality` wire value: the explicit rung id, or in 'auto' the top rung when the engine has
+   *  no client-side ABR (desktop mpv). Single source for every playback-info/stream-url call. */
   private resolveStartQuality(): string | undefined {
     const active = this.activeQualityId();
     if (active !== 'auto') return active;
@@ -2417,11 +2218,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     return supportsAbr ? undefined : this.qualityManager.topRungId();
   }
 
-  /** The playback-info call for the current track state: burn-in pick, audio
-   *  index and rung. Every playback-info request goes through here. The rung lets the
-   *  backend re-decide DirectPlay vs the ladder and prewarm ffmpeg at `startAt`.
-   *  `over` swaps a field: another file (its own picks are unknown, so none are sent),
-   *  or the Cast profile with the burn-in and rung that session needs. */
+  /** The playback-info call for the current track state (burn-in pick, audio index, rung); every request goes
+   *  through here. `over` swaps a field: another file (no picks sent) or the Cast profile's burn-in/rung. */
   private negotiatePlayback(
     startAt?: number,
     over: Partial<{ fileId: number; profile: DeviceProfile; burnInId: number | null; quality: string }> = {},
@@ -2501,10 +2299,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.subs.needsHlsSubtitles = !!auto.sub && !auto.sub.burnIn;
   }
 
-  /** Sidecar subtitles for the native MediaItem. Direct play carries the external
-   *  files this way (HLS ships its own as renditions, so a list there would show
-   *  every sub twice); an offline copy ships its downloaded VTTs. In the order
-   *  {@link subtitleOrdinal} ranks them, which is the order the player lists them. */
+  /** Sidecar subtitles for the native MediaItem: external files in direct play (HLS ships them as renditions,
+   *  so a list there would double them) and offline VTTs, in {@link subtitleOrdinal} order. */
   private async nativeSidecars(): Promise<NativeSidecarSubtitle[]> {
     if (this.isOfflinePlayback) return this.getOfflineSubtitleConfigs();
     if (this.playbackMode() !== 'direct') return [];
@@ -2514,9 +2310,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       .map((s) => ({ url: s.url, language: s.language, label: s.label, forced: !!s.forced }));
   }
 
-  /** Drops what the outgoing item chose so the next one starts from a clean track
-   *  state. The engine forgets its subtitle too: engines keep their selection
-   *  across load(), and the auto-selection never asks for Off. */
+  /** Drops what the outgoing item chose so the next starts clean. The engine forgets its subtitle too: engines
+   *  keep their selection across load() and auto-selection never asks for Off. */
   private resetTrackState(): void {
     try { this.engine?.setTextVisibility(false); } catch {}
     if (this.audioTracksTimer) clearTimeout(this.audioTracksTimer);
@@ -2600,9 +2395,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (!this.engine || !this.mediaFileId) return true;
     this.state.buffering.set(true);
     try {
-      // Drop the prior sid before minting a new one, and await it: a stall
-      // recovery still has a live prior session, and the backend would otherwise
-      // treat the re-mint as a concurrent sibling and split it onto a cold job.
+      // Drop and await the prior sid before minting: a stall recovery still has a live session, which the
+      // backend would otherwise treat as a concurrent sibling and split onto a cold job.
       const prevSid = this.playbackInfo?.sessionId;
       if (prevSid) {
         await this.streamingApi.stopSession(prevSid).catch(() => {});
@@ -2611,9 +2405,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       const wasPaused = opts.preservePause ? this.pauseIntent() : false;
       this.playbackInfo = await this.negotiatePlayback(this.reloadStartAt(pos));
       this.adoptPlaybackInfo(this.playbackInfo);
-      // Refresh the near-expiry stream token before rebuilding the play URL:
-      // it's baked into every segment URL and can't be swapped once the engine
-      // loads, so a token that lapsed mid-film would 401 every segment.
+      // Refresh a near-expiry stream token first: it's baked into every segment URL and can't be swapped after
+      // load.
       await this.authService.ensureStreamToken();
       const { url, mimeType } = this.buildPlayUrl({
         sid: this.playbackInfo.sessionId,
@@ -2636,19 +2429,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     }
   }
 
-  /**
-   * Restore the engine to the play/pause state the user intended before a
-   * reload. Every reload — quality / audio / subtitle switch and lost-session
-   * recovery — must preserve whether playback is running; only the initial
-   * launch autoplays. The native engine (ExoPlayer playWhenReady) autoplays on
-   * load(), so a paused user must be actively re-paused after load, not merely
-   * left unplayed. The single enforcement point keeps every reload path
-   * consistent.
-   */
-  /** The viewer's pause intent. Before the first frame `paused` still holds its
-   *  initial `true` — a launch that hasn't started, never a pause to preserve.
-   *  A native launch autoplays without calling `play()`, so nothing else would
-   *  distinguish the two. */
+  /** Restore the play/pause state the user intended before a reload (quality/audio/subtitle switch, recovery).
+   *  Native engines autoplay on load(), so a paused user must be actively re-paused. */
+  /** The viewer's pause intent. Before the first frame `paused` still holds its initial `true`: a launch not
+   *  yet started (native autoplays without `play()`), never a pause to preserve. */
   private pauseIntent(): boolean {
     return this.state.videoStarted() && this.paused();
   }
@@ -2659,34 +2443,24 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     else this.engine.play().catch(() => {});
   }
 
-  /**
-   * Guard so a slow recovery (~1-2 s of playback-info + reload) can't
-   * race against the next 10-second heartbeat: we only fire one
-   * recoverFromLostSession at a time, no matter how many heartbeats
-   * surface `sessionLost: true` in the interval.
-   */
+  /** Only one recoverFromLostSession at a time, so a slow recovery can't race the next 10s heartbeat's
+   *  `sessionLost`. */
   private recoveringFromLostSession = false;
   /** The recovery in progress: what triggered it and when the picture froze, kept across retries. */
   private recoveryEpisode: { reason: QoeRecoveryReason; since: number } | null = null;
-  /** Recovery attempts in the current loss episode. Cleared only once a
-   *  reload sustains playback (see {@link recoverConfirmPending}), NOT on the
-   *  instant a reload resolves — a reload that succeeds then re-fails within
-   *  seconds must keep counting toward {@link maxRecoverAttempts}, or it
-   *  re-mints a fresh sid every iteration and loops forever. */
+  /** Recovery attempts in this loss episode, cleared only once a reload sustains playback ({@link
+   *  recoverConfirmPending}), so a quick re-fail keeps counting toward {@link maxRecoverAttempts}. */
   private recoverAttempts = 0;
   private readonly maxRecoverAttempts = 3;
   /** Pending backoff retry between failed recovery attempts (2s → 4s). */
   private recoverRetryTimer: ReturnType<typeof setTimeout> | null = null;
-  /** A recovery reload just resolved; the episode counter and the native
-   *  recovery guard are cleared only after the playhead advances for
-   *  {@link recoverConfirmMs} (confirmed in checkStall). */
+  /** A recovery reload just resolved; counters clear only after the playhead advances for {@link
+   *  recoverConfirmMs} (confirmed in checkStall). */
   private recoverConfirmPending = false;
   private recoverConfirmAt = 0;
   private readonly recoverConfirmMs = 5_000;
-  /** Set in ngOnDestroy. Blocks any late async (heartbeat sessionLost,
-   *  sessionExpired event, Cast resume) from reloading the engine after the
-   *  player has been torn down — otherwise a fresh native player relaunches
-   *  in the background once the user has navigated away. */
+  /** Set in ngOnDestroy: blocks late async reloads (sessionLost, sessionExpired, Cast resume) that would
+   *  relaunch a native player in the background. */
   private destroyed = false;
 
   /** One-time setup after the first successful load (tracks, Cast/autoplay,
@@ -2727,10 +2501,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       await this.startCastFromPlayer(startPos, startSubtitle?.id ?? null);
     } else if (!this.isNativeEngine() || this.isDesktopNative) {
       this.engine!.play().catch(() => {
-        // No user gesture on a device started remotely: the browser refuses
-        // autoplay. Reported, not just logged: a controller otherwise shows a
-        // paused device with no way to tell why, and its own play button is
-        // refused for the same reason.
+        // No user gesture on a remotely started device: the browser refuses autoplay. Reported so a controller
+        // can tell why the device is paused (its own play button is refused too).
         console.warn('[player] autoplay blocked');
         this.autoplayBlocked.set(true);
         void this.savePosition(true);
@@ -2813,9 +2585,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     });
   }
 
-  /** A receiver that can't show HDR refuses an HDR-only master, so an HDR
-   *  stream is renegotiated SDR once; past that, card rather than sit paused
-   *  on a spinner. */
+  /** A receiver that can't show HDR refuses an HDR-only master: renegotiate SDR once, then show the card rather
+   *  than sit on a spinner. */
   private async onExternalPlaybackFailed(reason: string): Promise<void> {
     if (this.destroyed || this.castService.isConnected()) return;
     const id = this.mediaFileId;
@@ -2852,24 +2623,20 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     return this.copyFallback.fallBackFromLoadError(e, position, onRecovered);
   }
 
-  /** Re-baseline the stall watchdog so the next {@link stallTimeoutMs} window
-   *  starts from the current playhead. Called after load, after a seek, and
-   *  after a successful recovery — anywhere the playhead legitimately jumps. */
+  /** Re-baseline the stall watchdog so the next {@link stallTimeoutMs} window starts from the current playhead;
+   *  call wherever the playhead legitimately jumps (load, seek, recovery). */
   private resetStallWatchdog(): void {
     this.lastProgressPos = this.engine?.currentTime ?? 0;
     this.lastProgressAt = Date.now();
   }
 
-  /** Full technical dump shown in the error card's details block and copied
-   *  by the "copy diagnostics" button — the Shaka code/category/severity,
-   *  the failing variant, playback context, and any Shaka `data[]`. */
+  /** Full technical dump for the error card's details block and "copy diagnostics": Shaka
+   *  code/category/severity, failing variant, playback context, `data[]`. */
   errorDiagnostics(): string {
     const err = this.state.error();
     if (!err) return '';
-    // playbackMode/hwAccel are only meaningful once a negotiation has
-    // actually resolved — otherwise they still hold the previous title's
-    // values (state.reset() doesn't clear them) and would misreport a
-    // pre-negotiation failure as a negotiated DirectPlay.
+    // playbackMode/hwAccel are meaningful only once a negotiation resolved; before that they hold the previous
+    // title's values (state.reset() doesn't clear them).
     const dump = formatErrorDiagnostics(err, {
       currentTime: this.state.currentTime(),
       mode: this.playbackInfo ? this.state.playbackMode() : undefined,
@@ -2919,11 +2686,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }
 
 
-  /** True when the current media is Dolby Vision AND we're serving it untouched
-   *  (DirectPlay / DirectStream): a decode failure is then a DV-capability
-   *  failure, surfaced with an explicit message. A tonemapped transcode is not
-   *  DV, so it stays on the generic error path. Read live at error time (via the
-   *  probe registered on PlayerStateService) so it tracks quality switches. */
+  /** True when the media is Dolby Vision served untouched (DirectPlay/DirectStream), so a decode failure is a
+   *  DV-capability failure. Read live at error time via the PlayerStateService probe. */
   private isDolbyVisionPassthrough(): boolean {
     const method = this.playbackInfo?.playMethod;
     if (method !== 'DirectPlay' && method !== 'DirectStream') return false;
@@ -2931,20 +2695,14 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     return (v?.dvProfile ?? 0) > 0;
   }
 
-  /**
-   * Ticked once a second from the stats interval, before {@link checkStall}.
-   * Two jobs, both keyed off the wall clock rather than off playback: notice
-   * that the process was frozen and came back, and decide when a long buffer
-   * deserves an explanation on screen.
-   */
+  /** Ticked once a second before {@link checkStall}; keyed off the wall clock, it detects a frozen-and-back
+   *  process and decides when a long buffer deserves an on-screen explanation. */
   private tickClockWatch(): void {
     const now = Date.now();
     const gap = now - this.lastTickAt;
     this.lastTickAt = now;
     if (gap > PlayerComponent.wakeGapMs) {
-      // The frozen interval is not a frozen playhead: without this the stall
-      // watchdog fires on the same tick and reloads the engine — the very
-      // black-screen reload the resume path exists to avoid.
+      // A frozen interval is not a frozen playhead: skip the stall watchdog's black-screen reload this tick.
       this.resetStallWatchdog();
       void this.resumeAfterGap();
     } else if (
@@ -2956,15 +2714,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     }
   }
 
-  /**
-   * The player was frozen (laptop sleep) or cut off from the server, and is
-   * back. The backend killed our encoder while we were away but still answers
-   * on the same sid for a while, so the cheap path is: refresh the stream
-   * token, re-fetch the manifest at the playhead — which revives the session
-   * and respawns ffmpeg at the resume segment while the user is still paused —
-   * then beat once, so a session that is genuinely gone is caught now instead
-   * of up to 10 s later. No engine reload: the picture and the sid survive.
-   */
+  /** The player was frozen (sleep) or cut off and is back; the backend killed our encoder but knows the sid.
+   *  Refresh the token, re-fetch the manifest at the playhead (respawns ffmpeg), beat once; no engine reload. */
   private async resumeAfterGap(): Promise<void> {
     if (this.destroyed || !this.mediaFileId) return;
     if (this.castService.isConnected()) return;
@@ -2983,19 +2734,15 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     await this.savePosition();
   }
 
-  /** GET the HLS manifest on the live sid, anchored at the playhead. The
-   *  backend reads it as a keep-alive plus a prewarm, so it revives a GC'd
-   *  session and starts ffmpeg at the resume segment; it is a no-op when an
-   *  encoder is already running. Skipped off the HLS path (direct play has no
-   *  encoder to warm) and offline. */
+  /** GET the HLS manifest on the live sid at the playhead: a keep-alive plus prewarm that revives a GC'd
+   *  session and starts ffmpeg at the resume segment (no-op if running). Skipped off HLS and offline. */
   private async prewarmCurrentStream(): Promise<void> {
     const sid = this.playbackInfo?.sessionId;
     if (!sid || this.isOfflinePlayback || this.playbackMode() === 'direct') {
       return;
     }
-    // A hidden tab hits the same clock gap from timer throttling, and nobody
-    // is waiting on a warm encoder there — reviving via the heartbeat is
-    // enough. Only a visible player earns the respawn.
+    // A hidden tab sees the same gap from timer throttling and nobody awaits a warm encoder; the heartbeat
+    // revives it. Only a visible player earns the respawn.
     if (typeof document !== 'undefined' && document.hidden) return;
     const pos = Math.floor(
       this.engine?.currentTime || this.state.currentTime() || 0,
@@ -3010,17 +2757,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     }
   }
 
-  /** Ticked once a second from the stats interval. Detects a frozen playhead
-   *  during intended playback and routes it through the same recovery as a
-   *  lost session (re-mint sid + reload at position). */
+  /** Ticked once a second; detects a frozen playhead during intended playback and routes it through the
+   *  lost-session recovery (re-mint sid + reload at position). */
   private checkStall(): void {
     if (this.destroyed || !this.engine) return;
     if (this.castService.isConnected()) return;
-    // Not trying to play, or not playing yet → no stall to detect; keep the
-    // baseline fresh so resuming/finishing-load doesn't trip the timer.
-    // A fatal-no-retry error (undecodable stream) also bails: a fresh sid
-    // can't fix a codec the browser rejects, so recovering only flaps the
-    // card/spinner — show the terminal error instead.
+    // Not playing (yet): keep the baseline fresh. A fatal-no-retry error also bails: a fresh sid can't fix a
+    // codec the browser rejects, so show the terminal error instead of flapping the card/spinner.
     if (
       this.paused() ||
       this.state.loading() ||
@@ -3042,9 +2785,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (Math.abs(pos - this.lastProgressPos) > 0.25) {
       this.lastProgressPos = pos;
       this.lastProgressAt = Date.now();
-      // A recovery that has sustained playback for recoverConfirmMs is clean:
-      // clear the episode counter and re-arm the native one-shot guard so a
-      // later, unrelated blip gets its own recovery instead of going fatal.
+      // Playback sustained for recoverConfirmMs means a clean recovery: clear the counter and re-arm the native
+      // one-shot guard so a later blip gets its own recovery.
       if (
         this.recoverConfirmPending &&
         Date.now() - this.recoverConfirmAt >= this.recoverConfirmMs
@@ -3066,24 +2808,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     }
   }
 
-  /**
-   * The carried `sid` is no longer known to the backend (restart or
-   * GC after a long idle), or the playhead wedged (stall watchdog). Mint
-   * a fresh LiveSession via playback-info and reload the engine's stream
-   * URL with the new sid at the current position. Retries with backoff
-   * (2s → 4s) and surfaces a terminal error after {@link maxRecoverAttempts}
-   * failures rather than reloading forever. Cast playbacks are skipped —
-   * the cast receiver owns its own session lifecycle.
-   */
+  /** The carried `sid` is unknown to the backend or the playhead wedged: mint a fresh session and reload at the
+   *  position, backing off up to {@link maxRecoverAttempts}. Skipped for Cast (receiver owns the session). */
   private async recoverFromLostSession(reason: QoeRecoveryReason = 'other', frozenSince?: number): Promise<void> {
     if (this.destroyed) return;
     if (this.recoveringFromLostSession) return;
-    // A user reload (quality / audio switch, episode swap) re-mints the session
-    // and reloads the engine itself; a 410 or a heartbeat sessionLost inside
-    // that window is expected, and recovering here would race a second
-    // getPlaybackInfo + engine.load onto the same engine. Clear any recovery
-    // veil we were holding across a backoff — the in-flight reload now owns the
-    // session — so it isn't leaked true after the reload settles.
+    // A user reload (quality/audio switch, episode swap) owns the session, so a 410 or sessionLost inside it is
+    // expected and recovering would race a second load; also clear any veil held across a backoff.
     if (this.reloadingStream) {
       this.state.setRecovering(false);
       this.recoveryEpisode = null;
@@ -3091,17 +2822,14 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     }
     if (this.recoverRetryTimer) return; // a backoff retry is already queued
     if (this.recoverAttempts >= this.maxRecoverAttempts) {
-      // Exhausted recovery — surface a terminal error card instead of
-      // returning silently, which would leave a stuck spinner (recovering
-      // still veiled) or a stale overlay with no way out.
+      // Exhausted: surface a terminal error card rather than leave a stuck spinner or stale overlay.
       this.giveUpRecovery();
       return;
     }
     if (this.castService.isConnected()) return;
     if (!this.engine || !this.mediaFileId) return;
-    // The first trigger names the episode. An open stall already counts the freeze on the old sid, so the
-    // recovery wait starts now; otherwise it starts when the picture froze, at the last progress.
-    // A lost sid takes no more events: its open stall moves into the wait on the new sid.
+    // The first trigger names the episode. An open stall already counts the freeze on the old sid, so the wait
+    // starts now; otherwise at the last progress. A lost sid's open stall moves to the new one.
     if (!this.recoveryEpisode) {
       const openSince = reason === 'session_lost' ? this.qoe.dropStall() : null;
       const counted = openSince == null && this.qoe.closeStall(this.activeSessionId());
@@ -3111,20 +2839,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.recoveryEpisode = { reason, since };
     }
     this.recoveringFromLostSession = true;
-    // Suppress the fatal-error overlay the engine tears off as the stream
-    // reloads — recovery is about to resume playback, so the reload window
-    // reads as buffering, not "Playback error".
+    // Suppress the fatal-error overlay the engine tears off during the reload: it should read as buffering.
     this.state.setRecovering(true);
-    // Count the attempt up front, not only on failure: a reload that resolves
-    // then re-fails within seconds must keep counting toward maxRecoverAttempts.
-    // On the Shaka path there is no per-engine one-shot latch, so a fresh sid
-    // that 410s again on the next segment would otherwise re-enter with the
-    // counter still at 0 and loop unbounded. The counter clears only after
-    // playback sustains for recoverConfirmMs (checkStall).
+    // Count up front, not only on failure: Shaka has no per-engine one-shot latch, so a fresh sid that 410s
+    // again would re-enter at 0 and loop. Cleared only after playback sustains for recoverConfirmMs.
     this.recoverAttempts += 1;
-    // engine.currentTime can read 0 right after an error (e.g. Tizen AVPlay),
-    // which would reload from the start — fall back to the last mirrored
-    // position in that case.
+    // engine.currentTime can read 0 right after an error (e.g. Tizen AVPlay); fall back to the last mirrored
+    // position rather than reload from the start.
     const enginePos = this.engine.currentTime;
     const pos = enginePos > 1 ? enginePos : this.state.currentTime();
     try {
@@ -3141,9 +2862,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       );
       this.resetStallWatchdog();
       this.state.setRecovering(false);
-      // Don't clear the episode counter yet — only once the reload proves it
-      // plays (checkStall confirms sustained progress). A reload that resolves
-      // then immediately re-fails keeps counting toward the cap.
+      // Keep the episode counter until the reload proves it plays (checkStall confirms), so a re-fail keeps
+      // counting.
       this.recoverConfirmPending = true;
       this.recoverConfirmAt = Date.now();
     } catch (e) {
@@ -3174,11 +2894,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     else if (!this.state.error()) this.state.failWith(undefined, { source: 'session' });
   }
 
-  /** Reload local engine and resume after Cast disconnect. The
-   *  browser's pre-cast LiveSession was GC'd while the cast receiver
-   *  held the only live entry, so we mint a fresh sid before
-   *  reloading — reusing `this.playbackInfo?.sessionId` would race
-   *  against the heartbeat fallback path and flash a reload. */
+  /** Reload the local engine and resume after Cast disconnect. The pre-cast LiveSession was GC'd, so mint a
+   *  fresh sid: reusing `playbackInfo?.sessionId` would race the heartbeat fallback and flash a reload. */
   private async resumeLocalAfterCast(castPos: number) {
     if (this.destroyed) return;
     this.adoptCastSelection();
@@ -3205,9 +2922,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.subs.activeBurnInId = sub?.burnIn ? (sub.subtitleDbId ?? null) : null;
   }
 
-  /** A reload rebuilds the engine's pipeline at the default rate, so the UI
-   *  would keep advertising a speed nothing is playing. Re-apply, then read
-   *  back: an engine that refuses moves the control instead of lying. */
+  /** A reload resets the pipeline to the default rate: re-apply, then read back so an engine that refuses moves
+   *  the control instead of the UI lying. */
   private restorePlaybackRate(): void {
     if (!this.engine) return;
     const wanted = this.playbackRate();
@@ -3218,16 +2934,14 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   onSpeedChange(rate: number) {
     if (!this.engine) return;
     this.engine.playbackRate = rate;
-    // Read back rather than trust the request: an engine can silently keep
-    // the previous rate (e.g. Tizen AVPlay outside READY/PLAYING/PAUSED), and
-    // the UI must not claim a speed that isn't actually playing.
+    // Read back rather than trust the request: an engine can silently keep the previous rate (e.g. Tizen AVPlay
+    // outside READY/PLAYING/PAUSED).
     this.playbackRate.set(this.engine.playbackRate);
     this.edl.rearm();
   }
 
-  /** Whether the episode reached the completion threshold — mirrors the
-   *  backend (within 30s of the end, or past 90%). Drives the "back" target:
-   *  a finished episode returns to the next one. */
+  /** Whether the episode reached the backend's completion threshold (within 30s of the end, or past 90%); a
+   *  finished episode's "back" goes to the next one. */
   private episodeFinished(): boolean {
     // A pre-roll item reading past 90% must not send "back" to the next episode.
     if (this.preRollActive()) return false;
@@ -3238,17 +2952,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   onBack() {
     this.savePosition();
-    // Explicit navigation rather than history.back() — nav-inside-player
-    // (e.g. next-episode) leaves multiple /watch entries on the stack, and
-    // router-reuse across same routes means history.back() only rewrites
-    // the URL without exiting the player.
-    // replaceUrl drops /watch from history so hardware/browser back does not
-    // reopen the player on the way back.
+    // Explicit navigation, not history.back(): in-player navigation stacks several /watch entries. replaceUrl
+    // drops /watch so back doesn't reopen the player.
     const queueSourceId = this.queue.sourceId();
     let target: string;
-    // Same handoff a media card uses: the detail page paints from the record the
-    // player already holds instead of mounting on a skeleton. Nothing is
-    // prefetched — `getOne` still runs there for cast, crew and files.
+    // Same handoff as a media card: the detail page paints from the record the player holds instead of a
+    // skeleton; `getOne` still runs there for cast, crew and files.
     let handoff: { media: Media } | undefined;
     if (!this.mediaId) {
       target = '/';
@@ -3256,9 +2965,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // Playing from a playlist returns to that playlist, not the item's page.
       target = `/playlists/${queueSourceId}`;
     } else {
-      // Offline playback never loads `this.media`; fall back to the type stored
-      // on the download task so a downloaded series routes to /series, not
-      // /movies (a wrong-kind URL redirects and breaks the topbar back button).
+      // Offline never loads `this.media`; use the type stored on the download task so a downloaded series
+      // routes to /series (a wrong-kind URL redirects and breaks the topbar back button).
       const offlineType = this.isOfflinePlayback
         ? this.dlCache
             .load()
@@ -3268,9 +2976,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       const kind = (this.media?.type ?? offlineType) === 'series' ? 'series' : 'movies';
       if (this.media) handoff = { media: this.media };
       if (this.episodeId && kind === 'series') {
-        // A finished episode returns to the NEXT episode's detail page so the
-        // user lands ready to continue; an episode left mid-watch returns to
-        // its own page (to resume).
+        // A finished episode returns to the NEXT episode's detail page, a mid-watch one to its own (to resume).
         const next = this.queueCtl.nextEpisodeContext();
         const epId =
           this.episodeFinished() && next ? next.episodeId : this.episodeId;
@@ -3279,15 +2985,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         target = `/${kind}/${this.mediaId}`;
       }
     }
-    // If the previous URL is already the target, just pop /watch off the
-    // browser stack — replaceUrl would otherwise stack a duplicate
-    // consecutive entry, forcing the user to click back twice on the detail
-    // page (the first back lands on the duplicate, same URL → router-reuse,
-    // no visible change).
-    // Tell NavbarService to treat the upcoming NavigationEnd as a back-pop
-    // so /watch is NOT pushed onto its in-app history stack. Without this,
-    // pressing back on the destination detail page would pop /watch and
-    // send the user straight back into the player.
+    // If the previous URL is already the target, just pop /watch: replaceUrl would stack a duplicate (two
+    // backs). Mark the NavigationEnd as a back-pop so /watch isn't pushed on NavbarService's history.
     this.navbar.markAsBackNavigation();
     const prev = this.navHistory.previousUrl;
     void this.animateClose().then(() => {
@@ -3303,12 +3002,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     });
   }
 
-  /**
-   * Hold the navigation back for the closing animation, where it has to run on
-   * the player itself — over the app background, since the destination is not
-   * mounted yet. Wherever a view transition is available it animates the player
-   * over the page it returns to instead, which needs both painted at once.
-   */
+  /** Hold the navigation for the closing animation, run on the player over the app background (the destination
+   *  isn't mounted yet); with a view transition available it animates over the destination instead. */
   private async animateClose(): Promise<void> {
     // A native surface renders outside the WebView, so the player owns no pixels
     // here to shrink — animating them just fades the page to black.
@@ -3386,15 +3081,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.subs.availableSubtitles.set(await this.offlineSubtitleOptions());
   }
 
-  /** Apply the user's subtitle style to a native engine, plus the bar-clearance
-   *  bump — the WebKit `::cue` shift used in browser mode doesn't apply on
-   *  ExoPlayer/AVPlayer. */
+  /** Apply the user's subtitle style to a native engine, plus the bar-clearance bump (the WebKit `::cue` shift
+   *  used in browser mode doesn't apply on ExoPlayer/AVPlayer). */
   private applyNativeSubtitleStyle() {
-    // Subtitle styling on engines that own their own renderer:
-    // NativeEngine (ExoPlayer/AVPlayer) and TizenEngine (DOM overlay
-    // via webapis.avplay) both expose `setSubtitleStyle`. Shaka has its
-    // own CSS-variable path via `applySubtitleStyle()`. Duck-type the
-    // method so we don't import TizenEngine here just for the type.
+    // NativeEngine and TizenEngine both expose `setSubtitleStyle` (Shaka uses applySubtitleStyle()); duck-typed
+    // to avoid importing TizenEngine just for the type.
     if (!(this.engine && typeof (this.engine as NativeEngine).setSubtitleStyle === 'function')) {
       return;
     }
@@ -3447,10 +3138,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     }, 2000);
   }
 
-  /** Keep `activeAudioTrackId` pointing at a track that is actually in the
-   *  list. Every path that replaces the list can otherwise leave it dangling —
-   *  the selector then shows no language as selected at all. `preferred` is the
-   *  engine's own idea of the active track, used when the current id is gone. */
+  /** Keep `activeAudioTrackId` pointing at a track in the list, or the selector shows no language selected;
+   *  `preferred` is the engine's own active track, used when the current id is gone. */
   private reconcileActiveAudioTrack(
     tracks: { id: string }[],
     preferred?: string | null,
@@ -3474,9 +3163,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     await this.applyAudioTrack(trackId);
   }
 
-  /** Makes `trackId` the target audio. A later reloadStream() hands its streamInfo
-   *  index to /playback-info; without it the new master marks the old rendition
-   *  DEFAULT=YES and the language reverts on the item swap. */
+  /** Makes `trackId` the target audio; a later reloadStream() sends its streamInfo index to /playback-info,
+   *  otherwise the new master marks the old rendition DEFAULT=YES and the language reverts. */
   private async applyAudioTrack(trackId: string): Promise<void> {
     const request = ++this.audioRequest;
     const tracks = this.availableAudioTracks();
@@ -3488,11 +3176,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (index != null) this.activeAudioStreamIndex = index;
     this.audioSwitchPending = trackId;
 
-    // si-* tracks are the streamInfo fallback list shown before the engine
-    // surfaces client-switchable tracks: no engine-level track exists for that
-    // rendition yet, so the only way to honour it — in direct, remux or
-    // transcode alike — is a backend reload that marks the new audio index
-    // DEFAULT. Offline: no backend, nothing to reload.
+    // si-* tracks are the streamInfo fallback shown before the engine surfaces switchable tracks, so only a
+    // backend reload marking the new audio index DEFAULT can honour them. Offline: nothing to reload.
     if (trackId.startsWith('si-')) {
       this.audioSwitchPending = null;
       if (this.isOfflinePlayback) {
@@ -3504,9 +3189,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       return;
     }
 
-    // Engine-level audio switch. Capture the play/pause intent first: a native
-    // engine reloads the stream to switch track, which comes back playing —
-    // switching language must not resume a player the user paused.
+    // Engine-level audio switch. Capture the pause intent first: a native engine reloads the stream to switch
+    // track and comes back playing, which must not resume a paused user.
     const wasPaused = this.pauseIntent();
     if (this.isNativeEngine()) this.state.buffering.set(true);
     this.qoeGraceUntil = Number.MAX_SAFE_INTEGER;
@@ -3538,10 +3222,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private onSeeked = () => {
     this.lastSeekAt = Date.now();
     this.resetStallWatchdog();
-    // Forced: a jump is exactly what a controller cannot interpolate, so
-    // leaving it to the ten-second cadence left every other remote showing a
-    // position the target had already left. No loop: a controller reports
-    // nothing back, it only sends on a gesture.
+    // Forced: a jump can't be interpolated by a controller, so waiting for the ten-second cadence left other
+    // remotes on a stale position. No loop: a controller only sends on a gesture.
     void this.savePosition(true);
   };
   private spriteAbort?: AbortController;
@@ -3555,9 +3237,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   };
 
   private onPlayerBackEvent = () => {
-    // Desktop: Escape leaves the native (SDL) compositor fullscreen first —
-    // before closing the controls bar or exiting the player — matching the
-    // universal "Escape exits fullscreen" convention.
+    // Desktop: Escape leaves the native (SDL) compositor fullscreen first, before closing controls or exiting.
     if (
       this.isDesktopNative &&
       this.engine instanceof DesktopEngine &&
@@ -3566,11 +3246,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.engine.setFullscreen(false);
       return;
     }
-    // TV remote Return and desktop Escape first close a visible controls bar,
-    // then exit on the next press — back mirrors the on-screen close. (On
-    // desktop this event only ever comes from Escape, a deliberate keyboard
-    // press.) Phones and tablets get the direct exit: touch users dismiss the
-    // controls by tapping the video surface, not via hardware back.
+    // TV remote Return and desktop Escape close a visible controls bar first, then exit on the next press;
+    // phones and tablets exit directly (touch users dismiss controls by tapping the video).
     if ((this.device.isTv() || this.device.isDesktop()) && this.chrome.visible()) {
       this.chrome.hide();
       return;
@@ -3656,9 +3333,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   async onSelectQualityById(id: string) {
     const option = this.availableQualities().find(q => q.id === id);
     if (!option) return;
-    // Re-selecting the active rung is a no-op: selectQuality() short-circuits
-    // internally, but reloadStream() would still kill + re-mint the session
-    // (ffmpeg stop, playback-info, full engine.load) for zero change.
+    // Re-selecting the active rung is a no-op: reloadStream() would still kill + re-mint the session for no
+    // change.
     if (id === this.activeQualityId()) {
       this.chrome.resetHideTimer();
       return;
@@ -3667,13 +3343,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.lastQualitySwitchAt = Date.now();
     const from = this.availableQualities().find(q => q.id === this.activeQualityId())?.totalBitrateBps;
     this.qoe.onQualitySwitch(this.activeSessionId(), this.engine?.currentTime ?? 0, option.totalBitrateBps, from);
-    // Picking a rung below source — or any rung while already on the HLS
-    // ladder — re-negotiates playback: reloadStream() re-requests playback-info
-    // with the chosen quality, the backend re-decides DirectPlay vs the
-    // transcode ladder, and the engine swaps the raw file for the HLS master.
-    // Staying on `original` while direct-playing needs no reload. When we WILL
-    // reload, pass engine=null so we don't select a variant the reload throws
-    // away (it re-applies the quality after load via applyQualityPreferenceAfterLoad).
+    // A rung below source, or any rung on the HLS ladder, re-negotiates; `original` in direct play doesn't.
+    // When reloading pass engine=null so no variant is picked that the reload discards (re-applied after load).
     const willReload = mode !== 'direct' || id !== 'original';
     this.qualityManager.selectQuality(option, willReload ? null : this.engine, mode, false, true);
     if (willReload) {
@@ -3685,23 +3356,20 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   // ── Private helpers ──
 
-  /** Guards against overlapping reloads: a user switch racing a recovery (or
-   *  a second quick switch) must not run two getPlaybackInfo + load cycles at
-   *  once — that races the engine and leaks a session. */
+  /** Guards against overlapping reloads: a user switch racing a recovery (or another switch) must not run two
+   *  getPlaybackInfo + load cycles at once, which races the engine and leaks a session. */
   private reloadingStream = false;
   /** True until a reload's `engine.load()` resolves: the window where an engine error is
    *  the expected teardown, unlike one raised during the post-load awaits. */
   private reloadLoadPending = false;
   /** True until ngAfterViewInit's engine.load() settles; only {@link isReloadIdle} reads it. */
   private firstLoadPending = false;
-  /** Set once doReloadStream reaches a successful engine.load(). Lets the
-   *  reloadStream catch tell a dead surface (failure before load) from a live
-   *  one (a later throw over already-playing video). */
+  /** Set once doReloadStream reaches a successful engine.load(), so the reloadStream catch can tell a dead
+   *  surface (failure before load) from a live one. */
   private reloadReachedPlayback = false;
 
-  /** Reload the stream (e.g. when toggling burn-in subtitles or switching
-   *  audio). User-initiated, so re-arm the native recovery guard and serialise
-   *  against any concurrent reload/recovery. `at` overrides the resume anchor. */
+  /** Reload the stream (burn-in toggle, audio switch). User-initiated, so re-arm the native recovery guard and
+   *  serialise against other reloads/recoveries; `at` overrides the resume anchor. */
   async reloadStream(at?: number, why: ReloadWhy = { reason: 'other' }) {
     if (!this.engine || this.reloadingStream) return;
     this.reloadingStream = true;
@@ -3715,12 +3383,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       await this.doReloadStream(anchor);
     } catch (e) {
       if (this.fallBackFromRemuxOnLoadError(e, anchor)) return;
-      // Mobile Capacitor tears its surface down before re-negotiating, and
-      // desktop mpv's negotiation failure otherwise never reaches the user —
-      // both need a terminal card. Tizen/Shaka/webOS keep their previous
-      // source playing from buffer and self-heal via the 410 -> sessionExpired
-      // recovery, and a throw after load() means video is already playing —
-      // none of those three should card.
+      // Capacitor drops its surface before re-negotiating and desktop mpv's failure never surfaces: both need a
+      // card. Tizen/Shaka/webOS self-heal via 410 -> sessionExpired; a throw after load() means video plays.
       console.error('[Player] reloadStream failed:', e);
       if (
         this.isNativeEngine() &&
@@ -3765,9 +3429,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.adoptPlaybackInfo(pi);
 
       const mode = this.playbackMode();
-      // Refresh the near-expiry stream token before rebuilding the play URL:
-      // it's baked into every segment URL and can't be swapped once the engine
-      // loads, so a token that lapsed mid-film would 401 every segment.
+      // Refresh a near-expiry stream token first: it's baked into every segment URL and can't be swapped after
+      // load.
       await this.authService.ensureStreamToken();
       const { url, mimeType } = this.buildPlayUrl({ startTime: currentPos });
       await this.prepareLoad();
@@ -3786,9 +3449,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }
 
   private fireAndForgetStopSessions() {
-    // Release this device's session on exit — DirectPlay included, so its
-    // "now watching" dashboard row clears at once instead of lingering until
-    // the backend idle reap (transcode/remux paths also stop their ffmpeg).
+    // Release this device's session on exit, DirectPlay included, so its "now watching" row clears at once
+    // instead of lingering until the backend idle reap.
     const sid = this.activeSessionId();
     if (!sid) return;
     const url = this.streamingApi.getStopSessionUrl(sid);
@@ -3803,23 +3465,17 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   /** Where the load in flight is seeking to; see {@link savePosition}. */
   private pendingStartTime = 0;
 
-  /** Wall-clock timestamp (ms) of the last PUT to /state. Used to dedup
-   *  the cluster of saves that fire on exit (onBack, ngOnDestroy, the
-   *  savePosition interval and the 'seeked' event all hit savePosition
-   *  within the same tick). Time-based instead of position-based so a
-   *  paused player still emits a heartbeat every 10 s — the backend's
-   *  {@link LiveSessionRegistry} relies on it to keep the session warm. */
+  /** Wall-clock ms of the last PUT to /state; dedups the saves that fire together on exit. Time-based so a
+   *  paused player still beats every 10 s, which {@link LiveSessionRegistry} needs to keep the session warm. */
   private lastSaveAt = 0;
 
-  /** `force` bypasses only the 2s throttle: used right after applying a
-   *  remote command so its semantic ack (lastCmdId on the next heartbeat)
-   *  arrives in ~1s instead of waiting up to 10s. */
+  /** `force` bypasses only the 2s throttle: after a remote command, its ack (lastCmdId) arrives in ~1s, not
+   *  10s. */
   private lastForcedSaveAt = 0;
   private forcedSaveTrailing: ReturnType<typeof setTimeout> | null = null;
 
-  /** Active audio as a streamInfo index: the one space the backend, the media
-   *  detail header and every client agree on; a shaka-* id is engine-local and
-   *  means nothing to anyone else. */
+  /** Active audio as a streamInfo index, the one space the backend, detail header and clients agree on (a
+   *  shaka-* id is engine-local). */
   private activeAudioIndex(): number | null {
     if (this.activeAudioStreamIndex != null) return this.activeAudioStreamIndex;
     const id = this.activeAudioTrackId();
@@ -3831,9 +3487,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (force) {
       const now = Date.now();
       if (now - this.lastForcedSaveAt < FORCED_SAVE_COALESCE_MS) {
-        // Coalesce, never drop: a start fires the first frame, the transport
-        // flip and the track auto-selection within a few dozen ms, and dropping
-        // the later ones reported the state before playback began.
+        // Coalesce, never drop: a start fires first frame, transport flip and track auto-selection within
+        // milliseconds, and dropping the later ones reported the state from before playback began.
         if (this.forcedSaveTrailing) clearTimeout(this.forcedSaveTrailing);
         this.forcedSaveTrailing = setTimeout(() => {
           this.forcedSaveTrailing = null;
@@ -3869,15 +3524,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       return;
     }
 
-    // The clock reads 0 until the load's seek to the resume point lands, and the
-    // first frame can render before it does, so report where the load is headed
-    // rather than that 0. Any true reading retires the substitute.
+    // The clock reads 0 until the load's seek to the resume point lands (the first frame can render before), so
+    // report where the load is headed; any true reading retires the substitute.
     if (pos > 0) this.pendingStartTime = 0;
     else if (this.pendingStartTime > 0) pos = this.pendingStartTime;
 
-    // Heartbeat even at position 0 — a player paused at the very start is
-    // still live and the backend refreshes the LiveSession TTL off this PUT.
-    // Only bail on a non-finite reading (engine not ready), never on 0.
+    // Heartbeat even at position 0 (the backend refreshes the LiveSession TTL off this PUT); bail only on a
+    // non-finite reading, never on 0.
     if (!Number.isFinite(pos)) return;
 
     const now = Date.now();
@@ -3914,9 +3567,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (sessionId) {
       payload.sessionId = sessionId;
       payload.state = this.state.buffering() ? 'buffering' : this.uiPaused() ? 'paused' : 'playing';
-      // This device's own truth: while casting, the local engine is
-      // deliberately muted (castSyncEffect) and must not be reported as the
-      // target's volume.
+      // This device's own truth: while casting the local engine is deliberately muted (castSyncEffect), so
+      // don't report it as the target's volume.
       payload.volume = this.castService.isConnected() ? this.castService.volume() : this.volume();
       payload.muted = this.castService.isConnected() ? this.castService.muted() : this.muted();
       const lastCmdId = this.remoteService.lastAppliedCmdId();
@@ -3946,9 +3598,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       }
     }
 
-    // Offline queue persists position only — the heartbeat-related
-    // fields (sessionId / state / quality) are pointless once the
-    // backend session has already expired by the time we reconnect.
+    // The offline queue persists position only; heartbeat fields are pointless once the backend session
+    // expired.
     const offlinePayload = {
       mediaId: this.mediaId,
       mediaFileId: this.mediaFileId,
@@ -3963,10 +3614,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           payload,
         );
         this.qoe.flush(sessionId);
-        // The backend has GC'd / lost our LiveSession (restart, long
-        // idle, …). Re-issue playback-info and reload the engine
-        // with the fresh sid at the current position before the
-        // player's buffer drains.
+        // The backend lost our LiveSession (restart, long idle): re-issue playback-info and reload with the
+        // fresh sid at the current position before the buffer drains.
         if (response?.sessionLost) {
           void this.recoverFromLostSession('session_lost');
         }
@@ -3975,15 +3624,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         if (response?.state?.completed) {
           void this.autoDownload.onItemCompleted(this.mediaFileId);
         }
-        // Keep the device's own resume point current even on the happy path:
-        // the /state route is uncacheable, so once the server goes out of reach
-        // this is all an offline replay has to go on.
+        // Keep the device's own resume point current on the happy path: /state is uncacheable, so an offline
+        // replay has only this.
         this.offlineSync.record(offlinePayload);
       } catch {
         this.offlineSync.queue(offlinePayload);
-        // The beat never landed, so we never learned whether the session
-        // survived. Re-run the resume path once we're back online rather than
-        // waiting for a 410 on the next segment.
+        // The beat never landed, so the session's fate is unknown: re-run the resume path once online rather
+        // than wait for a 410 on the next segment.
         this.resumeDue = true;
       }
     } else {
@@ -3992,12 +3639,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     }
   }
 
-  /** Push subtitle appearance to both rendering paths:
-      - UITextDisplayer (DOM): CSS variables on .player-container, consumed
-        by the .shaka-text-wrapper / .shaka-text-container rules in
-        styles.css.
-      - NativeTextDisplayer (fallback / WebKit fullscreen): a global
-        <style> that targets video::cue. */
+  /** Push subtitle appearance to both renderers: CSS variables on .player-container for UITextDisplayer (DOM),
+   *  and a global <style> targeting video::cue for NativeTextDisplayer (fallback / WebKit fullscreen). */
   private applySubtitleStyle() {
     const s = this.playerSettings.get();
     const fontSize = SUBTITLE_SIZE_MAP[s.subtitleSize] ?? SUBTITLE_SIZE_MAP['normal'];
@@ -4005,10 +3648,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const shadow = SUBTITLE_SHADOW_MAP[s.subtitleShadow] ?? 'none';
     const bg = SUBTITLE_BG_MAP[s.subtitleBackground] ?? 'transparent';
 
-    // CSS variables for UITextDisplayer path + the WebKit cue-display
-    // bottom-margin lift (set on the player container so the variable
-    // reaches both the <video> shadow pseudo and the .shaka-text-container
-    // sibling).
+    // CSS variables for the UITextDisplayer path plus the WebKit cue bottom-margin lift, set on the container
+    // so the variable reaches both the <video> shadow pseudo and the .shaka-text-container sibling.
     const container = this.containerEl()?.nativeElement;
     if (container) {
       container.style.setProperty('--cue-font-size', fontSize);
@@ -4023,9 +3664,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       video.style.setProperty('--cue-bottom-margin', `${s.subtitleBottomMargin}vh`);
     }
 
-    // Native VTTCue path: keep the global <style> as a fallback for cases
-    // where Shaka falls back to NativeTextDisplayer (e.g. WebKit
-    // fullscreen) and for non-Shaka native engines.
+    // Native VTTCue path: global <style> fallback for Shaka's NativeTextDisplayer (e.g. WebKit fullscreen) and
+    // non-Shaka native engines.
     const css = `video::cue {
   font-size: ${fontSize} !important;
   color: ${color} !important;
@@ -4058,9 +3698,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.spriteMetadata.set(meta);
       const spriteUrl = this.streamingApi.getThumbnailSpriteUrl(this.mediaFileId);
       this.spriteUrl.set(spriteUrl);
-      // Decode it now rather than on the first arrow press: the sheet is one
-      // large image, and fetching it lazily leaves the first scrub of a
-      // session previewing an empty tooltip.
+      // Decode now, not on the first arrow press: the sheet is one large image, and a lazy fetch leaves the
+      // first scrub previewing an empty tooltip.
       new Image().src = spriteUrl;
     } catch {
       // Sprite not available or aborted on teardown — tooltip shows time only

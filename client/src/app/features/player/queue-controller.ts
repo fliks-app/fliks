@@ -289,9 +289,7 @@ export class QueueController {
       return;
     }
 
-    // Offline / Cast fallback: detour through `/` to force a fresh remount (the
-    // default router would otherwise reuse the component and never re-read the
-    // snapshot params).
+    // Offline / Cast fallback: detour through `/` to force a remount, as the router would reuse the component.
     void this.router
       .navigateByUrl('/', { skipLocationChange: true })
       .then(() =>
