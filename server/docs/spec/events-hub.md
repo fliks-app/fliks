@@ -38,6 +38,7 @@ Internal (Rust-only, S2, loopback + `FLIKS_BRIDGE_TOKEN`, plan §6.4): `POST /in
 
 15. When the client closes (`request.on('close')`) or the hub completes the observable: the ping interval is cleared, the bus subscription removed, the completer removed, the connection deleted; if the connection had a `targetId` (read before deleting; an evicted connection no longer has an entry so reads `undefined`), `remote.targets_changed` is `emitToUser(userId)`. `[ts:src/modules/scheduler/events.service.ts:753]–[ts:src/modules/scheduler/events.service.ts:762]` `[ts:backend/node_modules/@nestjs/core/router/router-response-controller.js:85]–[ts:backend/node_modules/@nestjs/core/router/router-response-controller.js:90]`
 16. Completing the observable ends the HTTP response (`response.end()`), which is how a drop becomes visible to the client (it reconnects). `[ts:backend/node_modules/@nestjs/core/router/router-response-controller.js:81]–[ts:backend/node_modules/@nestjs/core/router/router-response-controller.js:83]`
+   - 15a. C172 `[new]`: a connection queues at most 1024 frames for its stream (a suspended TV or a stalled proxy stopped draining and its queue grew without bound). The emit that finds the queue full closes the connection like a teardown (stream ends after the queued frames, `remote.targets_changed` announced when it was a target, household hook included); the client reconnects and gets the replay cache again.
 
 ### Audiences and emit API
 
@@ -205,6 +206,7 @@ none (the hub reads no setting; `engine_*`/`streaming_*` keys are in `engine-glu
 | Polled-target expiry | none (swept on list), TTL 30 000 ms | rule 31 |
 | Attribution TTL | checked on take, 60 000 ms | rule 36 |
 | Polled queue bound | 20 events | rule 21 |
+| SSE connection queue bound | 1024 frames | rule 15a |
 
 ## Bridges
 
