@@ -34,13 +34,7 @@ function sortByWeightThenId(list: readonly UiContribution[]): UiContribution[] {
   return [...list].sort((a, b) => a.weight - b.weight || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }
 
-/**
- * Resolves `nav.main` / `nav.acquisition` into renderable items: core's
- * declarative list merged with the registry's plugin contributions, sorted
- * by weight then id, `when`-filtered, and with the action resolved to a
- * route. Every surface (sidebar, dock, more-sheet) reads this — an item
- * cannot appear in one and be missing from another.
- */
+/** Resolves `nav.main` / `nav.acquisition` (core list plus plugin contributions, by weight then id, `when`-filtered) so every surface shows the same items. */
 @Injectable({ providedIn: 'root' })
 export class NavContributionsService {
   private readonly registry = inject(PluginUiRegistryService);

@@ -44,39 +44,7 @@ import { StorageScopeService } from '../../core/services/storage-scope.service';
 import { itemArtwork } from '../../shared/utils/media-artwork.util';
 import { armPageSlide } from '../../shared/utils/page-slide';
 
-/**
- * # Home page
- *
- * Displays several horizontal scroller sections:
- *
- * ## Libraries
- * One card per accessible library with custom icon + color gradient.
- * Data: `GET /api/libraries/mine`.
- *
- * ## Continuer à regarder
- * Media the user started but didn't finish (< 90% or < dur-30s).
- * Data: `GET /api/playback/continue-watching`.
- *
- * ## Bientôt disponible
- * Movies (digitalRelease) and episodes (airDate) releasing within
- * -3 days to +30 days that are monitored and don't have a file yet.
- * Keeps entries visible up to 3 days after release date so newly
- * released content stays until actually downloaded.
- * Data: `GET /api/media/calendar?start=<J-3>&end=<J+30>&monitoredOnly=true`.
- * Client-side filter: `!hasFile && (event === 'digital' || 'airing' || 'release')`.
- * Deduplicated by mediaId (earliest date kept).
- *
- * ## Récemment ajoutés
- * Last 20 media (movies + series mixed), excluding already-watched entries,
- * ranked by the user's `recentlyAddedMode` (media add time / newest file /
- * both). Opt-in per-library variants render the same feed scoped to one
- * library. Data: `GET /api/media/recently-added`.
- *
- * ## Recommandations
- * Genre-based suggestions derived from the user's watch history.
- * See `RecommendationService` for the algorithm.
- * Data: `GET /api/playback/recommendations`.
- */
+/** Home page: horizontal sections for libraries, continue watching, coming soon, recently added and recommendations. */
 @Component({
   selector: 'app-home',
   imports: [
@@ -199,14 +167,9 @@ export class HomeComponent implements OnInit, OnDestroy {
   /** Cold-start affordance only: coming back to Home serves cached data, so a
    *  placeholder would flash for nothing. */
   private static skeletonShown = false;
-  /** Gates the skeleton and the staggered fade-in. Cleared once the cold-start
-   *  reveal has played: the route is `reuse: true`, so a back-navigation
-   *  re-attaches this same instance and re-inserting the subtree would replay
-   *  every CSS animation still declared on it. */
+  /** Gates the skeleton and fade-in; cleared after the cold-start reveal since `reuse: true` re-attaches this instance and would replay animations. */
   readonly coldStart = signal(!HomeComponent.skeletonShown);
-  /** True until the first pass over every section resolves. Each section only
-   *  renders once its own data lands, so a cold start would otherwise show an
-   *  empty page; the skeleton stands in for the whole page during that pass. */
+  /** True until every section resolves once; the skeleton stands in for the page during that pass. */
   readonly loadingFirstPass = signal(this.coldStart());
 
   /** Shape of one skeleton row: how the zone's cards are laid out. */
@@ -216,14 +179,9 @@ export class HomeComponent implements OnInit, OnDestroy {
     likes: 'landscape',
   };
   private static readonly LAYOUT_KEY = 'fliks.home.layout';
-  /** Last rendered layout, replayed as the skeleton on the next cold start so
-   *  the placeholders sit where the real zones will land — same order, same
-   *  card shape, same count — instead of three generic rows the content then
-   *  shoves around. */
+  /** Last rendered layout, replayed as the next cold-start skeleton so placeholders match the real zones. */
   readonly skeletonLayout = signal<{ shape: string; cards: number[] }[]>([]);
-  /** Kept up past the swap so it can fade out over the zones staggering in
-   *  beneath it — removing it on the swap leaves each row blank until its own
-   *  delay elapses. */
+  /** Stays up past the swap so it fades out over the zones staggering in beneath it. */
   private readonly skeletonFadingOut = signal(false);
   readonly showSkeleton = computed(() => this.loadingFirstPass() || this.skeletonFadingOut());
 
@@ -242,9 +200,7 @@ export class HomeComponent implements OnInit, OnDestroy {
     return this.languageProfileNames().get(id) ?? `#${id}`;
   }
 
-  /** A playback that ended leaves this row stale, whether it ran here or on a
-   *  device this one is driving. The server announces every session stop to all
-   *  of the account's connections, so one subscription covers both. */
+  /** A stopped playback (here or on a driven device) leaves the row stale; the server announces every stop to all connections. */
   private readonly playbackStopped = this.sse.stopped.subscribe(() => {
     // A parked page refetches everything when it comes back.
     if (this.routeFresh() || !this.visibleSections().some((s) => s.type === 'continue-watching')) return;
@@ -270,10 +226,7 @@ export class HomeComponent implements OnInit, OnDestroy {
       .then((r) => this.recentRequests.set(r.data))
       .catch(() => {});
   });
-  /** Reactively re-filter the home rows whenever the user flips the
-   *  "only my requests" toggle in display settings. Skips the very first
-   *  invocation so we don't double-fetch on initial page load — ngOnInit
-   *  already calls loadAllSections(). */
+  /** Re-filters on the "only my requests" toggle; skips the first run since ngOnInit already loads. */
   private firstOnlyMyRequestsRun = true;
   private readonly onlyMyRequestsEffect = effect(() => {
     void this.displaySettings.settings().onlyMyRequests;
@@ -283,9 +236,7 @@ export class HomeComponent implements OnInit, OnDestroy {
     }
     void this.loadFilteredSections();
   });
-  /** Re-fetch the recently-added rows when the user changes the ranking mode
-   *  or enables/reorders zones from the home settings page. Skips the initial
-   *  run — ngOnInit already loads the sections. */
+  /** Re-fetches recently-added on ranking-mode or zone changes; skips the first run since ngOnInit already loads. */
   private firstHomeSettingsRun = true;
   private readonly homeSettingsEffect = effect(() => {
     void this.home.settings();
@@ -296,9 +247,7 @@ export class HomeComponent implements OnInit, OnDestroy {
     void this.loadFilteredSections();
   });
 
-  /** A library card stacks its page on this one; the rail switches root instead
-   *  and puts the stack down. Both read a tap, not a gesture the system takes
-   *  over — a pan across the row, or a swipe back, ends in no pointerup here. */
+  /** Library cards stack their page, the rail switches root; both read a tap, not a system-owned gesture (no pointerup). */
   protected readonly armSlide = armPageSlide;
 
   isMixedLibrary(id: number): boolean {
@@ -410,12 +359,7 @@ export class HomeComponent implements OnInit, OnDestroy {
       }, 1200);
     }
     this.captureLayout();
-    // App-open SWR: the cache served Pass 1 above (instant render even on
-    // a cold network). Now force a network round-trip so the user sees
-    // the freshest data — additions, watched-status flips made on
-    // another device, new recommendations, etc. — without waiting on it.
-    // Signals already populated, so a slower fresh response just
-    // overwrites in place; no spinner, no flash.
+    // App-open SWR: pass 1 rendered from cache; force a network refresh that overwrites signals in place.
     queueMicrotask(() => void this.loadAllSections({ force: true }));
     this.scrollMemory.restore(HomeComponent.SCROLL_KEY, this.injector);
   }
@@ -425,21 +369,8 @@ export class HomeComponent implements OnInit, OnDestroy {
     this.playbackStopped.unsubscribe();
   }
 
-  /**
-   * Fetch every section in parallel. Signals are updated as responses land —
-   * existing values stay visible until each new response arrives, so a
-   * background revalidation never blanks the UI.
-   *
-   * The pattern is two-pass SWR-on-demand:
-   *   • Pass 1 (default): cache-first. The interceptor serves IndexedDB
-   *     if fresh, network otherwise. Renders the home in ≤1 frame on a
-   *     warm cache.
-   *   • Pass 2 (`{ force: true }`): always go to network. Fired right
-   *     after Pass 1 from `ngOnInit` to refresh the home's data even
-   *     when the cache was fresh — the user expects the page to reflect
-   *     current backend state every time they open the app, but doesn't
-   *     want to wait for the network for the first paint.
-   */
+  /** Fetches every section in parallel, keeping existing values visible until each response lands.
+   * Default is cache-first; `{ force: true }` always hits the network (the SWR refresh after first paint). */
   private async loadAllSections(opts: { force?: boolean } = {}): Promise<void> {
     const force = !!opts.force;
     try {
@@ -590,11 +521,7 @@ export class HomeComponent implements OnInit, OnDestroy {
     );
   }
 
-  /**
-   * Persist a "remove from recommendations" gesture. The local list is
-   * updated optimistically so the card disappears immediately; a failed
-   * request restores it via a fresh fetch.
-   */
+  /** Removes the card optimistically; a failed request restores the list via a fresh fetch. */
   async dismissRecommendation(rec: RecommendationItem) {
     const id = rec.media.id;
     this.recommendations.update((list) => list.filter((r) => r.media.id !== id));
@@ -609,12 +536,7 @@ export class HomeComponent implements OnInit, OnDestroy {
     }
   }
 
-  /**
-   * Recommendation cards expose a Lire action even though the lean DTO
-   * doesn't carry file ids — we fetch the full media on demand and route
-   * to the first playable file. If nothing is playable (e.g. a "to add"
-   * suggestion not yet downloaded) we fall back to the detail page.
-   */
+  /** Plays the first playable file (full media fetched on demand, the lean DTO has no file ids); falls back to detail. */
   async playRecommendation(rec: RecommendationItem) {
     try {
       const media = await this.mediaService.getOne(rec.media.id);
@@ -637,9 +559,7 @@ export class HomeComponent implements OnInit, OnDestroy {
     }
   }
 
-  /** Context-menu action(s) for a recommendation card: just "mark watched".
-   *  Recommendations are pre-filtered to unwatched media, so no inline watched
-   *  indicator is needed — only the menu action that marks it and drops it. */
+  /** Only "mark watched": recommendations are pre-filtered to unwatched, so no inline indicator. */
   recommendationActions(rec: RecommendationItem): CardAction[] {
     return [
       {
@@ -650,9 +570,7 @@ export class HomeComponent implements OnInit, OnDestroy {
     ];
   }
 
-  /** Mark a recommended title watched (series → bulk; movie → its first file,
-   *  fetched on demand since the lean DTO carries no file id) and drop it from
-   *  the list, which is filtered to unwatched titles. */
+  /** Series marks in bulk, movies via their first file (fetched on demand); drops the title from the list. */
   private async markRecommendationWatched(rec: RecommendationItem) {
     const id = rec.media.id;
     try {
@@ -674,10 +592,7 @@ export class HomeComponent implements OnInit, OnDestroy {
     await this.playableMedia.resume(item);
   }
 
-  /** "Mark as watched" can only fire on a movie with at least one file
-   *  or a series (bulk-toggle endpoint). For lean rows that don't expose
-   *  a file (e.g. recommendations without a local copy) the action stays
-   *  hidden from the context menu. */
+  /** Needs a movie with a file or a series (bulk endpoint); lean rows without a file keep it hidden. */
   canMarkMediaWatched(m: Media): boolean {
     return m.type === 'series' || !!m.files?.length;
   }
@@ -685,10 +600,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   async toggleContinueWatchingWatched(item: ContinueWatchingItem, watched: boolean) {
     try {
       await this.streamingApi.toggleWatched(item.mediaId, item.mediaFileId, item.episodeId ?? undefined);
-      // Mark-watched drops the current episode but may surface the next
-      // one in the series (the backend auto-advances continue-watching).
-      // Refetch the row instead of filtering locally so the user sees the
-      // next episode appear in place rather than the card vanishing.
+      // Marking may surface the next episode (backend auto-advances), so refetch the row rather than filter locally.
       if (watched) {
         const list = await this.streamingApi.getContinueWatching(undefined, { force: true }).catch(() => null);
         if (list) this.continueWatchingRaw.set(list);
@@ -706,9 +618,7 @@ export class HomeComponent implements OnInit, OnDestroy {
         await this.streamingApi.toggleWatched(m.id, fileId);
       }
       if (watched) {
-        // Recently-added is loaded with excludeWatched=true, so a watched
-        // row would vanish on the next refresh anyway — remove it now to
-        // match the visible expectation.
+        // Recently-added is loaded with excludeWatched=true, so drop the watched row now.
         this.recentMedia.update(list => list.filter(x => x.id !== m.id));
       }
     } catch { /* global error toast */ }

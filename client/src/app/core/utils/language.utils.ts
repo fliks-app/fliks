@@ -2,11 +2,8 @@ import { TranslateService } from '@ngx-translate/core';
 import { SUBTITLE_LANGUAGE_CODES } from '../constants/subtitle-languages';
 import { ISO_639_2_TO_1_FULL } from './iso-639-2';
 
-/**
- * Codes folded after the ISO 639-2 → 639-1 step: deprecated tags, the 3-letter forms
- * players report for macro-languages, and Norwegian (the app's lists only know `no`,
- * so `nb`/`nn` match it). Same table on the backend (`app-languages.ts`).
- */
+/** Codes folded after the ISO 639-2 → 639-1 step: deprecated tags, macro-language forms, and `nb`/`nn` → `no`.
+ *  Same table on the backend (`app-languages.ts`). */
 const FOLDED_CODES: Readonly<Record<string, string>> = {
   iw: 'he', in: 'id', ji: 'yi', mo: 'ro', jw: 'jv', tw: 'ak',
   nb: 'no', nn: 'no',
@@ -15,10 +12,7 @@ const FOLDED_CODES: Readonly<Record<string, string>> = {
   'hbs-hrv': 'hr', 'hbs-srp': 'sr', 'hbs-bos': 'bs', 'ms-ind': 'id',
 };
 
-/**
- * Canonical form of a language tag, whoever reported it: lowercase ISO 639-1 when the
- * language has one, else the 639-2/3 code; region/script subtags dropped; `und` if empty.
- */
+/** Canonical language tag: lowercase ISO 639-1 if any, else the 639-2/3 code; subtags dropped; `und` if empty. */
 export function normalizeLangCode(
   code: string | undefined | null,
 ): string {
@@ -30,10 +24,7 @@ export function normalizeLangCode(
   return FOLDED_CODES[iso1] ?? iso1;
 }
 
-/**
- * A BCP-47 tag in comparable form (`pt_pt` → `pt-PT`, `zh-hant` → `zh-Hant`), or '' when it names
- * no variant past the language: that is what a remembered track pick pins down.
- */
+/** A BCP-47 tag in comparable form (`pt_pt` → `pt-PT`), or '' when it names no variant past the language. */
 export function normalizeLangTag(tag: string | undefined | null): string {
   const [primary, ...rest] = (tag ?? '').trim().split(/[-_]/);
   if (!primary || !rest.length) return '';
@@ -50,11 +41,8 @@ export interface SubtitleTags {
 const FORCED_TOKENS = new Set(['forced', 'foreign']);
 const HI_TOKENS = new Set(['hi', 'cc', 'sdh']);
 
-/**
- * Language and flags of a subtitle filename (`Movie.en.hi.srt` → en, hearing-impaired).
- * Same right-to-left rules as the backend `parseSubtitleFilename`: the leftmost part is the
- * video name, a lone `hi` is Hindi, and the walk stops at the first unrecognised token.
- */
+/** Language and flags of a subtitle filename (`Movie.en.hi.srt`), parsed right to left like the backend `parseSubtitleFilename`:
+ *  the leftmost part is the video name, a lone `hi` is Hindi, and the walk stops at the first unrecognised token. */
 export function guessSubtitleTags(name: string, known: readonly string[] = SUBTITLE_LANGUAGE_CODES): SubtitleTags {
   const tags: SubtitleTags = { language: null, forced: false, hearingImpaired: false };
   let hiCandidate = false;
@@ -84,12 +72,7 @@ export function guessSubtitleTags(name: string, known: readonly string[] = SUBTI
   return tags;
 }
 
-/**
- * Resolve a language code to its translated display name (e.g. `fra` → `Français`).
- * Falls back to the normalised code when the translation key is missing or
- * the code is unknown — matches ffprobe's `und` placeholder so we don't
- * print "language.und" in the UI.
- */
+/** Resolves a language code to its translated name; falls back to the normalised code (e.g. ffprobe's `und`) rather than printing a raw key. */
 export function localizeLanguage(
   code: string | undefined | null,
   translate: TranslateService,
@@ -128,11 +111,7 @@ function uiLocale(translate: TranslateService): string {
   return translate.currentLang() || translate.fallbackLang() || 'en';
 }
 
-/**
- * The platform's own name for a language code we carry no translation for
- * (`est`, `tam`, …), in the UI locale. Null when the runtime can't name it,
- * the caller then shows the raw code.
- */
+/** The platform's own name for a code we have no translation for, in the UI locale; null when the runtime can't name it. */
 function nativeLanguageName(code: string, locale: string): string | null {
   const name = displayName('language', code, locale);
   // Our own names are capitalised; several locales render theirs lowercase.
@@ -157,12 +136,8 @@ function tagQualifiers(code: string | undefined | null, tag: string | undefined 
   ].filter((n): n is string => !!n);
 }
 
-/**
- * The language name with the region or script of a track's BCP-47 tag in the UI
- * language (`es-419` → `Espagnol (Amérique latine)`). Plain {@link localizeLanguage}
- * when there is no tag, nothing past the language in it, or the runtime can't name it.
- * Labels only: the canonical `language` stays what preferences and selection match on.
- */
+/** The language name with the region or script of a BCP-47 tag (`es-419` → `Espagnol (Amérique latine)`); plain {@link localizeLanguage} when none.
+ *  Labels only: the canonical `language` stays what selection matches on. */
 export function localizeLanguageTag(
   code: string | undefined | null,
   tag: string | undefined | null,
@@ -173,11 +148,8 @@ export function localizeLanguageTag(
   return qualifiers.length ? `${base} (${qualifiers.join(', ')})` : base;
 }
 
-/**
- * Lowercased words naming the tag's variant, in English and the UI language: its region and
- * script names and the dialect form (`Latin American Spanish`). Empty when
- * {@link localizeLanguageTag} shows nothing extra, so it can only vouch for a displayed qualifier.
- */
+/** Lowercased words naming the tag's variant (region, script, dialect), in English and the UI language;
+ *  empty when {@link localizeLanguageTag} shows nothing extra. */
 export function languageTagWords(
   code: string | undefined | null,
   tag: string | undefined | null,
@@ -193,11 +165,7 @@ export function languageTagWords(
   return words;
 }
 
-/**
- * Track lists ordered by their displayed language name. Entries whose code has
- * no known name (`und`, `xx`, an untranslated code) go last, in source order;
- * the sort is stable, so same-language renditions keep their source order too.
- */
+/** Track lists ordered by displayed language name; unnamed codes (`und`, `xx`) go last, and the stable sort keeps source order. */
 export function sortByLanguageName<T extends { language?: string }>(
   items: readonly T[],
   translate: TranslateService,

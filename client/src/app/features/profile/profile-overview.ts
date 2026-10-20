@@ -16,9 +16,7 @@ import { resolveTmdbGenreId } from '../../core/utils/tmdb-genres';
 import { ProfileContextService } from './profile-context.service';
 import { itemArtwork } from '../../shared/utils/media-artwork.util';
 
-/** The profile "overview" tab: tastes, playlists, recommendations, recently
- *  watched and likes, each behind its share toggle. Reads the profile aggregate
- *  from {@link ProfileContextService} (loaded by the parent shell). */
+/** The profile "overview" tab: tastes, playlists, recommendations, recently watched and likes, each behind its share toggle; reads {@link ProfileContextService}. */
 @Component({
   selector: 'app-profile-overview',
   imports: [
@@ -42,9 +40,7 @@ export class ProfileOverviewComponent {
    *  resolve to a movie id, which the discover grid can filter on). */
   private readonly genreList = signal<TmdbGenre[]>([]);
 
-  /** Taste chips resolved to a TMDB id + the server-language name, deduped.
-   *  Stored genre names can be a mix of languages on older items; resolving to
-   *  an id lets us relabel them consistently and filter reliably. */
+  /** Taste chips resolved to a TMDB id plus server-language name, deduped; stored genre names can mix languages on older items. */
   readonly displayGenres = computed<{ id: number; name: string }[]>(() => {
     const list = this.genreList();
     const out: { id: number; name: string }[] = [];

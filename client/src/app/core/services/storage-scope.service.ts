@@ -2,11 +2,7 @@ import { Injectable, computed, inject, untracked } from '@angular/core';
 import { AuthService } from './auth.service';
 import { ServerConfigService } from './server-config.service';
 
-/**
- * localStorage-key suffix isolating device-local state to the current
- * (server, user) pair: a shared device never leaks one account's data into
- * another's, and ids that collide across servers can't cross-surface.
- */
+/** localStorage-key suffix scoping device-local state to the (server, user) pair, so shared devices and colliding ids across servers never leak. */
 @Injectable({ providedIn: 'root' })
 export class StorageScopeService {
   private readonly auth = inject(AuthService);

@@ -26,15 +26,8 @@ function entryKey(mediaId: number, episodeId?: number): string {
   return `${mediaId}:${episodeId ?? ''}`;
 }
 
-/**
- * Playback positions this device recorded, and the queue of those the backend
- * hasn't accepted yet.
- *
- * Doubles as the local read model. Every progress read — continue-watching,
- * resume points, the offline player — otherwise comes back from the SWR cache
- * with the pre-offline value, so callers overlay {@link queuedPositionFor} (or
- * {@link overlayProgress}) on top of whatever the API returned.
- */
+/** Playback positions recorded on this device plus the queue the backend hasn't accepted, doubling as the local read model:
+ *  callers overlay {@link queuedPositionFor}/{@link overlayProgress} on API progress, which the SWR cache returns stale after offline use. */
 @Injectable({ providedIn: 'root' })
 export class OfflinePlaybackSyncService {
   private readonly streamingApi = inject(StreamingApiService);
@@ -63,9 +56,7 @@ export class OfflinePlaybackSyncService {
       this._pending.set(this.loadPending());
     });
 
-    // Fires on construction too, which is the app-start flush: a queue stranded
-    // by a kill while offline would otherwise sit there until the next
-    // offline→online transition, and starting up online is not one.
+    // Also runs on construction, flushing a queue stranded by a kill while offline (start-up online is no transition).
     effect(() => {
       if (this.network.isOnline()) void this.flush();
     });
@@ -86,9 +77,7 @@ export class OfflinePlaybackSyncService {
     if (this.network.isOnline()) void this.flush();
   }
 
-  /** Note a position the server already accepted. Not a sync candidate — it
-   *  only keeps this device's resume points usable once the server goes out of
-   *  reach. */
+  /** Note a position the server already accepted: not a sync candidate, only keeps resume points usable offline. */
   record(update: Omit<PendingUpdate, 'updatedAt'>): PendingUpdate {
     const entry: PendingUpdate = {
       ...update,
@@ -146,9 +135,7 @@ export class OfflinePlaybackSyncService {
     return this.loadLastKnown().find((p) => entryKey(p.mediaId, p.episodeId) === key) ?? null;
   }
 
-  /** Push the queue to the server. Concurrency-safe: a call landing while a
-   *  pass is running joins it and schedules exactly one more pass, so an entry
-   *  queued mid-flush is neither stranded nor sent twice. */
+  /** Push the queue; a call during a pass joins it and schedules one more, so mid-flush entries are neither stranded nor sent twice. */
   flush(): Promise<void> {
     if (this.flushing) {
       this.rerun = true;
@@ -189,9 +176,7 @@ export class OfflinePlaybackSyncService {
     }
     if (!sent.length) return;
 
-    // Filter the live queue, not the snapshot: queue() may have replaced an
-    // entry while its PUT was in flight, and that newer position has to
-    // survive.
+    // Filter the live queue, not the snapshot: queue() may have replaced an entry mid-PUT and the newer position must survive.
     const sentByKey = new Map(sent.map((u) => [entryKey(u.mediaId, u.episodeId), u] as const));
     this.setPending(
       this._pending().filter((p) => {

@@ -14,9 +14,7 @@ export function supportsLiveDirectPlay(kind: EngineKind): boolean {
   }
 }
 
-/** The live packager emits exactly one audio track (`-map 0:a:0?`), so an
- *  engine that only needs MPEG-TS for single-audio sources needs it here
- *  always. Tizen AVPlay stalls on a single-audio fMP4 HLS (issue #148). */
+/** The live packager emits one audio track (`-map 0:a:0?`), so engines needing TS for single-audio sources need it always (Tizen AVPlay stalls on single-audio fMP4 HLS). */
 export function liveNeedsTs(kind: EngineKind): boolean {
   return ENGINE_TRAITS[kind]?.useTsOnSingleAudio === true;
 }

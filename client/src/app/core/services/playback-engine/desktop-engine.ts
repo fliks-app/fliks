@@ -38,13 +38,7 @@ interface DesiredSubtitle {
 
 type SubtitleHandle = Pick<DesiredSubtitle, 'language' | 'forced' | 'index' | 'source'>;
 
-/**
- * PlaybackEngine backed by the Electron desktop shell's embedded mpv player
- * (window.fliksDesktop). mpv renders into a window behind the transparent UI —
- * the same model as NativeEngine on mobile, so this mirrors that engine: the
- * desktop bridge replaces the Capacitor NativePlayer plugin, and mpv's event
- * stream replaces the native window CustomEvents.
- */
+/** PlaybackEngine backed by the Electron shell's embedded mpv (`window.fliksDesktop`), mirroring NativeEngine: mpv renders behind the transparent UI. */
 export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEngine {
   private readonly bridge: FliksDesktopApi = desktopBridge();
   private unsubscribe: (() => void) | null = null;
@@ -64,10 +58,7 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
 
   private _initialized = false;
 
-  // ── Subtitles ──
-  // mpv renders subtitles in its own pipeline. Text tracks are loaded sidecar via
-  // `sub-add` (addTextTrack); a pick is resolved against the track list mpv
-  // reports by identity (see findSubtitle), never by language alone.
+  // ── Subtitles ── text tracks load sidecar via `sub-add`; picks resolve against mpv's track list by identity (see findSubtitle).
   private _desiredSubtitle: DesiredSubtitle | null = null;
   private _nativeSubtitleTracks: DesktopSubtitleTrack[] = [];
   /** mpv's own audio track ids, indexed parallel to the `audio-<i>` ids the
@@ -157,12 +148,7 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
   async seek(position: number): Promise<void> {
     if (this.dead) return;
     await this.bridge.seek(position);
-    // Do NOT optimistically set _currentTime = position. Doing so makes the
-    // player's pollSeekConverge see instant convergence and drop seekLocked
-    // within ms — before the seek actually lands — which both lets the bar fall
-    // back to the old position and defeats the seek spinner. The real position
-    // arrives via timeUpdate (the addon force-pushes it on PLAYBACK_RESTART), so
-    // seekLocked stays up for the true duration of the seek.
+    // No optimistic _currentTime: pollSeekConverge would drop seekLocked before the seek lands; the real position arrives via timeUpdate.
   }
 
   // ── State ──
@@ -239,14 +225,8 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
     forced = false,
     index = 0,
   ): Promise<SubtitleHandle> {
-    // Sidecar load (mpv `sub-add`): mpv parses the VTT once and seeks within it
-    // natively. The alternative — an HLS SUBTITLES rendition — is a single
-    // segment over the whole VTT that mpv's ffmpeg HLS demuxer re-reads on each
-    // seek, re-injecting every cue without clearing the prior set, so cues stack.
-    // `sub-add` is idempotent per URL (main passes `cached`), so re-selecting the
-    // same subtitle doesn't duplicate the track.
-    // Sidecars load as the stored file: mpv's VTT reader drops cue placement,
-    // its SRT/ASS readers keep `{\an8}` and every other positioning tag.
+    // Sidecar `sub-add` (idempotent per URL) since an HLS rendition makes mpv re-read the VTT per seek, stacking cues.
+    // Load the stored file: mpv's VTT reader drops cue placement, its SRT/ASS readers keep `{\an8}` and other positioning tags.
     const source = url?.replace(/(\/subtitles\/\d+)(?=[?#]|$)/, '$1/download') || null;
     if (source) {
       await this.bridge.subAdd(source, label, language).catch(() => {});
@@ -281,19 +261,13 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
     }
   }
 
-  /** Apply the desired subtitle to mpv. Nothing desired, or a pick that can't be
-   *  resolved, asserts off: mpv auto-selects on its own and the app is the sole
-   *  source of truth, so a track the user didn't pick must never show. */
+  /** Apply the desired subtitle; nothing desired or unresolvable asserts off, since mpv auto-selects on its own. */
   private resolveSubtitle(): void {
     const match = this._desiredSubtitle ? this.findSubtitle(this._desiredSubtitle) : undefined;
     this.bridge.selectSubtitleTrack(match?.id ?? null).catch(() => {});
   }
 
-  /** Strongest identity first: the URL a sidecar was added from, then the
-   *  container stream index of an embedded track. The ordinal among same
-   *  (language, forced, image) tracks is only for a pick that carries neither
-   *  (an external bitmap sub); a pick with an identity that is gone must not
-   *  land on a sibling. */
+  /** Identity order: sidecar URL, then embedded stream index; the (language, forced, image) ordinal only for picks carrying neither. */
   private findSubtitle(want: DesiredSubtitle): DesktopSubtitleTrack | undefined {
     const tracks = this._nativeSubtitleTracks;
     if (want.source || want.embIndex != null) {
@@ -366,17 +340,13 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
     }
   }
 
-  // ── Tuning ──
-  // mpv opens one HLS variant and never switches: the rung is pinned server-side
-  // via `startQuality`, so there is no ABR to drive, only the audio language and crop.
+  // ── Tuning ── mpv never switches HLS variants (the rung is pinned via `startQuality`), so only audio language and crop apply.
   configure(config: EngineConfig): void {
     // The language reaches mpv as `alang` on the next load, like Shaka's preferredAudioLanguage.
     if (config && typeof config.preferredAudioLanguage === 'string') {
       this._preferredAudioLanguage = config.preferredAudioLanguage || undefined;
     }
-    // Black-bar crop: mpv cuts it at the VO for free, so the backend copies the
-    // bitstream instead of re-encoding. Held here and re-applied on every load,
-    // like the subtitle style and fill-screen above.
+    // Black-bar crop is free at mpv's VO, so the backend copies the bitstream; re-applied on every load.
     if (config && 'videoCrop' in config) {
       this._videoCrop = config.videoCrop || undefined;
     }
@@ -406,10 +376,7 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
         this._duration = d.duration;
         this._buffered = d.buffered;
         this.emit('timeUpdate', d);
-        // firstFrame is driven by mpv's authoritative 'playback-restart' (the
-        // 'firstFrame' case). Deriving it from a position delta mis-fires on a
-        // stale time-pos the persistent mpv replays after a reopen, which would
-        // flip a fresh engine into the sessionExpired recovery path.
+        // firstFrame comes from 'playback-restart' only: a position delta mis-fires on the stale time-pos a persistent mpv replays after reopen.
         break;
       }
       case 'tracksChanged': {
@@ -431,28 +398,18 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
       case 'firstFrame': {
         if (this.firstFrameEmitted) break;
         this.emitFirstFrameOnce();
-        // The persistent mpv may not fire a pause-property change on a fresh
-        // load (it was already unpaused from a prior session), so the UI's
-        // paused signal would stay stuck on its default. Assert the playing
-        // state once frames start flowing so the controls show pause, not play.
+        // A persistent mpv may fire no pause change on a fresh load: assert playing so controls show pause.
         this._paused = false;
         this.emit('stateChanged', { state: 'playing' });
         break;
       }
       case 'error': {
-        // mpv can't expose the failing segment's HTTP status either; mirror the
-        // native heuristic — first error after a frame played → try one
-        // session-expired recovery before surfacing a fatal error.
+        // mpv can't expose the segment's HTTP status: first error after a frame played tries one session-expired recovery.
         const { code, message, detail } = event.payload;
         if (this.maybeEmitSessionExpired({ code, message })) return;
-        // mpv's generic message ("loading failed") plus the concrete cause it
-        // logged (TLS verify, HTTP status, unsupported codec) so the error card
-        // shows why, not just that.
+        // Append the concrete cause mpv logged (TLS, HTTP status, codec) so the error card shows why.
         const composed = detail ? `${message} - ${detail}` : message;
-        // code 2 (MEDIA_ERR_NETWORK) is mpv's own TLS/libcurl transport
-        // classification; source:'media' routes it through the shared
-        // network/abort classifier instead of a decode-path label such as
-        // Dolby Vision.
+        // code 2 is mpv's TLS/libcurl transport error; source:'media' routes it via the network classifier, not a decode label.
         this.emit(
           'error',
           code === 2 ? { code, message: composed, source: 'media' } : { code, message: composed },

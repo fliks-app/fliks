@@ -5,13 +5,7 @@ import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { AuthService } from '../../core/services/auth.service';
 import { UsersApiService } from '../../core/services/api/users-api.service';
 
-/**
- * Mandatory password reset page that takes over the screen for users whose
- * `requirePasswordChange` flag is set by an admin. UI mirrors the login page
- * (full-screen, centered card) and there is no "cancel" path — the user
- * either submits a valid new password or quits the app. The route guard
- * (passwordChangeGuard) bounces them back here on every other URL.
- */
+/** Mandatory password reset page for users flagged `requirePasswordChange`; no cancel path, and passwordChangeGuard bounces every other URL here. */
 @Component({
   selector: 'app-forced-password-change',
   imports: [ReactiveFormsModule, TranslatePipe],
@@ -45,10 +39,7 @@ export class ForcedPasswordChangeComponent {
     this.error.set('');
     try {
       await this.api.update(user.id, { password: this.form.getRawValue().password });
-      // Force-refresh /auth/me so the local user signal picks up the cleared
-      // requirePasswordChange flag (backend resets it on self password change).
-      // hydrateFromServer early-returns when a user is already cached, so we
-      // can't reuse it here — refreshUser bypasses the cache.
+      // Force-refresh /auth/me: backend clears `requirePasswordChange` and hydrateFromServer early-returns when a user is cached.
       await this.auth.refreshUser();
       void this.router.navigate(['/'], { replaceUrl: true });
     } catch {

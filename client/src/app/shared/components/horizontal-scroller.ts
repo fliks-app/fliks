@@ -36,20 +36,14 @@ export class HorizontalScrollerComponent implements AfterViewInit, OnDestroy {
   readonly title = input('');
   readonly atStart = signal(true);
   readonly atEnd = signal(false);
-  /** Edge arrows reveal only while the cursor sits within {@link EDGE_ZONE_PX}
-   *  of that edge, not on a whole-row hover — so they don't cover the middle
-   *  cards and only show where they act. */
+  /** Arrows show only within {@link EDGE_ZONE_PX} of an edge, so they don't cover the middle cards. */
   readonly showLeft = signal(false);
   readonly showRight = signal(false);
   private static readonly EDGE_ZONE_PX = 80;
 
   private readonly scrollerEl = viewChild<ElementRef<HTMLElement>>('scroller');
   private resizeObserver?: ResizeObserver;
-  /** Last offset each page left this row at. A detached subtree loses its
-   *  scroll and the instance outlives the detach, so the instance is the store
-   *  — but one instance can span several pages, an episode page keeping it
-   *  across the param that names the episode, so it is one offset per page
-   *  rather than one for the row. */
+  /** Offset per page: a detached subtree loses its scroll, and one instance can span pages (an episode page across its param). */
   private readonly parked = new Map<string, number>();
 
   @HostListener('focusin', ['$event'])
@@ -64,11 +58,7 @@ export class HorizontalScrollerComponent implements AfterViewInit, OnDestroy {
       this.resizeObserver = new ResizeObserver(() => this.updateArrows());
       this.resizeObserver.observe(el);
     }
-    // Routes flagged `reuse: true` detach this row's DOM on navigate-away and
-    // reattach it on return without re-running ngAfterViewInit. The reattach
-    // can reset the rail's scrollLeft and leaves atStart/atEnd stale, so the
-    // arrows show the wrong state coming back from a detail page. Recompute
-    // once the page is reattached (next frame, after layout settles).
+    // Reuse routes reattach this row without re-running ngAfterViewInit, resetting scrollLeft and leaving atStart/atEnd stale; recompute next frame.
     this.reuse.attached$
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(() => {
@@ -86,9 +76,7 @@ export class HorizontalScrollerComponent implements AfterViewInit, OnDestroy {
           this.updateArrows();
         });
       });
-    // A page that keeps its instance across a param change — one episode over
-    // another — is never detached, so `attached$` says nothing about the trip
-    // back to it. The navigation itself is the only signal left.
+    // A page keeping its instance across a param change is never detached, so `attached$` is silent; the navigation is the only signal.
     this.router.events.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((e) => {
       if (e instanceof NavigationStart) {
         this.scrollerEl()?.nativeElement.removeAttribute(RAIL_RESTORED_ATTR);
@@ -111,22 +99,12 @@ export class HorizontalScrollerComponent implements AfterViewInit, OnDestroy {
     this.atEnd.set(el.scrollLeft + el.clientWidth >= el.scrollWidth - 1);
   }
 
-  /** The page this row's offset is filed under. Read off the document rather
-   *  than the router: a scroll event lands a task after the one that moved the
-   *  rail, and the router's own url is the first thing a navigation rewrites.
-   *  Query strings are in-page state (a library's tabs and filters), which the
-   *  row scrolls within, so the path alone names the page. */
+  /** Read off the document, not the router, whose url is rewritten first on navigation; query strings are in-page state, so the path names the page. */
   private pageKey(): string {
     return location.pathname;
   }
 
-  /** `scrollTo`, not the property: the rail carries `scroll-behavior: smooth`,
-   *  which would turn a restore into a visible glide.
-   *
-   *  Only on a return. Opening the page is a fresh screen, and the reattach
-   *  already left the rail at zero — the parked offset is then overwritten by
-   *  the `updateArrows()` that follows, so the next return restores what the
-   *  user actually left. */
+  /** `scrollTo` since the rail's `scroll-behavior: smooth` would glide the property write. Only on a return: opening a page is a fresh screen at zero. */
   private restoreScroll() {
     const el = this.scrollerEl()?.nativeElement;
     if (!el || !el.isConnected || !this.navbar.navigatedBack()) return;
@@ -146,9 +124,7 @@ export class HorizontalScrollerComponent implements AfterViewInit, OnDestroy {
     if (el) el.scrollBy({ left: el.clientWidth * 0.8, behavior: 'smooth' });
   }
 
-  /** Reveal an edge arrow only when the cursor is within the edge zone on
-   *  that side. Signals are written only on change so the high-frequency
-   *  mousemove doesn't thrash change detection. */
+  /** Signals are written only on change so high-frequency mousemove doesn't thrash change detection. */
   onPointerMove(event: MouseEvent) {
     const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
     const x = event.clientX - rect.left;

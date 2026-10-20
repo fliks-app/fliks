@@ -1,7 +1,5 @@
-/** TV browsers lag the bundle's Baseline: Tizen 6.5 and webOS 6 ship
- *  Chromium 76-85, and `BROWSERSLIST` only lowers syntax, never builtins.
- *  Angular core calls `Object.hasOwn` on every input/output binding, so
- *  without this the app dies before the first paint. */
+/** TV browsers (Chromium 76-85) lack builtins that `BROWSERSLIST` can't lower; Angular core calls `Object.hasOwn` on every binding,
+ *  so without this polyfill the app dies before first paint. */
 
 if (!Object.hasOwn) {
   Object.defineProperty(Object, 'hasOwn', {

@@ -1,12 +1,7 @@
 import { Pipe, PipeTransform, inject } from '@angular/core';
 import { TranslateService } from '@ngx-translate/core';
 
-/**
- * Season heading: "Specials" for season 0, "Season N" otherwise.
- *
- * Impure because the translation table loads asynchronously and changes when
- * the user switches locale.
- */
+/** Season heading ("Specials" for 0, "Season N"); impure because the translation table loads asynchronously and changes with locale. */
 @Pipe({ name: 'seasonLabel', pure: false })
 export class SeasonLabelPipe implements PipeTransform {
   private readonly translate = inject(TranslateService);

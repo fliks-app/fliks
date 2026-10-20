@@ -1,11 +1,7 @@
 import { Injectable, signal } from '@angular/core';
 import type { IdentifyModalConfig } from '../../features/media-detail/components/media-detail-identify-modal/media-detail-identify-modal.component';
 
-/**
- * App-wide broker for the identify dialog, same shape as {@link RecommendService}
- * and {@link TrackingModalService}: one modal in the layout, opened from the
- * detail menu or a card's menu without either owning it.
- */
+/** App-wide broker for the identify dialog, shaped like {@link RecommendService}/{@link TrackingModalService}: one layout modal opened from detail or card menus. */
 @Injectable({ providedIn: 'root' })
 export class IdentifyModalService {
   private counter = 0;

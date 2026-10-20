@@ -119,9 +119,7 @@
       </div>
     }
 
-    <!-- A download in flight is the page's headline state, so it gets the play
-         button's footprint: its own full-width bar rather than a chip sharing
-         the action row, where it would crowd the icons on a narrow phone. -->
+    <!-- A download in flight is the headline state, so it gets its own full-width bar rather than a chip crowding the action row on phones. -->
     @if (badge(); as b) {
       <div class="flex mt-4">
         <ng-container
@@ -184,9 +182,7 @@
     class="flex gap-6 lg:gap-10 relative z-20 has-[.dropdown-open]:z-50"
     [style.padding-top]="!navbar.isHeroPage() || navbar.effectiveSidebarPinned() || tv.isTv() ? null : navbar.mobileNavbarVisible() ? 'calc(env(safe-area-inset-top, 0px) + 3rem)' : null"
   >
-    <!-- Poster / Still (desktop only). Compact on the md-to-lg range (landscape
-         phones / small windows) so the title keeps room in a short viewport;
-         200 px from lg, 220 from xl, full 280 px from 2xl up. -->
+    <!-- Poster / Still (desktop only): compact on md-lg so the title keeps room in a short viewport; 200px from lg, 220 from xl, 280 from 2xl. -->
     <div class="shrink-0 rounded-xl overflow-hidden"
          [class.w-[140px]]="posterMode() === 'poster'"
          [class.lg:w-[200px]]="posterMode() === 'poster'"
@@ -389,9 +385,7 @@
 </div>
 }
 
-<!-- Download status / progress chip, shared by the mobile metadata row and the
-     desktop action row. Clickable (opens the detail modal) only while a grab is
-     in flight; otherwise a plain status chip. -->
+<!-- Download status chip shared by the mobile row and desktop actions; clickable (opens the detail modal) only while a grab is in flight. -->
 <ng-template #downloadBadge let-size let-b="badge">
   @if (b.clickable) {
     <button
@@ -420,18 +414,13 @@
   }
 </ng-template>
 
-<!-- Shared between mobile + desktop: Video (or file select) / Audio / Subtitles
-     (hidden on series overview). Single source of truth so we don't drift
-     when iterating on the layout. -->
+<!-- Video / Audio / Subtitles shared by mobile and desktop (hidden on series overview). -->
 <ng-template #streamInfoBlock>
   @if (selectedFileId() && (mediaType() !== 'series' || episodeId())) {
     <!-- min-h reserves the tallest child (a `select-sm`): the subtitle dropdown
          arrives after the video/audio labels, which are plain text. -->
     <div appTvRow class="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-5 min-h-8">
-      <!-- Every cell shrinks and every value wraps: a single long track label
-           (a commentary track names its whole channel layout) is otherwise wider
-           than the phone, and this page is the one that cannot clip its overflow
-           — `main` stays visible-x on a hero page so the fanart can bleed. -->
+      <!-- Cells shrink and values wrap: a long track label would exceed the phone, and this page can't clip overflow (`main` stays visible-x for the fanart). -->
       <div class="flex items-center gap-2 min-w-0">
         <span class="shrink-0 text-base-content/50">{{ 'common.label_colon' | translate: { label: ('media_info.video' | translate) } }}</span>
         @if (multipleFiles()) {

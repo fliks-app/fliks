@@ -36,9 +36,7 @@ export class ReleasesTableComponent {
 
   readonly grab = output<{ release: MovieRelease; key: string }>();
 
-  /** Keyed by `downloadUrl`, never by row position: the list re-ranks while a streamed
-   *  search fills in, and a tab shows a subset — a positional key would move an in-flight
-   *  grab's spinner, and its result, onto an unrelated release. */
+  /** Keyed by `downloadUrl`, not position: the list re-ranks during streamed search and tabs show subsets, so a positional key would move a spinner onto another release. */
   grabKey(r: MovieRelease): string {
     return `${this.grabPrefix()}-${r.downloadUrl}`;
   }

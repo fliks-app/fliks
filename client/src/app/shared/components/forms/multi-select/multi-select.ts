@@ -21,17 +21,8 @@ export interface MultiSelectOption<T extends string | number = number> {
  *  to skip past (plus a keyboard popping up on mobile). */
 const FILTER_FROM_OPTIONS = 8;
 
-/**
- * Multi-select with a built-in filter: the trigger shows the picked options
- * as removable chips, the panel stays open while ticking several.
- *
- * The panel is an `app-popover-menu`, which floats it out of any scrolling
- * ancestor — `.modal-box` is `overflow-y: auto` and would clip it — and turns
- * it into a bottom sheet on touch.
- *
- * <app-multi-select [(value)]="libraryIds" [options]="libraryOptions()"
- *   [placeholder]="'…' | translate" />
- */
+/** Multi-select with a built-in filter: picked options show as removable chips and the panel stays open while ticking.
+ *  The panel is an `app-popover-menu`, which escapes scrolling ancestors (`.modal-box` would clip it) and becomes a bottom sheet on touch. */
 @Component({
   selector: 'app-multi-select',
   standalone: true,

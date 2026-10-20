@@ -66,18 +66,14 @@ export class ImportModalComponent {
   readonly seasons = signal<SeasonStub[]>([]);
   readonly selectedSeasons = signal<Set<number>>(new Set());
   readonly seasonsLoading = signal(false);
-  /** The season list is what the picker picks from: without it there is nothing
-   *  to tick, so the import falls back to the server-side default instead of
-   *  leaving the confirm button dead. */
+  /** Without the season list there is nothing to tick, so the import falls back to the server default instead of a dead confirm button. */
   readonly seasonsFailed = signal(false);
 
   readonly compatibleLibraries = computed(() =>
     this.libraries().filter((l) => l.mediaTypes.includes(this.mediaType())),
   );
 
-  /** Nothing to submit to: the destination is resolved from this very list,
-   *  so an empty one can only end in a server-side refusal. Silent while the
-   *  list is still in flight, where empty means unknown. */
+  /** The destination resolves from this list, so empty ends in a server refusal; silent while in flight, where empty means unknown. */
   readonly noCompatibleLibrary = computed(
     () => !this.loading() && this.compatibleLibraries().length === 0,
   );

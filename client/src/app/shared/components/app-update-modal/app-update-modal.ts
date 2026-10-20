@@ -18,9 +18,7 @@ import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
 import { ModalHeaderComponent } from '../modal-header';
 import { ModalFooterComponent } from '../modal-footer';
 
-/** Changelog + install dialog for the topbar update button. Reads everything
- *  from AppUpdateService; the action adapts to the platform (in-app install on
- *  desktop, external release link on web/.deb). */
+/** Changelog + install dialog for the topbar update button, reading AppUpdateService; install is in-app on desktop, a release link on web/.deb. */
 @Component({
   selector: 'app-update-modal',
   imports: [

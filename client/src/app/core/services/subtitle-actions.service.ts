@@ -4,10 +4,7 @@ import { SubtitlesApiService, SubtitleFileRow, SyncOptions } from './api/subtitl
 import { SseService } from './sse.service';
 import { ToastService } from './toast.service';
 
-/**
- * Shared subtitle actions used by both media-detail and episode-detail pages.
- * Each method takes the signals it needs to update, avoiding tight coupling.
- */
+/** Subtitle actions shared by media-detail and episode-detail; each method takes the signals it updates to avoid coupling. */
 @Injectable({ providedIn: 'root' })
 export class SubtitleActionsService {
   private readonly subtitlesApi = inject(SubtitlesApiService);

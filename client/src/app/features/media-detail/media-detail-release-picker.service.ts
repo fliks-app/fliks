@@ -88,9 +88,7 @@ export class MediaDetailReleasePickerService {
     return this.grab((r) => r.episode, { id: mediaId, episodeId }, body);
   }
 
-  /** `sid` names the modal waiting on this search: the plugin echoes it on every partial
-   *  result it pushes, so a modal ignores a search other than its own. Omitted means the
-   *  caller wants the answer only, with nothing streamed. */
+  /** `sid` names the waiting modal, echoed on every partial result so a modal ignores other searches; omitted means answer only, nothing streamed. */
   private async search(
     pick: (r: ReleasePickerRoutes) => ReleasePickerPair,
     params: RouteParams,

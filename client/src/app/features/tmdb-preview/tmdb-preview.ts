@@ -78,9 +78,7 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
   private readonly backgroundService = inject(BackgroundService);
   readonly auth = inject(AuthService);
 
-  /** Page-wide fanart background — same plumbing as media-detail. The
-   *  inline bleed div is gone; `app-background` (mounted in layout)
-   *  picks the URL up from the service and renders it under the page. */
+  /** Page-wide fanart background, same plumbing as media-detail (`app-background` renders it from the service). */
   private readonly backgroundEffect = effect(() => {
     const m = this.media();
     this.backgroundService.set(this, m?.fanartUrl ?? null);
@@ -140,16 +138,12 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
    *  the media loads. Null until fetched / when the user can't request. */
   readonly titleState = signal<TitleRequestState | null>(null);
 
-  /** True when a request blocks re-requesting (globally):
-   *   - movies: any active request on this tmdbId
-   *   - series: an active *whole-series* request (no `seasons` scope) */
+  /** True when a request blocks re-requesting: any active request for a movie, an active whole-series (no `seasons`) one for a series. */
   readonly hasBlockingRequest = computed(
     () => this.titleState()?.requested ?? false,
   );
 
-  /** Season numbers already covered by an active per-season request
-   *  (globally). Empty for movies. Drives the inline badge and pre-disables
-   *  seasons in the request modal. */
+  /** Season numbers covered by an active per-season request (empty for movies); drives the badge and pre-disables seasons in the modal. */
   readonly requestedSeasons = computed<number[]>(
     () => this.titleState()?.requestedSeasons ?? [],
   );
@@ -158,16 +152,10 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
     this.auth.hasPermission('requests.manage'),
   );
 
-  /** Pending requests on this title, for a manager. Importing while one is
-   *  open can leave it stranded: the lifecycle only adopts a request whose
-   *  profiles the imported envelope covers, so a narrower import leaves it
-   *  PENDING with the media already in the library. */
+  /** Pending requests on this title, for a manager: importing narrower than the request's profiles leaves it PENDING with the media already imported. */
   readonly pendingRequests = signal<FliksRequestRow[]>([]);
 
-  /** Any pending request makes a raw import the wrong move, a per-season one
-   *  included: importing the whole series would satisfy a scope nobody asked
-   *  for, and the request only gets adopted if the profiles happen to cover it.
-   *  Approving it is the way in. */
+  /** Any pending request (per-season included) makes a raw import the wrong move; approving it is the way in. */
   readonly pendingBlocksImport = computed(() => this.pendingRequests().length > 0);
 
   /** The import button stands down while a pending request would be bypassed —
@@ -313,9 +301,7 @@ export class TmdbPreviewComponent implements OnInit, OnDestroy {
     });
   }
 
-  /** Pending requests on this title, so a manager acts on the request instead
-   *  of importing past it. Bypasses the cache: an approve/decline here has to
-   *  be reflected on the next visit. */
+  /** Pending requests on this title; bypasses the cache so an approve/decline shows on the next visit. */
   private async loadPendingRequests(tmdbId: number) {
     try {
       const page = await this.requestsApi.list(

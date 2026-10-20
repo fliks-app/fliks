@@ -1,8 +1,6 @@
 import { Injectable, computed, signal } from '@angular/core';
 
-/** A single entry the player can navigate to. `mediaFileId` is resolved lazily
- *  (playlist items don't carry it), so it may be absent until the player is
- *  about to load the item. */
+/** An entry the player can navigate to; `mediaFileId` is resolved lazily (playlist items lack it), so it may be absent until load. */
 export interface QueueItem {
   mediaId: number;
   episodeId?: number;
@@ -17,13 +15,8 @@ export interface QueueItem {
  *  the series currently playing (built from its loaded media). */
 export type QueueSource = 'playlist' | 'series';
 
-/**
- * Holds the active explicit playback queue that spans media boundaries (a
- * playlist). The player consumes it to decide what plays next and whether to
- * advance automatically. A launcher sets it right before navigating into the
- * player; the player clears it when it opens without a matching source, so a
- * standalone play never inherits a stale queue.
- */
+/** The active explicit playback queue (a playlist). A launcher sets it before navigating;
+ *  the player clears it when opened without a source, so a standalone play never inherits a stale queue. */
 @Injectable({ providedIn: 'root' })
 export class PlaybackQueueService {
   private readonly _items = signal<QueueItem[]>([]);
@@ -80,9 +73,7 @@ export class PlaybackQueueService {
     if (index >= 0 && index < this._items().length) this._index.set(index);
   }
 
-  /** Re-align the cursor to the item matching the given media/episode. Used by
-   *  the player on launch so the cursor tracks the actually-loaded item even if
-   *  the launcher's index and the URL ever diverge. */
+  /** Re-align the cursor to the matching media/episode on launch, in case the launcher's index and the URL diverge. */
   syncTo(mediaId: number, episodeId?: number): void {
     const idx = this._items().findIndex(
       (it) => it.mediaId === mediaId && (it.episodeId ?? null) === (episodeId ?? null),

@@ -7,41 +7,19 @@ import { NavbarService } from './navbar.service';
 import { ScrollMemoryService } from './scroll-memory.service';
 
 export interface KeepRouteFreshOptions {
-  /**
-   * Bring the page up to date. The cached DOM is what the user sees the instant
-   * they return, so this runs behind it: no spinner, no flash, and the screen is
-   * never left on whatever the data looked like when they navigated away. Also
-   * fires when the native app comes back to the foreground on this page.
-   */
+  /** Bring the page up to date behind the cached DOM (no spinner or flash); also fires when the native app returns to the foreground. */
   refresh?: () => void;
   /** Overrides {@link refresh} for the app-resume case, where the page is
    *  already on screen and a cache-first pass would repaint nothing. */
   refreshOnResume?: () => void;
-  /** Scroll-memory key held while this route is on screen. Pass a function when
-   *  the key depends on data that loads later (a library id, say); returning
-   *  null skips the scroll handling for that pass. */
+  /** Scroll-memory key held while on screen; a function when it depends on late data, null skips scroll handling. */
   scrollKey?: string | (() => string | null);
   onAttach?: () => void;
   onDetach?: () => void;
 }
 
-/**
- * Wire a `data: { reuse: true }` route to the cache that keeps it alive.
- *
- * Such a route is detached instead of destroyed, so `ngOnInit` does not run
- * again on return and `ngOnDestroy` does not run on the way out. Every cached
- * page therefore needs the same four things, which is what this does:
- *
- *  - revalidate on return, so the cache preloads the screen and a request still
- *    goes out to confirm it,
- *  - hold the scroll-memory key while attached, and release it on detach only
- *    if it is still ours (the next page claims its own in `ngOnInit`),
- *  - refresh on native app-resume, but only when this page is the visible one,
- *  - track whether the instance is parked in the cache.
- *
- * Call it from an injection context (a field initializer or the constructor).
- * Returns that detached state for anything else the page gates on it.
- */
+/** Wire a `data: { reuse: true }` route to its cache. Detached routes skip `ngOnInit`/`ngOnDestroy`, so this revalidates on return,
+ *  holds the scroll key while attached, refreshes on app-resume when visible, and returns whether the page is parked. Needs an injection context. */
 export function keepRouteFresh(
   opts: KeepRouteFreshOptions,
 ): Signal<boolean> {
@@ -53,10 +31,7 @@ export function keepRouteFresh(
   const destroyRef = inject(DestroyRef);
 
   const detached = signal(false);
-  // Read per event, never latched: a page that keeps its instance across a
-  // param change (`reuseOnParamChange`) is filed under the params it last
-  // showed, so a key captured on the first snapshot stops matching and the
-  // page never learns it was detached.
+  // Read per event, never latched: with `reuseOnParamChange` the page is filed under the params it last showed, so a first-snapshot key stops matching.
   const ownKey = () => reuse.keyFor(route.snapshot);
   const scrollKey = (): string | null =>
     typeof opts.scrollKey === 'function'

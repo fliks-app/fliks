@@ -1,14 +1,7 @@
 import { Directive, computed, input, signal } from '@angular/core';
 
-/**
- * Masks spoiler-bearing content (an unwatched episode's still or synopsis)
- * behind a blur until the user asks for it — click or Enter reveals it for the
- * life of the view. The reveal click is swallowed so it can't also trigger the
- * play/open handler of an enclosing card.
- *
- * Usage:
- *   <p [appSpoiler]="masked" #sp="spoiler">{{ overview }}</p>
- */
+/** Masks spoiler content behind a blur until click/Enter reveals it for the view; the reveal click is swallowed so an enclosing card's handler doesn't fire.
+ *  Usage: `<p [appSpoiler]="masked" #sp="spoiler">`. */
 @Directive({
   selector: '[appSpoiler]',
   standalone: true,

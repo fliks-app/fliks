@@ -1,6 +1,4 @@
-/* ============================================================================
-   Android TV / 10-foot UI overrides — body.tv toggled by TvService
-   ============================================================================ */
+/* Android TV / 10-foot UI overrides (body.tv toggled by TvService) */
 body.tv {
   /* Slight scale-up of base text for legibility from the couch */
   font-size: 18px;
@@ -8,15 +6,8 @@ body.tv {
      TV WebViews report. */
   --page-p: 4vw;
 }
-/* The 10-foot UI is sized for the 1280-wide logical viewport older TV
-   WebViews report. webOS and Tizen 9 lay it out at 1920 instead, so every
-   element renders at ⅔ the intended physical size and reads as tiny from
-   the couch. Scaling the root font restores the density: Tailwind sizes
-   spacing, text and box dimensions in rem, so they all follow. `zoom: 1.5`
-   would be the obvious lever and is the wrong one — it does not divide
-   viewport units, so every `min-h-screen` box rendered 1.5 screens tall and
-   scrolled. Keyed on the viewport rather than the OS: a 1280-wide TV must
-   not be scaled. */
+/* webOS and Tizen 9 lay out at 1920 instead of the 1280 the UI is sized for: scale the root font (rem-based sizing follows).
+   Not `zoom`: it doesn't divide viewport units, so `min-h-screen` boxes overflow. Keyed on viewport, not OS. */
 @media (min-width: 1900px) {
   html.tv-host {
     font-size: 24px;
@@ -25,74 +16,38 @@ body.tv {
     font-size: 1.125rem;
   }
 }
-/* Backfill html so the WebView doesn't show its default white during route
-   transitions or before bootstrap.
-   scroll-behavior smooth turns the abrupt focus-into-view jumps (D-pad
-   navigation between rows of cards) into a fluid animated scroll. */
+/* Backfill html so the WebView shows no white flash; smooth scroll animates focus-into-view jumps. */
 html.tv-host {
   background: #1d232a;
   scroll-behavior: smooth;
-  /* D-pad focus-into-view uses scrollIntoView({block:'nearest'}), which
-     otherwise parks the focused card flush against a screen edge. Keep it off
-     the edges: clear the top dock (matching the 96px the home rows snap to) and
-     leave a strip of look-ahead below so moving down a grid row never leaves
-     the bottom row cut. */
+  /* Keep scrollIntoView({block:'nearest'}) off the edges: clear the top dock (96px, as home rows snap) and leave look-ahead below. */
   scroll-padding-top: 96px;
   scroll-padding-bottom: 20vh;
 }
-/* Same focus-into-view breathing room on the browser when navigating by
-   keyboard: arrow / Tab focus scrolls via scrollIntoView({block:'nearest'}) (or
-   sequential focus nav), which otherwise parks the focused card against the
-   bottom edge. Scoped to keyboard modality so mouse scrolling is untouched.
-   TVs already get this via html.tv-host above. */
+/* Same focus-into-view breathing room for keyboard navigation in the browser, scoped so mouse scrolling is untouched. */
 html.keyboard-modality {
   scroll-padding-top: 96px;
   scroll-padding-bottom: 20vh;
 }
-/* Pointerless TVs: neutralise daisyUI's two ungated `:hover` backgrounds, so a
-   latched hover can't leave a phantom highlight. Tailwind's own `hover:`
-   utilities need no help — they sit behind `@media (hover: hover)`. Narrow on
-   purpose: `*:hover` reverted base backgrounds too, not just hover ones. */
+/* Pointerless TVs: neutralise daisyUI's two ungated `:hover` backgrounds so a latched hover leaves no phantom highlight. */
 html.tv-host:not(.tv-webos) .menu li > :hover,
 html.tv-host:not(.tv-webos) .select option:hover {
   background-color: revert !important;
 }
-/* Suppress every `:focus-visible` visual when the user isn't on a
-   keyboard / D-pad modality. Safari WebKit on iOS incorrectly fires
-   focus-visible on long-press, so a context-tap on a media card used
-   to paint the high-contrast ring. The `keyboard-modality` class is
-   set by app.ts on the first navigation keydown and cleared on the
-   next pointer / touch interaction; TV always uses the ring so it
-   short-circuits the suppression. `transform: none` covers the
-   scale-up rule on media cards a few selectors down.
-
-   Scoped to <html>, not <body>: overlays are reparented under <html>
-   to escape stacking contexts, and a body-scoped rule left their
-   focused entry ringed after a plain mouse click.
-
-   A select is not exempt: tapping one opens its picker, which is the
-   indication, and no platform leaves a ring on a field after a tap. Text
-   fields stay exempt because a caret alone reads as nothing on a wide row. */
+/* Suppress `:focus-visible` visuals outside keyboard/D-pad modality (iOS Safari fires it on long-press); TV keeps the ring.
+   Scoped to <html>, not <body>, because overlays are reparented under <html>. Selects are not exempt (their picker is the cue); text fields are. */
 html:not(.keyboard-modality):not(.tv-host)
   :focus-visible:not(input, textarea, [contenteditable]) {
   outline: none !important;
   box-shadow: none !important;
 }
 
-/* daisyUI paints its own outline on a focused select. The suppression above is
-   written against :focus-visible, which some engines do not match on a tapped
-   select (WebKit notably), so there the outline stayed and read as a second ring
-   next to the untouched border. Reached on plain :focus so the modality, not the
-   engine's focus-visible verdict, decides. */
+/* daisyUI's select outline is matched on plain :focus: some engines (WebKit) don't match :focus-visible on a tapped select. */
 html:not(.keyboard-modality):not(.tv-host) .select:focus {
   outline: none;
 }
 
-/* iOS Safari auto-zooms the viewport when a focused input has
-   `font-size` below 16 px — Apple's anti-eyestrain default, but it
-   reads as "the page suddenly grows" when tapping the search bar.
-   Lock the in-app form fields at 16 px on the Capacitor build so
-   focus never triggers the zoom. Desktop / web is untouched. */
+/* iOS Safari auto-zooms on inputs under 16px: lock in-app form fields at 16px on the Capacitor build. */
 html.native input,
 html.native textarea,
 html.native select {
@@ -107,24 +62,13 @@ html:not(.keyboard-modality):not(.tv-host) app-mosaic-card button:focus-visible 
   transform: none !important;
 }
 
-/* Same modality gate for a menu row's focus tint: the panel focuses its first
-   entry on open, and on a long-press-opened sheet that row read as already
-   selected. */
+/* Same modality gate for a menu row's focus tint (the panel focuses its first entry on open). */
 html:not(.keyboard-modality):not(.tv-host) .dropdown-item:focus-visible {
   background-color: transparent;
 }
 
-/* High-contrast primary focus ring — applies on every form factor so
-   keyboard / D-pad navigation looks identical. `:focus-visible` only
-   so mouse clicks on desktop don't paint a ring after activation.
-   Rendered as a two-layer box-shadow (page-bg gap + primary ring)
-   instead of `outline` because `outline` ignores `border-radius` on
-   Chromium <94 (Tizen 6.5 ships Chromium ~85), which would paint a
-   rectangle around a rounded button. box-shadow follows border-radius
-   everywhere. The inner layer uses `--color-base-100` (the surrounding
-   page bg in this dark theme) so the gap looks transparent over the
-   common backgrounds — a real `transparent` value can't be used here
-   because the second shadow shows through it. */
+/* Focus ring as a two-layer box-shadow (page-bg gap + primary), not `outline`, which ignores border-radius on Chromium <94 (Tizen 6.5).
+   The gap uses `--color-base-100` because a real `transparent` would show the second shadow through. */
 :is(a, button, select, input, [role="button"], [tabindex]):focus-visible {
   outline: none;
   box-shadow: var(--focus-ring);
@@ -132,37 +76,22 @@ html:not(.keyboard-modality):not(.tv-host) .dropdown-item:focus-visible {
   /* Never set `position` here: it would re-anchor an absolutely placed
      focusable (a modal ✕, a floating cue) and make it jump on focus. */
 }
-/* `z-index` applies to a flex item even at `position: static`, so on a button row
-   the rule above creates and destroys a stacking context on every focus move.
-   This WebView repaints that badly: a neighbour ghosts, re-drawn at its previous
-   offset (half a button's label duplicated on the media-detail action row). The
-   ring is 4px and these rows carry a gap, so nothing overlaps without it. */
+/* `z-index` on a flex item toggles a stacking context per focus move, which this WebView repaints as ghosted neighbours; the ring never overlaps anyway. */
 body.tv :is(a, button, select, input, [role="button"], [tabindex]):focus-visible {
   z-index: auto;
 }
 
-/* daisyUI keeps its active menu item's own box-shadow at low specificity behind
-   a `:where()`. The TV downlevel unwraps that wrapper — Chromium 85 can't parse
-   it — which lifts the rule above the ring and swallows it, so the focused
-   sidebar entry you are already on shows no ring at all. */
+/* The TV downlevel unwraps daisyUI's `:where()` (Chromium 85 can't parse it), lifting its box-shadow above the ring. */
 body.tv .menu li > .menu-active:focus-visible {
   box-shadow: var(--focus-ring) !important;
 }
 
-/* Over the video, the ring's inner `--color-base-100` layer has nothing to
-   blend into — it reads as a black circle around every control. On the player
-   only, drop it and keep the primary ring alone. */
+/* Over video the ring's base-100 layer reads as a black circle: keep the primary ring alone. */
 app-player-controls :is(a, button, select, input, [role="button"], [tabindex]):focus-visible {
   box-shadow: 0 0 0 3px var(--color-primary, #7a3ff2);
 }
 
-/* Tizen alone runs the CSS downlevel, and two "dimmed text" affordances do not
-   survive it. daisyUI dims an inactive tab through a `:not()` list holding
-   `:has()`, which Chromium 85 cannot parse, so the whole rule is stripped; and
-   both that rule and Tailwind's `::placeholder` reset express the dimming with
-   `color-mix()` alone, which the same engine ignores. Either way the text lands
-   at full contrast and reads as selected, or as typed. Opacity says the same
-   thing in syntax this engine has. */
+/* Tizen's downlevel strips daisyUI's `:has()` tab dimming and ignores `color-mix()` dimming (placeholders): use opacity instead. */
 body.tv-tizen .tab:not(.tab-active) {
   opacity: 0.5;
 }
@@ -170,29 +99,18 @@ body.tv-tizen ::placeholder {
   opacity: 0.5;
 }
 
-/* Same engine, worse outcome: daisyUI paints `.badge-soft`'s text AND background
-   the accent colour, then corrects the background with a `color-mix` down to an
-   8% tint over base-100. Chromium 85 drops that line, so the label is painted on
-   itself and disappears. base-100 is what the tint blends into. */
+/* Chromium 85 drops daisyUI's `color-mix` badge-soft background, leaving the label painted on itself: use base-100. */
 body.tv-tizen .badge-soft {
   background-color: var(--color-base-100);
   border-color: var(--color-base-100);
 }
 
-/* A field wrapped in `.input` hands its focus affordance to the wrapper: the
-   field itself opts out with `data-no-focus-ring` so the ring isn't drawn inside
-   the box. Without this the wrapper kept only daisyUI's 1px outline, unreadable
-   from a couch next to the 4px ring every other control paints. `:focus-within`
-   rather than `:has(:focus-visible)` — Tizen runs Chromium 85, which has no
-   `:has()` — so the keyboard / TV modality gate stands in for `:focus-visible`. */
+/* A field inside `.input` hands its focus ring to the wrapper (the field opts out via `data-no-focus-ring`).
+   `:focus-within`, not `:has()` (absent in Chromium 85), gated by modality in place of `:focus-visible`. */
 html.keyboard-modality label.input:focus-within,
 html.tv-host label.input:focus-within {
   outline: none;
   box-shadow: var(--focus-ring);
 }
 
-/* Default radius for the ring above, so a bare focusable (a section heading,
-   a plain link) doesn't get a rectangle around it and no component has to
-   remember its own. On an element with no background or border a radius paints
-   nothing, so this is invisible until focus. In `base`, so a `rounded-*`
-   utility or a daisyUI component radius still wins. */
+/* Default radius for the ring so bare focusables don't get a rectangle; in `base` so any `rounded-*` or component radius wins. */

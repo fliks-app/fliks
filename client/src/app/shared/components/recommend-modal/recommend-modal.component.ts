@@ -16,13 +16,8 @@ import { RecommendTarget } from '../../../core/services/recommend.service';
 import { ModalHeaderComponent } from '../modal-header';
 import { ToastService } from '../../../core/services/toast.service';
 
-/**
- * Dialog to recommend a piece of content (movie / season / episode) to another
- * member. Mounted once at the layout level and opened from anywhere (the
- * media-detail header, season menu) through {@link RecommendService}. The
- * recipient list is restricted to connectable members (public profiles or
- * members the caller follows), reusing `/social/connectable`.
- */
+/** Dialog to recommend a movie / season / episode to another member; mounted once at layout level and opened via {@link RecommendService}.
+ *  Recipients are limited to connectable members (`/social/connectable`). */
 @Component({
   selector: 'app-recommend-modal',
   imports: [FormsModule, TranslatePipe, LucideSend, ModalHeaderComponent],

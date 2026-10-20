@@ -46,13 +46,7 @@ export class SettingsDrawerComponent implements OnInit, OnDestroy {
   private readonly activePage = signal('');
   private routerSub?: Subscription;
 
-  /**
-   * Drives the browser tab title: `"<active page> | <layout>"` (e.g.
-   * "Général | Administration"), or the layout name alone before a page
-   * resolves. These shells live outside the main LayoutComponent that otherwise
-   * owns document.title, so without this the title keeps whatever the previous
-   * page (e.g. a media detail) left.
-   */
+  /** Sets the tab title (`"<page> | <layout>"`); these shells sit outside the LayoutComponent that owns document.title, which would keep the previous page's. */
   private readonly titleEffect = effect(() => {
     const page = this.activePage();
     const layout = this.title();
@@ -83,10 +77,7 @@ export class SettingsDrawerComponent implements OnInit, OnDestroy {
     this.routerSub?.unsubscribe();
   }
 
-  /** Label of the deepest sidebar entry whose route prefixes the current URL.
-   *  Scoped to the menu (so routed-content links don't leak in) and matched by
-   *  href prefix rather than the `.active` class, so it doesn't depend on
-   *  routerLinkActive's update timing. */
+  /** Deepest sidebar entry whose href prefixes the URL, scoped to the menu and matched by href rather than `.active` to avoid routerLinkActive timing. */
   private readActivePageLabel(): string {
     const menu = this.host.nativeElement.querySelector('ul.menu');
     if (!menu) return '';

@@ -1,6 +1,4 @@
-/** `S01E03 — Title` for a row that targets one episode, `''` for a movie or a
- *  whole-season row. Season falls back to 0 so a linked episode never renders
- *  a bare `SE03`. */
+/** `S01E03 — Title` for a single-episode row, `''` for a movie or whole-season row; season falls back to 0 so it never renders `SE03`. */
 export function episodeLabel(row: {
   seasonNumber: number | null;
   episodeNumber: number | null;

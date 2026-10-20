@@ -4,11 +4,7 @@ import {
   input,
 } from '@angular/core';
 
-/**
- * Standard dialog footer: actions right-aligned, ruled off from the body.
- * Mirrors {@link ModalHeaderComponent}, `flush` included — in a `p-0` box the
- * flex column pins it, in a padded one it sits at the end of the content.
- */
+/** Standard dialog footer mirroring {@link ModalHeaderComponent}, `flush` included: pinned in a `p-0` box, at content end in a padded one. */
 @Component({
   selector: 'app-modal-footer',
   templateUrl: './modal-footer.html',

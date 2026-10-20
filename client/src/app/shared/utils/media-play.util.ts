@@ -4,11 +4,7 @@ import { QueueItem } from '../../core/services/playback-queue.service';
 /** One entry of {@link Media.files}. */
 export type MediaFile = NonNullable<Media['files']>[number];
 
-/**
- * Resolve the playable file from loaded media: the file for a specific episode
- * when `episodeId` is given (series episodes carry `episodeId`), otherwise the
- * movie's own file. Returns null when the media has no matching file.
- */
+/** Resolve the playable file: the episode's when `episodeId` is given, otherwise the movie's own; null when none matches. */
 export function resolvePlayableFile(
   m: Media,
   episodeId?: number,
@@ -21,11 +17,7 @@ export function resolvePlayableFile(
   return files.find((f) => f.episodeId == null) ?? files[0] ?? null;
 }
 
-/**
- * The series' episodes as queue items in S/E order — specials excluded, and
- * episodes with no available file dropped (they aren't playable). Empty for
- * anything that isn't a loaded series.
- */
+/** The series' episodes as queue items in S/E order, excluding specials and episodes with no available file; empty for non-series. */
 export function buildSeriesQueueItems(m: Media): QueueItem[] {
   if (m.type !== 'series' || !m.seasons?.length) return [];
   const flat: {

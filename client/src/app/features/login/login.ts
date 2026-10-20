@@ -24,12 +24,7 @@ export class LoginComponent {
   readonly error = signal('');
   readonly loading = signal(false);
 
-  /**
-   * Username arrives via `?username=` from the user picker. When set we lock
-   * the field — the user already chose this account; let them just enter the
-   * password. Without it, fall back to the last username on the active server
-   * (server history feature) for one-tap return.
-   */
+  /** `?username=` from the user picker locks the field to the chosen account; else falls back to the active server's last username. */
   private readonly presetUsername = this.route.snapshot.queryParamMap.get('username');
   readonly usernameLocked = !!this.presetUsername;
 

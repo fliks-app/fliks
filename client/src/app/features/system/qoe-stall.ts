@@ -145,11 +145,7 @@ const HDR_LABEL: Record<string, string> = { DV: 'Dolby Vision' };
 const dimensions = (d: { width: number | null; height: number | null } | null | undefined) =>
   d?.width && d.height ? `${d.width}×${d.height}` : '';
 
-/**
- * "3840×1588 HEVC HDR10 → auto → 3840×1588 (tier 2160p) H.264 8.0 Mbps", or just the source when the stream is
- * not re-encoded. The output shows the real dimensions when known, and the rung as a tier name, so a scope film
- * is never read as an upscale.
- */
+/** "3840×1588 HEVC HDR10 → auto → 3840×1588 (tier 2160p) H.264 8.0 Mbps", or just the source when not re-encoded; real output dimensions, rung as a tier name, so scope films don't read as upscales. */
 export function pipelineChain(p: QoePipeline, f: Fmt, outDims?: { width: number | null; height: number | null } | null): string {
   const s = p.source;
   const src = s ? join([dimensions(s) || resolutionLabel(s.height, f), codecLabel(s.codec), s.hdr && (HDR_LABEL[s.hdr] ?? s.hdr)]) : '';

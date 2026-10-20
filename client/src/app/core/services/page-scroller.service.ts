@@ -1,11 +1,7 @@
 import { Injectable } from '@angular/core';
 import { Observable, fromEvent, map } from 'rxjs';
 
-/**
- * The document scroll, behind one API so shared chrome (topbar, drawer,
- * scroll memory) reads and writes it the same way and the constraints below
- * live in a single place.
- */
+/** The document scroll behind one API so shared chrome (topbar, drawer, scroll memory) reads and writes it consistently. */
 @Injectable({ providedIn: 'root' })
 export class PageScrollerService {
   private readonly changes$: Observable<void> = fromEvent(window, 'scroll', { passive: true }).pipe(

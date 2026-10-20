@@ -124,21 +124,14 @@ export class MediaDetailSeasonsComponent {
   readonly sectionTitle = input<string | null>(null);
   /** Episode the page is already showing — its card is framed instead of hidden. */
   readonly activeEpisodeId = input<number | null>(null);
-  /** Siblings of the episode already on screen open a page whose hero is the
-   *  same still in the same place, so the morph would read as a jump rather
-   *  than a hand-off. From the series page it is the animation that carries it. */
+  /** Off for siblings of the on-screen episode (same still, same place, so the morph would read as a jump); on from the series page. */
   protected readonly episodeMorph = computed(() => this.activeEpisodeId() == null);
 
   /** Season ids the viewer has liked — drives the season heart entry. */
   readonly likedSeasonIds = input<number[]>([]);
   readonly likedEpisodeIds = input<number[]>([]);
 
-  /**
-   * Card the rail should land on: the episode the page is showing, or the one
-   * the viewer would resume otherwise. Centred from here rather than from the
-   * page because the rail only exists once this component has rendered, and a
-   * caller firing a frame after its own fetch finds nothing to scroll.
-   */
+  /** Card the rail lands on: the shown episode, else the resume one; centred here since the rail only exists once this component rendered. */
   private readonly centerTarget = computed(() => {
     const active = this.activeEpisodeId();
     if (active != null) return active;
@@ -166,9 +159,7 @@ export class MediaDetailSeasonsComponent {
   readonly recommendSeason = output<number>();
   readonly seasonWatchedBusyId = input<number | null>(null);
 
-  // ── media.season.actions: the two release-picker entries in the season dropdown,
-  // rendered from the contribution registry — core has none of its own here, so
-  // with no plugin installed the list (and the dropdown rows) is empty.
+  // ── media.season.actions: release-picker entries in the season dropdown, from the contribution registry (empty without plugins).
 
   private readonly seasonActionsContext = computed<WhenContext>(() => ({
     isAdmin: this.isAdmin(),
@@ -193,9 +184,7 @@ export class MediaDetailSeasonsComponent {
     },
   };
 
-  /** Resolved season-dropdown rows: plugin contributions only, `when`-filtered, with
-   *  the action resolved to a handler. An unknown actionId drops the row rather than
-   *  rendering a broken one. */
+  /** Season-dropdown rows: plugin contributions only, `when`-filtered and resolved to handlers; an unknown actionId drops the row. */
   readonly seasonActionItems = computed(() => {
     const ctx = this.seasonActionsContext();
     const items: { id: string; labelKey: string; actionId: CoreSeasonActionId; handler: () => void }[] = [];
@@ -248,12 +237,7 @@ export class MediaDetailSeasonsComponent {
     return (season.episodes ?? []).filter((ep) => watched.has(ep.id)).length;
   }
 
-  /**
-   * Card row or detail list. Kept local: nothing outside this component reacts
-   * to it, unlike the on-disk filter the parent owns. A TV gets the choice too:
-   * each list row is an `appTvRow`, and the page's vertical `appTvSection`
-   * steps between them, which is the shape the home rows already use.
-   */
+  /** Card row or detail list, kept local since nothing outside reacts to it; TV gets the choice too (each list row is an `appTvRow`). */
   readonly episodeView = signal<EpisodeView>(readEpisodeViewFromStorage());
   readonly canSwitchEpisodeView = computed(() => !this.hideControls());
   readonly showEpisodeList = computed(
@@ -269,19 +253,14 @@ export class MediaDetailSeasonsComponent {
     }
   }
 
-  /**
-   * `05/08/2026 · 34 min`. Takes the date already formatted so the impure
-   * locale pipe stays in the template and keeps re-running on a language switch.
-   */
+  /** `05/08/2026 · 34 min`; takes the date pre-formatted so the impure locale pipe stays in the template and re-runs on language switch. */
   episodeCardSubtitle(formattedDate: string, runtime?: number | null): string {
     const parts = formattedDate ? [formattedDate] : [];
     if (runtime) parts.push(`${runtime} ${this.translate.instant('common.min')}`);
     return parts.join(' · ');
   }
 
-  /** True when at least one episode of the season isn't on disk — the
-   *  prerequisite for surfacing a Demander entry. Uses coverage so a season
-   *  fully covered by multi-episode files isn't flagged as missing. */
+  /** True when at least one episode isn't on disk, the prerequisite for a Demander entry; uses coverage so multi-episode files aren't flagged missing. */
   seasonHasMissingEpisodes(season: Season | null): boolean {
     if (!season) return false;
     const onDisk = onDiskEpisodeNumbers(season.episodes ?? []);

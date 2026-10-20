@@ -18,19 +18,8 @@ import {
   FliksRequestStatus,
 } from '../../../core/services/api/requests.service';
 
-/**
- * Status badge for a request row, shared by the requests list and the home
- * request card. Composes two concerns:
- *  - request **lifecycle** states (pending / declined / available / failed) →
- *    `requests.status.*`, owned here;
- *  - for an in-flight approved/processing request, the real **download** status
- *    (downloading / stalled / queued / paused / error…) via the shared
- *    {@link describeBadge}, which also covers the monitored/unmonitored states.
- *
- * When a download is in flight the badge is clickable (emits `badgeClick` so
- * the host can open the detail modal) — except on TV, where a focusable in-card
- * button would add a second D-pad stop and break card focus traversal.
- */
+/** Status badge for a request row, shared by the requests list and home card: request lifecycle states (`requests.status.*`),
+ *  or the real download status via {@link describeBadge} while in flight. Clickable then (`badgeClick`), except on TV: a focusable in-card button adds a second D-pad stop. */
 @Component({
   selector: 'app-request-status-badge',
   standalone: true,

@@ -1,18 +1,7 @@
 export const environment = {
   production: false,
-  /** Fliks client build version, kept in sync with client/package.json by
-   *  release-please. Reported to the backend (non-web clients only) so the
-   *  admin streams dashboard can show which app build a viewer is running. */
+  /** Client build version, kept in sync with client/package.json by release-please; reported by non-web clients to the admin streams dashboard. */
   version: '4.5.0', // x-release-please-version
-  /**
-   * Google Cast receiver app ID. Replace with the ID generated in the
-   * Cast Developer Console (https://cast.google.com/publish/) after
-   * registering the receiver shell URL hosted from `cast-receiver/`
-   * (typically `https://<owner>.github.io/<repo>/`).
-   *
-   * `CC1AD845` is Google's Default Media Receiver — works out of the
-   * box with no console registration but no Fliks branding. Keep as
-   * fallback so devs without console access can still cast.
-   */
+  /** Cast receiver app ID from the Cast Developer Console; `CC1AD845` is Google's Default Media Receiver, an unbranded fallback needing no registration. */
   castAppId: '66BF4DAE',
 };

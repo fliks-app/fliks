@@ -1,23 +1,8 @@
 import type { UiContribution } from '@fliks/plugin-ui';
 
-/**
- * Core's own `media.actions` items, expressed as contributions so they merge
- * with plugin contributions through the same weight/id sort instead of being
- * a fixed sequence of `@if` blocks. `when` encodes every part of the
- * pre-refactor gate that the closed vocabulary can express; the handful that
- * can't (an OR, or a fact that isn't a permission) stay as an extra guard in
- * `media-info-header.ts`, documented there.
- *
- * Two rows (`core.mark_series_watched`, `core.toggle_monitored`) toggle their
- * own label/icon by live state — cosmetic, so the swap lives in the
- * component's `displayLabelKey`/`displayIcon`, not here.
- */
-/**
- * Section boundaries, as weight bands over the media actions registry:
- * personal actions, acquisition, editing, maintenance, then destructive.
- * Bands rather than an explicit field so a plugin contribution groups itself by
- * the weight it already declares, with no addition to the contract.
- */
+/** Core's own `media.actions` as contributions, merged with plugin ones by weight/id. Gates `when` can't express
+ *  (an OR, non-permission facts) stay in `media-info-header.ts`; label/icon toggles live in `displayLabelKey`/`displayIcon`. */
+/** Section boundaries as weight bands (personal, acquisition, editing, maintenance, destructive), so plugin contributions group by their declared weight. */
 export function sectionOf(weight: number): string {
   if (weight < 500) return 'personal';
   if (weight < 1000) return 'edit';
@@ -54,8 +39,7 @@ export const CORE_MEDIA_ACTIONS: readonly UiContribution[] = [
     action: { kind: 'action', actionId: 'media.download' },
   },
   // ── Rows a card owns ────────────────────────────────────────────────────
-  // Play and Open act on a card's target; on a detail page you are already
-  // there, so they say `surface:card` rather than the lists diverging again.
+  // Play/Open say `surface:card`: on a detail page you are already there.
   {
     id: 'core.play',
     slot: 'media.actions',
@@ -152,9 +136,7 @@ export const CORE_MEDIA_ACTIONS: readonly UiContribution[] = [
       action: { kind: 'action', actionId: 'media.analyze' },
     },
     {
-      // `!isEpisode`: profile/library assignment is title-level, not
-      // per-episode — the pre-refactor episode header never bound
-      // `canEditProfiles` at all (always false), for the same reason.
+      // `!isEpisode`: profile/library assignment is title-level, not per-episode.
       id: 'core.edit_profiles',
       slot: 'media.actions',
       weight: 20,
@@ -232,10 +214,7 @@ export const CORE_MEDIA_ACTIONS: readonly UiContribution[] = [
     when: ['hasPermission:requests.create', '!hasPermission:media.create'],
     action: { kind: 'action', actionId: 'media.request' },
   },
-  // Subtitles are per-file, so the row belongs to a movie or to an episode and
-  // to nothing else. That is an OR, which a flat AND-list can't say — but two
-  // contributions on one actionId can, and they stay declarative, so any surface
-  // reading this list gets the gate instead of the header keeping it privately.
+  // Subtitles are per-file (movie or episode): an OR, expressed as two contributions on one actionId so every surface gets the gate.
   {
     id: 'core.edit_subtitles',
     slot: 'media.actions',
@@ -253,10 +232,7 @@ export const CORE_MEDIA_ACTIONS: readonly UiContribution[] = [
     icon: 'trash-2',
     tone: 'danger',
     confirmKey: 'media_detail.request_deletion_confirm',
-    // The pre-refactor gate is the single `canRequestDeletion` input, already
-    // `requests.create && !media.delete && !<a deletion request is already
-    // pending>` — pending is per-title async state, not a permission, so it
-    // can't be a `when` predicate. Full guard in media-info-header.ts.
+    // Pending deletion request is per-title async state, not a permission, so it can't be a `when` predicate; full guard in media-info-header.ts.
     action: { kind: 'action', actionId: 'media.request-deletion' },
   },
 ];

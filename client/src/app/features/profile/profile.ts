@@ -33,13 +33,7 @@ import { ProfileContextService } from './profile-context.service';
 import { AvatarEditorComponent } from './avatar-editor/avatar-editor';
 import { UserAvatarComponent } from '../../shared/components/user-avatar/user-avatar';
 
-/**
- * Profile shell: renders the shared header (avatar, counts, follow control) and
- * a tab nav, with the active section swapped through the `<router-outlet>`
- * (overview / followers / following / recommendations). The profile aggregate
- * is loaded once into {@link ProfileContextService} and read by the header here
- * and by the routed children.
- */
+/** Profile shell: shared header plus tab nav over a `<router-outlet>`; the aggregate is loaded once into {@link ProfileContextService} for header and children. */
 @Component({
   selector: 'app-profile',
   imports: [UserAvatarComponent, 
@@ -124,10 +118,7 @@ export class ProfileComponent {
           ? Math.max(0, p.followerCount - 1)
           : p.followerCount,
       });
-      // A private profile becomes non-viewable again once unfollowed. Return to
-      // the overview (so a followers/following child list doesn't linger — its
-      // effect keys on userId, which reload() doesn't change) and refresh the
-      // aggregate so everything collapses to the header + "private" message.
+      // A private profile is non-viewable once unfollowed: return to the overview (child lists key on userId, which reload() doesn't change) and refresh.
       if (p.visibility === 'private' && !p.isSelf) {
         void this.router.navigate(['/profile', p.id]);
         this.ctx.reload();

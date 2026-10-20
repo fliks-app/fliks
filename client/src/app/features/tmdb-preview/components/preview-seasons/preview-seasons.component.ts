@@ -47,10 +47,7 @@ export class PreviewSeasonsComponent {
       null,
   );
 
-  /**
-   * One provider call per season upstream, so it waits for the section to be
-   * opened rather than firing on every series preview.
-   */
+  /** One provider call per season upstream, so it waits for the section to open. */
   private readonly loadEffect = effect(() => {
     const id = this.externalId();
     const provider = this.provider();

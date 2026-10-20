@@ -1,8 +1,4 @@
-/**
- * Closed catalogue of `media.season.actions` actionIds core implements. A plugin's
- * contribution to this slot may only reference one of these — it never ships
- * its own handler — plugins never ship their own Angular code.
- */
+/** Closed catalogue of `media.season.actions` actionIds core implements; plugin contributions may only reference these, never ship a handler. */
 export type CoreSeasonActionId = 'season.search-releases' | 'season.grab-best';
 
 const CORE_SEASON_ACTION_IDS: ReadonlySet<string> = new Set<CoreSeasonActionId>([
@@ -13,12 +9,7 @@ const CORE_SEASON_ACTION_IDS: ReadonlySet<string> = new Set<CoreSeasonActionId>(
 /** One concrete handler per core actionId, supplied by whatever component owns the click. */
 export type SeasonActionHandlers = Record<CoreSeasonActionId, () => void>;
 
-/**
- * Resolves a contribution's `actionId` to the handler that implements it.
- * Anything outside the closed catalogue — a typo, a future id, a plugin
- * guessing — returns `null`. Fail closed: the caller must render no row at
- * all, never a button whose click silently does nothing.
- */
+/** Resolves a contribution's `actionId` to its handler; anything outside the catalogue returns `null` (fail closed: render no row). */
 export function resolveSeasonAction(
   actionId: string,
   handlers: SeasonActionHandlers,

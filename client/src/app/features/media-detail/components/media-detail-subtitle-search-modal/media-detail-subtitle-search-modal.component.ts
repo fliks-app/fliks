@@ -36,9 +36,7 @@ export class MediaDetailSubtitleSearchModalComponent {
   readonly search = output<void>();
   readonly download = output<SubtitleSearchResult>();
 
-  // Languages offered to the subtitle search. The displayed label is
-  // resolved via the localizeLanguage pipe so it matches what the player
-  // shows on its audio/subtitle tracks.
+  // Languages offered to the subtitle search; labels come from `localizeLanguage` to match the player's tracks.
   readonly languageCodes: readonly string[] = [
     'en',
     'fr',

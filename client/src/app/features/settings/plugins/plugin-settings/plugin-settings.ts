@@ -79,11 +79,7 @@ export class PluginSettingsComponent {
     await this.persist(AUTO_UPDATE_KEY, next, this.autoUpdate);
   }
 
-  /**
-   * The catalogue reads what a source's last refresh cached, and that cache was filtered under
-   * whichever value this had at the time. Refreshing every source is what makes the wider (or
-   * narrower) version list appear without waiting for the nightly job.
-   */
+  /** The catalogue reads each source's cache filtered under the old value, so every source is refreshed to widen/narrow the list without waiting for the nightly job. */
   async toggleSkipCompatibility(next: boolean): Promise<void> {
     if (!(await this.persist(SKIP_COMPATIBILITY_KEY, next, this.skipCompatibility))) return;
     this.saving.set(true);

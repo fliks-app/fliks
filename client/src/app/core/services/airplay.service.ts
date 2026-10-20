@@ -21,12 +21,8 @@ interface WebKitVideoElement extends HTMLVideoElement {
   readonly webkitCurrentPlaybackTargetIsWireless: boolean;
 }
 
-/**
- * AirPlay destination for the "play on another device" list. Unlike Cast, the
- * running player keeps the session: the system picker only reroutes it, so
- * there is no handoff to do. iOS routes the native AVPlayer app-wide; Safari
- * routes one `<video>`, so the web side only exists while the player is open.
- */
+/** AirPlay destination for "play on another device": the running player keeps the session (the picker only reroutes it), so no handoff.
+ * iOS routes the native AVPlayer app-wide; Safari routes one `<video>`, so the web side exists only while the player is open. */
 @Injectable({ providedIn: 'root' })
 export class AirPlayService {
   private readonly native = Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'ios';

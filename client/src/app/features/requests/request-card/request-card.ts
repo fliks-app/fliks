@@ -14,12 +14,8 @@ import { FliksRequestRow } from '../../../core/services/api/requests.service';
 import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
 import { clearPosterStamps } from '../../../shared/utils/view-transition';
 
-/**
- * Compact request card for the home "Demandes récentes" scroller: a fanart
- * backdrop with the request summary overlaid and (for managers, on pending
- * requests) Approuver / Refuser actions. The parent owns data + actions and
- * resolves the profile names; this card is presentational.
- */
+/** Compact presentational request card for the home scroller: fanart backdrop, summary, and Approuver / Refuser for managers on pending requests.
+ *  The parent owns data and actions. */
 @Component({
   selector: 'app-request-card',
   imports: [
@@ -30,14 +26,8 @@ import { clearPosterStamps } from '../../../shared/utils/view-transition';
     RequestStatusBadgeComponent,
     LucideTrash2,
   ],
-  // The host is the scroller flex item: fixed width, and a column flex so the
-  // inner card fills the row's stretched height (all cards same height).
-  // Compact on mobile, growing to full size on desktop/TV.
-  // The host is the single focusable unit (like a media card): it carries
-  // tabindex/role and the focus ring (via its data-home-focus attribute on the
-  // home page), while inner links/buttons sit at tabindex=-1 so keyboard and
-  // D-pad navigation move card-to-card instead of into the card. Activating the
-  // card opens the linked media.
+  // The host is the scroller's flex item and the single focusable unit (tabindex/role/focus ring); inner controls sit at tabindex=-1
+  // so D-pad moves card to card. Column flex makes the inner card fill the row height.
   host: {
     class: 'flex shrink-0 w-64 sm:w-72 lg:w-80 cursor-pointer rounded-box',
     tabindex: '0',
@@ -67,21 +57,15 @@ export class RequestCardComponent {
     () => this.request().media?.title ?? this.request().title,
   );
 
-  /** Activate the whole card (Enter / Space / click) → open the linked media,
-   *  mirroring a media card. Inner controls stop propagation so they still fire
-   *  their own action without also navigating. */
+  /** Activates the whole card (Enter / Space / click) to open the media; inner controls stop propagation. */
   protected onCardActivate(event?: Event): void {
     event?.preventDefault();
-    // This card has no poster to morph from, so drop whatever card was stamped
-    // last — otherwise the media page animates in from an unrelated card that
-    // happens to show the same title.
+    // No poster to morph from: drop the last stamped card so the media page doesn't animate from an unrelated one.
     clearPosterStamps();
     void this.router.navigate(this.mediaLink());
   }
 
-  /** Backdrop art: the request's own stored fanart, falling back to the
-   *  linked media's (both local `/api/images` paths). Null lets the poster
-   *  component fall back to the metadata lookup (pre-existing requests). */
+  /** Backdrop art: the request's stored fanart, else the linked media's (local `/api/images` paths); null falls back to the metadata lookup. */
   readonly fanartArt = computed(
     () => this.request().fanartUrl ?? this.request().media?.fanartUrl ?? null,
   );

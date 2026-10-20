@@ -11,19 +11,14 @@ const PHASE_LABEL_KEY: Record<ImportPhase, string> = {
   scan: 'import_progress.scanning',
 };
 
-/** Outermost loop first: several of these keys are live at once during a library
- *  import (enrichment of the first files runs while later folders are still being
- *  imported), and only one bar shows. OrphanImport wins because it counts the
- *  batch the user is waiting on; it retires and falls through to the enrich tail. */
+/** Outermost loop first, since several keys are live during an import and only one bar shows; OrphanImport wins as it counts the batch the user waits on. */
 const PHASES: { command: string; phase: ImportPhase }[] = [
   { command: 'OrphanImport', phase: 'import' },
   { command: 'PostImportEnrich', phase: 'enrich' },
   { command: 'OrphanScan', phase: 'scan' },
 ];
 
-/** Background library-import indicator: silent otherwise, so it costs nothing on
- *  every other page. Never focusable/interactive, so it can't enter the TV
- *  spatial-nav grid. */
+/** Background library-import indicator: silent otherwise and never focusable, so it can't enter the TV spatial-nav grid. */
 @Component({
   selector: 'app-import-progress-banner',
   imports: [TranslatePipe, ProgressBarComponent],

@@ -1,22 +1,8 @@
 import { Directive, ElementRef, HostListener, inject, input } from '@angular/core';
 import { SelectPickerService } from '../../core/services/select-picker.service';
 
-/**
- * Apposed on a native `<select>`. Intercepts the open gesture (mouse,
- * Enter, Space) on every form factor and routes through
- * SelectPickerService for a consistent styled popover. The native element
- * stays in DOM as the value source so existing `[(ngModel)]` / `(change)`
- * bindings are unaffected.
- *
- * Arrow keys are intentionally NOT captured here: the global
- * `TvSpatialNavService` already preventDefaults arrow events on a focused
- * `<select appTvSelect>` (blocking native option-cycling) and decides the
- * next focus target — tree-aware when the surrounding region is annotated,
- * rect-based fallback otherwise. Adding arrow handlers here would race
- * with that.
- *
- * Usage: `<select appTvSelect [(ngModel)]="x">…</select>`
- */
+/** On a native `<select>`: routes the open gesture through SelectPickerService, keeping the element as the value source for ngModel.
+ *  Arrow keys are NOT captured: `TvSpatialNavService` already handles them on `<select appTvSelect>`, and handlers here would race. */
 @Directive({
   selector: 'select[appTvSelect]',
   host: { class: 'cursor-pointer transition-colors hover:bg-base-content/10' },

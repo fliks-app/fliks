@@ -43,10 +43,7 @@ export function rungOf(s: QoeSessionRow): RungName {
 
 const LINKS = new Set(['quality_switch', 'recovery', 'reload']);
 
-/**
- * One chronological timeline grouped by session. Sessions of a playback follow each other, never overlap, and every
- * event carries its sessionId; the event that caused the next session becomes the transition between the two blocks.
- */
+/** One chronological timeline grouped by session: sessions never overlap and events carry a sessionId; the event that caused the next session becomes the transition. */
 export function buildTimeline(sessions: QoeSessionRow[], events: QoeEventRow[]): Timeline {
   const blocks: TimelineBlock[] = sessions.map((session, i) => ({ session, first: i === 0, events: [] }));
   if (!blocks.length) return { blocks, transitions: [] };

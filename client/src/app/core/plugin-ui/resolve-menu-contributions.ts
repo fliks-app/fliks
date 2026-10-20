@@ -17,17 +17,8 @@ export interface ResolvedMenuRow {
   children?: ResolvedMenuRow[];
 }
 
-/**
- * Turns a set of `UiContribution`s into the rows a menu can render.
- *
- * One routine for every surface that shows media actions: the card panel and
- * the detail header used to keep a copy each, which is how their two lists
- * drifted apart in the first place. A row is dropped — never rendered broken —
- * when its `when` fails, when a core alias's own gate fails, when a caller
- * guard says no, or when no handler resolves its actionId. That last one is
- * what lets a surface publish only the actions it can actually perform: the
- * rest fall away instead of being listed and doing nothing.
- */
+/** Turns `UiContribution`s into renderable menu rows, shared by every surface showing media actions (so lists can't drift).
+ *  A row is dropped, never rendered broken, when `when`, a core alias gate or a caller guard fails, or no handler resolves its actionId. */
 export function resolveMenuContributions(opts: {
   contributions: readonly UiContribution[];
   ctx: WhenContext;
@@ -44,9 +35,7 @@ export function resolveMenuContributions(opts: {
     (a, b) => a.weight - b.weight || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
   );
 
-  /** Every contribution at any depth. A core row moved into a submenu must still
-   *  be found by the alias check below, or a plugin could widen it by aliasing
-   *  an actionId whose gate the search no longer reaches. */
+  /** Every contribution at any depth, so the alias check still finds a core row moved into a submenu (a plugin could otherwise widen it). */
   const flatten = (list: readonly UiContribution[]): UiContribution[] =>
     list.flatMap((c) => [c, ...flatten(c.children ?? [])]);
   const everything = flatten(contributions);

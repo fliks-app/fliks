@@ -1,9 +1,7 @@
 import type { EngineQoeSample } from '../services/playback-engine/playback-engine';
 import { registerPlugin } from '@capacitor/core';
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
+// --- Types ---
 
 export interface NativeAudioTrack {
   id: string;
@@ -61,9 +59,7 @@ export type NativePlayerState =
   | 'ended'
   | 'error';
 
-// ---------------------------------------------------------------------------
-// Plugin interface
-// ---------------------------------------------------------------------------
+// --- Plugin interface ---
 
 export interface NativePlayerPlugin {
   // ── Lifecycle ──
@@ -105,11 +101,8 @@ export interface NativePlayerPlugin {
     artworkUrl?: string;
   }): Promise<void>;
 
-  /** Notification buttons: next shows only with `hasNext`; previous always shows
-   *  and restarts the item without `hasPrevious`; the heart shows once `liked`
-   *  is known; `seekButtons` swaps previous/next for ±10 s. Taps fire
-   *  `nativePlayerNext` / `Previous` / `Stop` / `ToggleLike`. iOS has no stop or
-   *  heart button and ignores `liked`. */
+  /** Notification buttons: `hasNext` shows next, `hasPrevious` gates previous's restart, `liked` shows the heart, `seekButtons` swaps prev/next for ±10 s.
+   *  Taps fire `nativePlayer*` events; iOS has no stop or heart button and ignores `liked`. */
   setQueueNav(options: {
     hasPrevious: boolean;
     hasNext: boolean;
@@ -145,15 +138,11 @@ export interface NativePlayerPlugin {
 
   // ── Display ──
 
-  /** Crop the video to fill the surface (`true`) or letterbox it (`false`).
-   *  The engines render outside the <video> element, so the CSS object-fit
-   *  binding the browser path uses can't reach them. */
+  /** Crops the video to fill the surface (`true`) or letterboxes it; engines render outside <video>, so CSS object-fit can't reach them. */
   setFillScreen(options: { fill: boolean }): Promise<void>;
 
-  /** Remove letterbox bars by showing only the given source-pixel rectangle.
-   *  `sourceWidth/Height` are the coded size the rectangle is expressed in.
-   *  An empty object clears the crop. Only builds reporting `cropsBlackBars`
-   *  in the VideoCapabilities plugin implement it. */
+  /** Removes letterbox bars by showing only the given source-pixel rectangle (`sourceWidth/Height` = coded size); empty clears.
+   *  Only builds reporting `cropsBlackBars` in VideoCapabilities implement it. */
   setCrop(options: NativePlayerCrop | Record<string, never>): Promise<void>;
 
   /** Silences audio inside the ranges (content seconds) without touching the user's volume.
@@ -178,9 +167,7 @@ export interface NativePlayerPlugin {
   setPlaybackRate(options: { rate: number }): Promise<void>;
 }
 
-// ---------------------------------------------------------------------------
-// Event types (dispatched as CustomEvent on window)
-// ---------------------------------------------------------------------------
+// --- Event types (dispatched as CustomEvent on window) ---
 
 /** window event: 'nativePlayerStateChanged' */
 export interface NativePlayerStateEvent {
@@ -206,9 +193,7 @@ export interface NativePlayerTracksEvent {
   subtitleTracks: NativeSubtitleTrack[];
 }
 
-// ---------------------------------------------------------------------------
-// Plugin registration
-// ---------------------------------------------------------------------------
+// --- Plugin registration ---
 
 export const NativePlayer =
   registerPlugin<NativePlayerPlugin>('NativePlayer');

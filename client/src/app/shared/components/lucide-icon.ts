@@ -18,12 +18,7 @@ import {
   LucideSwords,
 } from '@lucide/angular';
 
-/**
- * Renders a Lucide icon by name string. Supports a curated list of icons
- * commonly used for library customisation. Falls back to LucideLibrary.
- *
- * Usage: `<app-lucide-icon [name]="'film'" class="h-5 w-5" />`
- */
+/** Renders a Lucide icon by name from a curated list, falling back to LucideLibrary. */
 @Component({
   selector: 'app-lucide-icon',
   standalone: true,

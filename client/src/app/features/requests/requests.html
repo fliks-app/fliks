@@ -58,10 +58,7 @@
           </div>
 
           @if (mobileActionsAvailable(row) || (row.status === 'declined' && row.declinedReason?.trim())) {
-            <!-- Corner action cluster: primary buttons (sm-only, surfaced on
-                 landscape phones / small tablets) + kebab for the secondary
-                 ones. Hidden on lg+ where the dedicated sidebar column owns
-                 every action inline. -->
+            <!-- Corner action cluster: primary buttons (sm-only) + kebab for the secondary ones; hidden on lg+ where the sidebar column owns every action. -->
             <div class="absolute top-2 right-2 z-20 lg:hidden flex items-center gap-1">
               @if (row.status === 'pending' && auth.hasPermission('requests.manage')) {
                 <button

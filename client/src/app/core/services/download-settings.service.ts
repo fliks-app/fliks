@@ -8,12 +8,7 @@ const STORAGE_KEY = 'downloads.maxConcurrent';
 export const MAX_CONCURRENT_CHOICES = [1, 2, 3, 4, 5] as const;
 const DEFAULT_MAX_CONCURRENT = 3;
 
-/**
- * Per-device download preferences.
- *
- * Not scoped to an account: how many transfers this phone should run at once
- * is a property of the phone and its connection, not of who is signed in.
- */
+/** Per-device download preferences, not scoped to an account: concurrency belongs to the phone and its connection. */
 @Injectable({ providedIn: 'root' })
 export class DownloadSettingsService {
   private readonly notif = inject(DownloadNotificationService);

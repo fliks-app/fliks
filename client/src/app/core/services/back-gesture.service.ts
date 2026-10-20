@@ -21,30 +21,15 @@ interface BackGesturePlugin {
 
 const BackGesture = registerPlugin<BackGesturePlugin>('BackGesture');
 
-/** Routes the gesture stays out of. The player owns the whole screen and has
- *  its own back; the settings, account and admin shells navigate between their
- *  own panels, where sliding the entire screen off reads as leaving the app. */
+/** Routes the gesture stays out of: the player has its own back, and settings/account/admin shells navigate between their own panels. */
 const UNSWIPEABLE = ['/watch', '/admin', '/account', '/app-settings'];
 
 /** Above this a frame belongs to the rebuild, which lands them 60-80 ms apart
  *  where a page at rest paces at 8-17 ms. */
 const SMOOTH_FRAME_MS = 24;
 
-/**
- * iOS left-edge swipe-back. The recognizer and the slide animation live in
- * BackGesturePlugin.swift; this side decides when the gesture is armed and
- * runs the app's own back on commit.
- *
- * Arming is a signal effect rather than a check at gesture time: the native
- * recognizer has to be off *before* the touch, or it swallows the pan that
- * belongs to a carousel or an open sheet.
- *
- * It also feeds the native side a snapshot of every page left behind, so the
- * swipe can slide the current page off the one it is returning to. The stack
- * is kept aligned by mirroring NavbarService's own depth: replaced URLs,
- * query-only changes and the player's back all decide differently there, and
- * re-deriving those rules here would drift.
- */
+/** iOS left-edge swipe-back; the recognizer lives in BackGesturePlugin.swift, this side arms it and runs the app's back on commit.
+ *  Armed by an effect so the recognizer is off *before* the touch; its snapshot stack mirrors NavbarService's depth rather than re-deriving it. */
 @Injectable({ providedIn: 'root' })
 export class BackGestureService {
   private readonly router = inject(Router);
@@ -59,9 +44,7 @@ export class BackGestureService {
   /** Back-stack depth at the last NavigationEnd. goBack() pops before it
    *  navigates, so a start-of-navigation reading already shows the pop. */
   private lastDepth = 0;
-  /** Resolves when the pending capture has been stored. settle() consumes the
-   *  candidate, and a fast navigation reaches its end before the snapshot
-   *  comes back. */
+  /** Resolves when the pending capture is stored; settle() consumes the candidate before a fast navigation's snapshot returns. */
   private capturing: Promise<unknown> = Promise.resolve();
 
   private readonly armEffect = effect(() => {
@@ -112,16 +95,7 @@ export class BackGestureService {
     });
   }
 
-  /**
-   * Tells the native side when the page it navigated to has stopped rebuilding.
-   *
-   * A cached page comes back with its rows re-rendered, and on a slower device
-   * that rebuild runs for a few hundred milliseconds, painting half-filled
-   * frames along the way. Frame pacing is the signal for it: while the rebuild
-   * runs, frames land 60-80 ms apart, and two in a row at screen rate mean it
-   * is over. The snapshot held until then is the destination's own, so the
-   * wait shows nothing the viewer would not see anyway.
-   */
+  /** Tells the native side when the navigated-to page has stopped rebuilding: frames land 60-80 ms apart during a rebuild, two at screen rate mean it is over. */
   private reportSettled(): void {
     const start = performance.now();
     let previous = start;
@@ -144,9 +118,7 @@ export class BackGestureService {
     return url.split(/[?#]/)[0];
   }
 
-  /** Back doesn't always navigate — it may have closed a layer instead — so the
-   *  flag is released on a timer too, or one such gesture would disable every
-   *  later view transition. */
+  /** Back may close a layer instead of navigating, so the flag is also released on a timer to avoid disabling later view transitions. */
   private releaseTransitionsOnArrival(): void {
     const subscription = this.router.events
       .pipe(

@@ -19,12 +19,7 @@ import { AutoDownloadService } from '../../../core/services/auto-download.servic
 import { ModalHeaderComponent } from '../modal-header';
 import { ModalFooterComponent } from '../modal-footer';
 
-/**
- * Small dialog to add a media to an existing playlist or create a new one on
- * the fly. Mounted once at the layout level and opened from anywhere (media
- * cards, the media-detail header) through {@link AddToPlaylistService}. Only
- * playlists the user can add to are listed (viewers are filtered out).
- */
+/** Dialog to add media to a playlist or create one, mounted once in the layout and opened via {@link AddToPlaylistService}; viewer-only playlists are filtered out. */
 @Component({
   selector: 'app-add-to-playlist-modal',
   imports: [

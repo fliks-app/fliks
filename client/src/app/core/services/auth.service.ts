@@ -180,27 +180,19 @@ export class AuthService {
     return this._refreshToken;
   }
 
-  /** Read-only stream token signal. Cached value — call
-   *  ensureStreamToken() before starting a playback session to make
-   *  sure it isn't near expiry. */
+  /** Cached value; call ensureStreamToken() before starting playback to avoid a near-expiry token. */
   readonly streamToken = this._streamToken.asReadonly();
 
-  /** Best token to embed in a URL query param for a request that can't carry
-   *  a header (HLS manifest/segment URLs, a native `<img>` fetched cross-origin):
-   *  the long-lived stream token when present, else the regular access token. */
+  /** For URL query params where no header fits (HLS URLs, cross-origin `<img>`): the stream token if present, else the access token. */
   get playbackToken(): string | null {
     return this._streamToken() ?? this._accessToken;
   }
 
   readonly user = this._user.asReadonly();
   readonly isAuthenticated = computed(() => !!this._user());
-  /** Incremented whenever the signed-in session changes (login, resume, switch,
-   *  logout). Services holding session-bound state — the SSE stream, download
-   *  recovery, the response cache — watch it to rebind. */
+  /** Bumped on every session change (login, resume, switch, logout); session-bound services watch it to rebind. */
   readonly sessionEpoch = this._sessionEpoch.asReadonly();
-  /** True when the user opted out of the social/sharing layer — social UI
-   *  surfaces (follow, recommend, playlist collaborators/save, people search)
-   *  are hidden and the backend rejects the actions. */
+  /** Opted out of the social layer: social UI is hidden and the backend rejects the actions. */
   readonly sharingDisabled = computed(() => !!this._user()?.shareDisabled);
 
   /** Accounts that can be signed into on the active server without a password,
@@ -250,9 +242,7 @@ export class AuthService {
     return u?.isAdmin || u?.permissions?.includes('users.manage') || false;
   });
 
-  /**
-   * Juste avant le chargement Cast : token dédié (court) + base URL côté serveur.
-   */
+  /** Token dédié (court) + base URL serveur, juste avant le chargement Cast. */
   async getCastInfo(): Promise<{ token: string; streamBaseUrl: string }> {
     return firstValueFrom(
       this.http.post<{ token: string; streamBaseUrl: string }>(
@@ -275,9 +265,7 @@ export class AuthService {
       refreshToken: res.refreshToken ?? '',
       refreshExpiresAt: secondsToMs(res.refreshTokenExpiresAt),
     });
-    // Fire-and-forget — bumps the active server in the known-servers list
-    // so it surfaces first in /setup next time. Awaiting here could block
-    // the login spinner if the Preferences write stalled.
+    // Fire-and-forget: awaiting could block the login spinner if the Preferences write stalls.
     const activeUrl = this.serverConfig.serverUrl();
     if (activeUrl) {
       void this.serverConfig.addOrTouchKnownServer(activeUrl, {
@@ -334,10 +322,7 @@ export class AuthService {
     );
   }
 
-  /**
-   * Adopt a token issued through the pairing flow. Mirrors the post-success
-   * branch of `login()` so the storage / `/auth/me` hydrate path is identical.
-   */
+  /** Mirrors the post-success branch of `login()` so storage and `/auth/me` hydration are identical. */
   async loginWithToken(
     accessToken: string,
     refreshToken?: string,
@@ -362,17 +347,10 @@ export class AuthService {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Switching account / server without logging out
-  // ---------------------------------------------------------------------------
+  // ---- Switching account / server without logging out ----
 
-  /**
-   * Sign back into a stored session — no password, no quick-connect. The stored
-   * tokens are adopted as-is and the interceptor rotates them lazily on a 401:
-   * a rotation whose new pair never reaches storage reads as theft on the
-   * backend, which revokes every session of the account. Web rotates up-front
-   * anyway — its cookie still belongs to the account being left.
-   */
+  /** Stored tokens are adopted as-is and rotated lazily on 401: a rotation whose new pair never reaches storage reads as theft and revokes every session.
+   * Web rotates up-front since its cookie still belongs to the account being left. */
   async resumeSession(userId: number): Promise<ResumeOutcome> {
     const serverUrl = this.serverConfig.serverUrl();
     const stored = this.sessions.get(serverUrl, userId);
@@ -437,11 +415,7 @@ export class AuthService {
     await this.serverCache.clearAll();
   }
 
-  /**
-   * Point the app at another server, keeping every stored session, and resume
-   * that server's newest one. The app restarts: URLs resolved against the
-   * previous origin live on in DOM bindings, the player, cast and SSE.
-   */
+  /** The app restarts: URLs resolved against the previous origin live on in DOM bindings, the player, cast and SSE. */
   async switchToServer(url: string): Promise<void> {
     await this.serverConfig.save(url);
     const canonical = this.serverConfig.serverUrl();
@@ -457,22 +431,8 @@ export class AuthService {
     restartApp();
   }
 
-  /**
-   * Refresh the session by rotating the stored refresh token. Resolves `true`
-   * when usable credentials are in place afterwards (a fresh access token was
-   * obtained, or another tab had already rotated and we adopted it), `false`
-   * when refresh isn't possible — no stored token, or the server rejected ours.
-   *
-   * The boolean is a "retry the original request now?" signal: the fresh access
-   * token itself lands on {@link accessToken} / the session cookie as a side
-   * effect, which is what callers attach.
-   *
-   * Single-flight: parallel callers (e.g. 10 requests all 401-ing at once)
-   * share one in-flight promise so the server only rotates once. A server
-   * rejection is terminal — the session is dropped and the user is sent back
-   * to /select-user. Network/5xx failures keep the tokens so a flaky
-   * connection doesn't log the user out.
-   */
+  /** Resolves true when usable credentials are in place (fresh or adopted from another tab): a "retry the request now" signal, the token lands on {@link accessToken}.
+   * Single-flight; a server rejection drops the session, network/5xx keeps the tokens. */
   async refreshAccessToken(): Promise<boolean> {
     if (this._refreshInFlight) return this._refreshInFlight;
     if (!this._refreshToken) return false;
@@ -482,16 +442,8 @@ export class AuthService {
     return this._refreshInFlight;
   }
 
-  /**
-   * Cross-tab refresh coordination. Rotation invalidates the presented token,
-   * so two browser tabs racing to refresh would have the lagging one replay an
-   * already-rotated token — which the server treats as theft and revokes EVERY
-   * session. We serialise refreshes across tabs with the Web Locks API; the tab
-   * that wins the lock rotates, the others then see the token already changed
-   * and adopt it instead of replaying. Native/TV run a single webview, so they
-   * just refresh in-process (the {@link _refreshInFlight} single-flight covers
-   * the parallel-401 burst).
-   */
+  /** Rotation invalidates the presented token, so racing tabs would replay a rotated one and the server revokes every session; Web Locks serialise tabs.
+   * Native/TV run one webview and rely on {@link _refreshInFlight}. */
   private async runRefresh(): Promise<boolean> {
     const tokenAtStart = this._refreshToken;
     const lockMgr =
@@ -504,10 +456,7 @@ export class AuthService {
     return this.rotateOrAdopt(tokenAtStart);
   }
 
-  /** Re-read the freshest stored token; if another tab rotated it while we
-   *  waited for the lock, adopt it and skip the network call (that tab's
-   *  /refresh already set a fresh access cookie) so we don't replay a revoked
-   *  token. Otherwise perform the rotation ourselves. */
+  /** If another tab already rotated while we waited for the lock, adopt its token instead of replaying a revoked one. */
   private async rotateOrAdopt(tokenAtStart: string | null): Promise<boolean> {
     const stored = await this.readStoredRefreshToken();
     if (this.cookieAuth && stored && stored !== tokenAtStart) {
@@ -542,18 +491,14 @@ export class AuthService {
           refreshExpiresAt: secondsToMs(res.refreshTokenExpiresAt),
         });
       }
-      // Another session took over meanwhile. The pair is stored for the account
-      // it belongs to; installing it here would authenticate this screen as
-      // that account.
+      // Another session took over: installing the pair here would authenticate this screen as that account.
       if (untracked(this._sessionEpoch) !== epoch) return false;
       this._accessToken = res.accessToken;
       this._refreshToken = res.refreshToken;
       return true;
     } catch (err) {
       const status = err instanceof HttpErrorResponse ? err.status : 0;
-      // 4xx = server-side rejection (expired / revoked / theft-detection).
-      // Anything else (0 = offline, 5xx = hiccup) is transient: keep the tokens
-      // so a flaky connection doesn't log the user out.
+      // 4xx is a server rejection; 0 or 5xx is transient, so keep the tokens.
       if (status < 400 || status >= 500) return false;
       if (untracked(this._sessionEpoch) !== epoch) {
         // The refused credentials belong to a session we have already left.
@@ -572,15 +517,8 @@ export class AuthService {
     }
   }
 
-  /**
-   * Ensure a fresh stream token is cached. Fetched on first call, then
-   * re-used as long as it has > 30 min of life left — playback URLs are
-   * baked at `engine.load()` time and can't be updated mid-stream, so
-   * we want to start every session with a fresh token whose TTL safely
-   * exceeds the longest plausible film.
-   *
-   * Single-flight: concurrent callers share the same fetch.
-   */
+  /** Reused while more than 30 min of life remain: playback URLs bake the token at `engine.load()`, so it must outlast the longest film.
+   * Single-flight. */
   async ensureStreamToken(): Promise<string | null> {
     const minRemaining = 30 * 60 * 1000;
     if (
@@ -627,18 +565,11 @@ export class AuthService {
       this._user.set(user);
       await this.rememberUser(user);
     } catch {
-      // Offline or unreachable: keep the stored profile so the app opens on the
-      // last known account (downloads stay reachable). Dead credentials are
-      // handled by the interceptor, which drops the session when rotation fails.
+      // Offline: keep the stored profile so downloads stay reachable; dead credentials are dropped by the interceptor.
     }
   }
 
-  /**
-   * Force a re-fetch of /auth/me even when a user is already cached. Used
-   * after server-side state changes that affect fields the frontend reacts
-   * to — currently the requirePasswordChange flag, cleared by the backend
-   * when the user changes their own password.
-   */
+  /** Re-fetches /auth/me even when cached, e.g. after the backend clears requirePasswordChange. */
   async refreshUser(): Promise<void> {
     try {
       const raw = await firstValueFrom(this.http.get<LiveUser>('/api/auth/me'));
@@ -685,9 +616,7 @@ export class AuthService {
     );
   }
 
-  /** Validate the adopted session. A rejection that survived the interceptor's
-   *  rotation means the credentials are dead; network errors are ignored so the
-   *  snapshot keeps the app usable offline. */
+  /** A rejection that survived the interceptor's rotation means dead credentials; network errors are ignored to stay usable offline. */
   private validateSessionInBackground(): void {
     this.http.get<LiveUser>('/api/auth/me').subscribe({
       next: (raw) => {
@@ -718,9 +647,7 @@ export class AuthService {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Session state
-  // ---------------------------------------------------------------------------
+  // ---- Session state ----
 
   /** Install a session as the signed-in one: memory, storage, active pointer. */
   private async startSession(user: User, tokens: SessionTokens): Promise<void> {

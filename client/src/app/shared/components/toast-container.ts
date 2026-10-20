@@ -52,9 +52,7 @@ export class ToastContainerComponent {
   private readonly popover = viewChild<ElementRef<HTMLElement>>('popover');
 
   constructor() {
-    // Top-layer via the Popover API so toasts sit above showModal() <dialog>s,
-    // which no z-index can beat; re-promote on each change. Absent API (older TV
-    // webviews) falls back to the z-index div.
+    // Top layer via the Popover API so toasts sit above showModal() dialogs (no z-index can); falls back to the z-index div on older TV webviews.
     effect(() => {
       const hasToasts = this.toastService.toasts().length > 0;
       const el = this.popover()?.nativeElement;

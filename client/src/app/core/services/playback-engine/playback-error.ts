@@ -1,15 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 
-/**
- * Structured playback error surfaced on the player's error card.
- *
- * The engine `error` event carries raw fields (a Shaka `shaka.util.Error`,
- * an HTMLMediaElement `MediaError`, or an app/session error); the state
- * service composes them into this shape so the overlay can show a
- * translated line PLUS a copyable technical block (code, category,
- * severity, the failing variant, and any Shaka `data[]` payload — which is
- * where Shaka puts the failing segment URL, the nested MediaError, etc.).
- */
+/** Structured error for the player's error card: a translated line plus a copyable technical block (code, category, severity, variant, Shaka `data[]`). */
 export interface PlaybackError {
   /** Translated, human-facing one-liner shown under the title. */
   userMessage: string;
@@ -44,9 +35,7 @@ const SHAKA_CATEGORY_NAMES: Record<number, string> = {
   10: 'ADS',
 };
 
-/** shaka.util.Error.Code — the subset that shows up on playback failures.
- *  Unknown codes fall back to the bare number, so this never needs to be
- *  exhaustive to stay useful. */
+/** shaka.util.Error.Code subset seen on playback failures; unknown codes fall back to the bare number. */
 const SHAKA_CODE_NAMES: Record<number, string> = {
   1001: 'BAD_HTTP_STATUS',
   1002: 'HTTP_ERROR',
@@ -74,12 +63,7 @@ const MEDIA_ERROR_NAMES: Record<number, string> = {
   4: 'MEDIA_ERR_SRC_NOT_SUPPORTED',
 };
 
-/** Classify a caught init/reload error into the `{source, code}` pair the
- *  error card keys off. An `HttpErrorResponse` (a failed playback-info /
- *  session request) reports its transport status; an object carrying a
- *  Shaka `category` is a Shaka error; anything else is an engine (mpv /
- *  native) failure. One place for the guess, so an HTTP transport fault is
- *  never mislabelled as an engine failure. */
+/** Classifies into `{source, code}`: HttpErrorResponse reports its transport status, a Shaka `category` is Shaka, else an engine failure. */
 export function classifyPlaybackError(
   e: unknown,
 ): { source: PlaybackError['source']; code?: number } {
@@ -97,9 +81,7 @@ export function userMessageKeyFor(err: {
   category?: number;
   dolbyVision?: boolean;
 }): string {
-  // A fatal failure while presenting Dolby Vision untouched is almost always the
-  // DV bitstream the device couldn't decode — show an explicit, actionable line.
-  // Network / abort blips keep their own message.
+  // A fatal failure presenting untouched Dolby Vision is almost always an undecodable DV bitstream; network/abort blips keep their own message.
   if (err.dolbyVision && !isNetworkOrAbort(err)) {
     return 'player.dolby_vision_decode_failed';
   }
@@ -126,9 +108,7 @@ export function userMessageKeyFor(err: {
   return 'player.playback_error';
 }
 
-/** Transient transport failures (network / user abort) — distinct from a
- *  decode/format failure, so a Dolby Vision title doesn't blame DV for a
- *  dropped connection. */
+/** Transient transport failures, so a Dolby Vision title doesn't blame DV for a dropped connection. */
 export function isNetworkOrAbort(err: {
   source: PlaybackError['source'];
   code?: number;
@@ -141,10 +121,7 @@ export function isNetworkOrAbort(err: {
   return false;
 }
 
-/** A stream-level decode/format failure that a fresh session cannot fix —
- *  the player must show it terminally instead of looping lost-session
- *  recovery. Kept conservative: network / session / timeout / quota stay
- *  recoverable. */
+/** Decode/format failure a fresh session can't fix, shown terminally; conservative: network/session/timeout/quota stay recoverable. */
 export function isUndecodableError(err: {
   source?: PlaybackError['source'];
   code?: number;
@@ -170,17 +147,12 @@ export function isUndecodableError(err: {
   return msg.includes('PLAYER_ERROR_NOT_SUPPORTED_FILE') || msg.startsWith('unrecognized file format');
 }
 
-/** A stable one-line signature so repeated identical failures can be
- *  detected (used to avoid resetting the recovery budget on a reload that
- *  reproduces the exact same error). */
+/** Stable signature to detect repeated identical failures, so a reload reproducing the same error doesn't reset the recovery budget. */
 export function errorSignature(err: PlaybackError): string {
   return `${err.source}:${err.category ?? ''}:${err.code ?? ''}`;
 }
 
-/** Multi-line technical dump for the error card's details block and the
- *  "copy diagnostics" button. Field labels are terse English tokens on
- *  purpose — this is a diagnostic artifact meant to be pasted into a bug
- *  report, not translated UI copy. */
+/** Terse English tokens on purpose: a diagnostic meant to be pasted into bug reports, not translated UI. */
 export function formatErrorDiagnostics(
   err: PlaybackError,
   ctx: {

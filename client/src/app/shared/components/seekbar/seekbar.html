@@ -33,9 +33,7 @@
                 [style.background-position]="thumbnailBgPositionScaled()"
                 [style.background-size]="spriteBgSizeScaled()"
               ></div>
-              <!-- Time and chapter both ride the image's own gradient. Given a
-                   row of their own they would expose the panel's background
-                   below the thumbnail as a grey band. -->
+              <!-- Time and chapter ride the image's gradient; a row of their own would show the panel background as a grey band. -->
               <div class="absolute bottom-0 inset-x-0 text-center px-2 pb-0.5 pt-3 bg-gradient-to-t from-black/85 to-transparent">
                 <span class="text-white text-base tabular-nums font-medium drop-shadow">
                   {{ formatTime(previewTime()) }}
@@ -66,9 +64,7 @@
             }
           }
         </div>
-        <!-- Downward-pointing arrow: CSS triangle, sibling of the
-             rounded box so the box's overflow-hidden doesn't clip it.
-             Sits flush against the bottom edge, centered horizontally. -->
+        <!-- Downward arrow: a CSS triangle outside the rounded box so its overflow-hidden doesn't clip it. -->
         <div
           class="absolute left-1/2 top-full w-0 h-0 border-x-[6px] border-x-transparent border-t-[6px] border-t-neutral/95"
           style="transform: translateX(-50%)"
@@ -101,11 +97,8 @@
         [style.width.%]="b.width"
       ></div>
     }
-    <!-- Progress. `rounded-l-full` matches the track's left cap; right side
-         stays square so the progress ends on a crisp vertical edge instead of
-         a curved bulge. Shown whenever the media is loaded so the fill never
-         drops out mid-seek (the engine re-buffers on every seek); the sweep
-         below only takes over on the cold start, before there's a position. -->
+    <!-- Progress: `rounded-l-full` only, so it ends on a crisp edge. Shown whenever media is loaded so the fill survives re-buffering seeks;
+         the sweep below takes over only on cold start. -->
     @if (showPositionFill()) {
       <div
         class="absolute inset-y-0 left-0 rounded-l-full"
@@ -128,9 +121,7 @@
         [style.background-image]="strip"
       ></div>
     }
-    <!-- Out of reach, dimmed over the fills rather than under them: the played
-         side of a live bar covers the whole retained window otherwise. What is
-         left bright between the two is exactly where a seek can land. -->
+    <!-- Out of reach: dimmed over the fills, else a live bar's played side covers the whole retained window; the bright gap is where a seek can land. -->
     @if (unreachablePercent()) {
       <div
         class="absolute inset-y-0 left-0 bg-black/55 rounded-l-full pointer-events-none"
@@ -143,11 +134,7 @@
         [style.width.%]="unairedPercent()"
       ></div>
     }
-    <!-- Indeterminate loading sweep — a soft highlight that travels across the
-         track whenever the engine is buffering, painted over the bars (later in
-         the DOM). It reads only on the darker, unfilled track to the right of
-         the playhead: white-on-white over the solid fill leaves no visible
-         animation there, so the fill itself stays static. Below the ticks. -->
+    <!-- Indeterminate loading sweep over the bars; it reads only on the unfilled track (white on the solid fill is invisible), so the fill stays static. -->
     @if (loading()) {
       <div [class]="loadingSweepClass()"></div>
     }

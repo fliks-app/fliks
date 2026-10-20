@@ -1,9 +1,4 @@
-/**
- * Format an ISO/Date timestamp as a localized relative-time string ("il y a
- * 5 min", "in 2 days"). Wraps Intl.RelativeTimeFormat so all sites that
- * previously hand-rolled the unit ladder (admin user list, server history,
- * pending requests, user stats) share one implementation.
- */
+/** Format an ISO/Date timestamp as a localized relative-time string ("il y a 5 min") via Intl.RelativeTimeFormat. */
 export function formatRelativeTime(value: string | Date | null | undefined, locale = 'fr'): string {
   if (!value) return '';
   const ts = typeof value === 'string' ? new Date(value).getTime() : value.getTime();

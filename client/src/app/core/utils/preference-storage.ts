@@ -1,12 +1,8 @@
 import { Preferences } from '@capacitor/preferences';
 import { IS_STANDALONE_BUNDLE } from './standalone-bundle';
 
-/**
- * Key/value persistence for the state that must survive an app restart (server
- * URL, sessions). Capacitor `Preferences` on standalone bundles —
- * SharedPreferences / UserDefaults on mobile, its localStorage shim on TV and
- * desktop — with plain localStorage everywhere else and as the fallback.
- */
+/** Key/value persistence for state that must survive a restart (server URL, sessions): Capacitor `Preferences` on standalone bundles,
+ *  plain localStorage elsewhere and as the fallback. */
 export async function readPreference(key: string): Promise<string | null> {
   if (IS_STANDALONE_BUNDLE) {
     try {

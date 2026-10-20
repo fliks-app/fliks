@@ -10,10 +10,7 @@ import { MetadataService } from '../../core/services/api/metadata.service';
 import { MediaType } from '../../core/enums/media-type.enum';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 
-/** Per-process cache for the metadata detail fetch — multiple instances of
- *  `app-request-poster` on the same row (poster chip + mobile backdrop)
- *  share one HTTP round-trip. Holds the in-flight promise so concurrent
- *  ngOnInit calls don't race. */
+/** Per-process metadata detail cache so `app-request-poster` instances on one row share one round-trip; holds the in-flight promise to avoid races. */
 const detailsCache = new Map<
   string,
   Promise<{ posterUrl: string | null; fanartUrl: string | null }>
@@ -31,14 +28,9 @@ export class RequestPosterComponent implements OnInit {
   readonly tmdbId = input.required<number>();
   readonly mediaType = input.required<MediaType>();
   readonly titleText = input<string>('');
-  /** `poster` (default) shows the title's portrait poster with a placeholder
-   *  fallback when no art is available; `backdrop` shows the landscape fanart
-   *  with no fallback — meant to sit behind a gradient and stay silent when
-   *  there's nothing to render. */
+  /** `poster` shows the portrait with a placeholder fallback; `backdrop` shows landscape fanart with no fallback, silent when empty. */
   readonly mode = input<'poster' | 'backdrop'>('poster');
-  /** Pre-resolved art (the request row's local `/api/images` paths). When the
-   *  current mode's URL is provided, the component renders it directly and
-   *  skips the metadata lookup entirely. */
+  /** Pre-resolved local art: when the current mode's URL is given it renders directly and skips the metadata lookup. */
   readonly poster = input<string | null>(null);
   readonly fanart = input<string | null>(null);
 

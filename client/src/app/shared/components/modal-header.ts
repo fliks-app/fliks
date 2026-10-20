@@ -1,17 +1,8 @@
 import { Component, booleanAttribute, input, output } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
 
-/**
- * Standard dialog header: title on the left, close button on the right, ruled
- * off from the body. The button submits
- * the enclosing native <dialog>, so no handler is needed. Pass a plain `title`,
- * or project a custom title area (icon, subtitle). A modal shown by CSS rather
- * than showModal() has no dialog to submit to and must close on `(closed)`.
- *
- * The default variant bleeds out of `.modal-box`'s 1.5rem padding so the rule
- * spans the full width; `flush` is for a box that already sets `p-0` and lays
- * its header, body and footer out as a flex column.
- */
+/** Standard dialog header: the close button submits the enclosing native <dialog>; a CSS-shown modal (no showModal()) must close on `(closed)`.
+ *  The default variant bleeds out of `.modal-box` padding; `flush` is for a `p-0` box laid out as a flex column. */
 @Component({
   selector: 'app-modal-header',
   imports: [TranslatePipe],

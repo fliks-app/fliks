@@ -13,12 +13,8 @@ export const ACTIVE_SESSION_STORAGE_KEY = 'fliks_active_session';
  *  purpose: each one is a long-lived credential on a possibly shared device. */
 export const MAX_SESSIONS = 6;
 
-/**
- * Credentials of one account on one server, kept so the user can leave it and
- * come back without re-authenticating. `user` is the last known profile: it
- * drives the picker and the offline boot, so a session is displayable before
- * any request succeeds.
- */
+/** Credentials of one account on one server, kept so the user can return without re-authenticating; `user` (last known profile)
+ *  makes a session displayable before any request succeeds. */
 export interface StoredSession {
   serverUrl: string;
   user: User;
@@ -99,12 +95,8 @@ function parseSessions(raw: string | null): StoredSession[] {
   }
 }
 
-/**
- * Index of the accounts this device can sign into without a password, keyed by
- * (server, user). Persistence only — rotating and validating tokens is
- * {@link AuthService}'s job. A leaf: it injects nothing, and every lookup takes
- * the server URL as an argument.
- */
+/** Index of the accounts this device can sign into without a password, keyed by (server, user); persistence only (token handling is {@link AuthService}'s).
+ *  A leaf: injects nothing, lookups take the server URL. */
 @Injectable({ providedIn: 'root' })
 export class SessionStoreService {
   private readonly _sessions = signal<StoredSession[]>([]);

@@ -2,9 +2,7 @@ import { Injectable, effect, inject, signal, untracked } from '@angular/core';
 import { AuthService } from './auth.service';
 import { LiveTvApiService } from './api/livetv-api.service';
 
-/** Whether Live TV has anything to show the signed-in user. Every nav surface
- *  reads it through the `liveTv` when-predicate, so the entry appears nowhere
- *  until a lineup exists. */
+/** Whether Live TV has anything to show; read by every nav surface via the `liveTv` when-predicate, so the entry hides until a lineup exists. */
 @Injectable({ providedIn: 'root' })
 export class LiveTvAvailabilityService {
   private readonly api = inject(LiveTvApiService);

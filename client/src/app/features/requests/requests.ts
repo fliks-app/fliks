@@ -190,9 +190,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
     }
   }
 
-  /** Force-refetch the currently-loaded rows so backend status transitions (a
-   *  download finishing → downloaded) surface without a manual reload, while
-   *  preserving the user's loaded page depth. */
+  /** Force-refetches the loaded rows so backend status transitions surface, preserving the loaded page depth. */
   private async refreshStatuses(): Promise<void> {
     const status = this.statusFilter();
     const kind = this.kindFilter();
@@ -214,17 +212,12 @@ export class RequestsComponent implements OnInit, OnDestroy {
     if (row.status !== 'pending') return false;
     const u = this.auth.user();
     if (!u) return false;
-    // Prefer `row.user.id` (always populated via leftJoinAndSelect) over the
-    // `@RelationId` virtual `row.userId` which can be missing depending on
-    // how TypeORM serializes the entity.
+    // `row.user.id` is always populated by the join; the `@RelationId` `row.userId` can be missing depending on serialization.
     const ownerId = row.user?.id ?? row.userId;
     return ownerId === u.id;
   }
 
-  /** Show Edit button when: caller is a manager OR owns this pending request.
-   *  Same condition as `canCancel` — a user who can cancel can also tweak
-   *  quality / language profile before approval. Deletion requests carry no
-   *  profiles, so there is nothing to edit. */
+  /** Manager or owner of the pending request (same as `canCancel`); deletion requests carry no profiles, so nothing to edit. */
   canEdit(row: FliksRequestRow): boolean {
     if (row.kind === 'delete') return false;
     if (this.auth.hasPermission('requests.manage')) return true;
@@ -339,9 +332,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
   }
 
   mediaLink(row: FliksRequestRow): (string | number)[] {
-    // `row.media` is resolved by the backend via (tmdbId, type) so it surfaces
-    // even when the request's FK `mediaId` is still null (pending request on a
-    // title another user already brought in, or partially-imported series).
+    // `row.media` is resolved by (tmdbId, type), so it exists even when the request's `mediaId` FK is still null.
     const libraryId = row.media?.id;
     if (libraryId) {
       return row.mediaType === 'movie'

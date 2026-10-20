@@ -18,11 +18,7 @@ async function getFs() {
   return _fs;
 }
 
-/** Lazy-loaded Shaka Player. Eager-importing it pulls ~750 KB into the
- *  initial bundle even though the offline-download path is only reached
- *  from the downloads page (and never on native, where ExoPlayer /
- *  AVPlayer take over). Loaded on first call to `shakaDownload` /
- *  `shakaRemove`. */
+/** Lazy-loaded Shaka: eager import adds ~750 KB to the initial bundle for a path only the downloads page uses (never native). */
 let _shaka: typeof import('shaka-player').default | null = null;
 async function getShaka() {
   if (!_shaka) _shaka = (await import('shaka-player')).default;
@@ -64,17 +60,8 @@ export class OfflineStorageService {
     return offlineUri ?? null;
   }
 
-  /**
-   * Resolve the playable offline source for a native download.
-   *
-   * The two native platforms store offline HLS very differently:
-   *   - iOS (AVAssetDownloadTask) writes a local `.movpkg` bundle; the player
-   *     loads that file directly. Its path is resolved fresh from the native
-   *     plugin so it survives sandbox container-path changes across app updates.
-   *   - Android (ExoPlayer) keeps segments in SimpleCache and replays the
-   *     original remote HLS URL through a CacheDataSource, so we hand back the
-   *     `hlsUrl` stored on the DownloadTask.
-   */
+  /** Resolves the playable offline source: iOS loads a local `.movpkg` whose path is resolved fresh (survives container-path changes),
+   * Android replays the remote HLS URL stored on the DownloadTask through ExoPlayer's cache. */
   private async getNativeOfflineUrl(key: string): Promise<string | null> {
     try {
       const mfid = Number(key.replace('download-', ''));
@@ -119,10 +106,7 @@ export class OfflineStorageService {
     } catch { /* ignore */ }
   }
 
-  /**
-   * Use Shaka's built-in offline storage to download an HLS stream into
-   * IndexedDB. Returns the `offline:` URI for playback, or null on failure.
-   */
+  /** Downloads an HLS stream into IndexedDB via Shaka offline storage; returns the `offline:` URI, or null on failure. */
   async shakaStore(
     hlsUrl: string,
     mediaFileId: number,
@@ -156,9 +140,7 @@ export class OfflineStorageService {
         progressCallback: (_content: any, progress: number) => {
           onProgress?.(progress);
         },
-        // Default Shaka stores a single audio track. Keep every audio
-        // rendition + the chosen video variant so offline playback exposes
-        // all languages in the track picker.
+        // Shaka defaults to one audio track; keep every audio rendition plus the chosen video variant for the track picker.
         trackSelectionCallback: (tracks: any[]) => {
           const variants = tracks.filter((t) => t.type === 'variant');
           if (!variants.length) return tracks;
@@ -213,13 +195,7 @@ export class OfflineStorageService {
     this.removeShakaOfflineUri(mediaFileId);
   }
 
-  /**
-   * Bytes a completed download occupies, or null when it can't be measured.
-   *
-   * Each backend counts it its own way: a `.movpkg` bundle walked on disk
-   * (iOS), the cache's byte tally (Android), the Shaka store's own record
-   * (web), the file on disk (desktop).
-   */
+  /** Bytes a completed download occupies, or null; each backend counts its own way (disk walk, cache tally, Shaka record, file). */
   async sizeBytes(key: string): Promise<number | null> {
     const mfid = Number(this.mfidFromKey(key));
     try {
@@ -258,18 +234,11 @@ export class OfflineStorageService {
     await this.shakaRemove(mfid);
   }
 
-  /**
-   * Download a small text file (VTT subtitle) and store locally.
-   * Returns true only when the file was actually fetched and written — callers
-   * must not record a subtitle entry for a file that failed, otherwise offline
-   * playback points the native player at a non-existent file and renders nothing.
-   */
+  /** Downloads a small text file (VTT); true only when written, so callers never record a subtitle entry for a failed file. */
   async downloadSmallFile(url: string, key: string): Promise<boolean> {
     if (this.isDesktop) return this.downloader!.saveFile(key, url);
     try {
-      // Downloads can finish hours after the 1h access token was minted, so
-      // authenticate with the long-lived stream token (same token baked into
-      // the subtitle URL's ?token=), falling back to the access token.
+      // Downloads can finish hours after the 1h access token was minted, so use the long-lived stream token (as in the subtitle URL).
       const token = this.auth.streamToken() ?? this.auth.accessToken ?? '';
       const response = await fetch(url, {
         headers: { Authorization: `Bearer ${token}` },
@@ -349,9 +318,7 @@ export class OfflineStorageService {
     if (!this.isNative) return this.getSmallFileUrl(key);
     try {
       const { Filesystem, Directory } = await getFs();
-      // Confirm the file exists — getUri only builds a path, it never checks.
-      // Returning a URI for a missing file makes the native player attach a
-      // dead subtitle track that renders nothing.
+      // getUri only builds a path; confirm the file exists or the native player attaches a dead subtitle track.
       await Filesystem.stat({ path: `fliks-downloads/${key}`, directory: Directory.Data });
       const result = await Filesystem.getUri({
         path: `fliks-downloads/${key}`,

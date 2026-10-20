@@ -64,9 +64,7 @@ function launchTracksFromWire(cmd: RemoteCommand, fileId: number): LaunchTracks 
 /** Semantic-ack budget. A cold transcode start is the only slow case. */
 const ACK_TIMEOUT_MS = 3_000;
 const LOAD_ACK_TIMEOUT_MS = 20_000;
-/** Answered by restarting the stream, so the first report is a cold transcode
- *  start away rather than a frame: `next` remounts the player on another file
- *  and `quality` reloads the current one. */
+/** Answered by restarting the stream, so the first report is a cold transcode away: `next` remounts on another file, `quality` reloads. */
 const SLOW_ACK_ACTIONS: ReadonlySet<RemoteAction> = new Set<RemoteAction>([
   'load',
   'next',
@@ -78,23 +76,13 @@ const SELECTED_TARGET_KEY = 'fliks.remote.target';
 /** How long a freshly selected target is assumed to maybe be playing, before
  *  its silence is taken as "idle". */
 const FIRST_REPORT_GRACE_MS = 12_000;
-/** How long a selected target may stay off the listing before the selection is
- *  released. Longer than the SSE reconnect backoff (30s at its longest), since
- *  a target riding that out is still there. */
+/** How long an unlisted target stays selected; longer than the 30s max SSE reconnect backoff, since a target riding it out is still there. */
 const OFFLINE_RELEASE_MS = 45_000;
 
 const browseKey = (c: { mediaId?: number; episodeId?: number }) => `${c.mediaId}:${c.episodeId ?? ''}`;
 
-/**
- * Both halves of the remote-control protocol.
- *
- * As a *controllee* every client validates the commands aimed at it and
- * republishes them for the player to apply: the expiry and unknown-action
- * guards live here and nowhere else, so a second consumer cannot skip them.
- *
- * As a *controller* it owns the target list, the selected target, and the
- * optimistic state the UI reads while waiting for the target's own report.
- */
+/** Both halves of the remote-control protocol.
+ * As controllee it validates incoming commands (expiry and unknown-action guards live only here); as controller it owns targets, selection and optimistic state. */
 @Injectable({ providedIn: 'root' })
 export class RemoteService {
   private readonly http = inject(HttpClient);
@@ -116,21 +104,14 @@ export class RemoteService {
 
   readonly targets = signal<RemoteTarget[]>([]);
   readonly selectedTargetId = signal<string | null>(null);
-  /** Read back from storage but not yet seen in a listing. A device picked in an
-   *  earlier run may be long gone, and a selection that routes playback has to be
-   *  one we know is online, so it only becomes the selection once a listing
-   *  confirms it. */
+  /** Read back from storage; becomes the selection only once a listing confirms the device is online. */
   private restoredTargetId: string | null = this.readSelectedTarget();
   readonly pendingAction = signal<RemoteAction | null>(null);
-  /** The target is rebuilding its stream for the same title at the same place.
-   *  Derived from the command in flight, so it opens and closes with the ack
-   *  rather than needing its own bookkeeping. */
+  /** Target is rebuilding its stream at the same place; derived from the command in flight so it closes with the ack. */
   readonly restarting = computed(() => this.pendingAction() === 'quality');
   readonly targetOffline = signal(false);
   private offlineTimer: ReturnType<typeof setTimeout> | null = null;
-  /** Last listing of the selected target. The offline card that releases the
-   *  device is reached from the chip this feeds, so a target that drops off the
-   *  listing must not take its own way out with it. */
+  /** Last listing of the selected target; keeps the offline card (the way to release it) reachable after it drops off the listing. */
   private readonly selectedRow = signal<RemoteTarget | null>(null);
 
   readonly selectedTarget = computed(() => {
@@ -138,9 +119,7 @@ export class RemoteService {
     if (!id) return null;
     return this.targets().find((t) => t.targetId === id) ?? this.selectedRow();
   });
-  /** A selection, not its live listing: a target that drops off `targets()`
-   *  is still the one we're remoting to, just offline, so the overlay stays
-   *  mounted and shows that instead of unmounting mid-interaction. */
+  /** A selection, not its live listing: an offline target stays selected so the overlay shows that instead of unmounting. */
   readonly isRemoting = computed(() => this.selectedTargetId() !== null);
 
   private stateAt = 0;
@@ -157,9 +136,7 @@ export class RemoteService {
   private readonly reportedState = signal<RemoteNowPlaying | null>(null);
   private readonly pinnedVolume = signal<number | null>(null);
   private volumePinAt = 0;
-  /** Same optimistic hold for a seek: the target reads its position back only
-   *  once the seek lands, so without this the cue that triggered the seek stayed
-   *  on screen until a later heartbeat. */
+  /** Optimistic hold for a seek: the target reads its position back only once the seek lands. */
   private readonly pinnedPosition = signal<number | null>(null);
   private positionPinAt = 0;
   private readonly wallClock = signal(0);
@@ -187,9 +164,7 @@ export class RemoteService {
     return { ...s, volume: pinned };
   });
 
-  /** Drop what the target was playing and name what we asked for, so neither
-   *  the previous title nor the old session's farewell heartbeat can stand in
-   *  for the one that is starting. */
+  /** Drops the target's old state and names the expected file, so neither the previous title nor the old session's farewell heartbeat stands in. */
   noteLoadSent(mediaFileId: number | null): void {
     this.expectedMediaFileId = mediaFileId;
     this.stoppedSessionId = null;
@@ -205,9 +180,7 @@ export class RemoteService {
     if (!targetId || targetId !== this.selectedTargetId()) return;
     const pending = this.pendingAction();
     if (pending === 'quality') {
-      // Same title, same position: the stream is being rebuilt underneath. The
-      // reading on screen stays true, so keep it and just show it loading
-      // rather than emptying the card between the two sessions.
+      // Same title and position: the stream is being rebuilt, so keep the reading and show it loading.
       return;
     }
     if (pending && SLOW_ACK_ACTIONS.has(pending)) {
@@ -219,11 +192,7 @@ export class RemoteService {
     this.noteStopSent();
   }
 
-  /** Name the stopped session so its farewell heartbeat is not mistaken for
-   *  playback that is still running. The exact session rather than a time
-   *  window: switching episode on the target retires one session and starts
-   *  another within the same second, and a window swallowed the new one's
-   *  first report. Read before the state is cleared. */
+  /** Names the exact stopped session (not a time window) so its farewell heartbeat isn't mistaken for live playback; read before clearing state. */
   noteStopSent(): void {
     // Kept when the state is already gone: a stop cleared up front is noted twice.
     this.stoppedSessionId = this.reportedState()?.sessionId ?? this.stoppedSessionId;
@@ -234,10 +203,7 @@ export class RemoteService {
     this.pendingAction.set(null);
   }
 
-  /** True while a selected target has yet to report anything and could still
-   *  be playing. A restored selection has no state until the next heartbeat, and
-   *  the server-side join to the live session can lag a target's reconnect, so
-   *  neither source can rule out playback for one cadence. */
+  /** A selected target that has yet to report and could still be playing: a restored selection has no state, and the server join can lag a reconnect. */
   readonly awaitingFirstReport = computed(() => {
     if (!this.selectedTargetId() || this.reportedState()) return false;
     return this.wallClock() - this.observingSince < FIRST_REPORT_GRACE_MS;
@@ -306,9 +272,7 @@ export class RemoteService {
       untracked(() => void this.refreshTargets());
     });
 
-    // Mirror any detail page the controller opens onto the target. Driven off
-    // the router, not a component effect, so it fires from every entry path —
-    // a library or home grid, search, a deep link — not just an in-page reload.
+    // Driven off the router, not a component effect, so every entry path (grid, search, deep link) mirrors.
     this.router.events
       .pipe(filter((e): e is NavigationEnd => e instanceof NavigationEnd))
       .subscribe((e) => this.mirrorRoute(e.urlAfterRedirects));
@@ -318,9 +282,7 @@ export class RemoteService {
    *  detail routes; anything else on the controller is its own to browse. */
   private mirrorRoute(url: string): void {
     if (!this.selectedTargetId()) return;
-    // A load we just sent is still on its way to the target's player: the
-    // target has not reached /watch yet, so `applyBrowse` would not refuse the
-    // mirror and would pull it back onto the detail page instead.
+    // A load in flight means the target isn't on /watch yet; `applyBrowse` would pull it back to the detail page.
     const pending = this.pendingAction();
     if (pending && SLOW_ACK_ACTIONS.has(pending)) return;
     const m = /^\/(movies|series)\/(\d+)(?:\/episode\/(\d+))?/.exec(url.split('?')[0]);
@@ -375,9 +337,7 @@ export class RemoteService {
     if (cmd.mediaId) queryParams['mediaId'] = cmd.mediaId;
     if (cmd.episodeId) queryParams['episodeId'] = cmd.episodeId;
     if (cmd.positionSeconds !== undefined) queryParams['t'] = Math.floor(cmd.positionSeconds);
-    // Only a player already on screen needs the bounce, to remount on a load
-    // the router would otherwise consider the same route: from anywhere else it
-    // just flashed the home page on the way to the film.
+    // Only an on-screen player needs the bounce to remount; elsewhere it would flash the home page.
     if (this.router.url.startsWith('/watch')) {
       await this.router.navigateByUrl('/', { skipLocationChange: true });
     }
@@ -399,10 +359,8 @@ export class RemoteService {
     await this.router.navigate(path);
   }
 
-  /** Controller side of `applyBrowse`: mirror an opened detail page to the target.
-   *  Fire-and-forget: a browse sets no playback state, so a failed one must not
-   *  flip `targetOffline` or toast "not responding" the way a real command does.
-   *  A stale connection id on the target's SSE reconnect gets one re-resolve. */
+  /** Controller side of `applyBrowse`: fire-and-forget, so a failed browse doesn't flip `targetOffline` or toast.
+   * A stale connection id on SSE reconnect gets one re-resolve. */
   async browse(input: Omit<RemoteCommandInput, 'action'>, retry = true): Promise<void> {
     const targetId = this.selectedTargetId();
     if (!targetId) return;
@@ -450,9 +408,7 @@ export class RemoteService {
         this.restoredTargetId = null;
         this.selectTarget(rows.some((r) => r.targetId === restored) ? restored : null);
       }
-      // A household row is the only one carrying an owner name, so that is the
-      // exact discriminator. The selected target survives the filter: hiding it
-      // would read as the device going offline.
+      // Only a household row carries an owner name; the selected target survives the filter, or it would read as offline.
       const selected = this.selectedTargetId();
       this.targets.set(
         this.castSettings.settings().showHouseholdTargets
@@ -465,12 +421,8 @@ export class RemoteService {
       } else if (selected) {
         this.selectedRow.set(listed ?? null);
         this.clearOffline();
-        // The target sends a farewell heartbeat as it leaves the player, which
-        // lands after any local clear and would then sit there forever. Let the
-        // server settle it: a live playback reports every 10s, so a silent
-        // target the listing shows as empty really has stopped.
-        // The listing rebuilds playback from the live sessions, so it is the
-        // only state a client that just picked an already-playing target has.
+        // The target's farewell heartbeat lands after any local clear; a silent target the listing shows empty has stopped (live playback reports every 10s).
+        // The listing is the only state a client that just picked an already-playing target has.
         if (!listed?.nowPlaying) this.stoppedUntilReport = false;
         if (listed?.nowPlaying && !this.reportedState() && !this.stoppedUntilReport) {
           this.reportedState.set(listed.nowPlaying);
@@ -489,9 +441,7 @@ export class RemoteService {
   }
 
   selectTarget(targetId: string | null): void {
-    // One destination at a time: the control card reads whichever is active and
-    // prefers a remote target, so a Cast session left running behind one would
-    // keep playing with nothing on screen able to reach it.
+    // One destination at a time: a Cast session left behind a remote target would play with nothing on screen to reach it.
     if (targetId && this.cast.isConnected()) this.cast.disconnect();
     this.selectedTargetId.set(targetId);
     this.reportedState.set(null);
@@ -506,11 +456,7 @@ export class RemoteService {
 
   }
 
-  /** Both ways a target turns out to be gone — absent from a listing, or a
-   *  command it never took — land here, so one countdown covers them. A powered
-   *  off device never comes back under the same target id (the nonce is per
-   *  tab), so holding its selection only strands the UI: offer the local
-   *  fallback while it might still answer, then release it.  */
+  /** Absent from a listing or a command it never took: one countdown covers both. A powered-off device never returns under the same id (nonce per tab), so offer the local fallback, then release. */
   private markOffline(targetId: string): void {
     this.targetOffline.set(true);
     console.warn('[remote] selected target is offline', targetId);
@@ -551,11 +497,8 @@ export class RemoteService {
   async send(targetId: string, input: RemoteCommandInput, retry = true): Promise<void> {
     this.pendingAction.set(input.action);
     this.notePositionIntent(input);
-    // Clear the outgoing reading and name the expected file BEFORE the POST, not
-    // on its response: a warm target renders and heartbeats the new file within
-    // the round-trip, and clearing after that landed frame wiped the card back
-    // to a spinner while the target was already playing. `next` moves to another
-    // file too; a quality change keeps its file and position, so it stays valid.
+    // Clear the outgoing reading and name the file BEFORE the POST: a warm target heartbeats the new file within the round-trip.
+    // `next` moves to another file; a quality change keeps file and position.
     if (input.action === 'load' || input.action === 'next') {
       this.noteLoadSent(input.action === 'load' ? input.mediaFileId ?? null : null);
     }
@@ -583,9 +526,7 @@ export class RemoteService {
       this.pendingAction.set(null);
       this.markOffline(targetId);
       console.warn('[remote] command failed', input.action, targetId, err);
-      // The interceptor already toasts an HTTP failure, with the server's own
-      // reason rather than one generic line, so toasting here too showed the
-      // same failure twice. It stays silent on statuses the interceptor skips.
+      // The interceptor already toasts HTTP failures with the server's reason; stay silent on statuses it skips.
       const status = err instanceof HttpErrorResponse ? err.status : 0;
       if (status === 0 || status === 401) {
         this.toast.error(this.translate.instant('remote.error_command_failed'));
@@ -677,10 +618,7 @@ export class RemoteService {
     }
   }
 
-  /** Interpolate only while something is actually playing: a paused, idle or
-   *  offline target has nothing to advance, and a spare timer would just wake
-   *  the app. The second clause covers only the grace window, before the
-   *  target's first report says whether it is even playing. */
+  /** Interpolates only while playing; the second clause covers the grace window before the target's first report. */
   private syncTicker(): void {
     const playing =
       this.reportedState()?.state === 'playing' ||

@@ -56,9 +56,7 @@ export class DisplaySettingsPageComponent implements OnInit {
     if (value === this.language()) return;
     this.language.set(value);
     this.displaySettings.save({ language: value });
-    // Switch the UI text live (no reload). '' resolves back to the browser/OS
-    // language. Angular date/number formatting (LOCALE_ID) is fixed at bootstrap
-    // so it follows on the next app launch.
+    // Switches UI text live; `''` resolves to the browser/OS language. Date/number formatting (`LOCALE_ID`) follows on next launch.
     this.translate.use(resolveInitialLocale());
   }
 }

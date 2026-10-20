@@ -41,10 +41,7 @@ interface PickerRow {
   offRow: boolean;
 }
 
-/**
- * The single playback-control surface: drives whichever target is active,
- * a Chromecast session or a remote target, through the same UI.
- */
+/** The single playback-control surface, driving the active target (Chromecast or remote) through the same UI. */
 @Component({
   selector: 'app-cast-overlay',
   imports: [
@@ -102,9 +99,7 @@ export class CastOverlayComponent {
     return this.t.availableQualities().find((o) => o.id === id)?.label ?? id;
   }
 
-  /** Built as data rather than three near-identical template blocks: a file
-   *  with one audio track must leave no hole, and each panel's anchor has to
-   *  follow the position the picker actually ends up in. */
+  /** Built as data so a file with one audio track leaves no hole and each panel's anchor follows the picker's actual position. */
   protected readonly pickers = computed<PickerRow[]>(() => {
     const t = this.t;
     const rows: PickerRow[] = [];

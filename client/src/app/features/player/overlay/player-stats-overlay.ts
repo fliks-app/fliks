@@ -7,10 +7,7 @@ export interface PlayerStats {
   containerBitrate: string;
   outputFormat: string;
   outputFps: string;
-  /** Translation key naming what the server actually does with the file:
-   *  direct play (served as-is), remux (streams copied into HLS) or transcode
-   *  (video re-encoded). Read from the real delivery, not just the decision.
-   *  Empty when the delivery is unknown (offline). */
+  /** Translation key for what the server does with the file: direct play, remux or transcode, read from the real delivery; empty when unknown (offline). */
   streamTypeKey: string;
   /** Translated "Server decision: X / Delivered: Y" line, set only when they
    *  disagree. Empty otherwise. */
@@ -31,14 +28,9 @@ export interface PlayerStats {
   cropAppliedByPlayer?: boolean;
   /** Player crop not painting: PiP and iOS native fullscreen show the full frame. Defaults false. */
   cropBypassed?: boolean;
-  /** HDR → SDR tone-mapping filter the backend actually picked
-   *  (after `auto` resolution + opencl-probe fallback). Empty when no
-   *  tone-mapping pass runs on this session. */
+  /** HDR to SDR tone-mapping filter the backend picked (after `auto` resolution and opencl-probe fallback); empty when none runs. */
   tonemapping: string;
-  /** `transcodeReasons` flags that drive the video re-encode (any
-   *  `Video*` flag plus `SubtitleBurnIn`). Empty when the video
-   *  stream is copied. Container-level flags are excluded — they
-   *  appear in the stream section, not here. */
+  /** `transcodeReasons` driving the video re-encode (`Video*` flags plus `SubtitleBurnIn`); empty when copied; container-level flags are excluded. */
   videoTranscodeReasons: string[];
   droppedFrames: number;
 

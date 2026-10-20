@@ -1,8 +1,4 @@
-/**
- * Closed catalogue of `media.actions` actionIds core implements. A plugin's
- * contribution to this slot may only reference one of these — it never ships
- * its own handler — plugins never ship their own Angular code.
- */
+/** Closed catalogue of `media.actions` ids core implements; a plugin contribution may only reference one, never ship its own handler. */
 export type CoreMediaActionId =
   | 'media.recommend'
   | 'media.toggle-series-watched'
@@ -52,20 +48,10 @@ const CORE_MEDIA_ACTION_IDS: ReadonlySet<string> = new Set<CoreMediaActionId>([
   'media.request-deletion',
 ]);
 
-/**
- * The handlers a surface supplies. Partial on purpose: the card menu and the
- * detail menu read one list of actions and each serves the subset it can, so an
- * id it has no handler for resolves to null and its row is dropped rather than
- * listed and inert.
- */
+/** Handlers a surface supplies; partial since card and detail menus each serve a subset, and an id without one is dropped. */
 export type MediaActionHandlers = Partial<Record<CoreMediaActionId, () => void>>;
 
-/**
- * Resolves a contribution's `actionId` to the handler that implements it.
- * Anything outside the closed catalogue — a typo, a future id, a plugin
- * guessing — returns `null`. Fail closed: the caller must render no row at
- * all, never a button whose click silently does nothing.
- */
+/** Resolves an `actionId` to its handler; anything outside the catalogue returns `null` (fail closed: no row, never an inert button). */
 export function resolveMediaAction(
   actionId: string,
   handlers: MediaActionHandlers,

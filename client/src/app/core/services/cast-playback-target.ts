@@ -8,10 +8,7 @@ import { MediaService } from './api/media.service';
 import { QueueItem } from './playback-queue.service';
 import { resolveNextEpisodeItem } from '../../shared/utils/media-play.util';
 
-/**
- * Pure pass-through to CastService + CastPlayerService: the Chromecast
- * behaviour behind this facade is byte-for-byte what it was before.
- */
+/** Pure pass-through facade to CastService + CastPlayerService. */
 @Injectable({ providedIn: 'root' })
 export class CastPlaybackTarget implements PlaybackTarget {
   private readonly cast = inject(CastService);

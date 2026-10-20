@@ -30,11 +30,7 @@ export interface PickerRow {
   connected?: boolean;
 }
 
-/**
- * The destination list itself (Cast devices + remote targets, one list),
- * without the surface that holds it: the top bar wraps it in
- * `app-remote-picker`, the player in its own dropdown / bottom sheet.
- */
+/** The destination list (Cast devices + remote targets) without its surface: wrapped by `app-remote-picker` in the top bar, a dropdown/sheet in the player. */
 @Component({
   selector: 'app-remote-picker-list',
   standalone: true,
@@ -47,9 +43,7 @@ export interface PickerRow {
   templateUrl: './remote-picker-list.html',
 })
 export class RemotePickerListComponent {
-  /** Emit the pick instead of acting on it: a host with a running session (the
-   *  player) moves that playback to the destination itself. Leaving a device is
-   *  never delegated — it has no handoff to do. */
+  /** Emit the pick instead of acting, so a host with a running session moves that playback itself; leaving a device is never delegated. */
   readonly delegate = input(false);
   readonly picked = output<PickerRow>();
 
@@ -60,9 +54,7 @@ export class RemotePickerListComponent {
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
 
-  /** Whether the Cast backend lists devices itself (mobile plugin, desktop
-   *  bridge) — a browser has no enumeration API and delegates to its own
-   *  dialog through the single `cast-web` row. */
+  /** Whether the Cast backend lists devices itself; a browser has no enumeration API and delegates to the single `cast-web` row. */
   protected readonly enumerates = this.castService.enumerates;
 
   private readonly lastUsedId = signal<string | null>(this.readLastUsed());

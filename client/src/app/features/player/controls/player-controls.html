@@ -1,6 +1,4 @@
-<!-- Click-out backdrop: closes the open dropdown when tapping anywhere outside.
-     z-39 sits below the dropdown-content (z-50 in DaisyUI) and the controls bars
-     (z-40) but above the video, so the click reaches it before the page below. -->
+<!-- Click-out backdrop: z-39 sits below the dropdown-content (z-50) and the bars (z-40) but above the video. -->
 @if (openDropdown()) {
   <div class="fixed inset-0 z-30" (click)="closeDropdown($event)"></div>
 }
@@ -89,10 +87,7 @@
 }
 
 <!-- ===== CENTER OVERLAY (tap zone) =====
-     z-30 so the bottom bar (z-40) stays clickable. Tall titles + seekbar
-     can grow the bottom bar up into the centered area on phones, so the
-     mobile big buttons live in a separate z-50 layer below to keep them
-     tappable. -->
+     z-30 keeps the bottom bar (z-40) clickable; mobile big buttons sit in a separate z-50 layer, as a tall bar can grow into this area. -->
 <div
   class="absolute inset-0 z-30 flex items-center justify-center"
   (click)="onSurfaceClick($event)"
@@ -127,16 +122,8 @@
   </div>
 }
 
-<!-- ===== BOTTOM SECTION =====
-     Padding scales with screen width via Tailwind breakpoints (no JS-side
-     branching). The inline padding-left/right/bottom uses max(--ctrl-px,
-     env(safe-area-inset-...)) so a notch always wins; --ctrl-px / --ctrl-pb
-     are themselves responsive via the [--var:value] arbitrary utilities. -->
-<!-- z-40 by default so the mobile big buttons (z-50) stay tappable when
-     the bottom bar grows tall. While the user is scrubbing, promote to
-     z-[55] so the sprite preview tooltip pops above those buttons —
-     they're not relevant while the user is dragging the seek thumb and
-     the preview is far more useful in that moment. -->
+<!-- ===== BOTTOM SECTION ===== -->
+<!-- z-40 keeps the mobile big buttons (z-50) tappable; z-[55] while scrubbing so the sprite preview clears them. -->
 <div
   class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent transition-opacity duration-300 pt-12"
   [class]="seekDragging() ? 'z-[55]' : 'z-40'"
@@ -145,10 +132,7 @@
   [class.pointer-events-none]="!visible()"
 >
   @if (!seekOsd()) {
-    <!-- Episode + Title + Mobile action buttons row. The row itself emits
-         tapOverlay so the empty gap between the title and the right-aligned
-         action buttons doubles as a "close controls" hit zone; the buttons
-         stop propagation so their own taps don't also dismiss. -->
+    <!-- Episode + title + mobile actions row; the row emits tapOverlay so the gap between them is a "close controls" zone (buttons stop propagation). -->
     <div class="player-controls-reveal flex items-end justify-between mb-0.5 gap-2" (click)="tapOverlay.emit()">
       <div class="min-w-0 shrink">
         @if (episodeTitle()) {
@@ -438,9 +422,7 @@
         <span class="font-medium">{{ 'player.queue' | translate }}</span>
       </button>
       <div class="divider my-0 before:bg-white/10 after:bg-white/10"></div>
-      <!-- No inner scroll container: the sheet itself scrolls, so its
-           drag-to-dismiss (keyed off the sheet's own scrollTop) doesn't fight a
-           nested scroller. -->
+      <!-- No inner scroller: the sheet scrolls itself so its drag-to-dismiss (keyed off its scrollTop) doesn't fight a nested one. -->
       @for (q of queueItems(); track $index; let i = $index) {
         <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white active:bg-white/10" [attr.aria-current]="queueIndex() === i ? 'true' : null" (click)="selectQueueItem.emit(i); closeSheet()">
           <span class="w-5 shrink-0 text-white/40 text-xs">{{ i + 1 }}</span>
@@ -552,17 +534,7 @@
 </ng-template>
 
 <!-- ===== Shared menu templates =====
-     Each menu is used in TWO contexts: the desktop dropdown-content (hover,
-     dropdown closes on blur) and the mobile bottom sheet (touch, close on
-     select). The shared item style covers both:
-     - py-3 rounded-xl gives touch-friendly hit targets that look fine in a
-       hover dropdown too
-     - hover:bg-white/10 + active:bg-white/10 light up in either context
-     - disabled covers the active-item disable used in dropdowns (no-op on
-       sheet because no item is disabled in the sheet)
-     - The select handler emits then calls closeSheet() — no-op on desktop
-       (activeSheet is already null) so it's safe in both modes.
-     -->
+     Each menu serves both the desktop dropdown and the mobile sheet; select emits then calls closeSheet(), a no-op on desktop. -->
 <ng-template #subtitlesMenu>
   @if (subtitlesPanel() === 'tracks') {
     <div class="relative mb-3 flex h-6 items-center justify-center">
@@ -687,10 +659,7 @@
   </div>
 </ng-template>
 
-<!-- Fullscreen toggle — shared between the mobile action row (sm size) and
-     the desktop right-action row (md). Hidden on native apps (immersive
-     plugin already runs the WebView fullscreen). `size` is one of
-     'sm' | 'md'; defaults to 'md'. -->
+<!-- Fullscreen toggle shared by the mobile row (sm) and desktop row (md); hidden on native, where the immersive plugin already fullscreens. -->
 <ng-template #fullscreenBtn let-size>
   @if (!isNative() || isDesktop()) {
     @let isSm = size === 'sm';

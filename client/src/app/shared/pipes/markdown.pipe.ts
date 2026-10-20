@@ -1,9 +1,7 @@
 import { Pipe, PipeTransform } from '@angular/core';
 import { marked } from 'marked';
 
-/** Renders a markdown string to HTML (e.g. GitHub release notes). Bind the
- *  result with `[innerHTML]` — Angular sanitizes it. Links get target=_blank
- *  so a click doesn't navigate the app/webview away. */
+/** Renders markdown to HTML (e.g. release notes) for `[innerHTML]` (Angular sanitizes it); links get target=_blank so clicks don't navigate the webview away. */
 @Pipe({ name: 'markdown' })
 export class MarkdownPipe implements PipeTransform {
   transform(value: string | null | undefined): string {

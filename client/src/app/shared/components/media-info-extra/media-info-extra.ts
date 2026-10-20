@@ -15,13 +15,7 @@ import { CollapsibleSectionComponent } from '../collapsible-section/collapsible-
 import { bestTrailerKey } from '../../utils/trailer.util';
 import { TrailerDialogComponent } from '../trailer-dialog/trailer-dialog';
 
-/**
- * "Extra info" panel rendered on the media-detail page above the cast,
- * matching the Jellyseerr-style key/value table. Backed by `Media` +
- * `Media.metadata`. Every row is hidden when its source field is empty,
- * so the panel collapses to nothing on freshly imported media that
- * haven't pulled extended TMDB data yet.
- */
+/** Jellyseerr-style "Extra info" table on the media-detail page; rows with an empty source hide, so freshly imported media collapse to nothing. */
 @Component({
   selector: 'app-media-info-extra',
   imports: [LocaleDatePipe, CurrencyPipe, TranslatePipe, CollapsibleSectionComponent, LucidePlay, TrailerDialogComponent],

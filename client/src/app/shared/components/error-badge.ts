@@ -4,11 +4,7 @@ import { TranslateService } from '@ngx-translate/core';
 import { ConfirmationService } from '../../core/services/confirmation.service';
 import { translatedServerMessage } from '../../core/utils/server-message';
 
-/**
- * Status badge that opens the app's shared alert modal with the full error text when one
- * exists, and renders as a plain (non-clickable) badge otherwise. Same `badge-sm` size
- * everywhere so callers don't each pick their own.
- */
+/** Status badge that opens the shared alert modal with the full error text when there is one, else a plain badge; one `badge-sm` size everywhere. */
 @Component({
   selector: 'app-error-badge',
   imports: [NgTemplateOutlet],

@@ -33,13 +33,7 @@ const MANIFEST_SECTION_KEYS: Readonly<Record<string, string>> = {
   PLUGIN_BAD_EVENTS: 'settings.plugins.consent.refusal.bad_events',
 };
 
-/**
- * One i18n key per refusal-code family — never the backend `detail` string, which
- * is log/debug text only (see `archive/refusal-codes.ts`'s own doc comment). A code
- * this map doesn't know yet (a future guard) falls back to a generic message that
- * still carries the raw `code`, since the code itself — unlike `detail` — is the
- * stable, safe-to-surface contract.
- */
+/** One i18n key per refusal-code family, never the backend `detail` (log text only); unknown codes fall back to a generic message carrying the raw `code`, the stable contract. */
 export function refusalMessageKey(code: string | undefined): string {
   if (code && MANIFEST_SECTION_KEYS[code]) return MANIFEST_SECTION_KEYS[code];
   if (code && MALFORMED_CODES.has(code)) return 'settings.plugins.consent.refusal.malformed';

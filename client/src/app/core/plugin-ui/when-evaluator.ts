@@ -1,9 +1,6 @@
 import type { MediaType } from '../enums/media-type.enum';
 
-/**
- * Everything a `when` predicate can read. Deliberately narrow — this is not
- * app state, just the handful of facts the closed vocabulary needs.
- */
+/** Everything a `when` predicate can read; deliberately narrow, just the facts the closed vocabulary needs. */
 export interface WhenContext {
   isAdmin: boolean;
   hasPermission: (permission: string) => boolean;
@@ -18,9 +15,7 @@ export interface WhenContext {
   isTouch: boolean;
   /** The signed-in user has at least one Live TV channel. */
   liveTv?: boolean;
-  /** Which menu is being built. Both surfaces read the same contribution
-   *  lists, so an item only declares this when it genuinely belongs to one:
-   *  Play and Open mean nothing on a detail page you are already on. */
+  /** Which menu is being built; an item names this only when it belongs to one (Play/Open mean nothing on a detail page). */
   surface?: 'card' | 'detail';
 }
 
@@ -45,10 +40,7 @@ function evaluateKnown(predicate: string, ctx: WhenContext): boolean | null {
   return null;
 }
 
-/**
- * One `when` entry. A leading "!" negates — but an unknown predicate stays
- * false even negated, because negating "unknown" is still unknown.
- */
+/** One `when` entry; a leading "!" negates, but an unknown predicate stays false even negated. */
 function evaluateOne(predicate: string, ctx: WhenContext): boolean {
   const negated = predicate.startsWith('!');
   const result = evaluateKnown(negated ? predicate.slice(1) : predicate, ctx);
@@ -56,11 +48,7 @@ function evaluateOne(predicate: string, ctx: WhenContext): boolean {
   return negated ? !result : result;
 }
 
-/**
- * `when` is presentation only: it decides what the client shows, never what
- * the server allows. Every action behind a contribution is CASL-guarded
- * server-side regardless of how this evaluates.
- */
+/** `when` is presentation only: every action behind a contribution is CASL-guarded server-side regardless. */
 export function evaluateWhen(when: readonly string[] | undefined, ctx: WhenContext): boolean {
   return (when ?? []).every((predicate) => evaluateOne(predicate, ctx));
 }

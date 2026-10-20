@@ -1,15 +1,7 @@
 import { Directive, ElementRef, inject, input, OnInit } from '@angular/core';
 import { viewTransitionRunning } from '../utils/view-transition';
 
-/**
- * Hides the image until it finishes downloading, then fades it in. Avoids
- * the browser's default top-down progressive paint that looks janky on
- * fanart / poster hero images. Cached responses (already complete on
- * mount) skip the transition and show immediately, and so does an image
- * mounted during a view transition: the morph is already the animation.
- *
- * Usage: <img appImgFadeIn [src]="..." />
- */
+/** Hides the image until downloaded, then fades in, avoiding the janky progressive paint; cached images and images mounted during a view transition show immediately. */
 @Directive({
   selector: 'img[appImgFadeIn]',
   standalone: true,

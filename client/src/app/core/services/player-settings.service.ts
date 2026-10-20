@@ -8,18 +8,15 @@ import {
 } from '../utils/subtitle-presets';
 
 
-/** How much the viewer wants a hearing-impaired (SDH) track: `avoid` keeps the
- *  annotations out unless nothing else carries the language, `prefer` asks for
- *  them, `any` takes whichever track comes first. */
+/** How much the viewer wants a hearing-impaired (SDH) track: `avoid` unless nothing else carries the language,
+ *  `prefer` asks for it, `any` takes the first track. */
 export type HearingImpairedPreference = 'avoid' | 'any' | 'prefer';
 
 export interface PlayerSettings {
   // Audio
   preferredAudioLanguage: string;
-  /** `preferred`: the language above. `original`: the title's own language.
-   *  `default`: the track the file flags as default. `first`: the first track,
-   *  whatever it is. Every mode falls back to the first track when it can't be
-   *  satisfied. */
+  /** `preferred`: the language above; `original`: the title's language; `default`: the file's default flag; `first`: first track.
+   *  Every mode falls back to the first track when unsatisfiable. */
   audioSelectionMode: 'preferred' | 'original' | 'default' | 'first';
   rememberAudioSelections: boolean;
   // Video
@@ -29,8 +26,7 @@ export interface PlayerSettings {
   showEcoQualities: boolean;
   // Subtitles
   preferredSubtitleLanguage: string;
-  /** `off`: never. `onlyForced`: just the foreign-dialogue track. `intelligent`:
-   *  a full track when the audio is foreign, the forced one when it isn't.
+  /** `off`: never; `onlyForced`: foreign-dialogue track only; `intelligent`: full track when audio is foreign, else forced;
    *  `always`: a full track whenever the language exists. */
   subtitleMode: 'off' | 'onlyForced' | 'intelligent' | 'always';
   subtitleHearingImpaired: HearingImpairedPreference;
@@ -152,9 +148,8 @@ export function parseRememberedSubtitle(saved: string) {
   };
 }
 
-/** Stream a remembered key names: same language (the variant, when some stream has it), then role,
- *  then channel count.
- *  Bare `language` and `language:ordinal` keys match too. */
+/** Stream a remembered key names: same language (variant if some stream has it), then role, then channel count;
+ *  bare `language` and `language:ordinal` keys match too. */
 export function matchRememberedAudio(
   saved: string,
   streams: AudioStreamChoice[],
@@ -193,9 +188,7 @@ export function pickAudioStreamForLanguage(
 
 // ── Subtitle appearance maps ──
 
-/** The DOM cue sizes are the native ladder in `vmin` — the viewport's short
- *  side, so a rotation doesn't resize the cues (`vh` collapsed them to ~12px
- *  in landscape on a phone) — under the same floor the native renderers use. */
+/** DOM cue sizes use the native ladder in `vmin` (a rotation doesn't resize them; `vh` collapsed to ~12px in landscape), under the native renderers' floor. */
 export function domCueFontSize(scale: number): string {
   return `max(${+(scale * SUBTITLE_MIN_TEXT_PX).toFixed(2)}px, ${+(scale * DOM_SUBTITLE_HEIGHT_FRACTION * 100).toFixed(2)}vmin)`;
 }
@@ -269,12 +262,8 @@ export class PlayerSettingsService {
     return this.settings();
   }
 
-  /**
-   * The language the audio auto-selection targets, if any. Undefined in the
-   * `default` and `first` modes, which don't select by language at all.
-   *
-   * @param originalLanguage The title's original language (TMDB, ISO 639-1).
-   */
+  /** The language audio auto-selection targets; undefined in `default` / `first` modes.
+   *  @param originalLanguage The title's original language (TMDB, ISO 639-1). */
   audioLanguage(originalLanguage?: string | null): string | undefined {
     const s = this.get();
     if (s.audioSelectionMode === 'original') {
@@ -286,10 +275,7 @@ export class PlayerSettingsService {
     return undefined;
   }
 
-  /**
-   * Resolve the preferred audio stream index for a media file.
-   * Used by both the local player and Cast to ensure consistent audio selection.
-   */
+  /** Resolves the preferred audio stream index for a media file, shared by the local player and Cast. */
   resolveAudioStreamIndex(
     mediaFileId: number,
     audioStreams: AudioStreamChoice[],
@@ -318,9 +304,7 @@ export class PlayerSettingsService {
       if (idx != null) return idx;
     }
 
-    // Priority 3: the track the file flags as default. Resolved here rather
-    // than left to the container — the HLS paths rebuild the audio group and
-    // would otherwise always mark the first rendition as the default one.
+    // Resolved here, not left to the container: the HLS paths rebuild the audio group and always mark the first rendition default.
     if (s.audioSelectionMode === 'default') {
       const idx = audioStreams.findIndex((a) => a.isDefault);
       if (idx >= 0) return idx;

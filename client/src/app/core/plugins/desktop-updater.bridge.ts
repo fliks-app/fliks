@@ -1,7 +1,5 @@
-// Bridge to the Electron desktop shell's in-app updater, exposed on
-// `window.fliksUpdater` by the desktop preload. The Angular AppUpdateService
-// consumes this to drive the update button + changelog modal. Types mirror
-// desktop/src/shared/contract.ts (the two live in separate build workspaces).
+// Bridge to the desktop shell's updater on `window.fliksUpdater`, consumed by AppUpdateService.
+// Types mirror desktop/src/shared/contract.ts (separate build workspaces).
 
 export interface DesktopUpdateInfo {
   version: string;

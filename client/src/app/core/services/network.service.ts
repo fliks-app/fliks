@@ -16,10 +16,7 @@ export class NetworkService {
     window.addEventListener('online', () => this.isOnline.set(true));
     window.addEventListener('offline', () => this.isOnline.set(false));
 
-    // WKWebView keeps `navigator.onLine` at true on a device with no route and
-    // never fires the DOM events for it, so on native the OS reachability API
-    // is the only source that actually reports offline. Imported lazily to keep
-    // the plugin out of the web bundle.
+    // WKWebView keeps `navigator.onLine` true with no route and never fires the DOM events, so native uses the OS reachability API (lazy import keeps it out of the web bundle).
     if (Capacitor.isNativePlatform()) {
       void import('@capacitor/network')
         .then(({ Network }) => {

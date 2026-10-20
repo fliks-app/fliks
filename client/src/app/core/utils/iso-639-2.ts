@@ -1,7 +1,4 @@
-/**
- * Complete ISO 639-2 (B and T) → ISO 639-1 table. Kept identical in the client
- * (`core/utils/iso-639-2.ts`) and the backend (`common/constants/iso-639-2.ts`).
- */
+/** Complete ISO 639-2 (B and T) to 639-1 table; keep identical to the backend `common/constants/iso-639-2.ts`. */
 export const ISO_639_2_TO_1_FULL: Readonly<Record<string, string>> = {
   aar: 'aa',
   abk: 'ab',

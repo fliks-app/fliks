@@ -223,9 +223,7 @@ export const routes: Routes = [
           import('./features/media-detail/media-detail').then(
             (m) => m.MediaDetailComponent,
           ),
-        // Switching episodes only moves a param on a page that already holds
-        // the season rails, the subtitle list and the poster, and the component
-        // reads the params itself, so it keeps its instance.
+        // Switching episodes only moves a param; the component reads params itself, so it keeps its instance.
         data: { kind: 'series', reuse: true, reuseOnParamChange: true },
       },
       {

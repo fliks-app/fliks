@@ -10,10 +10,7 @@ export type SlotId =
   | 'media.season.actions'
   | 'card.actions';
 
-/**
- * Closed `when` vocabulary, evaluated with `.every()`. A leading "!"
- * negates any entry; an unknown predicate evaluates false (fail closed).
- */
+/** Closed `when` vocabulary, evaluated with `.every()`; a leading "!" negates, an unknown predicate is false. */
 export type WhenPredicateName =
   | 'isAdmin'
   | `hasPermission:${string}`
@@ -29,9 +26,7 @@ export type WhenPredicateName =
   | 'isTouch'
   /** The signed-in user has at least one Live TV channel to watch. */
   | 'liveTv'
-  /** Which menu is being built. The card menu and the media detail menu read the
-   *  same contributions, so a row only names this when it belongs to one of
-   *  them — 'Play' means nothing on a detail page you are already on. */
+  /** Which menu is being built; a row names this only when it belongs to the card menu or the detail menu. */
   | 'surface:card'
   | 'surface:detail';
 
@@ -54,20 +49,14 @@ export interface UiContribution {
   action:
     | { kind: 'route'; path: string }
     | { kind: 'action'; actionId: string }
-    /** A row that only opens the `children` below it. Older clients don't know
-     *  this kind and drop the row, which hides the group rather than showing a
-     *  parent that does nothing. */
+    /** A row that only opens its `children`; older clients drop the row, hiding the group. */
     | { kind: 'submenu' };
   /** Rows nested under this one. Only meaningful with `action.kind: 'submenu'`;
    *  a plugin can hand over a whole group this way. */
   children?: UiContribution[];
 }
 
-/**
- * Key a read response adds to `settings` to name the `secret: true` fields that hold a stored
- * value — the editor renders those masked and offers to erase them. Read-only: a resource must
- * strip it on write rather than persist it.
- */
+/** Key a read response adds to `settings` naming the `secret: true` fields holding a stored value. Read-only: strip it on write. */
 export const SECRETS_SET_KEY = 'secretsSet';
 
 /** The eight field kinds `<app-schema-form>` renders, over four form components. */
@@ -81,10 +70,7 @@ export type FieldType =
   | 'select'
   | 'multiselect';
 
-/**
- * One input of a plugin's settings form. `kind` is optional and defaults to `'field'` —
- * a manifest declaring plain fields today needs no change to keep installing and rendering.
- */
+/** One input of a plugin's settings form; `kind` defaults to `'field'`. */
 export interface FieldDef {
   kind?: 'field';
   key: string;
@@ -93,12 +79,8 @@ export interface FieldDef {
   hint?: string;
   placeholder?: string;
   required?: boolean;
-  /**
-   * Stripped from every read response; only written back when non-empty. A resource honouring
-   * this lists its set keys under `SECRETS_SET_KEY` so the editor can mask a stored value it
-   * never receives, and treats an incoming `null` as "erase it" — blank already means
-   * "unchanged", so removal needs a spelling of its own (the one JSON Merge Patch uses).
-   */
+  /** Stripped from every read response; only written back when non-empty. A resource lists its set keys
+   *  under `SECRETS_SET_KEY` and treats an incoming `null` as "erase" (blank already means "unchanged"). */
   secret?: boolean;
   /** A `string[]` only for `multiselect`, which is the set a new row starts from. */
   default?: string | number | boolean | string[];
@@ -108,10 +90,7 @@ export interface FieldDef {
   /** Written to a column on the row itself rather than into its `settings` bag.
    *  Without this a declared field silently stops persisting an entity column. */
   topLevel?: boolean;
-  /**
-   * All optional, all authoring affordances checked by the renderer before it will save — not a
-   * trust boundary, since the settings endpoint behind this page is already admin-gated.
-   */
+  /** Authoring affordances checked by the renderer, not a trust boundary (the settings endpoint is admin-gated). */
   min?: number;
   max?: number;
   minLength?: number;
@@ -145,11 +124,7 @@ export interface FormStatus {
 export type FormItem = FieldDef | FormCaption | FormGroup | FormStatus;
 
 /** One `ui.configPages[]` entry — a form-backed settings page under `plugin.<id>.`. */
-/**
- * A page a plugin contributes, discriminated on `kind`. `form` is the default and the only
- * one that works with the process stopped; `providers` and `table` read the plugin's own
- * routes and therefore need it running.
- */
+/** A page a plugin contributes, discriminated on `kind`; only `form` works with the process stopped. */
 export type ConfigPage = FormConfigPage | ProvidersConfigPage | TableConfigPage;
 
 interface ConfigPageBase {
@@ -161,25 +136,15 @@ interface ConfigPageBase {
 }
 
 /** Rendered by `<app-schema-form>` over `app_settings`; omitting `kind` means this one. */
-/**
- * Every `actionId` a `form` page's button may name. Core implements each one; an unknown value
- * renders nothing, so this list is the whole vocabulary available to a manifest.
- */
+/** Every `actionId` a `form` page's button may name; an unknown value renders nothing. */
 export const FORM_ACTION_IDS = ['events.test-delivery'] as const;
 export type FormActionId = (typeof FORM_ACTION_IDS)[number];
 
-/**
- * Every `actionId` a `table` row action may name, resolved by core against the row it sits on.
- * Same rule: an unknown value renders nothing.
- */
+/** Every `actionId` a `table` row action may name, resolved against its row; an unknown value renders nothing. */
 export const TABLE_ROW_ACTION_IDS = ['table.open-media'] as const;
 export type TableRowActionId = (typeof TABLE_ROW_ACTION_IDS)[number];
 
-/**
- * Where a `providers` row action renders instead of as its own labelled button. `cooldown-reset`
- * puts it beside the cooldown a row reports, so clearing one sits next to the thing it clears.
- * Closed vocabulary: an unknown value falls back to a plain button rather than disappearing.
- */
+/** Where a `providers` row action renders instead of its own button; an unknown value falls back to a plain button. */
 export const PROVIDER_ROW_ACTION_SLOTS = ['cooldown-reset'] as const;
 export type ProviderRowActionSlot = (typeof PROVIDER_ROW_ACTION_SLOTS)[number];
 
@@ -199,12 +164,8 @@ export interface ReleasePickerPair {
   grab: string;
 }
 
-/**
- * Routes the core release picker calls, relative to the plugin — core prefixes each with
- * its proxy path and substitutes `:id`, `:seasonId` and `:episodeId` from the open title.
- * Declared by whichever plugin contributes the picker's menu entries; core holds no route
- * of its own for this, so with nothing declared the picker never opens.
- */
+/** Routes the core release picker calls, relative to the plugin; `:id`, `:seasonId`, `:episodeId` are substituted.
+ *  With none declared the picker never opens. */
 export interface ReleasePickerRoutes {
   movie: ReleasePickerPair;
   season: ReleasePickerPair;
@@ -224,9 +185,7 @@ export type BadgeTone =
   | 'error'
   | 'ghost';
 
-/** One value rendered under a cell's own, as a badge or as plain text. One level only:
- *  it carries no `subValues` of its own, so a sub-value under a sub-value is impossible
- *  in the type rather than merely undocumented. */
+/** One value rendered under a cell's own, as a badge or plain text; one level only. */
 export interface TableSubValue {
   key: string;
   format?: 'date' | 'bytes' | 'percent' | 'speed';
@@ -241,9 +200,7 @@ export interface TableColumn {
   format?: 'date' | 'bytes' | 'percent' | 'speed';
   /** Maps a cell value to a translate key — a status column renders its raw enum otherwise. */
   labelKeys?: Record<string, string>;
-  /** Renders the cell as a badge, the value picking its tone. `*` covers every other value,
-   *  which is how an open-ended column (a quality name) gets one uniform tone. A `format`ted
-   *  cell is never badged. */
+  /** Renders the cell as a badge, the value picking its tone; `*` covers every other value. `format`ted cells are never badged. */
   badges?: Record<string, BadgeTone>;
   /** Keeps the cell on one line. Implied for `format`ted and badged cells. */
   nowrap?: boolean;
@@ -253,29 +210,18 @@ export interface TableColumn {
   /** A second line under the cell's own value. A release's quality and tracker belong with
    *  its name; as columns of their own they cost width the title needed. */
   subValues?: TableSubValue[];
-  /** Names another field of the row — not a translation key, hence no `Key` suffix. When that
-   *  field has a value, the cell becomes a button opening a dialog that shows it: a long
-   *  diagnostic message reads there instead of stretching a column across every row. */
+  /** Names another field of the row (not a translation key); when set, the cell opens a dialog showing it. */
   detailField?: string;
   /** Title of that dialog. Falls back to the column's own `labelKey`. */
   detailTitleKey?: string;
-  /** Turns the cell into a link running this core action against its row. Same closed
-   *  vocabulary as a row action's `actionId`, and the same fail-closed rule: an id core does not
-   *  recognise, or a row the action cannot resolve, renders plain text rather than a dead link. */
+  /** Turns the cell into a link running this core action; an unknown id or unresolvable row renders plain text. */
   linkActionId?: TableRowActionId;
-  /** Names a 0–100 field on the row; a badged cell then fills left-to-right with it and appends
-   *  the percent. A moving value belongs inside the badge naming what is moving — as its own
-   *  column it costs width and reads as unrelated to the state beside it. Ignored on a cell that
-   *  declares no `badges`, and on a row whose named field is not a number. */
+  /** Names a 0–100 field; a badged cell fills left-to-right with it. Ignored without `badges` or on a non-number. */
   progressField?: string;
 }
 
-/**
- * One line of a `detail` row action's dialog. A plain field renders its value; `kind: 'link'`
- * renders `textKey` as an anchor to the URL the row holds under `key`, which core refuses
- * unless it is `http:` or `https:` — the value comes from an indexer, not from the manifest.
- * A field whose row value is empty is skipped, so one dialog serves rows of differing shape.
- */
+/** One line of a `detail` row action's dialog; `kind: 'link'` anchors the URL under `key`, refused unless
+ *  `http:`/`https:` (it comes from an indexer). Empty row values are skipped. */
 export type TableDetailField =
   | {
       kind?: 'value';
@@ -286,9 +232,7 @@ export type TableDetailField =
     }
   | { kind: 'link'; key: string; labelKey: string; textKey: string };
 
-/** One `rowActions[]` visibility clause, read off the row itself: the action renders only when
- *  the row's `key` holds one of `in`. Pausing a paused download is not an action, it is a button
- *  that fails. Distinct from `when`, which reads the viewer rather than the row. */
+/** One `rowActions[]` visibility clause read off the row: renders only when the row's `key` holds one of `in`. */
 export interface TableRowCondition {
   key: string;
   in: (string | number | boolean)[];
@@ -299,14 +243,9 @@ export interface ProvidersConfigPage extends ConfigPageBase {
   kind: 'providers';
   list: string;
   implementations: string;
-  /** Tests the unsaved draft — POSTs `{implementation, settings, id?}` before it is saved.
-   *  Distinct from `actions[]`: there is no route parameter, and on a new draft no row exists
-   *  at all. A blank secret is omitted from `settings`, and `id` names the row being edited,
-   *  so the resource resolves it against what it stored rather than asking the user again. */
+  /** Tests the unsaved draft by POSTing `{implementation, settings, id?}`; a blank secret is omitted and `id` lets the resource use the stored one. */
   testConnection?: { route: string };
-  /** `method` is explicit: encoding it into `route` left the caller POSTing to a
-   *  string that contained the verb. Every `scope: 'row'` entry renders its own button —
-   *  its route's `:id` is substituted with the row's id before the request ever fires. */
+  /** `method` is explicit rather than encoded in `route`; a `scope: 'row'` entry substitutes `:id` with the row's id. */
   actions?: {
     id: string;
     labelKey: string;
@@ -325,9 +264,7 @@ export interface ProvidersConfigPage extends ConfigPageBase {
     afterSave?: boolean;
   }[];
   reorderable?: boolean;
-  /** Adds a selection column and the bulk actions that act on it (enable, disable, delete, and
-   *  one editor applied to every selected row). Opt-in per page: a list whose rows are edited one
-   *  at a time should not grow a column asking to be ticked. */
+  /** Adds a selection column and bulk actions; opt-in per page. */
   bulkSelect?: boolean;
   /** Priority is not a universal provider concept; hide the column when the
    *  resource has none. */
@@ -384,14 +321,8 @@ export interface TableConfigPage extends ConfigPageBase {
   /** Adds a selection column and turns the declared `proxy` row actions into batch actions,
    *  one confirmation for the whole selection instead of one per row. */
   bulkSelect?: boolean;
-  /**
-   * `when` gates on the viewer (the same closed predicate vocabulary `ui.contributions[]` uses —
-   * a mutating action names the permission its route is declared under, so the button is absent
-   * rather than answering 403); `visibleWhen` gates on the row. Both are presentation only:
-   * the route behind the button is CASL-guarded regardless.
-   *
-   * A `proxy` path may carry `:id`, substituted with the row's own `id` before the request fires.
-   */
+  /** `when` gates on the viewer (same vocabulary as `ui.contributions[]`), `visibleWhen` on the row; presentation
+   *  only, the route is CASL-guarded. A `proxy` path may carry `:id`, substituted with the row's id. */
   rowActions?: (
     | { kind: 'route'; labelKey: string; path: string; when?: WhenPredicate[]; visibleWhen?: TableRowCondition }
     | {
@@ -417,11 +348,7 @@ export interface TableConfigPage extends ConfigPageBase {
         method: 'POST' | 'DELETE';
         path: string;
         confirmKey?: string;
-        /** Renders a checkbox inside that confirmation and sends its state as the query
-         *  parameter `param`. Needs `confirmKey`: a toggle with no dialog to sit in never
-         *  renders, and would silently send its default. `hintKey` is the line under it, for
-         *  what the choice does *not* do — the part a label long enough to say it stops being
-         *  a label. */
+        /** Renders a checkbox in the confirmation sending its state as query param `param`; needs `confirmKey`. `hintKey` is the line under it. */
         confirmToggle?: { labelKey: string; param: string; hintKey?: string };
         /** Danger styling on the button — a destructive row action must not look like the
          *  two beside it. */
@@ -435,9 +362,7 @@ export interface TableConfigPage extends ConfigPageBase {
    *  paged resource renders empty against an array-only reader. */
   paged?: boolean;
   pageSize?: number;
-  /** Re-fetch this often while the page is on screen, for a list whose values move on
-   *  their own. Clamped to {@link TABLE_REFRESH_MIN_MS}; polling stops while the tab is
-   *  hidden. Prefer `refreshOn` — this is for values no event announces. */
+  /** Re-fetch this often while visible, clamped to {@link TABLE_REFRESH_MIN_MS}. Prefer `refreshOn`; this is for values no event announces. */
   refreshMs?: number;
   /** Core SSE event types that re-fetch the list as they arrive, coalesced to at most one
    *  fetch per {@link TABLE_REFRESH_MIN_MS}. */

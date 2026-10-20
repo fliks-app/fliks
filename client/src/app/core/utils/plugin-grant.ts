@@ -4,10 +4,7 @@ export interface PluginGrant {
   subject: string;
 }
 
-/**
- * `plugin:<id>:<name>` (every action) or `<action>:plugin:<id>:<name>` (that one). A bare subject
- * reads as `manage`, which is what core grants for it.
- */
+/** `plugin:<id>:<name>` (every action) or `<action>:plugin:<id>:<name>` (that one); a bare subject reads as `manage`, as core grants it. */
 export function parsePluginGrant(value: string): PluginGrant | null {
   const match = /^(?:([a-z]+):)?(plugin:[^:]+:.+)$/.exec(value);
   return match ? { action: match[1] ?? 'manage', subject: match[2] } : null;

@@ -10,18 +10,8 @@ const MOBILE_OS: Record<string, string> = {
   windows: 'Windows',
 };
 
-/**
- * Resolves the host's real identity from the best NATIVE source — the browser UA
- * can't expose a real OS version nor the user-assigned device name, so we read
- * them natively where possible:
- *   • systemName — OS name+version ("macOS 26", "Ubuntu 24.04", "iOS 18.5").
- *   • deviceName — user-assigned machine name ("MacBook de Clément", "Samsung de
- *     Clément"); '' on web and on iOS without the device-name entitlement.
- *
- * Order: Electron preload bridge → Capacitor `Device.getInfo()` → UA (OS name
- * only). Resolved once at construction; callers that must have the value before
- * sending it (pairing) should `await ready()` first.
- */
+/** Resolves the host's real OS version (`systemName`) and user-assigned `deviceName` from the best native source (Electron bridge → Capacitor → UA), since the UA can't expose them.
+ *  Resolved once at construction; callers needing the value first (pairing) should `await ready()`. */
 @Injectable({ providedIn: 'root' })
 export class SystemInfoService {
   private readonly _systemName = signal('');

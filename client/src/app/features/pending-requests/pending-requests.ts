@@ -37,12 +37,7 @@ export class PendingRequestsComponent implements OnInit {
   /** pairingId currently being approved/denied — disables its buttons. */
   readonly busy = signal<string | null>(null);
 
-  /**
-   * Live updates: when the SSE stream delivers a `pairing.requested` event
-   * targeting the current user, refresh the list. Filtering is client-side —
-   * the SSE channel is not per-user, but ignoring foreign events is enough
-   * for this case (the row would 403 on approve anyway).
-   */
+  /** Refreshes on `pairing.requested` for the current user; filtered client-side since the SSE channel isn't per-user (a foreign row would 403 on approve). */
   private readonly sseEffect = effect(() => {
     const ev = this.sse.lastEvent();
     if (!ev || ev.type !== 'pairing.requested') return;

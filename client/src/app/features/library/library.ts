@@ -63,10 +63,7 @@ export type SortOrder = 'ASC' | 'DESC';
 type FilterMonitored = '' | 'true' | 'false';
 type FilterWatched = '' | 'watched' | 'unwatched';
 
-/** Natural default order per sort field. Title reads A→Z; the three
- *  date / rating fields lead with the most recent / best value because
- *  that's what users actually want to see first. Applied whenever the
- *  user switches `sortBy` — they can still flip with the ↑/↓ button. */
+/** Natural default order per sort field: Title A→Z, date/rating fields newest/best first. Applied when `sortBy` changes. */
 const NATURAL_ORDER_BY_SORT: Record<string, SortOrder> = {
   title: 'ASC',
   year: 'DESC',
@@ -149,9 +146,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
   });
 
   private queryParamSub?: Subscription;
-  /** Set while a state-driven `syncQueryParams` is being applied to the
-   *  URL, so the `queryParamMap` subscription that fires right after
-   *  can ignore the round-trip instead of re-applying our own write. */
+  /** Set while a state-driven `syncQueryParams` writes the URL, so the `queryParamMap` subscription ignores the round-trip. */
   private skipQueryParamSync = false;
 
   /** Resolved library (null while loading or if not found). */
@@ -185,11 +180,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
   /** Content other members have recommended to the viewer. */
   readonly recommendedForYou = signal<ReceivedRecommendation[]>([]);
   readonly suggestionsLoading = signal(true);
-  /**
-   * A revalidation must not blank a panel that already has content: the tab is
-   * replaced by its skeleton, which drops whatever the viewer was looking at,
-   * including the card a back transition is morphing into.
-   */
+  /** A revalidation must not blank a panel that already has content (its skeleton would drop the card a back transition morphs into). */
   private readonly hasSuggestions = computed(
     () =>
       this.suggestionsContinueRaw().length > 0 ||
@@ -258,13 +249,8 @@ export class LibraryComponent implements OnInit, OnDestroy {
   protected readonly skeletonRow = Array.from({ length: 6 }, (_, i) => i);
 
   // ── CDK virtual scroll ───────────────────────────────────────────────────
-  // The grid renders through `cdk-virtual-scroll-viewport` on every platform:
-  // only the rows on screen exist, and the views scrolled past are recycled.
-  /** Columns and row pitch, measured from the first laid-out row. The initial
-   *  values only have to be plausible — the viewport re-lays out as soon as the
-   *  real ones land. The row carries the vertical gap as bottom padding, so its
-   *  measured height IS the pitch; deriving it from height + row-gap instead
-   *  drifted and collapsed the space between rows. */
+  /** Columns and row pitch, measured from the first laid-out row; initial values only need to be plausible.
+   *  The row carries the gap as bottom padding, so its height IS the pitch (height + row-gap drifted). */
   readonly gridCols = signal(6);
   readonly rowHeight = signal(520);
   /** All items chunked into rows — the viewport scrolls rows, not cards. */
@@ -280,9 +266,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
   protected trackRow(_: number, row: { index: number }): number {
     return row.index;
   }
-  /** Alphabet highlight. Derived from the scroll offset, not from the DOM
-   *  (only a handful of rows exist) and not from `scrolledIndexChange`, which
-   *  stays at 0 when the viewport scrolls the window rather than itself. */
+  /** Alphabet highlight, derived from the scroll offset: few rows exist in the DOM and `scrolledIndexChange` stays 0 when the window scrolls. */
   private letterRaf: number | null = null;
   /** How long a deliberate jump outranks the scroll-driven recompute: the row
    *  it lands on usually opens with the tail of the previous letter. */
@@ -378,10 +362,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
   }
   private viewport?: CdkVirtualScrollViewport;
   private cardRowEl?: HTMLElement;
-  /** Measured once per layout. The strategy is fixed-size: it places every row
-   *  at `index * itemSize`, so re-measuring a row whose natural height moved by
-   *  a pixel makes the pitch disagree with the placement, and the error
-   *  accumulates — a jump thousands of rows down lands a whole section early. */
+  /** Measured once per layout: the fixed-size strategy places rows at `index * itemSize`, so re-measuring accumulates pitch error. */
   private rowMeasured = false;
   @ViewChild('cardRow') set cardRowRef(ref: ElementRef<HTMLElement> | undefined) {
     this.cardRowEl = ref?.nativeElement;
@@ -463,9 +444,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
       this.sortOrder.set(
         (qp.get('sortOrder') ?? stored['sortOrder'] ?? 'ASC') as SortOrder,
       );
-      // View / genre / collection are navigation state, read only from the URL
-      // (within-session back/forward, deep links) — never from the persisted
-      // filters — so opening a library fresh lands on the `all` tab.
+      // View / genre / collection are navigation state read only from the URL, never persisted filters, so a fresh open lands on `all`.
       this.viewMode.set((qp.get('view') ?? 'all') as LibraryViewMode);
       this.selectedGenre.set(qp.get('genre') ?? '');
       const collId = qp.get('collectionId');
@@ -480,9 +459,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
       if (scrollKey) this.scrollMemory.restore(scrollKey, this.injector);
       void this.loadLikes();
       if (this.viewMode() === 'suggestions') {
-        // Either a deep-link with `?view=suggestions` or a return from
-        // back-nav with the persisted mode. Fetch the suggestions data
-        // alongside the regular grid so the panel isn't empty.
+        // Deep-link `?view=suggestions` or back-nav with the persisted mode: fetch suggestions alongside the grid.
         void this.loadSuggestions();
       } else if (this.viewMode() === 'genres') {
         void this.loadGenres();
@@ -493,9 +470,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
       }
     });
 
-    // Re-apply state on browser back/forward (same route, queryParams
-    // change). Initial load + state-driven `syncQueryParams` writes are
-    // skipped via the `skipQueryParamSync` flag so we don't recurse.
+    // Re-apply state on browser back/forward; the `skipQueryParamSync` flag skips initial load and our own writes.
     this.queryParamSub = this.route.queryParamMap.subscribe((qp) => {
       if (this.skipQueryParamSync) {
         this.skipQueryParamSync = false;
@@ -565,9 +540,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
     this.list.scrollToLetter(letter, (m) => m.title, 'media');
   }
 
-  /** Live measurements of the `all` grid for windowing. Read together (rect +
-   *  scroller.scrollTop) so a webOS `zoom` scales them consistently. Returns
-   *  null until the grid is laid out, where windowing falls back to full render. */
+  /** Live measurements of the `all` grid for windowing, read together so a webOS `zoom` scales them consistently; null until laid out. */
   onSearch(query: string) {
     this.searchQuery.set(query);
     this.syncQueryParams();
@@ -594,9 +567,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
 
   onSortByChange(field: string) {
     this.sortBy.set(field);
-    // Snap to the field's natural order so the leading items are the
-    // ones the user typically wants (newest / best first). The arrow
-    // button still lets them flip after the fact.
+    // Snap to the field's natural order; the arrow button still flips it.
     this.sortOrder.set(NATURAL_ORDER_BY_SORT[field] ?? 'ASC');
     this.onFilterChange();
   }
@@ -605,9 +576,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
     if (this.viewMode() === mode) return;
     this.viewMode.set(mode);
     this.scrollOwnTo(0);
-    // Tab switches stay on the same history entry — back from the
-    // library should return to the previous page, not walk through
-    // every tab the user clicked.
+    // Tab switches stay on one history entry so back returns to the previous page, not through every tab.
     this.syncQueryParams(false);
     if (mode === 'suggestions') {
       void this.loadSuggestions();
@@ -704,12 +673,8 @@ export class LibraryComponent implements OnInit, OnDestroy {
     }
   }
 
-  /** Fetches continue-watching + recommendations for the active library.
-   *  No in-memory dedup — the HTTP cache (stale-while-revalidate) handles
-   *  the no-op case when the entry is fresh, and we want every `attached$`
-   *  re-visit to give the SWR a chance to pull in updated data. Signals
-   *  keep their previous value until each response lands, so flipping
-   *  between tabs never blanks the panel. */
+  /** Fetches continue-watching + recommendations. No in-memory dedup: the SWR HTTP cache handles fresh entries,
+   *  and signals keep their value until each response lands, so tab flips never blank the panel. */
   private async loadSuggestions(): Promise<void> {
     const lib = this.library();
     if (!lib) return;
@@ -787,11 +752,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
     }
   }
 
-  /** Filter/sort *preferences* persisted to localStorage and restored when a
-   *  library is opened fresh. Deliberately excludes the active tab and its
-   *  in-tab selection (view / genre / collection): those are navigation state,
-   *  not preferences, so reopening the app lands on the library root rather
-   *  than the tab the user happened to leave open. */
+  /** Filter/sort preferences persisted to localStorage; excludes the active tab and its selection (navigation state). */
   private buildStoredParams(): Record<string, string> {
     const p: Record<string, string> = {};
     if (this.searchQuery()) p['q'] = this.searchQuery();
@@ -803,9 +764,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
     return p;
   }
 
-  /** The full state mirrored into the URL — the persisted preferences plus the
-   *  active tab and its selection — so within-session back/forward and deep
-   *  links restore the exact view. */
+  /** The full state mirrored into the URL (preferences plus active tab and selection) so back/forward and deep links restore the view. */
   private buildUrlParams(): Record<string, string> {
     const p = this.buildStoredParams();
     if (this.viewMode() !== 'all') p['view'] = this.viewMode();
@@ -814,9 +773,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
     return p;
   }
 
-  /** Reflect the current state in the URL. `push` adds a real history entry
-   *  instead of replacing — used for the genres-list → genre-filter transition
-   *  so the browser back button returns to the Genres list. */
+  /** Reflect the state in the URL; `push` adds a history entry (genres list → genre filter) so back returns to the list. */
   private syncQueryParams(push = false) {
     this.skipQueryParamSync = true;
     void this.router.navigate([], { queryParams: this.buildUrlParams(), replaceUrl: !push });
@@ -892,10 +849,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
       if (gen === this.loadGen) this.loading.set(false);
     }
     queueMicrotask(() => {
-      // Cached lists paint instantly; revalidate so a media imported / files
-      // landed / watched-toggled since the last visit shows up without
-      // waiting on the 5 min TTL. Generation check drops a stale background
-      // result when the user has already moved to another library.
+      // Cached lists paint instantly; revalidate to pick up changes before the 5 min TTL. The generation check drops stale results.
       if (gen !== this.loadGen) return;
       void Promise.all([
         this.mediaService.getAll(params, { force: true }).catch(() => null),
@@ -908,9 +862,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
     });
   }
 
-  /** Series always toggleable (bulk endpoint, no file needed). Movies need
-   *  at least one local file — without it `toggleWatched` has nothing to
-   *  reference and the action would silently no-op. */
+  /** Series always toggleable (bulk endpoint); movies need a local file, else `toggleWatched` has nothing to reference. */
   canMarkMediaWatched(m: Media): boolean {
     return m.type === 'series' || !!m.files?.length;
   }

@@ -33,16 +33,8 @@ export interface DownloadEvent {
   seq: number;
 }
 
-/**
- * Single entry point for all download operations.
- *
- * Downloads are fully client-side:
- *   - Native (Android/iOS): ExoPlayer DownloadManager / AVAssetDownloadURLSession
- *   - Web: Shaka offline storage (IndexedDB)
- *   - UI tracking: DownloadCacheService (localStorage)
- *
- * No backend API involvement.
- */
+/** Single entry point for downloads, fully client-side: ExoPlayer / AVAssetDownloadURLSession on native,
+ *  Shaka offline storage on web, DownloadCacheService (localStorage) for UI tracking. */
 @Injectable({ providedIn: 'root' })
 export class DownloadManagerService {
   private readonly isNative = Capacitor.isNativePlatform();
@@ -121,12 +113,8 @@ export class DownloadManagerService {
   /** Last percentage persisted per task, so the write below can be throttled. */
   private readonly persistedProgress = new Map<number, number>();
 
-  /** Promote the persisted status out of `transcoding` once the OS daemon has
-   *  taken the task. {@link recover} keys off that distinction, so a task still
-   *  reading `transcoding` after a relaunch looks like one that never started
-   *  and gets cancelled. Progress is written in 5-point steps — the daemon emits
-   *  it far more often than localStorage should be rewritten — but a change of
-   *  state always lands, or a queued task would never show it left the queue. */
+  /** Promotes the persisted status out of `transcoding` once the OS daemon owns the task ({@link recover} would cancel it otherwise).
+   *  Progress is written in 5-point steps to spare localStorage, but a state change always lands. */
   private persistProgress(taskId: number, progress: number, state?: string) {
     const status = state === 'queued' ? 'queued' : 'downloading';
     const last = this.persistedProgress.get(taskId);
@@ -136,20 +124,8 @@ export class DownloadManagerService {
     this.updateTaskStatus(taskId, status, progress);
   }
 
-  /**
-   * Refresh the copy on the iOS Live Activity covering the download queue.
-   *
-   * The native side aggregates the numbers off its own task list — it is the
-   * only thing that knows what is really transferring — but the wording has to
-   * come from here: ngx-translate is the single source of copy and a widget
-   * extension cannot reach it. Called whenever the batch changes shape, which
-   * is the only time the wording can change.
-   *
-   * An empty queue retires the card. That is the one reliable moment to clear a
-   * card stranded by a force-quit: nothing runs at termination, and by the time
-   * recovery has settled, this is the only place that knows the queue the card
-   * describes no longer exists.
-   */
+  /** Refreshes the copy on the iOS Live Activity covering the queue; the wording must come from here (ngx-translate, unreachable from the widget).
+   *  An empty queue retires the card, the only reliable moment to clear one stranded by a force-quit. */
   private syncActivityCopy() {
     if (Capacitor.getPlatform() !== 'ios') return;
     const active = this.cache
@@ -249,9 +225,7 @@ export class DownloadManagerService {
       media: { id: meta?.mediaId ?? 0, title, posterUrl: meta?.posterUrl ?? null, type: meta?.type ?? '' },
     };
 
-    // Desktop keeps a single offline copy per file (the disk key + status
-    // events are keyed by mediaFileId), so a new download replaces any prior
-    // one for the same file instead of colliding with it.
+    // Desktop keeps one offline copy per file (keyed by mediaFileId), so a new download replaces the prior one.
     if (this.isDesktop) {
       for (const prev of this.cache
         .load()
@@ -260,14 +234,10 @@ export class DownloadManagerService {
       }
     }
 
-    // Hydrate a fresh long-lived stream JWT before we bake the URL +
-    // header into the native download daemon — downloads can run for
-    // hours so we can't rely on the 1h access token.
+    // Fresh long-lived stream JWT before baking the URL into the daemon: downloads outlast the 1h access token.
     await this.auth.ensureStreamToken();
 
-    // Desktop (Electron), original: fetch the untouched container straight to
-    // disk and play it offline via mpv (full codec coverage). No HLS session —
-    // the raw ?download=1 route streams the file with Range support.
+    // Desktop original: fetch the untouched container to disk via the raw ?download=1 route and play it with mpv; no HLS session.
     if (this.isDesktop && quality === 'original') {
       const url = this.streamingApi.getOriginalDownloadUrl(mediaFileId);
       task.hlsUrl = url;
@@ -283,10 +253,7 @@ export class DownloadManagerService {
       return task;
     }
 
-    // Establish a live session the way playback does: the HLS segment routes
-    // resolve the codec variant off the session via ?sid= and reject (410)
-    // any segment request that can't resolve one. Thread the returned sid
-    // into the baked URL; active segment fetches keep the session warm.
+    // Live session as in playback: HLS segment routes resolve the codec variant from ?sid= and reject (410) without one.
     const playbackInfo = await this.streamingApi.getPlaybackInfo(
       mediaFileId,
       this.deviceProfile.getProfile(),
@@ -317,9 +284,7 @@ export class DownloadManagerService {
     } else if (this.isNative) {
       const token =
         this.auth.streamToken() ?? this.auth.accessToken ?? '';
-      // Pre-translated banner copy for the iOS completion/failure notification
-      // (ngx-translate is the single source of user-facing strings; the native
-      // side never hardcodes text). Ignored on Android.
+      // Pre-translated banner copy for the iOS notification (the native side never hardcodes text); ignored on Android.
       const notifTitle = episode ? `${title} · ${episode}` : title;
       this.notif.startDownload(String(taskId), hlsUrl, token, {
         notifTitle,
@@ -336,13 +301,7 @@ export class DownloadManagerService {
     return task;
   }
 
-  /**
-   * Run a failed download again from the metadata of the one that failed.
-   *
-   * The dead task is dropped first: its id is baked into the native daemon's
-   * bookkeeping and into any partial bundle on disk, so reusing it would have
-   * the retry inherit the corpse of the previous attempt.
-   */
+  /** Reruns a failed download from its metadata; the dead task is dropped first because its id lives in the daemon and any partial bundle. */
   async retryDownload(task: DownloadTask): Promise<DownloadTask> {
     await this.deleteDownload(task);
     return this.createDownload(
@@ -405,9 +364,7 @@ export class DownloadManagerService {
     }
   }
 
-  /**
-   * Web offline download using Shaka's built-in offline storage API.
-   */
+  /** Web offline download via Shaka's offline storage. */
   private async handleWebDownload(task: DownloadTask, hlsUrl: string) {
     const downloadId = task.id;
     if (this.cache.isDownloading(downloadId)) return;
@@ -518,9 +475,7 @@ export class DownloadManagerService {
     }
   }
 
-  /** Pin the title's artwork on disk alongside the media. The downloads page
-   *  and the detail header still render it offline, where the remote URL is
-   *  dead and the WebView cache is not something we control. */
+  /** Pins the artwork on disk so the downloads page and detail header render offline. */
   private prefetchArtwork(posterUrl?: string | null, fanartUrl?: string | null) {
     const wanted: [string | null | undefined, ImageSize][] = [
       [posterUrl, 'thumb'],
@@ -561,16 +516,8 @@ export class DownloadManagerService {
     if (status === 'ready') this.cache.markLocal(taskId);
   }
 
-  /**
-   * Re-sync one in-flight task with the native download daemon. Returns true
-   * when the daemon still owns it — live or finished — and the caller must
-   * leave it alone.
-   *
-   * `getDownloads` only reports transfers the daemon still holds (ExoPlayer
-   * drops an item the moment it completes), so a download that finished while
-   * the app was dead needs the `isDownloaded` probe, which reads the persistent
-   * index on both platforms.
-   */
+  /** Re-syncs one in-flight task with the native daemon; true when it still owns the task (live or finished).
+   *  `getDownloads` omits completed items (ExoPlayer drops them), so finished-while-dead needs the `isDownloaded` probe. */
   private async reconcileNative(
     task: DownloadTask,
     nativeById: Map<string, { id: string; progress: number; state: string }>,
@@ -582,9 +529,7 @@ export class DownloadManagerService {
         void this.preDownloadSubtitles(task.id);
       } else {
         this.persistedProgress.set(task.id, native.progress);
-        // Anything the daemon is holding but not actively transferring reads
-        // as queued — ExoPlayer also parks downloads as `stopped` and
-        // `restarting`, and neither is progress the user should see counting.
+        // Anything held but not transferring reads as queued (ExoPlayer also parks `stopped` / `restarting`).
         this.updateTaskStatus(
           task.id,
           native.state === 'downloading' ? 'downloading' : 'queued',
@@ -601,16 +546,8 @@ export class DownloadManagerService {
     return false;
   }
 
-  /**
-   * Recover download state from localStorage cache.
-   * Re-populates the titles map for UI display.
-   *
-   * `onStartup` = the app just (re)launched. That only condemns an in-flight
-   * task on web and desktop, where the transfer lived in the JS context that
-   * went away. On native the OS daemon owns it and outlives the process — iOS
-   * even relaunches us in the background to deliver its session events — so
-   * those are reconciled against the daemon instead.
-   */
+  /** Recovers download state from the localStorage cache.
+   *  `onStartup` condemns an in-flight task only on web and desktop; on native the OS daemon outlives the process, so it is reconciled instead. */
   private async recover(onStartup = false) {
     const tasks = this.cache.load();
 
@@ -640,9 +577,7 @@ export class DownloadManagerService {
         continue;
       }
       if (t.status === 'ready') {
-        // Native: trust localStorage — ExoPlayer's SimpleCache persists across
-        // restarts and querying DownloadIndex has timing issues.
-        // Web: verify Shaka offline URI still exists in localStorage.
+        // Native: trust localStorage (DownloadIndex queries have timing issues); web: verify the Shaka URI exists.
         if (!this.isNative) {
           const hasLocal = await this.storage.has(`download-${t.mediaFileId}`);
           if (!hasLocal) {
@@ -654,15 +589,10 @@ export class DownloadManagerService {
         // Remove stale failed tasks
         this.cache.remove(t.id);
       } else if (DownloadManagerService.ACTIVE_STATUSES.includes(t.status)) {
-        // In-flight when the app last stopped. Ask the native daemon before
-        // condemning anything — on web the Shaka store did die with the JS
-        // context, but a native transfer very likely didn't.
+        // In-flight at last stop: ask the native daemon first, since only web's Shaka store died with the JS context.
         if (this.isNative && (await this.reconcileNative(t, nativeById))) continue;
 
-        // Cancel the dead download so it can't keep retrying and race the fresh
-        // one. Auto items are dropped and re-fetched by the reconciler (one
-        // clean download); manual ones are flagged failed so they don't
-        // silently vanish.
+        // Cancel the dead download so it can't race the fresh one; auto items are re-fetched, manual ones flagged failed.
         if (onStartup && t.auto) {
           await this.deleteDownload(t);
         } else {

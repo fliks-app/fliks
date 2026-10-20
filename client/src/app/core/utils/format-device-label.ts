@@ -1,19 +1,7 @@
 import { detectBrowser, detectDeviceModel, detectOs, isElectronUa } from './ua-parser';
 
-/**
- * Boil the raw User-Agent header into a translation key + interpolation
- * params for device labels (admin streams dashboard, pairing requests). The
- * actual rendering happens via ngx-translate so the labels stay localised.
- *
- * Browser and OS names ("Chrome", "macOS") are passed as interpolation
- * params rather than translated themselves — they're proper nouns that
- * stay identical across locales.
- *
- * `systemName` (optional) is the REAL OS name+version resolved natively
- * (SystemInfoService) — "macOS 26", "Windows 11", "iOS 18.5". When provided it
- * overrides the UA-derived OS (which Chromium freezes and can't version), so the
- * label reads "Application macOS 26" instead of "Application macOS".
- */
+/** Turns a raw User-Agent into a translation key plus params; browser/OS names are proper nouns passed as params.
+ * `systemName` (native, e.g. "macOS 26") overrides the UA-derived OS, which Chromium freezes and can't version. */
 export interface DeviceLabelKey {
   key: string;
   params?: Record<string, string>;

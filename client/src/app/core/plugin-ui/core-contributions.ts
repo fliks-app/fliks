@@ -1,17 +1,10 @@
 import type { UiContribution } from '@fliks/plugin-ui';
 
-// `WhenPredicate` (mirrored from the backend contract) only lists the
-// positive spellings; the evaluator's documented "!" negation isn't part of
-// the type. Cast at the two call sites rather than fork the shared type.
+// `WhenPredicate` lacks the evaluator's "!" negation; cast at the two call sites rather than fork the shared type.
 type When = NonNullable<UiContribution['when']>;
 const not = (p: string) => `!${p}` as unknown as When[number];
 
-/**
- * Core's own `nav.main` / `nav.acquisition` items, expressed as contributions
- * so they merge with plugin contributions through the same weight/id sort
- * instead of being hardcoded markup. Weight 200 in `nav.acquisition` is free
- * for a plugin to claim; core has nothing of its own to put there.
- */
+/** Core's own `nav.main` / `nav.acquisition` items as contributions, merged with plugin ones by weight/id; weight 200 in `nav.acquisition` is free for a plugin. */
 export const CORE_NAV_CONTRIBUTIONS: readonly UiContribution[] = [
   { id: 'core.home', slot: 'nav.main', weight: 100, labelKey: 'nav.home', icon: 'home', action: { kind: 'route', path: '/' } },
   { id: 'core.search', slot: 'nav.main', weight: 200, labelKey: 'search.title', icon: 'search', action: { kind: 'route', path: '/search' } },
@@ -25,9 +18,7 @@ export const CORE_NAV_CONTRIBUTIONS: readonly UiContribution[] = [
   { id: 'core.calendar', slot: 'nav.acquisition', weight: 300, labelKey: 'nav.calendar', icon: 'calendar', action: { kind: 'route', path: '/calendar' } },
 ];
 
-/** Libraries render as their own data-driven block, anchored between the
- *  weight-300 and weight-2000 core items — this is where a plugin's
- *  `nav.main` item at weight 1000-1999 would land, visually after them. */
+/** Libraries render as their own block between the weight-300 and weight-2000 core items; where a plugin's `nav.main` weight 1000-1999 lands after them. */
 export const LIBRARIES_BLOCK_WEIGHT = 1000;
 
 /** One `menu-title` group in the admin settings sidebar. */
@@ -36,14 +27,8 @@ export interface CoreSettingsSection {
   items: readonly UiContribution[];
 }
 
-/**
- * Core's own admin settings links as `settings.page` contributions, grouped
- * into the 7 sections the sidebar has always had. A plugin never joins one
- * of these — it gets a section of its own instead (see the admin feature's
- * `SettingsSectionsService`) — so weight only orders core items against
- * each other; the 100-spacing is kept anyway for a future core item to slot
- * into, on the same convention as `CORE_NAV_CONTRIBUTIONS`.
- */
+/** Core's admin settings links as `settings.page` contributions in the 7 sidebar sections; plugins get their own section
+ *  (see `SettingsSectionsService`), so weight only orders core items, kept 100-spaced like `CORE_NAV_CONTRIBUTIONS`. */
 export const CORE_SETTINGS_SECTIONS: readonly CoreSettingsSection[] = [
   {
     labelKey: 'admin.section_system',

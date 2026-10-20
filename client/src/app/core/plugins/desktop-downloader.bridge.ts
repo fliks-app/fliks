@@ -1,7 +1,4 @@
-// Bridge to the Electron desktop shell's offline-download service, exposed on
-// `window.fliksDownloader` by the desktop preload. Types mirror
-// desktop/src/shared/contract.ts — the two live in separate build workspaces,
-// so the shape is intentionally duplicated here.
+// Bridge to the Electron offline-download service on `window.fliksDownloader`; types duplicate desktop/src/shared/contract.ts (separate build workspaces).
 
 export interface DesktopDownloadRequest {
   id: string;

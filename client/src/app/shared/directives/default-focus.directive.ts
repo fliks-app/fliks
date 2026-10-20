@@ -7,15 +7,8 @@ import {
   DefaultFocusTarget,
 } from '../../core/services/default-focus.service';
 
-/**
- * Declares a page's default-focus target. On arrival (fresh navigation or
- * back-nav re-attach) the {@link DefaultFocusService} focuses it — gated to
- * keyboard / TV so mouse and touch are untouched — and restores the previously
- * focused item on back-navigation. Drop it on any page's root container:
- *
- *   <div appDefaultFocus="a[data-home-focus^='library:']"
- *        focusKey="home" focusIdAttr="data-home-focus"> … </div>
- */
+/** Declares a page's default-focus target for {@link DefaultFocusService} (keyboard/TV only, restores focus on back-nav); put it on the page root:
+ *  `<div appDefaultFocus="a[data-home-focus^='library:']" focusKey="home" focusIdAttr="data-home-focus">`. */
 @Directive({ selector: '[appDefaultFocus]', standalone: true })
 export class DefaultFocusDirective implements OnInit, OnDestroy {
   /** CSS selector (within host) of the first element to focus; '' → first focusable. */
@@ -35,9 +28,7 @@ export class DefaultFocusDirective implements OnInit, OnDestroy {
   private readonly targetGetter = (): DefaultFocusTarget => this.target();
 
   constructor() {
-    // Fresh navigation: the directive is created with the component, so the
-    // next render is the arrival. A back-nav re-attach reuses the component
-    // (no re-render), so attached$ below covers that case.
+    // Fresh navigation arrives with this component's next render; a back-nav re-attach doesn't re-render, so attached$ covers it.
     afterNextRender(() => this.svc.applyOnArrival(this.target()));
   }
 

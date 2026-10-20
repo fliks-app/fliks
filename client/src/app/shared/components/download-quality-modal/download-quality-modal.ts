@@ -66,9 +66,7 @@ export class DownloadQualityModalComponent {
     this.close();
   }
 
-  /** Stream the untouched source file straight to the browser's downloads.
-   *  Mint a long-lived stream token first: the file can be several GB and a
-   *  1h access token would expire on a resumed range request mid-download. */
+  /** Stream the untouched source file to the downloads; mint a long-lived stream token since a 1h access token would expire on a resumed range request. */
   async downloadOriginal() {
     // Desktop: route the original through the Electron download-to-disk path
     // (the browser <a> save doesn't reliably attach in the Electron shell).

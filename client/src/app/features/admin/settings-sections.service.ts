@@ -19,9 +19,7 @@ export interface ResolvedSettingsItem {
 
 export interface ResolvedSettingsSection {
   id: string;
-  /** An i18n key for a core section; a plugin section's manifest name (or
-   *  its id as a last resort) — always piped through `translate`, which
-   *  falls back to the literal string when no such key exists. */
+  /** An i18n key for core sections, a plugin's manifest name (else id) otherwise; `translate` falls back to the literal string. */
   label: string;
   items: ResolvedSettingsItem[];
 }
@@ -30,15 +28,8 @@ function sortByWeightThenId(list: readonly UiContribution[]): UiContribution[] {
   return [...list].sort((a, b) => a.weight - b.weight || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }
 
-/**
- * Resolves `settings.page` into the admin sidebar's section list. Unlike
- * `nav.main`/`nav.acquisition`, a plugin never joins a core section: every
- * plugin's pages form one section of their own, labelled by the plugin's
- * manifest name and ordered after every core section, by plugin id — never
- * by install order. A section with no visible item cannot appear at all,
- * core or plugin, so an install/uninstall or a `when` change can never leave
- * an orphaned header.
- */
+/** Resolves `settings.page` into sidebar sections: all of a plugin's pages form one own section after the core ones, ordered by plugin id.
+ * Sections with no visible item never appear, so no orphaned header. */
 @Injectable({ providedIn: 'root' })
 export class SettingsSectionsService {
   private readonly registry = inject(PluginUiRegistryService);
@@ -84,12 +75,7 @@ export class SettingsSectionsService {
     return [...core, ...plugins].filter((s) => s.items.length > 0);
   });
 
-  /**
-   * The entry the current URL belongs to: the longest route that prefixes it, so a deeper entry
-   * wins over the shallower one it happens to sit under. `/admin/settings/plugins/<id>/<view>`
-   * therefore lights that plugin's own entry and not the Plugins page, while a library detail
-   * still lights Libraries, which has no deeper entry to lose to.
-   */
+  /** The longest route prefixing the URL wins, so a plugin view lights its own entry rather than the Plugins page. */
   readonly activeItemId = computed<string | null>(() => {
     const url = this.url();
     let best: ResolvedSettingsItem | null = null;

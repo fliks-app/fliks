@@ -53,9 +53,8 @@ export class CopyFallbackController {
     );
   }
 
-  /** For a caught load()/reload rejection: Shaka throws load-time fatals
-   *  (4032/4012) without emitting an `error` event. `onRecovered` runs the
-   *  post-load setup the caller's own catch skipped. */
+  /** For a caught load()/reload rejection: Shaka throws load-time fatals (4032/4012) without an `error` event;
+   *  `onRecovered` runs the post-load setup the caller's catch skipped. */
   fallBackFromLoadError(
     e: any, position: number, onRecovered?: () => Promise<void> | void,
   ): boolean {

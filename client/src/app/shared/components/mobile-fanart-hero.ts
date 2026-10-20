@@ -7,10 +7,7 @@ import {
   viewTransitionRunning,
 } from '../utils/view-transition';
 
-/**
- * Mobile-only hero image (series fanart, episode still, etc.) — extends under the transparent navbar
- * via global `.hero-fanart-bleed` on `body.hero-page`. Parent should wrap in `lg:hidden` when desktop differs.
- */
+/** Mobile-only hero extending under the transparent navbar via `.hero-fanart-bleed` on `body.hero-page`; the parent wraps it in `lg:hidden` when desktop differs. */
 @Component({
   selector: 'app-mobile-fanart-hero',
   imports: [ResolveUrlPipe, ImgFadeInDirective],
@@ -19,10 +16,7 @@ import {
 export class MobileFanartHeroComponent {
   readonly fanartUrl = input<string | null | undefined>(null);
   readonly imageAlt = input('');
-  /** Pairs this hero with the card that opened the page, so the poster morph
-   *  has a destination on mobile too — the box carries the whole aspect change,
-   *  portrait card into landscape hero. On the wrapper rather than the image so
-   *  the scrim the title sits on travels with it. Null where nothing pairs. */
+  /** Pairs the hero with the opening card for the poster morph; on the wrapper so the title scrim travels with it. Null where nothing pairs. */
   readonly viewTransitionName = input<string | null>(null);
 
   /** The url on screen, held while a morph animates: re-keying the image drops the
@@ -43,10 +37,7 @@ export class MobileFanartHeroComponent {
     return url ? [url] : [];
   });
 
-  /** The url this hero was showing before the current one. Not while a
-   *  transition runs: the page is frozen to snapshots for its length, so the
-   *  fade would play unseen and the picture it holds up is the one the arriving
-   *  snapshot carries — the episode being left. */
+  /** The previous url, except during a transition: the page is frozen to snapshots, so the fade would play unseen over the departing episode. */
   protected readonly outgoing = linkedSignal<string | null | undefined, string | null>({
     source: () => this.shown(),
     computation: (next, previous) =>

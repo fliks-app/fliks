@@ -79,12 +79,7 @@ export class MediaCardComponent {
   private readonly inSearch = inject(SEARCH_CARD_CONTEXT, { optional: true }) ?? false;
   /** Hover overlay (play button) only makes sense on a real pointer device. */
   protected readonly showHoverOverlay = computed(() => this.device.input() === 'mouse');
-  /**
-   * The figure is the single focus target across every form factor —
-   * child links (title, subtitle, hover overlay) stay clickable but
-   * never steal the spatial nav focus from the card itself. Same
-   * semantics for D-pad on TV, arrow keys on desktop, and Tab order.
-   */
+  /** The figure is the single focus target; child links stay clickable but never steal spatial-nav focus. */
   protected readonly innerTabindex = -1;
 
   // Data source (auto-derives imageUrl, title, rating, link, playable, status badge)
@@ -92,11 +87,7 @@ export class MediaCardComponent {
 
   // Layout
   readonly aspect = input<MediaCardAspect>('portrait');
-  /**
-   * Width classes for a landscape card, replacing the scroller-sized default.
-   * Portrait callers already size the host themselves; landscape ones can't,
-   * because the width lives on an inner element.
-   */
+  /** Width classes for a landscape card: the width lives on an inner element, so the host can't size it. */
   readonly widthClass = input<string | null>(null);
 
   /** Frames the card in the primary colour — marks the card as the one
@@ -108,9 +99,7 @@ export class MediaCardComponent {
 
   // Image (override media.posterUrl)
   readonly imageUrl = input<string | null>(null);
-  /** The landscape artwork the destination hero will show, for a card built
-   *  from a feed row rather than `[media]`: it is what the poster morph lands
-   *  on, and the hero falls back to the poster without it. */
+  /** Landscape artwork the destination hero shows for a feed-row card; the poster morph lands on it. */
   readonly fanartUrl = input<string | null>(null);
   /** Mask the image behind a blur until the viewer clicks it (anti-spoiler). */
   readonly spoiler = input(false);
@@ -138,11 +127,7 @@ export class MediaCardComponent {
   readonly titleLink = input<string[] | null>(null);
   /** Poster of the title's destination, so its hero is there for the morph. */
   readonly titlePosterUrl = input<string | null>(null);
-  /** When true, navigation triggered by the card replaces the
-   *  current history entry instead of pushing a new one. Useful for
-   *  "cards within the same media context" (sibling seasons, sibling
-   *  episodes…) so a single browser-back exits the media instead of
-   *  walking up the in-page chain. */
+  /** Replace the current history entry instead of pushing, so one back exits the media (sibling seasons/episodes). */
   readonly replaceUrl = input(false);
   readonly playable = input(false);
 
@@ -158,35 +143,15 @@ export class MediaCardComponent {
   // State
   readonly dimmed = input(false);
   readonly dismissable = input(false);
-  /**
-   * What clicking the card actually does. Default 'open' (navigate to detail
-   * via the configured link). 'play' is for sections like "Continue Watching"
-   * where the parent intercepts (clicked) to launch the player directly. The
-   * contextual panel uses this to show the right verb ('Lire' vs 'Ouvrir')
-   * and skip the duplicate explicit Play action.
-   */
+  /** 'open' navigates to detail; 'play' means the parent handles (clicked) and the panel skips its Play action. */
   readonly clickIntent = input<'open' | 'play'>('open');
-  /**
-   * When true, the top-right check becomes a toggle button that's always
-   * visible (filled green when `status()` is `'watched'`, outlined
-   * otherwise). Parents must handle {@link watchedToggled} to persist the
-   * change, otherwise the click does nothing.
-   */
+  /** Makes the top-right check an always-visible toggle; parents must handle {@link watchedToggled} to persist. */
   readonly interactiveWatched = input(false);
   /** Viewer's like on this card; `null` hides the heart. Parents persist via {@link likeToggled}. */
   readonly liked = input<boolean | null>(null);
-  /**
-   * Escape hatch for a caller-owned action the `card.actions` registry can't
-   * express (e.g. home's recommendation-row "mark watched", which drops the
-   * item from a page-local list — not a card concern). Spliced between the
-   * watched toggle and Remove, matching where core reserves weights 600-800.
-   * Every other pre-registry caller migrated to a contribution; this one
-   * lives in `features/home/home.html`, outside this refactor's ownership.
-   */
+  /** Caller-owned action the `card.actions` registry can't express; spliced between watched toggle and Remove. */
   readonly extraActions = input<CardAction[]>([]);
-  /** Library media id used for the "add to playlist" action when the card is
-   *  fed by individual inputs rather than `[media]` (continue-watching,
-   *  recommendations, coming-soon). Falls back to `media().id`. */
+  /** Library media id for "add to playlist" when the card isn't fed by `[media]`; falls back to `media().id`. */
   readonly playlistMediaId = input<number | null>(null);
   /** Episode id for the "add to playlist" action on episode-backed cards
    *  (e.g. continue-watching an episode). Takes precedence over the media id. */
@@ -219,20 +184,7 @@ export class MediaCardComponent {
     const m = this.media();
     return m ? ['/' + (m.type === 'movie' ? 'movies' : 'series'), '' + m.id] : null;
   });
-  /**
-   * Hand the full Media (or a stub) to the detail page via router state so it
-   * can render immediately instead of mounting on a blocking spinner.
-   *
-   * Cards built with `[imageUrl]` + `[link]` (recommendations, coming-soon,
-   * continue-watching, …) don't have a full Media. Without a state handoff
-   * the detail page sat on its spinner until the API responded — and during
-   * the spinner phase the destination poster <img> wasn't rendered yet, so
-   * the view-transition had nothing to pair with: no morph.
-   *
-   * We build a partial stub from `[link]` + `[imageUrl]` + `[title]` good
-   * enough for the header to render. The detail page's background fetch
-   * replaces it with the full Media a moment later.
-   */
+  /** Hands a full Media (or stub) to the detail page via router state so it renders without a spinner. */
   readonly navState = computed(() => {
     const preview = this.previewTarget();
     if (preview) {
@@ -247,9 +199,7 @@ export class MediaCardComponent {
     }
     const episodeId = this.episodeIdFromLink();
     if (episodeId != null) {
-      // With the series in hand the episode page resolves everything out of the
-      // season tree — rows included — so nothing blanks. The stub below is the
-      // fallback for a card that has no series: enough for the poster morph.
+      // Series in hand: the episode page resolves from its season tree; otherwise a stub for the poster morph.
       const series = this.media() ?? this.seedMedia();
       if (series) return { media: series };
       return {
@@ -296,27 +246,14 @@ export class MediaCardComponent {
     return Number.isFinite(id) && id > 0 ? id : null;
   }
 
-  /**
-   * `<img>` ref so we can stamp the view-transition-name imperatively just
-   * before navigating. We DON'T set it declaratively — when the same media
-   * appears in two cards on the same page (continue-watching + recently-added,
-   * etc.) the duplicate name aborts the whole transition. Stamping at click
-   * time means only the clicked card carries the name during the snapshot.
-   */
+  /** Stamped imperatively just before navigating: a declarative name duplicated across cards aborts the transition. */
   private readonly imgRef = viewChild<ElementRef<HTMLImageElement>>('cardImg');
   private readonly overlayRef = viewChild<ElementRef<HTMLElement>>('cardOverlay');
 
-  /** Off for a card whose destination is the page it already sits on: the
-   *  hero there ends up with the name this card stamped, and a duplicate name
-   *  aborts the whole transition ("Transition was skipped"). */
+  /** Off when the destination is the page the card sits on: a duplicate name aborts the transition. */
   readonly posterMorph = input(true);
 
-  /**
-   * Desktop affordance — opens the same contextual panel that TV's menu key
-   * and mobile's long-press use. The figure is the anchor with placement
-   * 'card-top' so the menu overlays the card from its top edge, even though
-   * the ⋯ glyph sits at the bottom.
-   */
+  /** Opens the contextual panel anchored on the figure with placement 'card-top'. */
   protected openActions(event: Event) {
     event.stopPropagation();
     event.preventDefault();
@@ -362,28 +299,9 @@ export class MediaCardComponent {
     return null;
   }
 
-  /**
-   * Stamp `view-transition-name: media-poster-<id>` on this card's <img>
-   * just before navigating. The browser snapshots the document on the
-   * next tick and pairs it with the matching name on the destination's
-   * poster. Wired to every click path that leads to the detail page.
-   *
-   * The name STAYS on the img until the next stamp clears it — both the
-   * forward (card → detail) and the back (detail → card) transitions
-   * need the name present at snapshot time. Auto-clearing it via a timer
-   * killed the back animation. Instead, before stamping we wipe any
-   * other stamped img: protects against the duplicate-name abort when the
-   * same media appears in two cards (continue-watching + recently-added,
-   * etc.).
-   *
-   * A card pointing at an episode pairs on the episode id: that page's hero
-   * is the still, not the series poster.
-   */
-  /** Pointerdown helper for the inline `[routerLink]` anchors: prepare
-   *  the view transition AND mark the next navigation as a back-pop
-   *  when `replaceUrl` is on, so NavbarService doesn't push the
-   *  replaced URL onto its history stack. Pointerdown fires before
-   *  click → before RouterLink kicks off `navigateByUrl`. */
+  /** Stamps `view-transition-name: media-poster-<id>` before navigating (episode cards use the episode id).
+   * The name stays until the next stamp, which wipes others: the back transition needs it, duplicates abort. */
+  /** Pointerdown helper for inline `[routerLink]` anchors: prepares the transition and marks back-pop intent for `replaceUrl`. */
   /** The title opens another page (the series behind an episode): the card's
    *  picture morphs into that page's hero, dissolving into its artwork. */
   protected onTitleAnchorPointerdown() {
@@ -398,20 +316,13 @@ export class MediaCardComponent {
     this.markNavigationIntent();
   }
 
-  /** Public: a link outside the card opening the same page — an episode row's
-   *  title beside its still — pairs with this card's picture, so it owes the
-   *  same stamp and the same stack intent. */
+  /** A link outside the card opening the same page owes the same stamp and stack intent. */
   onAnchorPointerdown() {
     this.flagPosterForTransition();
     this.markNavigationIntent();
   }
 
-  /**
-   * What every way out of a card has to say: whether it stacks a page or takes
-   * the place of the one it sits on. The back stack and the slide read the same
-   * answer — a replaced URL must not be pushed onto the stack, and has nothing
-   * to slide out of either.
-   */
+  /** Whether a way out of the card stacks a page or replaces it; a replaced URL is not pushed on the back stack nor slid out of. */
   private markNavigationIntent(): void {
     if (this.replaceUrl()) this.navbar.markAsBackNavigation();
     else armPageSlide();
@@ -419,13 +330,7 @@ export class MediaCardComponent {
 
   private readonly serverConfig = inject(ServerConfigService);
 
-  /**
-   * Warm the picture the destination will show, while the click is still being
-   * handled. A view transition captures the destination before its own images
-   * have decoded — measured `complete: false` at that exact point — so without
-   * this the morph has nothing of the target to carry and flies the card's
-   * poster instead. Decoding it here gives it the ~100 ms until the capture.
-   */
+  /** Decodes the destination artwork during the click: the transition captures before its images decode and would fly the poster. */
   private prefetchHeroArtwork() {
     // An episode page shows the still this card already carries, not the
     // series fanart the media below would hand over.
@@ -487,17 +392,11 @@ export class MediaCardComponent {
   protected onCardClick() {
     this.prefetchHeroArtwork();
     this.flagPosterForTransition();
-    // When the parent owns the click ('play' intent), don't navigate to the
-    // detail link here — the parent's (clicked) handler routes to /watch
-    // directly. Otherwise we'd land on /detail for one frame before the
-    // parent's navigate kicked in.
+    // 'play' intent: the parent's (clicked) handler routes to /watch, so don't navigate to detail here.
     if (this.clickIntent() !== 'play') {
       const link = this._link();
       if (link) {
-        // Keep NavbarService's history stack in sync with the browser
-        // history: when we replace the URL, the page we're leaving
-        // must NOT be pushed onto the back stack — otherwise the
-        // in-app "Retour" walks the chain of replaced entries.
+        // A replaced URL must not be pushed onto NavbarService's back stack.
         this.markNavigationIntent();
         void this.router.navigate(link, {
           state: this.navState(),
@@ -508,11 +407,7 @@ export class MediaCardComponent {
     this.clicked.emit();
   }
 
-  /**
-   * Navigate to the detail link WITHOUT emitting `clicked`. Used by the
-   * explicit "Ouvrir" menu action on cards whose normal click is intercepted
-   * by the parent (Continue Watching plays directly via (clicked)).
-   */
+  /** Navigates to the detail link without emitting `clicked` (the "Ouvrir" action on intercepted cards). */
   protected openDetail() {
     const link = this._link();
     if (!link) return;
@@ -567,11 +462,7 @@ export class MediaCardComponent {
     surface: 'card',
   }));
 
-  /**
-   * Visibility rules the closed `when` vocabulary can't express — this domain has
-   * almost none of it (no "has a link", "is playable" or "is dismissable"
-   * predicate), so nearly every core id is gated here rather than in `when`.
-   */
+  /** Visibility rules the closed `when` vocabulary can't express (no link/playable/dismissable predicate). */
   private readonly extraGuards: Record<string, () => boolean> = {
     'core.play': () => {
       const hasLink = !!this._link();
@@ -586,27 +477,14 @@ export class MediaCardComponent {
     'core.toggle_watched': () => this.interactiveWatched(),
     'core.like': () => this.liked() !== null,
     'core.remove': () => this.dismissable(),
-    // Identity and a metadata re-read need a library row. A card for a title
-    // that isn't in the library (search, discovery) has none, and the enclosing
-    // group drops itself once both children are gone.
+    // Identity and metadata re-read need a library row; search/discovery cards have none.
     'core.identify': () => this.media()?.id != null,
     'core.refresh_metadata': () => this.media()?.id != null,
   };
 
-  /**
-   * The `media.actions` ids a card can serve. Those whose UI is a modal on the
-   * detail page navigate there with the action armed, rather than every modal
-   * being hoisted to the layout — the admin lands on the title being edited.
-   * An id left null resolves to nothing and its row is dropped, which is the
-   * registry's fail-closed contract and is how the rows needing page-level
-   * state (requests, releases) stay off a card.
-   */
-  /**
-   * The actions a card can perform. Rows whose id is absent resolve to nothing
-   * and are dropped, which is how the ones needing the detail page's own state
-   * (requests, releases) stay off a card. Those whose UI is a modal on that page
-   * navigate there with the action armed, so no modal has to be hoisted.
-   */
+  /** `media.actions` ids a card serves; modal-backed ones navigate to detail with the action armed.
+   * A null id resolves to nothing and is dropped (fail-closed). */
+  /** Actions a card can perform; absent ids are dropped, which keeps page-state rows (requests, releases) off a card. */
   private readonly actionHandlers = {
     'media.play': () => (this.clickIntent() === 'play' ? this.onCardClick() : this.onPlayClick(new Event('synthetic'))),
     'media.open': () => this.openDetail(),
@@ -652,14 +530,8 @@ export class MediaCardComponent {
     },
   } satisfies MediaActionHandlers;
 
-  /**
-   * Actions exposed via the contextual panel (TV menu button / mobile long-press).
-   * Core's list merged with the registry's plugin contributions, sorted by weight
-   * then id, `when`/guard-filtered, with the action resolved to a handler. An
-   * unknown actionId or action.kind drops the row rather than rendering a broken
-   * one. `extraActions` — the one caller-owned escape hatch left — splices in at
-   * the point core reserves for it: after the watched toggle, before Remove.
-   */
+  /** Core list merged with registry contributions, sorted by weight then id and filtered; unknown ids/kinds drop the row.
+   * `extraActions` splices in after the watched toggle, before Remove. */
   protected readonly cardActions = computed((): CardAction[] => {
     const ctx = this.cardActionsContext();
     const watched = this.status() === 'watched';
@@ -707,13 +579,7 @@ export class MediaCardComponent {
     return actions;
   });
 
-  /**
-   * Resolved top-right status. Falls back to an auto-detected `'missing'`
-   * marker when the media is in the library but has no playable files yet
-   * (movies: no files; series: zero downloaded episodes), so cards in
-   * Recently Added / Library make the missing-file state immediately visible
-   * without each parent having to wire `[status]` itself.
-   */
+  /** Falls back to an auto-detected 'missing' marker when the library item has no playable files yet. */
   protected readonly _resolvedStatus = computed((): CardStatus => {
     if (this.status()) return this.status();
     if (this.badge()) return null;

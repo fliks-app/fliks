@@ -1,6 +1,4 @@
-/** Shared download-progress formatting + state mapping, used by the Activity
- *  queue, the request rows, and media-detail so the numbers and the
- *  progress-bar colour are rendered identically everywhere. */
+/** Shared download-progress formatting and state mapping, so numbers and bar colour render identically everywhere. */
 
 import type { ProgressPhase } from '../../core/enums/download-progress-state.enum';
 import type {
@@ -83,11 +81,7 @@ export function qbStateBadgeClass(state: ProgressPhase | ''): string {
   return VARIANT_BADGE_CLASS[qbStateVariant(state)];
 }
 
-// Precedence for folding several concurrent leaves into one status, most
-// prominent first. `stalled` absorbs what used to be the vendor's dedicated
-// error states, so it still outranks `active` the way a real failure did;
-// otherwise the most-active state wins. The per-leaf breakdown lives in the
-// detail modal.
+// Precedence when folding concurrent leaves, most prominent first; `stalled` outranks `active` as a real failure would, else the most-active state wins.
 const STATE_RANK: Record<ProgressPhase, number> = {
   stalled: 1,
   active: 2,
@@ -115,10 +109,7 @@ export function dominantState(
   return best;
 }
 
-/** Mean percent over the still-downloading leaves only — a leaf already at 100%
- *  is excluded (rounding can land a near-complete leaf there just before the
- *  store retires it), so a finishing pack never shows a misleading
- *  "downloading 96%". Null when nothing is actively downloading. */
+/** Mean percent over still-downloading leaves only (a 100% leaf is excluded, so a finishing pack never shows "downloading 96%"); null when none. */
 export function activeWeightedPercent(leaves: DownloadLeaf[]): number | null {
   // A leaf still being searched for has no size and no progress — counting its
   // 0 would drag a real download's percent down and label a lone search "0%".
@@ -132,9 +123,7 @@ export interface LeafFold {
   percent: number | null;
 }
 
-/** Fold a set of leaves into one status — dominant state + active percent +
- *  counts. The single aggregation primitive reused by the progress store, the
- *  badge descriptor and the detail modal. */
+/** Folds leaves into one status (dominant state, active percent, counts); the single aggregation primitive for store, badge and modal. */
 export function foldLeaves(leaves: DownloadLeaf[]): LeafFold {
   return {
     state: dominantState(leaves.map((l) => l.state)),
@@ -183,9 +172,7 @@ export function collectScopedLeaves(
   for (const [seasonNumber, sp] of progress.seasons) {
     if (seasonFilter?.length && !seasonFilter.includes(seasonNumber)) continue;
     for (const [key, leaf] of sp.leaves) {
-      // Only another episode's own download is out of scope. A leaf naming no
-      // episode — a season pack, or one whose episode couldn't be resolved —
-      // may well carry this one, so it counts.
+      // Only another episode's own download is out of scope; a leaf naming no episode (season pack) may carry this one.
       if (
         episodeFilter != null &&
         leaf.episodeNumber != null &&
@@ -207,13 +194,8 @@ function collectLeaves(
   return collectScopedLeaves(progress, seasonFilter, episodeFilter).map((s) => s.leaf);
 }
 
-/**
- * Single source of truth for what a status badge shows for a media (optionally
- * narrowed to a set of seasons, e.g. a per-season request). Owns only the
- * download / monitored / unmonitored / hide-when-downloaded sub-states — the
- * request lifecycle states (pending, declined, available…) stay in the request
- * component, which calls this only for in-flight scopes.
- */
+/** Single source of truth for a media status badge (optionally narrowed to seasons): only the download / monitored / unmonitored / hide-when-downloaded sub-states.
+ * Request lifecycle states stay in the request component. */
 export function describeBadge(
   progress: MediaDownloadProgress | null,
   opts: {
@@ -230,13 +212,7 @@ export function describeBadge(
   );
 }
 
-/**
- * The in-flight half of {@link describeBadge}: what a scope's downloads are
- * doing, or null when none of them are. Callers that only surface downloads
- * (the media header) use this directly — the monitored / unmonitored fallback
- * is a request-view concern and would otherwise sit on an ongoing series for
- * the life of the show.
- */
+/** The in-flight half of {@link describeBadge}, or null; downloads-only callers use it since the monitored fallback would sit on an ongoing series forever. */
 export function describeDownload(
   progress: MediaDownloadProgress | null,
   scope: {

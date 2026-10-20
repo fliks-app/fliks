@@ -2,11 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { AuthService } from './auth.service';
 import { UsersApiService } from './api/users-api.service';
 
-/**
- * Per-user library display preferences (order + hidden), persisted server-side
- * on the user so they follow the account across devices. Read reactively from
- * the auth user signal; apply to any library list before rendering.
- */
+/** Per-user library display preferences (order + hidden), persisted server-side so they follow the account; apply before rendering any library list. */
 @Injectable({ providedIn: 'root' })
 export class LibraryPrefsService {
   private readonly auth = inject(AuthService);

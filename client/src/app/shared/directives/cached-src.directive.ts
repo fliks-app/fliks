@@ -1,11 +1,7 @@
 import { Directive, ElementRef, effect, inject, input } from '@angular/core';
 import { ImageCacheService } from '../../core/services/image-cache.service';
 
-/**
- * Drop-in replacement for `[src]` on server artwork: renders the on-disk copy
- * when native has one and fills the cache as images scroll past, so the grid
- * still has its posters offline. Pass-through on web.
- */
+/** Drop-in for `[src]` on server artwork: renders the on-disk copy when native has one and fills the cache as images scroll past; pass-through on web. */
 @Directive({ selector: 'img[cachedSrc]' })
 export class CachedSrcDirective {
   readonly cachedSrc = input<string | null>();

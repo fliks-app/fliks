@@ -21,31 +21,13 @@ import {
   restoreOpenerFocus,
 } from '../../core/services/focusable.constants';
 
-/**
- * Reusable menu chrome that picks its presentation per-platform:
- *   • TV / mobile / tablet (touch) → bottom sheet (BottomSheetComponent).
- *   • Desktop with a mouse → DaisyUI-style anchored dropdown.
- *
- * Usage:
- *   <button #trigger (click)="open.set(!open())">…</button>
- *   <app-popover-menu [open]="open()" [anchor]="trigger" (closed)="open.set(false)">
- *     <ul class="menu p-2">…</ul>
- *   </app-popover-menu>
- *
- * Content is projected via <ng-content>, so every existing menu can keep
- * its template (icons, conditional items, RouterLink) — only the wrapping
- * chrome changes. The bottom-sheet variant carries `data-tv-modal` so the
- * spatial-nav focus trap kicks in.
- */
+/** Menu chrome: bottom sheet on TV/touch, anchored dropdown on desktop with a mouse; content is projected.
+ * The sheet carries `data-tv-modal` so the spatial-nav focus trap kicks in. */
 @Component({
   selector: 'app-popover-menu',
   standalone: true,
   imports: [BottomSheetComponent, NgTemplateOutlet],
-  // `display: contents` keeps the host out of its parent's layout — the
-  // backdrop + content divs are `position: fixed` so they don't need a
-  // box of their own, and the host would otherwise act as a stray grid
-  // item inside a parent like daisyUI's `.modal` (display: grid;
-  // place-items: center) and shift the modal-box off-centre.
+  // `display: contents` keeps the host from acting as a stray grid item (e.g. in daisyUI's `.modal`) and off-centring it.
   styles: [':host { display: contents; }'],
   templateUrl: './popover-menu.html',
 })
@@ -54,10 +36,7 @@ export class PopoverMenuComponent {
   readonly open = input(false);
   /** Element the dropdown should anchor to on desktop. */
   readonly anchor = input<HTMLElement | null>(null);
-  /** Where the dropdown opens relative to the anchor. `*-center` centers it
-   *  under the anchor; `right-start` / `left-start` are side flyouts (used for
-   *  submenus) that open beside the anchor; `start-end` overlays the anchor,
-   *  top and right edges aligned with it. */
+  /** Where the dropdown opens: `*-center` under the anchor, `right-start`/`left-start` side flyouts for submenus, `start-end` overlaying it. */
   readonly placement = input<
     | 'bottom-end'
     | 'bottom-start'
@@ -82,44 +61,22 @@ export class PopoverMenuComponent {
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly dismissStack = inject(DismissableStackService);
 
-  /** Ticked on every scroll / resize while the popover is open so the
-   *  `position()` computed re-reads the anchor's `getBoundingClientRect`
-   *  and the `position: fixed` box stays glued to the trigger. */
+  /** Ticked on scroll/resize while open so `position()` re-reads the anchor rect. */
   private readonly viewportTick = signal(0);
   /** True once the host has been moved out of its Angular-owned position. */
   private reparented = false;
 
   constructor() {
-    // The host is moved under <html>/the open dialog's top-layer on open (see
-    // the open effect below), so Angular no longer owns its DOM position and
-    // won't remove the relocated node on destroy. Detach it ourselves —
-    // otherwise a popover torn down mid-close (its sheet's slide-down exit
-    // still running) orphans the sheet's full-screen backdrop, which keeps
-    // blocking clicks across the app.
+    // The host is relocated on open, so Angular won't remove it on destroy; detach it or a mid-close sheet orphans its blocking backdrop.
     inject(DestroyRef).onDestroy(() => {
       if (this.reparented) this.host.nativeElement.remove();
     });
 
-    // Focus the first focusable inside the menu on every open. autofocus
-    // is unreliable on Capacitor's Android WebView for dynamically added
-    // content, so we do it programmatically.
+    // Programmatic focus: autofocus is unreliable on Capacitor's Android WebView for dynamically added content.
     effect((onCleanup) => {
       if (!this.open()) return;
-      // Move the host on every open so we land in the right stacking
-      // context for the *current* anchor. Three problems we sidestep:
-      //   • <dialog open> → showModal() renders in the browser top-layer,
-      //     which sits above every regular z-index. The popover host can
-      //     be mounted anywhere (e.g. the SelectPicker singleton lives
-      //     at the app root, not inside the dialog), so we walk up from
-      //     the anchor — not the host — to find the open dialog and
-      //     append into its top-layer.
-      //   • TV → body.tv has a scale transform that re-anchors fixed
-      //     descendants to body's box instead of the viewport.
-      //   • Mobile → drawer-content is `position: relative`, creating a
-      //     stacking context that traps z-[101] below the bottom dock.
-      // When no dialog is open we relocate to <html> unconditionally
-      // (dropdown variant included) so a previous dialog-scoped open
-      // doesn't leave the host orphaned inside a now-closed dialog.
+      // Relocate on every open into the right stacking context for the current anchor:
+      // a showModal() dialog's top-layer (found from the anchor, not the host), else <html>; body.tv scale and mobile drawer stacking contexts trap fixed boxes.
       if (typeof document !== 'undefined') {
         const anchor = this.anchor();
         const openDialog =
@@ -131,9 +88,7 @@ export class PopoverMenuComponent {
         }
       }
       queueMicrotask(() => {
-        // Record the opener on a submenu's content so spatial nav can send
-        // focus straight back to it on ArrowLeft (rect-nav would otherwise
-        // land on whatever sits behind the flyout).
+        // Record the opener so spatial nav returns focus to it on ArrowLeft instead of what sits behind the flyout.
         if (this.submenu()) {
           const content = this.host.nativeElement.querySelector<HTMLElement>(
             '[data-tv-submenu]',
@@ -147,10 +102,7 @@ export class PopoverMenuComponent {
         // it; falls back to the first focusable when nothing is marked.
         focusOverlayEntry(initialOverlayFocus(this.host.nativeElement));
       });
-      // Register with the dismissable stack so Escape (browser) and the
-      // hardware back button (Capacitor / Tizen) close the popover. Return
-      // focus to the opener so keyboard / D-pad users don't lose their place
-      // (a submenu returns to its parent entry, a menu to its trigger).
+      // Register with the dismissable stack (Escape / hardware back) and return focus to the opener (submenu: parent entry).
       const anchorOf = () => untracked(() => this.anchor());
       const bump = () => this.viewportTick.update((v) => v + 1);
       const close = () => {
@@ -160,15 +112,8 @@ export class PopoverMenuComponent {
       this.dismissStack.push(close);
       onCleanup(() => this.dismissStack.remove(close));
 
-      // Follow the anchor by frame rather than by event, for as long as the menu is open, so
-      // `position()` re-reads `getBoundingClientRect` whenever the trigger actually moved.
-      // Events cannot answer this on their own: a nested `overflow-y: auto` container (a
-      // `.modal-box` around a long form is the case that showed it), an ancestor transform, a
-      // programmatic scroll, a font or image that lands late and reflows the form, all move the
-      // trigger without every one of them firing a `scroll` or a `resize` the popover sees.
-      //
-      // The tick only bumps when the rect changed, so an idle menu costs one rect read per frame
-      // and schedules no change detection at all.
+      // Follow the anchor per frame, not per event: nested scroll containers, transforms and late reflows move it without a `scroll`/`resize`.
+      // The tick bumps only when the rect changed, so an idle menu schedules no change detection.
       if (typeof window === 'undefined' || !this.useDropdown()) return;
       let previous = '';
       let frame = requestAnimationFrame(function follow(this: void) {
@@ -188,15 +133,8 @@ export class PopoverMenuComponent {
   /** Anchored dropdown only on desktop with a mouse. TV + touch get the sheet. */
   readonly useDropdown = computed(() => !this.tv.isTv() && !this.device.isTouch());
 
-  /** Re-reads `getBoundingClientRect` on every anchor change AND on every
-   *  viewport tick (scroll / resize) so the fixed-positioned box follows its
-   *  trigger when the page moves under it. The box is kept inside the viewport
-   *  on both axes: vertically it opens on the requested side but flips to the
-   *  other when that side can't fit a usable menu (so a tall list near the
-   *  bottom edge doesn't spill off-screen), anchoring with `bottom` when it
-   *  opens upward; horizontally `left` is clamped into the viewport. The
-   *  chosen side's free space caps `maxHeight`, and the internal
-   *  `overflow-y-auto` scrolls the content INSIDE the box. */
+  /** Re-reads the anchor rect on anchor change and viewport tick, keeping the box inside the viewport.
+   * It flips side when the requested one can't fit a usable menu, and its free space caps `maxHeight`. */
   readonly position = computed(() => {
     this.viewportTick(); // dependency: forces recompute on scroll / resize
     const GUTTER = 8;
@@ -298,9 +236,7 @@ export class PopoverMenuComponent {
     this.closed.emit();
   }
 
-  /** A submenu flyout closes once focus leaves it (e.g. ArrowLeft back to the
-   *  opener), so re-activating the opener re-opens + re-focuses it instead of
-   *  finding it already open. Ignored while focus stays inside. */
+  /** A submenu closes once focus leaves it, so re-activating the opener re-opens and re-focuses it. */
   protected onSubmenuFocusOut(e: FocusEvent): void {
     if (!this.submenu()) return;
     const next = e.relatedTarget as Node | null;

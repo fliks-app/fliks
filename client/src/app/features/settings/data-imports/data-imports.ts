@@ -261,9 +261,7 @@ export class DataImportsSettingsComponent implements OnInit {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Emby watch history
-  // ---------------------------------------------------------------------------
+  // ---- Emby watch history ----
 
   private setEmbyImporting(serverId: number, running: boolean) {
     this.embyImportingIds.update((s) => {
@@ -302,9 +300,7 @@ export class DataImportsSettingsComponent implements OnInit {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Seerr
-  // ---------------------------------------------------------------------------
+  // ---- Seerr ----
 
   private hasKey(setting: string, typed: string): boolean {
     const kept = this.storedKeys().has(setting) && !this.clearedKeys().has(setting);
@@ -422,9 +418,7 @@ export class DataImportsSettingsComponent implements OnInit {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Radarr / Sonarr
-  // ---------------------------------------------------------------------------
+  // ---- Radarr / Sonarr ----
 
   arrCanSave(p: Provider): boolean {
     const st = this.arr[p];
@@ -486,13 +480,7 @@ export class DataImportsSettingsComponent implements OnInit {
     return typeof sel === 'number' ? { targetLibraryId: sel } : {};
   }
 
-  /**
-   * Step 1 of the import: ask the backend for *arr root folders + suggestions.
-   * Three branches:
-   *   - *arr exposes 0 root folders → skip the wizard and import with empty mappings
-   *   - Fliks has 0 root folders     → open wizard in "no roots configured" state
-   *   - otherwise                    → open wizard with one row per remote root
-   */
+  /** Import step 1: fetch *arr root folders and suggestions; 0 *arr roots imports with empty mappings, 0 Fliks roots opens the wizard in "no roots" state. */
   async openWizard(provider: Provider) {
     const st = this.arr[provider];
     const url = st.url().trim();
@@ -537,12 +525,7 @@ export class DataImportsSettingsComponent implements OnInit {
     st.mappings.set([]);
   }
 
-  /**
-   * Empty-state CTA when the user has no compatible Fliks libraries. We
-   * navigate programmatically because mixing `routerLink` with the `(click)`
-   * handler that closes the wizard removed the anchor before Angular Router
-   * had a chance to navigate, and the click was a no-op.
-   */
+  /** Empty-state CTA: navigates programmatically because `routerLink` plus the wizard-closing `(click)` removed the anchor before the router ran. */
   goToLibraries(provider: Provider) {
     this.cancelWizard(provider);
     void this.router.navigateByUrl('/settings/libraries');
@@ -560,10 +543,7 @@ export class DataImportsSettingsComponent implements OnInit {
     );
   }
 
-  /**
-   * Filter libraries for the picker: only the import target is offered.
-   * The backend enforces the same rule; this just hides unselectable options.
-   */
+  /** Libraries offered by the picker: only the import target (the backend enforces the same rule). */
   eligibleLocalLibraries(provider: Provider) {
     const st = this.arr[provider];
     const preview = st.preview();

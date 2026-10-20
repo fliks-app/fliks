@@ -1,15 +1,5 @@
-/**
- * Single source of truth for User-Agent string parsing (OS + browser + shell).
- *
- * The UA is the only signal available on the web, and it CANNOT expose a real OS
- * version — Chromium freezes it (e.g. always "Mac OS X 10_15_7"). So `detectOs`
- * returns an OS *name* only; for a real version, prefer the native
- * `SystemInfoService` (Electron bridge / Capacitor Device), which feeds its
- * richer `systemName` into the label formatters here.
- *
- * Consolidates what used to be duplicated across `format-device-label.ts`,
- * `device-info.ts` and `browser-device-profile.service.ts`.
- */
+/** Single source of truth for User-Agent parsing (OS + browser + shell). The UA can't expose a real OS version (Chromium freezes it),
+ *  so `detectOs` returns a name only; prefer native `SystemInfoService` for a version. */
 
 /** OS name from the UA (no version — see file header). Null if unknown. */
 export function detectOs(ua: string): string | null {
@@ -46,11 +36,7 @@ export function isElectronUa(ua: string): boolean {
   return /\bElectron\//.test(ua);
 }
 
-/**
- * The device's own model as the User-Agent states it: an Android model code
- * ("Pixel 8", "SM-S931B") or the iOS device family. Null when the UA names
- * neither, which is every desktop browser.
- */
+/** The device model as the UA states it (Android model code or iOS device family); null for every desktop browser. */
 export function detectDeviceModel(ua: string): string | null {
   if (/iPhone/.test(ua)) return 'iPhone';
   if (/iPad/.test(ua)) return 'iPad';

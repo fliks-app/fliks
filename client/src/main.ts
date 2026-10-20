@@ -2,11 +2,7 @@ import { bootstrapApplication } from '@angular/platform-browser';
 import { appConfig } from './app/app.config';
 import { App } from './app/app';
 
-// Pre-bootstrap TV detection: pose `body.tv` (and `body.tv-{platform}`)
-// before Angular renders so the 10-foot CSS variants take effect without
-// flashing the mobile/desktop layout. Kept strict — only true TVs match.
-// DeviceService re-runs the same checks (plus the touch-device split for
-// phone/tablet) once the app is up.
+// Pre-bootstrap TV detection poses `body.tv` before Angular renders to avoid flashing the mobile/desktop layout; strict, DeviceService re-runs it later.
 (function applyTvBootstrapTweaks() {
   const ua = navigator.userAgent;
   const matchMedia = typeof window.matchMedia === 'function' ? window.matchMedia : null;

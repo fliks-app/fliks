@@ -1,8 +1,5 @@
-// Bridge to the Electron desktop shell's embedded mpv player, exposed on
-// `window.fliksDesktop` by the desktop preload. The Angular DesktopEngine
-// consumes this exactly as NativeEngine consumes the NativePlayer Capacitor
-// plugin. Types mirror desktop/src/shared/contract.ts — the two live in
-// separate build workspaces, so the shape is intentionally duplicated here.
+// Bridge to the Electron shell's embedded mpv player on `window.fliksDesktop`, consumed by DesktopEngine like NativePlayer.
+// Types mirror desktop/src/shared/contract.ts (separate build workspaces), so the shape is duplicated here.
 
 export interface DesktopAudioTrack {
   id: string;

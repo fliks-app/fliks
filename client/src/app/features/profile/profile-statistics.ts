@@ -17,9 +17,7 @@ import { SocialApiService } from '../../core/services/api/social-api.service';
 import { UserStats } from '../../core/services/api/users-api.service';
 import { ProfileContextService } from './profile-context.service';
 
-/** The profile "statistics" tab: watch stats + total requests made. Visible for
- *  the owner, and for others only when the member opted in (backend gates it and
- *  the tab is hidden otherwise). Loads on demand from the social stats endpoint. */
+/** Profile "statistics" tab (watch stats, total requests): visible to the owner, others only if the member opted in (backend-gated). */
 @Component({
   selector: 'app-profile-statistics',
   imports: [

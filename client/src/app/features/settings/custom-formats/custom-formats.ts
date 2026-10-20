@@ -23,11 +23,7 @@ import { ConfirmationService } from '../../../core/services/confirmation.service
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 import { ModalFooterComponent } from '../../../shared/components/modal-footer';
 
-/**
- * Condition values that come from a closed vocabulary — the backend matches them
- * against the parsed release attribute, so a free-typed variant simply never
- * matches. Types absent here take free text (a regex, a release group).
- */
+/** Condition values from a closed vocabulary the backend matches against the parsed release attribute; other types take free text. */
 const VALUE_OPTIONS: Partial<Record<CustomFormatSpecType, readonly string[]>> = {
   source: ['remux', 'bluray', 'web-dl', 'webrip', 'hdtv', 'dvd', 'sdtv', 'cam', 'ts', 'tc'],
   resolution: ['4320p', '2160p', '1080p', '720p', '576p', '480p', '360p'],

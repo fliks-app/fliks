@@ -2,19 +2,8 @@ import { Component, input } from '@angular/core';
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 import { CachedSrcDirective } from '../../directives/cached-src.directive';
 
-/**
- * One option of an `app-dropdown-menu`: an optional thumbnail, a head line, an
- * optional detail line, and the selected marker. Shared by the audio, subtitle
- * and season pickers; only the season picker carries artwork, so the thumbnail
- * reserves no space when `imageUrl` is absent.
- *
- * Both labels arrive already translated — the component holds no user-facing
- * string of its own. The host is `display: contents` so `.dropdown-item`'s
- * `w-full` keeps resolving against the menu, not against a wrapper.
- *
- * Selection is reported by binding `(click)` on the element: the inner button's
- * event bubbles through, which is also how the menu closes itself.
- */
+/** One `app-dropdown-menu` option (optional thumbnail, head, detail, selected marker); labels arrive translated, the host is `display: contents`
+ *  so `.dropdown-item`'s `w-full` resolves against the menu. Selection is the bubbled `(click)`, which also closes the menu. */
 @Component({
   selector: 'app-dropdown-option',
   imports: [

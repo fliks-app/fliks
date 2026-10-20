@@ -6,13 +6,7 @@ import {
 } from '../player-settings.service';
 import { NATIVE_SUBTITLE_SIZE_SCALE } from '../../utils/subtitle-presets';
 
-/**
- * DOM-rendered subtitle overlay shared by the TV engines (Tizen AVPlay,
- * webOS native `<video>`). Those pipelines either reject HTTPS external
- * subtitle paths (AVPlay) or give no styleable cue API, so we fetch the
- * WebVTT ourselves, parse the cues, and paint the active ones into our own
- * div inside the player container.
- */
+/** DOM subtitle overlay shared by the TV engines (AVPlay rejects HTTPS subtitle paths, webOS has no styleable cue API): fetches and paints the WebVTT itself. */
 
 export interface VttCue {
   start: number;
@@ -174,9 +168,7 @@ export class SubtitleOverlay {
 
   private ensureEls(): Record<Band, HTMLDivElement> | null {
     if (typeof document === 'undefined') return null;
-    // Must live inside `.player-container` (like Shaka's own text container):
-    // it is a z-index 100 stacking context, and on webOS the hardware video
-    // surface erases anything painted below it.
+    // Must live inside `.player-container` (a z-index 100 stacking context): on webOS the hardware video surface erases anything below it.
     const host = document.querySelector('.player-container') ?? document.body;
     if (this.els?.bottom.isConnected) {
       for (const b of BANDS) if (this.els[b].parentElement !== host) host.appendChild(this.els[b]);

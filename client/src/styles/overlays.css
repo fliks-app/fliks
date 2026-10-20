@@ -1,24 +1,12 @@
-/* ============================================================================
-   Tablet form-factor — body.tablet toggled by DeviceService
-   ============================================================================ */
+/* ===== Tablet form-factor (body.tablet, toggled by DeviceService) ===== */
 body.tablet [data-touch-only] {
   /* Touch-only affordances stay visible on tablet (it's a touch device). */
   display: revert;
 }
 
-/* ============================================================================
-   Shaka UITextDisplayer subtitle styling
-   ----------------------------------------------------------------------------
-   Shaka renders cues into `.shaka-text-container` (a child of `.player-
-   container`), with each line as a `.shaka-text-wrapper` flex item. CSS
-   variables are set per-video by PlayerComponent.applySubtitleStyle on
-   `.player-container`. These rules live in global styles (not the
-   component) because Shaka builds these elements outside Angular's view
-   encapsulation and they don't carry our `_ngcontent-*` attribute.
-   ============================================================================ */
-/* Shaka places bottom cues against this box's bottom edge and top cues
-   (`line:` from an SRT {\an8}) against its top edge, so the controls push each
-   group inward by insetting the box, never by moving it. */
+/* ===== Shaka UITextDisplayer subtitle styling ===== */
+/* Global, not component styles: Shaka builds these elements outside Angular's view encapsulation, so they lack `_ngcontent-*`. */
+/* Shaka anchors bottom cues to this box's bottom edge and top cues (SRT {\an8}) to its top, so controls inset the box, never move it. */
 .player-container > .shaka-text-container {
   position: absolute;
   inset: var(--cue-top-margin, 0vh) 0 var(--cue-bottom-margin, 0vh) 0;
@@ -33,11 +21,7 @@ body.tablet [data-touch-only] {
   top: var(--cue-top-margin, 0vh);
   bottom: calc(var(--cue-bottom-margin, 0vh) + 6vh);
 }
-/* Visual styling applies to the leaf text span (Shaka tags it with
-   `translate="no"` and bakes a default background-color inline on it).
-   Single-line cues skip the .shaka-text-wrapper hop, so we must target
-   the leaf to reach both single- and multi-line cases. !important
-   overrides Shaka's inline styles. */
+/* Style the leaf text span: single-line cues skip `.shaka-text-wrapper`, and `!important` beats Shaka's inline background. */
 .shaka-text-container span[translate="no"] {
   font-size: var(--cue-font-size, 0.7em) !important;
   color: var(--cue-color, #ffffff) !important;
@@ -48,17 +32,11 @@ body.tablet [data-touch-only] {
   padding: 0.15em 0.4em !important;
   border-radius: 0.25em !important;
 }
-/* Multi-line wrapper carries `line-height: normal` inline; tightening it
-   here closes the gap between stacked lines (which native VTTCue
-   rendering can't do because each line becomes a separate cue box). */
+/* Tighten the wrapper's inline `line-height: normal` to close the gap between stacked lines (native VTTCue can't). */
 .shaka-text-container .shaka-text-wrapper {
   line-height: 1.1 !important;
 }
-/* Bottom-sheet backdrop fade-in — CSS @starting-style interpolates from
-   opacity 0 when the element is added to the DOM, so the component doesn't
-   need a JS-side toggling pattern. Falls back gracefully on older WebKit
-   that doesn't support @starting-style (the backdrop just appears at full
-   opacity instantly — no broken state, just no animation). */
+/* Backdrop fade-in via `@starting-style`; older WebKit without it just shows the backdrop instantly. */
 .bottom-sheet-backdrop {
   @starting-style {
     opacity: 0;
@@ -72,12 +50,7 @@ html.keyboard-open [data-alpha-index] {
   height: var(--keyboard-closed-height, 100%);
 }
 
-/* Dock cradle — a circular bump painted in the dock's own colour rises
-   above the dock's top edge to wrap the lower half of the Search FAB.
-   The pseudo is concentric with the FAB so its visible protrusion
-   (above the dock baseline) hugs the FAB outline.
-   `overflow: visible` is required so the pseudo can extend past the dock's
-   own bounding box (DaisyUI's .dock would otherwise clip it). */
+/* Dock cradle: a bump in the dock's colour concentric with the FAB, wrapping its lower half; `overflow: visible` so DaisyUI's .dock doesn't clip it. */
 .dock-with-fab-cradle {
   --dock-edge: color-mix(in oklab, var(--color-base-100) 20%, transparent);
   overflow: visible !important;
@@ -108,9 +81,7 @@ html.keyboard-open [data-alpha-index] {
   height: 64px;
   border-radius: 50%;
   left: 50%;
-  /* FAB (56px / radius 28) centre is 20px below the dock top
-     (bottom: 1rem + 28px − 4rem). Cradle radius 32 = FAB + 4px gap;
-     top: -12 puts the cradle's centre at the same y as the FAB. */
+  /* FAB centre is 20px below the dock top; cradle radius 32 = FAB 28 + 4px gap, `top: -12` aligns the centres. */
   top: -12px;
   transform: translateX(-50%);
   background: color-mix(in oklab, var(--color-base-100) 70%, transparent);

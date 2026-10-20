@@ -266,9 +266,7 @@ export interface LiveTvUserAccess {
   id: number;
   username: string;
   groups: string[];
-  /** Account manages Live TV itself: sees every restricted group regardless
-   *  of the grants above, computed server-side from the same permission list
-   *  the access check uses. */
+  /** Account manages Live TV itself: sees every restricted group, computed server-side from the same permission list as the access check. */
   hasFullAccess: boolean;
 }
 
@@ -382,11 +380,8 @@ export class LiveTvApiService {
     return firstValueFrom(this.http.delete<void>(`/api/livetv/sessions/${sessionId}`));
   }
 
-  /** Release path for a page that is going away: an Angular request is dropped
-   *  mid-flight there, and the provider connection then waits out the idle
-   *  timer, which answers 409 to the next tune on a one-connection account.
-   *  Bypasses HttpClient (its interceptors don't run on a bare `fetch`), so the
-   *  URL and the Bearer header are resolved here the same way they do. */
+  /** Release path for a page going away, where an Angular request is dropped and the provider connection waits out its idle timer (409 on the next tune).
+   *  Bypasses HttpClient, so the URL and Bearer header are resolved here. */
   stopSessionOnUnload(sessionId: string): void {
     const path = `/api/livetv/sessions/${sessionId}`;
     const url = this.serverConfig.isNative ? this.serverConfig.resolveUrl(path) : path;

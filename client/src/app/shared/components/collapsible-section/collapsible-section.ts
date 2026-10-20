@@ -30,12 +30,7 @@ export function writeSectionOpen(key: string, open: boolean): void {
   }
 }
 
-/**
- * Section with a fold/unfold header that animates to the content's height.
- * Pass a `persistKey` to remember the open state across pages and reloads.
- *
- * Usage: <app-collapsible-section [heading]="'file_info.title' | translate" persistKey="fileInfo">
- */
+/** Section with a fold/unfold header that animates to the content's height; a `persistKey` remembers the open state across pages and reloads. */
 @Component({
   selector: 'app-collapsible-section',
   imports: [LucideChevronDown],

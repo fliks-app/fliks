@@ -8,33 +8,8 @@ import {
   isRendered,
 } from './focusable.constants';
 
-/**
- * Spatial navigation for D-pad input on Android TV — and keyboard
- * arrow keys on desktop / laptop. Same algorithm, same container
- * tree; the gating is removed so any pointer device benefits. The
- * TV-only quirks (forced initial focus, `body.tv` 10-foot styling)
- * stay scoped via the `tv.isTv()` checks they already had.
- *
- * Two cooperating layers:
- *
- * 1. **Container tree** (opt-in) — pages annotate sections with
- *    `[appTvSection]` (vertical) / `[appTvRow]` (horizontal). Each
- *    directive registers its element here, building a logical tree that
- *    groups focusables by intent. Within an annotated zone the focus
- *    walks the tree (last-active child memorised per container). A
- *    vertical step into a new row lands on that row's first item; a
- *    horizontal step within a row still restores the last-focused card.
- *
- * 2. **Rect-based fallback** — for any focus that lives outside an
- *    annotated container the original three-pass scoring runs (in-line
- *    → 45° cone → half-plane), so unmigrated pages keep working
- *    unchanged. Migration is therefore strictly incremental.
- *
- * `findNeighbor` consults the tree first; on miss (or if the active
- * element isn't inside any registered container) the rect-based pass
- * runs. Keys are intercepted on the capture phase so `<select>` arrow
- * cycling and other native consumers are pre-empted.
- */
+/** Spatial navigation for D-pad and keyboard arrows: container tree (`[appTvSection]`/`[appTvRow]`) first,
+ *  rect fallback outside any container. Keys are caught in capture phase to pre-empt native consumers. */
 
 interface ContainerNode {
   readonly el: HTMLElement;
@@ -62,20 +37,12 @@ export class TvSpatialNavService {
   private lastNavAt = 0;
   /** Registered containers, keyed by their host element. */
   private readonly containers = new Map<HTMLElement, ContainerNode>();
-  /** Cached whole-document focusable list, reused until the DOM mutates. When
-   *  no tree container matches the active element (e.g. the library grid),
-   *  findNeighbor scans the whole document on every D-pad press, and
-   *  querySelectorAll + getComputedStyle over hundreds of cards per press
-   *  stalls the main thread. A pure scroll/focus move mutates nothing, so the
-   *  list stays valid between presses; the observer below clears it on change. */
+  /** Whole-document focusable list, cleared by the observer below; rescanning hundreds of cards per D-pad press stalls the main thread. */
   private focusableCache: HTMLElement[] | null = null;
   private focusObserver?: MutationObserver;
 
   constructor() {
-    // Bind unconditionally — desktop / laptop users press arrow keys
-    // expecting spatial focus moves, and the handler is a no-op for
-    // any non-arrow key. Touch-only phones never fire arrow keydowns
-    // so binding there has no observable effect.
+    // Handler is a no-op for non-arrow keys, so binding on touch-only devices is harmless.
     this.bind();
   }
 
@@ -83,31 +50,19 @@ export class TvSpatialNavService {
     if (this.bound || typeof window === 'undefined') return;
     this.bound = true;
     const handler = (e: KeyboardEvent) => this.onKey(e);
-    // Single listener on window (capture phase) — earlier we doubled up with
-    // document AND window which made each keypress fire the handler twice and
-    // skip every other card on horizontal nav.
+    // Window only: also listening on document fired each keypress twice.
     window.addEventListener('keydown', handler, { capture: true });
     this.destroyRef.onDestroy(() => window.removeEventListener('keydown', handler, { capture: true } as any));
-    // The LG Magic Remote's scroll wheel emits standard `wheel` events
-    // (deltaY ±120 per notch) but the webOS WebView never scrolls the page
-    // in response, so the wheel feels dead. Translate vertical wheel into
-    // the same up/down focus moves the D-pad makes — TV only, so the mouse
-    // wheel keeps its native page-scroll on desktop. Non-passive so the
-    // (no-op on webOS) default can be suppressed and double-scroll avoided
-    // on any platform that does scroll natively.
+    // The webOS WebView never scrolls on the Magic Remote wheel: map it to up/down focus moves (TV only).
+    // Non-passive so the default scroll can be suppressed.
     const wheelHandler = (e: WheelEvent) => this.onWheel(e);
     window.addEventListener('wheel', wheelHandler, { capture: true, passive: false });
     this.destroyRef.onDestroy(() => window.removeEventListener('wheel', wheelHandler, { capture: true } as any));
-    // Track the deepest focused element inside each registered container so
-    // re-entering a container can dig back to the same leaf (last-active-child
-    // memory). Bubble phase is fine: focusin always reaches the document.
+    // Track the deepest focused element per container for last-active-child memory.
     const focusInHandler = (e: FocusEvent) => this.updateActiveChild(e.target as HTMLElement | null);
     document.addEventListener('focusin', focusInHandler);
     this.destroyRef.onDestroy(() => document.removeEventListener('focusin', focusInHandler));
-    // Invalidate the focusable cache whenever the DOM that could change the
-    // focusable set changes. Scoped to the attributes that flip an element's
-    // focusability/visibility (not every attribute) so cosmetic churn doesn't
-    // thrash the cache; childList/subtree covers infinite-scroll card adds.
+    // Clear the cache on DOM changes that affect focusability; attribute filter avoids cosmetic churn.
     if (typeof MutationObserver !== 'undefined') {
       this.focusObserver = new MutationObserver(() => {
         this.focusableCache = null;
@@ -120,25 +75,14 @@ export class TvSpatialNavService {
       });
       this.destroyRef.onDestroy(() => this.focusObserver?.disconnect());
     }
-    // Android TV WebView often leaves the body un-focused on first paint, which
-    // means D-pad events are consumed by the native View and never reach JS.
-    // Pushing focus to the first interactive element guarantees subsequent
-    // keydowns are dispatched into our handler.
-    // Desktop / laptop opt out — stealing focus on bootstrap from whatever
-    // the browser would otherwise restore (e.g. a form input on a refresh)
-    // is hostile, and arrow keys reach the body fine anyway.
+    // Android TV WebView may leave the body unfocused, sending D-pad events to the native View.
+    // Desktop opts out: stealing focus on bootstrap is hostile.
     if (this.tv.isTv()) {
       queueMicrotask(() => this.focusFirstIfNoFocus());
     }
   }
 
-  /**
-   * Register a container. Called by `[appTvSection]` / `[appTvRow]` on init.
-   * Parent is auto-resolved by walking up to the closest registered ancestor
-   * — DI is too coarse here because the host element of a directive may not
-   * itself be the registered host (e.g. a row inside another component's
-   * template). Walking the live DOM tree captures that automatically.
-   */
+  /** Register a container, auto-parented to the closest registered DOM ancestor (DI is too coarse here). */
   registerContainer(
     el: HTMLElement,
     options: { orientation: 'vertical' | 'horizontal'; isWrapping?: boolean },
@@ -152,13 +96,7 @@ export class TvSpatialNavService {
       parent,
       activeChild: null,
     });
-    // Re-resolve the parent for every existing container that lies inside
-    // `el`. Two cases this handles:
-    //   - A descendant registered before us with `parent: null` (init race).
-    //   - A descendant whose previous parent was an ancestor of us, but `el`
-    //     is now the closest ancestor (we slot in between).
-    // Iterating with the live `findParentContainer` guarantees correctness
-    // regardless of registration order.
+    // Re-parent existing containers now inside `el`, so registration order doesn't matter.
     for (const c of this.containers.values()) {
       if (c.el === el || !el.contains(c.el)) continue;
       c.parent = this.findParentContainer(c.el);
@@ -222,24 +160,15 @@ export class TvSpatialNavService {
     const isMultiLineText = tag === 'TEXTAREA' || tag === 'OPTION' || !!active?.isContentEditable;
     if (isMultiLineText) return;
 
-    // Inputs without native arrow handling — checkbox/radio/button-style
-    // — must always fall through to the spatial-nav tree, regardless of
-    // platform, or the user gets focus-trapped on the field. Toggles
-    // (DaisyUI `.toggle` is a styled `<input type="checkbox">`) are the
-    // canonical example: no caret, no value cycle, arrows would just
-    // dead-end without this.
+    // Checkbox/radio/button-style inputs (e.g. DaisyUI toggles) have no native arrow handling and must reach spatial nav.
     const NATIVE_INPUT_TYPES = new Set([
       'text', 'email', 'password', 'search', 'tel', 'url',
       'number', 'range', 'date', 'time', 'datetime-local', 'month', 'week',
     ]);
     const isInputWithNativeArrows = tag === 'INPUT' && NATIVE_INPUT_TYPES.has(inputType ?? 'text');
 
-    // Text-style inputs own horizontal arrows (caret movement) — defer
-    // left/right to native UNTIL the caret hits the end of the value, at
-    // which point the arrow should escape to spatial nav instead of
-    // dead-ending on a no-op caret move. Up/down don't move the caret on
-    // single-line inputs, so they escape unconditionally. Range inputs
-    // are excluded (their arrows adjust the value on every axis).
+    // Text inputs keep left/right for the caret until it hits the end, then escape; up/down escape immediately.
+    // Range inputs are excluded (arrows adjust the value).
     if (isInputWithNativeArrows && inputType !== 'range' && (dir === 'left' || dir === 'right')) {
       const input = active as HTMLInputElement;
       const value = input.value ?? '';
@@ -252,27 +181,14 @@ export class TvSpatialNavService {
       if (dir === 'right' && !atEnd) return;
       // Caret at boundary → fall through to spatial nav.
     }
-    // Native `<select>` cycles its options on arrow keys (silently
-    // changing the value) and Alt+Down opens the dropdown. Block both:
-    // selects open via mouse / Enter / Space (see TvSelectDirective for
-    // the styled picker variant); arrows are reserved for spatial nav.
-    // If no neighbour exists, focus stays put — never a stray value
-    // mutation from an arrow press.
+    // Native <select> would cycle its value on arrows; block it and reserve arrows for spatial nav.
     if (tag === 'SELECT') {
       e.preventDefault();
     }
-    // Sliders (seekbar, volume) own ArrowLeft/Right for value adjustment —
-    // never spatial-nav those. ArrowUp/Down on a horizontal slider has no
-    // intrinsic meaning, so we let those bubble to the focus tree so the
-    // user can escape vertically (out of the seekbar, into the controls
-    // bar above or the content row below). Without this, the focus gets
-    // trapped on the seekbar and the user has to back out of the player
-    // to recover.
+    // Sliders own left/right; up/down bubble to the focus tree so focus can't get trapped on the seekbar.
     if (active?.matches('[role="slider"], [data-tv-skip-spatial], [data-tv-skip-spatial] *')) {
       if (dir === 'left' || dir === 'right') return;
-      // Unless the slider binds vertical itself — the seekbar does while the
-      // seek OSD is up and the file has chapters, where there is nothing else
-      // on screen to escape to anyway.
+      // Unless the slider binds vertical itself (seekbar with chapters while the seek OSD is up).
       if (active.matches('[data-tv-own-vertical]')) return;
     }
     e.preventDefault();
@@ -290,23 +206,15 @@ export class TvSpatialNavService {
     const active = document.activeElement as HTMLElement | null;
     const next = this.findNeighbor(dir);
     if (next) {
-      // Held key stays inside the current zone (a TV row, the library grid):
-      // a deliberate press crosses out, a held one doesn't, so you can't
-      // overshoot out of a row / grid by leaning on the D-pad.
+      // A held key stays in the current zone (row/grid) so leaning on the D-pad can't overshoot out of it.
       if (!crossZones && this.exitsZone(active, next)) return;
-      // preventScroll keeps the browser's instant auto-scroll off; the smooth
-      // scrollIntoView animates an off-screen card in (block:'nearest'), while
-      // horizontal-scroller's focusin handler owns vertical row-top alignment.
+      // preventScroll skips the instant auto-scroll; smooth scrollIntoView then animates, horizontal-scroller owns row-top alignment.
       next.focus({ preventScroll: true });
-      // Positioned targets (a modal's absolute close ✕, fixed FABs, sticky
-      // headers) are already placed on screen — scrolling them "into view"
-      // shifts their scroll container and visibly displaces them, so skip it.
+      // Positioned targets (modal close, fixed FABs, sticky headers) are already on screen; scrolling would displace them.
       const pos = typeof getComputedStyle !== 'undefined' ? getComputedStyle(next).position : 'static';
       if (pos !== 'absolute' && pos !== 'fixed' && pos !== 'sticky') {
         next.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
-        // Last, so it wins: on the TV WebView a smooth `scrollIntoView` leaves a
-        // horizontal scroller untouched (a smooth `scrollTo` on the same element
-        // works), which strands focus off the right edge of a card row.
+        // Last so it wins: on the TV WebView smooth scrollIntoView leaves a horizontal scroller untouched, stranding focus off-card.
         this.scrollRowToFocus(next);
       }
       return;
@@ -343,9 +251,7 @@ export class TvSpatialNavService {
     return !zone.contains(next);
   }
 
-  /** Accumulated wheel deltaY between focus-step emissions, so one notch
-   *  (≈120) maps to exactly one up/down move regardless of the platform's
-   *  delta granularity. */
+  /** Accumulated wheel deltaY, so one notch (~120) is exactly one focus move. */
   private wheelAcc = 0;
 
   private onWheel(e: WheelEvent) {
@@ -364,13 +270,7 @@ export class TvSpatialNavService {
     }
   }
 
-  /** Currently-open overlays that scope spatial navigation. Bottom sheets
-   *  / popovers carry `[data-tv-modal]`; daisyUI dropdowns are detected
-   *  via `.dropdown-open .dropdown-content` because their content stays
-   *  in the DOM with `display:none` when closed (a bare attribute would
-   *  falsely match). Native `<dialog>` elements opened via `showModal()`
-   *  get the `open` attribute and are picked up here so arrow keys can't
-   *  escape into the inert page underneath. */
+  /** Open overlays scoping navigation: `[data-tv-modal]`, `.dropdown-open .dropdown-content` (closed content stays in the DOM), and open `<dialog>`s. */
   private openModals(): HTMLElement[] {
     return [
       ...Array.from(document.querySelectorAll<HTMLElement>('dialog[open]')),
@@ -383,19 +283,10 @@ export class TvSpatialNavService {
 
   private findNeighbor(dir: 'left' | 'right' | 'up' | 'down'): HTMLElement | null {
     const active = document.activeElement as HTMLElement | null;
-    // Modal trap takes precedence over tree-aware. The dropdown / sheet
-    // is a self-contained universe; walking up the container tree would
-    // bridge to whatever sits behind it on the page (a dropdown rendered
-    // inside the top-right cluster's [appTvRow] would otherwise let ↓
-    // from its first item escape down into the page section below).
-    // Prefer the modal that contains focus; fall back to the first open
-    // one so a freshly-opened dropdown still scopes arrows even before
-    // focus has settled inside it.
+    // Modal trap beats tree-aware nav: walking the tree would bridge out to the page behind the dropdown/sheet.
+    // Prefer the modal containing focus, else the first open one.
     const modals = this.openModals();
-    // Flyout submenus (Corrections / Décalage) trap up/down inside themselves
-    // so focus can't leak into the parent menu or the page behind. Left jumps
-    // straight back to the opener the popover recorded (rect-nav would land on
-    // whatever sits behind the flyout); right has nowhere to go.
+    // Flyout submenus trap up/down; left jumps back to the recorded opener, right has nowhere to go.
     const submenu = active?.closest<HTMLElement>('[data-tv-submenu]') ?? null;
     if (submenu && (dir === 'left' || dir === 'right')) {
       const opener = (submenu as unknown as { __tvOpener?: HTMLElement })
@@ -406,11 +297,7 @@ export class TvSpatialNavService {
     if (submenu) {
       openModal = submenu;
     } else {
-      // Scope to the INNERMOST open modal that contains focus. A popover/sheet
-      // (`[data-tv-modal]`) rendered inside an open `<dialog>` must trap nav to
-      // itself — picking the first match would land on the enclosing dialog
-      // (which contains the whole page), letting arrows escape the menu into
-      // the content behind it.
+      // Innermost containing modal: a popover inside an open <dialog> must not pick the enclosing dialog.
       const containing = modals.filter((m) => active && m.contains(active));
       openModal = containing.length
         ? containing.reduce((inner, m) => (inner.contains(m) ? m : inner))
@@ -434,28 +321,15 @@ export class TvSpatialNavService {
     const fromCy = fromRect.top + fromRect.height / 2;
     const horizontal = dir === 'left' || dir === 'right';
 
-    // Scope horizontal nav to the active horizontal scroller (if any).
-    // Without this, pressing Right on the last card of a row would fall
-    // through to the `anywhere` fallback and land on a card from another
-    // row. The restriction is applied below only to off-line / anywhere
-    // candidates — in-line (same row) candidates are always considered
-    // so the user can step out of the row toward a same-band element
-    // outside it (typically: the layout sidebar on the left).
+    // Restrict off-line/anywhere candidates to the active scroller so Right on a row's last card can't land in another row;
+    // in-line candidates stay global so Left can reach the sidebar.
     const parentRow = horizontal ? this.findParentContainer(active) : null;
     const activeScroller = horizontal
       ? active.closest<HTMLElement>(SCROLLER_SELECTOR)
         ?? (parentRow?.orientation === 'horizontal' ? parentRow.el : null)
       : null;
 
-    // Three-pass selection:
-    //   1. In-line: candidate's box overlaps the source's perpendicular axis
-    //      (same row for horizontal nav, same column for vertical) → pick
-    //      closest by primary distance. Matches user intent in 90% of cases.
-    //   2. Off-line in 45° cone: nothing in the same row/col, take the
-    //      closest candidate within 45° of the requested direction.
-    //   3. Anything in the half-plane: last-resort fallback so the D-pad
-    //      always finds *something* (e.g. reaching the top-left hamburger
-    //      from a center button on a hero page would otherwise be stuck).
+    // Three passes: in-line (same row/column, closest), 45 degree cone, then any candidate in the half-plane as last resort.
     const inLine: { el: HTMLElement; primary: number }[] = [];
     const offLine: { el: HTMLElement; score: number }[] = [];
     const anywhere: { el: HTMLElement; score: number }[] = [];
@@ -484,9 +358,7 @@ export class TvSpatialNavService {
       const cross   = horizontal ? Math.abs(dy) : Math.abs(dx);
 
       if (sameRowOrCol) {
-        // Same-band candidates are considered globally — this is what lets
-        // Left from the leftmost card in a row reach the sidebar without
-        // falling through to the cross-row `anywhere` fallback.
+        // Same-band candidates are global so Left from a row's first card reaches the sidebar.
         inLine.push({ el, primary });
       } else if (activeScroller && !activeScroller.contains(el)) {
         // Off-line candidates outside the active row scroller would let
@@ -515,15 +387,7 @@ export class TvSpatialNavService {
     return null;
   }
 
-  /**
-   * Tree-aware step. Climbs from the deepest container holding `active` and
-   * at every level whose orientation matches the requested direction tries
-   * to step to the next/prev sibling navigable child. If the climb hits the
-   * tree root without matching, bridges to a peer top-level container in
-   * the requested direction (rect-scored among peers only). Returns null
-   * if neither path produces a target so the caller falls back to the
-   * page-wide rect-based scoring.
-   */
+  /** Tree-aware step: climbs from the deepest container, then bridges to a peer top-level one; null falls back to rect scoring. */
   private findNeighborInTree(active: HTMLElement, dir: 'left' | 'right' | 'up' | 'down'): HTMLElement | null {
     const activeRect = active.getBoundingClientRect();
     const activeCx = activeRect.left + activeRect.width / 2;
@@ -546,21 +410,14 @@ export class TvSpatialNavService {
             nextIdx = (nextIdx + children.length) % children.length;
           }
           if (nextIdx >= 0 && nextIdx < children.length) {
-            // A vertical step crosses into a different row: land on the item
-            // sitting under the one being left, not wherever focus last sat
-            // there. A horizontal step walks to the literal sibling, so keep
-            // the leaf as-is.
+            // Vertical steps land under the item being left; horizontal steps take the literal sibling.
             return this.digDown(children[nextIdx], !horizontal, horizontal ? undefined : activeCx);
           }
         }
       }
       cur = cur.parent;
     }
-    // No tree-step matched — bridge to a peer top-level container. Without
-    // this, an arrow at the boundary of an isolated container (e.g. the
-    // top-right user/cast row, which has no parent section) would always
-    // fall through to rect-based and could pick a far-away leaf instead of
-    // the next logical region.
+    // Bridge to a peer top-level container so an isolated container's edge doesn't fall through to a far-away rect match.
     if (topMost) {
       const peer = this.findPeerContainer(topMost, dir);
       // Peer bridging only ever fires for up/down (see findPeerContainer), so
@@ -570,17 +427,7 @@ export class TvSpatialNavService {
     return null;
   }
 
-  /**
-   * Pick the closest visible top-level container in the requested direction.
-   *
-   * Only fires for vertical directions: a layout often has overlapping
-   * top-level regions on the same horizontal band (e.g. an absolutely
-   * positioned top-right user/cast row floating over the page section
-   * underneath), so an edge-based "left of" / "right of" test is ambiguous
-   * — we leave horizontal bridging to the rect-based fallback. Vertical
-   * direction is unambiguous: the user wants to step out of the current
-   * region into the next-deeper region downward (or upward).
-   */
+  /** Closest top-level container, vertical only: overlapping regions on one band make left/right ambiguous (rect fallback). */
   private findPeerContainer(
     from: ContainerNode,
     dir: 'left' | 'right' | 'up' | 'down',
@@ -598,10 +445,7 @@ export class TvSpatialNavService {
       const r = c.el.getBoundingClientRect();
       const cx = r.left + r.width / 2;
       const cy = r.top + r.height / 2;
-      // Center-based + extent check: candidate's center is in the right
-      // direction AND it extends past the source on that axis. Catches
-      // overlapping regions (page section under a floating top bar) that
-      // a strict edge check would miss.
+      // Center in direction AND extending past the source: catches overlapping regions an edge check misses.
       const inDirection =
         dir === 'down'
           ? cy > fromCy && r.bottom > fromRect.bottom
@@ -618,18 +462,7 @@ export class TvSpatialNavService {
     return best;
   }
 
-  /**
-   * Resolve a navigable child to a focusable leaf. When `preferFirst` is
-   * false (horizontal entry), priority order:
-   *   1. The container's remembered activeChild (last-focused memory).
-   *   2. A descendant with the `autofocus` attribute — page authors mark
-   *      the natural starting point (e.g. the "Reprendre" button on a
-   *      detail page) with this, so on first entry we land directly there
-   *      instead of crawling DOM-order to whichever focusable comes first.
-   *   3. The first navigable child, recursed.
-   * When `preferFirst` is true (vertical entry into a new row/region),
-   * skip memory and autofocus and land on the first navigable child.
-   */
+  /** Resolve a child to a leaf: remembered activeChild, `autofocus` descendant, then first child; `preferFirst` skips the first two. */
   private digDown(el: HTMLElement, preferFirst = false, alignCx?: number): HTMLElement | null {
     const c = this.containers.get(el);
     if (!c) return el; // it's a leaf focusable
@@ -657,13 +490,7 @@ export class TvSpatialNavService {
     return null;
   }
 
-  /**
-   * The navigable children of a container are: its registered direct
-   * sub-containers, plus the focusable leaves directly inside it that are
-   * not hidden by a deeper container. Walk the DOM and cut at every
-   * sub-container boundary so the tree-step doesn't see a sub-container's
-   * inner cards as siblings.
-   */
+  /** Registered direct sub-containers plus focusable leaves not inside a deeper container. */
   private getNavigableChildren(container: ContainerNode): HTMLElement[] {
     const out: HTMLElement[] = [];
     const visit = (el: HTMLElement) => {
@@ -715,15 +542,8 @@ function collectFocusables(root: ParentNode = document): HTMLElement[] {
     if (!isFocusCandidate(el, style)) return false;
     if (style.pointerEvents === 'none') return false;
     const r = el.getBoundingClientRect();
-    // Reject focusables only when they're positioned entirely off-document —
-    // not just scrolled out of view. DaisyUI's drawer-toggle checkbox lives
-    // at left: -100% and would otherwise pollute spatial nav (Left key would
-    // teleport focus into it). But cards scrolled off a horizontal row, or
-    // page sections scrolled above the viewport on a long detail page, are
-    // valid targets: focusing them makes the browser scroll them back into
-    // view. Page coords (viewport rect + the page's scroll) stay positive
-    // for scrolled-off content, and a horizontal-scroller's internal
-    // scrollLeft reaches its hidden siblings, so allow either case.
+    // Reject only elements positioned off-document (DaisyUI drawer-toggle at left:-100%), not scrolled-out ones:
+    // those are valid targets, focusing scrolls them into view.
     if (r.right <= 0 || r.bottom <= 0) {
       const inScroller = el.closest(SCROLLER_SELECTOR);
       const docRight = r.right + window.scrollX;
@@ -732,10 +552,7 @@ function collectFocusables(root: ParentNode = document): HTMLElement[] {
     }
     return true;
   });
-  // Keep only the outermost focusables: if an element has an ancestor that is
-  // also focusable, treat the ancestor as the navigation target. Without this,
-  // a card containing several inner buttons/links presents 5+ targets to spatial
-  // nav and a "Right" key can land on an inner element instead of the next card.
+  // Keep outermost focusables only: a card's inner buttons/links must not become separate targets.
   const set = new Set(visible);
   return visible.filter((el) => {
     let p = el.parentElement;

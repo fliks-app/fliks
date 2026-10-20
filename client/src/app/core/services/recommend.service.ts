@@ -8,13 +8,8 @@ export interface RecommendTarget {
   episodeId?: number;
 }
 
-/**
- * App-wide broker for the "recommend to a member" dialog. A single modal is
- * mounted globally (in the layout) and opened on demand from anywhere — the
- * media-detail header, season menu — by calling {@link open}. The `request`
- * signal carries a monotonic `n` so re-requesting the same target
- * (open → close → open) still fires the bridge effect.
- */
+/** App-wide broker for the "recommend to a member" dialog, opened from anywhere via {@link open}.
+ * `request` carries a monotonic `n` so re-requesting the same target still fires the bridge effect. */
 @Injectable({ providedIn: 'root' })
 export class RecommendService {
   private counter = 0;
@@ -26,10 +21,7 @@ export class RecommendService {
     this.request.set({ target, n: ++this.counter });
   }
 
-  /** Consume the pending request. Called by the layout bridge once it has
-   *  handed the target to the modal, so the request doesn't linger and reopen
-   *  the modal when the layout is re-created (e.g. after exiting the player,
-   *  which lives on a route outside the layout shell). */
+  /** Consumes the pending request once the layout bridge handed it off, so it doesn't reopen the modal when the layout is re-created (e.g. after the player). */
   clear(): void {
     this.request.set(null);
   }

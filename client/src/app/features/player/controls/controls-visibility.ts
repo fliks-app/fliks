@@ -5,11 +5,7 @@ import { desktopBridgeOrNull } from '../../../core/plugins/desktop-player.bridge
 const HIDE_DELAY_TV_MS = 5000;
 const HIDE_DELAY_MS = 3000;
 
-/**
- * Owns whether a player's controls are on screen: the auto-hide countdown, the
- * pins that suspend it, the blur so a hidden button cannot be pressed, and the
- * cursor. Provided per player component, never app-wide.
- */
+/** Owns whether the player's controls are on screen: auto-hide countdown, suspending pins, blur of hidden buttons and the cursor; provided per player. */
 @Injectable()
 export class ControlsVisibilityService {
   private readonly device = inject(DeviceService);

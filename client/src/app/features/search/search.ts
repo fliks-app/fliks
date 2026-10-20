@@ -86,10 +86,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
 
   readonly searchInput = viewChild<ElementRef<HTMLInputElement>>('searchInput');
 
-  /** Refocus the input whenever something external (e.g. the bottom-
-   *  dock search button on mobile re-tapping the same route) requests
-   *  it. Selecting the current text lets the user immediately
-   *  overwrite the existing query. */
+  /** Refocus the input on an external request (e.g. dock search re-tap), selecting the text so it can be overwritten. */
   private readonly externalFocusEffect = effect(() => {
     const id = this.state.focusRequestId();
     if (id === 0) return;
@@ -103,9 +100,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     }, 0);
   });
 
-  /** Preload the discover panel with a genre asked for from elsewhere (e.g. a
-   *  profile taste chip). Lives on the instance so it fires across route reuse,
-   *  where ngOnInit wouldn't re-run. */
+  /** Preload the discover panel with a genre requested from elsewhere (profile taste chip); instance-level so it fires across route reuse. */
   private readonly genreFilterEffect = effect(() => {
     const req = this.state.genreFilterRequest();
     if (!req) return;
@@ -116,9 +111,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     });
   });
 
-  /** Keep the discover genre list populated for the active content type so the
-   *  filter panel's genre chips render during a text search too. Movie genres
-   *  cover the "all" and "movie" tabs; series uses the TV list. */
+  /** Keep the discover genre list populated for the active type (movie genres for "all"/"movie", TV list for series) so chips render during text search. */
   private readonly discoverGenreEffect = effect(() => {
     this.state.tab();
     this.state.contentType();
@@ -126,9 +119,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     untracked(() => void this.ensureDiscoverGenres());
   });
 
-  /** Auto-apply the discover panel filters (debounced) — no explicit apply
-   *  button. The run is untracked so its writes can't feed back into the effect.
-   *  See applyFiltersNow for what each state does. */
+  /** Auto-apply discover filters (debounced); untracked so its writes don't feed back. See applyFiltersNow. */
   private readonly liveFilterEffect = effect(() => {
     this.state.discoverSelectedGenres();
     this.state.discoverSort();
@@ -142,11 +133,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     });
   });
 
-  /** Apply the current filters to the right source:
-   *  - text query  → the local library query (external post-filters reactively);
-   *  - no query + filters + external on  → TMDB /discover;
-   *  - no query + filters + external off → filtered local library browse;
-   *  - no query + no filters → back to the discovery rows. */
+  /** Apply filters to the right source: text query → local library; filters → TMDB /discover (external on) or local browse; none → discovery rows. */
   private async applyFiltersNow(): Promise<void> {
     if (this.state.tab() !== 'videos') return;
     const ct = this.state.contentType();
@@ -187,9 +174,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   ngAfterViewInit() {
-    // Auto-focus on first visit only on non-touch devices (desktop). On touch
-    // surfaces this would pop the soft keyboard on arrival; there the keyboard
-    // opens only on an explicit re-tap of the search dock (requestFocus).
+    // Auto-focus only on non-touch: on touch it would pop the soft keyboard; there only a dock re-tap (requestFocus) opens it.
     if (!this.state.hasQuery() && !this.device.isTouch()) {
       setTimeout(() => this.searchInput()?.nativeElement.focus(), 100);
     }
@@ -202,10 +187,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     this.removeOutsidePointerListener();
   }
 
-  /** Outside-tap → blur. Capacitor's iOS WebView doesn't reliably blur an
-   *  input when the user taps a non-interactive element (no cursor:pointer,
-   *  no click handler). We register a one-shot pointerdown listener while
-   *  the input has focus that blurs it on any tap outside its wrapper. */
+  /** Outside-tap → blur: Capacitor's iOS WebView doesn't reliably blur on a non-interactive tap, so a one-shot pointerdown listener does. */
   private outsidePointerHandler: ((e: Event) => void) | null = null;
 
   protected onInputFocus() {
@@ -325,13 +307,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     void this.router.navigate(['/profile', userId]);
   }
 
-  /**
-   * Populate the empty-state discovery rows. Trending/popular + the discover
-   * genre list are TMDB and only fetched when external search is enabled;
-   * suggestions always come from the viewer's own library. Each fetch fails
-   * soft (empty row) so a missing provider / cold-start user just drops that
-   * section. Rows follow the active `movie`/`series`/`all` tab.
-   */
+  /** Populate the empty-state discovery rows; TMDB rows need external search, suggestions come from the library, and each fetch fails soft. */
   private async loadDiscovery(
     ct: 'all' | 'movie' | 'series',
     external: boolean,
@@ -372,9 +348,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
       this.state.discoverGenres.set(genres);
       this.loadRequestedIds();
 
-      // "Suggestions pour vous" (external): TMDB catalog matching the viewer's
-      // taste — NOT limited to the library. Derive their top genres from the
-      // library recommendations, then discover those genres on TMDB.
+      // "Suggestions pour vous": TMDB catalog matching taste, not library-limited; derive top genres from library recommendations.
       const topGenreIds = this.deriveTasteGenreIds(this.state.discoveryRecommendations(), genres);
       const suggestions = await this.fetchSuggestions(ct, topGenreIds);
       if (this.staleDiscovery(ct, external)) return;
@@ -508,9 +482,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     });
   }
 
-  /** Run the TMDB /discover query from the current panel filters and switch
-   *  the content area to the results grid. Stale responses (a later filter
-   *  change superseded this one) are dropped. */
+  /** Run the TMDB /discover query from the panel filters and show the results grid; stale responses are dropped. */
   async applyDiscover() {
     const ct = this.state.contentType();
     const sig = (this.lastDiscoverSig = this.filterSig('', ct));
@@ -545,9 +517,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     this.state.resetDiscover();
   }
 
-  /** Preload the discover panel on a genre id (resolved by the caller — a
-   *  profile taste chip — so it's language-proof). The filter auto-applies via
-   *  liveFilterEffect, routed to the right source by the external toggle. */
+  /** Preload the discover panel on a caller-resolved genre id (language-proof); liveFilterEffect auto-applies it. */
   private applyGenreFilter(genreId: number): void {
     this.state.tab.set('videos');
     this.state.query.set('');

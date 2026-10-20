@@ -7,12 +7,8 @@ import { DeviceService } from '../services/device.service';
 import { PluginUiRegistryService } from '../plugin-ui/plugin-ui-registry.service';
 import { evaluateWhen } from '../plugin-ui/when-evaluator';
 
-/**
- * Keeps a plugin page from being reachable by a user its own contribution's
- * `when` would hide it from. Presentation only — an unknown plugin/view is
- * the component's "unavailable" state, not a guard concern; the proxied
- * routes a page calls are CASL-guarded server-side regardless of this check.
- */
+/** Blocks a plugin page for users its contribution's `when` would hide it from; presentation only (an unknown view is the component's
+ *  "unavailable" state, and proxied routes are CASL-guarded server-side). */
 export const pluginViewGuard: CanActivateFn = (route, state) => {
   const auth = inject(AuthService);
   const router = inject(Router);

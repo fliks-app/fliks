@@ -151,28 +151,19 @@ export class PlayerControlsComponent {
 
   constructor() {
     inject(DestroyRef).onDestroy(() => clearTimeout(this.surfaceClickTimer));
-    // Mirror the open dropdown into the global dismissable stack so the
-    // Capacitor hardware back button (which never reaches our keydown
-    // listener — it's intercepted by the App plugin in app.ts) closes the
-    // panel before falling through to "leave the player".
+    // Mirrors the open dropdown into the dismissable stack so the Capacitor hardware Back (intercepted in app.ts) closes it first.
     effect((onCleanup) => {
       if (!this.openDropdown()) return;
       const close = () => this.dropdownBack();
       this.dismissStack.push(close);
       onCleanup(() => this.dismissStack.remove(close));
     });
-    // TV: snap focus back to play/pause every time the controls bar shows.
-    // On a remote, the user can't reach a button without first reactivating
-    // the bar, so the next D-pad center always means "toggle playback"
-    // regardless of where focus drifted before the bar auto-hid.
+    // TV: snap focus to play/pause whenever the bar shows, so D-pad center always toggles playback.
     effect(() => {
       const visible = this.visible();
       const wasVisible = this.lastVisible;
       this.lastVisible = visible;
-      // Focus play/pause when the bar appears under keyboard / D-pad so the
-      // next Enter/Space toggles playback. Skipped for pointer (mouse-revealed
-      // controls shouldn't steal focus). The seek OSD renders no play/pause, so
-      // an arrow-seek keeps the focus scrubFromKey put on the seekbar.
+      // Focus play/pause on keyboard / D-pad reveal only; the seek OSD has no play/pause, so arrow-seek keeps focus on the seekbar.
       if (visible && !wasVisible && this.autoFocusModality()) {
         this.closeDropdown();
         this.playPauseBtn()?.nativeElement.focus({ preventScroll: true });
@@ -186,19 +177,14 @@ export class PlayerControlsComponent {
       this.lastPanelOpen = open;
       this.panelOpenChange.emit(open);
     });
-    // Floating-cue countdown — mirrors the progress sweep numerically, for the
-    // intro and next-item cues alike. Reset to the full window each time a cue
-    // (re)appears.
+    // Cue countdown mirrors the progress sweep; reset to the full window when a cue (re)appears.
     effect(() => {
       if (this.showSkipIntro() || this.showNextCue()) {
         this.skipCueKey();
         this.cueCountdown.set(Math.ceil(this.cueDurationMs() / 1000));
       }
     });
-    // Tick down to 1, but hold while the cue is "engaged" — the controls bar is
-    // up or the cue itself is focused. The parent freezes the retract timer on
-    // the same conditions, so the number stays in lockstep. The cleanup stops
-    // the tick on pause and on retract alike.
+    // Tick down to 1, held while the bar is up or the cue is focused (the parent freezes its retract timer on the same conditions).
     effect((onCleanup) => {
       if ((!this.showSkipIntro() && !this.showNextCue()) || this.visible() || this.cueFocused()) return;
       const id = setInterval(
@@ -207,9 +193,7 @@ export class PlayerControlsComponent {
       );
       onCleanup(() => clearInterval(id));
     });
-    // A cue that disappears under the focus leaves it on <body>: the remote then
-    // acts on nothing at all. Hand it back to play/pause, which is where the bar
-    // puts focus whenever it appears.
+    // A cue vanishing under focus leaves it on <body>; hand it back to play/pause.
     effect(() => {
       const gone = !this.skipIntroBtn() && !this.nextEpisodeBtn();
       if (!gone || !this.cueFocused()) return;
@@ -225,23 +209,14 @@ export class PlayerControlsComponent {
         this.cueFocused.set(false);
       }
     });
-    // Focus a floating cue the instant it mounts so a TV / keyboard user can
-    // act on it without first hunting for it with the D-pad. Each effect is
-    // driven by its cue's view-query signal, which holds the element while the
-    // cue's @if is live and is undefined otherwise.
+    // Focus a floating cue as it mounts; each effect is driven by its cue's view-query signal (set only while its @if is live).
     effect(() => this.autoFocusCue(this.skipIntroBtn()));
     effect(() => this.autoFocusCue(this.nextEpisodeBtn()));
   }
   private lastPanelOpen = false;
   private lastVisible = true;
-  /**
-   * Player layout selection. Splits the three concerns the template branches on:
-   * - 'tv' → desktop-style toolbar with dropdowns (D-pad-friendly).
-   * - 'mobile' → big center play/seek buttons + bottom sheets (touch).
-   * - 'desktop' → desktop-style toolbar with dropdowns (mouse + keyboard).
-   * Tablets land on 'mobile' so taps reach the controls — the previous
-   * `isNative && !isTv` rule excluded tablets that were mis-classified as TV.
-   */
+  /** 'tv' and 'desktop' use the dropdown toolbar; 'mobile' uses big center buttons and bottom sheets.
+   *  Tablets land on 'mobile' so taps reach the controls. */
   readonly playerLayout = computed<'desktop' | 'mobile' | 'tv'>(() => {
     if (this.device.isTv()) return 'tv';
     if (this.device.isTouch()) return 'mobile';
@@ -257,9 +232,7 @@ export class PlayerControlsComponent {
   readonly paused = input(true);
   /** The player's centered spinner is up; the big center buttons step aside for it. */
   readonly spinner = input(false);
-  /** True once the first decoded frame is on the surface. Hides the big
-   *  mobile play/pause button on cold start so it doesn't overlay the
-   *  centered loading spinner before any frame has rendered. */
+  /** True once the first frame is on the surface; hides the big mobile play button over the loading spinner. */
   readonly videoStarted = input(true);
   readonly currentTime = input(0);
   readonly duration = input(0);
@@ -276,10 +249,7 @@ export class PlayerControlsComponent {
   readonly mediaTitle = input('');
   /** Clearlogo shown in place of the title text in the top-left overlay. */
   readonly logoUrl = input<string | null>(null);
-  /** The logo URL whose image failed to load. The backend can hand back a
-   *  logo path for media whose file was never stored (or got cleaned up), so
-   *  the URL is truthy but 404s — fall back to the title instead of a broken
-   *  image. Keyed by URL so it resets automatically on the next media. */
+  /** Logo URL that failed to load (the backend may return a path whose file is gone); keyed by URL so it resets on the next media. */
   private readonly failedLogoUrl = signal<string | null>(null);
   readonly showLogo = computed(
     () => !!this.logoUrl() && this.failedLogoUrl() !== this.logoUrl(),
@@ -336,11 +306,8 @@ export class PlayerControlsComponent {
   readonly skipCueLabel = input('player.skip_intro');
   /** Identity of the skip cue: a change while it stays up restarts its sweep and countdown. */
   readonly skipCueKey = input('intro');
-  /** Gating these on `!visible()` was tried twice and reverted twice: unmounting
-   *  a cue while its `showSkipIntro` is still true strands the `cueFocused`
-   *  flag (its blur never fires), and the retract/countdown state then no
-   *  longer matches what is on screen. Hide them at the player level, by
-   *  retracting them, not by unmounting them here. */
+  /** Do not gate these on `!visible()`: unmounting a cue while `showSkipIntro` is true strands `cueFocused` (no blur).
+   *  Hide them by retracting at the player level. */
   protected readonly skipIntroCue = computed(() => this.showSkipIntro());
   protected readonly nextItemCue = computed(() => this.showNextCue());
   /** Shown for the whole pre-roll item, not a timed cue — no sweep, no countdown. */
@@ -351,9 +318,7 @@ export class PlayerControlsComponent {
   /** Seconds left before the skip-intro cue retracts, shown in the button as a
    *  live countdown next to its progress sweep. */
   readonly cueCountdown = signal(0);
-  /** True while a floating cue holds focus. The player reads it to freeze the
-   *  retract timer, and the sweep / countdown freeze on it here — a cue the
-   *  user has navigated to (keyboard / D-pad) must not vanish from under them. */
+  /** True while a floating cue holds focus; the player freezes its retract timer and the sweep/countdown freeze on it. */
   readonly cueFocused = signal(false);
   readonly togglePlay = output<void>();
   readonly skipIntro = output<void>();
@@ -375,17 +340,12 @@ export class PlayerControlsComponent {
   readonly next = output<void>();
   readonly back = output<void>();
   readonly selectAudioTrack = output<string>();
-  /** Any focus move inside the bar — the parent restarts its auto-hide
-   *  countdown, so walking the controls with the D-pad never lets them retract
-   *  under the user. */
+  /** Any focus move inside the bar; the parent restarts its auto-hide countdown. */
   readonly interacted = output<void>();
 
   @HostListener('focusin', ['$event'])
   protected onBarFocusIn(e: FocusEvent): void {
-    // The floating cues live in this component but are not the bar. They focus
-    // themselves the moment they appear, and counting that as activity restarts
-    // the retract countdown — the bar then never goes away, which in turn keeps
-    // the cues hidden. Only the bar's own controls are activity.
+    // The floating cues self-focus on appearing; counting that as activity would keep the bar up forever.
     const target = e.target as HTMLElement | null;
     if (target?.closest('.player-floating-cue')) return;
     this.interacted.emit();
@@ -394,26 +354,15 @@ export class PlayerControlsComponent {
   readonly toggleFillScreen = output<void>();
   readonly openMedia = output<void>();
   readonly seekDragChange = output<boolean>();
-  /** Mirror of the seekbar's drag state for local layout — true while the
-   *  user is scrubbing. Drives a z-index bump on the bottom bar so the
-   *  sprite preview tooltip pops above the mobile center buttons (which
-   *  sit at z-50 to stay tappable when the bar grows tall). */
+  /** True while scrubbing; bumps the bottom bar's z-index so the sprite preview clears the z-50 mobile center buttons. */
   readonly seekDragging = signal(false);
-  /**
-   * Fires whenever any of the controls' own panels (desktop dropdown OR
-   * mobile bottom sheet) opens or closes. Lets the parent player pause its
-   * auto-hide timer while a panel is up — otherwise the subtitle/audio sheet
-   * on mobile gets orphaned when the 3 s timer hides the controls behind it.
-   */
+  /** Fires when a panel (dropdown or bottom sheet) opens or closes, so the parent pauses its auto-hide timer. */
   readonly panelOpenChange = output<boolean>();
 
   /** Opens the subtitle resync panel; carries the menu trigger so focus can return to it. */
   readonly openSubtitleSync = output<HTMLElement | null>();
 
-  /** AVPlay only takes integer trick-play rates (it drives them from the HLS
-   *  I-frame rendition, one on-demand encode per frame), so fractional steps
-   *  raise INVALID_PARAMETER and anything past 2x outruns the server. LG's
-   *  media pipeline has no variable-rate playback at all. */
+  /** AVPlay takes only integer trick-play rates (INVALID_PARAMETER otherwise) and past 2x outruns the server; LG has no variable rate. */
   readonly speedOptions = computed<number[]>(() =>
     this.tv.isTizen()
       ? [1, 2]
@@ -493,11 +442,7 @@ export class PlayerControlsComponent {
     this.enterPanel(from);
   }
 
-  /**
-   * Which click-driven dropdown is open, or null. Replaces DaisyUI's
-   * focus-within trigger so dropdowns no longer pop open just by D-pad
-   * focusing their button — a click/Enter is required.
-   */
+  /** Which click-driven dropdown is open, or null; a click/Enter is required, D-pad focus alone does not open it. */
   readonly openDropdown = signal<PanelName | null>(null);
 
   /** True when any desktop dropdown is open — prevents play/pause on backdrop click. */
@@ -524,9 +469,7 @@ export class PlayerControlsComponent {
   private readonly skipIntroBtn = viewChild<ElementRef<HTMLButtonElement>>('skipIntroBtn');
   private readonly nextEpisodeBtn = viewChild<ElementRef<HTMLButtonElement>>('nextEpisodeBtn');
 
-  /** True under keyboard / D-pad input — the only modality where stealing focus
-   *  is wanted (mouse and touch users are left alone, matching the CSS ring
-   *  gate). TV is always keyboard-like. */
+  /** True under keyboard / D-pad input, the only modality where stealing focus is wanted. */
   private autoFocusModality(): boolean {
     return (
       this.isTv() ||
@@ -535,15 +478,10 @@ export class PlayerControlsComponent {
     );
   }
 
-  /** Pull focus onto a floating cue the moment it appears — but only for TV
-   *  and keyboard navigation, where there's no pointer to reach it. A
-   *  mouse-revealed cue shouldn't steal focus. */
+  /** Focus a floating cue on appearance, for TV and keyboard navigation only. */
   private autoFocusCue(btn: ElementRef<HTMLButtonElement> | undefined): void {
     if (!btn || !this.autoFocusModality()) return;
-    // Never yank focus off something the user is holding: seeking into an intro
-    // makes the cue appear mid-scrub, and stealing focus there drops the
-    // seekbar under their thumb. The cue is only worth auto-focusing when the
-    // user has nothing else in hand.
+    // Never steal focus from something the user holds: a cue appearing mid-scrub would drop the seekbar.
     const active = document.activeElement as HTMLElement | null;
     if (active && active !== document.body && this.hostEl.nativeElement.contains(active)) return;
     btn.nativeElement.focus({ preventScroll: true });
@@ -563,11 +501,7 @@ export class PlayerControlsComponent {
     this.subtitlesPanel.set('tracks');
   }
 
-  /**
-   * Close the open dropdown when Escape (web) or KEYCODE_BACK (Android remote)
-   * fires. We intercept in capture phase so the OS Back button doesn't navigate
-   * the player away while a panel is still open.
-   */
+  /** Closes the open dropdown on Escape or KEYCODE_BACK; captured so Back doesn't leave the player while a panel is open. */
   @HostListener('window:keydown', ['$event'])
   onWindowKey(e: KeyboardEvent) {
     if (!this.openDropdown()) return;
@@ -578,10 +512,7 @@ export class PlayerControlsComponent {
     this.dropdownBack();
   }
 
-  /** One step back inside the open dropdown: a sub-panel returns to its parent,
-   *  the root panel closes the menu and hands focus back to its trigger.
-   *  Returns true while the dropdown stays open, so the dismissable stack keeps
-   *  it registered for the next Back/Escape. */
+  /** One step back: a sub-panel returns to its parent, the root closes and refocuses its trigger. Returns true while the dropdown stays open. */
   private dropdownBack(): boolean {
     if (this.openDropdown() === 'settings' && this.settingsPanel() !== 'main') {
       this.openSettingsPanel('main');
@@ -622,17 +553,12 @@ export class PlayerControlsComponent {
     if (next) {
       // Remember the trigger so Back/Escape can refocus it after closing.
       this.dropdownTrigger = (event?.currentTarget as HTMLElement) ?? null;
-      // Push focus into the panel so the first item is reachable without
-      // having to traverse out of the trigger via spatial nav (D-pad on TV,
-      // arrow keys on desktop keyboard). Harmless for mouse users.
+      // Push focus into the panel so the first item is reachable without spatial nav out of the trigger.
       this.focusDropdownEntry();
     }
   }
 
-  /** Close current dropdown (called from the click-out backdrop or by Escape).
-   *  Item-selection handlers in dropdowns deliberately do NOT call this — the
-   *  user can change a setting (subtitle / audio / speed / quality) and then
-   *  dismiss the menu themselves with a click outside. */
+  /** Close current dropdown. Item selection deliberately does not call this: the user dismisses with a click outside. */
   private surfaceClickTimer?: ReturnType<typeof setTimeout>;
 
   /** Play/pause waits out the double-click window, so a double click only
@@ -664,9 +590,7 @@ export class PlayerControlsComponent {
     afterNextRender(() => scrollSelectedIntoView(this.hostEl.nativeElement), { injector: this.injector });
   }
 
-  /** `fromPanel` is the panel being left: when the new panel holds the row that
-   *  opens it (`data-panel-row`), focus returns there instead of the first
-   *  item. */
+  /** `fromPanel` is the panel being left: if the new panel holds its opening row (`data-panel-row`), focus returns there. */
   private focusDropdownEntry(fromPanel?: string) {
     afterNextRender(
       () => {

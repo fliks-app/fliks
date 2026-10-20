@@ -69,11 +69,7 @@ const DEFAULTS: HomeSettings = {
   recentlyAddedMode: 'file',
 };
 
-/**
- * Per-user, per-device home personalization (zone visibility + order and the
- * "recently added" ranking mode), persisted to localStorage exactly like
- * `DisplaySettingsService` / `PlayerSettingsService`. No backend involvement.
- */
+/** Per-user, per-device home personalization (zone visibility/order, "recently added" mode), persisted to localStorage; no backend. */
 /** Zones the 10-foot UI does not show. Recent requests is an admin surface
  *  (approve, decline, profile names) the TV layout was never designed for. */
 const HIDDEN_ON_TV: ReadonlySet<HomeSectionKey> = new Set<HomeSectionKey>([
@@ -120,10 +116,7 @@ export class HomeSettingsService {
     this.persist({ ...this.settings(), recentlyAddedMode });
   }
 
-  /** Reset zone order + visibility to defaults (built-ins visible in their
-   *  canonical order; permission-gated and per-library zones fall back to
-   *  their default placement via {@link resolve}). Leaves the recently-added
-   *  mode untouched. */
+  /** Reset zone order + visibility to defaults (gated and per-library zones use {@link resolve}); leaves the recently-added mode. */
   resetLayout(): void {
     this.persist({
       ...this.settings(),
@@ -131,12 +124,7 @@ export class HomeSettingsService {
     });
   }
 
-  /**
-   * Reconcile the saved order with what's actually available now: keep the
-   * saved order for still-present zones, append any missing built-ins (default
-   * visible) in their canonical position, append one zone per library (default
-   * hidden — opt-in), and drop entries for libraries that no longer exist.
-   */
+  /** Reconcile the saved order with what exists now: keep saved zones, append missing built-ins (visible) and one hidden zone per library, drop gone libraries. */
   resolve(
     libraries: { id: number; name: string }[],
     opts: { requests?: boolean } = {},
@@ -144,25 +132,19 @@ export class HomeSettingsService {
     const libName = new Map(libraries.map((l) => [l.id, l.name]));
     const available = new Set<HomeSectionKey>(BUILTIN_ORDER);
     if (opts.requests) available.add('requests-recent');
-    // The one answer to "which zones exist here", form factor included: the
-    // home page renders what this returns and the settings page lists it, so a
-    // zone the 10-foot UI hides is not offered for reordering either.
+    // The one answer to "which zones exist here", form factor included: home renders it and settings lists it.
     if (this.tv.isTv()) for (const key of HIDDEN_ON_TV) available.delete(key);
     for (const lib of libraries) {
       available.add(`${LIBRARY_RECENT_PREFIX}${lib.id}` as HomeSectionKey);
     }
 
-    // Saved layouts predating this zone get it on top, not appended at the
-    // bottom (new users already get it first via DEFAULTS) — so it's kept
-    // out of the generic merge's canonical-order append and handled after.
+    // Saved layouts predating this zone get it on top (new users get it first via DEFAULTS), so it skips the generic append.
     const otherBuiltins = DEFAULTS.order.filter((p) => p.key !== 'received-recommendations');
     let merged = mergeOrdered(this.settings().order, otherBuiltins, available, (p) => p.key);
     if (!merged.some((p) => p.key === 'received-recommendations')) {
       merged = [{ key: 'received-recommendations', visible: true }, ...merged];
     }
-    // Permission-gated built-in: only offered when the user can use requests.
-    // With no saved preference it defaults visible, slotted just above
-    // "recently-added"; a saved order (handled above) wins.
+    // Permission-gated: defaults visible just above "recently-added" unless a saved order (handled above) wins.
     if (available.has('requests-recent') && !merged.some((p) => p.key === 'requests-recent')) {
       const pref: HomeSectionPref = { key: 'requests-recent', visible: true };
       const at = merged.findIndex((p) => p.key === 'recently-added');

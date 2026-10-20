@@ -4,12 +4,7 @@ import { detectBrowser, detectDeviceModel, detectOs } from './ua-parser';
 
 const DEVICE_ID_KEY = 'fliks_device_id';
 
-/**
- * Stable per-installation device identifier. Generated once and persisted in
- * Capacitor Preferences (native) or localStorage (web), then reused for every
- * pairing request so the server can scope the access-token read to the same
- * device that opened the request.
- */
+/** Stable per-installation id (Capacitor Preferences or localStorage), reused so the server scopes the token read to the device that opened the request. */
 export async function getOrCreateDeviceId(): Promise<string> {
   const isNative = Capacitor.isNativePlatform();
   const existing = await readDeviceId(isNative);
@@ -19,11 +14,7 @@ export async function getOrCreateDeviceId(): Promise<string> {
   return id;
 }
 
-/**
- * Best-effort human-readable device name shown on the phone's pending-requests
- * page so the user can recognize the device making the request. We aim for
- * "this looks like the right TV", not exact accuracy.
- */
+/** Best-effort name shown on the phone's pending-requests page; aims for "looks like the right TV", not accuracy. */
 export function getDeviceName(): string {
   const ua = navigator.userAgent;
 

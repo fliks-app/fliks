@@ -56,11 +56,7 @@ export class SelectUserComponent {
     () => new Set(this.auth.resumableSessions().map((s) => s.user.id)),
   );
 
-  /**
-   * The server's roster, plus the accounts this device has a session for. The
-   * union matters when the server is unreachable: a stored session is exactly
-   * what lets someone back into their downloaded media offline.
-   */
+  /** The server's roster plus accounts with a session on this device; the union lets someone back into downloaded media offline. */
   readonly users = computed<PublicUserSummary[]>(() => {
     const byId = new Map<number, PublicUserSummary>();
     for (const session of this.auth.resumableSessions()) {
@@ -78,23 +74,15 @@ export class SelectUserComponent {
     () => this.users().find((u) => u.id === this.openSheetFor()) ?? null,
   );
 
-  /** Tile the default-focus pass lands on: an account with a stored session
-   *  when there is one, else the first. A session-only marker would match
-   *  nothing on a fresh device and leave the boot screen unfocused until
-   *  `DefaultFocusService` times out. */
+  /** Tile the default-focus pass lands on: an account with a stored session, else the first (else boot stays unfocused until `DefaultFocusService` times out). */
   readonly focusTileId = computed(
     () => this.users().find((u) => this.hasSession(u))?.id ?? this.users()[0]?.id ?? null,
   );
 
-  /** Default-focus target inside the sheet (password button). Captured as a
-   *  view child so the effect below can pull focus to it the moment the
-   *  sheet opens — `data-tv-modal` on the sheet container already traps
-   *  D-pad navigation inside (see `tv-spatial-nav.service.ts`). */
+  /** Password button, focused when the sheet opens; `data-tv-modal` already traps D-pad navigation (see `tv-spatial-nav.service.ts`). */
   private readonly passwordBtn = viewChild<ElementRef<HTMLButtonElement>>('passwordBtn');
 
-  /** Stable identity for the dismiss-stack registration so the same
-   *  callback can be `remove()`-d as was `push()`-ed even if `closeSheet`
-   *  fires multiple times (open → cancel → reopen). */
+  /** Stable identity so the callback pushed on the dismiss stack can be `remove()`-d even if `closeSheet` fires repeatedly. */
   private readonly dismissCallback = () => this.closeSheet();
   private dismissRegistered = false;
   /** Tile the sheet was opened from, so closing hands focus back to it
@@ -103,12 +91,8 @@ export class SelectUserComponent {
 
   constructor() {
     void this.loadUsers();
-    // Sheet lifecycle: focus the password button on open and register a
-    // back-dismiss callback so the app-shell back handler
-    // (App.handleBackButton — Tizen XF86Back / Capacitor backButton /
-    // Android hardware) closes the sheet before any route-level back.
-    // The viewChild is null on the first effect tick (sheet not yet
-    // materialised by @if); rAF lands after Angular's commit pass.
+    // Sheet lifecycle: focus the password button on open and register a back-dismiss callback.
+    // The viewChild is null on the first tick (@if not yet materialised); rAF lands after Angular's commit pass.
     effect(() => {
       const open = this.openSheetFor() !== null;
       if (open && !this.dismissRegistered) {
@@ -121,9 +105,7 @@ export class SelectUserComponent {
       if (!open) {
         const opener = this.opener;
         this.opener = null;
-        // rAF for the same reason as the open path: the sheet's focused button
-        // is still in the DOM until Angular's commit pass lands, and its
-        // removal would blur whatever we restored.
+        // rAF as on open: the sheet's focused button stays in the DOM until the commit pass, and its removal would blur the restored focus.
         if (opener) requestAnimationFrame(() => restoreOpenerFocus(opener));
         return;
       }
@@ -132,10 +114,7 @@ export class SelectUserComponent {
       });
     });
 
-    // Belt: if the component is torn down while the sheet is open
-    // (route change, auth flow restarting), drop the dismiss callback
-    // so the stack doesn't grow a dangling reference that would
-    // swallow the next back press elsewhere.
+    // Drop the dismiss callback if torn down while open, so a dangling entry doesn't swallow the next back press.
     this.destroyRef.onDestroy(() => {
       if (this.dismissRegistered) {
         this.dismissStack.remove(this.dismissCallback);

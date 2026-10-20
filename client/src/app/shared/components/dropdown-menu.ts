@@ -18,32 +18,8 @@ import { TvService } from '../../core/services/tv.service';
 
 type Placement = 'bottom-end' | 'bottom-start' | 'top-end' | 'top-start';
 
-/**
- * Form-factor-aware menu wrapper.
- *
- *   • Desktop (mouse + non-TV) → DaisyUI `.dropdown` / `.dropdown-content`
- *     anchored sibling layout. Open/close handled by `appDropdownToggle`
- *     (click + outside-click + back-button via DismissableStackService).
- *   • Mobile / tablet / TV → BottomSheetComponent.
- *
- * Authoring:
- *
- *   <app-dropdown-menu placement="bottom-end">
- *     <button trigger type="button" class="btn btn-ghost btn-circle">…</button>
- *     <a routerLink="/account">…</a>
- *     <button (click)="logout()">…</button>
- *   </app-dropdown-menu>
- *
- * The element marked `trigger` is projected as the first child of
- * `.dropdown` on desktop so DaisyUI's `:focus-within` open path keeps
- * working alongside the click toggle. All other children are projected
- * into `.dropdown-content` (desktop) or the bottom sheet body (TV/touch).
- *
- * Both <ng-content> slots live inside <ng-template> refs and are rendered
- * via *ngTemplateOutlet — direct <ng-content> inside @if blocks does not
- * project reliably (Angular 21 still hits this case under nested control
- * flow).
- */
+/** Form-factor-aware menu: DaisyUI `.dropdown` on desktop, BottomSheetComponent on touch / TV; the `trigger` child is projected first.
+ *  Both slots sit in <ng-template> + *ngTemplateOutlet because <ng-content> inside @if blocks doesn't project reliably. */
 @Component({
   selector: 'app-dropdown-menu',
   standalone: true,
@@ -54,9 +30,7 @@ export class DropdownMenuComponent {
   readonly placement = input<Placement>('bottom-end');
   /** Title for the sheet variant (touch / TV). The desktop dropdown ignores it. */
   readonly heading = input('');
-  /** Height cap on the panel. A caller whose trigger sits low and opens upward
-   *  needs a tighter one: the panel is anchored above the trigger, so a cap
-   *  taller than the space there puts the first options off screen. */
+  /** Height cap on the panel; an upward-opening panel near the page bottom needs a tighter one to keep its first options on screen. */
   readonly maxHeight = input('max-h-[70vh]');
 
   private readonly tv = inject(TvService);
@@ -65,12 +39,7 @@ export class DropdownMenuComponent {
   readonly useDropdown = computed(() => !this.tv.isTv() && !this.device.isTouch());
   protected readonly open = signal(false);
 
-  /** Reference to <app-bottom-sheet> on the touch/TV branch — used to
-   *  reparent the sheet under <html> so its `position: fixed` resolves
-   *  against the viewport instead of the layout's drawer-content (which
-   *  has `position: relative` on mobile, creating a stacking context that
-   *  traps `z-[101]` below the bottom dock at `z-40`). The trigger stays
-   *  inline so the layout's flex/grid placement keeps working. */
+  /** The <app-bottom-sheet> (touch/TV), reparented under <html> so its `position: fixed` escapes the drawer's stacking context. */
   private readonly sheet = viewChild('sheet', { read: ElementRef });
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private wasOpen = false;
@@ -87,16 +56,9 @@ export class DropdownMenuComponent {
         document.documentElement.appendChild(ref.nativeElement);
       });
     });
-    // The sheet host is moved under <html> to escape the drawer's stacking
-    // context, so Angular no longer owns its DOM position and won't remove it
-    // when this component is destroyed. Detach it ourselves — otherwise a
-    // sheet torn down mid-close (its slide-down exit still running, e.g. an
-    // item tap that navigates away) orphans its full-screen backdrop, which
-    // keeps blocking clicks across the app.
+    // The reparented sheet is outside Angular's DOM ownership; detach it so a mid-close teardown doesn't orphan its click-blocking backdrop.
     inject(DestroyRef).onDestroy(() => this.reparentedSheet?.remove());
-    // Sheet branch (touch / TV) doesn't go through DropdownToggleDirective,
-    // so refocus the projected trigger ourselves on close — keeps Enter /
-    // tap parity with the dropdown branch (re-activating re-opens).
+    // The sheet branch skips DropdownToggleDirective, so refocus the trigger on close for parity with the dropdown.
     effect(() => {
       const open = this.open();
       const justClosed = this.wasOpen && !open;
@@ -118,11 +80,7 @@ export class DropdownMenuComponent {
     return cls.join(' ');
   });
 
-  /** Close on any click that lands on an `<a>` / `<button>` inside the
-   *  sheet — mirrors the desktop `DropdownToggleDirective` behaviour
-   *  (the directive's outside-click handler treats item clicks as
-   *  "outside the trigger" and closes). Padding / spacer clicks are
-   *  ignored so the sheet doesn't dismiss on stray taps. */
+  /** Closes on a click on an `<a>` / `<button>` inside the sheet, as the desktop directive does; padding clicks are ignored. */
   protected onItemsClick(event: Event) {
     const target = event.target as HTMLElement | null;
     if (target?.closest('a, button')) {

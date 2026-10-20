@@ -40,9 +40,7 @@ export class SetupChecklistComponent implements OnInit {
    *  admin pages, which the 10-foot UI was never designed for. */
   protected readonly isTv = inject(TvService).isTv;
 
-  /** When `true`, also surface completed and dismissed items (with a
-   *  reactivate button on the latter). Off by default — the home
-   *  widget only wants pending things. */
+  /** When `true`, also surface completed and dismissed items (with a reactivate button on the latter). */
   readonly showAll = input(false);
 
   readonly items = this.api.items;

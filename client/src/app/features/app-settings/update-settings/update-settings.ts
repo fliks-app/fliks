@@ -13,11 +13,7 @@ import { MarkdownPipe } from '../../../shared/pipes/markdown.pipe';
 import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
 import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-field/toggle-field';
 
-/** Full-page counterpart to the topbar update button: shows the running
- *  version, lets the user re-check on demand, and surfaces the check result —
- *  including the "up to date" and error states the topbar button hides. Reads
- *  everything from {@link AppUpdateService}, so the action adapts to the
- *  platform (in-app install on desktop, external release link on web/.deb). */
+/** Full-page counterpart to the topbar update button, also showing the "up to date" and error states it hides; the action adapts via {@link AppUpdateService}. */
 @Component({
   selector: 'app-update-settings',
   imports: [

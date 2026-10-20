@@ -1,20 +1,8 @@
-/**
- * Poster morph between a media card and the media page.
- *
- * The stamp has to survive past the click: the browser snapshots on the next
- * tick, and the back transition reads it again, so it is never cleared on a
- * timer, only replaced. That makes a stale stamp the hazard, and the router's
- * transition hook drops it once neither side of a navigation has a poster.
- */
+/** Poster morph between a media card and the media page. The stamp must outlive the click (snapshot on next tick, read again on back), so it is only replaced,
+ * and the router hook drops it when neither side has a poster. */
 /** The clicked card's badges and progress bar, captured as one layer. */
 export const CARD_OVERLAY_NAME = 'media-card-overlay';
-/**
- * Marks what this module put there. A media page names its own hero the same
- * way — a style binding is an inline style too — and Angular does not rewrite
- * a binding whose value has not changed, so clearing by inline style took that
- * name away for good on a page kept in the route cache: the trip back then
- * found nothing to pair the card with.
- */
+/** Marks what this module stamped: a hero's own style-bound name is unchanged so Angular won't rewrite it, and clearing by inline style would lose it in the route cache. */
 const STAMPED = 'data-poster-stamped';
 
 export function clearPosterStamps(): void {
@@ -60,16 +48,8 @@ export function stampPosterNamed(
   }
 }
 
-/**
- * Hide the hero of the page being left for the length of one transition. On a
- * trip between two poster pages it is named for the morph that opened it and
- * nothing on the destination carries that name, so captured it would be a lone
- * poster animating on its own over the new page.
- *
- * The hook runs before the old snapshot is taken and the elements are held by
- * reference, so the page can be detached into the route cache and still be
- * given its name back.
- */
+/** Hides the leaving hero for one transition: it is named for the opening morph and nothing on the destination carries that name.
+ * Held by reference, so a page detached into the route cache still gets its name back. */
 const HERO_MUTED = 'data-hero-muted';
 
 export function muteHeroUntilDone(transition: { finished: Promise<unknown> }): void {
@@ -113,11 +93,7 @@ export function leafRoutePath(root: RouteNode): string | undefined {
   return leaf.routeConfig?.path;
 }
 
-/**
- * A card on a list opening the page that carries the other half of its morph.
- * A card already on a poster page opens a sibling of the page it sits on, which
- * is a step deeper into the same stack — the slide owns that pair.
- */
+/** A list card opening the page with the other half of its morph; from a poster page the slide owns the pair. */
 export function enteringPosterPage(from: RouteNode, to: RouteNode): boolean {
   return (
     POSTER_ROUTES.has(leafRoutePath(to)) &&
@@ -126,10 +102,7 @@ export function enteringPosterPage(from: RouteNode, to: RouteNode): boolean {
   );
 }
 
-/**
- * Two poster pages in a row: a rail on one opening another. The stack owns that
- * pair where it slides, and the morph is what is left everywhere else.
- */
+/** Two poster pages in a row: the stack slide owns that pair where it applies, the morph covers the rest. */
 export function betweenPosterPages(from: RouteNode, to: RouteNode): boolean {
   return POSTER_ROUTES.has(leafRoutePath(from)) && POSTER_ROUTES.has(leafRoutePath(to));
 }
@@ -143,11 +116,7 @@ export function leavingPosterPage(from: RouteNode, to: RouteNode): boolean {
   );
 }
 
-/**
- * Drop a stamp left over from an earlier card click when neither side of the
- * navigation has a poster to pair with: the lone img would be snapshotted out of
- * the figure that rounds it and animate on its own.
- */
+/** Drops a leftover stamp when neither side has a poster, else the lone img animates on its own out of its rounded figure. */
 export function clearStalePosterStamps(from: RouteNode, to: RouteNode): void {
   const player =
     leafRoutePath(from) === WATCH_PATH || leafRoutePath(to) === WATCH_PATH;
@@ -159,11 +128,7 @@ export function clearStalePosterStamps(from: RouteNode, to: RouteNode): void {
 
 const VIEW_TRANSITION_CLASS = 'view-transitioning';
 
-/**
- * Flag the document for as long as the transition runs, so an entry animation
- * that would otherwise stack on top of the morph (see ImgFadeInDirective) can
- * sit it out.
- */
+/** Flags the document while the transition runs so an entry animation (see ImgFadeInDirective) can sit it out. */
 let running: Promise<void> = Promise.resolve();
 let animating: object | null = null;
 
@@ -193,10 +158,7 @@ export function viewTransitionDone(): Promise<void> {
   return running;
 }
 
-/** How many running transitions asked for each class. Starting a transition
- *  skips the one before it, which then settles and cleans up — after the new one
- *  has named itself, and they share these names. Counted, so the one arriving
- *  keeps what it asked for and the one leaving takes back only its own. */
+/** Count of running transitions per class: a superseded one cleans up after the new one named itself, so each takes back only its own. */
 const heldClasses = new Map<string, number>();
 
 /** Names the transition for the CSS that shapes it, for as long as it runs. */

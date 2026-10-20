@@ -33,9 +33,7 @@ export class ScrollMemoryService {
         this.routerScrolled = true;
         const due = this.queued;
         this.queued = [];
-        // A microtask, so this lands after the router's own subscriber has
-        // scrolled whatever subscriber order puts first — same task either
-        // way, so nothing in between is ever painted.
+        // A microtask, so it lands after the router's own subscriber within the same task and nothing in between paints.
         if (due.length) queueMicrotask(() => due.forEach((fn) => fn()));
         if (!this.navbar.navigatedBack()) queueMicrotask(() => this.enterAtTop());
       }
@@ -58,55 +56,28 @@ export class ScrollMemoryService {
     this.currentKey = null;
   }
 
-  /**
-   * Stop tracking only if the active key still matches `key`. Useful when a
-   * component is detached (route reuse) before another page has had a chance
-   * to claim the active key — without this guard we'd stomp on the next
-   * page's activate() call when both fire in close succession.
-   */
+  /** Guard against a detached component stomping on the next page's activate() when both fire in close succession. */
   deactivateIf(key: string) {
     if (this.currentKey === key) this.currentKey = null;
   }
 
-  /**
-   * Restore scroll position after Angular has rendered.
-   */
   restore(key: string, injector: Injector) {
     const y = this.positions.get(key);
     if (!y) return;
     afterNextRender(() => this.pageScroller.scrollTo(y), { injector });
   }
 
-  /**
-   * Restore scroll on route reattach, where the cached DOM is already laid out.
-   * Applies once the router has taken its turn, then re-applies for ~600 ms
-   * with rAF gating for a document that is still growing — stopping on the
-   * first frame where scrollY already equals the target, so a user scroll
-   * within the window ends the loop cleanly too.
-   */
+  /** For route reattach (cached DOM laid out): applies after the router's turn, then re-applies about 600 ms via rAF for a growing document, stopping once scrollY equals the target. */
   restoreSticky(key: string): void {
     const target = this.positions.get(key);
     if (!target) return;
-    // A cached route is reattached before the router scrolls, so restoring now
-    // would scroll the page being left, be overwritten by the scroll-to-top,
-    // and then correct itself — three jumps, the first of them on the outgoing
-    // page. Wait for the router to have had its turn.
+    // A cached route reattaches before the router scrolls; restoring now would scroll the outgoing page and jump three times.
     if (this.routerScrolled) this.stick(target);
     else this.queued.push(() => this.stick(target));
   }
 
-  /**
-   * Hold a forward entry at the top. The router scrolls there once, and a
-   * WKWebView still sizing the incoming document drops that write — leaving
-   * the page at the offset the taller page before it had, which the new
-   * document's own maximum clamps to its footer.
-   *
-   * Two passes, because that clamp is not bound to this task: the sticky one
-   * for an offset that is already wrong, and a listener for the one that
-   * arrives a few frames later off the scrolling thread. Both end early —
-   * the first on the frame it reads zero, the second on the first thing the
-   * user does, so neither ever pulls against a real gesture.
-   */
+  /** Holds a forward entry at the top: a WKWebView still sizing the document drops the router's single scroll, and the taller page's offset clamps to the footer.
+   * Two passes (sticky, plus a listener for a later off-thread clamp), ending on a zero read and on the first user gesture respectively. */
   private enterAtTop(): void {
     this.stick(0);
 

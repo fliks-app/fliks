@@ -25,10 +25,7 @@ import {
 @Component({
   selector: 'app-bottom-sheet',
   standalone: true,
-  // Same reason as `app-popover-menu`: the backdrop and sheet are
-  // `position: fixed`, so the host needs no box — and left with one it becomes
-  // a stray grid item in a parent like daisyUI's `.modal` (display: grid),
-  // adding a row that pushes the modal-box off-centre and covers the backdrop.
+  // The backdrop and sheet are `position: fixed`, so the host needs no box (as in `app-popover-menu`); a box becomes a stray grid item in `.modal`.
   styles: [':host { display: contents; }'],
   templateUrl: './bottom-sheet.html',
 })
@@ -54,18 +51,12 @@ export class BottomSheetComponent {
   private readonly injector = inject(Injector);
   private readonly dismissCallback = () => this.dismiss();
   private startY = 0;
-  /** True when the touch gesture began with the sheet already scrolled to the
-   *  top. Only then can a downward drag turn into a dismiss — otherwise
-   *  scrolling a long list up to the top and continuing in the same gesture
-   *  would chain straight into the close. Reaching the top mid-scroll stops;
-   *  a fresh swipe (new touchstart at the top) is needed to dismiss. */
+  /** True when the touch began with the sheet scrolled to the top; only then can a downward drag dismiss, so a scroll never chains into the close. */
   private startedAtTop = false;
   /** A drag from the handle/title always dismisses: it sits above the list, so
    *  it never scrolls it, however far the list is scrolled. */
   private fromHandle = false;
-  /** Y of the previous touchmove, and whether the last meaningful move went
-   *  downward — the release only dismisses when the finger was still heading
-   *  down, so easing back up after over-pulling keeps the sheet open. */
+  /** Y of the previous touchmove and the last move's direction; release dismisses only if still heading down. */
   private prevY = 0;
   private movingDown = true;
   private prevBodyOverflow: string | null = null;
@@ -75,15 +66,8 @@ export class BottomSheetComponent {
   /** Element focused when the sheet opened — restored on close. */
   private prevFocused: HTMLElement | null = null;
 
-  /**
-   * TV-only focus trap. The WebView's spatial navigation moves focus to the
-   * visually closest focusable on D-pad press; once the user reaches the
-   * sheet's last item, ↓ targets an element on the background and the
-   * browser auto-`scrollIntoView`s the background into the visible region
-   * — even with `overflow: hidden` on body/html (programmatic scroll is
-   * not blocked). Catching `focusin` and bouncing focus back inside
-   * neutralises that path.
-   */
+  /** TV-only focus trap: at the last item, spatial nav targets the background and the browser scrolls it into view even with `overflow: hidden`.
+   *  Bouncing `focusin` back inside prevents that. */
   private readonly onFocusIn = (e: FocusEvent) => {
     const sheetEl = this.sheet()?.nativeElement;
     if (!sheetEl) return;
@@ -109,12 +93,7 @@ export class BottomSheetComponent {
           this.visible.set(true);
           this.dismissing.set(false);
           this.dragOffset.set(0);
-          // Lock the page scroll behind the sheet. Save+restore the previous
-          // inline overflow so we don't trample a parent component's setting.
-          // On TV body has a scale transform that makes html the scrolling
-          // element — lock both. On other form factors body is the scroller
-          // and locking html on tablet landscape (pinned drawer) shifts the
-          // sidebar upward.
+          // Lock page scroll, saving the prior inline overflow; TV scrolls on html (body is scaled), elsewhere locking html shifts the pinned drawer.
           if (typeof document !== 'undefined') {
             this.prevBodyOverflow = document.body.style.overflow;
             document.body.style.overflow = 'hidden';
@@ -134,40 +113,24 @@ export class BottomSheetComponent {
             injector: this.injector,
           });
           if (this.tv.isTv() && !this.focusTrapActive && typeof document !== 'undefined') {
-            // Snapshot the trigger before the trap can bounce focus inside.
-            // Restored on close so the user lands back on the element they
-            // pressed (e.g. a <select appTvSelect>) — not on the option they
-            // happened to highlight last in the sheet.
+            // Snapshot the trigger before the trap can bounce focus; restored on close.
             this.prevFocused = document.activeElement as HTMLElement | null;
             document.addEventListener('focusin', this.onFocusIn);
             this.focusTrapActive = true;
-            // Move focus inside the sheet on open. Without this, the D-pad
-            // still operates on the trigger row (or the previously-focused
-            // tile in the route), so up/down moves to a background element and
-            // the focus-trap fires AFTER the user has already left the sheet
-            // visually — feels unresponsive.
-            // queueMicrotask waits until @if has materialised the sheet
-            // content; rAF would defer one extra frame and let the WebView
-            // paint the focus halo on the wrong element first.
+            // Move focus into the sheet on open, else the D-pad still acts on the background. queueMicrotask, not rAF, so the halo isn't painted on the wrong element.
             queueMicrotask(() => {
               if (!this.open()) return;
               focusOverlayEntry(initialOverlayFocus(this.sheet()?.nativeElement));
             });
           }
         } else {
-          // Animate the slide-down exit instead of an instant teardown, whatever
-          // caused the close (item select flipping `open`, or backdrop/drag/back
-          // via dismiss()).
+          // Animate the exit whatever caused the close (item select or dismiss()).
           this.beginClose();
         }
       });
     });
 
-    // Belt: ensure scroll is unlocked, the stack is clean, the exit timer is
-    // cleared, and (TV) focus is restored even if the component is destroyed
-    // while still open — e.g. a route change, or a parent `@if` tearing the
-    // sheet down (PopoverMenu hardcodes `[open]="true"`, so the effect's close
-    // branch never runs for that path).
+    // Cleanup if destroyed while open (route change, parent `@if`; PopoverMenu hardcodes `[open]="true"`, so the effect's close branch never runs).
     destroyRef.onDestroy(() => {
       if (this.exitTimer) {
         clearTimeout(this.exitTimer);
@@ -199,9 +162,7 @@ export class BottomSheetComponent {
     const y = e.touches[0].clientY;
     const deltaY = y - this.startY;
 
-    // Only turn a downward pull into a dismiss-drag when the gesture began at
-    // the top. Scrolling a long list up to the top does NOT chain into the
-    // close in the same gesture — the user lifts and swipes again.
+    // Only a pull that began at the top becomes a dismiss-drag; scrolling up to the top must not chain into the close.
     const canDrag = this.fromHandle || (this.startedAtTop && !scrolledBetween(e.target, el));
     if (canDrag && deltaY > 0) {
       e.preventDefault();
@@ -236,10 +197,7 @@ export class BottomSheetComponent {
     this.beginClose();
   }
 
-  /** Slide the sheet down, then remove it from the DOM and notify the parent.
-   *  Idempotent — a close already in flight is not restarted. Every close path
-   *  funnels through here so selecting an item animates out exactly like a
-   *  backdrop tap or a drag-down. */
+  /** Slides the sheet down, then removes it and notifies the parent; idempotent, and every close path funnels here. */
   private beginClose() {
     if (this.exitTimer || !this.visible()) return;
     this.releaseOpenState();

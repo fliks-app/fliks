@@ -1,10 +1,6 @@
 import type { ConfigPage, ReleasePickerRoutes, UiContribution } from '@fliks/plugin-ui';
 
-/**
- * `GET /api/plugins/ui` response entry, one per plugin whose contributions
- * are currently live. Single declared shape — reconcile here if the
- * backend's differs; nothing else needs to change.
- */
+/** `GET /api/plugins/ui` response entry, one per plugin with live contributions; the single declared shape, reconcile here if the backend differs. */
 export interface PluginUiEntry {
   pluginId: string;
   /** The plugin's manifest display name; absent on a backend that hasn't shipped it yet. */

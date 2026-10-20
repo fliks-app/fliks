@@ -37,9 +37,7 @@
           </button>
         }
         @if ((!isNative || device.isTablet()) && !tv.isTv()) {
-          <!-- Hamburger appears wherever the drawer can be opened — that means
-               every form-factor except native phone (uses the bottom dock) and
-               TV (D-pad nav, drawer is always pinnable from the user menu). -->
+          <!-- Hamburger wherever the drawer can open: every form factor except native phone (bottom dock) and TV (D-pad nav). -->
           <label for="sidebar" class="btn btn-square btn-ghost" [attr.aria-label]="'nav.open_menu' | translate">
             <svg lucideMenu class="h-5 w-5 md:h-6 md:w-6"></svg>
           </label>
@@ -78,9 +76,7 @@
             (error)="onHeroLogoError()"
             class="h-7 w-auto max-w-[50vw] object-contain object-left pl-1 [filter:drop-shadow(0_1px_2px_rgb(0_0_0/0.45))]" />
         } @else if (navbar.isHeroPage()) {
-          <!-- Hero page without a clearlogo: render nothing. The empty branch
-               keeps it from falling through to the mobile-title / app-name
-               fallbacks below — no title in the clearlogo slot. -->
+          <!-- Hero page without a clearlogo: render nothing, so it doesn't fall through to the title fallbacks below. -->
         } @else if (isHomeRoute()) {
           <img src="fliks-logo-ondark.svg" [alt]="'app.name' | translate" class="h-7 w-auto pl-2 object-contain object-left" />
         } @else if (navbar.mobileNavTitle()) {
@@ -218,9 +214,7 @@
             <span class="dock-label truncate max-w-full">{{ (item.shortLabelKey ?? item.labelKey) | translate }}</span>
           </a>
         }
-        <!-- Empty cell that holds the centre slot in the flex chain so the
-             4 nav items distribute evenly across 5 columns. The FAB sits
-             outside the dock to keep .dock's position:fixed intact. -->
+        <!-- Empty cell holding the centre slot so the 4 nav items spread over 5 columns; the FAB stays outside the dock to keep .dock's position:fixed. -->
         <span aria-hidden="true" class="invisible"></span>
         @if (dockRequests(); as item) {
           <a [routerLink]="item.route" routerLinkActive="dock-active" [routerLinkActiveOptions]="{ exact: item.exact }"
@@ -235,10 +229,7 @@
           <span class="dock-label truncate max-w-full">{{ 'nav.more' | translate }}</span>
         </button>
       </div>
-      <!-- Search FAB — fixed at horizontal viewport centre, vertically lifted
-           so its centre lands ~just above the top of the dock. Default: white
-           bg + primary icon (white literal so dark themes still get a white
-           circle). Active (current route): inverted via routerLinkActive.
+      <!-- Search FAB: centred above the dock; white bg (literal, so dark themes keep a white circle), inverted when active.
            Arbitrary variants suppress the DaisyUI .dock-active underline. -->
       <a routerLink="/search"
          [state]="{ rootEntry: true }"
@@ -325,10 +316,7 @@
           <span class="badge badge-sm badge-warning">{{ 'downloads.offline' | translate }}</span>
         }
         @if (device.isTablet() || device.isTv()) {
-          <!-- Pin/unpin sidebar — tablet & TV (lg+ widths where the pin
-               actually has an effect; auto-disabled on narrower viewports
-               via effectiveSidebarPinned). Desktop is always pinned,
-               phones never have this sidebar. -->
+          <!-- Pin/unpin sidebar: tablet & TV at lg+ where the pin has an effect (desktop is always pinned, phones have no sidebar). -->
           <button
             type="button"
             class="btn btn-ghost btn-sm btn-square hidden lg:inline-flex"

@@ -1,8 +1,6 @@
 import { Component, computed, input } from '@angular/core';
 
-/** A daisyUI badge that doubles as a progress indicator: when `percent` is set
- *  the badge fills left-to-right and appends the value. Used by the request
- *  views to show a download advancing inside the status badge. */
+/** A daisyUI badge that fills left-to-right with `percent` and appends the value, to show a download advancing inside a status badge. */
 @Component({
   selector: 'app-progress-badge',
   templateUrl: './progress-badge.component.html',

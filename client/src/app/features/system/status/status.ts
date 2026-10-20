@@ -61,14 +61,10 @@ export class SystemStatusComponent implements OnInit, OnDestroy {
   readonly activity = signal<ActivityRow[]>([]);
   readonly activityTotal = signal(0);
   readonly activityPage = signal(1);
-  /** Cumulative count of registrations the backend's activity registry had to
-   *  drop because it was at capacity (near-impossible in practice), surfaced
-   *  rather than left as a silently missing row. */
+  /** Registrations the activity registry dropped at capacity (near-impossible), surfaced instead of a silently missing row. */
   readonly activityDropped = signal(0);
   readonly maxVisibleChildren = MAX_VISIBLE_CHILDREN;
-  /** Throttles the SSE-triggered refetch to roughly once a second: a library import
-   *  can ping `activity.changed` many times a second, and a fetch per ping would just
-   *  move the flood from the wire to the API. */
+  /** Throttles the SSE-triggered refetch to ~1/s: a library import can ping `activity.changed` many times a second. */
   private activityRefetchTimer: ReturnType<typeof setTimeout> | null = null;
   private activityRefetchPending = false;
 

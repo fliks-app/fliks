@@ -3,19 +3,11 @@
 const lastOffset = new Map<string, number>();
 const tracked = new WeakSet<Element>();
 
-/** Put on a rail a return has already placed, by the row that owns its offsets.
- *  Centring runs a frame later, off an effect, and would otherwise pull the rail
- *  off the card the reader left it on and onto the one the page is showing. */
+/** Set on a rail a return has already placed; centring runs a frame later and would pull it off the card the reader left it on. */
 export const RAIL_RESTORED_ATTR = 'data-rail-restored';
 
-/**
- * Centre a horizontal rail on one of its cards, addressed by element id. No-op
- * when the card isn't there or the rail doesn't overflow: nothing to scroll.
- *
- * `memoryKey` survives the rail's destruction. Navigating between two episodes
- * of a season rebuilds the rail at `scrollLeft: 0`, so without it the smooth
- * scroll below replays from the first episode every time.
- */
+/** Centres a horizontal rail on a card by element id; no-op when the card is missing or the rail doesn't overflow.
+ *  `memoryKey` survives the rail's destruction: navigating between episodes rebuilds it at `scrollLeft: 0`. */
 export function centerRailOnCard(cardId: string, memoryKey?: string): void {
   const card = document.getElementById(cardId);
   const rail = card?.parentElement;

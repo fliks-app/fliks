@@ -78,9 +78,7 @@ function uniqueAudioNames(streams: { language?: string; title?: string }[]): str
   });
 }
 
-/** Build CastAudioOption[] from streamInfo audio streams. Single source of
- *  truth for both quickStart (cast from a detail page) and the player's
- *  castAudioOptions (cast in-progress). */
+/** Single source of truth for quickStart and the player's castAudioOptions. */
 export function buildCastAudioOptions(
   audioStreams: (AudioStreamChoice & { title?: string; languageTag?: string; codec?: string })[] | undefined,
   translate: TranslateService,
@@ -111,11 +109,7 @@ export interface CastQualityOption {
   lowBandwidth?: boolean;
 }
 
-/** Filter a backend-authoritative quality list for Cast: drop the
- *  'original' rung (Cast forces transcode, never direct-streams) and
- *  cap by the user's Cast-side `maxQuality` preference. The cap is
- *  derived from the rung id itself (`parseInt('Np')`) so adding a new
- *  rung server-side requires no client change. */
+/** Drops 'original' (Cast always transcodes) and caps by `maxQuality`, parsed from the rung id so new rungs need no client change. */
 export function buildCastQualityOptions(
   qualities:
     | { id: string; label: string; height: number; lowBandwidth?: boolean }[]
@@ -166,10 +160,7 @@ type ReceiverSample = NonNullable<ReturnType<CastService['receiverQoe']>>;
 /** A sample of the previous load, still in flight when a reload minted a new sid. */
 const fromOtherLoad = (q: ReceiverSample, sid: string | null) => !!q.sid && q.sid !== sid;
 
-/**
- * Global service managing Cast stream state.
- * Extracted from PlayerComponent so the Cast overlay can work independently.
- */
+/** Global Cast stream state, so the Cast overlay works independently of PlayerComponent. */
 @Injectable({ providedIn: 'root' })
 export class CastPlayerService {
   private readonly cast = inject(CastService);
@@ -186,37 +177,19 @@ export class CastPlayerService {
   private readonly translate = inject(TranslateService);
   private readonly toast = inject(ToastService);
 
-  /** Chromecast profile, derived from the receiver-probed MSE codec list
-   *  (see `probeReceiverCapabilities`). `videoCodecs: []` keeps every Cast
-   *  on the transcode path so the backend ladder drives quality/ABR; the
-   *  surround output codec is picked in stream-builder from the audio
-   *  codecs we list here (priority EAC-3 > AC-3 > AAC).
-   *
-   *  Without cached caps (first cast to a new device, or older receiver
-   *  that doesn't answer the probe), we fall back to AAC-only stereo — a
-   *  Cast generation we don't recognise is safer downmixed than failing
-   *  to play. */
+  /** Profile from the receiver-probed MSE codecs; empty `videoCodecs` keeps Cast on transcode.
+   * Without cached caps it falls back to AAC-only stereo, safer than failing to play. */
   getCastDeviceProfile(): DeviceProfile {
     const cs = this.castSettings.get();
     const maxChannels = cs.audioChannels ?? 2;
 
-    // Pull the receiver's probed capabilities for the currently connected
-    // device (cached from a previous session, or just-populated by an
-    // in-flight probe). Default to AAC-only when we have nothing.
     const deviceName = this.currentDeviceName();
     const caps = deviceName
       ? this.castSettings.getDeviceCapabilities(deviceName)
       : null;
     const receiverAudio = caps?.audioCodecs ?? ['aac'];
 
-    // Filter against codecs the backend can actually emit (the transcoder
-    // produces AAC, AC-3, or EAC-3) and against the channel preference.
-    // EAC-3 is intentionally NOT exposed here even when the receiver
-    // claims `audio/mp4; codecs="ec-3"` is supported via MSE — multiple
-    // Android TV / Cast firmwares advertise it but then fail at chunk
-    // append or load. AC-3 is the safe surround target across the entire
-    // Cast generation lineup. Revisit if we can confirm EAC-3 actually
-    // works end-to-end on a given receiver via chrome://inspect logs.
+    // EAC-3 is not exposed: several Cast/Android TV firmwares advertise it via MSE but fail at chunk append; AC-3 is the safe surround target.
     const surroundOk = maxChannels >= 6;
     const allowedAudio = receiverAudio.filter((c) => {
       if (c === 'aac' || c === 'aac-he') return true;
@@ -238,27 +211,14 @@ export class CastPlayerService {
       supportsHdr: cs.hdr ?? false,
       deviceType: 'desktop',
       deviceName: deviceName ? `Chromecast - ${deviceName}` : 'Chromecast',
-      // HLS-TS is disabled on Cast in every scenario. Originally
-      // introduced as a workaround for the fMP4 + AAC encoder priming
-      // desync (Shaka ignores the init segment `edts/elst` atom), but it
-      // breaks mid-file resume (Shaka error 3016) and prevents AC-3 / EAC-3
-      // surround paths (Shaka can't transmux Dolby in TS → MSE). fMP4
-      // works for every codec path we currently emit. The `useTs` flag
-      // and its backend plumbing are kept as dead code so we can flip
-      // back later without re-doing the plumbing.
+      // HLS-TS stays off on Cast: it breaks mid-file resume (Shaka 3016) and Shaka can't transmux Dolby from TS.
       useTs: false,
-      // The Cast receiver runs Shaka, which fetches seg-0 on a load-then-seek,
-      // so keep the backend's seg-0 early-start companion for resumes, and it
-      // has real ABR (Shaka), so supportsAbr rides through as true. The CAST
-      // row leaves useTsOnSingleAudio / supportsHlsSubtitles /
-      // supportsDirectPlay undefined on the wire.
+      // The Cast receiver runs Shaka (seg-0 fetched on load-then-seek, real ABR); CAST traits leave the other flags undefined.
       ...ENGINE_TRAITS[EngineKind.CAST],
     };
   }
 
-  /** Friendly name of the currently connected Cast device, or null when
-   *  no session is active. Used as the cache key for receiver-probed
-   *  capabilities. */
+  /** Cache key for receiver-probed capabilities. */
   private currentDeviceName(): string | null {
     try {
       const session = (window as any).cast?.framework?.CastContext
@@ -270,11 +230,7 @@ export class CastPlayerService {
     }
   }
 
-  /** Ask the receiver which audio/video codecs `MediaSource.isTypeSupported`
-   *  accepts. The receiver answers on the same `urn:x-cast:app.fliks.caps`
-   *  namespace. Result is cached per device so only the first session to
-   *  a new Cast pays the round-trip; subsequent sessions read directly
-   *  from {@link CastSettingsService.getDeviceCapabilities}. */
+  /** Asks the receiver for its MSE-supported codecs on `urn:x-cast:app.fliks.caps`; cached per device. */
   private async probeReceiverCapabilities(): Promise<void> {
     const session = (window as any).cast?.framework?.CastContext
       ?.getInstance?.()
@@ -323,9 +279,7 @@ export class CastPlayerService {
         finish('exception');
         return;
       }
-      // 2 s ceiling — older receivers that don't implement the namespace
-      // won't answer, falling back to whatever capabilities (or absence)
-      // the cache already has.
+      // Older receivers don't implement the namespace and never answer.
       setTimeout(() => finish('timeout'), 2000);
     });
   }
@@ -370,19 +324,11 @@ export class CastPlayerService {
   readonly hasMedia = signal(false);
   /** Whether the Cast overlay card is expanded. */
   readonly expanded = signal(false);
-  /** Server-issued live session id for the currently-playing Cast stream.
-   *  Distinct from the sender's local sid: the receiver's profile (cast
-   *  codec capabilities) and the resulting transcode session live under
-   *  this id, so the sender heartbeats it instead of its local sid while
-   *  the cast is connected. */
+  /** Server-side session id of the Cast stream, heartbeated instead of the sender's local sid while casting. */
   readonly liveSessionId = signal<string | null>(null);
   /** The viewing being cast; kept from the local player that handed it over. */
   private playbackId: string | null = null;
 
-  /**
-   * Initialize a Cast session with media data from the player.
-   * Called by the PlayerComponent when Cast is active on init or toggled on.
-   */
   startCast(opts: {
     playbackId?: string;
     mediaFileId: number;
@@ -486,10 +432,6 @@ export class CastPlayerService {
     this.loadSpriteMetadata(s.mediaFileId);
   }
 
-  /** Clear Cast media state (on disconnect/stop). Saves position first
-   *  and kills the backend transcode session so its ffmpeg stops; without
-   *  this the session lingers until SESSION_TIMEOUT_MS, holding HW
-   *  encoder slots and disk cache. */
   private disconnectGrace: ReturnType<typeof setTimeout> | null = null;
   private static readonly DISCONNECT_GRACE_MS = 45_000;
   private static readonly LOAD_RETRY_DELAY_MS = 1000;
@@ -516,10 +458,7 @@ export class CastPlayerService {
   }
 
   constructor() {
-    // Tear down when the cast session drops, but debounce it: a sender blip
-    // (Wi-Fi roam, sleep) drops the connection while the TV keeps playing, and
-    // clearing here would 410 it. CAF auto-rejoins (ORIGIN_SCOPED), so cancel
-    // the teardown on reconnect; a real stop just clears a bit later.
+    // Debounced teardown: a sender blip (Wi-Fi roam, sleep) drops the session while the TV keeps playing; CAF auto-rejoins, so reconnect cancels it.
     effect(() => {
       const connected = this.cast.isConnected();
       if (connected) {
@@ -546,17 +485,13 @@ export class CastPlayerService {
       if (!this.hasMedia()) return;
       this.cast.saveResumeState(this.resumeState());
     });
-    // On every session connect, ask the receiver which audio/video codecs
-    // its MediaSource accepts and cache the answer by device name. The
-    // probe is a no-op when the cache already covers this device.
+    // Probe is a no-op when the cache already covers the device.
     effect(() => {
       if (this.cast.isConnected()) {
         void this.probeReceiverCapabilities();
       }
     });
-    // Receiver reported a recoverable playback error (session GC'd → 410 on
-    // the next segment). Re-establish a fresh stream and resume. Root
-    // singleton, so the subscription lives for the app's lifetime.
+    // Recoverable receiver error (session GC'd, 410 on next segment): reload a fresh stream and resume.
     this.cast.playbackError$.subscribe(({ position }) => {
       void this.recoverFromCastError(position);
     });
@@ -566,10 +501,7 @@ export class CastPlayerService {
     });
   }
 
-  /** Recover from a fatal receiver error by reloading with a fresh sid at
-   *  the last known position. Throttled so a genuinely broken stream
-   *  (deleted file, lost ACL) can't drive an endless reload loop: isolated
-   *  errors recover freely, but three inside 30 s give up with a toast. */
+  /** Throttled: three recoveries within 30 s give up with a toast, so a broken stream can't loop. */
   private recoverAttempts = 0;
   private lastRecoverAt = 0;
   /** The receiver error and the native IDLE/ERROR poll fire for one failure; the second must not restart the reload. */
@@ -597,12 +529,7 @@ export class CastPlayerService {
     }
   }
 
-  /**
-   * Reload the Cast stream after a quality / audio / burn-in change.
-   * Drops any in-flight ffmpeg session before re-spawning, since the new
-   * audio/burn-in context wouldn't be picked up by an existing session
-   * (transcoding.service only auto-replaces on quality change).
-   */
+  /** Drops the in-flight ffmpeg session first; transcoding.service only auto-replaces on quality change. */
   async reloadCastStream(positionOverride?: number, autoplay = true, snapQualityId?: string) {
     const mfId = this.mediaFileId();
     if (!mfId) return;
@@ -644,11 +571,7 @@ export class CastPlayerService {
     await this.dispatchLoad(mfId, pi, currentPos, transcodeQuality, castInfo, autoplay);
   }
 
-  /**
-   * Build the cast URL from a playback-info response and dispatch loadMedia.
-   * Shared between quickStart (initial cast) and reloadCastStream (changes). A refused LOAD is
-   * reported here (toast, loading state off) and returns false rather than throwing.
-   */
+  /** Shared by quickStart and reloadCastStream; a refused LOAD is reported here and returns false. */
   private async dispatchLoad(
     mfId: number,
     pi: { playMethod: PlayMethod; playUrl: string; sessionId?: string; edl?: EdlRange[] },
@@ -680,9 +603,7 @@ export class CastPlayerService {
     const castUrl = built.url;
     const contentType = built.contentType;
 
-    // Stash the Cast live-session id so the sender's heartbeat loop
-    // (`savePosition` in the local player) keeps the receiver's
-    // session warm instead of beating the now-paused browser session.
+    // The sender heartbeat (`savePosition`) must beat the Cast session, not the paused browser one.
     this.setLiveSession(pi.sessionId ?? null);
 
     const loaded = this.availableSubtitles().filter(s => !s.burnIn);
@@ -695,9 +616,6 @@ export class CastPlayerService {
     }));
     const activeSubtitleTrackId = loaded.find(s => s.id === this.activeSubtitleId())?.castTrackId;
 
-    // Show the loading sweep immediately rather than waiting for the first
-    // receiver state tick; the player-state feed reconciles it once playback
-    // (or a rebuffer) actually starts.
     this.cast.buffering.set(true);
 
     const load = () => this.cast.loadMedia({
@@ -811,10 +729,7 @@ export class CastPlayerService {
     );
     this.activeAudioTrackId.set(trackId);
 
-    // Fast path: switch the active audio rendition via EditTracksInfoRequest
-    // (web) or RemoteMediaClient.setActiveMediaTracks (native) on the
-    // standard media bus. Sub-100ms swap, no ffmpeg restart. Falls through
-    // to a full reload when the receiver hasn't published the rendition yet.
+    // Fast path: swap the audio rendition on the media bus with no ffmpeg restart; full reload if the receiver hasn't published it.
     const audio = this.availableAudioTracks()[audioIndex];
     if (audio && (await this.cast.setActiveAudioLanguage(audio.language, audio.name))) {
       return;
@@ -892,11 +807,7 @@ export class CastPlayerService {
     const dur = this.cast.duration();
     if (!pos || pos < 1) return;
     try {
-      // Carry the Cast live-session id so the backend refreshes its
-      // lastBeat. Once the player page is gone this loop is the only
-      // keep-alive for the receiver's session; without the sid the
-      // backend GCs it after the ttl and 410s the next segment, which
-      // the receiver has no way to recover from.
+      // Once the player page is gone this loop is the only keep-alive; without the sid the backend GCs the session and the receiver 410s.
       const sid = this.liveSessionId();
       const heartbeat = sid
         ? {
@@ -914,12 +825,7 @@ export class CastPlayerService {
         ...heartbeat,
         ...(sid ? { qoe: this.qoeSample() ?? undefined } : {}),
       });
-      // Backend lost the session (its keep-alive lapsed, a restart, …).
-      // The receiver can't self-heal a session_expired, so re-issue
-      // playback-info and reload the stream with a fresh sid.
-      // Preserve the receiver's pause state across an auto-recovery reload — a
-      // paused cast whose session was reaped (missed heartbeats) must not be
-      // force-resumed by the reload's default autoplay.
+      // Backend lost the session: reload with a fresh sid, preserving the receiver's pause state.
       if (sid) void this.qoeReporter.flush(sid);
       if (response?.sessionLost) {
         await this.reloadCastStream(pos, !this.cast.isPaused());
@@ -997,11 +903,7 @@ export class CastPlayerService {
     } catch { /* sprite not available */ }
   }
 
-  /**
-   * Quick-start Cast from a detail page (no player needed).
-   * Fetches playbackInfo, subtitles, builds options, and starts streaming.
-   * `tracks` are the viewer's picks for this start, honoured over the rules and never remembered.
-   */
+  /** `tracks` are the viewer's picks for this start, honoured over the rules and never remembered. */
   async quickStart(opts: {
     mediaFileId: number;
     mediaId: number;
@@ -1015,10 +917,7 @@ export class CastPlayerService {
     /** Open the overlay once the cast state is set, without waiting for the receiver's LOAD. */
     expand?: boolean;
   }) {
-    // Phase 1 — parallelize every fetch that doesn't depend on streamInfo
-    // resolution. Saves ~3 sequential round-trips on cold cast.
-    // `original` audio mode needs the title's language, which only the media
-    // payload carries — fetch it even when the caller supplied streamInfo.
+    // Phase 1: fetches independent of streamInfo run in parallel; `original` audio needs the media payload's language.
     const needsMediaFetch =
       !opts.streamInfo ||
       this.playerSettings.get().audioSelectionMode === 'original';
@@ -1091,9 +990,7 @@ export class CastPlayerService {
       launchPick?.subtitleId,
     );
 
-    // Phase 2 — single playback-info call. We pass the user's cast cap as
-    // startQuality so the backend pre-spawns ffmpeg at the right rung; the
-    // backend snaps it to whatever the source can actually serve.
+    // Phase 2: the user's cast cap goes as startQuality; the backend snaps it to what the source can serve.
     const cs = this.castSettings.get();
     const startQuality = cs.maxQuality === 'original' ? '1080p' : cs.maxQuality;
     const pi = await this.getCastPlaybackInfo(
@@ -1101,9 +998,6 @@ export class CastPlayerService {
       audioIndex, startQuality, Math.floor(startTime),
     );
 
-    // Build the dropdown list from the backend-authoritative qualities,
-    // capped by the user's cast preference. Active pick defaults to the
-    // first (highest) rung in the filtered list.
     const qualities = buildCastQualityOptions(pi.qualities, cs.maxQuality);
     const activeQualityId = qualities[0]?.id ?? '1080p';
 

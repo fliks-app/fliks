@@ -43,9 +43,7 @@ export class MediaFileInfoComponent {
   private readonly translate = inject(TranslateService);
   private readonly confirmation = inject(ConfirmationService);
   readonly file = input.required<FileInput | null>();
-  /** Absolute folder path of the parent media (library.path + folderName).
-   *  Concatenated with `file.relativePath` so the panel exposes the
-   *  full disk path instead of a basename-like fragment. */
+  /** Absolute parent folder (library.path + folderName), joined with `file.relativePath` for the full disk path. */
   readonly mediaPath = input<string | null>(null);
 
   /** Viewer holds the delete permission: exposes the delete-file action at the
