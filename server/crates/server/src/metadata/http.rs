@@ -1,4 +1,5 @@
 //! One upstream: a `reqwest` client behind the shared circuit breaker (`metadata.md` rules 18, 20, 21).
+use crate::sync::MutexExt;
 use fliks_domain::metadata::breaker::{Breaker, Event, Outcome};
 use serde_json::Value;
 use std::{error::Error, sync::Mutex, time::Duration, time::Instant};
@@ -118,11 +119,7 @@ impl Guarded {
     }
 
     fn record(&self, outcome: Outcome) {
-        let event = self
-            .breaker
-            .lock()
-            .expect("breaker")
-            .record(self.now(), outcome);
+        let event = self.breaker.lock_clean().record(self.now(), outcome);
         match event {
             Event::Opened => tracing::warn!(
                 "{}: 3 consecutive failures, circuit open for 30s",
@@ -147,7 +144,7 @@ impl Guarded {
     /// Sends the request through the breaker and returns the 2xx JSON body.
     pub async fn send(&self, req: reqwest::RequestBuilder) -> Result<Value, Upstream> {
         let allowed = {
-            let mut b = self.breaker.lock().expect("breaker");
+            let mut b = self.breaker.lock_clean();
             b.allow(self.now())
         };
         if !allowed {

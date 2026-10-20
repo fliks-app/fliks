@@ -7,6 +7,7 @@ use super::{
     },
     types::{Credits, PersonDetails},
 };
+use crate::sync::MutexExt;
 use fliks_domain::metadata::{discover::Options, language::Resolved};
 use futures_util::{StreamExt, stream};
 use serde_json::{Map, Value, json};
@@ -66,10 +67,10 @@ impl Tmdb {
     ) -> Result<Value, Upstream> {
         match fetch.await {
             Ok(v) => {
-                self.stale.lock().expect("stale").insert(key, v.clone());
+                self.stale.lock_clean().insert(key, v.clone());
                 Ok(v)
             }
-            Err(e) => match self.stale.lock().expect("stale").get(&key) {
+            Err(e) => match self.stale.lock_clean().get(&key) {
                 Some(v) => {
                     tracing::warn!("TMDB {key} unavailable, serving last cached copy");
                     Ok(v.clone())

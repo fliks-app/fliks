@@ -2,6 +2,7 @@
 use super::manifest::{self, Inspected};
 use super::packages::{self, Package};
 use super::{Plugins, archive::Refusal};
+use crate::sync::MutexExt;
 use axum::http::StatusCode;
 use nodejs_semver::Version;
 use serde::Serialize;
@@ -447,7 +448,7 @@ impl Plugins {
         }
         packages::delete(&self.db, id).await?;
         let _ = std::fs::remove_dir_all(self.opts.runtime_dir.join("data").join(id));
-        self.fk_warnings.lock().unwrap().remove(id);
+        self.fk_warnings.lock_clean().remove(id);
         Ok(())
     }
 

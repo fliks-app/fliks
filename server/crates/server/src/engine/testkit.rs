@@ -1,4 +1,5 @@
 //! A fake engine (axum on a loopback port) that records what the host sends and plays scripted answers.
+use crate::sync::MutexExt;
 use axum::{
     Router,
     body::{Body, Bytes},
@@ -125,23 +126,22 @@ impl Fake {
 
     /// The `hello` answer; `None` makes the engine answer 500, which the host takes as "not there".
     pub fn hello(&self, body: Option<Value>) {
-        self.s.lock().unwrap().hello = body;
+        self.s.lock_clean().hello = body;
     }
 
     pub fn script(&self, method: &str, path: &str, answers: Vec<Answer>) {
         self.s
-            .lock()
-            .unwrap()
+            .lock_clean()
             .answers
             .insert(format!("{method} {path}"), answers.into());
     }
 
     pub fn connections(&self, conns: Vec<Conn>) {
-        self.s.lock().unwrap().conns = conns.into();
+        self.s.lock_clean().conns = conns.into();
     }
 
     pub fn seen(&self, method: &str, path: &str) -> Vec<Seen> {
-        let s = self.s.lock().unwrap();
+        let s = self.s.lock_clean();
         s.seen
             .get(&format!("{method} {path}"))
             .cloned()
@@ -150,17 +150,17 @@ impl Fake {
 
     /// When each `GET /v1/events` connection arrived.
     pub fn connected_at(&self) -> Vec<Instant> {
-        self.s.lock().unwrap().connected_at.clone()
+        self.s.lock_clean().connected_at.clone()
     }
 
     /// Every request in arrival order, as `METHOD /path`.
     pub fn order(&self) -> Vec<String> {
-        self.s.lock().unwrap().order.clone()
+        self.s.lock_clean().order.clone()
     }
 
     /// Writes raw SSE text to every open (held) events connection.
     pub fn push_frames(&self, text: &str) {
-        let s = self.s.lock().unwrap();
+        let s = self.s.lock_clean();
         for tx in &s.held {
             let _ = tx.send(Ok(Bytes::from(text.to_owned())));
         }
@@ -215,7 +215,7 @@ async fn handle(State(s): State<Arc<Mutex<S>>>, req: Request) -> Response {
         body: serde_json::from_slice(&bytes).unwrap_or(Value::Null),
     };
     let (response, delay_ms) = {
-        let mut s = s.lock().unwrap();
+        let mut s = s.lock_clean();
         s.order.push(key.clone());
         s.seen.entry(key.clone()).or_default().push(seen);
         respond(&mut s, &key, &bytes)

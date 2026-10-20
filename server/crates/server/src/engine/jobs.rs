@@ -1,5 +1,6 @@
 //! Background-job waiters (`engine-glue.md` section E): `run_job` resolves on `BgJobDone`.
 use super::{Engine, EngineError};
+use crate::sync::MutexExt;
 use fliks_engine_core::api::{BgJobState, JobRequest, JobResult};
 use std::{
     collections::HashMap,
@@ -27,7 +28,7 @@ pub(super) struct Waiters(Mutex<HashMap<String, Vec<Waiter>>>);
 
 impl Waiters {
     fn lock(&self) -> std::sync::MutexGuard<'_, HashMap<String, Vec<Waiter>>> {
-        self.0.lock().expect("job waiters")
+        self.0.lock_clean()
     }
 
     /// Ids someone still waits for.

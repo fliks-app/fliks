@@ -5,13 +5,9 @@ use crate::{
     state::AppState,
 };
 use axum::{Json, extract::State};
-use chrono::{DateTime, SecondsFormat, Utc};
+use fliks_domain::js::iso;
 use serde_json::{Value, json};
 use sqlx::PgPool;
-
-fn iso(d: DateTime<Utc>) -> String {
-    d.to_rfc3339_opts(SecondsFormat::Millis, true)
-}
 
 /// `None` when the user does not exist.
 pub async fn user_stats(db: &PgPool, id: i32) -> sqlx::Result<Option<Value>> {

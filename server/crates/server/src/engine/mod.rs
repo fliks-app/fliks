@@ -20,6 +20,7 @@ pub use events::Feed;
 pub use jobs::Progress;
 pub use remote::router;
 
+use crate::sync::MutexExt;
 use client::Client;
 use fliks_engine_core::api::{Hello, PathMapping};
 use serde::Serialize;
@@ -301,7 +302,7 @@ impl Engine {
     }
 
     fn state(&self) -> MutexGuard<'_, State> {
-        self.inner.state.lock().expect("engine state")
+        self.inner.state.lock_clean()
     }
 
     fn db(&self) -> Option<&PgPool> {

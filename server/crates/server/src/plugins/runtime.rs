@@ -2,7 +2,9 @@
 use super::db::PluginDb;
 use super::logs::{Logs, Pipe};
 use super::outbound::Outbound;
+use crate::events::uuid_v4;
 use crate::net::guard::Net;
+use crate::sync::MutexExt;
 use futures_util::future::BoxFuture;
 use serde_json::Value as Json;
 use sqlx::PgPool;
@@ -187,7 +189,7 @@ impl CallStats {
         if !ok {
             self.failures.fetch_add(1, Ordering::Relaxed);
         }
-        let mut l = self.latencies.lock().unwrap();
+        let mut l = self.latencies.lock_clean();
         if l.len() == 256 {
             l.pop_front();
         }
@@ -196,7 +198,7 @@ impl CallStats {
 
     /// Nearest rank, rounded to 0.1 ms; `None` with no calls.
     pub fn p95(&self) -> Option<f64> {
-        let mut v: Vec<f64> = self.latencies.lock().unwrap().iter().copied().collect();
+        let mut v: Vec<f64> = self.latencies.lock_clean().iter().copied().collect();
         if v.is_empty() {
             return None;
         }
@@ -380,18 +382,18 @@ impl Lane {
     }
 
     fn clear(&self) {
-        let gone = std::mem::take(&mut *self.idle.lock().unwrap());
+        let gone = std::mem::take(&mut *self.idle.lock_clean());
         self.live.fetch_sub(gone.len(), Ordering::SeqCst);
     }
 
     fn put(&self, inst: Inst) {
         self.live.fetch_add(1, Ordering::SeqCst);
-        self.idle.lock().unwrap().push((inst, Instant::now()));
+        self.idle.lock_clean().push((inst, Instant::now()));
     }
 
     /// Drops the instances idle for `after` (rule 40: `http`, `task`, `job` lanes only).
     fn reap(&self, after: Duration) -> usize {
-        let mut idle = self.idle.lock().unwrap();
+        let mut idle = self.idle.lock_clean();
         let before = idle.len();
         idle.retain(|(_, at)| at.elapsed() < after);
         let gone = before - idle.len();
@@ -434,11 +436,11 @@ impl Lane {
             tokio::time::Instant::now() + budget.deadline
         };
         let era = rt.sh.era.load(Ordering::SeqCst);
-        let pooled = self.idle.lock().unwrap().pop();
+        let pooled = self.idle.lock_clean().pop();
         let inst = match pooled {
             Some((i, _)) => i,
             None => {
-                if let Some(at) = *self.retry_at.lock().unwrap()
+                if let Some(at) = *self.retry_at.lock_clean()
                     && Instant::now() < at
                 {
                     return Err(CallError::Unavailable("backoff".into()));
@@ -467,7 +469,7 @@ impl Lane {
             d.db_unavailable = false;
         }
         let cfg_gen = rt.cfg_gen.load(Ordering::SeqCst);
-        let keys = (inst.cfg_gen < cfg_gen).then(|| rt.cfg_keys.lock().unwrap().clone());
+        let keys = (inst.cfg_gen < cfg_gen).then(|| rt.cfg_keys.lock_clean().clone());
         let stopped = rt.sh.stopped.notified();
         tokio::pin!(stopped);
         stopped.as_mut().enable();
@@ -540,7 +542,7 @@ struct Slot<'a> {
 impl Slot<'_> {
     fn back(mut self) {
         let inst = self.inst.take().expect("held");
-        self.lane.idle.lock().unwrap().push((inst, Instant::now()));
+        self.lane.idle.lock_clean().push((inst, Instant::now()));
     }
 }
 
@@ -702,7 +704,7 @@ impl PluginRt {
 
     /// The breaker message, else (in a down state) the stderr tail.
     pub fn message(&self) -> String {
-        let m = self.sup.lock().unwrap().message.clone();
+        let m = self.sup.lock_clean().message.clone();
         if !m.is_empty() {
             return m;
         }
@@ -717,7 +719,7 @@ impl PluginRt {
 
     fn set_state(&self, s: State) {
         {
-            let mut sup = self.sup.lock().unwrap();
+            let mut sup = self.sup.lock_clean();
             if s == State::Ready && sup.ready_since.is_none() {
                 sup.ready_since = Some(Instant::now());
             } else if s != State::Ready && s != State::Degraded {
@@ -844,12 +846,12 @@ impl PluginRt {
         self.set_state(State::Handshaking);
         match self.instantiate().await {
             Ok(inst) => {
-                self.timings.lock().unwrap().first_hello = t.elapsed();
+                self.timings.lock_clean().first_hello = t.elapsed();
                 self.core.put(inst);
                 Ok(())
             }
             Err(SpawnError::Mismatch(d)) => {
-                self.sup.lock().unwrap().message = format!("manifest-mismatch: {d}");
+                self.sup.lock_clean().message = format!("manifest-mismatch: {d}");
                 self.set_state(State::Failed);
                 self.drop_all();
                 Err(SpawnError::Mismatch(d))
@@ -886,14 +888,14 @@ impl PluginRt {
                 }),
             )
             .await;
-        self.timings.lock().unwrap().start = t.elapsed();
+        self.timings.lock_clean().start = t.elapsed();
         if !self.alive(era) {
             return;
         }
         let db = self.core.last_db.load(Ordering::SeqCst);
         match r {
             Ok(Ok(())) => {
-                self.sup.lock().unwrap().db_down = false;
+                self.sup.lock_clean().db_down = false;
                 self.set_state(State::Ready);
             }
             Ok(Err(e)) if db => {
@@ -914,7 +916,7 @@ impl PluginRt {
     /// C109: `degraded` with the core instance kept; `start` again after the ladder, then every 30 s.
     fn db_degraded(self: &Arc<Self>, era: u64) {
         let delay = {
-            let mut s = self.sup.lock().unwrap();
+            let mut s = self.sup.lock_clean();
             s.db_down = true;
             let cfg = &self.sh.env.cfg;
             let d = cfg.ladder.get(s.ladder).copied().unwrap_or(cfg.db_retry);
@@ -925,7 +927,7 @@ impl PluginRt {
         let rt = self.clone();
         tokio::spawn(async move {
             tokio::time::sleep(delay).await;
-            if rt.alive(era) && rt.sup.lock().unwrap().db_down {
+            if rt.alive(era) && rt.sup.lock_clean().db_down {
                 rt.run_start().await;
             }
         });
@@ -964,7 +966,7 @@ impl PluginRt {
         let cfg = &self.sh.env.cfg;
         let now = Instant::now();
         let delay = {
-            let mut s = self.sup.lock().unwrap();
+            let mut s = self.sup.lock_clean();
             if matches!(self.state(), State::Failed | State::Stopped) {
                 return;
             }
@@ -997,7 +999,7 @@ impl PluginRt {
             self.sh.id,
             lane.kind
         );
-        *lane.retry_at.lock().unwrap() = Some(now + delay);
+        *lane.retry_at.lock_clean() = Some(now + delay);
         if lane.kind == LaneKind::Core {
             self.set_state(State::Crashed);
             self.set_state(State::Backoff);
@@ -1011,7 +1013,7 @@ impl PluginRt {
     async fn recreate_core(self: Arc<Self>, era: u64, delay: Duration) {
         tokio::time::sleep(delay).await;
         {
-            let mut s = self.sup.lock().unwrap();
+            let mut s = self.sup.lock_clean();
             if s.recreating || !self.alive(era) || self.core.live.load(Ordering::SeqCst) > 0 {
                 return;
             }
@@ -1022,15 +1024,15 @@ impl PluginRt {
             Ok(inst) => {
                 let others = self.live_instances();
                 self.core.put(inst);
-                self.sup.lock().unwrap().recreating = false;
-                if others == 0 || self.sup.lock().unwrap().db_down {
+                self.sup.lock_clean().recreating = false;
+                if others == 0 || self.sup.lock_clean().db_down {
                     self.run_start().await;
                 } else if matches!(self.state(), State::Crashed | State::Backoff) {
                     self.set_state(State::Ready);
                 }
             }
             Err(SpawnError::Mismatch(d)) => {
-                let mut s = self.sup.lock().unwrap();
+                let mut s = self.sup.lock_clean();
                 s.recreating = false;
                 s.message = format!("manifest-mismatch: {d}");
                 drop(s);
@@ -1038,7 +1040,7 @@ impl PluginRt {
                 self.drop_all();
             }
             Err(e) => {
-                self.sup.lock().unwrap().recreating = false;
+                self.sup.lock_clean().recreating = false;
                 self.crash(&self.core, &e.to_string());
             }
         }
@@ -1051,7 +1053,7 @@ impl PluginRt {
         for l in self.lanes() {
             l.clear();
         }
-        self.ring.lock().unwrap().clear();
+        self.ring.lock_clean().clear();
         self.ring_wake.notify_one();
     }
 
@@ -1092,7 +1094,7 @@ impl PluginRt {
                 l.reap(cfg.idle_after);
             }
             if !matches!(self.state(), State::Ready | State::Degraded)
-                || self.sup.lock().unwrap().db_down
+                || self.sup.lock_clean().db_down
             {
                 continue;
             }
@@ -1101,7 +1103,7 @@ impl PluginRt {
                 Err(_) => continue,
             };
             let db = self.core.last_db.load(Ordering::SeqCst);
-            let mut s = self.sup.lock().unwrap();
+            let mut s = self.sup.lock_clean();
             if ok {
                 s.misses = 0;
                 if s.ready_since
@@ -1152,7 +1154,7 @@ impl PluginRt {
     }
 
     pub fn push_event(&self, name: &str, payload: &str) {
-        let mut r = self.ring.lock().unwrap();
+        let mut r = self.ring.lock_clean();
         if r.len() == RING {
             r.pop_front();
             self.event_drops.fetch_add(1, Ordering::SeqCst);
@@ -1168,7 +1170,7 @@ impl PluginRt {
                 return;
             }
             let next = (self.state() == State::Ready)
-                .then(|| self.ring.lock().unwrap().pop_front())
+                .then(|| self.ring.lock_clean().pop_front())
                 .flatten();
             let Some((name, payload)) = next else {
                 let _ =
@@ -1292,7 +1294,7 @@ impl PluginRt {
 
     /// Every live instance sees `config-changed` before its next call.
     pub fn config_changed(&self, keys: Vec<String>) {
-        *self.cfg_keys.lock().unwrap() = keys;
+        *self.cfg_keys.lock_clean() = keys;
         self.cfg_gen.fetch_add(1, Ordering::SeqCst);
     }
 
@@ -1300,22 +1302,6 @@ impl PluginRt {
     pub fn memory(&self) -> Option<u64> {
         (self.live_instances() > 0).then(|| self.sh.mem_total.load(Ordering::Relaxed) as u64)
     }
-}
-
-pub fn uuid_v4() -> String {
-    let mut b = [0u8; 16];
-    getrandom::fill(&mut b).expect("os rng");
-    b[6] = (b[6] & 0x0f) | 0x40;
-    b[8] = (b[8] & 0x3f) | 0x80;
-    let h: String = b.iter().map(|x| format!("{x:02x}")).collect();
-    format!(
-        "{}-{}-{}-{}-{}",
-        &h[..8],
-        &h[8..12],
-        &h[12..16],
-        &h[16..20],
-        &h[20..]
-    )
 }
 
 pub fn set_mode(p: &std::path::Path, mode: u32) {

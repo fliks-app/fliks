@@ -1,5 +1,6 @@
 //! `readEdlSidecar` (spec rule 41): the file read around `fliks_domain::edl`.
 use crate::state::AppState;
+use crate::sync::MutexExt;
 use fliks_domain::edl::{EdlRange, MAX_EDL_BYTES, edl_path_for, find_case_insensitive, parse_edl};
 use std::{io::ErrorKind, path::Path, time::UNIX_EPOCH};
 use tokio::io::AsyncReadExt;
@@ -8,11 +9,7 @@ const MAX_LOGGED_REJECTS: usize = 5;
 const MAX_WARNED: usize = 1000;
 
 fn warn_once(st: &AppState, key: String, msg: String) {
-    let mut w = st
-        .stream
-        .edl_warned
-        .lock()
-        .unwrap_or_else(|e| e.into_inner());
+    let mut w = st.stream.edl_warned.lock_clean();
     if w.len() >= MAX_WARNED {
         w.clear();
     }
@@ -89,8 +86,7 @@ pub async fn read(st: &AppState, video: &Path, fps: Option<f64>) -> Option<Vec<E
     let hit = st
         .stream
         .edl
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
+        .lock_clean()
         .get(&path, fps, mtime, meta.len())
         .map(<[EdlRange]>::to_vec);
     if hit.is_some() {
@@ -118,12 +114,9 @@ pub async fn read(st: &AppState, video: &Path, fps: Option<f64>) -> Option<Vec<E
             ),
         );
     }
-    st.stream.edl.lock().unwrap_or_else(|e| e.into_inner()).put(
-        &path,
-        fps,
-        mtime,
-        meta.len(),
-        parsed.ranges.clone(),
-    );
+    st.stream
+        .edl
+        .lock_clean()
+        .put(&path, fps, mtime, meta.len(), parsed.ranges.clone());
     Some(parsed.ranges)
 }

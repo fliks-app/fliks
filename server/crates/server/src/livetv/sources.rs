@@ -1,6 +1,7 @@
 //! Source routes (`livetv-sources.md` Routes and rules 1-14): CRUD, the test probe, the playlist upload
 //! and the manual sync.
 use super::{
+    admin,
     dto::{Body, Opt},
     lineup::{self, Conn, Fetched},
     model::{SOURCE_COLS, Source},
@@ -22,13 +23,9 @@ use axum::{
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
 };
-use chrono::SecondsFormat;
-use fliks_domain::{
-    acl::{Action, Subject},
-    livetv::{
-        sync::{GroupPattern, PatternField, classify_entries},
-        xtream::{self, Credentials},
-    },
+use fliks_domain::livetv::{
+    sync::{GroupPattern, PatternField, classify_entries},
+    xtream::{self, Credentials},
 };
 use serde_json::{Value, json};
 use sqlx::PgPool;
@@ -39,10 +36,6 @@ const I32: std::ops::RangeInclusive<i64> = i32::MIN as i64..=i32::MAX as i64;
 
 pub fn upload_limit() -> DefaultBodyLimit {
     DefaultBodyLimit::max(MAX_PLAYLIST_BYTES as usize + 64 * 1024)
-}
-
-fn admin(a: &Authed) -> Result<(), AppError> {
-    a.require(Action::Manage, Subject::Settings)
 }
 
 fn not_found(id: i32) -> AppError {
@@ -486,7 +479,7 @@ pub(super) async fn probe(
         "guideUrl": lineup.guide_urls.first(),
         "guideUrls": lineup.guide_urls,
         "maxConnections": lineup.max_connections,
-        "expiresAt": lineup.expires_at.map(|d| d.to_rfc3339_opts(SecondsFormat::Millis, true)),
+        "expiresAt": lineup.expires_at.map(fliks_domain::js::iso),
         "accountStatus": lineup.account_status,
     });
     if let Some(s) = suggestion.as_ref() {

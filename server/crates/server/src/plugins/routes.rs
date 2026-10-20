@@ -323,7 +323,7 @@ fn source_summary(s: &packages::Source) -> Value {
         "url": s.url,
         "enabled": s.enabled,
         "hasPinnedKey": s.public_key.is_some(),
-        "lastRefreshedAt": s.last_refreshed_at.map(|t| t.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)),
+        "lastRefreshedAt": s.last_refreshed_at.map(fliks_domain::js::iso),
         "lastRefreshError": s.last_refresh_error,
         "pluginCount": s.cached_catalog.as_ref().and_then(|c| c["plugins"].as_array()).map_or(0, Vec::len),
     })
@@ -549,7 +549,7 @@ pub async fn sources_catalog(State(st): State<AppState>, a: Authed, Path(id): Pa
     let s = source_or_404(&st, id).await?;
     Ok(Json(json!({
         "cachedCatalog": s.cached_catalog,
-        "lastRefreshedAt": s.last_refreshed_at.map(|t| t.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)),
+        "lastRefreshedAt": s.last_refreshed_at.map(fliks_domain::js::iso),
         "lastRefreshError": s.last_refresh_error,
     }))
     .into_response())

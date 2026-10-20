@@ -17,12 +17,10 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use chrono::{DateTime, Utc};
-use fliks_domain::livetv::{
-    access::iso,
-    sync::{
-        AccountState, ChannelRow, Classified, Entry, GroupPattern, PatternField, StreamRow,
-        account_state, classify_entries, plan_upsert,
-    },
+use fliks_domain::js::iso;
+use fliks_domain::livetv::sync::{
+    AccountState, ChannelRow, Classified, Entry, GroupPattern, PatternField, StreamRow,
+    account_state, classify_entries, plan_upsert,
 };
 use serde::Serialize;
 use serde_json::{Map, Value, json};
@@ -582,11 +580,15 @@ async fn adult_guard(st: &AppState, source: &Source, groups: Vec<String>) {
     if error.is_none() && source.last_adult_guard_error.is_none() {
         return;
     }
-    let _ = sqlx::query(r#"UPDATE livetv_sources SET "lastAdultGuardError" = $2 WHERE id = $1"#)
-        .bind(source.id)
-        .bind(error)
-        .execute(&st.db)
-        .await;
+    if let Err(e) =
+        sqlx::query(r#"UPDATE livetv_sources SET "lastAdultGuardError" = $2 WHERE id = $1"#)
+            .bind(source.id)
+            .bind(error)
+            .execute(&st.db)
+            .await
+    {
+        tracing::warn!("adult guard error of source #{} not stored: {e}", source.id);
+    }
 }
 
 /// The sweep runs only when every enabled source last synced fine: a partial view must never look like a vanished group.

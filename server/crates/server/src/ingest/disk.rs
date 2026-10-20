@@ -6,6 +6,7 @@ use super::{
     rescan::{ensure_season_and_episode, link_in_place, match_special},
     transfer::{Method, split_ext},
 };
+use crate::sync::MutexExt;
 use crate::{
     events::{DomainEvent, Num, SseEvent, Subject as Subj, event::ImportSource},
     http::{
@@ -700,7 +701,7 @@ async fn relink_orphans(st: &AppState, a: &Authed, d: RelinkDto) -> Result<Value
     )
     .await;
     if unmatched_key.is_some() {
-        let mut h = st.ingest.unmatched_holders.lock().expect("holders");
+        let mut h = st.ingest.unmatched_holders.lock_clean();
         match h.get(&media.id).copied().unwrap_or(1) {
             n if n > 1 => {
                 h.insert(media.id, n - 1);
@@ -865,8 +866,7 @@ async fn link_files(
         let holders = st
             .ingest
             .unmatched_holders
-            .lock()
-            .expect("holders")
+            .lock_clean()
             .get(&media.id)
             .copied();
         let files = sqlx::query_scalar!(
@@ -1283,8 +1283,7 @@ async fn find_or_create_unmatched(
     };
     *st.ingest
         .unmatched_holders
-        .lock()
-        .expect("holders")
+        .lock_clean()
         .entry(id)
         .or_default() += 1;
     let media = load_media(&st.db, id)

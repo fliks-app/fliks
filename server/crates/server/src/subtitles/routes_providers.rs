@@ -15,6 +15,7 @@ use crate::{
 use axum::{Json, extract::State, http::StatusCode};
 use chrono::{DateTime, NaiveDate, TimeZone, Utc};
 use fliks_domain::acl::{Action, Subject};
+use fliks_domain::js::iso;
 use serde_json::{Map, Value, json};
 use sqlx::FromRow;
 
@@ -387,10 +388,6 @@ fn local_midnight(tz: chrono_tz::Tz, d: NaiveDate) -> DateTime<Utc> {
         || Utc.from_utc_datetime(&midnight),
         |t| t.with_timezone(&Utc),
     )
-}
-
-fn iso(t: DateTime<Utc>) -> String {
-    t.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
 }
 
 #[cfg(test)]

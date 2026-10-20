@@ -132,13 +132,16 @@ async fn run(st: &AppState, placeholder: i32, source: &Row, automatic: bool) {
             )
             .await;
             let msg: String = text.chars().take(2000).collect();
-            let _ = sqlx::query(
+            if let Err(e) = sqlx::query(
                 r#"UPDATE subtitle_files SET status = 'failed', "errorMessage" = $2 WHERE id = $1"#,
             )
             .bind(placeholder)
             .bind(msg)
             .execute(&st.db)
-            .await;
+            .await
+            {
+                tracing::warn!("OCR failure of subtitle #{placeholder} not stored: {e}");
+            }
         }
     }
 }
@@ -230,10 +233,13 @@ async fn try_run(
         .await
         .map_err(|e| e.text())?
     {
-        let _ = sqlx::query("DELETE FROM subtitle_files WHERE id = $1")
+        if let Err(e) = sqlx::query("DELETE FROM subtitle_files WHERE id = $1")
             .bind(source.id)
             .execute(&st.db)
-            .await;
+            .await
+        {
+            tracing::warn!("OCR source subtitle #{} not removed: {e}", source.id);
+        }
         tracing::info!(
             "OCR: removed source image subtitle #{} after extraction",
             source.id

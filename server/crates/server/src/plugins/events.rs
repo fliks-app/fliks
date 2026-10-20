@@ -3,6 +3,7 @@ use super::runtime::fliks::plugin::types as t;
 use crate::events::event::{Download, DownloadState, MediaKind};
 use crate::events::{DomainEvent, Num, SseEvent};
 use crate::state::AppState;
+use crate::sync::MutexExt;
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -114,7 +115,7 @@ impl Progress {
         let set: Vec<Download> = downloads.iter().map(download_of).collect();
         let now = Instant::now();
         let wait = {
-            let mut g = self.0.lock().unwrap();
+            let mut g = self.0.lock_clean();
             match g.get_mut(&media_id) {
                 Some(gate) if now - gate.last < PROGRESS_MIN => {
                     gate.pending = Some(set.clone());
@@ -147,7 +148,7 @@ impl Progress {
     async fn flush(&'static self, st: AppState, media_id: i32, wait: Duration) {
         tokio::time::sleep(wait).await;
         let pending = {
-            let mut g = self.0.lock().unwrap();
+            let mut g = self.0.lock_clean();
             let Some(gate) = g.get_mut(&media_id) else {
                 return;
             };

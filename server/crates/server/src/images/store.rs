@@ -1,5 +1,6 @@
 //! Download, resize and cache artwork (`docs/spec/image-store.md`); the write side of `GET /api/images/*`.
 use super::paths::{Kind, Size, Target, Variant};
+use crate::ingest::KeyedLocks;
 use crate::{atomic_file::write_atomic, paths::data_dir};
 use image::{
     ColorType, DynamicImage, ImageEncoder, ImageFormat, ImageReader, codecs::jpeg::JpegEncoder,
@@ -8,14 +9,13 @@ use image::{
 use serde::Deserialize;
 use sha1::{Digest, Sha1};
 use std::{
-    collections::HashMap,
     future::Future,
     io::Cursor,
     path::{Path, PathBuf},
-    sync::{Arc, Mutex},
+    sync::Arc,
     time::Duration,
 };
-use tokio::sync::{Mutex as AsyncMutex, Semaphore};
+use tokio::sync::Semaphore;
 
 const MAX_DOWNLOAD_BYTES: usize = 20 * 1024 * 1024;
 const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(15);
@@ -32,7 +32,7 @@ pub struct ImageStore {
     http: reqwest::Client,
     net: Semaphore,
     cpu: Semaphore,
-    keys: Mutex<HashMap<String, Arc<AsyncMutex<()>>>>,
+    keys: KeyedLocks<String>,
 }
 
 #[derive(Deserialize)]
@@ -180,7 +180,7 @@ impl ImageStore {
                 .expect("reqwest client"),
             net: Semaphore::new(NETWORK_SLOTS),
             cpu: Semaphore::new(1),
-            keys: Mutex::default(),
+            keys: KeyedLocks::default(),
         }
     }
 
@@ -250,23 +250,11 @@ impl ImageStore {
 
     /// One store at a time per target: a second call waits, then finds the files or reruns.
     async fn serialized<T>(&self, t: &Target, run: impl Future<Output = T>) -> T {
-        let key = format!("{}/{:?}", t.api_path(), t.variant);
-        let lock = self
+        let _held = self
             .keys
-            .lock()
-            .expect("keys")
-            .entry(key.clone())
-            .or_default()
-            .clone();
-        let out = {
-            let _held = lock.lock().await;
-            run.await
-        };
-        let mut keys = self.keys.lock().expect("keys");
-        if Arc::strong_count(&lock) == 2 {
-            keys.remove(&key);
-        }
-        out
+            .lock(format!("{}/{:?}", t.api_path(), t.variant))
+            .await;
+        run.await
     }
 
     async fn store(&self, t: &Target, key: &str, bytes: Vec<u8>) -> Option<String> {
@@ -387,6 +375,7 @@ impl ImageStore {
 mod tests {
     use super::*;
     use crate::metadata::MediaKind;
+    use crate::sync::MutexExt;
     use axum::{
         Router,
         extract::{Path as AxPath, State},
@@ -395,6 +384,7 @@ mod tests {
         routing::get,
     };
     use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::{collections::HashMap, sync::Mutex};
 
     #[derive(Clone, Default)]
     struct Mock {
@@ -405,9 +395,9 @@ mod tests {
 
     async fn serve_file(State(m): State<Mock>, uri: axum::http::Uri) -> impl IntoResponse {
         m.hits.fetch_add(1, Ordering::SeqCst);
-        m.seen.lock().unwrap().push(uri.path().to_owned());
+        m.seen.lock_clean().push(uri.path().to_owned());
         let name = uri.path().rsplit('/').next().unwrap_or_default().to_owned();
-        match m.files.lock().unwrap().get(&name) {
+        match m.files.lock_clean().get(&name) {
             Some(b) => ([(header::CONTENT_TYPE, "image/jpeg")], b.clone()).into_response(),
             None => StatusCode::NOT_FOUND.into_response(),
         }
@@ -497,7 +487,7 @@ mod tests {
 
     impl Fx {
         fn serve(&self, name: &str, bytes: Vec<u8>) -> String {
-            self.mock.files.lock().unwrap().insert(name.into(), bytes);
+            self.mock.files.lock_clean().insert(name.into(), bytes);
             format!("{}/f/{name}", self.base)
         }
 
@@ -804,7 +794,7 @@ mod tests {
         let got = f.store.download_and_store(&url, &t).await.unwrap();
         assert!(got.contains("?v="));
         assert_eq!(
-            f.mock.seen.lock().unwrap().as_slice(),
+            f.mock.seen.lock_clean().as_slice(),
             ["/t/p/original/abc.jpg"]
         );
         let other = format!("{}/other/w500/abc.jpg", f.base);
@@ -813,7 +803,7 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(
-            f.mock.seen.lock().unwrap().last().unwrap(),
+            f.mock.seen.lock_clean().last().unwrap(),
             "/other/w500/abc.jpg"
         );
         // the cache key is the URL as passed in

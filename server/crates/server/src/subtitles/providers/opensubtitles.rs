@@ -3,6 +3,7 @@ use super::{
     MAX_BODY, Query, Shared, TestResult, body_bytes, body_json, body_text, candidate, net, setting,
     test_result, with_params,
 };
+use crate::sync::MutexExt;
 use fliks_domain::subtitle_score::Candidate;
 use reqwest::{RequestBuilder, Url};
 use serde_json::{Value, json};
@@ -31,7 +32,7 @@ fn token_key(s: &Value) -> String {
 }
 
 fn token(sh: &Shared, s: &Value) -> Option<String> {
-    let mut cache = sh.os_tokens.lock().unwrap_or_else(|e| e.into_inner());
+    let mut cache = sh.os_tokens.lock_clean();
     let key = token_key(s);
     match cache.get(&key) {
         Some((t, exp)) if *exp > super::limiter::now_ms() => Some(t.clone()),
@@ -87,13 +88,10 @@ async fn ensure_token(sh: &Shared, s: &Value) {
         if let Ok(v) = body_json(res).await
             && let Some(t) = v["token"].as_str()
         {
-            sh.os_tokens
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .insert(
-                    token_key(s),
-                    (t.to_owned(), super::limiter::now_ms() + TOKEN_TTL_MS),
-                );
+            sh.os_tokens.lock_clean().insert(
+                token_key(s),
+                (t.to_owned(), super::limiter::now_ms() + TOKEN_TTL_MS),
+            );
             tracing::info!("OpenSubtitles: authenticated successfully");
         }
     } else {

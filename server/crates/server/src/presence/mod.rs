@@ -6,20 +6,18 @@ mod session;
 pub use feed::spawn;
 pub use session::{Beat, Facts, LiveSession, Tags, kind_of, parse_source_fps, to_tags};
 
+use crate::sync::MutexExt;
 use crate::{engine::Engine, events::event::Num, state::AppState};
 use fliks_engine_core::api::{SessionKind, SessionSnapshot};
 use serde::Serialize;
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
-    time::{SystemTime, UNIX_EPOCH},
 };
 
 /// Epoch milliseconds, the unit of every presence clock.
 pub fn now_ms() -> f64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0.0, |d| d.as_millis() as f64)
+    fliks_domain::js::now_ms() as f64
 }
 
 /// `liveSessionTtlMs`, read lazily from `STREAM_LIVE_SESSION_TTL_MS` (positive integer, else 30 000).
@@ -33,7 +31,7 @@ pub struct Presence(Arc<Mutex<HashMap<String, LiveSession>>>);
 
 impl Presence {
     fn map(&self) -> std::sync::MutexGuard<'_, HashMap<String, LiveSession>> {
-        self.0.lock().unwrap_or_else(|e| e.into_inner())
+        self.0.lock_clean()
     }
 
     /// playback-info: always overwrites the entry with the same sid.

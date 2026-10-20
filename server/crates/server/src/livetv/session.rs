@@ -5,6 +5,7 @@ use super::{
     dto::Body,
     net::DEFAULT_USER_AGENT,
 };
+use crate::sync::MutexExt;
 use crate::{
     engine::EngineError,
     events::{Num, Subject},
@@ -182,7 +183,7 @@ pub struct Live(Mutex<Inner>);
 
 impl Live {
     fn lock(&self) -> std::sync::MutexGuard<'_, Inner> {
-        self.0.lock().unwrap_or_else(|e| e.into_inner())
+        self.0.lock_clean()
     }
 
     fn transcodes(i: &Inner) -> u32 {
@@ -325,7 +326,7 @@ pub async fn open(
     let grace =
         grace_of(crate::settings::setting_value(&st.db, "livetv_slot_release_seconds").await?);
     let cap = super::sync::setting_int(&st.db, "livetv_max_viewers_per_user", 0).await?;
-    let token = super::playlist_file::uuid_v4();
+    let token = crate::events::uuid_v4();
     let (verdict, vetoes): (Option<AtCapacity>, Vec<bool>) = {
         let mut g = st.livetv.live.lock();
         let held = g

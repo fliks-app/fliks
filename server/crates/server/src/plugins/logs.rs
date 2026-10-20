@@ -1,5 +1,6 @@
 //! Plugin output: guest `log`, stdout and stderr into one ring, capped per plugin per minute.
 
+use crate::sync::MutexExt;
 use std::collections::HashMap;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
@@ -45,7 +46,7 @@ impl Logs {
         let now = Instant::now();
         let context = format!("plugin:{plugin}");
         {
-            let mut w = self.windows.lock().unwrap();
+            let mut w = self.windows.lock_clean();
             let w = w.entry(plugin.to_owned()).or_default();
             if w.start.is_none_or(|s| now - s >= Duration::from_secs(60)) {
                 *w = Window {
@@ -89,7 +90,7 @@ impl Logs {
     }
 
     fn stderr(&self, plugin: &str, text: &str) {
-        let mut t = self.tails.lock().unwrap();
+        let mut t = self.tails.lock_clean();
         let tail = t.entry(plugin.to_owned()).or_default();
         tail.push_str(text);
         tail.push('\n');
@@ -104,8 +105,7 @@ impl Logs {
 
     pub fn tail(&self, plugin: &str) -> String {
         self.tails
-            .lock()
-            .unwrap()
+            .lock_clean()
             .get(plugin)
             .cloned()
             .unwrap_or_default()
@@ -205,8 +205,8 @@ mod tests {
         for _ in 0..CAP_PER_MINUTE {
             logs.push("acme.quiet", Level::Info, "");
         }
-        assert!(!logs.windows.lock().unwrap()["acme.quiet"].warned);
+        assert!(!logs.windows.lock_clean()["acme.quiet"].warned);
         logs.push("acme.quiet", Level::Info, "");
-        assert!(logs.windows.lock().unwrap()["acme.quiet"].warned);
+        assert!(logs.windows.lock_clean()["acme.quiet"].warned);
     }
 }

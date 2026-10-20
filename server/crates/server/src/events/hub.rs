@@ -6,6 +6,8 @@ use super::{
     event::{Download, RawEvent},
     replay::Replay,
 };
+use crate::sync::MutexExt;
+use fliks_domain::js::now_ms;
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex, MutexGuard},
@@ -154,10 +156,6 @@ pub(crate) fn uuid_v4() -> String {
     )
 }
 
-fn now_ms() -> i64 {
-    chrono::Utc::now().timestamp_millis()
-}
-
 impl Default for Hub {
     fn default() -> Self {
         Self::new()
@@ -196,7 +194,7 @@ impl Hub {
     /// Set once by the remote module: widens `remote.state|targets_changed|stopped` sent through
     /// `emit_to_user` past their owner. It must use `emit_to_users`, which never calls it back.
     pub fn register_household_fan_out(&self, f: impl Fn(&SseEvent, i32) + Send + Sync + 'static) {
-        *self.0.fan_out.lock().unwrap_or_else(|e| e.into_inner()) = Some(Arc::new(f));
+        *self.0.fan_out.lock_clean() = Some(Arc::new(f));
     }
 
     /// To every connection of every user.
@@ -592,7 +590,7 @@ impl Hub {
     }
 
     fn lock(&self) -> MutexGuard<'_, Inner> {
-        self.0.inner.lock().unwrap_or_else(|e| e.into_inner())
+        self.0.inner.lock_clean()
     }
 
     fn send(&self, aud: Aud<'_>, out: Out) {
@@ -655,12 +653,7 @@ impl Hub {
     }
 
     fn fan_out(&self, ev: &SseEvent, owner: i32) {
-        let hook = self
-            .0
-            .fan_out
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .clone();
+        let hook = self.0.fan_out.lock_clean().clone();
         if let Some(hook) = hook {
             hook(ev, owner);
         }

@@ -1,4 +1,5 @@
 //! The GitHub release check (`docs/spec/system.md` rules 9-11).
+use crate::sync::MutexExt;
 use serde::{Deserialize, Serialize};
 use std::{
     sync::{Mutex, OnceLock},
@@ -96,15 +97,14 @@ impl Cache {
         if disabled() {
             return fallback();
         }
-        if let Some((at, s)) = &*self.0.lock().unwrap_or_else(|e| e.into_inner())
+        if let Some((at, s)) = &*self.0.lock_clean()
             && at.elapsed() < TTL
         {
             return s.clone();
         }
         let status = fetch().await.unwrap_or_else(fallback);
         if status.latest_version.is_some() {
-            *self.0.lock().unwrap_or_else(|e| e.into_inner()) =
-                Some((Instant::now(), status.clone()));
+            *self.0.lock_clean() = Some((Instant::now(), status.clone()));
         }
         status
     }

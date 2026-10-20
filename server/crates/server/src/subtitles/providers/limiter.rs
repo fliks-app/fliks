@@ -1,4 +1,5 @@
 //! Per-type cooldown and circuit breaker (`subtitle-providers.md` rules 5-14, C70, C71).
+use crate::sync::MutexExt;
 use reqwest::{Client, RequestBuilder, Response, header::HeaderMap};
 use serde::Serialize;
 use std::{
@@ -95,7 +96,7 @@ fn number(h: &HeaderMap, k: &str) -> Option<f64> {
 
 impl Limiter {
     fn table(&self) -> std::sync::MutexGuard<'_, Table> {
-        self.0.lock().unwrap_or_else(|e| e.into_inner())
+        self.0.lock_clean()
     }
 
     /// Seconds left of a cooldown, 0 when none (and then cleared).

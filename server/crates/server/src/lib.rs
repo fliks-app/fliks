@@ -39,6 +39,7 @@ pub mod social;
 pub mod state;
 pub mod stream;
 pub mod subtitles;
+pub mod sync;
 pub mod system;
 pub mod users;
 pub mod vetted;

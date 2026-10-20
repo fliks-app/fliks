@@ -1,6 +1,7 @@
 //! The one consumer of the engine feed for QoE: served segments, rung and hardware changes, and the
 //! running-job count behind `serverLoad.activeTranscodes` (`qoe.md` rule 35). Presence stays in `presence::feed`.
 use super::system::served_rung;
+use crate::sync::MutexExt;
 use crate::{engine::Feed, qoe::SessionRef, state::AppState};
 use fliks_domain::qoe::read_cmcd_raw;
 use fliks_engine_core::{
@@ -90,7 +91,7 @@ fn primary_run_id(media: u32, owner: Option<&str>, hash: &str, kind: SessionKind
 }
 
 fn resync(jobs: &Jobs, snaps: &[SessionSnapshot]) {
-    let mut j = jobs.lock().unwrap_or_else(|e| e.into_inner());
+    let mut j = jobs.lock_clean();
     *j = snaps
         .iter()
         .filter(|s| s.job.as_ref().is_some_and(|j| j.state == JobState::Running))
@@ -111,14 +112,10 @@ fn observe(st: &AppState, jobs: &Jobs, ev: &EngineEvent, segment_s: f64) {
     match ev {
         // A throttle-paused job still counts: the engine emits no pause event.
         EngineEvent::JobStarted { job_key, .. } => {
-            jobs.lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .insert(run_id(job_key));
+            jobs.lock_clean().insert(run_id(job_key));
         }
         EngineEvent::JobEnded { job_key, .. } => {
-            jobs.lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .remove(&run_id(job_key));
+            jobs.lock_clean().remove(&run_id(job_key));
         }
         EngineEvent::PipelineChanged {
             session_id,

@@ -1,5 +1,6 @@
 //! `PUT /api/playback/media/{mediaId}/state` (`docs/spec/heartbeat.md`): the client's heartbeat.
 use super::watched::{self, Watch};
+use crate::sync::MutexExt;
 use crate::{
     engine::EngineError,
     events::{
@@ -35,7 +36,7 @@ pub struct Debounce(Mutex<HashMap<String, (i64, f64)>>);
 impl Debounce {
     /// Decides and, on a flush, records the write before it happens, so a failed write still debounces.
     fn flush(&self, key: &str, now: i64, pos: f64, dur: f64, state_changed: bool) -> bool {
-        let mut map = self.0.lock().unwrap_or_else(|e| e.into_inner());
+        let mut map = self.0.lock_clean();
         let last = map.get(key).copied();
         let seeked = last.is_none_or(|(_, p)| (pos - p).abs() > SEEK_SECONDS);
         let due = now - last.map_or(0, |(at, _)| at) >= DEBOUNCE_MS;
@@ -401,7 +402,7 @@ mod tests {
         let d = Debounce::default();
         d.flush("old", 0, 0.0, 0.0, false);
         assert!(d.flush("new", 300_001, 0.0, 0.0, false));
-        let keys: Vec<_> = d.0.lock().unwrap().keys().cloned().collect();
+        let keys: Vec<_> = d.0.lock_clean().keys().cloned().collect();
         assert_eq!(keys, ["new"]);
     }
 

@@ -1,5 +1,6 @@
 //! Household fan-out of `remote.state|stopped|targets_changed` (spec rules 31-34).
 use super::db;
+use crate::sync::MutexExt;
 use crate::{
     events::{Hub, SseEvent},
     state::AppState,
@@ -51,7 +52,7 @@ impl FanOut {
         fresh: impl Future<Output = sqlx::Result<Vec<i32>>>,
     ) -> sqlx::Result<Vec<i32>> {
         let hit = {
-            let c = self.cache.lock().unwrap_or_else(|e| e.into_inner());
+            let c = self.cache.lock_clean();
             c.get(&key).filter(|(_, at)| at.elapsed() < CACHE).cloned()
         };
         if let Some((ids, _)) = hit {
@@ -59,8 +60,7 @@ impl FanOut {
         }
         let ids = fresh.await?;
         self.cache
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .lock_clean()
             .insert(key, (ids.clone(), Instant::now()));
         Ok(ids)
     }

@@ -82,7 +82,7 @@ fn since(days: i64, floor: bool) -> DateTime<Utc> {
     super::at(ms)
 }
 
-fn admin(a: &Authed) -> Result<(), AppError> {
+fn read_settings(a: &Authed) -> Result<(), AppError> {
     a.require(Action::Read, Subject::Settings)
 }
 
@@ -92,7 +92,7 @@ pub async fn sessions(
     a: Authed,
     Query(q): Q,
 ) -> Result<Json<Value>, AppError> {
-    admin(&a)?;
+    read_settings(&a)?;
     let d = days(&q);
     let verdict = scalar(&q, "verdict").filter(|v| playbacks::is_verdict(v));
     // An id outside the int column range matches nothing instead of failing the query.
@@ -144,7 +144,7 @@ pub async fn session(
     a: Authed,
     PathParams(sid): PathParams<String>,
 ) -> Result<Json<Value>, AppError> {
-    admin(&a)?;
+    read_settings(&a)?;
     let anchor = store::anchor(&st.db, &sid)
         .await?
         .ok_or_else(|| AppError::not_found("qoe_session_not_found"))?;
@@ -171,7 +171,7 @@ pub async fn summary(
     a: Authed,
     Query(q): Q,
 ) -> Result<Json<Value>, AppError> {
-    admin(&a)?;
+    read_settings(&a)?;
     let d = days(&q);
     let rows = store::summary_rows(&st.db, since(d, true), since(d, false)).await?;
     Ok(Json(playbacks::summary(&rows)))
