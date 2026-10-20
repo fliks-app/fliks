@@ -5,6 +5,7 @@ pub mod channels;
 mod dto;
 mod feed;
 pub mod guide;
+mod guide_reads;
 pub mod jobs;
 mod lineup;
 mod logos;
