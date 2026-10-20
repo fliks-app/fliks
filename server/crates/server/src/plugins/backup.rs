@@ -3,7 +3,8 @@
 use super::Plugins;
 use super::db::{database_oid, role, schema};
 use super::install::{InstallError, ie};
-use axum::http::StatusCode;
+use axum::{body::Body, body::Bytes, http::StatusCode};
+use futures_util::{TryStreamExt, stream};
 use serde_json::{Map, Value, json};
 use sqlx::PgConnection;
 use std::collections::{BTreeMap, BTreeSet};
@@ -82,6 +83,62 @@ async fn fk_order(c: &mut PgConnection, s: &str, names: &[String]) -> sqlx::Resu
     Ok(out)
 }
 
+const CHUNK: usize = 64 * 1024;
+
+type Out = tokio::sync::mpsc::Sender<Result<Bytes, std::io::Error>>;
+
+fn body(rx: tokio::sync::mpsc::Receiver<Result<Bytes, std::io::Error>>) -> Body {
+    Body::from_stream(stream::unfold(rx, |mut rx| async {
+        rx.recv().await.map(|v| (v, rx))
+    }))
+}
+
+/// The `tables` object of an export, a chunk at a time; `Err` when the client is gone.
+async fn write_tables(
+    tx: &mut PgConnection,
+    s: &str,
+    names: &[String],
+    head: String,
+    out: &Out,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let mut buf = head.into_bytes();
+    for (i, t) in names.iter().enumerate() {
+        let pk: Vec<String> = sqlx::query_scalar(
+            "SELECT a.attname::text FROM pg_index i
+               CROSS JOIN LATERAL unnest(i.indkey) WITH ORDINALITY k(attnum, ord)
+               JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = k.attnum
+              WHERE i.indrelid = ($1::text)::regclass AND i.indisprimary ORDER BY k.ord",
+        )
+        .bind(format!("{}.{}", quote(s), quote(t)))
+        .fetch_all(&mut *tx)
+        .await?;
+        let order = if pk.is_empty() {
+            String::new()
+        } else {
+            let cols: Vec<String> = pk.iter().map(|c| format!("r.{}", quote(c))).collect();
+            format!(" ORDER BY {}", cols.join(", "))
+        };
+        buf.extend_from_slice(format!("{}{}:[", if i > 0 { "," } else { "" }, json!(t)).as_bytes());
+        let sql = format!("SELECT to_jsonb(r) FROM {}.{} r{order}", quote(s), quote(t));
+        let mut rows = sqlx::query_scalar::<_, Value>(&sql).fetch(&mut *tx);
+        let mut first = true;
+        while let Some(row) = rows.try_next().await? {
+            if !first {
+                buf.push(b',');
+            }
+            first = false;
+            serde_json::to_writer(&mut buf, &row)?;
+            if buf.len() >= CHUNK {
+                out.send(Ok(Bytes::from(std::mem::take(&mut buf)))).await?;
+            }
+        }
+        buf.push(b']');
+    }
+    buf.extend_from_slice(b"}}");
+    out.send(Ok(Bytes::from(buf))).await?;
+    Ok(())
+}
+
 impl Plugins {
     async fn owned_settings(&self, id: &str) -> sqlx::Result<Map<String, Value>> {
         let ids = super::imports::installed_ids(&self.db).await?;
@@ -113,56 +170,39 @@ impl Plugins {
             .map(drop)
     }
 
-    pub async fn export(&self, id: &str) -> Result<Value, InstallError> {
-        let _l = self.lock(id).await;
+    /// The export document as a stream: rows go out as they are read, one snapshot for every table.
+    /// The plugin lock and the snapshot are held until the client has read it all.
+    pub async fn export(&self, id: &str) -> Result<Body, InstallError> {
+        let lock = self.lock(id).await;
         let pkg = self.find_installed(id).await?;
-        let mut out = Map::new();
-        if Self::has_schema(&pkg.manifest) {
-            let mut tx = self.db.begin().await.map_err(internal)?;
-            // One snapshot for every table.
-            sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
-                .execute(&mut *tx)
-                .await
-                .map_err(internal)?;
-            self.as_plugin(&mut tx, id).await?;
-            let s = schema(id);
-            for t in tables(&mut tx, &s).await.map_err(internal)? {
-                let pk: Vec<String> = sqlx::query_scalar(
-                    "SELECT a.attname::text FROM pg_index i
-                       CROSS JOIN LATERAL unnest(i.indkey) WITH ORDINALITY k(attnum, ord)
-                       JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = k.attnum
-                      WHERE i.indrelid = ($1::text)::regclass AND i.indisprimary ORDER BY k.ord",
-                )
-                .bind(format!("{}.{}", quote(&s), quote(&t)))
-                .fetch_all(&mut *tx)
-                .await
-                .map_err(internal)?;
-                let order = if pk.is_empty() {
-                    String::new()
-                } else {
-                    let cols: Vec<String> = pk.iter().map(|c| format!("r.{}", quote(c))).collect();
-                    format!(" ORDER BY {}", cols.join(", "))
-                };
-                let rows: Vec<Value> = sqlx::query_scalar(&format!(
-                    "SELECT to_jsonb(r) FROM {}.{} r{order}",
-                    quote(&s),
-                    quote(&t)
-                ))
-                .fetch_all(&mut *tx)
-                .await
-                .map_err(internal)?;
-                out.insert(t, Value::Array(rows));
-            }
-            tx.commit().await.map_err(internal)?;
+        let head = format!(
+            r#"{{"exportedAt":{},"formatVersion":1,"pluginId":{},"pluginVersion":{},"settings":{},"tables":{{"#,
+            json!(chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)),
+            json!(id),
+            json!(pkg.version),
+            Value::Object(self.owned_settings(id).await.map_err(internal)?),
+        );
+        let (out, rx) = tokio::sync::mpsc::channel::<Result<Bytes, std::io::Error>>(4);
+        if !Self::has_schema(&pkg.manifest) {
+            let _ = out.try_send(Ok(Bytes::from(format!("{head}}}}}"))));
+            return Ok(body(rx));
         }
-        Ok(json!({
-            "formatVersion": 1,
-            "pluginId": id,
-            "pluginVersion": pkg.version,
-            "exportedAt": chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
-            "settings": self.owned_settings(id).await.map_err(internal)?,
-            "tables": out,
-        }))
+        let mut tx = self.db.begin().await.map_err(internal)?;
+        sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
+            .execute(&mut *tx)
+            .await
+            .map_err(internal)?;
+        self.as_plugin(&mut tx, id).await?;
+        let s = schema(id);
+        let mut names = tables(&mut tx, &s).await.map_err(internal)?;
+        names.sort();
+        tokio::spawn(async move {
+            let _lock = lock;
+            if let Err(e) = write_tables(&mut tx, &s, &names, head, &out).await {
+                let _ = out.send(Err(std::io::Error::other(e.to_string()))).await;
+            }
+        });
+        Ok(body(rx))
     }
 
     /// Rule 54: every check before any write; settings and rows in one core transaction.

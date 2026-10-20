@@ -677,7 +677,8 @@ pub async fn logo(State(st): State<AppState>, a: Authed, Path(id): Path<String>)
 #[utoipa::path(get, path = "/api/plugins/{pluginId}/export", responses((status = 200)))]
 pub async fn export(State(st): State<AppState>, a: Authed, Path(id): Path<String>) -> Res {
     need(&a, Action::Read)?;
-    Ok(Json(st.plugins.export(&id).await.map_err(inst)?).into_response())
+    let body = st.plugins.export(&id).await.map_err(inst)?;
+    Ok(([(header::CONTENT_TYPE, "application/json")], body).into_response())
 }
 
 #[utoipa::path(post, path = "/api/plugins/{pluginId}/import", responses((status = 201)))]
