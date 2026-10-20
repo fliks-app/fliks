@@ -9,7 +9,7 @@ use crate::{
     },
     images::paths::{Target, Variant},
     ingest::{MediaRow, load_media, rescan::rescan_files},
-    metadata::service::{self, Details, Found, SeasonDetails},
+    metadata::service::{self, Details, EpisodeDetails, Found, SeasonDetails},
     state::AppState,
 };
 use axum::{Json, extract::State, http::StatusCode};
@@ -62,14 +62,15 @@ pub async fn download_season_images(
             .images
             .download_and_store(&url, &Target::episode(ep))
             .await
-        {
-            let _ = sqlx::query!(
+            && let Err(e) = sqlx::query!(
                 r#"UPDATE episodes SET "stillUrl" = $2 WHERE id = $1"#,
                 ep,
                 local
             )
             .execute(&st.db)
-            .await;
+            .await
+        {
+            tracing::warn!("still of episode #{ep}: {e}");
         }
     }
     if let Some(p) = poster.filter(|p| !p.is_empty())
@@ -77,14 +78,15 @@ pub async fn download_season_images(
             .images
             .download_and_store(&p, &Target::season(season))
             .await
-    {
-        let _ = sqlx::query!(
+        && let Err(e) = sqlx::query!(
             r#"UPDATE seasons SET "posterUrl" = $2 WHERE id = $1"#,
             season,
             local
         )
         .execute(&st.db)
-        .await;
+        .await
+    {
+        tracing::warn!("poster of season #{season}: {e}");
     }
 }
 
@@ -110,59 +112,78 @@ pub async fn apply_season(
     )
     .execute(&mut *c)
     .await?;
-    let existing: Vec<(i32, i32)> = sqlx::query!(
-        r#"SELECT id, "episodeNumber" AS n FROM episodes WHERE "seasonId" = $1"#,
-        sid
+    // One row per episode number, the last listing wins.
+    let mut by_number = std::collections::BTreeMap::new();
+    for ep in &sd.episodes {
+        by_number.insert(ep.episode_number, ep);
+    }
+    let eps: Vec<&EpisodeDetails> = by_number.into_values().collect();
+    let numbers: Vec<i32> = eps.iter().map(|e| e.episode_number).collect();
+    let titles: Vec<Option<String>> = eps
+        .iter()
+        .map(|e| Some(e.title.clone()).filter(|t| !t.is_empty()))
+        .collect();
+    let overviews: Vec<Option<String>> = eps
+        .iter()
+        .map(|e| e.overview.clone().filter(|o| !o.is_empty()))
+        .collect();
+    let airs: Vec<Option<String>> = eps
+        .iter()
+        .map(|e| e.air_date.clone().filter(|a| !a.is_empty()))
+        .collect();
+    let runtimes: Vec<Option<i32>> = eps.iter().map(|e| e.runtime).collect();
+    sqlx::query!(
+        r#"UPDATE episodes e SET title = COALESCE(v.title, e.title), overview = COALESCE(v.overview, e.overview),
+             "airDate" = COALESCE(v.air::date, e."airDate"), runtime = COALESCE(v.runtime, e.runtime)
+           FROM UNNEST($2::int[], $3::text[], $4::text[], $5::text[], $6::int[])
+             AS v(n, title, overview, air, runtime)
+           WHERE e."seasonId" = $1 AND e."episodeNumber" = v.n
+             AND (e.title IS DISTINCT FROM COALESCE(v.title, e.title)
+               OR e.overview IS DISTINCT FROM COALESCE(v.overview, e.overview)
+               OR e."airDate" IS DISTINCT FROM COALESCE(v.air::date, e."airDate")
+               OR e.runtime IS DISTINCT FROM COALESCE(v.runtime, e.runtime))"#,
+        sid,
+        &numbers,
+        &titles as &[Option<String>],
+        &overviews as &[Option<String>],
+        &airs as &[Option<String>],
+        &runtimes as &[Option<i32>]
+    )
+    .execute(&mut *c)
+    .await?;
+    sqlx::query!(
+        r#"INSERT INTO episodes ("seasonId", "episodeNumber", title, overview, "airDate", runtime, monitored)
+           SELECT $1, v.n, v.title, v.overview, v.air::date, v.runtime, true
+           FROM UNNEST($2::int[], $3::text[], $4::text[], $5::text[], $6::int[])
+             AS v(n, title, overview, air, runtime)
+           WHERE NOT EXISTS (SELECT 1 FROM episodes e WHERE e."seasonId" = $1 AND e."episodeNumber" = v.n)"#,
+        sid,
+        &numbers,
+        &titles as &[Option<String>],
+        &overviews as &[Option<String>],
+        &airs as &[Option<String>],
+        &runtimes as &[Option<i32>]
+    )
+    .execute(&mut *c)
+    .await?;
+    let ids: std::collections::HashMap<i32, i32> = sqlx::query!(
+        r#"SELECT min(id) AS "id!", "episodeNumber" AS n FROM episodes
+           WHERE "seasonId" = $1 AND "episodeNumber" = ANY($2) GROUP BY "episodeNumber""#,
+        sid,
+        &numbers
     )
     .fetch_all(&mut *c)
     .await?
     .into_iter()
     .map(|r| (r.n, r.id))
     .collect();
-    let mut stills = vec![];
-    for ep in &sd.episodes {
-        let title = Some(ep.title.clone()).filter(|t| !t.is_empty());
-        let overview = ep.overview.clone().filter(|o| !o.is_empty());
-        let air = ep.air_date.clone().filter(|a| !a.is_empty());
-        let id = match existing.iter().find(|(n, _)| *n == ep.episode_number) {
-            Some((_, id)) => {
-                sqlx::query!(
-                    r#"UPDATE episodes SET title = COALESCE($2, title), overview = COALESCE($3, overview),
-                         "airDate" = COALESCE($4::text::date, "airDate"), runtime = COALESCE($5, runtime)
-                       WHERE id = $1 AND (title IS DISTINCT FROM COALESCE($2, title)
-                         OR overview IS DISTINCT FROM COALESCE($3, overview)
-                         OR "airDate" IS DISTINCT FROM COALESCE($4::text::date, "airDate")
-                         OR runtime IS DISTINCT FROM COALESCE($5, runtime))"#,
-                    id,
-                    title,
-                    overview,
-                    air,
-                    ep.runtime
-                )
-                .execute(&mut *c)
-                .await?;
-                *id
-            }
-            None => {
-                sqlx::query_scalar!(
-                    r#"INSERT INTO episodes ("seasonId", "episodeNumber", title, overview, "airDate", runtime, monitored)
-                       VALUES ($1, $2, $3, $4, $5::text::date, $6, true) RETURNING id"#,
-                    sid,
-                    ep.episode_number,
-                    title,
-                    overview,
-                    air,
-                    ep.runtime
-                )
-                .fetch_one(&mut *c)
-                .await?
-            }
-        };
-        if let Some(s) = ep.still_url.clone().filter(|s| !s.is_empty()) {
-            stills.push((id, s));
-        }
-    }
-    Ok(stills)
+    Ok(eps
+        .iter()
+        .filter_map(|e| {
+            let still = e.still_url.clone().filter(|s| !s.is_empty())?;
+            Some((*ids.get(&e.episode_number)?, still))
+        })
+        .collect())
 }
 
 /// `refreshSeriesEpisodes` applied to provider seasons (rule 56); returns the inserted episode count.
@@ -172,7 +193,8 @@ async fn apply_seasons(
     seasons: &[SeasonDetails],
 ) -> Result<i64, AppError> {
     let before: i64 = count_episodes(st, media_id).await?;
-    let mut c = st.db.acquire().await?;
+    let mut tx = st.db.begin().await?;
+    let mut applied = vec![];
     for sd in seasons {
         let n = sd.season_number;
         let sid = match sqlx::query_scalar!(
@@ -180,7 +202,7 @@ async fn apply_seasons(
             media_id,
             n
         )
-        .fetch_optional(&mut *c)
+        .fetch_optional(&mut *tx)
         .await?
         {
             Some(id) => id,
@@ -191,12 +213,11 @@ async fn apply_seasons(
                     n,
                     n > 0
                 )
-                .fetch_one(&mut *c)
+                .fetch_one(&mut *tx)
                 .await?
             }
         };
-        let stills = apply_season(&mut c, sid, sd).await?;
-        download_season_images(st, sid, stills, sd.poster_url.clone()).await;
+        let stills = apply_season(&mut tx, sid, sd).await?;
         let live: HashSet<i32> = sd.episodes.iter().map(|e| e.episode_number).collect();
         if !live.is_empty() {
             let listed: Vec<i32> = live.into_iter().collect();
@@ -205,11 +226,17 @@ async fn apply_seasons(
                 sid,
                 &listed
             )
-            .execute(&mut *c)
+            .execute(&mut *tx)
             .await?;
         }
+        applied.push((sid, stills, sd.poster_url.clone()));
     }
-    Ok((count_episodes(st, media_id).await? - before).max(0))
+    tx.commit().await?;
+    let inserted = (count_episodes(st, media_id).await? - before).max(0);
+    for (sid, stills, poster) in applied {
+        download_season_images(st, sid, stills, poster).await;
+    }
+    Ok(inserted)
 }
 
 async fn count_episodes(st: &AppState, media_id: i32) -> Result<i64, sqlx::Error> {
