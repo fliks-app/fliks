@@ -1,6 +1,6 @@
 //! Notification vocabulary, message formatting, channel requests and settings rules (`docs/spec/notifications.md`).
-use crate::js::trim;
-use serde_json::{Map, Number, Value, json};
+use crate::js::{js_string, trim};
+use serde_json::{Map, Value, json};
 
 pub const TYPES: [&str; 5] = ["discord", "slack", "webhook", "gotify", "ntfy"];
 
@@ -58,46 +58,6 @@ fn truthy(v: Option<&Value>) -> bool {
         Some(Value::Number(n)) => n.as_f64() != Some(0.0),
         Some(Value::String(s)) => !s.is_empty(),
         Some(_) => true,
-    }
-}
-
-/// `Number.prototype.toString`.
-fn js_number(n: &Number) -> String {
-    const SAFE: u64 = 1 << 53;
-    match n.as_i64() {
-        Some(i) if i.unsigned_abs() <= SAFE => return i.to_string(),
-        _ => {}
-    }
-    let f = n.as_f64().unwrap_or(0.0);
-    if f == 0.0 {
-        return "0".into();
-    }
-    if f.abs() >= 1e21 || f.abs() < 1e-6 {
-        let s = format!("{f:e}");
-        return match s.split_once('e') {
-            Some((m, e)) if !e.starts_with('-') => format!("{m}e+{e}"),
-            _ => s,
-        };
-    }
-    f.to_string()
-}
-
-/// `String(v)` / template interpolation.
-fn js_string(v: &Value) -> String {
-    match v {
-        Value::Null => "null".into(),
-        Value::Bool(b) => b.to_string(),
-        Value::Number(n) => js_number(n),
-        Value::String(s) => s.clone(),
-        Value::Array(a) => a
-            .iter()
-            .map(|x| match x {
-                Value::Null => String::new(),
-                x => js_string(x),
-            })
-            .collect::<Vec<_>>()
-            .join(","),
-        Value::Object(_) => "[object Object]".into(),
     }
 }
 

@@ -6,6 +6,7 @@ use crate::{engine::Feed, qoe::SessionRef, state::AppState};
 use fliks_domain::qoe::read_cmcd_raw;
 use fliks_engine_core::{
     api::{EngineEvent, JobState, SessionKind, SessionSnapshot},
+    decide::timeline::real_segment_seconds,
     session::{base_profile_hash, session_key},
 };
 use std::{
@@ -99,15 +100,6 @@ fn resync(jobs: &Jobs, snaps: &[SessionSnapshot]) {
         .collect();
 }
 
-/// Real length of a segment cut every `segment_duration` seconds on whole GOPs of `fps`.
-pub(super) fn real_segment_seconds(segment_duration: f64, fps: Option<f64>) -> f64 {
-    let Some(fps) = fps.filter(|f| *f > 0.0) else {
-        return segment_duration;
-    };
-    let gop = (segment_duration * fps).round().max(1.0) / fps;
-    (gop * 1000.0).round() / 1000.0
-}
-
 fn observe(st: &AppState, jobs: &Jobs, ev: &EngineEvent, segment_s: f64) {
     match ev {
         // A throttle-paused job still counts: the engine emits no pause event.
@@ -165,14 +157,7 @@ fn observe(st: &AppState, jobs: &Jobs, ev: &EngineEvent, segment_s: f64) {
 
 #[cfg(test)]
 mod tests {
-    use super::{real_segment_seconds as real, *};
-
-    #[test]
-    fn segments_are_cut_on_whole_gops() {
-        assert_eq!(real(3.0, Some(24.0)), 3.0);
-        assert_eq!(real(3.0, Some(23.976)), 3.003);
-        assert_eq!(real(6.0, None), 6.0);
-    }
+    use super::*;
 
     #[test]
     fn a_resynced_run_ends_on_the_engines_own_job_key() {

@@ -215,24 +215,7 @@ pub async fn delete(dir: &Path, name: &str) -> Result<(), AppError> {
 
 /// `String(value)` of a JSON value, for the 400 text of rule 22.
 pub fn js_string(v: Option<&Value>) -> String {
-    match v {
-        None => "undefined".into(),
-        Some(Value::Null) => "null".into(),
-        Some(Value::String(s)) => s.clone(),
-        Some(Value::Array(a)) => a
-            .iter()
-            .map(|e| {
-                if e.is_null() {
-                    String::new()
-                } else {
-                    js_string(Some(e))
-                }
-            })
-            .collect::<Vec<_>>()
-            .join(","),
-        Some(Value::Object(_)) => "[object Object]".into(),
-        Some(other) => other.to_string(),
-    }
+    v.map_or_else(|| "undefined".into(), fliks_domain::js::js_string)
 }
 
 /// `^GRANT .+ TO (plugin_[a-z0-9_]{1,56}|fp_[0-9a-f]{8}_[a-z0-9_]{1,51});$`: the only guard of

@@ -76,7 +76,7 @@ pub fn pg_text(v: &serde_json::Value) -> String {
     match v {
         Value::String(s) => s.clone(),
         Value::Bool(b) => b.to_string(),
-        Value::Number(n) => js_number(n),
+        Value::Number(n) => fliks_domain::js::number_string(n),
         Value::Array(a) => {
             let item = |v: &Value| match v {
                 Value::Null => "NULL".into(),
@@ -97,7 +97,7 @@ fn js_json(v: &serde_json::Value) -> String {
     use serde_json::Value;
     let join = |items: Vec<String>| items.join(",");
     match v {
-        Value::Number(n) => js_number(n),
+        Value::Number(n) => fliks_domain::js::number_string(n),
         Value::Array(a) => format!("[{}]", join(a.iter().map(js_json).collect())),
         Value::Object(o) => {
             let pairs = o
@@ -106,18 +106,6 @@ fn js_json(v: &serde_json::Value) -> String {
             format!("{{{}}}", join(pairs.collect()))
         }
         v => v.to_string(),
-    }
-}
-
-/// JS `Number.prototype.toString`: plain decimal in [1e-6, 1e21), exponent with an explicit sign otherwise.
-fn js_number(n: &serde_json::Number) -> String {
-    let x = n.as_f64().unwrap_or_default();
-    if x == 0.0 {
-        "0".into()
-    } else if (1e-6..1e21).contains(&x.abs()) {
-        x.to_string()
-    } else {
-        format!("{x:e}").replace('e', "e+").replace("e+-", "e-")
     }
 }
 
