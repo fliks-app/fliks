@@ -13,6 +13,7 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TvSelectDirective } from '../../shared/directives/tv-select.directive';
+import { DefaultFocusDirective } from '../../shared/directives/default-focus.directive';
 import { ActivatedRoute, Router } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
 import { MediaService, Media, SearchParams } from '../../core/services/api/media.service';
@@ -43,7 +44,7 @@ import { UserAvatarComponent } from '../../shared/components/user-avatar/user-av
 
 @Component({
   selector: 'app-search',
-  imports: [TvSelectDirective, UserAvatarComponent, FormsModule, TranslatePipe, NgTemplateOutlet, MediaCardComponent, HorizontalScrollerComponent, DropdownMenuComponent, LucideSearch, LucideX, LucideSettings, ModalHeaderComponent],
+  imports: [TvSelectDirective, DefaultFocusDirective, UserAvatarComponent, FormsModule, TranslatePipe, NgTemplateOutlet, MediaCardComponent, HorizontalScrollerComponent, DropdownMenuComponent, LucideSearch, LucideX, LucideSettings, ModalHeaderComponent],
   templateUrl: './search.html',
   providers: [{ provide: SEARCH_CARD_CONTEXT, useValue: true }],
 })

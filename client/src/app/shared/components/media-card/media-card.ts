@@ -58,6 +58,8 @@ export type CardStatus = 'watched' | 'missing' | null;
     LucideFilm, LucidePlay, LucideStar, LucideCheck, LucideClock, LucideEllipsisVertical, LucideCircleX, LucideHeart,
     CardActionsDirective, SpoilerDirective],
   templateUrl: './media-card.html',
+  // Stable card identity for focus memory (`focusIdAttr`); the focused figure wraps the link, so `href` can't serve.
+  host: { '[attr.data-card-link]': '_link()?.toString()' },
 })
 export class MediaCardComponent {
   private readonly translate = inject(TranslateService);

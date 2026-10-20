@@ -62,8 +62,10 @@ export class DefaultFocusService {
     if (!t.focusKey || typeof document === 'undefined') return;
     const active = document.activeElement as HTMLElement | null;
     if (!active || !t.host.contains(active)) return;
-    const id = active.closest<HTMLElement>(`[${t.focusIdAttr}]`)?.getAttribute(t.focusIdAttr);
-    if (id) this.focusMemory.save(t.focusKey, id);
+    const item = active.closest<HTMLElement>(`[${t.focusIdAttr}]`);
+    const id = item?.getAttribute(t.focusIdAttr);
+    if (!item || !id) return;
+    this.focusMemory.save(t.focusKey, id, this.itemsWithId(t, id).indexOf(item));
   }
 
   /** Register a default-focus target so spatial-nav can land on it when nothing is focused (e.g. first key press after a cold load). */
@@ -132,8 +134,12 @@ export class DefaultFocusService {
     if (!t.focusKey || !this.navbar.lastWasBack()) return null;
     const saved = this.focusMemory.retrieve(t.focusKey);
     if (!saved) return null;
-    const item = t.host.querySelector<HTMLElement>(`[${t.focusIdAttr}="${CSS.escape(saved)}"]`);
-    return this.firstVisibleFocusable(item);
+    const items = this.itemsWithId(t, saved.id);
+    return this.firstVisibleFocusable(items[saved.nth] ?? items[0] ?? null);
+  }
+
+  private itemsWithId(t: DefaultFocusTarget, id: string): HTMLElement[] {
+    return Array.from(t.host.querySelectorAll<HTMLElement>(`[${t.focusIdAttr}="${CSS.escape(id)}"]`));
   }
 
   /** First selector match (in DOM order) that yields a visible focusable —

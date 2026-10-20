@@ -9,7 +9,7 @@
               <span class="text-base-content/50">{{ 'requests.requested_by' | translate }}</span>
               <span class="font-medium">{{ r.user.username }}</span>
             </span>
-            <span class="flex flex-wrap items-center gap-1 ms-auto">
+            <span appTvRow class="flex flex-wrap items-center gap-1 ms-auto">
               <button type="button" class="btn btn-primary btn-sm"
                       [disabled]="actionBusyId() === r.id" (click)="approveRequest(r.id)">
                 {{ 'requests.approve' | translate }}
@@ -49,6 +49,7 @@
 @if (error() && !media()) {
   <div role="alert" class="alert alert-error">{{ error() }}</div>
 } @else {
+<div appTvSection appDefaultFocus="[data-preview-actions]">
 
   <!-- ===== MOBILE layout ===== -->
   @if (!desktopLayout()) {
@@ -93,7 +94,7 @@
         }
 
         <!-- Action buttons -->
-        <div class="flex flex-wrap items-center gap-3 mt-4">
+        <div appTvRow data-preview-actions class="flex flex-wrap items-center gap-3 mt-4">
           @if (showImportButton()) {
             <button type="button" class="btn btn-primary flex-1 gap-2" (click)="openImportModal()">
               <svg lucidePlus class="h-4 w-4"></svg>{{ 'discover.add_to_library' | translate }}
@@ -255,7 +256,7 @@
           }
 
           <!-- Action buttons — order + sizing matching media-detail's row. -->
-          <div class="flex flex-wrap items-center gap-2 mt-6">
+          <div appTvRow data-preview-actions class="flex flex-wrap items-center gap-2 mt-6">
             @if (showImportButton()) {
               <button type="button" class="btn btn-primary gap-2" (click)="openImportModal()">
                 <svg lucidePlus class="h-4 w-4"></svg>{{ 'discover.add_to_library' | translate }}
@@ -435,6 +436,7 @@
       </div>
     </section>
   }
+</div>
 }
 
 <app-trailer-dialog #trailerDialog />

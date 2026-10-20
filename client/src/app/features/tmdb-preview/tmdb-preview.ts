@@ -42,6 +42,9 @@ import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { LocaleDatePipe } from '../../core/pipes/locale-date.pipe';
 import { localizeLanguage } from '../../core/utils/language.utils';
 import { ClampToggleDirective } from '../../shared/directives/clamp-toggle.directive';
+import { DefaultFocusDirective } from '../../shared/directives/default-focus.directive';
+import { TvRowDirective } from '../../shared/directives/tv-row.directive';
+import { TvSectionDirective } from '../../shared/directives/tv-section.directive';
 import { CollapsibleSectionComponent } from '../../shared/components/collapsible-section/collapsible-section';
 import { PreviewSeasonsComponent } from './components/preview-seasons/preview-seasons.component';
 import { MD_BREAKPOINT_QUERY, mediaQuerySignal } from '../../core/utils/viewport';
@@ -61,7 +64,7 @@ interface PreviewSeed {
 
 @Component({
   selector: 'app-tmdb-preview',
-  imports: [FormsModule, CurrencyPipe, DecimalPipe, NgTemplateOutlet, TranslatePipe, ResolveUrlPipe, LocaleDatePipe, RequestModalComponent, ImportModalComponent, MobileFanartHeroComponent, HorizontalScrollerComponent, ClampToggleDirective, CollapsibleSectionComponent, PreviewSeasonsComponent, ImgFadeInDirective, CachedSrcDirective, RequestDeclineModalComponent, RequestEditModalComponent, TrailerDialogComponent, LucideFilm, LucideUser, LucidePlay, LucidePlus],
+  imports: [FormsModule, CurrencyPipe, DecimalPipe, NgTemplateOutlet, TranslatePipe, ResolveUrlPipe, LocaleDatePipe, RequestModalComponent, ImportModalComponent, MobileFanartHeroComponent, HorizontalScrollerComponent, ClampToggleDirective, DefaultFocusDirective, TvRowDirective, TvSectionDirective, CollapsibleSectionComponent, PreviewSeasonsComponent, ImgFadeInDirective, CachedSrcDirective, RequestDeclineModalComponent, RequestEditModalComponent, TrailerDialogComponent, LucideFilm, LucideUser, LucidePlay, LucidePlus],
   templateUrl: './tmdb-preview.html',
 })
 export class TmdbPreviewComponent implements OnInit, OnDestroy {
