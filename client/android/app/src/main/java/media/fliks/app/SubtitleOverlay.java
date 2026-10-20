@@ -1,7 +1,9 @@
 package media.fliks.app;
 
+import android.app.Activity;
 import android.content.Context;
 import android.graphics.Bitmap;
+import android.os.Build;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.SurfaceView;
@@ -90,6 +92,9 @@ class SubtitleOverlay {
      *  size from it alone. */
     private static final float MIN_TEXT_SIZE_SP = 18f;
 
+    /** Larger share for the small PiP window, which gets no floor (it would dwarf the picture). */
+    private static final float PIP_TEXT_SIZE_FRACTION = 0.09f;
+
     private float fontScale = 1f;
 
     /** Bottom padding only moves cues without a `line:`; top cues are re-anchored
@@ -128,12 +133,19 @@ class SubtitleOverlay {
 
     private void applyTextSize() {
         if (subtitleView == null) return;
-        float minPx = TypedValue.applyDimension(
+        boolean pip = isInPip();
+        float minPx = pip ? 0 : TypedValue.applyDimension(
                 TypedValue.COMPLEX_UNIT_SP, MIN_TEXT_SIZE_SP * fontScale,
                 subtitleView.getResources().getDisplayMetrics());
         int shortSide = Math.min(subtitleView.getWidth(), subtitleView.getHeight());
         subtitleView.setFixedTextSize(TypedValue.COMPLEX_UNIT_PX,
-                Math.max(shortSide * TEXT_SIZE_FRACTION * fontScale, minPx));
+                Math.max(shortSide * (pip ? PIP_TEXT_SIZE_FRACTION : TEXT_SIZE_FRACTION) * fontScale, minPx));
+    }
+
+    private boolean isInPip() {
+        Context c = subtitleView.getContext();
+        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && c instanceof Activity
+                && ((Activity) c).isInPictureInPictureMode();
     }
 
     /** Dim text cues when the screen is at max brightness (HDR mode). */
