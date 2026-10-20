@@ -545,13 +545,15 @@ pub async fn translate(
     let b: TranslateBody = from_value(body.0)?;
     Ok((
         StatusCode::CREATED,
-        Json(super::translate::start(
-            &st,
-            sub,
-            b.target_language.as_deref(),
-            b.provider_id,
-            b.remove_hi_tags,
-        )
-        .await?),
+        Json(
+            super::translate::start(
+                &st,
+                sub,
+                b.target_language.as_deref(),
+                b.provider_id,
+                b.remove_hi_tags,
+            )
+            .await?,
+        ),
     ))
 }
