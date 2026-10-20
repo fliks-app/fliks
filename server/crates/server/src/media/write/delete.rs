@@ -217,12 +217,18 @@ async fn remove_orphan_edl(root: &fsx::Root, video: &std::path::Path) {
     let edl = PathBuf::from(crate::stream::edl_sidecar(&video.to_string_lossy()).await);
     let stem = |n: &str| crate::ingest::transfer::split_ext(n).0.to_lowercase();
     let mine = stem(&crate::ingest::library::file_name(video));
-    let shared = std::fs::read_dir(video.parent().unwrap_or(root.path()))
-        .into_iter()
-        .flatten()
-        .flatten()
-        .filter_map(|e| e.file_name().into_string().ok())
-        .any(|n| crate::ingest::is_video(&n) && stem(&n) == mine);
+    let mut shared = false;
+    if let Ok(mut rd) = tokio::fs::read_dir(video.parent().unwrap_or(root.path())).await {
+        while let Ok(Some(e)) = rd.next_entry().await {
+            if let Ok(n) = e.file_name().into_string()
+                && crate::ingest::is_video(&n)
+                && stem(&n) == mine
+            {
+                shared = true;
+                break;
+            }
+        }
+    }
     if shared {
         return;
     }

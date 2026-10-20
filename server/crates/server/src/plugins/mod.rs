@@ -826,7 +826,8 @@ impl Plugins {
             crate::jobs::server_tz(),
             chrono::Utc::now,
             move || {
-                st3.plugins.staging.sweep();
+                let st3 = st3.clone();
+                tokio::spawn(async move { st3.plugins.staging.sweep().await });
             },
         );
         let st4 = st.clone();

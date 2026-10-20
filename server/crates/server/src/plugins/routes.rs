@@ -307,7 +307,7 @@ pub async fn import_discard(State(st): State<AppState>, a: Authed, Path(id): Pat
             "stagingId must match /^[0-9a-f]{32}$/ regular expression",
         )));
     }
-    if !st.plugins.staging.discard(&id) {
+    if !st.plugins.staging.discard(&id).await {
         return Err(inst(ie(
             StatusCode::NOT_FOUND,
             "PLUGIN_STAGING_NOT_FOUND",

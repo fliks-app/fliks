@@ -438,7 +438,7 @@ pub async fn do_sync(st: &AppState, id: i32, o: &Options) -> Result<(), String> 
         |_| "Subtitle has no resolvable file path (check media root folder and relative path)",
     )?;
     let format = format_of(&stored)?;
-    let text = decode_text(&std::fs::read(&abs).map_err(|e| e.to_string())?);
+    let text = decode_text(&tokio::fs::read(&abs).await.map_err(|e| e.to_string())?);
     let reference = reference(o.reference.as_deref(), &dirs)?;
     let video = dirs.m.join(
         crate::ingest::fsx::safe_rel(&file.relative_path).ok_or("MediaFile path is invalid")?,

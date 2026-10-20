@@ -205,7 +205,7 @@ impl Plugins {
             Ok(i) => i,
             Err(r) => return Ok(Report::refused(r)),
         };
-        let (id, _) = self.staging.stage(bytes, origin).map_err(|e| match e {
+        let (id, _) = self.staging.stage(bytes, origin).await.map_err(|e| match e {
             super::staging::StageError::Limit => ie(
                 StatusCode::TOO_MANY_REQUESTS,
                 "PLUGIN_STAGING_LIMIT",
@@ -225,7 +225,7 @@ impl Plugins {
         staging_id: &str,
         sha256: &str,
     ) -> Result<InstallResult, InstallError> {
-        let bytes = self.staging.read(staging_id).ok_or_else(|| {
+        let bytes = self.staging.read(staging_id).await.ok_or_else(|| {
             ie(
                 StatusCode::NOT_FOUND,
                 "PLUGIN_STAGING_NOT_FOUND",
@@ -243,9 +243,9 @@ impl Plugins {
             .inspect_bytes(&bytes)
             .await
             .map_err(|r| ie(StatusCode::UNPROCESSABLE_ENTITY, r.code, r.detail))?;
-        let origin = self.staging.origin(staging_id);
+        let origin = self.staging.origin(staging_id).await;
         let r = self.promote(&bytes, &i, origin).await;
-        self.staging.discard(staging_id);
+        self.staging.discard(staging_id).await;
         r
     }
 
