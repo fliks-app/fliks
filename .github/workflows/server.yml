@@ -59,9 +59,9 @@ jobs:
       # Where `cargo xtask build` leaves the fixture.
       FLIKS_TEST_WASM_DIR: ${{ github.workspace }}/server/target/wasm32-wasip2/release
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - uses: ./.github/actions/setup-rust
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           # PR caches would evict main's from the repository's 10 GB.
           save-if: ${{ github.ref == 'refs/heads/main' }}
@@ -80,7 +80,7 @@ jobs:
       - name: build the fixture component
         working-directory: server/crates/plugin-sdk
         run: cargo xtask build examples/fixture-guest
-      - uses: taiki-e/install-action@nextest
+      - uses: taiki-e/install-action@9252097d36d2d3618ad98f5d873696a962b6897c # nextest
       # Includes the plugin host tests (`--test plugins`), which fail under CI without the fixture.
       # nextest pools every test binary instead of running them one after another; this workspace has no doctests.
       - run: cargo nextest run --workspace
@@ -117,9 +117,9 @@ jobs:
       SQLX_OFFLINE: 'true'
       CARGO_PROFILE_DEV_DEBUG: line-tables-only
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - uses: ./.github/actions/setup-rust
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
           workspaces: server

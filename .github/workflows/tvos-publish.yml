@@ -51,13 +51,13 @@ jobs:
       PUBLISH: ${{ github.event_name != 'pull_request' }}
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           # Full history → `git rev-list --count HEAD` gives a real commit
           # count for the build number.
           fetch-depth: ${{ github.event_name == 'pull_request' && 1 || 0 }}
 
-      - uses: maxim-lobanov/setup-xcode@v1
+      - uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1
         with:
           xcode-version: '26.3'
 

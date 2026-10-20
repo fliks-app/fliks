@@ -99,7 +99,7 @@ jobs:
         shell: pwsh
         run: Set-MpPreference -DisableRealtimeMonitoring $true
 
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       # The version is baked into the installer filenames and electron-builder's extraMetadata.
       - name: Resolve version
@@ -112,7 +112,7 @@ jobs:
       # transitive deps (@electron/rebuild, node-abi, app-builder-lib) require
       # Node >= 22.12, so the runner uses 22. The addon's Electron 42 ABI is
       # pinned via node-gyp --target/--dist-url and is independent of host Node.
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 22
           cache: npm
@@ -126,7 +126,7 @@ jobs:
       # store. Paths are listed for all three OSes; actions/cache skips the ones
       # that don't exist on a given runner. Keyed on the Electron major + lock.
       - name: Cache electron / electron-builder / node-gyp
-        uses: actions/cache@v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: |
             ~/.cache/electron
@@ -183,22 +183,7 @@ jobs:
       - name: Verify vendored libmpv (Linux)
         if: runner.os == 'Linux'
         shell: bash
-        run: |
-          f=desktop/native/vendor/libmpv.so.2
-          test -f "$f" || { echo "::error::vendored libmpv missing at $f"; exit 1; }
-          test -z "$(nm -D "$f" 2>/dev/null | grep ' av_')" \
-            || { echo "::error::libmpv exports av_*, will clash with Electron's libffmpeg"; exit 1; }
-          # The bundled copies only prove themselves where the host has none
-          # of them: here a non-bundled dep (libarchive) pulls the host's
-          # libxml2 in under the same SONAME. A bare container resolves them
-          # through $ORIGIN or not at all; its X11, GL and audio entries dangle
-          # by design, so only the bundled SONAMEs are read.
-          bash desktop/scripts/vendor-libmpv-linux.sh --print-sonames > /tmp/bundled
-          docker run --rm -v "$PWD/desktop/native/vendor:/v:ro" ubuntu:24.04 \
-            sh -c 'ldd /v/libmpv.so.2' | awk '/not found/ {print $1}' > /tmp/dangling
-          ours=$(grep -Fxf /tmp/bundled /tmp/dangling || true)
-          test -z "$ours" || { echo "::error::bundled libs unresolved on a clean box:"; echo "$ours"; exit 1; }
-          echo "vendored libmpv OK: $(du -sh desktop/native/vendor | cut -f1)"
+        run: bash desktop/scripts/verify-libmpv-linux.sh
 
       # From a Fliks-owned release (MPV_VENDOR_TAG): zhongfly/mpv-winbuild prunes its
       # releases after about a month. Refresh the pin per the checklist at the top.
@@ -209,22 +194,7 @@ jobs:
           MPV_VENDOR_TAG: "mpv-winbuild-2026-09-28-e470f8986e"
           MPV_VENDOR_ASSET: "mpv-x86_64-20260928-git-e470f8986e.7z"
           MPV_VENDOR_SHA256: "ddef3932aed791cdc3f2585e5798802e55171ab9dce06d3275bdd9ed2967774d"
-        run: |
-          set -euo pipefail
-          dest=desktop/native/vendor
-          mkdir -p "$dest"
-          url="https://github.com/${{ github.repository }}/releases/download/${MPV_VENDOR_TAG}/${MPV_VENDOR_ASSET}"
-          echo "Downloading mpv (Fliks-vendored): $url"
-          curl -fsSL -o "$RUNNER_TEMP/mpv.7z" "$url"
-          echo "${MPV_VENDOR_SHA256}  $RUNNER_TEMP/mpv.7z" | sha256sum -c -
-          7z x -y -o"$dest" "$RUNNER_TEMP/mpv.7z" >/dev/null
-          if [ ! -f "$dest/mpv.exe" ]; then
-            sub=$(find "$dest" -name mpv.exe -printf '%h\n' | head -1)
-            [ -n "$sub" ] && cp -rf "$sub"/. "$dest"/
-          fi
-          test -f "$dest/mpv.exe" || { echo "::error::mpv.exe missing after extract"; find "$dest" -maxdepth 2; exit 1; }
-          rm -f "$dest/libmpv.so.2"  # the committed Linux lib isn't used on Windows
-          echo "vendored mpv.exe ($(du -h "$dest/mpv.exe" | cut -f1)) + $(ls "$dest"/*.dll 2>/dev/null | wc -l) DLLs"
+        run: bash desktop/scripts/fetch-mpv-windows.sh
 
       # macOS embeds in-process libmpv (CAOpenGLLayer on the videoWin NSView).
       # Build a self-contained, relocatable libmpv.dylib (+ its deps) from the
@@ -241,17 +211,7 @@ jobs:
       - name: Verify vendored libmpv (macOS)
         if: runner.os == 'macOS'
         shell: bash
-        run: |
-          f=desktop/native/vendor/libmpv.dylib
-          test -f "$f" || { echo "::error::vendored libmpv.dylib missing at $f"; exit 1; }
-          # libmpv must export no FFmpeg symbols (else it clashes with Electron's
-          # bundled libffmpeg.dylib) — the macOS analogue of the Linux av_* check.
-          test -z "$(nm -gU "$f" 2>/dev/null | grep ' _av_')" \
-            || { echo "::error::libmpv exports _av_ — not self-contained"; exit 1; }
-          # nothing in the tree may point outside @loader_path + the system dirs.
-          stray=$(otool -L desktop/native/vendor/*.dylib | grep -E '/opt/homebrew|/usr/local' || true)
-          test -z "$stray" || { echo "::error::stray non-bundled deps:"; echo "$stray"; exit 1; }
-          echo "vendored libmpv OK: $(du -sh desktop/native/vendor | cut -f1)"
+        run: bash desktop/scripts/verify-libmpv-mac.sh
 
       # ── Build the native compositor addon against the Electron 42 ABI ──
       # Linux-only: SDL2 + GLES/EGL OSR compositor (the Mutter/X11 model). macOS
@@ -416,7 +376,7 @@ jobs:
       # On tag builds electron-builder already attached these to the Release; the
       # workflow artifact is for inspection / non-tag runs.
       - name: Upload installer artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: fliks-desktop-${{ matrix.label }}-${{ steps.version.outputs.version }}
           path: ${{ matrix.artifact_glob }}
