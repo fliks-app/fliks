@@ -1,12 +1,15 @@
 //! Subtitle burn-in resolution and the text renditions of the master (spec rules 42-45); the filter
-//! strings come from `fliks_domain::burn_in`.
+//! strings come from the engine (`fliks_engine_core::jobs::subtitles`).
 use super::file::ResolvedFile;
 use crate::{engine::resolve::lexical_resolve, http::AppError, state::AppState};
 use fliks_domain::burn_in::{
-    BurnInInfo, BurnInType, EmbeddedSubtitle, ExternalSubtitle, RenditionKind, build_filter,
-    is_image_based_codec, text_subtitle_renditions,
+    EmbeddedSubtitle, ExternalSubtitle, RenditionKind, is_image_based_codec,
+    text_subtitle_renditions,
 };
-use fliks_engine_core::api::{BurnInKind, BurnInSpec, SubtitleTrack, SubtitleTrackKind};
+use fliks_engine_core::{
+    api::{BurnInKind, BurnInSpec, SubtitleTrack, SubtitleTrackKind},
+    jobs::subtitles::{BurnInSource, burn_in_filter},
+};
 
 /// What a request burns in; `stream_index` is the image track the engine overlays.
 pub struct Resolved {
@@ -42,9 +45,9 @@ pub async fn resolve(
             .or_else(|| i.video.first().and_then(|v| v.start_time_seconds))
     });
     let kind = if image {
-        BurnInType::Image
+        BurnInKind::Image
     } else {
-        BurnInType::Text
+        BurnInKind::Text
     };
     let mut stream_index = None;
     let (subtitle_path, ordinal, cue) = if let Some(stored) =
@@ -79,22 +82,17 @@ pub async fn resolve(
     } else {
         return Err(not_found("Subtitle has no file path or stream index"));
     };
-    let domain = BurnInInfo {
+    let filter = burn_in_filter(&BurnInSource {
         kind,
         video_path,
         subtitle_path,
-        subtitle_ordinal: ordinal,
+        stream_index: ordinal,
         cue_offset_seconds: cue,
-    };
-    let filter = build_filter(&domain);
+    });
     Ok(Resolved {
         is_text: filter.is_some(),
         spec: BurnInSpec {
-            kind: if image {
-                BurnInKind::Image
-            } else {
-                BurnInKind::Text
-            },
+            kind,
             filter,
             stream_index,
         },

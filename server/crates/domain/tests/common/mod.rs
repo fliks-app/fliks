@@ -119,14 +119,24 @@ pub fn norm(v: Value) -> Value {
 
 /// Replays every case of `fixtures/<set>/cases.json` through `run(input)` (blessing under `BLESS=1`).
 pub fn replay(set: &str, count: usize, run: impl Fn(&Value) -> Value) {
+    replay_where(set, count, |_| true, run);
+}
+
+/// `replay` over the cases whose input satisfies `keep`; `count` is the number kept.
+pub fn replay_where(
+    set: &str,
+    count: usize,
+    keep: impl Fn(&Value) -> bool,
+    run: impl Fn(&Value) -> Value,
+) {
     // Read at run time: a target dir shared across worktrees reuses binaries built in another one.
     let dir = std::env::var("CARGO_MANIFEST_DIR").expect("run through cargo test");
     let path = PathBuf::from(dir).join(format!("../../fixtures/{set}/cases.json"));
     let mut fx = Fixture::load(&path);
     let cases = fx.root["cases"].as_array().unwrap().clone();
-    assert_eq!(cases.len(), count);
+    assert_eq!(cases.iter().filter(|c| keep(&c["input"])).count(), count);
     let mut failed = vec![];
-    for (idx, c) in cases.iter().enumerate() {
+    for (idx, c) in cases.iter().enumerate().filter(|(_, c)| keep(&c["input"])) {
         let got = norm(run(&c["input"]));
         let mut d = vec![];
         diff("", &got, &norm(c["expected"].clone()), &mut d);

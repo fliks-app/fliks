@@ -2,6 +2,7 @@
 mod auth;
 mod auth_routes;
 mod backup_restore;
+mod burn_in;
 mod heartbeat;
 mod importers;
 mod libraries;
