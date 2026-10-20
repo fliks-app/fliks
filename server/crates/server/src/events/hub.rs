@@ -20,6 +20,8 @@ const ATTRIBUTION_TTL: Duration = Duration::from_secs(60);
 /// Bounds a device that registers and never polls.
 const POLLED_QUEUE_MAX: usize = 20;
 const BUS_CAPACITY: usize = 4096;
+/// Frames a stream may lag behind; past it the connection is closed and the client reconnects.
+const CONN_QUEUE_MAX: usize = 1024;
 
 /// What a connection (or polled target) knows about itself; absent query params stay `None`.
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -58,7 +60,7 @@ struct Conn {
     identity: Identity,
     since: i64,
     seq: u64,
-    tx: mpsc::UnboundedSender<Msg>,
+    tx: mpsc::Sender<Msg>,
 }
 
 struct Polled {
@@ -83,6 +85,8 @@ struct Inner {
     claims: HashMap<String, Claim>,
     replay: Replay,
     seq: u64,
+    /// Owners of targets evicted for a full queue, announced to their household once unlocked.
+    evicted: Vec<i32>,
 }
 
 type FanOut = Arc<dyn Fn(&SseEvent, i32) + Send + Sync>;
@@ -122,7 +126,7 @@ impl Out {
 /// connection down (rule 15).
 pub struct Connection {
     pub id: String,
-    pub(super) rx: mpsc::UnboundedReceiver<Msg>,
+    pub(super) rx: mpsc::Receiver<Msg>,
     _teardown: Teardown,
 }
 
@@ -185,7 +189,7 @@ impl Hub {
     pub fn shutdown(&self) {
         self.0.down.send_replace(true);
         for (_, c) in self.lock().conns.drain() {
-            let _ = c.tx.send(Msg::Close);
+            let _ = c.tx.try_send(Msg::Close);
         }
     }
 
@@ -255,13 +259,15 @@ impl Hub {
             return false;
         }
         self.dispatch(&mut g, Aud::Conn(connection_id), Out::sse(ev));
+        drop(g);
+        self.announce_evicted();
         true
     }
 
     /// Registers the connection and queues `sse.connected` plus the user's progress replay (rule 9).
     pub fn connect(&self, user: i32, identity: Identity) -> Connection {
         let id = uuid_v4();
-        let (tx, rx) = mpsc::unbounded_channel();
+        let (tx, rx) = mpsc::channel(CONN_QUEUE_MAX);
         let has_target = identity.target().is_some();
         {
             let mut g = self.lock();
@@ -274,7 +280,7 @@ impl Hub {
                     .collect();
                 for sid in stale {
                     if let Some(c) = g.conns.remove(&sid) {
-                        let _ = c.tx.send(Msg::Close);
+                        let _ = c.tx.try_send(Msg::Close);
                     }
                     tracing::info!("Evicted superseded connection for target {target}");
                 }
@@ -290,13 +296,13 @@ impl Hub {
             let connected = Out::sse(SseEvent::SseConnected {
                 connection_id: id.clone(),
             });
-            let _ = tx.send(Msg::Event(connected.json));
+            let _ = tx.try_send(Msg::Event(connected.json));
             for ev in g.replay.snapshot_for(user, Instant::now()) {
-                let _ = tx.send(Msg::Event(Out::sse(ev).json));
+                let _ = tx.try_send(Msg::Event(Out::sse(ev).json));
             }
             // A request accepted while shutting down would otherwise hold the graceful shutdown open.
             if *self.0.down.borrow() {
-                let _ = tx.send(Msg::Close);
+                let _ = tx.try_send(Msg::Close);
             } else {
                 g.conns.insert(
                     id.clone(),
@@ -590,8 +596,18 @@ impl Hub {
     }
 
     fn send(&self, aud: Aud<'_>, out: Out) {
-        let mut g = self.lock();
-        self.dispatch(&mut g, aud, out);
+        {
+            let mut g = self.lock();
+            self.dispatch(&mut g, aud, out);
+        }
+        self.announce_evicted();
+    }
+
+    fn announce_evicted(&self) {
+        let users = std::mem::take(&mut self.lock().evicted);
+        for user in users {
+            self.fan_out(&SseEvent::RemoteTargetsChanged {}, user);
+        }
     }
 
     /// The single funnel of every emit: records or clears the replay cache for user-scoped events
@@ -617,17 +633,25 @@ impl Hub {
                 _ => {}
             }
         }
+        let mut full = vec![];
         for (id, c) in &inner.conns {
             let to_it = match &aud {
                 Aud::All => true,
                 Aud::Users(users) => users.contains(&c.user),
                 Aud::Conn(only) => only == id,
             };
-            if to_it {
-                let _ = c.tx.send(Msg::Event(out.json.clone()));
+            if to_it && c.tx.try_send(Msg::Event(out.json.clone())).is_err() {
+                full.push(id.clone());
             }
         }
         let _ = self.0.bus.send(Arc::new(out.bus));
+        for id in full {
+            tracing::warn!("Closing SSE connection {id}: its queue is full");
+            let user = inner.conns.get(&id).map(|c| c.user);
+            if let Some(user) = user.filter(|_| self.close_locked(inner, &id)) {
+                inner.evicted.push(user);
+            }
+        }
     }
 
     fn fan_out(&self, ev: &SseEvent, owner: i32) {
@@ -653,7 +677,7 @@ impl Hub {
         let Some(c) = inner.conns.remove(id) else {
             return false;
         };
-        let _ = c.tx.send(Msg::Close);
+        let _ = c.tx.try_send(Msg::Close);
         let had_target = c.identity.target().is_some();
         if had_target {
             self.dispatch(
@@ -793,6 +817,27 @@ mod tests {
             })
             .collect();
         assert_eq!(kinds, ["sse", "sse", "domain"]);
+    }
+
+    #[test]
+    fn a_connection_that_stops_draining_is_closed_and_announced() {
+        let hub = Hub::new();
+        let calls = Arc::new(AtomicUsize::new(0));
+        let n = calls.clone();
+        hub.register_household_fan_out(move |_, _| {
+            n.fetch_add(1, Ordering::SeqCst);
+        });
+        let mut watcher = hub.connect(1, Identity::default());
+        let mut tv = hub.connect(1, at("tv#a"));
+        let _ = got(&mut watcher);
+        let calls_before = calls.load(Ordering::SeqCst);
+        for _ in 0..CONN_QUEUE_MAX {
+            hub.emit_to_connection(1, &tv.id, SseEvent::QueueUpdated {});
+        }
+        assert!(!hub.has_connection(&tv.id));
+        assert_eq!(got(&mut watcher), [CHANGED]);
+        assert_eq!(calls.load(Ordering::SeqCst), calls_before + 1);
+        assert_eq!(got(&mut tv).len(), CONN_QUEUE_MAX);
     }
 
     #[test]
