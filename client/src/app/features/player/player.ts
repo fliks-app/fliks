@@ -4,7 +4,6 @@ import {
   ElementRef,
   OnDestroy,
   ViewEncapsulation,
-  WritableSignal,
   computed,
   effect,
   inject,
@@ -14,13 +13,12 @@ import {
 } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Title } from '@angular/platform-browser';
-import { Subscription } from 'rxjs';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { StreamingApiService, PlaybackInfoResponse } from '../../core/services/api/streaming-api.service';
 import { MediaService, Media } from '../../core/services/api/media.service';
 import { BrowserDeviceProfileService, DeviceProfile } from '../../core/services/browser-device-profile.service';
 import type { PreRollItem } from '@fliks/plugin-ui';
-import { SseService, RemoteCommand, RemoteQualityRung } from '../../core/services/sse.service';
+import { SseService, RemoteQualityRung } from '../../core/services/sse.service';
 import { RemoteService } from '../../core/services/remote.service';
 import { remoteOverlayOpen } from '../../core/services/remote-playback-target';
 import { PickerRow } from '../../shared/remote-picker/remote-picker-list';
@@ -43,9 +41,8 @@ import { ServerConfigService } from '../../core/services/server-config.service';
 import { NavigationHistoryService } from '../../core/services/navigation-history.service';
 import { ToastService } from '../../core/services/toast.service';
 import { NavbarService } from '../../core/services/navbar.service';
-import { PlaybackQueueService, QueueItem } from '../../core/services/playback-queue.service';
-import { buildSeriesQueueItems, resolvePlayableFile } from '../../shared/utils/media-play.util';
-import { buildPlayerStats, formatAudioLabel, formatAudioParts, inIntroRange, inOutroRange, parseAudioIndex, playbackModeOf, SpriteMetadata, widthForProfile, type CropRect, type OfflineCrop } from '../../core/utils/player.utils';
+import { PlaybackQueueService } from '../../core/services/playback-queue.service';
+import { buildPlayerStats, formatAudioLabel, formatAudioParts, playbackModeOf, SpriteMetadata, widthForProfile, type CropRect, type OfflineCrop } from '../../core/utils/player.utils';
 import { formatErrorDiagnostics, type PlaybackError } from '../../core/services/playback-engine/playback-error';
 import { environment } from '../../../environments/environment';
 import { normalizeLangCode } from '../../core/utils/language.utils';
@@ -71,8 +68,6 @@ import { TizenEngine, isTizenAvplayAvailable } from '../../core/services/playbac
 import { NativePlayer, type NativeSidecarSubtitle } from '../../core/plugins/native-player.plugin';
 import { Orientation, releasePlayerOrientation } from '../../core/plugins/orientation.plugin';
 import { imageUrlWithSize } from '../../core/pipes/resolve-url.pipe';
-import { NotificationLike } from '../../core/services/notification-like';
-import { LikesApiService } from '../../core/services/api/likes-api.service';
 import { PlayerStateService } from '../../core/services/player-state.service';
 import { subtitleManifestRank } from '../../core/utils/subtitle-tracks';
 import { TrackManagerService, SubtitleOption, type LaunchTracks, launchPickFor, streamIndexForTrack, trackForStreamIndex } from '../../core/services/track-manager.service';
