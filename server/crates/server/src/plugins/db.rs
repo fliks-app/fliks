@@ -173,18 +173,32 @@ impl PluginDb {
         let key = self.lock_key;
         let work = async {
             let c = lease.client.as_mut().expect("leased");
-            let mut applied = Vec::new();
-            for (name, up) in migrations {
+            let lock = format!(
+                "SET LOCAL statement_timeout = {}; SELECT pg_advisory_xact_lock({key})",
+                MIGRATE_DEADLINE.as_millis()
+            );
+            let exists: bool = c
+                .query_one("SELECT to_regclass('\"_migrations\"') IS NOT NULL", &[])
+                .await
+                .map_err(pg_err)?
+                .get(0);
+            // Checked first: IF NOT EXISTS on an existing table logs a NOTICE on every boot.
+            if !exists && !migrations.is_empty() {
                 let tx = c.transaction().await.map_err(pg_err)?;
                 tx.batch_execute(&format!(
-                    "SET LOCAL statement_timeout = {}; SELECT pg_advisory_xact_lock({key});
+                    "{lock};
                      CREATE TABLE IF NOT EXISTS \"_migrations\" (
                        \"name\" text PRIMARY KEY,
-                       \"appliedAt\" timestamptz NOT NULL DEFAULT now())",
-                    MIGRATE_DEADLINE.as_millis()
+                       \"appliedAt\" timestamptz NOT NULL DEFAULT now())"
                 ))
                 .await
                 .map_err(pg_err)?;
+                tx.commit().await.map_err(pg_err)?;
+            }
+            let mut applied = Vec::new();
+            for (name, up) in migrations {
+                let tx = c.transaction().await.map_err(pg_err)?;
+                tx.batch_execute(&lock).await.map_err(pg_err)?;
                 let done = tx
                     .query_opt("SELECT 1 FROM \"_migrations\" WHERE \"name\" = $1", &[name])
                     .await
