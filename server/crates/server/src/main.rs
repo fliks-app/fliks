@@ -1,6 +1,11 @@
 use fliks_server::config::Config;
 use std::process::ExitCode;
 
+// glibc keeps the peaks of a many-threaded server resident; musl malloc is slow under contention.
+#[cfg(target_os = "linux")]
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 #[tokio::main]
 async fn main() -> ExitCode {
     if std::env::args().nth(1).as_deref() == Some(fliks_server::plugins::compile::SUBCOMMAND) {
