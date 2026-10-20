@@ -78,6 +78,7 @@ pub async fn start(
     subtitle_id: i32,
     target_language: Option<&str>,
     provider_id: Option<i32>,
+    remove_hi_tags: bool,
 ) -> Result<Value, AppError> {
     if !flag_on(st, "subtitle_translation_enabled").await? {
         return Err(AppError::bad_request("errors.translation_disabled"));
@@ -115,7 +116,7 @@ pub async fn start(
     if target == source.language {
         return Err(AppError::bad_request("errors.source_target_language_same"));
     }
-    let remove_hi = flag_on(st, "subtitle_remove_hi_tags").await?;
+    let remove_hi = remove_hi_tags || flag_on(st, "subtitle_remove_hi_tags").await?;
     let hi = source.hearing_impaired && !remove_hi;
     let key = format!(
         "{}:{}:{target}:{}:{hi}",
@@ -177,7 +178,7 @@ pub async fn start(
         .map_or(1, |n| n.floor() as usize);
     let (st2, id) = (st.clone(), inserted.id);
     let json = new.saved_json(&inserted);
-    tokio::spawn(async move { run(&st2, id, &source, &target, &provider, max).await });
+    tokio::spawn(async move { run(&st2, id, &source, &target, &provider, max, remove_hi).await });
     Ok(json)
 }
 
@@ -188,6 +189,7 @@ async fn run(
     target: &str,
     provider: &providers::Row,
     max: usize,
+    remove_hi: bool,
 ) {
     let media_id = source.media_id.unwrap_or(0);
     let media = files::load_media(&st.db, media_id).await.ok().flatten();
@@ -199,6 +201,7 @@ async fn run(
         provider,
         max,
         media.as_ref(),
+        remove_hi,
     )
     .await;
     st.subtitles.set_translation_progress(placeholder, None);
@@ -255,6 +258,7 @@ async fn run(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn try_run(
     st: &AppState,
     placeholder: i32,
@@ -263,6 +267,7 @@ async fn try_run(
     provider: &providers::Row,
     max: usize,
     media: Option<&MediaCtx>,
+    remove_hi: bool,
 ) -> Result<String, TranslationError> {
     let other = |e: &dyn std::fmt::Display| TranslationError::Other(e.to_string());
     let media = media.ok_or_else(|| other(&"media root folder not set"))?;
@@ -349,9 +354,10 @@ async fn try_run(
                 .unwrap_or_else(|| c.text.clone()),
         })
         .collect();
-    let opts = clean_options(st, true)
+    let mut opts = clean_options(st, true)
         .await
         .map_err(|e| other(&e.text()))?;
+    opts.remove_hi_tags |= remove_hi;
     let cleaned = clean_subtitle(&serialize_srt(&out), &opts);
     let hi = source.hearing_impaired && !opts.remove_hi_tags;
     let suffix = sidecar_lang_suffix(target, source.forced, hi);

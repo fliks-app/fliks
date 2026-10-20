@@ -1184,6 +1184,7 @@
     "translate_processing": "Traduzindo",
     "translation_in_progress": "A traduzir legendas: {{langs}}",
     "translate_target_language": "Idioma de destino",
+    "translate_remove_hi": "Remover as anotações para deficientes auditivos",
     "translate_provider": "Fornecedor de tradução",
     "translate_no_providers": "Nenhum fornecedor de tradução configurado. Peça a um administrador para adicionar um nas definições.",
     "translate_hint": "Cria uma nova legenda traduzindo esta. A tradução é executada em segundo plano e mantém a sincronização original.",

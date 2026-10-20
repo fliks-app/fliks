@@ -528,6 +528,8 @@ struct TranslateBody {
     target_language: Option<String>,
     #[serde(default)]
     provider_id: Option<i32>,
+    #[serde(default)]
+    remove_hi_tags: bool,
 }
 
 #[utoipa::path(post, path = "/api/media/{id}/subtitles/{subtitleId}/translate", responses((status = 201)))]
@@ -543,6 +545,13 @@ pub async fn translate(
     let b: TranslateBody = from_value(body.0)?;
     Ok((
         StatusCode::CREATED,
-        Json(super::translate::start(&st, sub, b.target_language.as_deref(), b.provider_id).await?),
+        Json(super::translate::start(
+            &st,
+            sub,
+            b.target_language.as_deref(),
+            b.provider_id,
+            b.remove_hi_tags,
+        )
+        .await?),
     ))
 }

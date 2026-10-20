@@ -1184,6 +1184,7 @@
     "translate_processing": "Traduzione",
     "translation_in_progress": "Traduzione dei sottotitoli in corso: {{langs}}",
     "translate_target_language": "Lingua di destinazione",
+    "translate_remove_hi": "Rimuovi le annotazioni per non udenti",
     "translate_provider": "Fornitore di traduzione",
     "translate_no_providers": "Nessun fornitore di traduzione configurato. Chiedi a un amministratore di aggiungerne uno nelle impostazioni.",
     "translate_hint": "Crea un nuovo sottotitolo traducendo questo. La traduzione viene eseguita in background e mantiene la sincronizzazione originale.",

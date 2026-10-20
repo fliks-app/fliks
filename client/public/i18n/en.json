@@ -1184,6 +1184,7 @@
     "translate_processing": "Translating",
     "translation_in_progress": "Translating subtitles: {{langs}}",
     "translate_target_language": "Target language",
+    "translate_remove_hi": "Remove hearing-impaired annotations",
     "translate_provider": "Translation provider",
     "translate_no_providers": "No translation provider is configured. Ask an admin to add one in settings.",
     "translate_hint": "Create a new subtitle by translating this one. The translation runs in the background and keeps the original timing.",

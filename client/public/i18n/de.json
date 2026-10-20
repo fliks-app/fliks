@@ -1184,6 +1184,7 @@
     "translate_processing": "Übersetzen",
     "translation_in_progress": "Untertitel werden übersetzt: {{langs}}",
     "translate_target_language": "Zielsprache",
+    "translate_remove_hi": "Hörgeschädigten-Anmerkungen entfernen",
     "translate_provider": "Übersetzungsanbieter",
     "translate_no_providers": "Kein Übersetzungsanbieter konfiguriert. Bitten Sie einen Administrator, in den Einstellungen einen hinzuzufügen.",
     "translate_hint": "Erstellt einen neuen Untertitel, indem dieser übersetzt wird. Die Übersetzung läuft im Hintergrund und behält das ursprüngliche Timing bei.",

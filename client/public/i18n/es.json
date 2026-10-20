@@ -1184,6 +1184,7 @@
     "translate_processing": "Traduciendo",
     "translation_in_progress": "Traduciendo subtítulos: {{langs}}",
     "translate_target_language": "Idioma de destino",
+    "translate_remove_hi": "Eliminar las anotaciones para personas sordas",
     "translate_provider": "Proveedor de traducción",
     "translate_no_providers": "No hay ningún proveedor de traducción configurado. Pida a un administrador que añada uno en los ajustes.",
     "translate_hint": "Crea un nuevo subtítulo traduciendo este. La traducción se ejecuta en segundo plano y conserva la sincronización original.",
