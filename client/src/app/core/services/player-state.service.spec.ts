@@ -63,7 +63,7 @@ describe('PlayerStateService buffering latch', () => {
     const { service, state, fire } = setup();
     state('playing');
     state('buffering');
-    fire('timeUpdate', { position: 12, duration: 100, buffered: 20 });
+    fire('timeUpdate', { position: 1, duration: 100, buffered: 20 });
     expect(service.buffering()).toBe(false);
   });
 });
@@ -186,6 +186,20 @@ describe('PlayerStateService engine reload', () => {
     state('buffering');
     expect(service.buffering()).toBe(true);
     state('playing');
+    expect(service.buffering()).toBe(false);
+  });
+
+  it('keeps the spinner when the reloaded stream lands on its start position', () => {
+    const { service, state, fire } = setup();
+    state('playing');
+    fire('timeUpdate', { position: 120, duration: 300, buffered: 130 });
+    const end = service.beginReload();
+    fire('timeUpdate', { position: 0, duration: 0, buffered: 0 });
+    end();
+    state('buffering');
+    fire('timeUpdate', { position: 120, duration: 300, buffered: 120 });
+    expect(service.buffering()).toBe(true);
+    fire('timeUpdate', { position: 121, duration: 300, buffered: 126 });
     expect(service.buffering()).toBe(false);
   });
 
