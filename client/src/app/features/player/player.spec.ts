@@ -1059,10 +1059,10 @@ describe('PlayerComponent remux fallback (rejectCopy)', () => {
     });
     // Stale crop from before the fallback: replaced, never stacked on a server-side crop.
     h.component.webCrop.videoCropStyle.set({ transform: 'stale' } as any);
-    h.component.availableSubtitles.set([
+    h.component.subs.availableSubtitles.set([
       { id: 'sub-1', label: 'English', url: '/subs/1.vtt', language: 'en', burnIn: false },
     ]);
-    h.component.activeSubtitleId.set('sub-1');
+    h.component.subs.activeSubtitleId.set('sub-1');
     h.engine.addTextTrack.mockResolvedValueOnce({ id: 'sub-1' } as any);
     h.streamingApi.getPlaybackInfo.mockResolvedValueOnce(
       buildPi(MAIN_FILE_ID, {
@@ -1152,9 +1152,9 @@ describe('PlayerComponent selectSubtitle Cast guard', () => {
     h.component.castService.isConnected = () => true;
     h.component.castService.volume = () => 1;
     h.component.castService.muted = () => false;
-    h.component.activeBurnInId = 'burn-1';
+    h.component.subs.activeBurnInId = 'burn-1';
 
-    await h.component.selectSubtitle({
+    await h.component.subs.selectSubtitle({
       id: 'sub-1', label: 'English', url: '/subs/1.vtt', language: 'en',
       burnIn: true, subtitleDbId: 1,
     } as any);
@@ -1162,7 +1162,7 @@ describe('PlayerComponent selectSubtitle Cast guard', () => {
     expect(h.engine.setTextVisibility).not.toHaveBeenCalled();
     expect(h.engine.addTextTrack).not.toHaveBeenCalled();
     expect(h.streamingApi.stopSession).not.toHaveBeenCalled();
-    expect(h.component.activeBurnInId).toBe('burn-1');
+    expect(h.component.subs.activeBurnInId).toBe('burn-1');
   });
 });
 
@@ -1593,12 +1593,12 @@ describe('PlayerComponent reload QoE event', () => {
 
   it('flags a burn-in switch with its language, and its removal without one', async () => {
     const { h, spy } = spied();
-    h.component.availableSubtitles.set([
+    h.component.subs.availableSubtitles.set([
       subOption('emb-9', 'fr', { burnIn: true, subtitleDbId: 9, isImage: true }),
     ]);
 
-    await h.component.selectSubtitle(h.component.availableSubtitles()[0]);
-    await h.component.selectSubtitle(null);
+    await h.component.subs.selectSubtitle(h.component.subs.availableSubtitles()[0]);
+    await h.component.subs.selectSubtitle(null);
 
     expect(spy.mock.calls.map((c) => c[2])).toEqual([
       { reason: 'subtitles', to: 'fr' },
@@ -1640,7 +1640,7 @@ describe('PlayerComponent playback-info request', () => {
 
   it('reloadStream, the recovery reload and the far-seek reload all negotiate the same track state', async () => {
     const h = createHarness();
-    h.component.activeBurnInId = 7;
+    h.component.subs.activeBurnInId = 7;
     h.component.activeAudioStreamIndex = 2;
     h.engine.currentTime = 30;
 
@@ -2202,9 +2202,9 @@ describe('PlayerComponent item change', () => {
       { id: 'audio-1', label: 'French', language: 'fr' },
     ]);
     h.component.activeAudioTrackId.set('audio-1');
-    h.component.availableSubtitles.set([subOption('ext-1', 'en')]);
-    h.component.activeSubtitleId.set('ext-1');
-    h.component.activeBurnInId = 5;
+    h.component.subs.availableSubtitles.set([subOption('ext-1', 'en')]);
+    h.component.subs.activeSubtitleId.set('ext-1');
+    h.component.subs.activeBurnInId = 5;
     return h;
   }
 
@@ -2215,7 +2215,7 @@ describe('PlayerComponent item change', () => {
 
     expect(h.engine.setTextVisibility).toHaveBeenCalledWith(false);
     expect(h.engine.setTextVisibility.mock.invocationCallOrder[0]).toBeLessThan(h.engine.load.mock.invocationCallOrder[0]);
-    expect(h.component.activeSubtitleId()).toBeNull();
+    expect(h.component.subs.activeSubtitleId()).toBeNull();
     expect(h.component.activeAudioTrackId()).toBeNull();
     expect(h.component.availableAudioTracks()).toEqual([]);
     // The new file's own pick is negotiated: no burn-in, and its default-flagged English track (index 1).
@@ -2334,7 +2334,7 @@ describe('PlayerComponent subtitle selection', () => {
   ])('%s restores the active subtitle with its ordinal, embedded index and image flag', async (_name, reload) => {
     const { h } = subtitleHarness();
     h.engine.currentTime = 10;
-    h.component.availableSubtitles.set([
+    h.component.subs.availableSubtitles.set([
       ext(1, 'en'),
       ext(2, 'en'),
       subOption('emb-4', 'en', { url: '/emb4' }),
@@ -2346,7 +2346,7 @@ describe('PlayerComponent subtitle selection', () => {
       ['emb-4', 0, 4, undefined],
       ['emb-5', 0, 5, true],
     ] as const) {
-      h.component.activeSubtitleId.set(id);
+      h.component.subs.activeSubtitleId.set(id);
       h.engine.addTextTrack.mockClear();
       await reload(h.component);
       expect(h.engine.addTextTrack.mock.calls.at(-1)?.[4], id).toBe(ordinal);
@@ -2357,8 +2357,8 @@ describe('PlayerComponent subtitle selection', () => {
   it('restores on a native engine too, which the recovery reload used to skip', async () => {
     const { h } = subtitleHarness();
     h.component.isNativeEngine.set(true);
-    h.component.availableSubtitles.set([ext(1, 'en')]);
-    h.component.activeSubtitleId.set('ext-1');
+    h.component.subs.availableSubtitles.set([ext(1, 'en')]);
+    h.component.subs.activeSubtitleId.set('ext-1');
 
     await h.component.refreshSidAndReload(10, { preservePause: false, unmute: false });
 
@@ -2367,9 +2367,9 @@ describe('PlayerComponent subtitle selection', () => {
 
   it('restores nothing while Off, and leaves a burn-in to the server', async () => {
     const { h } = subtitleHarness();
-    h.component.availableSubtitles.set([ext(1, 'en', { burnIn: true })]);
+    h.component.subs.availableSubtitles.set([ext(1, 'en', { burnIn: true })]);
     await h.component.reloadStream();
-    h.component.activeSubtitleId.set('ext-1');
+    h.component.subs.activeSubtitleId.set('ext-1');
     await h.component.reloadStream();
 
     expect(h.engine.addTextTrack).not.toHaveBeenCalled();
@@ -2377,12 +2377,12 @@ describe('PlayerComponent subtitle selection', () => {
 
   it('turns the soft subtitle off before a burn-in reload, and does not bring it back', async () => {
     const { h } = subtitleHarness();
-    h.component.availableSubtitles.set([ext(1, 'en'), subOption('emb-9', 'en', { burnIn: true, subtitleDbId: 9, isImage: true })]);
-    await h.component.selectSubtitle(h.component.availableSubtitles()[0]);
+    h.component.subs.availableSubtitles.set([ext(1, 'en'), subOption('emb-9', 'en', { burnIn: true, subtitleDbId: 9, isImage: true })]);
+    await h.component.subs.selectSubtitle(h.component.subs.availableSubtitles()[0]);
     h.engine.setTextVisibility.mockClear();
     h.engine.addTextTrack.mockClear();
 
-    await h.component.selectSubtitle(h.component.availableSubtitles()[1]);
+    await h.component.subs.selectSubtitle(h.component.subs.availableSubtitles()[1]);
 
     expect(h.engine.setTextVisibility).toHaveBeenCalledWith(false);
     expect(h.engine.setTextVisibility.mock.invocationCallOrder[0]).toBeLessThan(
@@ -2390,27 +2390,27 @@ describe('PlayerComponent subtitle selection', () => {
     );
     expect((h.streamingApi.getPlaybackInfo.mock.calls.at(-1) as unknown[])[2]).toBe(9);
     expect(h.engine.addTextTrack).not.toHaveBeenCalled();
-    expect(h.component.activeSubtitleId()).toBe('emb-9');
+    expect(h.component.subs.activeSubtitleId()).toBe('emb-9');
   });
 
   it('keeps the latest pick when an older one finishes loading last', async () => {
     const { h, tracks } = subtitleHarness();
     const a = ext(1, 'en');
     const b = ext(2, 'fr');
-    h.component.availableSubtitles.set([a, b]);
+    h.component.subs.availableSubtitles.set([a, b]);
     const loads: Record<string, (t: unknown) => void> = {};
     h.engine.addTextTrack.mockImplementation(
       (_url: string, language: string) => new Promise((resolve) => (loads[language] = resolve)),
     );
 
-    const first = h.component.selectSubtitle(a);
-    const second = h.component.selectSubtitle(b);
+    const first = h.component.subs.selectSubtitle(a);
+    const second = h.component.subs.selectSubtitle(b);
     loads['fr']({ id: 'fr' });
     await second;
     loads['en']({ id: 'en' });
     await first;
 
-    expect(h.component.activeSubtitleId()).toBe('ext-2');
+    expect(h.component.subs.activeSubtitleId()).toBe('ext-2');
     expect(h.engine.selectTextTrack).toHaveBeenCalledTimes(1);
     expect(lastSelected(h)).toMatchObject({ id: 'fr' });
     expect(tracks.saveSubtitleSelection).toHaveBeenCalledTimes(1);
@@ -2421,16 +2421,16 @@ describe('PlayerComponent subtitle selection', () => {
     const { h } = subtitleHarness();
     h.component.media = TWO_EPISODES;
     const a = ext(1, 'en');
-    h.component.availableSubtitles.set([a]);
+    h.component.subs.availableSubtitles.set([a]);
     let finish: (t: unknown) => void = () => {};
     h.engine.addTextTrack.mockImplementation(() => new Promise((resolve) => (finish = resolve)));
 
-    const pick = h.component.selectSubtitle(a);
+    const pick = h.component.subs.selectSubtitle(a);
     await h.component.reloadForEpisode(EP2_FILE_ID, MEDIA_ID, undefined);
     finish({ id: 'late' });
     await pick;
 
-    expect(h.component.activeSubtitleId()).toBeNull();
+    expect(h.component.subs.activeSubtitleId()).toBeNull();
     expect(h.engine.selectTextTrack).not.toHaveBeenCalled();
   });
 
@@ -2443,13 +2443,13 @@ describe('PlayerComponent subtitle selection', () => {
     });
 
     await h.component.completeEpisodeSwitchSetup();
-    expect(h.component.activeSubtitleId()).toBe('ext-1');
+    expect(h.component.subs.activeSubtitleId()).toBe('ext-1');
     expect(tracks.saveSubtitleSelection).not.toHaveBeenCalled();
 
-    await h.component.onSelectSubtitleById('ext-1');
+    await h.component.subs.selectById('ext-1');
     expect(tracks.saveSubtitleSelection).toHaveBeenCalledWith(MEDIA_ID, 'en', true, false, false, undefined, undefined);
 
-    await h.component.onSelectSubtitleById(null);
+    await h.component.subs.selectById(null);
     expect(tracks.saveSubtitleSelection).toHaveBeenLastCalledWith(MEDIA_ID, null, undefined, false, false, undefined, undefined);
   });
 
@@ -2489,7 +2489,7 @@ describe('PlayerComponent cast session picks', () => {
     const { h, cp } = casting();
     cp['selectionFor'].mockReturnValue({ subtitleId: 'ext-5', audioStreamIndex: 2 });
     h.component.activeAudioStreamIndex = 0;
-    h.component.activeSubtitleId.set('emb-1');
+    h.component.subs.activeSubtitleId.set('emb-1');
 
     await h.component.savePosition(true);
 
@@ -2507,16 +2507,16 @@ describe('PlayerComponent cast session picks', () => {
     ) {
       const { h, cp } = casting();
       cp['selectionFor'].mockReturnValue(picked);
-      h.component.availableSubtitles.set(subs);
+      h.component.subs.availableSubtitles.set(subs);
       h.component.activeAudioStreamIndex = 0;
-      h.component.activeBurnInId = 99;
-      h.component.activeSubtitleId.set('ext-1');
+      h.component.subs.activeBurnInId = 99;
+      h.component.subs.activeSubtitleId.set('ext-1');
       let seen: unknown;
       h.component.refreshSidAndReload = vi.fn(async () => {
         seen = {
           audio: h.component.activeAudioStreamIndex,
-          burnIn: h.component.activeBurnInId,
-          subtitle: h.component.activeSubtitleId(),
+          burnIn: h.component.subs.activeBurnInId,
+          subtitle: h.component.subs.activeSubtitleId(),
         };
         return true;
       });
@@ -2556,7 +2556,7 @@ describe('PlayerComponent cast session picks', () => {
 
   it('starts a cast opened on an already-connected receiver on the subtitle the local rules pick', async () => {
     const { h, cp } = casting();
-    h.component.availableSubtitles.set([castSub('ext-5'), castSub('ext-6')]);
+    h.component.subs.availableSubtitles.set([castSub('ext-5'), castSub('ext-6')]);
     cp['resolveStartSubtitle'].mockResolvedValue(castSub('ext-6'));
     h.component.engine.unload = vi.fn(async () => {});
 
@@ -2580,13 +2580,13 @@ describe('PlayerComponent cast session picks', () => {
 
   it('hands a local Off over to the cast as Off', async () => {
     const { h, cp } = casting();
-    h.component.availableSubtitles.set([castSub('ext-5')]);
-    h.component.activeSubtitleId.set(null);
+    h.component.subs.availableSubtitles.set([castSub('ext-5')]);
+    h.component.subs.activeSubtitleId.set(null);
 
     await h.component.startCastFromPlayer(10);
 
     expect(cp['startCast'].mock.calls[0][0]).toMatchObject({ activeSubtitleId: null });
-    expect(cp['startCast'].mock.calls[0][0].subtitles).toEqual(h.component.availableSubtitles());
+    expect(cp['startCast'].mock.calls[0][0].subtitles).toEqual(h.component.subs.availableSubtitles());
   });
 });
 
@@ -2622,13 +2622,13 @@ describe('PlayerComponent subtitle delivery', () => {
   describe('bitmap subtitles', () => {
     it('are rendered by an engine that can, from the DirectPlay container', async () => {
       const h = deliveryHarness(EngineKind.ANDROID);
-      h.component.availableSubtitles.set([pgs('emb-9')]);
+      h.component.subs.availableSubtitles.set([pgs('emb-9')]);
 
-      await h.component.selectSubtitle(h.component.availableSubtitles()[0]);
+      await h.component.subs.selectSubtitle(h.component.subs.availableSubtitles()[0]);
 
       expect(negotiations(h)).toHaveLength(0);
       expect(h.engine.addTextTrack).toHaveBeenCalled();
-      expect(h.component.activeSubtitleId()).toBe('emb-9');
+      expect(h.component.subs.activeSubtitleId()).toBe('emb-9');
     });
 
     it.each([
@@ -2640,9 +2640,9 @@ describe('PlayerComponent subtitle delivery', () => {
       const h = deliveryHarness(kind);
       answerLikeServer(h);
       h.state.playbackMode.set(mode as 'direct' | 'remux');
-      h.component.availableSubtitles.set([pgs(id)]);
+      h.component.subs.availableSubtitles.set([pgs(id)]);
 
-      await h.component.selectSubtitle(h.component.availableSubtitles()[0]);
+      await h.component.subs.selectSubtitle(h.component.subs.availableSubtitles()[0]);
 
       expect(negotiations(h).at(-1)![2]).toBe(9);
       expect(h.engine.addTextTrack).not.toHaveBeenCalled();
@@ -2651,8 +2651,8 @@ describe('PlayerComponent subtitle delivery', () => {
     it('follow the play mode a reload lands on: rendered in DirectPlay, burned in once it is HLS', async () => {
       const h = deliveryHarness(EngineKind.ANDROID);
       answerLikeServer(h);
-      h.component.availableSubtitles.set([pgs('emb-9')]);
-      await h.component.selectSubtitle(h.component.availableSubtitles()[0]);
+      h.component.subs.availableSubtitles.set([pgs('emb-9')]);
+      await h.component.subs.selectSubtitle(h.component.subs.availableSubtitles()[0]);
       h.engine.addTextTrack.mockClear();
       // A quality below the source: the reload is no longer DirectPlay.
       (h.streamingApi.getPlaybackInfo as any).mockImplementation(async (id: number, _p: any, burnIn?: number) =>
@@ -2662,7 +2662,7 @@ describe('PlayerComponent subtitle delivery', () => {
       await h.component.reloadStream();
 
       expect(negotiations(h).map((c) => c[2])).toEqual([undefined, 9]);
-      expect(h.component.activeBurnInId).toBe(9);
+      expect(h.component.subs.activeBurnInId).toBe(9);
       expect(h.component.playbackMode()).toBe('transcode');
       expect(h.engine.addTextTrack).not.toHaveBeenCalled();
     });
@@ -2670,8 +2670,8 @@ describe('PlayerComponent subtitle delivery', () => {
     it('stay burned in across further reloads without renegotiating again', async () => {
       const h = deliveryHarness(EngineKind.IOS);
       answerLikeServer(h);
-      h.component.availableSubtitles.set([pgs('emb-9')]);
-      await h.component.selectSubtitle(h.component.availableSubtitles()[0]);
+      h.component.subs.availableSubtitles.set([pgs('emb-9')]);
+      await h.component.subs.selectSubtitle(h.component.subs.availableSubtitles()[0]);
       const before = negotiations(h).length;
 
       await h.component.reloadStream();
@@ -2682,16 +2682,16 @@ describe('PlayerComponent subtitle delivery', () => {
     it('are not brought back when a text subtitle replaces the burned-in one', async () => {
       const h = deliveryHarness(EngineKind.WEB);
       answerLikeServer(h);
-      h.component.availableSubtitles.set([pgs('emb-9'), dbSub('ext-1', 'en')]);
-      await h.component.selectSubtitle(h.component.availableSubtitles()[0]);
+      h.component.subs.availableSubtitles.set([pgs('emb-9'), dbSub('ext-1', 'en')]);
+      await h.component.subs.selectSubtitle(h.component.subs.availableSubtitles()[0]);
       const before = negotiations(h).length;
 
-      await h.component.selectSubtitle(h.component.availableSubtitles()[1]);
+      await h.component.subs.selectSubtitle(h.component.subs.availableSubtitles()[1]);
 
       expect(negotiations(h)).toHaveLength(before + 1);
       expect(negotiations(h).at(-1)![2]).toBeUndefined();
-      expect(h.component.activeBurnInId).toBeNull();
-      expect(h.component.activeSubtitleId()).toBe('ext-1');
+      expect(h.component.subs.activeBurnInId).toBeNull();
+      expect(h.component.subs.activeSubtitleId()).toBe('ext-1');
     });
   });
 
@@ -2701,9 +2701,9 @@ describe('PlayerComponent subtitle delivery', () => {
     it('renegotiates once for HLS on an explicit pick in DirectPlay, before selecting the track', async () => {
       const h = deliveryHarness(EngineKind.IOS);
       answerLikeServer(h);
-      h.component.availableSubtitles.set([text(), dbSub('ext-2', 'fr')]);
+      h.component.subs.availableSubtitles.set([text(), dbSub('ext-2', 'fr')]);
 
-      await h.component.selectSubtitle(h.component.availableSubtitles()[0]);
+      await h.component.subs.selectSubtitle(h.component.subs.availableSubtitles()[0]);
 
       expect(negotiations(h)).toHaveLength(1);
       expect(negotiations(h)[0][1]).toMatchObject({ needsHlsSubtitles: true });
@@ -2711,17 +2711,17 @@ describe('PlayerComponent subtitle delivery', () => {
       expect(h.engine.load.mock.invocationCallOrder[0]).toBeLessThan(h.engine.addTextTrack.mock.invocationCallOrder[0]);
 
       // The rendition exists now: the next pick needs no reload.
-      await h.component.selectSubtitle(h.component.availableSubtitles()[1]);
+      await h.component.subs.selectSubtitle(h.component.subs.availableSubtitles()[1]);
       expect(negotiations(h)).toHaveLength(1);
     });
 
     it('stops asking for HLS once the subtitle is turned off', async () => {
       const h = deliveryHarness(EngineKind.IOS);
       answerLikeServer(h);
-      h.component.availableSubtitles.set([text()]);
-      await h.component.selectSubtitle(h.component.availableSubtitles()[0]);
+      h.component.subs.availableSubtitles.set([text()]);
+      await h.component.subs.selectSubtitle(h.component.subs.availableSubtitles()[0]);
 
-      await h.component.selectSubtitle(null);
+      await h.component.subs.selectSubtitle(null);
       await h.component.reloadStream();
 
       expect(negotiations(h).at(-1)![1].needsHlsSubtitles).toBeUndefined();
@@ -2732,9 +2732,9 @@ describe('PlayerComponent subtitle delivery', () => {
       ['a server that does not know the field', EngineKind.IOS, false],
     ])('keeps DirectPlay for %s', async (_why, kind, serverFeature) => {
       const h = deliveryHarness(kind, { serverFeature });
-      h.component.availableSubtitles.set([text()]);
+      h.component.subs.availableSubtitles.set([text()]);
 
-      await h.component.selectSubtitle(h.component.availableSubtitles()[0]);
+      await h.component.subs.selectSubtitle(h.component.subs.availableSubtitles()[0]);
 
       expect(negotiations(h)).toHaveLength(0);
       expect(h.engine.addTextTrack).toHaveBeenCalled();
@@ -2742,9 +2742,9 @@ describe('PlayerComponent subtitle delivery', () => {
 
     it('does not leave a bitmap pick the engine renders itself', async () => {
       const h = deliveryHarness(EngineKind.IOS);
-      h.component.availableSubtitles.set([pgs('emb-9')]);
+      h.component.subs.availableSubtitles.set([pgs('emb-9')]);
 
-      await h.component.selectSubtitle(h.component.availableSubtitles()[0]);
+      await h.component.subs.selectSubtitle(h.component.subs.availableSubtitles()[0]);
 
       expect(negotiations(h).at(-1)![1].needsHlsSubtitles).toBeUndefined();
     });
@@ -2884,17 +2884,17 @@ describe('PlayerComponent offline subtitle order', () => {
   it('ranks same-language downloads like the manifest, so the Nth pick is the Nth rendition', async () => {
     const h = offlineHarness(['ext-9', 'emb-4']);
     await h.component.loadOfflineSubtitles();
-    const [first, second] = h.component.availableSubtitles();
+    const [first, second] = h.component.subs.availableSubtitles();
 
     expect([first.id, second.id]).toEqual(['offline-sub-1', 'offline-sub-0']);
-    expect(h.component.subtitleOrdinal(first)).toBe(0);
-    expect(h.component.subtitleOrdinal(second)).toBe(1);
+    expect(h.component.subs.subtitleOrdinal(first)).toBe(0);
+    expect(h.component.subs.subtitleOrdinal(second)).toBe(1);
   });
 
   it('labels downloads on two lines like the online menu, the flags on the subline', async () => {
     const h = offlineHarness(['emb-3'], { forced: true, hearingImpaired: false, codec: 'subrip' });
     await h.component.loadOfflineSubtitles();
-    const [sub] = h.component.availableSubtitles();
+    const [sub] = h.component.subs.availableSubtitles();
 
     expect([sub.menuHead, sub.menuSub]).toEqual(['en', 'forced']);
   });
@@ -2902,7 +2902,7 @@ describe('PlayerComponent offline subtitle order', () => {
   it('shows the stored one-line label for a download saved before its descriptors', async () => {
     const h = offlineHarness(['emb-3']);
     await h.component.loadOfflineSubtitles();
-    const [sub] = h.component.availableSubtitles();
+    const [sub] = h.component.subs.availableSubtitles();
 
     expect([sub.menuHead, sub.menuSub]).toEqual(['s0', '']);
   });
@@ -2923,9 +2923,9 @@ describe('PlayerComponent negotiation entry points', () => {
 
   it('negotiates a pre-roll item through the shared path, without the main file\'s picks', async () => {
     const h = createHarness({ preRoll: [{ mediaFileId: TRAILER_FILE_ID }] });
-    h.component.activeBurnInId = 7;
+    h.component.subs.activeBurnInId = 7;
     h.component.activeAudioStreamIndex = 2;
-    h.component.needsHlsSubtitles = true;
+    h.component.subs.needsHlsSubtitles = true;
     const negotiate = vi.spyOn(h.component, 'negotiatePlayback');
 
     await h.component.maybeStartPreRoll(undefined);

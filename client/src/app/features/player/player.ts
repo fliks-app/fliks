@@ -98,8 +98,6 @@ interface ImmersivePlugin {
 /** Long enough to fold a start-up burst into one report, short enough that a
  *  controller still sees the change in about a frame's time. */
 const FORCED_SAVE_COALESCE_MS = 300;
-/** Server feature: `needsHlsSubtitles` is a known field of the device profile. */
-const HLS_SUBTITLE_REQUEST_FEATURE = 'hlsSubtitleRequest';
 
 const Immersive = registerPlugin<ImmersivePlugin>('Immersive');
 
@@ -123,6 +121,7 @@ import { CueController } from './cue-controller';
 import { QueueController } from './queue-controller';
 import { RemoteController } from './remote-controller';
 import { KeyboardController } from './keyboard-controller';
+import { SubtitleController } from './subtitle-controller';
 import { isMutedAt } from '../../core/utils/edl-policy';
 import { PlayerStatsOverlayComponent, PlayerStats } from './overlay/player-stats-overlay';
 import { SubtitleSyncPanelComponent } from './overlay/subtitle-sync-panel/subtitle-sync-panel';
@@ -131,7 +130,7 @@ import { DefaultFocusDirective } from '../../shared/directives/default-focus.dir
 @Component({
   imports: [TranslatePipe, LucideAirplay, LucideInfo, LucideVolumeX, LucideX, PlayerControlsComponent, PlayerStatsOverlayComponent, SubtitleSyncPanelComponent, PlayerErrorOverlayComponent, DefaultFocusDirective],
   templateUrl: './player.html',
-  providers: [ControlsVisibilityService, CopyFallbackController, WebVideoCropController, QueueController, RemoteController],
+  providers: [ControlsVisibilityService, CopyFallbackController, WebVideoCropController, QueueController, RemoteController, SubtitleController],
   encapsulation: ViewEncapsulation.None,
   styles: [`
     .player-container {
@@ -531,10 +530,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   readonly spriteUrl = signal<string | null>(null);
   readonly spriteMetadata = signal<SpriteMetadata | null>(null);
-  readonly activeSubtitleId = signal<string | null>(null);
   readonly activeAudioTrackId = signal<string | null>(null);
   readonly availableAudioTracks = signal<AudioOption[]>([]);
-  readonly availableSubtitles = signal<SubtitleOption[]>([]);
 
   /** Audio tracks from streamInfo for the Cast remote */
   readonly castAudioOptions = computed<CastAudioOption[]>(() => {
@@ -588,6 +585,17 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     onSpeedChange: (r) => this.onSpeedChange(r),
     stepFrame: (d) => this.stepFrame(d),
   });
+  protected readonly subs = inject(SubtitleController);
+  private readonly _subsAttach = (this.subs.attach({
+    engine: () => this.engine,
+    isOfflinePlayback: () => this.isOfflinePlayback,
+    mediaId: () => this.mediaId,
+    mediaFileId: () => this.mediaFileId,
+    playbackMode: () => this.playbackMode(),
+    readsSubtitlesAtLoad: () => this.isNative && !this.isDesktopNative,
+    reloadStream: (at, why) => this.reloadStream(at, why),
+    doReloadStream: (position) => this.doReloadStream(position),
+  }), null);
   protected readonly remote = inject(RemoteController);
   private readonly _remoteAttach = (this.remote.attach({
     mediaFileId: () => this.mediaFileId,
@@ -601,7 +609,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     savePosition: (force) => this.savePosition(force),
     localAudioTrackId: (i) => this.availableAudioTracks()[i]?.id,
     onSelectAudioTrack: (id) => this.onSelectAudioTrack(id),
-    onSelectSubtitleById: (id) => this.onSelectSubtitleById(id),
+    onSelectSubtitleById: (id) => this.subs.selectById(id),
     onSelectQualityById: (id) => this.onSelectQualityById(id),
   }), null);
   private readonly remoteCommandEffect = effect(() => this.remote.onAdminEvent());
@@ -702,7 +710,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   /** Bumped whenever {@link media} is (re)assigned so reactive computeds re-run. */
   private readonly mediaLoadedTick = signal(0);
-  private activeBurnInId: number | null = null;
   /** The audio the viewer is meant to hear: an index into the file's
    *  `streamInfo.audio`. The one source of truth every load path negotiates and
    *  configures from; the engine's own track is reconciled to it, never the reverse. */
@@ -713,12 +720,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private audioSwitchPending: string | null = null;
   /** Bumped by every audio switch: an older one that settles late must not touch the UI. */
   private audioRequest = 0;
-  /** Bumped by every subtitle request (and by a new item): an older one whose
-   *  addTextTrack settles late may neither move the check mark nor be remembered. */
-  private subtitleRequest = 0;
-  /** A text subtitle is on screen, or about to be, on an engine that can only show
-   *  it as an HLS rendition: every negotiation then leaves DirectPlay. */
-  private needsHlsSubtitles = false;
   private audioTracksTimer: ReturnType<typeof setTimeout> | null = null;
   /** The playing file's subtitle list, fetched once: the native engine needs the
    *  sidecars before load(), the picker after it. */
@@ -1115,7 +1116,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           // don't pre-select here (that earlier pass was a redundant, less
           // complete duplicate — it skipped visibility / burn-in handling).
           const subs = await tvSubsPromise;
-          this.availableSubtitles.set(subs);
+          this.subs.availableSubtitles.set(subs);
         } else if (this.isDesktopNative || this.isNative) {
           // Native player path (Electron+mpv on desktop, ExoPlayer/AVPlayer on
           // Capacitor mobile). Subtitles arrive as HLS SUBTITLES renditions in
@@ -2120,8 +2121,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    *  by a click, so report the value rather than the gesture. */
   private lastReportedTracks = '';
   private readonly trackReportEffect = effect(() => {
-    const picks = this.castService.isConnected() ? this.castPlayerService : this;
-    const key = `${this.mediaFileId}|${picks.activeAudioTrackId()}|${picks.activeSubtitleId()}`;
+    const casting = this.castService.isConnected();
+    const audioId = casting ? this.castPlayerService.activeAudioTrackId() : this.activeAudioTrackId();
+    const subtitleId = casting ? this.castPlayerService.activeSubtitleId() : this.subs.activeSubtitleId();
+    const key = `${this.mediaFileId}|${audioId}|${subtitleId}`;
     untracked(() => {
       if (!this.state.videoStarted()) return;
       if (this.lastReportedTracks === key) return;
@@ -2375,7 +2378,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    *  `subtitleId` is the subtitle the cast starts on: the local pick unless the caller has none. */
   private async startCastFromPlayer(
     position?: number,
-    subtitleId: string | null = this.activeSubtitleId(),
+    subtitleId: string | null = this.subs.activeSubtitleId(),
   ) {
     const localSid = this.playbackInfo?.sessionId;
 
@@ -2387,7 +2390,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       episodeTitle: this.episodeTitle(),
       fanartUrl: this.fanartUrl(),
       playbackMode: this.playbackMode(),
-      subtitles: this.availableSubtitles(),
+      subtitles: this.subs.availableSubtitles(),
       qualities: [],
       audioTracks: this.castAudioOptions(),
       activeQualityId: this.activeQualityId(),
@@ -2433,8 +2436,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const onScreen = fileId === this.mediaFileId;
     const own = this.deviceProfileFor(fileId);
     const request = {
-      profile: onScreen && this.needsHlsSubtitles ? { ...own, needsHlsSubtitles: true } : own,
-      burnInId: onScreen ? this.activeBurnInId : null,
+      profile: onScreen && this.subs.needsHlsSubtitles ? { ...own, needsHlsSubtitles: true } : own,
+      burnInId: onScreen ? this.subs.activeBurnInId : null,
       audioStreamIndex: onScreen ? this.activeAudioStreamIndex : undefined,
       quality: this.resolveStartQuality(),
       ...over,
@@ -2472,26 +2475,17 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     return this.subtitleFetch.list;
   }
 
-  /** Whether a text subtitle reaches this engine in DirectPlay only as an HLS rendition,
-   *  and the server can be asked for one. */
-  private textNeedsHls(): boolean {
-    return (
-      !this.deviceProfileService.engineTraits().sideloadsDirectPlaySubtitles &&
-      this.authService.hasServerFeature(HLS_SUBTITLE_REQUEST_FEATURE)
-    );
-  }
-
   /** The subtitle the item opens on, once its list and audio are known. This is the one use
    *  of the launch pick, so the item's later reloads and episode switches never see it. */
   private async autoSelectSubtitle(): Promise<void> {
     const picked = this.launchPick()?.subtitleId;
     if (this.launchPick()) this.launchTracks = null;
     await this.trackManager.autoSelectSubtitle(
-      this.availableSubtitles(),
+      this.subs.availableSubtitles(),
       this.availableAudioTracks(),
       this.activeAudioTrackId(),
       this.mediaFileId,
-      (sub) => this.applySubtitle(sub),
+      (sub) => this.subs.applySubtitle(sub),
       this.mediaId,
       this.targetAudioLanguage(),
       picked,
@@ -2501,15 +2495,15 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   /** Settles before the negotiation whether the automatic selection will pick a text
    *  subtitle this engine can't sideload, so the first load is already HLS. */
   private async planSubtitleDelivery(): Promise<void> {
-    this.needsHlsSubtitles = false;
-    if (!this.textNeedsHls()) return;
+    this.subs.needsHlsSubtitles = false;
+    if (!this.subs.textNeedsHls()) return;
     const auto: { sub: SubtitleOption | null } = { sub: null };
     await this.trackManager.autoSelectSubtitle(
       await this.itemSubtitles(), [], null, this.mediaFileId,
       async (sub) => { auto.sub = sub; },
       this.mediaId, this.targetAudioLanguage(), this.launchPick()?.subtitleId,
     );
-    this.needsHlsSubtitles = !!auto.sub && !auto.sub.burnIn;
+    this.subs.needsHlsSubtitles = !!auto.sub && !auto.sub.burnIn;
   }
 
   /** Sidecar subtitles for the native MediaItem. Direct play carries the external
@@ -2521,7 +2515,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (this.playbackMode() !== 'direct') return [];
     return (await this.itemSubtitles())
       .filter((s) => !s.burnIn && !!s.url && s.id.startsWith('ext-'))
-      .sort((a, b) => this.manifestRank(a) - this.manifestRank(b))
+      .sort((a, b) => this.subs.manifestRank(a) - this.subs.manifestRank(b))
       .map((s) => ({ url: s.url, language: s.language, label: s.label, forced: !!s.forced }));
   }
 
@@ -2536,11 +2530,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.activeAudioTrackId.set(null);
     this.activeAudioStreamIndex = undefined;
     this.audioSwitchPending = null;
-    this.availableSubtitles.set([]);
-    this.activeSubtitleId.set(null);
-    this.activeBurnInId = null;
-    this.needsHlsSubtitles = false;
-    this.subtitleRequest++;
+    this.subs.availableSubtitles.set([]);
+    this.subs.activeSubtitleId.set(null);
+    this.subs.activeBurnInId = null;
+    this.subs.needsHlsSubtitles = false;
+    this.subs.subtitleRequest++;
   }
 
   /** The target's language for engines that pre-select by it (Shaka, mpv `alang`), unless a
@@ -2637,7 +2631,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       );
       this.restorePlaybackRate();
       this.restorePlayState(wasPaused);
-      await this.restoreSubtitle(pos);
+      await this.subs.restoreSubtitle(pos);
       return true;
     } catch (e) {
       if (!this.fallBackFromRemuxOnLoadError(e, pos)) throw e;
@@ -2711,9 +2705,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         // Offline: load pre-downloaded subtitles from local storage (no API)
         await this.loadOfflineSubtitles();
         this.loadAudioTracks();
-      } else if (!this.availableSubtitles().length) {
+      } else if (!this.subs.availableSubtitles().length) {
         // The fetch started in parallel with engine.load (Shaka + native).
-        this.availableSubtitles.set(await this.itemSubtitles());
+        this.subs.availableSubtitles.set(await this.itemSubtitles());
         this.loadAudioTracks();
       } else {
         this.loadAudioTracks();
@@ -2733,7 +2727,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       const startPos = resumeTime ?? this.engine!.currentTime;
       // The local auto-select was refused while casting: the cast starts on what it would have picked.
       const startSubtitle = await this.castPlayerService.resolveStartSubtitle(
-        this.availableSubtitles(), this.mediaFileId, this.mediaId, this.targetAudioLanguage(),
+        this.subs.availableSubtitles(), this.mediaFileId, this.mediaId, this.targetAudioLanguage(),
       );
       await this.startCastFromPlayer(startPos, startSubtitle?.id ?? null);
     } else if (!this.isNativeEngine() || this.isDesktopNative) {
@@ -2789,7 +2783,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   /** Post-load steps for an episode switch, run after its own load or its copy fallback. */
   private async completeEpisodeSwitchSetup(): Promise<void> {
-    this.availableSubtitles.set(await this.itemSubtitles());
+    this.subs.availableSubtitles.set(await this.itemSubtitles());
     this.loadAudioTracks();
     await this.autoSelectSubtitle();
 
@@ -3211,9 +3205,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const picked = this.castPlayerService.selectionFor(this.mediaFileId);
     if (!picked) return;
     if (picked.audioStreamIndex != null) this.activeAudioStreamIndex = picked.audioStreamIndex;
-    const sub = this.availableSubtitles().find((s) => s.id === picked.subtitleId);
-    this.activeSubtitleId.set(sub?.id ?? null);
-    this.activeBurnInId = sub?.burnIn ? (sub.subtitleDbId ?? null) : null;
+    const sub = this.subs.availableSubtitles().find((s) => s.id === picked.subtitleId);
+    this.subs.activeSubtitleId.set(sub?.id ?? null);
+    this.subs.activeBurnInId = sub?.burnIn ? (sub.subtitleDbId ?? null) : null;
   }
 
   /** A reload rebuilds the engine's pipeline at the default rate, so the UI
@@ -3394,7 +3388,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   /** Load offline subtitles into the subtitle picker (no API calls). */
   private async loadOfflineSubtitles() {
-    this.availableSubtitles.set(await this.offlineSubtitleOptions());
+    this.subs.availableSubtitles.set(await this.offlineSubtitleOptions());
   }
 
   /** Apply the user's subtitle style to a native engine, plus the bar-clearance
@@ -3533,209 +3527,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (request === this.audioRequest) this.restorePlayState(wasPaused);
   }
 
-  private manifestRank(s: SubtitleOption): number {
-    return subtitleManifestRank(s.trackKey ?? s.id);
-  }
-
-  /** 0-based ordinal of a soft subtitle among the tracks that share its
-   *  (language, forced) — several same-language subs can't be told apart by
-   *  language alone, so the engines pick the Nth one. */
-  private subtitleOrdinal(sub: SubtitleOption): number {
-    const peers = this.availableSubtitles()
-      .filter(
-        (s) =>
-          !s.isImage &&
-          !s.burnIn &&
-          s.language === sub.language &&
-          !!s.forced === !!sub.forced,
-      )
-      .sort((a, b) => this.manifestRank(a) - this.manifestRank(b));
-    const idx = peers.findIndex((s) => s.id === sub.id);
-    return idx < 0 ? 0 : idx;
-  }
-
-  /** A viewer's pick (menu, remote command): applied, then remembered. Automatic picks
-   *  use {@link applySubtitle} alone, so they never harden into the viewer's choice. */
-  async selectSubtitle(sub: SubtitleOption | null): Promise<void> {
-    if (!(await this.applySubtitle(sub))) return;
-    const image = !!(sub?.isImage || sub?.burnIn);
-    this.trackManager.saveSubtitleSelection(
-      this.mediaId,
-      sub?.language ?? null,
-      sub?.forced,
-      !!sub?.id.startsWith('emb-'),
-      image,
-      sub?.hearingImpaired,
-      sub?.languageTag,
-    );
-  }
-
-  /** Puts `sub` on screen (null: Off) and moves the active id. False when it did
-   *  not take effect: no engine, casting, a load failure, or a newer request. */
-  private async applySubtitle(sub: SubtitleOption | null): Promise<boolean> {
-    if (!this.engine) return false;
-    // Cast owns subtitle selection once connected (via CastPlayerService.selectSubtitle):
-    // an auto-select racing in from the local engine must not reload it instead.
-    if (this.castService.isConnected()) return false;
-    const request = ++this.subtitleRequest;
-    this.chrome.resetHideTimer();
-
-    if (!sub) {
-      this.hideSoftSubtitle();
-      this.needsHlsSubtitles = false;
-      this.activeSubtitleId.set(null);
-      if (!this.isOfflinePlayback && this.activeBurnInId) {
-        this.activeBurnInId = null;
-        await this.reloadStream(undefined, { reason: 'subtitles' });
-      }
-      return request === this.subtitleRequest;
-    }
-
-    // A bitmap sub the engine can't render from this playback is burned in: the
-    // reload re-negotiates with it, and the server answers with a transcode.
-    if (this.burnsIn(sub) && sub.subtitleDbId) {
-      // The reload doesn't touch the engine's own selection: without this the
-      // soft track would show under the burned-in one.
-      this.hideSoftSubtitle();
-      this.needsHlsSubtitles = false;
-      this.activeBurnInId = sub.subtitleDbId;
-      this.activeSubtitleId.set(sub.id);
-      await this.reloadStream(undefined, { reason: 'subtitles', to: sub.language });
-      return request === this.subtitleRequest;
-    }
-
-    const previousNeedsHls = this.needsHlsSubtitles;
-    try {
-      this.needsHlsSubtitles = !sub.burnIn && this.textNeedsHls();
-      // A text sub on an engine that can't sideload it into a raw file needs the
-      // HLS master's renditions: renegotiate once, before the track is selected.
-      const leavesDirectPlay =
-        this.needsHlsSubtitles && this.playbackMode() === 'direct' && !this.isOfflinePlayback;
-      const burnedIn = this.activeBurnInId != null;
-      this.activeBurnInId = null;
-      // The burned-in pick is replaced: the restore after the reload must not bring it back.
-      if (burnedIn) this.activeSubtitleId.set(null);
-      if ((burnedIn || leavesDirectPlay) && !this.isOfflinePlayback) {
-        await this.reloadStream(undefined, {
-          reason: 'subtitles',
-          ...(leavesDirectPlay && { from: 'hls', to: sub.language }),
-        });
-      }
-      if (!(await this.showSoftSubtitle(sub, request))) return false;
-    } catch (e) {
-      // Surface the failure instead of silently moving the checkmark to a track
-      // that never loaded — leave the prior selection and the picker in place so
-      // the user can pick another.
-      console.error('[Player] Failed to load subtitle:', e);
-      this.needsHlsSubtitles = previousNeedsHls;
-      this.toast.error(this.translate.instant('player.subtitle_load_failed'));
-      return false;
-    }
-    this.activeSubtitleId.set(sub.id);
-    return true;
-  }
-
-  /** Whether `sub` reaches the screen burned into the video: a bitmap subtitle is
-   *  rendered by the engine only when it can AND this playback carries the track,
-   *  which only a DirectPlay container does. */
-  private burnsIn(sub: SubtitleOption): boolean {
-    if (!sub.burnIn) return false;
-    const rendersFromContainer =
-      this.deviceProfileService.engineTraits().supportsImageSubtitles === true &&
-      this.playbackMode() === 'direct' &&
-      sub.id.startsWith('emb-');
-    return !rendersFromContainer;
-  }
-
-  private hideSoftSubtitle(): void {
-    try { this.engine?.setTextVisibility(false); } catch {}
-  }
-
-  /** Loads `sub` into the engine and selects it unless a newer request took over;
-   *  every engine gets the same descriptor (ordinal, embedded index, image flag). */
-  private async showSoftSubtitle(sub: SubtitleOption, request: number): Promise<boolean> {
-    const engine = this.engine;
-    if (!engine) return false;
-    const track = await engine.addTextTrack(
-      sub.url, sub.language, sub.label, sub.forced, this.subtitleOrdinal(sub),
-    );
-    if (request !== this.subtitleRequest || engine !== this.engine) return false;
-    // Keep the engine track's own id: Shaka matches the rendition by it; the
-    // other engines key off language/forced/embIndex.
-    engine.selectTextTrack({
-      ...track,
-      embIndex: sub.id.startsWith('emb-') ? Number(sub.id.slice(4)) : null,
-      image: sub.isImage,
-    });
-    // The resync panel previews the cues itself, so the engine stays hidden meanwhile.
-    if (this.subtitleSyncOpen()) this.hideSoftSubtitle();
-    else try { engine.setTextVisibility(true); } catch {}
-    return true;
-  }
-
-  // ── Subtitle resync panel ──
-
-  readonly subtitleSyncOpen = signal(false);
-  /** The panel takes the controls' place: none are shown, a tap plays or pauses. */
-  protected readonly syncHidesControls = this.subtitleSyncOpen.asReadonly();
-  protected subtitleSyncOpener: HTMLElement | null = null;
-  protected readonly syncSubtitle = computed(
-    () => this.availableSubtitles().find((s) => s.id === this.activeSubtitleId()) ?? null,
-  );
-  protected readonly syncTextTracks = computed(() => this.availableSubtitles().filter((s) => !s.isImage && !s.burnIn));
-  protected readonly subtitleTime = () => this.engine?.currentTime ?? 0;
   protected get syncMediaId() { return this.mediaId; }
   protected get syncMediaFileId() { return this.mediaFileId; }
 
   protected onTapOverlay() {
-    if (this.syncHidesControls()) this.onTogglePlay();
+    if (this.subs.syncHidesControls()) this.onTogglePlay();
     else this.chrome.toggle();
-  }
-
-  protected onOpenSubtitleSync(opener: HTMLElement | null) {
-    this.subtitleSyncOpener = opener;
-    this.subtitleSyncOpen.set(true);
-    this.hideSoftSubtitle();
-    const tracks = this.syncTextTracks();
-    if (!tracks.some((s) => s.id === this.activeSubtitleId()) && tracks.length) void this.onSelectSubtitleById(tracks[0].id);
-  }
-
-  protected onCloseSubtitleSync() {
-    this.subtitleSyncOpen.set(false);
-    const sub = this.syncSubtitle();
-    if (!sub || this.burnsIn(sub)) return;
-    this.showSoftSubtitle(sub, this.subtitleRequest).catch((e) => console.error('[Player] restore subtitle failed:', e));
-  }
-
-  /** A new URL makes engines (Shaka caches sideloaded tracks by URL) load the edited file. */
-  protected onSubtitleContentChanged(id: string) {
-    const rev = `rev=${Date.now()}`;
-    this.availableSubtitles.update((list) =>
-      list.map((s) => (s.id === id ? { ...s, url: s.url.replace(/[?&]rev=\d+/, '') + (s.url.includes('?') ? '&' : '?') + rev } : s)),
-    );
-    // ExoPlayer reads subtitles at load(), so a new file needs a stream reload.
-    if (this.isNative && !this.isDesktopNative) void this.reloadStream(undefined, { reason: 'other' });
-  }
-
-  /** Re-selects the active subtitle after a reload, which engines drop across load().
-   *  A reload that changed the play mode can change how a bitmap sub must be shown:
-   *  one the engine rendered in DirectPlay is burned in once the stream is HLS. */
-  private async restoreSubtitle(position: number): Promise<void> {
-    const id = this.activeSubtitleId();
-    const sub = id ? this.availableSubtitles().find((s) => s.id === id) : undefined;
-    if (!sub) return;
-    if (this.burnsIn(sub)) {
-      if (!sub.subtitleDbId || this.activeBurnInId === sub.subtitleDbId) return;
-      this.hideSoftSubtitle();
-      this.activeBurnInId = sub.subtitleDbId;
-      await this.doReloadStream(position);
-      return;
-    }
-    try {
-      await this.showSoftSubtitle(sub, this.subtitleRequest);
-    } catch (e) {
-      console.error('[Player] re-apply subtitle after reload failed:', e);
-    }
   }
 
   // Bound DOM handlers kept as stable references so ngOnDestroy can remove
@@ -3891,22 +3688,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.chrome.resetHideTimer();
   }
 
-  async onSelectSubtitleById(id: string | null): Promise<void> {
-    if (id === null) {
-      await this.selectSubtitle(null);
-      return;
-    }
-    const sub = this.availableSubtitles().find(s => s.id === id) ?? null;
-    if (!sub) {
-      // Falling through to selectSubtitle(null) persisted "off" for this media,
-      // so an id arriving before the tracks are enumerated both missed and
-      // overwrote the remembered choice.
-      console.warn('[player] onSelectSubtitleById: id not found, tracks may not be enumerated yet', id);
-      return;
-    }
-    await this.selectSubtitle(sub);
-  }
-
   // ── Private helpers ──
 
   /** Guards against overlapping reloads: a user switch racing a recovery (or
@@ -4003,7 +3784,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.restorePlaybackRate();
       this.restorePlayState(wasPaused);
 
-      await this.restoreSubtitle(currentPos);
+      await this.subs.restoreSubtitle(currentPos);
     } finally {
       this.state.buffering.set(false);
     }
@@ -4160,7 +3941,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       payload.audioTrackIndex = onReceiver ? (onReceiver.audioStreamIndex ?? null) : this.activeAudioIndex();
       payload.episodeLabel = this.episodeTitle() || null;
       payload.supportsVolume = this.engine?.supportsVolume ?? true;
-      payload.subtitleId = onReceiver ? onReceiver.subtitleId : this.activeSubtitleId();
+      payload.subtitleId = onReceiver ? onReceiver.subtitleId : this.subs.activeSubtitleId();
       payload.autoplayBlocked = this.autoplayBlocked();
       payload.hasNext = this.queueCtl.upNext() !== null;
       // While casting, CastPlayerService's own heartbeat carries the receiver's sample.
