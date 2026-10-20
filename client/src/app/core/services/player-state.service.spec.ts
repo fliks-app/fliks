@@ -161,3 +161,60 @@ describe('PlayerStateService startup transport', () => {
     expect(service.uiPaused()).toBe(false);
   });
 });
+
+describe('PlayerStateService engine reload', () => {
+  it('keeps the viewer playing and the spinner on through the teardown', () => {
+    const { service, state, fire } = setup();
+    state('playing');
+    const end = service.beginReload();
+    state('playing');
+    fire('timeUpdate', { position: 12, duration: 100, buffered: 20 });
+    state('idle');
+    state('paused');
+    expect(service.paused()).toBe(false);
+    expect(service.buffering()).toBe(true);
+    end();
+  });
+
+  it('keeps the spinner after the load ends until playback resumes', () => {
+    const { service, state } = setup();
+    state('playing');
+    const end = service.beginReload();
+    state('idle');
+    end();
+    expect(service.buffering()).toBe(true);
+    state('buffering');
+    expect(service.buffering()).toBe(true);
+    state('playing');
+    expect(service.buffering()).toBe(false);
+  });
+
+  it('shows no spinner after a reload of a paused viewer', () => {
+    const { service, state } = setup();
+    state('playing');
+    state('paused');
+    const end = service.beginReload();
+    end();
+    expect(service.paused()).toBe(true);
+    expect(service.buffering()).toBe(false);
+  });
+
+  it('reports a pause again after the reload', () => {
+    const { service, state } = setup();
+    state('playing');
+    service.beginReload()();
+    state('paused');
+    expect(service.paused()).toBe(true);
+  });
+
+  it('holds until the outermost of nested reloads ends', () => {
+    const { service, state } = setup();
+    state('playing');
+    const outer = service.beginReload();
+    const inner = service.beginReload();
+    inner();
+    state('paused');
+    expect(service.paused()).toBe(false);
+    outer();
+  });
+});

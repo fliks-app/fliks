@@ -2393,7 +2393,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     opts: { preservePause: boolean; unmute: boolean },
   ): Promise<boolean> {
     if (!this.engine || !this.mediaFileId) return true;
-    this.state.buffering.set(true);
+    const endReload = this.state.beginReload();
     try {
       // Drop and await the prior sid before minting: a stall recovery still has a live session, which the
       // backend would otherwise treat as a concurrent sibling and split onto a cold job.
@@ -2425,7 +2425,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       if (!this.fallBackFromRemuxOnLoadError(e, pos)) throw e;
       return false;
     } finally {
-      this.state.buffering.set(false);
+      endReload();
     }
   }
 
@@ -2439,8 +2439,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   private restorePlayState(wasPaused: boolean): void {
     if (!this.engine) return;
-    if (wasPaused) this.engine.pause().catch(() => {});
-    else this.engine.play().catch(() => {});
+    const engine = this.engine;
+    const settle = () => {
+      this.state.paused.set(engine.paused);
+      if (engine.paused) this.state.buffering.set(false);
+    };
+    if (wasPaused) engine.pause().catch(settle);
+    else engine.play().catch(settle);
   }
 
   /** Only one recoverFromLostSession at a time, so a slow recovery can't race the next 10s heartbeat's
@@ -3405,7 +3410,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   private async doReloadStream(currentPos: number) {
     if (!this.engine) return;
-    this.state.buffering.set(true);
+    const endReload = this.state.beginReload();
     this.reloadLoadPending = true;
     try {
       // Capture the user's play/pause intent before tearing the stream down — a
@@ -3444,7 +3449,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
       await this.subs.restoreSubtitle(currentPos);
     } finally {
-      this.state.buffering.set(false);
+      endReload();
     }
   }
 
