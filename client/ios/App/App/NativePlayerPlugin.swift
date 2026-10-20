@@ -571,7 +571,14 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         subtitleOutput?.suppressesPlayerRendering = !native
         subtitleOverlay?.isHidden = native || pipPhase == .exiting
         if native { subtitleOverlay?.render([]) }
+        player?.currentItem?.textStyleRules = pipPhase == .active ? Self.pipTextStyleRules : nil
     }
+
+    /// The PiP window is a fraction of the screen, so the default native caption size reads small in it.
+    /// Rules also style the overlay's cues, so they apply only while PiP draws the native caption.
+    private static let pipTextStyleRules: [AVTextStyleRule] = [
+        AVTextStyleRule(textMarkupAttributes: [kCMTextMarkupAttribute_RelativeFontSize as String: 200]),
+    ].compactMap { $0 }
 
     /// PiP mirrors the AVPlayerLayer, not the overlay. Will-stop also clears the native caption;
     /// the overlay is revealed once PiP has fully exited (`finishSubtitlePiPExit`).
