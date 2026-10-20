@@ -1,5 +1,5 @@
-# Rust server and plugin SDK: fmt, clippy, tests (plugins on the wasm fixture), sqlx offline cache and
-# openapi.json drift. Linux only; parity runs locally.
+# Rust server and plugin SDK: fmt, clippy (Linux, and Windows debug), tests (plugins on the wasm fixture), sqlx
+# offline cache and openapi.json drift. Tests run on Linux; parity runs locally.
 name: Server
 
 on:
@@ -12,6 +12,11 @@ on:
   push:
     branches: [main]
     paths: *paths
+
+# A newer PR push supersedes a running one; a main run must finish to save the caches.
+concurrency:
+  group: server-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -49,8 +54,10 @@ jobs:
       SQLX_OFFLINE: 'true'
       S8_PG_ADMIN_URL: postgres://fliks:fliks@localhost:5432/postgres
       FLIKS_HARNESS_PG_URL: postgres://fliks:fliks@localhost:5432/postgres
-      # Where `cargo xtask build` leaves the fixture: the SDK workspace's own target dir.
-      FLIKS_TEST_WASM_DIR: ${{ github.workspace }}/server/crates/plugin-sdk/target/wasm32-wasip2/release
+      # One target dir for both workspaces: the plugin SDK reuses the compiled dependencies (455 of 477 crates).
+      CARGO_TARGET_DIR: ${{ github.workspace }}/server/target
+      # Where `cargo xtask build` leaves the fixture.
+      FLIKS_TEST_WASM_DIR: ${{ github.workspace }}/server/target/wasm32-wasip2/release
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/setup-rust
@@ -58,18 +65,10 @@ jobs:
         with:
           # PR caches would evict main's from the repository's 10 GB.
           save-if: ${{ github.ref == 'refs/heads/main' }}
-          workspaces: |
-            server
-            server/crates/plugin-sdk
+          workspaces: server
       # The restore test runs pg_dump against the Postgres 18 service; the runner image ships 16.
       - name: PostgreSQL 18 client tools
-        run: |
-          sudo install -d /usr/share/postgresql-common/pgdg
-          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
-          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq postgresql-client-18
-          echo /usr/lib/postgresql/18/bin >> "$GITHUB_PATH"
+        run: ${{ github.workspace }}/.github/scripts/install-pg18-client.sh
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - name: plugin SDK fmt and clippy (native and wasm32-wasip2)
@@ -106,3 +105,23 @@ jobs:
           DB_USERNAME: fliks
           DB_PASSWORD: fliks
           DB_NAME: fliks
+
+  # Release builds only run on main and tags; this keeps a Linux-only edit from breaking the Windows target.
+  windows-clippy:
+    if: ${{ !startsWith(github.head_ref, 'release-please--') }}
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: server
+    env:
+      SQLX_OFFLINE: 'true'
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup-rust
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+          workspaces: server
+      # What the Windows release build compiles: the integration tests are Unix-only.
+      - run: cargo clippy --workspace --lib --bins -- -D warnings
