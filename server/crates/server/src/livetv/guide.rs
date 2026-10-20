@@ -549,22 +549,17 @@ async fn match_pass(
         })
         .collect();
     let report = matching::match_guide_channels(&matchable, &candidates);
-    let mut groups: Vec<((String, matching::Kind), Vec<i32>)> = vec![];
-    for a in &report.assignments {
-        let key = (a.guide_channel_id.clone(), a.kind);
-        match groups.iter_mut().find(|(k, _)| *k == key) {
-            Some((_, ids)) => ids.push(a.channel_id),
-            None => groups.push((key, vec![a.channel_id])),
-        }
-    }
-    for ((guide, kind), ids) in &groups {
-        sqlx::query(r#"UPDATE livetv_channels SET "guideChannelId" = $1, "guideMatchKind" = $2 WHERE id = ANY($3)"#)
-            .bind(guide)
-            .bind(kind.as_str())
-            .bind(ids)
-            .execute(db)
-            .await
-            .map_err(e)?;
+    if !report.assignments.is_empty() {
+        sqlx::query(
+            r#"UPDATE livetv_channels c SET "guideChannelId" = t.guide, "guideMatchKind" = t.kind
+               FROM UNNEST($1::int[], $2::text[], $3::text[]) AS t(id, guide, kind) WHERE c.id = t.id"#,
+        )
+        .bind(report.assignments.iter().map(|a| a.channel_id).collect::<Vec<_>>())
+        .bind(report.assignments.iter().map(|a| a.guide_channel_id.clone()).collect::<Vec<_>>())
+        .bind(report.assignments.iter().map(|a| a.kind.as_str()).collect::<Vec<_>>())
+        .execute(db)
+        .await
+        .map_err(e)?;
     }
     let assigned: HashMap<i32, &str> = report
         .assignments
