@@ -10,7 +10,7 @@
     [ngModel]="logSearch()" (ngModelChange)="logSearch.set($event); load()" />
 </div>
 
-<div #box class="overflow-auto min-h-64 rounded-lg border border-base-200" [style.height.px]="height()">
+<div class="overflow-x-auto max-h-[32rem] overflow-y-auto rounded-lg border border-base-200">
   <table class="table font-mono">
     <thead class="sticky top-0 bg-base-100">
       <tr>

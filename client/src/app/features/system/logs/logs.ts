@@ -1,5 +1,5 @@
 import {
-  Component, signal, inject, OnInit, OnDestroy, ElementRef, viewChild, afterNextRender,
+  Component, signal, inject, OnInit, OnDestroy,
 } from '@angular/core';
 import { DatePipe, NgClass } from '@angular/common';
 import { TvSelectDirective } from '../../../shared/directives/tv-select.directive';
@@ -12,7 +12,6 @@ import { firstValueFrom } from 'rxjs';
   selector: 'app-system-logs',
   imports: [TvSelectDirective, TranslatePipe, DatePipe, NgClass, FormsModule],
   templateUrl: './logs.html',
-  host: { '(window:resize)': 'fit()' },
 })
 export class SystemLogsComponent implements OnInit, OnDestroy {
   private readonly http = inject(HttpClient);
@@ -21,18 +20,7 @@ export class SystemLogsComponent implements OnInit, OnDestroy {
   readonly loading = signal(false);
   readonly logLevel = signal('');
   readonly logSearch = signal('');
-  readonly height = signal<number | null>(null);
-  private readonly box = viewChild.required<ElementRef<HTMLElement>>('box');
   private interval: any;
-
-  constructor() { afterNextRender(() => this.fit()); }
-
-  // Fill the viewport below the table, minus <main>'s bottom padding, so the page itself never scrolls.
-  fit() {
-    const el = this.box().nativeElement;
-    const pad = parseFloat(getComputedStyle(el.closest('main') ?? el).paddingBottom) || 0;
-    this.height.set(window.innerHeight - el.getBoundingClientRect().top - window.scrollY - pad);
-  }
 
   ngOnInit() {
     this.load();
