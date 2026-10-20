@@ -20,109 +20,14 @@ pub(super) async fn link_files(
         )));
     }
     let guard = st.ingest.media.lock(media.id).await;
-    let (mut linked, mut present, mut errors, mut slot) = (0i64, 0i64, vec![], false);
-    if d.reorganize || d.transfer.is_some() {
-        let mut entries = vec![];
-        for f in &d.files {
-            let name = file_name(Path::new(&f.path));
-            // F47: an in-place reorganize moves files that are already in this library, nothing else.
-            if d.transfer.is_none()
-                && !fsx::Root::open(&lib.path).is_ok_and(|r| {
-                    dunce::canonicalize(&f.path).is_ok_and(|p| r.contains(&p, false))
-                })
-            {
-                errors.push(format!("{name}: file outside the library root"));
-                continue;
-            }
-            let mut episode_id = None;
-            if media.is_series() {
-                match caller_nums(f.season, f.episode, f.end)
-                    .or_else(|| parse_episode_numbers(&name, Some(&f.path)))
-                {
-                    None => match match_special(&st.db, media.id, &name).await? {
-                        Some(ep) => episode_id = Some(ep.id),
-                        None => {
-                            errors.push(format!("{name}: no SxxEyy pattern found"));
-                            continue;
-                        }
-                    },
-                    Some(n) => {
-                        let (ep, c) = ensure_season_and_episode(&st.db, media.id, n).await?;
-                        episode_id = Some(ep);
-                        slot |= c;
-                    }
-                }
-            }
-            entries.push((
-                f.path.clone(),
-                episode_id,
-                parse_release_quality(&name).quality.name,
-            ));
-        }
-        if !entries.is_empty() {
-            let r = confirm_import(
-                st,
-                &guard,
-                media.id,
-                lib,
-                entries,
-                d.transfer.unwrap_or(Method::Move),
-                d.transfer.is_none(),
-            )
-            .await?;
-            linked = r.0;
-            present = r.1;
-            errors.extend(r.2);
-        }
+    let (mut errors, mut slot) = (vec![], false);
+    let (linked, present) = if d.reorganize || d.transfer.is_some() {
+        relink_moved(st, &guard, d, lib, media, &mut errors, &mut slot).await?
     } else {
-        let mut current = load_media(&st.db, media.id)
-            .await?
-            .unwrap_or_else(|| media.clone());
-        let has_files = sqlx::query_scalar!(
-            r#"SELECT count(*) AS "n!" FROM media_files WHERE "mediaId" = $1"#,
-            media.id
-        )
-        .fetch_one(&st.db)
-        .await?
-            > 0;
-        if !has_files && current.folder_name.as_deref().unwrap_or("") != d.folder_name {
-            sqlx::query!(
-                r#"UPDATE media SET "libraryId" = $2, "folderName" = $3 WHERE id = $1"#,
-                media.id,
-                lib.id,
-                folder
-            )
-            .execute(&st.db)
-            .await?;
-            current = load_media(&st.db, media.id).await?.unwrap_or(current);
-        }
-        if current.library_id.is_none() {
-            current.library_id = Some(lib.id);
-            current.library_path = Some(lib.path.clone());
-            current.library_name = Some(lib.name.clone());
-        }
-        for f in &d.files {
-            let abs = PathBuf::from(resolve(&f.path, "/"));
-            let nums = caller_nums(f.season, f.episode, f.end);
-            match link_in_place(st, &guard, &current, &abs, nums).await? {
-                Err(e) => errors.push(format!("{}: {e}", file_name(&abs))),
-                Ok(l) => {
-                    linked += 1;
-                    slot |= l.created;
-                    st.ingest.queue.enqueue(st, l.file_id);
-                }
-            }
-        }
-        if linked > 0 {
-            st.hub.emit_domain(DomainEvent::MediaFilesImported {
-                media_id: i64::from(media.id),
-                season_number: None,
-                episode_number: None,
-                source: ImportSource::Disk,
-            });
-            st.ingest.settle.schedule(st, media.id);
-        }
-    }
+        let linked =
+            relink_in_place(st, &guard, d, lib, media, folder, &mut errors, &mut slot).await?;
+        (linked, 0)
+    };
     let identified = media.tmdb_id.is_some() || media.tvdb_id.is_some() || media.imdb_id.is_some();
     if media.is_series()
         && slot
@@ -132,31 +37,161 @@ pub(super) async fn link_files(
         tracing::warn!("Orphan relink: refreshSeriesEpisodes failed — {}", e.text());
     }
     drop(guard);
-    if let Some(key) = unmatched_key
-        && created
-        && linked == 0
-        && present == 0
-    {
-        let _k = st.ingest.unmatched.lock(key.to_owned()).await;
-        let holders = st
-            .ingest
-            .unmatched_holders
-            .lock_clean()
-            .get(&media.id)
-            .copied();
-        let files = sqlx::query_scalar!(
-            r#"SELECT count(*) AS "n!" FROM media_files WHERE "mediaId" = $1"#,
-            media.id
-        )
-        .fetch_one(&st.db)
-        .await?;
-        if holders == Some(1) && files == 0 {
-            sqlx::query!("DELETE FROM media WHERE id = $1", media.id)
-                .execute(&st.db)
-                .await?;
-        }
+    if let Some(key) = unmatched_key.filter(|_| created && linked == 0 && present == 0) {
+        drop_unmatched_if_empty(st, media.id, key).await?;
     }
     Ok((linked, present, errors))
+}
+
+async fn relink_moved(
+    st: &AppState,
+    guard: &tokio::sync::OwnedMutexGuard<()>,
+    d: &RelinkDto,
+    lib: &Lib,
+    media: &MediaRow,
+    errors: &mut Vec<String>,
+    slot: &mut bool,
+) -> Result<(i64, i64), AppError> {
+    let (mut linked, mut present) = (0i64, 0i64);
+    let mut entries = vec![];
+    for f in &d.files {
+        let name = file_name(Path::new(&f.path));
+        // F47: an in-place reorganize moves files that are already in this library, nothing else.
+        if d.transfer.is_none()
+            && !fsx::Root::open(&lib.path)
+                .is_ok_and(|r| dunce::canonicalize(&f.path).is_ok_and(|p| r.contains(&p, false)))
+        {
+            errors.push(format!("{name}: file outside the library root"));
+            continue;
+        }
+        let mut episode_id = None;
+        if media.is_series() {
+            match caller_nums(f.season, f.episode, f.end)
+                .or_else(|| parse_episode_numbers(&name, Some(&f.path)))
+            {
+                None => match match_special(&st.db, media.id, &name).await? {
+                    Some(ep) => episode_id = Some(ep.id),
+                    None => {
+                        errors.push(format!("{name}: no SxxEyy pattern found"));
+                        continue;
+                    }
+                },
+                Some(n) => {
+                    let (ep, c) = ensure_season_and_episode(&st.db, media.id, n).await?;
+                    episode_id = Some(ep);
+                    *slot |= c;
+                }
+            }
+        }
+        entries.push((
+            f.path.clone(),
+            episode_id,
+            parse_release_quality(&name).quality.name,
+        ));
+    }
+    if !entries.is_empty() {
+        let r = confirm_import(
+            st,
+            guard,
+            media.id,
+            lib,
+            entries,
+            d.transfer.unwrap_or(Method::Move),
+            d.transfer.is_none(),
+        )
+        .await?;
+        linked = r.0;
+        present = r.1;
+        errors.extend(r.2);
+    }
+    Ok((linked, present))
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn relink_in_place(
+    st: &AppState,
+    guard: &tokio::sync::OwnedMutexGuard<()>,
+    d: &RelinkDto,
+    lib: &Lib,
+    media: &MediaRow,
+    folder: &str,
+    errors: &mut Vec<String>,
+    slot: &mut bool,
+) -> Result<i64, AppError> {
+    let mut linked = 0i64;
+    let mut current = load_media(&st.db, media.id)
+        .await?
+        .unwrap_or_else(|| media.clone());
+    let has_files = sqlx::query_scalar!(
+        r#"SELECT count(*) AS "n!" FROM media_files WHERE "mediaId" = $1"#,
+        media.id
+    )
+    .fetch_one(&st.db)
+    .await?
+        > 0;
+    if !has_files && current.folder_name.as_deref().unwrap_or("") != d.folder_name {
+        sqlx::query!(
+            r#"UPDATE media SET "libraryId" = $2, "folderName" = $3 WHERE id = $1"#,
+            media.id,
+            lib.id,
+            folder
+        )
+        .execute(&st.db)
+        .await?;
+        current = load_media(&st.db, media.id).await?.unwrap_or(current);
+    }
+    if current.library_id.is_none() {
+        current.library_id = Some(lib.id);
+        current.library_path = Some(lib.path.clone());
+        current.library_name = Some(lib.name.clone());
+    }
+    for f in &d.files {
+        let abs = PathBuf::from(resolve(&f.path, "/"));
+        let nums = caller_nums(f.season, f.episode, f.end);
+        match link_in_place(st, guard, &current, &abs, nums).await? {
+            Err(e) => errors.push(format!("{}: {e}", file_name(&abs))),
+            Ok(l) => {
+                linked += 1;
+                *slot |= l.created;
+                st.ingest.queue.enqueue(st, l.file_id);
+            }
+        }
+    }
+    if linked > 0 {
+        st.hub.emit_domain(DomainEvent::MediaFilesImported {
+            media_id: i64::from(media.id),
+            season_number: None,
+            episode_number: None,
+            source: ImportSource::Disk,
+        });
+        st.ingest.settle.schedule(st, media.id);
+    }
+
+    Ok(linked)
+}
+
+/// An unmatched media nobody else holds and without a file is dropped again.
+async fn drop_unmatched_if_empty(st: &AppState, media_id: i32, key: &str) -> Result<(), AppError> {
+    let _k = st.ingest.unmatched.lock(key.to_owned()).await;
+    let holders = st
+        .ingest
+        .unmatched_holders
+        .lock_clean()
+        .get(&media_id)
+        .copied();
+    let files = sqlx::query_scalar!(
+        r#"SELECT count(*) AS "n!" FROM media_files WHERE "mediaId" = $1"#,
+        media_id
+    )
+    .fetch_one(&st.db)
+    .await?;
+    if holders == Some(1) && files == 0 {
+        sqlx::query!("DELETE FROM media WHERE id = $1", media_id)
+            .execute(&st.db)
+            .await?;
+    }
+
+    Ok(())
 }
 
 /// `confirmImport` (rule 92, C53); the caller holds the media's lock.
@@ -407,6 +442,78 @@ pub(super) fn local_artwork(dir: &Path, base: Option<&str>, base_only: bool) -> 
     }
 }
 
+/// The folder the media lives in: named from the formats on a transfer, else the one the caller gave.
+async fn target_folder(
+    st: &AppState,
+    d: &RelinkDto,
+    title: &str,
+    year: Option<i32>,
+) -> Result<String, AppError> {
+    Ok(if d.transfer.is_some() {
+        let f = naming_formats(&st.db).await?;
+        let named = if d.media_type == "series" {
+            naming::apply_series_folder_format(
+                &f.series_folder,
+                &SeriesFolder {
+                    series_title: title.to_owned(),
+                    original_title: None,
+                    year: year.map(i64::from),
+                    tmdb_id: None,
+                },
+            )
+        } else {
+            naming::apply_movie_folder_format(
+                &f.movie_folder,
+                &MovieFolder {
+                    title: title.to_owned(),
+                    original_title: None,
+                    year: year.map(i64::from),
+                    tmdb_id: None,
+                },
+            )
+        };
+        validate_folder_name(&named)
+            .map_err(|_| AppError::bad_request(format!("Invalid folder name for \"{title}\"")))?
+            .to_owned()
+    } else {
+        d.folder_name.clone()
+    })
+}
+
+async fn existing_unmatched(
+    st: &AppState,
+    d: &RelinkDto,
+    lib: &Lib,
+    folder: &str,
+) -> Result<Option<i32>, AppError> {
+    Ok(if folder.is_empty() {
+        let wanted: Vec<String> = d
+            .files
+            .iter()
+            .map(|f| file_name(Path::new(&f.path)))
+            .collect();
+        sqlx::query_scalar!(
+            r#"SELECT m.id FROM media m WHERE m."libraryId" = $1 AND m.type::text = $2 AND m."folderName" = ''
+               AND EXISTS (SELECT 1 FROM media_files f WHERE f."mediaId" = m.id AND f."relativePath" = ANY($3))
+               ORDER BY m.id LIMIT 1"#,
+            lib.id,
+            d.media_type,
+            &wanted
+        )
+        .fetch_optional(&st.db)
+        .await?
+    } else {
+        sqlx::query_scalar!(
+            r#"SELECT id FROM media WHERE "libraryId" = $1 AND type::text = $2 AND "folderName" = $3 ORDER BY id LIMIT 1"#,
+            lib.id,
+            d.media_type,
+            folder
+        )
+        .fetch_optional(&st.db)
+        .await?
+    })
+}
+
 /// `findOrCreateUnmatched` (rules 79-81) under the `(library, type, folder)` lock.
 pub(super) async fn find_or_create_unmatched(
     st: &AppState,
@@ -458,63 +565,10 @@ pub(super) async fn find_or_create_unmatched(
         .as_ref()
         .and_then(|n| n.year)
         .and_then(|y| i32::try_from(y).ok()));
-    let folder = if d.transfer.is_some() {
-        let f = naming_formats(&st.db).await?;
-        let named = if series {
-            naming::apply_series_folder_format(
-                &f.series_folder,
-                &SeriesFolder {
-                    series_title: title.clone(),
-                    original_title: None,
-                    year: year.map(i64::from),
-                    tmdb_id: None,
-                },
-            )
-        } else {
-            naming::apply_movie_folder_format(
-                &f.movie_folder,
-                &MovieFolder {
-                    title: title.clone(),
-                    original_title: None,
-                    year: year.map(i64::from),
-                    tmdb_id: None,
-                },
-            )
-        };
-        validate_folder_name(&named)
-            .map_err(|_| AppError::bad_request(format!("Invalid folder name for \"{title}\"")))?
-            .to_owned()
-    } else {
-        d.folder_name.clone()
-    };
+    let folder = target_folder(st, d, &title, year).await?;
     let key = format!("{}:{}:{folder}", lib.id, d.media_type);
     let _lock = st.ingest.unmatched.lock(key.clone()).await;
-    let existing = if folder.is_empty() {
-        let wanted: Vec<String> = d
-            .files
-            .iter()
-            .map(|f| file_name(Path::new(&f.path)))
-            .collect();
-        sqlx::query_scalar!(
-            r#"SELECT m.id FROM media m WHERE m."libraryId" = $1 AND m.type::text = $2 AND m."folderName" = ''
-               AND EXISTS (SELECT 1 FROM media_files f WHERE f."mediaId" = m.id AND f."relativePath" = ANY($3))
-               ORDER BY m.id LIMIT 1"#,
-            lib.id,
-            d.media_type,
-            &wanted
-        )
-        .fetch_optional(&st.db)
-        .await?
-    } else {
-        sqlx::query_scalar!(
-            r#"SELECT id FROM media WHERE "libraryId" = $1 AND type::text = $2 AND "folderName" = $3 ORDER BY id LIMIT 1"#,
-            lib.id,
-            d.media_type,
-            folder
-        )
-        .fetch_optional(&st.db)
-        .await?
-    };
+    let existing = existing_unmatched(st, d, lib, &folder).await?;
     let (id, created) = match existing {
         Some(id) => (id, false),
         None => {

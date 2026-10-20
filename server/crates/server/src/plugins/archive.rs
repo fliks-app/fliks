@@ -327,24 +327,7 @@ impl Archive {
 
 /// Rule 13 in order; every entry is read (sizes checked) before the archive is accepted.
 pub fn read(buf: &[u8]) -> Result<Archive, Refusal> {
-    if buf.len() < 4 || buf[..4] != [0x50, 0x4b, 0x03, 0x04] {
-        return Err(refuse(
-            "PLUGIN_BAD_MAGIC",
-            "archive does not start with the ZIP local-file-header signature",
-        ));
-    }
-    if buf.len() > MAX_ARCHIVE_BYTES {
-        return Err(refuse(
-            "PLUGIN_TOO_LARGE",
-            format!("archive is {} bytes, cap is {MAX_ARCHIVE_BYTES}", buf.len()),
-        ));
-    }
-    if find_all(buf, &[0x50, 0x4b, 0x05, 0x06]) > 1 {
-        return Err(refuse(
-            "PLUGIN_TRAILING_DATA",
-            "archive contains more than one end-of-central-directory signature",
-        ));
-    }
+    check_envelope(buf)?;
     let sha256 = sha256_hex(buf);
     let (count, comment, cd) = open(buf).map_err(|m| refuse(classify(&m), m))?;
     if !comment.is_empty() {
@@ -359,124 +342,12 @@ pub fn read(buf: &[u8]) -> Result<Archive, Refusal> {
             format!("{count} entries, cap is {MAX_ENTRIES}"),
         ));
     }
-    let (mut exact, mut lower) = (HashSet::new(), HashSet::new());
-    let (mut logo, mut total, mut cursor) = (false, 0u64, cd);
+    let mut seen = Seen::default();
+    let (mut total, mut cursor) = (0u64, cd);
     let mut walked = vec![];
     for _ in 0..count {
         let e = read_entry(buf, &mut cursor).map_err(|m| refuse(classify(&m), m))?;
-        let n = &e.name;
-        let q = serde_json::to_string(n).unwrap_or_default();
-        if n.chars().any(|c| (c as u32) <= 0x1f || c as u32 == 0x7f) {
-            return Err(refuse(
-                "PLUGIN_CONTROL_CHAR",
-                format!("control character in entry name {q}"),
-            ));
-        }
-        if n.nfc().collect::<String>() != *n {
-            return Err(refuse(
-                "PLUGIN_NOT_NFC",
-                format!("entry name {q} is not NFC-normalised"),
-            ));
-        }
-        if n.contains('/') {
-            return Err(refuse(
-                "PLUGIN_PATH_SEPARATOR",
-                format!("entry name {q} contains a path separator"),
-            ));
-        }
-        let nb = n.as_bytes();
-        if n.starts_with('/') || (nb.len() >= 2 && nb[0].is_ascii_alphabetic() && nb[1] == b':') {
-            return Err(refuse(
-                "PLUGIN_ABSOLUTE_PATH",
-                format!("entry name {q} is an absolute path"),
-            ));
-        }
-        if e.external & 0x10 != 0 {
-            return Err(refuse(
-                "PLUGIN_DIRECTORY_ENTRY",
-                format!("entry {q} is flagged as a directory"),
-            ));
-        }
-        let kind = (e.external >> 16) & 0xf000;
-        if kind != 0 && kind != 0x8000 {
-            return Err(refuse(
-                "PLUGIN_SYMLINK",
-                format!("entry {q} is not a regular file (type 0{kind:o})"),
-            ));
-        }
-        if exact.contains(n) || lower.contains(&n.to_lowercase()) {
-            return Err(refuse(
-                "PLUGIN_DUPLICATE_ENTRY",
-                format!("duplicate entry {q}"),
-            ));
-        }
-        exact.insert(n.clone());
-        lower.insert(n.to_lowercase());
-        if !ENTRY_NAMES.contains(&n.as_str()) {
-            return Err(refuse(
-                "PLUGIN_UNEXPECTED_ENTRY",
-                format!("{q} is not one of the legal entry names"),
-            ));
-        }
-        if n.starts_with("logo.") {
-            if logo {
-                return Err(refuse(
-                    "PLUGIN_DUPLICATE_ENTRY",
-                    "archive carries more than one logo entry",
-                ));
-            }
-            logo = true;
-        }
-        if e.extra.iter().any(|(id, _)| *id == 1) {
-            return Err(refuse(
-                "PLUGIN_ZIP64",
-                format!("entry {q} carries a ZIP64 extra field"),
-            ));
-        }
-        if e.flags & 0x8 != 0 {
-            return Err(refuse(
-                "PLUGIN_DATA_DESCRIPTOR",
-                format!("entry {q} uses a data descriptor"),
-            ));
-        }
-        if e.flags & 1 != 0 {
-            return Err(refuse(
-                "PLUGIN_ENCRYPTED",
-                format!("entry {q} is encrypted"),
-            ));
-        }
-        if e.method != 0 && e.method != 8 {
-            return Err(refuse(
-                "PLUGIN_COMPRESSION_METHOD",
-                format!("entry {q} uses compression method {}", e.method),
-            ));
-        }
-        let cap = max_bytes_for(n);
-        if e.uncompressed > cap {
-            let code = if n == "plugin.json" {
-                "PLUGIN_MANIFEST_TOO_LARGE"
-            } else {
-                "PLUGIN_TOO_LARGE"
-            };
-            return Err(refuse(
-                code,
-                format!("entry {q} declares {} bytes, cap is {cap}", e.uncompressed),
-            ));
-        }
-        if e.compressed > 0 {
-            let ratio = e.uncompressed as f64 / e.compressed as f64;
-            if ratio > MAX_RATIO {
-                return Err(refuse(
-                    "PLUGIN_RATIO",
-                    format!("entry {q} has a {ratio:.1}:1 compression ratio"),
-                ));
-            }
-        } else if e.uncompressed > 0 {
-            return Err(refuse(
-                "PLUGIN_RATIO",
-                format!("entry {q} declares content from zero compressed bytes"),
-            ));
-        }
+        check_entry(&e, &mut seen)?;
         total += e.uncompressed;
         walked.push(e);
     }
@@ -507,6 +378,153 @@ pub fn read(buf: &[u8]) -> Result<Archive, Refusal> {
         order: walked.into_iter().map(|e| e.name).collect(),
         entries,
     })
+}
+
+fn check_envelope(buf: &[u8]) -> Result<(), Refusal> {
+    if buf.len() < 4 || buf[..4] != [0x50, 0x4b, 0x03, 0x04] {
+        return Err(refuse(
+            "PLUGIN_BAD_MAGIC",
+            "archive does not start with the ZIP local-file-header signature",
+        ));
+    }
+    if buf.len() > MAX_ARCHIVE_BYTES {
+        return Err(refuse(
+            "PLUGIN_TOO_LARGE",
+            format!("archive is {} bytes, cap is {MAX_ARCHIVE_BYTES}", buf.len()),
+        ));
+    }
+    if find_all(buf, &[0x50, 0x4b, 0x05, 0x06]) > 1 {
+        return Err(refuse(
+            "PLUGIN_TRAILING_DATA",
+            "archive contains more than one end-of-central-directory signature",
+        ));
+    }
+    Ok(())
+}
+
+#[derive(Default)]
+struct Seen {
+    exact: HashSet<String>,
+    lower: HashSet<String>,
+    logo: bool,
+}
+
+/// The rules of one central-directory entry; `seen` carries the names met so far.
+fn check_entry(e: &Entry, seen: &mut Seen) -> Result<(), Refusal> {
+    let n = &e.name;
+    let q = serde_json::to_string(n).unwrap_or_default();
+    if n.chars().any(|c| (c as u32) <= 0x1f || c as u32 == 0x7f) {
+        return Err(refuse(
+            "PLUGIN_CONTROL_CHAR",
+            format!("control character in entry name {q}"),
+        ));
+    }
+    if n.nfc().collect::<String>() != *n {
+        return Err(refuse(
+            "PLUGIN_NOT_NFC",
+            format!("entry name {q} is not NFC-normalised"),
+        ));
+    }
+    if n.contains('/') {
+        return Err(refuse(
+            "PLUGIN_PATH_SEPARATOR",
+            format!("entry name {q} contains a path separator"),
+        ));
+    }
+    let nb = n.as_bytes();
+    if n.starts_with('/') || (nb.len() >= 2 && nb[0].is_ascii_alphabetic() && nb[1] == b':') {
+        return Err(refuse(
+            "PLUGIN_ABSOLUTE_PATH",
+            format!("entry name {q} is an absolute path"),
+        ));
+    }
+    if e.external & 0x10 != 0 {
+        return Err(refuse(
+            "PLUGIN_DIRECTORY_ENTRY",
+            format!("entry {q} is flagged as a directory"),
+        ));
+    }
+    let kind = (e.external >> 16) & 0xf000;
+    if kind != 0 && kind != 0x8000 {
+        return Err(refuse(
+            "PLUGIN_SYMLINK",
+            format!("entry {q} is not a regular file (type 0{kind:o})"),
+        ));
+    }
+    if seen.exact.contains(n) || seen.lower.contains(&n.to_lowercase()) {
+        return Err(refuse(
+            "PLUGIN_DUPLICATE_ENTRY",
+            format!("duplicate entry {q}"),
+        ));
+    }
+    seen.exact.insert(n.clone());
+    seen.lower.insert(n.to_lowercase());
+    if !ENTRY_NAMES.contains(&n.as_str()) {
+        return Err(refuse(
+            "PLUGIN_UNEXPECTED_ENTRY",
+            format!("{q} is not one of the legal entry names"),
+        ));
+    }
+    if n.starts_with("logo.") {
+        if seen.logo {
+            return Err(refuse(
+                "PLUGIN_DUPLICATE_ENTRY",
+                "archive carries more than one logo entry",
+            ));
+        }
+        seen.logo = true;
+    }
+    if e.extra.iter().any(|(id, _)| *id == 1) {
+        return Err(refuse(
+            "PLUGIN_ZIP64",
+            format!("entry {q} carries a ZIP64 extra field"),
+        ));
+    }
+    if e.flags & 0x8 != 0 {
+        return Err(refuse(
+            "PLUGIN_DATA_DESCRIPTOR",
+            format!("entry {q} uses a data descriptor"),
+        ));
+    }
+    if e.flags & 1 != 0 {
+        return Err(refuse(
+            "PLUGIN_ENCRYPTED",
+            format!("entry {q} is encrypted"),
+        ));
+    }
+    if e.method != 0 && e.method != 8 {
+        return Err(refuse(
+            "PLUGIN_COMPRESSION_METHOD",
+            format!("entry {q} uses compression method {}", e.method),
+        ));
+    }
+    let cap = max_bytes_for(n);
+    if e.uncompressed > cap {
+        let code = if n == "plugin.json" {
+            "PLUGIN_MANIFEST_TOO_LARGE"
+        } else {
+            "PLUGIN_TOO_LARGE"
+        };
+        return Err(refuse(
+            code,
+            format!("entry {q} declares {} bytes, cap is {cap}", e.uncompressed),
+        ));
+    }
+    if e.compressed > 0 {
+        let ratio = e.uncompressed as f64 / e.compressed as f64;
+        if ratio > MAX_RATIO {
+            return Err(refuse(
+                "PLUGIN_RATIO",
+                format!("entry {q} has a {ratio:.1}:1 compression ratio"),
+            ));
+        }
+    } else if e.uncompressed > 0 {
+        return Err(refuse(
+            "PLUGIN_RATIO",
+            format!("entry {q} declares content from zero compressed bytes"),
+        ));
+    }
+    Ok(())
 }
 
 /// PNG by magic bytes; SVG rooted at `<svg>` with no script content (rule 14).
