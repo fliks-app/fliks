@@ -158,52 +158,13 @@ pub fn compute_rejections(o: &RejectionInput) -> Vec<ReleaseRejection> {
     }
 
     if let (Some(title), Some(year)) = (title, o.expected_year.filter(|y| *y != 0)) {
-        let years = release_years(title);
-        if !years.is_empty() && !years.iter().any(|y| (i64::from(*y) - year).abs() <= 1) {
-            let actual = years
-                .iter()
-                .map(u32::to_string)
-                .collect::<Vec<_>>()
-                .join(", ");
-            out.push(rej(
-                "YEAR_MISMATCH",
-                vec![
-                    ("expected", Param::Num(year)),
-                    ("actual", Param::Str(actual)),
-                ],
-            ));
-        }
+        year_block(title, year, &mut out);
     }
 
     if let Some(title) = title
         && (o.expected_season.is_some() || o.expected_episode.is_some())
     {
-        let cov = o
-            .coverage
-            .clone()
-            .unwrap_or_else(|| release_coverage(title));
-        let wrong_season =
-            matches!((o.expected_season, cov.seasons), (Some(e), Some(s)) if !within(&s, e));
-        let wrong_episode =
-            matches!((o.expected_episode, cov.episodes), (Some(e), Some(s)) if !within(&s, e));
-        let expected = format_season_episode(o.expected_season, o.expected_episode, None, None);
-        if wrong_season || wrong_episode {
-            out.push(rej(
-                "EPISODE_MISMATCH",
-                vec![
-                    ("expected", Param::Str(expected.clone())),
-                    ("actual", Param::Str(format_coverage(&cov))),
-                ],
-            ));
-        }
-        if o.expected_episode.is_some()
-            && ((cov.seasons.is_some() && cov.episodes.is_none()) || cov.complete_series)
-        {
-            out.push(rej(
-                "FULL_SEASON_FOR_EPISODE",
-                vec![("expected", Param::Str(expected))],
-            ));
-        }
+        episode_block(o, title, &mut out);
     }
 
     if !o.allowed.contains(&o.quality_id) {
@@ -254,6 +215,69 @@ pub fn compute_rejections(o: &RejectionInput) -> Vec<ReleaseRejection> {
         out.push(rej("BLOCKLISTED", vec![]));
     }
 
+    size_block(o, &mut out);
+
+    let min_seed = o.source_min_seeders.get(&o.source_id).copied().unwrap_or(0);
+    if min_seed > 0 && o.seeders < min_seed {
+        out.push(rej(
+            "MIN_SEEDERS",
+            vec![
+                ("actual", Param::Num(o.seeders)),
+                ("min", Param::Num(min_seed)),
+            ],
+        ));
+    }
+    out
+}
+
+fn year_block(title: &str, year: i64, out: &mut Vec<ReleaseRejection>) {
+    let years = release_years(title);
+    if !years.is_empty() && !years.iter().any(|y| (i64::from(*y) - year).abs() <= 1) {
+        let actual = years
+            .iter()
+            .map(u32::to_string)
+            .collect::<Vec<_>>()
+            .join(", ");
+        out.push(rej(
+            "YEAR_MISMATCH",
+            vec![
+                ("expected", Param::Num(year)),
+                ("actual", Param::Str(actual)),
+            ],
+        ));
+    }
+}
+
+fn episode_block(o: &RejectionInput, title: &str, out: &mut Vec<ReleaseRejection>) {
+    let cov = o
+        .coverage
+        .clone()
+        .unwrap_or_else(|| release_coverage(title));
+    let wrong_season =
+        matches!((o.expected_season, cov.seasons), (Some(e), Some(s)) if !within(&s, e));
+    let wrong_episode =
+        matches!((o.expected_episode, cov.episodes), (Some(e), Some(s)) if !within(&s, e));
+    let expected = format_season_episode(o.expected_season, o.expected_episode, None, None);
+    if wrong_season || wrong_episode {
+        out.push(rej(
+            "EPISODE_MISMATCH",
+            vec![
+                ("expected", Param::Str(expected.clone())),
+                ("actual", Param::Str(format_coverage(&cov))),
+            ],
+        ));
+    }
+    if o.expected_episode.is_some()
+        && ((cov.seasons.is_some() && cov.episodes.is_none()) || cov.complete_series)
+    {
+        out.push(rej(
+            "FULL_SEASON_FOR_EPISODE",
+            vec![("expected", Param::Str(expected))],
+        ));
+    }
+}
+
+fn size_block(o: &RejectionInput, out: &mut Vec<ReleaseRejection>) {
     // Limits are MB/h calibrated for x264; scale them by the codec factor.
     let factor = detect_codec_size_factor(o.release_title.as_deref());
     let hours = if o.runtime_minutes > 0.0 {
@@ -288,16 +312,4 @@ pub fn compute_rejections(o: &RejectionInput) -> Vec<ReleaseRejection> {
             ));
         }
     }
-
-    let min_seed = o.source_min_seeders.get(&o.source_id).copied().unwrap_or(0);
-    if min_seed > 0 && o.seeders < min_seed {
-        out.push(rej(
-            "MIN_SEEDERS",
-            vec![
-                ("actual", Param::Num(o.seeders)),
-                ("min", Param::Num(min_seed)),
-            ],
-        ));
-    }
-    out
 }

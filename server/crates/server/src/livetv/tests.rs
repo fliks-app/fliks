@@ -1578,7 +1578,7 @@ mod sessions {
         assert_eq!((viewers.len(), holds.len()), (2, 1));
         assert_eq!(holds[0].0, t1);
         // The joined open took no capacity: a release of the shared hold starts one grace, not two.
-        session::on_event(
+        session::events::on_event(
             &c.st,
             &EngineEvent::LiveReleased {
                 capacity_token: t1,
@@ -1721,7 +1721,7 @@ mod sessions {
         let other = source(c, "S2", "m3u", "http://h/y", 0).await;
         stream(&c.pool, w.a, other, "http://h/a-backup.ts", 1).await;
         let (_, token) = opened(&w).await;
-        session::on_event(&c.st, &serde_json::from_value(json!({"type": "LiveAttempt", "capacityToken": token, "upstream": 1,
+        session::events::on_event(&c.st, &serde_json::from_value(json!({"type": "LiveAttempt", "capacityToken": token, "upstream": 1,
             "upstreamUrl": "http://h/a-backup.ts", "upstreamPriority": 1, "error": null, "probe": {"videoCodec": "h264", "container": "mpegts"}})).unwrap()).await;
         let (_, holds) = session::peek(&c.st);
         assert_eq!(
@@ -1744,7 +1744,7 @@ mod sessions {
         let w = world(pool).await;
         let c = &w.c;
         let (_, t1) = opened(&w).await;
-        session::on_event(
+        session::events::on_event(
             &c.st,
             &attempt(&t1, "http://h/a.ts", Some("connection reset")),
         )
@@ -1757,8 +1757,8 @@ mod sessions {
                 .unwrap();
         assert_eq!(err.as_deref(), Some("connection reset"));
         // Not feeding yet: no grace, so B (same source, limit 1) still counts only the hold.
-        session::on_event(&c.st, &attempt(&t1, "http://h/a.ts", None)).await;
-        session::on_event(&c.st, &attempt(&t1, "http://h/a.ts", Some("stalled"))).await;
+        session::events::on_event(&c.st, &attempt(&t1, "http://h/a.ts", None)).await;
+        session::events::on_event(&c.st, &attempt(&t1, "http://h/a.ts", Some("stalled"))).await;
         let (_, holds) = session::peek(&c.st);
         assert_eq!(holds.len(), 1);
         sqlx::query(r#"UPDATE livetv_sources SET "accountStatus" = 'Expired' WHERE id = $1"#)
@@ -1774,7 +1774,7 @@ mod sessions {
         );
         open(&w, w.b, "B").await.map_err(err_body).unwrap();
         let t9 = token_of(&w, 1);
-        session::on_event(&c.st, &attempt(&t9, "http://h/b.ts", Some("denied"))).await;
+        session::events::on_event(&c.st, &attempt(&t9, "http://h/b.ts", Some("denied"))).await;
         let err: Option<String> = sqlx::query_scalar(
             "SELECT \"lastError\" FROM livetv_channel_streams WHERE url = 'http://h/b.ts'",
         )
@@ -1823,7 +1823,7 @@ mod sessions {
             "probe": {"videoCodec": "h264", "audioCodec": "aac", "container": "mpegts"}}),
         )
         .unwrap();
-        session::on_event(&c.st, &ev).await;
+        session::events::on_event(&c.st, &ev).await;
         c.fake.script(
             "POST",
             "/v1/live",
@@ -1846,7 +1846,7 @@ mod sessions {
         let w = world(pool).await;
         let c = &w.c;
         let (_, token) = opened(&w).await;
-        session::on_event(
+        session::events::on_event(
             &c.st,
             &EngineEvent::LiveReleased {
                 capacity_token: token.clone(),
@@ -1875,7 +1875,7 @@ mod sessions {
         );
         open(&w, w.a, "A").await.map_err(err_body).unwrap();
         let t2 = token_of(&w, 1);
-        session::on_event(
+        session::events::on_event(
             &c.st,
             &EngineEvent::LiveReleased {
                 capacity_token: t2.clone(),
@@ -1884,7 +1884,7 @@ mod sessions {
         )
         .await;
         assert_eq!(failures(w.a).await, 1);
-        session::on_event(
+        session::events::on_event(
             &c.st,
             &EngineEvent::LiveReleased {
                 capacity_token: t2,
@@ -1906,7 +1906,7 @@ mod sessions {
         .await
         .unwrap();
         let (_, token) = opened(&w).await;
-        session::on_event(
+        session::events::on_event(
             &c.st,
             &EngineEvent::LiveReleased {
                 capacity_token: token,
@@ -1946,7 +1946,7 @@ mod sessions {
             json!({"type": "SessionEnded", "sessionId": sid, "reason": "stopped"}),
         )
         .unwrap();
-        session::on_event(&c.st, &ended).await;
+        session::events::on_event(&c.st, &ended).await;
         assert!(session::peek(&c.st).0.is_empty());
         assert!(
             c.st.hub
@@ -1956,7 +1956,7 @@ mod sessions {
                 .iter()
                 .all(|r| !r.entry.id.starts_with("livetv:"))
         );
-        session::on_event(&c.st, &ended).await;
+        session::events::on_event(&c.st, &ended).await;
     }
 
     #[sqlx::test(migrations = false)]
@@ -1974,8 +1974,8 @@ mod sessions {
                 "waitedMs": 120.0, "cacheHit": false, "cmcdRaw": "bl=5000"}))
             .unwrap()
         };
-        session::on_event(&c.st, &served(&sid)).await;
-        session::on_event(&c.st, &served("stranger")).await;
+        session::events::on_event(&c.st, &served(&sid)).await;
+        session::events::on_event(&c.st, &served("stranger")).await;
         assert!(c.st.qoe.live_summary(&sid).is_some());
         assert!(c.st.qoe.live_summary("stranger").is_none());
     }

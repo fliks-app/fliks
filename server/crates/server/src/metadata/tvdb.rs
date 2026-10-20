@@ -649,7 +649,33 @@ pub fn map_details(m: &Value, tv: bool, code: &str) -> Value {
     o.insert("tagline".into(), opt(loc.and_then(|l| l.2)));
     o.insert("cast".into(), cast_of(get(m, "characters")).into());
     o.insert("crew".into(), crew_of(get(m, "characters")).into());
-    let videos: Vec<Value> = arr(m, "trailers")
+    o.insert("videos".into(), trailers(m).into());
+    o.insert(
+        "keywords".into(),
+        pluck(arr(m, "tagOptions"), "name").into(),
+    );
+    o.insert(
+        "alternativeTitles".into(),
+        aliases(
+            get(m, "aliases"),
+            get(m, "name").as_str().unwrap_or_default(),
+        )
+        .into(),
+    );
+    o.insert("tmdbCollectionId".into(), Value::Null);
+    o.insert("tmdbCollectionName".into(), Value::Null);
+    o.insert("originalLanguage".into(), nn(m, "originalLanguage"));
+    o.insert("episodeCount".into(), Value::Null);
+    if tv {
+        series_fields(&mut o, m);
+    } else {
+        movie_fields(&mut o, m);
+    }
+    Value::Object(o)
+}
+
+fn trailers(m: &Value) -> Vec<Value> {
+    arr(m, "trailers")
         .iter()
         .map(|t| {
             let url = get(t, "url").as_str().unwrap_or_default();
@@ -668,108 +694,93 @@ pub fn map_details(m: &Value, tv: bool, code: &str) -> Value {
             put(&mut v, "name", t, "name");
             Value::Object(v)
         })
-        .collect();
-    o.insert("videos".into(), videos.into());
+        .collect()
+}
+
+fn series_fields(o: &mut Map<String, Value>, m: &Value) {
+    let count = arr(m, "seasons")
+        .iter()
+        .filter(|s| get(s, "number") != 0)
+        .count();
     o.insert(
-        "keywords".into(),
-        pluck(arr(m, "tagOptions"), "name").into(),
+        "seasonCount".into(),
+        if count == 0 {
+            Value::Null
+        } else {
+            count.into()
+        },
     );
-    o.insert(
-        "alternativeTitles".into(),
-        aliases(
-            get(m, "aliases"),
-            get(m, "name").as_str().unwrap_or_default(),
-        )
-        .into(),
-    );
-    o.insert("tmdbCollectionId".into(), Value::Null);
-    o.insert("tmdbCollectionName".into(), Value::Null);
-    o.insert("originalLanguage".into(), nn(m, "originalLanguage"));
-    o.insert("episodeCount".into(), Value::Null);
-    if tv {
-        let count = arr(m, "seasons")
-            .iter()
-            .filter(|s| get(s, "number") != 0)
-            .count();
-        o.insert(
-            "seasonCount".into(),
-            if count == 0 {
-                Value::Null
-            } else {
-                count.into()
-            },
-        );
-        o.insert("runtime".into(), Value::Null);
-        o.insert("releaseDate".into(), nn(m, "firstAired"));
-        for k in [
-            "inCinemas",
-            "digitalRelease",
-            "physicalRelease",
-            "budget",
-            "revenue",
-        ] {
-            o.insert(k.into(), Value::Null);
-        }
-        o.insert(
-            "status".into(),
-            series_status(get(get(m, "status"), "name").as_str().unwrap_or_default()).into(),
-        );
-        let country = get(m, "originalCountry");
-        o.insert(
-            "productionCountries".into(),
-            if country.as_str().is_some_and(|c| !c.is_empty()) {
-                json!([country])
-            } else {
-                json!([])
-            },
-        );
-        let companies: Vec<Value> = pluck(arr(m, "networks"), "name")
-            .into_iter()
-            .chain(pluck(arr(get(m, "companies"), "production"), "name"))
-            .chain(pluck(arr(m, "studios"), "name"))
-            .collect();
-        o.insert("productionCompanies".into(), companies.into());
-    } else {
-        let first = nn(get(m, "first_release"), "date");
-        o.insert("seasonCount".into(), Value::Null);
-        o.insert("runtime".into(), nn(m, "runtime"));
-        o.insert("releaseDate".into(), first.clone());
-        let releases = get(m, "releases");
-        o.insert(
-            "inCinemas".into(),
-            release_date(releases, "Theatrical").unwrap_or(first),
-        );
-        o.insert(
-            "digitalRelease".into(),
-            release_date(releases, "Digital").unwrap_or(Value::Null),
-        );
-        o.insert(
-            "physicalRelease".into(),
-            release_date(releases, "Physical").unwrap_or(Value::Null),
-        );
-        o.insert(
-            "status".into(),
-            str_lower_or(get(m, "status"), "name", "unknown").into(),
-        );
-        let int = |k: &str| match get(m, k)
-            .as_str()
-            .filter(|s| !s.is_empty())
-            .and_then(js_parse_int)
-        {
-            Some(n) if n != 0 => Value::from(n),
-            _ => Value::Null,
-        };
-        o.insert("budget".into(), int("budget"));
-        o.insert("revenue".into(), int("boxOffice"));
-        o.insert(
-            "productionCountries".into(),
-            pluck(arr(m, "production_countries"), "name").into(),
-        );
-        let companies: Vec<Value> = pluck(arr(get(m, "companies"), "production"), "name")
-            .into_iter()
-            .chain(pluck(arr(get(m, "companies"), "studio"), "name"))
-            .collect();
-        o.insert("productionCompanies".into(), companies.into());
+    o.insert("runtime".into(), Value::Null);
+    o.insert("releaseDate".into(), nn(m, "firstAired"));
+    for k in [
+        "inCinemas",
+        "digitalRelease",
+        "physicalRelease",
+        "budget",
+        "revenue",
+    ] {
+        o.insert(k.into(), Value::Null);
     }
-    Value::Object(o)
+    o.insert(
+        "status".into(),
+        series_status(get(get(m, "status"), "name").as_str().unwrap_or_default()).into(),
+    );
+    let country = get(m, "originalCountry");
+    o.insert(
+        "productionCountries".into(),
+        if country.as_str().is_some_and(|c| !c.is_empty()) {
+            json!([country])
+        } else {
+            json!([])
+        },
+    );
+    let companies: Vec<Value> = pluck(arr(m, "networks"), "name")
+        .into_iter()
+        .chain(pluck(arr(get(m, "companies"), "production"), "name"))
+        .chain(pluck(arr(m, "studios"), "name"))
+        .collect();
+    o.insert("productionCompanies".into(), companies.into());
+}
+
+fn movie_fields(o: &mut Map<String, Value>, m: &Value) {
+    let first = nn(get(m, "first_release"), "date");
+    o.insert("seasonCount".into(), Value::Null);
+    o.insert("runtime".into(), nn(m, "runtime"));
+    o.insert("releaseDate".into(), first.clone());
+    let releases = get(m, "releases");
+    o.insert(
+        "inCinemas".into(),
+        release_date(releases, "Theatrical").unwrap_or(first),
+    );
+    o.insert(
+        "digitalRelease".into(),
+        release_date(releases, "Digital").unwrap_or(Value::Null),
+    );
+    o.insert(
+        "physicalRelease".into(),
+        release_date(releases, "Physical").unwrap_or(Value::Null),
+    );
+    o.insert(
+        "status".into(),
+        str_lower_or(get(m, "status"), "name", "unknown").into(),
+    );
+    let int = |k: &str| match get(m, k)
+        .as_str()
+        .filter(|s| !s.is_empty())
+        .and_then(js_parse_int)
+    {
+        Some(n) if n != 0 => Value::from(n),
+        _ => Value::Null,
+    };
+    o.insert("budget".into(), int("budget"));
+    o.insert("revenue".into(), int("boxOffice"));
+    o.insert(
+        "productionCountries".into(),
+        pluck(arr(m, "production_countries"), "name").into(),
+    );
+    let companies: Vec<Value> = pluck(arr(get(m, "companies"), "production"), "name")
+        .into_iter()
+        .chain(pluck(arr(get(m, "companies"), "studio"), "name"))
+        .collect();
+    o.insert("productionCompanies".into(), companies.into());
 }

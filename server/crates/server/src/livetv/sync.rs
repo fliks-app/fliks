@@ -19,7 +19,7 @@ use axum::{
 use chrono::{DateTime, Utc};
 use fliks_domain::js::iso;
 use fliks_domain::livetv::sync::{
-    AccountState, ChannelRow, Classified, Entry, GroupPattern, PatternField, StreamRow,
+    AccountState, ChannelRow, Classified, Entry, GroupPattern, PatternField, Plan, StreamRow,
     account_state, classify_entries, plan_upsert,
 };
 use serde::Serialize;
@@ -366,11 +366,21 @@ async fn upsert(
     now: DateTime<Utc>,
     stale_days: i64,
 ) -> sqlx::Result<Counts> {
+    let (streams, channels) = load_rows(tx, source.id).await?;
+    let plan = plan_upsert(entries, &streams, &channels, now, stale_days);
+    apply_plan(tx, source, entries, &plan, now).await
+}
+
+/// The stream rows of the source and every channel with its stream counts.
+async fn load_rows(
+    tx: &mut Transaction<'_, Postgres>,
+    source_id: i32,
+) -> sqlx::Result<(Vec<StreamRow>, Vec<ChannelRow>)> {
     type StreamRaw = (i32, Option<i32>, String, Option<DateTime<Utc>>);
     let existing: Vec<StreamRaw> = sqlx::query_as(
         r#"SELECT id, "channelId", "externalId", "lastSeenAt" FROM livetv_channel_streams WHERE "sourceId" = $1"#,
     )
-    .bind(source.id)
+    .bind(source_id)
     .fetch_all(&mut **tx)
     .await?;
     let streams: Vec<StreamRow> = existing
@@ -399,7 +409,7 @@ async fn upsert(
     for (channel, src) in links {
         let Some(channel) = channel else { continue };
         *total.entry(channel).or_default() += 1;
-        if src == Some(source.id) {
+        if src == Some(source_id) {
             mine.insert(channel);
         }
     }
@@ -417,8 +427,16 @@ async fn upsert(
             },
         )
         .collect();
-    let plan = plan_upsert(entries, &streams, &channels, now, stale_days);
+    Ok((streams, channels))
+}
 
+async fn apply_plan(
+    tx: &mut Transaction<'_, Postgres>,
+    source: &Source,
+    entries: &[Entry],
+    plan: &Plan,
+    now: DateTime<Utc>,
+) -> sqlx::Result<Counts> {
     let e = |i: usize| &entries[i];
     // New channels first: their ids pair with the entries by row order.
     let new_ids: Vec<i32> = if plan.new_channels.is_empty() {

@@ -175,13 +175,67 @@ pub async fn update(
     let dto: UpdateUser = body(req).await?;
     dto.validate()?;
     let is_self = a.user.id == id;
-    let is_manager = a.perms.can(Action::Manage, &Subject::User);
-    let is_admin = a.user.is_admin;
 
     let mut tx = st.db.begin().await?;
     let target: UserRow = db::lock_user(&mut tx, id)
         .await?
         .ok_or_else(|| not_found(id))?;
+    authorize_update(&a, &dto, &target)?;
+    let role_changing = dto.role_id.is_some_and(|r| r != target.role_id);
+    let admin_changing = dto.is_admin.is_some_and(|v| v != target.is_admin);
+    let enabled_changing = dto.enabled.is_some_and(|v| v != target.enabled);
+    let new_enabled = dto.enabled.unwrap_or(target.enabled);
+    let new_admin = dto.is_admin.unwrap_or(target.is_admin);
+    if target.is_admin
+        && target.enabled
+        && !(new_enabled && new_admin)
+        && db::is_last_enabled_admin(&mut tx, id).await?
+    {
+        return Err(AppError::conflict("Cannot remove the last enabled admin"));
+    }
+    if let Some(name) = &dto.username
+        && db::username_taken(&mut tx, name, Some(id)).await?
+    {
+        return Err(AppError::conflict("Username already taken"));
+    }
+
+    let mut t = target.clone();
+    let password_changed = dto.password.is_some();
+    if password_changed && is_self {
+        t.require_password_change = false;
+    }
+    let hashed = match dto.password.clone() {
+        Some(p) => Some(hash(p).await?),
+        None => None,
+    };
+    merge_fields(&mut t, &dto);
+    save_user(&mut tx, id, &t, hashed.as_deref()).await?;
+    if dto.share_disabled == Some(true) && !target.share_disabled {
+        crate::social::leave_social(&mut tx, id).await?;
+    }
+    if let Some(ids) = &dto.library_ids {
+        db::replace_library_access(&mut tx, id, ids).await?;
+    }
+    tx.commit().await?;
+
+    if role_changing || enabled_changing || password_changed {
+        st.hub.drop_connections_for_user(id);
+    }
+    if password_changed {
+        // F9: the caller keeps working on its access token until it expires.
+        db::revoke_other_families(&st.db, id, None).await?;
+    }
+    if dto.enabled == Some(false) || role_changing || admin_changing || dto.library_ids.is_some() {
+        revoke_in_background(&st, id);
+    }
+    public(&st.db, id).await
+}
+
+/// Who may change what on `target`, before any write.
+fn authorize_update(a: &Authed, dto: &UpdateUser, target: &UserRow) -> Result<(), AppError> {
+    let is_self = a.user.id == target.id;
+    let is_manager = a.perms.can(Action::Manage, &Subject::User);
+    let is_admin = a.user.is_admin;
     if !is_self && !is_manager {
         return Err(forbidden());
     }
@@ -191,7 +245,6 @@ pub async fn update(
     }
     let role_changing = dto.role_id.is_some_and(|r| r != target.role_id);
     let admin_changing = dto.is_admin.is_some_and(|v| v != target.is_admin);
-    let enabled_changing = dto.enabled.is_some_and(|v| v != target.enabled);
     if !is_manager && dto.has_managed_field() {
         return Err(AppError::forbidden(MSG_MANAGED));
     }
@@ -213,32 +266,12 @@ pub async fn update(
     if !is_manager && dto.library_ids.is_some() {
         return Err(AppError::forbidden(MSG_LIBRARIES));
     }
-    let new_enabled = dto.enabled.unwrap_or(target.enabled);
-    let new_admin = dto.is_admin.unwrap_or(target.is_admin);
-    if target.is_admin
-        && target.enabled
-        && !(new_enabled && new_admin)
-        && db::is_last_enabled_admin(&mut tx, id).await?
-    {
-        return Err(AppError::conflict("Cannot remove the last enabled admin"));
-    }
-    if let Some(name) = &dto.username
-        && db::username_taken(&mut tx, name, Some(id)).await?
-    {
-        return Err(AppError::conflict("Username already taken"));
-    }
+    Ok(())
+}
 
-    let mut t = target.clone();
-    let password_changed = dto.password.is_some();
-    if password_changed && is_self {
-        t.require_password_change = false;
-    }
-    let hashed = match dto.password {
-        Some(p) => Some(hash(p).await?),
-        None => None,
-    };
+fn merge_fields(t: &mut UserRow, dto: &UpdateUser) {
     macro_rules! set {
-        ($($f:ident),*) => { $( if let Some(v) = dto.$f { t.$f = v; } )* };
+        ($($f:ident),*) => { $( if let Some(v) = dto.$f.clone() { t.$f = v; } )* };
     }
     set!(
         username,
@@ -264,12 +297,20 @@ pub async fn update(
         spoiler_hide_overviews,
         spoiler_hide_titles
     );
-    if let Some(v) = dto.library_order {
+    if let Some(v) = dto.library_order.clone() {
         t.library_order = Jsonb(v);
     }
-    if let Some(v) = dto.hidden_library_ids {
+    if let Some(v) = dto.hidden_library_ids.clone() {
         t.hidden_library_ids = Jsonb(v);
     }
+}
+
+async fn save_user(
+    tx: &mut sqlx::PgConnection,
+    id: i32,
+    t: &UserRow,
+    hashed: Option<&str>,
+) -> Result<(), sqlx::Error> {
     sqlx::query!(
         r#"UPDATE users SET "username" = $2, "email" = $3,
         "passwordHash" = COALESCE($4, "passwordHash"), "roleId" = $5, "isAdmin" = $6, "enabled" = $7,
@@ -309,25 +350,7 @@ pub async fn update(
     )
         .execute(&mut *tx)
         .await?;
-    if dto.share_disabled == Some(true) && !target.share_disabled {
-        crate::social::leave_social(&mut tx, id).await?;
-    }
-    if let Some(ids) = &dto.library_ids {
-        db::replace_library_access(&mut tx, id, ids).await?;
-    }
-    tx.commit().await?;
-
-    if role_changing || enabled_changing || password_changed {
-        st.hub.drop_connections_for_user(id);
-    }
-    if password_changed {
-        // F9: the caller keeps working on its access token until it expires.
-        db::revoke_other_families(&st.db, id, None).await?;
-    }
-    if dto.enabled == Some(false) || role_changing || admin_changing || dto.library_ids.is_some() {
-        revoke_in_background(&st, id);
-    }
-    public(&st.db, id).await
+    Ok(())
 }
 
 #[utoipa::path(delete, path = "/api/users/{id}", responses((status = 200)))]

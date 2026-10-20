@@ -137,13 +137,69 @@ async fn pass(
     if let Some(p) = progress {
         p(0, total, &format!("{label} 0/{total}"));
     }
+    let mut prints = fingerprint_all(
+        st,
+        &targets,
+        &media_path,
+        &Run {
+            lookup_sec,
+            outro,
+            label,
+            priority,
+            progress,
+        },
+    )
+    .await;
+    prints.sort_by_key(|p| p.episode.episode_number);
+
+    let (result_files, detected) = if prints.is_empty() {
+        (HashSet::new(), 0)
+    } else {
+        detect_segments(st, &prints, kind, name, lookup_sec, min_segment).await?
+    };
+    let skipped = episodes
+        .iter()
+        .filter(eligible)
+        .filter(|e| e.file_id.is_some_and(|f| !result_files.contains(&f)))
+        .count();
+    tracing::info!("{name} detection of season #{season}: {detected} saved, {skipped} skipped");
+    if !outro && let Some(p) = progress {
+        let n = episodes.len() as i64;
+        p(n, n, &format!("Detection complete: {detected} intro(s)"));
+    }
+    Ok(detected)
+}
+
+struct Run<'a> {
+    lookup_sec: f64,
+    outro: bool,
+    label: &'a str,
+    priority: JobPriority,
+    progress: Progress<'a>,
+}
+
+/// Fingerprints the episodes in slices of `FINGERPRINT_CONCURRENCY`; a failed one is logged and left out.
+async fn fingerprint_all<'a>(
+    st: &AppState,
+    targets: &[&'a EpisodeFile],
+    media_path: &str,
+    run: &Run<'_>,
+) -> Vec<Fingerprinted<'a>> {
+    let Run {
+        lookup_sec,
+        outro,
+        label,
+        priority,
+        progress,
+    } = *run;
+    let total = targets.len() as i64;
     let done = AtomicUsize::new(0);
     let mut prints: Vec<Fingerprinted> = vec![];
     for slice in targets.chunks(FINGERPRINT_CONCURRENCY) {
         let runs = slice.iter().map(|ep| async {
             let file_id = ep.file_id.expect("eligible");
             let abs = resolve(
-                &join(&media_path, ep.relative_path.as_deref().unwrap_or_default()),
+                &join(media_path, ep.relative_path.as_deref().unwrap_or_default()),
                 &std::env::current_dir()
                     .map(|p| p.to_string_lossy().into_owned())
                     .unwrap_or_else(|_| "/".into()),
@@ -176,65 +232,63 @@ async fn pass(
         });
         prints.extend(join_all(runs).await.into_iter().flatten());
     }
-    prints.sort_by_key(|p| p.episode.episode_number);
+    prints
+}
 
+/// Asks the engine for the segments of the fingerprinted episodes and stores them.
+async fn detect_segments(
+    st: &AppState,
+    prints: &[Fingerprinted<'_>],
+    kind: IntroDetectKind,
+    name: &str,
+    lookup_sec: f64,
+    min_segment: f64,
+) -> Result<(HashSet<i32>, i64), String> {
+    let outro = kind == IntroDetectKind::Outro;
     let mut result_files = HashSet::new();
-    let mut detected = 0;
-    if !prints.is_empty() {
-        let body = IntroDetectRequest {
-            kind,
-            lookup_seconds: lookup_sec,
-            min_segment_seconds: Some(min_segment),
-            episodes: prints
-                .iter()
-                .map(|p| IntroEpisode {
-                    media_file_id: p.file_id as u32,
-                    duration_seconds: duration(p.episode.info.as_ref()),
-                    chapters: p.episode.info.as_ref().and_then(|i| {
-                        serde_json::from_value::<Vec<Chapter>>(i["chapters"].clone()).ok()
-                    }),
-                    intro_fingerprint: (!outro).then(|| p.fingerprint.clone()),
-                    outro_fingerprint: outro.then(|| p.fingerprint.clone()),
-                })
-                .collect(),
+    let body = IntroDetectRequest {
+        kind,
+        lookup_seconds: lookup_sec,
+        min_segment_seconds: Some(min_segment),
+        episodes: prints
+            .iter()
+            .map(|p| IntroEpisode {
+                media_file_id: p.file_id as u32,
+                duration_seconds: duration(p.episode.info.as_ref()),
+                chapters: p.episode.info.as_ref().and_then(|i| {
+                    serde_json::from_value::<Vec<Chapter>>(i["chapters"].clone()).ok()
+                }),
+                intro_fingerprint: (!outro).then(|| p.fingerprint.clone()),
+                outro_fingerprint: outro.then(|| p.fingerprint.clone()),
+            })
+            .collect(),
+    };
+    let res = st
+        .engine
+        .intro_detect(&body)
+        .await
+        .map_err(|e| e.to_string())?;
+    for seg in &res.results {
+        result_files.insert(seg.media_file_id as i32);
+        let Some(p) = prints
+            .iter()
+            .find(|p| p.file_id as u32 == seg.media_file_id)
+        else {
+            continue;
         };
-        let res = st
-            .engine
-            .intro_detect(&body)
-            .await
-            .map_err(|e| e.to_string())?;
-        for seg in &res.results {
-            result_files.insert(seg.media_file_id as i32);
-            let Some(p) = prints
-                .iter()
-                .find(|p| p.file_id as u32 == seg.media_file_id)
-            else {
-                continue;
-            };
-            db::upsert_detected(
-                &st.db,
-                p.episode.episode_id,
-                name,
-                seg.start_seconds,
-                seg.end_seconds,
-                seg.confidence,
-            )
-            .await
-            .map_err(|e| e.to_string())?;
-        }
-        detected = res.results.len() as i64;
+        db::upsert_detected(
+            &st.db,
+            p.episode.episode_id,
+            name,
+            seg.start_seconds,
+            seg.end_seconds,
+            seg.confidence,
+        )
+        .await
+        .map_err(|e| e.to_string())?;
     }
-    let skipped = episodes
-        .iter()
-        .filter(eligible)
-        .filter(|e| e.file_id.is_some_and(|f| !result_files.contains(&f)))
-        .count();
-    tracing::info!("{name} detection of season #{season}: {detected} saved, {skipped} skipped");
-    if !outro && let Some(p) = progress {
-        let n = episodes.len() as i64;
-        p(n, n, &format!("Detection complete: {detected} intro(s)"));
-    }
-    Ok(detected)
+
+    Ok((result_files, res.results.len() as i64))
 }
 
 /// Rule 16: intros (a failure aborts), outros (a failure is logged), then the scanned stamp.

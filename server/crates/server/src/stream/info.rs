@@ -180,20 +180,7 @@ async fn run(
     sse_connection: Option<String>,
     user_agent: Option<String>,
 ) -> Result<Value, AppError> {
-    if st.engine.gateway_mismatch() {
-        return Err(unavailable(
-            "The saved engine URL is not the one this process forwards video to",
-        ));
-    }
-    if !st.engine.runtime() {
-        return Err(unavailable(
-            if st.engine.status() == crate::engine::Status::Down {
-                "The streaming engine is unreachable"
-            } else {
-                "Playback needs the streaming engine, which is not running"
-            },
-        ));
-    }
+    check_engine(st)?;
     let mut file = resolve_file(st, Some(a), id).await?;
     let burn_in = match q.burn_in_subtitle_id.filter(|n| *n != 0) {
         None => None,
@@ -210,20 +197,7 @@ async fn run(
 
     let mut info = file.info.take();
     let held = scan::lookup(st, file.id, &file.absolute, info.as_mut()).await;
-    let position = match q.start_at {
-        Some(p) => p,
-        None => match file.media_id {
-            Some(media) => db::resume_position(
-                &st.db,
-                a.user.id,
-                media,
-                file.episode_id.filter(|e| *e != 0),
-            )
-            .await?
-            .unwrap_or(0.0),
-            None => 0.0,
-        },
-    };
+    let position = start_position(st, a, &q, &file).await?;
     file.info = info;
     let renditions = if device.supports_hls_subtitles == Some(true) {
         Some(burn_in::renditions(st, &file).await)
@@ -290,6 +264,75 @@ async fn run(
             return Err(open_error(e));
         }
     };
+    register_live(
+        st,
+        a,
+        &open,
+        &file,
+        q.start_quality.as_deref(),
+        (&client, &tags),
+        position,
+    );
+    rescan_hint(st, &open, &file);
+    let fps = file
+        .info
+        .as_ref()
+        .and_then(|i| i.video.first())
+        .and_then(|v| v.frame_rate.as_deref())
+        .and_then(parse_source_fps);
+    let (markers, pre_roll, edl) = side_reads(st, a, &file, q.download, fps).await;
+    Ok(assemble(&open, &file, markers, pre_roll, edl))
+}
+
+fn check_engine(st: &AppState) -> Result<(), AppError> {
+    if st.engine.gateway_mismatch() {
+        return Err(unavailable(
+            "The saved engine URL is not the one this process forwards video to",
+        ));
+    }
+    if !st.engine.runtime() {
+        return Err(unavailable(
+            if st.engine.status() == crate::engine::Status::Down {
+                "The streaming engine is unreachable"
+            } else {
+                "Playback needs the streaming engine, which is not running"
+            },
+        ));
+    }
+    Ok(())
+}
+
+async fn start_position(
+    st: &AppState,
+    a: &crate::http::auth::Authed,
+    q: &Params,
+    file: &ResolvedFile,
+) -> Result<f64, AppError> {
+    Ok(match q.start_at {
+        Some(p) => p,
+        None => match file.media_id {
+            Some(media) => db::resume_position(
+                &st.db,
+                a.user.id,
+                media,
+                file.episode_id.filter(|e| *e != 0),
+            )
+            .await?
+            .unwrap_or(0.0),
+            None => 0.0,
+        },
+    })
+}
+
+fn register_live(
+    st: &AppState,
+    a: &crate::http::auth::Authed,
+    open: &OpenSessionResponse,
+    file: &ResolvedFile,
+    quality: Option<&str>,
+    (client, tags): (&ClientInfo, &std::collections::BTreeMap<String, String>),
+    position: f64,
+) {
     let response = &open.decision.response;
     let live = st.presence.create(LiveSession::from_facts(
         &Facts {
@@ -297,11 +340,11 @@ async fn run(
             user_id: Some(a.user.id),
             media_file_id: file.id as u32,
             profile_hash: open.profile_hash.as_deref(),
-            quality: q.start_quality.as_deref(),
+            quality,
             kind: kind_of(response.play_method),
             decision: &open.decision,
-            client: &client,
-            tags: &tags,
+            client,
+            tags,
             position_s: position,
         },
         now_ms(),
@@ -316,13 +359,20 @@ async fn run(
     {
         st.qoe.set_pipeline(&live_ref, p);
     }
-    rescan_hint(st, &open, &file);
-    let fps = file
-        .info
-        .as_ref()
-        .and_then(|i| i.video.first())
-        .and_then(|v| v.frame_rate.as_deref())
-        .and_then(parse_source_fps);
+}
+
+/// The markers, the pre-roll and the EDL of a file; the session is also marked started.
+async fn side_reads(
+    st: &AppState,
+    a: &crate::http::auth::Authed,
+    file: &ResolvedFile,
+    download: bool,
+    fps: Option<f64>,
+) -> (
+    Option<db::Markers>,
+    Option<Vec<preroll::Item>>,
+    Option<Vec<fliks_domain::edl::EdlRange>>,
+) {
     let (markers, pre_roll, edl, _) = tokio::join!(
         async {
             let episode = file.episode_id.filter(|e| *e != 0)?;
@@ -347,7 +397,7 @@ async fn run(
             }
         },
         async {
-            if let (false, Some(media)) = (q.download, file.media_id)
+            if let (false, Some(media)) = (download, file.media_id)
                 && let Err(e) = db::mark_started(
                     &st.db,
                     a.user.id,
@@ -361,7 +411,7 @@ async fn run(
             }
         },
     );
-    Ok(assemble(&open, &file, markers, pre_roll, edl))
+    (markers, pre_roll, edl)
 }
 
 /// The engine's hints: a stale probe is re-probed (which chains the scan), else a missing scan is made.

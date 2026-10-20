@@ -146,14 +146,60 @@ pub async fn rescan_files(
         media.title,
         dir.display()
     );
-    let norm = |r: &str| r.replace('\\', "/");
     let linked: HashSet<String> = rows.iter().map(|r| norm(&r.rel)).collect();
+    let w = walk_media(&media, &dir, &rows, &linked).await?;
+    let disk: Vec<(String, PathBuf)> = w
+        .files
+        .into_iter()
+        .filter_map(|p| Some((fsx::rel_under(&dir, &p)?, p)))
+        .collect();
+    let on_disk: HashSet<&str> = disk.iter().map(|(r, _)| r.as_str()).collect();
+    let mut c = Counts::default();
+    let mut slots_created = false;
+
+    if w.complete {
+        remove_missing(st, media_id, &rows, &on_disk, &mut c).await?;
+    } else {
+        tracing::warn!("Rescan[media #{media_id}]: a directory could not be read, no row removed");
+    }
+    slots_created |= refresh_existing(st, &media, &dir, &rows, &on_disk, &mut c).await?;
+    slots_created |= add_new(st, &media, &disk, &linked, &mut c).await?;
+    // C51: an interrupted walk proves nothing about what is on disk.
+    if w.complete {
+        reconcile_subtitles(st, media_id, &mut c).await;
+    }
+    tracing::info!(
+        "Rescan: media #{media_id} done (added {}, removed {}, updated {})",
+        c.added,
+        c.removed,
+        c.updated
+    );
+    if c.added + c.removed + c.updated > 0 {
+        crate::media_servers::dispatch_detached(st, "library.rescan");
+    }
+    if slots_created && let Err(e) = crate::media::write::refresh_series_episodes(st, &media).await
+    {
+        tracing::warn!("Rescan[media #{media_id}]: episode metadata refresh failed: {e:?}");
+    }
+    Ok(c)
+}
+
+fn norm(r: &str) -> String {
+    r.replace('\\', "/")
+}
+
+async fn walk_media(
+    media: &MediaRow,
+    dir: &Path,
+    rows: &[Row],
+    linked: &HashSet<String>,
+) -> Result<Walk, AppError> {
     let mut w = Walk {
         files: vec![],
         complete: true,
     };
     if media.folder_name.as_deref().is_some_and(|f| !f.is_empty()) {
-        let (d, l) = (dir.clone(), linked.clone());
+        let (d, l) = (dir.to_path_buf(), linked.clone());
         w = tokio::task::spawn_blocking(move || {
             let mut w = Walk {
                 files: vec![],
@@ -165,7 +211,7 @@ pub async fn rescan_files(
         .await
         .map_err(|e| AppError::internal(e.to_string()))?;
     } else {
-        for r in &rows {
+        for r in rows {
             if let Some(rel) = fsx::safe_rel(&r.rel) {
                 let p = dir.join(rel);
                 if tokio::fs::metadata(&p).await.is_ok_and(|m| m.is_file()) {
@@ -174,47 +220,56 @@ pub async fn rescan_files(
             }
         }
     }
-    let disk: Vec<(String, PathBuf)> = w
-        .files
-        .into_iter()
-        .filter_map(|p| Some((fsx::rel_under(&dir, &p)?, p)))
-        .collect();
-    let on_disk: HashSet<&str> = disk.iter().map(|(r, _)| r.as_str()).collect();
-    let mut c = Counts::default();
-    let mut slots_created = false;
+    Ok(w)
+}
 
-    if w.complete {
-        for r in rows
-            .iter()
-            .filter(|r| !on_disk.contains(norm(&r.rel).as_str()))
-        {
-            if r.rel.contains("..") {
-                tracing::error!(
-                    "Rescan[media #{media_id}]: row with \"..\" in relativePath \"{}\"",
-                    r.rel
-                );
-            }
-            match sqlx::query!("DELETE FROM media_files WHERE id = $1", r.id)
-                .execute(&st.db)
-                .await
-            {
-                Ok(_) => {
-                    drop_thumbnails(st, r.id);
-                    c.removed += 1;
-                    if let Some(ep) = r.episode_id {
-                        clear_has_file(&st.db, ep).await?;
-                    }
-                }
-                Err(e) => tracing::error!(
-                    "Rescan[media #{media_id}]: failed to remove row #{}: {e}",
-                    r.id
-                ),
-            }
+async fn remove_missing(
+    st: &AppState,
+    media_id: i32,
+    rows: &[Row],
+    on_disk: &HashSet<&str>,
+    c: &mut Counts,
+) -> Result<(), AppError> {
+    for r in rows
+        .iter()
+        .filter(|r| !on_disk.contains(norm(&r.rel).as_str()))
+    {
+        if r.rel.contains("..") {
+            tracing::error!(
+                "Rescan[media #{media_id}]: row with \"..\" in relativePath \"{}\"",
+                r.rel
+            );
         }
-    } else {
-        tracing::warn!("Rescan[media #{media_id}]: a directory could not be read, no row removed");
+        match sqlx::query!("DELETE FROM media_files WHERE id = $1", r.id)
+            .execute(&st.db)
+            .await
+        {
+            Ok(_) => {
+                drop_thumbnails(st, r.id);
+                c.removed += 1;
+                if let Some(ep) = r.episode_id {
+                    clear_has_file(&st.db, ep).await?;
+                }
+            }
+            Err(e) => tracing::error!(
+                "Rescan[media #{media_id}]: failed to remove row #{}: {e}",
+                r.id
+            ),
+        }
     }
+    Ok(())
+}
 
+async fn refresh_existing(
+    st: &AppState,
+    media: &MediaRow,
+    dir: &Path,
+    rows: &[Row],
+    on_disk: &HashSet<&str>,
+    c: &mut Counts,
+) -> Result<bool, AppError> {
+    let media_id = media.id;
+    let mut slots_created = false;
     for r in rows
         .iter()
         .filter(|r| on_disk.contains(norm(&r.rel).as_str()))
@@ -289,7 +344,18 @@ pub async fn rescan_files(
             tokio::spawn(async move { st.engine.invalidate(id).await });
         }
     }
+    Ok(slots_created)
+}
 
+async fn add_new(
+    st: &AppState,
+    media: &MediaRow,
+    disk: &[(String, PathBuf)],
+    linked: &HashSet<String>,
+    c: &mut Counts,
+) -> Result<bool, AppError> {
+    let media_id = media.id;
+    let mut slots_created = false;
     for (rel, abs) in disk.iter().filter(|(r, _)| !linked.contains(r)) {
         let Ok(meta) = tokio::fs::metadata(abs).await else {
             continue;
@@ -345,39 +411,24 @@ pub async fn rescan_files(
             Err(e) => tracing::error!("Rescan[media #{media_id}]: failed to add \"{rel}\": {e}"),
         }
     }
+    Ok(slots_created)
+}
 
-    // C51: an interrupted walk proves nothing about what is on disk.
-    if w.complete {
-        let (missing, dupes) =
-            crate::subtitles::sidecars::reconcile_after_rescan(st, media_id).await;
-        c.subtitle_removed_missing = missing as i64;
-        c.subtitle_removed_duplicates = dupes as i64;
-        crate::subtitles::sidecars::discover_external(st, media_id).await;
-        for (file, episode) in sqlx::query_as::<_, (i32, Option<i32>)>(
-            r#"SELECT id, "episodeId" FROM media_files WHERE "mediaId" = $1 ORDER BY id"#,
-        )
-        .bind(media_id)
-        .fetch_all(&st.db)
-        .await
-        .unwrap_or_default()
-        {
-            crate::subtitles::embedded::detect_and_store(st, media_id, file, episode).await;
-        }
-    }
-    tracing::info!(
-        "Rescan: media #{media_id} done (added {}, removed {}, updated {})",
-        c.added,
-        c.removed,
-        c.updated
-    );
-    if c.added + c.removed + c.updated > 0 {
-        crate::media_servers::dispatch_detached(st, "library.rescan");
-    }
-    if slots_created && let Err(e) = crate::media::write::refresh_series_episodes(st, &media).await
+async fn reconcile_subtitles(st: &AppState, media_id: i32, c: &mut Counts) {
+    let (missing, dupes) = crate::subtitles::sidecars::reconcile_after_rescan(st, media_id).await;
+    c.subtitle_removed_missing = missing as i64;
+    c.subtitle_removed_duplicates = dupes as i64;
+    crate::subtitles::sidecars::discover_external(st, media_id).await;
+    for (file, episode) in sqlx::query_as::<_, (i32, Option<i32>)>(
+        r#"SELECT id, "episodeId" FROM media_files WHERE "mediaId" = $1 ORDER BY id"#,
+    )
+    .bind(media_id)
+    .fetch_all(&st.db)
+    .await
+    .unwrap_or_default()
     {
-        tracing::warn!("Rescan[media #{media_id}]: episode metadata refresh failed: {e:?}");
+        crate::subtitles::embedded::detect_and_store(st, media_id, file, episode).await;
     }
-    Ok(c)
 }
 
 async fn link_row(st: &AppState, file: i32, ep: i32) -> Result<(), sqlx::Error> {

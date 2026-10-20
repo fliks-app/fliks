@@ -207,26 +207,7 @@ impl Plugins {
 
     /// Rule 54: every check before any write; settings and rows in one core transaction.
     pub async fn import(&self, id: &str, doc: &Value) -> Result<Value, InstallError> {
-        let ok = doc["formatVersion"] == json!(1)
-            && doc["pluginId"].is_string()
-            && doc["pluginVersion"].is_string()
-            && doc["settings"]
-                .as_object()
-                .is_some_and(|s| s.values().all(|v| v.is_null() || v.is_string()))
-            && doc["tables"]
-                .as_object()
-                .is_some_and(|t| t.values().all(Value::is_array));
-        if !ok {
-            return Err(malformed());
-        }
-        let doc_id = doc["pluginId"].as_str().unwrap_or_default();
-        if doc_id != id {
-            return Err(ie(
-                StatusCode::BAD_REQUEST,
-                "PLUGIN_EXPORT_ID_MISMATCH",
-                format!("export is for \"{doc_id}\", not \"{id}\""),
-            ));
-        }
+        check_document(id, doc)?;
         let st = self
             .app()
             .ok_or_else(|| internal("no application state"))?
@@ -244,26 +225,7 @@ impl Plugins {
             })?;
         let _l = self.lock(id).await;
         let pkg = self.find_installed(id).await?;
-        if pkg.status != "active" {
-            return Err(ie(
-                StatusCode::CONFLICT,
-                "PLUGIN_NOT_READY",
-                format!(
-                    "plugin \"{id}\" has not completed activation — its schema may not be migrated yet"
-                ),
-            ));
-        }
-        let doc_version = doc["pluginVersion"].as_str().unwrap_or_default();
-        if doc_version != pkg.version {
-            return Err(ie(
-                StatusCode::CONFLICT,
-                "PLUGIN_EXPORT_VERSION_MISMATCH",
-                format!(
-                    "export is from version {doc_version}, installed version is {} — install {doc_version} before importing",
-                    pkg.version
-                ),
-            ));
-        }
+        check_installed(id, doc, &pkg)?;
         let has = Self::has_schema(&pkg.manifest);
         let tables_doc = doc["tables"].as_object().expect("checked");
         let settings = doc["settings"].as_object().expect("checked");
@@ -279,19 +241,7 @@ impl Plugins {
         let ids = super::imports::installed_ids(&self.db)
             .await
             .map_err(internal)?;
-        let owned = |k: &str| {
-            fliks_domain::plugins::setting_owner(k, ids.iter().map(String::as_str)) == Some(id)
-        };
-        if let Some(k) = settings.keys().find(|k| !owned(k)) {
-            return Err(ie(
-                StatusCode::BAD_REQUEST,
-                "PLUGIN_EXPORT_SETTING_OUT_OF_SCOPE",
-                format!(
-                    "setting {} is outside plugin \"{id}\"'s namespace",
-                    Value::String(k.clone())
-                ),
-            ));
-        }
+        check_setting_scope(id, settings, &ids)?;
         let mut counts = Map::new();
         let entries: Vec<(String, Option<String>)> = settings
             .iter()
@@ -304,99 +254,181 @@ impl Plugins {
                 .map_err(internal)?;
         }
         if has {
-            // Deferred triggers fire at commit with the role still set, so the sandbox holds there too.
-            self.as_plugin(&mut tx, id).await?;
-            let s = schema(id);
-            let known = tables(&mut tx, &s).await.map_err(internal)?;
-            for t in &known {
-                // Re-checked under the lock, so nothing lands between the check and the inserts.
-                sqlx::query(&format!(
-                    "LOCK TABLE {}.{} IN EXCLUSIVE MODE",
-                    quote(&s),
-                    quote(t)
-                ))
-                .execute(&mut *tx)
-                .await
-                .map_err(internal)?;
-                let any: Option<i32> = sqlx::query_scalar(&format!(
-                    "SELECT 1 FROM {}.{} LIMIT 1",
-                    quote(&s),
-                    quote(t)
-                ))
-                .fetch_optional(&mut *tx)
-                .await
-                .map_err(internal)?;
-                if any.is_some() {
-                    return Err(ie(
-                        StatusCode::CONFLICT,
-                        "PLUGIN_SCHEMA_NOT_EMPTY",
-                        format!(
-                            "plugin \"{id}\" already has rows in its schema — uninstall and reinstall it before importing"
-                        ),
-                    ));
-                }
-            }
-            for (t, rows) in tables_doc {
-                if !known.contains(t) {
-                    return Err(malformed());
-                }
-                let c = columns(&mut tx, &s, t).await.map_err(internal)?;
-                for r in rows.as_array().expect("checked") {
-                    let Some(r) = r.as_object() else {
-                        return Err(malformed());
-                    };
-                    if r.keys().any(|k| !c.contains(k)) {
-                        return Err(malformed());
-                    }
-                }
-                counts.insert(t.clone(), json!(rows.as_array().map_or(0, Vec::len)));
-            }
-            let names: Vec<String> = tables_doc.keys().cloned().collect();
-            for t in fk_order(&mut tx, &s, &names).await.map_err(internal)? {
-                let target = format!("{}.{}", quote(&s), quote(&t));
-                for r in tables_doc[&t].as_array().expect("checked") {
-                    let r = r.as_object().expect("checked");
-                    if r.is_empty() {
-                        continue;
-                    }
-                    let list = r.keys().map(|k| quote(k)).collect::<Vec<_>>().join(", ");
-                    sqlx::query(&format!(
-                        "INSERT INTO {target} ({list}) OVERRIDING SYSTEM VALUE
-                         SELECT {list} FROM jsonb_populate_record(NULL::{target}, $1)"
-                    ))
-                    .bind(Value::Object(r.clone()))
-                    .execute(&mut *tx)
-                    .await
-                    .map_err(internal)?;
-                }
-                let serials: Vec<String> = sqlx::query_scalar(
-                    "SELECT column_name::text FROM information_schema.columns
-                      WHERE table_schema = $1 AND table_name = $2
-                        AND pg_get_serial_sequence(quote_ident($1) || '.' || quote_ident($2), column_name) IS NOT NULL",
-                )
-                .bind(&s)
-                .bind(&t)
-                .fetch_all(&mut *tx)
-                .await
-                .map_err(internal)?;
-                for c in serials {
-                    sqlx::query(&format!(
-                        "SELECT setval(pg_get_serial_sequence(quote_ident($1) || '.' || quote_ident($2), $3),
-                           (SELECT COALESCE(MAX({}), 0) + 1 FROM {target}), false)",
-                        quote(&c)
-                    ))
-                    .bind(&s)
-                    .bind(&t)
-                    .bind(&c)
-                    .execute(&mut *tx)
-                    .await
-                    .map_err(internal)?;
-                }
-            }
+            counts = self.restore_tables(&mut tx, id, tables_doc).await?;
         }
         tx.commit().await.map_err(internal)?;
         let keys: Vec<String> = entries.iter().map(|(k, _)| k.clone()).collect();
         crate::settings::notify_changed(&st, &keys, Some(&format!("plugin-import:{id}"))).await;
         Ok(json!({"pluginId": id, "tablesRestored": counts, "settingsRestored": entries.len()}))
     }
+
+    /// Every table of the document into the empty schema, in foreign-key order; returns the row counts.
+    async fn restore_tables(
+        &self,
+        tx: &mut PgConnection,
+        id: &str,
+        tables_doc: &Map<String, Value>,
+    ) -> Result<Map<String, Value>, InstallError> {
+        let mut counts = Map::new();
+        // Deferred triggers fire at commit with the role still set, so the sandbox holds there too.
+        self.as_plugin(tx, id).await?;
+        let s = schema(id);
+        let known = tables(tx, &s).await.map_err(internal)?;
+        for t in &known {
+            // Re-checked under the lock, so nothing lands between the check and the inserts.
+            sqlx::query(&format!(
+                "LOCK TABLE {}.{} IN EXCLUSIVE MODE",
+                quote(&s),
+                quote(t)
+            ))
+            .execute(&mut *tx)
+            .await
+            .map_err(internal)?;
+            let any: Option<i32> =
+                sqlx::query_scalar(&format!("SELECT 1 FROM {}.{} LIMIT 1", quote(&s), quote(t)))
+                    .fetch_optional(&mut *tx)
+                    .await
+                    .map_err(internal)?;
+            if any.is_some() {
+                return Err(ie(
+                    StatusCode::CONFLICT,
+                    "PLUGIN_SCHEMA_NOT_EMPTY",
+                    format!(
+                        "plugin \"{id}\" already has rows in its schema — uninstall and reinstall it before importing"
+                    ),
+                ));
+            }
+        }
+        for (t, rows) in tables_doc {
+            if !known.contains(t) {
+                return Err(malformed());
+            }
+            let c = columns(tx, &s, t).await.map_err(internal)?;
+            for r in rows.as_array().expect("checked") {
+                let Some(r) = r.as_object() else {
+                    return Err(malformed());
+                };
+                if r.keys().any(|k| !c.contains(k)) {
+                    return Err(malformed());
+                }
+            }
+            counts.insert(t.clone(), json!(rows.as_array().map_or(0, Vec::len)));
+        }
+        let names: Vec<String> = tables_doc.keys().cloned().collect();
+        for t in fk_order(tx, &s, &names).await.map_err(internal)? {
+            let target = format!("{}.{}", quote(&s), quote(&t));
+            for r in tables_doc[&t].as_array().expect("checked") {
+                let r = r.as_object().expect("checked");
+                if r.is_empty() {
+                    continue;
+                }
+                let list = r.keys().map(|k| quote(k)).collect::<Vec<_>>().join(", ");
+                sqlx::query(&format!(
+                    "INSERT INTO {target} ({list}) OVERRIDING SYSTEM VALUE
+                     SELECT {list} FROM jsonb_populate_record(NULL::{target}, $1)"
+                ))
+                .bind(Value::Object(r.clone()))
+                .execute(&mut *tx)
+                .await
+                .map_err(internal)?;
+            }
+            let serials: Vec<String> = sqlx::query_scalar(
+                "SELECT column_name::text FROM information_schema.columns
+                  WHERE table_schema = $1 AND table_name = $2
+                    AND pg_get_serial_sequence(quote_ident($1) || '.' || quote_ident($2), column_name) IS NOT NULL",
+            )
+            .bind(&s)
+            .bind(&t)
+            .fetch_all(&mut *tx)
+            .await
+            .map_err(internal)?;
+            for c in serials {
+                sqlx::query(&format!(
+                    "SELECT setval(pg_get_serial_sequence(quote_ident($1) || '.' || quote_ident($2), $3),
+                       (SELECT COALESCE(MAX({}), 0) + 1 FROM {target}), false)",
+                    quote(&c)
+                ))
+                .bind(&s)
+                .bind(&t)
+                .bind(&c)
+                .execute(&mut *tx)
+                .await
+                .map_err(internal)?;
+            }
+        }
+        Ok(counts)
+    }
+}
+
+fn check_document(id: &str, doc: &Value) -> Result<(), InstallError> {
+    let ok = doc["formatVersion"] == json!(1)
+        && doc["pluginId"].is_string()
+        && doc["pluginVersion"].is_string()
+        && doc["settings"]
+            .as_object()
+            .is_some_and(|s| s.values().all(|v| v.is_null() || v.is_string()))
+        && doc["tables"]
+            .as_object()
+            .is_some_and(|t| t.values().all(Value::is_array));
+    if !ok {
+        return Err(malformed());
+    }
+    let doc_id = doc["pluginId"].as_str().unwrap_or_default();
+    if doc_id != id {
+        return Err(ie(
+            StatusCode::BAD_REQUEST,
+            "PLUGIN_EXPORT_ID_MISMATCH",
+            format!("export is for \"{doc_id}\", not \"{id}\""),
+        ));
+    }
+    Ok(())
+}
+
+fn check_installed(
+    id: &str,
+    doc: &Value,
+    pkg: &crate::plugins::Package,
+) -> Result<(), InstallError> {
+    if pkg.status != "active" {
+        return Err(ie(
+            StatusCode::CONFLICT,
+            "PLUGIN_NOT_READY",
+            format!(
+                "plugin \"{id}\" has not completed activation — its schema may not be migrated yet"
+            ),
+        ));
+    }
+    let doc_version = doc["pluginVersion"].as_str().unwrap_or_default();
+    if doc_version != pkg.version {
+        return Err(ie(
+            StatusCode::CONFLICT,
+            "PLUGIN_EXPORT_VERSION_MISMATCH",
+            format!(
+                "export is from version {doc_version}, installed version is {} — install {doc_version} before importing",
+                pkg.version
+            ),
+        ));
+    }
+    Ok(())
+}
+
+fn check_setting_scope(
+    id: &str,
+    settings: &Map<String, Value>,
+    ids: &[String],
+) -> Result<(), InstallError> {
+    let owned = |k: &str| {
+        fliks_domain::plugins::setting_owner(k, ids.iter().map(String::as_str)) == Some(id)
+    };
+    if let Some(k) = settings.keys().find(|k| !owned(k)) {
+        return Err(ie(
+            StatusCode::BAD_REQUEST,
+            "PLUGIN_EXPORT_SETTING_OUT_OF_SCOPE",
+            format!(
+                "setting {} is outside plugin \"{id}\"'s namespace",
+                Value::String(k.clone())
+            ),
+        ));
+    }
+    Ok(())
 }
