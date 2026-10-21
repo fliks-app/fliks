@@ -265,7 +265,7 @@
 </div>
 
 <dialog #editorDialog class="modal">
-  <div class="modal-box max-w-2xl max-h-[92vh] flex flex-col p-0 gap-0 overflow-hidden">
+  <div class="modal-box max-w-2xl flex flex-col p-0 gap-0 overflow-hidden">
     <app-modal-header
       flush
       [title]="(editingId() === null ? labels().createTitleKey : labels().editTitleKey) | translate"
@@ -361,7 +361,7 @@
 </dialog>
 
 <dialog #bulkDialog class="modal">
-  <div class="modal-box max-w-2xl max-h-[92vh] flex flex-col p-0 gap-0 overflow-hidden">
+  <div class="modal-box max-w-2xl flex flex-col p-0 gap-0 overflow-hidden">
     <app-modal-header
       flush
       [title]="'provider_list.bulk_edit_title' | translate: { count: selectedIds().size }"

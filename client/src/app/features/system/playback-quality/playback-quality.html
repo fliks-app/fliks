@@ -223,7 +223,7 @@
 </div>
 
 <dialog #detailDialog class="modal" (close)="detail.set(null)">
-  <div class="modal-box w-11/12 max-w-6xl p-0 gap-0 overflow-hidden flex flex-col max-h-[90vh]">
+  <div class="modal-box w-11/12 max-w-6xl p-0 gap-0 overflow-hidden flex flex-col">
     @if (detail(); as d) {
       <app-modal-header flush>
         <div class="min-w-0">
