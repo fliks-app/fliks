@@ -6,7 +6,6 @@
       "Read(server/fixtures/**)",
       "Read(server/parity/seed/*.sql)",
       "Read(CHANGELOG.md)",
-      "Read(client/**)",
       "Read(docker-compose.yml)"
     ]
   }
