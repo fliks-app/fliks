@@ -1386,6 +1386,15 @@ async fn an_unmonitored_media_retires_its_available_request_and_the_title_can_be
 }
 
 #[sqlx::test(migrations = false)]
+async fn a_bulk_unmonitor_retires_available_requests_and_the_title_can_be_requested_again(
+    pool: PgPool,
+) {
+    let c = ctx(pool).await;
+    let body = json!({"ids": [14], "monitored": false});
+    available_then(&c, ("PATCH", "/api/media/bulk", body)).await;
+}
+
+#[sqlx::test(migrations = false)]
 async fn unmonitoring_a_season_trims_or_retires_available_scopes(pool: PgPool) {
     let c = ctx(pool).await;
     q(&c.pool(), r#"INSERT INTO media (id, title, type, "tmdbId", "libraryId") VALUES (15, 'S', 'series', 94, 2)"#).await;

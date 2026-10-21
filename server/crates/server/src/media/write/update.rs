@@ -500,6 +500,14 @@ pub async fn bulk(
         m => m.flatten(),
     };
     let mut tx = st.db.begin().await?;
+    let was_monitored = sqlx::query!(
+        r#"SELECT id, type::text AS "media_type!", "tmdbId" AS tmdb_id
+           FROM media WHERE id = ANY($1) AND monitored AND $2::bool IS NOT NULL"#,
+        &ids,
+        monitored
+    )
+    .fetch_all(&mut *tx)
+    .await?;
     let updated = sqlx::query!(
         r#"UPDATE media SET
              "qualityProfileId" = CASE WHEN $2 THEN $3 ELSE "qualityProfileId" END,
@@ -522,6 +530,18 @@ pub async fn bulk(
         cascade_monitored(&mut tx, &ids, m).await?;
     }
     tx.commit().await?;
+    if let Some(m) = monitored {
+        let lifecycle = crate::requests::Lifecycle::of(&st);
+        for r in was_monitored {
+            let media = crate::requests::MediaRef {
+                id: r.id,
+                media_type: r.media_type,
+                tmdb_id: r.tmdb_id,
+                monitored: m,
+            };
+            lifecycle.on_media_monitor_change(media, true).await;
+        }
+    }
     Ok(Json(json!({ "updated": updated })))
 }
 

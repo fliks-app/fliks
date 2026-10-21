@@ -1,0 +1,35 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, type::text AS \"media_type!\", \"tmdbId\" AS tmdb_id\n           FROM media WHERE id = ANY($1) AND monitored AND $2::bool IS NOT NULL",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "media_type!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "tmdb_id",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4Array",
+        "Bool"
+      ]
+    },
+    "nullable": [
+      false,
+      null,
+      true
+    ]
+  },
+  "hash": "8a0ac7a5033b2d414901acb558ccbe0d33ce00038efc959c903ff689167c5ff1"
+}
