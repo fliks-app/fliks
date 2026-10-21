@@ -14,7 +14,7 @@ pub fn schema(plugin_id: &str) -> String {
     format!("plugin_{}", plugin_id.replace('.', "_"))
 }
 
-/// C119: `fp_<database oid as 8 hex>_<suffix>`, at most 63 bytes.
+/// `fp_<database oid as 8 hex>_<suffix>`, at most 63 bytes.
 pub fn role(oid: &str, plugin_id: &str) -> String {
     format!("fp_{oid}_{}", plugin_id.replace('.', "_"))
 }
@@ -79,7 +79,7 @@ pub(super) async fn adopt(tx: &mut Tx, former: &str, to: &str) -> sqlx::Result<(
 #[derive(Debug)]
 pub struct ProvisionError {
     pub message: String,
-    /// Postgres could not be reached (C109).
+    /// Postgres could not be reached.
     pub unavailable: bool,
 }
 
@@ -266,7 +266,7 @@ pub async fn provision(
     Ok(password)
 }
 
-/// Uninstall (rule 20): our role, a never-adopted Node-era role, the schema; tolerant of none.
+/// Uninstall (rule 20): our role, a never-adopted 4.x role, the schema; tolerant of none.
 pub async fn deprovision(core: &PgPool, plugin_id: &str) -> sqlx::Result<()> {
     let oid = database_oid(core).await?;
     let mut tx = core.begin().await?;

@@ -94,7 +94,7 @@ pub async fn files_of_media(db: impl PgExecutor<'_>, media: i32) -> sqlx::Result
     .await
 }
 
-/// `M` and its realpath `Mc`: every write is checked against `Mc` (F52).
+/// `M` and its realpath `Mc`: every write is checked against `Mc`.
 pub struct Dirs {
     pub m: PathBuf,
     pub mc: fsx::Root,
@@ -111,7 +111,7 @@ impl MediaCtx {
         let m = lib_root
             .media_dir(self.folder_name.as_deref())
             .map_err(|_| AppError::bad_request(no_root))?;
-        // F45: a folder name that is a symlink out of the library is no media directory.
+        // A folder name that is a symlink out of the library is no media directory.
         if !lib_root.contains(&m, true) {
             return Err(AppError::bad_request(no_root));
         }

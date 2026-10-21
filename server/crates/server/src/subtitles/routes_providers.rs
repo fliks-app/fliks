@@ -58,7 +58,7 @@ fn view(p: &ProviderRow) -> Value {
     })
 }
 
-/// class-validator's messages for the fields of a provider body.
+/// Validation messages for the fields of a provider body.
 struct Body {
     name: Option<String>,
     kind: Option<String>,
@@ -282,7 +282,7 @@ pub async fn update(
     let b = validate(body.0, false)?;
     let cur = find(&st, id).await?;
     let kind = b.kind.unwrap_or_else(|| cur.kind.clone());
-    // C69: a changed type never inherits the stored credentials.
+    // A changed type never inherits the stored credentials.
     let keep = (kind == cur.kind).then_some(&cur.settings);
     let settings = match &b.settings {
         Some(s) => secrets::merge(keep, s, &SECRET_KEYS),
@@ -326,7 +326,7 @@ pub async fn remove(State(st): State<AppState>, a: Authed, id: Id) -> Res<Status
 
 #[utoipa::path(post, path = "/api/subtitles/providers/{id}/test", responses((status = 201)))]
 pub async fn test(State(st): State<AppState>, a: Authed, id: Id) -> Res<(StatusCode, Json<Value>)> {
-    // F51: the stored credentials are used, so the route needs `settings.access`.
+    // The stored credentials are used, so the route needs `settings.access`.
     policy(&a, Action::Update)?;
     let PathParams(id) = id?;
     let p = find(&st, id).await?;
@@ -381,7 +381,7 @@ fn window_start(tz: chrono_tz::Tz, now: DateTime<Utc>) -> DateTime<Utc> {
     )
 }
 
-/// Nest's instant: the pg `date` read as local midnight of the server zone.
+/// The pg `date` read as local midnight of the server zone.
 fn local_midnight(tz: chrono_tz::Tz, d: NaiveDate) -> DateTime<Utc> {
     let midnight = d.and_hms_opt(0, 0, 0).unwrap_or_default();
     tz.from_local_datetime(&midnight).earliest().map_or_else(

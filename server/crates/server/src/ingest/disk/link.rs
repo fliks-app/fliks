@@ -1,7 +1,7 @@
 //! Linking disk files to media: the orphan relink, the import confirm and the unmatched-media find or create.
 use super::*;
 
-/// Rules 82-87 under the media's lock (C54).
+/// Rules 82-87 under the media's lock.
 pub(super) async fn link_files(
     st: &AppState,
     d: &RelinkDto,
@@ -56,7 +56,7 @@ async fn relink_moved(
     let mut entries = vec![];
     for f in &d.files {
         let name = file_name(Path::new(&f.path));
-        // F47: an in-place reorganize moves files that are already in this library, nothing else.
+        // An in-place reorganize moves files that are already in this library, nothing else.
         if d.transfer.is_none()
             && !fsx::Root::open(&lib.path)
                 .is_ok_and(|r| dunce::canonicalize(&f.path).is_ok_and(|p| r.contains(&p, false)))
@@ -194,7 +194,7 @@ async fn drop_unmatched_if_empty(st: &AppState, media_id: i32, key: &str) -> Res
     Ok(())
 }
 
-/// `confirmImport` (rule 92, C53); the caller holds the media's lock.
+/// `confirmImport` (rule 92); the caller holds the media's lock.
 pub(super) async fn confirm_import(
     st: &AppState,
     guard: &tokio::sync::OwnedMutexGuard<()>,
@@ -310,7 +310,7 @@ pub(super) fn pin_folder(f: &naming::NamingFormats, m: &MediaRow) -> String {
     }
 }
 
-/// `findOrImportIdentified` (rule 78, C1: a numeric id).
+/// `findOrImportIdentified` (rule 78: a numeric id).
 pub(super) async fn find_or_import(
     st: &AppState,
     a: &Authed,

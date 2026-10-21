@@ -308,7 +308,7 @@ async fn try_run(
             overview: media.overview.clone(),
         },
     };
-    // F49: the viewers of the media only, resolved once; events go out in order.
+    // The viewers of the media only, resolved once; events go out in order.
     let viewers = events::viewers_for_media(st, source.media_id.unwrap_or(0)).await;
     let on = |done: usize, total: usize| {
         let pct = if total > 0 {
@@ -364,7 +364,7 @@ async fn try_run(
     let rel = dirs
         .write_sidecar(&file.relative_path, &suffix, ".srt", cleaned.as_bytes())
         .map_err(|e| other(&e.text()))?;
-    // C61: one statement; no row back means the placeholder was deleted, so the file goes too.
+    // One statement; no row back means the placeholder was deleted, so the file goes too.
     let attached: Option<i32> = sqlx::query_scalar(
         r#"UPDATE subtitle_files SET "filePath" = $2, "hearingImpaired" = $3, status = 'downloaded' WHERE id = $1 RETURNING id"#,
     )

@@ -1,4 +1,4 @@
-//! Plugin crons and triggers (rule 50, C111) and the scheduled-call claimer (rule 55).
+//! Plugin crons and triggers (rule 50) and the scheduled-call claimer (rule 55).
 use super::runtime::{CallError, State};
 use super::scheduled;
 use crate::state::AppState;

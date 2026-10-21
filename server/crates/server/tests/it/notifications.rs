@@ -168,7 +168,7 @@ async fn authz_and_bad_ids(pool: PgPool) {
             "{m} {u}"
         );
     }
-    // C1: ids outside int4 or non-integers are 400, never 500.
+    // Ids outside int4 or non-integers are 400, never 500.
     for id in ["99999999999", "abc", "007", "1.5"] {
         let (s, body) = admin(&c, "GET", &format!("/api/notifications/{id}"), None).await;
         assert_eq!(s, 400, "{id}");
@@ -197,7 +197,7 @@ async fn authz_and_bad_ids(pool: PgPool) {
 }
 
 #[sqlx::test]
-async fn secrets_follow_the_f5_convention(pool: PgPool) {
+async fn secrets_follow_the_redact_merge_convention(pool: PgPool) {
     let c = ctx(pool).await;
     let (s, created) = admin(
         &c,
@@ -269,7 +269,7 @@ async fn secrets_follow_the_f5_convention(pool: PgPool) {
 }
 
 #[sqlx::test]
-async fn f28_webhook_url_is_a_secret(pool: PgPool) {
+async fn webhook_url_is_a_secret(pool: PgPool) {
     let c = ctx(pool).await;
     let hook = "https://discord.test/api/webhooks/1/abc";
     let (_, d) = admin(&c, "POST", "/api/notifications", Some(json!({"name": "d", "type": "discord", "settings": {"webhookUrl": hook, "username": "Bot"}}))).await;
@@ -349,7 +349,7 @@ async fn validation_and_events_list(pool: PgPool) {
             .unwrap()
             .starts_with("each value in events must be one of")
     );
-    // C1: a null on a column that cannot hold it is a 400, not Nest's 500
+    // A null on a column that cannot hold it is a 400
     let ok = json!({"name": "n", "type": "ntfy", "settings": {"url": "https://n.test"}});
     let (_, created) = admin(&c, "POST", "/api/notifications", Some(ok.clone())).await;
     let uri = format!("/api/notifications/{}", created["id"]);
@@ -545,7 +545,7 @@ async fn test_route_reports_results_never_errors(pool: PgPool) {
             json!({"ok": false, "message": "Request failed with status code 401"})
         )
     );
-    // redirects are followed as in Nest (Q1)
+    // redirects are followed
     let (_, b) = test_send(
         &c,
         "slack",
@@ -563,7 +563,7 @@ async fn test_route_reports_results_never_errors(pool: PgPool) {
 }
 
 #[sqlx::test]
-async fn f29_errors_never_carry_the_url(pool: PgPool) {
+async fn errors_never_carry_the_url(pool: PgPool) {
     let c = ctx(pool).await;
     // a port nothing listens on: bind then drop
     let closed = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -589,7 +589,7 @@ async fn f29_errors_never_carry_the_url(pool: PgPool) {
 }
 
 #[sqlx::test]
-async fn c16_a_silent_receiver_times_out_after_10s(pool: PgPool) {
+async fn a_silent_receiver_times_out_after_10s(pool: PgPool) {
     let c = ctx(pool).await;
     let (base, _) = spawn_mock().await;
     add(

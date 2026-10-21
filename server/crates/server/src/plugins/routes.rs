@@ -1,5 +1,5 @@
 //! `/api/plugins/*` (`plugins.md` Routes). A path under `/api/plugins/<id>/` that a concrete route
-//! does not answer for a method falls through to the proxy, as Express did.
+//! does not answer for a method falls through to the proxy.
 use super::install::{InstallError, ie};
 use super::packages;
 use super::runtime::{CallError, State as RtState};
@@ -353,7 +353,7 @@ pub async fn uninstall(State(st): State<AppState>, a: Authed, Path(id): Path<Str
     Ok(StatusCode::NO_CONTENT.into_response())
 }
 
-/// `DELETE /api/plugins/{ui,metrics,sources}`: Express routed these to `:pluginId` (C104 ids).
+/// `DELETE /api/plugins/{ui,metrics,sources}`: 4.x routed these to `:pluginId`.
 async fn uninstall_literal(State(st): State<AppState>, a: Authed, req: Request) -> Res {
     need(&a, Action::Manage)?;
     let id = req

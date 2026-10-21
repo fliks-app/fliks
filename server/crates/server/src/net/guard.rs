@@ -1,4 +1,4 @@
-//! The outbound guard (`plugins.md` "Outbound HTTP guard", F58/F65): one lookup, every address
+//! The outbound guard (`plugins.md` "Outbound HTTP guard"): one lookup, every address
 //! vetted by `fliks_domain::net`, the connection made to the vetted addresses.
 use fliks_domain::net::{Class, classify};
 use futures_util::future::BoxFuture;

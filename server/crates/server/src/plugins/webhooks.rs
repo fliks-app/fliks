@@ -1,4 +1,4 @@
-//! Data-tier webhooks (`plugins.md` rule 52, F65, F66).
+//! Data-tier webhooks (`plugins.md` rule 52).
 use super::fetch::WebhookError;
 use crate::state::AppState;
 use serde::Serialize;

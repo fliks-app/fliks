@@ -33,7 +33,7 @@ fn run(i: &Value) -> Value {
                         Body::Json(v) => v,
                         Body::Text(t) => t.into(),
                     };
-                    // F30 is a deliberate deviation from Nest's recorded body.
+                    // No mention injection, unlike the 4.x body.
                     if typ == "discord" {
                         body.as_object_mut().unwrap().remove("allowed_mentions");
                     }

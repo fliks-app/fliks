@@ -1,4 +1,4 @@
-//! C119: role names scoped by the database OID, Node-era adoption, restore and template copies.
+//! Role names scoped by the database OID, 4.x adoption, restore and template copies.
 use super::harness::*;
 use fliks_server::plugins::db;
 use sqlx::{Connection, PgConnection};
@@ -47,7 +47,7 @@ async fn provision_adopt_and_deprovision() {
     );
     assert!(
         !exists(&s.pool, "plugin_acme_tool").await,
-        "the Node-era role is dropped"
+        "the 4.x role is dropped"
     );
     let kept: String = sqlx::query_scalar(r#"SELECT name FROM "plugin_acme_tool"."items""#)
         .fetch_one(&s.pool)

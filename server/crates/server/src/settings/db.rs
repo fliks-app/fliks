@@ -69,7 +69,7 @@ pub async fn manifests(pool: &PgPool) -> sqlx::Result<Vec<(String, serde_json::V
     Ok(rows.into_iter().map(|r| (r.pluginId, r.manifest)).collect())
 }
 
-/// The text node-pg's `prepareValue` writes for a non-null JSON value Nest passes through untyped.
+/// The text 4.x wrote for a non-null JSON value, passed through untyped.
 // ponytail: object keys follow serde_json's sorted map, not JS insertion order; preserve_order if it matters.
 pub fn pg_text(v: &serde_json::Value) -> String {
     use serde_json::Value;

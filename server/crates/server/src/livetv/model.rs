@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use serde::Serialize;
 use sqlx::{FromRow, types::Json};
 
-/// Every `livetv_sources` column but `password`, which no route ever serialises (F5).
+/// Every `livetv_sources` column but `password`, which no route ever serialises.
 pub const SOURCE_COLS: &str = r#"id, "createdAt", "updatedAt", name, kind, url, username, "userAgent", referer, "maxStreams",
     "maxStreamsIsManual", "refreshIntervalHours", "includeGroupsPattern", "excludeGroupsPattern", "expiresAt",
     "accountStatus", "guideUrls", "playlistEtag", "playlistLastModified", enabled, priority, "lastSyncAt",

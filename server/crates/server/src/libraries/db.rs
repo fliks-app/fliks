@@ -58,7 +58,7 @@ pub struct Detailed {
     pub disk: Option<Disk>,
 }
 
-/// F22: absolute server paths only for callers who can manage libraries.
+/// Absolute server paths only for callers who can manage libraries.
 pub fn paths_visible(perms: &Permissions) -> bool {
     perms.can(Action::Manage, &Subject::Settings)
 }
@@ -78,7 +78,7 @@ pub fn not_found(id: i32) -> AppError {
     AppError::not_found(format!("Library #{id} not found"))
 }
 
-/// Byte-order name sort (README "Frozen as is": collation-dependent lists), then `id` (C12).
+/// Byte-order name sort (collation-dependent lists), then `id`.
 pub async fn list(db: &PgPool, ids: &[i32]) -> sqlx::Result<Vec<Library>> {
     sqlx::query_as!(
         Library,
@@ -111,7 +111,7 @@ pub async fn summaries(db: &PgPool, ids: &[i32]) -> sqlx::Result<Vec<Summary>> {
     .await
 }
 
-/// `library_user_access.userId` per library, in insertion order (C12).
+/// `library_user_access.userId` per library, in insertion order.
 pub async fn user_ids(db: &PgPool, libraries: &[i32]) -> sqlx::Result<HashMap<i32, Vec<i32>>> {
     let rows = sqlx::query!(
         r#"SELECT "libraryId" AS "library_id!", "userId" AS "user_id!" FROM library_user_access
@@ -147,7 +147,7 @@ pub async fn detail(db: &PgPool, libraries: Vec<Library>) -> sqlx::Result<Vec<De
         .collect())
 }
 
-/// Maps the constraint failures Nest answered 500 for (C1, rule 38).
+/// Maps the constraint failures 4.x answered 500 for (rule 38).
 pub fn constraint(e: sqlx::Error) -> AppError {
     let Some(d) = e.as_database_error() else {
         return e.into();

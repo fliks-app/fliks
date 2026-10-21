@@ -240,7 +240,7 @@ pub async fn enqueue(st: &AppState, id: i32, options: Options) -> Result<Value, 
         .map_or(out, |(_, v)| v))
 }
 
-/// Starts queued items while a slot is free; each item runs with its own options (C56).
+/// Starts queued items while a slot is free; each item runs with its own options.
 /// Returns each started item as it looked at the start (what an enqueue answers).
 pub fn pump(st: &AppState) -> Vec<(i32, Value)> {
     let mut started = vec![];
@@ -345,7 +345,7 @@ fn format_of(stored: &str) -> Result<SubtitleFormat, String> {
     })
 }
 
-/// `syncReference`, with the reference confined to the media directory (F53).
+/// `syncReference`, with the reference confined to the media directory.
 fn reference(raw: Option<&str>, dirs: &Dirs) -> Result<SyncReference, String> {
     let Some(raw) = raw.filter(|r| !r.is_empty() && *r != "auto") else {
         return Ok(SyncReference::Auto);

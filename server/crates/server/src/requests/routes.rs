@@ -20,7 +20,7 @@ use serde_json::Value;
 
 type Pairs = Query<Vec<(String, String)>>;
 
-/// Body parsing after the policy and id checks, as Nest's guards run before its pipes.
+/// Body parsing after the policy and id checks, as 4.x guards run before its pipes.
 async fn body(req: Request) -> Res<Value> {
     let ValidJson(v) = ValidJson::<Value>::from_request(req, &()).await?;
     Ok(v)

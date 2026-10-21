@@ -72,7 +72,7 @@ fn io_text(e: &io::Error) -> String {
     s.split(" (os error").next().unwrap_or(&s).to_owned()
 }
 
-/// `assignPath` (rule 13) with F19's order: the directory is created last, right before the `UPDATE`.
+/// `assignPath` (rule 13): the directory is created last, right before the `UPDATE`.
 pub async fn assign(c: &mut PgConnection, id: i32, raw: &str) -> Result<(), AppError> {
     let current = sqlx::query_scalar!("SELECT path FROM libraries WHERE id = $1", id)
         .fetch_optional(&mut *c)

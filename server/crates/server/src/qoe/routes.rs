@@ -31,7 +31,7 @@ pub fn router() -> Router<AppState> {
 
 type Q = Query<Vec<(String, String)>>;
 
-/// A parameter given once; a repeated one is an array in Express and reads as invalid.
+/// A parameter given once; a repeated one is an array in 4.x and reads as invalid.
 fn scalar<'a>(q: &'a [(String, String)], key: &str) -> Option<&'a str> {
     let mut it = q.iter().filter(|(k, _)| k == key);
     match (it.next(), it.next()) {

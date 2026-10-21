@@ -86,7 +86,7 @@ pub fn stream_url(c: &Credentials, stream_id: &str, format: &str) -> String {
     )
 }
 
-/// The guide link without its credentials (F71); the password is added on the wire only.
+/// The guide link without its credentials; the password is added on the wire only.
 pub fn guide_url_bare(c: &Credentials) -> String {
     format!("{}/xmltv.php", c.base_url)
 }

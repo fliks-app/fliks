@@ -237,7 +237,7 @@ async fn blacklist_history_stats_and_the_provider_crud(pool: PgPool) {
             .fetch_one(&c.pool)
             .await
             .unwrap();
-    assert_eq!(saved, Some(c.media), "C58");
+    assert_eq!(saved, Some(c.media));
     assert_eq!(
         call(
             &c,
@@ -304,7 +304,7 @@ async fn blacklist_history_stats_and_the_provider_crud(pool: PgPool) {
         404
     );
 
-    // Providers: redaction, keep-on-blank, C69.
+    // Providers: redaction, keep-on-blank, changed type.
     let (s, v) = call(&c, "POST", "/api/subtitles/providers", &c.admin, Some(json!({"name": "OS", "type": "opensubtitles", "settings": {"username": "u", "password": "pw", "apiKey": "k"}}))).await;
     assert_eq!(s, 201);
     assert_eq!(
@@ -345,7 +345,7 @@ async fn blacklist_history_stats_and_the_provider_crud(pool: PgPool) {
         Some(json!({"type": "subdl"})),
     )
     .await;
-    assert_eq!(v["settings"], json!({"secretsSet": []}), "C69");
+    assert_eq!(v["settings"], json!({"secretsSet": []}));
     let (s, v) = call(
         &c,
         "POST",
@@ -390,8 +390,7 @@ async fn blacklist_history_stats_and_the_provider_crud(pool: PgPool) {
         )
         .await
         .0,
-        403,
-        "F51"
+        403
     );
     let (s, v) = call(
         &c,
@@ -496,7 +495,7 @@ async fn search_download_list_upgrade_post_process_and_delete(pool: PgPool) {
     assert_eq!(s, 201, "{v}");
     let mut keys: Vec<_> = v.as_object().unwrap().keys().cloned().collect();
     keys.sort();
-    // Recorded against Nest (parity `subtitles-provider-download-shape`).
+    // Parity `subtitles-provider-download-shape`).
     let want = [
         "codec",
         "createdAt",
@@ -946,7 +945,7 @@ async fn missing_lists_uncovered_languages_and_activity_follows_library_access(p
         (json!(0), json!([])),
         "past the end the total is 0"
     );
-    // F50: rows of media outside the reader's libraries are not listed.
+    // Rows of media outside the reader's libraries are not listed.
     sqlx::query(r#"INSERT INTO subtitle_files ("mediaId", language, "providerType", status, score) VALUES ($1, 'de', 'disk', 'downloaded', 100)"#).bind(c.other_media).execute(&c.pool).await.unwrap();
     let (_, h) = call(&c, "GET", "/api/subtitles/history", &c.reader, None).await;
     assert_eq!(h["total"], 2);
@@ -957,8 +956,7 @@ async fn missing_lists_uncovered_languages_and_activity_follows_library_access(p
         call(&c, "GET", "/api/subtitles/health", &c.reader, None)
             .await
             .0,
-        403,
-        "F51"
+        403
     );
     let (s, v) = call(&c, "GET", "/api/subtitles/health", &c.admin, None).await;
     assert_eq!((s, v), (200, json!([])));

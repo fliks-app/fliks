@@ -1,4 +1,4 @@
-//! The `counts.set` push cache (`counts.md` rules 12-15, C95): per plugin, per key.
+//! The `counts.set` push cache (`counts.md` rules 12-15): per plugin, per key.
 use crate::sync::MutexExt;
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -7,7 +7,7 @@ use std::sync::Mutex;
 pub struct Counts(Mutex<HashMap<String, HashMap<String, u64>>>);
 
 impl Counts {
-    /// C95: `key` 1-64 chars; the value is already a non-negative integer by its WIT type.
+    /// `key` 1-64 chars; the value is already a non-negative integer by its WIT type.
     pub fn set(&self, plugin: &str, key: &str, value: u64) -> Result<(), String> {
         let n = key.chars().count();
         if n == 0 || n > 64 {

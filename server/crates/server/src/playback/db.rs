@@ -90,7 +90,7 @@ pub struct History {
     total: i64,
 }
 
-/// An unknown media, episode or file is a 404 instead of Nest's FK-violation 500 (C1).
+/// An unknown media, episode or file is a 404, never a foreign-key 500.
 pub(super) fn fk(e: sqlx::Error) -> AppError {
     match &e {
         sqlx::Error::Database(d) if d.code().as_deref() == Some("23503") => {

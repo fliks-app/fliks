@@ -1,4 +1,4 @@
-//! Request validation with Nest's error bodies (`ValidationPipe`, `ParseIntPipe`).
+//! Request validation with the 4.x error bodies.
 use super::AppError;
 use axum::{
     body::Bytes,
@@ -14,7 +14,7 @@ use serde_json::Value;
 
 /// JSON body into `T` with the global pipe's semantics: unknown keys 400 (`#[serde(deny_unknown_fields)]`
 /// on the DTO; leave it off for an `@AllowExtraProperties` one), JSON types strict, nothing coerced.
-/// Only `application/json` bodies are read: any other content type or an empty body is `{}` like Express.
+/// Only `application/json` bodies are read: any other content type or an empty body is `{}`.
 pub struct ValidJson<T>(pub T);
 
 impl<S: Send + Sync, T: DeserializeOwned> FromRequest<S> for ValidJson<T> {
@@ -91,8 +91,8 @@ fn message(field: &str, err: &str) -> String {
     format!("{field} must be {what}")
 }
 
-/// Path parameters with `ParseIntPipe`'s 400 body on failure; use `PathParams<i32>` or a tuple.
-/// Integers must be canonical (`7`, `-7`; never `007`, `+7`, ` 7 `, `0x7`): C20.
+/// Path parameters with the 4.x 400 body on failure; use `PathParams<i32>` or a tuple.
+/// Integers must be canonical (`7`, `-7`; never `007`, `+7`, ` 7 `, `0x7`).
 pub struct PathParams<T>(pub T);
 
 impl<S: Send + Sync, T: DeserializeOwned + Send> FromRequestParts<S> for PathParams<T> {
@@ -112,13 +112,13 @@ impl<S: Send + Sync, T: DeserializeOwned + Send> FromRequestParts<S> for PathPar
     }
 }
 
-/// `ParseIntPipe` + C20 on one raw segment, for handlers that must run their policy check first.
+/// Canonical-integer check on one raw segment, for handlers that must run their policy check first.
 pub fn int_param(raw: &str) -> Result<i32, AppError> {
     i32::deserialize(Val(raw))
         .map_err(|_| AppError::bad_request("Validation failed (numeric string is expected)"))
 }
 
-/// A query integer: absent or empty is `None`, a non-canonical string is 400 (C1), a huge one saturates.
+/// A query integer: absent or empty is `None`, a non-canonical string is 400, a huge one saturates.
 pub fn int_query(raw: Option<&String>) -> Result<Option<i64>, AppError> {
     let Some(s) = raw.filter(|s| !s.is_empty()) else {
         return Ok(None);
@@ -380,7 +380,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn only_application_json_is_parsed_like_express() {
+    async fn only_application_json_is_parsed() {
         assert_eq!(
             call(None, r#"{"username":"a"}"#).await,
             bad("username should not be empty")

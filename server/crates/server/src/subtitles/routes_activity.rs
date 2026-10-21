@@ -28,7 +28,7 @@ use std::collections::HashMap;
 type Res<T> = Result<T, AppError>;
 
 /// `Number(x) || default`; with a clamp the page floors at 1 and the limit is clamped, without one a
-/// negative or fractional value is 400 (C1 extended).
+/// negative or fractional value is 400.
 fn page_limit(
     q: &HashMap<String, String>,
     default_limit: f64,
@@ -60,7 +60,7 @@ fn page_limit(
     }
 }
 
-/// Accessible-library filter of F50: `None` means every media.
+/// Accessible-library filter: `None` means every media.
 async fn visible_media(st: &AppState, a: &Authed) -> Res<Option<Vec<i32>>> {
     if a.user.is_admin || a.perms.can(Action::Manage, &Subject::All) {
         return Ok(None);
@@ -245,7 +245,7 @@ pub async fn stats(State(st): State<AppState>, a: Authed) -> Res<Json<Value>> {
 
 #[utoipa::path(get, path = "/api/subtitles/health", responses((status = 200)))]
 pub async fn health(State(st): State<AppState>, a: Authed) -> Res<Json<Value>> {
-    // F51: the stored credentials are used, so the route needs `subtitles.manage`.
+    // The stored credentials are used, so the route needs `subtitles.manage`.
     policy(&a, Action::Create)?;
     let mut out = vec![];
     for p in service::enabled_providers(&st.db).await? {
@@ -289,7 +289,7 @@ pub async fn missing(
         episode_number: Option<i32>,
         total: i64,
     }
-    // C57: the HI mode never decides what is missing; items without an isoCode are skipped.
+    // The HI mode never decides what is missing; items without an isoCode are skipped.
     let rows: Vec<M> = sqlx::query_as(
         r#"WITH required AS (
              SELECT m.id AS media_id, m.title AS media_title, m.type::text AS media_type,
@@ -411,7 +411,7 @@ pub async fn blacklist_add(
         ));
     };
     if let Some(m) = b.media_id {
-        // C58: the media is kept; an unknown one is 404.
+        // The media is kept; an unknown one is 404.
         let found: Option<i32> = sqlx::query_scalar("SELECT id FROM media WHERE id = $1")
             .bind(m)
             .fetch_optional(&st.db)

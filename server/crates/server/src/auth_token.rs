@@ -1,4 +1,4 @@
-//! Access and stream JWTs (HS256, key = the secret's UTF-8 bytes, as Nest signs them) and the TTL parsers.
+//! Access and stream JWTs (HS256, key = the secret's UTF-8 bytes, as 4.x signs them) and the TTL parsers.
 use crate::http::AppError;
 use chrono::Utc;
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation};
@@ -60,7 +60,7 @@ impl Jwt {
     pub fn new(secret: &str, access_ttl_secs: u64, stream_ttl_secs: u64) -> Self {
         let mut validation = Validation::new(Algorithm::HS256);
         validation.leeway = 0;
-        // Node's jsonwebtoken rejects at now >= exp.
+        // A token is rejected at now >= exp.
         validation.reject_tokens_expiring_in_less_than = 1;
         validation.validate_nbf = true;
         validation.validate_aud = false;
@@ -156,7 +156,7 @@ impl Jwt {
     }
 }
 
-/// Nest's `ms()` grammar (`ms@2.1`): a number then an optional unit, a bare number is milliseconds.
+/// The `ms()` grammar (`ms@2.1`): a number then an optional unit, a bare number is milliseconds.
 pub fn parse_ms(s: &str) -> Option<f64> {
     if s.len() > 100 {
         return None;

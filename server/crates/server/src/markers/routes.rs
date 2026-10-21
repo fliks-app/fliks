@@ -102,7 +102,7 @@ fn parse_create(body: Value) -> Res<Create> {
     })
 }
 
-/// F43: an unknown, library-less or inaccessible episode / season is 404.
+/// An unknown, library-less or inaccessible episode / season is 404.
 async fn reachable(
     st: &AppState,
     a: &Authed,
@@ -231,7 +231,7 @@ pub(crate) async fn update(
     if end <= start {
         return Err(AppError::bad_request(ORDER));
     }
-    // TypeORM wrote only changed columns: an unchanged manual marker keeps its `updatedAt`.
+    // Only changed columns are written: an unchanged manual marker keeps its `updatedAt`.
     if m.manual && m.confidence == 1.0 && (start, end) == (m.start_seconds, m.end_seconds) {
         return Ok(Json(m));
     }

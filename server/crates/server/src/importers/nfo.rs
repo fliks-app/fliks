@@ -2,7 +2,7 @@
 use fliks_domain::nfo::{NfoData, parse};
 use std::{io::Read, path::Path};
 
-/// Larger files are cut here (C55), far above any real `.nfo`.
+/// Larger files are cut here, far above any real `.nfo`.
 const MAX_BYTES: u64 = 1024 * 1024;
 
 /// The parsed file; `None` for a missing or unreadable one. Blocking: call it from `spawn_blocking`.

@@ -82,7 +82,7 @@ impl Dto {
         match raw.is_default {
             Some(Value::Bool(b)) => dto.is_default = Some(b),
             None => {}
-            // Nest reads a create's null as false; on update it would store NULL (C1: 400 instead).
+            // A create's null reads as false; on update it is a 400, not a stored NULL.
             Some(Value::Null) if create => {}
             _ => msgs.push("isDefault must be a boolean value".into()),
         }
@@ -120,7 +120,7 @@ fn forbidden() -> AppError {
     AppError::bare(StatusCode::FORBIDDEN)
 }
 
-/// F12: added strings must come from `GET /roles/permissions`; adding `manage:all` needs an admin.
+/// Added strings must come from `GET /roles/permissions`; adding `manage:all` needs an admin.
 async fn check_permissions(st: &AppState, a: &Authed, perms: &[String]) -> Res<()> {
     let mut known = None;
     for p in perms {
@@ -210,7 +210,7 @@ pub(crate) async fn create(
     let id = db::insert(&st.db, &name, &perms, is_default).await?;
     db::set_libraries(&st.db, id, &dto.default_library_ids.unwrap_or_default()).await?;
     let mut role = one(&st, id).await?.json(paths_visible(&a.perms));
-    // Nest returns the freshly loaded libraries here without their profile-id columns (recorded `roles-create-ok`).
+    // The freshly loaded libraries carry no profile-id columns here (`roles-create-ok`).
     for lib in role["defaultLibraries"]
         .as_array_mut()
         .into_iter()

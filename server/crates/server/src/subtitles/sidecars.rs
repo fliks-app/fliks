@@ -1,5 +1,5 @@
 //! Sidecar rows against the disk: discovery, rescan reconcile, carry-over and deletes
-//! (`subtitle-files.md` rules 13, 14, 18-20). Every path is confined to the media directory (F52).
+//! (`subtitle-files.md` rules 13, 14, 18-20). Every path is confined to the media directory.
 use super::{
     files::{self, Dirs, MediaCtx},
     model::{self, New, Row},
@@ -84,7 +84,7 @@ pub async fn discover_external(st: &AppState, media_id: i32) -> usize {
                 continue;
             }
             let abs = dir.join(entry);
-            // F52: a regular file whose real parent stays under the media directory.
+            // A regular file whose real parent stays under the media directory.
             if !fs::symlink_metadata(&abs).is_ok_and(|m| m.is_file()) {
                 continue;
             }
@@ -287,7 +287,7 @@ pub async fn delete_files_on_disk(st: &AppState, media_id: i32, file_id: i32) {
     }
 }
 
-/// Unlinks a row's sidecar unless another row lists the same file (C64); a failure is logged.
+/// Unlinks a row's sidecar unless another row lists the same file; a failure is logged.
 pub async fn unlink_unless_shared(st: &AppState, row: &Row) -> Result<(), AppError> {
     let (Some(stored), Some(media_id)) = (row.file_path.as_deref(), row.media_id) else {
         return Ok(());

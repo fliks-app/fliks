@@ -1,5 +1,5 @@
 //! Genre-taste recommendations over a user's history; the queries stay with the caller.
-//! `Taste::score` keeps Nest's order; the server then calls `rank_c4` (score desc, id asc, C4).
+//! The server ranks scored items with `rank_by_score` (score desc, id asc).
 use crate::js::round;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -196,8 +196,8 @@ impl Taste {
     }
 }
 
-/// Deviation C4: score desc, then media id asc, instead of the database scan order.
-pub fn rank_c4(scored: &mut [Scored]) {
+/// Score desc, then media id asc, instead of the database scan order.
+pub fn rank_by_score(scored: &mut [Scored]) {
     scored.sort_by(|a, b| {
         b.score
             .total_cmp(&a.score)

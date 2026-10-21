@@ -52,7 +52,7 @@ use std::{net::SocketAddr, time::Duration};
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
-/// Nest's TypeORM pool size (`bootstrap.md` rule 14).
+/// The 4.x pool size (`bootstrap.md` rule 14).
 pub(crate) const POOL_MAX: u32 = 30;
 
 async fn connect(cfg: &Config) -> Result<PgPool, sqlx::Error> {

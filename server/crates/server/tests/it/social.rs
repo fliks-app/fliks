@@ -315,7 +315,7 @@ async fn leaving_social_is_one_transaction_with_the_user_update(pool: PgPool) {
     .await
     .unwrap();
     assert_eq!((vis.as_str(), follows), ("private", 0));
-    assert_ne!(before, after, "C8: the made-private playlist moves up");
+    assert_ne!(before, after, "the made-private playlist moves up");
 }
 
 #[sqlx::test(migrations = false)]

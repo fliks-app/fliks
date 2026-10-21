@@ -324,7 +324,7 @@ async fn validation_messages(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
-async fn f12_permissions_are_validated(pool: PgPool) {
+async fn permissions_are_validated(pool: PgPool) {
     let c = ctx(pool.clone()).await;
     let body = |p: Value| Some(json!({"name": "n", "permissions": p}));
     let ed = Some(c.editor.as_str());
@@ -391,7 +391,7 @@ async fn f12_permissions_are_validated(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
-async fn f12_only_checks_added_permissions(pool: PgPool) {
+async fn only_checks_added_permissions(pool: PgPool) {
     let c = ctx(pool.clone()).await;
     sqlx::query(r#"UPDATE roles SET permissions = '["media.read","plugin:gone:x"]' WHERE id = 3"#)
         .execute(&pool)

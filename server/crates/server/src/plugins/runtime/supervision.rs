@@ -43,7 +43,7 @@ impl PluginRt {
         }
     }
 
-    /// C109: `degraded` with the core instance kept; `start` again after the ladder, then every 30 s.
+    /// `degraded` with the core instance kept; `start` again after the ladder, then every 30 s.
     pub(super) fn db_degraded(self: &Arc<Self>, era: u64) {
         let delay = {
             let mut s = self.sup.lock_clean();
@@ -76,7 +76,7 @@ impl PluginRt {
             && !matches!(self.state(), State::Failed | State::Stopped)
     }
 
-    /// A failed call lost its instance: a crash, unless the database caused it (C109).
+    /// A failed call lost its instance: a crash, unless the database caused it.
     pub(super) fn lost(self: &Arc<Self>, lane: &Lane, db: bool, why: &str) {
         if db && lane.kind == LaneKind::Core {
             tracing::warn!(

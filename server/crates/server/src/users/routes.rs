@@ -46,7 +46,7 @@ fn forbidden() -> AppError {
     AppError::bare(StatusCode::FORBIDDEN)
 }
 
-/// `ParseIntPipe` on the raw segment, after the policy check as Nest's guards run before pipes.
+/// Canonical integer on the raw segment, parsed after the policy check.
 async fn body<T: serde::de::DeserializeOwned>(req: Request) -> Result<T, AppError> {
     let ValidJson(dto) = ValidJson::<T>::from_request(req, &()).await?;
     Ok(dto)
@@ -222,7 +222,7 @@ pub async fn update(
         st.hub.drop_connections_for_user(id);
     }
     if password_changed {
-        // F9: the caller keeps working on its access token until it expires.
+        // The caller keeps working on its access token until it expires.
         db::revoke_other_families(&st.db, id, None).await?;
     }
     if dto.enabled == Some(false) || role_changing || admin_changing || dto.library_ids.is_some() {
@@ -239,7 +239,6 @@ fn authorize_update(a: &Authed, dto: &UpdateUser, target: &UserRow) -> Result<()
     if !is_self && !is_manager {
         return Err(forbidden());
     }
-    // F10
     if target.is_admin && !is_admin {
         return Err(forbidden());
     }
@@ -254,7 +253,6 @@ fn authorize_update(a: &Authed, dto: &UpdateUser, target: &UserRow) -> Result<()
     if admin_changing && !is_admin {
         return Err(forbidden());
     }
-    // F11, C2
     let quota = [
         dto.movie_quota_limit,
         dto.series_quota_limit,
@@ -375,7 +373,6 @@ pub async fn remove(
         .execute(&mut *tx)
         .await?;
     tx.commit().await?;
-    // F17
     st.hub.drop_connections_for_user(id);
     revoke_in_background(&st, id);
     Ok(())
@@ -486,7 +483,7 @@ pub async fn clear_avatar(
     public(&st.db, id).await
 }
 
-/// Boot seed (rule 7): an empty `users` table gets `admin` / `password` (F1 keeps it).
+/// Boot seed (rule 7): an empty `users` table gets `admin` / `password`.
 pub async fn seed_admin(db: &PgPool) -> Result<(), AppError> {
     let empty = sqlx::query_scalar!(r#"SELECT NOT EXISTS(SELECT 1 FROM users) AS "empty!""#)
         .fetch_one(db)
@@ -508,13 +505,13 @@ pub async fn seed_admin(db: &PgPool) -> Result<(), AppError> {
 
 #[cfg(test)]
 mod tests {
-    /// Nest's `bcrypt` 6 verifies only `$2a$`/`$2b$`, so Rust must keep writing `$2b$`.
+    /// 4.x verifies only `$2a$`/`$2b$` hashes, so `$2b$` must keep being written.
     #[tokio::test]
-    async fn bcrypt_matches_nest() {
+    async fn bcrypt_matches_v4() {
         let h = super::hash("pass".into()).await.unwrap();
         assert!(h.starts_with("$2b$12$") && bcrypt::verify("pass", &h).unwrap());
-        let nest = "$2b$12$uz0IJTjIwyn42EOSchUXwuIceXfuXd3h0I9fNbV7SQKT4VkmTuZly";
-        assert!(bcrypt::verify("nest-pass", nest).unwrap());
-        assert!(bcrypt::verify("nest-pass", &nest.replace("$2b$", "$2a$")).unwrap());
+        let v4_hash = "$2b$12$ArcuuJ3zV3DAJ/zbtJsCYOsxiX1O6wFVeSZ74c4ZrV.CQI1GqKLAa";
+        assert!(bcrypt::verify("v4-pass", v4_hash).unwrap());
+        assert!(bcrypt::verify("v4-pass", &v4_hash.replace("$2b$", "$2a$")).unwrap());
     }
 }

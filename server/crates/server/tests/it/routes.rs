@@ -1,5 +1,5 @@
 //! The OpenAPI document is the route list: every operation answers on its path, anything else gets
-//! Nest's `Cannot <METHOD> <url>` 404, never a 405.
+//! the 4.x `Cannot <METHOD> <url>` 404, never a 405.
 use axum::{Router, body::Body, http::Request};
 use fliks_server::{app, config::Config, state::AppState};
 use serde_json::Value;
@@ -51,7 +51,7 @@ async fn every_openapi_operation_answers_on_its_path() {
 }
 
 #[tokio::test]
-async fn undeclared_methods_and_unknown_api_paths_get_the_nest_404() {
+async fn undeclared_methods_and_unknown_api_paths_get_the_cannot_method_404() {
     let doc = serde_json::to_value(app::openapi()).unwrap();
     let router = router();
     for (path, ops) in doc["paths"].as_object().unwrap() {
@@ -59,7 +59,7 @@ async fn undeclared_methods_and_unknown_api_paths_get_the_nest_404() {
         let plugin = uri.strip_prefix("/api/plugins/");
         for method in ["GET", "POST", "PUT", "PATCH", "DELETE"] {
             let m = method.to_lowercase();
-            // The proxy catches `/api/plugins/:id/*splat` and `:id` routes take literal ids, as in Nest.
+            // The proxy catches `/api/plugins/:id/*splat` and `:id` routes take literal ids.
             let proxied = plugin.is_some_and(|r| {
                 r.contains('/') || doc["paths"]["/api/plugins/{pluginId}"][&m].is_object()
             });

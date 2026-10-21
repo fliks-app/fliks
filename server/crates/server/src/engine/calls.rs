@@ -16,7 +16,7 @@ use std::{fmt, time::Instant};
 
 const DEFAULT_RENDER_NODE: &str = "/dev/dri/renderD128";
 
-/// A failed engine call; the 503 variants carry the messages Nest's exceptions had.
+/// A failed engine call; the 503 variants carry the 4.x messages.
 #[derive(Debug)]
 pub enum EngineError {
     /// No adopted engine: 503 "The streaming engine is not running".

@@ -31,7 +31,7 @@ pub fn client() -> &'static Client {
     })
 }
 
-/// A transport error as text, without the request URL that `Display` would embed (F29).
+/// A transport error as text, without the request URL that `Display` would embed.
 pub fn error_text(e: reqwest::Error) -> String {
     e.without_url().to_string()
 }

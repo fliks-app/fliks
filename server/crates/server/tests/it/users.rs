@@ -1,4 +1,4 @@
-//! `/api/users/*` authorisation, deviations (F2, F9-F11, C1, C2) and side effects on a fresh database.
+//! `/api/users/*` authorisation, and side effects on a fresh database.
 use axum::{Router, body::Body, http::Request};
 use fliks_server::{config::Config, state::AppState, users};
 use serde_json::{Value, json};
@@ -160,12 +160,11 @@ async fn self_update_rules(pool: PgPool) {
             Some("Only users with users.manage permission can change role or enabled status")
         )
     );
-    // F11
     assert_eq!(
         put(&c, &ta, a, json!({"movieQuotaLimit": 5})).await.1,
         bare_403()
     );
-    // C2: rejected before any write
+    // Rejected before any write
     let (s, _) = put(
         &c,
         &ta,
@@ -175,7 +174,7 @@ async fn self_update_rules(pool: PgPool) {
     .await;
     assert_eq!(s, 403);
     assert!(c.column::<bool>(a, "hideSpoilers").await);
-    // C1 and validation
+    // Validation
     assert_eq!(
         put(&c, &ta, a, json!({"username": null})).await.1["message"],
         json!(["username must be a string"])
@@ -203,7 +202,7 @@ async fn a_quota_period_below_one_day_is_refused(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
-async fn admin_guards_f10(pool: PgPool) {
+async fn admin_guards(pool: PgPool) {
     let c = ctx(pool).await;
     let (admin, tadmin) = c.user("admin", "[]", true).await;
     let (_, tm) = c

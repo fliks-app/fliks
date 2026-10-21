@@ -84,7 +84,7 @@ fn parse_int(s: &str) -> Option<i64> {
     Some(if neg { -n } else { n })
 }
 
-/// JS `Number(s) || default`, then `clamp`; a fractional result is a 400 (C1).
+/// JS `Number(s) || default`, then `clamp`; a fractional result is a 400.
 fn number_or(
     q: &[(String, String)],
     key: &str,

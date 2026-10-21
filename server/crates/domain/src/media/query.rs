@@ -50,7 +50,7 @@ pub fn js_parse_int(s: &str) -> Option<i64> {
     Some(if neg { -n } else { n })
 }
 
-// validator.js `isISO8601` (non-strict), as class-validator's `IsDateString` uses it.
+// validator.js `isISO8601` (non-strict).
 static ISO8601: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(concat!(
         r"^([\+-]?\d{4}(?!\d{2}\b))((-?)((0[1-9]|1[0-2])(\3([12]\d|0[1-9]|3[01]))?|W([0-4]\d|5[0-3])(-?[1-7])?|(00[1-9]|0[1-9]\d|[12]\d{2}|3([0-5]\d|6[1-6])))",

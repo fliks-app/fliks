@@ -1,5 +1,5 @@
 //! Host-side fetches of the plugin host: catalog documents (rule 26) and catalog archives with
-//! their https redirects (rule 28, C107). Errors are kinds, never URLs (F66).
+//! their https redirects (rule 28). Errors are kinds, never URLs.
 use crate::net::guard::{self, Net};
 use reqwest::{Client, StatusCode, Url, redirect};
 use std::sync::Arc;
@@ -19,7 +19,7 @@ pub enum FetchError {
 }
 
 impl FetchError {
-    /// The F66 kind text of `lastRefreshError`, `failures[]` and the logs.
+    /// The kind text of `lastRefreshError`, `failures[]` and the logs.
     pub fn kind(&self) -> String {
         match self {
             FetchError::Network(_) => "network error".into(),
@@ -196,7 +196,7 @@ impl Fetcher {
         Err(ArchiveError::Failed("too many redirects".into()))
     }
 
-    /// A data-tier webhook POST (F65): resolved once, every address vetted without a grant, the
+    /// A data-tier webhook POST: resolved once, every address vetted without a grant, the
     /// connection pinned to them; 5 s, no redirect, 64 KiB read.
     pub async fn webhook(&self, url: &str, body: &serde_json::Value) -> Result<(), WebhookError> {
         let u = Url::parse(url).map_err(|_| WebhookError::Refused)?;

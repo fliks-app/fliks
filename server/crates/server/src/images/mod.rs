@@ -96,7 +96,7 @@ async fn serve(
             ));
         }
     };
-    // C7: weak ETag from the mtime in seconds.
+    // Weak ETag from the mtime in seconds.
     let secs = meta
         .modified()
         .ok()

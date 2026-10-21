@@ -37,7 +37,7 @@ fn param<'a>(q: &'a [(String, String)], key: &str) -> Option<&'a str> {
     q.iter().find(|(k, _)| k == key).map(|(_, v)| v.as_str())
 }
 
-/// `limit ? Math.min(+limit, 50) : 20`; anything but a non-negative integer is a 400 (rule 38, C1).
+/// `limit ? Math.min(+limit, 50) : 20`; anything but a non-negative integer is a 400 (rule 38).
 fn limit(q: &[(String, String)]) -> Result<i64, AppError> {
     let Some(raw) = param(q, "limit").filter(|s| !s.is_empty()) else {
         return Ok(FOLLOWING_DEFAULT);

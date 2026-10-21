@@ -211,7 +211,7 @@ pub async fn title_state(st: &AppState, tmdb_id: i32, media_type: &str) -> Res<V
     }))
 }
 
-/// C114: ids Postgres would reject as a foreign key violation answer 400 instead of 500.
+/// Ids Postgres would reject as a foreign key violation answer 400 instead of 500.
 async fn assert_exist(st: &AppState, q: Option<i32>, l: Option<i32>, lib: Option<i32>) -> Res<()> {
     if let Some(lib) = lib
         && !db::library_exists(&st.db, lib).await?
@@ -274,7 +274,7 @@ fn notify(st: &AppState, event: &'static str, payload: Value) {
     }
 }
 
-/// The saved row as Nest returns it: relation ids and public identities, `media` joined by title.
+/// The saved row as 4.x returns it: relation ids and public identities, `media` joined by title.
 async fn row_json(st: &AppState, id: i32) -> Res<Map<String, Value>> {
     let f = db::Filter {
         id: Some(id),

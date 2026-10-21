@@ -68,7 +68,7 @@ pub fn config(engine: &str, s: &Value) -> Cfg {
     }
 }
 
-/// `http`/`https` with a host (F57).
+/// `http`/`https` with a host.
 fn http_url(u: &str) -> bool {
     Url::parse(u).is_ok_and(|u| matches!(u.scheme(), "http" | "https") && u.has_host())
 }
@@ -93,7 +93,7 @@ pub fn validate_config(engine: &str, s: &Value) -> Result<(), AppError> {
     }
 }
 
-/// F57 alone: a stored value that is not an http(s) URL is refused on write.
+/// A a stored value that is not an http(s) URL is refused on write.
 pub fn validate_url_fields(engine: &str, s: &Value) -> Result<(), AppError> {
     let c = config(engine, s);
     match engine {

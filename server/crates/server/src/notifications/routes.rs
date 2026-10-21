@@ -31,7 +31,7 @@ fn id_of(PathParams(raw): PathParams<String>) -> Res<i32> {
     int_param(&raw)
 }
 
-/// Body read after the policy check, as Nest's guards run before its pipes.
+/// Body read after the policy check, guards run before the body pipe.
 async fn body(req: Request) -> Res<Value> {
     Ok(ValidJson::<Value>::from_request(req, &()).await?.0)
 }
@@ -123,7 +123,7 @@ pub async fn update(
     let stored = db::find(&st.db, id).await?;
     let same_type = stored.as_ref().filter(|c| body["type"] == c.typ.as_str());
     let mut msgs = dom::validate(&body, same_type.map(|c| &c.settings.0));
-    // C1: Nest stores these nulls and answers 500.
+    // These nulls are a 400, never stored.
     if body["events"].is_null() && body.get("events").is_some() {
         msgs.push("events must be an array".into());
     }

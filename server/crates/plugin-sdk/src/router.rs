@@ -58,7 +58,7 @@ pub struct Response {
 }
 
 impl Response {
-    /// `application/json`, as every Node plugin answered; a 500 if `body` does not serialise.
+    /// `application/json`, as 4.x plugins answered; a 500 if `body` does not serialise.
     pub fn json(status: u16, body: &impl Serialize) -> Self {
         match serde_json::to_vec(body) {
             Ok(body) => Response {

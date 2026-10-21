@@ -314,7 +314,7 @@ impl Matcher {
         self.regex.is_match(input).unwrap_or(false)
     }
 
-    /// `None` when the path does not match or a capture fails `decodeURIComponent` (C148).
+    /// `None` when the path does not match or a capture fails `decodeURIComponent`.
     pub fn matches(&self, input: &str) -> Option<Vec<(String, ParamValue)>> {
         let caps = self.regex.captures(input).ok()??;
         let mut out: Vec<(String, ParamValue)> = vec![];

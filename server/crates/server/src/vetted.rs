@@ -1,10 +1,10 @@
-//! Outbound requests to an address vetted once (`livetv-sources.md` rule 14, F70): the host is resolved
+//! Outbound requests to an address vetted once (`livetv-sources.md` rule 14): the host is resolved
 //! a single time, every address checked, and the connection goes to the address that passed.
 use fliks_domain::net::{Class, classify};
 use reqwest::{Client, Url, header::LOCATION, redirect};
 use std::net::{IpAddr, SocketAddr};
 
-/// Any address outside the public class of `fliks_domain::net` (F70 and F67 share the one predicate).
+/// Any address outside the public class of `fliks_domain::net` (one shared predicate).
 pub fn is_internal(ip: IpAddr) -> bool {
     classify(ip) != Class::Public
 }

@@ -40,7 +40,7 @@ fn plugin_headers() {
             Some(b) => {
                 json!({"header": [name, b.iter().map(|&c| char::from(c)).collect::<String>()]})
             }
-            // C149: Node threw (a 500) on a value it cannot write; the header is dropped instead.
+            // A value that cannot be written as a header is dropped, not a 500.
             None if fliks_domain::plugins::response_header(name, "").is_some()
                 && !value.contains(['\r', '\n', '\0']) =>
             {
@@ -57,7 +57,7 @@ fn address_class() {
     replay("address-class", 67, |i| {
         let ip = i["ip"].as_str().unwrap();
         let internal = ip.parse().map_or(true, |ip| classify(ip) != Class::Public);
-        // F67/F70: 6to4, Teredo, documentation, site-local and IPv4-compatible space is refused too.
+        // 6to4, Teredo, documentation, site-local and IPv4-compatible space is refused too.
         let stricter = [
             "::2",
             "fec0::1",

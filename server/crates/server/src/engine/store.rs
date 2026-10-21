@@ -34,7 +34,7 @@ pub async fn engine_settings(db: &PgPool) -> sqlx::Result<(String, String, Vec<P
     ))
 }
 
-/// A write of the saved token: blank keeps, `null` clears, text sets (F5).
+/// A write of the saved token: blank keeps, `null` clears, text sets.
 pub enum TokenWrite {
     Keep,
     Set(Option<String>),

@@ -69,7 +69,7 @@ pub fn legal_permission_name(n: &str) -> bool {
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || *c == b'_' || *c == b'-')
 }
 
-/// `^[a-z][a-z0-9]*(\.[a-z0-9]+)*$`, at most 51 chars (C119).
+/// `^[a-z][a-z0-9]*(\.[a-z0-9]+)*$`, at most 51 chars.
 pub fn legal_plugin_id(id: &str) -> bool {
     id.len() <= 51
         && id.starts_with(|c: char| c.is_ascii_lowercase())
@@ -96,7 +96,7 @@ pub fn response_header(name: &str, value: &str) -> Option<Vec<u8>> {
     if !token || !ALLOWED.contains(&name.to_ascii_lowercase().as_str()) {
         return None;
     }
-    // Node writes a header value as Latin-1; it refuses controls and characters above U+00FF (C149).
+    // A header value is written as Latin-1; controls and characters above U+00FF are refused.
     value
         .chars()
         .map(|c| match u32::from(c) {
@@ -106,7 +106,7 @@ pub fn response_header(name: &str, value: &str) -> Option<Vec<u8>> {
         .collect()
 }
 
-/// Rule 8 (C106): a literal path a core `/api/plugins/:id/...` route shadows.
+/// Rule 8: a literal path a core `/api/plugins/:id/...` route shadows.
 pub fn shadowed_by_core(method: &str, path: &str) -> bool {
     let p = path.to_ascii_lowercase();
     let p = p.strip_suffix('/').unwrap_or(&p);

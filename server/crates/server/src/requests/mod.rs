@@ -22,7 +22,7 @@ pub use rules::{
     rule_create, rule_get, rule_list, rule_remove, rule_update,
 };
 
-/// A failure of a service owned by another milestone, with the HTTP status Nest answered.
+/// A failure of a service owned by another module, with the HTTP status it answers.
 #[derive(Debug, Clone)]
 pub struct PortError {
     pub status: u16,

@@ -178,7 +178,7 @@ fn engine_name(e: Option<fliks_domain::qoe::Engine>) -> Option<String> {
 
 #[cfg(not(unix))]
 fn load_avg1() -> Option<f64> {
-    // Node's os.loadavg() reports 0 on Windows.
+    // 4.x reported 0 load on Windows.
     Some(0.0)
 }
 

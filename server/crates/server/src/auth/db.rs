@@ -1,5 +1,5 @@
 //! Refresh-token and pairing queries. Every time rule takes `now`, so tests age rows without sleeping;
-//! rotation and the pairing claim run in one transaction over `SELECT ... FOR UPDATE` (C3).
+//! rotation and the pairing claim run in one transaction over `SELECT ... FOR UPDATE`.
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, Duration, Utc};
 use sha2::{Digest, Sha256};
@@ -151,7 +151,7 @@ pub async fn revoke(db: &PgPool, raw: &str, now: DateTime<Utc>) -> Result<(), sq
     Ok(())
 }
 
-/// F6: rows expired or revoked more than 30 days ago.
+/// Rows expired or revoked more than 30 days ago.
 pub async fn prune_refresh_tokens(db: &PgPool, now: DateTime<Utc>) -> Result<u64, sqlx::Error> {
     let cutoff = now - Duration::days(30);
     let r = sqlx::query!(
@@ -237,7 +237,7 @@ pub enum PairingStatus {
     },
 }
 
-/// `pairing/status`: lazy expiry plus the one-shot claim (rule 54, F15), atomic under the row lock.
+/// `pairing/status`: lazy expiry plus the one-shot claim (rule 54), atomic under the row lock.
 pub async fn pairing_status(
     db: &PgPool,
     public_id: &str,
@@ -258,7 +258,7 @@ pub async fn pairing_status(
         return Ok(None);
     };
     let unclaimed = p.status == "approved" && p.access_token.as_deref() == Some(APPROVED);
-    // F15: an approval not claimed before `expiresAt` expires like a pending request.
+    // An approval not claimed before `expiresAt` expires like a pending request.
     if (p.status == "pending" || unclaimed) && p.expires_at < now {
         sqlx::query!(
             r#"UPDATE pairing_requests SET status = 'expired', "accessToken" = NULL WHERE id = $1"#,
@@ -584,7 +584,7 @@ mod tests {
     }
 
     #[sqlx::test(migrations = false)]
-    async fn approved_claim_checks_expiry_f15(pool: PgPool) {
+    async fn approved_claim_checks_expiry(pool: PgPool) {
         let u = setup(&pool).await;
         let now = Utc::now();
         let id = created(open(&pool, u, "d", now).await);

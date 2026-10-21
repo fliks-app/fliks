@@ -46,7 +46,7 @@ pub fn endpoint_key(typ: &str) -> Option<&'static str> {
     }
 }
 
-/// F28: the settings keys redacted on read and merged on write.
+/// The settings keys redacted on read and merged on write.
 pub fn secret_keys(typ: &str) -> &'static [&'static str] {
     match endpoint_key(typ) {
         Some("webhookUrl") => &["token", "webhookUrl"],
@@ -150,7 +150,6 @@ pub fn build_request(
             Request {
                 url: endpoint,
                 headers: vec![],
-                // F30: no mention injection.
                 body: Body::Json(json!({
                     "username": text(settings.get("username"), "Fliks"),
                     "content": msg(),
@@ -297,7 +296,7 @@ fn is_http_url(s: &str) -> bool {
 }
 
 /// The endpoint the DTO constraint checks; for `webhookUrl` types a blank or absent write counts as
-/// the stored value (F28) and `null` as none.
+/// the stored value and `null` as none.
 fn effective_endpoint(typ: &str, settings: &Value, stored: Option<&Map<String, Value>>) -> String {
     let get = |k: &str| settings.get(k);
     let as_text = |v: Option<&Value>| match v {
@@ -320,7 +319,7 @@ fn effective_endpoint(typ: &str, settings: &Value, stored: Option<&Map<String, V
     }
 }
 
-/// `CreateNotificationConnectionDto` validation (class-validator messages, same order); `stored`
+/// `CreateNotificationConnectionDto` validation (same message order as 4.x); `stored`
 /// is the saved settings of the connection being updated when its type is unchanged.
 pub fn validate(body: &Value, stored: Option<&Map<String, Value>>) -> Vec<String> {
     let empty = Map::new();

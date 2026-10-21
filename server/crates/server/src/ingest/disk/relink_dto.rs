@@ -154,7 +154,7 @@ pub(super) fn parse_relink(v: Value, prefix: &str) -> Result<RelinkDto, AppError
     })
 }
 
-/// F48: moving files from outside the library is a library manager's action.
+/// Moving files from outside the library is a library manager's action.
 pub(super) fn check_transfer(a: &Authed, d: &RelinkDto) -> Result<(), AppError> {
     if d.transfer.is_some() {
         a.require(Action::Manage, Subject::Settings)?;

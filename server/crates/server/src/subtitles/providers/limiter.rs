@@ -1,4 +1,4 @@
-//! Per-type cooldown and circuit breaker (`subtitle-providers.md` rules 5-14, C70, C71).
+//! Per-type cooldown and circuit breaker (`subtitle-providers.md` rules 5-14).
 use crate::sync::MutexExt;
 use reqwest::{Client, RequestBuilder, Response, header::HeaderMap};
 use serde::Serialize;
@@ -11,7 +11,7 @@ use tokio::time::Instant;
 
 const FAILURE_THRESHOLD: u32 = 3;
 const CIRCUIT_OPEN_MS: i64 = 5 * 60_000;
-/// C71: a `Retry-After` never blocks a type for more than the OpenSubtitles quota cooldown.
+/// A `Retry-After` never blocks a type for more than the OpenSubtitles quota cooldown.
 const MAX_BACKOFF_SEC: f64 = 3600.0;
 pub const FETCH_TIMEOUT: Duration = Duration::from_secs(30);
 
@@ -131,7 +131,7 @@ impl Limiter {
         }
     }
 
-    /// Admits a request; a half-open circuit admits one probe at a time (C70).
+    /// Admits a request; a half-open circuit admits one probe at a time.
     fn admit(&self, t: &str) -> Option<bool> {
         if self.rate_limit_delay(t) > 0 {
             return None;

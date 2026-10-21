@@ -5,7 +5,7 @@ use chrono::{Datelike, Local, NaiveDate};
 use serde_json::{Value, json};
 use sqlx::PgPool;
 
-/// Postgres rejected a date the DTO let through: 400 instead of Nest's 500 (C1).
+/// Postgres rejected a date the DTO let through: 400, never a database 500.
 fn date_error(e: sqlx::Error) -> AppError {
     match &e {
         sqlx::Error::Database(d) if d.code().is_some_and(|c| c.starts_with("22")) => {

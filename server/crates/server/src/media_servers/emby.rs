@@ -1,4 +1,4 @@
-//! Emby provider (`docs/spec/media-servers.md` rules 8, 9, 11, 14): token header, timeouts, F29/F42 via `outbound`.
+//! Emby provider (`docs/spec/media-servers.md` rules 8, 9, 11, 14): token header, timeouts, outbound guard via `outbound`.
 use crate::outbound::{ITEM_TIMEOUT, LIST_TIMEOUT, TEST_TIMEOUT, base_url, client, error_text};
 use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
 use serde_json::Value;

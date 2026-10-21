@@ -82,7 +82,7 @@ struct Claim {
 #[derive(Default)]
 struct Inner {
     conns: HashMap<String, Conn>,
-    /// Keyed by owner and `polled:<targetId>` (F14): another account cannot take a device over.
+    /// Keyed by owner and `polled:<targetId>`: another account cannot take a device over.
     polled: HashMap<(i32, String), Polled>,
     claims: HashMap<String, Claim>,
     replay: Replay,

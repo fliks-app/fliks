@@ -68,7 +68,7 @@ impl Config {
                 .map(|v| v.trim().to_owned())
                 .filter(|v| !v.is_empty())
         };
-        // Nest's `Number(x) || default`: unparsable and 0 fall back.
+        // `Number(x) || default`: unparsable and 0 fall back.
         let number = |k: &str, default: u16| {
             get(k)
                 .and_then(|v| v.trim().parse().ok())

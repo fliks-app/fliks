@@ -153,7 +153,7 @@ fn resolve(p: &str) -> PathBuf {
     }
 }
 
-/// Node's `readdir` error text for the errors an admin can hit; the OS text otherwise.
+/// The 4.x `readdir` error text for the errors an admin can hit; the OS text otherwise.
 fn node_message(e: &std::io::Error, path: &str) -> String {
     use std::io::ErrorKind::*;
     let (code, text) = match e.kind() {

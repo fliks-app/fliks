@@ -1,6 +1,6 @@
 //! Recommendation queries around `fliks_domain::recommend` (rules 19-29).
 use fliks_domain::recommend::{
-    Candidate, GenreWeight, HistoryMedia, RecommendationItem, Taste, rank_c4, stratify,
+    Candidate, GenreWeight, HistoryMedia, RecommendationItem, Taste, rank_by_score, stratify,
 };
 use sqlx::{PgPool, types::Json};
 use std::collections::HashSet;
@@ -37,7 +37,7 @@ async fn window(
         .collect())
 }
 
-/// Top genres of the user's history inside `libs` (the viewer's libraries, F25).
+/// Top genres of the user's history inside `libs` (the viewer's libraries).
 pub async fn top_genres(
     db: &PgPool,
     user: i32,
@@ -105,7 +105,7 @@ pub async fn recommendations(
     })
     .collect();
     let mut scored = taste.score(candidates);
-    rank_c4(&mut scored);
+    rank_by_score(&mut scored);
     let top = stratify(scored, limit);
     let ids: Vec<i32> = top.iter().map(|s| s.media.id as i32).collect();
     let available = sqlx::query_scalar!(

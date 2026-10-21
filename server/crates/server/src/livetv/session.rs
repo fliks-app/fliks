@@ -124,7 +124,7 @@ impl From<StreamJoin> for HStream {
     }
 }
 
-/// The streams of a channel on an enabled source (C136: a disabled source's channels are not playable); `restore`
+/// The streams of a channel on an enabled source (a disabled source's channels are not playable); `restore`
 /// reads them whatever the source says, for a hold rebuilt after a restart.
 pub async fn load_streams(
     db: &PgPool,
@@ -206,7 +206,7 @@ fn grace_of(raw: Option<String>) -> f64 {
         .unwrap_or(15) as f64
 }
 
-/// What a play refusal sends: an object body is sent verbatim (Nest's `ConflictException({..})`).
+/// What a play refusal sends: an object body is sent verbatim, as 4.x clients read it.
 pub enum PlayError {
     Object(StatusCode, Value),
     App(AppError),
@@ -240,7 +240,7 @@ fn unavailable(channel: &str) -> PlayError {
     )
 }
 
-/// C139: the engine's refusals, as the client reads them (it treats every 5xx alike).
+/// The engine's refusals, as the client reads them (it treats every 5xx alike).
 fn engine_failure(e: &EngineError) -> AppError {
     match e {
         EngineError::NotRunning | EngineError::NoLive => {
@@ -269,7 +269,7 @@ pub struct Opened {
     pub segment_seconds: f64,
 }
 
-/// A header value the entry or its source gives, entry first (C140).
+/// A header value the entry or its source gives, entry first.
 fn pick(entry: &Option<String>, source: &Option<String>) -> Option<String> {
     [entry, source]
         .into_iter()
@@ -618,7 +618,7 @@ pub async fn leave(
 ) -> Result<Json<Value>, AppError> {
     read(&a)?;
     let sid = sid.0;
-    // F74: only the owner, or whoever administers settings, ends a viewer.
+    // Only the owner, or whoever administers settings, ends a viewer.
     let known = st.livetv.live.lock().viewers.get(&sid).map(|v| v.user_id);
     let owner = match known {
         Some(o) => o,
@@ -670,7 +670,7 @@ pub async fn heartbeat(
     Ok(Json(json!({"ok": true})))
 }
 
-/// C137: the live viewers of a user whose channel is no longer playable for them end now.
+/// The live viewers of a user whose channel is no longer playable for them end now.
 pub async fn revoke_lost_access(st: &AppState, user_id: i32) {
     let mine: Vec<(String, i32)> = {
         let g = st.livetv.live.lock();
@@ -737,7 +737,7 @@ pub async fn resolve_live(
     let Some(viewer) = viewer else {
         return Ok(false);
     };
-    // F75: another user's credential is not a denial of the owner (the engine answers 403 by itself).
+    // Another user's credential is not a denial of the owner (the engine answers 403 by itself).
     if viewer.user_id != Some(user_id) {
         return Ok(true);
     }

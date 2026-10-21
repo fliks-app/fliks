@@ -11,13 +11,13 @@ pub fn request_key(id: &str) -> bool {
         .is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
 }
 
-/// C9: `0` or digits without a leading zero, within the integer range.
+/// `0` or digits without a leading zero, within the integer range.
 pub fn canonical_id(id: &str) -> bool {
     id.parse::<i32>()
         .is_ok_and(|n| n >= 0 && n.to_string() == id)
 }
 
-/// F21: only the variants Nest writes.
+/// Only the variants the server writes.
 pub fn media_variant(v: &str) -> bool {
     matches!(v, "poster" | "fanart" | "logo")
         || v.strip_prefix("fanart-")

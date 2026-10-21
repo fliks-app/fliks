@@ -487,7 +487,7 @@ async fn timeouts_epoch_traps_and_breaker() {
     assert_eq!(
         rt.restarts.load(std::sync::atomic::Ordering::SeqCst),
         1,
-        "C105: the timeout counts toward the breaker"
+        "the timeout counts toward the breaker"
     );
     tokio::time::sleep(Duration::from_millis(50)).await;
     let (st, _) = h
@@ -607,7 +607,7 @@ async fn health_misses_and_timeouts() {
     let before = rt.restarts.load(std::sync::atomic::Ordering::SeqCst);
     h.set("plugin.fliks.fixture.health", "slow").await;
     until(
-        "C118: a timed-out health is a crash at once",
+        "a timed-out health is a crash at once",
         Duration::from_secs(5),
         async || rt.restarts.load(std::sync::atomic::Ordering::SeqCst) == before + 1,
     )
@@ -752,7 +752,7 @@ async fn jobs_no_overlap_and_commands() {
     );
     assert!(
         h.st.jobs.claim(fliks_server::jobs::RESTORE).is_none(),
-        "C111: a restore is refused while a plugin job runs"
+        "a restore is refused while a plugin job runs"
     );
     let (st, b) = h
         .call(
@@ -976,7 +976,7 @@ impl Relay {
     }
 }
 
-/// C109 after boot: provisioning that cannot reach Postgres is `degraded`, then registers once it answers.
+/// After boot: provisioning that cannot reach Postgres is `degraded`, then registers once it answers.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn provisioning_waits_for_the_database() {
     use fliks_server::plugins::{Plugins, runtime::HostConfig};
@@ -1038,7 +1038,7 @@ async fn provisioning_waits_for_the_database() {
     done(s, h).await;
 }
 
-/// C109: the plugin's database down while running makes `start` and `health` `degraded`, never a crash.
+/// The plugin's database down while running makes `start` and `health` `degraded`, never a crash.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn database_outage_degrades_without_crashing() {
     let Some((m, w)) = fixture() else { return };
@@ -1140,7 +1140,7 @@ async fn a_dropped_call_frees_its_instance() {
     done(s, h).await;
 }
 
-/// C112: while a restore holds its claim, registration and the admin routes refuse.
+/// While a restore holds its claim, registration and the admin routes refuse.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_restore_refuses_registration_and_admin_routes() {
     let Some((s, h)) = setup("restoring", |_| {}).await else {

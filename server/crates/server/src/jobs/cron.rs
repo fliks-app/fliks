@@ -108,7 +108,7 @@ mod tests {
     }
 
     /// `cron-parser` 5.5 skips some fires on a DST change day where `croner` fires each valid local
-    /// time (`scheduler.md` Q1), so only windows crossing a transition may differ.
+    /// time (`scheduler.md`), so only windows crossing a transition may differ.
     fn dst_window(
         tz: Tz,
         from: DateTime<Utc>,

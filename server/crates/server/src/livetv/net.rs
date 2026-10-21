@@ -1,5 +1,5 @@
 //! Outbound requests of live TV: one identity, validators, idle timeout, redirect limit, body cap.
-//! Errors never carry the request URL, userinfo or query (F71).
+//! Errors never carry the request URL, userinfo or query.
 use crate::vetted;
 use reqwest::{
     Client, ClientBuilder, Response, StatusCode, Url,
@@ -13,7 +13,7 @@ use std::time::Duration;
 /// Providers block the ffmpeg and HTTP-library agents outright: every request goes out as VLC.
 pub const DEFAULT_USER_AGENT: &str = "VLC/3.0.20 LibVLC/3.0.20";
 
-/// Largest body read from a provider, after any `Content-Encoding` decoding (F72).
+/// Largest body read from a provider, after any `Content-Encoding` decoding.
 pub const MAX_BODY: usize = 512 * 1024 * 1024;
 
 /// Per-source overrides: the source's columns, or an entry's own.
@@ -43,7 +43,7 @@ pub struct Opts {
     /// Longest silence between two reads (axios' `timeout`).
     pub idle: Duration,
     pub max_redirects: usize,
-    /// Probe mode: the host is vetted before every hop (F70).
+    /// Probe mode: the host is vetted before every hop.
     pub vetted: bool,
 }
 

@@ -1,4 +1,4 @@
-//! Senders and dispatch: one POST per matching connection, 10 s timeout, no retry (C16).
+//! Senders and dispatch: one POST per matching connection, 10 s timeout, no retry.
 use super::db::{self, Connection};
 use fliks_domain::notifications::{Body, build_request};
 use reqwest::header::CONTENT_TYPE;
@@ -13,7 +13,7 @@ fn client() -> &'static reqwest::Client {
     CLIENT.get_or_init(|| reqwest::Client::builder().build().expect("reqwest client"))
 }
 
-/// Error text without the request URL (F29): the gotify token and the webhook secret travel in it.
+/// Error text without the request URL: the gotify token and the webhook secret travel in it.
 fn describe(e: reqwest::Error) -> String {
     if e.is_timeout() {
         return format!("timeout of {}ms exceeded", TIMEOUT.as_millis());

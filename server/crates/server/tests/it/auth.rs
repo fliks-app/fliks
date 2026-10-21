@@ -290,7 +290,7 @@ async fn scoped_tokens_by_extractor(pool: PgPool) {
         let (app, t) = (app.clone(), bearer(t));
         async move { get_with(&app, uri, &[("authorization", &t)]).await }
     };
-    // F8: plain Authed refuses a stream token, StreamAuthed takes it, Session answers Nest's 403
+    // plain Authed refuses a stream token, StreamAuthed takes it, Session answers a 403
     let (s, body) = call("/who", &scoped).await;
     assert_eq!(
         (s, serde_json::from_str::<Value>(&body).unwrap()),

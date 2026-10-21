@@ -1,4 +1,4 @@
-//! `GET /api/media` and `recently-added` (`media-query.md` rules 14-27, 33-34; C10-C12 in rules 67-72).
+//! `GET /api/media` and `recently-added` (`media-query.md` rules 14-27, 33-34, 67-72).
 use super::{
     hydrate,
     params::{Recent, Search},
@@ -55,7 +55,7 @@ const MISSING_EPISODE_TAIL: &str = r#" AND NOT ("me"."hasFile" = true OR EXISTS 
     ))
 )"#;
 
-/// Distinct stored qualities with their rank, for the cutoff filter in SQL (C11).
+/// Distinct stored qualities with their rank, for the cutoff filter in SQL.
 struct QualityMap {
     names: Vec<String>,
     ranks: Vec<i32>,
@@ -372,7 +372,7 @@ WHERE m.id = ANY($2::int[])"#,
     Ok(())
 }
 
-/// Rule 33, Q-R: newest additions by media, by file, or both; `id ASC` breaks ties (C12).
+/// Rule 33, Q-R: newest additions by media, by file, or both; `id ASC` breaks ties.
 pub async fn recently_added(
     db: &PgPool,
     p: &Recent,

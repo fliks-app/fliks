@@ -208,7 +208,7 @@ fn on_disk(eps: &[EpisodeRow]) -> BTreeSet<i32> {
     )
 }
 
-/// The highest-ranked quality; the first of equal ranks wins, as in Nest.
+/// The highest-ranked quality; the first of equal ranks wins.
 fn best(qualities: Vec<String>) -> Option<String> {
     qualities.into_iter().reduce(|a, b| {
         if rank_from_quality_string(Some(&b)) > rank_from_quality_string(Some(&a)) {

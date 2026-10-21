@@ -83,7 +83,7 @@ fn recommend_reproduces_expected() {
 }
 
 #[test]
-fn c4_orders_equal_scores_by_media_id() {
+fn orders_equal_scores_by_media_id() {
     let cand = |id| Candidate {
         id,
         title: format!("T{id}"),
@@ -105,7 +105,7 @@ fn c4_orders_equal_scores_by_media_id() {
         scored.iter().map(|s| s.media.id).collect::<Vec<_>>(),
         [30, 10, 20]
     );
-    rank_c4(&mut scored);
+    rank_by_score(&mut scored);
     assert_eq!(
         scored.iter().map(|s| s.media.id).collect::<Vec<_>>(),
         [10, 20, 30]

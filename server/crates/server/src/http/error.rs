@@ -3,7 +3,7 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use serde_json::{Value, json};
 
-/// Nest exception body: `{statusCode, message}` when built bare, plus `error` when built with a message.
+/// 4.x error body: `{statusCode, message}` when built bare, plus `error` when built with a message.
 #[derive(Debug)]
 pub struct AppError {
     status: StatusCode,
@@ -21,7 +21,7 @@ impl AppError {
         }
     }
 
-    /// Non-Nest-exception error (`{statusCode, message}`), e.g. body-parser's 413.
+    /// Plain error (`{statusCode, message}`), e.g. body-parser's 413.
     pub fn plain(status: StatusCode, message: impl Into<Value>) -> Self {
         Self {
             status,
@@ -76,7 +76,7 @@ impl AppError {
     }
 }
 
-/// The `message` as Nest's `e.message`, for logs.
+/// The `message` text, for logs.
 impl std::fmt::Display for AppError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.text())
@@ -93,7 +93,7 @@ impl IntoResponse for AppError {
     }
 }
 
-/// Nest's unknown-error body; the cause is logged, never returned.
+/// The 4.x unknown-error body; the cause is logged, never returned.
 impl From<sqlx::Error> for AppError {
     fn from(e: sqlx::Error) -> Self {
         tracing::error!(error = %e, "database error");

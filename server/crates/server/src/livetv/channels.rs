@@ -36,7 +36,7 @@ pub fn not_found(id: i32) -> AppError {
     AppError::not_found(format!("Live TV channel #{id} not found"))
 }
 
-/// `%` and `_` of a user's text are literal (C132).
+/// `%` and `_` of a user's text are literal.
 pub fn like_pattern(q: &str) -> String {
     let mut out = String::from("%");
     for c in q.chars() {
@@ -49,7 +49,7 @@ pub fn like_pattern(q: &str) -> String {
     out
 }
 
-/// The denied-group predicate, both sides folded in SQL so every route agrees (C134); `$2` is the raw denied list.
+/// The denied-group predicate, both sides folded in SQL so every route agrees; `$2` is the raw denied list.
 fn not_denied(alias: &str) -> String {
     format!(
         r#"(cardinality($2::text[]) = 0 OR {alias}."groupName" IS NULL
@@ -452,7 +452,7 @@ pub async fn bulk_update(
     let enabled = b.opt_bool("enabled");
     let group_name = b.opt_string("groupName");
     let start_number = b.opt_int("startNumber", None);
-    // C1: a null the columns cannot take.
+    // A null the columns cannot take is a 400.
     for (key, null) in [
         ("enabled", enabled == Opt::Null),
         ("startNumber", start_number == Opt::Null),
@@ -633,7 +633,7 @@ pub async fn update_channel(
     let enabled = b.opt_bool("enabled");
     let shift = b.opt_int("guideShiftMinutes", None);
     let guide = b.opt_string("guideChannelId");
-    // C1: a null on a NOT NULL column.
+    // A null on a NOT NULL column is a 400.
     for (key, null) in [
         ("name", name == Opt::Null),
         ("enabled", enabled == Opt::Null),

@@ -8,7 +8,7 @@ use super::{
 use crate::state::AppState;
 use chrono::{DateTime, Duration, Utc};
 
-/// C127: a sync that finished a few minutes late must not wait a whole extra tick.
+/// A sync that finished a few minutes late must not wait a whole extra tick.
 const DUE_TOLERANCE: Duration = Duration::minutes(5);
 
 /// Never synced, or last synced at least its interval ago (less the tolerance).

@@ -333,7 +333,7 @@ pub async fn definition_list(db: &PgPool) -> sqlx::Result<Vec<QualityDefinition>
     .await
 }
 
-/// C2: one transaction for the whole loop; an unknown `qualityId` updates nothing.
+/// One transaction for the whole loop; an unknown `qualityId` updates nothing.
 pub async fn definitions_update(db: &PgPool, items: Vec<DefinitionValues>) -> sqlx::Result<()> {
     let mut tx = db.begin().await?;
     for it in items {

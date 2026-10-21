@@ -1,4 +1,4 @@
-//! `/api/media` read routes: C10-C12, F22 and the library ACL on a small fixture (the rest is parity).
+//! `/api/media` read routes and the library ACL on a small fixture (the rest is parity).
 use axum::{Router, body::Body, http::Request};
 use fliks_server::{config::Config, media, state::AppState};
 use serde_json::{Value, json};
@@ -173,7 +173,7 @@ async fn stream_info_tracks_carry_their_markers(pool: PgPool) {
     assert!(other["files"][0]["streamInfo"].is_null());
 }
 
-/// C170: a move cannot carry files, so a media that has some answers 409 and stays put.
+/// A move cannot carry files, so a media that has some answers 409 and stays put.
 #[sqlx::test(migrations = false)]
 async fn moving_a_media_with_files_is_a_409(pool: PgPool) {
     let c = ctx(pool.clone()).await;

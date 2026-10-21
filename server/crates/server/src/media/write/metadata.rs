@@ -318,7 +318,7 @@ pub async fn refresh_metadata(st: &AppState, id: i32, defer_kick: bool) -> Resul
     Ok(found)
 }
 
-/// Rule 51: seasons the provider no longer lists; an empty list drops nothing (C99); files survive.
+/// Rule 51: seasons the provider no longer lists; an empty list drops nothing; files survive.
 async fn drop_absent(st: &AppState, id: i32, found: &Found) -> Result<(), sqlx::Error> {
     if found.seasons.is_empty() {
         return Ok(());
@@ -501,7 +501,7 @@ pub async fn refresh(
     Ok((StatusCode::CREATED, Json(json!({"ok": true}))))
 }
 
-/// `POST /api/media/:id/episodes/:episodeId/refresh` (rules 54-55, F46: the episode is under `:id`).
+/// `POST /api/media/:id/episodes/:episodeId/refresh` (rules 54-55: the episode is under `:id`).
 #[utoipa::path(post, path = "/api/media/{id}/episodes/{episodeId}/refresh", responses((status = 201)))]
 pub async fn refresh_episode(
     State(st): State<AppState>,

@@ -1,4 +1,4 @@
-//! The outbound guard (F65, F67): guest requests, catalog archive redirects (C107), webhooks.
+//! The outbound guard guest requests, catalog archive redirects, webhooks.
 use super::harness::*;
 use fliks_server::net::guard::Net;
 use fliks_server::plugins::fetch::{ArchiveError, Fetcher};
@@ -361,7 +361,7 @@ async fn guest_outbound_guard() {
             );
             assert!(
                 !refused.is_empty() && refused.iter().all(|e| !e.message.contains("https://")),
-                "F66"
+                "no URL in the refusal"
             );
         } else {
             assert_eq!(o["private"]["status"], 200);
@@ -564,13 +564,13 @@ async fn webhooks_resolve_once_and_never_leak_urls() {
     for f in r["failures"].as_array().unwrap() {
         assert!(
             !f.as_str().unwrap().contains("secret") && !f.as_str().unwrap().contains("hooks.test"),
-            "F66: {f}"
+            "no secret in {f}"
         );
     }
     let warned = fliks_server::system::logs::query("warn", "acme.hooks", None);
     assert!(
         warned.iter().all(|e| !e.message.contains("secret")),
-        "F66 in the logs"
+        "no secret in the logs"
     );
     h.finish().await;
     s.finish().await;

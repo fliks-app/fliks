@@ -42,7 +42,7 @@ pub struct Role {
 }
 
 impl Role {
-    /// F22: default libraries carry `path` only for callers who can manage libraries.
+    /// Default libraries carry `path` only for callers who can manage libraries.
     pub fn json(self, paths: bool) -> Value {
         let mut v = serde_json::to_value(self).expect("role serialises");
         if !paths {

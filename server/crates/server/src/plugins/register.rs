@@ -69,7 +69,7 @@ impl Plugins {
         }
     }
 
-    /// C109: `degraded` while the database is down, registered again on the ladder until it answers.
+    /// `degraded` while the database is down, registered again on the ladder until it answers.
     pub(super) fn wait_for_db(&self, pkg: &Package, f: &Fail) {
         let (Some(me), Ok(host)) = (self.app().map(|a| a.plugins.clone()), self.host()) else {
             return;
@@ -116,7 +116,7 @@ impl Plugins {
         });
     }
 
-    /// A restore holds its claim (C112).
+    /// A restore holds its claim.
     pub(crate) fn restoring(&self) -> bool {
         self.app().is_some_and(|a| a.jobs.is_restoring())
     }

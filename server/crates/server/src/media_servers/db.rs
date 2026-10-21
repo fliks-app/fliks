@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use serde::Serialize;
 use sqlx::{PgPool, types::Json};
 
-/// The entity as the API serialises it: `apiKey` is always `""`, `apiKeySet` says whether a key is stored (F79).
+/// The entity as the API serialises it: `apiKey` is always `""`, `apiKeySet` says whether a key is stored.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Server {

@@ -111,7 +111,7 @@ pub async fn follows(db: &PgPool, from: i32, to: i32) -> sqlx::Result<bool> {
 }
 
 /// The media title, or 404 `<what> #<id> not found` for the first of media, season, episode that is
-/// missing, outside `accessible` or not under the media (C1, F32).
+/// missing, outside `accessible` or not under the media.
 pub async fn assert_targets(
     db: &PgPool,
     accessible: &[i32],
@@ -144,7 +144,7 @@ pub async fn assert_targets(
     }
 }
 
-/// A target deleted between the check and the write is the same 404 (C1).
+/// A target deleted between the check and the write is the same 404.
 pub fn fk_missing(e: sqlx::Error) -> AppError {
     match &e {
         sqlx::Error::Database(d) if d.code().as_deref() == Some("23503") => {
@@ -154,7 +154,7 @@ pub fn fk_missing(e: sqlx::Error) -> AppError {
     }
 }
 
-/// Leaving social (rule 46): the six statements in order, run in the caller's transaction (C14).
+/// Leaving social (rule 46): the six statements in order, run in the caller's transaction.
 pub async fn leave_social(c: &mut PgConnection, user: i32) -> Result<(), sqlx::Error> {
     sqlx::query!(
         r#"DELETE FROM user_follows WHERE "followerId" = $1 OR "followingId" = $1"#,

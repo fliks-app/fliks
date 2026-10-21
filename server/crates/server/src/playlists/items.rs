@@ -84,7 +84,7 @@ struct Joined {
     metadata: Option<Value>,
 }
 
-/// The `Media` entity as TypeORM serialises it with its eager relations; F22 drops the absolute paths.
+/// The `Media` entity with its eager relations, absolute paths dropped.
 fn media_json(j: Joined, paths: bool) -> Value {
     let (mut media, mut library) = (j.media, j.library);
     iso_times(&mut media);

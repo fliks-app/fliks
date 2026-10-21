@@ -20,7 +20,7 @@ pub async fn streams(st: &AppState, media: i32, file: i32) -> Result<Vec<Value>,
     else {
         return Err(file_not_found(file));
     };
-    // A library without path cannot place the file: 404 (Q1) where Nest threw a TypeError.
+    // A library without path cannot place the file: 404.
     let Some(base) = media_path(row.lib_path.as_deref(), row.folder_name.as_deref()) else {
         return Err(file_not_found(file));
     };

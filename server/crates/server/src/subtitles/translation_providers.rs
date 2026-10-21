@@ -72,7 +72,7 @@ fn endpoint(engine: &str) -> Option<&'static str> {
     }
 }
 
-/// C74: same engine and, for the engines with one, the same endpoint (trimmed, no trailing `/`).
+/// Same engine and, for the engines with one, the same endpoint (trimmed, no trailing `/`).
 fn same_endpoint(stored_engine: &str, stored: &Value, engine: &str, settings: &Value) -> bool {
     if engine != stored_engine {
         return false;
@@ -150,7 +150,7 @@ fn policy(a: &Authed, action: Action) -> Res<()> {
     a.require(action, Subject::TranslationProvider)
 }
 
-/// C73: one default at a time, decided under the row locks.
+/// One default at a time, decided under the row locks.
 async fn clear_other_defaults(tx: &mut PgConnection, keep: i32) -> sqlx::Result<()> {
     sqlx::query(r#"UPDATE translation_providers SET "isDefault" = false WHERE id <> $1 AND "isDefault" = true"#)
         .bind(keep)
@@ -355,7 +355,7 @@ pub async fn update(
     .await?
     .ok_or_else(|| AppError::not_found(format!("TranslationProvider #{id} not found")))?;
     let engine = b.engine.clone().unwrap_or_else(|| cur.engine.clone());
-    // C74: a changed engine or endpoint never inherits the stored key.
+    // A changed engine or endpoint never inherits the stored key.
     let settings = match &b.settings {
         Some(s) => {
             let keep =

@@ -15,7 +15,7 @@ pub struct Connection {
 }
 
 impl Connection {
-    /// `ConnectionJSON`: settings redacted (F5, F28).
+    /// `ConnectionJSON`: settings redacted.
     pub fn json(&self) -> Value {
         let ms = |t: &DateTime<Utc>| fliks_domain::js::iso(*t);
         json!({

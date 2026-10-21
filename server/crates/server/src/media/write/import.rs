@@ -1,5 +1,5 @@
 //! Metadata imports (rules 10-17, 19-22): the provider reads happen first, the rows in one
-//! transaction (C50); images and credits follow detached.
+//! transaction; images and credits follow detached.
 use super::{body::Body, entity_or_404, metadata, resolve_profile};
 use crate::{
     events::DomainEvent,
@@ -29,7 +29,7 @@ pub struct Target {
     pub default_language: Option<i32>,
 }
 
-/// Rule 14 with F46: the library (or the sole one accepting `type`) among the caller's libraries.
+/// Rule 14: the library (or the sole one accepting `type`) among the caller's libraries.
 pub async fn resolve_target(
     st: &AppState,
     a: &Authed,
@@ -62,7 +62,7 @@ pub async fn resolve_target_in(
     let lib = match library_id {
         Some(id) => match rows.iter().find(|r| r.id == id) {
             Some(r) => r,
-            // F46: unknown and outside the caller's libraries answer alike (no existence oracle).
+            // Unknown and outside the caller's libraries answer alike (no existence oracle).
             None => return Err(AppError::not_found(format!("Library #{id} not found"))),
         },
         None => {
@@ -451,7 +451,7 @@ pub async fn import_tmdb(
     Ok((StatusCode::CREATED, Json(entity_or_404(&st, &a, id).await?)))
 }
 
-/// `POST /api/media/import` (rule 17, C1: a numeric `externalId` and a known `provider`).
+/// `POST /api/media/import` (rule 17: a numeric `externalId` and a known `provider`).
 #[utoipa::path(post, path = "/api/media/import", responses((status = 201)))]
 pub async fn import_media(
     State(st): State<AppState>,
