@@ -198,7 +198,7 @@
             </tr>
           </thead>
           <tbody>
-            @for (item of recommendations().items; track item.mediaId) {
+            @for (item of pagedRecommendations(); track item.mediaId) {
               <tr>
                 <td class="font-medium">{{ item.title }}</td>
                 <td>
@@ -236,6 +236,14 @@
           </tbody>
         </table>
       </div>
+      @if (recommendationPageCount() > 1) {
+        <app-pagination
+          class="self-center"
+          [current]="recommendationCurrentPage()"
+          [total]="recommendationPageCount()"
+          (pageChange)="recommendationPage.set($event)"
+        />
+      }
     }
   </section>
 </div>

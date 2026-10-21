@@ -29,6 +29,7 @@ import {
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 import { ModalFooterComponent } from '../../../shared/components/modal-footer';
 import { EnabledSwitchComponent } from '../../../shared/components/enabled-switch';
+import { PaginationComponent } from '../../../shared/components/pagination/pagination';
 import { formatBytes } from '../../../shared/utils/download-format';
 import { cleanCriteria, daysLeft, scopeLabel } from '../../../shared/utils/cleanup.util';
 
@@ -40,6 +41,7 @@ type FlagKey = {
 }[keyof CleanupCriteria];
 
 const MAX_PER_RUN_KEY = 'cleanup_max_per_run';
+const RECOMMENDATIONS_PAGE_SIZE = 20;
 
 @Component({
   selector: 'app-cleanup',
@@ -52,6 +54,7 @@ const MAX_PER_RUN_KEY = 'cleanup_max_per_run';
     DatePipe,
     TranslatePipe,
     EnabledSwitchComponent,
+    PaginationComponent,
   ],
   templateUrl: './cleanup.html',
 })
@@ -99,6 +102,18 @@ export class CleanupSettingsComponent implements OnInit {
   readonly rules = signal<CleanupRule[]>([]);
   readonly candidates = signal<CleanupCandidate[]>([]);
   readonly recommendations = signal<CleanupRecommendations>({ reasons: [], items: [] });
+  readonly recommendationPage = signal(1);
+  readonly recommendationPageCount = computed(() =>
+    Math.max(1, Math.ceil(this.recommendations().items.length / RECOMMENDATIONS_PAGE_SIZE)),
+  );
+  /** Clamped so a page emptied by keep or delete falls back to the last one. */
+  readonly recommendationCurrentPage = computed(() =>
+    Math.min(this.recommendationPage(), this.recommendationPageCount()),
+  );
+  readonly pagedRecommendations = computed(() => {
+    const start = (this.recommendationCurrentPage() - 1) * RECOMMENDATIONS_PAGE_SIZE;
+    return this.recommendations().items.slice(start, start + RECOMMENDATIONS_PAGE_SIZE);
+  });
   readonly loading = signal(true);
   readonly libraries = signal<Library[]>([]);
   readonly genreOptions = signal<MultiSelectOption<string>[]>([]);
