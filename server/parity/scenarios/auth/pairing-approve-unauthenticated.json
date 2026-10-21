@@ -1,5 +1,4 @@
 {
-  "deviation": null,
   "name": "auth-pairing-approve-unauthenticated",
   "seed": "base",
   "steps": [

@@ -1,5 +1,4 @@
 {
-  "deviation": "F47",
   "name": "ingest-relink-inplace-identified-escape",
   "seed": "ingest",
   "steps": [

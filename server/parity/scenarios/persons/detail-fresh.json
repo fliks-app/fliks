@@ -1,5 +1,4 @@
 {
-  "deviation": "F22",
   "engine": "down",
   "ignore": [
     "$..metadataRefreshedAt"

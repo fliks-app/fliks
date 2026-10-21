@@ -1,5 +1,4 @@
 {
-  "deviation": null,
   "name": "roles-delete-unauthenticated",
   "seed": "base",
   "steps": [

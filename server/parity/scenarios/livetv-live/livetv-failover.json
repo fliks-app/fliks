@@ -2,7 +2,6 @@
   "capture": {
     "sid": "$.steps[2].body.sessionId"
   },
-  "deviation": null,
   "engine": "up",
   "ignore": [
     "$..createdAt",

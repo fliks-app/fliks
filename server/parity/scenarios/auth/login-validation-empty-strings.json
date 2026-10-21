@@ -1,5 +1,4 @@
 {
-  "deviation": null,
   "name": "auth-login-validation-empty-strings",
   "seed": "base",
   "steps": [

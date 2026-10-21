@@ -1,12 +1,11 @@
 {
-  "deviation": "C1",
   "ignore": [
     "$..createdAt",
     "$..updatedAt",
     "$..lastSyncAt",
     "$..logoPath"
   ],
-  "name": "sources-deviation-c1-null-not-null",
+  "name": "sources-null-not-null",
   "seed": "livetv",
   "steps": [
     {

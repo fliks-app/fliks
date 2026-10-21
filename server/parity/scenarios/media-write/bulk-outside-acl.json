@@ -1,5 +1,4 @@
 {
-  "deviation": "F46",
   "name": "media-write-bulk-outside-acl",
   "seed": "ingest",
   "steps": [

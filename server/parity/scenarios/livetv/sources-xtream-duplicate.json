@@ -1,5 +1,4 @@
 {
-  "deviation": "C123",
   "ignore": [
     "$..createdAt",
     "$..updatedAt",
@@ -7,7 +6,7 @@
     "$..logoPath",
     "$..lastSeenAt"
   ],
-  "name": "sources-deviation-c123-xtream-duplicate",
+  "name": "sources-xtream-duplicate",
   "seed": "livetv",
   "steps": [
     {

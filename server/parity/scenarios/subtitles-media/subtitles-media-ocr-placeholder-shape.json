@@ -1,5 +1,4 @@
 {
-  "deviation": null,
   "engine": "up",
   "ignore": [
     "$..createdAt",

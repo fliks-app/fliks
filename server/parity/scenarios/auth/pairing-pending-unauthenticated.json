@@ -1,5 +1,4 @@
 {
-  "deviation": null,
   "name": "auth-pairing-pending-unauthenticated",
   "seed": "base",
   "steps": [

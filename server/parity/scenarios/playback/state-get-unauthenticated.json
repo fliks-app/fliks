@@ -1,5 +1,4 @@
 {
-  "deviation": null,
   "name": "playback-state-get-unauthenticated",
   "seed": "base",
   "steps": [

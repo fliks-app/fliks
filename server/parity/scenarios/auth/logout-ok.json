@@ -2,7 +2,6 @@
   "capture": {
     "rt": "$.steps[0].body.refreshToken"
   },
-  "deviation": "F18",
   "engine": "up",
   "ignore": [
     "$..accessToken",

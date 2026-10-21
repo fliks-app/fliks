@@ -2,7 +2,6 @@
   "capture": {
     "cand": "$.steps[1].body[0]"
   },
-  "deviation": null,
   "fs": [
     {
       "from": "base.mkv",

@@ -2,7 +2,6 @@
   "capture": {
     "pid": "$.steps[0].body.pairingId"
   },
-  "deviation": null,
   "ignore": [
     "$..pairingId"
   ],

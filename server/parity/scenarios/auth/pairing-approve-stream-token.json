@@ -3,7 +3,6 @@
     "pid": "$.steps[1].body.pairingId",
     "st": "$.steps[0].body.streamToken"
   },
-  "deviation": "F8",
   "ignore": [
     "$.streamToken",
     "$.expiresAt",

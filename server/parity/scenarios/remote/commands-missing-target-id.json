@@ -1,5 +1,4 @@
 {
-  "deviation": "C1",
   "name": "remote-commands-missing-target-id",
   "seed": "base",
   "steps": [

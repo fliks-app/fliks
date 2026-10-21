@@ -1,7 +1,4 @@
 {
-  "deviation": [
-    "F51"
-  ],
   "ignore": [
     "$..createdAt",
     "$..updatedAt",
@@ -9,7 +6,7 @@
     "$..queuedAt",
     "$.id"
   ],
-  "name": "subtitles-deviation-f51-health-and-provider-test",
+  "name": "subtitles-health-and-provider-test",
   "seed": "subtitles",
   "steps": [
     {

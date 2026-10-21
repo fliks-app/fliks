@@ -2,7 +2,6 @@
   "capture": {
     "etag": "$.steps[0].headers.etag"
   },
-  "deviation": "C7",
   "name": "images-conditional",
   "seed": "base",
   "steps": [

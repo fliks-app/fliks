@@ -1,5 +1,4 @@
 {
-  "deviation": "F32",
   "ignore": [
     "$..createdAt",
     "$..updatedAt",

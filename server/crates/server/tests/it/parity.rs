@@ -1,4 +1,4 @@
-//! HTTP parity runner (plan 5.3); env knobs and usage in server/parity/README.md.
+//! HTTP parity runner; env knobs and usage in server/parity/README.md.
 use reqwest::{Client, Method, multipart};
 use serde_json::{Map, Value, json};
 use std::{
@@ -307,7 +307,7 @@ fn is_key(s: &str) -> bool {
             .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_' || b == b'.')
 }
 
-/// Nest error envelope: `statusCode` + `error` always, `message` only for i18n keys or `strictMessage`.
+/// Error envelope: `statusCode` + `error` always, `message` only for i18n keys or `strictMessage`.
 fn diff_error(e: &Map<String, Value>, a: &Value, strict: bool, out: &mut Vec<String>) {
     for k in ["statusCode", "error"] {
         diff(
@@ -551,7 +551,7 @@ async fn send(ctx: &Ctx, step: &Value, vars: &HashMap<String, Value>) -> Result<
             Value::Array(events)
         }
         _ => {
-            // the stub stands in for both image hosts (`stub.py` `local_images`); Nest answered the real ones
+            // the stub stands in for both image hosts (`stub.py` `local_images`)
             let stub = env("PARITY_STUB", "http://127.0.0.1:4964");
             let text = r
                 .text()
@@ -682,7 +682,7 @@ fn uses_stub(sc: &Value) -> bool {
         .is_some_and(|s| s.iter().any(|st| st["stub"].as_bool() == Some(true)))
 }
 
-/// Keys added to the contract after the Nest recordings (spec rows marked additive): never compared.
+/// Keys the recordings predate (additive contract keys): never compared.
 const ADDITIVE: &[&str] = &["$..trackMarkers"];
 
 /// Step-level `ignore`: paths dropped from that step's body only.
@@ -802,7 +802,6 @@ async fn run(ctx: &Ctx, sc: &mut Value, record: bool) -> Vec<String> {
         })
         .unwrap_or_default();
     let strict = sc["strictMessage"].as_bool().unwrap_or(false);
-    let record = record && sc["deviation"].is_null();
     let captures: Vec<(String, Vec<Seg>)> = sc["capture"]
         .as_object()
         .map(|o| {
@@ -922,7 +921,7 @@ async fn parity() {
     let providers = env("PARITY_PROVIDERS", "") == "1";
     // Library scenarios create directories under libs/ and list it; a leftover from a previous run breaks the listing.
     let _ = fs::remove_dir_all(PathBuf::from(media_root()).join("libs"));
-    let (mut ok, mut failed, mut skipped, mut dev) = (0, 0, 0, vec![]);
+    let (mut ok, mut failed, mut skipped) = (0, 0, 0);
     let mut files = vec![];
     collect(
         &Path::new(&std::env::var("CARGO_MANIFEST_DIR").expect("run through cargo test"))
@@ -971,33 +970,19 @@ async fn parity() {
         let rec = record && (sc["engine"].is_string() || engine == "up");
         let steps = sc["steps"].clone();
         let errs = run(&ctx, &mut sc, rec).await;
-        if rec && sc["deviation"].is_null() && sc["steps"] != steps {
+        if rec && sc["steps"] != steps {
             fs::write(f, serde_json::to_string_pretty(&sc).unwrap() + "\n").unwrap();
         }
-        let line = |tag: &str| {
-            format!(
-                "{tag} {name}: {}",
-                errs.iter().take(6).cloned().collect::<Vec<_>>().join("; ")
-            )
-        };
-        if !sc["deviation"].is_null() {
-            dev.push(if errs.is_empty() {
-                format!("DEVIATION {name} ({}): matches", sc["deviation"])
-            } else {
-                failed += 1;
-                line("DEVIATION-DIFF")
-            });
-        } else if errs.is_empty() {
+        if errs.is_empty() {
             ok += 1;
         } else {
             failed += 1;
-            println!("{}", line("FAIL"));
+            println!(
+                "FAIL {name}: {}",
+                errs.iter().take(6).cloned().collect::<Vec<_>>().join("; ")
+            );
         }
     }
-    dev.iter().for_each(|l| println!("{l}"));
-    println!(
-        "parity: {ok} passed, {failed} failed, {skipped} skipped (engine {engine}), {} deviation",
-        dev.len()
-    );
+    println!("parity: {ok} passed, {failed} failed, {skipped} skipped (engine {engine})");
     assert_eq!(failed, 0);
 }

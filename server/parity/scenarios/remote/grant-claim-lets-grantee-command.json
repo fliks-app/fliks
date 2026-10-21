@@ -2,7 +2,6 @@
   "capture": {
     "code": "$.steps[1].body.code"
   },
-  "deviation": null,
   "ignore": [
     "$..code",
     "$..createdAt",

@@ -113,13 +113,13 @@ run_mode() { # run_mode <engine up|down|stub> <providers 0|1> <filter>
   local ENG_URL="" ENG_TOK="" HOST_TOK=""
   log "mode engine=$engine providers=$prov"
   rm -rf "$d" "$FLIKS_PARITY_ROOT/data"; mkdir -p "$d"/{conf,cache,runtime}
-  "$SERVER/parity/media-gen.sh" || { SUMMARY+=("$tag|ERROR|0|0|0|media-gen"); FAILED=1; return; }
+  "$SERVER/parity/media-gen.sh" || { SUMMARY+=("$tag|ERROR|0|0|media-gen"); FAILED=1; return; }
   case $engine in
     up)
       mkdir -p "$d/engine"
       start "engine-$1-$2" "$d" env FLIKS_ENGINE_TOKEN=pall-engine ENGINE_DATA_DIR="$d/engine/data" \
         FLIKS_CACHE_DIR="$d/engine/cache" FLIKS_TRANSCODE_DIR="$d/engine/transcode" "$ENGBIN" --listen 127.0.0.1:$P_ENGINE
-      wait_http "http://127.0.0.1:$P_ENGINE/v1/hello" 20 || { log "engine did not start"; SUMMARY+=("$tag|ERROR|0|0|0|engine"); FAILED=1; stop_all_but_stubs; return; }
+      wait_http "http://127.0.0.1:$P_ENGINE/v1/hello" 20 || { log "engine did not start"; SUMMARY+=("$tag|ERROR|0|0|engine"); FAILED=1; stop_all_but_stubs; return; }
       ENG_URL=http://127.0.0.1:$P_ENGINE ENG_TOK=pall-engine ;;
     stub) ENG_URL=http://127.0.0.1:$P_ESTUB ENG_TOK=stub ;;
   esac
@@ -135,7 +135,7 @@ run_mode() { # run_mode <engine up|down|stub> <providers 0|1> <filter>
   psql_admin -d postgres -c "DROP DATABASE IF EXISTS $DB WITH (FORCE)" -c "CREATE DATABASE $DB TEMPLATE $TPL"
   start "target-$1-$2" "$d" env -u TMDB_API_KEY -u TVDB_API_KEY -u DATABASE_URL -u INVOCATION_ID -u pm_id -u FLIKS_SUPERVISED "${penv[@]}" "$BIN"
   if ! wait_http "http://127.0.0.1:$P_TARGET/api/auth/login" 90; then
-    log "target did not start, see $RUN/target-$1-$2.log"; SUMMARY+=("$tag|ERROR|0|0|0|target"); FAILED=1
+    log "target did not start, see $RUN/target-$1-$2.log"; SUMMARY+=("$tag|ERROR|0|0|target"); FAILED=1
     stop_all_but_stubs; return
   fi
   if [ "$engine" = up ]; then
@@ -151,16 +151,16 @@ run_mode() { # run_mode <engine up|down|stub> <providers 0|1> <filter>
     "$TESTEXE" parity::parity --ignored --nocapture) >"$out" 2>&1 3>&- </dev/null &
   PIDS+=($!)
   wait $!
-  local rc=$? line ok failed skipped dev
+  local rc=$? line ok failed skipped
   line=$(grep -E '^parity: [0-9]+ passed' "$out" | tail -1)
   ok=$(sed -n 's/^parity: \([0-9]*\) passed.*/\1/p' <<<"$line"); failed=$(sed -n 's/.* \([0-9]*\) failed.*/\1/p' <<<"$line")
-  skipped=$(sed -n 's/.* \([0-9]*\) skipped.*/\1/p' <<<"$line"); dev=$(grep -c '^DEVIATION' "$out")
-  if [ -z "$line" ]; then SUMMARY+=("$tag|ERROR|0|0|0|runner crashed rc=$rc"); FAILED=1
+  skipped=$(sed -n 's/.* \([0-9]*\) skipped.*/\1/p' <<<"$line")
+  if [ -z "$line" ]; then SUMMARY+=("$tag|ERROR|0|0|runner crashed rc=$rc"); FAILED=1
   else
-    SUMMARY+=("$tag|$ok|${failed:-0}|${skipped:-0}|$dev|")
+    SUMMARY+=("$tag|$ok|${failed:-0}|${skipped:-0}|")
     [ "${failed:-0}" != 0 ] || [ "$rc" != 0 ] && FAILED=1
   fi
-  grep -E '^(FAIL|DEVIATION-DIFF)' "$out" | cut -c1-400 >&2
+  grep -E '^FAIL' "$out" | cut -c1-400 >&2
   stop_all_but_stubs
 }
 
@@ -182,8 +182,8 @@ want up1 && run_mode up 1 "$FILTER"
 want down1 && run_mode down 1 "$FILTER"
 
 echo
-printf '%-14s %8s %8s %8s %10s  %s\n' MODE PASSED FAILED SKIPPED DEVIATIONS NOTE
-for r in "${SUMMARY[@]}"; do IFS='|' read -r a b c d e f <<<"$r"; printf '%-14s %8s %8s %8s %10s  %s\n' "$a" "$b" "$c" "$d" "$e" "$f"; done
+printf '%-14s %8s %8s %8s  %s\n' MODE PASSED FAILED SKIPPED NOTE
+for r in "${SUMMARY[@]}"; do IFS='|' read -r a b c d e <<<"$r"; printf '%-14s %8s %8s %8s  %s\n' "$a" "$b" "$c" "$d" "$e"; done
 echo "logs: $RUN"
 [ "$FAILED" = 0 ] && echo "parity: ALL GREEN" || echo "parity: FAILURES"
 exit $FAILED

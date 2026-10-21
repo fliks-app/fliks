@@ -1,5 +1,4 @@
 {
-  "deviation": "C143",
   "ignore": [
     "$..createdAt",
     "$..updatedAt",
@@ -8,7 +7,7 @@
     "$..lastSeenAt",
     "$..guideUrls"
   ],
-  "name": "sources-deviation-c143-fold-touched",
+  "name": "sources-fold-touched",
   "seed": "livetv",
   "steps": [
     {

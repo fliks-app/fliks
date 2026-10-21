@@ -1,5 +1,4 @@
 {
-  "deviation": "F1",
   "name": "auth-register-unknown-field",
   "seed": "base",
   "steps": [

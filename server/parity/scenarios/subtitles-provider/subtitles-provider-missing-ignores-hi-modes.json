@@ -1,5 +1,4 @@
 {
-  "deviation": "C57",
   "fs": [
     {
       "from": "base.mkv",
@@ -17,7 +16,7 @@
     "$..date",
     "$..queuedAt"
   ],
-  "name": "subtitles-provider-deviation-c57-missing-ignores-hi-modes",
+  "name": "subtitles-provider-missing-ignores-hi-modes",
   "seed": "subtitles-work",
   "steps": [
     {

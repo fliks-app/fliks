@@ -4,7 +4,6 @@
     "sid3": "$.steps[4].body.sessionId",
     "sid4": "$.steps[8].body.sessionId"
   },
-  "deviation": null,
   "engine": "up",
   "ignore": [
     "$..createdAt",

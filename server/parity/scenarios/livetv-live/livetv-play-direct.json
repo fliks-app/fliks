@@ -3,7 +3,6 @@
     "sid": "$.steps[2].body.sessionId",
     "url": "$.steps[2].body.url"
   },
-  "deviation": null,
   "engine": "up",
   "ignore": [
     "$..createdAt",

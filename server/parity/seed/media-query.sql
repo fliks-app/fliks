@@ -43,7 +43,7 @@ UPDATE media SET "fanartUrl" = '/api/images/' || id || '/fanart' WHERE id IN (2,
 ALTER TABLE episodes DISABLE TRIGGER set_updated_at;
 UPDATE episodes SET "hasFile" = false WHERE id = 1;
 ALTER TABLE episodes ENABLE TRIGGER set_updated_at;
--- updated before any insert so the heap (and Nest's unordered `files`) stays in id order
+-- updated before any insert so the heap order stays the id order
 UPDATE media_files SET "createdAt" = '2026-02-01'::timestamptz + (id * 37 % 101) * interval '1 hour' WHERE id <= 29;
 
 INSERT INTO media (id, "createdAt", "updatedAt", title, "originalTitle", year, type, "tmdbId", "imdbId", "tvdbId", overview, status, monitored, "folderName", rating, genres, runtime, "releaseDate", "inCinemas", "digitalRelease", "physicalRelease", "libraryId", "qualityProfileId", "languageProfileId", "addedById", "tmdbCollectionId", "tmdbCollectionName", "posterUrl", "fanartUrl") VALUES

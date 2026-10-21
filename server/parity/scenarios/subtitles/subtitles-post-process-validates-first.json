@@ -1,7 +1,4 @@
 {
-  "deviation": [
-    "C62"
-  ],
   "ignore": [
     "$..createdAt",
     "$..updatedAt",
@@ -9,7 +6,7 @@
     "$..queuedAt",
     "$.id"
   ],
-  "name": "subtitles-deviation-c62-post-process-validates-first",
+  "name": "subtitles-post-process-validates-first",
   "seed": "subtitles",
   "steps": [
     {

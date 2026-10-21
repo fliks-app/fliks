@@ -1,12 +1,11 @@
 {
-  "deviation": "C131",
   "ignore": [
     "$..createdAt",
     "$..updatedAt",
     "$..lastSyncAt",
     "$..logoPath"
   ],
-  "name": "guide-sources-deviation-c131",
+  "name": "guide-sources-field-validation",
   "seed": "livetv",
   "steps": [
     {

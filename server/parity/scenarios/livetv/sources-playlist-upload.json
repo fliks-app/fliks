@@ -2,7 +2,6 @@
   "capture": {
     "loc": "$.steps[0].body.location"
   },
-  "deviation": null,
   "ignore": [
     "$..createdAt",
     "$..updatedAt",
