@@ -705,7 +705,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   cardStatus(row: MetadataSearchResult): CardBadge {
     if (row.existingMediaId) return 'library';
     const reqStatus = this.requestedTmdbIds().get(row.tmdbId);
-    if (!reqStatus) return null;
+    if (!reqStatus || reqStatus === 'removed') return null;
     if (reqStatus === 'declined' || reqStatus === 'failed') return 'declined';
     if (reqStatus === 'available') return 'library';
     return 'pending';

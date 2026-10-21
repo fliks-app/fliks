@@ -963,7 +963,7 @@ async fn on_media_imported_adopts_only_covered_requests(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
-async fn removal_declines_add_rows_resolves_delete_rows_and_keeps_available(pool: PgPool) {
+async fn removal_declines_add_rows_resolves_delete_rows_and_retires_available(pool: PgPool) {
     let c = ctx(pool).await;
     q(&c.pool(), r#"INSERT INTO media (id, title, type, "tmdbId", "libraryId") VALUES (12, 'M', 'movie', 91, 1)"#).await;
     for (kind, status) in [
@@ -1000,7 +1000,7 @@ async fn removal_declines_add_rows_resolves_delete_rows_and_keeps_available(pool
         [
             ("add".into(), "declined".into(), declined.clone(), None),
             ("add".into(), "declined".into(), declined, None),
-            ("add".into(), "available".into(), None, Some(12)),
+            ("add".into(), "removed".into(), None, None),
             ("delete".into(), "approved".into(), None, None),
         ]
     );
@@ -1339,4 +1339,80 @@ impl Ctx {
             .await
             .unwrap()
     }
+}
+
+/// An `available` movie request on media 14 (tmdb 93), then the same title requested again by `c.user`.
+async fn available_then(c: &Ctx, media_call: (&str, &str, Value)) {
+    q(&c.pool(), r#"INSERT INTO media (id, title, type, "tmdbId", "libraryId") VALUES (14, 'M', 'movie', 93, 1)"#).await;
+    q(
+        &c.pool(),
+        r#"INSERT INTO requests ("userId", kind, "mediaType", "tmdbId", title, status, "mediaId")
+        VALUES (1, 'add', 'movie', 93, 'Movie 93', 'available', 14)"#,
+    )
+    .await;
+    let (s, _) = call(c, "POST", "/api/requests", &c.user, movie(93)).await;
+    assert_eq!(s, 409, "an available request blocks a re-request");
+    let (m, uri, body) = media_call;
+    let (s, r) = call(c, m, uri, &c.admin, body).await;
+    assert_eq!(s, 200, "{r}");
+    assert_eq!(status_of(c, 1).await, ("removed".into(), None));
+    let (_, st) = call(
+        c,
+        "GET",
+        "/api/requests/title-state?tmdbId=93&mediaType=movie",
+        &c.user,
+        json!(null),
+    )
+    .await;
+    assert_eq!(st["requested"], false);
+    let (s, r) = call(c, "POST", "/api/requests", &c.user, movie(93)).await;
+    assert_eq!(s, 201, "{r}");
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_deleted_media_retires_its_available_request_and_the_title_can_be_requested_again(
+    pool: PgPool,
+) {
+    let c = ctx(pool).await;
+    available_then(&c, ("DELETE", "/api/media/14", json!(null))).await;
+}
+
+#[sqlx::test(migrations = false)]
+async fn an_unmonitored_media_retires_its_available_request_and_the_title_can_be_requested_again(
+    pool: PgPool,
+) {
+    let c = ctx(pool).await;
+    available_then(&c, ("PUT", "/api/media/14", json!({"monitored": false}))).await;
+}
+
+#[sqlx::test(migrations = false)]
+async fn unmonitoring_a_season_trims_or_retires_available_scopes(pool: PgPool) {
+    let c = ctx(pool).await;
+    q(&c.pool(), r#"INSERT INTO media (id, title, type, "tmdbId", "libraryId") VALUES (15, 'S', 'series', 94, 2)"#).await;
+    for seasons in ["'[1]'", "'[1,2]'"] {
+        q(&c.pool(), &format!(r#"INSERT INTO requests ("userId", kind, "mediaType", "tmdbId", title, status, "mediaId", seasons)
+            VALUES (1, 'add', 'series', 94, 'S', 'available', 15, {seasons})"#)).await;
+    }
+    let media = MediaRef {
+        id: 15,
+        media_type: "series".into(),
+        tmdb_id: Some(94),
+        monitored: true,
+    };
+    Lifecycle::of(&c.st)
+        .on_season_monitor_change(media, 1, true, false)
+        .await;
+    let rows: Vec<SeasonRow> = sqlx::query_as(
+        r#"SELECT status::text, "declinedReason", seasons, "mediaId" FROM requests ORDER BY id"#,
+    )
+    .fetch_all(&c.pool())
+    .await
+    .unwrap();
+    assert_eq!(
+        rows,
+        [
+            ("removed".into(), None, Some(json!([1])), None),
+            ("available".into(), None, Some(json!([2])), Some(15)),
+        ]
+    );
 }

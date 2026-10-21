@@ -187,17 +187,23 @@ impl Lifecycle {
         for r in db::linked(&self.st.db, media_id, Some("add"), &db::IN_FLIGHT).await? {
             db::decline_unlink(&self.st.db, r.id, reason).await?;
         }
+        for r in db::linked(&self.st.db, media_id, Some("add"), &["available"]).await? {
+            db::remove_unlink(&self.st.db, r.id).await?;
+        }
         Ok(())
     }
 
-    /// Rule 39: a request scoped to the season is declined, a wider one loses it.
+    /// Rule 39: a request scoped to the season is declined (`removed` once available), a wider one loses it.
     async fn season_unmonitored(&self, media_id: i32, season: i64) -> Res<()> {
-        for r in db::linked(&self.st.db, media_id, None, &db::IN_FLIGHT).await? {
+        let statuses = [db::IN_FLIGHT.as_slice(), &["available"]].concat();
+        for r in db::linked(&self.st.db, media_id, None, &statuses).await? {
             let Some(scope) = r.scope().filter(|s| s.contains(&season)) else {
                 continue;
             };
             let rest: Vec<i64> = scope.iter().copied().filter(|n| *n != season).collect();
-            if rest.is_empty() {
+            if rest.is_empty() && r.status == "available" {
+                db::remove_unlink(&self.st.db, r.id).await?;
+            } else if rest.is_empty() {
                 let reason = format!("Season {season} was unmonitored");
                 db::decline_unlink(&self.st.db, r.id, &reason).await?;
             } else {

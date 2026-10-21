@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE requests SET status = 'removed', \"mediaId\" = NULL\n        WHERE \"mediaId\" = $1 AND kind = 'add' AND status = 'available'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3648ba4c8ba1d54d54fe3ede94f87f2a347bf145f18dbf080b1b5748912a27bc"
+}

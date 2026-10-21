@@ -1317,7 +1317,8 @@
       "declined": "Rifiutata",
       "processing": "In elaborazione",
       "available": "Scaricato",
-      "failed": "Fallito"
+      "failed": "Fallito",
+      "removed": "Rimossa"
     }
   },
   "activity": {

@@ -399,6 +399,14 @@ async fn unmonitor_removes_the_files_and_keeps_the_media(pool: PgPool) {
     .await;
     fs::create_dir_all(format!("{lib}/A")).unwrap();
     fs::write(format!("{lib}/A/a.mkv"), b"x").unwrap();
+    exec(
+        &pool,
+        &format!(
+            r#"UPDATE requests SET status = 'available' WHERE "mediaId" = {}"#,
+            s.m1
+        ),
+    )
+    .await;
     rule(
         &pool,
         json!({"sizeAboveGb": 1}),
@@ -407,6 +415,12 @@ async fn unmonitor_removes_the_files_and_keeps_the_media(pool: PgPool) {
     )
     .await;
     job::run(&st).await.unwrap();
+    let req: (String, Option<i32>) =
+        sqlx::query_as(r#"SELECT status::text, "mediaId" FROM requests WHERE title = 'a'"#)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(req, ("removed".into(), None));
     assert!(!PathBuf::from(format!("{lib}/A/a.mkv")).exists());
     assert_eq!(media_ids(&pool).await.len(), 3);
     let monitored: bool = sqlx::query_scalar("SELECT monitored FROM media WHERE id = $1")
@@ -627,6 +641,16 @@ async fn a_season_is_deleted_and_unmonitored_but_the_series_stays(pool: PgPool) 
     let s = show(&pool).await;
     let st = state(&pool).await;
     played(&pool, s.eps[0], 1).await;
+    exec(
+        &pool,
+        &format!(
+            r#"INSERT INTO requests (kind, "mediaType", "tmdbId", title, status, "mediaId", seasons)
+            VALUES ('add', 'series', 1, 'Show', 'available', {0}, '[1,2]'),
+                   ('add', 'series', 1, 'Show', 'available', {0}, '[2]')"#,
+            s.media
+        ),
+    )
+    .await;
     scoped_rule(
         &pool,
         "season",
@@ -636,6 +660,19 @@ async fn a_season_is_deleted_and_unmonitored_but_the_series_stays(pool: PgPool) 
     )
     .await;
     job::run(&st).await.unwrap();
+    let reqs: Vec<(String, Option<serde_json::Value>)> = sqlx::query_as(
+        "SELECT status::text, seasons FROM requests WHERE title = 'Show' ORDER BY id",
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        reqs,
+        [
+            ("available".into(), Some(json!([1]))),
+            ("removed".into(), Some(json!([2])))
+        ]
+    );
     assert_eq!(files_left(&pool).await, ["S01E01.mkv", "S01E02.mkv"]);
     assert!(!s.dir.join("Show/S02E01.mkv").exists());
     assert!(s.dir.join("Show/S01E01.mkv").exists());

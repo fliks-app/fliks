@@ -446,6 +446,17 @@ pub async fn decline_unlink(db: &PgPool, id: i32, reason: &str) -> sqlx::Result<
     Ok(())
 }
 
+/// An `available` row whose media left the library or was unmonitored: terminal, no longer blocks a re-request.
+pub async fn remove_unlink(db: &PgPool, id: i32) -> sqlx::Result<()> {
+    sqlx::query!(
+        r#"UPDATE requests SET status = 'removed', "mediaId" = NULL WHERE id = $1 AND status = 'available'"#,
+        id
+    )
+    .execute(db)
+    .await?;
+    Ok(())
+}
+
 /// `onMediaRemoved` in the delete's transaction: delete rows are done, add rows are declined.
 pub async fn resolve_removed(db: &mut PgConnection, media_id: i32) -> sqlx::Result<()> {
     sqlx::query!(
@@ -458,6 +469,13 @@ pub async fn resolve_removed(db: &mut PgConnection, media_id: i32) -> sqlx::Resu
     sqlx::query!(
         r#"UPDATE requests SET status = 'declined', "declinedReason" = 'Media removed from library', "mediaId" = NULL
         WHERE "mediaId" = $1 AND kind = 'add' AND status IN ('pending', 'approved', 'processing')"#,
+        media_id
+    )
+    .execute(&mut *db)
+    .await?;
+    sqlx::query!(
+        r#"UPDATE requests SET status = 'removed', "mediaId" = NULL
+        WHERE "mediaId" = $1 AND kind = 'add' AND status = 'available'"#,
         media_id
     )
     .execute(db)

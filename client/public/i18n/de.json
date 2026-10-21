@@ -1317,7 +1317,8 @@
       "declined": "Abgelehnt",
       "processing": "In Bearbeitung",
       "available": "Heruntergeladen",
-      "failed": "Fehlgeschlagen"
+      "failed": "Fehlgeschlagen",
+      "removed": "Entfernt"
     }
   },
   "activity": {

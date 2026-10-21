@@ -1317,7 +1317,8 @@
       "declined": "Declined",
       "processing": "Processing",
       "available": "Downloaded",
-      "failed": "Failed"
+      "failed": "Failed",
+      "removed": "Removed"
     }
   },
   "activity": {
