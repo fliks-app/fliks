@@ -38,6 +38,9 @@
       @if (leavingLabel()) {
         <span class="badge badge-warning">{{ leavingLabel() }}</span>
       }
+      @for (label of scopedLeaving(); track label) {
+        <span class="badge badge-warning">{{ label }}</span>
+      }
     </div>
 
     <!-- Genres are navigation, so they stay out of the folded details panel. -->

@@ -57,6 +57,8 @@ export interface Episode {
   hasFile: boolean;
   runtime?: number | null;
   stillUrl?: string | null;
+  /** Set only while the episode is flagged for cleanup with a date. */
+  deleteAt?: string | null;
 }
 
 export interface Season {
@@ -70,6 +72,8 @@ export interface Season {
   overview?: string | null;
   /** First air date. May be a bare year: that's what TVDB reports. */
   airDate?: string | null;
+  /** Set only while the season is flagged for cleanup with a date. */
+  deleteAt?: string | null;
   episodes: Episode[];
 }
 

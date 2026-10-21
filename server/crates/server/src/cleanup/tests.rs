@@ -1,4 +1,7 @@
-use super::{dto, job, rules};
+use super::{
+    db::{self, Scope},
+    dto, job, rules,
+};
 use crate::{config::Config, state::AppState};
 use serde_json::{Value, json};
 use sqlx::PgPool;
@@ -15,7 +18,7 @@ async fn scalar(pool: &PgPool, sql: &str) -> i32 {
 }
 
 async fn ids(pool: &PgPool, c: Value) -> Vec<i32> {
-    let mut v: Vec<i32> = rules::matched(pool, &c, "delete")
+    let mut v: Vec<i32> = rules::matched(pool, &c, "movie", "delete")
         .await
         .unwrap()
         .iter()
@@ -395,4 +398,409 @@ async fn unmonitor_removes_the_files_and_keeps_the_media(pool: PgPool) {
         .unwrap();
     assert!(!monitored);
     assert!(candidates(&pool).await.is_empty());
+}
+
+struct Show {
+    media: i32,
+    dir: PathBuf,
+    /// seasons 1, 2
+    seasons: [i32; 2],
+    /// S1E1, S1E2, S2E1, S2E2, aired in that order
+    eps: [i32; 4],
+}
+
+/// A series with two seasons of two episodes, one 1 GB file each, written on disk.
+async fn show(pool: &PgPool) -> Show {
+    crate::db::migrate(pool).await.unwrap();
+    let dir = tmp();
+    let lib = scalar(
+        pool,
+        &format!(
+            r#"INSERT INTO libraries (name, path) VALUES ('tv', '{}') RETURNING id"#,
+            dir.display()
+        ),
+    )
+    .await;
+    let media = scalar(
+        pool,
+        &format!(
+            r#"INSERT INTO media (title, type, "libraryId", "folderName") VALUES ('Show', 'series', {lib}, 'Show') RETURNING id"#
+        ),
+    )
+    .await;
+    fs::create_dir_all(dir.join("Show")).unwrap();
+    let mut seasons = [0; 2];
+    let mut eps = [0; 4];
+    for (i, season) in seasons.iter_mut().enumerate() {
+        *season = scalar(
+            pool,
+            &format!(
+                r#"INSERT INTO seasons ("seasonNumber", "mediaId") VALUES ({}, {media}) RETURNING id"#,
+                i + 1
+            ),
+        )
+        .await;
+        for n in 0..2 {
+            let k = i * 2 + n;
+            let ep = scalar(
+                pool,
+                &format!(
+                    r#"INSERT INTO episodes ("episodeNumber", "seasonId", "hasFile", "airDate")
+                    VALUES ({}, {season}, true, '2020-01-0{}') RETURNING id"#,
+                    n + 1,
+                    k + 1
+                ),
+            )
+            .await;
+            let name = format!("S0{}E0{}.mkv", i + 1, n + 1);
+            fs::write(dir.join("Show").join(&name), b"x").unwrap();
+            exec(
+                pool,
+                &format!(
+                    r#"INSERT INTO media_files ("mediaId", "episodeId", "relativePath", size, quality)
+                    VALUES ({media}, {ep}, '{name}', 1073741824, 'x')"#
+                ),
+            )
+            .await;
+            eps[k] = ep;
+        }
+    }
+    Show {
+        media,
+        dir,
+        seasons,
+        eps,
+    }
+}
+
+async fn matched_ids(pool: &PgPool, level: &str, c: Value) -> Vec<i32> {
+    let mut v: Vec<i32> = rules::matched(pool, &c, level, "delete")
+        .await
+        .unwrap()
+        .iter()
+        .map(|m| m.episode_id.or(m.season_id).unwrap())
+        .collect();
+    v.sort();
+    v
+}
+
+async fn played(pool: &PgPool, ep: i32, days_ago: i32) {
+    let user = scalar(
+        pool,
+        &format!(r#"INSERT INTO users (username) VALUES ('p{ep}') RETURNING id"#),
+    )
+    .await;
+    exec(
+        pool,
+        &format!(
+            r#"INSERT INTO playback_states ("userId", "mediaId", "episodeId", completed, "lastPlayedAt")
+            SELECT {user}, s."mediaId", {ep}, true, now() - interval '{days_ago} days'
+            FROM episodes e JOIN seasons s ON s.id = e."seasonId" WHERE e.id = {ep}"#
+        ),
+    )
+    .await;
+}
+
+async fn files_left(pool: &PgPool) -> Vec<String> {
+    sqlx::query_scalar(r#"SELECT "relativePath" FROM media_files ORDER BY id"#)
+        .fetch_all(pool)
+        .await
+        .unwrap()
+}
+
+#[sqlx::test]
+async fn season_level_reads_the_episodes_of_the_season(pool: PgPool) {
+    let s = show(&pool).await;
+    played(&pool, s.eps[0], 100).await;
+    played(&pool, s.eps[2], 1).await;
+    let [s1, s2] = s.seasons;
+    let cases = [
+        (json!({}), vec![s1, s2]),
+        (json!({"neverPlayed": true}), vec![]),
+        (json!({"lastPlayedOlderThanDays": 30}), vec![s1]),
+        (json!({"watchedByRequester": true}), vec![]),
+        (json!({"sizeAboveGb": 1.5}), vec![s1, s2]),
+        (json!({"sizeAboveGb": 2.5}), vec![]),
+        (json!({"addedOlderThanDays": 1}), vec![]),
+        (json!({"releasedOlderThanDays": 1}), vec![s1, s2]),
+        (json!({"ratingBelow": 5}), vec![]),
+    ];
+    for (criteria, want) in cases {
+        assert_eq!(
+            matched_ids(&pool, "season", criteria.clone()).await,
+            want,
+            "{criteria}"
+        );
+    }
+}
+
+#[sqlx::test]
+async fn episode_level_matches_one_episode(pool: PgPool) {
+    let s = show(&pool).await;
+    played(&pool, s.eps[0], 100).await;
+    played(&pool, s.eps[1], 1).await;
+    let [a, b, c, d] = s.eps;
+    assert_eq!(
+        matched_ids(&pool, "episode", json!({})).await,
+        vec![a, b, c, d]
+    );
+    assert_eq!(
+        matched_ids(&pool, "episode", json!({"neverPlayed": true})).await,
+        vec![c, d]
+    );
+    assert_eq!(
+        matched_ids(&pool, "episode", json!({"lastPlayedOlderThanDays": 30})).await,
+        vec![a, c, d]
+    );
+    assert_eq!(
+        matched_ids(&pool, "episode", json!({"sizeAboveGb": 0.5})).await,
+        vec![a, b, c, d]
+    );
+    exec(
+        &pool,
+        &format!(r#"DELETE FROM media_files WHERE "episodeId" = {a}"#),
+    )
+    .await;
+    assert_eq!(
+        matched_ids(&pool, "episode", json!({})).await,
+        vec![b, c, d]
+    );
+}
+
+#[sqlx::test]
+async fn keep_latest_episodes_keeps_the_newest_on_disk(pool: PgPool) {
+    let s = show(&pool).await;
+    let [a, b, c, d] = s.eps;
+    assert_eq!(
+        matched_ids(&pool, "episode", json!({"keepLatestEpisodes": 1})).await,
+        vec![a, b, c]
+    );
+    assert_eq!(
+        matched_ids(&pool, "episode", json!({"keepLatestEpisodes": 3})).await,
+        vec![a]
+    );
+    exec(
+        &pool,
+        &format!(r#"DELETE FROM media_files WHERE "episodeId" = {d}"#),
+    )
+    .await;
+    assert_eq!(
+        matched_ids(&pool, "episode", json!({"keepLatestEpisodes": 3})).await,
+        Vec::<i32>::new()
+    );
+}
+
+async fn scoped_rule(pool: &PgPool, level: &str, c: Value, action: &str, empty: bool) {
+    sqlx::query(
+        r#"INSERT INTO cleanup_rules (name, level, criteria, action, "graceDays", "deleteSeriesWhenEmpty")
+        VALUES ('r', $1, $2, $3, 0, $4)"#,
+    )
+    .bind(level)
+    .bind(c)
+    .bind(action)
+    .bind(empty)
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
+#[sqlx::test]
+async fn a_season_is_deleted_and_unmonitored_but_the_series_stays(pool: PgPool) {
+    let s = show(&pool).await;
+    let st = state(&pool).await;
+    played(&pool, s.eps[0], 1).await;
+    scoped_rule(
+        &pool,
+        "season",
+        json!({"neverPlayed": true}),
+        "delete",
+        false,
+    )
+    .await;
+    job::run(&st).await.unwrap();
+    assert_eq!(files_left(&pool).await, ["S01E01.mkv", "S01E02.mkv"]);
+    assert!(!s.dir.join("Show/S02E01.mkv").exists());
+    assert!(s.dir.join("Show/S01E01.mkv").exists());
+    let m: Vec<bool> = sqlx::query_scalar("SELECT monitored FROM episodes ORDER BY id")
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+    assert_eq!(m, [true, true, false, false]);
+    let sm: Vec<bool> = sqlx::query_scalar("SELECT monitored FROM seasons ORDER BY id")
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+    assert_eq!(sm, [true, false]);
+    assert_eq!(media_ids(&pool).await, vec![s.media]);
+    assert!(candidates(&pool).await.is_empty());
+    job::run(&st).await.unwrap();
+    assert_eq!(
+        files_left(&pool).await.len(),
+        2,
+        "a cleaned season is not flagged again"
+    );
+}
+
+#[sqlx::test]
+async fn an_episode_is_deleted_alone(pool: PgPool) {
+    let s = show(&pool).await;
+    let st = state(&pool).await;
+    scoped_rule(
+        &pool,
+        "episode",
+        json!({"keepLatestEpisodes": 3}),
+        "delete_files_unmonitor",
+        false,
+    )
+    .await;
+    job::run(&st).await.unwrap();
+    assert_eq!(
+        files_left(&pool).await,
+        ["S01E02.mkv", "S02E01.mkv", "S02E02.mkv"]
+    );
+    let m: Vec<bool> = sqlx::query_scalar("SELECT monitored FROM episodes ORDER BY id")
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+    assert_eq!(m, [false, true, true, true]);
+    let season_monitored: bool = sqlx::query_scalar("SELECT monitored FROM seasons WHERE id = $1")
+        .bind(s.seasons[0])
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert!(season_monitored);
+    assert_eq!(media_ids(&pool).await, vec![s.media]);
+}
+
+#[sqlx::test]
+async fn delete_series_when_empty_removes_the_series_with_its_last_file(pool: PgPool) {
+    let s = show(&pool).await;
+    let st = state(&pool).await;
+    scoped_rule(&pool, "episode", json!({}), "delete", true).await;
+    job::run(&st).await.unwrap();
+    assert!(files_left(&pool).await.is_empty());
+    assert!(media_ids(&pool).await.is_empty());
+    assert!(!s.dir.join("Show").exists());
+}
+
+#[sqlx::test]
+async fn the_series_stays_without_the_option(pool: PgPool) {
+    let s = show(&pool).await;
+    let st = state(&pool).await;
+    scoped_rule(&pool, "episode", json!({}), "delete", false).await;
+    job::run(&st).await.unwrap();
+    assert!(files_left(&pool).await.is_empty());
+    assert_eq!(media_ids(&pool).await, vec![s.media]);
+}
+
+#[sqlx::test]
+async fn an_excluded_episode_protects_itself_and_its_season(pool: PgPool) {
+    let s = show(&pool).await;
+    let st = state(&pool).await;
+    let [a, b, c, d] = s.eps;
+    let [s1, s2] = s.seasons;
+    let user = scalar(
+        &pool,
+        r#"INSERT INTO users (username) VALUES ('admin') RETURNING id"#,
+    )
+    .await;
+    let one = Scope {
+        season: Some(s1),
+        episode: Some(a),
+    };
+    db::exclude(&pool, s.media, one, user).await.unwrap();
+    assert_eq!(
+        matched_ids(&pool, "episode", json!({})).await,
+        vec![b, c, d]
+    );
+    assert_eq!(matched_ids(&pool, "season", json!({})).await, vec![s2]);
+    scoped_rule(&pool, "episode", json!({}), "none", false).await;
+    job::run(&st).await.unwrap();
+    assert_eq!(scoped_candidates(&pool).await.len(), 3);
+    let scope = Scope {
+        season: Some(s2),
+        episode: None,
+    };
+    db::exclude(&pool, s.media, scope, user).await.unwrap();
+    job::run(&st).await.unwrap();
+    assert_eq!(scoped_candidates(&pool).await, vec![(Some(s1), Some(b))]);
+    assert!(db::unexclude(&pool, s.media, scope).await.unwrap());
+}
+
+async fn scoped_candidates(pool: &PgPool) -> Vec<(Option<i32>, Option<i32>)> {
+    sqlx::query_as(r#"SELECT "seasonId", "episodeId" FROM cleanup_candidates ORDER BY id"#)
+        .fetch_all(pool)
+        .await
+        .unwrap()
+}
+
+#[sqlx::test]
+async fn candidates_of_one_media_are_unique_per_scope(pool: PgPool) {
+    let s = show(&pool).await;
+    let r = scalar(
+        &pool,
+        r#"INSERT INTO cleanup_rules (name, criteria) VALUES ('r', '{}') RETURNING id"#,
+    )
+    .await;
+    let insert = |season: String, ep: String| {
+        format!(
+            r#"INSERT INTO cleanup_candidates ("mediaId", "seasonId", "episodeId", "ruleId") VALUES ({}, {season}, {ep}, {r})"#,
+            s.media
+        )
+    };
+    exec(&pool, &insert("NULL".into(), "NULL".into())).await;
+    assert!(
+        sqlx::query(&insert("NULL".into(), "NULL".into()))
+            .execute(&pool)
+            .await
+            .is_err()
+    );
+    exec(&pool, &insert(s.seasons[0].to_string(), "NULL".into())).await;
+    exec(
+        &pool,
+        &insert(s.seasons[0].to_string(), s.eps[0].to_string()),
+    )
+    .await;
+    assert_eq!(scoped_candidates(&pool).await.len(), 3);
+}
+
+#[test]
+fn level_rules_are_validated() {
+    let level = |level: &str, criteria: Value| {
+        dto::rule(json!({"name": "r", "level": level, "criteria": criteria}))
+    };
+    assert!(
+        level(
+            "episode",
+            json!({"keepLatestEpisodes": 3, "neverPlayed": true})
+        )
+        .is_ok()
+    );
+    assert!(level("season", json!({"lastPlayedOlderThanDays": 5})).is_ok());
+    assert!(level("series", json!({"mediaType": "series"})).is_ok());
+    for (l, c) in [
+        ("season", json!({"keepLatestEpisodes": 3})),
+        ("movie", json!({"keepLatestEpisodes": 3})),
+        ("season", json!({"mediaType": "series"})),
+        ("episode", json!({"mediaType": "movie"})),
+        ("movie", json!({"mediaType": "series"})),
+        ("series", json!({"mediaType": "movie"})),
+        ("episode", json!({"keepLatestEpisodes": 0})),
+        ("shot", json!({})),
+    ] {
+        assert!(level(l, c.clone()).is_err(), "{l} {c}");
+    }
+    let rule = |v: Value| {
+        let mut body = json!({"name": "r", "criteria": {}});
+        body.as_object_mut()
+            .unwrap()
+            .extend(v.as_object().unwrap().clone());
+        dto::rule(body)
+    };
+    assert!(rule(json!({"level": "season", "deleteSeriesWhenEmpty": true})).is_ok());
+    assert!(rule(json!({"level": "movie", "deleteSeriesWhenEmpty": true})).is_err());
+    assert!(rule(json!({"deleteSeriesWhenEmpty": "yes"})).is_err());
+    assert_eq!(rule(json!({})).unwrap().level, "movie");
+    let typed = dto::rule(json!({"name": "r", "criteria": {"mediaType": "series"}})).unwrap();
+    assert_eq!(typed.level, "series");
 }

@@ -19,8 +19,11 @@ export interface CleanupCriteria {
   notLiked?: boolean;
   likedByFewerThan?: number;
   notLikedByRequester?: boolean;
+  keepLatestEpisodes?: number;
   diskFreeBelowPercent?: number;
 }
+
+export type CleanupLevel = 'movie' | 'series' | 'season' | 'episode';
 
 export type CleanupAction = 'delete' | 'delete_files_unmonitor' | 'none';
 
@@ -30,20 +33,42 @@ export interface CleanupRule {
   updatedAt: string;
   name: string;
   enabled: boolean;
+  level: CleanupLevel;
   criteria: CleanupCriteria;
   action: CleanupAction;
   graceDays: number | null;
+  deleteSeriesWhenEmpty: boolean;
 }
 
-export type CleanupRuleBody = Pick<CleanupRule, 'name' | 'enabled' | 'criteria' | 'action' | 'graceDays'>;
+export type CleanupRuleBody = Pick<
+  CleanupRule,
+  'name' | 'enabled' | 'level' | 'criteria' | 'action' | 'graceDays' | 'deleteSeriesWhenEmpty'
+>;
+
+/** The season and episode of a candidate; both null for a whole media. */
+export interface CleanupScope {
+  seasonId: number | null;
+  episodeId: number | null;
+}
 
 export interface CleanupPreview {
-  matches: { id: number; title: string; type: string; size: number; lastPlayedAt: string | null }[];
+  matches: (CleanupScope & {
+    id: number;
+    title: string;
+    type: string;
+    size: number;
+    lastPlayedAt: string | null;
+    seasonNumber: number | null;
+    episodeNumber: number | null;
+  })[];
   totalSize: number;
 }
 
-export interface CleanupCandidate {
+export interface CleanupCandidate extends CleanupScope {
+  id: number;
   mediaId: number;
+  seasonNumber: number | null;
+  episodeNumber: number | null;
   title: string;
   type: string;
   posterUrl: string | null;
@@ -53,6 +78,13 @@ export interface CleanupCandidate {
   size: number;
   flaggedAt: string;
   deleteAt: string | null;
+}
+
+function scopeParams(c: CleanupScope): Record<string, number> {
+  return {
+    ...(c.seasonId != null && { seasonId: c.seasonId }),
+    ...(c.episodeId != null && { episodeId: c.episodeId }),
+  };
 }
 
 @Injectable({ providedIn: 'root' })
@@ -83,11 +115,13 @@ export class CleanupApiService {
     return firstValueFrom(this.http.get<CleanupCandidate[]>('/api/cleanup/candidates'));
   }
 
-  deleteNow(mediaId: number) {
-    return firstValueFrom(this.http.post<{ ok: boolean }>(`/api/cleanup/candidates/${mediaId}/delete-now`, {}));
+  deleteNow(c: CleanupCandidate) {
+    return firstValueFrom(
+      this.http.post<{ ok: boolean }>(`/api/cleanup/candidates/${c.mediaId}/delete-now`, {}, { params: scopeParams(c) }),
+    );
   }
 
-  keep(mediaId: number) {
-    return firstValueFrom(this.http.post<void>(`/api/cleanup/exclusions/${mediaId}`, {}));
+  keep(c: CleanupCandidate) {
+    return firstValueFrom(this.http.post<void>(`/api/cleanup/exclusions/${c.mediaId}`, {}, { params: scopeParams(c) }));
   }
 }

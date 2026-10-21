@@ -16,6 +16,18 @@ pub struct Match {
     #[sqlx(rename = "lastPlayedAt")]
     #[serde(rename = "lastPlayedAt", with = "iso_ms::opt")]
     pub last_played_at: Option<DateTime<Utc>>,
+    #[sqlx(rename = "seasonId")]
+    #[serde(rename = "seasonId")]
+    pub season_id: Option<i32>,
+    #[sqlx(rename = "episodeId")]
+    #[serde(rename = "episodeId")]
+    pub episode_id: Option<i32>,
+    #[sqlx(rename = "seasonNumber")]
+    #[serde(rename = "seasonNumber")]
+    pub season_number: Option<i32>,
+    #[sqlx(rename = "episodeNumber")]
+    #[serde(rename = "episodeNumber")]
+    pub episode_number: Option<i32>,
 }
 
 const ONE_GB: f64 = 1_073_741_824.0;
@@ -41,14 +53,92 @@ fn strings(c: &Value, k: &str) -> Option<Vec<String>> {
     })
 }
 
+/// SQL of the per-scope facts a criterion reads: the media at movie and series level, or the episodes
+/// (`ep`) of the season (`s`) or episode (`e`) at season and episode level.
+struct Scope {
+    size: String,
+    last_played: String,
+    played: String,
+    added: String,
+    released: String,
+    /// `episodes ep` of the scope, for the criteria that walk them.
+    episodes: Option<String>,
+}
+
+impl Scope {
+    fn of(level: &str) -> Self {
+        let ep = match level {
+            "season" => r#"ep."seasonId" = s.id"#,
+            "episode" => "ep.id = e.id",
+            _ => {
+                return Scope {
+                    size: FILE_SIZE.into(),
+                    last_played: LAST_PLAYED.into(),
+                    played:
+                        r#"EXISTS (SELECT 1 FROM playback_states ps WHERE ps."mediaId" = media.id)"#
+                            .into(),
+                    added: r#"media."createdAt""#.into(),
+                    released: r#"media."releaseDate""#.into(),
+                    episodes: None,
+                };
+            }
+        };
+        let files =
+            format!(r#"media_files f JOIN episodes ep ON ep.id = f."episodeId" WHERE {ep}"#);
+        Scope {
+            size: format!("COALESCE((SELECT SUM(f.size) FROM {files}), 0)"),
+            last_played: format!(
+                r#"(SELECT MAX(ps."lastPlayedAt") FROM playback_states ps JOIN episodes ep ON ep.id = ps."episodeId" WHERE {ep})"#
+            ),
+            played: format!(
+                r#"EXISTS (SELECT 1 FROM playback_states ps JOIN episodes ep ON ep.id = ps."episodeId" WHERE {ep})"#
+            ),
+            added: format!(r#"(SELECT MAX(f."createdAt") FROM {files})"#),
+            released: format!(r#"(SELECT MAX(ep."airDate") FROM episodes ep WHERE {ep})"#),
+            episodes: Some(ep.into()),
+        }
+    }
+}
+
+const EP_FILE: &str = r#"EXISTS (SELECT 1 FROM media_files f WHERE f."episodeId" = ep.id)"#;
+
 /// `disk_libs` are the libraries under `diskFreeBelowPercent`; `unmonitor` skips already unmonitored media.
-pub fn compile(c: &Value, disk_libs: &[i32], unmonitor: bool) -> QueryBuilder<'static, Postgres> {
+pub fn compile(
+    c: &Value,
+    level: &str,
+    disk_libs: &[i32],
+    unmonitor: bool,
+) -> QueryBuilder<'static, Postgres> {
+    let sc = Scope::of(level);
+    let (ids, from, excluded) = match level {
+        "season" => (
+            r#"s.id AS "seasonId", NULL::int AS "episodeId", s."seasonNumber" AS "seasonNumber", NULL::int AS "episodeNumber""#,
+            r#"media JOIN seasons s ON s."mediaId" = media.id"#,
+            r#" AND (x."seasonId" IS NULL OR x."seasonId" = s.id)"#,
+        ),
+        "episode" => (
+            r#"s.id AS "seasonId", e.id AS "episodeId", s."seasonNumber" AS "seasonNumber", e."episodeNumber" AS "episodeNumber""#,
+            r#"media JOIN seasons s ON s."mediaId" = media.id JOIN episodes e ON e."seasonId" = s.id"#,
+            r#" AND (x."seasonId" IS NULL OR x."seasonId" = s.id) AND (x."episodeId" IS NULL OR x."episodeId" = e.id)"#,
+        ),
+        _ => (
+            r#"NULL::int AS "seasonId", NULL::int AS "episodeId", NULL::int AS "seasonNumber", NULL::int AS "episodeNumber""#,
+            "media",
+            "",
+        ),
+    };
+    let size = &sc.size;
+    let last_played = &sc.last_played;
     let mut q = QueryBuilder::new(format!(
-        r#"SELECT media.id, media.title, media."type"::text AS "type", {FILE_SIZE}::bigint AS size,
-        {LAST_PLAYED} AS "lastPlayedAt" FROM media WHERE NOT EXISTS
-        (SELECT 1 FROM cleanup_exclusions x WHERE x."mediaId" = media.id)"#
+        r#"SELECT media.id, media.title, media."type"::text AS "type", {size}::bigint AS size,
+        {last_played} AS "lastPlayedAt", {ids} FROM {from} WHERE NOT EXISTS
+        (SELECT 1 FROM cleanup_exclusions x WHERE x."mediaId" = media.id{excluded})"#
     ));
-    if unmonitor {
+    if let Some(ep) = &sc.episodes {
+        q.push(format!(
+            r#" AND EXISTS (SELECT 1 FROM media_files f JOIN episodes ep ON ep.id = f."episodeId" WHERE {ep})"#
+        ));
+    } else if unmonitor {
         q.push(" AND media.monitored");
     }
     if let Some(ids) = c.get("libraryIds").and_then(Value::as_array) {
@@ -65,27 +155,38 @@ pub fn compile(c: &Value, disk_libs: &[i32], unmonitor: bool) -> QueryBuilder<'s
             .push_bind(t.to_owned());
     }
     if let Some(d) = int(c, "addedOlderThanDays") {
-        q.push(r#" AND media."createdAt" < now() - make_interval(days => "#)
-            .push_bind(d as i32)
-            .push(")");
+        q.push(format!(
+            " AND {} < now() - make_interval(days => ",
+            sc.added
+        ))
+        .push_bind(d as i32)
+        .push(")");
     }
     if let Some(d) = int(c, "releasedOlderThanDays") {
-        q.push(r#" AND media."releaseDate" < current_date - "#)
+        q.push(format!(" AND {} < current_date - ", sc.released))
             .push_bind(d as i32);
     }
     if let Some(d) = int(c, "lastPlayedOlderThanDays") {
         q.push(format!(
-            " AND COALESCE({LAST_PLAYED}, '-infinity') < now() - make_interval(days => "
+            " AND COALESCE({last_played}, '-infinity') < now() - make_interval(days => "
         ))
         .push_bind(d as i32)
         .push(")");
     }
     if flag(c, "neverPlayed") {
-        q.push(
-            r#" AND NOT EXISTS (SELECT 1 FROM playback_states ps WHERE ps."mediaId" = media.id)"#,
-        );
+        q.push(format!(" AND NOT {}", sc.played));
     }
-    if flag(c, "watchedByRequester") {
+    if flag(c, "watchedByRequester")
+        && let Some(ep) = &sc.episodes
+    {
+        q.push(format!(
+            r#" AND EXISTS (SELECT 1 FROM requests r WHERE {REQUESTER})
+            AND NOT EXISTS (SELECT 1 FROM requests r WHERE {REQUESTER}
+              AND EXISTS (SELECT 1 FROM episodes ep WHERE {ep} AND {EP_FILE}
+                AND NOT EXISTS (SELECT 1 FROM playback_states ps WHERE ps."userId" = r."userId"
+                  AND ps."episodeId" = ep.id AND ps.completed)))"#
+        ));
+    } else if flag(c, "watchedByRequester") {
         q.push(format!(
             r#" AND EXISTS (SELECT 1 FROM requests r WHERE {REQUESTER})
             AND NOT EXISTS (SELECT 1 FROM requests r WHERE {REQUESTER}
@@ -102,7 +203,7 @@ pub fn compile(c: &Value, disk_libs: &[i32], unmonitor: bool) -> QueryBuilder<'s
             .push_bind(v as i32);
     }
     if let Some(gb) = c.get("sizeAboveGb").and_then(Value::as_f64) {
-        q.push(format!(" AND {FILE_SIZE} > "))
+        q.push(format!(" AND {size} > "))
             .push_bind((gb * ONE_GB) as i64);
     }
     if let Some(g) = strings(c, "genres") {
@@ -114,6 +215,14 @@ pub fn compile(c: &Value, disk_libs: &[i32], unmonitor: bool) -> QueryBuilder<'s
         q.push(" AND NOT COALESCE(jsonb_exists_any(media.genres, ")
             .push_bind(g)
             .push("), false)");
+    }
+    if let Some(n) = int(c, "keepLatestEpisodes") {
+        q.push(
+            r#" AND (SELECT COUNT(*) FROM episodes e2 JOIN seasons s2 ON s2.id = e2."seasonId"
+            WHERE s2."mediaId" = media.id AND EXISTS (SELECT 1 FROM media_files f WHERE f."episodeId" = e2.id)
+            AND (COALESCE(e2."airDate", '-infinity'::date), e2.id) > (COALESCE(e."airDate", '-infinity'::date), e.id)) >= "#,
+        )
+        .push_bind(n);
     }
     if flag(c, "seriesEnded") {
         q.push(r#" AND media."type" = 'series' AND media.status = 'ended'"#);
@@ -136,7 +245,11 @@ pub fn compile(c: &Value, disk_libs: &[i32], unmonitor: bool) -> QueryBuilder<'s
             .push_bind(disk_libs.to_vec())
             .push(")");
     }
-    q.push(" ORDER BY media.id");
+    q.push(match level {
+        "season" => " ORDER BY media.id, s.id",
+        "episode" => " ORDER BY media.id, s.id, e.id",
+        _ => " ORDER BY media.id",
+    });
     q
 }
 
@@ -158,12 +271,17 @@ async fn low_disk_libraries(db: &PgPool, percent: i64) -> sqlx::Result<Vec<i32>>
 }
 
 /// What a rule matches now, exclusions applied; read-only.
-pub async fn matched(db: &PgPool, criteria: &Value, action: &str) -> sqlx::Result<Vec<Match>> {
+pub async fn matched(
+    db: &PgPool,
+    criteria: &Value,
+    level: &str,
+    action: &str,
+) -> sqlx::Result<Vec<Match>> {
     let disk = match int(criteria, "diskFreeBelowPercent") {
         Some(p) => low_disk_libraries(db, p).await?,
         None => vec![],
     };
-    compile(criteria, &disk, action == "delete_files_unmonitor")
+    compile(criteria, level, &disk, action == "delete_files_unmonitor")
         .build_query_as()
         .fetch_all(db)
         .await

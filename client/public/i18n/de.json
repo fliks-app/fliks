@@ -2863,7 +2863,15 @@
       "c_watchedByRequester": "Vom Anfragenden gesehen",
       "c_seriesEnded": "Serie beendet",
       "c_notLiked": "Von niemandem gemocht",
-      "c_notLikedByRequester": "Vom Anfragenden nicht gemocht"
+      "c_notLikedByRequester": "Vom Anfragenden nicht gemocht",
+      "field_level": "Ebene",
+      "level_movie": "Film",
+      "level_series": "Serie",
+      "level_season": "Staffel",
+      "level_episode": "Episode",
+      "level_hint": "Staffel- und Episodenregeln löschen die Dateien der Staffel oder Episode und beenden deren Überwachung.",
+      "c_keepLatestEpisodes": "Neueste Episoden behalten (pro Serie)",
+      "c_deleteSeriesWhenEmpty": "Serie entfernen, sobald keine Datei mehr übrig ist"
     }
   },
   "roles": {
@@ -3413,6 +3421,9 @@
   "cleanup": {
     "leaving_today": "Heute entfernt",
     "leaving_in_one": "Entfernung in {{count}} Tag",
-    "leaving_in_other": "Entfernung in {{count}} Tagen"
+    "leaving_in_other": "Entfernung in {{count}} Tagen",
+    "season_badge": "Staffel {{season}}: {{label}}",
+    "episodes_badge_one": "{{count}} Episode: {{label}}",
+    "episodes_badge_other": "{{count}} Episoden: {{label}}"
   }
 }

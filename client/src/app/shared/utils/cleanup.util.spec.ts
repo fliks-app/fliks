@@ -1,4 +1,4 @@
-import { cleanCriteria, daysLeft } from './cleanup.util';
+import { cleanCriteria, daysLeft, scopeLabel } from './cleanup.util';
 
 describe('cleanup.util', () => {
   const now = Date.parse('2026-01-10T12:00:00Z');
@@ -19,5 +19,11 @@ describe('cleanup.util', () => {
   it('drops minVotes without ratingBelow', () => {
     expect(cleanCriteria({ minVotes: 10 })).toEqual({});
     expect(cleanCriteria({ minVotes: 10, ratingBelow: 5 })).toEqual({ minVotes: 10, ratingBelow: 5 });
+  });
+
+  it('labels the scope of a season or episode candidate', () => {
+    expect(scopeLabel({ seasonNumber: null, episodeNumber: null })).toBe('');
+    expect(scopeLabel({ seasonNumber: 2, episodeNumber: null })).toBe(' S02');
+    expect(scopeLabel({ seasonNumber: 2, episodeNumber: 5 })).toBe(' S02E05');
   });
 });

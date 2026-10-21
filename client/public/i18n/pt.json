@@ -2863,7 +2863,15 @@
       "c_watchedByRequester": "Assistido pelo solicitante",
       "c_seriesEnded": "Série finalizada",
       "c_notLiked": "Curtido por ninguém",
-      "c_notLikedByRequester": "Não curtido pelo solicitante"
+      "c_notLikedByRequester": "Não curtido pelo solicitante",
+      "field_level": "Nível",
+      "level_movie": "Filme",
+      "level_series": "Série",
+      "level_season": "Temporada",
+      "level_episode": "Episódio",
+      "level_hint": "As regras de temporada e de episódio apagam os arquivos dessa temporada ou episódio e param de monitorá-lo.",
+      "c_keepLatestEpisodes": "Manter os últimos episódios (por série)",
+      "c_deleteSeriesWhenEmpty": "Remover a série quando não restar nenhum arquivo"
     }
   },
   "roles": {
@@ -3413,6 +3421,9 @@
   "cleanup": {
     "leaving_today": "Sai hoje",
     "leaving_in_one": "Sai em {{count}} dia",
-    "leaving_in_other": "Sai em {{count}} dias"
+    "leaving_in_other": "Sai em {{count}} dias",
+    "season_badge": "Temporada {{season}}: {{label}}",
+    "episodes_badge_one": "{{count}} episódio: {{label}}",
+    "episodes_badge_other": "{{count}} episódios: {{label}}"
   }
 }

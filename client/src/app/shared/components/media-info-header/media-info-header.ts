@@ -259,6 +259,7 @@ export class MediaInfoHeaderComponent {
   readonly badge = input<MediaInfoHeaderBadge | null>(null);
   /** Cleanup countdown, shown beside the library badge. */
   readonly leavingLabel = input<string | null>(null);
+  readonly scopedLeaving = input<string[]>([]);
 
   /** False when the title has no metadata-provider id; gates the refresh-metadata action. */
   readonly identified = input(true);

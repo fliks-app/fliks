@@ -13,7 +13,7 @@ use axum::{
     routing::{get, post},
 };
 
-pub use db::delete_at;
+pub use db::{delete_at, scoped_delete_at};
 pub use job::run;
 pub use routes::*;
 
