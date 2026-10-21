@@ -16,9 +16,8 @@ enum APIError: Error, CustomStringConvertible {
     }
 }
 
-/// Nest serializes `Date` via `JSON.stringify`, which always emits
-/// milliseconds (`2024-01-01T12:00:00.123Z`) — the plain `.iso8601` strategy
-/// has no fractional-seconds support and fails to decode those.
+/// The server emits `Date` with milliseconds (`2024-01-01T12:00:00.123Z`); the plain
+/// `.iso8601` strategy has no fractional-seconds support and fails to decode those.
 private enum ISO8601 {
     static let withFraction: ISO8601DateFormatter = {
         let f = ISO8601DateFormatter()

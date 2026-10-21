@@ -55,7 +55,7 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
   );
 };
 
-/** Nest's own 404 for a route nothing serves (`Cannot ${method} ${url}`) — a
+/** The 404 for a route nothing serves (`Cannot ${method} ${url}`) — a
  *  raw URL a user has no context for, never a message the app itself wrote. */
 function isFrameworkNotFound(status: number, message: unknown): boolean {
   return status === 404 && typeof message === 'string' && /^Cannot [A-Z]+ /.test(message);
