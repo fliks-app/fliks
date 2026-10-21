@@ -1,4 +1,4 @@
-//! `POST /api/cleanup/candidates/bulk` authorisation and per-item results (`docs/spec/cleanup.md` rule 29).
+//! `POST /api/cleanup/candidates/bulk` authorisation and per-item results (`docs/spec/cleanup.md` rule 32).
 use axum::{Router, body::Body, http::Request};
 use fliks_server::{app, config::Config, state::AppState};
 use serde_json::{Value, json};
