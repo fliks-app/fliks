@@ -42,6 +42,7 @@ type FlagKey = {
 
 const MAX_PER_RUN_KEY = 'cleanup_max_per_run';
 const RECOMMENDATIONS_PAGE_SIZE = 20;
+const ONE_GB = 1024 ** 3;
 
 @Component({
   selector: 'app-cleanup',
@@ -102,9 +103,32 @@ export class CleanupSettingsComponent implements OnInit {
   readonly rules = signal<CleanupRule[]>([]);
   readonly candidates = signal<CleanupCandidate[]>([]);
   readonly recommendations = signal<CleanupRecommendations>({ reasons: [], items: [] });
+  readonly recommendationReasons = signal<string[]>([]);
+  readonly recommendationLibraries = signal<number[]>([]);
+  readonly recommendationMinGb = signal<number | null>(null);
+  readonly recommendationMaxGb = signal<number | null>(null);
+  protected readonly reasonOptions = computed<MultiSelectOption<string>[]>(() =>
+    this.recommendations().reasons.map((r) => ({
+      value: r.key,
+      label: this.translate.instant('settings.cleanup.reason_' + r.key),
+    })),
+  );
+  readonly filteredRecommendations = computed(() => {
+    const reasons = this.recommendationReasons();
+    const libraries = this.recommendationLibraries();
+    const min = this.recommendationMinGb();
+    const max = this.recommendationMaxGb();
+    return this.recommendations().items.filter(
+      (i) =>
+        (!reasons.length || i.reasons.some((r) => reasons.includes(r))) &&
+        (!libraries.length || (i.libraryId != null && libraries.includes(i.libraryId))) &&
+        (min == null || i.size >= min * ONE_GB) &&
+        (max == null || i.size <= max * ONE_GB),
+    );
+  });
   readonly recommendationPage = signal(1);
   readonly recommendationPageCount = computed(() =>
-    Math.max(1, Math.ceil(this.recommendations().items.length / RECOMMENDATIONS_PAGE_SIZE)),
+    Math.max(1, Math.ceil(this.filteredRecommendations().length / RECOMMENDATIONS_PAGE_SIZE)),
   );
   /** Clamped so a page emptied by keep or delete falls back to the last one. */
   readonly recommendationCurrentPage = computed(() =>
@@ -112,7 +136,7 @@ export class CleanupSettingsComponent implements OnInit {
   );
   readonly pagedRecommendations = computed(() => {
     const start = (this.recommendationCurrentPage() - 1) * RECOMMENDATIONS_PAGE_SIZE;
-    return this.recommendations().items.slice(start, start + RECOMMENDATIONS_PAGE_SIZE);
+    return this.filteredRecommendations().slice(start, start + RECOMMENDATIONS_PAGE_SIZE);
   });
   readonly loading = signal(true);
   readonly libraries = signal<Library[]>([]);
@@ -186,6 +210,10 @@ export class CleanupSettingsComponent implements OnInit {
     this.libraries.set(libraries);
     const names = [...new Set([...movie, ...tv].map((g) => g.name))].sort((a, b) => a.localeCompare(b));
     this.genreOptions.set(names.map((n) => ({ value: n, label: n })));
+  }
+
+  libraryName(id: number | null): string {
+    return this.libraries().find((l) => l.id === id)?.name ?? '';
   }
 
   libraryNames(rule: CleanupRule): string {

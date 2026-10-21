@@ -1220,6 +1220,12 @@ async fn recommendations_merge_reasons_and_skip_kept_and_flagged(pool: PgPool) {
         ]
     );
     let lib = scalar(&pool, "SELECT id FROM libraries WHERE name = 'one'").await;
+    let m1_lib = scalar(
+        &pool,
+        &format!(r#"SELECT "libraryId" FROM media WHERE id = {}"#, s.m1),
+    )
+    .await;
+    assert_eq!(all["items"][0]["libraryId"], json!(m1_lib));
     routes::keep_one(&st, s.user, &[lib], s.m3, no_scope())
         .await
         .unwrap();

@@ -186,11 +186,57 @@
     @if (!loading() && recommendations().items.length === 0) {
       <p class="text-base-content/50 text-center py-4">{{ 'settings.cleanup.recommendations_empty' | translate }}</p>
     } @else if (recommendations().items.length) {
+      <div class="flex flex-wrap items-end gap-3">
+        <div class="form-control w-64">
+          <span class="label-text">{{ 'settings.cleanup.col_reasons' | translate }}</span>
+          <app-multi-select
+            class="mt-1"
+            [options]="reasonOptions()"
+            [value]="recommendationReasons()"
+            (valueChange)="recommendationReasons.set($event); recommendationPage.set(1)"
+            [placeholder]="'settings.cleanup.any' | translate"
+          />
+        </div>
+        <div class="form-control w-64">
+          <span class="label-text">{{ 'settings.cleanup.col_library' | translate }}</span>
+          <app-multi-select
+            class="mt-1"
+            [options]="libraryOptions()"
+            [value]="recommendationLibraries()"
+            (valueChange)="recommendationLibraries.set($event); recommendationPage.set(1)"
+            [placeholder]="'settings.cleanup.any' | translate"
+          />
+        </div>
+        <label class="form-control">
+          <span class="label-text">{{ 'settings.cleanup.filter_size_min' | translate }}</span>
+          <input
+            type="number"
+            min="0"
+            class="input input-bordered input-sm w-28 mt-1"
+            [ngModel]="recommendationMinGb()"
+            (ngModelChange)="recommendationMinGb.set(parseNumber($event)); recommendationPage.set(1)"
+          />
+        </label>
+        <label class="form-control">
+          <span class="label-text">{{ 'settings.cleanup.filter_size_max' | translate }}</span>
+          <input
+            type="number"
+            min="0"
+            class="input input-bordered input-sm w-28 mt-1"
+            [ngModel]="recommendationMaxGb()"
+            (ngModelChange)="recommendationMaxGb.set(parseNumber($event)); recommendationPage.set(1)"
+          />
+        </label>
+      </div>
+      @if (filteredRecommendations().length === 0) {
+        <p class="text-base-content/50 text-center py-4">{{ 'settings.cleanup.recommendations_filtered_empty' | translate }}</p>
+      } @else {
       <div class="overflow-x-auto rounded-lg border border-base-200">
         <table class="table">
           <thead>
             <tr>
               <th>{{ 'settings.cleanup.col_title' | translate }}</th>
+              <th>{{ 'settings.cleanup.col_library' | translate }}</th>
               <th>{{ 'settings.cleanup.col_reasons' | translate }}</th>
               <th>{{ 'settings.cleanup.col_size' | translate }}</th>
               <th>{{ 'settings.cleanup.col_last_played' | translate }}</th>
@@ -201,6 +247,7 @@
             @for (item of pagedRecommendations(); track item.mediaId) {
               <tr>
                 <td class="font-medium">{{ item.title }}</td>
+                <td>{{ libraryName(item.libraryId) }}</td>
                 <td>
                   <div class="flex flex-wrap gap-1">
                     @for (reason of item.reasons; track reason) {
@@ -243,6 +290,7 @@
           [total]="recommendationPageCount()"
           (pageChange)="recommendationPage.set($event)"
         />
+      }
       }
     }
   </section>
