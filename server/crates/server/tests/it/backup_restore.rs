@@ -225,7 +225,7 @@ async fn backup_and_restore_on_a_scratch_database() {
 }
 
 async fn run(c: &Ctx, c_old: &Ctx, pool: &PgPool, role: &str) {
-    // F36: settings.access alone is not enough, and nothing exists yet.
+    // settings.access alone is not enough, and nothing exists yet.
     assert_eq!(
         call(c, "GET", "/api/system/backups", &c.limited, Value::Null)
             .await
@@ -241,7 +241,7 @@ async fn run(c: &Ctx, c_old: &Ctx, pool: &PgPool, role: &str) {
     let (s, _, b) = call(c, "GET", "/api/system/backups", &c.admin, Value::Null).await;
     assert_eq!((s, json_of(&b)), (200, json!([])));
 
-    // create: name pattern, size, content, F38 modes
+    // create: name pattern, size, content, modes
     sqlx::query("INSERT INTO app_settings (key, value) VALUES ('s5_marker', 'before')")
         .execute(pool)
         .await
@@ -415,7 +415,7 @@ async fn run(c: &Ctx, c_old: &Ctx, pool: &PgPool, role: &str) {
     );
     assert_eq!(setting(pool, "s5_marker").await.as_deref(), Some("before"));
 
-    // F37: meta-commands refused, \restrict accepted
+    // meta-commands refused, \restrict accepted
     std::fs::write(&corrupt, "\\! touch /tmp/fliks-s5-pwned\n").unwrap();
     let (s, _, b) = call(
         c,
@@ -466,7 +466,7 @@ async fn run(c: &Ctx, c_old: &Ctx, pool: &PgPool, role: &str) {
         .0,
         201
     );
-    // C119: the replay could create the role, and the host drops it as not this database's.
+    // The replay could create the role, and the host drops it as not this database's.
     let kept: bool = sqlx::query_scalar("SELECT EXISTS (SELECT FROM pg_roles WHERE rolname = $1)")
         .bind(role)
         .fetch_one(pool)
@@ -474,7 +474,7 @@ async fn run(c: &Ctx, c_old: &Ctx, pool: &PgPool, role: &str) {
         .unwrap();
     assert!(!kept);
 
-    // C24: 409 while a command runs; idle restore leaves no running row, and sweeps the dump's own
+    // 409 while a command runs; idle restore leaves no running row, and sweeps the dump's own
     sqlx::query("INSERT INTO commands (name, status) VALUES ('X', 'running')")
         .execute(pool)
         .await
@@ -530,7 +530,7 @@ async fn run(c: &Ctx, c_old: &Ctx, pool: &PgPool, role: &str) {
         ]
     );
 
-    // C27, C98: a dump from one migration back restores into today's database, at today's schema
+    // A dump from one migration back restores into today's database, at today's schema
     let (s, _, b) = call(
         c_old,
         "POST",

@@ -2,13 +2,12 @@
   "capture": {
     "id": "$.steps[0].body.id"
   },
-  "deviation": "F28",
   "ignore": [
     "$..id",
     "$..createdAt",
     "$..updatedAt"
   ],
-  "name": "notifications-f28-webhookurl-masked",
+  "name": "notifications-webhookurl-masked",
   "seed": "base",
   "steps": [
     {

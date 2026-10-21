@@ -1,4 +1,4 @@
-//! F5: which settings keys are secret, and the one redact/merge pair GET and PUT share.
+//! Which settings keys are secret, and the one redact/merge pair GET and PUT share.
 use super::db;
 use serde_json::{Map, Value, json};
 use sqlx::PgPool;

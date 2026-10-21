@@ -1,6 +1,6 @@
 # Spec: library cleanup rules
 
-Scope: `cleanup_rules`, `cleanup_candidates`, `cleanup_exclusions`, the `MediaCleanup` job, `/api/cleanup/*`, `GET /api/media/leaving-soon` and the `deleteAt` field of the media detail. Movie and series level only. New domain: no Nest source (`[new]`).
+Scope: `cleanup_rules`, `cleanup_candidates`, `cleanup_exclusions`, the `MediaCleanup` job, `/api/cleanup/*`, `GET /api/media/leaving-soon` and the `deleteAt` field of the media detail. Movie and series level only.
 
 ## Routes
 

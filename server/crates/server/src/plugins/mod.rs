@@ -110,14 +110,14 @@ pub struct Plugins {
     crons: Mutex<HashMap<String, Vec<tokio::task::JoinHandle<()>>>>,
     app: OnceLock<AppState>,
     pub(crate) fk_warnings: Mutex<HashMap<String, String>>,
-    /// C109: plugins whose registration waits for the database, by generation and `statusReason`.
+    /// Plugins whose registration waits for the database, by generation and `statusReason`.
     db_waits: Mutex<HashMap<String, (u64, String)>>,
     wait_gen: AtomicU64,
 }
 
 const DB_UNAVAILABLE: &str = "db-unavailable";
 
-/// `reason`, or `db-unavailable` when Postgres could not be reached (C109).
+/// `reason`, or `db-unavailable` when Postgres could not be reached.
 fn db_fail(reason: &'static str, e: impl Into<db::ProvisionError>) -> Fail {
     let e = e.into();
     fail(
@@ -228,7 +228,7 @@ impl Plugins {
         })
     }
 
-    /// The `statusReason` of a registration waiting for the database (C109).
+    /// The `statusReason` of a registration waiting for the database.
     pub fn db_wait_reason(&self, id: &str) -> Option<String> {
         self.db_waits.lock_clean().get(id).map(|w| w.1.clone())
     }
@@ -428,7 +428,7 @@ impl Plugins {
         }
     }
 
-    /// C112: every plugin stops before a restore replays.
+    /// Every plugin stops before a restore replays.
     pub async fn stop_all(&self) {
         self.db_waits.lock_clean().clear();
         let ids: Vec<String> = self.live().iter().map(|r| r.sh.id.to_string()).collect();

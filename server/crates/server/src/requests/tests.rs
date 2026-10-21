@@ -21,10 +21,7 @@ fn ctx() -> Ctx {
 #[test]
 fn an_empty_criteria_matches_everything() {
     assert!(matches(&json!({}), &ctx()));
-    assert!(
-        !matches(&json!([]), &ctx()),
-        "array criteria fail closed (C114)"
-    );
+    assert!(!matches(&json!([]), &ctx()), "array criteria fail closed");
 }
 
 #[test]

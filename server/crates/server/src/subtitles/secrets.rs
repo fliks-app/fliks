@@ -1,4 +1,4 @@
-//! Secret settings of providers (F5 convention, `secret-fields.util.ts`): redacted on read, kept on write.
+//! Secret settings of providers: redacted on read, kept on write.
 use serde_json::{Map, Value};
 
 pub const SECRETS_SET: &str = "secretsSet";

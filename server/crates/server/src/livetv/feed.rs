@@ -10,7 +10,7 @@ use std::{
 };
 use tokio::sync::{mpsc, oneshot};
 
-/// Inflated bytes beyond this are refused (F72).
+/// Inflated bytes beyond this are refused.
 const MAX_INFLATED: u64 = 1024 * 1024 * 1024;
 
 /// What the reader hands the async side.

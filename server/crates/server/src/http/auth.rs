@@ -166,7 +166,7 @@ pub async fn load_users(
         .collect())
 }
 
-/// An authenticated, enabled user. Plain `Authed` refuses `scope` tokens (F8); see `StreamAuthed`.
+/// An authenticated, enabled user. Plain `Authed` refuses `scope` tokens; see `StreamAuthed`.
 #[derive(Debug, Clone)]
 pub struct Authed {
     pub user: UserRow,
@@ -176,7 +176,7 @@ pub struct Authed {
 }
 
 impl Authed {
-    /// The handler's first line: 403 with Nest's `PoliciesGuard` body unless the role grants it at class level.
+    /// The handler's first line: 403 with the 4.x policy body unless the role grants it at class level.
     pub fn require(&self, action: Action, subject: Subject) -> Result<(), AppError> {
         if self.perms.can(action, &subject) {
             Ok(())
@@ -190,7 +190,7 @@ impl Authed {
 #[derive(Debug, Clone)]
 pub struct StreamAuthed(pub Authed);
 
-/// `Authed` for routes behind Nest's `SessionTokenGuard`: a scoped token is 403 `session_token_required`.
+/// `Authed` for routes behind the session-token guard: a scoped token is 403 `session_token_required`.
 #[derive(Debug, Clone)]
 pub struct SessionAuthed(pub Authed);
 

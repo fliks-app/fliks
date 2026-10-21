@@ -1,4 +1,4 @@
-//! Accounts created by the Seerr and Emby importers (`importers.md` rule 33, C43).
+//! Accounts created by the Seerr and Emby importers (`importers.md` rule 33).
 use super::db::add_library_access;
 use sqlx::PgPool;
 
@@ -20,7 +20,7 @@ pub async fn imported_user(
     )
     .fetch_all(&mut *tx)
     .await?;
-    // The first default role only: Nest read one role row.
+    // The first default role only.
     let role = rows.first().map(|r| r.id);
     let libraries: Vec<i32> = rows
         .iter()

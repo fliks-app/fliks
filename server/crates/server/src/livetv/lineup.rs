@@ -43,7 +43,7 @@ impl Conn {
 #[derive(Debug)]
 pub struct Lineup {
     pub entries: Vec<Entry>,
-    /// Xtream: the bare guide url, its credentials are derived on demand (F71).
+    /// Xtream: the bare guide url, its credentials are derived on demand.
     pub guide_urls: Vec<String>,
     pub max_connections: Option<i32>,
     pub expires_at: Option<DateTime<Utc>>,

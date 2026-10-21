@@ -1,4 +1,4 @@
-//! The data and cache directories, resolved as Nest's `getDataDir` / `getCacheDir` (`common/constants/paths.ts`).
+//! The data and cache directories, resolved as 4.x does.
 use std::{
     path::{Path, PathBuf},
     sync::OnceLock,

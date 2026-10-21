@@ -17,7 +17,7 @@ const NATIVE: [&str; 3] = [
     "http://localhost",
 ];
 
-/// Origin list as Nest builds it: `CORS_ORIGIN` (or the dev defaults) plus the native-app origins.
+/// Origin list: `CORS_ORIGIN` (or the dev defaults) plus the native-app origins.
 fn origins(cors_origin: Option<&str>) -> Vec<HeaderValue> {
     let env: Vec<&str> = cors_origin
         .unwrap_or_default()
@@ -51,7 +51,7 @@ async fn no_store_on_error(req: Request, next: Next) -> Response {
 /// A path whose handler reads and bounds its own body.
 pub type Exempt = fn(&str) -> bool;
 
-/// Express's 100 kB limit only covers JSON and urlencoded bodies; uploads and streams are untouched.
+/// The 100 kB limit only covers JSON and urlencoded bodies; uploads and streams are untouched.
 async fn body_limit(
     State((limit, exempt)): State<(usize, Exempt)>,
     req: Request,
@@ -85,7 +85,7 @@ pub fn is_preflight(req: &Request) -> bool {
     req.method() == Method::OPTIONS && req.headers().contains_key(ACCESS_CONTROL_REQUEST_METHOD)
 }
 
-/// Express `cors` answers preflights 204 (`optionsSuccessStatus`); tower-http answers 200.
+/// Preflights answer 204 like 4.x (`optionsSuccessStatus`); tower-http answers 200.
 async fn preflight_204(req: Request, next: Next) -> Response {
     let preflight = is_preflight(&req);
     let mut res = next.run(req).await;

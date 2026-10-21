@@ -70,7 +70,7 @@ fn by_name(views: &mut [PlaylistView]) {
 }
 
 /// Owned, shared and saved playlists, once each with that precedence (rule 9); a saved one the
-/// caller can no longer read is dropped (F26).
+/// caller cannot read is dropped.
 pub async fn list_for(db: &PgPool, a: &Authed) -> Result<Vec<PlaylistView>, AppError> {
     let me = a.user.id;
     let rows = sqlx::query!(

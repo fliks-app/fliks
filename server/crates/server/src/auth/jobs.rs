@@ -1,4 +1,4 @@
-//! Boot-time loops: hourly pairing cleanup, daily refresh-token prune (F6) at 03:30 local.
+//! Boot-time loops: hourly pairing cleanup, daily refresh-token prune at 03:30 local.
 use super::db;
 use chrono::{Duration as Span, Local, NaiveDateTime, Utc};
 use sqlx::PgPool;

@@ -1,4 +1,4 @@
-//! Request bodies (`create-user.dto.ts`, `update-user.dto.ts`). `null` on a non-nullable field is a 400 (C1).
+//! Request bodies. `null` on a non-nullable field is a 400.
 use crate::http::AppError;
 use serde::{Deserialize, Deserializer};
 
@@ -88,7 +88,7 @@ pub struct UpdateUser {
     pub spoiler_hide_titles: Option<bool>,
 }
 
-/// class-validator `isEmail` approximation: one `@`, a dotted domain, no whitespace.
+/// Email check: one `@`, a dotted domain, no whitespace.
 fn is_email(s: &str) -> bool {
     let Some((local, domain)) = s.split_once('@') else {
         return false;

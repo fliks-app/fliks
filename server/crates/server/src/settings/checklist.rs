@@ -109,7 +109,7 @@ pub async fn list(State(st): State<AppState>, a: Authed) -> Result<Json<Value>, 
     Ok(Json(Value::Array(items)))
 }
 
-/// Rules 14-16 (C96): one transaction behind an advisory lock; no write when nothing changes.
+/// Rules 14-16: one transaction behind an advisory lock; no write when nothing changes.
 async fn change(st: &AppState, a: &Authed, key: &str, add: bool) -> Result<Json<Value>, AppError> {
     a.require(Action::Manage, Subject::Settings)?;
     if !ITEMS.iter().any(|i| i.0 == key) {

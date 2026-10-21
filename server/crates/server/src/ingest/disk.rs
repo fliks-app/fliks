@@ -112,7 +112,7 @@ struct Group {
     files: Vec<FileEntry>,
 }
 
-/// Rule 62: depth 3, bonus folders below the scan root skipped, regular video files only (C55).
+/// Rule 62: depth 3, bonus folders below the scan root skipped, regular video files only.
 fn collect(dir: &Path, depth: usize, out: &mut Vec<PathBuf>) {
     if depth > 3 {
         return;
@@ -272,7 +272,7 @@ async fn scan_under(
     })
 }
 
-/// `POST /api/imports/library/:libraryId/orphans/scan` (rules 60, 70: ACL and F22 on the path).
+/// `POST /api/imports/library/:libraryId/orphans/scan` (rules 60, 70: ACL on the path).
 #[utoipa::path(post, path = "/api/imports/library/{libraryId}/orphans/scan", responses((status = 201)))]
 pub async fn scan(
     State(st): State<AppState>,

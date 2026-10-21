@@ -1,4 +1,4 @@
-//! The plugin host's Rust-only tests against real components (`plugins.md` Vectors/parity).
+//! The plugin host's tests against real components (`plugins.md` Vectors/parity).
 //! Need `S8_PG_ADMIN_URL` and the fixture wasm (`FLIKS_TEST_WASM_DIR`); skipped otherwise.
 mod api;
 mod harness;

@@ -1,5 +1,4 @@
 {
-  "deviation": "F14",
   "ignore": [
     "$..cmdId",
     "$..expiresAt"

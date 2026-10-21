@@ -322,7 +322,7 @@ pub fn clean_subtitle(content: &str, opts: &CleanOptions) -> String {
 mod tests {
     use super::*;
 
-    // C66: an invalid or backtracking-bound exclusion is skipped, never run unbounded.
+    // An invalid or backtracking-bound exclusion is skipped, never run unbounded.
     #[test]
     fn a_bad_or_overrunning_exclusion_is_skipped_and_counted() {
         let pats = ["(".to_owned(), "(a+)+$".into(), "good".into()];

@@ -213,7 +213,7 @@ pub async fn file_path(
     Ok(resolved.map(|p| (p, info)))
 }
 
-/// `finalizeImportedFile` (rule 50): crop and the OpenSubtitles hash from one engine probe (C67).
+/// `finalizeImportedFile` (rule 50): crop and the OpenSubtitles hash from one engine probe.
 async fn enrich(st: &AppState, id: i32) -> Result<(), String> {
     let Some((path, info)) = file_path(st, id).await.map_err(|e| e.to_string())? else {
         return Err("no contained path".into());

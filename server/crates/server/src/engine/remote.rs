@@ -25,7 +25,7 @@ pub fn router() -> Router<AppState> {
         .route("/engine/resolve", post(resolve::resolve))
 }
 
-/// Field-level checks of the DTOs with class-validator's messages (all of them, not the first).
+/// Field-level checks of the DTOs with class-validator style messages (all of them, not the first).
 struct Check<'a> {
     obj: &'a serde_json::Map<String, Value>,
     errors: Vec<String>,
@@ -105,7 +105,7 @@ fn parse_put(body: &Value) -> Result<PutDto, Vec<String>> {
     }
 }
 
-/// The GET shape under F5: the token is never returned, `secretsSet` says whether one is stored.
+/// The GET shape: the token is never returned, `secretsSet` says whether one is stored.
 async fn snapshot(st: &AppState) -> Result<Value, AppError> {
     let v = store::values(
         &st.db,

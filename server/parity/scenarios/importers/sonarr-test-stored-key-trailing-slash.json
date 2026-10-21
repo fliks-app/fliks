@@ -1,5 +1,4 @@
 {
-  "deviation": null,
   "name": "imports-sonarr-test-stored-key-trailing-slash",
   "seed": "importers",
   "steps": [

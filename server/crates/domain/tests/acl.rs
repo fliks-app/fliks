@@ -12,7 +12,7 @@ const PLUGINS: [&str; 2] = [
 ];
 
 /// CASL 6.8 denies every instance check once a non-`all` ability also holds a string-subject rule
-/// (`Settings`, `plugin:*`); Nest only checks classes, so `Permissions` keeps the intended semantics.
+/// (`Settings`, `plugin:*`); 4.x only checks classes, so `Permissions` keeps the intended semantics.
 fn casl_denies_instances(p: &Permissions) -> bool {
     let has = |s: &Subject| ALL_ACTIONS.iter().any(|a| p.can(*a, s));
     !p.can(Action::Manage, &Subject::All)

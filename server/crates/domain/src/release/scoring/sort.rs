@@ -34,7 +34,7 @@ fn flag_first(a: bool, b: bool) -> f64 {
     }
 }
 
-/// The Nest comparator: first non-zero step decides, negative = `a` first.
+/// The comparator: first non-zero step decides, negative = `a` first.
 fn compare<T: Sortable>(a: &T, b: &T, prefer_full_season: bool) -> f64 {
     let step = flag_first(!a.rejected(), !b.rejected());
     if step != 0.0 {

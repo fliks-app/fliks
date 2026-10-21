@@ -109,7 +109,7 @@ pub async fn issued(db: &PgPool, owner: i32, device: Option<&str>) -> sqlx::Resu
     .await
 }
 
-/// Scoped to the owner (F31): anyone can mint a code for another account's device id.
+/// Scoped to the owner: anyone can mint a code for another account's device id.
 pub async fn grantees_of_device(db: &PgPool, owner: i32, device: &str) -> sqlx::Result<Vec<i32>> {
     sqlx::query_scalar!(
         r#"SELECT "granteeUserId" AS "grantee!" FROM remote_control_grants

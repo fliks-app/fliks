@@ -1,4 +1,4 @@
-//! `/api/playback/*` deviations (C1, C4, C6), watched toggles and the in-process top genres.
+//! `/api/playback/*` validation, watched toggles and the in-process top genres.
 use axum::{Router, body::Body, http::Request};
 use fliks_server::{config::Config, playback, state::AppState};
 use serde_json::{Value, json};

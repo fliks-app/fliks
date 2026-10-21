@@ -1,7 +1,4 @@
 {
-  "deviation": [
-    "C60"
-  ],
   "ignore": [
     "$..createdAt",
     "$..updatedAt",
@@ -9,7 +6,7 @@
     "$..queuedAt",
     "$.id"
   ],
-  "name": "subtitles-deviation-c60-blacklist-clear",
+  "name": "subtitles-blacklist-clear",
   "seed": "subtitles",
   "steps": [
     {

@@ -3,7 +3,6 @@
     "cand": "$.steps[1].body[0]",
     "cand2": "$.steps[1].body[1]"
   },
-  "deviation": null,
   "fs": [
     {
       "from": "base.mkv",

@@ -37,7 +37,7 @@ pub struct SocialUser {
     follows_you: bool,
 }
 
-/// F33: the one predicate deciding whether a member may appear in a social list.
+/// The one predicate deciding whether a member may appear in a social list.
 pub fn listable(enabled: bool, share_disabled: bool) -> bool {
     enabled && !share_disabled
 }
@@ -91,7 +91,7 @@ fn param<'a>(q: &'a [(String, String)], key: &str) -> Option<&'a str> {
     q.iter().find(|(k, _)| k == key).map(|(_, v)| v.as_str())
 }
 
-/// Enabled, opted-in members other than the caller, `ILIKE` on the trimmed `q`, 30 by `lower(username), id` (rules 21-22, C15).
+/// Enabled, opted-in members other than the caller, `ILIKE` on the trimmed `q`, 30 by `lower(username), id` (rules 21-22).
 async fn find_users(
     st: &AppState,
     a: &Authed,
@@ -287,7 +287,7 @@ pub async fn reject(
     Ok(StatusCode::CREATED)
 }
 
-/// F23: the profile gate, then whether the viewer may see the connections (rule 18).
+/// The profile gate, then whether the viewer may see the connections (rule 18).
 async fn connections_visible(st: &AppState, a: &Authed, target: i32) -> Result<bool, AppError> {
     let t = require_user(&st.db, target).await?;
     let is_self = a.user.id == target;

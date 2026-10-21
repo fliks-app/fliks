@@ -1,4 +1,4 @@
-//! Emby watch-history import (`docs/spec/media-servers.md` rules 13-21, C43-C45).
+//! Emby watch-history import (`docs/spec/media-servers.md` rules 13-21).
 use super::{
     db::Server,
     emby::{Conn, Item, Mode},
@@ -66,7 +66,7 @@ pub fn plan(item: &Item, in_resume: bool, now: DateTime<Utc>) -> Plan {
     }
 }
 
-/// Imports every Emby user's history; a `listUsers` failure is the error (C45).
+/// Imports every Emby user's history; a `listUsers` failure is the error.
 pub async fn import_server(db: &PgPool, server: &Server) -> Result<Stats, String> {
     let conn = Conn::new(&server.url, server.api_key.as_deref());
     let users = conn
@@ -242,7 +242,7 @@ async fn apply(
         .map_err(sql)
 }
 
-/// One statement per key shape; the database decides whether Fliks' newer state wins (C44).
+/// One statement per key shape; the database decides whether Fliks' newer state wins.
 async fn write(
     db: &PgPool,
     user: i32,

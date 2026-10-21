@@ -1,5 +1,4 @@
 {
-  "deviation": null,
   "name": "users-update-duplicate-username",
   "seed": "base",
   "steps": [

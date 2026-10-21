@@ -1,4 +1,4 @@
-//! Resolves the JWT secret like Nest's `getJwtSecret`, creating `<conf>/.jwt-secret` where Nest looks for it.
+//! Resolves the JWT secret like 4.x, creating `<conf>/.jwt-secret` where 4.x looks for it.
 use crate::config::{Config, random_hex};
 use std::fs::{self, DirBuilder, OpenOptions};
 use std::io::{ErrorKind, Write};

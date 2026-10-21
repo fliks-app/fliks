@@ -1,5 +1,4 @@
 {
-  "deviation": "C38",
   "name": "imports-sonarr-preview-not-array",
   "seed": "importers",
   "steps": [

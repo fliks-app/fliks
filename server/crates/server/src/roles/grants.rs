@@ -17,7 +17,7 @@ pub const PERMISSIONS: [&str; 12] = [
     "roles.manage",
 ];
 
-/// Same pattern as Nest's `PLUGIN_PERMISSION_NAME_PATTERN`: `^[a-z][a-z0-9_-]{0,63}$`.
+/// Plugin permission names match `^[a-z][a-z0-9_-]{0,63}$`.
 fn legal_name(n: &str) -> bool {
     let mut c = n.chars();
     n.len() <= 64

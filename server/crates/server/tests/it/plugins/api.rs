@@ -39,7 +39,7 @@ async fn install_pipeline_refusals_and_signatures() {
     let (_, r) = h
         .upload(&pack(&reserved, "0.1.0", &w, Some(&test_key())))
         .await;
-    assert_eq!(r["refusalCode"], "PLUGIN_BAD_ID", "C104");
+    assert_eq!(r["refusalCode"], "PLUGIN_BAD_ID", "reserved id");
     let signed = pack(&m, "0.1.0", &w, Some(&test_key()));
     let (_, r) = h.upload(&signed).await;
     assert_eq!(
@@ -141,7 +141,7 @@ async fn install_pipeline_refusals_and_signatures() {
         )
     );
     assert_eq!(body, LOGO);
-    // A route a core route shadows is refused at registration (C106).
+    // A route a core route shadows is refused at registration.
     let mut shadow = m.clone();
     shadow["routes"]
         .as_array_mut()
@@ -218,7 +218,7 @@ async fn config_ownership_and_counts() {
     assert_eq!(
         cfg,
         json!({"mine": "ours"}),
-        "F68: a longer id's keys are not ours"
+        "a longer id's keys are not ours"
     );
     let rt = h.st.plugins.rt("fliks.fixture").unwrap();
     let get = async |path: &str, q: &[(&str, &str)]| {
@@ -255,7 +255,7 @@ async fn config_ownership_and_counts() {
     assert_eq!(
         get("/test/counts", &[("key", ""), ("v", "1")]).await["error"],
         "ERR_VALIDATION",
-        "C95"
+        "empty key"
     );
     assert_eq!(
         get("/test/counts", &[("key", "queueActive"), ("v", "3")]).await["ok"],
@@ -296,10 +296,10 @@ async fn config_ownership_and_counts() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn concurrent_lifecycle_of_one_id_is_serialised() {
     let Some((m, w)) = fixture() else { return };
-    let Some(s) = Scratch::create("c100").await else {
+    let Some(s) = Scratch::create("lifecycle").await else {
         return;
     };
-    let h = Arc::new(harness(&s, "c100", |_| {}).await);
+    let h = Arc::new(harness(&s, "lifecycle", |_| {}).await);
     allow_unsigned(&h).await;
     let archive = pack(&m, "0.1.0", &w, None);
     let (_, r) = h.upload(&archive).await;
@@ -535,7 +535,7 @@ async fn sources_catalog_denylist_and_auto_update() {
             .contains("network.internal"),
         "{out}"
     );
-    // C108: from a pluginApi 1 package by the same key the grant carries forward.
+    // From a pluginApi 1 package by the same key the grant carries forward.
     sqlx::query(r#"UPDATE plugin_packages SET manifest = jsonb_set(manifest, '{pluginApi}', '1')"#)
         .execute(&s.pool)
         .await
@@ -568,7 +568,7 @@ async fn sources_catalog_denylist_and_auto_update() {
         .unwrap();
     assert_eq!(pkg.status_reason.as_deref(), Some("revoked: pulled"));
     assert!(h.st.plugins.rt("fliks.fixture").is_none());
-    // C101: a new url clears the cache; F66: no URL in the refresh error.
+    // A new url clears the cache; no URL in the refresh error.
     let (st, r) = h
         .call(
             "PUT",
@@ -771,7 +771,7 @@ async fn export_import_order_and_checks() {
         .fetch_one(&s.pool)
         .await
         .unwrap();
-    assert_eq!(empty, 0, "C102: no table written by a refused import");
+    assert_eq!(empty, 0, "no table written by a refused import");
     let mut ordered = doc.clone();
     let tables = ordered["tables"].as_object_mut().unwrap();
     let stats = tables.remove("indexer_stats").unwrap();
@@ -787,7 +787,7 @@ async fn export_import_order_and_checks() {
     assert_eq!(
         (st, r["tablesRestored"].clone()),
         (201, json!({"indexer_stats": 1, "indexers": 2})),
-        "C103: {r}"
+        "{r}"
     );
     let next: i32 = sqlx::query_scalar(
         r#"INSERT INTO "plugin_fliks_fixture".indexers (name) VALUES ('c') RETURNING id"#,
@@ -815,7 +815,7 @@ async fn restore_stops_and_reregisters_plugins() {
     h.st.plugins.stop_all().await;
     assert!(
         h.st.plugins.rt("fliks.fixture").is_none(),
-        "C112: stopped before the replay"
+        "stopped before the replay"
     );
     h.st.plugins.after_restore(&[]).await;
     super::harness::until("registered again", Duration::from_secs(15), async || {

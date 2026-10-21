@@ -3,7 +3,6 @@
     "code": "$.steps[0].body.code",
     "gid": "$.steps[1].body.id"
   },
-  "deviation": null,
   "ignore": [
     "$..code",
     "$..createdAt"

@@ -242,7 +242,7 @@ fn mime(name: &str) -> &'static str {
     }
 }
 
-/// Express `res.attachment(name)`.
+/// `Content-Disposition: attachment` as `res.attachment(name)` words it.
 fn disposition(name: &str) -> String {
     let plain = name.chars().all(|c| c.is_ascii() && !c.is_ascii_control());
     let quoted = |s: &str| s.replace('\\', "\\\\").replace('"', "\\\"");

@@ -87,7 +87,7 @@ pub(crate) async fn notify(st: &AppState, keys: &[String], origin: Option<&str>)
     }
 }
 
-/// Values the engine would reject with its whole config (plan §15.1).
+/// Values the engine would reject with its whole config.
 fn validate(key: &str, value: &str) -> Result<(), AppError> {
     crate::engine::validate_streaming_setting(key, Some(value))
         .map_err(|m| AppError::bad_request(vec![m]))
@@ -150,7 +150,7 @@ pub(crate) async fn put_one(
         (Write::Set(v), _) => db::set(&mut tx, &key, v.as_deref()).await.map_err(db_err)?,
     };
     tx.commit().await.map_err(db_err)?;
-    // Nest notifies on every PUT, even when a secret kept its stored value (spec rule 8).
+    // Every PUT notifies, even when a secret kept its stored value (spec rule 8).
     notify(&st, std::slice::from_ref(&key), None).await;
     if secrets.is_secret(&key) {
         saved.value = None;

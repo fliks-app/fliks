@@ -119,7 +119,7 @@ pub async fn any_active(db: &PgPool) -> sqlx::Result<bool> {
     .await
 }
 
-/// Rule 26: `720 hours`, not calendar days, like Nest's `Date.now() - 30 * 24 h`.
+/// Rule 26: `720 hours`, not calendar days, like 4.x (`Date.now() - 30 * 24 h`).
 pub async fn prune(db: &PgPool) -> sqlx::Result<u64> {
     let n = sqlx::query(r#"DELETE FROM commands WHERE "createdAt" < now() - interval '720 hours'"#)
         .execute(db)

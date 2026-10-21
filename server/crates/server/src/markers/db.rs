@@ -99,7 +99,7 @@ pub async fn episode_exists(db: &PgPool, episode: i32) -> sqlx::Result<bool> {
         .map(|r| r.is_some())
 }
 
-/// C39: a manual marker replaces the `(episode, type)` one in one statement.
+/// A manual marker replaces the `(episode, type)` one in one statement.
 pub async fn upsert_manual(
     db: &PgPool,
     episode: i32,
@@ -274,7 +274,7 @@ pub async fn manual_episodes(db: &PgPool, episodes: &[i32], kind: &str) -> sqlx:
     .await
 }
 
-/// C39: a marker made manual during the run is never overwritten.
+/// A marker made manual during the run is never overwritten.
 pub async fn upsert_detected(
     db: &PgPool,
     episode: i32,

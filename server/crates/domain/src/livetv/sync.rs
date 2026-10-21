@@ -44,7 +44,7 @@ impl From<M3uEntry> for Entry {
 }
 
 /// A group pattern, case-insensitive, with look-around and back-references; the backtrack limit
-/// bounds a catastrophic one (C126).
+/// bounds a catastrophic one.
 #[derive(Debug, Clone)]
 pub struct GroupPattern(Regex);
 
@@ -178,7 +178,7 @@ pub struct StreamRow {
     pub last_seen_at: Option<DateTime<Utc>>,
 }
 
-/// A channel as the sync sees it (`ORDER BY id`, C124).
+/// A channel as the sync sees it (`ORDER BY id`).
 #[derive(Debug, Clone)]
 pub struct ChannelRow {
     pub id: i32,

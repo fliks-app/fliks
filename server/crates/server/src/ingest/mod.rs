@@ -43,7 +43,7 @@ impl<K: Eq + Hash + Clone> KeyedLocks<K> {
     }
 }
 
-/// Process-wide ingest state: the C54 per-media lock, the relink creation lock and the queue.
+/// Process-wide ingest state: the per-media lock, the relink creation lock and the queue.
 #[derive(Default)]
 pub struct Shared {
     pub media: KeyedLocks<i32>,

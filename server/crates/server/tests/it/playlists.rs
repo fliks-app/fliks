@@ -78,7 +78,7 @@ impl Ctx {
 }
 
 /// Rule 6: (visibility, share role of `c`, `c` follows the owner) -> statuses of
-/// GET :id, PATCH :id, POST items, DELETE :id and the role GET reports (C13).
+/// GET :id, PATCH :id, POST items, DELETE :id and the role GET reports.
 #[sqlx::test(migrations = false)]
 async fn role_matrix(pool: PgPool) {
     let c = ctx(pool).await;

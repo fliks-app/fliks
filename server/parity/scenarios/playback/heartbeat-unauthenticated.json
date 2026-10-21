@@ -1,5 +1,4 @@
 {
-  "deviation": null,
   "name": "playback-heartbeat-unauthenticated",
   "seed": "base",
   "steps": [

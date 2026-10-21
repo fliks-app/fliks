@@ -111,7 +111,7 @@ fn columns(b: &Body) -> Result<Vec<(&'static str, Col)>, AppError> {
         };
         out.push(("preferredProvider", Col::Text(v)));
     }
-    // C1: a NOT NULL column set to null is a 400, never a database 500.
+    // A NOT NULL column set to null is a 400, never a database 500.
     for (k, c) in &out {
         let null = matches!(c, Col::Text(None) | Col::Bool(None) | Col::Enum(_, None));
         if null && ["title", "type", "status", "monitored"].contains(k) {
@@ -286,7 +286,7 @@ fn library_not_found(id: i32) -> AppError {
     AppError::not_found(format!("Library #{id} not found"))
 }
 
-/// The target of a move: in the caller's libraries (F46) and with a root path.
+/// The target of a move: in the caller's libraries and with a root path.
 async fn move_target(st: &AppState, a: &Authed, library_id: i32) -> Result<(), AppError> {
     let libs = accessible_library_ids(&st.db, a).await?;
     let lib = sqlx::query!("SELECT name, path FROM libraries WHERE id = $1", library_id)
@@ -303,7 +303,7 @@ async fn move_target(st: &AppState, a: &Authed, library_id: i32) -> Result<(), A
     Ok(())
 }
 
-/// `PATCH /api/media/:id/library` (rule 29): 409 for a media with files (C170, `code: media_has_files`), which a move cannot carry.
+/// `PATCH /api/media/:id/library` (rule 29): 409 for a media with files (`code: media_has_files`), which a move cannot carry.
 #[utoipa::path(patch, path = "/api/media/{id}/library", responses((status = 200)))]
 pub async fn patch_library(
     State(st): State<AppState>,
@@ -401,7 +401,7 @@ pub async fn patch_profiles(
     Ok(Json(detail_or_404(&st, &a, id).await?))
 }
 
-/// `PATCH /api/media/bulk` (rule 31, F46, C47): all or nothing, in one transaction.
+/// `PATCH /api/media/bulk` (rule 31): all or nothing, in one transaction.
 #[utoipa::path(patch, path = "/api/media/bulk", responses((status = 200)))]
 pub async fn bulk(
     State(st): State<AppState>,

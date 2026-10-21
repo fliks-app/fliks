@@ -59,7 +59,7 @@ pub async fn media_dir_to_remove(st: &AppState, m: &MediaRow) -> Result<Option<P
     fsx::removable_media_dir(&root, folder, &roots, &others)
 }
 
-/// `remove(id)` (rules 67-69, C48): hook and row delete in one transaction; the caller holds the lock.
+/// `remove(id)` (rules 67-69): hook and row delete in one transaction; the caller holds the lock.
 pub async fn remove_media(
     st: &AppState,
     _guard: &tokio::sync::OwnedMutexGuard<()>,

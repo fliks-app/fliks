@@ -1,4 +1,4 @@
-//! Per-plugin Postgres (`plugins.md` rule 35, SQL section): own role (C119), own schema,
+//! Per-plugin Postgres (`plugins.md` rule 35, SQL section): own role, own schema,
 //! text-format params, the deadline cancel and the `unavailable` code.
 use super::runtime::{DbError, Param, RowSet, Value};
 use crate::sync::MutexExt;
@@ -295,7 +295,7 @@ impl Drop for Lease {
     }
 }
 
-/// Every parameter goes as text with an inferred type, as node-pg sent them.
+/// Every parameter goes as text with an inferred type, as 4.x sent them.
 #[derive(Debug)]
 struct TextParam(Option<String>);
 

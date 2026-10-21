@@ -1,5 +1,4 @@
 {
-  "deviation": null,
   "name": "media-list-validation-bad-boolean-array",
   "seed": "media-query",
   "steps": [

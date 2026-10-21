@@ -392,7 +392,7 @@ async fn crud_validation_and_acl(pool: PgPool) {
     );
 }
 
-/// F79: no response carries the key; absent or "" keeps it, a new string replaces it, null clears it.
+/// No response carries the key; absent or "" keeps it, a new string replaces it, null clears it.
 #[sqlx::test(migrations = false)]
 async fn api_key_is_redacted_and_kept(pool: PgPool) {
     let c = ctx(pool).await;
@@ -451,7 +451,7 @@ async fn api_key_is_redacted_and_kept(pool: PgPool) {
     redacted(&b, false);
 }
 
-/// C169: a write is checked on what it changes; a stored row a 4.x toggle re-sends still passes.
+/// A write is checked on what it changes; a stored row a 4.x toggle re-sends still passes.
 #[sqlx::test(migrations = false)]
 async fn url_and_events_are_validated_on_change(pool: PgPool) {
     let c = ctx(pool).await;
@@ -540,7 +540,7 @@ async fn test_connection_modes(pool: PgPool) {
     );
     assert_eq!(check("500").await.1["ok"], false);
     let (_, b) = check("redirect").await;
-    assert_eq!(b["ok"], false, "F42: a cross-host redirect is a failure");
+    assert_eq!(b["ok"], false, "a cross-host redirect is a failure");
     assert!(
         c.hits.0.lock().unwrap().is_empty(),
         "the token never reached the other host"
@@ -593,7 +593,7 @@ async fn test_connection_modes(pool: PgPool) {
     let msg = b["message"].as_str().unwrap();
     assert!(
         !msg.contains("127.0.0.1") && !msg.contains("u:p"),
-        "F29: {msg}"
+        "no credential in {msg}"
     );
 }
 
@@ -752,7 +752,7 @@ async fn import_history_follows_the_resume_rules(pool: PgPool) {
     assert_eq!(eps, 2);
     let d: String = sqlx::query_scalar(r#"SELECT to_char("lastPlayedAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD') FROM playback_states ps JOIN media m ON m.id = ps."mediaId" WHERE m.title = 'Movie 3'"#).fetch_one(&pool).await.unwrap();
     assert_eq!(d, "2024-03-04", "DateCreated fallback");
-    // C43: the created account sees the default role's libraries
+    // The created account sees the default role's libraries
     let libs: i64 = sqlx::query_scalar(r#"SELECT count(*) FROM library_user_access a JOIN users u ON u.id = a."userId" WHERE u.username = 'newbie'"#).fetch_one(&pool).await.unwrap();
     assert_eq!(libs, 2);
     let status: String =
@@ -846,7 +846,7 @@ async fn import_guards_and_failures(pool: PgPool) {
         .0,
         404
     );
-    // C45: a failing Users call is a failed event and a failed command row
+    // A failing Users call is a failed event and a failed command row
     let id = add_server(&c, "nousers", &[], true).await;
     let ev = run_import(&c, id).await;
     assert!(
@@ -854,7 +854,7 @@ async fn import_guards_and_failures(pool: PgPool) {
         "{ev:?}"
     );
     assert!(matches!(&ev[3], SseEvent::CommandCompleted { status, .. } if status == "failed"));
-    // C42: a running import refuses a second one until it ends
+    // A running import refuses a second one until it ends
     let claim = c.st.busy.watch_history.claim(id as i32).unwrap();
     let (s, b) = call(
         &c,

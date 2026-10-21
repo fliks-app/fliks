@@ -132,7 +132,7 @@ impl Dto {
         })
     }
 
-    /// C1: a `null` for a NOT NULL column is a 400 instead of Nest's 500.
+    /// A `null` for a NOT NULL column is a 400, never a database 500.
     fn reject_nulls(&self) -> Res<()> {
         let mut msgs = vec![];
         if matches!(self.events, Some(None)) {
@@ -150,7 +150,7 @@ impl Dto {
     }
 }
 
-/// C169: checks only what the write changes, so a stored row re-sent by a 4.x toggle passes.
+/// Checks only what the write changes, so a stored row re-sent by a 4.x toggle passes.
 fn validate(dto: &Dto, cur: Option<&Server>) -> Res<()> {
     let mut msgs = vec![];
     if cur.is_none_or(|c| c.url != dto.url)
@@ -188,7 +188,7 @@ fn validate(dto: &Dto, cur: Option<&Server>) -> Res<()> {
     }
 }
 
-/// Body parsing after the policy check, as Nest's guards run before its pipes.
+/// Body parsing after the policy check, guards run before the body pipe.
 async fn body(req: Request) -> Res<Value> {
     let ValidJson(v) = ValidJson::<Value>::from_request(req, &()).await?;
     Ok(v)
@@ -264,7 +264,7 @@ pub async fn update(
     dto.reject_nulls()?;
     let cur = one(&st, id).await?;
     validate(&dto, Some(&cur))?;
-    // F79: absent or "" keeps the stored key, null clears it.
+    // Absent or "" keeps the stored key, null clears it.
     let api_key = match dto.api_key.as_ref() {
         Some(None) => None,
         Some(Some(k)) if !k.is_empty() => Some(k.as_str()),

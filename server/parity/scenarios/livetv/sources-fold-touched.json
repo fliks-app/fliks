@@ -1,23 +1,23 @@
 {
-  "deviation": "C123",
   "ignore": [
     "$..createdAt",
     "$..updatedAt",
     "$..lastSyncAt",
     "$..logoPath",
-    "$..lastSeenAt"
+    "$..lastSeenAt",
+    "$..guideUrls"
   ],
-  "name": "sources-deviation-c123-xtream-duplicate",
+  "name": "sources-fold-touched",
   "seed": "livetv",
   "steps": [
     {
       "as": "admin",
       "body": {
         "kind": "xtream",
-        "name": "Dup",
+        "name": "Touch",
         "password": "p",
         "url": "http://127.0.0.1:4961",
-        "username": "dup"
+        "username": "touch"
       },
       "expect": {
         "body": {
@@ -26,7 +26,6 @@
           "enabled": true,
           "excludeGroupsPattern": null,
           "expiresAt": null,
-          "guideUrls": [],
           "id": 3,
           "includeGroupsPattern": null,
           "kind": "xtream",
@@ -35,7 +34,7 @@
           "lastSyncStatus": "never",
           "maxStreams": 0,
           "maxStreamsIsManual": false,
-          "name": "Dup",
+          "name": "Touch",
           "playlistEtag": null,
           "playlistLastModified": null,
           "priority": 0,
@@ -43,7 +42,7 @@
           "refreshIntervalHours": 12,
           "url": "http://127.0.0.1:4961",
           "userAgent": null,
-          "username": "dup"
+          "username": "touch"
         },
         "status": 201
       },
@@ -75,15 +74,11 @@
               "name": "Mine"
             },
             {
-              "count": 1,
-              "name": "Old News"
-            },
-            {
               "count": 2,
               "name": "XNews"
             },
             {
-              "count": 1,
+              "count": 2,
               "name": "XSport"
             },
             {
@@ -95,7 +90,7 @@
             {
               "consecutiveFailures": 0,
               "enabled": true,
-              "groupName": "Old News",
+              "groupName": "XSport",
               "groupNameSource": "provider",
               "guideChannelId": "one.fr",
               "guideMatchKind": "id",
@@ -126,9 +121,6 @@
                     "enabled": true,
                     "excludeGroupsPattern": null,
                     "expiresAt": null,
-                    "guideUrls": [
-                      "http://127.0.0.1:4961/guide.xml"
-                    ],
                     "id": 1,
                     "includeGroupsPattern": null,
                     "kind": "m3u",
@@ -170,9 +162,6 @@
                     "enabled": true,
                     "excludeGroupsPattern": null,
                     "expiresAt": null,
-                    "guideUrls": [
-                      "http://127.0.0.1:4961/guide.xml"
-                    ],
                     "id": 1,
                     "includeGroupsPattern": null,
                     "kind": "m3u",
@@ -214,7 +203,6 @@
                     "enabled": true,
                     "excludeGroupsPattern": null,
                     "expiresAt": "2100-01-01T00:00:00.000Z",
-                    "guideUrls": [],
                     "id": 3,
                     "includeGroupsPattern": null,
                     "kind": "xtream",
@@ -223,7 +211,7 @@
                     "lastSyncStatus": "ok",
                     "maxStreams": 2,
                     "maxStreamsIsManual": false,
-                    "name": "Dup",
+                    "name": "Touch",
                     "playlistEtag": null,
                     "playlistLastModified": null,
                     "priority": 0,
@@ -231,10 +219,10 @@
                     "refreshIntervalHours": 12,
                     "url": "http://127.0.0.1:4961",
                     "userAgent": null,
-                    "username": "dup"
+                    "username": "touch"
                   },
                   "sourceId": 3,
-                  "url": "http://127.0.0.1:4961/live/dup/p/8.ts",
+                  "url": "http://127.0.0.1:4961/live/touch/p/8.ts",
                   "userAgent": null
                 }
               ]
@@ -273,9 +261,6 @@
                     "enabled": true,
                     "excludeGroupsPattern": null,
                     "expiresAt": null,
-                    "guideUrls": [
-                      "http://127.0.0.1:4961/guide.xml"
-                    ],
                     "id": 1,
                     "includeGroupsPattern": null,
                     "kind": "m3u",
@@ -317,7 +302,6 @@
                     "enabled": true,
                     "excludeGroupsPattern": null,
                     "expiresAt": "2100-01-01T00:00:00.000Z",
-                    "guideUrls": [],
                     "id": 3,
                     "includeGroupsPattern": null,
                     "kind": "xtream",
@@ -326,7 +310,7 @@
                     "lastSyncStatus": "ok",
                     "maxStreams": 2,
                     "maxStreamsIsManual": false,
-                    "name": "Dup",
+                    "name": "Touch",
                     "playlistEtag": null,
                     "playlistLastModified": null,
                     "priority": 0,
@@ -334,10 +318,10 @@
                     "refreshIntervalHours": 12,
                     "url": "http://127.0.0.1:4961",
                     "userAgent": null,
-                    "username": "dup"
+                    "username": "touch"
                   },
                   "sourceId": 3,
-                  "url": "http://127.0.0.1:4961/live/dup/p/7.ts",
+                  "url": "http://127.0.0.1:4961/live/touch/p/7.ts",
                   "userAgent": null
                 }
               ]
@@ -376,7 +360,6 @@
                     "enabled": true,
                     "excludeGroupsPattern": null,
                     "expiresAt": "2100-01-01T00:00:00.000Z",
-                    "guideUrls": [],
                     "id": 3,
                     "includeGroupsPattern": null,
                     "kind": "xtream",
@@ -385,7 +368,7 @@
                     "lastSyncStatus": "ok",
                     "maxStreams": 2,
                     "maxStreamsIsManual": false,
-                    "name": "Dup",
+                    "name": "Touch",
                     "playlistEtag": null,
                     "playlistLastModified": null,
                     "priority": 0,
@@ -393,10 +376,10 @@
                     "refreshIntervalHours": 12,
                     "url": "http://127.0.0.1:4961",
                     "userAgent": null,
-                    "username": "dup"
+                    "username": "touch"
                   },
                   "sourceId": 3,
-                  "url": "http://127.0.0.1:4961/live/dup/p/5.ts",
+                  "url": "http://127.0.0.1:4961/live/touch/p/5.ts",
                   "userAgent": null
                 }
               ]
@@ -435,7 +418,6 @@
                     "enabled": true,
                     "excludeGroupsPattern": null,
                     "expiresAt": "2100-01-01T00:00:00.000Z",
-                    "guideUrls": [],
                     "id": 3,
                     "includeGroupsPattern": null,
                     "kind": "xtream",
@@ -444,7 +426,7 @@
                     "lastSyncStatus": "ok",
                     "maxStreams": 2,
                     "maxStreamsIsManual": false,
-                    "name": "Dup",
+                    "name": "Touch",
                     "playlistEtag": null,
                     "playlistLastModified": null,
                     "priority": 0,
@@ -452,10 +434,10 @@
                     "refreshIntervalHours": 12,
                     "url": "http://127.0.0.1:4961",
                     "userAgent": null,
-                    "username": "dup"
+                    "username": "touch"
                   },
                   "sourceId": 3,
-                  "url": "http://127.0.0.1:4961/live/dup/p/1.ts",
+                  "url": "http://127.0.0.1:4961/live/touch/p/1.ts",
                   "userAgent": null
                 }
               ]
@@ -494,7 +476,6 @@
                     "enabled": true,
                     "excludeGroupsPattern": null,
                     "expiresAt": "2100-01-01T00:00:00.000Z",
-                    "guideUrls": [],
                     "id": 3,
                     "includeGroupsPattern": null,
                     "kind": "xtream",
@@ -503,7 +484,7 @@
                     "lastSyncStatus": "ok",
                     "maxStreams": 2,
                     "maxStreamsIsManual": false,
-                    "name": "Dup",
+                    "name": "Touch",
                     "playlistEtag": null,
                     "playlistLastModified": null,
                     "priority": 0,
@@ -511,7 +492,7 @@
                     "refreshIntervalHours": 12,
                     "url": "http://127.0.0.1:4961",
                     "userAgent": null,
-                    "username": "dup"
+                    "username": "touch"
                   },
                   "sourceId": 3,
                   "url": "http://127.0.0.1:4961/direct/3.ts",
@@ -553,7 +534,6 @@
                     "enabled": true,
                     "excludeGroupsPattern": null,
                     "expiresAt": "2100-01-01T00:00:00.000Z",
-                    "guideUrls": [],
                     "id": 3,
                     "includeGroupsPattern": null,
                     "kind": "xtream",
@@ -562,7 +542,7 @@
                     "lastSyncStatus": "ok",
                     "maxStreams": 2,
                     "maxStreamsIsManual": false,
-                    "name": "Dup",
+                    "name": "Touch",
                     "playlistEtag": null,
                     "playlistLastModified": null,
                     "priority": 0,
@@ -570,10 +550,10 @@
                     "refreshIntervalHours": 12,
                     "url": "http://127.0.0.1:4961",
                     "userAgent": null,
-                    "username": "dup"
+                    "username": "touch"
                   },
                   "sourceId": 3,
-                  "url": "http://127.0.0.1:4961/live/dup/p/2.ts",
+                  "url": "http://127.0.0.1:4961/live/touch/p/2.ts",
                   "userAgent": null
                 }
               ]

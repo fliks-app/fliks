@@ -38,7 +38,7 @@ struct Row {
     info: Option<serde_json::Value>,
 }
 
-/// `media.path` with C51: the library root and the media folder must exist (never created here).
+/// `media.path`: the library root and the media folder must exist (never created here).
 fn media_dir(media: &MediaRow) -> Result<(fsx::Root, PathBuf), AppError> {
     let lib = media
         .library_path
@@ -64,7 +64,7 @@ struct Walk {
     complete: bool,
 }
 
-/// Rule 40: depth 3, links never followed into, only regular video files (C55).
+/// Rule 40: depth 3, links never followed into, only regular video files.
 fn walk(
     dir: &Path,
     root: &Path,
@@ -164,7 +164,7 @@ pub async fn rescan_files(
     }
     slots_created |= refresh_existing(st, &media, &dir, &rows, &on_disk, &mut c).await?;
     slots_created |= add_new(st, &media, &disk, &linked, &mut c).await?;
-    // C51: an interrupted walk proves nothing about what is on disk.
+    // An interrupted walk proves nothing about what is on disk.
     if w.complete {
         reconcile_subtitles(st, media_id, &mut c).await;
     }
@@ -574,7 +574,7 @@ pub struct Linked {
     pub created: bool,
 }
 
-/// `linkExistingFileInPlace` (rules 52-53, F47); the caller holds the media's lock.
+/// `linkExistingFileInPlace` (rules 52-53); the caller holds the media's lock.
 pub async fn link_in_place(
     st: &AppState,
     _guard: &OwnedMutexGuard<()>,

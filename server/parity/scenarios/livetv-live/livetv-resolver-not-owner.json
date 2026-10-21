@@ -4,7 +4,6 @@
     "sid": "$.steps[2].body.sessionId",
     "url": "$.steps[2].body.url"
   },
-  "deviation": "F75",
   "engine": "up",
   "ignore": [
     "$..createdAt",

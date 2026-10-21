@@ -56,7 +56,7 @@ async fn the_search_pass_fills_gaps_and_a_bad_min_score_keeps_the_default(pool: 
     provider(&c, "subdl").await;
     one_hit(&c);
     probe(&c, json!([]));
-    // C59: `abc` is not a number, so the default of 70 applies and the good match is fetched.
+    // `abc` is not a number, so the default of 70 applies and the good match is fetched.
     set(&c, "subtitle_min_score", "abc").await;
     let got = crate::subtitles::scheduler::search_missing_for_media(&c.st, c.media, c.file).await;
     assert!(got.contains(&"en".to_owned()), "{got:?}");

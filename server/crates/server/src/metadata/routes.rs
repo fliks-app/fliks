@@ -61,7 +61,7 @@ pub fn router() -> Router<AppState> {
         .route(&format!("{m}/tv/{{tmdbId}}/seasons"), get(legacy_seasons))
 }
 
-/// A bare `@Query` string; a repeated key is an array in Nest, joined here (only `q` rejects it).
+/// A bare `@Query` string; a repeated key is an array to the pipe, joined here (only `q` rejects it).
 fn bare(pairs: &[(String, String)], key: &str) -> Option<String> {
     let v: Vec<&str> = pairs
         .iter()
@@ -82,7 +82,7 @@ fn unavailable(what: &str, provider: Provider, e: &Upstream) -> AppError {
     )
 }
 
-/// C28: an upstream 404 on a detail route is a 404, everything else a 503.
+/// An upstream 404 on a detail route is a 404, everything else a 503.
 fn fail(provider: Provider, e: &Upstream, detail: bool) -> AppError {
     if detail && e.is_not_found() {
         return AppError::not_found("not_found");
@@ -119,7 +119,7 @@ async fn preferred(db: &PgPool, media_id: Option<&str>) -> Result<Option<String>
     Ok(row.and_then(|r| r.media_pref.or(r.library_pref)))
 }
 
-/// Rule 12: `existingMediaId` / `existingMediaType`, only for libraries the caller can read (F40).
+/// Rule 12: `existingMediaId` / `existingMediaType`, only for libraries the caller can read.
 async fn enrich(db: &PgPool, a: &Authed, results: Vec<Value>, tv: bool) -> Result<Value, AppError> {
     if results.is_empty() {
         return Ok(Value::Array(results));

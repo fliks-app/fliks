@@ -76,7 +76,7 @@ pub fn decode_xml_text(raw: &str) -> String {
 }
 
 /// `YYYYMMDDHHMM[SS] [+-HHMM]`: the stamp's own offset, else `fallback_offset_minutes`. An impossible
-/// date is `None` rather than rolled over (C128).
+/// date is `None` rather than rolled over.
 pub fn parse_xmltv_date(raw: Option<&str>, fallback_offset_minutes: i32) -> Option<DateTime<Utc>> {
     let t = js::trim(raw?);
     let m = rx!(r"^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})?\s*([+-]\d{4})?").captures(t)?;

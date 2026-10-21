@@ -1,5 +1,4 @@
 {
-  "deviation": "C133",
   "ignore": [
     "$..createdAt",
     "$..updatedAt",

@@ -16,7 +16,7 @@ pub fn is_http_source(location: &str) -> bool {
 }
 
 /// A stored upload, as opposed to a path an administrator typed: under the playlist directory by
-/// path components, symlinks followed when the file exists (F73).
+/// path components, symlinks followed when the file exists.
 pub fn is_managed_upload(location: &str) -> bool {
     managed_in(location, &playlist_dir())
 }

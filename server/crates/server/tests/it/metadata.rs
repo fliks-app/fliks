@@ -220,7 +220,7 @@ async fn search_marks_media_the_caller_can_read(pool: PgPool) {
     assert_eq!(
         ids(&reader),
         [json!(1), Value::Null, Value::Null, Value::Null],
-        "F40"
+        "only the first hit is linked"
     );
     assert_eq!(reader[1]["existingMediaType"], Value::Null);
 }
@@ -247,7 +247,7 @@ async fn search_input_rules(pool: PgPool) {
     assert_eq!(
         (s, body["error"].as_str()),
         (400, Some("Bad Request")),
-        "C28"
+        "a repeated q is a 400"
     );
     assert_eq!(
         call(&c, "/api/metadata/search/movie?q=a", None).await.0,
@@ -350,7 +350,7 @@ async fn upstream_failures_are_503_without_the_url(pool: PgPool) {
     let msg = b["message"].as_str().unwrap();
     assert_eq!(msg, "Metadata search failed on tmdb: HTTP 500 — boom");
     assert!(!msg.contains("tmdb-secret-key") && !msg.contains("127.0.0.1"));
-    // the same failure on a list with no stale copy is a 503 too (C28)
+    // the same failure on a list with no stale copy is a 503 too
     c.stub.json("/tmdb/3/genre/tv/list", 500, json!({}));
     let (s, b) = call(&c, "/api/metadata/genres/tv", Some(&c.reader)).await;
     assert_eq!(s, 503);
@@ -594,7 +594,11 @@ async fn person_search(pool: PgPool) {
     .execute(&pool)
     .await
     .unwrap();
-    assert_eq!(names(&search("").await.1).len(), 1000, "C171");
+    assert_eq!(
+        names(&search("").await.1).len(),
+        1000,
+        "no cap on the result count"
+    );
     sqlx::query("DELETE FROM persons WHERE name LIKE 'Zz %'")
         .execute(&pool)
         .await
@@ -604,13 +608,17 @@ async fn person_search(pool: PgPool) {
         "%28", "a%26", "x%21", "a%3Ab", "%27", "a%7Cb", "-", "a%5Cb", "%3A",
     ] {
         let (s, _) = search(Box::leak(format!("?q={q}").into_boxed_str())).await;
-        assert_eq!(s, 200, "C30: {q}");
+        assert_eq!(s, 200, "search {q}");
     }
     assert!(!search("?q=a%26").await.1.as_array().unwrap().is_empty());
     assert_eq!(search("?q=%28").await.1, json!([]));
     assert_eq!(search("?q=a&q=b").await.0, 400);
-    assert_eq!(call(&c, "/api/persons/search", None).await.0, 401, "F4");
-    // the trigger keeps the index in step with the name (C31)
+    assert_eq!(
+        call(&c, "/api/persons/search", None).await.0,
+        401,
+        "auth required"
+    );
+    // the trigger keeps the index in step with the name
     sqlx::query("UPDATE persons SET name = 'Zed Renamed' WHERE id = 1")
         .execute(&pool)
         .await
@@ -661,12 +669,12 @@ async fn person_detail_applies_the_library_acl(pool: PgPool) {
         "a fresh person is not refreshed"
     );
     let (_, r) = call(&c, "/api/persons/1", Some(&c.reader)).await;
-    assert_eq!(r["cast"].as_array().unwrap().len(), 1, "F40");
+    assert_eq!(r["cast"].as_array().unwrap().len(), 1, "one cast entry");
     assert_eq!(r["cast"][0]["character"], "A");
     assert!(
         r["cast"][0]["media"].get("path").is_none()
             && r["cast"][0]["media"]["library"].get("path").is_none(),
-        "F22"
+        "no path leaks"
     );
     assert_eq!(r["crew"], json!([]));
 }
@@ -823,7 +831,11 @@ async fn a_pin_that_breaks_the_unique_pair_keeps_the_provider(pool: PgPool) {
         json!({"data": {"name": "From Tvdb", "biographies": [], "characters": []}}),
     );
     let (s, d) = call(&c, "/api/persons/1/provider-credits", Some(&c.reader)).await;
-    assert_eq!((s, d["provider"].as_str()), (200, Some("tmdb")), "C31");
+    assert_eq!(
+        (s, d["provider"].as_str()),
+        (200, Some("tmdb")),
+        "provider credits"
+    );
     let (_, d) = call(&c, "/api/persons/1", Some(&c.reader)).await;
     assert_eq!(d["person"]["provider"], "tmdb");
     assert_eq!(d["person"]["name"], "From Tvdb");
@@ -870,7 +882,7 @@ async fn provider_credits_link_on_type_and_id_for_readable_media(pool: PgPool) {
     assert_eq!(
         link("cast"),
         [json!(1), json!(2), Value::Null, Value::Null],
-        "(type, id) and F40"
+        "linked by (type, id)"
     );
     assert_eq!(link("crew"), [json!(1)]);
     assert_eq!(d["cast"][0]["title"], "M");

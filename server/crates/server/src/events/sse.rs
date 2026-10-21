@@ -1,4 +1,4 @@
-//! Wire format of `/api/system/events` (rules 5-7, 11), byte-compatible with Nest's `SseStream`.
+//! Wire format of `/api/system/events` (rules 5-7, 11), byte-compatible with 4.x.
 use super::hub::{Connection, Msg};
 use axum::body::Bytes;
 use futures_util::{Stream, StreamExt, stream};

@@ -1,4 +1,4 @@
-//! `Media` entities as JSON (`media-query.md` rules 30-32): built in SQL, absolute paths added or removed in Rust (F22).
+//! `Media` entities as JSON (`media-query.md` rules 30-32): built in SQL, absolute paths added or removed in Rust.
 use fliks_domain::{media::path::media_path, track_markers};
 use serde_json::Value;
 use sqlx::PgPool;

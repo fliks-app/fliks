@@ -311,7 +311,7 @@ async fn episode_labels(st: &AppState, ids: &[i32]) -> sqlx::Result<HashMap<i32,
         .collect())
 }
 
-/// Live TV viewers, one row each; the engine knows them all except the source's name (Nest's).
+/// Live TV viewers, one row each; the engine knows them all except the source's name.
 async fn live_tv_rows(st: &AppState, host_hw: &str) -> Vec<ActiveStream> {
     let Ok(snaps) = st.engine.list_live(None).await else {
         return vec![];

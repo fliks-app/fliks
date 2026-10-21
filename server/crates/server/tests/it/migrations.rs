@@ -1,4 +1,4 @@
-//! Each logic migration (JS in the TypeORM original) is run on a DB built at the previous version.
+//! Each logic migration is run on a DB built at the previous version.
 use sqlx::PgPool;
 use sqlx::migrate::Migrator;
 
@@ -430,9 +430,9 @@ async fn m1785600_skips_unexpected_setting_shapes(pool: PgPool) {
     );
 }
 
-const TYPEORM_VERSIONS: i64 = 81;
+const V4_VERSIONS: i64 = 81;
 const SQL_FILES: i64 = 91;
-const LAST_TYPEORM_VERSION: i64 = 1_786_300_000_000;
+const LAST_V4_VERSION: i64 = 1_786_300_000_000;
 
 #[sqlx::test(migrations = false)]
 async fn migrate_builds_a_fresh_database(pool: PgPool) {
@@ -461,7 +461,7 @@ const SCHEMA: &str = r#"
 "#;
 
 #[sqlx::test(migrations = false)]
-async fn adopting_a_typeorm_database_matches_a_fresh_one(pool: PgPool) {
+async fn adopting_a_v4_database_matches_a_fresh_one(pool: PgPool) {
     sqlx::raw_sql(include_str!("fixtures/typeorm-81.sql"))
         .execute(&pool)
         .await
@@ -474,13 +474,10 @@ async fn adopting_a_typeorm_database_matches_a_fresh_one(pool: PgPool) {
     )
     .await;
     assert_eq!(ledger.len() as i64, SQL_FILES);
-    let adopted_rows = || ledger.iter().filter(|r| r.0 <= LAST_TYPEORM_VERSION);
-    assert_eq!(adopted_rows().count() as i64, TYPEORM_VERSIONS);
-    assert!(
-        adopted_rows().all(|r| r.1 == 0),
-        "a TypeORM migration re-ran"
-    );
-    let new_rows = ledger.iter().filter(|r| r.0 > LAST_TYPEORM_VERSION);
+    let adopted_rows = || ledger.iter().filter(|r| r.0 <= LAST_V4_VERSION);
+    assert_eq!(adopted_rows().count() as i64, V4_VERSIONS);
+    assert!(adopted_rows().all(|r| r.1 == 0), "a 4.x migration re-ran");
+    let new_rows = ledger.iter().filter(|r| r.0 > LAST_V4_VERSION);
     assert!(new_rows.clone().count() == 10 && new_rows.into_iter().all(|r| r.1 > 0));
 
     let fresh_db = "fliks_p7_fresh";
@@ -513,7 +510,7 @@ async fn adopting_a_typeorm_database_matches_a_fresh_one(pool: PgPool) {
     assert_eq!(
         only_in(&adopted, &built),
         Vec::<String>::new(),
-        "only in the TypeORM-built schema"
+        "only in the 4.x-built schema"
     );
     assert_eq!(
         only_in(&built, &adopted),

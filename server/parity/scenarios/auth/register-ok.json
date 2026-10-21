@@ -1,5 +1,4 @@
 {
-  "deviation": "F1",
   "engine": "up",
   "ignore": [
     "$..createdAt",

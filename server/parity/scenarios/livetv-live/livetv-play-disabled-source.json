@@ -2,7 +2,6 @@
   "capture": {
     "url": "$.steps[3].body.url"
   },
-  "deviation": "C136",
   "engine": "up",
   "ignore": [
     "$..createdAt",

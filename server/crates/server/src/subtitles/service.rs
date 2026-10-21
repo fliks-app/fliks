@@ -277,7 +277,7 @@ pub async fn download(
     match model::insert(&st.db, &new).await {
         Ok(inserted) => Ok(Saved { new, inserted }),
         Err(e) => {
-            // C62: a row that failed to insert leaves no orphan file.
+            // A row that failed to insert leaves no orphan file.
             let _ = dirs.unlink(&rel);
             Err(e.into())
         }
@@ -301,7 +301,7 @@ pub async fn upgrade(st: &AppState, id: i32, c: Option<&Candidate>) -> Result<Sa
         old.media_file_id
             .ok_or_else(|| AppError::not_found("MediaFile #0 not found"))?,
     );
-    // A missing `searchResult` is 400 only after the row checks, as Nest reached them first.
+    // A missing `searchResult` is 400 only after the row checks.
     let c = c.ok_or_else(|| AppError::bad_request("searchResult should not be empty"))?;
     let mut saved = download(st, media_id, file_id, old.episode_id, c).await?;
     sqlx::query(

@@ -23,7 +23,7 @@ Everything that needs ranges goes through `POST /stream/:id/playback-info` (loca
 
 ### 1.2 Files (new)
 - `backend/src/modules/streaming/edl/edl-parser.ts` (pure) + `edl-parser.spec.ts`
-- `backend/src/modules/streaming/edl/edl-sidecar.ts` (disk read, cache, logging, timeline mapping; module functions with a module `Logger`, same pattern as `transcoding/source-timeline.ts`; no Nest provider) + `edl-sidecar.spec.ts`
+- `backend/src/modules/streaming/edl/edl-sidecar.ts` (disk read, cache, logging, timeline mapping; module functions with a module `Logger`, same pattern as `transcoding/source-timeline.ts`) + `edl-sidecar.spec.ts`
 
 ### 1.3 Parser (`parseEdl`)
 ```ts

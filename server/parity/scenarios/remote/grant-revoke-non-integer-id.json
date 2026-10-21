@@ -1,5 +1,4 @@
 {
-  "deviation": null,
   "name": "remote-grant-revoke-non-integer-id",
   "seed": "base",
   "steps": [

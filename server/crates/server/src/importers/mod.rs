@@ -60,7 +60,7 @@ async fn fetch(
         .await
 }
 
-/// Both URLs compared without a trailing `/`, scheme and host case-insensitively (F41).
+/// Both URLs compared without a trailing `/`, scheme and host case-insensitively.
 fn same_url(a: &str, b: &str) -> bool {
     let norm = |u: &str| {
         let base = base_url(u, true);
@@ -69,7 +69,7 @@ fn same_url(a: &str, b: &str) -> bool {
     norm(a) == norm(b)
 }
 
-/// `resolveApiKey`: the key sent, else the stored one when the body URL is the stored URL (F41).
+/// `resolveApiKey`: the key sent, else the stored one when the body URL is the stored URL.
 async fn resolve_key(
     st: &AppState,
     provided: Option<String>,

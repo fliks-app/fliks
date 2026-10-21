@@ -8,7 +8,7 @@ use axum::{Router, extract::Request, response::Response, routing::any};
 use std::path::PathBuf;
 use utoipa::OpenApi;
 
-/// Nest's default JSON limit (`bootstrap.md` rule 10).
+/// The 4.x default JSON body limit (`bootstrap.md` rule 10).
 pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
 
 /// With the per-domain docs merged by `openapi()`, every route the server answers.
@@ -324,7 +324,7 @@ pub fn openapi() -> utoipa::openapi::OpenApi {
     doc
 }
 
-/// Unmatched `/api` paths and undeclared methods on owned paths get Nest's `Cannot` 404, never a 405.
+/// Unmatched `/api` paths and undeclared methods on owned paths get the 4.x `Cannot <METHOD>` 404, never a 405.
 pub fn router(
     state: AppState,
     client_dir: Option<PathBuf>,

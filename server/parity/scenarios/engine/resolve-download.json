@@ -2,7 +2,6 @@
   "capture": {
     "jwt": "$.steps[0].body.accessToken"
   },
-  "deviation": null,
   "engine": "up",
   "ignore": [
     "$..accessToken",

@@ -1,5 +1,4 @@
 {
-  "deviation": "F71",
   "ignore": [
     "$..createdAt",
     "$..updatedAt",
@@ -7,7 +6,7 @@
     "$..logoPath",
     "$..lastSeenAt"
   ],
-  "name": "sources-deviation-f71-xtream-guide-urls",
+  "name": "sources-xtream-guide-urls",
   "seed": "livetv",
   "steps": [
     {

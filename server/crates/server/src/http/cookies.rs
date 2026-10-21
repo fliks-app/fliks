@@ -17,7 +17,7 @@ pub fn cookie_value(headers: &HeaderMap, name: &str) -> Option<String> {
     headers
         .get_all(header::COOKIE)
         .iter()
-        // Lossy, not to_str: one non-ASCII cookie from another app must not hide ours (Node reads latin1).
+        // Lossy, not to_str: one non-ASCII cookie from another app must not hide ours (latin1 on 4.x).
         .map(|v| String::from_utf8_lossy(v.as_bytes()).into_owned())
         .find_map(|h| {
             h.split(';')
@@ -83,7 +83,7 @@ fn same_site(headers: &HeaderMap, secure: bool) -> &'static str {
     if native && secure { "None" } else { "Lax" }
 }
 
-/// `Set-Cookie` for a fresh access token; `max_age_secs` is the token lifetime (F7).
+/// `Set-Cookie` for a fresh access token; `max_age_secs` is the token lifetime.
 pub fn access_cookie(headers: &HeaderMap, token: &str, max_age_secs: u64) -> String {
     access_cookie_at(headers, token, max_age_secs, SystemTime::now())
 }
@@ -104,7 +104,7 @@ fn access_cookie_at(
     )
 }
 
-/// `Set-Cookie` that clears the cookie exactly as Express's `clearCookie` does (no `Max-Age`).
+/// `Set-Cookie` that clears the cookie exactly as 4.x does (no `Max-Age`).
 pub fn clear_cookie(headers: &HeaderMap) -> String {
     let secure = is_secure(headers);
     format!(

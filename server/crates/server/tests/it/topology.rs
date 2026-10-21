@@ -1,4 +1,4 @@
-//! Process topology (plan §11): the real binary on a scratch database.
+//! Process topology the real binary on a scratch database.
 use sqlx::PgPool;
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};

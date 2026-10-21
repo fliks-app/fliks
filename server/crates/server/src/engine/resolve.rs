@@ -117,7 +117,7 @@ pub async fn resolve(
     }
 }
 
-/// The DTO checks of `ResolveRequestDto` under `forbidNonWhitelisted`, with class-validator's messages.
+/// The DTO checks of `ResolveRequestDto` under `forbidNonWhitelisted`, with class-validator style messages.
 /// `mediaId` is normalized: a file id for the file purposes, the viewer's session id for `live`; a
 /// `mediaId` that is neither is `u32::MAX`, which no file has (the routes answered 400, a denial).
 fn parse(body: &Value) -> Result<ResolveRequest, Vec<String>> {
@@ -379,7 +379,7 @@ async fn subtitle_on_disk(
         .stored
         .filter(|s| !s.trim().is_empty())
         .ok_or(Fail::Denied)?;
-    // F52: the real parent stays under the media directory and the file is a regular one.
+    // The real parent stays under the media directory and the file is a regular one.
     let media_id: Option<i32> =
         sqlx::query_scalar(r#"SELECT "mediaId" FROM subtitle_files WHERE id = $1"#)
             .bind(id)

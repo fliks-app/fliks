@@ -1,4 +1,4 @@
-//! `/api/remote/*`: grants lifecycle, `canControl` outcomes, F14 and C1 on a fresh database.
+//! `/api/remote/*`: grants lifecycle and `canControl` outcomes on a fresh database.
 use axum::{Router, body::Body, http::Request};
 use fliks_server::{config::Config, remote, state::AppState};
 use serde_json::{Value, json};

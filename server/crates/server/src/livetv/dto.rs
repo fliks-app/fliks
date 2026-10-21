@@ -242,7 +242,7 @@ impl<'a> Body<'a> {
         Some(ints.into_iter().flatten().collect())
     }
 
-    /// The caller's own message, for a rule no decorator covers (C1 and the like).
+    /// The caller's own message, for a rule no decorator covers.
     pub fn reject(&mut self, msg: impl Into<String>) {
         self.errors.push(msg.into());
     }
@@ -256,7 +256,7 @@ impl<'a> Body<'a> {
     }
 }
 
-/// A query string with Nest's pipe: repeated keys are arrays (invalid for a scalar), values are text.
+/// A query string as the global pipe reads it: repeated keys are arrays (invalid for a scalar), values are text.
 pub struct Query<'a>(pub &'a [(String, String)]);
 
 impl Query<'_> {

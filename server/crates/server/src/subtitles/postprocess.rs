@@ -19,7 +19,7 @@ const ACTIONS: [&str; 10] = [
     "convertToSrt",
 ];
 
-/// `Number(params?.x ?? default)`, finite or 400 (C62).
+/// `Number(params?.x ?? default)`, finite or 400.
 fn number(params: &Value, key: &str, default: f64) -> Result<f64, AppError> {
     let bad = || AppError::bad_request(format!("{key} must be a finite number"));
     match params.get(key) {

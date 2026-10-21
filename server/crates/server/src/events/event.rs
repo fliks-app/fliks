@@ -1,5 +1,5 @@
 //! Wire events (`docs/spec/events-hub.md`, Events): the 40 `SseEvent` types, the 11 `DomainEvent`
-//! types and the plugin envelope. Field names and omission rules follow `JSON.stringify` of Nest's objects.
+//! types and the plugin envelope. Field names and omission rules follow `JSON.stringify` of the 4.x objects.
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
 
@@ -132,7 +132,7 @@ mod present {
     }
 }
 
-/// Nest stores and relays any truthy heartbeat `state` verbatim, whatever its JSON type.
+/// 4.x stores and relays any truthy heartbeat `state` verbatim, whatever its JSON type.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum PlayState {

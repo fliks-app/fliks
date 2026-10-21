@@ -106,7 +106,7 @@ pub fn spawn(st: &AppState) {
     sprite::spawn_legacy_cleanup();
 }
 
-/// An engine failure on a route that does not map it: 503 for the states Nest named, else a 500.
+/// An engine failure on a route that does not map it: 503 for the engine states that mean unavailable, else a 500.
 fn engine_err(e: EngineError) -> AppError {
     match e {
         EngineError::NotRunning | EngineError::NoLive => {

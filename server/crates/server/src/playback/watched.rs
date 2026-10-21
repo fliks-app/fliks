@@ -5,7 +5,7 @@ use crate::playlists::remove_watched_from_auto_playlists;
 use serde_json::{Value, json};
 use sqlx::PgPool;
 
-/// Rule 15. Returns the saved entity in the shape Nest's `repo.save` gave it.
+/// Rule 15. Returns the saved entity in the shape the 4.x clients read.
 pub async fn toggle_watched(
     db: &PgPool,
     user: i32,

@@ -12,12 +12,12 @@ fn present<'de, D: Deserializer<'de>, T: Deserialize<'de>>(d: D) -> Result<Patch
     Option::<T>::deserialize(d).map(Some)
 }
 
-/// Rejects `null` where Nest let it through to Postgres (C1).
+/// Rejects `null` where 4.x let it through to Postgres.
 fn not_null<'de, D: Deserializer<'de>>(d: D) -> Result<Option<String>, D::Error> {
     String::deserialize(d).map(Some)
 }
 
-/// `IsNumber` accepts `1.0`; Postgres integer columns need an `int4` (C1).
+/// `IsNumber` accepts `1.0`; Postgres integer columns need an `int4`.
 fn int4(field: &str, n: &Number) -> Res<i32> {
     n.as_i64()
         .or_else(|| n.as_f64().filter(|f| f.fract() == 0.0).map(|f| f as i64))

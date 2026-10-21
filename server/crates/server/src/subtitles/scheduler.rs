@@ -25,7 +25,7 @@ struct Opts {
     burn_in_covers: bool,
 }
 
-/// `Number(x)` finite, else the default (C59).
+/// `Number(x)` finite, else the default.
 fn number(v: Option<String>, default: f64) -> f64 {
     v.and_then(|s| fliks_domain::media::query::js_number(&s))
         .filter(|n| n.is_finite())
@@ -50,7 +50,7 @@ async fn resolve_opts(st: &AppState) -> Opts {
     }
 }
 
-/// `String(err)` of a Nest exception.
+/// `String(err)` of the error.
 fn err_string(e: &AppError) -> String {
     let name = match e.status().as_u16() {
         400 => "BadRequestException",
@@ -521,7 +521,7 @@ async fn upgrade_batch(st: &AppState, rows: &[Row], opts: &Opts) -> Result<(), S
     Ok(())
 }
 
-/// The 6 h tick: each due pass holds its name's claim for its whole run (C110).
+/// The 6 h tick: each due pass holds its name's claim for its whole run.
 pub fn spawn_tick(st: &AppState) {
     let last = std::sync::Arc::new(Mutex::new((0i64, 0i64)));
     let st = st.clone();

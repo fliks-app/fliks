@@ -13,7 +13,7 @@ use axum::middleware::{Next, from_fn};
 use axum::response::{IntoResponse, Response};
 use tower_http::services::{ServeDir, ServeFile};
 
-/// Express-style weak ETag (`W/"<size hex>-<mtime seconds hex>"`, C7), `Cache-Control` and `If-None-Match` 304.
+/// Weak ETag (`W/"<size hex>-<mtime seconds hex>"`, as 4.x), `Cache-Control` and `If-None-Match` 304.
 async fn validators(req: Request, next: Next) -> Response {
     let inm = req.headers().get(IF_NONE_MATCH).cloned();
     let mut res = next.run(req).await;
@@ -59,7 +59,7 @@ async fn validators(req: Request, next: Next) -> Response {
     res
 }
 
-/// `mime-types` rule used by Express `send`: lowercase `utf-8` on `text/*`, JavaScript and JSON.
+/// `mime-types` rule of 4.x: lowercase `utf-8` on `text/*`, JavaScript and JSON.
 fn add_charset(res: &mut Response) {
     let Some(ct) = res
         .headers()
@@ -87,8 +87,8 @@ pub(crate) fn matches_etag(header: &str, etag: &str) -> bool {
     header.trim() == "*" || header.split(',').any(|t| weak(t) == weak(etag))
 }
 
-/// Every miss gets Nest's `Cannot <METHOD> <originalUrl>` 404; ServeDir's 405 on other methods included.
-async fn nest_404(req: Request, next: Next) -> Response {
+/// Every miss gets the 4.x `Cannot <METHOD> <originalUrl>` 404; ServeDir's 405 on other methods included.
+async fn cannot_404(req: Request, next: Next) -> Response {
     let miss = cannot(&req);
     let res = next.run(req).await;
     if matches!(
@@ -100,7 +100,7 @@ async fn nest_404(req: Request, next: Next) -> Response {
     res
 }
 
-/// Nest's `Cannot <METHOD> <originalUrl>` 404 for the request.
+/// The 4.x `Cannot <METHOD> <originalUrl>` 404 for the request.
 pub fn cannot(req: &Request) -> Response {
     let url = req.uri().path_and_query().map_or("/", |p| p.as_str());
     AppError::not_found(format!("Cannot {} {url}", req.method())).into_response()
@@ -114,7 +114,7 @@ pub fn router(client_dir: Option<PathBuf>, cast_dir: PathBuf) -> Router {
         r = r
             .fallback_service(ServeDir::new(&dir).fallback(ServeFile::new(dir.join("index.html"))));
     }
-    r.layer(from_fn(validators)).layer(from_fn(nest_404))
+    r.layer(from_fn(validators)).layer(from_fn(cannot_404))
 }
 
 #[cfg(test)]
@@ -160,7 +160,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn serves_files_spa_cast_and_nest_404() {
+    async fn serves_files_spa_cast_and_cannot_404() {
         let (c, k) = dirs("serve");
         let r = router(Some(c), k);
         let file = get(&r, "/app.js", None).await;

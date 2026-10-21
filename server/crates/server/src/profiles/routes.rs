@@ -27,7 +27,7 @@ use serde_json::{Value, json};
 
 type Res<T> = Result<T, AppError>;
 
-/// Body parsing after the policy and id checks, as Nest's guards run before its pipes.
+/// Body parsing after the policy and id checks, as 4.x guards run before its pipes.
 async fn body<T: DeserializeOwned>(req: Request) -> Res<T> {
     let ValidJson(dto) = ValidJson::<T>::from_request(req, &()).await?;
     Ok(dto)
@@ -229,7 +229,7 @@ pub async fn format_update(
     a.require(Action::Manage, Subject::Settings)?;
     let id = int_param(&id)?;
     let v = body::<dto::CustomFormat>(req).await?.validate()?;
-    // The 404 answers before the regex check, as in Nest.
+    // The 404 answers before the regex check.
     if db::format_find(&st.db, id).await?.is_none() {
         return Err(format_not_found(id));
     }

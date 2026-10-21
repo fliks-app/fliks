@@ -34,17 +34,17 @@ const NAMES: [&str; 8] = [
     "0008_download_history_coverage",
 ];
 
-/// Rule 35's typed value against what node-pg handed the plugin (a `Date` as ISO text, bytes, parsed JSON).
+/// Rule 35's typed value against what the 4.x driver handed the plugin (a `Date` as ISO text, bytes, parsed JSON).
 fn same_value(sql: &str, got: &Value, columns: &Value, want: &Value) -> bool {
-    // C151: where node-pg crashed the plugin or lost the value, the host decodes the text or refuses the type.
-    let c151 = [
+    // Where the 4.x driver crashed the plugin or lost the value, the host decodes the text or refuses the type.
+    let special = [
         ("SELECT 'infinity'::timestamptz AS v", json!("infinity")),
         ("SELECT '-infinity'::timestamp AS v", json!("-infinity")),
         ("SELECT pg_advisory_unlock_all() AS v", Value::Null),
         ("SELECT now() - now() AS v", json!("error")),
         ("SELECT ARRAY[1,2]::int4[] AS v", json!("error")),
     ];
-    if let Some((_, v)) = c151.iter().find(|(s, _)| *s == sql) {
+    if let Some((_, v)) = special.iter().find(|(s, _)| *s == sql) {
         return got == v;
     }
     if want == "error" {
@@ -88,7 +88,7 @@ async fn db_driver() {
         )
         .unwrap()
     };
-    // A Node-era ledger is adopted: nothing re-runs.
+    // A 4.x ledger is adopted: nothing re-runs.
     call("/test/db/query", q(r#"CREATE TABLE "_migrations" ("name" varchar PRIMARY KEY, "appliedAt" timestamptz NOT NULL DEFAULT now())"#, json!([])), &[]).await;
     call(
         "/test/db/query",
@@ -164,7 +164,7 @@ async fn db_driver() {
         .await["rows"][0][0],
         0
     );
-    // The `db-driver` vectors: node-pg with the download plugin's parsers, as that plugin saw each value.
+    // The `db-driver` vectors: the 4.x driver with the download plugin's parsers, as that plugin saw each value.
     let file: Value =
         serde_json::from_str(include_str!("../../../../../fixtures/db-driver/cases.json")).unwrap();
     let mut failed = vec![];
@@ -360,7 +360,7 @@ async fn an_import_failing_at_commit_writes_nothing() {
     s.finish().await;
 }
 
-/// Rule 54 (C155): the import body is bounded at 64 MiB by the route, after authentication.
+/// Rule 54: the import body is bounded at 64 MiB by the route, after authentication.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn the_import_body_cap_is_the_routes_own() {
     let Some(s) = Scratch::create("impcap").await else {

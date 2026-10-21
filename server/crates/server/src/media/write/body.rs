@@ -63,7 +63,7 @@ impl Body {
         )
     }
 
-    /// `@IsNumber` on an int4 column: a non-integer or out-of-range value is a 400, never a 500 (C1).
+    /// `@IsNumber` on an int4 column: a non-integer or out-of-range value is a 400, never a 500.
     pub fn int(&self, k: &str) -> Result<Field<i32>, AppError> {
         let n = self.num(k)?;
         n.map(|o| {

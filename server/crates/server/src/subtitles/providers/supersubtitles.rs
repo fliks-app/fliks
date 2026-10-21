@@ -256,7 +256,7 @@ pub async fn download(sh: &Shared, c: &Candidate) -> Result<Vec<u8>, String> {
         }
     };
     let body = body_bytes(res, MAX_BODY).await?;
-    // C72: the site may answer a ZIP.
+    // The site may answer a ZIP.
     if body.starts_with(b"PK\x03\x04") {
         return super::zip::extract_subtitle(&body, true);
     }

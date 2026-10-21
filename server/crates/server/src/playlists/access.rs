@@ -110,7 +110,7 @@ pub async fn find(db: &PgPool, id: i32) -> sqlx::Result<Option<Playlist>> {
 }
 
 /// The playlist and the caller's role, 404 for a non-member and 403 below `min`.
-/// A share's role wins over the read-only grant of public / followed visibility (C13).
+/// A share's role wins over the read-only grant of public / followed visibility.
 pub async fn assert_role(
     db: &PgPool,
     user: i32,

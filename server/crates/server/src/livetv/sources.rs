@@ -42,7 +42,7 @@ fn not_found(id: i32) -> AppError {
     AppError::not_found(format!("Live TV source #{id} not found"))
 }
 
-/// `@IsPlaylistLocation()`: a managed upload passes, anything else must be an http(s) URL (C125).
+/// `@IsPlaylistLocation()`: a managed upload passes, anything else must be an http(s) URL.
 fn location(s: &str) -> bool {
     playlist_file::is_managed_upload(s) || lineup::is_fetchable_url(s)
 }
@@ -134,7 +134,7 @@ fn read_fields(body: &Value, update: bool) -> Result<Fields, AppError> {
         include: b.opt_string("includeGroupsPattern"),
         exclude: b.opt_string("excludeGroupsPattern"),
     };
-    // C1: a null on a NOT NULL column, and an integer the column cannot hold.
+    // A null on a NOT NULL column, and an integer the column cannot hold.
     for (key, null) in [
         ("name", f.name == Opt::Null),
         ("kind", f.kind == Opt::Null),
@@ -233,7 +233,7 @@ pub async fn update(
         "excludeGroupsPattern",
     )
     .map_err(AppError::bad_request)?;
-    // C122: a value that really changes invalidates what the last sync learned.
+    // A value that really changes invalidates what the last sync learned.
     let changed = !same(&f.url, &Some(stored.url.clone()))
         || !same(&f.kind, &Some(stored.kind.clone()))
         || !same(&f.username, &stored.username)
@@ -242,7 +242,7 @@ pub async fn update(
         || !same(&f.referer, &stored.referer)
         || !same(&f.include, &stored.include_groups_pattern)
         || !same(&f.exclude, &stored.exclude_groups_pattern);
-    // F5/F71: blank or absent keeps the password, null clears.
+    // Blank or absent keeps the password, null clears.
     let password_set =
         matches!(f.password, Opt::Null) || matches!(&f.password, Opt::Val(v) if !v.is_empty());
     let row: Source = sqlx::query_as(&format!(
@@ -301,7 +301,7 @@ pub async fn remove(
         .bind(id)
         .fetch_all(&mut *tx)
         .await?;
-    // C1: a source deleted by a concurrent request.
+    // A source deleted by a concurrent request.
     let gone = sqlx::query("DELETE FROM livetv_sources WHERE id = $1")
         .bind(id)
         .execute(&mut *tx)

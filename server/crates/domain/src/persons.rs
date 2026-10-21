@@ -7,8 +7,8 @@ pub fn needs_refresh(refreshed_at_ms: Option<i64>, now_ms: i64) -> bool {
     refreshed_at_ms.is_none_or(|t| now_ms - t > REFRESH_AFTER_MS)
 }
 
-/// `to_tsquery('simple', ..)` text for `q`: every letter/digit/`-`/`_` run is a quoted prefix term, all ANDed
-/// (C30). `None` when no usable word is left; operators in `q` are never interpreted.
+/// `to_tsquery('simple', ..)` text for `q`: every letter/digit/`-`/`_` run is a quoted prefix term, all ANDed.
+/// `None` when no usable word is left; operators in `q` are never interpreted.
 pub fn tsquery(q: &str) -> Option<String> {
     let runs: Vec<String> = q
         .split(|c: char| !(c.is_alphanumeric() || c == '-' || c == '_'))
@@ -26,7 +26,7 @@ pub struct Owned {
     pub external_id: i64,
 }
 
-/// The owned media of a credit, matched on `(type, id)` (C31); the last row wins.
+/// The owned media of a credit, matched on `(type, id)`; the last row wins.
 pub fn link(owned: &[Owned], external_id: i64, is_series: bool) -> Option<i32> {
     owned
         .iter()

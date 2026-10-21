@@ -1,4 +1,4 @@
-//! Request DTOs of the importer routes (`importers.md` rules 2-3), with class-validator's messages.
+//! Request DTOs of the importer routes (`importers.md` rules 2-3), with class-validator style messages.
 use crate::http::{AppError, validate::from_value};
 use fliks_domain::arr_import::PathMapping;
 use serde::Deserialize;

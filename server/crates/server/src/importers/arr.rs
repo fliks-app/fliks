@@ -77,7 +77,7 @@ fn int_of(v: &Value, k: &str) -> Option<i32> {
         .and_then(|n| i32::try_from(n).ok())
 }
 
-/// A TMDB id taken from a JSON number or numeric string; anything below 1 is not an id (C33).
+/// A TMDB id taken from a JSON number or numeric string; anything below 1 is not an id.
 fn tmdb_id(v: &Value) -> Option<i32> {
     let n = match v.get("tmdbId")? {
         Value::Number(n) => n.as_f64().filter(|f| f.fract() == 0.0)? as i64,

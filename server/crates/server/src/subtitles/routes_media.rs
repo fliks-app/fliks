@@ -506,7 +506,7 @@ pub async fn sync_queue(State(st): State<AppState>, a: Authed) -> Res<Json<Vec<V
     if every {
         return Ok(Json(all));
     }
-    // F50: only the items of media in the caller's libraries.
+    // Only the items of media in the caller's libraries.
     let mut out = vec![];
     for item in all {
         let media = item["subject"]["mediaId"].as_i64().map(|m| m as i32);

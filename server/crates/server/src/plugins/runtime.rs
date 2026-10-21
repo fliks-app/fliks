@@ -236,7 +236,7 @@ pub struct Ctx {
     era: u64,
     mem: usize,
     mem_max: usize,
-    /// Set by a `db` call that failed `unavailable` during the current export (C109).
+    /// Set by a `db` call that failed `unavailable` during the current export.
     pub db_unavailable: bool,
 }
 
@@ -302,7 +302,7 @@ impl Drop for Inst {
 pub enum CallError {
     /// Not ready, lane in backoff, queue full or waited too long, stopped: the proxy answers 503.
     Unavailable(String),
-    /// The deadline passed; the instance was dropped and the crash counted (C105).
+    /// The deadline passed; the instance was dropped and the crash counted.
     Timeout,
     /// A trap; the instance was dropped and the crash counted.
     Crashed(String),
@@ -354,7 +354,7 @@ struct Sup {
     ready_since: Option<Instant>,
     misses: u32,
     message: String,
-    /// `start` failed only because the database was unreachable (C109).
+    /// `start` failed only because the database was unreachable.
     db_down: bool,
     /// A core instance is being created: a second crash must not start another.
     recreating: bool,

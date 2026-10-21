@@ -1,5 +1,4 @@
 {
-  "deviation": "C59",
   "fs": [
     {
       "from": "base.mkv",
@@ -17,7 +16,7 @@
     "$..date",
     "$..queuedAt"
   ],
-  "name": "subtitles-provider-deviation-c59-non-numeric-min-score",
+  "name": "subtitles-provider-non-numeric-min-score",
   "seed": "subtitles-work",
   "steps": [
     {

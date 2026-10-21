@@ -1,4 +1,4 @@
-//! Query-string DTOs of the media routes (`media-query.md` rules 4-9): Nest's coercions, C1 for what Postgres rejected.
+//! Query-string DTOs of the media routes (`media-query.md` rules 4-9): JS-style number coercion, a 400 for what Postgres rejects.
 use crate::http::AppError;
 use fliks_domain::media::query::{is_iso8601, js_number};
 
@@ -91,7 +91,7 @@ impl<'a> Reader<'a> {
         }
     }
 
-    /// A number bound to an int4 column: Nest answered 500 for anything else (C1).
+    /// A number bound to an int4 column: anything else is a 400.
     fn int(&mut self, key: &str) -> Option<i32> {
         let n = self.number(key)?;
         if n.fract() == 0.0 && (f64::from(i32::MIN)..=f64::from(i32::MAX)).contains(&n) {

@@ -2,7 +2,6 @@
   "capture": {
     "mid": "$.steps[1].body.id"
   },
-  "deviation": null,
   "engine": "down",
   "ignore": [
     "$..createdAt",

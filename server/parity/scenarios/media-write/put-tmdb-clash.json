@@ -1,5 +1,4 @@
 {
-  "deviation": "C1",
   "name": "media-write-put-tmdb-clash",
   "seed": "ingest",
   "steps": [

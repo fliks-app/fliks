@@ -46,7 +46,7 @@ impl Lifecycle {
         );
     }
 
-    /// Inside the media delete's transaction, before the row goes (C48).
+    /// Inside the media delete's transaction, before the row goes.
     pub async fn on_media_removed(
         &self,
         tx: &mut PgConnection,
@@ -216,7 +216,7 @@ fn obj(v: serde_json::Value) -> serde_json::Map<String, serde_json::Value> {
 }
 
 /// `isRequestScopeCovered` for a series: every monitored episode of the monitored scoped seasons is on
-/// disk; a scope with nothing to check is not covered (code wins over the source comment, Q9).
+/// disk; a scope with nothing to check is not covered.
 pub(super) fn scope_covered(scope: Option<&[i64]>, eps: &[db::Ep]) -> bool {
     let mut seasons: Vec<i32> = eps.iter().map(|e| e.season_number).collect();
     seasons.dedup();

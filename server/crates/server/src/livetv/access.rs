@@ -257,7 +257,7 @@ pub async fn set_grants(
     admin(&a)?;
     let id = int_param(&id.0)?;
     let groups = groups_body(&body)?;
-    // C135: an unknown user is a 404 before any write.
+    // An unknown user is a 404 before any write.
     let known: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM users WHERE id = $1)")
         .bind(id)
         .fetch_one(&st.db)

@@ -474,7 +474,7 @@ async fn max_seasons_counts_the_requested_scope_else_the_show(pool: PgPool) {
     let (_, r) = call(&c, "POST", "/api/requests", &c.user, series(32, json!([]))).await;
     assert_eq!(
         r["status"], "pending",
-        "an empty scope is the whole show of 5 seasons (C115)"
+        "an empty scope is the whole show of 5 seasons"
     );
     let (_, r) = call(&c, "POST", "/api/requests", &c.user, movie(33)).await;
     assert_eq!(r["status"], "pending", "the rule is for series");
@@ -486,7 +486,7 @@ async fn a_failed_import_aborts_the_create(pool: PgPool) {
     rule(&c, json!({})).await;
     c.tmdb.down.lock().unwrap().insert(40);
     let (s, _) = call(&c, "POST", "/api/requests", &c.user, movie(40)).await;
-    assert_eq!(s, 500, "TMDB answering 503 is Nest's generic 500");
+    assert_eq!(s, 500, "TMDB answering 503 is a generic 500");
     let (_, list) = call(&c, "GET", "/api/requests", &c.admin, json!(null)).await;
     assert_eq!(list["total"], 0, "nothing inserted");
 }

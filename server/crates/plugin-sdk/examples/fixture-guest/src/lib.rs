@@ -1,5 +1,5 @@
-//! Test and parity fixture: the parity routes behave like the Node fixture of
-//! `server/parity/plugins/`; `/test/*` routes exercise one host behaviour each.
+//! Test and parity fixture: the parity routes follow `server/parity/plugins/`;
+//! `/test/*` routes exercise one host behaviour each.
 
 use fliks_plugin_sdk::bindings::fliks::plugin::types as t;
 use fliks_plugin_sdk::bindings::wasi::http::types::Method;

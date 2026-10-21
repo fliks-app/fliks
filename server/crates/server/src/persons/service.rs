@@ -111,7 +111,7 @@ where
     };
     let v = call(other).await.map_err(|e| (other, e))?;
     tracing::info!("person {} is known to {}, pinning", p.id, other.name());
-    // C31: another row may already hold that (provider, tmdbId): keep this one's provider.
+    // Another row may already hold that (provider, tmdbId): keep this one's provider.
     match sqlx::query!(
         "UPDATE persons SET provider = $2 WHERE id = $1",
         p.id,
@@ -178,7 +178,7 @@ pub async fn ensure_details_loaded(
     }
 }
 
-/// F40 + F22: the cast (or crew) rows of a person for media in libraries the caller can read.
+/// The cast (or crew) rows of a person for media in libraries the caller can read.
 async fn credit_rows(
     st: &AppState,
     a: &Authed,

@@ -112,7 +112,7 @@ fn profile(id: Option<i32>) -> Option<i32> {
     id.filter(|i| *i != 0)
 }
 
-/// Body parsing after the policy check, as Nest's guards run before its pipes.
+/// Body parsing after the policy check, as 4.x runs guards before validation.
 async fn body<T: serde::de::DeserializeOwned>(req: Request) -> Result<T, AppError> {
     let ValidJson(dto) = ValidJson::<T>::from_request(req, &()).await?;
     Ok(dto)
@@ -122,7 +122,7 @@ fn id_of(PathParams(raw): PathParams<String>) -> Result<i32, AppError> {
     int_param(&raw)
 }
 
-/// F20: a caller whose accessible ids lack `id` gets the same 404 as for a missing library.
+/// A caller whose accessible ids lack `id` gets the same 404 as for a missing library.
 async fn reachable(db: &PgPool, a: &Authed, id: i32) -> Result<(), AppError> {
     if accessible_library_ids(db, a).await?.contains(&id) {
         Ok(())
@@ -205,7 +205,7 @@ pub async fn create(
     .fetch_one(&mut *tx)
     .await
     .map_err(db::constraint)?;
-    // Access before path: a rejected request must not leave a directory behind (F19).
+    // Access before path: a rejected request must not leave a directory behind.
     if let Some(ids) = dto.user_ids.filter(|ids| !ids.is_empty()) {
         replace_access(&mut tx, id, &ids).await?;
     }
@@ -325,7 +325,7 @@ async fn patch(c: &mut PgConnection, id: i32, dto: &UpdateDto) -> Result<(), sql
     q.build().execute(c).await.map(drop)
 }
 
-/// Replace-all of a library's access rows; unknown or duplicate user ids are 400 (C1).
+/// Replace-all of a library's access rows; unknown or duplicate user ids are 400.
 async fn replace_access(c: &mut PgConnection, id: i32, ids: &[i32]) -> Result<(), AppError> {
     if ids.iter().collect::<HashSet<_>>().len() != ids.len() {
         return Err(bad("userIds must not contain duplicate values"));

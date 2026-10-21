@@ -472,7 +472,7 @@ async fn markers_edl_and_a_failing_markers_query(pool: PgPool) {
         .await
         .unwrap();
     let (s, b) = info(&c, "").await;
-    assert_eq!(s, 201, "C6");
+    assert_eq!(s, 201);
     assert!(b.get("markers").is_none());
 }
 

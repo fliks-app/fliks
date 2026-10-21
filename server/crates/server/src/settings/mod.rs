@@ -1,4 +1,4 @@
-//! `/api/settings/*` (`docs/spec/settings.md`): flat KV store over `app_settings`, secrets redacted (F5).
+//! `/api/settings/*` (`docs/spec/settings.md`): flat KV store over `app_settings`, secrets redacted.
 pub mod checklist;
 mod db;
 mod routes;

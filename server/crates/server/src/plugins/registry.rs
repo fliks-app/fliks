@@ -673,7 +673,7 @@ fn validate_routes(routes: &[Value], declared: &BTreeSet<String>) -> Result<Vec<
     Ok(out)
 }
 
-/// Rule 9: `croner` with 5 fields, 6 with seconds, or a nickname such as `@daily` (C150).
+/// Rule 9: `croner` with 5 fields, 6 with seconds, or a nickname such as `@daily`.
 pub fn plugin_cron(cron: &str) -> Result<(), String> {
     if !cron.starts_with('@') && !(5..=6).contains(&cron.split_whitespace().count()) {
         return Err("expected 5 or 6 fields".into());

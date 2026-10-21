@@ -1435,7 +1435,7 @@ mod sessions {
         assert_eq!(
             ups[0]["headers"],
             json!({"User-Agent": "EntryAgent/1", "Referer": "http://ref/"}),
-            "the entry's agent wins (C140)"
+            "the entry's agent wins"
         );
         assert_eq!(ups[0]["probedVideoCodec"], "h264");
         assert_eq!(
@@ -2432,7 +2432,7 @@ mod sessions {
         assert_eq!(
             resolve(c, &sid, w.who.id, &["livetv.read"]).await,
             Ok(false),
-            "so does a disabled source (C136)"
+            "so does a disabled source"
         );
     }
 
@@ -2446,7 +2446,7 @@ mod sessions {
         assert_eq!(
             resolve(c, &sid, stranger, &["livetv.read"]).await,
             Ok(true),
-            "the engine answers 403 itself (F75)"
+            "the engine answers 403 itself"
         );
         assert_eq!(
             resolve(c, &sid, w.who.id, &["livetv.read"]).await,

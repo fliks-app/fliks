@@ -37,7 +37,7 @@ pub async fn installed_ids(core: &PgPool) -> sqlx::Result<Vec<String>> {
         .await
 }
 
-/// Caller-owned settings with the prefix stripped; null values are absent (F68).
+/// Caller-owned settings with the prefix stripped; null values are absent.
 pub async fn config_for(
     core: &PgPool,
     id: &str,

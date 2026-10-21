@@ -80,7 +80,7 @@ fn cron_validate() {
         include_str!("../../../../fixtures/cron-validate/cases.json"),
         |i| {
             let cron = i["cron"].as_str().unwrap();
-            // C150: croner, not cron-parser; these strings are judged the other way.
+            // These strings are judged the other way.
             let flipped = [
                 "0 0 31 4 *",
                 "",
@@ -101,7 +101,7 @@ fn webhook_target() {
         include_str!("../../../../fixtures/webhook-target/cases.json"),
         |i| {
             let m = json!({"events": [i], "ui": {"configPages": [{"kind": "form", "fields": [{"key": "url"}]}]}});
-            // F77: Nest never checked an IPv6 literal (`hostname` keeps its brackets).
+            // 4.x never checked an IPv6 literal (`hostname` keeps its brackets).
             let v6 = [
                 "https://[::1]/x",
                 "https://[fd00::1]/x",

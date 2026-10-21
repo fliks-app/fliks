@@ -1,5 +1,4 @@
 {
-  "deviation": null,
   "name": "imports-sonarr-test-unknown-key",
   "seed": "importers",
   "steps": [

@@ -152,7 +152,7 @@ pub struct Lookup {
     pub library_id: i32,
 }
 
-/// Nest answers any provider failure with its generic 500; the reason is only logged.
+/// Any provider failure is a generic 500; the reason is only logged.
 fn fail(p: Provider, e: Upstream) -> AppError {
     tracing::warn!("metadata request failed on {}: {e}", p.name());
     AppError::plain(

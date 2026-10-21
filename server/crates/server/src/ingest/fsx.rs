@@ -11,7 +11,7 @@ use std::{
 pub struct Root(PathBuf);
 
 impl Root {
-    /// The root must exist and be a directory: nothing ever creates it here (C51).
+    /// The root must exist and be a directory: nothing ever creates it here.
     pub fn open(library_path: &str) -> io::Result<Root> {
         let c = dunce::canonicalize(library_path)?;
         if !c.is_dir() {
@@ -69,7 +69,7 @@ fn resolve_existing(p: &Path) -> Option<PathBuf> {
     }
 }
 
-/// A stored `relativePath` as path components: `\` read as `/`, never absolute, `..` or NUL (F45).
+/// A stored `relativePath` as path components: `\` read as `/`, never absolute, `..` or NUL.
 pub fn safe_rel(rel: &str) -> Option<PathBuf> {
     let rel = rel.replace('\\', "/");
     if rel.is_empty() || rel.starts_with('/') || rel.contains('\0') {
@@ -100,7 +100,7 @@ pub fn rel_under(dir: &Path, abs: &Path) -> Option<String> {
     (!parts.is_empty()).then(|| parts.join("/"))
 }
 
-/// A source file: resolved through symlinks and required to be a regular file (F47).
+/// A source file: resolved through symlinks and required to be a regular file.
 pub fn regular_source(p: &Path) -> io::Result<(PathBuf, fs::Metadata)> {
     let real = dunce::canonicalize(p)?;
     let meta = fs::metadata(&real)?;
@@ -130,7 +130,7 @@ pub fn tmp_name() -> String {
     )
 }
 
-/// `rename` that fails with `AlreadyExists` instead of replacing `to` (C52).
+/// `rename` that fails with `AlreadyExists` instead of replacing `to`.
 pub fn rename_noreplace(from: &Path, to: &Path) -> io::Result<()> {
     #[cfg(target_os = "linux")]
     {
@@ -340,7 +340,7 @@ pub enum Unlinked {
     Missing,
 }
 
-/// The contained unlink of W7/W8/W14/W16 (F45): the parent's realpath under the root (the root
+/// The contained unlink: the parent's realpath under the root (the root
 /// itself for a root-level movie), never a directory; a symlink is removed, not its target.
 pub fn unlink_contained(root: &Root, path: &Path) -> io::Result<Unlinked> {
     let parent = path.parent().ok_or(io::ErrorKind::InvalidInput)?;

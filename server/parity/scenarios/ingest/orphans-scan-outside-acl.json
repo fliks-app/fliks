@@ -1,5 +1,4 @@
 {
-  "deviation": "F48",
   "name": "ingest-orphans-scan-outside-acl",
   "seed": "ingest",
   "steps": [

@@ -165,7 +165,7 @@ async fn login_and_refresh_rotate(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
-async fn register_requires_users_manage_f1(pool: PgPool) {
+async fn register_requires_users_manage(pool: PgPool) {
     let c = ctx(pool.clone()).await;
     let plain = user(&pool, "plain", Some("[]"), false, true).await;
     let mgr = user(&pool, "mgr", Some(r#"["users.manage"]"#), false, true).await;
@@ -207,7 +207,7 @@ async fn register_requires_users_manage_f1(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
-async fn me_stream_scope_is_rejected_f8_and_tokens(pool: PgPool) {
+async fn me_stream_scope_is_rejected_and_tokens(pool: PgPool) {
     let c = ctx(pool.clone()).await;
     let id = user(&pool, "bob", Some("[]"), false, true).await;
     let h = bearer(&c, id, "bob");

@@ -224,7 +224,7 @@ pub fn language_from_name(name: &str) -> String {
         .map_or(lower, |l| l.iso_code.to_owned())
 }
 
-/// `{quality:{id,name}, allowed, items?}` of a remote profile; absent members are tolerated like in Nest.
+/// `{quality:{id,name}, allowed, items?}` of a remote profile; absent members are tolerated.
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct RemoteItem {
     #[serde(default, deserialize_with = "lenient")]

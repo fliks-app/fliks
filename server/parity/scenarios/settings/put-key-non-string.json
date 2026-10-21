@@ -1,5 +1,4 @@
 {
-  "deviation": null,
   "name": "settings-put-key-non-string",
   "seed": "base",
   "steps": [

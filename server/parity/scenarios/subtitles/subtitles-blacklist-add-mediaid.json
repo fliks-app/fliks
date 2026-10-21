@@ -1,13 +1,10 @@
 {
-  "deviation": [
-    "C58"
-  ],
   "ignore": [
     "$..createdAt",
     "$..updatedAt",
     "$..id"
   ],
-  "name": "subtitles-deviation-c58-blacklist-add-mediaid",
+  "name": "subtitles-blacklist-add-mediaid",
   "seed": "subtitles",
   "steps": [
     {

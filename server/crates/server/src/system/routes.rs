@@ -22,7 +22,7 @@ use std::{collections::HashMap, time::Duration};
 use tower::ServiceExt;
 use tower_http::services::ServeFile;
 
-/// F36: a dump holds every secret, so the backup routes need `manage:all`.
+/// A dump holds every secret, so the backup routes need `manage:all`.
 fn manage_all(a: &Authed) -> Result<(), AppError> {
     a.require(Action::Manage, Subject::All)
 }
@@ -196,7 +196,7 @@ async fn detached<T: Send + 'static>(
         .map_err(|e| AppError::internal(e.to_string()))?
 }
 
-/// Express `res.download`: `send`'s Range, `Last-Modified` and length, plus a weak ETag and the attachment name.
+/// A download: `send`'s Range, `Last-Modified` and length, plus a weak ETag and the attachment name.
 #[utoipa::path(get, path = "/api/system/backups/{name}", responses((status = 200)))]
 pub async fn backup_download(
     a: Authed,

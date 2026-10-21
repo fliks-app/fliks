@@ -1,5 +1,4 @@
 {
-  "deviation": "F1",
   "name": "auth-register-duplicate",
   "seed": "base",
   "steps": [

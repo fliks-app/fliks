@@ -1,4 +1,4 @@
-//! Plugin export and import (`plugins.md` rules 53-54, C102, C103), under `SET LOCAL ROLE` of the
+//! Plugin export and import (`plugins.md` rules 53-54), under `SET LOCAL ROLE` of the
 //! plugin's role: its triggers, defaults and policies are plugin code and stay in the rule-35 sandbox.
 use super::Plugins;
 use super::db::{database_oid, role, schema};
@@ -212,7 +212,7 @@ impl Plugins {
             .app()
             .ok_or_else(|| internal("no application state"))?
             .clone();
-        // C112: no restore may replay under an import, nor a second import run beside it.
+        // No restore may replay under an import, nor a second import run beside it.
         let _claim = st
             .jobs
             .claim(&format!("plugin-import:{id}"))

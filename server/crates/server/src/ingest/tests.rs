@@ -512,7 +512,7 @@ async fn relink_in_place_is_contained(pool: PgPool) {
         assert_eq!(s, 400, "{bad}");
     }
     assert_eq!(count(&c, "SELECT count(*) FROM media").await, 1);
-    // Transfers are a library manager's action (F48).
+    // Transfers are a library manager's action.
     let mut t = body("X", c.dir.join("outside/Out.mkv"));
     t["transfer"] = json!("copy");
     let (s, _) = call(&c, "POST", url, &c.editor, t).await;

@@ -179,7 +179,7 @@ async fn validation_conflicts_and_acl(pool: PgPool) {
     assert_eq!(s, 400);
     let (s, _) = call(&c, "GET", "/api/libraries/007", &c.admin, json!(null)).await;
     assert_eq!(s, 400);
-    // non-admin with settings.access: F20 hides libraries outside its rows
+    // non-admin with settings.access: the ACL hides libraries outside its rows
     let (s, b) = call(&c, "GET", "/api/libraries/1", &c.user, json!(null)).await;
     assert_eq!(
         (s, b["message"].clone()),

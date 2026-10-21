@@ -62,7 +62,7 @@ pub async fn start(
         source_stream_index: Some(stream),
         ..New::default()
     };
-    // C63: one run per source track, decided under an advisory lock so two requests cannot both pass.
+    // One run per source track, decided under an advisory lock so two requests cannot both pass.
     let mut tx = st.db.begin().await?;
     sqlx::query("SELECT pg_advisory_xact_lock(hashtext($1))")
         .bind(format!("ocr:{file_id}:{stream}"))
@@ -214,7 +214,7 @@ async fn try_run(
     let rel = dirs
         .write_sidecar_ocr(&file.relative_path, &suffix, cleaned.as_bytes())
         .map_err(|e| e.text())?;
-    // C61: one statement; no row back means the placeholder was deleted, so the file goes too.
+    // One statement; no row back means the placeholder was deleted, so the file goes too.
     let attached: Option<i32> = sqlx::query_scalar(
         r#"UPDATE subtitle_files SET "filePath" = $2, "hearingImpaired" = $3, status = 'downloaded' WHERE id = $1 RETURNING id"#,
     )

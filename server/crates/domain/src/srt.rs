@@ -66,7 +66,7 @@ pub fn decode_text(bytes: &[u8]) -> String {
 mod tests {
     use super::decode_text;
 
-    // C65: BOM, then UTF-8, then Windows-1252; never lossy.
+    // BOM, then UTF-8, then Windows-1252; never lossy.
     #[test]
     fn text_decodes_bom_then_utf8_then_windows_1252() {
         assert_eq!(decode_text(b"caf\xE9"), "café");

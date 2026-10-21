@@ -1,4 +1,4 @@
-//! The cron runner (`scheduler.md` rules 8, 19, 26) and the in-process "already running" set (C22).
+//! The cron runner (`scheduler.md` rules 8, 19, 26) and the in-process "already running" set.
 use super::{audit, bodies, cron, names};
 use crate::state::AppState;
 use crate::sync::MutexExt;

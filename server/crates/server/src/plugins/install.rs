@@ -1,4 +1,4 @@
-//! Install, upgrade, uninstall, enable, disable, restart (`plugins.md` rules 12, 17-23, C100, C108).
+//! Install, upgrade, uninstall, enable, disable, restart (`plugins.md` rules 12, 17-23).
 use super::manifest::{self, Inspected};
 use super::packages::{self, Package};
 use super::{Plugins, archive::Refusal};
@@ -112,7 +112,7 @@ pub struct Summary {
     status_message: String,
 }
 
-/// C108: an upgrade from a `pluginApi` 1 package by the same key carries the grant forward.
+/// An upgrade from a `pluginApi` 1 package by the same key carries the grant forward.
 pub fn carries_grant(existing: &Package, new_signed_by: Option<&str>) -> bool {
     existing.manifest["pluginApi"].as_f64() == Some(1.0)
         && existing.verified_by_key_id.is_some()
@@ -251,7 +251,7 @@ impl Plugins {
     }
 
     /// Rule 19: denylist, provisioning, the row, then registration.
-    /// C112: no install, upgrade, enable or restart while a restore holds its claim.
+    /// No install, upgrade, enable or restart while a restore holds its claim.
     fn refuse_while_restoring(&self) -> Result<(), InstallError> {
         if self.restoring() {
             return Err(ie(

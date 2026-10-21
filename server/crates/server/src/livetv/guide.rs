@@ -71,7 +71,7 @@ fn http_url(s: &str) -> bool {
     lineup::is_fetchable_url(s)
 }
 
-/// C131: what the merged row of a create or an update must satisfy.
+/// What the merged row of a create or an update must satisfy.
 fn row_errors(
     url: &Option<String>,
     interval: i64,
@@ -103,7 +103,7 @@ fn row_errors(
     out
 }
 
-/// C165: what `kind` needs, reported only for the fields the payload sets (a stored row is never re-judged).
+/// What `kind` needs, reported only for the fields the payload sets (a stored row is never re-judged).
 fn link_errors(
     kind: Option<&str>,
     url: Option<&str>,
@@ -250,7 +250,7 @@ pub async fn update(
     let language = b.opt_string("language");
     let priority = b.opt_int("priority", None);
     let enabled = b.opt_bool("enabled");
-    // C1: a null on a NOT NULL column.
+    // A null on a NOT NULL column is a 400.
     for (key, null) in [
         ("name", name == Opt::Null),
         ("kind", kind == Opt::Null),
@@ -390,7 +390,7 @@ pub async fn sync(st: &AppState, id: i32) -> Result<GuideSyncResult, SyncError> 
     run_claimed(st, id).await
 }
 
-/// The async twin of `sync` (C164): the queued row of a sync that runs on.
+/// The async twin of `sync`: the queued row of a sync that runs on.
 pub async fn start(st: &AppState, id: i32) -> Result<Command, SyncError> {
     let Some(flight) = Flight::claim(st, "LiveTvGuideSync", id) else {
         return Err(SyncError::Running);
@@ -661,7 +661,7 @@ async fn run(st: &AppState, g: &GuideSource) -> Result<GuideSyncResult, String> 
     while let Some(item) = items.recv().await {
         match item {
             Item::Channel(c) => {
-                // C129: a repeated channel id keeps its first occurrence.
+                // A repeated channel id keeps its first occurrence.
                 if !channels.iter().any(|x| x.id == c.id) {
                     channels.push(c);
                 }

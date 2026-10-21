@@ -57,7 +57,7 @@ pub(super) fn parse_int(raw: &str) -> Option<i64> {
     Some(if neg { -n } else { n })
 }
 
-/// C1: a `startAt` that is not a finite number is a 400, not `NaN` on the wire.
+/// A `startAt` that is not a finite number is a 400, not `NaN` on the wire.
 pub(super) fn parse_query(pairs: &[(String, String)]) -> Result<Params, AppError> {
     let first = |k: &str| pairs.iter().find(|(n, _)| n == k).map(|(_, v)| v.as_str());
     let token_param: Vec<String> = ["token", "sid"]

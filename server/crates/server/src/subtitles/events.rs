@@ -1,4 +1,4 @@
-//! `subtitle.*` events go to the media's viewers (F49) and their notifications and Emby refreshes.
+//! `subtitle.*` events go to the media's viewers and their notifications and Emby refreshes.
 use crate::{events::SseEvent, state::AppState};
 use serde_json::{Map, Value};
 

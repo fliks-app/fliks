@@ -85,7 +85,7 @@ fn stem_of(p: &Path) -> String {
     transfer::split_ext(&file_name(p)).0.to_owned()
 }
 
-/// The caller holds the media's C54 lock (`guard`).
+/// The caller holds the media's lock (`guard`).
 pub async fn ingest(
     st: &AppState,
     _guard: &OwnedMutexGuard<()>,
@@ -397,7 +397,7 @@ impl Ctx<'_> {
         .map_err(|e| e.to_string())
     }
 
-    /// `<base> (n)<ext>` for n in 2..=99; `None` when every one is taken (C52).
+    /// `<base> (n)<ext>` for n in 2..=99; `None` when every one is taken.
     async fn free_name(&self, dir: &Path, base: &str, ext: &str) -> Result<Option<String>, String> {
         for n in 2..=99 {
             let Ok(name) = file_component(&format!("{base} ({n})"), ext) else {

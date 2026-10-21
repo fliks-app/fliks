@@ -1,5 +1,4 @@
 {
-  "deviation": "F50",
   "fs": [
     {
       "from": "base.mkv",
@@ -17,7 +16,7 @@
     "$..date",
     "$..queuedAt"
   ],
-  "name": "subtitles-provider-deviation-f50-activity-by-library",
+  "name": "subtitles-provider-activity-by-library",
   "seed": "subtitles-work",
   "steps": [
     {

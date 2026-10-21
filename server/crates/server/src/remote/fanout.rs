@@ -20,7 +20,7 @@ type Cached = Mutex<HashMap<String, (Vec<i32>, Instant)>>;
 struct FanOut {
     db: PgPool,
     hub: Hub,
-    // Never invalidated on grant changes, like Nest; keys are one per device or owner seen.
+    // Never invalidated on grant changes; keys are one per device or owner seen.
     cache: Cached,
 }
 

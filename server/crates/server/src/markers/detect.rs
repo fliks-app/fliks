@@ -24,7 +24,7 @@ const COMMAND: &str = "IntroDetection";
 /// `(current, total, message)`.
 type Progress<'a> = Option<&'a (dyn Fn(i64, i64, &str) + Send + Sync)>;
 
-/// C40: a positive finite number, else the default.
+/// A positive finite number, else the default.
 pub fn positive_or(value: Option<&str>, default: f64) -> f64 {
     value
         .and_then(|v| v.trim().parse::<f64>().ok())

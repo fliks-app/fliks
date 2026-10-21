@@ -1,5 +1,4 @@
 {
-  "deviation": "C2",
   "name": "settings-bulk-put-protected-key-writes-nothing",
   "seed": "base",
   "steps": [

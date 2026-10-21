@@ -203,7 +203,7 @@ fn record_qoe(st: &AppState, user: i32, s: &LiveSession, qoe: &Value) {
     }
 }
 
-/// Rule 11: the stored presence plus the body fields Nest echoes as received.
+/// Rule 11: the stored presence plus the body fields echoed as received.
 fn remote_state(target_id: String, s: &LiveSession, media: i32, b: &Value) -> SseEvent {
     SseEvent::RemoteState {
         target_id,

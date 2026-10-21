@@ -2,7 +2,6 @@
   "capture": {
     "st": "$.steps[0].body.streamToken"
   },
-  "deviation": null,
   "engine": "up",
   "ignore": [
     "$..createdAt",

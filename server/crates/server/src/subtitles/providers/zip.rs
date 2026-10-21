@@ -1,7 +1,7 @@
 //! Subtitle extraction from a ZIP body (`zip-utils.ts`, Subsynchro's variant), over the central directory.
 use miniz_oxide::inflate::decompress_to_vec_with_limit;
 
-/// Largest subtitle taken out of an archive (`SUBTITLE_UPLOAD_MAX_BYTES`, F56).
+/// Largest subtitle taken out of an archive (`SUBTITLE_UPLOAD_MAX_BYTES`).
 pub const MAX_EXTRACTED: usize = 5 * 1024 * 1024;
 const NO_SUBTITLE: &str = "No subtitle file found in ZIP archive";
 

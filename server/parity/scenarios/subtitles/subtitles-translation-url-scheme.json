@@ -1,7 +1,4 @@
 {
-  "deviation": [
-    "F57"
-  ],
   "ignore": [
     "$..createdAt",
     "$..updatedAt",
@@ -9,7 +6,7 @@
     "$..queuedAt",
     "$.id"
   ],
-  "name": "subtitles-deviation-f57-translation-url-scheme",
+  "name": "subtitles-translation-url-scheme",
   "seed": "subtitles",
   "steps": [
     {

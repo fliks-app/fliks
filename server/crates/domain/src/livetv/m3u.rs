@@ -31,7 +31,7 @@ pub struct M3uPlaylist {
     pub entries: Vec<M3uEntry>,
 }
 
-/// Provider text never carries U+0000: Postgres rejects it (C128).
+/// Provider text never carries U+0000: Postgres rejects it.
 fn clean(s: &str) -> String {
     s.replace('\0', "")
 }

@@ -47,7 +47,7 @@ impl TestResult {
     }
 }
 
-/// Downloaded bodies are capped (F56).
+/// Downloaded bodies are capped.
 pub const MAX_BODY: usize = 10 * 1024 * 1024;
 
 pub async fn body_bytes(mut res: Response, cap: usize) -> Result<Vec<u8>, String> {
@@ -216,7 +216,7 @@ impl<'a> Provider<'a> {
         }
     }
 
-    /// The probe verdict, its detail masked (F54) and logged (rule 40).
+    /// The probe verdict, its detail masked and logged (rule 40).
     pub async fn test(&self) -> TestResult {
         let mut r = self.probe().await;
         r.detail = r.detail.map(|d| redact(&d, &self.settings));
@@ -249,7 +249,7 @@ pub fn setting<'a>(s: &'a Value, key: &str) -> Option<&'a str> {
     s.get(key).and_then(Value::as_str)
 }
 
-/// Transport errors as the text a provider failure shows (never the URL, F54).
+/// Transport errors as the text a provider failure shows (never the URL).
 pub fn net(e: reqwest::Error) -> String {
     if e.is_timeout() {
         return "timeout".into();
@@ -257,7 +257,7 @@ pub fn net(e: reqwest::Error) -> String {
     crate::outbound::error_text(e)
 }
 
-/// Settings secrets that must not travel in an error text (F54).
+/// Settings secrets that must not travel in an error text.
 pub fn redact(msg: &str, settings: &Value) -> String {
     ["apiKey", "password"]
         .iter()

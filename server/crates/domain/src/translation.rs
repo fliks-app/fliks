@@ -11,7 +11,7 @@ pub const REQUEST_TIMEOUT_MS: u64 = 240_000;
 pub const REGISTER_PROBE_MAX_OUTPUT_TOKENS: u64 = 500;
 const CHARS_PER_TOKEN: usize = 4;
 const MARKER_TOKENS: u64 = 4;
-/// Terminal upstream bodies are cut here (F57); the quota and size tests read the whole body.
+/// Terminal upstream bodies are cut here; the quota and size tests read the whole body.
 pub const UPSTREAM_TEXT: usize = 300;
 const MAX_ATTEMPTS: u32 = 4;
 const QUOTA_RETRY_MS: u64 = 20_000;

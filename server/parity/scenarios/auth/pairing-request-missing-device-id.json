@@ -1,5 +1,4 @@
 {
-  "deviation": null,
   "name": "auth-pairing-request-missing-device-id",
   "seed": "base",
   "steps": [

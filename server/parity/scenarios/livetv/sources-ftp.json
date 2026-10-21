@@ -1,12 +1,11 @@
 {
-  "deviation": "C125",
   "ignore": [
     "$..createdAt",
     "$..updatedAt",
     "$..lastSyncAt",
     "$..logoPath"
   ],
-  "name": "sources-deviation-c125-ftp",
+  "name": "sources-ftp",
   "seed": "livetv",
   "steps": [
     {

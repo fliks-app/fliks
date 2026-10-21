@@ -1,5 +1,4 @@
 {
-  "deviation": "F24",
   "ignore": [
     "$..createdAt",
     "$..updatedAt",

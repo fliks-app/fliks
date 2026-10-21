@@ -2,7 +2,6 @@
   "capture": {
     "fname": "$.steps[0].body.filename"
   },
-  "deviation": null,
   "ignore": [
     "$..filename",
     "$..size",

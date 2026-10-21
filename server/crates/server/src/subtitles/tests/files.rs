@@ -1,4 +1,4 @@
-//! Confinement (F52, F53), discovery, reconcile, carry-over and the engine jobs end to end.
+//! Confinement, discovery, reconcile, carry-over and the engine jobs end to end.
 use super::{routes::*, *};
 use crate::{
     engine::testkit::ok,
@@ -209,7 +209,7 @@ async fn discovery_reconcile_carry_over_and_delete(pool: PgPool) {
     // Deleting with the video unlinks the sidecars, except a file another video lists.
     sidecars::delete_files_on_disk(&c.st, c.media, new_file).await;
     assert!(!c.dir.join("New.Movie.en.forced.srt").exists());
-    // A shared sidecar survives the delete of one row (C64).
+    // A shared sidecar survives the delete of one row.
     std::fs::write(c.dir.join("shared.srt"), SRT).unwrap();
     let a = row(&c, "en", "disk", Some("shared.srt"), None, None).await;
     row(&c, "fr", "disk", Some("shared.srt"), None, None).await;
@@ -379,7 +379,7 @@ async fn a_sync_job_runs_end_to_end_and_a_failure_is_recorded(pool: PgPool) {
             .is_some_and(|e| e.starts_with("Sync failed: "))
     }));
 
-    // F53: a reference outside the media directory fails before any job.
+    // A reference outside the media directory fails before any job.
     let before = c.fake.seen("POST", "/v1/jobs").len();
     call(
         &c,
@@ -568,7 +568,7 @@ async fn an_ocr_job_runs_end_to_end_and_a_failed_run_stays_failed(pool: PgPool) 
 #[sqlx::test]
 async fn a_root_level_movie_works_and_a_folder_symlinked_out_of_the_library_does_not(pool: PgPool) {
     let c = ctx(pool).await;
-    // F52: a movie with no folder lives in the library root.
+    // A movie with no folder lives in the library root.
     std::fs::write(c.root.join("Flat.mkv"), b"v").unwrap();
     sqlx::query(r#"UPDATE media SET "folderName" = NULL WHERE id = $1"#)
         .bind(c.media)
@@ -581,7 +581,7 @@ async fn a_root_level_movie_works_and_a_folder_symlinked_out_of_the_library_does
         dirs.write_sidecar("Flat.mkv", "en", ".srt", b"x").unwrap(),
         "Flat.en.srt"
     );
-    // A folder name that is a symlink to outside the library is refused (F45).
+    // A folder name that is a symlink to outside the library is refused.
     let outside = std::env::temp_dir().join(format!("fliks-s6-out-{}", std::process::id()));
     std::fs::create_dir_all(&outside).unwrap();
     std::os::unix::fs::symlink(&outside, c.root.join("Linked")).unwrap();
@@ -733,7 +733,7 @@ async fn one_ocr_run_per_source_track_even_when_requested_twice_at_once(pool: Pg
     let mut codes = [a.0, b.0];
     codes.sort();
     assert_eq!(codes, [201, 409], "{a:?} {b:?}");
-    // C61: a placeholder deleted while its run is in flight leaves no row and no file behind.
+    // A placeholder deleted while its run is in flight leaves no row and no file behind.
     until("the first run finished", || async {
         sqlx::query_scalar::<_, i64>(r#"SELECT count(*) FROM subtitle_files WHERE "providerType" = 'ocr' AND status = 'downloaded'"#)
             .fetch_one(&c.pool)
@@ -881,7 +881,7 @@ async fn the_sync_queue_dedupes_live_items_and_runs_each_with_its_own_options(po
         enqueue(ids[1], json!({"maxOffsetSeconds": 30})).await["status"],
         "running"
     );
-    // C56: the third waits for a slot and keeps its own options, whoever frees the slot.
+    // The third waits for a slot and keeps its own options, whoever frees the slot.
     let third = enqueue(ids[2], json!({"maxOffsetSeconds": 10})).await;
     assert_eq!(third["status"], "queued");
     until("all synced", || async {
@@ -894,7 +894,7 @@ async fn the_sync_queue_dedupes_live_items_and_runs_each_with_its_own_options(po
             == 3
     })
     .await;
-    // The queue item shape recorded against Nest (parity `subtitles-provider-sync-queue-shape`).
+    // The queue item shape (parity `subtitles-provider-sync-queue-shape`).
     let first = c.st.subtitles.sync.snapshot().remove(0);
     let mut keys: Vec<&String> = first.as_object().unwrap().keys().collect();
     keys.sort();

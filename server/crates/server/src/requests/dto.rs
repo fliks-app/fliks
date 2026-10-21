@@ -1,4 +1,4 @@
-//! Bodies and queries (`requests.md` routes table, rules 28-30): class-validator messages, Nest's coercions.
+//! Bodies and queries (`requests.md` routes table, rules 28-30): class-validator-shaped messages, 4.x coercions.
 use crate::http::{AppError, validate::int_param};
 use fliks_domain::media::query::js_number;
 use serde_json::{Map, Value, json};
@@ -219,7 +219,7 @@ pub fn create_request(v: Value) -> Res<CreateRequest> {
     );
     let media_type = c.one_of("mediaType", &MEDIA_TYPES, false);
     let kind = c.one_of("kind", &KINDS, true);
-    // past int4 Postgres rejected the insert (500): C114
+    // past int4 Postgres rejected the insert (500)
     let tmdb_id = match o.get("tmdbId") {
         Some(v)
             if v.as_f64()
@@ -408,7 +408,7 @@ pub fn list(q: &[(String, String)]) -> Res<List> {
     })
 }
 
-/// The `tmdbId` and `mediaType` of `title-state` (`ParseIntPipe`; the enum is validated here, not in Nest: C114).
+/// The `tmdbId` and `mediaType` of `title-state` (canonical integers; the enum is validated here).
 pub fn title_state(q: &[(String, String)]) -> Res<(i32, String)> {
     let one = |k: &str| q.iter().find(|(n, _)| n == k).map(|(_, v)| v.as_str());
     let tmdb =
@@ -431,7 +431,7 @@ pub struct Rule {
     pub criteria: Value,
 }
 
-/// `CreateAutoApprovalRuleDto` (rule 30); criteria keys of rule 28, nulls kept as Nest stores them.
+/// `CreateAutoApprovalRuleDto` (rule 30); criteria keys of rule 28, nulls kept as 4.x stored them.
 pub fn rule(v: Value) -> Res<Rule> {
     let o = object(v);
     let mut c = Check::new(&o, &["name", "enabled", "criteria"], "");
