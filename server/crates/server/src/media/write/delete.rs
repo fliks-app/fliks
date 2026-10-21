@@ -94,6 +94,35 @@ pub async fn remove_media(
     Ok(media)
 }
 
+/// `remove_media` plus the folder it judged contained (`None` when kept); the caller holds the lock.
+pub async fn remove_media_with_dir(
+    st: &AppState,
+    guard: &tokio::sync::OwnedMutexGuard<()>,
+    id: i32,
+) -> Result<(MediaRow, Option<PathBuf>), AppError> {
+    let media = remove_media(st, guard, id).await?;
+    let dir = match media_dir_to_remove(st, &media).await {
+        Ok(dir) => dir,
+        Err(why) => {
+            tracing::warn!(
+                "Media #{} \"{}\": folder kept ({why})",
+                media.id,
+                media.title
+            );
+            None
+        }
+    };
+    Ok((media, dir))
+}
+
+/// Removes a folder `media_dir_to_remove` judged contained.
+pub async fn remove_media_folder(dir: PathBuf) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || fsx::remove_media_dir(&dir))
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())
+}
+
 fn delete_failed(st: &AppState, user: i32, m: &MediaRow) {
     st.hub.emit_to_user(
         user,

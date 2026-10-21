@@ -5,13 +5,17 @@ use super::{
 };
 use crate::{
     ingest::load_media,
-    media::write::{delete_media_file, set_media_monitored, set_season_monitored},
-    requests::services::{self, delete_media_folder},
+    media::write::{
+        delete_media_file, remove_media_folder, remove_media_with_dir, set_media_monitored,
+        set_season_monitored,
+    },
+    requests::services,
     settings,
     state::AppState,
 };
 use serde_json::{Value, json};
 use std::collections::HashMap;
+use tokio::sync::OwnedMutexGuard;
 
 type Key = (i32, Option<i32>, Option<i32>);
 
@@ -35,16 +39,9 @@ pub async fn run(st: &AppState) -> Result<(), String> {
     let due = db::due(&st.db, max).await.map_err(|e| e.to_string())?;
     let (mut done, mut failed) = (0, 0);
     for d in &due {
-        match act(
-            st,
-            d.media,
-            d.scope(),
-            &d.action,
-            d.delete_series_when_empty,
-        )
-        .await
-        {
-            Ok(()) => done += 1,
+        match act(st, d.media, d.scope(), false).await {
+            Ok(true) => done += 1,
+            Ok(false) => {}
             Err(e) => {
                 failed += 1;
                 tracing::warn!("MediaCleanup: media #{} not cleaned: {e}", d.media);
@@ -61,7 +58,14 @@ pub async fn run(st: &AppState) -> Result<(), String> {
 pub async fn flag(st: &AppState) -> sqlx::Result<usize> {
     let mut claimed: HashMap<Key, (i32, Option<i32>)> = HashMap::new();
     for r in db::rules_enabled(&st.db).await? {
-        for m in rules::matched(&st.db, &r.criteria.0, &r.levels, &r.action).await? {
+        let matched = match rules::matched(&st.db, &r.criteria.0, &r.levels, &r.action).await {
+            Ok(m) => m,
+            Err(e) => {
+                tracing::warn!("MediaCleanup: rule #{} skipped: {e}", r.id);
+                continue;
+            }
+        };
+        for m in matched {
             claimed
                 .entry((m.id, m.season_id, m.episode_id))
                 .or_insert((r.id, r.grace_days));
@@ -167,66 +171,89 @@ fn scope_numbers(payload: &mut Value, season: Option<i32>, episode: Option<i32>)
     }
 }
 
-/// Runs a rule action on one scope, under the media lock.
-pub async fn act(
-    st: &AppState,
-    id: i32,
-    scope: Scope,
-    action: &str,
-    delete_series_when_empty: bool,
-) -> Result<(), String> {
-    if scope.season.is_some() {
-        return act_scope(st, id, scope, action, delete_series_when_empty).await;
-    }
-    if action == "delete_files_unmonitor" {
-        let lock = st.ingest.media.lock(id).await;
-        let media = load_media(&st.db, id)
+/// Runs the action of a scope's candidate under the media lock; `Ok(false)` when it is gone or, unless
+/// `explicit` (delete-now), no longer due.
+pub async fn act(st: &AppState, id: i32, scope: Scope, explicit: bool) -> Result<bool, String> {
+    let lock = st.ingest.media.lock(id).await;
+    let Some((action, delete_series_when_empty)) =
+        db::candidate_action(&st.db, id, scope, !explicit)
             .await
             .map_err(|e| e.to_string())?
-            .ok_or("media not found")?;
-        let files: Vec<i32> =
-            sqlx::query_scalar(r#"SELECT id FROM media_files WHERE "mediaId" = $1 ORDER BY id"#)
-                .bind(id)
-                .fetch_all(&st.db)
-                .await
-                .map_err(|e| e.to_string())?;
-        for f in files {
-            delete_media_file(st, &media, f, true)
-                .await
-                .map_err(|e| e.text())?;
-        }
-        set_media_monitored(st, &[id], false)
+    else {
+        return Ok(false);
+    };
+    // a flag-only rule has no action of its own: an explicit delete-now removes the media
+    let action = match action.as_str() {
+        "none" if explicit => "delete".to_owned(),
+        "none" => return Ok(false),
+        _ => action,
+    };
+    if scope.season.is_some() {
+        act_scope(st, id, scope, &action, delete_series_when_empty, lock).await?;
+    } else if action == "delete_files_unmonitor" {
+        unmonitor_whole(st, id, &action, lock).await?;
+    } else {
+        remove_whole(st, id, &action, lock).await?;
+    }
+    Ok(true)
+}
+
+async fn unmonitor_whole(
+    st: &AppState,
+    id: i32,
+    action: &str,
+    lock: OwnedMutexGuard<()>,
+) -> Result<(), String> {
+    let media = load_media(&st.db, id)
+        .await
+        .map_err(|e| e.to_string())?
+        .ok_or("media not found")?;
+    let files: Vec<i32> =
+        sqlx::query_scalar(r#"SELECT id FROM media_files WHERE "mediaId" = $1 ORDER BY id"#)
+            .bind(id)
+            .fetch_all(&st.db)
             .await
             .map_err(|e| e.to_string())?;
-        sqlx::query(
-            r#"DELETE FROM cleanup_candidates WHERE "mediaId" = $1 AND "seasonId" IS NULL"#,
-        )
+    for f in files {
+        delete_media_file(st, &media, f, true)
+            .await
+            .map_err(|e| e.text())?;
+    }
+    set_media_monitored(st, &[id], false)
+        .await
+        .map_err(|e| e.to_string())?;
+    sqlx::query(r#"DELETE FROM cleanup_candidates WHERE "mediaId" = $1 AND "seasonId" IS NULL"#)
         .bind(id)
         .execute(&st.db)
         .await
         .map_err(|e| e.to_string())?;
-        drop(lock);
-        notify(
-            st,
-            "media.cleaned_up",
-            json!({"title": media.title, "mediaId": id, "action": action}),
-        );
-        return Ok(());
-    }
-    remove_whole(st, id, action).await
-}
-
-async fn remove_whole(st: &AppState, id: i32, action: &str) -> Result<(), String> {
-    let removed = services::remove_media(st, id)
-        .await
-        .map_err(|e| e.message)?;
-    if let Some(path) = &removed.disk_path {
-        delete_media_folder(path).await?;
-    }
+    drop(lock);
     notify(
         st,
         "media.cleaned_up",
-        json!({"title": removed.title, "mediaId": id, "action": action}),
+        json!({"title": media.title, "mediaId": id, "action": action}),
+    );
+    Ok(())
+}
+
+/// Deletes the media row and its folder; the lock is held until the folder is gone.
+async fn remove_whole(
+    st: &AppState,
+    id: i32,
+    action: &str,
+    lock: OwnedMutexGuard<()>,
+) -> Result<(), String> {
+    let (media, dir) = remove_media_with_dir(st, &lock, id)
+        .await
+        .map_err(|e| e.text())?;
+    if let Some(dir) = dir {
+        remove_media_folder(dir).await?;
+    }
+    drop(lock);
+    notify(
+        st,
+        "media.cleaned_up",
+        json!({"title": media.title, "mediaId": id, "action": action}),
     );
     Ok(())
 }
@@ -238,13 +265,22 @@ async fn act_scope(
     scope: Scope,
     action: &str,
     delete_series_when_empty: bool,
+    lock: OwnedMutexGuard<()>,
 ) -> Result<(), String> {
     let err = |e: sqlx::Error| e.to_string();
-    let lock = st.ingest.media.lock(id).await;
     let media = load_media(&st.db, id)
         .await
         .map_err(err)?
         .ok_or("media not found")?;
+    let (season, episode): (Option<i32>, Option<i32>) = sqlx::query_as(
+        r#"SELECT (SELECT "seasonNumber" FROM seasons WHERE id = $1),
+                  (SELECT "episodeNumber" FROM episodes WHERE id = $2)"#,
+    )
+    .bind(scope.season)
+    .bind(scope.episode)
+    .fetch_one(&st.db)
+    .await
+    .map_err(err)?;
     let files: Vec<i32> = sqlx::query_scalar(
         r#"SELECT f.id FROM media_files f WHERE f."mediaId" = $1
         AND ($2::int IS NULL OR f."episodeId" = $2)
@@ -288,21 +324,11 @@ async fn act_scope(
     .fetch_one(&st.db)
     .await
     .map_err(err)?;
-    let (season, episode): (Option<i32>, Option<i32>) = sqlx::query_as(
-        r#"SELECT (SELECT "seasonNumber" FROM seasons WHERE id = $1),
-                  (SELECT "episodeNumber" FROM episodes WHERE id = $2)"#,
-    )
-    .bind(scope.season)
-    .bind(scope.episode)
-    .fetch_one(&st.db)
-    .await
-    .map_err(err)?;
-    drop(lock);
     let mut p = json!({"title": media.title, "mediaId": id, "action": action});
     scope_numbers(&mut p, season, episode);
     notify(st, "media.cleaned_up", p);
     if delete_series_when_empty && empty {
-        remove_whole(st, id, "delete").await?;
+        remove_whole(st, id, "delete", lock).await?;
     }
     Ok(())
 }

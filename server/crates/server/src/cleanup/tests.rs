@@ -189,12 +189,23 @@ async fn each_criterion_filters(pool: PgPool) {
         ids(&pool, json!({"watchedByRequester": true})).await,
         vec![c]
     );
+    exec(
+        &pool,
+        &format!(r#"UPDATE requests SET status = 'declined' WHERE "mediaId" = {c}"#),
+    )
+    .await;
+    assert!(
+        ids(&pool, json!({"watchedByRequester": true}))
+            .await
+            .is_empty()
+    );
 }
 
 #[test]
 fn unknown_keys_and_wrong_types_are_rejected() {
     let ok = json!({"name": "r", "criteria": {"neverPlayed": true, "ratingBelow": 4.5}});
     assert!(dto::rule(ok).is_ok());
+    assert!(dto::rule(json!({"name": "r", "criteria": {"addedOlderThanDays": 36_500}})).is_ok());
     let history =
         json!({"playCountBelow": 3, "playCountByUsersBelow": 2, "notPlayedInLastDays": 0});
     assert!(dto::rule(json!({"name": "r", "criteria": history})).is_ok());
@@ -209,6 +220,10 @@ fn unknown_keys_and_wrong_types_are_rejected() {
         json!({"playCountBelow": 0}),
         json!({"playCountByUsersBelow": 0}),
         json!({"notPlayedInLastDays": -1}),
+        json!({"addedOlderThanDays": 36_501}),
+        json!({"releasedOlderThanDays": 2_000_000_000}),
+        json!({"lastPlayedOlderThanDays": 36_501}),
+        json!({"notPlayedInLastDays": 36_501}),
     ] {
         let r = dto::rule(json!({"name": "r", "criteria": criteria}));
         assert!(r.is_err(), "{criteria}");
@@ -1246,7 +1261,8 @@ async fn recommendations_merge_reasons_and_skip_kept_and_flagged(pool: PgPool) {
             })
             .collect()
     };
-    let all = rules::recommendations(&pool).await.unwrap();
+    let lib = scalar(&pool, "SELECT id FROM libraries WHERE name = 'one'").await;
+    let all = rules::recommendations(&pool, &[lib, s.lib2]).await.unwrap();
     assert_eq!(all["reasons"].as_array().unwrap().len(), 4);
     let never = vec!["never_played".to_owned()];
     assert_eq!(
@@ -1256,7 +1272,6 @@ async fn recommendations_merge_reasons_and_skip_kept_and_flagged(pool: PgPool) {
             (i64::from(s.m3), never.clone())
         ]
     );
-    let lib = scalar(&pool, "SELECT id FROM libraries WHERE name = 'one'").await;
     let m1_lib = scalar(
         &pool,
         &format!(r#"SELECT "libraryId" FROM media WHERE id = {}"#, s.m1),
@@ -1267,10 +1282,93 @@ async fn recommendations_merge_reasons_and_skip_kept_and_flagged(pool: PgPool) {
         .await
         .unwrap();
     assert_eq!(
-        titles(&rules::recommendations(&pool).await.unwrap()).len(),
+        titles(&rules::recommendations(&pool, &[lib]).await.unwrap()).len(),
         1
     );
     rule(&pool, json!({"neverPlayed": true}), "none", None).await;
     job::run(&st).await.unwrap();
-    assert!(titles(&rules::recommendations(&pool).await.unwrap()).is_empty());
+    assert!(titles(&rules::recommendations(&pool, &[lib]).await.unwrap()).is_empty());
+}
+
+#[sqlx::test]
+async fn recommendations_and_candidates_stay_in_the_allowed_libraries(pool: PgPool) {
+    let s = seed(&pool).await;
+    let st = state(&pool).await;
+    assert!(
+        rules::recommendations(&pool, &[s.lib2]).await.unwrap()["items"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    rule(&pool, json!({}), "none", None).await;
+    both_levels(&pool).await;
+    job::run(&st).await.unwrap();
+    let lib = scalar(&pool, "SELECT id FROM libraries WHERE name = 'one'").await;
+    let seen = |rows: Vec<Value>| -> Vec<i64> {
+        rows.iter()
+            .map(|r| r["mediaId"].as_i64().unwrap())
+            .collect()
+    };
+    assert_eq!(
+        seen(db::candidates(&pool, &[s.lib2]).await.unwrap()),
+        vec![i64::from(s.m2)]
+    );
+    assert_eq!(
+        seen(db::candidates(&pool, &[lib]).await.unwrap()),
+        vec![i64::from(s.m1), i64::from(s.m3)]
+    );
+    assert!(db::candidates(&pool, &[]).await.unwrap().is_empty());
+}
+
+#[sqlx::test]
+async fn a_failing_rule_does_not_stop_the_others(pool: PgPool) {
+    let s = seed(&pool).await;
+    let st = state(&pool).await;
+    rule(
+        &pool,
+        json!({"addedOlderThanDays": 2_000_000_000}),
+        "none",
+        None,
+    )
+    .await;
+    rule(&pool, json!({"libraryIds": [s.lib2]}), "none", None).await;
+    both_levels(&pool).await;
+    job::flag(&st).await.unwrap();
+    assert_eq!(candidates(&pool).await, vec![s.m2]);
+}
+
+#[sqlx::test]
+async fn act_skips_a_candidate_that_is_gone_or_not_due(pool: PgPool) {
+    let s = seed(&pool).await;
+    let st = state(&pool).await;
+    rule(&pool, json!({}), "delete", Some(0)).await;
+    both_levels(&pool).await;
+    job::flag(&st).await.unwrap();
+    due_now(&pool).await;
+    let due = db::due(&pool, 10).await.unwrap();
+    assert_eq!(due.len(), 3);
+    // after the due read: m2 is kept, m1 gets a later deadline
+    routes::keep_one(&st, s.user, &[s.lib2], s.m2, no_scope())
+        .await
+        .unwrap();
+    exec(
+        &pool,
+        &format!(
+            r#"UPDATE cleanup_candidates SET "deleteAt" = now() + interval '1 day' WHERE "mediaId" = {}"#,
+            s.m1
+        ),
+    )
+    .await;
+    let mut acted = vec![];
+    for d in &due {
+        if job::act(&st, d.media, d.scope(), false).await.unwrap() {
+            acted.push(d.media);
+        }
+    }
+    assert_eq!(acted, vec![s.m3]);
+    assert_eq!(media_ids(&pool).await, vec![s.m1, s.m2]);
+}
+
+async fn both_levels(pool: &PgPool) {
+    exec(pool, "UPDATE cleanup_rules SET levels = '{movie,series}'").await;
 }

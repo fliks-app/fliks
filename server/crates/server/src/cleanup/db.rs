@@ -101,7 +101,8 @@ pub async fn rule_delete(db: &PgPool, id: i32) -> sqlx::Result<bool> {
         == 1)
 }
 
-pub async fn candidates(db: &PgPool) -> sqlx::Result<Vec<Value>> {
+/// Candidates of the media in `libraries`.
+pub async fn candidates(db: &PgPool, libraries: &[i32]) -> sqlx::Result<Vec<Value>> {
     sqlx::query_scalar(
         r#"SELECT jsonb_build_object('id', c.id, 'mediaId', m.id, 'seasonId', c."seasonId", 'episodeId', c."episodeId",
           'seasonNumber', s."seasonNumber", 'episodeNumber', e."episodeNumber", 'title', m.title,
@@ -112,25 +113,31 @@ pub async fn candidates(db: &PgPool) -> sqlx::Result<Vec<Value>> {
           'flaggedAt', iso_ms(c."flaggedAt"), 'deleteAt', iso_ms(c."deleteAt"))
         FROM cleanup_candidates c JOIN media m ON m.id = c."mediaId" JOIN cleanup_rules r ON r.id = c."ruleId"
         LEFT JOIN seasons s ON s.id = c."seasonId" LEFT JOIN episodes e ON e.id = c."episodeId"
+        WHERE m."libraryId" = ANY($1)
         ORDER BY c."deleteAt" ASC NULLS LAST, m.id ASC, s."seasonNumber" ASC NULLS FIRST, e."episodeNumber" ASC NULLS FIRST"#,
     )
+    .bind(libraries)
     .fetch_all(db)
     .await
 }
 
-/// The candidate's rule action and `deleteSeriesWhenEmpty`.
+/// The candidate's rule action and `deleteSeriesWhenEmpty`; `due_only` also needs it past `deleteAt`
+/// under an enabled rule, as the job's pick did.
 pub async fn candidate_action(
     db: &PgPool,
     media_id: i32,
     scope: Scope,
+    due_only: bool,
 ) -> sqlx::Result<Option<(String, bool)>> {
     sqlx::query_as(
         r#"SELECT r.action, r."deleteSeriesWhenEmpty" FROM cleanup_candidates c JOIN cleanup_rules r ON r.id = c."ruleId"
-        WHERE c."mediaId" = $1 AND c."seasonId" IS NOT DISTINCT FROM $2 AND c."episodeId" IS NOT DISTINCT FROM $3"#,
+        WHERE c."mediaId" = $1 AND c."seasonId" IS NOT DISTINCT FROM $2 AND c."episodeId" IS NOT DISTINCT FROM $3
+        AND (NOT $4 OR (c."deleteAt" <= now() AND r.enabled))"#,
     )
     .bind(media_id)
     .bind(scope.season)
     .bind(scope.episode)
+    .bind(due_only)
     .fetch_optional(db)
     .await
 }
@@ -143,9 +150,6 @@ pub struct Due {
     pub season: Option<i32>,
     #[sqlx(rename = "episodeId")]
     pub episode: Option<i32>,
-    pub action: String,
-    #[sqlx(rename = "deleteSeriesWhenEmpty")]
-    pub delete_series_when_empty: bool,
 }
 
 impl Due {
@@ -160,7 +164,7 @@ impl Due {
 /// Candidates past their `deleteAt` whose rule acts, oldest first.
 pub async fn due(db: &PgPool, limit: i64) -> sqlx::Result<Vec<Due>> {
     sqlx::query_as(
-        r#"SELECT c."mediaId", c."seasonId", c."episodeId", r.action, r."deleteSeriesWhenEmpty"
+        r#"SELECT c."mediaId", c."seasonId", c."episodeId"
         FROM cleanup_candidates c JOIN cleanup_rules r ON r.id = c."ruleId"
         WHERE c."deleteAt" <= now() AND r.action <> 'none'
         ORDER BY c."deleteAt", c.id LIMIT $1"#,
@@ -278,4 +282,16 @@ pub async fn library_names(db: &PgPool) -> sqlx::Result<Vec<(i32, String)>> {
     sqlx::query_as("SELECT id, name FROM libraries ORDER BY id")
         .fetch_all(db)
         .await
+}
+
+/// `(media id, deleteAt ISO)` of the dated whole-media candidates in `libraries`, soonest first.
+pub async fn leaving_soon(db: &PgPool, libraries: &[i32]) -> sqlx::Result<Vec<(i32, String)>> {
+    sqlx::query_as(
+        r#"SELECT m.id, iso_ms(c."deleteAt") FROM cleanup_candidates c JOIN media m ON m.id = c."mediaId"
+        WHERE c."deleteAt" IS NOT NULL AND c."seasonId" IS NULL AND m."libraryId" = ANY($1)
+        ORDER BY c."deleteAt", m.id"#,
+    )
+    .bind(libraries)
+    .fetch_all(db)
+    .await
 }

@@ -3,11 +3,7 @@ use super::{Art, ImportSpec, PortError, Removed, TitleFacts};
 use crate::{
     http::AppError,
     images::paths::{Target, Variant},
-    ingest::fsx,
-    media::write::{
-        all_library_ids, import_for_request, media_dir_to_remove, remove_media as delete_media,
-        resolve_target_in,
-    },
+    media::write::{all_library_ids, import_for_request, remove_media_with_dir, resolve_target_in},
     metadata::{MediaKind, Provider, service::Details},
     notifications,
     state::AppState,
@@ -148,32 +144,14 @@ pub async fn import_from_tmdb(
 /// `Removed` until its folder is deleted.
 pub async fn remove_media(st: &AppState, media_id: i32) -> Result<Removed, PortError> {
     let lock = st.ingest.media.lock(media_id).await;
-    let media = delete_media(st, &lock, media_id).await.map_err(port)?;
-    let disk_path = match media_dir_to_remove(st, &media).await {
-        Ok(dir) => dir.map(|d| d.to_string_lossy().into_owned()),
-        Err(why) => {
-            tracing::warn!(
-                "Media #{} \"{}\": folder kept ({why})",
-                media.id,
-                media.title
-            );
-            None
-        }
-    };
+    let (media, dir) = remove_media_with_dir(st, &lock, media_id)
+        .await
+        .map_err(port)?;
     Ok(Removed {
         title: media.title,
-        disk_path,
+        disk_path: dir.map(|d| d.to_string_lossy().into_owned()),
         lock,
     })
-}
-
-/// Removes the folder `remove_media` judged contained.
-pub async fn delete_media_folder(path: &str) -> Result<(), String> {
-    let dir = std::path::PathBuf::from(path);
-    tokio::task::spawn_blocking(move || fsx::remove_media_dir(&dir))
-        .await
-        .map_err(|e| e.to_string())?
-        .map_err(|e| e.to_string())
 }
 
 /// `NotificationsService.dispatch`: fire and forget.

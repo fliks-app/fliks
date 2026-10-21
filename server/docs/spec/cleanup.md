@@ -11,9 +11,9 @@ Scope: `playback_history`, `cleanup_rules`, `cleanup_candidates`, `cleanup_exclu
 | `GET /api/cleanup/rules/{id}` | `Read Settings` | none | 200, `Rule` | 404 `Rule #<id> not found` | none |
 | `PUT /api/cleanup/rules/{id}` | `Manage Settings` | as `POST`, replaces the rule | 200, `Rule` | 400, 404 | UPDATE |
 | `DELETE /api/cleanup/rules/{id}` | `Manage Settings` | none | 200 | 404 | DELETE (candidates of the rule cascade) |
-| `POST /api/cleanup/rules/{id}/preview` | `Manage Settings` | none | 200, `{matches: {id, title, type, size, lastPlayedAt, seasonId, episodeId, seasonNumber, episodeNumber}[], totalSize}` (`id` is the media id; the season and episode keys are null above their level) | 404 | none; also for a disabled rule |
-| `GET /api/cleanup/recommendations` | `Read Settings` | none | 200, `{reasons: {key, criteria, levels}[], items: {mediaId, libraryId, title, type, size, lastPlayedAt, reasons: string[]}[]}` (rules 33-36) | 401, 403 | none |
-| `GET /api/cleanup/candidates` | `Read Settings` | none | 200, `Candidate[]` ordered by `deleteAt` (nulls last), `mediaId` | 401, 403 | none |
+| `POST /api/cleanup/rules/{id}/preview` | `Manage Settings`, library ACL (rule 37) | none | 200, `{matches: {id, title, type, size, lastPlayedAt, seasonId, episodeId, seasonNumber, episodeNumber}[], totalSize}` (`id` is the media id; the season and episode keys are null above their level) | 404 | none; also for a disabled rule |
+| `GET /api/cleanup/recommendations` | `Read Settings`, library ACL (rule 37) | none | 200, `{reasons: {key, criteria, levels}[], items: {mediaId, libraryId, title, type, size, lastPlayedAt, reasons: string[]}[]}` (rules 33-36) | 401, 403 | none |
+| `GET /api/cleanup/candidates` | `Read Settings`, library ACL (rule 37) | none | 200, `Candidate[]` ordered by `deleteAt` (nulls last), `mediaId` | 401, 403 | none |
 | `POST /api/cleanup/candidates/{mediaId}/delete-now` | `Delete Media`, library ACL | query `seasonId?`, `episodeId?` (rule 26) | 200, `{ok: true}` | 404 `Media #<id> is not a cleanup candidate`, 500 | rule 22 |
 | `POST /api/cleanup/exclusions/{mediaId}` | `Manage Settings`, library ACL | query `seasonId?`, `episodeId?` (rule 26) | 201, `{mediaId, seasonId, episodeId}` | 404 | INSERT exclusion (idempotent), DELETE the scope's candidates |
 | `DELETE /api/cleanup/exclusions/{mediaId}` | `Manage Settings` | query `seasonId?`, `episodeId?` (rule 26) | 200 | 404 `Media #<id> is not excluded` | DELETE |
@@ -45,11 +45,11 @@ Scope: `playback_history`, `cleanup_rules`, `cleanup_candidates`, `cleanup_exclu
     |---|---|---|
     | `libraryIds` | int[] | its library is listed |
     | `excludeLibraryIds` | int[] | its library is not listed |
-    | `addedOlderThanDays` | int >= 0 | `media.createdAt` is older (season, episode: the newest file of the scope was added before) |
-    | `releasedOlderThanDays` | int >= 0 | `media.releaseDate` is older (season: the newest `episodes.airDate` of the season; episode: its `airDate`; no date: no match) |
-    | `lastPlayedOlderThanDays` | int >= 0 | the newest `playback_states.lastPlayedAt` of any user, episodes included, is older; never played matches (season: the playback states of its episodes; episode: its own) |
+    | `addedOlderThanDays` | int 0..36500 | `media.createdAt` is older (season, episode: the newest file of the scope was added before) |
+    | `releasedOlderThanDays` | int 0..36500 | `media.releaseDate` is older (season: the newest `episodes.airDate` of the season; episode: its `airDate`; no date: no match) |
+    | `lastPlayedOlderThanDays` | int 0..36500 | the newest `playback_states.lastPlayedAt` of any user, episodes included, is older; never played matches (season: the playback states of its episodes; episode: its own) |
     | `neverPlayed` | bool | no `playback_states` row exists for it (`false` is ignored) |
-    | `watchedByRequester` | bool | it has at least one requester (`requests.kind = 'add'`, user set) and every requester has watched it: a movie completed, a series with every episode on disk completed (the `exclude watched` predicate of `media-query.md` rule 20; season, episode: every episode of the scope on disk completed by every requester) |
+    | `watchedByRequester` | bool | it has at least one requester (`requests.kind = 'add'`, user set, not declined: a declined requester was never served; pending and later states count) and every requester has watched it: a movie completed, a series with every episode on disk completed (the `exclude watched` predicate of `media-query.md` rule 20; season, episode: every episode of the scope on disk completed by every requester) |
     | `ratingBelow` | number >= 0 | `media.rating` is above 0 and below the value; a null or 0 rating is unknown and never matches (the TVDB provider stores 0) |
     | `minVotes` | int >= 1, needs `ratingBelow` | `media_metadata.voteCount` is at least the value; an unknown count fails |
     | `sizeAboveGb` | number >= 0 | the sum of its `media_files.size` exceeds the value (1 GB = 2^30 bytes; season, episode: the files of the scope) |
@@ -59,13 +59,13 @@ Scope: `playback_history`, `cleanup_rules`, `cleanup_candidates`, `cleanup_exclu
     | `notLiked` | bool | no `likes` row for the media, its seasons or its episodes |
     | `playCountBelow` | int >= 1 | fewer `playback_history` rows than the value for the media (a series counts every episode play; never played is 0) |
     | `playCountByUsersBelow` | int >= 1 | fewer distinct users than the value have a `playback_history` row for the media |
-    | `notPlayedInLastDays` | int >= 0 | no `playback_history` row newer than that many days (never played matches) |
+    | `notPlayedInLastDays` | int 0..36500 | no `playback_history` row newer than that many days (never played matches) |
     | `likedByFewerThan` | int >= 1 | fewer distinct users than the value liked the media, a season or an episode |
     | `notLikedByRequester` | bool | no requester of the media liked it (no requester matches) |
     | `keepLatestEpisodes` | int >= 1, only when `levels` is `[episode]` (`is only available at episode level`) | the episode is not among the N newest episodes of its series on disk, ranked by `episodes.airDate` (no date ranks oldest), then `id` |
     | `diskFreeBelowPercent` | int 1..100 | its library path has less free space than that percentage of the disk (`libraries::disk`); a library without a readable path never matches |
 
-    The three play-history criteria apply at movie and series level only; a rule selecting season or episode rejects them.
+    The three play-history criteria apply at movie and series level only; a rule selecting season or episode rejects them (`is not available at <level> level`). Day criteria stop at 36500 (100 years) so the date arithmetic stays in range.
 
     Boolean criteria constrain only when `true`. Series-scoped criteria (`libraryIds`, `ratingBelow`, `minVotes`, `genres`, `excludeGenres`, `seriesEnded`, the likes keys, `diskFreeBelowPercent`) apply to the parent series at every level.
 
@@ -80,16 +80,16 @@ Scope: `playback_history`, `cleanup_rules`, `cleanup_candidates`, `cleanup_exclu
 11. Daily `0 05 * * *`, label `system.cmd_media_cleanup`, triggerable, audited like the other core jobs (`scheduler.md`).
 12. Flag phase: for the enabled rules in `id` order, collect the matches; the first rule to match a scope (media, season or episode) owns it. Candidates not matched by any enabled rule are deleted (a changed, disabled or deleted rule un-flags).
 13. A newly matched scope gets a row with `deleteAt = now + graceDays` (null when `graceDays` is null). An already flagged media keeps its `flaggedAt` and `deleteAt`; only `ruleId` follows the owning rule, and a null `deleteAt` takes the new rule's value.
-14. Act phase: candidates with `deleteAt <= now` whose rule action is not `none`, ordered by `deleteAt`, `id`, limited to `cleanup_max_per_run`. A failure on one media is logged and counts against the cap.
-15. `delete`: `requests::services::remove_media` (the request lifecycle clears its requests), then the media folder is removed, the media lock held until then.
+14. Act phase: candidates with `deleteAt <= now` whose rule action is not `none`, ordered by `deleteAt`, `id`, limited to `cleanup_max_per_run`. A failure on one media is logged and counts against the cap. Under the media lock each candidate is read again: one that is gone (kept, un-flagged), not yet due or whose rule is disabled or now `none` is skipped, counting neither as cleaned nor as failed. In the flag phase a rule whose query fails is logged and skipped (its candidates are un-flagged by rule 12), the other rules still run.
+15. `delete`: `media::write::remove_media_with_dir` under the media lock (the request lifecycle clears its requests), then the media folder is removed, the lock held until then.
 16. `delete_files_unmonitor`: under the media lock, `delete_media_file` (on disk) for each file, `setMediaMonitored([id], false)` (`media-write.md` rule 27: cascade to every season and episode, `media.monitored.changed`, then the request unmonitor hook, `requests.md` rule 38; the whole media's files are gone, so unmonitoring its children is within the rule's scope), the candidate row is dropped.
-16b. Season and episode candidates, whatever the action but `none` (`delete` included: it does not remove the series): under the media lock, `delete_media_file` (on disk) for each file of the scope, `episodes.monitored = false` for the episode (season: every episode of the season and `setSeasonMonitored(season, false)` (`media-write.md` rule 32: episodes, `media.season.monitored.changed`, then the season hook, `requests.md` rule 39)), the candidate rows of the scope are dropped. With `deleteSeriesWhenEmpty`, once the media has no file left the lock is released, then rule 15 runs (`remove_media` and folder).
+16b. Season and episode candidates, whatever the action but `none` (`delete` included: it does not remove the series): under the media lock, `delete_media_file` (on disk) for each file of the scope, `episodes.monitored = false` for the episode (season: every episode of the season and `setSeasonMonitored(season, false)` (`media-write.md` rule 32: episodes, `media.season.monitored.changed`, then the season hook, `requests.md` rule 39)), the candidate rows of the scope are dropped. With `deleteSeriesWhenEmpty`, once the media has no file left rule 15 runs without releasing the lock, so a file imported meanwhile is never deleted with the series.
 17. One summary line: `MediaCleanup: <n> newly flagged, <n> cleaned, <n> failed (cap <n>)`.
 18. Real media is touched only by rules 15, 16 and 16b; tests use temporary directories.
 
 ### E. Routes
 
-19. `leaving-soon`: media with a non-null `deleteAt` on a whole-media candidate (season and episode candidates are not listed) in the viewer's accessible libraries (the `recently-added` ACL), ordered by `deleteAt`, `id`; each item is the `recently-added` card plus `deleteAt`.
+19. `leaving-soon`: media with a non-null `deleteAt` on a whole-media candidate (season and episode candidates are not listed) in the viewer's accessible libraries (the `recently-added` ACL; each item is matched to its `deleteAt` by id, so an id that vanished meanwhile only drops out), ordered by `deleteAt`, `id`; each item is the `recently-added` card plus `deleteAt`.
 20. The media detail (`GET /api/media/{id}`) carries `deleteAt` (ISO) only when the media itself is flagged with a date; the key is absent otherwise. Likewise each season and episode object of `seasons` carries `deleteAt` when its own candidate has a date.
 21. `POST exclusions` is idempotent and removes the candidates it now protects in the same transaction.
 22. `delete-now` runs the candidate's rule action at once, whatever its `deleteAt`; for a rule with action `none` it deletes the media (an explicit gesture), or the scope's files for a season or episode candidate.
@@ -114,14 +114,17 @@ Scope: `playback_history`, `cleanup_rules`, `cleanup_candidates`, `cleanup_exclu
 
 ### H. Recommendations
 
+
 33. Built-in sets, fixed in code (no table, no setting), each a reason key with criteria and levels: `never_played` `{neverPlayed: true, addedOlderThanDays: 90}`; `watched_by_requester` `{watchedByRequester: true, lastPlayedOlderThanDays: 60}`; `not_played_for_a_year` `{notPlayedInLastDays: 365, addedOlderThanDays: 365}` (movie, series); `series_ended` `{seriesEnded: true, lastPlayedOlderThanDays: 180, addedOlderThanDays: 180}` (series). Each runs through the matching of rules 8-10 with action `delete`, so cleanup exclusions are honoured. `reasons` of the response lists the four sets, so a client can turn one into a rule.
 34. A media matched by several sets appears once, with every reason in set order.
 35. A media with a whole-media candidate is left out; season and episode candidates do not hide it.
 36. `items` are ordered by `size` descending, then `mediaId`. The list is read-only: nothing is flagged, scheduled or deleted. Keep is `POST exclusions` (rule 21), and a deletion is `DELETE /api/media/{id}`.
 
+37. Candidates, recommendations and rule previews list only media of the libraries the viewer may access (`libraries.md` rules 30-34, as `leaving-soon`, `delete-now` and `keep`); a media without library is never listed. A user restricted to library A sees no row of library B in any of the three.
+
 ## SQL
 
-- Flag upsert: `INSERT INTO cleanup_candidates ("mediaId","ruleId","deleteAt") SELECT ... FROM UNNEST($1::int[],$2::int[],$3::int[]) ... ON CONFLICT ("mediaId","seasonId","episodeId") DO UPDATE SET "ruleId" = EXCLUDED."ruleId", "deleteAt" = COALESCE(cleanup_candidates."deleteAt", EXCLUDED."deleteAt") RETURNING ..., (xmax = 0)`.
+- Flag upsert: `INSERT INTO cleanup_candidates ("mediaId","seasonId","episodeId","ruleId","deleteAt") SELECT ... FROM UNNEST($1::int[],$2::int[],$3::int[],$4::int[],$5::int[]) ... ON CONFLICT ("mediaId","seasonId","episodeId") DO UPDATE SET "ruleId" = EXCLUDED."ruleId", "deleteAt" = COALESCE(cleanup_candidates."deleteAt", EXCLUDED."deleteAt") RETURNING ..., (xmax = 0)`.
 - Un-flag: `DELETE FROM cleanup_candidates c WHERE NOT EXISTS (SELECT 1 FROM UNNEST($1,$2,$3) t(m,s,e) WHERE t.m = c."mediaId" AND t.s IS NOT DISTINCT FROM c."seasonId" AND t.e IS NOT DISTINCT FROM c."episodeId")`.
 - Due: `... WHERE c."deleteAt" <= now() AND r.action <> 'none' ORDER BY c."deleteAt", c.id LIMIT $1`.
 

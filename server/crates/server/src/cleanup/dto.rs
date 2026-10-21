@@ -1,9 +1,14 @@
 //! `/api/cleanup/rules` body (`cleanup.md` rules 6-8): class-validator style messages, unknown keys rejected.
-use crate::{
-    http::AppError,
-    requests::dto::{Check, Res, object},
+use crate::http::{
+    AppError,
+    validate::{Check, object},
 };
 use serde_json::{Map, Value, json};
+
+type Res<T> = Result<T, AppError>;
+
+/// Longest age or window a day criterion takes (100 years); Postgres date arithmetic stays in range.
+const MAX_DAYS: i32 = 36_500;
 
 pub const ACTIONS: [&str; 3] = ["delete", "delete_files_unmonitor", "none"];
 pub const LEVELS: [&str; 4] = ["movie", "series", "season", "episode"];
@@ -230,7 +235,9 @@ fn criteria_at(k: &Map<String, Value>, level: &str, errs: &mut Vec<String>) -> V
             "addedOlderThanDays"
             | "releasedOlderThanDays"
             | "lastPlayedOlderThanDays"
-            | "notPlayedInLastDays" => c.int(key, v, false, Some(0), None).map(Value::from),
+            | "notPlayedInLastDays" => c
+                .int(key, v, false, Some(0), Some(MAX_DAYS))
+                .map(Value::from),
             "minVotes"
             | "likedByFewerThan"
             | "keepLatestEpisodes"

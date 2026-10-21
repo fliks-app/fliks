@@ -21,6 +21,7 @@ use axum::{
 use fliks_domain::acl::{Action, Subject};
 use serde::Deserialize;
 use serde_json::{Value, json};
+use std::collections::HashMap;
 
 type Res<T> = Result<T, AppError>;
 
@@ -121,7 +122,9 @@ pub async fn rule_preview(
     let r = db::rule_row(&st.db, id)
         .await?
         .ok_or_else(|| rule_not_found(id))?;
-    let matches = rules::matched(&st.db, &r.criteria.0, &r.levels, &r.action).await?;
+    let ids = accessible_library_ids(&st.db, &a).await?;
+    let mut matches = rules::matched(&st.db, &r.criteria.0, &r.levels, &r.action).await?;
+    matches.retain(|m| m.library_id.is_some_and(|l| ids.contains(&l)));
     let total: i64 = matches.iter().map(|m| m.size).sum();
     Ok(Json(json!({"matches": matches, "totalSize": total})))
 }
@@ -129,13 +132,15 @@ pub async fn rule_preview(
 #[utoipa::path(get, path = "/api/cleanup/candidates", responses((status = 200)))]
 pub async fn candidate_list(State(st): State<AppState>, a: Authed) -> Res<Json<Vec<Value>>> {
     a.require(Action::Read, Subject::Settings)?;
-    Ok(Json(db::candidates(&st.db).await?))
+    let ids = accessible_library_ids(&st.db, &a).await?;
+    Ok(Json(db::candidates(&st.db, &ids).await?))
 }
 
 #[utoipa::path(get, path = "/api/cleanup/recommendations", responses((status = 200)))]
 pub async fn recommendation_list(State(st): State<AppState>, a: Authed) -> Res<Json<Value>> {
     a.require(Action::Read, Subject::Settings)?;
-    Ok(Json(rules::recommendations(&st.db).await?))
+    let ids = accessible_library_ids(&st.db, &a).await?;
+    Ok(Json(rules::recommendations(&st.db, &ids).await?))
 }
 
 #[utoipa::path(post, path = "/api/cleanup/candidates/{mediaId}/delete-now", responses((status = 200)))]
@@ -147,11 +152,7 @@ pub async fn candidate_delete_now(
 ) -> Res<Json<Value>> {
     a.require(Action::Delete, Subject::Media)?;
     let ids = accessible_library_ids(&st.db, &a).await?;
-    let scope = ScopeQuery {
-        season_id: q.season_id,
-        episode_id: q.episode_id,
-    };
-    delete_one(&st, &ids, media_id, scope).await?;
+    delete_one(&st, &ids, media_id, q).await?;
     Ok(Json(json!({"ok": true})))
 }
 
@@ -163,14 +164,11 @@ pub(super) async fn delete_one(
 ) -> Res<()> {
     assert_media_accessible(&st.db, media_id, ids).await?;
     let scope = scope(st, media_id, &q).await?;
-    let (action, delete_series_when_empty) = db::candidate_action(&st.db, media_id, scope)
-        .await?
-        .ok_or_else(|| dto::not_candidate(media_id))?;
-    // a flag-only rule has no action of its own: an explicit delete-now removes the media
-    let action = if action == "none" { "delete" } else { &action };
-    job::act(st, media_id, scope, action, delete_series_when_empty)
-        .await
-        .map_err(AppError::internal)
+    match job::act(st, media_id, scope, true).await {
+        Ok(true) => Ok(()),
+        Ok(false) => Err(dto::not_candidate(media_id)),
+        Err(e) => Err(AppError::internal(e)),
+    }
 }
 
 pub(super) async fn keep_one(
@@ -308,17 +306,15 @@ pub async fn exclusion_remove(
 pub async fn leaving_soon(State(st): State<AppState>, a: Authed) -> Res<Json<Vec<Value>>> {
     a.require(Action::Read, Subject::Media)?;
     let ids = accessible_library_ids(&st.db, &a).await?;
-    let rows: Vec<(i32, String)> = sqlx::query_as(
-        r#"SELECT m.id, iso_ms(c."deleteAt") FROM cleanup_candidates c JOIN media m ON m.id = c."mediaId"
-        WHERE c."deleteAt" IS NOT NULL AND c."seasonId" IS NULL AND m."libraryId" = ANY($1) ORDER BY c."deleteAt", m.id"#,
-    )
-    .bind(&ids)
-    .fetch_all(&st.db)
-    .await?;
+    let rows = db::leaving_soon(&st.db, &ids).await?;
     let page: Vec<i32> = rows.iter().map(|r| r.0).collect();
+    let at: HashMap<i64, &str> = rows
+        .iter()
+        .map(|r| (i64::from(r.0), r.1.as_str()))
+        .collect();
     let mut items = hydrate::items(&st.db, &page, paths_visible(&a.perms)).await?;
-    for (item, (_, at)) in items.iter_mut().zip(&rows) {
-        item["deleteAt"] = json!(at);
+    for item in &mut items {
+        item["deleteAt"] = json!(item["id"].as_i64().and_then(|id| at.get(&id)));
     }
     Ok(Json(items))
 }
