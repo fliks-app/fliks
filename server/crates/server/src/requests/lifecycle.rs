@@ -59,7 +59,7 @@ impl Lifecycle {
         if was_monitored && !media.monitored {
             warn(
                 "on_media_monitor_change",
-                self.decline_linked(media.id, "Media was unmonitored").await,
+                self.retire_linked(media.id, "Media was unmonitored").await,
             );
         }
     }
@@ -182,25 +182,32 @@ impl Lifecycle {
         }
     }
 
-    /// Declines the active ADD requests of the media and unlinks it (rules 38, 40).
-    async fn decline_linked(&self, media_id: i32, reason: &str) -> Res<()> {
-        for r in db::linked(&self.st.db, media_id, Some("add"), &db::IN_FLIGHT).await? {
-            db::decline_unlink(&self.st.db, r.id, reason).await?;
-        }
-        for r in db::linked(&self.st.db, media_id, Some("add"), &["available"]).await? {
-            db::remove_unlink(&self.st.db, r.id).await?;
-        }
-        Ok(())
+    /// Retires the ADD requests linked to the media (rules 38, 40).
+    async fn retire_linked(&self, media_id: i32, reason: &str) -> Res<()> {
+        let mut c = self.st.db.acquire().await?;
+        Ok(db::retire_linked(&mut c, media_id, reason).await?)
     }
 
-    /// Rule 39: a request scoped to the season is declined (`removed` once available), a wider one loses it.
+    /// Rule 39: a request scoped to the season is declined (`removed` once available), a wider one loses it;
+    /// a whole-series request keeps the other monitored seasons so this one can be requested again.
     async fn season_unmonitored(&self, media_id: i32, season: i64) -> Res<()> {
         let statuses = [db::IN_FLIGHT.as_slice(), &["available"]].concat();
+        let mut whole: Option<Vec<i64>> = None;
         for r in db::linked(&self.st.db, media_id, None, &statuses).await? {
-            let Some(scope) = r.scope().filter(|s| s.contains(&season)) else {
-                continue;
+            let scope = match r.scope() {
+                Some(s) => s.to_vec(),
+                None if r.media_type == "series" => {
+                    if whole.is_none() {
+                        whole = Some(db::monitored_seasons(&self.st.db, media_id, season).await?);
+                    }
+                    whole.clone().unwrap_or_default()
+                }
+                None => continue,
             };
-            let rest: Vec<i64> = scope.iter().copied().filter(|n| *n != season).collect();
+            if !scope.contains(&season) {
+                continue;
+            }
+            let rest: Vec<i64> = scope.into_iter().filter(|n| *n != season).collect();
             if rest.is_empty() && r.status == "available" {
                 db::remove_unlink(&self.st.db, r.id).await?;
             } else if rest.is_empty() {
