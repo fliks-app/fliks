@@ -52,6 +52,14 @@
             "triggerable": true
           },
           {
+            "cron": "0 05 * * *",
+            "labelKey": "system.cmd_media_cleanup",
+            "lastStatus": null,
+            "name": "MediaCleanup",
+            "pluginId": null,
+            "triggerable": true
+          },
+          {
             "cron": "0 0-23/1 * * *",
             "labelKey": "liveTv.jobs.sourceRefresh",
             "lastStatus": null,

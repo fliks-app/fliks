@@ -526,7 +526,8 @@
     "cw_remove_title": "Entfernen",
     "cw_remove_message": "„{{title}}“ aus der Liste entfernen?",
     "customize": "Startseite anpassen",
-    "customize_hint": "Bereiche der Startseite hinzufügen, entfernen und neu anordnen"
+    "customize_hint": "Bereiche der Startseite hinzufügen, entfernen und neu anordnen",
+    "leaving_soon": "Bald entfernt"
   },
   "playback_settings": {
     "title": "Wiedergabeeinstellungen",
@@ -1507,7 +1508,8 @@
     "device_apple_tv": "Apple TV ({{os}})",
     "backup_failed": "Sicherung fehlgeschlagen",
     "restore_failed": "Wiederherstellung fehlgeschlagen",
-    "delete_backup_failed": "Löschen fehlgeschlagen"
+    "delete_backup_failed": "Löschen fehlgeschlagen",
+    "cmd_media_cleanup": "Bibliothek bereinigen"
   },
   "qoe": {
     "title": "Wiedergabequalität",
@@ -1900,7 +1902,8 @@
       "streaming": "Streaming",
       "engine": "Remote-Engine",
       "plugins": "Plugins",
-      "subtitles_activity": "Untertitel-Aktivität"
+      "subtitles_activity": "Untertitel-Aktivität",
+      "cleanup": "Bereinigung"
     },
     "engine": {
       "title": "Remote-Streaming-Engine",
@@ -2800,6 +2803,67 @@
         "allow_unsigned": "Unsignierte Plugins zulassen",
         "allow_unsigned_hint": "Erlaubt die Installation eines Plugins, dessen Code niemand signiert hat, für die Entwicklung eigener Plugins. Ein bereits so installiertes Plugin wird beim Ausschalten nicht entfernt."
       }
+    },
+    "cleanup": {
+      "title": "Bibliotheksbereinigung",
+      "subtitle": "Regeln markieren ungenutzte Medien. Ein markierter Titel wird nach Ablauf der Karenzzeit entfernt.",
+      "new": "Neue Regel",
+      "empty": "Keine Bereinigungsregel.",
+      "confirm_delete": "Regel \"{{name}}\" löschen?",
+      "col_name": "Name",
+      "col_action": "Aktion",
+      "col_grace": "Karenzzeit (Tage)",
+      "col_title": "Titel",
+      "col_rule": "Regel",
+      "col_size": "Größe",
+      "col_days_left": "Verbleibende Tage",
+      "col_last_played": "Zuletzt gespielt",
+      "never": "Nie",
+      "never_played": "Nie gespielt",
+      "no_date": "Kein Datum",
+      "no_limit": "Keine Grenze",
+      "any": "Alle",
+      "none": "Keine",
+      "preview": "Vorschau",
+      "delete": "Löschen",
+      "keep": "Behalten",
+      "delete_now": "Jetzt löschen",
+      "confirm_delete_now": "\"{{title}}\" jetzt löschen? Das lässt sich nicht rückgängig machen.",
+      "max_per_run": "Maximale Löschungen pro Lauf",
+      "max_per_run_hint": "Weitere Löschungen warten auf den nächsten Lauf.",
+      "candidates": "Markierte Medien",
+      "candidates_empty": "Keine Medien markiert.",
+      "editor_edit": "Regel bearbeiten",
+      "editor_create": "Neue Regel",
+      "field_name": "Name",
+      "field_enabled": "Aktiv",
+      "grace_hint": "Eine leere Karenzzeit markiert das Medium, ohne je zu handeln.",
+      "logic_hint": "Eine Regel trifft Medien, die alle gesetzten Kriterien erfüllen. Mehrere Regeln gelten als Alternativen.",
+      "votes_hint": "Die Mindestzahl an Stimmen gilt nur mit einer Bewertungsschwelle.",
+      "preview_empty": "Kein Medium passt zu dieser Regel.",
+      "preview_total": "Treffer: {{count}}. Freigegebener Speicher: {{size}}.",
+      "type_movie": "Filme",
+      "type_series": "Serien",
+      "action_delete": "Medium und Dateien löschen",
+      "action_delete_files_unmonitor": "Dateien löschen und Überwachung beenden",
+      "action_none": "Nur markieren",
+      "c_mediaType": "Medientyp",
+      "c_libraryIds": "Bibliotheken",
+      "c_genres": "Genres",
+      "c_excludeGenres": "Ausgeschlossene Genres",
+      "c_addedOlderThanDays": "Hinzugefügt vor mehr als (Tage)",
+      "c_releasedOlderThanDays": "Veröffentlicht vor mehr als (Tage)",
+      "c_lastPlayedOlderThanDays": "Zuletzt gespielt vor mehr als (Tage)",
+      "c_ratingBelow": "Bewertung unter",
+      "c_minVotes": "Mindestanzahl Stimmen",
+      "c_sizeAboveGb": "Größe über (GB)",
+      "c_likedByFewerThan": "Von weniger als (Nutzer) gemocht",
+      "c_diskFreeBelowPercent": "Freier Speicher der Bibliothek unter (%)",
+      "c_neverPlayed": "Nie gespielt",
+      "c_watchedByRequester": "Vom Anfragenden gesehen",
+      "c_seriesEnded": "Serie beendet",
+      "c_notLiked": "Von niemandem gemocht",
+      "c_notLikedByRequester": "Vom Anfragenden nicht gemocht"
     }
   },
   "roles": {
@@ -3345,5 +3409,10 @@
         "adult_guard_failed": "Einschränkung für Erwachseneninhalte fehlgeschlagen"
       }
     }
+  },
+  "cleanup": {
+    "leaving_today": "Heute entfernt",
+    "leaving_in_one": "Entfernung in {{count}} Tag",
+    "leaving_in_other": "Entfernung in {{count}} Tagen"
   }
 }

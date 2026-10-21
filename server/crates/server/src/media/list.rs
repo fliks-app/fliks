@@ -13,7 +13,7 @@ use sqlx::{PgPool, Postgres, QueryBuilder};
 use std::collections::HashMap;
 
 /// Rule 20 verbatim; `uid` is the authenticated user's id, never user text.
-fn watched_sql(uid: i32) -> String {
+pub(crate) fn watched_sql(uid: impl std::fmt::Display) -> String {
     format!(
         r#"
   SELECT DISTINCT ps."mediaId" AS id FROM playback_states ps

@@ -81,6 +81,7 @@ This domain stores every key; the semantics belong to consumers. Registry of doc
 | Key(s) | Consumer parsing/default | In-memory cache or listener |
 |---|---|---|
 | `streaming_segment_duration`, `streaming_qsv_preset`, `streaming_tonemap_algo`, `streaming_tonemap_curve`, `streaming_cache_max_gb`, `streaming_cache_ttl_hours`, `streaming_ffmpeg_slots`, `streaming_auto_quality_mode`, `streaming_auto_crop_enabled`, `streaming_gpu_render_node`, `streaming_throttle_enabled`, `streaming_throttle_threshold_seconds` | `StreamingSettingsCache.load` `[ts:src/modules/streaming/streaming-settings-cache.service.ts:65]` | cache + engine push (listener L1) |
+| `cleanup_max_per_run` (10; invalid or negative = 10) | `MediaCleanup`, read per run (`cleanup.md` rule 4) | none |
 | `qoe_enabled` (absent = on; only `'false'` disables), `qoe_retention_days` (30) | `[ts:src/modules/qoe/qoe.service.ts:37]` | `enabledFlag` (listener L2); retention read on demand |
 | `livetv_segment_seconds`, `livetv_timeshift_minutes`, `livetv_probe_seconds`, `livetv_channel_idle_seconds`, `livetv_fast_zap` | `intOr(raw, default)`; fast zap `'true'`/`'false'`/else null `[ts:src/modules/livetv/services/livetv-session.service.ts:96]` | engine push (listener L3) |
 | `subtitle_translation_*` (enabled, engine, max_concurrency, gemini_api_key/model, openai_base_url/api_key/model, libretranslate_url/api_key) | `[ts:src/modules/subtitles/subtitle-translation-settings-cache.service.ts:38]` | cache (listener L4) |

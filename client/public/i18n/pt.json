@@ -526,7 +526,8 @@
     "cw_remove_title": "Remover",
     "cw_remove_message": "Remover «{{title}}» da lista?",
     "customize": "Personalizar o início",
-    "customize_hint": "Adicione, remova e reorganize as zonas do início"
+    "customize_hint": "Adicione, remova e reorganize as zonas do início",
+    "leaving_soon": "Saindo em breve"
   },
   "playback_settings": {
     "title": "Definições de reprodução",
@@ -1507,7 +1508,8 @@
     "device_apple_tv": "Apple TV ({{os}})",
     "backup_failed": "Falha ao criar a cópia de segurança",
     "restore_failed": "Falha ao restaurar",
-    "delete_backup_failed": "Falha ao eliminar"
+    "delete_backup_failed": "Falha ao eliminar",
+    "cmd_media_cleanup": "Limpar a biblioteca"
   },
   "qoe": {
     "title": "Qualidade de reprodução",
@@ -1900,7 +1902,8 @@
       "streaming": "Streaming",
       "engine": "Motor remoto",
       "plugins": "Plugins",
-      "subtitles_activity": "Atividade de legendas"
+      "subtitles_activity": "Atividade de legendas",
+      "cleanup": "Limpeza"
     },
     "engine": {
       "title": "Motor de streaming remoto",
@@ -2800,6 +2803,67 @@
         "allow_unsigned": "Permitir plugins não assinados",
         "allow_unsigned_hint": "Permite instalar um plugin cujo código ninguém assinou, para desenvolver o seu. Desativá-lo não remove um plugin já instalado dessa forma."
       }
+    },
+    "cleanup": {
+      "title": "Limpeza da biblioteca",
+      "subtitle": "As regras marcam mídias sem uso. Um título marcado é removido ao fim do período de carência.",
+      "new": "Nova regra",
+      "empty": "Nenhuma regra de limpeza.",
+      "confirm_delete": "Excluir a regra \"{{name}}\"?",
+      "col_name": "Nome",
+      "col_action": "Ação",
+      "col_grace": "Período de carência (dias)",
+      "col_title": "Título",
+      "col_rule": "Regra",
+      "col_size": "Tamanho",
+      "col_days_left": "Dias restantes",
+      "col_last_played": "Última reprodução",
+      "never": "Nunca",
+      "never_played": "Nunca reproduzido",
+      "no_date": "Sem data",
+      "no_limit": "Sem limite",
+      "any": "Qualquer",
+      "none": "Nenhum",
+      "preview": "Pré-visualizar",
+      "delete": "Excluir",
+      "keep": "Manter",
+      "delete_now": "Excluir agora",
+      "confirm_delete_now": "Excluir \"{{title}}\" agora? Não é possível desfazer.",
+      "max_per_run": "Máximo de remoções por execução",
+      "max_per_run_hint": "As remoções acima do máximo esperam a próxima execução.",
+      "candidates": "Mídias marcadas",
+      "candidates_empty": "Nenhuma mídia marcada.",
+      "editor_edit": "Editar regra",
+      "editor_create": "Nova regra",
+      "field_name": "Nome",
+      "field_enabled": "Ativa",
+      "grace_hint": "Um período de carência vazio marca a mídia sem nunca agir sobre ela.",
+      "logic_hint": "Uma regra corresponde às mídias que cumprem todos os critérios definidos. Várias regras se combinam como alternativas.",
+      "votes_hint": "O mínimo de votos só vale com um limite de nota.",
+      "preview_empty": "Nenhuma mídia corresponde a esta regra.",
+      "preview_total": "Correspondências: {{count}}. Espaço liberado: {{size}}.",
+      "type_movie": "Filmes",
+      "type_series": "Séries",
+      "action_delete": "Excluir a mídia e os arquivos",
+      "action_delete_files_unmonitor": "Excluir os arquivos e parar de monitorar",
+      "action_none": "Apenas marcar",
+      "c_mediaType": "Tipo de mídia",
+      "c_libraryIds": "Bibliotecas",
+      "c_genres": "Gêneros",
+      "c_excludeGenres": "Gêneros excluídos",
+      "c_addedOlderThanDays": "Adicionado há mais de (dias)",
+      "c_releasedOlderThanDays": "Lançado há mais de (dias)",
+      "c_lastPlayedOlderThanDays": "Última reprodução há mais de (dias)",
+      "c_ratingBelow": "Nota abaixo de",
+      "c_minVotes": "Mínimo de votos",
+      "c_sizeAboveGb": "Tamanho acima de (GB)",
+      "c_likedByFewerThan": "Curtido por menos de (usuários)",
+      "c_diskFreeBelowPercent": "Espaço livre do disco da biblioteca abaixo de (%)",
+      "c_neverPlayed": "Nunca reproduzido",
+      "c_watchedByRequester": "Assistido pelo solicitante",
+      "c_seriesEnded": "Série finalizada",
+      "c_notLiked": "Curtido por ninguém",
+      "c_notLikedByRequester": "Não curtido pelo solicitante"
     }
   },
   "roles": {
@@ -3345,5 +3409,10 @@
         "adult_guard_failed": "Restrição de conteúdo adulto falhou"
       }
     }
+  },
+  "cleanup": {
+    "leaving_today": "Sai hoje",
+    "leaving_in_one": "Sai em {{count}} dia",
+    "leaving_in_other": "Sai em {{count}} dias"
   }
 }

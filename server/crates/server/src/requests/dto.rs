@@ -3,7 +3,7 @@ use crate::http::{AppError, validate::int_param};
 use fliks_domain::media::query::js_number;
 use serde_json::{Map, Value, json};
 
-type Res<T> = Result<T, AppError>;
+pub(crate) type Res<T> = Result<T, AppError>;
 
 pub const STATUSES: [&str; 6] = [
     "pending",
@@ -38,13 +38,13 @@ impl<T: Copy> Field<T> {
     }
 }
 
-struct Check<'a> {
+pub(crate) struct Check<'a> {
     o: &'a Map<String, Value>,
     prefix: &'a str,
-    errs: Vec<String>,
+    pub(crate) errs: Vec<String>,
 }
 
-fn object(v: Value) -> Map<String, Value> {
+pub(crate) fn object(v: Value) -> Map<String, Value> {
     match v {
         Value::Object(o) => o,
         _ => Map::new(),
@@ -67,7 +67,7 @@ fn int4(n: f64) -> Option<i32> {
 }
 
 impl<'a> Check<'a> {
-    fn new(o: &'a Map<String, Value>, known: &[&str], prefix: &'a str) -> Self {
+    pub(crate) fn new(o: &'a Map<String, Value>, known: &[&str], prefix: &'a str) -> Self {
         let errs = o
             .keys()
             .filter(|k| !known.contains(&k.as_str()))
@@ -76,7 +76,7 @@ impl<'a> Check<'a> {
         Self { o, prefix, errs }
     }
 
-    fn err(&mut self, key: &str, what: &str) {
+    pub(crate) fn err(&mut self, key: &str, what: &str) {
         self.errs.push(format!("{}{key} {what}", self.prefix));
     }
 
@@ -85,7 +85,7 @@ impl<'a> Check<'a> {
         self.o.get(key).filter(|v| !v.is_null())
     }
 
-    fn one_of(&mut self, key: &str, allowed: &[&str], optional: bool) -> Option<String> {
+    pub(crate) fn one_of(&mut self, key: &str, allowed: &[&str], optional: bool) -> Option<String> {
         let v = if optional {
             self.get(key)?
         } else {
@@ -107,7 +107,7 @@ impl<'a> Check<'a> {
     }
 
     /// `@IsInt` (with `@Type(() => Number)` when `coerced`) and the bounds, messages in validator order.
-    fn int(
+    pub(crate) fn int(
         &mut self,
         key: &str,
         v: &Value,
@@ -153,7 +153,7 @@ impl<'a> Check<'a> {
     }
 
     /// `@IsArray @IsInt({ each: true })` (`@Type(() => Number)` when `coerced`).
-    fn int_array(&mut self, key: &str, coerced: bool) -> Option<Vec<i64>> {
+    pub(crate) fn int_array(&mut self, key: &str, coerced: bool) -> Option<Vec<i64>> {
         let v = self.get(key)?;
         let Some(a) = v.as_array() else {
             self.err(key, "must be an array");
@@ -180,7 +180,7 @@ impl<'a> Check<'a> {
         Some(nums.into_iter().flatten().map(|n| n as i64).collect())
     }
 
-    fn finish<T>(self, v: T) -> Res<T> {
+    pub(crate) fn finish<T>(self, v: T) -> Res<T> {
         if self.errs.is_empty() {
             Ok(v)
         } else {

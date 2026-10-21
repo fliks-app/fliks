@@ -33,6 +33,7 @@ pub async fn run(st: &AppState, name: &str) -> Outcome {
         "LiveTvSourceRefresh" => crate::livetv::jobs::refresh_sources(st).await,
         "LiveTvGuideRefresh" => crate::livetv::jobs::refresh_guides(st).await,
         "LiveTvGuidePrune" => crate::livetv::jobs::prune_guide(st).await,
+        "MediaCleanup" => crate::cleanup::run(st).await,
         "RefreshPluginSources" => crate::plugins::sources::refresh_and_update(st).await,
         _ => Err(format!("unknown job {name}")),
     }

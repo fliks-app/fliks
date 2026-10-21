@@ -119,6 +119,8 @@ export interface Media {
   imdbId?: string | null;
   tvdbId?: number | null;
   metadata?: MediaMetadataBrief | null;
+  /** Set only while the media is flagged for cleanup with a date. */
+  deleteAt?: string | null;
 }
 
 export type CutoffState =
@@ -404,6 +406,11 @@ export class MediaService {
         headers ? { params: httpParams, headers } : { params: httpParams },
       ),
     );
+  }
+
+  getLeavingSoon(opts: { force?: boolean } = {}) {
+    const headers = opts.force ? { [CACHE_BYPASS_HEADER]: '1' } : undefined;
+    return firstValueFrom(this.http.get<Media[]>('/api/media/leaving-soon', headers ? { headers } : {}));
   }
 
   getTracking(id: number) {

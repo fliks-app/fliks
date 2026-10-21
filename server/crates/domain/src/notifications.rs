@@ -5,7 +5,7 @@ use serde_json::{Map, Value, json};
 pub const TYPES: [&str; 5] = ["discord", "slack", "webhook", "gotify", "ntfy"];
 
 /// `NOTIFICATION_EVENTS`, in vocabulary order.
-pub const EVENTS: [&str; 18] = [
+pub const EVENTS: [&str; 20] = [
     "request.created",
     "request.approved",
     "request.declined",
@@ -24,6 +24,8 @@ pub const EVENTS: [&str; 18] = [
     "livetv.account_expiring",
     "livetv.account_expired",
     "livetv.adult_guard_failed",
+    "media.leaving_soon",
+    "media.cleaned_up",
 ];
 
 /// What `GET /notifications/events` lists: `health.issue` is only ever sent by the test route.
@@ -96,6 +98,8 @@ pub fn format_message(event: &str, payload: &Map<String, Value>) -> String {
             "Live TV source \"{}\" adult-group restriction pass failed",
             src()
         ),
+        "media.leaving_soon" => format!("Leaving soon: {title}"),
+        "media.cleaned_up" => format!("Cleaned up: {title}"),
         _ => format!("{event}: {}", Value::Object(payload.clone())),
     }
 }

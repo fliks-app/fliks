@@ -190,6 +190,7 @@
           [status]="m.status"
           [monitored]="m.monitored"
           [libraryName]="m.library?.name ?? null"
+          [leavingLabel]="m.deleteAt ? leavingLabel(m.deleteAt) : null"
           [qualityProfileName]="m.qualityProfile?.name ?? null"
           [languageProfileName]="m.languageProfile?.name ?? null"
           [originalLanguage]="m.metadata?.originalLanguage ?? null"

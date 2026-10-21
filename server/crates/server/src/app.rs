@@ -1,8 +1,8 @@
 use crate::http::{layers, static_files};
 use crate::{
-    auth, events, fs, images, importers, jobs, libraries, livetv, markers, media, media_servers,
-    metadata, notifications, persons, playback, playlists, profiles, qoe, remote, requests, roles,
-    settings, social, state::AppState, subtitles, system, users,
+    auth, cleanup, events, fs, images, importers, jobs, libraries, livetv, markers, media,
+    media_servers, metadata, notifications, persons, playback, playlists, profiles, qoe, remote,
+    requests, roles, settings, social, state::AppState, subtitles, system, users,
 };
 use axum::{Router, extract::Request, response::Response, routing::any};
 use std::path::PathBuf;
@@ -265,6 +265,17 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         requests::rule_get,
         requests::rule_update,
         requests::rule_remove,
+        cleanup::rule_list,
+        cleanup::rule_create,
+        cleanup::rule_get,
+        cleanup::rule_update,
+        cleanup::rule_remove,
+        cleanup::rule_preview,
+        cleanup::candidate_list,
+        cleanup::candidate_delete_now,
+        cleanup::exclusion_add,
+        cleanup::exclusion_remove,
+        cleanup::leaving_soon,
         livetv::channels::status,
         livetv::channels::list,
         livetv::guide::on_now,
@@ -361,6 +372,7 @@ fn api() -> Router<AppState> {
         .merge(system::api())
         .merge(jobs::router())
         .merge(requests::router())
+        .merge(cleanup::router())
         .merge(subtitles::router())
         .merge(livetv::router())
         .merge(crate::plugins::routes::router())

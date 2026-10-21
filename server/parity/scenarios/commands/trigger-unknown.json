@@ -11,7 +11,7 @@
       "expect": {
         "body": {
           "error": "Bad Request",
-          "message": "Unknown command: nope. Valid: Backup, RefreshMetadata, RefreshPluginSources, SubtitleSearch, SubtitleUpgrade, LiveTvSourceRefresh, LiveTvGuideRefresh, LiveTvGuidePrune, RescanAll, RefreshMissingMetadata, RescanMissingFiles, GenerateSprites, GenerateMissingSprites, DetectMarkers, DetectMissingMarkers",
+          "message": "Unknown command: nope. Valid: Backup, RefreshMetadata, RefreshPluginSources, SubtitleSearch, SubtitleUpgrade, MediaCleanup, LiveTvSourceRefresh, LiveTvGuideRefresh, LiveTvGuidePrune, RescanAll, RefreshMissingMetadata, RescanMissingFiles, GenerateSprites, GenerateMissingSprites, DetectMarkers, DetectMissingMarkers",
           "statusCode": 400
         },
         "status": 400

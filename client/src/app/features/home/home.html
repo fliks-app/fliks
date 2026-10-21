@@ -272,6 +272,20 @@
   }
   }
 
+  @if (leavingSoon().length) {
+    <app-horizontal-scroller [title]="'home.leaving_soon' | translate">
+      @for (m of leavingSoon(); track m.id) {
+        <app-media-card
+          class="shrink-0 w-28 sm:w-32 lg:w-40"
+          [attr.data-home-focus]="'leaving:' + m.id"
+          [media]="m"
+          [topLeftBadge]="leavingLabel(m)"
+          [hideStatusBar]="true"
+        />
+      }
+    </app-horizontal-scroller>
+  }
+
   <!-- Compact box (icon beside text) up through tablet portrait; stacked box
        only on desktop / tablet landscape (lg+). -->
   <a routerLink="/app-settings/home"

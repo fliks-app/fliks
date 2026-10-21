@@ -127,6 +127,9 @@ pub async fn detail(db: &PgPool, id: i32, see_paths: bool) -> Result<Option<Valu
         obj.remove("episodeStats");
         obj.insert("seasons".into(), extra.seasons);
         obj.insert("metadata".into(), metadata.unwrap_or(Value::Null));
+        if let Some(at) = crate::cleanup::delete_at(db, id).await? {
+            obj.insert("deleteAt".into(), at.into());
+        }
     }
     Ok(Some(media))
 }

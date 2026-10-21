@@ -1,0 +1,331 @@
+<div class="flex flex-col gap-8">
+  <section class="flex flex-col gap-4">
+    <div class="flex items-center justify-between gap-3">
+      <div>
+        <h2 class="text-xl font-semibold">{{ 'settings.cleanup.title' | translate }}</h2>
+        <p class="text-sm text-base-content/60 mt-1">{{ 'settings.cleanup.subtitle' | translate }}</p>
+      </div>
+      <button type="button" class="btn btn-primary btn-sm" (click)="openCreate()">
+        + {{ 'settings.cleanup.new' | translate }}
+      </button>
+    </div>
+
+    @if (loading()) {
+      <div class="flex justify-center py-8">
+        <span class="loading loading-spinner loading-md"></span>
+      </div>
+    } @else if (rules().length === 0) {
+      <p class="text-base-content/50 text-center py-8">{{ 'settings.cleanup.empty' | translate }}</p>
+    } @else {
+      <div class="overflow-x-auto rounded-lg border border-base-200">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>{{ 'settings.cleanup.col_name' | translate }}</th>
+              <th>{{ 'settings.cleanup.col_action' | translate }}</th>
+              <th>{{ 'settings.cleanup.col_grace' | translate }}</th>
+              <th class="text-center">{{ 'common.active' | translate }}</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (rule of rules(); track rule.id) {
+              <tr [class.opacity-50]="!rule.enabled">
+                <td>
+                  <button type="button" class="link link-hover font-medium" (click)="openEdit(rule)">
+                    {{ rule.name }}
+                  </button>
+                  @if (libraryNames(rule)) {
+                    <div class="text-xs text-base-content/50">{{ libraryNames(rule) }}</div>
+                  }
+                </td>
+                <td>{{ 'settings.cleanup.action_' + rule.action | translate }}</td>
+                <td>
+                  @if (rule.graceDays == null) {
+                    <span class="text-base-content/50">{{ 'settings.cleanup.never' | translate }}</span>
+                  } @else {
+                    {{ rule.graceDays }}
+                  }
+                </td>
+                <td class="text-center">
+                  <app-enabled-switch
+                    [enabled]="rule.enabled"
+                    [busy]="togglingId() === rule.id"
+                    ariaLabelKey="common.active"
+                    (toggle)="toggleEnabled(rule)"
+                  />
+                </td>
+                <td class="text-end whitespace-nowrap">
+                  <button type="button" class="btn btn-ghost btn-xs" (click)="runPreview(rule)">
+                    {{ 'settings.cleanup.preview' | translate }}
+                  </button>
+                  <button type="button" class="btn btn-ghost btn-xs text-error" (click)="remove(rule)">
+                    {{ 'settings.cleanup.delete' | translate }}
+                  </button>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+
+    <label class="form-control max-w-xs">
+      <span class="label-text">{{ 'settings.cleanup.max_per_run' | translate }}</span>
+      <div class="flex gap-2 mt-1">
+        <input
+          type="number"
+          min="1"
+          class="input input-bordered input-sm w-28"
+          [ngModel]="maxPerRun()"
+          (ngModelChange)="maxPerRun.set(parseNumber($event))"
+        />
+        <button type="button" class="btn btn-sm" [disabled]="!maxPerRun() || maxPerRun()! < 1" (click)="saveMaxPerRun()">
+          {{ 'common.save' | translate }}
+        </button>
+      </div>
+      <span class="block text-xs leading-tight text-base-content/50 mt-1">
+        {{ 'settings.cleanup.max_per_run_hint' | translate }}
+      </span>
+    </label>
+  </section>
+
+  <section class="flex flex-col gap-3">
+    <h3 class="text-lg font-semibold">{{ 'settings.cleanup.candidates' | translate }}</h3>
+    @if (!loading() && candidates().length === 0) {
+      <p class="text-base-content/50 text-center py-4">{{ 'settings.cleanup.candidates_empty' | translate }}</p>
+    } @else if (candidates().length) {
+      <div class="overflow-x-auto rounded-lg border border-base-200">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>{{ 'settings.cleanup.col_title' | translate }}</th>
+              <th>{{ 'settings.cleanup.col_rule' | translate }}</th>
+              <th>{{ 'settings.cleanup.col_size' | translate }}</th>
+              <th>{{ 'settings.cleanup.col_days_left' | translate }}</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (c of candidates(); track c.mediaId) {
+              <tr>
+                <td class="font-medium">{{ c.title }}</td>
+                <td>{{ c.ruleName }}</td>
+                <td class="whitespace-nowrap">{{ formatBytes(c.size) }}</td>
+                <td>
+                  @if (c.deleteAt) {
+                    {{ daysLeft(c.deleteAt) }}
+                  } @else {
+                    <span class="text-base-content/50">{{ 'settings.cleanup.no_date' | translate }}</span>
+                  }
+                </td>
+                <td class="text-end whitespace-nowrap">
+                  <button type="button" class="btn btn-ghost btn-xs" (click)="keep(c)">
+                    {{ 'settings.cleanup.keep' | translate }}
+                  </button>
+                  <button type="button" class="btn btn-ghost btn-xs text-error" (click)="deleteNow(c)">
+                    {{ 'settings.cleanup.delete_now' | translate }}
+                  </button>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </section>
+</div>
+
+<dialog #editorDialog class="modal">
+  <div class="modal-box max-w-2xl">
+    <app-modal-header
+      [title]="(editingId() != null ? 'settings.cleanup.editor_edit' : 'settings.cleanup.editor_create') | translate"
+    />
+    <div class="flex flex-col gap-5">
+      <div class="flex flex-col sm:flex-row gap-4 sm:items-end">
+        <label class="form-control flex-1">
+          <span class="label-text">{{ 'settings.cleanup.field_name' | translate }}</span>
+          <input
+            type="text"
+            class="input input-bordered input-sm w-full"
+            [ngModel]="formName()"
+            (ngModelChange)="formName.set($event)"
+          />
+        </label>
+        <label class="label cursor-pointer justify-start gap-2">
+          <input
+            type="checkbox"
+            class="toggle toggle-sm toggle-primary"
+            [ngModel]="formEnabled()"
+            (ngModelChange)="formEnabled.set($event)"
+          />
+          <span class="label-text">{{ 'settings.cleanup.field_enabled' | translate }}</span>
+        </label>
+      </div>
+
+      <div class="flex gap-4">
+        <label class="form-control flex-1">
+          <span class="label-text">{{ 'settings.cleanup.col_action' | translate }}</span>
+          <select
+            appTvSelect
+            class="select select-bordered select-sm w-full"
+            [ngModel]="formAction()"
+            (ngModelChange)="formAction.set($event)"
+          >
+            @for (a of actions; track a) {
+              <option [value]="a">{{ 'settings.cleanup.action_' + a | translate }}</option>
+            }
+          </select>
+        </label>
+        <label class="form-control flex-1">
+          <span class="label-text">{{ 'settings.cleanup.col_grace' | translate }}</span>
+          <input
+            type="number"
+            min="0"
+            class="input input-bordered input-sm w-full"
+            [placeholder]="'settings.cleanup.never' | translate"
+            [ngModel]="formGraceDays()"
+            (ngModelChange)="formGraceDays.set(parseNumber($event))"
+          />
+        </label>
+      </div>
+      <p class="text-xs leading-tight text-base-content/50 -mt-3">{{ 'settings.cleanup.grace_hint' | translate }}</p>
+
+      <p class="text-sm text-base-content/60">{{ 'settings.cleanup.logic_hint' | translate }}</p>
+
+      <div class="grid sm:grid-cols-2 gap-3">
+        <label class="form-control">
+          <span class="label-text">{{ 'settings.cleanup.c_mediaType' | translate }}</span>
+          <select
+            appTvSelect
+            class="select select-bordered select-sm w-full"
+            [ngModel]="formCriteria().mediaType ?? ''"
+            (ngModelChange)="setMediaType($event)"
+          >
+            <option value="">{{ 'settings.cleanup.any' | translate }}</option>
+            <option value="movie">{{ 'settings.cleanup.type_movie' | translate }}</option>
+            <option value="series">{{ 'settings.cleanup.type_series' | translate }}</option>
+          </select>
+        </label>
+        <div class="form-control">
+          <span class="label-text">{{ 'settings.cleanup.c_libraryIds' | translate }}</span>
+          <app-multi-select
+            class="mt-1"
+            [options]="libraryOptions()"
+            [value]="formCriteria().libraryIds ?? []"
+            (valueChange)="setList('libraryIds', $event)"
+            [placeholder]="'settings.cleanup.any' | translate"
+          />
+        </div>
+        <div class="form-control">
+          <span class="label-text">{{ 'settings.cleanup.c_genres' | translate }}</span>
+          <app-multi-select
+            class="mt-1"
+            [options]="genreOptions()"
+            [value]="formCriteria().genres ?? []"
+            (valueChange)="setList('genres', $event)"
+            [placeholder]="'settings.cleanup.any' | translate"
+          />
+        </div>
+        <div class="form-control">
+          <span class="label-text">{{ 'settings.cleanup.c_excludeGenres' | translate }}</span>
+          <app-multi-select
+            class="mt-1"
+            [options]="genreOptions()"
+            [value]="formCriteria().excludeGenres ?? []"
+            (valueChange)="setList('excludeGenres', $event)"
+            [placeholder]="'settings.cleanup.none' | translate"
+          />
+        </div>
+        @for (key of numberFields; track key) {
+          <label class="form-control">
+            <span class="label-text">{{ 'settings.cleanup.c_' + key | translate }}</span>
+            <input
+              type="number"
+              min="0"
+              class="input input-bordered input-sm w-full"
+              [placeholder]="'settings.cleanup.no_limit' | translate"
+              [ngModel]="formCriteria()[key] ?? null"
+              (ngModelChange)="setNumber(key, $event)"
+            />
+          </label>
+        }
+      </div>
+      <p class="text-xs leading-tight text-base-content/50 -mt-3">{{ 'settings.cleanup.votes_hint' | translate }}</p>
+
+      <div class="grid sm:grid-cols-2 gap-1">
+        @for (key of flagFields; track key) {
+          <label class="label cursor-pointer justify-start gap-2">
+            <input
+              type="checkbox"
+              class="checkbox checkbox-sm"
+              [ngModel]="!!formCriteria()[key]"
+              (ngModelChange)="setFlag(key, $event)"
+            />
+            <span class="label-text">{{ 'settings.cleanup.c_' + key | translate }}</span>
+          </label>
+        }
+      </div>
+
+      <app-modal-footer>
+        <button type="button" class="btn btn-ghost" (click)="closeEditor()">{{ 'common.cancel' | translate }}</button>
+        <button type="button" class="btn btn-primary" [disabled]="saving() || !formName().trim()" (click)="save()">
+          @if (saving()) {
+            <span class="loading loading-spinner loading-xs"></span>
+          }
+          {{ 'common.save' | translate }}
+        </button>
+      </app-modal-footer>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button type="button" (click)="closeEditor()">close</button>
+  </form>
+</dialog>
+
+<dialog #previewDialog class="modal">
+  <div class="modal-box max-w-2xl">
+    @if (preview(); as p) {
+      <app-modal-header [title]="p.name" />
+      @if (p.matches.length === 0) {
+        <p class="text-base-content/50 text-center py-4">{{ 'settings.cleanup.preview_empty' | translate }}</p>
+      } @else {
+        <p class="text-sm mb-3">
+          {{ 'settings.cleanup.preview_total' | translate: { count: p.matches.length, size: formatBytes(p.totalSize) } }}
+        </p>
+        <div class="overflow-x-auto max-h-96 rounded-lg border border-base-200">
+          <table class="table table-sm">
+            <thead>
+              <tr>
+                <th>{{ 'settings.cleanup.col_title' | translate }}</th>
+                <th>{{ 'settings.cleanup.col_size' | translate }}</th>
+                <th>{{ 'settings.cleanup.col_last_played' | translate }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (m of p.matches; track m.id) {
+                <tr>
+                  <td>{{ m.title }}</td>
+                  <td class="whitespace-nowrap">{{ formatBytes(m.size) }}</td>
+                  <td class="whitespace-nowrap">
+                    @if (m.lastPlayedAt) {
+                      {{ m.lastPlayedAt | date: 'mediumDate' }}
+                    } @else {
+                      <span class="text-base-content/50">{{ 'settings.cleanup.never_played' | translate }}</span>
+                    }
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+      <app-modal-footer>
+        <button type="button" class="btn btn-ghost" (click)="closePreview()">{{ 'common.close' | translate }}</button>
+      </app-modal-footer>
+    }
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button type="button" (click)="closePreview()">close</button>
+  </form>
+</dialog>

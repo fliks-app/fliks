@@ -2,7 +2,7 @@
 
 ## Spec index
 
-Per-domain specs live under [`spec/`](spec/) (template: phase-2 plan §12); [`spec/node-removal.md`](spec/node-removal.md) is the removal of the Nest backend (S9). Specs are the record of each port: their `[ts:]` tags and "Bridges"/"Deletes in Nest" sections are history.
+Per-domain specs live under [`spec/`](spec/) (template: phase-2 plan §12); [`spec/cleanup.md`](spec/cleanup.md) is the library cleanup rules (Rust only); [`spec/node-removal.md`](spec/node-removal.md) is the removal of the Nest backend (S9). Specs are the record of each port: their `[ts:]` tags and "Bridges"/"Deletes in Nest" sections are history.
 
 ## Tag legend (in specs)
 
