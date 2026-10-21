@@ -58,8 +58,13 @@ describe('CompanionImportModalComponent', () => {
     expect([cmp.language(), cmp.forced(), cmp.hearingImpaired()]).toEqual(['en', false, false]);
     picked(cmp, new File(['x'], 'Film.fr.forced.srt'));
     expect([cmp.language(), cmp.forced()]).toEqual(['fr', true]);
+  });
+
+  it('keeps the chosen language when the file name has none', () => {
+    const { cmp } = setup();
+    cmp.language.set('fr');
     picked(cmp, new File(['x'], 'Film.srt'));
-    expect([cmp.language(), cmp.forced()]).toEqual(['en', false]);
+    expect(cmp.language()).toBe('fr');
   });
 
   it('rejects .sub, which the server cannot read as cues', () => {

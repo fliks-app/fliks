@@ -72,7 +72,9 @@ export class CompanionImportModalComponent {
     this.type.set(type);
     this.file.set(null);
     this.error.set(null);
-    this.applyTags(null);
+    this.language.set('en');
+    this.forced.set(false);
+    this.hearingImpaired.set(false);
     const input = this.fileInput()?.nativeElement;
     if (input) input.value = '';
   }
@@ -82,14 +84,15 @@ export class CompanionImportModalComponent {
     const file = input.files?.[0] ?? null;
     this.file.set(file);
     this.error.set(file ? this.precheck(file) : null);
-    this.applyTags(file);
+    if (file) this.applyTags(file);
   }
 
-  private applyTags(file: File | null): void {
-    const tags = file ? guessSubtitleTags(file.name) : null;
-    this.language.set(tags?.language ?? 'en');
-    this.forced.set(tags?.forced ?? false);
-    this.hearingImpaired.set(tags?.hearingImpaired ?? false);
+  /** The file name only overrides what it states, never a choice the user already made. */
+  private applyTags(file: File): void {
+    const tags = guessSubtitleTags(file.name);
+    if (tags.language) this.language.set(tags.language);
+    if (tags.forced) this.forced.set(true);
+    if (tags.hearingImpaired) this.hearingImpaired.set(true);
   }
 
   private precheck(file: File): string | null {
