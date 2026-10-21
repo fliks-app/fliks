@@ -12,10 +12,13 @@ import {
   CleanupCriteria,
   CleanupLevel,
   CleanupPreview,
+  CleanupReason,
+  CleanupRecommendations,
   CleanupRule,
   CleanupRuleBody,
   CleanupScope,
 } from '../../../core/services/api/cleanup-api.service';
+import { MediaService } from '../../../core/services/api/media.service';
 import { SettingsApiService } from '../../../core/services/api/settings-api.service';
 import { LibrariesApiService, Library } from '../../../core/services/api/libraries-api.service';
 import { MetadataService } from '../../../core/services/api/metadata.service';
@@ -54,6 +57,7 @@ const MAX_PER_RUN_KEY = 'cleanup_max_per_run';
 })
 export class CleanupSettingsComponent implements OnInit {
   private readonly api = inject(CleanupApiService);
+  private readonly mediaApi = inject(MediaService);
   private readonly settings = inject(SettingsApiService);
   private readonly librariesApi = inject(LibrariesApiService);
   private readonly metadata = inject(MetadataService);
@@ -94,6 +98,7 @@ export class CleanupSettingsComponent implements OnInit {
 
   readonly rules = signal<CleanupRule[]>([]);
   readonly candidates = signal<CleanupCandidate[]>([]);
+  readonly recommendations = signal<CleanupRecommendations>({ reasons: [], items: [] });
   readonly loading = signal(true);
   readonly libraries = signal<Library[]>([]);
   readonly genreOptions = signal<MultiSelectOption<string>[]>([]);
@@ -141,9 +146,14 @@ export class CleanupSettingsComponent implements OnInit {
   async reload() {
     this.loading.set(true);
     try {
-      const [rules, candidates] = await Promise.all([this.api.listRules(), this.api.candidates()]);
+      const [rules, candidates, recommendations] = await Promise.all([
+        this.api.listRules(),
+        this.api.candidates(),
+        this.api.recommendations(),
+      ]);
       this.rules.set(rules);
       this.candidates.set(candidates);
+      this.recommendations.set(recommendations);
       this.selected.set(new Set());
     } catch {
       // handled by global error interceptor
@@ -336,6 +346,48 @@ export class CleanupSettingsComponent implements OnInit {
     } catch {
       // handled by global error interceptor
     }
+  }
+
+  async keepRecommended(mediaId: number) {
+    try {
+      await this.api.keepMedia(mediaId);
+      await this.reload();
+    } catch {
+      // handled by global error interceptor
+    }
+  }
+
+  async deleteRecommended(item: CleanupRecommendations['items'][number]) {
+    if (
+      !(await this.confirmation.confirm({
+        title: this.translate.instant('common.confirm'),
+        message: this.translate.instant('settings.cleanup.confirm_delete_now', { title: item.title }),
+        variant: 'danger',
+      }))
+    )
+      return;
+    try {
+      await this.mediaApi.delete(item.mediaId);
+      await this.reload();
+    } catch {
+      // handled by global error interceptor
+    }
+  }
+
+  ruleFromReason(key: CleanupReason) {
+    const reason = this.recommendations().reasons.find((r) => r.key === key);
+    if (!reason) return;
+    this.editingId.set(null);
+    this.fill(
+      this.translate.instant('settings.cleanup.reason_' + key),
+      true,
+      reason.levels,
+      false,
+      'delete',
+      null,
+      [7, 1],
+      reason.criteria,
+    );
   }
 
   async deleteNow(c: CleanupCandidate) {

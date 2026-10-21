@@ -36,7 +36,7 @@
           </thead>
           <tbody>
             @for (rule of rules(); track rule.id) {
-              <tr [class.opacity-50]="!rule.enabled">
+              <tr>
                 <td>
                   <button type="button" class="link link-hover font-medium" (click)="openEdit(rule)">
                     {{ rule.name }}
@@ -167,6 +167,67 @@
                     {{ 'settings.cleanup.keep' | translate }}
                   </button>
                   <button type="button" class="btn btn-ghost btn-xs text-error" (click)="deleteNow(c)">
+                    {{ 'settings.cleanup.delete_now' | translate }}
+                  </button>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </section>
+
+  <section class="flex flex-col gap-3">
+    <div>
+      <h3 class="text-lg font-semibold">{{ 'settings.cleanup.recommendations' | translate }}</h3>
+      <p class="text-sm text-base-content/60 mt-1">{{ 'settings.cleanup.recommendations_hint' | translate }}</p>
+    </div>
+    @if (!loading() && recommendations().items.length === 0) {
+      <p class="text-base-content/50 text-center py-4">{{ 'settings.cleanup.recommendations_empty' | translate }}</p>
+    } @else if (recommendations().items.length) {
+      <div class="overflow-x-auto rounded-lg border border-base-200">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>{{ 'settings.cleanup.col_title' | translate }}</th>
+              <th>{{ 'settings.cleanup.col_reasons' | translate }}</th>
+              <th>{{ 'settings.cleanup.col_size' | translate }}</th>
+              <th>{{ 'settings.cleanup.col_last_played' | translate }}</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (item of recommendations().items; track item.mediaId) {
+              <tr>
+                <td class="font-medium">{{ item.title }}</td>
+                <td>
+                  <div class="flex flex-wrap gap-1">
+                    @for (reason of item.reasons; track reason) {
+                      <button
+                        type="button"
+                        class="badge badge-ghost badge-sm cursor-pointer hover:badge-primary"
+                        [title]="'settings.cleanup.create_rule' | translate"
+                        (click)="ruleFromReason(reason)"
+                      >
+                        {{ 'settings.cleanup.reason_' + reason | translate }}
+                      </button>
+                    }
+                  </div>
+                </td>
+                <td class="whitespace-nowrap">{{ formatBytes(item.size) }}</td>
+                <td class="whitespace-nowrap">
+                  @if (item.lastPlayedAt) {
+                    {{ item.lastPlayedAt | date: 'mediumDate' }}
+                  } @else {
+                    <span class="text-base-content/50">{{ 'settings.cleanup.never' | translate }}</span>
+                  }
+                </td>
+                <td class="text-end whitespace-nowrap">
+                  <button type="button" class="btn btn-ghost btn-xs" (click)="keepRecommended(item.mediaId)">
+                    {{ 'settings.cleanup.keep' | translate }}
+                  </button>
+                  <button type="button" class="btn btn-ghost btn-xs text-error" (click)="deleteRecommended(item)">
                     {{ 'settings.cleanup.delete_now' | translate }}
                   </button>
                 </td>

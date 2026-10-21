@@ -10,6 +10,8 @@ Library names in a rule file must match your libraries exactly. Replace `Movies`
 
 An exported rule file is `{fliksCleanupRule: 2, name, enabled, levels, action, graceDays, deleteSeriesWhenEmpty, reminderDays, criteria}`. Libraries are written by name, so a file moves between servers.
 
+Below the candidates, the Recommendations list shows titles the server suggests removing: never played, watched by the requester, untouched for a year, or an ended series left alone. It never flags or deletes anything. Keep hides a title, Delete now removes it, and Create rule opens the editor with that reason's criteria.
+
 ## Watched and untouched for 90 days
 
 Movies the requester has watched, that nobody has played for three months.

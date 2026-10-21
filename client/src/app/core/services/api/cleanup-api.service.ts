@@ -84,6 +84,21 @@ export interface CleanupCandidate extends CleanupScope {
   deleteAt: string | null;
 }
 
+export type CleanupReason = 'never_played' | 'watched_by_requester' | 'not_played_for_a_year' | 'series_ended';
+
+export interface CleanupRecommendations {
+  /** The built-in sets, so a reason can be turned into a rule. */
+  reasons: { key: CleanupReason; criteria: CleanupCriteria; levels: CleanupLevel[] }[];
+  items: {
+    mediaId: number;
+    title: string;
+    type: string;
+    size: number;
+    lastPlayedAt: string | null;
+    reasons: CleanupReason[];
+  }[];
+}
+
 function scopeParams(c: CleanupScope): Record<string, number> {
   return {
     ...(c.seasonId != null && { seasonId: c.seasonId }),
@@ -121,6 +136,14 @@ export class CleanupApiService {
 
   candidates() {
     return firstValueFrom(this.http.get<CleanupCandidate[]>('/api/cleanup/candidates'));
+  }
+
+  recommendations() {
+    return firstValueFrom(this.http.get<CleanupRecommendations>('/api/cleanup/recommendations'));
+  }
+
+  keepMedia(mediaId: number) {
+    return firstValueFrom(this.http.post<void>(`/api/cleanup/exclusions/${mediaId}`, {}));
   }
 
   deleteNow(c: CleanupCandidate) {

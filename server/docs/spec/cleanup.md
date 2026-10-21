@@ -12,6 +12,7 @@ Scope: `playback_history`, `cleanup_rules`, `cleanup_candidates`, `cleanup_exclu
 | `PUT /api/cleanup/rules/{id}` | `Manage Settings` | as `POST`, replaces the rule | 200, `Rule` | 400, 404 | UPDATE |
 | `DELETE /api/cleanup/rules/{id}` | `Manage Settings` | none | 200 | 404 | DELETE (candidates of the rule cascade) |
 | `POST /api/cleanup/rules/{id}/preview` | `Manage Settings` | none | 200, `{matches: {id, title, type, size, lastPlayedAt, seasonId, episodeId, seasonNumber, episodeNumber}[], totalSize}` (`id` is the media id; the season and episode keys are null above their level) | 404 | none; also for a disabled rule |
+| `GET /api/cleanup/recommendations` | `Read Settings` | none | 200, `{reasons: {key, criteria, levels}[], items: {mediaId, title, type, size, lastPlayedAt, reasons: string[]}[]}` (rules 33-36) | 401, 403 | none |
 | `GET /api/cleanup/candidates` | `Read Settings` | none | 200, `Candidate[]` ordered by `deleteAt` (nulls last), `mediaId` | 401, 403 | none |
 | `POST /api/cleanup/candidates/{mediaId}/delete-now` | `Delete Media`, library ACL | query `seasonId?`, `episodeId?` (rule 26) | 200, `{ok: true}` | 404 `Media #<id> is not a cleanup candidate`, 500 | rule 22 |
 | `POST /api/cleanup/exclusions/{mediaId}` | `Manage Settings`, library ACL | query `seasonId?`, `episodeId?` (rule 26) | 201, `{mediaId, seasonId, episodeId}` | 404 | INSERT exclusion (idempotent), DELETE the scope's candidates |
@@ -110,6 +111,13 @@ Scope: `playback_history`, `cleanup_rules`, `cleanup_candidates`, `cleanup_exclu
 30. Portable rule: `{fliksCleanupRule: 2, name, enabled, levels, action, graceDays, deleteSeriesWhenEmpty, reminderDays, criteria}`, with `levels`, `deleteSeriesWhenEmpty` and `reminderDays` carried as is and `criteria.libraryIds` and `criteria.excludeLibraryIds` holding library names instead of ids. Library names are unique.
 31. Export emits rule 30 for the stored rule and never `criteria.mediaType`. Import accepts version 2, and version 1 (`fliksCleanupRule: 1`, files exported before `levels`): a v1 `level` becomes `levels: [level]`, a v1 legacy `criteria.mediaType` is dropped and becomes `levels` when `level` is absent, and is rejected with `criteria.mediaType contradicts level <level>` when it differs from `level`; a v1 file without either gets the default. `levels` in a v1 file and `level` in a v2 file are unknown keys. Another `fliksCleanupRule` value or a missing one is `fliksCleanupRule must be 1 or 2`; unknown top-level keys are rejected as in rule 6; a library name that does not exist is `criteria.<key> unknown library <name>`. After names are resolved to ids the body is validated exactly like `POST /api/cleanup/rules`, and the rule is created with `enabled = false` whatever the file says.
 32. Bulk runs the single-item paths one after the other: `keep` is `POST exclusions`, `delete-now` is rule 22. A failing item (not found, outside the viewer's libraries, not a candidate for `delete-now`, action error) gives `ok: false` and the error text and never stops the others. Each item is `{mediaId, seasonId?, episodeId?}` with the scope of rule 26. A request without any `items`, with more than 200, or with an unknown `action` is a 400.
+
+### H. Recommendations
+
+33. Built-in sets, fixed in code (no table, no setting), each a reason key with criteria and levels: `never_played` `{neverPlayed: true, addedOlderThanDays: 90}`; `watched_by_requester` `{watchedByRequester: true, lastPlayedOlderThanDays: 60}`; `not_played_for_a_year` `{notPlayedInLastDays: 365, addedOlderThanDays: 365}` (movie, series); `series_ended` `{seriesEnded: true, lastPlayedOlderThanDays: 180, addedOlderThanDays: 180}` (series). Each runs through the matching of rules 8-10 with action `delete`, so cleanup exclusions are honoured. `reasons` of the response lists the four sets, so a client can turn one into a rule.
+34. A media matched by several sets appears once, with every reason in set order.
+35. A media with a whole-media candidate is left out; season and episode candidates do not hide it.
+36. `items` are ordered by `size` descending, then `mediaId`. The list is read-only: nothing is flagged, scheduled or deleted. Keep is `POST exclusions` (rule 21), and a deletion is `DELETE /api/media/{id}`.
 
 ## SQL
 

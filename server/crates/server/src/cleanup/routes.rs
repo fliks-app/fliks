@@ -132,6 +132,12 @@ pub async fn candidate_list(State(st): State<AppState>, a: Authed) -> Res<Json<V
     Ok(Json(db::candidates(&st.db).await?))
 }
 
+#[utoipa::path(get, path = "/api/cleanup/recommendations", responses((status = 200)))]
+pub async fn recommendation_list(State(st): State<AppState>, a: Authed) -> Res<Json<Value>> {
+    a.require(Action::Read, Subject::Settings)?;
+    Ok(Json(rules::recommendations(&st.db).await?))
+}
+
 #[utoipa::path(post, path = "/api/cleanup/candidates/{mediaId}/delete-now", responses((status = 200)))]
 pub async fn candidate_delete_now(
     State(st): State<AppState>,

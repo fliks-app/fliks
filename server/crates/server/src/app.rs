@@ -272,6 +272,7 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         cleanup::rule_remove,
         cleanup::rule_preview,
         cleanup::candidate_list,
+        cleanup::recommendation_list,
         cleanup::candidate_delete_now,
         cleanup::candidate_bulk,
         cleanup::rule_export,
