@@ -510,8 +510,8 @@ mod tests {
     async fn bcrypt_matches_v4() {
         let h = super::hash("pass".into()).await.unwrap();
         assert!(h.starts_with("$2b$12$") && bcrypt::verify("pass", &h).unwrap());
-        let v4_hash = "$2b$12$ArcuuJ3zV3DAJ/zbtJsCYOsxiX1O6wFVeSZ74c4ZrV.CQI1GqKLAa";
-        assert!(bcrypt::verify("v4-pass", v4_hash).unwrap());
-        assert!(bcrypt::verify("v4-pass", &v4_hash.replace("$2b$", "$2a$")).unwrap());
+        let v4_hash = "$2b$12$uz0IJTjIwyn42EOSchUXwuIceXfuXd3h0I9fNbV7SQKT4VkmTuZly";
+        assert!(bcrypt::verify("nest-pass", v4_hash).unwrap());
+        assert!(bcrypt::verify("nest-pass", &v4_hash.replace("$2b$", "$2a$")).unwrap());
     }
 }
