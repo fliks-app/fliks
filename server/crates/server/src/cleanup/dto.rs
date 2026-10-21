@@ -130,8 +130,9 @@ fn reminder_days(c: &mut Check, o: &Map<String, Value>) -> Vec<i32> {
     v
 }
 
-const KEYS: [&str; 21] = [
+const KEYS: [&str; 22] = [
     "libraryIds",
+    "excludeLibraryIds",
     "mediaType",
     "addedOlderThanDays",
     "releasedOlderThanDays",
@@ -163,7 +164,7 @@ fn criteria(k: &Map<String, Value>, level: &str, errs: &mut Vec<String>) -> Valu
             continue;
         };
         let val: Option<Value> = match key {
-            "libraryIds" => c.int_array(key, false).map(|a| json!(a)),
+            "libraryIds" | "excludeLibraryIds" => c.int_array(key, false).map(|a| json!(a)),
             "mediaType" if scoped(level) => {
                 c.err(key, &format!("is not available at {level} level"));
                 None
@@ -237,4 +238,92 @@ fn criteria(k: &Map<String, Value>, level: &str, errs: &mut Vec<String>) -> Valu
 
 pub fn not_candidate(id: i32) -> AppError {
     AppError::not_found(format!("Media #{id} is not a cleanup candidate"))
+}
+
+const BULK_MAX: usize = 200;
+
+#[derive(Debug)]
+pub struct BulkItem {
+    pub media_id: i32,
+    pub season_id: Option<i32>,
+    pub episode_id: Option<i32>,
+}
+
+#[derive(Debug)]
+pub struct Bulk {
+    pub delete_now: bool,
+    pub items: Vec<BulkItem>,
+}
+
+pub fn bulk(v: Value) -> Res<Bulk> {
+    let o = object(v);
+    let mut c = Check::new(&o, &["action", "items"], "");
+    let action = c.one_of("action", &["keep", "delete-now"], false);
+    let mut items = vec![];
+    match o.get("items").and_then(Value::as_array) {
+        Some(a) if (1..=BULK_MAX).contains(&a.len()) => {
+            for (i, it) in a.iter().enumerate() {
+                let it = object(it.clone());
+                let prefix = format!("items.{i}.");
+                let mut ic = Check::new(&it, &["mediaId", "seasonId", "episodeId"], &prefix);
+                let id =
+                    |ic: &mut Check, k: &str, req: bool| match it.get(k).filter(|v| !v.is_null()) {
+                        None if !req => None,
+                        Some(v) => ic.int(k, v, false, Some(1), None),
+                        None => {
+                            ic.err(k, "must be an integer number");
+                            None
+                        }
+                    };
+                let media_id = id(&mut ic, "mediaId", true);
+                let season_id = id(&mut ic, "seasonId", false);
+                let episode_id = id(&mut ic, "episodeId", false);
+                c.errs.append(&mut ic.errs);
+                if let Some(media_id) = media_id {
+                    items.push(BulkItem {
+                        media_id,
+                        season_id,
+                        episode_id,
+                    });
+                }
+            }
+        }
+        _ => c.err("items", "must contain between 1 and 200 items"),
+    }
+    c.finish(Bulk {
+        delete_now: action.as_deref() == Some("delete-now"),
+        items,
+    })
+}
+
+/// Portable rule (`cleanup.md` rule 26) to a rule body: library names to ids, always disabled.
+pub fn import(v: Value, libraries: &[(i32, String)]) -> Res<Rule> {
+    let mut o = object(v);
+    let mut errs = vec![];
+    if o.remove("fliksCleanupRule") != Some(json!(1)) {
+        errs.push("fliksCleanupRule must be 1".to_owned());
+    }
+    if let Some(Value::Object(k)) = o.get_mut("criteria") {
+        for key in ["libraryIds", "excludeLibraryIds"] {
+            let Some(Value::Array(names)) = k.get(key).cloned() else {
+                continue;
+            };
+            let mut ids = vec![];
+            for n in &names {
+                match n.as_str().and_then(|n| libraries.iter().find(|l| l.1 == n)) {
+                    Some(l) => ids.push(json!(l.0)),
+                    None => errs.push(format!(
+                        "criteria.{key} unknown library {}",
+                        n.as_str().map_or_else(|| n.to_string(), str::to_owned)
+                    )),
+                }
+            }
+            k.insert(key.into(), Value::Array(ids));
+        }
+    }
+    if !errs.is_empty() {
+        return Err(AppError::bad_request(errs));
+    }
+    o.insert("enabled".into(), json!(false));
+    rule(Value::Object(o))
 }

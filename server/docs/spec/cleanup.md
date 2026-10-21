@@ -16,6 +16,9 @@ Scope: `playback_history`, `cleanup_rules`, `cleanup_candidates`, `cleanup_exclu
 | `POST /api/cleanup/candidates/{mediaId}/delete-now` | `Delete Media`, library ACL | query `seasonId?`, `episodeId?` (rule 26) | 200, `{ok: true}` | 404 `Media #<id> is not a cleanup candidate`, 500 | rule 22 |
 | `POST /api/cleanup/exclusions/{mediaId}` | `Manage Settings`, library ACL | query `seasonId?`, `episodeId?` (rule 26) | 201, `{mediaId, seasonId, episodeId}` | 404 | INSERT exclusion (idempotent), DELETE the scope's candidates |
 | `DELETE /api/cleanup/exclusions/{mediaId}` | `Manage Settings` | query `seasonId?`, `episodeId?` (rule 26) | 200 | 404 `Media #<id> is not excluded` | DELETE |
+| `POST /api/cleanup/candidates/bulk` | `Manage Settings` for `keep`, `Delete Media` for `delete-now`; library ACL per item | `{action: 'keep'\|'delete-now', items: {mediaId, seasonId?, episodeId?}[1..200]}` | 200, `{results: {mediaId, seasonId, episodeId, ok, error?}[]}` in request order | 400 field errors, 401, 403 | rules 21 and 22 per item |
+| `GET /api/cleanup/rules/{id}/export` | `Read Settings` | none | 200, portable rule (rule 30) | 404 | none |
+| `POST /api/cleanup/rules/import` | `Manage Settings` | portable rule (rule 30) | 201, `Rule` (created disabled) | 400 field errors, 401, 403 | INSERT |
 | `GET /api/media/leaving-soon` | `Read Media` | none | 200, the card shape of `recently-added` plus `deleteAt` (ISO) | 401, 403 | none |
 
 `Rule` = `{id, createdAt, updatedAt, name, enabled, level, criteria, action, graceDays: int|null, deleteSeriesWhenEmpty, reminderDays: int[]}`. `Candidate` = `{id, mediaId, seasonId, episodeId, seasonNumber, episodeNumber, title, type, posterUrl, ruleId, ruleName, action, size, flaggedAt, deleteAt: string|null}`; the season and episode keys are null for a whole-media candidate. `size` is the sum of the scope's file sizes in bytes.
@@ -40,6 +43,7 @@ Scope: `playback_history`, `cleanup_rules`, `cleanup_candidates`, `cleanup_exclu
     | Key | Type | Matches a media when |
     |---|---|---|
     | `libraryIds` | int[] | its library is listed |
+    | `excludeLibraryIds` | int[] | its library is not listed |
     | `mediaType` | `movie`\|`series` | it has that type (rejected at season and episode level, which are series by nature: `is not available at season level`) |
     | `addedOlderThanDays` | int >= 0 | `media.createdAt` is older (season, episode: the newest file of the scope was added before) |
     | `releasedOlderThanDays` | int >= 0 | `media.releaseDate` is older (season: the newest `episodes.airDate` of the season; episode: its `airDate`; no date: no match) |
@@ -101,6 +105,12 @@ Scope: `playback_history`, `cleanup_rules`, `cleanup_candidates`, `cleanup_exclu
 27. Reminder pass, after the flag phase, for each candidate (any scope) with `deleteAt > now`: the crossed threshold is the smallest `reminderDays` value of its rule that is >= `daysLeft`. When one exists and is below `lastReminderDays` (or `lastReminderDays` is null), `media.leaving_soon` is sent once and `lastReminderDays` takes the threshold. A media flagged with fewer days left than several thresholds sends one event for the smallest of them, not one per threshold. A run between two thresholds sends nothing.
 28. A newly flagged scope always sends its flag-time event (rule 23); `lastReminderDays` then takes the crossed threshold, if any, so the reminder pass does not repeat it. A candidate past its `deleteAt` gets no reminder.
 29. Recipients: reminders reach the notification connections only (rule 25). The server has no per-user channel to carry them to the requesters and viewers of the media: no in-app notification store, no mobile push, no email sender. SSE (`emit_to_user`) reaches only connected clients and is not an inbox, so it is not used.
+
+### G. Bulk and portable rules
+
+30. Portable rule: `{fliksCleanupRule: 1, name, enabled, level, action, graceDays, deleteSeriesWhenEmpty, reminderDays, criteria}`, with `level`, `deleteSeriesWhenEmpty` and `reminderDays` carried as is and `criteria.libraryIds` and `criteria.excludeLibraryIds` holding library names instead of ids. Library names are unique.
+31. Export emits rule 30 for the stored rule. Import accepts only that shape: another `fliksCleanupRule` value or a missing one is `fliksCleanupRule must be 1`; unknown top-level keys are rejected as in rule 6; a library name that does not exist is `criteria.<key> unknown library <name>`. After names are resolved to ids the body is validated exactly like `POST /api/cleanup/rules`, and the rule is created with `enabled = false` whatever the file says.
+32. Bulk runs the single-item paths one after the other: `keep` is `POST exclusions`, `delete-now` is rule 22. A failing item (not found, outside the viewer's libraries, not a candidate for `delete-now`, action error) gives `ok: false` and the error text and never stops the others. Each item is `{mediaId, seasonId?, episodeId?}` with the scope of rule 26. A request without any `items`, with more than 200, or with an unknown `action` is a 400.
 
 ## SQL
 

@@ -4,6 +4,7 @@ import { firstValueFrom } from 'rxjs';
 
 export interface CleanupCriteria {
   libraryIds?: number[];
+  excludeLibraryIds?: number[];
   mediaType?: 'movie' | 'series';
   addedOlderThanDays?: number;
   releasedOlderThanDays?: number;
@@ -91,6 +92,10 @@ function scopeParams(c: CleanupScope): Record<string, number> {
   };
 }
 
+export interface CleanupBulkResult {
+  results: (CleanupScope & { mediaId: number; ok: boolean; error?: string })[];
+}
+
 @Injectable({ providedIn: 'root' })
 export class CleanupApiService {
   private readonly http = inject(HttpClient);
@@ -127,5 +132,18 @@ export class CleanupApiService {
 
   keep(c: CleanupCandidate) {
     return firstValueFrom(this.http.post<void>(`/api/cleanup/exclusions/${c.mediaId}`, {}, { params: scopeParams(c) }));
+  }
+
+  exportRule(id: number) {
+    return firstValueFrom(this.http.get<unknown>(`/api/cleanup/rules/${id}/export`));
+  }
+
+  importRule(body: unknown) {
+    return firstValueFrom(this.http.post<CleanupRule>('/api/cleanup/rules/import', body));
+  }
+
+  bulk(action: 'keep' | 'delete-now', candidates: CleanupCandidate[]) {
+    const items = candidates.map((c) => ({ mediaId: c.mediaId, ...scopeParams(c) }));
+    return firstValueFrom(this.http.post<CleanupBulkResult>('/api/cleanup/candidates/bulk', { action, items }));
   }
 }

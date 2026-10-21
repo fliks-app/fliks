@@ -150,6 +150,15 @@ pub fn compile(
             .push_bind(ids)
             .push(")");
     }
+    if let Some(ids) = c.get("excludeLibraryIds").and_then(Value::as_array) {
+        let ids: Vec<i32> = ids
+            .iter()
+            .filter_map(|v| i32::try_from(v.as_i64()?).ok())
+            .collect();
+        q.push(r#" AND media."libraryId" <> ALL("#)
+            .push_bind(ids)
+            .push(")");
+    }
     if let Some(t) = c.get("mediaType").and_then(Value::as_str) {
         q.push(r#" AND media."type"::text = "#)
             .push_bind(t.to_owned());

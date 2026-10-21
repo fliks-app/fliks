@@ -251,6 +251,19 @@
         }
       }
     },
+    "/api/cleanup/candidates/bulk": {
+      "post": {
+        "tags": [
+          "cleanup"
+        ],
+        "operationId": "candidate_bulk",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/cleanup/candidates/{mediaId}/delete-now": {
       "post": {
         "tags": [
@@ -312,6 +325,19 @@
         }
       }
     },
+    "/api/cleanup/rules/import": {
+      "post": {
+        "tags": [
+          "cleanup"
+        ],
+        "operationId": "rule_import",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/cleanup/rules/{id}": {
       "get": {
         "tags": [
@@ -340,6 +366,19 @@
           "cleanup"
         ],
         "operationId": "rule_remove",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/cleanup/rules/{id}/export": {
+      "get": {
+        "tags": [
+          "cleanup"
+        ],
+        "operationId": "rule_export",
         "responses": {
           "200": {
             "description": ""

@@ -2877,7 +2877,17 @@
       "level_episode": "Episode",
       "level_hint": "Season and episode rules delete the files of that season or episode and stop monitoring it.",
       "c_keepLatestEpisodes": "Keep the latest episodes (per series)",
-      "c_deleteSeriesWhenEmpty": "Remove the series once no file is left"
+      "c_deleteSeriesWhenEmpty": "Remove the series once no file is left",
+      "import": "Import",
+      "export": "Export",
+      "import_invalid": "The file is not valid JSON.",
+      "imported": "Rule \"{{name}}\" imported, disabled. Review it before enabling.",
+      "select_all": "Select all",
+      "selected": "{{count}} selected, {{size}}",
+      "confirm_bulk_delete": "Delete {{count}} media now ({{size}})? This cannot be undone.",
+      "bulk_done": "{{done}} done.",
+      "bulk_partial": "{{done}} done, {{failed}} failed.",
+      "c_excludeLibraryIds": "Excluded libraries"
     }
   },
   "roles": {

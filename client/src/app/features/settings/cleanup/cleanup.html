@@ -5,9 +5,15 @@
         <h2 class="text-xl font-semibold">{{ 'settings.cleanup.title' | translate }}</h2>
         <p class="text-sm text-base-content/60 mt-1">{{ 'settings.cleanup.subtitle' | translate }}</p>
       </div>
-      <button type="button" class="btn btn-primary btn-sm" (click)="openCreate()">
-        + {{ 'settings.cleanup.new' | translate }}
-      </button>
+      <div class="flex gap-2">
+        <input #importInput type="file" accept=".json,application/json" class="hidden" (change)="onImportPicked($event)" />
+        <button type="button" class="btn btn-sm" (click)="importInput.click()">
+          {{ 'settings.cleanup.import' | translate }}
+        </button>
+        <button type="button" class="btn btn-primary btn-sm" (click)="openCreate()">
+          + {{ 'settings.cleanup.new' | translate }}
+        </button>
+      </div>
     </div>
 
     @if (loading()) {
@@ -60,6 +66,9 @@
                   <button type="button" class="btn btn-ghost btn-xs" (click)="runPreview(rule)">
                     {{ 'settings.cleanup.preview' | translate }}
                   </button>
+                  <button type="button" class="btn btn-ghost btn-xs" (click)="exportRule(rule)">
+                    {{ 'settings.cleanup.export' | translate }}
+                  </button>
                   <button type="button" class="btn btn-ghost btn-xs text-error" (click)="remove(rule)">
                     {{ 'settings.cleanup.delete' | translate }}
                   </button>
@@ -92,7 +101,22 @@
   </section>
 
   <section class="flex flex-col gap-3">
-    <h3 class="text-lg font-semibold">{{ 'settings.cleanup.candidates' | translate }}</h3>
+    <div class="flex items-center justify-between gap-3">
+      <h3 class="text-lg font-semibold">{{ 'settings.cleanup.candidates' | translate }}</h3>
+      @if (selected().size) {
+        <div class="flex items-center gap-2">
+          <span class="text-sm text-base-content/60">
+            {{ 'settings.cleanup.selected' | translate: { count: selected().size, size: formatBytes(selectedSize()) } }}
+          </span>
+          <button type="button" class="btn btn-sm" [disabled]="bulkBusy()" (click)="bulk('keep')">
+            {{ 'settings.cleanup.keep' | translate }}
+          </button>
+          <button type="button" class="btn btn-sm btn-error" [disabled]="bulkBusy()" (click)="bulk('delete-now')">
+            {{ 'settings.cleanup.delete_now' | translate }}
+          </button>
+        </div>
+      }
+    </div>
     @if (!loading() && candidates().length === 0) {
       <p class="text-base-content/50 text-center py-4">{{ 'settings.cleanup.candidates_empty' | translate }}</p>
     } @else if (candidates().length) {
@@ -100,6 +124,15 @@
         <table class="table">
           <thead>
             <tr>
+              <th>
+                <input
+                  type="checkbox"
+                  class="checkbox checkbox-sm"
+                  [attr.aria-label]="'settings.cleanup.select_all' | translate"
+                  [checked]="allSelected()"
+                  (change)="toggleAll()"
+                />
+              </th>
               <th>{{ 'settings.cleanup.col_title' | translate }}</th>
               <th>{{ 'settings.cleanup.col_rule' | translate }}</th>
               <th>{{ 'settings.cleanup.col_size' | translate }}</th>
@@ -110,6 +143,15 @@
           <tbody>
             @for (c of candidates(); track c.id) {
               <tr>
+                <td>
+                  <input
+                    type="checkbox"
+                    class="checkbox checkbox-sm"
+                    [attr.aria-label]="c.title"
+                    [checked]="selected().has(c.id)"
+                    (change)="toggleSelected(c.id)"
+                  />
+                </td>
                 <td class="font-medium">{{ c.title }}{{ scopeLabel(c) }}</td>
                 <td>{{ c.ruleName }}</td>
                 <td class="whitespace-nowrap">{{ formatBytes(c.size) }}</td>
@@ -247,6 +289,16 @@
             [value]="formCriteria().libraryIds ?? []"
             (valueChange)="setList('libraryIds', $event)"
             [placeholder]="'settings.cleanup.any' | translate"
+          />
+        </div>
+        <div class="form-control">
+          <span class="label-text">{{ 'settings.cleanup.c_excludeLibraryIds' | translate }}</span>
+          <app-multi-select
+            class="mt-1"
+            [options]="libraryOptions()"
+            [value]="formCriteria().excludeLibraryIds ?? []"
+            (valueChange)="setList('excludeLibraryIds', $event)"
+            [placeholder]="'settings.cleanup.none' | translate"
           />
         </div>
         <div class="form-control">
