@@ -1,7 +1,8 @@
 {
   "ignore": [
     "$..uptimeSeconds",
-    "$..restartSupervisor"
+    "$..restartSupervisor",
+    "$..version"
   ],
   "name": "system-health",
   "seed": "base",

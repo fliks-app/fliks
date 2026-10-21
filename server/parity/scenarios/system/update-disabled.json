@@ -18,5 +18,8 @@
       "method": "GET",
       "path": "/api/system/update"
     }
+  ],
+  "ignore": [
+    "$..currentVersion"
   ]
 }

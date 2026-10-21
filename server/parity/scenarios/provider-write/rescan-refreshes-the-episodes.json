@@ -104,7 +104,7 @@
                 "formatBitRate": 108274,
                 "formatName": "matroska,webm",
                 "formatStartSeconds": -0.023,
-                "schemaVersion": 1,
+                "schemaVersion": 2,
                 "subtitles": [],
                 "video": [
                   {

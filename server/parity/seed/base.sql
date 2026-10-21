@@ -400,6 +400,118 @@ ALTER SEQUENCE public.auto_approval_rules_id_seq OWNED BY public.auto_approval_r
 
 
 --
+-- Name: cleanup_candidates; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.cleanup_candidates (
+    "mediaId" integer NOT NULL,
+    "ruleId" integer NOT NULL,
+    "flaggedAt" timestamp with time zone DEFAULT now() NOT NULL,
+    "deleteAt" timestamp with time zone,
+    id integer NOT NULL,
+    "seasonId" integer,
+    "episodeId" integer,
+    "lastReminderDays" integer
+);
+
+
+--
+-- Name: cleanup_candidates_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.cleanup_candidates_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: cleanup_candidates_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.cleanup_candidates_id_seq OWNED BY public.cleanup_candidates.id;
+
+
+--
+-- Name: cleanup_exclusions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.cleanup_exclusions (
+    "mediaId" integer NOT NULL,
+    "userId" integer,
+    "createdAt" timestamp with time zone DEFAULT now() NOT NULL,
+    id integer NOT NULL,
+    "seasonId" integer,
+    "episodeId" integer
+);
+
+
+--
+-- Name: cleanup_exclusions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.cleanup_exclusions_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: cleanup_exclusions_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.cleanup_exclusions_id_seq OWNED BY public.cleanup_exclusions.id;
+
+
+--
+-- Name: cleanup_rules; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.cleanup_rules (
+    id integer NOT NULL,
+    "createdAt" timestamp with time zone DEFAULT now() NOT NULL,
+    "updatedAt" timestamp with time zone DEFAULT now() NOT NULL,
+    name character varying NOT NULL,
+    enabled boolean DEFAULT true NOT NULL,
+    criteria jsonb NOT NULL,
+    action text DEFAULT 'delete'::text NOT NULL,
+    "graceDays" integer,
+    level text DEFAULT 'movie'::text NOT NULL,
+    "deleteSeriesWhenEmpty" boolean DEFAULT false NOT NULL,
+    "reminderDays" integer[] DEFAULT '{7,1}'::integer[] NOT NULL,
+    CONSTRAINT cleanup_rules_action_check CHECK ((action = ANY (ARRAY['delete'::text, 'delete_files_unmonitor'::text, 'none'::text]))),
+    CONSTRAINT "cleanup_rules_graceDays_check" CHECK (("graceDays" >= 0)),
+    CONSTRAINT cleanup_rules_level_check CHECK ((level = ANY (ARRAY['movie'::text, 'series'::text, 'season'::text, 'episode'::text])))
+);
+
+
+--
+-- Name: cleanup_rules_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.cleanup_rules_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: cleanup_rules_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.cleanup_rules_id_seq OWNED BY public.cleanup_rules.id;
+
+
+--
 -- Name: commands; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1482,6 +1594,39 @@ ALTER SEQUENCE public.persons_id_seq OWNED BY public.persons.id;
 
 
 --
+-- Name: playback_history; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.playback_history (
+    id integer NOT NULL,
+    "userId" integer NOT NULL,
+    "mediaId" integer NOT NULL,
+    "episodeId" integer,
+    "playedAt" timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: playback_history_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.playback_history_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: playback_history_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.playback_history_id_seq OWNED BY public.playback_history.id;
+
+
+--
 -- Name: playback_qoe_events; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2543,6 +2688,27 @@ ALTER TABLE ONLY public.auto_approval_rules ALTER COLUMN id SET DEFAULT nextval(
 
 
 --
+-- Name: cleanup_candidates id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cleanup_candidates ALTER COLUMN id SET DEFAULT nextval('public.cleanup_candidates_id_seq'::regclass);
+
+
+--
+-- Name: cleanup_exclusions id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cleanup_exclusions ALTER COLUMN id SET DEFAULT nextval('public.cleanup_exclusions_id_seq'::regclass);
+
+
+--
+-- Name: cleanup_rules id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cleanup_rules ALTER COLUMN id SET DEFAULT nextval('public.cleanup_rules_id_seq'::regclass);
+
+
+--
 -- Name: commands id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -2729,6 +2895,13 @@ ALTER TABLE ONLY public.pairing_requests ALTER COLUMN id SET DEFAULT nextval('pu
 --
 
 ALTER TABLE ONLY public.persons ALTER COLUMN id SET DEFAULT nextval('public.persons_id_seq'::regclass);
+
+
+--
+-- Name: playback_history id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.playback_history ALTER COLUMN id SET DEFAULT nextval('public.playback_history_id_seq'::regclass);
 
 
 --
@@ -2999,6 +3172,12 @@ COPY public._sqlx_migrations (version, description, installed_on, success, check
 1786830000000	persons search vector	2026-01-01 00:00:00+00	t	\\x5193d58a2af78a4d8fe0a7002ed1972d27e4d9387c88624b31612aa4e25abff5cd185024ad663a244b1a7cc0dc04a773	0
 1786900000000	plugins-wasm-host	2026-01-01 00:00:00+00	t	\\x7d91aa54274314dac952692f4a1fd58bda4230dc5731e69d7931a734ee896f9e53eeee367dfeaa00e9b8c1ada16ea4f7	0
 1787100000000	livetv clear xtream guide urls	2026-01-01 00:00:00+00	t	\\x5a36fd84eb4d4ae7c1d06968dfbed790b0d10f30c2d678d6fb1269d478fe499edf757e4788e4ab9a99f987b731e1b8a3	0
+1787200000000	media servers normalise url events	2026-01-01 00:00:00+00	t	\\x9e0d54fd35a784876bdc6f42733fa342451034320e0858c161176d29162f6881bd406bfb7e388a1aeb9478bf75e11f05	0
+1787300000000	index-foreign-keys	2026-01-01 00:00:00+00	t	\\x64c5d78776c1a2e11bcf46c029df9ac16794413b55e4248da5d1e8e431b694a53b87ee980be57b3c1df6acb266085331	0
+1787400000000	media-cleanup	2026-01-01 00:00:00+00	t	\\xece72fa7349805895c0869df4f53128c1229692ad422f35cd7b058290c449fc8d0102264579282d0ce833e7c24ecf740	0
+1787500000000	cleanup-season-episode	2026-01-01 00:00:00+00	t	\\xd37f435e256e0a48705f32cb8250a8d6f43acaa5f6e4a06c074985af8c36ea703b668a5a6297002f9b6faadcd6c8b15c	0
+1787600000000	playback-history	2026-01-01 00:00:00+00	t	\\x8937f5cc4e28636882ccc2ed91517abfcc65eee6d954501c15e0e83d50eaedd7befae639b8ad1bf7ceda5bbb053cb975	0
+1787700000000	cleanup-reminders	2026-01-01 00:00:00+00	t	\\xd2740129ef7b5733209232400958529690f7b7215d4f90d328eff855dd64973e20030a8047f249939dd6903c90149bb8	0
 \.
 
 
@@ -3018,6 +3197,30 @@ COPY public.app_settings (id, "createdAt", "updatedAt", key, value) FROM stdin;
 --
 
 COPY public.auto_approval_rules (id, "createdAt", "updatedAt", name, enabled, criteria) FROM stdin;
+\.
+
+
+--
+-- Data for Name: cleanup_candidates; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.cleanup_candidates ("mediaId", "ruleId", "flaggedAt", "deleteAt", id, "seasonId", "episodeId", "lastReminderDays") FROM stdin;
+\.
+
+
+--
+-- Data for Name: cleanup_exclusions; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.cleanup_exclusions ("mediaId", "userId", "createdAt", id, "seasonId", "episodeId") FROM stdin;
+\.
+
+
+--
+-- Data for Name: cleanup_rules; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.cleanup_rules (id, "createdAt", "updatedAt", name, enabled, criteria, action, "graceDays", level, "deleteSeriesWhenEmpty", "reminderDays") FROM stdin;
 \.
 
 
@@ -3312,6 +3515,14 @@ COPY public.persons (id, "createdAt", "updatedAt", "tmdbId", name, "avatarUrl", 
 
 
 --
+-- Data for Name: playback_history; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.playback_history (id, "userId", "mediaId", "episodeId", "playedAt") FROM stdin;
+\.
+
+
+--
 -- Data for Name: playback_qoe_events; Type: TABLE DATA; Schema: public; Owner: -
 --
 
@@ -3578,6 +3789,27 @@ SELECT pg_catalog.setval('public.auto_approval_rules_id_seq', 1, false);
 
 
 --
+-- Name: cleanup_candidates_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.cleanup_candidates_id_seq', 1, false);
+
+
+--
+-- Name: cleanup_exclusions_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.cleanup_exclusions_id_seq', 1, false);
+
+
+--
+-- Name: cleanup_rules_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.cleanup_rules_id_seq', 1, false);
+
+
+--
 -- Name: commands_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
@@ -3764,6 +3996,13 @@ SELECT pg_catalog.setval('public.pairing_requests_id_seq', 1, false);
 --
 
 SELECT pg_catalog.setval('public.persons_id_seq', 1, false);
+
+
+--
+-- Name: playback_history_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.playback_history_id_seq', 1, false);
 
 
 --
@@ -4421,6 +4660,30 @@ ALTER TABLE ONLY public._sqlx_migrations
 
 
 --
+-- Name: cleanup_candidates cleanup_candidates_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cleanup_candidates
+    ADD CONSTRAINT cleanup_candidates_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: cleanup_exclusions cleanup_exclusions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cleanup_exclusions
+    ADD CONSTRAINT cleanup_exclusions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: cleanup_rules cleanup_rules_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cleanup_rules
+    ADD CONSTRAINT cleanup_rules_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: content_recommendations content_recommendations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4434,6 +4697,14 @@ ALTER TABLE ONLY public.content_recommendations
 
 ALTER TABLE ONLY public.likes
     ADD CONSTRAINT likes_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: playback_history playback_history_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.playback_history
+    ADD CONSTRAINT playback_history_pkey PRIMARY KEY (id);
 
 
 --
@@ -4646,6 +4917,48 @@ CREATE INDEX "IDX_afa67f327d1abc474061454d0e" ON public.pairing_requests USING b
 
 
 --
+-- Name: IDX_cleanup_candidates_episodeId; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "IDX_cleanup_candidates_episodeId" ON public.cleanup_candidates USING btree ("episodeId");
+
+
+--
+-- Name: IDX_cleanup_candidates_ruleId; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "IDX_cleanup_candidates_ruleId" ON public.cleanup_candidates USING btree ("ruleId");
+
+
+--
+-- Name: IDX_cleanup_candidates_seasonId; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "IDX_cleanup_candidates_seasonId" ON public.cleanup_candidates USING btree ("seasonId");
+
+
+--
+-- Name: IDX_cleanup_exclusions_episodeId; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "IDX_cleanup_exclusions_episodeId" ON public.cleanup_exclusions USING btree ("episodeId");
+
+
+--
+-- Name: IDX_cleanup_exclusions_seasonId; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "IDX_cleanup_exclusions_seasonId" ON public.cleanup_exclusions USING btree ("seasonId");
+
+
+--
+-- Name: IDX_cleanup_exclusions_userId; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "IDX_cleanup_exclusions_userId" ON public.cleanup_exclusions USING btree ("userId");
+
+
+--
 -- Name: IDX_content_recommendations_recipient; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -4727,6 +5040,41 @@ CREATE INDEX "IDX_livetv_programs_window" ON public.livetv_programs USING btree 
 --
 
 CREATE INDEX "IDX_media_addedById" ON public.media USING btree ("addedById");
+
+
+--
+-- Name: IDX_media_files_episodeId; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "IDX_media_files_episodeId" ON public.media_files USING btree ("episodeId");
+
+
+--
+-- Name: IDX_media_libraryId; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "IDX_media_libraryId" ON public.media USING btree ("libraryId");
+
+
+--
+-- Name: IDX_playback_history_episodeId; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "IDX_playback_history_episodeId" ON public.playback_history USING btree ("episodeId");
+
+
+--
+-- Name: IDX_playback_history_mediaId_playedAt; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "IDX_playback_history_mediaId_playedAt" ON public.playback_history USING btree ("mediaId", "playedAt");
+
+
+--
+-- Name: IDX_playback_history_userId; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "IDX_playback_history_userId" ON public.playback_history USING btree ("userId");
 
 
 --
@@ -4842,6 +5190,34 @@ CREATE INDEX "IDX_refresh_tokens_userId" ON public.refresh_tokens USING btree ("
 
 
 --
+-- Name: IDX_requests_mediaId; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "IDX_requests_mediaId" ON public.requests USING btree ("mediaId");
+
+
+--
+-- Name: IDX_requests_userId; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "IDX_requests_userId" ON public.requests USING btree ("userId");
+
+
+--
+-- Name: IDX_seasons_mediaId; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "IDX_seasons_mediaId" ON public.seasons USING btree ("mediaId");
+
+
+--
+-- Name: IDX_subtitle_files_episodeId; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "IDX_subtitle_files_episodeId" ON public.subtitle_files USING btree ("episodeId");
+
+
+--
 -- Name: IDX_subtitle_files_mediaFileId; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -4867,6 +5243,20 @@ CREATE INDEX "IDX_user_follows_follower" ON public.user_follows USING btree ("fo
 --
 
 CREATE INDEX "IDX_user_follows_following" ON public.user_follows USING btree ("followingId");
+
+
+--
+-- Name: UQ_cleanup_candidates_scope; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX "UQ_cleanup_candidates_scope" ON public.cleanup_candidates USING btree ("mediaId", "seasonId", "episodeId") NULLS NOT DISTINCT;
+
+
+--
+-- Name: UQ_cleanup_exclusions_scope; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX "UQ_cleanup_exclusions_scope" ON public.cleanup_exclusions USING btree ("mediaId", "seasonId", "episodeId") NULLS NOT DISTINCT;
 
 
 --
@@ -5014,6 +5404,13 @@ CREATE TRIGGER set_updated_at BEFORE UPDATE ON public.app_settings FOR EACH ROW 
 --
 
 CREATE TRIGGER set_updated_at BEFORE UPDATE ON public.auto_approval_rules FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: cleanup_rules set_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON public.cleanup_rules FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
 
 --
@@ -5924,6 +6321,94 @@ ALTER TABLE ONLY public.playlist_saves
 
 ALTER TABLE ONLY public.playback_qoe_events
     ADD CONSTRAINT "FK_playback_qoe_events_session" FOREIGN KEY ("sessionId") REFERENCES public.playback_qoe_sessions("sessionId") ON DELETE CASCADE;
+
+
+--
+-- Name: cleanup_candidates cleanup_candidates_episodeId_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cleanup_candidates
+    ADD CONSTRAINT "cleanup_candidates_episodeId_fkey" FOREIGN KEY ("episodeId") REFERENCES public.episodes(id) ON DELETE CASCADE;
+
+
+--
+-- Name: cleanup_candidates cleanup_candidates_mediaId_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cleanup_candidates
+    ADD CONSTRAINT "cleanup_candidates_mediaId_fkey" FOREIGN KEY ("mediaId") REFERENCES public.media(id) ON DELETE CASCADE;
+
+
+--
+-- Name: cleanup_candidates cleanup_candidates_ruleId_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cleanup_candidates
+    ADD CONSTRAINT "cleanup_candidates_ruleId_fkey" FOREIGN KEY ("ruleId") REFERENCES public.cleanup_rules(id) ON DELETE CASCADE;
+
+
+--
+-- Name: cleanup_candidates cleanup_candidates_seasonId_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cleanup_candidates
+    ADD CONSTRAINT "cleanup_candidates_seasonId_fkey" FOREIGN KEY ("seasonId") REFERENCES public.seasons(id) ON DELETE CASCADE;
+
+
+--
+-- Name: cleanup_exclusions cleanup_exclusions_episodeId_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cleanup_exclusions
+    ADD CONSTRAINT "cleanup_exclusions_episodeId_fkey" FOREIGN KEY ("episodeId") REFERENCES public.episodes(id) ON DELETE CASCADE;
+
+
+--
+-- Name: cleanup_exclusions cleanup_exclusions_mediaId_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cleanup_exclusions
+    ADD CONSTRAINT "cleanup_exclusions_mediaId_fkey" FOREIGN KEY ("mediaId") REFERENCES public.media(id) ON DELETE CASCADE;
+
+
+--
+-- Name: cleanup_exclusions cleanup_exclusions_seasonId_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cleanup_exclusions
+    ADD CONSTRAINT "cleanup_exclusions_seasonId_fkey" FOREIGN KEY ("seasonId") REFERENCES public.seasons(id) ON DELETE CASCADE;
+
+
+--
+-- Name: cleanup_exclusions cleanup_exclusions_userId_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cleanup_exclusions
+    ADD CONSTRAINT "cleanup_exclusions_userId_fkey" FOREIGN KEY ("userId") REFERENCES public.users(id) ON DELETE SET NULL;
+
+
+--
+-- Name: playback_history playback_history_episodeId_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.playback_history
+    ADD CONSTRAINT "playback_history_episodeId_fkey" FOREIGN KEY ("episodeId") REFERENCES public.episodes(id) ON DELETE CASCADE;
+
+
+--
+-- Name: playback_history playback_history_mediaId_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.playback_history
+    ADD CONSTRAINT "playback_history_mediaId_fkey" FOREIGN KEY ("mediaId") REFERENCES public.media(id) ON DELETE CASCADE;
+
+
+--
+-- Name: playback_history playback_history_userId_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.playback_history
+    ADD CONSTRAINT "playback_history_userId_fkey" FOREIGN KEY ("userId") REFERENCES public.users(id) ON DELETE CASCADE;
 
 
 --

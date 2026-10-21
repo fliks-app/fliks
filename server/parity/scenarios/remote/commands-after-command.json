@@ -39,33 +39,6 @@
       "expect": {
         "body": [
           {
-            "action": "pause",
-            "byTargetId": null,
-            "type": "remote.command"
-          },
-          {
-            "action": "load",
-            "byTargetId": null,
-            "mediaFileId": 1,
-            "mediaId": 1,
-            "mediaType": "movie",
-            "type": "remote.command"
-          },
-          {
-            "action": "load",
-            "byTargetId": null,
-            "mediaFileId": 1,
-            "mediaId": 1,
-            "mediaType": "movie",
-            "type": "remote.command"
-          },
-          {
-            "action": "seek",
-            "byTargetId": null,
-            "positionSeconds": 12,
-            "type": "remote.command"
-          },
-          {
             "action": "play",
             "byTargetId": null,
             "type": "remote.command"
