@@ -431,7 +431,7 @@ async fn m1785600_skips_unexpected_setting_shapes(pool: PgPool) {
 }
 
 const TYPEORM_VERSIONS: i64 = 81;
-const SQL_FILES: i64 = 90;
+const SQL_FILES: i64 = 91;
 const LAST_TYPEORM_VERSION: i64 = 1_786_300_000_000;
 
 #[sqlx::test(migrations = false)]
@@ -481,7 +481,7 @@ async fn adopting_a_typeorm_database_matches_a_fresh_one(pool: PgPool) {
         "a TypeORM migration re-ran"
     );
     let new_rows = ledger.iter().filter(|r| r.0 > LAST_TYPEORM_VERSION);
-    assert!(new_rows.clone().count() == 9 && new_rows.into_iter().all(|r| r.1 > 0));
+    assert!(new_rows.clone().count() == 10 && new_rows.into_iter().all(|r| r.1 > 0));
 
     let fresh_db = "fliks_p7_fresh";
     for stmt in [
