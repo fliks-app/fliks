@@ -2806,7 +2806,7 @@
     },
     "cleanup": {
       "title": "Bibliotheksbereinigung",
-      "subtitle": "Regeln markieren ungenutzte Medien. Ein markierter Titel wird nach Ablauf der Karenzzeit entfernt.",
+      "subtitle": "Medien automatisch aus der Bibliothek entfernen",
       "new": "Neue Regel",
       "empty": "Keine Bereinigungsregel.",
       "confirm_delete": "Regel \"{{name}}\" löschen?",

@@ -2806,7 +2806,7 @@
     },
     "cleanup": {
       "title": "Limpeza da biblioteca",
-      "subtitle": "As regras marcam mídias sem uso. Um título marcado é removido ao fim do período de carência.",
+      "subtitle": "Remover mídias da biblioteca automaticamente",
       "new": "Nova regra",
       "empty": "Nenhuma regra de limpeza.",
       "confirm_delete": "Excluir a regra \"{{name}}\"?",

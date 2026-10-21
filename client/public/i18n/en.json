@@ -2806,7 +2806,7 @@
     },
     "cleanup": {
       "title": "Library cleanup",
-      "subtitle": "Rules flag stale media. A flagged title is removed once its grace period ends.",
+      "subtitle": "Remove media from the library automatically",
       "new": "New rule",
       "empty": "No cleanup rule.",
       "confirm_delete": "Delete the rule \"{{name}}\"?",

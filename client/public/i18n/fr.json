@@ -2806,7 +2806,7 @@
     },
     "cleanup": {
       "title": "Nettoyage de la bibliothèque",
-      "subtitle": "Les règles signalent les médias inutilisés. Un titre signalé est supprimé à la fin de son délai de grâce.",
+      "subtitle": "Supprimer automatiquement des médias de la bibliothèque",
       "new": "Nouvelle règle",
       "empty": "Aucune règle de nettoyage.",
       "confirm_delete": "Supprimer la règle \"{{name}}\" ?",
