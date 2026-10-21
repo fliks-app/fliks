@@ -273,3 +273,9 @@ pub async fn scoped_delete_at(db: &PgPool, media_id: i32) -> sqlx::Result<Vec<(S
         .map(|(season, episode, at)| (Scope { season, episode }, at))
         .collect())
 }
+
+pub async fn library_names(db: &PgPool) -> sqlx::Result<Vec<(i32, String)>> {
+    sqlx::query_as("SELECT id, name FROM libraries ORDER BY id")
+        .fetch_all(db)
+        .await
+}

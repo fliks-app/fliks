@@ -2877,7 +2877,17 @@
       "level_episode": "Épisode",
       "level_hint": "Les règles de saison et d'épisode suppriment les fichiers de la saison ou de l'épisode et arrêtent son suivi.",
       "c_keepLatestEpisodes": "Garder les derniers épisodes (par série)",
-      "c_deleteSeriesWhenEmpty": "Retirer la série quand il ne reste aucun fichier"
+      "c_deleteSeriesWhenEmpty": "Retirer la série quand il ne reste aucun fichier",
+      "import": "Importer",
+      "export": "Exporter",
+      "import_invalid": "Le fichier n'est pas un JSON valide.",
+      "imported": "Règle \"{{name}}\" importée, désactivée. Vérifiez-la avant de l'activer.",
+      "select_all": "Tout sélectionner",
+      "selected": "{{count}} sélectionnés, {{size}}",
+      "confirm_bulk_delete": "Supprimer {{count}} médias maintenant ({{size}}) ? Cette action est irréversible.",
+      "bulk_done": "{{done}} traités.",
+      "bulk_partial": "{{done}} traités, {{failed}} en échec.",
+      "c_excludeLibraryIds": "Bibliothèques exclues"
     }
   },
   "roles": {

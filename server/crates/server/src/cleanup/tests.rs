@@ -1,6 +1,6 @@
 use super::{
     db::{self, Scope},
-    dto, job, rules,
+    dto, job, routes, rules,
 };
 use crate::{config::Config, state::AppState};
 use serde_json::{Value, json};
@@ -215,6 +215,13 @@ fn unknown_keys_and_wrong_types_are_rejected() {
     }
     assert!(dto::rule(json!({"name": "r", "criteria": {}, "extra": 1})).is_err());
     assert!(dto::rule(json!({"name": "r", "criteria": {}, "action": "burn"})).is_err());
+}
+
+fn no_scope() -> routes::ScopeQuery {
+    routes::ScopeQuery {
+        season_id: None,
+        episode_id: None,
+    }
 }
 
 async fn state(pool: &PgPool) -> AppState {
@@ -810,6 +817,7 @@ fn level_rules_are_validated() {
     let typed = dto::rule(json!({"name": "r", "criteria": {"mediaType": "series"}})).unwrap();
     assert_eq!(typed.level, "series");
 }
+
 #[sqlx::test]
 async fn play_history_criteria(pool: PgPool) {
     let s = seed(&pool).await;
@@ -922,4 +930,162 @@ fn reminder_days_are_validated_and_sorted() {
             .reminder_days,
         vec![7, 1]
     );
+}
+
+#[sqlx::test]
+async fn export_then_import_round_trips_library_names(pool: PgPool) {
+    let s = seed(&pool).await;
+    let one: i32 = scalar(&pool, "SELECT id FROM libraries WHERE name = 'one'").await;
+    let criteria = json!({"libraryIds": [one], "excludeLibraryIds": [s.lib2], "neverPlayed": true});
+    let id = rule(&pool, criteria.clone(), "none", Some(30)).await;
+    let stored = db::rule_find(&pool, id).await.unwrap().unwrap();
+    let libs = db::library_names(&pool).await.unwrap();
+    let out = routes::export(&stored, &libs);
+    assert_eq!(out["fliksCleanupRule"], 1);
+    assert_eq!(out["criteria"]["libraryIds"], json!(["one"]));
+    assert_eq!(out["criteria"]["excludeLibraryIds"], json!(["two"]));
+    let r = dto::import(out, &libs).unwrap();
+    assert!(!r.enabled);
+    assert_eq!(r.criteria, criteria);
+    assert_eq!((r.action.as_str(), r.grace_days), ("none", Some(30)));
+}
+
+#[sqlx::test]
+async fn import_rejects_unknown_library_version_and_keys(pool: PgPool) {
+    seed(&pool).await;
+    let libs = db::library_names(&pool).await.unwrap();
+    let base = |extra: Value| {
+        let mut v = json!({"fliksCleanupRule": 1, "name": "r", "criteria": {}});
+        v.as_object_mut()
+            .unwrap()
+            .extend(extra.as_object().unwrap().clone());
+        v
+    };
+    let err = |v: Value| dto::import(v, &libs).unwrap_err().text();
+    assert!(
+        err(base(json!({"criteria": {"libraryIds": ["nope"]}}))).contains("unknown library nope")
+    );
+    assert!(err(base(json!({"fliksCleanupRule": 2}))).contains("fliksCleanupRule must be 1"));
+    assert!(err(json!({"name": "r", "criteria": {}})).contains("fliksCleanupRule must be 1"));
+    assert!(err(base(json!({"extra": 1}))).contains("property extra should not exist"));
+    assert!(dto::import(base(json!({"enabled": true})), &libs).is_ok_and(|r| !r.enabled));
+}
+
+#[sqlx::test]
+async fn exclude_library_ids_is_the_opposite_of_library_ids(pool: PgPool) {
+    let s = seed(&pool).await;
+    assert_eq!(
+        ids(&pool, json!({"excludeLibraryIds": [s.lib2]})).await,
+        vec![s.m1, s.m3]
+    );
+    assert_eq!(
+        ids(&pool, json!({"excludeLibraryIds": []})).await,
+        vec![s.m1, s.m2, s.m3]
+    );
+}
+
+#[test]
+fn bulk_body_is_validated() {
+    assert!(
+        dto::bulk(
+            json!({"action": "keep", "items": [{"mediaId": 1}, {"mediaId": 2, "seasonId": 3}]})
+        )
+        .is_ok()
+    );
+    assert!(
+        dto::bulk(json!({"action": "delete-now", "items": [{"mediaId": 1}]}))
+            .is_ok_and(|b| b.delete_now)
+    );
+    assert!(dto::bulk(json!({"action": "keep", "items": []})).is_err());
+    assert!(dto::bulk(json!({"action": "keep", "items": [{"seasonId": 1}]})).is_err());
+    assert!(dto::bulk(json!({"action": "burn", "items": [{"mediaId": 1}]})).is_err());
+    let many: Vec<Value> = (1..=201).map(|i| json!({"mediaId": i})).collect();
+    assert!(dto::bulk(json!({"action": "keep", "items": many})).is_err());
+}
+
+#[sqlx::test]
+async fn bulk_keep_and_delete_now_report_each_item(pool: PgPool) {
+    let s = seed(&pool).await;
+    let st = state(&pool).await;
+    rule(&pool, json!({}), "none", None).await;
+    job::run(&st).await.unwrap();
+    exec(
+        &pool,
+        &format!(r#"UPDATE media SET "folderName" = 'A' WHERE id = {}"#, s.m1),
+    )
+    .await;
+    let lib: String = sqlx::query_scalar(r#"SELECT path FROM libraries WHERE name = 'one'"#)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    fs::create_dir_all(format!("{lib}/A")).unwrap();
+    // m2 is outside the allowed libraries, 999999 does not exist
+    let allowed = [scalar(&pool, "SELECT id FROM libraries WHERE name = 'one'").await];
+    assert!(
+        routes::delete_one(&st, &allowed, s.m1, no_scope())
+            .await
+            .is_ok()
+    );
+    assert!(
+        routes::delete_one(&st, &allowed, s.m2, no_scope())
+            .await
+            .is_err()
+    );
+    assert!(
+        routes::delete_one(&st, &allowed, 999_999, no_scope())
+            .await
+            .is_err()
+    );
+    assert!(!PathBuf::from(format!("{lib}/A")).exists());
+    assert_eq!(media_ids(&pool).await, vec![s.m2, s.m3]);
+    routes::keep_one(&st, s.user, &[allowed[0], s.lib2], s.m2, no_scope())
+        .await
+        .unwrap();
+    assert!(
+        routes::keep_one(&st, s.user, &allowed, s.m2, no_scope())
+            .await
+            .is_err()
+    );
+    assert_eq!(candidates(&pool).await, vec![s.m3]);
+    let excluded: i64 =
+        sqlx::query_scalar(r#"SELECT COUNT(*) FROM cleanup_exclusions WHERE "mediaId" = $1"#)
+            .bind(s.m2)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(excluded, 1);
+}
+
+#[sqlx::test]
+async fn export_carries_level_scope_flag_and_new_criteria(pool: PgPool) {
+    seed(&pool).await;
+    let criteria = json!({"playCountBelow": 2, "notPlayedInLastDays": 10});
+    let id: i32 = sqlx::query_scalar(
+        r#"INSERT INTO cleanup_rules (name, level, criteria) VALUES ('m', 'movie', $1) RETURNING id"#,
+    )
+    .bind(&criteria)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let scoped: i32 = sqlx::query_scalar(
+        r#"INSERT INTO cleanup_rules (name, level, "deleteSeriesWhenEmpty", criteria)
+        VALUES ('s', 'season', true, '{}') RETURNING id"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    for (id, level, empty) in [(id, "movie", false), (scoped, "season", true)] {
+        let stored = db::rule_find(&pool, id).await.unwrap().unwrap();
+        let out = routes::export(&stored, &[]);
+        assert_eq!(
+            (&out["level"], &out["deleteSeriesWhenEmpty"]),
+            (&json!(level), &json!(empty))
+        );
+        let r = dto::import(out, &[]).unwrap();
+        assert_eq!(
+            (r.level.as_str(), r.delete_series_when_empty),
+            (level, empty)
+        );
+        assert!(!r.enabled);
+    }
 }

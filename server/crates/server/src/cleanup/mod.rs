@@ -23,6 +23,8 @@ pub fn router() -> Router<AppState> {
             "/api/cleanup/rules",
             get(routes::rule_list).post(routes::rule_create),
         )
+        .route("/api/cleanup/rules/import", post(routes::rule_import))
+        .route("/api/cleanup/rules/{id}/export", get(routes::rule_export))
         .route(
             "/api/cleanup/rules/{id}",
             get(routes::rule_get)
@@ -34,6 +36,7 @@ pub fn router() -> Router<AppState> {
             post(routes::rule_preview),
         )
         .route("/api/cleanup/candidates", get(routes::candidate_list))
+        .route("/api/cleanup/candidates/bulk", post(routes::candidate_bulk))
         .route(
             "/api/cleanup/candidates/{mediaId}/delete-now",
             post(routes::candidate_delete_now),

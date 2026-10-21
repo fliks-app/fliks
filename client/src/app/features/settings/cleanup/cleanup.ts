@@ -3,6 +3,7 @@ import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { TvSelectDirective } from '../../../shared/directives/tv-select.directive';
+import { ToastService } from '../../../core/services/toast.service';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import {
   CleanupAction,
@@ -58,6 +59,7 @@ export class CleanupSettingsComponent implements OnInit {
   private readonly metadata = inject(MetadataService);
   private readonly translate = inject(TranslateService);
   private readonly confirmation = inject(ConfirmationService);
+  private readonly toast = inject(ToastService);
 
   protected readonly formatBytes = formatBytes;
   protected readonly daysLeft = daysLeft;
@@ -111,6 +113,14 @@ export class CleanupSettingsComponent implements OnInit {
   readonly formReminderDays = signal('7, 1');
   readonly formCriteria = signal<CleanupCriteria>({});
 
+  readonly selected = signal<ReadonlySet<number>>(new Set());
+  readonly selectedCandidates = computed(() => this.candidates().filter((c) => this.selected().has(c.id)));
+  readonly selectedSize = computed(() => this.selectedCandidates().reduce((n, c) => n + c.size, 0));
+  readonly allSelected = computed(
+    () => this.candidates().length > 0 && this.selectedCandidates().length === this.candidates().length,
+  );
+  readonly bulkBusy = signal(false);
+
   readonly maxPerRun = signal<number | null>(10);
 
   ngOnInit() {
@@ -128,6 +138,7 @@ export class CleanupSettingsComponent implements OnInit {
       const [rules, candidates] = await Promise.all([this.api.listRules(), this.api.candidates()]);
       this.rules.set(rules);
       this.candidates.set(candidates);
+      this.selected.set(new Set());
     } catch {
       // handled by global error interceptor
     } finally {
@@ -209,7 +220,7 @@ export class CleanupSettingsComponent implements OnInit {
     this.formCriteria.update((c) => ({ ...c, [key]: on || undefined }));
   }
 
-  setList<K extends 'libraryIds' | 'genres' | 'excludeGenres'>(key: K, value: CleanupCriteria[K]) {
+  setList<K extends 'libraryIds' | 'excludeLibraryIds' | 'genres' | 'excludeGenres'>(key: K, value: CleanupCriteria[K]) {
     this.formCriteria.update((c) => ({ ...c, [key]: value }));
   }
 
@@ -343,6 +354,85 @@ export class CleanupSettingsComponent implements OnInit {
     if (n == null || n < 1) return;
     try {
       await this.settings.set(MAX_PER_RUN_KEY, String(Math.floor(n)));
+    } catch {
+      // handled by global error interceptor
+    }
+  }
+
+  toggleSelected(id: number) {
+    this.selected.update((s) => {
+      const next = new Set(s);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+  }
+
+  toggleAll() {
+    this.selected.set(this.allSelected() ? new Set() : new Set(this.candidates().map((c) => c.id)));
+  }
+
+  async bulk(action: 'keep' | 'delete-now') {
+    const picked = this.selectedCandidates();
+    if (!picked.length) return;
+    if (
+      action === 'delete-now' &&
+      !(await this.confirmation.confirm({
+        title: this.translate.instant('common.confirm'),
+        message: this.translate.instant('settings.cleanup.confirm_bulk_delete', {
+          count: picked.length,
+          size: formatBytes(this.selectedSize()),
+        }),
+        variant: 'danger',
+      }))
+    )
+      return;
+    this.bulkBusy.set(true);
+    try {
+      const { results } = await this.api.bulk(action, picked);
+      const failed = results.filter((r) => !r.ok).length;
+      const done = { size: results.length - failed };
+      await this.reload();
+      const key = failed ? 'settings.cleanup.bulk_partial' : 'settings.cleanup.bulk_done';
+      const msg = this.translate.instant(key, { done: done.size, failed });
+      if (failed) this.toast.warning(msg);
+      else this.toast.success(msg);
+    } catch {
+      // handled by global error interceptor
+    } finally {
+      this.bulkBusy.set(false);
+    }
+  }
+
+  async exportRule(rule: CleanupRule) {
+    try {
+      const json = JSON.stringify(await this.api.exportRule(rule.id), null, 2);
+      const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${rule.name.replace(/[\\/:*?"<>|]+/g, '_')}.fliks-rule.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      // handled by global error interceptor
+    }
+  }
+
+  async onImportPicked(event: Event) {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file) return;
+    let body: unknown;
+    try {
+      body = JSON.parse(await file.text());
+    } catch {
+      this.toast.error(this.translate.instant('settings.cleanup.import_invalid'));
+      return;
+    }
+    try {
+      const rule = await this.api.importRule(body);
+      this.toast.success(this.translate.instant('settings.cleanup.imported', { name: rule.name }));
+      await this.reload();
     } catch {
       // handled by global error interceptor
     }
