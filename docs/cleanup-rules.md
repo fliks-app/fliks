@@ -6,7 +6,9 @@ A rule matches a media when every criterion it sets holds. When several rules ma
 
 Library names in a rule file must match your libraries exactly. Replace `Movies` and `Series` with your own, or delete the `libraryIds` line to cover every library.
 
-An exported rule file is `{fliksCleanupRule: 1, name, enabled, action, graceDays, criteria}`. Libraries are written by name, so a file moves between servers.
+`levels` lists what the rule applies to: movies, plus at most one of series, seasons or episodes. Files from earlier versions (`fliksCleanupRule: 1`, with `level`) still import.
+
+An exported rule file is `{fliksCleanupRule: 2, name, enabled, levels, action, graceDays, deleteSeriesWhenEmpty, reminderDays, criteria}`. Libraries are written by name, so a file moves between servers.
 
 ## Watched and untouched for 90 days
 
@@ -14,13 +16,13 @@ Movies the requester has watched, that nobody has played for three months.
 
 ```json
 {
-  "fliksCleanupRule": 1,
+  "fliksCleanupRule": 2,
   "name": "Watched and untouched for 90 days",
   "enabled": false,
+  "levels": ["movie"],
   "action": "delete",
   "graceDays": 14,
   "criteria": {
-    "mediaType": "movie",
     "watchedByRequester": true,
     "lastPlayedOlderThanDays": 90
   }
@@ -29,13 +31,14 @@ Movies the requester has watched, that nobody has played for three months.
 
 ## Never watched after a year
 
-Anything added more than a year ago that nobody ever started. It only flags: nothing is removed.
+Movies added more than a year ago that nobody ever started. It only flags: nothing is removed.
 
 ```json
 {
-  "fliksCleanupRule": 1,
+  "fliksCleanupRule": 2,
   "name": "Never watched after a year",
   "enabled": false,
+  "levels": ["movie"],
   "action": "none",
   "graceDays": 30,
   "criteria": {
@@ -51,13 +54,13 @@ Movies rated under 5 (with at least 100 votes) that take more than 20 GB.
 
 ```json
 {
-  "fliksCleanupRule": 1,
+  "fliksCleanupRule": 2,
   "name": "Low-rated and big",
   "enabled": false,
+  "levels": ["movie"],
   "action": "delete",
   "graceDays": 7,
   "criteria": {
-    "mediaType": "movie",
     "ratingBelow": 5,
     "minVotes": 100,
     "sizeAboveGb": 20
@@ -71,9 +74,10 @@ On the `Movies` library only, when its disk has less than 10% free, flag movies 
 
 ```json
 {
-  "fliksCleanupRule": 1,
+  "fliksCleanupRule": 2,
   "name": "Free space when the disk fills up",
   "enabled": false,
+  "levels": ["movie"],
   "action": "delete_files_unmonitor",
   "graceDays": 7,
   "criteria": {
@@ -90,13 +94,13 @@ Ended series nobody liked and nobody played for a year, in every library except 
 
 ```json
 {
-  "fliksCleanupRule": 1,
+  "fliksCleanupRule": 2,
   "name": "Ended series nobody liked",
   "enabled": false,
+  "levels": ["series"],
   "action": "delete",
   "graceDays": 30,
   "criteria": {
-    "mediaType": "series",
     "seriesEnded": true,
     "notLiked": true,
     "lastPlayedOlderThanDays": 365,

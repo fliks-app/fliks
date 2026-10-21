@@ -41,7 +41,7 @@
                   <button type="button" class="link link-hover font-medium" (click)="openEdit(rule)">
                     {{ rule.name }}
                   </button>
-                  <span class="badge badge-ghost badge-sm ms-2">{{ 'settings.cleanup.level_' + rule.level | translate }}</span>
+                  <span class="badge badge-ghost badge-sm ms-2">{{ levelLabels(rule) }}</span>
                   @if (libraryNames(rule)) {
                     <div class="text-xs text-base-content/50">{{ libraryNames(rule) }}</div>
                   }
@@ -206,22 +206,18 @@
         </label>
       </div>
 
-      <label class="form-control">
-        <span class="label-text">{{ 'settings.cleanup.field_level' | translate }}</span>
-        <select
-          appTvSelect
-          class="select select-bordered select-sm w-full"
-          [ngModel]="formLevel()"
-          (ngModelChange)="setLevel($event)"
-        >
-          @for (l of levels; track l) {
-            <option [value]="l">{{ 'settings.cleanup.level_' + l | translate }}</option>
-          }
-        </select>
+      <div class="form-control">
+        <span class="label-text">{{ 'settings.cleanup.field_applies_to' | translate }}</span>
+        <app-multi-select
+          class="mt-1"
+          [options]="levelOptions()"
+          [value]="formLevels()"
+          (valueChange)="setLevels($event)"
+        />
         <span class="block text-xs leading-tight text-base-content/50 mt-1">
-          {{ 'settings.cleanup.level_hint' | translate }}
+          {{ 'settings.cleanup.applies_limit' | translate }} {{ 'settings.cleanup.applies_hint' | translate }}
         </span>
-      </label>
+      </div>
 
       <div class="flex gap-4">
         <label class="form-control flex-1">
@@ -266,21 +262,6 @@
       <p class="text-sm text-base-content/60">{{ 'settings.cleanup.logic_hint' | translate }}</p>
 
       <div class="grid sm:grid-cols-2 gap-3">
-        @if (!scopedLevels.includes(formLevel())) {
-        <label class="form-control">
-          <span class="label-text">{{ 'settings.cleanup.c_mediaType' | translate }}</span>
-          <select
-            appTvSelect
-            class="select select-bordered select-sm w-full"
-            [ngModel]="formCriteria().mediaType ?? ''"
-            (ngModelChange)="setMediaType($event)"
-          >
-            <option value="">{{ 'settings.cleanup.any' | translate }}</option>
-            <option value="movie">{{ 'settings.cleanup.type_movie' | translate }}</option>
-            <option value="series">{{ 'settings.cleanup.type_series' | translate }}</option>
-          </select>
-        </label>
-        }
         <div class="form-control">
           <span class="label-text">{{ 'settings.cleanup.c_libraryIds' | translate }}</span>
           <app-multi-select
@@ -334,7 +315,7 @@
             />
           </label>
         }
-        @if (formLevel() === 'episode') {
+        @if (formEpisodeOnly()) {
           <label class="form-control">
             <span class="label-text">{{ 'settings.cleanup.c_keepLatestEpisodes' | translate }}</span>
             <input
@@ -362,7 +343,7 @@
             <span class="label-text">{{ 'settings.cleanup.c_' + key | translate }}</span>
           </label>
         }
-        @if (scopedLevels.includes(formLevel())) {
+        @if (formScoped()) {
           <label class="label cursor-pointer justify-start gap-2">
             <input
               type="checkbox"

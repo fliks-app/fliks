@@ -458,8 +458,63 @@ async fn m1787600_backfills_one_row_per_completed_state(pool: PgPool) {
     );
 }
 
+#[sqlx::test(migrations = false)]
+async fn m1787800_moves_media_type_into_level(pool: PgPool) {
+    apply_until(&pool, 1_787_800_000_000).await;
+    sql(
+        &pool,
+        r#"INSERT INTO cleanup_rules (id, name, criteria, level) VALUES
+          (1, 'a', '{"mediaType":"series","neverPlayed":true}', 'movie'),
+          (2, 'b', '{"mediaType":"movie"}', 'movie'),
+          (3, 'c', '{"mediaType":"series"}', 'series'),
+          (4, 'd', '{"neverPlayed":true}', 'episode')"#,
+    )
+    .await;
+    apply_only(&pool, 1_787_800_000_000).await;
+    let got: Vec<(i32, String, String)> = rows(
+        &pool,
+        r#"SELECT id, level, criteria::text FROM cleanup_rules ORDER BY id"#,
+    )
+    .await;
+    assert_eq!(
+        got,
+        vec![
+            (1, "series".into(), r#"{"neverPlayed": true}"#.into()),
+            (2, "movie".into(), "{}".into()),
+            (3, "series".into(), "{}".into()),
+            (4, "episode".into(), r#"{"neverPlayed": true}"#.into()),
+        ]
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn m1787900_turns_level_into_levels(pool: PgPool) {
+    apply_until(&pool, 1_787_900_000_000).await;
+    sql(
+        &pool,
+        r#"INSERT INTO cleanup_rules (id, name, criteria, level) VALUES
+          (1, 'a', '{}', 'movie'), (2, 'b', '{}', 'series'), (3, 'c', '{}', 'season'), (4, 'd', '{}', 'episode')"#,
+    )
+    .await;
+    apply_only(&pool, 1_787_900_000_000).await;
+    let got: Vec<(i32, String)> = rows(
+        &pool,
+        r#"SELECT id, "levels"::text FROM cleanup_rules ORDER BY id"#,
+    )
+    .await;
+    let want = [(1, "movie"), (2, "series"), (3, "season"), (4, "episode")];
+    assert_eq!(got, want.map(|(i, l)| (i, format!("{{{l}}}"))).to_vec());
+    let dropped: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*) FROM information_schema.columns WHERE table_name = 'cleanup_rules' AND column_name = 'level'"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(dropped, 0);
+}
+
 const V4_VERSIONS: i64 = 81;
-const SQL_FILES: i64 = 94;
+const SQL_FILES: i64 = 96;
 const LAST_V4_VERSION: i64 = 1_786_300_000_000;
 
 #[sqlx::test(migrations = false)]
@@ -506,7 +561,7 @@ async fn adopting_a_v4_database_matches_a_fresh_one(pool: PgPool) {
     assert_eq!(adopted_rows().count() as i64, V4_VERSIONS);
     assert!(adopted_rows().all(|r| r.1 == 0), "a 4.x migration re-ran");
     let new_rows = ledger.iter().filter(|r| r.0 > LAST_V4_VERSION);
-    assert!(new_rows.clone().count() == 13 && new_rows.into_iter().all(|r| r.1 > 0));
+    assert!(new_rows.clone().count() == 15 && new_rows.into_iter().all(|r| r.1 > 0));
 
     let fresh_db = "fliks_p7_fresh";
     for stmt in [

@@ -4,7 +4,7 @@ use serde_json::Value;
 use sqlx::{FromRow, PgPool, types::Json};
 
 const RULE: &str = r#"jsonb_build_object('id', id, 'createdAt', iso_ms("createdAt"), 'updatedAt', iso_ms("updatedAt"),
-  'name', name, 'enabled', enabled, 'level', level, 'criteria', criteria, 'action', action,
+  'name', name, 'enabled', enabled, 'levels', levels, 'criteria', criteria, 'action', action,
   'graceDays', "graceDays", 'deleteSeriesWhenEmpty', "deleteSeriesWhenEmpty",
   'reminderDays', "reminderDays")"#;
 
@@ -18,7 +18,7 @@ pub struct Scope {
 #[derive(FromRow)]
 pub struct RuleRow {
     pub id: i32,
-    pub level: String,
+    pub levels: Vec<String>,
     pub criteria: Json<Value>,
     pub action: String,
     #[sqlx(rename = "graceDays")]
@@ -27,7 +27,7 @@ pub struct RuleRow {
 
 pub async fn rules_enabled(db: &PgPool) -> sqlx::Result<Vec<RuleRow>> {
     sqlx::query_as(
-        r#"SELECT id, level, criteria, action, "graceDays" FROM cleanup_rules WHERE enabled ORDER BY id"#,
+        r#"SELECT id, levels, criteria, action, "graceDays" FROM cleanup_rules WHERE enabled ORDER BY id"#,
     )
     .fetch_all(db)
     .await
@@ -35,7 +35,7 @@ pub async fn rules_enabled(db: &PgPool) -> sqlx::Result<Vec<RuleRow>> {
 
 pub async fn rule_row(db: &PgPool, id: i32) -> sqlx::Result<Option<RuleRow>> {
     sqlx::query_as(
-        r#"SELECT id, level, criteria, action, "graceDays" FROM cleanup_rules WHERE id = $1"#,
+        r#"SELECT id, levels, criteria, action, "graceDays" FROM cleanup_rules WHERE id = $1"#,
     )
     .bind(id)
     .fetch_optional(db)
@@ -59,12 +59,12 @@ pub async fn rule_find(db: &PgPool, id: i32) -> sqlx::Result<Option<Value>> {
 
 pub async fn rule_insert(db: &PgPool, r: &Rule) -> sqlx::Result<Value> {
     sqlx::query_scalar(&format!(
-        r#"WITH r AS (INSERT INTO cleanup_rules (name, enabled, level, criteria, action, "graceDays", "deleteSeriesWhenEmpty", "reminderDays")
+        r#"WITH r AS (INSERT INTO cleanup_rules (name, enabled, levels, criteria, action, "graceDays", "deleteSeriesWhenEmpty", "reminderDays")
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *) SELECT {RULE} FROM r"#
     ))
     .bind(&r.name)
     .bind(r.enabled)
-    .bind(&r.level)
+    .bind(&r.levels)
     .bind(&r.criteria)
     .bind(&r.action)
     .bind(r.grace_days)
@@ -76,13 +76,13 @@ pub async fn rule_insert(db: &PgPool, r: &Rule) -> sqlx::Result<Value> {
 
 pub async fn rule_update(db: &PgPool, id: i32, r: &Rule) -> sqlx::Result<Option<Value>> {
     sqlx::query_scalar(&format!(
-        r#"WITH r AS (UPDATE cleanup_rules SET name = $2, enabled = $3, level = $4, criteria = $5, action = $6,
+        r#"WITH r AS (UPDATE cleanup_rules SET name = $2, enabled = $3, levels = $4, criteria = $5, action = $6,
         "graceDays" = $7, "deleteSeriesWhenEmpty" = $8, "reminderDays" = $9 WHERE id = $1 RETURNING *) SELECT {RULE} FROM r"#
     ))
     .bind(id)
     .bind(&r.name)
     .bind(r.enabled)
-    .bind(&r.level)
+    .bind(&r.levels)
     .bind(&r.criteria)
     .bind(&r.action)
     .bind(r.grace_days)

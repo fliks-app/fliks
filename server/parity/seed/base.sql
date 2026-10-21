@@ -482,12 +482,12 @@ CREATE TABLE public.cleanup_rules (
     criteria jsonb NOT NULL,
     action text DEFAULT 'delete'::text NOT NULL,
     "graceDays" integer,
-    level text DEFAULT 'movie'::text NOT NULL,
     "deleteSeriesWhenEmpty" boolean DEFAULT false NOT NULL,
     "reminderDays" integer[] DEFAULT '{7,1}'::integer[] NOT NULL,
+    levels text[] DEFAULT '{movie}'::text[] NOT NULL,
     CONSTRAINT cleanup_rules_action_check CHECK ((action = ANY (ARRAY['delete'::text, 'delete_files_unmonitor'::text, 'none'::text]))),
     CONSTRAINT "cleanup_rules_graceDays_check" CHECK (("graceDays" >= 0)),
-    CONSTRAINT cleanup_rules_level_check CHECK ((level = ANY (ARRAY['movie'::text, 'series'::text, 'season'::text, 'episode'::text])))
+    CONSTRAINT cleanup_rules_levels_check CHECK (((cardinality(levels) >= 1) AND (levels <@ ARRAY['movie'::text, 'series'::text, 'season'::text, 'episode'::text])))
 );
 
 
@@ -3178,6 +3178,8 @@ COPY public._sqlx_migrations (version, description, installed_on, success, check
 1787500000000	cleanup-season-episode	2026-01-01 00:00:00+00	t	\\xd37f435e256e0a48705f32cb8250a8d6f43acaa5f6e4a06c074985af8c36ea703b668a5a6297002f9b6faadcd6c8b15c	0
 1787600000000	playback-history	2026-01-01 00:00:00+00	t	\\x8937f5cc4e28636882ccc2ed91517abfcc65eee6d954501c15e0e83d50eaedd7befae639b8ad1bf7ceda5bbb053cb975	0
 1787700000000	cleanup-reminders	2026-01-01 00:00:00+00	t	\\xd2740129ef7b5733209232400958529690f7b7215d4f90d328eff855dd64973e20030a8047f249939dd6903c90149bb8	0
+1787800000000	cleanup-drop-media-type	2026-01-01 00:00:00+00	t	\\x1790563dfc6ac223b76568c9ad3c4fbcbdf770d0ed884673c76caa4dbff1265b81e56f9103f35e0e02e45dbbf43730ad	0
+1787900000000	cleanup-levels	2026-01-01 00:00:00+00	t	\\x56c4f73258eaf6bf695db1915cf8290ef5b84e645e29be6232fbb78898cddfd77ecba2f9efd553bdee2b825df9b90f1c	0
 \.
 
 
@@ -3220,7 +3222,7 @@ COPY public.cleanup_exclusions ("mediaId", "userId", "createdAt", id, "seasonId"
 -- Data for Name: cleanup_rules; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.cleanup_rules (id, "createdAt", "updatedAt", name, enabled, criteria, action, "graceDays", level, "deleteSeriesWhenEmpty", "reminderDays") FROM stdin;
+COPY public.cleanup_rules (id, "createdAt", "updatedAt", name, enabled, criteria, action, "graceDays", "deleteSeriesWhenEmpty", "reminderDays", levels) FROM stdin;
 \.
 
 

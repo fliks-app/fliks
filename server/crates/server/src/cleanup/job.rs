@@ -61,7 +61,7 @@ pub async fn run(st: &AppState) -> Result<(), String> {
 pub async fn flag(st: &AppState) -> sqlx::Result<usize> {
     let mut claimed: HashMap<Key, (i32, Option<i32>)> = HashMap::new();
     for r in db::rules_enabled(&st.db).await? {
-        for m in rules::matched(&st.db, &r.criteria.0, &r.level, &r.action).await? {
+        for m in rules::matched(&st.db, &r.criteria.0, &r.levels, &r.action).await? {
             claimed
                 .entry((m.id, m.season_id, m.episode_id))
                 .or_insert((r.id, r.grace_days));

@@ -1,7 +1,7 @@
 //! `/api/cleanup/rules` body (`cleanup.md` rules 6-8): class-validator style messages, unknown keys rejected.
 use crate::{
     http::AppError,
-    requests::dto::{Check, MEDIA_TYPES, Res, object},
+    requests::dto::{Check, Res, object},
 };
 use serde_json::{Map, Value, json};
 
@@ -16,7 +16,7 @@ pub fn scoped(level: &str) -> bool {
 pub struct Rule {
     pub name: String,
     pub enabled: bool,
-    pub level: String,
+    pub levels: Vec<String>,
     pub delete_series_when_empty: bool,
     pub reminder_days: Vec<i32>,
     pub criteria: Value,
@@ -31,7 +31,7 @@ pub fn rule(v: Value) -> Res<Rule> {
         &[
             "name",
             "enabled",
-            "level",
+            "levels",
             "criteria",
             "action",
             "graceDays",
@@ -66,18 +66,11 @@ pub fn rule(v: Value) -> Res<Rule> {
         None | Some(Value::Null) => None,
         Some(v) => c.int("graceDays", v, false, Some(0), Some(3650)),
     };
-    let typed_series = o
-        .get("criteria")
-        .and_then(|k| k.get("mediaType"))
-        .and_then(Value::as_str)
-        == Some("series");
-    let level = c
-        .one_of("level", &LEVELS, true)
-        .unwrap_or_else(|| if typed_series { "series" } else { "movie" }.into());
+    let levels = levels(&mut c, &o);
     let delete_series_when_empty = match o.get("deleteSeriesWhenEmpty") {
         None | Some(Value::Null) => false,
         Some(Value::Bool(b)) => {
-            if *b && !scoped(&level) {
+            if *b && !levels.iter().any(|l| scoped(l)) {
                 c.err("deleteSeriesWhenEmpty", "must be false below season level");
             }
             *b
@@ -89,7 +82,7 @@ pub fn rule(v: Value) -> Res<Rule> {
     };
     let reminder_days = reminder_days(&mut c, &o);
     let criteria = match o.get("criteria") {
-        Some(Value::Object(k)) => criteria(k, &level, &mut c.errs),
+        Some(Value::Object(k)) => criteria(k, &levels, &mut c.errs),
         _ => {
             c.err("criteria", "must be an object");
             json!({})
@@ -98,13 +91,55 @@ pub fn rule(v: Value) -> Res<Rule> {
     c.finish(Rule {
         name,
         enabled,
-        level,
+        levels,
         delete_series_when_empty,
         reminder_days,
         criteria,
         action,
         grace_days,
     })
+}
+
+/// Canonical order; null or absent is `["movie"]`; at most one of series, season, episode.
+fn levels(c: &mut Check, o: &Map<String, Value>) -> Vec<String> {
+    let default = || vec!["movie".to_owned()];
+    let a = match o.get("levels") {
+        None | Some(Value::Null) => return default(),
+        Some(Value::Array(a)) => a,
+        Some(_) => {
+            c.err("levels", "must be an array");
+            return default();
+        }
+    };
+    if a.is_empty() {
+        c.err("levels", "should not be empty");
+        return default();
+    }
+    let mut got: Vec<&str> = vec![];
+    for v in a {
+        match v.as_str().filter(|s| LEVELS.contains(s)) {
+            Some(s) if got.contains(&s) => {
+                c.errs.push("levels's elements must be unique".into());
+            }
+            Some(s) => got.push(s),
+            None => c.errs.push(format!(
+                "each value in levels must be one of the following values: {}",
+                LEVELS.join(", ")
+            )),
+        }
+    }
+    if got.iter().filter(|l| **l != "movie").count() > 1 {
+        c.err(
+            "levels",
+            "must hold at most one of series, season and episode",
+        );
+    }
+    let v: Vec<String> = LEVELS
+        .iter()
+        .filter(|l| got.contains(l))
+        .map(|l| (*l).to_owned())
+        .collect();
+    if v.is_empty() { default() } else { v }
 }
 
 /// Sorted descending; null or absent is the default `[7, 1]`.
@@ -130,10 +165,9 @@ fn reminder_days(c: &mut Check, o: &Map<String, Value>) -> Vec<i32> {
     v
 }
 
-const KEYS: [&str; 22] = [
+const KEYS: [&str; 21] = [
     "libraryIds",
     "excludeLibraryIds",
-    "mediaType",
     "addedOlderThanDays",
     "releasedOlderThanDays",
     "lastPlayedOlderThanDays",
@@ -155,7 +189,27 @@ const KEYS: [&str; 22] = [
     "diskFreeBelowPercent",
 ];
 
-fn criteria(k: &Map<String, Value>, level: &str, errs: &mut Vec<String>) -> Value {
+/// Valid for every selected level; the error list holds each message once.
+fn criteria(k: &Map<String, Value>, levels: &[String], errs: &mut Vec<String>) -> Value {
+    let mut out = Value::Null;
+    let mut all: Vec<String> = vec![];
+    for level in levels {
+        let mut e = vec![];
+        let v = criteria_at(k, level, &mut e);
+        if out.is_null() {
+            out = v;
+        }
+        for m in e {
+            if !all.contains(&m) {
+                all.push(m);
+            }
+        }
+    }
+    errs.extend(all);
+    out
+}
+
+fn criteria_at(k: &Map<String, Value>, level: &str, errs: &mut Vec<String>) -> Value {
     let mut c = Check::new(k, &KEYS, "criteria.");
     let mut out = Map::new();
     for key in &KEYS {
@@ -165,20 +219,6 @@ fn criteria(k: &Map<String, Value>, level: &str, errs: &mut Vec<String>) -> Valu
         };
         let val: Option<Value> = match key {
             "libraryIds" | "excludeLibraryIds" => c.int_array(key, false).map(|a| json!(a)),
-            "mediaType" if scoped(level) => {
-                c.err(key, &format!("is not available at {level} level"));
-                None
-            }
-            "mediaType" => c
-                .one_of(key, &MEDIA_TYPES, true)
-                .map(Value::from)
-                .filter(|t| {
-                    let ok = *t == level;
-                    if !ok {
-                        c.err(key, &format!("must be {level}"));
-                    }
-                    ok
-                }),
             "keepLatestEpisodes" if level != "episode" => {
                 c.err(key, "is only available at episode level");
                 None
@@ -296,12 +336,41 @@ pub fn bulk(v: Value) -> Res<Bulk> {
     })
 }
 
-/// Portable rule (`cleanup.md` rule 26) to a rule body: library names to ids, always disabled.
+/// Version 1 file (`cleanup.md` rule 31): `level`, or the legacy `criteria.mediaType`, becomes `levels`.
+fn v1_level(o: &mut Map<String, Value>, errs: &mut Vec<String>) {
+    if o.contains_key("levels") {
+        errs.push("property levels should not exist".into());
+    }
+    let legacy = match o.get_mut("criteria") {
+        Some(Value::Object(k)) => k.remove("mediaType"),
+        _ => None,
+    };
+    let level = o.remove("level").filter(|l| !l.is_null());
+    let picked = match (legacy, level) {
+        (Some(t), Some(l)) if t != l => {
+            errs.push(format!(
+                "criteria.mediaType contradicts level {}",
+                l.as_str().unwrap_or_default()
+            ));
+            return;
+        }
+        (t, l) => l.or(t),
+    };
+    if let Some(l) = picked {
+        o.insert("levels".into(), json!([l]));
+    }
+}
+
+/// Portable rule (`cleanup.md` rule 30) to a rule body: library names to ids, always disabled.
 pub fn import(v: Value, libraries: &[(i32, String)]) -> Res<Rule> {
     let mut o = object(v);
     let mut errs = vec![];
-    if o.remove("fliksCleanupRule") != Some(json!(1)) {
-        errs.push("fliksCleanupRule must be 1".to_owned());
+    let version = o.remove("fliksCleanupRule");
+    if version != Some(json!(1)) && version != Some(json!(2)) {
+        errs.push("fliksCleanupRule must be 1 or 2".to_owned());
+    }
+    if version == Some(json!(1)) {
+        v1_level(&mut o, &mut errs);
     }
     if let Some(Value::Object(k)) = o.get_mut("criteria") {
         for key in ["libraryIds", "excludeLibraryIds"] {
