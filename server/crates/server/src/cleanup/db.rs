@@ -5,7 +5,8 @@ use sqlx::{FromRow, PgPool, types::Json};
 
 const RULE: &str = r#"jsonb_build_object('id', id, 'createdAt', iso_ms("createdAt"), 'updatedAt', iso_ms("updatedAt"),
   'name', name, 'enabled', enabled, 'level', level, 'criteria', criteria, 'action', action,
-  'graceDays', "graceDays", 'deleteSeriesWhenEmpty', "deleteSeriesWhenEmpty")"#;
+  'graceDays', "graceDays", 'deleteSeriesWhenEmpty', "deleteSeriesWhenEmpty",
+  'reminderDays', "reminderDays")"#;
 
 /// What a candidate or an exclusion covers: a whole media, a season or an episode.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -58,8 +59,8 @@ pub async fn rule_find(db: &PgPool, id: i32) -> sqlx::Result<Option<Value>> {
 
 pub async fn rule_insert(db: &PgPool, r: &Rule) -> sqlx::Result<Value> {
     sqlx::query_scalar(&format!(
-        r#"WITH r AS (INSERT INTO cleanup_rules (name, enabled, level, criteria, action, "graceDays", "deleteSeriesWhenEmpty")
-        VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *) SELECT {RULE} FROM r"#
+        r#"WITH r AS (INSERT INTO cleanup_rules (name, enabled, level, criteria, action, "graceDays", "deleteSeriesWhenEmpty", "reminderDays")
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *) SELECT {RULE} FROM r"#
     ))
     .bind(&r.name)
     .bind(r.enabled)
@@ -68,6 +69,7 @@ pub async fn rule_insert(db: &PgPool, r: &Rule) -> sqlx::Result<Value> {
     .bind(&r.action)
     .bind(r.grace_days)
     .bind(r.delete_series_when_empty)
+    .bind(&r.reminder_days)
     .fetch_one(db)
     .await
 }
@@ -75,7 +77,7 @@ pub async fn rule_insert(db: &PgPool, r: &Rule) -> sqlx::Result<Value> {
 pub async fn rule_update(db: &PgPool, id: i32, r: &Rule) -> sqlx::Result<Option<Value>> {
     sqlx::query_scalar(&format!(
         r#"WITH r AS (UPDATE cleanup_rules SET name = $2, enabled = $3, level = $4, criteria = $5, action = $6,
-        "graceDays" = $7, "deleteSeriesWhenEmpty" = $8 WHERE id = $1 RETURNING *) SELECT {RULE} FROM r"#
+        "graceDays" = $7, "deleteSeriesWhenEmpty" = $8, "reminderDays" = $9 WHERE id = $1 RETURNING *) SELECT {RULE} FROM r"#
     ))
     .bind(id)
     .bind(&r.name)
@@ -85,6 +87,7 @@ pub async fn rule_update(db: &PgPool, id: i32, r: &Rule) -> sqlx::Result<Option<
     .bind(&r.action)
     .bind(r.grace_days)
     .bind(r.delete_series_when_empty)
+    .bind(&r.reminder_days)
     .fetch_optional(db)
     .await
 }

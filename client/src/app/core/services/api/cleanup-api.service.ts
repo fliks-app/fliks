@@ -41,11 +41,12 @@ export interface CleanupRule {
   action: CleanupAction;
   graceDays: number | null;
   deleteSeriesWhenEmpty: boolean;
+  reminderDays: number[];
 }
 
 export type CleanupRuleBody = Pick<
   CleanupRule,
-  'name' | 'enabled' | 'level' | 'criteria' | 'action' | 'graceDays' | 'deleteSeriesWhenEmpty'
+  'name' | 'enabled' | 'level' | 'criteria' | 'action' | 'graceDays' | 'deleteSeriesWhenEmpty' | 'reminderDays'
 >;
 
 /** The season and episode of a candidate; both null for a whole media. */

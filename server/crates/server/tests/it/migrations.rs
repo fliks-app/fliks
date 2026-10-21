@@ -459,7 +459,7 @@ async fn m1787600_backfills_one_row_per_completed_state(pool: PgPool) {
 }
 
 const V4_VERSIONS: i64 = 81;
-const SQL_FILES: i64 = 93;
+const SQL_FILES: i64 = 94;
 const LAST_V4_VERSION: i64 = 1_786_300_000_000;
 
 #[sqlx::test(migrations = false)]
@@ -506,7 +506,7 @@ async fn adopting_a_v4_database_matches_a_fresh_one(pool: PgPool) {
     assert_eq!(adopted_rows().count() as i64, V4_VERSIONS);
     assert!(adopted_rows().all(|r| r.1 == 0), "a 4.x migration re-ran");
     let new_rows = ledger.iter().filter(|r| r.0 > LAST_V4_VERSION);
-    assert!(new_rows.clone().count() == 12 && new_rows.into_iter().all(|r| r.1 > 0));
+    assert!(new_rows.clone().count() == 13 && new_rows.into_iter().all(|r| r.1 > 0));
 
     let fresh_db = "fliks_p7_fresh";
     for stmt in [

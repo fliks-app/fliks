@@ -108,7 +108,14 @@ pub fn format_message(event: &str, payload: &Map<String, Value>) -> String {
             "Live TV source \"{}\" adult-group restriction pass failed",
             src()
         ),
-        "media.leaving_soon" => format!("Leaving soon: {title}{}", scope(payload)),
+        "media.leaving_soon" => {
+            let left = match payload.get("daysLeft").and_then(Value::as_i64) {
+                Some(1) => " (1 day)".to_owned(),
+                Some(n) => format!(" ({n} days)"),
+                None => String::new(),
+            };
+            format!("Leaving soon: {title}{}{left}", scope(payload))
+        }
         "media.cleaned_up" => format!("Cleaned up: {title}{}", scope(payload)),
         _ => format!("{event}: {}", Value::Object(payload.clone())),
     }

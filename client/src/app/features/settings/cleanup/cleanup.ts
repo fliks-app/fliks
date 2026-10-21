@@ -108,6 +108,7 @@ export class CleanupSettingsComponent implements OnInit {
   readonly formDeleteSeriesWhenEmpty = signal(false);
   readonly formAction = signal<CleanupAction>('delete');
   readonly formGraceDays = signal<number | null>(null);
+  readonly formReminderDays = signal('7, 1');
   readonly formCriteria = signal<CleanupCriteria>({});
 
   readonly maxPerRun = signal<number | null>(10);
@@ -152,7 +153,7 @@ export class CleanupSettingsComponent implements OnInit {
 
   openCreate() {
     this.editingId.set(null);
-    this.fill('', true, 'movie', false, 'delete', null, {});
+    this.fill('', true, 'movie', false, 'delete', null, [7, 1], {});
   }
 
   openEdit(rule: CleanupRule) {
@@ -164,6 +165,7 @@ export class CleanupSettingsComponent implements OnInit {
       rule.deleteSeriesWhenEmpty,
       rule.action,
       rule.graceDays,
+      rule.reminderDays,
       rule.criteria ?? {},
     );
   }
@@ -175,6 +177,7 @@ export class CleanupSettingsComponent implements OnInit {
     deleteSeriesWhenEmpty: boolean,
     action: CleanupAction,
     grace: number | null,
+    reminders: number[],
     c: CleanupCriteria,
   ) {
     this.formName.set(name);
@@ -183,6 +186,7 @@ export class CleanupSettingsComponent implements OnInit {
     this.formDeleteSeriesWhenEmpty.set(deleteSeriesWhenEmpty);
     this.formAction.set(action);
     this.formGraceDays.set(grace);
+    this.formReminderDays.set(reminders.join(', '));
     this.formCriteria.set({ ...c });
     this.editorDialog()?.nativeElement.showModal();
   }
@@ -235,6 +239,10 @@ export class CleanupSettingsComponent implements OnInit {
       deleteSeriesWhenEmpty: this.formDeleteSeriesWhenEmpty(),
       action: this.formAction(),
       graceDays: this.formGraceDays(),
+      reminderDays: this.formReminderDays()
+        .split(',')
+        .filter((d) => d.trim())
+        .map(Number),
       criteria: cleanCriteria(this.formCriteria()),
     };
     const id = this.editingId();
@@ -252,7 +260,7 @@ export class CleanupSettingsComponent implements OnInit {
   /** The server replaces the whole rule and rejects unknown keys, so the editable fields ride along with `enabled`. */
   async toggleEnabled(rule: CleanupRule) {
     this.togglingId.set(rule.id);
-    const { name, level, criteria, action, graceDays, deleteSeriesWhenEmpty } = rule;
+    const { name, level, criteria, action, graceDays, deleteSeriesWhenEmpty, reminderDays } = rule;
     try {
       await this.api.updateRule(rule.id, {
         name,
@@ -261,6 +269,7 @@ export class CleanupSettingsComponent implements OnInit {
         action,
         graceDays,
         deleteSeriesWhenEmpty,
+        reminderDays,
         enabled: !rule.enabled,
       });
       await this.reload();

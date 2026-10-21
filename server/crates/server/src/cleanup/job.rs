@@ -14,8 +14,6 @@ use serde_json::{Value, json};
 use std::collections::HashMap;
 
 type Key = (i32, Option<i32>, Option<i32>);
-/// Media id, title, `deleteAt`, season and episode numbers of a newly flagged scope.
-type Fresh = (i32, String, Option<String>, Option<i32>, Option<i32>);
 
 const MAX_PER_RUN_KEY: &str = "cleanup_max_per_run";
 const DEFAULT_MAX_PER_RUN: i64 = 10;
@@ -86,18 +84,15 @@ pub async fn flag(st: &AppState) -> sqlx::Result<usize> {
     .await?;
     let rule_ids: Vec<i32> = keys.iter().map(|k| claimed[k].0).collect();
     let graces: Vec<Option<i32>> = keys.iter().map(|k| claimed[k].1).collect();
-    let fresh: Vec<Fresh> = sqlx::query_as(
+    let fresh: Vec<i32> = sqlx::query_scalar(
         r#"WITH up AS (
              INSERT INTO cleanup_candidates ("mediaId", "seasonId", "episodeId", "ruleId", "deleteAt")
              SELECT t.m, t.s, t.e, t.r, now() + make_interval(days => t.g)
              FROM UNNEST($1::int[], $2::int[], $3::int[], $4::int[], $5::int[]) AS t(m, s, e, r, g)
              ON CONFLICT ("mediaId", "seasonId", "episodeId") DO UPDATE SET "ruleId" = EXCLUDED."ruleId",
                "deleteAt" = COALESCE(cleanup_candidates."deleteAt", EXCLUDED."deleteAt")
-             RETURNING "mediaId", "seasonId", "episodeId", "deleteAt", (xmax = 0) AS inserted)
-           SELECT up."mediaId", m.title, iso_ms(up."deleteAt"), s."seasonNumber", e."episodeNumber"
-           FROM up JOIN media m ON m.id = up."mediaId"
-           LEFT JOIN seasons s ON s.id = up."seasonId" LEFT JOIN episodes e ON e.id = up."episodeId"
-           WHERE up.inserted AND up."deleteAt" IS NOT NULL"#,
+             RETURNING id, "deleteAt", (xmax = 0) AS inserted)
+           SELECT id FROM up WHERE inserted AND "deleteAt" IS NOT NULL"#,
     )
     .bind(&medias)
     .bind(&seasons)
@@ -106,12 +101,60 @@ pub async fn flag(st: &AppState) -> sqlx::Result<usize> {
     .bind(&graces)
     .fetch_all(&st.db)
     .await?;
-    for (id, title, delete_at, season, episode) in &fresh {
-        let mut p = json!({"title": title, "mediaId": id, "deleteAt": delete_at});
-        scope_numbers(&mut p, *season, *episode);
+    remind(st, &fresh).await?;
+    Ok(fresh.len())
+}
+
+#[derive(sqlx::FromRow)]
+struct Due {
+    id: i32,
+    media: i32,
+    title: String,
+    delete_at: String,
+    days_left: i32,
+    thresholds: Vec<i32>,
+    last: Option<i32>,
+    season: Option<i32>,
+    episode: Option<i32>,
+}
+
+/// Sends `media.leaving_soon` for the newly flagged candidates and each threshold newly crossed (rules 27-28).
+async fn remind(st: &AppState, fresh: &[i32]) -> sqlx::Result<()> {
+    let rows: Vec<Due> = sqlx::query_as(
+        r#"SELECT c.id, c."mediaId" AS media, m.title, iso_ms(c."deleteAt") AS delete_at,
+             CEIL(EXTRACT(EPOCH FROM (c."deleteAt" - now())) / 86400)::int AS days_left,
+             r."reminderDays" AS thresholds, c."lastReminderDays" AS last,
+             s."seasonNumber" AS season, e."episodeNumber" AS episode
+           FROM cleanup_candidates c JOIN media m ON m.id = c."mediaId"
+           JOIN cleanup_rules r ON r.id = c."ruleId"
+           LEFT JOIN seasons s ON s.id = c."seasonId" LEFT JOIN episodes e ON e.id = c."episodeId"
+           WHERE c."deleteAt" > now()"#,
+    )
+    .fetch_all(&st.db)
+    .await?;
+    for d in rows {
+        let crossed = d
+            .thresholds
+            .iter()
+            .copied()
+            .filter(|t| *t >= d.days_left)
+            .min();
+        let new = crossed.is_some_and(|t| d.last.is_none_or(|l| t < l));
+        if !new && !fresh.contains(&d.id) {
+            continue;
+        }
+        if let Some(t) = crossed.filter(|_| new) {
+            sqlx::query(r#"UPDATE cleanup_candidates SET "lastReminderDays" = $2 WHERE id = $1"#)
+                .bind(d.id)
+                .bind(t)
+                .execute(&st.db)
+                .await?;
+        }
+        let mut p = json!({"title": d.title, "mediaId": d.media, "deleteAt": d.delete_at, "daysLeft": d.days_left});
+        scope_numbers(&mut p, d.season, d.episode);
         notify(st, "media.leaving_soon", p);
     }
-    Ok(fresh.len())
+    Ok(())
 }
 
 /// Adds `seasonNumber` / `episodeNumber` to a notification payload when scoped.

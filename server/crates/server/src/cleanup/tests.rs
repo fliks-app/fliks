@@ -847,3 +847,79 @@ async fn play_history_criteria(pool: PgPool) {
         assert_eq!(ids(&pool, criteria.clone()).await, want, "{criteria}");
     }
 }
+
+async fn last_reminder(pool: &PgPool) -> Vec<Option<i32>> {
+    sqlx::query_scalar(r#"SELECT "lastReminderDays" FROM cleanup_candidates ORDER BY "mediaId""#)
+        .fetch_all(pool)
+        .await
+        .unwrap()
+}
+
+async fn deadline(pool: &PgPool, interval: &str) {
+    exec(
+        pool,
+        &format!(r#"UPDATE cleanup_candidates SET "deleteAt" = now() + interval '{interval}'"#),
+    )
+    .await;
+}
+
+#[sqlx::test]
+async fn reminders_follow_the_thresholds(pool: PgPool) {
+    seed(&pool).await;
+    let st = state(&pool).await;
+    rule(&pool, json!({"neverPlayed": true}), "none", Some(30)).await;
+    job::run(&st).await.unwrap();
+    assert_eq!(last_reminder(&pool).await, vec![None, None]);
+    deadline(&pool, "10 days").await;
+    job::run(&st).await.unwrap();
+    assert_eq!(last_reminder(&pool).await, vec![None, None]);
+    deadline(&pool, "6 days 12 hours").await;
+    job::run(&st).await.unwrap();
+    assert_eq!(last_reminder(&pool).await, vec![Some(7), Some(7)]);
+    deadline(&pool, "3 days").await;
+    job::run(&st).await.unwrap();
+    assert_eq!(last_reminder(&pool).await, vec![Some(7), Some(7)]);
+    deadline(&pool, "23 hours").await;
+    job::run(&st).await.unwrap();
+    assert_eq!(last_reminder(&pool).await, vec![Some(1), Some(1)]);
+}
+
+#[sqlx::test]
+async fn a_late_flag_records_the_smallest_crossed_threshold(pool: PgPool) {
+    seed(&pool).await;
+    let st = state(&pool).await;
+    let id = rule(&pool, json!({"neverPlayed": true}), "none", Some(3)).await;
+    job::run(&st).await.unwrap();
+    assert_eq!(last_reminder(&pool).await, vec![Some(7), Some(7)]);
+    exec(&pool, "DELETE FROM cleanup_candidates").await;
+    exec(&pool, &format!(r#"UPDATE cleanup_rules SET "graceDays" = 1, "reminderDays" = '{{14,7,1}}' WHERE id = {id}"#)).await;
+    job::run(&st).await.unwrap();
+    assert_eq!(last_reminder(&pool).await, vec![Some(1), Some(1)]);
+}
+
+#[test]
+fn reminder_days_are_validated_and_sorted() {
+    let rule = |v: Value| dto::rule(json!({"name": "r", "criteria": {}, "reminderDays": v}));
+    assert_eq!(
+        rule(json!([1, 14, 7])).unwrap().reminder_days,
+        vec![14, 7, 1]
+    );
+    assert_eq!(rule(Value::Null).unwrap().reminder_days, vec![7, 1]);
+    assert!(rule(json!([])).unwrap().reminder_days.is_empty());
+    for bad in [
+        json!([0]),
+        json!([-1]),
+        json!([7, 7]),
+        json!([1, 2, 3, 4, 5, 6]),
+        json!(["a"]),
+        json!(7),
+    ] {
+        assert!(rule(bad.clone()).is_err(), "{bad}");
+    }
+    assert_eq!(
+        dto::rule(json!({"name": "r", "criteria": {}}))
+            .unwrap()
+            .reminder_days,
+        vec![7, 1]
+    );
+}

@@ -18,6 +18,7 @@ pub struct Rule {
     pub enabled: bool,
     pub level: String,
     pub delete_series_when_empty: bool,
+    pub reminder_days: Vec<i32>,
     pub criteria: Value,
     pub action: String,
     pub grace_days: Option<i32>,
@@ -35,6 +36,7 @@ pub fn rule(v: Value) -> Res<Rule> {
             "action",
             "graceDays",
             "deleteSeriesWhenEmpty",
+            "reminderDays",
         ],
         "",
     );
@@ -85,6 +87,7 @@ pub fn rule(v: Value) -> Res<Rule> {
             false
         }
     };
+    let reminder_days = reminder_days(&mut c, &o);
     let criteria = match o.get("criteria") {
         Some(Value::Object(k)) => criteria(k, &level, &mut c.errs),
         _ => {
@@ -97,10 +100,34 @@ pub fn rule(v: Value) -> Res<Rule> {
         enabled,
         level,
         delete_series_when_empty,
+        reminder_days,
         criteria,
         action,
         grace_days,
     })
+}
+
+/// Sorted descending; null or absent is the default `[7, 1]`.
+fn reminder_days(c: &mut Check, o: &Map<String, Value>) -> Vec<i32> {
+    if o.get("reminderDays").is_none_or(Value::is_null) {
+        return vec![7, 1];
+    }
+    let Some(a) = c.int_array("reminderDays", false) else {
+        return vec![7, 1];
+    };
+    if a.len() > 5 {
+        c.err("reminderDays", "must contain no more than 5 elements");
+    }
+    if a.iter().any(|n| *n < 1) {
+        c.errs
+            .push("each value in reminderDays must not be less than 1".into());
+    }
+    let mut v: Vec<i32> = a.iter().filter_map(|n| i32::try_from(*n).ok()).collect();
+    v.sort_unstable_by(|x, y| y.cmp(x));
+    if v.windows(2).any(|w| w[0] == w[1]) {
+        c.errs.push("reminderDays's elements must be unique".into());
+    }
+    v
 }
 
 const KEYS: [&str; 21] = [
