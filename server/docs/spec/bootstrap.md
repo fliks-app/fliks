@@ -1,6 +1,6 @@
 # Spec: bootstrap
 
-Sources: `[ts:src/main.ts]`, `[ts:src/app.module.ts]`, `[ts:src/common/pipes/tolerant-validation.pipe.ts]`, `[ts:src/common/filters/file-too-large.filter.ts]`. Milestone: S0.
+Cross-cutting HTTP stack: prefix, validation, serialization, error bodies, CORS, static files, boot-time database setup and listen port.
 
 ## Routes
 
@@ -8,25 +8,25 @@ Sources: `[ts:src/main.ts]`, `[ts:src/app.module.ts]`, `[ts:src/common/pipes/tol
 
 ## Rules
 
-1. Global HTTP prefix is `api`; route `engine/resolve` is excluded from the prefix (served at `/engine/resolve`, not `/api/engine/resolve`). `[ts:src/main.ts:76]`
-2. Global validation uses `TolerantValidationPipe` with `whitelist: true`, `forbidNonWhitelisted: true`, `transform: true`. `[ts:src/main.ts:77]`–`[ts:src/main.ts:82]`
-3. DTOs decorated with `@AllowExtraProperties()` skip `forbidNonWhitelisted` (unknown fields stripped only). Pipe implementation: `[ts:src/common/pipes/tolerant-validation.pipe.ts:8]`–`[ts:src/common/pipes/tolerant-validation.pipe.ts:27]`. Example consumer: `[ts:src/modules/streaming/dto/device-profile.dto.ts:56]`.
-4. Global `ClassSerializerInterceptor` strips `@Exclude()` fields from serialized entity instances returned by controllers. `[ts:src/main.ts:87]` Confirmed `@Exclude` credentials: `User.passwordHash` `[ts:src/modules/users/entities/user.entity.ts:22]`–`[ts:src/modules/users/entities/user.entity.ts:23]`; `LiveTvSource.password` `[ts:src/modules/livetv/entities/livetv-source.entity.ts:32]`–`[ts:src/modules/livetv/entities/livetv-source.entity.ts:33]`. `media_servers.apiKey` is NOT excluded (`[ts:src/modules/users/entities/media-server.entity.ts:16]`–`[ts:src/modules/users/entities/media-server.entity.ts:17]`) and the client reads it back: `apiKey` IS returned by `GET /api/media-servers[/:id]`, the Rust response must include it (`[ts:client/src/app/features/settings/media-servers/media-servers.ts:107]` fills the edit form from `row.apiKey`, `[ts:client/src/app/features/settings/media-servers/media-servers.ts:188]` sends it on update).
-5. Default Nest HTTP exceptions serialize as JSON `{ statusCode, message, error }`. `[ts:src/main.ts:92]` registers only `ClientAbortExceptionFilter`, which extends `BaseExceptionFilter` and delegates to `super.catch` (Nest default error body) unless the client aborted. `[ts:src/common/filters/client-abort-exception.filter.ts:19]`, `[ts:src/common/filters/client-abort-exception.filter.ts:31]`
-6. `FileTooLargeFilter` on selected upload routes maps `PayloadTooLargeException` to HTTP 413 with body `{ statusCode: 413, error: 'Payload Too Large', message: 'file_info.import_err_too_large' }`. `[ts:src/common/filters/file-too-large.filter.ts:8]`–`[ts:src/common/filters/file-too-large.filter.ts:11]`; applied on `[ts:src/modules/media/media.controller.ts:273]` and `[ts:src/modules/media/media.controller.ts:772]`.
-7. Middleware wraps `res.writeHead`: any response with `statusCode >= 400` gets `Cache-Control: no-store, no-cache, must-revalidate`. `[ts:src/main.ts:64]`–`[ts:src/main.ts:66]`
-8. CORS: origins from `CORS_ORIGIN` (comma-separated) when non-empty, else `http://localhost:4200` and `http://localhost:4500`; always union `https://localhost`, `capacitor://localhost`, `http://localhost`; `credentials: true`. `[ts:src/main.ts:23]`–`[ts:src/main.ts:43]`
-9. Express `trust proxy` is `true` (honour `X-Forwarded-*` for client IP). `[ts:src/main.ts:47]`
-10. JSON request body size limit is Express’s default 100 kB; nothing in `backend/src` calls `bodyParser`, `useBodyParser` or `express.json`, so Nest's default 100 kB JSON/urlencoded limit applies. `[ts:src/main.ts:13]`–`[ts:src/main.ts:15]` (`NestFactory.create` with only `forceCloseConnections`)
-11. At boot, before listen: `CREATE EXTENSION IF NOT EXISTS pg_trgm` on the TypeORM connection. `[ts:src/main.ts:20]`–`[ts:src/main.ts:21]`
-12. Static files: `/cast` → `join(__dirname, '..', 'public')` with `index: false`. `[ts:src/app.module.ts:42]`–`[ts:src/app.module.ts:45]`
-13. When `SERVE_STATIC_PATH` is set, serve that directory at `/`, excluding `/api/{*path}` and `/cast/{*path}`. Any other unmatched path falls back to that directory's `index.html` (SPA fallback, ServeStatic default; no `index`/`renderPath` override). `[ts:src/app.module.ts:48]`–`[ts:src/app.module.ts:54]`
-14. TypeORM: `synchronize` when `NODE_ENV !== 'production'`, `migrationsRun` when production; connection pool `extra.max: 30`. `[ts:src/app.module.ts:60]`–`[ts:src/app.module.ts:77]`
-15. Listen port: `Number(process.env.PORT) || 4848`. `[ts:src/main.ts:94]`–`[ts:src/main.ts:95]`
+1. Global HTTP prefix is `api`; route `engine/resolve` is excluded from the prefix (served at `/engine/resolve`, not `/api/engine/resolve`).
+2. Global validation is tolerant: unknown fields are rejected (`forbidNonWhitelisted`) except on DTOs marked as allowing extra properties, where unknown fields are stripped only; request bodies are transformed to the declared types.
+3. DTOs that allow extra properties skip the unknown-field rejection (unknown fields stripped only). Example consumer: the device-profile DTO of streaming.
+4. Serialized entities omit credential fields: `User.passwordHash` and `LiveTvSource.password` are never returned. `media_servers.apiKey` is serialized as `""` and `apiKeySet: boolean` says whether a key is stored; a write with `apiKey` absent or `""` keeps the stored key, a non-empty string replaces it, `null` clears it. The media-servers edit form starts empty with an "unchanged" hint; a 4.x client re-sending `""` keeps the key but can no longer clear it.
+5. HTTP errors serialize as JSON `{ statusCode, message, error }`. The only exception filter is the client-abort one, which delegates to the default error body unless the client aborted.
+6. On selected upload routes a payload over the limit maps to HTTP 413 with body `{ statusCode: 413, error: 'Payload Too Large', message: 'file_info.import_err_too_large' }`; applied on the two media upload routes.
+7. Any response with `statusCode >= 400` gets `Cache-Control: no-store, no-cache, must-revalidate`.
+8. CORS: origins from `CORS_ORIGIN` (comma-separated) when non-empty, else `http://localhost:4200` and `http://localhost:4500`; always union `https://localhost`, `capacitor://localhost`, `http://localhost`; `credentials: true`.
+9. The server trusts the proxy: `X-Forwarded-*` is honoured for the client IP.
+10. JSON and urlencoded request bodies are limited to 100 kB; no route overrides the limit.
+11. At boot, before listen: `CREATE EXTENSION IF NOT EXISTS pg_trgm` on the database connection.
+12. Static files: `/cast` serves the `public` directory next to the binary, with no index document.
+13. When `SERVE_STATIC_PATH` is set, serve that directory at `/`, excluding `/api/{*path}` and `/cast/{*path}`. Any other unmatched path falls back to that directory's `index.html` (SPA fallback). There is no `/internal` route: `/internal/**` falls to the SPA fallback like any unknown non-`/api` path, and answers the `Cannot <METHOD>` 404 when no client directory is set.
+14. Database: pending migrations run at boot (`fliks-server migrate` runs them alone); the connection pool holds at most 30 connections.
+15. Listen port: `PORT` when set to a number, else 4849 (the engine fronts the HTTP API on 4848). The desktop bundles write the engine and `fliks-server` output to `logs/server-<date>.log`.
 
 ## SQL
 
-- Boot: `CREATE EXTENSION IF NOT EXISTS pg_trgm` — enables trigram similarity used by media search. `[ts:src/main.ts:21]`
+- Boot: `CREATE EXTENSION IF NOT EXISTS pg_trgm` — enables trigram similarity used by media search.
 
 ## Events
 
@@ -40,20 +40,6 @@ Sources: `[ts:src/main.ts]`, `[ts:src/app.module.ts]`, `[ts:src/common/pipes/tol
 
 (none at bootstrap)
 
-## Bridges
-
-(none at bootstrap)
-
-## Deletes in Nest (S0)
-
-Per phase-2 plan §10 S0, once Rust owns them:
-
-- `src/main.ts:20`–`21`: boot `pg_trgm` `CREATE EXTENSION` query.
-- `src/app.module.ts:41`–`56`: both `ServeStaticModule.forRoot` roots (`/cast`, `SERVE_STATIC_PATH`).
-- `src/app.module.ts:60`, `74`–`76`: `isDev` / `synchronize` / `migrations` / `migrationsRun` (pool `extra.max` at `77` is a Rust-side setting, kept as a config value).
-- `src/modules/scheduler/liveness.controller.ts` and `src/modules/scheduler/liveness.controller.spec.ts`: deleted.
-- `src/modules/scheduler/scheduler.module.ts:16`, `68`: `LivenessController` import and `controllers` entry.
-
 ## Vectors/parity
 
-Cross-cutting layers verified via S0 parity scenarios through the forwarder (phase-2 plan §5.3 / P6), not domain-specific fixtures.
+Cross-cutting layers are verified by parity scenarios through the front door, not by domain fixtures.
