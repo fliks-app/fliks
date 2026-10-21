@@ -431,5 +431,5 @@ html.tv-host .toggle-primary[aria-checked='true'] {
 
 /* Every modal keeps a gap above and below instead of touching the viewport edges. */
 .modal-box {
-  max-height: calc(100dvh - 4rem);
+  max-height: calc(100dvh - 2rem);
 }
