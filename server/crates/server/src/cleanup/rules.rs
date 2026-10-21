@@ -342,6 +342,8 @@ const RECOMMENDATIONS: [(&str, &str, &[&str]); 4] = [
 struct Recommendation {
     #[serde(rename = "mediaId")]
     media_id: i32,
+    #[serde(rename = "libraryId")]
+    library_id: Option<i32>,
     title: String,
     #[serde(rename = "type")]
     media_type: String,
@@ -376,9 +378,18 @@ pub async fn recommendations(db: &PgPool) -> sqlx::Result<Value> {
         reasons.push(serde_json::json!({"key": key, "criteria": criteria, "levels": levels}));
     }
     items.sort_by_key(|(m, _)| (std::cmp::Reverse(m.size), m.id));
+    let ids: Vec<i32> = items.iter().map(|(m, _)| m.id).collect();
+    let libs: std::collections::HashMap<i32, Option<i32>> =
+        sqlx::query_as(r#"SELECT id, "libraryId" FROM media WHERE id = ANY($1)"#)
+            .bind(&ids)
+            .fetch_all(db)
+            .await?
+            .into_iter()
+            .collect();
     let items: Vec<Recommendation> = items
         .into_iter()
         .map(|(m, reasons)| Recommendation {
+            library_id: libs.get(&m.id).copied().flatten(),
             media_id: m.id,
             title: m.title,
             media_type: m.media_type,

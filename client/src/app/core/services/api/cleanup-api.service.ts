@@ -91,6 +91,7 @@ export interface CleanupRecommendations {
   reasons: { key: CleanupReason; criteria: CleanupCriteria; levels: CleanupLevel[] }[];
   items: {
     mediaId: number;
+    libraryId: number | null;
     title: string;
     type: string;
     size: number;

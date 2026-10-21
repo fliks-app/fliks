@@ -12,7 +12,7 @@ Scope: `playback_history`, `cleanup_rules`, `cleanup_candidates`, `cleanup_exclu
 | `PUT /api/cleanup/rules/{id}` | `Manage Settings` | as `POST`, replaces the rule | 200, `Rule` | 400, 404 | UPDATE |
 | `DELETE /api/cleanup/rules/{id}` | `Manage Settings` | none | 200 | 404 | DELETE (candidates of the rule cascade) |
 | `POST /api/cleanup/rules/{id}/preview` | `Manage Settings` | none | 200, `{matches: {id, title, type, size, lastPlayedAt, seasonId, episodeId, seasonNumber, episodeNumber}[], totalSize}` (`id` is the media id; the season and episode keys are null above their level) | 404 | none; also for a disabled rule |
-| `GET /api/cleanup/recommendations` | `Read Settings` | none | 200, `{reasons: {key, criteria, levels}[], items: {mediaId, title, type, size, lastPlayedAt, reasons: string[]}[]}` (rules 33-36) | 401, 403 | none |
+| `GET /api/cleanup/recommendations` | `Read Settings` | none | 200, `{reasons: {key, criteria, levels}[], items: {mediaId, libraryId, title, type, size, lastPlayedAt, reasons: string[]}[]}` (rules 33-36) | 401, 403 | none |
 | `GET /api/cleanup/candidates` | `Read Settings` | none | 200, `Candidate[]` ordered by `deleteAt` (nulls last), `mediaId` | 401, 403 | none |
 | `POST /api/cleanup/candidates/{mediaId}/delete-now` | `Delete Media`, library ACL | query `seasonId?`, `episodeId?` (rule 26) | 200, `{ok: true}` | 404 `Media #<id> is not a cleanup candidate`, 500 | rule 22 |
 | `POST /api/cleanup/exclusions/{mediaId}` | `Manage Settings`, library ACL | query `seasonId?`, `episodeId?` (rule 26) | 201, `{mediaId, seasonId, episodeId}` | 404 | INSERT exclusion (idempotent), DELETE the scope's candidates |
