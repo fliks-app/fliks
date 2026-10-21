@@ -5,7 +5,6 @@ import { firstValueFrom } from 'rxjs';
 export interface CleanupCriteria {
   libraryIds?: number[];
   excludeLibraryIds?: number[];
-  mediaType?: 'movie' | 'series';
   addedOlderThanDays?: number;
   releasedOlderThanDays?: number;
   lastPlayedOlderThanDays?: number;

@@ -159,9 +159,9 @@ pub fn compile(
             .push_bind(ids)
             .push(")");
     }
-    if let Some(t) = c.get("mediaType").and_then(Value::as_str) {
+    if level == "movie" || level == "series" {
         q.push(r#" AND media."type"::text = "#)
-            .push_bind(t.to_owned());
+            .push_bind(level.to_owned());
     }
     if let Some(d) = int(c, "addedOlderThanDays") {
         q.push(format!(

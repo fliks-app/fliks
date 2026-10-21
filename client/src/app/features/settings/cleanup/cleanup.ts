@@ -224,19 +224,14 @@ export class CleanupSettingsComponent implements OnInit {
     this.formCriteria.update((c) => ({ ...c, [key]: value }));
   }
 
-  /** Drops the criteria the new level rejects: the type below the media, `keepLatestEpisodes` off episodes. */
+  /** Drops `keepLatestEpisodes` off episode level. */
   setLevel(level: CleanupLevel) {
     this.formLevel.set(level);
-    this.formCriteria.update(({ mediaType, keepLatestEpisodes, ...rest }) => ({
+    this.formCriteria.update(({ keepLatestEpisodes, ...rest }) => ({
       ...rest,
-      ...(level === 'movie' || level === 'series' ? { mediaType: mediaType === level ? mediaType : undefined } : {}),
       ...(level === 'episode' ? { keepLatestEpisodes } : {}),
     }));
     if (level !== 'season' && level !== 'episode') this.formDeleteSeriesWhenEmpty.set(false);
-  }
-
-  setMediaType(value: string) {
-    this.formCriteria.update((c) => ({ ...c, mediaType: (value as 'movie' | 'series') || undefined }));
   }
 
   async save() {

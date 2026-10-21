@@ -6,7 +6,7 @@ A rule matches a media when every criterion it sets holds. When several rules ma
 
 Library names in a rule file must match your libraries exactly. Replace `Movies` and `Series` with your own, or delete the `libraryIds` line to cover every library.
 
-An exported rule file is `{fliksCleanupRule: 1, name, enabled, action, graceDays, criteria}`. Libraries are written by name, so a file moves between servers.
+An exported rule file is `{fliksCleanupRule: 1, name, enabled, level, action, graceDays, deleteSeriesWhenEmpty, reminderDays, criteria}`. Libraries are written by name, so a file moves between servers.
 
 ## Watched and untouched for 90 days
 
@@ -17,10 +17,10 @@ Movies the requester has watched, that nobody has played for three months.
   "fliksCleanupRule": 1,
   "name": "Watched and untouched for 90 days",
   "enabled": false,
+  "level": "movie",
   "action": "delete",
   "graceDays": 14,
   "criteria": {
-    "mediaType": "movie",
     "watchedByRequester": true,
     "lastPlayedOlderThanDays": 90
   }
@@ -29,13 +29,14 @@ Movies the requester has watched, that nobody has played for three months.
 
 ## Never watched after a year
 
-Anything added more than a year ago that nobody ever started. It only flags: nothing is removed.
+Movies added more than a year ago that nobody ever started. It only flags: nothing is removed.
 
 ```json
 {
   "fliksCleanupRule": 1,
   "name": "Never watched after a year",
   "enabled": false,
+  "level": "movie",
   "action": "none",
   "graceDays": 30,
   "criteria": {
@@ -54,10 +55,10 @@ Movies rated under 5 (with at least 100 votes) that take more than 20 GB.
   "fliksCleanupRule": 1,
   "name": "Low-rated and big",
   "enabled": false,
+  "level": "movie",
   "action": "delete",
   "graceDays": 7,
   "criteria": {
-    "mediaType": "movie",
     "ratingBelow": 5,
     "minVotes": 100,
     "sizeAboveGb": 20
@@ -93,10 +94,10 @@ Ended series nobody liked and nobody played for a year, in every library except 
   "fliksCleanupRule": 1,
   "name": "Ended series nobody liked",
   "enabled": false,
+  "level": "series",
   "action": "delete",
   "graceDays": 30,
   "criteria": {
-    "mediaType": "series",
     "seriesEnded": true,
     "notLiked": true,
     "lastPlayedOlderThanDays": 365,

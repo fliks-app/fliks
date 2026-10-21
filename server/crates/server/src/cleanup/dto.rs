@@ -1,7 +1,7 @@
 //! `/api/cleanup/rules` body (`cleanup.md` rules 6-8): class-validator style messages, unknown keys rejected.
 use crate::{
     http::AppError,
-    requests::dto::{Check, MEDIA_TYPES, Res, object},
+    requests::dto::{Check, Res, object},
 };
 use serde_json::{Map, Value, json};
 
@@ -66,14 +66,9 @@ pub fn rule(v: Value) -> Res<Rule> {
         None | Some(Value::Null) => None,
         Some(v) => c.int("graceDays", v, false, Some(0), Some(3650)),
     };
-    let typed_series = o
-        .get("criteria")
-        .and_then(|k| k.get("mediaType"))
-        .and_then(Value::as_str)
-        == Some("series");
     let level = c
         .one_of("level", &LEVELS, true)
-        .unwrap_or_else(|| if typed_series { "series" } else { "movie" }.into());
+        .unwrap_or_else(|| "movie".into());
     let delete_series_when_empty = match o.get("deleteSeriesWhenEmpty") {
         None | Some(Value::Null) => false,
         Some(Value::Bool(b)) => {
@@ -130,10 +125,9 @@ fn reminder_days(c: &mut Check, o: &Map<String, Value>) -> Vec<i32> {
     v
 }
 
-const KEYS: [&str; 22] = [
+const KEYS: [&str; 21] = [
     "libraryIds",
     "excludeLibraryIds",
-    "mediaType",
     "addedOlderThanDays",
     "releasedOlderThanDays",
     "lastPlayedOlderThanDays",
@@ -165,20 +159,6 @@ fn criteria(k: &Map<String, Value>, level: &str, errs: &mut Vec<String>) -> Valu
         };
         let val: Option<Value> = match key {
             "libraryIds" | "excludeLibraryIds" => c.int_array(key, false).map(|a| json!(a)),
-            "mediaType" if scoped(level) => {
-                c.err(key, &format!("is not available at {level} level"));
-                None
-            }
-            "mediaType" => c
-                .one_of(key, &MEDIA_TYPES, true)
-                .map(Value::from)
-                .filter(|t| {
-                    let ok = *t == level;
-                    if !ok {
-                        c.err(key, &format!("must be {level}"));
-                    }
-                    ok
-                }),
             "keepLatestEpisodes" if level != "episode" => {
                 c.err(key, "is only available at episode level");
                 None
@@ -296,12 +276,25 @@ pub fn bulk(v: Value) -> Res<Bulk> {
     })
 }
 
-/// Portable rule (`cleanup.md` rule 26) to a rule body: library names to ids, always disabled.
+/// Portable rule (`cleanup.md` rule 30) to a rule body: library names to ids, always disabled.
 pub fn import(v: Value, libraries: &[(i32, String)]) -> Res<Rule> {
     let mut o = object(v);
     let mut errs = vec![];
     if o.remove("fliksCleanupRule") != Some(json!(1)) {
         errs.push("fliksCleanupRule must be 1".to_owned());
+    }
+    let legacy = match o.get_mut("criteria") {
+        Some(Value::Object(k)) => k.remove("mediaType"),
+        _ => None,
+    };
+    match (legacy, o.get("level").filter(|l| !l.is_null())) {
+        (Some(t), None) => {
+            o.insert("level".into(), t);
+        }
+        (Some(t), Some(l)) if *l != t => {
+            errs.push(format!("criteria.mediaType contradicts level {l}"));
+        }
+        _ => {}
     }
     if let Some(Value::Object(k)) = o.get_mut("criteria") {
         for key in ["libraryIds", "excludeLibraryIds"] {

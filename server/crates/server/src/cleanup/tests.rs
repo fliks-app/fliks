@@ -18,12 +18,11 @@ async fn scalar(pool: &PgPool, sql: &str) -> i32 {
 }
 
 async fn ids(pool: &PgPool, c: Value) -> Vec<i32> {
-    let mut v: Vec<i32> = rules::matched(pool, &c, "movie", "delete")
-        .await
-        .unwrap()
-        .iter()
-        .map(|m| m.id)
-        .collect();
+    let mut v = vec![];
+    for level in ["movie", "series"] {
+        let m = rules::matched(pool, &c, level, "delete").await.unwrap();
+        v.extend(m.iter().map(|m| m.id));
+    }
     v.sort();
     v
 }
@@ -133,7 +132,6 @@ async fn each_criterion_filters(pool: PgPool) {
     let cases = [
         (json!({}), vec![a, b, c]),
         (json!({"libraryIds": [s.lib2]}), vec![b]),
-        (json!({"mediaType": "series"}), vec![b]),
         (json!({"addedOlderThanDays": 30}), vec![a, c]),
         (json!({"releasedOlderThanDays": 365}), vec![a]),
         (json!({"lastPlayedOlderThanDays": 30}), vec![a, c]),
@@ -203,7 +201,7 @@ fn unknown_keys_and_wrong_types_are_rejected() {
         json!({"neverPlayed": "yes"}),
         json!({"addedOlderThanDays": -1}),
         json!({"genres": [1]}),
-        json!({"mediaType": "episode"}),
+        json!({"mediaType": "series"}),
         json!({"diskFreeBelowPercent": 0}),
         json!({"minVotes": 10}),
         json!({"playCountBelow": 0}),
@@ -347,7 +345,7 @@ async fn the_none_action_flags_but_never_acts(pool: PgPool) {
     let st = state(&pool).await;
     rule(&pool, json!({}), "none", Some(0)).await;
     job::run(&st).await.unwrap();
-    assert_eq!(candidates(&pool).await.len(), 3);
+    assert_eq!(candidates(&pool).await.len(), 2);
     due_now(&pool).await;
     job::run(&st).await.unwrap();
     assert_eq!(media_ids(&pool).await.len(), 3);
@@ -357,7 +355,12 @@ async fn the_none_action_flags_but_never_acts(pool: PgPool) {
 async fn the_lowest_rule_id_wins_a_media(pool: PgPool) {
     let s = seed(&pool).await;
     let st = state(&pool).await;
-    let first = rule(&pool, json!({"mediaType": "series"}), "none", None).await;
+    let first = rule(&pool, json!({}), "none", None).await;
+    exec(
+        &pool,
+        &format!(r#"UPDATE cleanup_rules SET level = 'series' WHERE id = {first}"#),
+    )
+    .await;
     rule(&pool, json!({}), "none", None).await;
     job::run(&st).await.unwrap();
     let owner: i32 =
@@ -790,14 +793,11 @@ fn level_rules_are_validated() {
         .is_ok()
     );
     assert!(level("season", json!({"lastPlayedOlderThanDays": 5})).is_ok());
-    assert!(level("series", json!({"mediaType": "series"})).is_ok());
     for (l, c) in [
         ("season", json!({"keepLatestEpisodes": 3})),
         ("movie", json!({"keepLatestEpisodes": 3})),
+        ("movie", json!({"mediaType": "movie"})),
         ("season", json!({"mediaType": "series"})),
-        ("episode", json!({"mediaType": "movie"})),
-        ("movie", json!({"mediaType": "series"})),
-        ("series", json!({"mediaType": "movie"})),
         ("episode", json!({"keepLatestEpisodes": 0})),
         ("shot", json!({})),
     ] {
@@ -814,8 +814,16 @@ fn level_rules_are_validated() {
     assert!(rule(json!({"level": "movie", "deleteSeriesWhenEmpty": true})).is_err());
     assert!(rule(json!({"deleteSeriesWhenEmpty": "yes"})).is_err());
     assert_eq!(rule(json!({})).unwrap().level, "movie");
-    let typed = dto::rule(json!({"name": "r", "criteria": {"mediaType": "series"}})).unwrap();
-    assert_eq!(typed.level, "series");
+}
+
+#[sqlx::test]
+async fn movie_and_series_levels_select_their_media_type(pool: PgPool) {
+    let s = seed(&pool).await;
+    assert_eq!(matched_ids(&pool, "series", json!({})).await, vec![s.m2]);
+    assert_eq!(
+        matched_ids(&pool, "movie", json!({})).await,
+        vec![s.m1, s.m3]
+    );
 }
 
 #[sqlx::test]
@@ -969,6 +977,16 @@ async fn import_rejects_unknown_library_version_and_keys(pool: PgPool) {
     assert!(err(json!({"name": "r", "criteria": {}})).contains("fliksCleanupRule must be 1"));
     assert!(err(base(json!({"extra": 1}))).contains("property extra should not exist"));
     assert!(dto::import(base(json!({"enabled": true})), &libs).is_ok_and(|r| !r.enabled));
+    let legacy = |extra: Value, t: &str| {
+        let mut v = base(extra);
+        v["criteria"] = json!({"mediaType": t, "neverPlayed": true});
+        v
+    };
+    let r = dto::import(legacy(json!({}), "series"), &libs).unwrap();
+    assert_eq!(r.level, "series");
+    assert_eq!(r.criteria, json!({"neverPlayed": true}));
+    assert!(dto::import(legacy(json!({"level": "series"}), "series"), &libs).is_ok());
+    assert!(err(legacy(json!({"level": "movie"}), "series")).contains("contradicts level"));
 }
 
 #[sqlx::test]
