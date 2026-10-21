@@ -35,6 +35,7 @@
                   <button type="button" class="link link-hover font-medium" (click)="openEdit(rule)">
                     {{ rule.name }}
                   </button>
+                  <span class="badge badge-ghost badge-sm ms-2">{{ 'settings.cleanup.level_' + rule.level | translate }}</span>
                   @if (libraryNames(rule)) {
                     <div class="text-xs text-base-content/50">{{ libraryNames(rule) }}</div>
                   }
@@ -107,9 +108,9 @@
             </tr>
           </thead>
           <tbody>
-            @for (c of candidates(); track c.mediaId) {
+            @for (c of candidates(); track c.id) {
               <tr>
-                <td class="font-medium">{{ c.title }}</td>
+                <td class="font-medium">{{ c.title }}{{ scopeLabel(c) }}</td>
                 <td>{{ c.ruleName }}</td>
                 <td class="whitespace-nowrap">{{ formatBytes(c.size) }}</td>
                 <td>
@@ -163,6 +164,23 @@
         </label>
       </div>
 
+      <label class="form-control">
+        <span class="label-text">{{ 'settings.cleanup.field_level' | translate }}</span>
+        <select
+          appTvSelect
+          class="select select-bordered select-sm w-full"
+          [ngModel]="formLevel()"
+          (ngModelChange)="setLevel($event)"
+        >
+          @for (l of levels; track l) {
+            <option [value]="l">{{ 'settings.cleanup.level_' + l | translate }}</option>
+          }
+        </select>
+        <span class="block text-xs leading-tight text-base-content/50 mt-1">
+          {{ 'settings.cleanup.level_hint' | translate }}
+        </span>
+      </label>
+
       <div class="flex gap-4">
         <label class="form-control flex-1">
           <span class="label-text">{{ 'settings.cleanup.col_action' | translate }}</span>
@@ -194,6 +212,7 @@
       <p class="text-sm text-base-content/60">{{ 'settings.cleanup.logic_hint' | translate }}</p>
 
       <div class="grid sm:grid-cols-2 gap-3">
+        @if (!scopedLevels.includes(formLevel())) {
         <label class="form-control">
           <span class="label-text">{{ 'settings.cleanup.c_mediaType' | translate }}</span>
           <select
@@ -207,6 +226,7 @@
             <option value="series">{{ 'settings.cleanup.type_series' | translate }}</option>
           </select>
         </label>
+        }
         <div class="form-control">
           <span class="label-text">{{ 'settings.cleanup.c_libraryIds' | translate }}</span>
           <app-multi-select
@@ -250,6 +270,19 @@
             />
           </label>
         }
+        @if (formLevel() === 'episode') {
+          <label class="form-control">
+            <span class="label-text">{{ 'settings.cleanup.c_keepLatestEpisodes' | translate }}</span>
+            <input
+              type="number"
+              min="1"
+              class="input input-bordered input-sm w-full"
+              [placeholder]="'settings.cleanup.no_limit' | translate"
+              [ngModel]="formCriteria().keepLatestEpisodes ?? null"
+              (ngModelChange)="setNumber('keepLatestEpisodes', $event)"
+            />
+          </label>
+        }
       </div>
       <p class="text-xs leading-tight text-base-content/50 -mt-3">{{ 'settings.cleanup.votes_hint' | translate }}</p>
 
@@ -263,6 +296,17 @@
               (ngModelChange)="setFlag(key, $event)"
             />
             <span class="label-text">{{ 'settings.cleanup.c_' + key | translate }}</span>
+          </label>
+        }
+        @if (scopedLevels.includes(formLevel())) {
+          <label class="label cursor-pointer justify-start gap-2">
+            <input
+              type="checkbox"
+              class="checkbox checkbox-sm"
+              [ngModel]="formDeleteSeriesWhenEmpty()"
+              (ngModelChange)="formDeleteSeriesWhenEmpty.set($event)"
+            />
+            <span class="label-text">{{ 'settings.cleanup.c_deleteSeriesWhenEmpty' | translate }}</span>
           </label>
         }
       </div>
@@ -303,9 +347,9 @@
               </tr>
             </thead>
             <tbody>
-              @for (m of p.matches; track m.id) {
+              @for (m of p.matches; track (m.episodeId ?? m.seasonId ?? 0) + ':' + m.id) {
                 <tr>
-                  <td>{{ m.title }}</td>
+                  <td>{{ m.title }}{{ scopeLabel(m) }}</td>
                   <td class="whitespace-nowrap">{{ formatBytes(m.size) }}</td>
                   <td class="whitespace-nowrap">
                     @if (m.lastPlayedAt) {

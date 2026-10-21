@@ -74,8 +74,8 @@ Scope: connections CRUD, senders and dispatch, and every `notifications.dispatch
 | `livetv.account_expiring` | `Live TV source "<src>" account expires soon` | `sourceName` |
 | `livetv.account_expired` | `Live TV source "<src>" account has expired` | `sourceName` |
 | `livetv.adult_guard_failed` | `Live TV source "<src>" adult-group restriction pass failed` | `sourceName` |
-| `media.leaving_soon` | `Leaving soon: <title>` | `title` |
-| `media.cleaned_up` | `Cleaned up: <title>` | `title` |
+| `media.leaving_soon` | `Leaving soon: <title>[ S<ss>[E<ee>]]` | `title`, `seasonNumber`, `episodeNumber` |
+| `media.cleaned_up` | `Cleaned up: <title>[ S<ss>[E<ee>]]` | `title`, `seasonNumber`, `episodeNumber` |
 | any other string | `<event>: <JSON.stringify(payload)>` | whole payload (unreachable: events are validated, rule 29) |
 
    Other payload keys (`mediaType`, `reason`, `quality`, `sourceTitle`, `provider`, `score`, `oldScore`, `newScore`, `error`, `subtitleId`, `expiresAt`) are NOT in MSG; they reach only the `webhook` channel.
@@ -101,8 +101,8 @@ Scope: connections CRUD, senders and dispatch, and every `notifications.dispatch
 | `subtitle.synced` | `{language, subtitleId}` |
 | `livetv.account_expired` / `livetv.account_expiring` | `{sourceName, expiresAt: ISO\|null}` (only on state transition) |
 | `livetv.adult_guard_failed` | `{sourceName}` |
-| `media.leaving_soon` | `{title, mediaId, deleteAt}` |
-| `media.cleaned_up` | `{title, mediaId, action}` |
+| `media.leaving_soon` | `{title, mediaId, deleteAt}` plus `seasonNumber` (and `episodeNumber`) for a season (episode) scope |
+| `media.cleaned_up` | `{title, mediaId, action}` plus `seasonNumber` (and `episodeNumber`) for a season (episode) scope |
 | `health.issue` | `{test: true, message}` |
 
 20. `NotificationsService::dispatch(event, payload)` is the one in-process entry point for the 11 call sites above; the event is a typed value from the 18-name vocabulary, so an event outside it cannot be dispatched.

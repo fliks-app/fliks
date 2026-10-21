@@ -125,7 +125,23 @@ pub async fn detail(db: &PgPool, id: i32, see_paths: bool) -> Result<Option<Valu
     if let Some(obj) = media.as_object_mut() {
         obj.remove("sizeOnDisk");
         obj.remove("episodeStats");
-        obj.insert("seasons".into(), extra.seasons);
+        let mut seasons = extra.seasons;
+        for (scope, at) in crate::cleanup::scoped_delete_at(db, id).await? {
+            let season = seasons
+                .as_array_mut()
+                .and_then(|a| a.iter_mut().find(|s| s["id"] == scope.season.unwrap_or(0)));
+            let target = match (season, scope.episode) {
+                (Some(s), None) => Some(s),
+                (Some(s), Some(e)) => s["episodes"]
+                    .as_array_mut()
+                    .and_then(|a| a.iter_mut().find(|x| x["id"] == e)),
+                _ => None,
+            };
+            if let Some(t) = target {
+                t["deleteAt"] = at.into();
+            }
+        }
+        obj.insert("seasons".into(), seasons);
         obj.insert("metadata".into(), metadata.unwrap_or(Value::Null));
         if let Some(at) = crate::cleanup::delete_at(db, id).await? {
             obj.insert("deleteAt".into(), at.into());

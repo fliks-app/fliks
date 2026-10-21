@@ -9,8 +9,11 @@ import {
   CleanupApiService,
   CleanupCandidate,
   CleanupCriteria,
+  CleanupLevel,
   CleanupPreview,
   CleanupRule,
+  CleanupRuleBody,
+  CleanupScope,
 } from '../../../core/services/api/cleanup-api.service';
 import { SettingsApiService } from '../../../core/services/api/settings-api.service';
 import { LibrariesApiService, Library } from '../../../core/services/api/libraries-api.service';
@@ -23,7 +26,7 @@ import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 import { ModalFooterComponent } from '../../../shared/components/modal-footer';
 import { EnabledSwitchComponent } from '../../../shared/components/enabled-switch';
 import { formatBytes } from '../../../shared/utils/download-format';
-import { cleanCriteria, daysLeft } from '../../../shared/utils/cleanup.util';
+import { cleanCriteria, daysLeft, scopeLabel } from '../../../shared/utils/cleanup.util';
 
 type NumberKey = {
   [K in keyof CleanupCriteria]-?: CleanupCriteria[K] extends number | undefined ? K : never;
@@ -58,6 +61,8 @@ export class CleanupSettingsComponent implements OnInit {
 
   protected readonly formatBytes = formatBytes;
   protected readonly daysLeft = daysLeft;
+  protected readonly scopeLabel = scopeLabel;
+  protected readonly levels: CleanupLevel[] = ['movie', 'series', 'season', 'episode'];
   protected readonly actions: CleanupAction[] = ['delete', 'delete_files_unmonitor', 'none'];
   protected readonly numberFields: NumberKey[] = [
     'addedOlderThanDays',
@@ -69,6 +74,7 @@ export class CleanupSettingsComponent implements OnInit {
     'likedByFewerThan',
     'diskFreeBelowPercent',
   ];
+  protected readonly scopedLevels: CleanupLevel[] = ['season', 'episode'];
   protected readonly flagFields: FlagKey[] = [
     'neverPlayed',
     'watchedByRequester',
@@ -95,6 +101,8 @@ export class CleanupSettingsComponent implements OnInit {
 
   readonly formName = signal('');
   readonly formEnabled = signal(true);
+  readonly formLevel = signal<CleanupLevel>('movie');
+  readonly formDeleteSeriesWhenEmpty = signal(false);
   readonly formAction = signal<CleanupAction>('delete');
   readonly formGraceDays = signal<number | null>(null);
   readonly formCriteria = signal<CleanupCriteria>({});
@@ -141,17 +149,35 @@ export class CleanupSettingsComponent implements OnInit {
 
   openCreate() {
     this.editingId.set(null);
-    this.fill('', true, 'delete', null, {});
+    this.fill('', true, 'movie', false, 'delete', null, {});
   }
 
   openEdit(rule: CleanupRule) {
     this.editingId.set(rule.id);
-    this.fill(rule.name, rule.enabled, rule.action, rule.graceDays, rule.criteria ?? {});
+    this.fill(
+      rule.name,
+      rule.enabled,
+      rule.level,
+      rule.deleteSeriesWhenEmpty,
+      rule.action,
+      rule.graceDays,
+      rule.criteria ?? {},
+    );
   }
 
-  private fill(name: string, enabled: boolean, action: CleanupAction, grace: number | null, c: CleanupCriteria) {
+  private fill(
+    name: string,
+    enabled: boolean,
+    level: CleanupLevel,
+    deleteSeriesWhenEmpty: boolean,
+    action: CleanupAction,
+    grace: number | null,
+    c: CleanupCriteria,
+  ) {
     this.formName.set(name);
     this.formEnabled.set(enabled);
+    this.formLevel.set(level);
+    this.formDeleteSeriesWhenEmpty.set(deleteSeriesWhenEmpty);
     this.formAction.set(action);
     this.formGraceDays.set(grace);
     this.formCriteria.set({ ...c });
@@ -180,6 +206,17 @@ export class CleanupSettingsComponent implements OnInit {
     this.formCriteria.update((c) => ({ ...c, [key]: value }));
   }
 
+  /** Drops the criteria the new level rejects: the type below the media, `keepLatestEpisodes` off episodes. */
+  setLevel(level: CleanupLevel) {
+    this.formLevel.set(level);
+    this.formCriteria.update(({ mediaType, keepLatestEpisodes, ...rest }) => ({
+      ...rest,
+      ...(level === 'movie' || level === 'series' ? { mediaType: mediaType === level ? mediaType : undefined } : {}),
+      ...(level === 'episode' ? { keepLatestEpisodes } : {}),
+    }));
+    if (level !== 'season' && level !== 'episode') this.formDeleteSeriesWhenEmpty.set(false);
+  }
+
   setMediaType(value: string) {
     this.formCriteria.update((c) => ({ ...c, mediaType: (value as 'movie' | 'series') || undefined }));
   }
@@ -188,9 +225,11 @@ export class CleanupSettingsComponent implements OnInit {
     const name = this.formName().trim();
     if (!name) return;
     this.saving.set(true);
-    const body = {
+    const body: CleanupRuleBody = {
       name,
       enabled: this.formEnabled(),
+      level: this.formLevel(),
+      deleteSeriesWhenEmpty: this.formDeleteSeriesWhenEmpty(),
       action: this.formAction(),
       graceDays: this.formGraceDays(),
       criteria: cleanCriteria(this.formCriteria()),
@@ -207,11 +246,20 @@ export class CleanupSettingsComponent implements OnInit {
     }
   }
 
-  /** The server replaces the whole rule, so the other fields ride along with `enabled`. */
+  /** The server replaces the whole rule and rejects unknown keys, so the editable fields ride along with `enabled`. */
   async toggleEnabled(rule: CleanupRule) {
     this.togglingId.set(rule.id);
+    const { name, level, criteria, action, graceDays, deleteSeriesWhenEmpty } = rule;
     try {
-      await this.api.updateRule(rule.id, { ...rule, enabled: !rule.enabled });
+      await this.api.updateRule(rule.id, {
+        name,
+        level,
+        criteria,
+        action,
+        graceDays,
+        deleteSeriesWhenEmpty,
+        enabled: !rule.enabled,
+      });
       await this.reload();
     } catch {
       // handled by global error interceptor
@@ -252,8 +300,8 @@ export class CleanupSettingsComponent implements OnInit {
 
   async keep(c: CleanupCandidate) {
     try {
-      await this.api.keep(c.mediaId);
-      this.candidates.update((l) => l.filter((x) => x.mediaId !== c.mediaId));
+      await this.api.keep(c);
+      await this.reload();
     } catch {
       // handled by global error interceptor
     }
@@ -263,14 +311,16 @@ export class CleanupSettingsComponent implements OnInit {
     if (
       !(await this.confirmation.confirm({
         title: this.translate.instant('common.confirm'),
-        message: this.translate.instant('settings.cleanup.confirm_delete_now', { title: c.title }),
+        message: this.translate.instant('settings.cleanup.confirm_delete_now', {
+          title: c.title + scopeLabel(c),
+        }),
         variant: 'danger',
       }))
     )
       return;
     try {
-      await this.api.deleteNow(c.mediaId);
-      this.candidates.update((l) => l.filter((x) => x.mediaId !== c.mediaId));
+      await this.api.deleteNow(c);
+      await this.reload();
     } catch {
       // handled by global error interceptor
     }

@@ -2863,7 +2863,15 @@
       "c_watchedByRequester": "Watched by the requester",
       "c_seriesEnded": "Series ended",
       "c_notLiked": "Liked by nobody",
-      "c_notLikedByRequester": "Not liked by the requester"
+      "c_notLikedByRequester": "Not liked by the requester",
+      "field_level": "Level",
+      "level_movie": "Movie",
+      "level_series": "Series",
+      "level_season": "Season",
+      "level_episode": "Episode",
+      "level_hint": "Season and episode rules delete the files of that season or episode and stop monitoring it.",
+      "c_keepLatestEpisodes": "Keep the latest episodes (per series)",
+      "c_deleteSeriesWhenEmpty": "Remove the series once no file is left"
     }
   },
   "roles": {
@@ -3413,6 +3421,9 @@
   "cleanup": {
     "leaving_today": "Leaving today",
     "leaving_in_one": "Leaving in {{count}} day",
-    "leaving_in_other": "Leaving in {{count}} days"
+    "leaving_in_other": "Leaving in {{count}} days",
+    "season_badge": "Season {{season}}: {{label}}",
+    "episodes_badge_one": "{{count}} episode: {{label}}",
+    "episodes_badge_other": "{{count}} episodes: {{label}}"
   }
 }

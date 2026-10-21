@@ -71,6 +71,16 @@ fn text(v: Option<&Value>, default: &str) -> String {
     }
 }
 
+/// ` S02` or ` S02E05` for a season or episode scope, else empty.
+fn scope(payload: &Map<String, Value>) -> String {
+    let n = |k: &str| payload.get(k).and_then(Value::as_i64);
+    match (n("seasonNumber"), n("episodeNumber")) {
+        (Some(s), Some(e)) => format!(" S{s:02}E{e:02}"),
+        (Some(s), None) => format!(" S{s:02}"),
+        _ => String::new(),
+    }
+}
+
 /// `formatMessage`.
 pub fn format_message(event: &str, payload: &Map<String, Value>) -> String {
     let title = text(payload.get("title"), "");
@@ -98,8 +108,8 @@ pub fn format_message(event: &str, payload: &Map<String, Value>) -> String {
             "Live TV source \"{}\" adult-group restriction pass failed",
             src()
         ),
-        "media.leaving_soon" => format!("Leaving soon: {title}"),
-        "media.cleaned_up" => format!("Cleaned up: {title}"),
+        "media.leaving_soon" => format!("Leaving soon: {title}{}", scope(payload)),
+        "media.cleaned_up" => format!("Cleaned up: {title}{}", scope(payload)),
         _ => format!("{event}: {}", Value::Object(payload.clone())),
     }
 }

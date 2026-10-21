@@ -24,7 +24,7 @@ import { ProfilesService, LanguageProfile } from '../../core/services/api/profil
 import { LibrariesApiService, LibrarySummary } from '../../core/services/api/libraries-api.service';
 import { NavbarService } from '../../core/services/navbar.service';
 import { BackgroundService } from '../../core/services/background.service';
-import { leavingLabel } from '../../shared/utils/cleanup.util';
+import { leavingLabel, scopedLeavingLabels } from '../../shared/utils/cleanup.util';
 import { pickFanart } from '../../shared/utils/media-artwork.util';
 import { centerRailOnCard } from '../../shared/utils/center-rail';
 import { armPageSlide } from '../../shared/utils/page-slide';
@@ -258,6 +258,10 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   }
 
   /** Whole-media download progress, on the movie/series header. */
+  protected scopedLeaving(seasons: Season[]): string[] {
+    return scopedLeavingLabels(this.translate, seasons);
+  }
+
   protected leavingLabel(deleteAt: string): string {
     return leavingLabel(this.translate, deleteAt);
   }

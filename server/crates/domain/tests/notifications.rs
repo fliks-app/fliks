@@ -61,7 +61,7 @@ fn run(i: &Value) -> Value {
 
 #[test]
 fn notification_vectors() {
-    replay("notifications", 410, run);
+    replay("notifications", 413, run);
 }
 
 fn settings(v: Value) -> Map<String, Value> {

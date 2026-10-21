@@ -408,5 +408,8 @@
 {"input":{"fn":"redact","type":"ntfy","settings":{}},"expected":{"settings":{"secretsSet":[]}}},
 {"input":{"fn":"redact","type":"webhook","settings":{"url":"https://h.test","token":"tk","secretsSet":["x"]}},"expected":{"settings":{"url":"https://h.test","secretsSet":["token"]}}},
 {"input":{"fn":"redact","type":"gotify","settings":{"url":"https://g.test","token":"tok","extra":{"a":1}}},"expected":{"settings":{"url":"https://g.test","extra":{"a":1},"secretsSet":["token"]}}},
-{"input":{"fn":"redact","type":"webhook","settings":{"url":"https://h.test","webhookUrl":"https://legacy.test","token":null}},"expected":{"settings":{"url":"https://h.test","webhookUrl":"https://legacy.test","secretsSet":[]}}}
+{"input":{"fn":"redact","type":"webhook","settings":{"url":"https://h.test","webhookUrl":"https://legacy.test","token":null}},"expected":{"settings":{"url":"https://h.test","webhookUrl":"https://legacy.test","secretsSet":[]}}},
+{"expected":{"message":"Leaving soon: Show S02"},"input":{"event":"media.leaving_soon","fn":"format","payload":{"seasonNumber":2,"title":"Show"}}},
+{"expected":{"message":"Leaving soon: Show S02E05"},"input":{"event":"media.leaving_soon","fn":"format","payload":{"episodeNumber":5,"seasonNumber":2,"title":"Show"}}},
+{"expected":{"message":"Cleaned up: Show S12E105"},"input":{"event":"media.cleaned_up","fn":"format","payload":{"episodeNumber":105,"seasonNumber":12,"title":"Show"}}}
 ]}
