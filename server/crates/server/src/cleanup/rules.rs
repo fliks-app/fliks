@@ -313,3 +313,79 @@ pub async fn matched(
     }
     Ok(out)
 }
+
+/// Built-in recommendations: reason key, criteria, levels (`cleanup.md` rules 33-36).
+const RECOMMENDATIONS: [(&str, &str, &[&str]); 4] = [
+    (
+        "never_played",
+        r#"{"neverPlayed": true, "addedOlderThanDays": 90}"#,
+        &["movie", "series"],
+    ),
+    (
+        "watched_by_requester",
+        r#"{"watchedByRequester": true, "lastPlayedOlderThanDays": 60}"#,
+        &["movie", "series"],
+    ),
+    (
+        "not_played_for_a_year",
+        r#"{"notPlayedInLastDays": 365, "addedOlderThanDays": 365}"#,
+        &["movie", "series"],
+    ),
+    (
+        "series_ended",
+        r#"{"seriesEnded": true, "lastPlayedOlderThanDays": 180, "addedOlderThanDays": 180}"#,
+        &["series"],
+    ),
+];
+
+#[derive(Serialize)]
+struct Recommendation {
+    #[serde(rename = "mediaId")]
+    media_id: i32,
+    title: String,
+    #[serde(rename = "type")]
+    media_type: String,
+    size: i64,
+    #[serde(rename = "lastPlayedAt", with = "iso_ms::opt")]
+    last_played_at: Option<DateTime<Utc>>,
+    reasons: Vec<&'static str>,
+}
+
+/// `{reasons: {key, criteria, levels}[], items}`: titles matched by a built-in set, merged by media,
+/// without the whole-media candidates, biggest first.
+pub async fn recommendations(db: &PgPool) -> sqlx::Result<Value> {
+    let flagged: Vec<i32> = sqlx::query_scalar(
+        r#"SELECT "mediaId" FROM cleanup_candidates WHERE "seasonId" IS NULL AND "episodeId" IS NULL"#,
+    )
+    .fetch_all(db)
+    .await?;
+    let mut reasons = vec![];
+    let mut items: Vec<(Match, Vec<&str>)> = vec![];
+    for (key, criteria, levels) in RECOMMENDATIONS {
+        let criteria: Value = serde_json::from_str(criteria).expect("built-in criteria");
+        let lv: Vec<String> = levels.iter().map(|l| (*l).to_owned()).collect();
+        for m in matched(db, &criteria, &lv, "delete").await? {
+            if flagged.contains(&m.id) {
+                continue;
+            }
+            match items.iter_mut().find(|(i, _)| i.id == m.id) {
+                Some((_, r)) => r.push(key),
+                None => items.push((m, vec![key])),
+            }
+        }
+        reasons.push(serde_json::json!({"key": key, "criteria": criteria, "levels": levels}));
+    }
+    items.sort_by_key(|(m, _)| (std::cmp::Reverse(m.size), m.id));
+    let items: Vec<Recommendation> = items
+        .into_iter()
+        .map(|(m, reasons)| Recommendation {
+            media_id: m.id,
+            title: m.title,
+            media_type: m.media_type,
+            size: m.size,
+            last_played_at: m.last_played_at,
+            reasons,
+        })
+        .collect();
+    Ok(serde_json::json!({"reasons": reasons, "items": items}))
+}

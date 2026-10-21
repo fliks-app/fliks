@@ -301,6 +301,19 @@
         }
       }
     },
+    "/api/cleanup/recommendations": {
+      "get": {
+        "tags": [
+          "cleanup"
+        ],
+        "operationId": "recommendation_list",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/cleanup/rules": {
       "get": {
         "tags": [

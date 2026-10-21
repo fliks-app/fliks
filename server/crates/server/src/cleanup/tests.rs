@@ -1190,3 +1190,44 @@ async fn export_carries_levels_scope_flag_and_new_criteria(pool: PgPool) {
         assert!(!r.enabled);
     }
 }
+
+#[sqlx::test]
+async fn recommendations_merge_reasons_and_skip_kept_and_flagged(pool: PgPool) {
+    let s = seed(&pool).await;
+    let st = state(&pool).await;
+    let titles = |v: &Value| -> Vec<(i64, Vec<String>)> {
+        v["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|i| {
+                let r = i["reasons"].as_array().unwrap();
+                (
+                    i["mediaId"].as_i64().unwrap(),
+                    r.iter().map(|x| x.as_str().unwrap().to_owned()).collect(),
+                )
+            })
+            .collect()
+    };
+    let all = rules::recommendations(&pool).await.unwrap();
+    assert_eq!(all["reasons"].as_array().unwrap().len(), 4);
+    let never = vec!["never_played".to_owned()];
+    assert_eq!(
+        titles(&all),
+        vec![
+            (i64::from(s.m1), never.clone()),
+            (i64::from(s.m3), never.clone())
+        ]
+    );
+    let lib = scalar(&pool, "SELECT id FROM libraries WHERE name = 'one'").await;
+    routes::keep_one(&st, s.user, &[lib], s.m3, no_scope())
+        .await
+        .unwrap();
+    assert_eq!(
+        titles(&rules::recommendations(&pool).await.unwrap()).len(),
+        1
+    );
+    rule(&pool, json!({"neverPlayed": true}), "none", None).await;
+    job::run(&st).await.unwrap();
+    assert!(titles(&rules::recommendations(&pool).await.unwrap()).is_empty());
+}

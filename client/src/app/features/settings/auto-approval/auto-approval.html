@@ -36,7 +36,7 @@
         </thead>
         <tbody>
           @for (rule of rules(); track rule.id) {
-            <tr [class.opacity-50]="!rule.enabled">
+            <tr>
               <td>
                 <button type="button" class="link link-hover font-medium" (click)="openEdit(rule)">
                   {{ rule.name }}

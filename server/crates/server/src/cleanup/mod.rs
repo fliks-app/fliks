@@ -38,6 +38,10 @@ pub fn router() -> Router<AppState> {
         .route("/api/cleanup/candidates", get(routes::candidate_list))
         .route("/api/cleanup/candidates/bulk", post(routes::candidate_bulk))
         .route(
+            "/api/cleanup/recommendations",
+            get(routes::recommendation_list),
+        )
+        .route(
             "/api/cleanup/candidates/{mediaId}/delete-now",
             post(routes::candidate_delete_now),
         )
