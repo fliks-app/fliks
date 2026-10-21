@@ -2873,6 +2873,7 @@
       "applies_season": "Staffeln",
       "applies_episode": "Episoden",
       "applies_hint": "Staffel- und Episodenregeln löschen die Dateien der Staffel oder Episode und beenden deren Überwachung.",
+      "applies_limit": "Filme lassen sich mit höchstens einem anderen Typ kombinieren.",
       "c_keepLatestEpisodes": "Neueste Episoden behalten (pro Serie)",
       "c_deleteSeriesWhenEmpty": "Serie entfernen, sobald keine Datei mehr übrig ist",
       "import": "Importieren",

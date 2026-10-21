@@ -1,13 +1,13 @@
 # Spec: library cleanup rules
 
-Scope: `playback_history`, `cleanup_rules`, `cleanup_candidates`, `cleanup_exclusions`, the `MediaCleanup` job, `/api/cleanup/*`, `GET /api/media/leaving-soon` and the `deleteAt` field of the media detail. Rules act at movie, series, season or episode level.
+Scope: `playback_history`, `cleanup_rules`, `cleanup_candidates`, `cleanup_exclusions`, the `MediaCleanup` job, `/api/cleanup/*`, `GET /api/media/leaving-soon` and the `deleteAt` field of the media detail. Rules act at movie, series, season or episode level, one or several (rule 6).
 
 ## Routes
 
 | Method path | Auth | Request | Response | Errors | Side effects |
 |---|---|---|---|---|---|
 | `GET /api/cleanup/rules` | `Read Settings` | none | 200, `Rule[]` ordered by `name`, `id` | 401, 403 | none |
-| `POST /api/cleanup/rules` | `Manage Settings` | `{name, enabled?, level?, criteria, action?, graceDays?, deleteSeriesWhenEmpty?, reminderDays?}` (rule 6) | 201, `Rule` | 400 field errors, 401, 403 | INSERT |
+| `POST /api/cleanup/rules` | `Manage Settings` | `{name, enabled?, levels?, criteria, action?, graceDays?, deleteSeriesWhenEmpty?, reminderDays?}` (rule 6) | 201, `Rule` | 400 field errors, 401, 403 | INSERT |
 | `GET /api/cleanup/rules/{id}` | `Read Settings` | none | 200, `Rule` | 404 `Rule #<id> not found` | none |
 | `PUT /api/cleanup/rules/{id}` | `Manage Settings` | as `POST`, replaces the rule | 200, `Rule` | 400, 404 | UPDATE |
 | `DELETE /api/cleanup/rules/{id}` | `Manage Settings` | none | 200 | 404 | DELETE (candidates of the rule cascade) |
@@ -21,13 +21,13 @@ Scope: `playback_history`, `cleanup_rules`, `cleanup_candidates`, `cleanup_exclu
 | `POST /api/cleanup/rules/import` | `Manage Settings` | portable rule (rule 30) | 201, `Rule` (created disabled) | 400 field errors, 401, 403 | INSERT |
 | `GET /api/media/leaving-soon` | `Read Media` | none | 200, the card shape of `recently-added` plus `deleteAt` (ISO) | 401, 403 | none |
 
-`Rule` = `{id, createdAt, updatedAt, name, enabled, level, criteria, action, graceDays: int|null, deleteSeriesWhenEmpty, reminderDays: int[]}`. `Candidate` = `{id, mediaId, seasonId, episodeId, seasonNumber, episodeNumber, title, type, posterUrl, ruleId, ruleName, action, size, flaggedAt, deleteAt: string|null}`; the season and episode keys are null for a whole-media candidate. `size` is the sum of the scope's file sizes in bytes.
+`Rule` = `{id, createdAt, updatedAt, name, enabled, levels, criteria, action, graceDays: int|null, deleteSeriesWhenEmpty, reminderDays: int[]}`. `Candidate` = `{id, mediaId, seasonId, episodeId, seasonNumber, episodeNumber, title, type, posterUrl, ruleId, ruleName, action, size, flaggedAt, deleteAt: string|null}`; the season and episode keys are null for a whole-media candidate. `size` is the sum of the scope's file sizes in bytes.
 
 ## Rules
 
 ### A. Tables
 
-1. `cleanup_rules`: `id serial`, `createdAt`/`updatedAt timestamptz` (`updatedAt` by trigger), `name`, `enabled` (default true), `criteria jsonb`, `level` in `movie|series|season|episode` (default `movie`; the only selector of what a rule applies to; the migration moved the former `criteria.mediaType` into it and removed the key), `action` in `delete|delete_files_unmonitor|none` (default `delete`), `graceDays int >= 0` or null, `reminderDays int[]` (default `{7,1}`), `deleteSeriesWhenEmpty` boolean (default false).
+1. `cleanup_rules`: `id serial`, `createdAt`/`updatedAt timestamptz` (`updatedAt` by trigger), `name`, `enabled` (default true), `criteria jsonb`, `levels text[]`, non-empty, each in `movie|series|season|episode` (default `{movie}`; the only selector of what a rule applies to; the migration folded the former `criteria.mediaType` and the single `level` column into it), `action` in `delete|delete_files_unmonitor|none` (default `delete`), `graceDays int >= 0` or null, `reminderDays int[]` (default `{7,1}`), `deleteSeriesWhenEmpty` boolean (default false).
 2. `cleanup_candidates`: `id serial` primary key, `mediaId` (media cascade), `seasonId` and `episodeId` nullable (cascade), `ruleId` (rule cascade), `flaggedAt`, `deleteAt` nullable. Unique on `(mediaId, seasonId, episodeId)` with NULLs equal (`NULLS NOT DISTINCT`): one row per scope, one rule owns it. `lastReminderDays int` nullable: the smallest reminder threshold already sent. A whole-media row has both null, a season row only `seasonId`, an episode row both.
 3. `cleanup_exclusions`: same `id`, `mediaId`, `seasonId`, `episodeId` and unique index, `userId` (`SET NULL`), `createdAt`. An exclusion protects its scope and everything below it: whole media (all levels), a season (and its episodes), an episode. Media level matching honours any exclusion of the media, season level any exclusion of the season or of one of its episodes (a protected child protects its parent).
 4. Setting `cleanup_max_per_run` (`app_settings`, written by the generic settings routes): decimal string, default 10, invalid or negative falls back to 10, `0` acts on nothing.
@@ -37,7 +37,7 @@ Scope: `playback_history`, `cleanup_rules`, `cleanup_candidates`, `cleanup_exclu
 
 ### B. Rule body
 
-6. `name` trimmed, non-empty string. `enabled` boolean (default true). `level` one of rule 1, default `movie`. `action` one of rule 1 (default `delete`). `graceDays` integer 0..3650 or null/absent. `deleteSeriesWhenEmpty` boolean (default false), only `true` at season or episode level (`must be false below season level`). `reminderDays` array of at most 5 distinct integers >= 1 (null/absent: `[7,1]`, `[]`: no reminder), stored and returned sorted descending; errors `reminderDays must contain no more than 5 elements`, `each value in reminderDays must be an integer number`, `each value in reminderDays must not be less than 1`, `reminderDays's elements must be unique`. `criteria` object, required. Unknown top-level keys: `property <key> should not exist`. `level` is the only selector: a `movie` rule matches movies only, a `series` rule series only, a `season` or `episode` rule the seasons or episodes of series. A body that still sends `criteria.mediaType` gets the error of any unknown key, `criteria.property mediaType should not exist`.
+6. `name` trimmed, non-empty string. `enabled` boolean (default true). `levels` array of rule 1 values, default `["movie"]`: `levels should not be empty`, `levels must be an array`, `each value in levels must be one of the following values: movie, series, season, episode`, `levels's elements must be unique`, and at most one of `series`, `season`, `episode` (`levels must hold at most one of series, season and episode`), so the valid sets are `[movie]`, `[series]`, `[season]`, `[episode]`, `[movie, series]`, `[movie, season]`, `[movie, episode]`; stored and returned in the order movie, series, season, episode. `action` one of rule 1 (default `delete`). `graceDays` integer 0..3650 or null/absent. `deleteSeriesWhenEmpty` boolean (default false), only `true` when `levels` holds season or episode (`must be false below season level`). `reminderDays` array of at most 5 distinct integers >= 1 (null/absent: `[7,1]`, `[]`: no reminder), stored and returned sorted descending; errors `reminderDays must contain no more than 5 elements`, `each value in reminderDays must be an integer number`, `each value in reminderDays must not be less than 1`, `reminderDays's elements must be unique`. `criteria` object, required. Unknown top-level keys: `property <key> should not exist`. `levels` is the only selector: `movie` matches movies only, `series` series only, `season` or `episode` the seasons or episodes of series; a rule is evaluated once per level and the matches are the union. A criterion must be valid for every selected level, with the messages of rule 7. A body still sending `level` gets the unknown key error. A body that still sends `criteria.mediaType` gets the error of any unknown key, `criteria.property mediaType should not exist`.
 7. `criteria` keys, all optional, `null` treated as absent, combined with AND; an unknown key is `criteria.property <key> should not exist`, a wrong type is `criteria.<key> must be ...`:
 
     | Key | Type | Matches a media when |
@@ -61,17 +61,17 @@ Scope: `playback_history`, `cleanup_rules`, `cleanup_candidates`, `cleanup_exclu
     | `notPlayedInLastDays` | int >= 0 | no `playback_history` row newer than that many days (never played matches) |
     | `likedByFewerThan` | int >= 1 | fewer distinct users than the value liked the media, a season or an episode |
     | `notLikedByRequester` | bool | no requester of the media liked it (no requester matches) |
-    | `keepLatestEpisodes` | int >= 1, episode level only (`is only available at episode level`) | the episode is not among the N newest episodes of its series on disk, ranked by `episodes.airDate` (no date ranks oldest), then `id` |
+    | `keepLatestEpisodes` | int >= 1, only when `levels` is `[episode]` (`is only available at episode level`) | the episode is not among the N newest episodes of its series on disk, ranked by `episodes.airDate` (no date ranks oldest), then `id` |
     | `diskFreeBelowPercent` | int 1..100 | its library path has less free space than that percentage of the disk (`libraries::disk`); a library without a readable path never matches |
 
-    The three play-history criteria apply at movie and series level only; a season or episode rule rejects them.
+    The three play-history criteria apply at movie and series level only; a rule selecting season or episode rejects them.
 
     Boolean criteria constrain only when `true`. Series-scoped criteria (`libraryIds`, `ratingBelow`, `minVotes`, `genres`, `excludeGenres`, `seriesEnded`, the likes keys, `diskFreeBelowPercent`) apply to the parent series at every level.
 
 ### C. Matching
 
 8. A rule compiles to one `SELECT` over `media` built with `QueryBuilder`; every value is bound. `diskFreeBelowPercent` is resolved per library in Rust first and bound as a library id list.
-9. Every query excludes what `cleanup_exclusions` protects (rule 3). At movie and series level a rule whose action is `delete_files_unmonitor` also skips media with `monitored = false`, so a cleaned media is not flagged again. At season level the query runs over `seasons` of the series and at episode level over `episodes`, joined to `media`; a scope matches only if it has at least one file on disk, so a cleaned scope is not flagged again.
+9. Every query excludes what `cleanup_exclusions` protects (rule 3). At movie and series level (each selected level is compiled on its own) a rule whose action is `delete_files_unmonitor` also skips media with `monitored = false`, so a cleaned media is not flagged again. At season level the query runs over `seasons` of the series and at episode level over `episodes`, joined to `media`; a scope matches only if it has at least one file on disk, so a cleaned scope is not flagged again.
 10. Each match carries `size` (bytes of the scope's files) and `lastPlayedAt` (newest play of any user in the scope, or null) for the preview, plus its season and episode ids and numbers.
 
 ### D. Job `MediaCleanup`
@@ -107,8 +107,8 @@ Scope: `playback_history`, `cleanup_rules`, `cleanup_candidates`, `cleanup_exclu
 
 ### G. Bulk and portable rules
 
-30. Portable rule: `{fliksCleanupRule: 1, name, enabled, level, action, graceDays, deleteSeriesWhenEmpty, reminderDays, criteria}`, with `level`, `deleteSeriesWhenEmpty` and `reminderDays` carried as is and `criteria.libraryIds` and `criteria.excludeLibraryIds` holding library names instead of ids. Library names are unique.
-31. Export emits rule 30 for the stored rule. Export never emits `criteria.mediaType`. Import accepts only that shape, except that a legacy `criteria.mediaType` (files exported before its removal) is dropped and becomes `level` when `level` is absent, and is rejected with `criteria.mediaType contradicts level <level>` when it differs from `level`; otherwise it accepts only that shape: another `fliksCleanupRule` value or a missing one is `fliksCleanupRule must be 1`; unknown top-level keys are rejected as in rule 6; a library name that does not exist is `criteria.<key> unknown library <name>`. After names are resolved to ids the body is validated exactly like `POST /api/cleanup/rules`, and the rule is created with `enabled = false` whatever the file says.
+30. Portable rule: `{fliksCleanupRule: 2, name, enabled, levels, action, graceDays, deleteSeriesWhenEmpty, reminderDays, criteria}`, with `levels`, `deleteSeriesWhenEmpty` and `reminderDays` carried as is and `criteria.libraryIds` and `criteria.excludeLibraryIds` holding library names instead of ids. Library names are unique.
+31. Export emits rule 30 for the stored rule and never `criteria.mediaType`. Import accepts version 2, and version 1 (`fliksCleanupRule: 1`, files exported before `levels`): a v1 `level` becomes `levels: [level]`, a v1 legacy `criteria.mediaType` is dropped and becomes `levels` when `level` is absent, and is rejected with `criteria.mediaType contradicts level <level>` when it differs from `level`; a v1 file without either gets the default. `levels` in a v1 file and `level` in a v2 file are unknown keys. Another `fliksCleanupRule` value or a missing one is `fliksCleanupRule must be 1 or 2`; unknown top-level keys are rejected as in rule 6; a library name that does not exist is `criteria.<key> unknown library <name>`. After names are resolved to ids the body is validated exactly like `POST /api/cleanup/rules`, and the rule is created with `enabled = false` whatever the file says.
 32. Bulk runs the single-item paths one after the other: `keep` is `POST exclusions`, `delete-now` is rule 22. A failing item (not found, outside the viewer's libraries, not a candidate for `delete-now`, action error) gives `ok: false` and the error text and never stops the others. Each item is `{mediaId, seasonId?, episodeId?}` with the scope of rule 26. A request without any `items`, with more than 200, or with an unknown `action` is a 400.
 
 ## SQL

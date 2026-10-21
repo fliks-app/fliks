@@ -36,7 +36,7 @@ export interface CleanupRule {
   updatedAt: string;
   name: string;
   enabled: boolean;
-  level: CleanupLevel;
+  levels: CleanupLevel[];
   criteria: CleanupCriteria;
   action: CleanupAction;
   graceDays: number | null;
@@ -46,7 +46,7 @@ export interface CleanupRule {
 
 export type CleanupRuleBody = Pick<
   CleanupRule,
-  'name' | 'enabled' | 'level' | 'criteria' | 'action' | 'graceDays' | 'deleteSeriesWhenEmpty' | 'reminderDays'
+  'name' | 'enabled' | 'levels' | 'criteria' | 'action' | 'graceDays' | 'deleteSeriesWhenEmpty' | 'reminderDays'
 >;
 
 /** The season and episode of a candidate; both null for a whole media. */

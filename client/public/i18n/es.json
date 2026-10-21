@@ -2873,6 +2873,7 @@
       "applies_season": "Temporadas",
       "applies_episode": "Episodios",
       "applies_hint": "Las reglas de temporada y de episodio borran los archivos de esa temporada o episodio y dejan de seguirlo.",
+      "applies_limit": "Las películas se combinan con un solo otro tipo como máximo.",
       "c_keepLatestEpisodes": "Conservar los últimos episodios (por serie)",
       "c_deleteSeriesWhenEmpty": "Quitar la serie cuando no quede ningún archivo",
       "import": "Importar",

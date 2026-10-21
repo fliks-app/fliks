@@ -2873,6 +2873,7 @@
       "applies_season": "Seasons",
       "applies_episode": "Episodes",
       "applies_hint": "Season and episode rules delete the files of that season or episode and stop monitoring it.",
+      "applies_limit": "Movies combine with at most one other type.",
       "c_keepLatestEpisodes": "Keep the latest episodes (per series)",
       "c_deleteSeriesWhenEmpty": "Remove the series once no file is left",
       "import": "Import",

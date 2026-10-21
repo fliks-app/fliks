@@ -64,7 +64,12 @@ export class CleanupSettingsComponent implements OnInit {
   protected readonly formatBytes = formatBytes;
   protected readonly daysLeft = daysLeft;
   protected readonly scopeLabel = scopeLabel;
-  protected readonly levels: CleanupLevel[] = ['movie', 'series', 'season', 'episode'];
+  protected readonly levelOptions = computed<MultiSelectOption<CleanupLevel>[]>(() =>
+    (['movie', 'series', 'season', 'episode'] as const).map((value) => ({
+      value,
+      label: this.translate.instant('settings.cleanup.applies_' + value),
+    })),
+  );
   protected readonly actions: CleanupAction[] = ['delete', 'delete_files_unmonitor', 'none'];
   protected readonly numberFields: NumberKey[] = [
     'addedOlderThanDays',
@@ -79,7 +84,6 @@ export class CleanupSettingsComponent implements OnInit {
     'likedByFewerThan',
     'diskFreeBelowPercent',
   ];
-  protected readonly scopedLevels: CleanupLevel[] = ['season', 'episode'];
   protected readonly flagFields: FlagKey[] = [
     'neverPlayed',
     'watchedByRequester',
@@ -106,7 +110,9 @@ export class CleanupSettingsComponent implements OnInit {
 
   readonly formName = signal('');
   readonly formEnabled = signal(true);
-  readonly formLevel = signal<CleanupLevel>('movie');
+  readonly formLevels = signal<CleanupLevel[]>(['movie']);
+  protected readonly formScoped = computed(() => this.formLevels().some((l) => l === 'season' || l === 'episode'));
+  protected readonly formEpisodeOnly = computed(() => this.formLevels().join() === 'episode');
   readonly formDeleteSeriesWhenEmpty = signal(false);
   readonly formAction = signal<CleanupAction>('delete');
   readonly formGraceDays = signal<number | null>(null);
@@ -164,7 +170,7 @@ export class CleanupSettingsComponent implements OnInit {
 
   openCreate() {
     this.editingId.set(null);
-    this.fill('', true, 'movie', false, 'delete', null, [7, 1], {});
+    this.fill('', true, ['movie'], false, 'delete', null, [7, 1], {});
   }
 
   openEdit(rule: CleanupRule) {
@@ -172,7 +178,7 @@ export class CleanupSettingsComponent implements OnInit {
     this.fill(
       rule.name,
       rule.enabled,
-      rule.level,
+      rule.levels,
       rule.deleteSeriesWhenEmpty,
       rule.action,
       rule.graceDays,
@@ -184,7 +190,7 @@ export class CleanupSettingsComponent implements OnInit {
   private fill(
     name: string,
     enabled: boolean,
-    level: CleanupLevel,
+    levels: CleanupLevel[],
     deleteSeriesWhenEmpty: boolean,
     action: CleanupAction,
     grace: number | null,
@@ -193,7 +199,7 @@ export class CleanupSettingsComponent implements OnInit {
   ) {
     this.formName.set(name);
     this.formEnabled.set(enabled);
-    this.formLevel.set(level);
+    this.formLevels.set(levels);
     this.formDeleteSeriesWhenEmpty.set(deleteSeriesWhenEmpty);
     this.formAction.set(action);
     this.formGraceDays.set(grace);
@@ -224,14 +230,21 @@ export class CleanupSettingsComponent implements OnInit {
     this.formCriteria.update((c) => ({ ...c, [key]: value }));
   }
 
-  /** Drops `keepLatestEpisodes` off episode level. */
-  setLevel(level: CleanupLevel) {
-    this.formLevel.set(level);
-    this.formCriteria.update(({ keepLatestEpisodes, ...rest }) => ({
-      ...rest,
-      ...(level === 'episode' ? { keepLatestEpisodes } : {}),
-    }));
-    if (level !== 'season' && level !== 'episode') this.formDeleteSeriesWhenEmpty.set(false);
+  /** At most one of series, season and episode: the one just picked wins. Drops what the new levels reject. */
+  setLevels(picked: CleanupLevel[]) {
+    const added = picked.filter((l) => !this.formLevels().includes(l));
+    const others = picked.filter((l) => l !== 'movie');
+    const kept = others.length > 1 ? others.filter((l) => added.includes(l)) : others;
+    const levels: CleanupLevel[] = [...(picked.includes('movie') ? ['movie' as const] : []), ...kept];
+    this.formLevels.set(levels.length ? levels : ['movie']);
+    if (!this.formEpisodeOnly()) {
+      this.formCriteria.update(({ keepLatestEpisodes, ...rest }) => rest);
+    }
+    if (!this.formScoped()) this.formDeleteSeriesWhenEmpty.set(false);
+  }
+
+  levelLabels(rule: CleanupRule): string {
+    return rule.levels.map((l) => this.translate.instant('settings.cleanup.applies_' + l)).join(', ');
   }
 
   async save() {
@@ -241,7 +254,7 @@ export class CleanupSettingsComponent implements OnInit {
     const body: CleanupRuleBody = {
       name,
       enabled: this.formEnabled(),
-      level: this.formLevel(),
+      levels: this.formLevels(),
       deleteSeriesWhenEmpty: this.formDeleteSeriesWhenEmpty(),
       action: this.formAction(),
       graceDays: this.formGraceDays(),
@@ -266,11 +279,11 @@ export class CleanupSettingsComponent implements OnInit {
   /** The server replaces the whole rule and rejects unknown keys, so the editable fields ride along with `enabled`. */
   async toggleEnabled(rule: CleanupRule) {
     this.togglingId.set(rule.id);
-    const { name, level, criteria, action, graceDays, deleteSeriesWhenEmpty, reminderDays } = rule;
+    const { name, levels, criteria, action, graceDays, deleteSeriesWhenEmpty, reminderDays } = rule;
     try {
       await this.api.updateRule(rule.id, {
         name,
-        level,
+        levels,
         criteria,
         action,
         graceDays,

@@ -20,7 +20,9 @@ async fn scalar(pool: &PgPool, sql: &str) -> i32 {
 async fn ids(pool: &PgPool, c: Value) -> Vec<i32> {
     let mut v = vec![];
     for level in ["movie", "series"] {
-        let m = rules::matched(pool, &c, level, "delete").await.unwrap();
+        let m = rules::matched(pool, &c, &[level.to_owned()], "delete")
+            .await
+            .unwrap();
         v.extend(m.iter().map(|m| m.id));
     }
     v.sort();
@@ -358,7 +360,7 @@ async fn the_lowest_rule_id_wins_a_media(pool: PgPool) {
     let first = rule(&pool, json!({}), "none", None).await;
     exec(
         &pool,
-        &format!(r#"UPDATE cleanup_rules SET level = 'series' WHERE id = {first}"#),
+        &format!(r#"UPDATE cleanup_rules SET levels = '{{series}}' WHERE id = {first}"#),
     )
     .await;
     rule(&pool, json!({}), "none", None).await;
@@ -490,7 +492,7 @@ async fn show(pool: &PgPool) -> Show {
 }
 
 async fn matched_ids(pool: &PgPool, level: &str, c: Value) -> Vec<i32> {
-    let mut v: Vec<i32> = rules::matched(pool, &c, level, "delete")
+    let mut v: Vec<i32> = rules::matched(pool, &c, &[level.to_owned()], "delete")
         .await
         .unwrap()
         .iter()
@@ -608,8 +610,8 @@ async fn keep_latest_episodes_keeps_the_newest_on_disk(pool: PgPool) {
 
 async fn scoped_rule(pool: &PgPool, level: &str, c: Value, action: &str, empty: bool) {
     sqlx::query(
-        r#"INSERT INTO cleanup_rules (name, level, criteria, action, "graceDays", "deleteSeriesWhenEmpty")
-        VALUES ('r', $1, $2, $3, 0, $4)"#,
+        r#"INSERT INTO cleanup_rules (name, levels, criteria, action, "graceDays", "deleteSeriesWhenEmpty")
+        VALUES ('r', ARRAY[$1], $2, $3, 0, $4)"#,
     )
     .bind(level)
     .bind(c)
@@ -783,7 +785,7 @@ async fn candidates_of_one_media_are_unique_per_scope(pool: PgPool) {
 #[test]
 fn level_rules_are_validated() {
     let level = |level: &str, criteria: Value| {
-        dto::rule(json!({"name": "r", "level": level, "criteria": criteria}))
+        dto::rule(json!({"name": "r", "levels": [level], "criteria": criteria}))
     };
     assert!(
         level(
@@ -810,20 +812,86 @@ fn level_rules_are_validated() {
             .extend(v.as_object().unwrap().clone());
         dto::rule(body)
     };
-    assert!(rule(json!({"level": "season", "deleteSeriesWhenEmpty": true})).is_ok());
-    assert!(rule(json!({"level": "movie", "deleteSeriesWhenEmpty": true})).is_err());
+    assert!(rule(json!({"levels": ["season"], "deleteSeriesWhenEmpty": true})).is_ok());
+    assert!(rule(json!({"levels": ["movie", "season"], "deleteSeriesWhenEmpty": true})).is_ok());
+    assert!(rule(json!({"levels": ["movie"], "deleteSeriesWhenEmpty": true})).is_err());
     assert!(rule(json!({"deleteSeriesWhenEmpty": "yes"})).is_err());
-    assert_eq!(rule(json!({})).unwrap().level, "movie");
+    assert_eq!(rule(json!({})).unwrap().levels, ["movie"]);
+    assert_eq!(
+        rule(json!({"levels": ["episode", "movie"]}))
+            .unwrap()
+            .levels,
+        ["movie", "episode"]
+    );
+}
+
+#[test]
+fn levels_are_validated_together() {
+    let body = |levels: Value, criteria: Value| {
+        dto::rule(json!({"name": "r", "levels": levels, "criteria": criteria}))
+    };
+    for ok in [
+        json!(["movie"]),
+        json!(["series"]),
+        json!(["season"]),
+        json!(["episode"]),
+        json!(["movie", "series"]),
+        json!(["movie", "season"]),
+        json!(["movie", "episode"]),
+    ] {
+        assert!(body(ok.clone(), json!({})).is_ok(), "{ok}");
+    }
+    for bad in [
+        json!([]),
+        json!("movie"),
+        json!(["shot"]),
+        json!(["movie", "movie"]),
+        json!(["series", "season"]),
+        json!(["series", "episode"]),
+        json!(["season", "episode"]),
+    ] {
+        assert!(body(bad.clone(), json!({})).is_err(), "{bad}");
+    }
+    let err = |l: Value, c: Value| body(l, c).unwrap_err().text();
+    assert!(
+        err(
+            json!(["movie", "episode"]),
+            json!({"keepLatestEpisodes": 2})
+        )
+        .contains("only available at episode level")
+    );
+    assert!(body(json!(["episode"]), json!({"keepLatestEpisodes": 2})).is_ok());
+    assert!(
+        err(json!(["movie", "season"]), json!({"playCountBelow": 2}))
+            .contains("not available at season level")
+    );
+    assert!(body(json!(["movie", "series"]), json!({"playCountBelow": 2})).is_ok());
+    let both = err(json!(["series", "season"]), json!({}));
+    assert!(both.contains("at most one of series, season and episode"));
+    assert!(
+        dto::rule(json!({"name": "r", "level": "movie", "criteria": {}}))
+            .unwrap_err()
+            .text()
+            .contains("property level should not exist")
+    );
 }
 
 #[sqlx::test]
 async fn movie_and_series_levels_select_their_media_type(pool: PgPool) {
     let s = seed(&pool).await;
-    assert_eq!(matched_ids(&pool, "series", json!({})).await, vec![s.m2]);
-    assert_eq!(
-        matched_ids(&pool, "movie", json!({})).await,
-        vec![s.m1, s.m3]
-    );
+    let at = |levels: &[&str]| {
+        let levels: Vec<String> = levels.iter().map(|l| (*l).to_owned()).collect();
+        let pool = pool.clone();
+        async move {
+            let m = rules::matched(&pool, &json!({}), &levels, "delete").await;
+            let mut v: Vec<i32> = m.unwrap().iter().map(|m| m.id).collect();
+            v.sort();
+            v
+        }
+    };
+    assert_eq!(at(&["series"]).await, vec![s.m2]);
+    assert_eq!(at(&["movie"]).await, vec![s.m1, s.m3]);
+    assert_eq!(at(&["movie", "series"]).await, vec![s.m1, s.m2, s.m3]);
 }
 
 #[sqlx::test]
@@ -949,7 +1017,7 @@ async fn export_then_import_round_trips_library_names(pool: PgPool) {
     let stored = db::rule_find(&pool, id).await.unwrap().unwrap();
     let libs = db::library_names(&pool).await.unwrap();
     let out = routes::export(&stored, &libs);
-    assert_eq!(out["fliksCleanupRule"], 1);
+    assert_eq!(out["fliksCleanupRule"], 2);
     assert_eq!(out["criteria"]["libraryIds"], json!(["one"]));
     assert_eq!(out["criteria"]["excludeLibraryIds"], json!(["two"]));
     let r = dto::import(out, &libs).unwrap();
@@ -973,20 +1041,35 @@ async fn import_rejects_unknown_library_version_and_keys(pool: PgPool) {
     assert!(
         err(base(json!({"criteria": {"libraryIds": ["nope"]}}))).contains("unknown library nope")
     );
-    assert!(err(base(json!({"fliksCleanupRule": 2}))).contains("fliksCleanupRule must be 1"));
-    assert!(err(json!({"name": "r", "criteria": {}})).contains("fliksCleanupRule must be 1"));
+    assert!(err(base(json!({"fliksCleanupRule": 3}))).contains("fliksCleanupRule must be 1 or 2"));
+    assert!(err(json!({"name": "r", "criteria": {}})).contains("fliksCleanupRule must be 1 or 2"));
     assert!(err(base(json!({"extra": 1}))).contains("property extra should not exist"));
     assert!(dto::import(base(json!({"enabled": true})), &libs).is_ok_and(|r| !r.enabled));
-    let legacy = |extra: Value, t: &str| {
+    let v1 = |extra: Value, c: Value| {
         let mut v = base(extra);
-        v["criteria"] = json!({"mediaType": t, "neverPlayed": true});
+        v["fliksCleanupRule"] = json!(1);
+        v["criteria"] = c;
         v
     };
-    let r = dto::import(legacy(json!({}), "series"), &libs).unwrap();
-    assert_eq!(r.level, "series");
+    let legacy = json!({"mediaType": "series", "neverPlayed": true});
+    let r = dto::import(v1(json!({}), legacy.clone()), &libs).unwrap();
+    assert_eq!(r.levels, ["series"]);
     assert_eq!(r.criteria, json!({"neverPlayed": true}));
-    assert!(dto::import(legacy(json!({"level": "series"}), "series"), &libs).is_ok());
-    assert!(err(legacy(json!({"level": "movie"}), "series")).contains("contradicts level"));
+    let r = dto::import(v1(json!({"level": "season"}), json!({})), &libs).unwrap();
+    assert_eq!(r.levels, ["season"]);
+    assert_eq!(
+        dto::import(v1(json!({}), json!({})), &libs).unwrap().levels,
+        ["movie"]
+    );
+    assert!(dto::import(v1(json!({"level": "series"}), legacy.clone()), &libs).is_ok());
+    assert!(err(v1(json!({"level": "movie"}), legacy)).contains("contradicts level movie"));
+    assert!(err(v1(json!({"levels": ["movie"]}), json!({}))).contains("levels should not exist"));
+    let v2 = base(json!({"fliksCleanupRule": 2, "levels": ["movie", "season"]}));
+    assert_eq!(dto::import(v2, &libs).unwrap().levels, ["movie", "season"]);
+    assert!(
+        err(base(json!({"fliksCleanupRule": 2, "level": "movie"})))
+            .contains("property level should not exist")
+    );
 }
 
 #[sqlx::test]
@@ -1075,19 +1158,19 @@ async fn bulk_keep_and_delete_now_report_each_item(pool: PgPool) {
 }
 
 #[sqlx::test]
-async fn export_carries_level_scope_flag_and_new_criteria(pool: PgPool) {
+async fn export_carries_levels_scope_flag_and_new_criteria(pool: PgPool) {
     seed(&pool).await;
     let criteria = json!({"playCountBelow": 2, "notPlayedInLastDays": 10});
     let id: i32 = sqlx::query_scalar(
-        r#"INSERT INTO cleanup_rules (name, level, criteria) VALUES ('m', 'movie', $1) RETURNING id"#,
+        r#"INSERT INTO cleanup_rules (name, levels, criteria) VALUES ('m', '{movie}', $1) RETURNING id"#,
     )
     .bind(&criteria)
     .fetch_one(&pool)
     .await
     .unwrap();
     let scoped: i32 = sqlx::query_scalar(
-        r#"INSERT INTO cleanup_rules (name, level, "deleteSeriesWhenEmpty", criteria)
-        VALUES ('s', 'season', true, '{}') RETURNING id"#,
+        r#"INSERT INTO cleanup_rules (name, levels, "deleteSeriesWhenEmpty", criteria)
+        VALUES ('s', '{season}', true, '{}') RETURNING id"#,
     )
     .fetch_one(&pool)
     .await
@@ -1096,12 +1179,12 @@ async fn export_carries_level_scope_flag_and_new_criteria(pool: PgPool) {
         let stored = db::rule_find(&pool, id).await.unwrap().unwrap();
         let out = routes::export(&stored, &[]);
         assert_eq!(
-            (&out["level"], &out["deleteSeriesWhenEmpty"]),
-            (&json!(level), &json!(empty))
+            (&out["levels"], &out["deleteSeriesWhenEmpty"]),
+            (&json!([level]), &json!(empty))
         );
         let r = dto::import(out, &[]).unwrap();
         assert_eq!(
-            (r.level.as_str(), r.delete_series_when_empty),
+            (r.levels[0].as_str(), r.delete_series_when_empty),
             (level, empty)
         );
         assert!(!r.enabled);

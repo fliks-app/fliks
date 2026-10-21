@@ -299,15 +299,17 @@ async fn low_disk_libraries(db: &PgPool, percent: i64) -> sqlx::Result<Vec<i32>>
 pub async fn matched(
     db: &PgPool,
     criteria: &Value,
-    level: &str,
+    levels: &[String],
     action: &str,
 ) -> sqlx::Result<Vec<Match>> {
     let disk = match int(criteria, "diskFreeBelowPercent") {
         Some(p) => low_disk_libraries(db, p).await?,
         None => vec![],
     };
-    compile(criteria, level, &disk, action == "delete_files_unmonitor")
-        .build_query_as()
-        .fetch_all(db)
-        .await
+    let mut out = vec![];
+    for level in levels {
+        let mut q = compile(criteria, level, &disk, action == "delete_files_unmonitor");
+        out.extend(q.build_query_as::<Match>().fetch_all(db).await?);
+    }
+    Ok(out)
 }

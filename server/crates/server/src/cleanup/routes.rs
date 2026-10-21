@@ -121,7 +121,7 @@ pub async fn rule_preview(
     let r = db::rule_row(&st.db, id)
         .await?
         .ok_or_else(|| rule_not_found(id))?;
-    let matches = rules::matched(&st.db, &r.criteria.0, &r.level, &r.action).await?;
+    let matches = rules::matched(&st.db, &r.criteria.0, &r.levels, &r.action).await?;
     let total: i64 = matches.iter().map(|m| m.size).sum();
     Ok(Json(json!({"matches": matches, "totalSize": total})))
 }
@@ -244,8 +244,8 @@ pub(super) fn export(rule: &Value, libraries: &[(i32, String)]) -> Value {
             }
         }
     }
-    json!({"fliksCleanupRule": 1, "name": rule["name"], "enabled": rule["enabled"],
-        "level": rule["level"], "action": rule["action"], "graceDays": rule["graceDays"],
+    json!({"fliksCleanupRule": 2, "name": rule["name"], "enabled": rule["enabled"],
+        "levels": rule["levels"], "action": rule["action"], "graceDays": rule["graceDays"],
         "deleteSeriesWhenEmpty": rule["deleteSeriesWhenEmpty"], "reminderDays": rule["reminderDays"],
         "criteria": criteria})
 }
