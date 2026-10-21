@@ -7,7 +7,7 @@ Scope: `playback_history`, `cleanup_rules`, `cleanup_candidates`, `cleanup_exclu
 | Method path | Auth | Request | Response | Errors | Side effects |
 |---|---|---|---|---|---|
 | `GET /api/cleanup/rules` | `Read Settings` | none | 200, `Rule[]` ordered by `name`, `id` | 401, 403 | none |
-| `POST /api/cleanup/rules` | `Manage Settings` | `{name, enabled?, level?, criteria, action?, graceDays?, deleteSeriesWhenEmpty?}` (rule 6) | 201, `Rule` | 400 field errors, 401, 403 | INSERT |
+| `POST /api/cleanup/rules` | `Manage Settings` | `{name, enabled?, level?, criteria, action?, graceDays?, deleteSeriesWhenEmpty?, reminderDays?}` (rule 6) | 201, `Rule` | 400 field errors, 401, 403 | INSERT |
 | `GET /api/cleanup/rules/{id}` | `Read Settings` | none | 200, `Rule` | 404 `Rule #<id> not found` | none |
 | `PUT /api/cleanup/rules/{id}` | `Manage Settings` | as `POST`, replaces the rule | 200, `Rule` | 400, 404 | UPDATE |
 | `DELETE /api/cleanup/rules/{id}` | `Manage Settings` | none | 200 | 404 | DELETE (candidates of the rule cascade) |
@@ -18,14 +18,14 @@ Scope: `playback_history`, `cleanup_rules`, `cleanup_candidates`, `cleanup_exclu
 | `DELETE /api/cleanup/exclusions/{mediaId}` | `Manage Settings` | query `seasonId?`, `episodeId?` (rule 26) | 200 | 404 `Media #<id> is not excluded` | DELETE |
 | `GET /api/media/leaving-soon` | `Read Media` | none | 200, the card shape of `recently-added` plus `deleteAt` (ISO) | 401, 403 | none |
 
-`Rule` = `{id, createdAt, updatedAt, name, enabled, level, criteria, action, graceDays: int|null, deleteSeriesWhenEmpty}`. `Candidate` = `{id, mediaId, seasonId, episodeId, seasonNumber, episodeNumber, title, type, posterUrl, ruleId, ruleName, action, size, flaggedAt, deleteAt: string|null}`; the season and episode keys are null for a whole-media candidate. `size` is the sum of the scope's file sizes in bytes.
+`Rule` = `{id, createdAt, updatedAt, name, enabled, level, criteria, action, graceDays: int|null, deleteSeriesWhenEmpty, reminderDays: int[]}`. `Candidate` = `{id, mediaId, seasonId, episodeId, seasonNumber, episodeNumber, title, type, posterUrl, ruleId, ruleName, action, size, flaggedAt, deleteAt: string|null}`; the season and episode keys are null for a whole-media candidate. `size` is the sum of the scope's file sizes in bytes.
 
 ## Rules
 
 ### A. Tables
 
-1. `cleanup_rules`: `id serial`, `createdAt`/`updatedAt timestamptz` (`updatedAt` by trigger), `name`, `enabled` (default true), `criteria jsonb`, `level` in `movie|series|season|episode` (default `movie`; the migration backfills `series` for a rule whose `criteria.mediaType` is `series`), `action` in `delete|delete_files_unmonitor|none` (default `delete`), `graceDays int >= 0` or null, `deleteSeriesWhenEmpty` boolean (default false).
-2. `cleanup_candidates`: `id serial` primary key, `mediaId` (media cascade), `seasonId` and `episodeId` nullable (cascade), `ruleId` (rule cascade), `flaggedAt`, `deleteAt` nullable. Unique on `(mediaId, seasonId, episodeId)` with NULLs equal (`NULLS NOT DISTINCT`): one row per scope, one rule owns it. A whole-media row has both null, a season row only `seasonId`, an episode row both.
+1. `cleanup_rules`: `id serial`, `createdAt`/`updatedAt timestamptz` (`updatedAt` by trigger), `name`, `enabled` (default true), `criteria jsonb`, `level` in `movie|series|season|episode` (default `movie`; the migration backfills `series` for a rule whose `criteria.mediaType` is `series`), `action` in `delete|delete_files_unmonitor|none` (default `delete`), `graceDays int >= 0` or null, `reminderDays int[]` (default `{7,1}`), `deleteSeriesWhenEmpty` boolean (default false).
+2. `cleanup_candidates`: `id serial` primary key, `mediaId` (media cascade), `seasonId` and `episodeId` nullable (cascade), `ruleId` (rule cascade), `flaggedAt`, `deleteAt` nullable. Unique on `(mediaId, seasonId, episodeId)` with NULLs equal (`NULLS NOT DISTINCT`): one row per scope, one rule owns it. `lastReminderDays int` nullable: the smallest reminder threshold already sent. A whole-media row has both null, a season row only `seasonId`, an episode row both.
 3. `cleanup_exclusions`: same `id`, `mediaId`, `seasonId`, `episodeId` and unique index, `userId` (`SET NULL`), `createdAt`. An exclusion protects its scope and everything below it: whole media (all levels), a season (and its episodes), an episode. Media level matching honours any exclusion of the media, season level any exclusion of the season or of one of its episodes (a protected child protects its parent).
 4. Setting `cleanup_max_per_run` (`app_settings`, written by the generic settings routes): decimal string, default 10, invalid or negative falls back to 10, `0` acts on nothing.
 5. `graceDays` null means no `deleteAt`: the media is flagged and never acted on. `action = none` flags (and sets `deleteAt` when `graceDays` is set, for the badge) and never acts.
@@ -34,7 +34,7 @@ Scope: `playback_history`, `cleanup_rules`, `cleanup_candidates`, `cleanup_exclu
 
 ### B. Rule body
 
-6. `name` trimmed, non-empty string. `enabled` boolean (default true). `level` one of rule 1, default `series` when `criteria.mediaType` is `series`, else `movie`. `action` one of rule 1 (default `delete`). `graceDays` integer 0..3650 or null/absent. `deleteSeriesWhenEmpty` boolean (default false), only `true` at season or episode level (`must be false below season level`). `criteria` object, required. Unknown top-level keys: `property <key> should not exist`. At `movie` and `series` level `mediaType` must agree with the level (`must be movie`/`must be series`); `level` itself adds no filter, so a `movie` rule without `mediaType` still matches series as before.
+6. `name` trimmed, non-empty string. `enabled` boolean (default true). `level` one of rule 1, default `series` when `criteria.mediaType` is `series`, else `movie`. `action` one of rule 1 (default `delete`). `graceDays` integer 0..3650 or null/absent. `deleteSeriesWhenEmpty` boolean (default false), only `true` at season or episode level (`must be false below season level`). `reminderDays` array of at most 5 distinct integers >= 1 (null/absent: `[7,1]`, `[]`: no reminder), stored and returned sorted descending; errors `reminderDays must contain no more than 5 elements`, `each value in reminderDays must be an integer number`, `each value in reminderDays must not be less than 1`, `reminderDays's elements must be unique`. `criteria` object, required. Unknown top-level keys: `property <key> should not exist`. At `movie` and `series` level `mediaType` must agree with the level (`must be movie`/`must be series`); `level` itself adds no filter, so a `movie` rule without `mediaType` still matches series as before.
 7. `criteria` keys, all optional, `null` treated as absent, combined with AND; an unknown key is `criteria.property <key> should not exist`, a wrong type is `criteria.<key> must be ...`:
 
     | Key | Type | Matches a media when |
@@ -92,11 +92,15 @@ Scope: `playback_history`, `cleanup_rules`, `cleanup_candidates`, `cleanup_exclu
 
 ### F. Events
 
-23. `media.leaving_soon {title, mediaId, deleteAt}`: notification event sent once when a scope is newly flagged with a `deleteAt`; `seasonNumber` (and `episodeNumber` for an episode) join the payload when scoped.
+23. `media.leaving_soon {title, mediaId, deleteAt, daysLeft}`: notification event, `daysLeft` = whole days to `deleteAt` rounded up, sent when a scope is newly flagged with a `deleteAt` (the first reminder) and by the reminder pass (rules 27-29); `seasonNumber` (and `episodeNumber` for an episode) join the payload when scoped.
 24. `media.cleaned_up {title, mediaId, action}`: sent after a scope is cleaned (rules 15, 16, 16b, 22), with the same optional scope keys. The message appends ` S02` or ` S02E05` to the title when they are present (`notifications.md` rule 16).
 25. Both belong to the notification vocabulary (`notifications.md` rules 2, 3, 16): connections subscribe to them like any event; delivery is per connection, not per user.
 
 26. Scope of the candidate and exclusion routes: no query means the whole media; `seasonId` the season; `episodeId` the episode (its season is derived, a `seasonId` that disagrees is a 404 `Episode #<id> not found`). An unknown season or episode of the media is a 404.
+
+27. Reminder pass, after the flag phase, for each candidate (any scope) with `deleteAt > now`: the crossed threshold is the smallest `reminderDays` value of its rule that is >= `daysLeft`. When one exists and is below `lastReminderDays` (or `lastReminderDays` is null), `media.leaving_soon` is sent once and `lastReminderDays` takes the threshold. A media flagged with fewer days left than several thresholds sends one event for the smallest of them, not one per threshold. A run between two thresholds sends nothing.
+28. A newly flagged scope always sends its flag-time event (rule 23); `lastReminderDays` then takes the crossed threshold, if any, so the reminder pass does not repeat it. A candidate past its `deleteAt` gets no reminder.
+29. Recipients: reminders reach the notification connections only (rule 25). The server has no per-user channel to carry them to the requesters and viewers of the media: no in-app notification store, no mobile push, no email sender. SSE (`emit_to_user`) reaches only connected clients and is not an inbox, so it is not used.
 
 ## SQL
 

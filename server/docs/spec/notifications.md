@@ -74,7 +74,7 @@ Scope: connections CRUD, senders and dispatch, and every `notifications.dispatch
 | `livetv.account_expiring` | `Live TV source "<src>" account expires soon` | `sourceName` |
 | `livetv.account_expired` | `Live TV source "<src>" account has expired` | `sourceName` |
 | `livetv.adult_guard_failed` | `Live TV source "<src>" adult-group restriction pass failed` | `sourceName` |
-| `media.leaving_soon` | `Leaving soon: <title>[ S<ss>[E<ee>]]` | `title`, `seasonNumber`, `episodeNumber` |
+| `media.leaving_soon` | `Leaving soon: <title>[ S<ss>[E<ee>]]`, then ` (<n> days)` when `daysLeft` is an integer (`1 day` for 1) | `title`, `seasonNumber`, `episodeNumber`, `daysLeft` |
 | `media.cleaned_up` | `Cleaned up: <title>[ S<ss>[E<ee>]]` | `title`, `seasonNumber`, `episodeNumber` |
 | any other string | `<event>: <JSON.stringify(payload)>` | whole payload (unreachable: events are validated, rule 29) |
 
@@ -101,7 +101,7 @@ Scope: connections CRUD, senders and dispatch, and every `notifications.dispatch
 | `subtitle.synced` | `{language, subtitleId}` |
 | `livetv.account_expired` / `livetv.account_expiring` | `{sourceName, expiresAt: ISO\|null}` (only on state transition) |
 | `livetv.adult_guard_failed` | `{sourceName}` |
-| `media.leaving_soon` | `{title, mediaId, deleteAt}` plus `seasonNumber` (and `episodeNumber`) for a season (episode) scope |
+| `media.leaving_soon` | `{title, mediaId, deleteAt, daysLeft}` plus `seasonNumber` (and `episodeNumber`) for a season (episode) scope |
 | `media.cleaned_up` | `{title, mediaId, action}` plus `seasonNumber` (and `episodeNumber`) for a season (episode) scope |
 | `health.issue` | `{test: true, message}` |
 

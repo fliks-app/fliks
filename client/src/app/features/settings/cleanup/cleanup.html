@@ -209,6 +209,18 @@
       </div>
       <p class="text-xs leading-tight text-base-content/50 -mt-3">{{ 'settings.cleanup.grace_hint' | translate }}</p>
 
+      <label class="form-control">
+        <span class="label-text">{{ 'settings.cleanup.col_reminders' | translate }}</span>
+        <input
+          type="text"
+          class="input input-bordered input-sm w-full"
+          [placeholder]="'settings.cleanup.reminders_placeholder' | translate"
+          [ngModel]="formReminderDays()"
+          (ngModelChange)="formReminderDays.set($event)"
+        />
+      </label>
+      <p class="text-xs leading-tight text-base-content/50 -mt-3">{{ 'settings.cleanup.reminders_hint' | translate }}</p>
+
       <p class="text-sm text-base-content/60">{{ 'settings.cleanup.logic_hint' | translate }}</p>
 
       <div class="grid sm:grid-cols-2 gap-3">

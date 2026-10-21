@@ -1,5 +1,9 @@
 {"cases":[
 {"input":{"fn":"format","event":"request.created","payload":{"title":"Dune","mediaType":"movie"}},"expected":{"message":"New request: Dune"}},
+{"expected":{"message":"Leaving soon: Dune (7 days)"},"input":{"event":"media.leaving_soon","fn":"format","payload":{"daysLeft":7,"mediaId":1,"title":"Dune"}}},
+{"expected":{"message":"Leaving soon: Dune (1 day)"},"input":{"event":"media.leaving_soon","fn":"format","payload":{"daysLeft":1,"mediaId":1,"title":"Dune"}}},
+{"expected":{"message":"Leaving soon: Dune"},"input":{"event":"media.leaving_soon","fn":"format","payload":{"mediaId":1,"title":"Dune"}}},
+{"expected":{"message":"Leaving soon: Show S02E05 (3 days)"},"input":{"event":"media.leaving_soon","fn":"format","payload":{"daysLeft":3,"episodeNumber":5,"mediaId":2,"seasonNumber":2,"title":"Show"}}},
 {"input":{"fn":"send","type":"discord","settings":{"webhookUrl":"https://discord.test/api/webhooks/1/abc"},"event":"request.created","payload":{"title":"Dune","mediaType":"movie"}},"expected":{"url":"https://discord.test/api/webhooks/1/abc","headers":{},"body":{"username":"Fliks","content":"New request: Dune"}}},
 {"input":{"fn":"send","type":"slack","settings":{"webhookUrl":"https://hooks.slack.test/T/B/x"},"event":"request.created","payload":{"title":"Dune","mediaType":"movie"}},"expected":{"url":"https://hooks.slack.test/T/B/x","headers":{},"body":{"text":"New request: Dune"}}},
 {"input":{"fn":"send","type":"webhook","settings":{"url":"https://hook.test/in","token":"tk"},"event":"request.created","payload":{"title":"Dune","mediaType":"movie"}},"expected":{"url":"https://hook.test/in","headers":{"Authorization":"Bearer tk"},"body":{"event":"request.created","title":"Dune","mediaType":"movie"}}},
