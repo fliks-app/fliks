@@ -238,6 +238,128 @@
         }
       }
     },
+    "/api/cleanup/candidates": {
+      "get": {
+        "tags": [
+          "cleanup"
+        ],
+        "operationId": "candidate_list",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/cleanup/candidates/{mediaId}/delete-now": {
+      "post": {
+        "tags": [
+          "cleanup"
+        ],
+        "operationId": "candidate_delete_now",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/cleanup/exclusions/{mediaId}": {
+      "post": {
+        "tags": [
+          "cleanup"
+        ],
+        "operationId": "exclusion_add",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "cleanup"
+        ],
+        "operationId": "exclusion_remove",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/cleanup/rules": {
+      "get": {
+        "tags": [
+          "cleanup"
+        ],
+        "operationId": "rule_list",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "cleanup"
+        ],
+        "operationId": "rule_create",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/cleanup/rules/{id}": {
+      "get": {
+        "tags": [
+          "cleanup"
+        ],
+        "operationId": "rule_get",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "cleanup"
+        ],
+        "operationId": "rule_update",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "cleanup"
+        ],
+        "operationId": "rule_remove",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/cleanup/rules/{id}/preview": {
+      "post": {
+        "tags": [
+          "cleanup"
+        ],
+        "operationId": "rule_preview",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/commands": {
       "get": {
         "tags": [
@@ -1502,6 +1624,19 @@
         "operationId": "import_tmdb",
         "responses": {
           "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/media/leaving-soon": {
+      "get": {
+        "tags": [
+          "cleanup"
+        ],
+        "operationId": "leaving_soon",
+        "responses": {
+          "200": {
             "description": ""
           }
         }

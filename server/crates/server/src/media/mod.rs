@@ -2,7 +2,7 @@
 mod aggregates;
 mod calendar;
 pub mod hydrate;
-mod list;
+pub(crate) mod list;
 mod params;
 mod related;
 mod routes;

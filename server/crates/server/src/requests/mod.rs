@@ -1,6 +1,6 @@
 //! `/api/requests/*`, `/api/auto-approval-rules/*` and the request lifecycle (`docs/spec/requests.md`).
 mod db;
-mod dto;
+pub(crate) mod dto;
 mod flow;
 mod lifecycle;
 mod routes;

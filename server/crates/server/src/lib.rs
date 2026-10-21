@@ -3,6 +3,7 @@ pub mod atomic_file;
 pub mod auth;
 pub mod auth_token;
 pub mod busy;
+pub mod cleanup;
 pub mod config;
 pub mod db;
 pub mod engine;

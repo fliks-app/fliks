@@ -1,7 +1,7 @@
 //! The job name lists of `scheduler.md` rules 10 and 15; they equal `core-scheduler-jobs.ts`.
 
 /// `(name, cron, labelKey)`, in listing order; every one is triggerable.
-pub const CORE: [(&str, &str, &str); 5] = [
+pub const CORE: [(&str, &str, &str); 6] = [
     ("Backup", "0 02 * * *", "system.cmd_backup"),
     (
         "RefreshMetadata",
@@ -23,9 +23,10 @@ pub const CORE: [(&str, &str, &str); 5] = [
         "0 0-23/6 * * *",
         "system.cmd_subtitle_upgrade",
     ),
+    ("MediaCleanup", "0 05 * * *", "system.cmd_media_cleanup"),
 ];
 
-/// The live TV registry jobs, after the core five in the listing (`livetv-sources.md` rule 46).
+/// The live TV registry jobs, after the core jobs in the listing (`livetv-sources.md` rule 46).
 pub const LIVETV: [(&str, &str, &str); 3] = [
     (
         "LiveTvSourceRefresh",

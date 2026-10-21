@@ -2,7 +2,7 @@
 
 ## Spec index
 
-Per-domain specs live under [`spec/`](spec/) (template: phase-2 plan §12); [`spec/node-removal.md`](spec/node-removal.md) is the removal of the Nest backend (S9). Specs are the record of each port: their `[ts:]` tags and "Bridges"/"Deletes in Nest" sections are history.
+Per-domain specs live under [`spec/`](spec/) (template: phase-2 plan §12); [`spec/cleanup.md`](spec/cleanup.md) is the library cleanup rules (Rust only); [`spec/node-removal.md`](spec/node-removal.md) is the removal of the Nest backend (S9). Specs are the record of each port: their `[ts:]` tags and "Bridges"/"Deletes in Nest" sections are history.
 
 ## Tag legend (in specs)
 
@@ -261,6 +261,7 @@ A 500 or a half-written request is never part of the frozen contract:
 | C172 | an SSE connection's frame queue was unbounded: a client that stopped reading made server memory grow | the queue holds 1024 frames; a connection that overflows is closed and the client reconnects (`events-hub.md` rule 15a) | none: clients already reconnect on a dropped stream |
 | C173 | an image source of up to 268 402 689 pixels (about 1 GiB decoded) was decoded once per variant | one decode per source, refused over 40 000 000 pixels: the full file is kept, its resized variants are not made (`image-store.md` rule 9) | none: artwork is far smaller |
 | C174 | `acquisition.candidates` built the whole wanted list for the first page, cached it for 60 s and paged it by offset | keyset cursor on `(mediaId, season id, episode id)`: a page reads only the media after the cursor, in batches; no cache (`plugins.md` rule 31) | none: the cursor is opaque to plugins |
+| C175 | n/a (new domain) | the notification vocabulary gains `media.leaving_soon` and `media.cleaned_up` (`cleanup.md` rules 23-25): 20 events, 19 listed by `GET /api/notifications/events`; the core job list gains `MediaCleanup` | the notification settings page lists two more events; the tasks page one more job |
 
 Frozen as is (decided): the heartbeat keeps its debounce entry after a failed history write and returns
 `sessionLost: false` when the engine session lives but presence cannot be rebuilt. Lists whose order comes

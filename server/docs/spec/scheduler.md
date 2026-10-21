@@ -48,6 +48,9 @@ Scope: the `commands` table and its audit wrapper (`runAuditedCommand`), the cro
     | `RefreshPluginSources` | `0 3 * * *` | `system.cmd_refresh_plugin_sources` |
     | `SubtitleSearch` | `0 0-23/6 * * *` | `system.cmd_subtitle_search` |
     | `SubtitleUpgrade` | `0 0-23/6 * * *` | `system.cmd_subtitle_upgrade` |
+    | `MediaCleanup` | `0 05 * * *` | `system.cmd_media_cleanup` |
+
+    `MediaCleanup` is a Rust job added after Nest (`cleanup.md` rules 11-18); the Nest-held jobs of rule 11 follow it.
 
     Strings from `CronExpression.EVERY_DAY_AT_2AM`, `EVERY_DAY_AT_4AM`, `PLUGIN_SOURCE_REFRESH_CRON` `[ts:src/common/constants/core-scheduler-jobs.ts:13]`, `EVERY_6_HOURS` (`@nestjs/schedule` 6.1.1 enum); they are part of the contract and the client shows them.
 11. After the core five come the Nest-held jobs (rule 18): the registry jobs in registration order (today `LiveTvSourceRefresh`, `LiveTvGuideRefresh`, `LiveTvGuidePrune`, `pluginId: null`, `lastRun`/`lastStatus` from `commands` like core), then the plugin-declared jobs `{name, cron, triggerable, labelKey, lastRun: null, lastStatus: null, pluginId}` (a plugin's runs have no `commands` row, rule 13). When the bridge is unreachable the Nest-held entries are omitted and the response is still 200 (the listing "shrinks" the same way when nothing registered). `[ts:src/modules/scheduler/scheduler.service.ts:195]`–`[ts:src/modules/scheduler/scheduler.service.ts:239]`, `[ts:src/modules/scheduler/scheduled-job-registry.service.ts:45]`–`[ts:src/modules/scheduler/scheduled-job-registry.service.ts:51]`
@@ -109,6 +112,7 @@ None in the `settings` table (the only settings-gated tick, subtitles, is S6). E
 | `RefreshMetadata` | Rust | `0 04 * * *`, manual | `TMDB_API_KEY` | rules 23, 24 | `RefreshMetadata` |
 | `PruneOldCommands` | Rust | `0 03 * * *` | none | rule 26 | none |
 | `RefreshPluginSources` | Rust schedule, Nest body (bridge) until S8 | `0 3 * * *`, manual | none | rule 30 | `RefreshPluginSources` |
+| `MediaCleanup` | Rust | `0 05 * * *`, manual | `cleanup_max_per_run` | `cleanup.md` rules 11-18 | `MediaCleanup` |
 | `RefreshMissingMetadata` | Rust | manual only | `TMDB_API_KEY`, `METADATA_STALE_AFTER_MONTHS` | rule 25 | `RefreshMissingMetadata`, `manual` |
 | `RescanAll`, `RescanMissingFiles` | Rust | manual only | none | rule 27 | same name, `manual` |
 | `GenerateSprites`, `GenerateMissingSprites` | Rust | manual only | none | rule 28 | same name, `manual` |
