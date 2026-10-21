@@ -13,5 +13,8 @@
       "method": "GET",
       "path": "/api/system/version"
     }
+  ],
+  "ignore": [
+    "$..version"
   ]
 }

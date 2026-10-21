@@ -46,7 +46,7 @@
         "body": {
           "error": "Bad Request",
           "message": [
-            "each value in events must be one of the following values: request.created, request.approved, request.declined, request.processing, request.available, request.delete.created, request.delete.approved, request.delete.declined, grab.started, download.complete, health.issue, subtitle.downloaded, subtitle.upgraded, subtitle.failed, subtitle.synced, livetv.account_expiring, livetv.account_expired, livetv.adult_guard_failed"
+            "each value in events must be one of the following values: request.created, request.approved, request.declined, request.processing, request.available, request.delete.created, request.delete.approved, request.delete.declined, grab.started, download.complete, health.issue, subtitle.downloaded, subtitle.upgraded, subtitle.failed, subtitle.synced, livetv.account_expiring, livetv.account_expired, livetv.adult_guard_failed, media.leaving_soon, media.cleaned_up"
           ],
           "statusCode": 400
         },

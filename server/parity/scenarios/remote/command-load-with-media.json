@@ -1,6 +1,7 @@
 {
   "ignore": [
-    "$..cmdId"
+    "$..cmdId",
+    "$..expiresAt"
   ],
   "name": "remote-command-load-with-media",
   "seed": "base",
@@ -35,6 +36,24 @@
       },
       "method": "POST",
       "path": "/api/remote/dev-1%23native/command"
+    },
+    {
+      "as": "user",
+      "expect": {
+        "body": [
+          {
+            "action": "load",
+            "mediaFileId": 1,
+            "mediaId": 1,
+            "mediaType": "movie",
+            "byTargetId": null,
+            "type": "remote.command"
+          }
+        ],
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/remote/commands?targetId=dev-1%23native"
     }
   ]
 }
