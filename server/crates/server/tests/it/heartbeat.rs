@@ -227,6 +227,16 @@ async fn completion_zone_writes_every_beat_and_cleans_auto_playlists(pool: PgPoo
         .await
         .unwrap();
     assert_eq!(left, 0);
+    let plays = || async {
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM playback_history")
+            .fetch_one(&c.pool)
+            .await
+            .unwrap()
+    };
+    assert_eq!(plays().await, 1, "completion appends once");
+    c.beat(json!({"positionSeconds": 100})).await;
+    c.beat(json!({"positionSeconds": 3500})).await;
+    assert_eq!(plays().await, 2, "a re-watch appends again");
 }
 
 #[sqlx::test(migrations = false)]

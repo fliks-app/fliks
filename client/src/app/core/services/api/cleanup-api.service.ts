@@ -17,6 +17,9 @@ export interface CleanupCriteria {
   excludeGenres?: string[];
   seriesEnded?: boolean;
   notLiked?: boolean;
+  playCountBelow?: number;
+  playCountByUsersBelow?: number;
+  notPlayedInLastDays?: number;
   likedByFewerThan?: number;
   notLikedByRequester?: boolean;
   keepLatestEpisodes?: number;

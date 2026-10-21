@@ -1,6 +1,6 @@
 # Spec: library cleanup rules
 
-Scope: `cleanup_rules`, `cleanup_candidates`, `cleanup_exclusions`, the `MediaCleanup` job, `/api/cleanup/*`, `GET /api/media/leaving-soon` and the `deleteAt` field of the media detail. Rules act at movie, series, season or episode level.
+Scope: `playback_history`, `cleanup_rules`, `cleanup_candidates`, `cleanup_exclusions`, the `MediaCleanup` job, `/api/cleanup/*`, `GET /api/media/leaving-soon` and the `deleteAt` field of the media detail. Rules act at movie, series, season or episode level.
 
 ## Routes
 
@@ -30,6 +30,8 @@ Scope: `cleanup_rules`, `cleanup_candidates`, `cleanup_exclusions`, the `MediaCl
 4. Setting `cleanup_max_per_run` (`app_settings`, written by the generic settings routes): decimal string, default 10, invalid or negative falls back to 10, `0` acts on nothing.
 5. `graceDays` null means no `deleteAt`: the media is flagged and never acted on. `action = none` flags (and sets `deleteAt` when `graceDays` is set, for the badge) and never acts.
 
+6a. `playback_history` (`id serial`, `userId` users cascade, `mediaId` media cascade, `episodeId` episodes cascade or null for a movie, `playedAt timestamptz` default now), indexes on `("mediaId","playedAt")` and `("userId")`. A row is appended each time a playback state flips `completed` from false (or absent) to true: the heartbeat completion (`heartbeat.md` rule 15), `toggle-watched`, `toggle-series-watched` (each newly completed episode) and `toggle-season-watched` (each episode not completed before). A manual "mark as watched" counts as a play; marking unwatched, deleting a state or re-saving an already completed state never touches the history, and a re-watch after un-completing appends again. The migration backfills one row per completed `playback_states` row, `playedAt = COALESCE("playedAt", "lastPlayedAt", "updatedAt")`.
+
 ### B. Rule body
 
 6. `name` trimmed, non-empty string. `enabled` boolean (default true). `level` one of rule 1, default `series` when `criteria.mediaType` is `series`, else `movie`. `action` one of rule 1 (default `delete`). `graceDays` integer 0..3650 or null/absent. `deleteSeriesWhenEmpty` boolean (default false), only `true` at season or episode level (`must be false below season level`). `criteria` object, required. Unknown top-level keys: `property <key> should not exist`. At `movie` and `series` level `mediaType` must agree with the level (`must be movie`/`must be series`); `level` itself adds no filter, so a `movie` rule without `mediaType` still matches series as before.
@@ -51,10 +53,15 @@ Scope: `cleanup_rules`, `cleanup_candidates`, `cleanup_exclusions`, the `MediaCl
     | `excludeGenres` | string[] | `media.genres` holds none of them (no genres matches) |
     | `seriesEnded` | bool | it is a series with `status = 'ended'` |
     | `notLiked` | bool | no `likes` row for the media, its seasons or its episodes |
+    | `playCountBelow` | int >= 1 | fewer `playback_history` rows than the value for the media (a series counts every episode play; never played is 0) |
+    | `playCountByUsersBelow` | int >= 1 | fewer distinct users than the value have a `playback_history` row for the media |
+    | `notPlayedInLastDays` | int >= 0 | no `playback_history` row newer than that many days (never played matches) |
     | `likedByFewerThan` | int >= 1 | fewer distinct users than the value liked the media, a season or an episode |
     | `notLikedByRequester` | bool | no requester of the media liked it (no requester matches) |
     | `keepLatestEpisodes` | int >= 1, episode level only (`is only available at episode level`) | the episode is not among the N newest episodes of its series on disk, ranked by `episodes.airDate` (no date ranks oldest), then `id` |
-| `diskFreeBelowPercent` | int 1..100 | its library path has less free space than that percentage of the disk (`libraries::disk`); a library without a readable path never matches |
+    | `diskFreeBelowPercent` | int 1..100 | its library path has less free space than that percentage of the disk (`libraries::disk`); a library without a readable path never matches |
+
+    The three play-history criteria apply at movie and series level only; a season or episode rule rejects them.
 
     Boolean criteria constrain only when `true`. Series-scoped criteria (`libraryIds`, `ratingBelow`, `minVotes`, `genres`, `excludeGenres`, `seriesEnded`, the likes keys, `diskFreeBelowPercent`) apply to the parent series at every level.
 

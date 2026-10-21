@@ -71,6 +71,9 @@ export class CleanupSettingsComponent implements OnInit {
     'ratingBelow',
     'minVotes',
     'sizeAboveGb',
+    'playCountBelow',
+    'playCountByUsersBelow',
+    'notPlayedInLastDays',
     'likedByFewerThan',
     'diskFreeBelowPercent',
   ];

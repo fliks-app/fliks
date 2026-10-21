@@ -103,7 +103,7 @@ pub fn rule(v: Value) -> Res<Rule> {
     })
 }
 
-const KEYS: [&str; 18] = [
+const KEYS: [&str; 21] = [
     "libraryIds",
     "mediaType",
     "addedOlderThanDays",
@@ -118,6 +118,9 @@ const KEYS: [&str; 18] = [
     "excludeGenres",
     "seriesEnded",
     "notLiked",
+    "playCountBelow",
+    "playCountByUsersBelow",
+    "notPlayedInLastDays",
     "likedByFewerThan",
     "notLikedByRequester",
     "keepLatestEpisodes",
@@ -152,12 +155,19 @@ fn criteria(k: &Map<String, Value>, level: &str, errs: &mut Vec<String>) -> Valu
                 c.err(key, "is only available at episode level");
                 None
             }
-            "addedOlderThanDays" | "releasedOlderThanDays" | "lastPlayedOlderThanDays" => {
-                c.int(key, v, false, Some(0), None).map(Value::from)
+            "playCountBelow" | "playCountByUsersBelow" | "notPlayedInLastDays" if scoped(level) => {
+                c.err(key, &format!("is not available at {level} level"));
+                None
             }
-            "minVotes" | "likedByFewerThan" | "keepLatestEpisodes" => {
-                c.int(key, v, false, Some(1), None).map(Value::from)
-            }
+            "addedOlderThanDays"
+            | "releasedOlderThanDays"
+            | "lastPlayedOlderThanDays"
+            | "notPlayedInLastDays" => c.int(key, v, false, Some(0), None).map(Value::from),
+            "minVotes"
+            | "likedByFewerThan"
+            | "keepLatestEpisodes"
+            | "playCountBelow"
+            | "playCountByUsersBelow" => c.int(key, v, false, Some(1), None).map(Value::from),
             "diskFreeBelowPercent" => c.int(key, v, false, Some(1), Some(100)).map(Value::from),
             "neverPlayed"
             | "watchedByRequester"

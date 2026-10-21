@@ -195,6 +195,9 @@ async fn each_criterion_filters(pool: PgPool) {
 fn unknown_keys_and_wrong_types_are_rejected() {
     let ok = json!({"name": "r", "criteria": {"neverPlayed": true, "ratingBelow": 4.5}});
     assert!(dto::rule(ok).is_ok());
+    let history =
+        json!({"playCountBelow": 3, "playCountByUsersBelow": 2, "notPlayedInLastDays": 0});
+    assert!(dto::rule(json!({"name": "r", "criteria": history})).is_ok());
     for criteria in [
         json!({"nope": 1}),
         json!({"neverPlayed": "yes"}),
@@ -203,6 +206,9 @@ fn unknown_keys_and_wrong_types_are_rejected() {
         json!({"mediaType": "episode"}),
         json!({"diskFreeBelowPercent": 0}),
         json!({"minVotes": 10}),
+        json!({"playCountBelow": 0}),
+        json!({"playCountByUsersBelow": 0}),
+        json!({"notPlayedInLastDays": -1}),
     ] {
         let r = dto::rule(json!({"name": "r", "criteria": criteria}));
         assert!(r.is_err(), "{criteria}");
@@ -803,4 +809,41 @@ fn level_rules_are_validated() {
     assert_eq!(rule(json!({})).unwrap().level, "movie");
     let typed = dto::rule(json!({"name": "r", "criteria": {"mediaType": "series"}})).unwrap();
     assert_eq!(typed.level, "series");
+}
+#[sqlx::test]
+async fn play_history_criteria(pool: PgPool) {
+    let s = seed(&pool).await;
+    let u2 = scalar(
+        &pool,
+        r#"INSERT INTO users (username) VALUES ('v') RETURNING id"#,
+    )
+    .await;
+    for (u, m, ago) in [
+        (s.user, s.m1, 40),
+        (s.user, s.m1, 50),
+        (u2, s.m1, 60),
+        (s.user, s.m2, 1),
+    ] {
+        exec(
+            &pool,
+            &format!(
+                r#"INSERT INTO playback_history ("userId", "mediaId", "playedAt") VALUES ({u}, {m}, now() - interval '{ago} days')"#
+            ),
+        )
+        .await;
+    }
+    let (a, b, c) = (s.m1, s.m2, s.m3);
+    let cases = [
+        (json!({"playCountBelow": 1}), vec![c]),
+        (json!({"playCountBelow": 2}), vec![b, c]),
+        (json!({"playCountBelow": 4}), vec![a, b, c]),
+        (json!({"playCountByUsersBelow": 2}), vec![b, c]),
+        (json!({"playCountByUsersBelow": 3}), vec![a, b, c]),
+        (json!({"notPlayedInLastDays": 30}), vec![a, c]),
+        (json!({"notPlayedInLastDays": 0}), vec![a, b, c]),
+        (json!({"notPlayedInLastDays": 45}), vec![c]),
+    ];
+    for (criteria, want) in cases {
+        assert_eq!(ids(&pool, criteria.clone()).await, want, "{criteria}");
+    }
 }

@@ -173,6 +173,22 @@ pub fn compile(
         .push_bind(d as i32)
         .push(")");
     }
+    if let Some(n) = int(c, "playCountBelow") {
+        q.push(r#" AND (SELECT COUNT(*) FROM playback_history h WHERE h."mediaId" = media.id) < "#)
+            .push_bind(n);
+    }
+    if let Some(n) = int(c, "playCountByUsersBelow") {
+        q.push(r#" AND (SELECT COUNT(DISTINCT h."userId") FROM playback_history h WHERE h."mediaId" = media.id) < "#)
+            .push_bind(n);
+    }
+    if let Some(d) = int(c, "notPlayedInLastDays") {
+        q.push(
+            r#" AND NOT EXISTS (SELECT 1 FROM playback_history h WHERE h."mediaId" = media.id
+            AND h."playedAt" >= now() - make_interval(days => "#,
+        )
+        .push_bind(d as i32)
+        .push("))");
+    }
     if flag(c, "neverPlayed") {
         q.push(format!(" AND NOT {}", sc.played));
     }

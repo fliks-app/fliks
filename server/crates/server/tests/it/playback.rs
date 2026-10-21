@@ -215,3 +215,54 @@ async fn recommendation_ties_break_by_media_id(pool: PgPool) {
             .is_empty()
     );
 }
+
+#[sqlx::test(migrations = false)]
+async fn completing_appends_history_and_unmarking_keeps_it(pool: PgPool) {
+    let c = ctx(pool).await;
+    let m = c
+        .id(r#"INSERT INTO media (title, type) VALUES ('m', 'movie') RETURNING id"#)
+        .await;
+    let uri = format!("/api/playback/media/{m}/toggle-watched");
+    let plays = || c.id("SELECT count(*)::int FROM playback_history");
+    c.api("POST", &uri, None).await;
+    assert_eq!(plays().await, 1, "a manual mark counts as a play");
+    c.api("POST", &uri, None).await;
+    assert_eq!(plays().await, 1, "unmarking keeps the history");
+    c.api("POST", &uri, None).await;
+    assert_eq!(plays().await, 2);
+}
+
+#[sqlx::test(migrations = false)]
+async fn series_and_season_toggles_append_one_row_per_new_episode(pool: PgPool) {
+    let c = ctx(pool).await;
+    let m = c
+        .id(r#"INSERT INTO media (title, type) VALUES ('s', 'series') RETURNING id"#)
+        .await;
+    let season = c
+        .id(&format!(
+            r#"INSERT INTO seasons ("seasonNumber", "mediaId") VALUES (1, {m}) RETURNING id"#
+        ))
+        .await;
+    for n in 1..=2 {
+        c.id(&format!(
+            r#"INSERT INTO episodes ("episodeNumber", "seasonId", "hasFile") VALUES ({n}, {season}, true) RETURNING id"#
+        ))
+        .await;
+    }
+    let plays = || c.id("SELECT count(*)::int FROM playback_history");
+    let w = Some(json!({"watched": true}));
+    let series = format!("/api/playback/media/{m}/toggle-series-watched");
+    c.api("POST", &series, w.clone()).await;
+    assert_eq!(plays().await, 2);
+    c.api("POST", &series, w.clone()).await;
+    assert_eq!(
+        plays().await,
+        2,
+        "already completed episodes do not count again"
+    );
+    let season_uri = format!("/api/playback/media/{m}/seasons/{season}/toggle-watched");
+    c.api("POST", &season_uri, Some(json!({"watched": false})))
+        .await;
+    c.api("POST", &season_uri, w).await;
+    assert_eq!(plays().await, 4);
+}
