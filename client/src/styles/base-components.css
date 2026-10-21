@@ -428,3 +428,8 @@ html.tv-host .toggle-primary:checked,
 html.tv-host .toggle-primary[aria-checked='true'] {
   background-color: var(--color-primary);
 }
+
+/* Every modal keeps a gap above and below instead of touching the viewport edges. */
+.modal-box {
+  max-height: calc(100dvh - 4rem);
+}
