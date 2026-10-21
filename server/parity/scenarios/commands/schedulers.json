@@ -1,5 +1,5 @@
 {
-  "deviation": null,
+  "deviation": "C175",
   "ignore": [
     "$..nextRun",
     "$..lastRun"
@@ -48,6 +48,14 @@
             "labelKey": "system.cmd_subtitle_upgrade",
             "lastStatus": null,
             "name": "SubtitleUpgrade",
+            "pluginId": null,
+            "triggerable": true
+          },
+          {
+            "cron": "0 05 * * *",
+            "labelKey": "system.cmd_media_cleanup",
+            "lastStatus": null,
+            "name": "MediaCleanup",
             "pluginId": null,
             "triggerable": true
           },

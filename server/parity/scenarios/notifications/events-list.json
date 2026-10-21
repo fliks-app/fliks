@@ -1,5 +1,5 @@
 {
-  "deviation": null,
+  "deviation": "C175",
   "ignore": [
     "$..id",
     "$..createdAt",
@@ -28,7 +28,9 @@
           "subtitle.synced",
           "livetv.account_expiring",
           "livetv.account_expired",
-          "livetv.adult_guard_failed"
+          "livetv.adult_guard_failed",
+          "media.leaving_soon",
+          "media.cleaned_up"
         ],
         "status": 200
       },
