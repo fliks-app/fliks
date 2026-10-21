@@ -85,12 +85,12 @@
       <div class="flex gap-2 mt-1">
         <input
           type="number"
-          min="1"
+          min="0"
           class="input input-bordered input-sm w-28"
           [ngModel]="maxPerRun()"
           (ngModelChange)="maxPerRun.set(parseNumber($event))"
         />
-        <button type="button" class="btn btn-sm" [disabled]="!maxPerRun() || maxPerRun()! < 1" (click)="saveMaxPerRun()">
+        <button type="button" class="btn btn-sm" [disabled]="maxPerRun() == null || maxPerRun()! < 0" (click)="saveMaxPerRun()">
           {{ 'common.save' | translate }}
         </button>
       </div>
@@ -420,17 +420,19 @@
           />
         </div>
         @for (key of numberFields; track key) {
-          <label class="form-control">
-            <span class="label-text">{{ 'settings.cleanup.c_' + key | translate }}</span>
-            <input
-              type="number"
-              min="0"
-              class="input input-bordered input-sm w-full"
-              [placeholder]="'settings.cleanup.no_limit' | translate"
-              [ngModel]="formCriteria()[key] ?? null"
-              (ngModelChange)="setNumber(key, $event)"
-            />
-          </label>
+          @if (!formScoped() || !movieSeriesOnly.includes(key)) {
+            <label class="form-control">
+              <span class="label-text">{{ 'settings.cleanup.c_' + key | translate }}</span>
+              <input
+                type="number"
+                min="0"
+                class="input input-bordered input-sm w-full"
+                [placeholder]="'settings.cleanup.no_limit' | translate"
+                [ngModel]="formCriteria()[key] ?? null"
+                (ngModelChange)="setNumber(key, $event)"
+              />
+            </label>
+          }
         }
         @if (formEpisodeOnly()) {
           <label class="form-control">
