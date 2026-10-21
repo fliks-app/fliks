@@ -526,7 +526,8 @@
     "cw_remove_title": "Remove",
     "cw_remove_message": "Remove \"{{title}}\" from the list?",
     "customize": "Customize home",
-    "customize_hint": "Add, remove and reorder the home sections"
+    "customize_hint": "Add, remove and reorder the home sections",
+    "leaving_soon": "Leaving soon"
   },
   "playback_settings": {
     "title": "Playback settings",
@@ -1507,7 +1508,8 @@
     "device_apple_tv": "Apple TV ({{os}})",
     "backup_failed": "Backup failed",
     "restore_failed": "Restore failed",
-    "delete_backup_failed": "Delete failed"
+    "delete_backup_failed": "Delete failed",
+    "cmd_media_cleanup": "Clean up the library"
   },
   "qoe": {
     "title": "Playback quality",
@@ -1900,7 +1902,8 @@
       "streaming": "Streaming",
       "engine": "Remote engine",
       "plugins": "Plugins",
-      "subtitles_activity": "Subtitle activity"
+      "subtitles_activity": "Subtitle activity",
+      "cleanup": "Cleanup"
     },
     "engine": {
       "title": "Remote streaming engine",
@@ -2800,6 +2803,67 @@
         "allow_unsigned": "Allow unsigned plugins",
         "allow_unsigned_hint": "Lets a plugin whose code nobody signed be installed, for developing your own. Turning it back off does not remove a plugin already installed this way."
       }
+    },
+    "cleanup": {
+      "title": "Library cleanup",
+      "subtitle": "Rules flag stale media. A flagged title is removed once its grace period ends.",
+      "new": "New rule",
+      "empty": "No cleanup rule.",
+      "confirm_delete": "Delete the rule \"{{name}}\"?",
+      "col_name": "Name",
+      "col_action": "Action",
+      "col_grace": "Grace period (days)",
+      "col_title": "Title",
+      "col_rule": "Rule",
+      "col_size": "Size",
+      "col_days_left": "Days left",
+      "col_last_played": "Last played",
+      "never": "Never",
+      "never_played": "Never played",
+      "no_date": "No date",
+      "no_limit": "No limit",
+      "any": "Any",
+      "none": "None",
+      "preview": "Preview",
+      "delete": "Delete",
+      "keep": "Keep",
+      "delete_now": "Delete now",
+      "confirm_delete_now": "Delete \"{{title}}\" now? This cannot be undone.",
+      "max_per_run": "Maximum removals per run",
+      "max_per_run_hint": "Removals beyond this number wait for the next run.",
+      "candidates": "Flagged media",
+      "candidates_empty": "No media is flagged.",
+      "editor_edit": "Edit rule",
+      "editor_create": "New rule",
+      "field_name": "Name",
+      "field_enabled": "Active",
+      "grace_hint": "An empty grace period flags the media without ever acting on it.",
+      "logic_hint": "A rule matches media that meet every criterion set. Several rules combine as alternatives.",
+      "votes_hint": "The minimum vote count applies only with a rating threshold.",
+      "preview_empty": "No media matches this rule.",
+      "preview_total": "Matches: {{count}}. Space freed: {{size}}.",
+      "type_movie": "Movies",
+      "type_series": "Series",
+      "action_delete": "Delete media and files",
+      "action_delete_files_unmonitor": "Delete files and stop monitoring",
+      "action_none": "Flag only",
+      "c_mediaType": "Media type",
+      "c_libraryIds": "Libraries",
+      "c_genres": "Genres",
+      "c_excludeGenres": "Excluded genres",
+      "c_addedOlderThanDays": "Added more than (days ago)",
+      "c_releasedOlderThanDays": "Released more than (days ago)",
+      "c_lastPlayedOlderThanDays": "Last played more than (days ago)",
+      "c_ratingBelow": "Rating below",
+      "c_minVotes": "Minimum votes",
+      "c_sizeAboveGb": "Size above (GB)",
+      "c_likedByFewerThan": "Liked by fewer than (users)",
+      "c_diskFreeBelowPercent": "Library disk free below (%)",
+      "c_neverPlayed": "Never played",
+      "c_watchedByRequester": "Watched by the requester",
+      "c_seriesEnded": "Series ended",
+      "c_notLiked": "Liked by nobody",
+      "c_notLikedByRequester": "Not liked by the requester"
     }
   },
   "roles": {
@@ -3345,5 +3409,10 @@
         "adult_guard_failed": "Adult-content restriction failed"
       }
     }
+  },
+  "cleanup": {
+    "leaving_today": "Leaving today",
+    "leaving_in_one": "Leaving in {{count}} day",
+    "leaving_in_other": "Leaving in {{count}} days"
   }
 }

@@ -35,6 +35,9 @@
       @if (libraryName()) {
         <span class="badge badge-primary badge-outline">{{ libraryName() }}</span>
       }
+      @if (leavingLabel()) {
+        <span class="badge badge-warning">{{ leavingLabel() }}</span>
+      }
     </div>
 
     <!-- Genres are navigation, so they stay out of the folded details panel. -->
@@ -243,6 +246,9 @@
         }
         @if (libraryName()) {
           <span class="badge badge-primary badge-outline">{{ libraryName() }}</span>
+        }
+        @if (leavingLabel()) {
+          <span class="badge badge-warning">{{ leavingLabel() }}</span>
         }
       </div>
 

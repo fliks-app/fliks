@@ -257,6 +257,8 @@ export class MediaInfoHeaderComponent {
   readonly deleteLoading = input(false);
   /** Status badge beside the kebab menu (download progress or monitored state); a clickable one emits openDownloadDetail. */
   readonly badge = input<MediaInfoHeaderBadge | null>(null);
+  /** Cleanup countdown, shown beside the library badge. */
+  readonly leavingLabel = input<string | null>(null);
 
   /** False when the title has no metadata-provider id; gates the refresh-metadata action. */
   readonly identified = input(true);

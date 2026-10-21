@@ -1,6 +1,7 @@
 import { Component, inject, signal, computed, effect, OnInit, OnDestroy, Injector, viewChild } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { filter } from 'rxjs';
+import { leavingLabel } from '../../shared/utils/cleanup.util';
 import { keepRouteFresh } from '../../core/services/keep-route-fresh';
 import { LocaleDatePipe } from '../../core/pipes/locale-date.pipe';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
@@ -123,6 +124,8 @@ export class HomeComponent implements OnInit, OnDestroy {
   );
   readonly recentMedia = signal<Media[]>([]);
   readonly comingSoon = signal<CalendarEntry[]>([]);
+  readonly leavingSoon = signal<Media[]>([]);
+  protected readonly leavingLabel = (m: Media) => leavingLabel(this.translate, m.deleteAt!);
   readonly recommendations = signal<RecommendationItem[]>([]);
   /** Accessible playlists ordered by last modification, for the "playlists" zone. */
   readonly playlists = signal<Playlist[]>([]);
@@ -452,6 +455,7 @@ export class HomeComponent implements OnInit, OnDestroy {
         ),
       ]);
       this.recentMedia.set(recent);
+      void this.mediaService.getLeavingSoon({ force }).then((l) => this.leavingSoon.set(l), () => undefined);
       this.libraryRecent.set(new Map(libEntries));
       const upcoming = calendar
         .filter((e) => !e.hasFile && (e.event === 'digital' || e.event === 'airing' || e.event === 'release'))

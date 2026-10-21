@@ -57,7 +57,7 @@ describe('SettingsSectionsService', () => {
     const svc = createService({ permissions: ALL_PERMISSIONS });
     const sections = svc.sections();
     expect(sections).toHaveLength(8);
-    expect(sections.reduce((n, s) => n + s.items.length, 0)).toBe(25);
+    expect(sections.reduce((n, s) => n + s.items.length, 0)).toBe(26);
   });
 
   it('drops the core entries whose own pages the viewer has no permission for', () => {
@@ -67,6 +67,7 @@ describe('SettingsSectionsService', () => {
     expect(ids).not.toContain('core.subtitles_activity');
     // Its own endpoints are Settings-gated, so it stays: the rule follows the policy, not the section.
     expect(ids).toContain('core.auto_approval');
+    expect(ids).toContain('core.cleanup');
   });
 
   it('sorts a plugin section\'s own items by weight then id, independent of core', () => {
