@@ -9,12 +9,12 @@ Per-domain specs live under [`spec/`](spec/) (template: phase-2 plan §12); [`sp
 | Tag | Meaning |
 |---|---|
 | `[ts:path:line]` | Open that file at that line only (±40 lines). `backend/` is gone: `git show nest-final:backend/<path>`. |
-| `[new]` | Deliberate deviation from Nest; record here or in Deviations. |
+| `[new]` | Behaviour that differs from Nest. |
 | `[assumed]` | Behaviour inferred where Nest is unclear; verify before port. |
 
 ## Deviations
 
-Decided behaviour for the Rust port (security fixes F, correctness fixes C; D3). Each lands in its owning milestone. Each has a parity exception.
+Behaviour decided during the Rust port (security fixes F, correctness fixes C; D3). The list is closed: later behaviour changes live in their domain spec only.
 
 | # | Today (Nest) | Rust behaviour | Client impact |
 |---|---|---|---|

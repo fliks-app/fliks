@@ -1,6 +1,6 @@
 # HTTP parity
 
-Scenarios recorded against Nest (now removed: their `expect` is frozen), replayed against `fliks-server` (plan §5.3). Local only.
+Scenarios first recorded against Nest, replayed against `fliks-server` (plan §5.3). A behaviour change edits the `expect`s it affects. Local only.
 Needs docker (`fliks-postgres-1`), ffmpeg, python3 and `FLIKS_ENGINE_FIXTURES` (default `~/Documents/clement/code/fliks-engine/fixtures/probe`).
 
 ## Run everything
@@ -46,8 +46,7 @@ export FLIKS_CAST_DIR=$PWD/public   # from server/
 "$CARGO_TARGET_DIR"/debug/fliks-server
 ```
 
-Record mode never overwrites an existing `expect`: an expectation recorded from Nest only changes in a PR that names the
-`docs/README.md` Deviations row it implements (a `deviation` scenario with a hand-written `expect`).
+Record mode never overwrites an existing `expect`: edit it by hand in the PR that changes the behaviour.
 Keys added to the contract after the recordings (spec rules marked additive, e.g. `trackMarkers`) are listed in
 `ADDITIVE` (`crates/server/tests/it/parity.rs`) and never compared.
 
@@ -61,7 +60,7 @@ Keys added to the contract after the recordings (spec rules marked additive, e.g
 - Engine-up recordings use the dev-stack `engine` service via `docker compose run` (cargo watch on `../fliks-engine`),
   media mounted from `/tmp/fliks-parity`; `PARITY_HOST_TOKEN` is read from the engine's `GET /v1/config`.
 - Sync points, never `sleepMs` for a wait: an SSE step whose `after` sub-steps cause the events; `retryMs` on a step (repeat it until its `expect` holds, at most that long, then fail on the last diff); `{"wait": "idle"|"busy"}`. Idle means: empty `GET /api/system/activity`, no stub request in flight (`/__inflight` of `PARITY_STUB` and of `PARITY_LIVETV` when set) and no running client query on the scenario DB, stable over two polls; an unreadable probe fails the run. Every run waits for idle before each reset, so no detached job reaches the next scenario's database; the reset also empties `<root>/data/backups`. `busy` is the same signal inverted (the two livetv `*-sync-409` scenarios rely on the fixture delay to keep it set). The remaining `sleepMs` are timers: `metadata/zz-breaker-open` (breaker cooldown), `livetv-live/livetv-zap` and `livetv-capacity-409` (channel idle plus slot release, see their `note`).
-- Known limits: work that is invisible to every probe (e.g. an image resize in `spawn_blocking` between two awaits) can still outlive the idle wait; `after` sub-steps with `status: 0` or no `expect` (24 in `events/`, `importers/seerr-*`, `markers/detect-*`, `media-servers/import-*`, `provider-write/refresh-override-unresolvable`) are not checked, their expectations are frozen with the rest of the Nest recordings (#1754).
+- Known limits: work that is invisible to every probe (e.g. an image resize in `spawn_blocking` between two awaits) can still outlive the idle wait; `after` sub-steps with `status: 0` or no `expect` (24 in `events/`, `importers/seerr-*`, `markers/detect-*`, `media-servers/import-*`, `provider-write/refresh-override-unresolvable`) are not checked, their expectations were never recorded (#1754).
 - Only the DB is reset between scenarios: in-memory state (engine sessions, SSE, targets) persists, so scenarios close what they open.
 - `"deviation": "<row id of docs/README.md Deviations>"` (e.g. `F1`) + a hand-written `expect`; reported separately.
 - Subtitle scenarios (`scenarios/subtitles*`): recorded against the Nest of commit `f246dfa7` (pre-S5 `main`, `npm run build`, `node dist/main`) behind the Rust front built from `6037f4af` (the S5 integration, before the S6 router: every subtitle route is forwarded to Nest), generated media under `/tmp/fliks-parity/s6/subtitles-work` (scenario `fsDir`, seed `subtitles-work`). `scenarios/subtitles-provider/` needs the loopback stub (`PARITY_PROVIDERS=1`, `external/stub.py` serves a Subdl clone): the target is built with `--features parity` and gets `FLIKS_SUBTITLE_PROVIDERS_URL=<stub>`. Sync and OCR scenarios are `"engine": "up"`. The in-memory sync queue persists across scenarios: restart the target before a replay of `subtitles-provider`.

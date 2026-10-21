@@ -10,7 +10,7 @@ The Fliks HTTP server (Rust), run behind the `fliks-engine` supervisor.
 
 ## Rules
 
-Spec first: change behaviour in `docs/spec/` first, then the code. No workarounds; stop and report if blocked. Contract frozen: the allowed client-visible diffs are the `docs/README.md` Deviations rows. Golden vectors (`fixtures/`) and parity `expect`s were recorded from Nest and are never regenerated from Rust: a changed `expected`/`expect` lands only in a PR naming its F/C Deviations row (`fixtures/README.md`). Comments: one line, non-obvious why only. Commits: Conventional Commits, no `Co-Authored-By`, identity `clementdelestre@gmail.com`. Real media read-only; parity uses `/tmp/fliks-parity/`. Never read `docker-compose.yml` or `CHANGELOG.md`.
+Spec first: change behaviour in `docs/spec/` first, then the code. No workarounds; stop and report if blocked. The port is done and the product evolves freely: a behaviour change updates its spec, the parity `expect`s and the golden vectors (`BLESS=1`) in the same PR, with no Deviations row. Comments: one line, non-obvious why only. Commits: Conventional Commits, no `Co-Authored-By`, identity `clementdelestre@gmail.com`. Real media read-only; parity uses `/tmp/fliks-parity/`. Never read `docker-compose.yml` or `CHANGELOG.md`.
 
 ## Docs
 
