@@ -5,6 +5,44 @@ use crate::playlists::remove_watched_from_auto_playlists;
 use serde_json::{Value, json};
 use sqlx::PgPool;
 
+/// Appends one `playback_history` row (`cleanup.md` rule 6a).
+async fn log_play(db: &PgPool, user: i32, media: i32, episode: Option<i32>) -> sqlx::Result<()> {
+    sqlx::query(
+        r#"INSERT INTO playback_history ("userId", "mediaId", "episodeId") VALUES ($1, $2, $3)"#,
+    )
+    .bind(user)
+    .bind(media)
+    .bind(episode)
+    .execute(db)
+    .await
+    .map(drop)
+}
+
+/// Appends a row per episode with a file the user has not completed: of `season`, else of the
+/// series' regular seasons.
+async fn log_uncompleted_episodes(
+    db: &PgPool,
+    user: i32,
+    media: i32,
+    season: Option<i32>,
+) -> sqlx::Result<()> {
+    sqlx::query(
+        r#"INSERT INTO playback_history ("userId", "mediaId", "episodeId")
+           SELECT $1, $2, e.id FROM episodes e JOIN seasons s ON s.id = e."seasonId"
+           WHERE e."hasFile"
+             AND CASE WHEN $3::int IS NULL THEN s."mediaId" = $2 AND s."seasonNumber" > 0
+                      ELSE s.id = $3 END
+             AND NOT EXISTS (SELECT 1 FROM playback_states ps
+                             WHERE ps."userId" = $1 AND ps."episodeId" = e.id AND ps.completed)"#,
+    )
+    .bind(user)
+    .bind(media)
+    .bind(season)
+    .execute(db)
+    .await
+    .map(drop)
+}
+
 /// Rule 15. Returns the saved entity in the shape the 4.x clients read.
 pub async fn toggle_watched(
     db: &PgPool,
@@ -93,6 +131,7 @@ pub async fn toggle_watched(
         .await?
         .ok_or_else(|| AppError::internal("playback state vanished"))?;
     if completing {
+        log_play(db, user, media, episode).await?;
         remove_watched_from_auto_playlists(
             db,
             user,
@@ -139,6 +178,7 @@ pub async fn toggle_series_watched(
         .await
         .map(drop);
     }
+    log_uncompleted_episodes(db, user, media, None).await?;
     sqlx::query!(
         r#"INSERT INTO playback_states
              ("userId", "mediaId", "mediaFileId", "episodeId",
@@ -210,6 +250,7 @@ pub async fn toggle_season_watched(
         .await
         .map(drop);
     }
+    log_uncompleted_episodes(db, user, media, Some(season)).await?;
     let mut tx = db.begin().await?;
     sqlx::query!(
         r#"DELETE FROM playback_states
@@ -312,6 +353,7 @@ pub async fn record_watch(
         Err(e) => return Err(e.into()),
     }
     if completed && existing.as_ref().is_none_or(|e| !e.completed) {
+        log_play(db, user, media, w.episode.filter(|e| *e != 0)).await?;
         let episodes = w.episode.map(|e| [e]);
         remove_watched_from_auto_playlists(db, user, media, episodes.as_ref().map(|e| &e[..]))
             .await;

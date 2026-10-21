@@ -430,8 +430,36 @@ async fn m1785600_skips_unexpected_setting_shapes(pool: PgPool) {
     );
 }
 
+#[sqlx::test(migrations = false)]
+async fn m1787600_backfills_one_row_per_completed_state(pool: PgPool) {
+    apply_until(&pool, 1_787_600_000_000).await;
+    sql(
+        &pool,
+        r#"
+        INSERT INTO users (id, username) VALUES (1, 'u');
+        INSERT INTO media (id, title, type) VALUES (1, 'a', 'movie'), (2, 'b', 'movie'), (3, 'c', 'movie');
+        INSERT INTO playback_states ("userId", "mediaId", completed, "lastPlayedAt", "playedAt") VALUES
+          (1, 1, true, '2024-02-01T00:00:00Z', '2024-01-01T00:00:00Z'),
+          (1, 2, true, '2024-03-01T00:00:00Z', NULL),
+          (1, 3, false, '2024-04-01T00:00:00Z', NULL);
+    "#,
+    )
+    .await;
+    apply_only(&pool, 1_787_600_000_000).await;
+
+    let got: Vec<(i32, String)> = rows(
+        &pool,
+        r#"SELECT "mediaId", to_char("playedAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD') FROM playback_history ORDER BY "mediaId""#,
+    )
+    .await;
+    assert_eq!(
+        got,
+        vec![(1, "2024-01-01".into()), (2, "2024-03-01".into())]
+    );
+}
+
 const V4_VERSIONS: i64 = 81;
-const SQL_FILES: i64 = 92;
+const SQL_FILES: i64 = 93;
 const LAST_V4_VERSION: i64 = 1_786_300_000_000;
 
 #[sqlx::test(migrations = false)]
@@ -478,7 +506,7 @@ async fn adopting_a_v4_database_matches_a_fresh_one(pool: PgPool) {
     assert_eq!(adopted_rows().count() as i64, V4_VERSIONS);
     assert!(adopted_rows().all(|r| r.1 == 0), "a 4.x migration re-ran");
     let new_rows = ledger.iter().filter(|r| r.0 > LAST_V4_VERSION);
-    assert!(new_rows.clone().count() == 11 && new_rows.into_iter().all(|r| r.1 > 0));
+    assert!(new_rows.clone().count() == 12 && new_rows.into_iter().all(|r| r.1 > 0));
 
     let fresh_db = "fliks_p7_fresh";
     for stmt in [
