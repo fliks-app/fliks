@@ -15,7 +15,7 @@ Every client reports how its playback goes; the server diagnoses each viewing
 | Stall counting | Client side, engine-agnostic: engine `buffering` after the first frame, merged with a frozen-playhead detector (250 ms watch, 1 s threshold) for players that hold a starved playhead silently. Seeks, reloads, recoveries and quality switches are excluded. |
 | Grouping | A `playbackId` per viewing, stable across the sids a quality switch or a recovery mints. The admin shows one item per (userId, playbackId). |
 | Storage | Postgres `playback_qoe_sessions` (one row per sid, written once it reported something) + `playback_qoe_events`. One migration. Purged after `qoe_retention_days` (default 30). |
-| Diagnosis | Pure `diagnose()` in `backend/src/modules/qoe/core/` (no Nest/Fliks imports, extractable). |
+| Diagnosis | Pure `diagnose()` in `backend/src/modules/qoe/core/` (no framework imports, extractable). |
 | Setting | App settings `qoe_enabled` (default on) and `qoe_retention_days`. Off: nothing is recorded. |
 | No new infra | No Prometheus, OpenTelemetry, Sentry. Data never leaves the server. |
 

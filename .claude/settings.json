@@ -3,7 +3,6 @@
     "deny": [
       "Read(server/target/**)",
       "Read(server/.sqlx/**)",
-      "Read(server/fixtures/**)",
       "Read(server/parity/seed/*.sql)",
       "Read(CHANGELOG.md)",
       "Read(docker-compose.yml)"

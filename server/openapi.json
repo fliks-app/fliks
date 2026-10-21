@@ -604,7 +604,7 @@
         "tags": [
           "crate::ingest::disk"
         ],
-        "summary": "`POST /api/imports/library/:libraryId/orphans/scan` (rules 60, 70: ACL and F22 on the path).",
+        "summary": "`POST /api/imports/library/:libraryId/orphans/scan` (rules 60, 70: ACL on the path).",
         "operationId": "scan",
         "responses": {
           "201": {
@@ -1513,7 +1513,7 @@
         "tags": [
           "media::write"
         ],
-        "summary": "`PATCH /api/media/bulk` (rule 31, F46, C47): all or nothing, in one transaction.",
+        "summary": "`PATCH /api/media/bulk` (rule 31): all or nothing, in one transaction.",
         "operationId": "bulk",
         "responses": {
           "200": {
@@ -1606,7 +1606,7 @@
         "tags": [
           "media::write"
         ],
-        "summary": "`POST /api/media/import` (rule 17, C1: a numeric `externalId` and a known `provider`).",
+        "summary": "`POST /api/media/import` (rule 17: a numeric `externalId` and a known `provider`).",
         "operationId": "import_media",
         "responses": {
           "201": {
@@ -1790,7 +1790,7 @@
         "tags": [
           "media::write"
         ],
-        "summary": "`POST /api/media/:id/episodes/:episodeId/refresh` (rules 54-55, F46: the episode is under `:id`).",
+        "summary": "`POST /api/media/:id/episodes/:episodeId/refresh` (rules 54-55: the episode is under `:id`).",
         "operationId": "refresh_episode",
         "responses": {
           "201": {
@@ -1884,7 +1884,7 @@
         "tags": [
           "media::write"
         ],
-        "summary": "`PATCH /api/media/:id/library` (rule 29): 409 for a media with files (C170, `code: media_has_files`), which a move cannot carry.",
+        "summary": "`PATCH /api/media/:id/library` (rule 29): 409 for a media with files (`code: media_has_files`), which a move cannot carry.",
         "operationId": "patch_library",
         "responses": {
           "200": {
@@ -4441,7 +4441,7 @@
         "tags": [
           "system"
         ],
-        "summary": "Express `res.download`: `send`'s Range, `Last-Modified` and length, plus a weak ETag and the attachment name.",
+        "summary": "A download: `send`'s Range, `Last-Modified` and length, plus a weak ETag and the attachment name.",
         "operationId": "backup_download",
         "responses": {
           "200": {

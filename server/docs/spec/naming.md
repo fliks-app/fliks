@@ -97,7 +97,7 @@ Set `naming` (fixtures `server/fixtures/naming/cases.json`, replay `crates/domai
 
 Generated (seed `0x4a31`): format strings from the token vocabularies of rule 4 (valid tokens, wrong-case tokens, unknown `{Foo}`, a lone `{`, repeated tokens, empty string) mixed with literal text containing every character of rule 7 step 3, `(`, `)`, `[`, `]`, double spaces, `undefined`, accents, CJK; data values: empty, null/absent, `0`, `2023`, 3-digit and negative season/episode, titles containing tokens (`{Release Year}`), controls, trailing dots; 900 `apply*` cases. `getFormats`: all 32 present/absent combinations of the five keys with stored values `''`, `null`, text, 60 cases. `extractReleaseGroup` 120. `parseEpisodeNumbers` 700: every pattern of rule 13 x separators (`.`, `_`, space, `-`) x years (`.2023.` before and after) x special markers (`OVA 02`, `SP01`, `Special 3`, `NCED 1`, `Specials/`, `Season 00`, `12.5`, `S01E00`, `1x00`) x `filePath` present/absent. `isSpecialFile` 200, `matchSpecialByTitle` 150 (accents, case, punctuation, equal positions with different lengths, titles under 4 characters, empty and absent titles). The divergence characters of `release.md` rule 7 appear in every family.
 
-Rust-only tests: `$` literals (rule 9); `.` and `..` movie/series folder results (rule 10); the win32 `basename`/`extname` cases (rule 19); a movie folder format `''` and a file format `''` (rule 3).
+Tests without a vector: `$` literals (rule 9); `.` and `..` movie/series folder results (rule 10); the win32 `basename`/`extname` cases (rule 19); a movie folder format `''` and a file format `''` (rule 3).
 
 Parity: none (no route). The importers' and ingest scenarios exercise naming through the generated media at `/tmp/fliks-parity/`.
 

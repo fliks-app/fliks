@@ -1,4 +1,4 @@
-//! Golden naming vectors (`fixtures/naming`; `BLESS=1` rewrites `expected`) and the Rust-only rules.
+//! Golden naming vectors (`fixtures/naming`; `BLESS=1` rewrites `expected`) and the rules without a vector.
 mod common;
 
 use common::replay;

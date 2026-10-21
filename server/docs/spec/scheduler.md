@@ -50,8 +50,6 @@ Scope: the `commands` table and its audit wrapper (`run_audited`), the cron runn
     | `SubtitleUpgrade` | `0 0-23/6 * * *` | `system.cmd_subtitle_upgrade` |
     | `MediaCleanup` | `0 05 * * *` | `system.cmd_media_cleanup` |
 
-    `MediaCleanup` is a Rust job added after Nest (`cleanup.md` rules 11-18); the Nest-held jobs of rule 11 follow it.
-
     The cron strings are verbatim, part of the contract; the client shows them.
 11. After the core five come the live TV jobs in this order (`LiveTvSourceRefresh`, `LiveTvGuideRefresh`, `LiveTvGuidePrune`, `pluginId: null`, `lastRun`/`lastStatus` from `commands` like core), then the plugin-declared jobs `{name, cron, triggerable, labelKey, lastRun: null, lastStatus: null, pluginId}` (a plugin's runs have no `commands` row, rule 13).
 12. `lastRun` / `lastStatus` = `startedOn` / `status` of the newest row of that name by `createdAt` (a `queued` row gives `lastRun: null, lastStatus: 'queued'`), else both `null`; one query for all non-plugin names (SQL). `nextRun` = next fire time strictly after now, computed in the zone of rule 9 and serialized as UTC ISO-8601 with ms and `Z`.
