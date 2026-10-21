@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT \"seasonNumber\" AS \"n!\" FROM seasons\n        WHERE \"mediaId\" = $1 AND (monitored OR \"seasonNumber\" = $2) ORDER BY 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "n!",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "ed2ce0124c593cefe15cba5f05d81be1129f9d3e721bd9b28a4fbf830036ea70"
+}

@@ -9,6 +9,7 @@ use crate::{
     },
     ingest::load_media,
     libraries::{accessible_library_ids, assert_media_accessible},
+    requests::MediaRef,
     state::AppState,
 };
 use axum::{
@@ -57,7 +58,6 @@ enum Col {
     Text(Option<String>),
     Int(Option<i32>),
     Float(Option<f64>),
-    Bool(Option<bool>),
     Json(Option<Value>),
     Enum(&'static str, Option<String>),
     Date(Option<String>),
@@ -86,7 +86,11 @@ fn columns(b: &Body) -> Result<Vec<(&'static str, Col)>, AppError> {
     put!("status", b.one_of("status", &STATUSES)?, |v| {
         Col::Enum("media_status_enum", v)
     });
-    put!("monitored", b.bool("monitored")?, Col::Bool);
+    if let Some(None) = b.bool("monitored")? {
+        return Err(AppError::bad_request(vec![
+            "monitored should not be empty".to_owned(),
+        ]));
+    }
     put!("posterUrl", b.str("posterUrl")?, Col::Text);
     put!("fanartUrl", b.str("fanartUrl")?, Col::Text);
     put!("rating", b.num("rating")?, Col::Float);
@@ -113,8 +117,8 @@ fn columns(b: &Body) -> Result<Vec<(&'static str, Col)>, AppError> {
     }
     // A NOT NULL column set to null is a 400, never a database 500.
     for (k, c) in &out {
-        let null = matches!(c, Col::Text(None) | Col::Bool(None) | Col::Enum(_, None));
-        if null && ["title", "type", "status", "monitored"].contains(k) {
+        let null = matches!(c, Col::Text(None) | Col::Enum(_, None));
+        if null && ["title", "type", "status"].contains(k) {
             return Err(AppError::bad_request(vec![format!(
                 "{k} should not be empty"
             )]));
@@ -128,7 +132,6 @@ fn push_value(q: &mut QueryBuilder<'_, Postgres>, c: &Col) {
         Col::Text(v) => q.push_bind(v.clone()),
         Col::Int(v) => q.push_bind(*v),
         Col::Float(v) => q.push_bind(*v),
-        Col::Bool(v) => q.push_bind(*v),
         Col::Json(v) => q.push_bind(v.clone()),
         Col::Enum(t, v) => q.push_bind(v.clone()).push(format!("::{t}")),
         Col::Date(v) => q.push_bind(v.clone()).push("::timestamptz::date"),
@@ -200,12 +203,69 @@ pub async fn create(
     Ok((StatusCode::CREATED, Json(entity_or_404(&st, &a, id).await?)))
 }
 
-/// Rule 27: two statements whatever the size; no season hook for the children.
-async fn cascade_monitored(
+/// What a monitored write really changed, announced once the transaction has committed.
+pub struct MonitoredChange {
+    monitored: bool,
+    media: Vec<MediaRef>,
+    seasons: Vec<(MediaRef, i32)>,
+}
+
+impl MonitoredChange {
+    /// Rule 38/39 events and request hooks, for every media or season whose flag flipped.
+    pub async fn announce(self, st: &AppState) {
+        let lifecycle = crate::requests::Lifecycle::of(st);
+        for m in self.media {
+            st.hub.emit_domain(DomainEvent::MediaMonitoredChanged {
+                media_id: i64::from(m.id),
+                monitored: self.monitored,
+            });
+            lifecycle.on_media_monitor_change(m, !self.monitored).await;
+        }
+        for (m, number) in self.seasons {
+            st.hub
+                .emit_domain(DomainEvent::MediaSeasonMonitoredChanged {
+                    media_id: i64::from(m.id),
+                    season_number: i64::from(number),
+                    monitored: self.monitored,
+                });
+            lifecycle
+                .on_season_monitor_change(m, number, !self.monitored, self.monitored)
+                .await;
+        }
+    }
+}
+
+/// Rule 27: sets `monitored` on the media and, in two statements whatever the size, on their seasons and
+/// episodes (no season hook for the children). The prior state is read in one query.
+pub async fn apply_media_monitored(
     c: &mut PgConnection,
     ids: &[i32],
     monitored: bool,
-) -> Result<(), sqlx::Error> {
+) -> Result<MonitoredChange, sqlx::Error> {
+    let media = sqlx::query!(
+        r#"SELECT id, type::text AS "media_type!", "tmdbId" AS tmdb_id
+           FROM media WHERE id = ANY($1) AND monitored IS DISTINCT FROM $2"#,
+        ids,
+        monitored
+    )
+    .fetch_all(&mut *c)
+    .await?
+    .into_iter()
+    .map(|r| MediaRef {
+        id: r.id,
+        media_type: r.media_type,
+        tmdb_id: r.tmdb_id,
+        monitored,
+    })
+    .collect::<Vec<_>>();
+    let changed: Vec<i32> = media.iter().map(|m| m.id).collect();
+    sqlx::query!(
+        "UPDATE media SET monitored = $1 WHERE id = ANY($2)",
+        monitored,
+        &changed
+    )
+    .execute(&mut *c)
+    .await?;
     sqlx::query!(
         r#"UPDATE seasons SET monitored = $1 WHERE "mediaId" = ANY($2)"#,
         monitored,
@@ -221,6 +281,85 @@ async fn cascade_monitored(
     )
     .execute(&mut *c)
     .await?;
+    Ok(MonitoredChange {
+        monitored,
+        media,
+        seasons: vec![],
+    })
+}
+
+/// Rules 32-33: sets `monitored` on a season and every episode of it.
+pub async fn apply_season_monitored(
+    c: &mut PgConnection,
+    season_id: i32,
+    monitored: bool,
+) -> Result<MonitoredChange, sqlx::Error> {
+    let was = sqlx::query!(
+        r#"SELECT s."seasonNumber" AS number, s.monitored AS was, m.id AS "media_id?",
+             m.type::text AS media_type, m."tmdbId" AS tmdb_id
+           FROM seasons s LEFT JOIN media m ON m.id = s."mediaId" WHERE s.id = $1"#,
+        season_id
+    )
+    .fetch_optional(&mut *c)
+    .await?;
+    sqlx::query!(
+        "UPDATE seasons SET monitored = $2 WHERE id = $1 AND monitored IS DISTINCT FROM $2",
+        season_id,
+        monitored
+    )
+    .execute(&mut *c)
+    .await?;
+    sqlx::query!(
+        r#"UPDATE episodes SET monitored = $1 WHERE "seasonId" = $2"#,
+        monitored,
+        season_id
+    )
+    .execute(&mut *c)
+    .await?;
+    let seasons = was
+        .filter(|w| w.was != monitored)
+        .and_then(|w| {
+            Some((
+                MediaRef {
+                    id: w.media_id?,
+                    media_type: w.media_type?,
+                    tmdb_id: w.tmdb_id,
+                    monitored: true,
+                },
+                w.number,
+            ))
+        })
+        .into_iter()
+        .collect();
+    Ok(MonitoredChange {
+        monitored,
+        media: vec![],
+        seasons,
+    })
+}
+
+/// The single owner of media monitoring outside a larger write: apply, commit, announce.
+pub async fn set_media_monitored(
+    st: &AppState,
+    ids: &[i32],
+    monitored: bool,
+) -> Result<(), sqlx::Error> {
+    let mut tx = st.db.begin().await?;
+    let change = apply_media_monitored(&mut tx, ids, monitored).await?;
+    tx.commit().await?;
+    change.announce(st).await;
+    Ok(())
+}
+
+pub async fn set_season_monitored(
+    st: &AppState,
+    season_id: i32,
+    monitored: bool,
+) -> Result<(), sqlx::Error> {
+    let mut tx = st.db.begin().await?;
+    let change = apply_season_monitored(&mut tx, season_id, monitored).await?;
+    tx.commit().await?;
+    change.announce(st).await;
     Ok(())
 }
 
@@ -235,7 +374,7 @@ pub async fn update(
     let id = gate(&st, &a, Action::Update, id).await?;
     let b = Body::new(v, &MEDIA_FIELDS)?;
     let cols = columns(&b)?;
-    let before = load_media(&st.db, id)
+    load_media(&st.db, id)
         .await?
         .ok_or_else(|| crate::libraries::media_not_found(id))?;
     let monitored = b.bool("monitored")?.flatten();
@@ -264,20 +403,13 @@ pub async fn update(
             }
         })?;
     }
-    if let Some(m) = monitored {
-        cascade_monitored(&mut tx, &[id], m).await?;
-    }
+    let change = match monitored {
+        Some(m) => Some(apply_media_monitored(&mut tx, &[id], m).await?),
+        None => None,
+    };
     tx.commit().await?;
-    if let Some(m) = monitored {
-        st.hub.emit_domain(DomainEvent::MediaMonitoredChanged {
-            media_id: i64::from(id),
-            monitored: m,
-        });
-    }
-    if let Some(after) = load_media(&st.db, id).await? {
-        crate::requests::Lifecycle::of(&st)
-            .on_media_monitor_change(after.lifecycle_ref(), before.monitored)
-            .await;
+    if let Some(c) = change {
+        c.announce(&st).await;
     }
     Ok(Json(detail_or_404(&st, &a, id).await?))
 }
@@ -500,47 +632,29 @@ pub async fn bulk(
         m => m.flatten(),
     };
     let mut tx = st.db.begin().await?;
-    let was_monitored = sqlx::query!(
-        r#"SELECT id, type::text AS "media_type!", "tmdbId" AS tmdb_id
-           FROM media WHERE id = ANY($1) AND monitored AND $2::bool IS NOT NULL"#,
-        &ids,
-        monitored
-    )
-    .fetch_all(&mut *tx)
-    .await?;
     let updated = sqlx::query!(
         r#"UPDATE media SET
              "qualityProfileId" = CASE WHEN $2 THEN $3 ELSE "qualityProfileId" END,
              "languageProfileId" = CASE WHEN $4 THEN $5 ELSE "languageProfileId" END,
-             monitored = COALESCE($6, monitored),
-             "libraryId" = COALESCE($7, "libraryId")
+             "libraryId" = COALESCE($6, "libraryId")
            WHERE id = ANY($1)"#,
         &ids,
         q.is_some(),
         q.flatten(),
         l.is_some(),
         l.flatten(),
-        monitored,
         library
     )
     .execute(&mut *tx)
     .await?
     .rows_affected();
-    if let Some(m) = monitored {
-        cascade_monitored(&mut tx, &ids, m).await?;
-    }
+    let change = match monitored {
+        Some(m) => Some(apply_media_monitored(&mut tx, &ids, m).await?),
+        None => None,
+    };
     tx.commit().await?;
-    if let Some(m) = monitored {
-        let lifecycle = crate::requests::Lifecycle::of(&st);
-        for r in was_monitored {
-            let media = crate::requests::MediaRef {
-                id: r.id,
-                media_type: r.media_type,
-                tmdb_id: r.tmdb_id,
-                monitored: m,
-            };
-            lifecycle.on_media_monitor_change(media, true).await;
-        }
+    if let Some(c) = change {
+        c.announce(&st).await;
     }
     Ok(Json(json!({ "updated": updated })))
 }
@@ -582,11 +696,11 @@ async fn season_gate(
     st: &AppState,
     a: &Authed,
     id: Result<PathParams<i32>, AppError>,
-) -> Result<(i32, i32, i32, bool), AppError> {
+) -> Result<i32, AppError> {
     a.require(Action::Update, Subject::Media)?;
     let PathParams(id) = id?;
     let s = sqlx::query!(
-        r#"SELECT "mediaId" AS media_id, "seasonNumber" AS number, monitored FROM seasons WHERE id = $1"#,
+        r#"SELECT "mediaId" AS media_id FROM seasons WHERE id = $1"#,
         id
     )
     .fetch_optional(&st.db)
@@ -597,7 +711,7 @@ async fn season_gate(
         .ok_or_else(|| AppError::not_found(format!("Season #{id} not found")))?;
     let libs = accessible_library_ids(&st.db, a).await?;
     assert_media_accessible(&st.db, media, &libs).await?;
-    Ok((id, media, s.number, s.monitored))
+    Ok(id)
 }
 
 /// `PATCH /api/media/seasons/:seasonId` (rules 32-33).
@@ -608,7 +722,7 @@ pub async fn patch_season(
     id: Result<PathParams<i32>, AppError>,
     ValidJson(v): ValidJson<Value>,
 ) -> Result<Json<Value>, AppError> {
-    let (id, media_id, number, was) = season_gate(&st, &a, id).await?;
+    let id = season_gate(&st, &a, id).await?;
     let b = Body::new(v, &["monitored", "preferredProvider"])?;
     let monitored = match b.bool("monitored")? {
         Some(None) => {
@@ -629,40 +743,24 @@ pub async fn patch_season(
         }
     };
     let mut tx = st.db.begin().await?;
-    sqlx::query!(
-        r#"UPDATE seasons SET monitored = COALESCE($2, monitored),
-             "preferredProvider" = CASE WHEN $3 THEN $4 ELSE "preferredProvider" END
-           WHERE id = $1 AND (monitored IS DISTINCT FROM COALESCE($2, monitored)
-             OR ($3 AND "preferredProvider" IS DISTINCT FROM $4))"#,
-        id,
-        monitored,
-        provider.is_some(),
-        provider.clone().flatten()
-    )
-    .execute(&mut *tx)
-    .await?;
-    if let Some(m) = monitored {
+    if let Some(p) = provider {
         sqlx::query!(
-            r#"UPDATE episodes SET monitored = $1 WHERE "seasonId" = $2"#,
-            m,
-            id
+            r#"UPDATE seasons SET "preferredProvider" = $2
+               WHERE id = $1 AND "preferredProvider" IS DISTINCT FROM $2"#,
+            id,
+            p
         )
         .execute(&mut *tx)
         .await?;
     }
+    let change = match monitored {
+        Some(m) => Some(apply_season_monitored(&mut tx, id, m).await?),
+        None => None,
+    };
     tx.commit().await?;
-    let now = monitored.unwrap_or(was);
-    if let Some(media) = load_media(&st.db, media_id).await? {
-        crate::requests::Lifecycle::of(&st)
-            .on_season_monitor_change(media.lifecycle_ref(), number, was, now)
-            .await;
+    if let Some(c) = change {
+        c.announce(&st).await;
     }
-    st.hub
-        .emit_domain(DomainEvent::MediaSeasonMonitoredChanged {
-            media_id: i64::from(media_id),
-            season_number: i64::from(number),
-            monitored: now,
-        });
     Ok(Json(season_json(&st, &a, id).await?))
 }
 

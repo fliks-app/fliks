@@ -1425,3 +1425,33 @@ async fn unmonitoring_a_season_trims_or_retires_available_scopes(pool: PgPool) {
         ]
     );
 }
+
+#[sqlx::test(migrations = false)]
+async fn unmonitoring_a_season_keeps_a_whole_series_request_on_the_other_seasons(pool: PgPool) {
+    let c = ctx(pool).await;
+    q(&c.pool(), r#"INSERT INTO media (id, title, type, "tmdbId", "libraryId") VALUES (15, 'S', 'series', 94, 2)"#).await;
+    q(&c.pool(), r#"INSERT INTO seasons ("seasonNumber", "mediaId", monitored) VALUES (1, 15, true), (2, 15, true), (3, 15, true)"#).await;
+    q(
+        &c.pool(),
+        r#"INSERT INTO requests ("userId", kind, "mediaType", "tmdbId", title, status, "mediaId")
+        VALUES (1, 'add', 'series', 94, 'S', 'available', 15)"#,
+    )
+    .await;
+    let (s, _) = call(&c, "POST", "/api/requests", &c.user, series(94, json!([2]))).await;
+    assert_eq!(s, 409, "the whole series is available");
+    let season: i32 = sqlx::query_scalar(r#"SELECT id FROM seasons WHERE "seasonNumber" = 2"#)
+        .fetch_one(&c.pool())
+        .await
+        .unwrap();
+    let uri = format!("/api/media/seasons/{season}");
+    let (s, r) = call(&c, "PATCH", &uri, &c.admin, json!({"monitored": false})).await;
+    assert_eq!(s, 200, "{r}");
+    let row: (String, Option<Value>) =
+        sqlx::query_as("SELECT status::text, seasons FROM requests WHERE id = 1")
+            .fetch_one(&c.pool())
+            .await
+            .unwrap();
+    assert_eq!(row, ("available".into(), Some(json!([1, 3]))));
+    let (s, r) = call(&c, "POST", "/api/requests", &c.user, series(94, json!([2]))).await;
+    assert_eq!(s, 201, "{r}");
+}

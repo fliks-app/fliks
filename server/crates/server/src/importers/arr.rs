@@ -415,7 +415,6 @@ async fn import_one(
                     id: e.id,
                     title,
                     year: year.or(e.year),
-                    monitored: monitored.unwrap_or(e.monitored),
                     folder_name: &folder,
                     imdb_id: imdb.or(e.imdb_id.as_deref()),
                     overview: overview.or(e.overview.as_deref()),
@@ -425,6 +424,11 @@ async fn import_one(
             )
             .await
             .map_err(fail)?;
+            if let Some(m) = monitored.filter(|m| *m != e.monitored) {
+                crate::media::write::set_media_monitored(st, &[e.id], m)
+                    .await
+                    .map_err(fail)?;
+            }
             Ok(Outcome::Imported(None))
         }
         None => {

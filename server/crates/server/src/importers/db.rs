@@ -91,7 +91,6 @@ pub struct MediaUpdate<'a> {
     pub id: i32,
     pub title: &'a str,
     pub year: Option<i32>,
-    pub monitored: bool,
     pub folder_name: &'a str,
     pub imdb_id: Option<&'a str>,
     pub overview: Option<&'a str>,
@@ -101,13 +100,12 @@ pub struct MediaUpdate<'a> {
 
 pub async fn update_media(db: &PgPool, m: &MediaUpdate<'_>) -> sqlx::Result<()> {
     sqlx::query!(
-        r#"UPDATE media SET title = $2, year = $3, monitored = $4, "folderName" = $5, "imdbId" = $6,
-                  overview = $7, "qualityProfileId" = $8, "libraryId" = $9, "updatedAt" = now()
+        r#"UPDATE media SET title = $2, year = $3, "folderName" = $4, "imdbId" = $5,
+                  overview = $6, "qualityProfileId" = $7, "libraryId" = $8, "updatedAt" = now()
            WHERE id = $1"#,
         m.id,
         m.title,
         m.year,
-        m.monitored,
         m.folder_name,
         m.imdb_id,
         m.overview,

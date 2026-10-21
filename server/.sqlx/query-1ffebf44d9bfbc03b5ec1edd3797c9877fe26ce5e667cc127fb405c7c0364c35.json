@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE seasons SET monitored = $2 WHERE id = $1 AND monitored IS DISTINCT FROM $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1ffebf44d9bfbc03b5ec1edd3797c9877fe26ce5e667cc127fb405c7c0364c35"
+}
