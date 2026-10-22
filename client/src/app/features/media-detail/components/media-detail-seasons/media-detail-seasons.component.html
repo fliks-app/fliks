@@ -3,8 +3,10 @@
 <div class="divider my-6"></div>
 <section class="space-y-4">
   @if (!hideControls()) {
-  <div appTvRow class="flex items-center gap-2 flex-wrap">
-    @if (canSwitchEpisodeView()) {
+  <div appTvRow class="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+    <!-- Select mode forces the list view, so the switch has nothing to offer then. -->
+    @let showViewToggle = canSwitchEpisodeView() && !selectMode();
+    @if (showViewToggle) {
       <div class="order-last join ms-auto" role="group">
         <button
           type="button"
@@ -33,20 +35,21 @@
     @if (canSelect()) {
       <button
         type="button"
-        class="order-last btn btn-sm shrink-0 me-auto"
+        class="order-last btn btn-sm max-sm:btn-square shrink-0 {{ showViewToggle ? '' : 'ms-auto' }}"
         [class.btn-active]="selectMode()"
         [attr.aria-pressed]="selectMode()"
+        [attr.aria-label]="'downloads.select' | translate"
         (click)="toggleSelectMode()"
       >
         <svg lucideListChecks class="h-4 w-4"></svg>
-        {{ 'downloads.select' | translate }}
+        <span class="max-sm:hidden">{{ 'downloads.select' | translate }}</span>
       </button>
     }
     @if (selSeason) {
       <button
         type="button"
-        class="order-last btn btn-ghost btn-circle shrink-0"
-        [class.ms-auto]="!canSwitchEpisodeView()"
+        class="order-last btn btn-ghost btn-circle max-sm:btn-sm shrink-0"
+        [class.ms-auto]="!showViewToggle && !canSelect()"
         (click)="toggleSeasonLike.emit(selSeason.id)"
         [attr.aria-label]="(isSeasonLiked(selSeason.id) ? 'likes.unlike_season' : 'likes.like_season') | translate"
       >
@@ -58,8 +61,8 @@
         ></svg>
       </button>
     }
-    <app-dropdown-menu placement="bottom-end" class="order-last" [class.ms-auto]="!canSwitchEpisodeView() && !selSeason">
-      <button trigger type="button" class="btn btn-ghost btn-circle shrink-0">
+    <app-dropdown-menu placement="bottom-end" class="order-last" [class.ms-auto]="!showViewToggle && !canSelect() && !selSeason">
+      <button trigger type="button" class="btn btn-ghost btn-circle max-sm:btn-sm shrink-0">
         <svg lucideEllipsisVertical class="h-5 w-5"></svg>
       </button>
       <label class="dropdown-item text-white">
