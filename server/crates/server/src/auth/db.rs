@@ -31,11 +31,11 @@ pub struct Issued {
     pub expires_at: DateTime<Utc>,
 }
 
-/// `family` continues a rotation chain; `None` starts a new one (login, pairing).
+/// `from` is the rotated token (id, family); `None` starts a new family (login, pairing).
 pub async fn issue(
     conn: &mut PgConnection,
     user_id: i32,
-    family: Option<i32>,
+    from: Option<(i32, i32)>,
     user_agent: Option<&str>,
     ttl_days: i64,
     now: DateTime<Utc>,
@@ -45,9 +45,10 @@ pub async fn issue(
     let ua: Option<String> = user_agent.map(|u| u.chars().take(255).collect());
     sqlx::query!(
         r#"WITH n AS (SELECT nextval(pg_get_serial_sequence('refresh_tokens', 'id'))::int AS id)
-           INSERT INTO refresh_tokens (id, "familyId", "userId", "tokenHash", "expiresAt", "userAgent")
-           SELECT n.id, COALESCE($1::int, n.id), $2, $3, $4, $5 FROM n"#,
-        family,
+           INSERT INTO refresh_tokens (id, "familyId", "parentId", "userId", "tokenHash", "expiresAt", "userAgent")
+           SELECT n.id, COALESCE($1::int, n.id), $2::int, $3, $4, $5, $6 FROM n"#,
+        from.map(|f| f.1),
+        from.map(|f| f.0),
         user_id,
         hash(&raw),
         expires_at,
@@ -103,13 +104,33 @@ pub async fn refresh(
             );
             return Ok(Refreshed::AlreadyRotated);
         }
+        let successor_used = sqlx::query_scalar!(
+            r#"SELECT "lastUsedAt" IS NOT NULL AS "used!" FROM refresh_tokens WHERE "parentId" = $1"#,
+            t.id
+        )
+        .fetch_optional(&mut *tx)
+        .await?;
+        let since_rotation_ms = (now - revoked).num_milliseconds();
+        // An unused successor means the rotation response was lost, not stolen.
+        if successor_used == Some(false) {
+            tracing::info!(
+                user = t.user_id,
+                token = t.id,
+                family = t.family_id,
+                stored_user_agent = t.user_agent.as_deref(),
+                presented_user_agent = user_agent,
+                since_rotation_ms,
+                "refresh token replayed, successor unused: lost response"
+            );
+            return Ok(Refreshed::AlreadyRotated);
+        }
         tracing::warn!(
             user = t.user_id,
             token = t.id,
             family = t.family_id,
             stored_user_agent = t.user_agent.as_deref(),
             presented_user_agent = user_agent,
-            since_rotation_ms = (now - revoked).num_milliseconds(),
+            since_rotation_ms,
             "refresh token reuse: family revoked"
         );
         revoke_family(&mut tx, t.family_id, now).await?;
@@ -139,7 +160,7 @@ pub async fn refresh(
     let issued = issue(
         &mut tx,
         t.user_id,
-        Some(t.family_id),
+        Some((t.id, t.family_id)),
         user_agent,
         ttl_days,
         now,
@@ -448,13 +469,24 @@ mod tests {
         refresh(pool, raw, None, 60, now).await.unwrap()
     }
 
+    /// Rotates `raw` and then its successor, so replaying `raw` is a fork.
+    async fn spend_chain(pool: &PgPool, raw: &str, now: DateTime<Utc>) {
+        let Refreshed::Ok { issued, .. } = rotate(pool, raw, now).await else {
+            panic!("rotation failed")
+        };
+        assert!(matches!(
+            rotate(pool, &issued.raw, now).await,
+            Refreshed::Ok { .. }
+        ));
+    }
+
     #[sqlx::test(migrations = false)]
     async fn rotation_grace_is_inclusive_then_reuse_revokes_the_family(pool: PgPool) {
         let u = setup(&pool).await;
         let t0 = Utc::now();
         let a = token(&pool, u, t0).await;
         token(&pool, u, t0).await;
-        assert!(matches!(rotate(&pool, &a, t0).await, Refreshed::Ok { .. }));
+        spend_chain(&pool, &a, t0).await;
         let edge = t0 + Duration::milliseconds(REUSE_GRACE_MS);
         assert!(matches!(
             rotate(&pool, &a, edge).await,
@@ -486,13 +518,44 @@ mod tests {
         let t0 = Utc::now();
         let a = token(&pool, u, t0).await;
         let b = token(&pool, u, t0).await;
-        assert!(matches!(rotate(&pool, &a, t0).await, Refreshed::Ok { .. }));
+        spend_chain(&pool, &a, t0).await;
         let late = t0 + Duration::milliseconds(REUSE_GRACE_MS + 1);
         assert!(matches!(rotate(&pool, &a, late).await, Refreshed::Reuse));
         assert!(matches!(
             rotate(&pool, &b, late).await,
             Refreshed::Ok { .. }
         ));
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn replay_with_an_unused_successor_revokes_nothing_but_a_used_one_is_a_fork(
+        pool: PgPool,
+    ) {
+        let u = setup(&pool).await;
+        let t0 = Utc::now();
+        let a = token(&pool, u, t0).await;
+        let Refreshed::Ok { issued, .. } = rotate(&pool, &a, t0).await else {
+            panic!("rotation failed")
+        };
+        let late = t0 + Duration::milliseconds(REUSE_GRACE_MS + 1);
+        assert!(matches!(
+            rotate(&pool, &a, late).await,
+            Refreshed::AlreadyRotated
+        ));
+        let Refreshed::Ok { issued: c, .. } = rotate(&pool, &issued.raw, late).await else {
+            panic!("the successor must still refresh")
+        };
+        assert!(matches!(rotate(&pool, &a, late).await, Refreshed::Reuse));
+        assert!(matches!(
+            rotate(&pool, &c.raw, late).await,
+            Refreshed::AlreadyRotated | Refreshed::Reuse
+        ));
+        let live: i64 =
+            sqlx::query_scalar(r#"SELECT count(*) FROM refresh_tokens WHERE "revokedAt" IS NULL"#)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(live, 0);
     }
 
     #[sqlx::test(migrations = false)]
