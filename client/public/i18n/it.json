@@ -908,7 +908,6 @@
     "sort_added": "Data di aggiunta",
     "sort_rating": "Voto TMDB",
     "bulk_edit": "Modifica in blocco",
-    "bulk_selected": "{{count}} selezionato/i",
     "bulk_apply": "Applica",
     "bulk_cancel": "Annulla",
     "bulk_select_all": "Seleziona tutto",
@@ -3231,7 +3230,8 @@
     "refresh": "Aggiorna"
   },
   "bulk": {
-    "selected": "{{count}} selezionati",
+    "selected_one": "{{count}} selezionato",
+    "selected_other": "{{count}} selezionati",
     "select_all": "Seleziona tutte le righe",
     "select_row": "Seleziona {{name}}",
     "clear": "Annulla la selezione",

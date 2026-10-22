@@ -60,7 +60,7 @@
         </label>
       } @else {
       <span class="text-sm font-medium">
-        {{ 'bulk.selected' | translate: { count: selectedIds().size } }}
+        {{ (selectedIds().size === 1 ? 'bulk.selected_one' : 'bulk.selected_other') | translate: { count: selectedIds().size } }}
       </span>
       <div class="flex flex-wrap gap-2 ms-auto">
         <button

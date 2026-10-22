@@ -357,7 +357,7 @@
           <button type="button" class="btn btn-sm btn-ghost btn-circle" [attr.aria-label]="'library.bulk_cancel' | translate" (click)="toggleSelectMode()">
             <svg lucideX class="h-4 w-4"></svg>
           </button>
-          <span class="font-semibold text-sm whitespace-nowrap">{{ 'bulk.selected' | translate:{ count: selectedEpisodeIds().size } }}</span>
+          <span class="font-semibold text-sm whitespace-nowrap">{{ (selectedEpisodeIds().size === 1 ? 'bulk.selected_one' : 'bulk.selected_other') | translate: { count: selectedEpisodeIds().size } }}</span>
           <span class="flex-1"></span>
           <button type="button" class="btn btn-sm btn-ghost" (click)="allEpisodesSelected() ? selectedEpisodeIds.set(emptySelection) : selectAllEpisodes()">
             {{ (allEpisodesSelected() ? 'library.bulk_deselect' : 'library.bulk_select_all') | translate }}

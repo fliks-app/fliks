@@ -908,7 +908,6 @@
     "sort_added": "Hinzufügungsdatum",
     "sort_rating": "TMDB-Bewertung",
     "bulk_edit": "Sammelbearbeitung",
-    "bulk_selected": "{{count}} ausgewählt",
     "bulk_apply": "Anwenden",
     "bulk_cancel": "Abbrechen",
     "bulk_select_all": "Alle auswählen",
@@ -3231,7 +3230,8 @@
     "refresh": "Aktualisieren"
   },
   "bulk": {
-    "selected": "{{count}} ausgewählt",
+    "selected_one": "{{count}} ausgewählt",
+    "selected_other": "{{count}} ausgewählt",
     "select_all": "Alle Zeilen auswählen",
     "select_row": "{{name}} auswählen",
     "clear": "Auswahl aufheben",
