@@ -111,4 +111,20 @@ describe('AuthService session switching', () => {
     expect(await rotation).toBe(false);
     expect(sessions.get('', 1)).toBeNull();
   });
+
+  it('adopts the pair another refresher stored instead of dropping on "already rotated"', async () => {
+    const rotation = auth.refreshAccessToken();
+    await settle();
+    const request = http.expectOne('/api/auth/refresh');
+    await sessions.updateTokens('', 1, {
+      accessToken: null,
+      refreshToken: 'refresh-winner',
+      refreshExpiresAt: null,
+    });
+    request.flush({ message: 'Refresh token already rotated' }, { status: 401, statusText: '' });
+
+    expect(await rotation).toBe(true);
+    expect(auth.refreshToken).toBe('refresh-winner');
+    expect(sessions.get('', 1)).not.toBeNull();
+  });
 });
