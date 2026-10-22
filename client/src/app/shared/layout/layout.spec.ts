@@ -181,6 +181,7 @@ async function createFixture(f: Fixture): Promise<ComponentFixture<LayoutCompone
           isPhone: () => !!f.device.isPhone,
           isTv: () => !!f.device.isTv,
           isTouch: () => !!f.device.isTouch,
+          isDesktopNative: () => false,
           formFactor: () =>
             f.device.isTv ? 'tv'
               : f.device.isDesktop ? 'desktop'

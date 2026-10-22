@@ -117,7 +117,7 @@ function createFixture(opts: { isAdmin?: boolean; permissions?: string[]; entrie
         },
       },
       { provide: TvService, useValue: { isTv: () => false, isAndroidTv: () => false } },
-      { provide: DeviceService, useValue: { isTouch: () => false } },
+      { provide: DeviceService, useValue: { isTouch: () => false, isTv: () => false, isDesktopNative: () => false } },
       {
         provide: PluginUiRegistryService,
         useValue: { pluginEntries: () => opts.entries ?? [] },
