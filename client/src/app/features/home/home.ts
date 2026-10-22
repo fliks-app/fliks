@@ -44,6 +44,7 @@ import { libraryColorVar } from '../../core/constants/library-appearance';
 import { StorageScopeService } from '../../core/services/storage-scope.service';
 import { itemArtwork } from '../../shared/utils/media-artwork.util';
 import { armPageSlide } from '../../shared/utils/page-slide';
+import { CacheRead } from '../../core/interceptors/cache.interceptor';
 
 /** Home page: horizontal sections for libraries, continue watching, coming soon, recently added and recommendations. */
 @Component({
@@ -96,7 +97,7 @@ export class HomeComponent implements OnInit, OnDestroy {
    *  repaints and a forced pass brings in what changed elsewhere. */
   private readonly routeFresh = keepRouteFresh({
     refresh: () => {
-      void this.loadAllSections();
+      void this.loadAllSections({ known: true });
       queueMicrotask(() => void this.loadAllSections({ force: true }));
     },
     // On resume the sections are already rendered, so a cache-first pass would
@@ -351,7 +352,7 @@ export class HomeComponent implements OnInit, OnDestroy {
     const cold = this.coldStart();
     HomeComponent.skeletonShown = true;
     if (cold) this.skeletonLayout.set(this.readLayout());
-    await this.loadAllSections();
+    await this.loadAllSections({ known: true });
     if (cold) {
       this.skeletonFadingOut.set(true);
       this.loadingFirstPass.set(false);
@@ -373,34 +374,32 @@ export class HomeComponent implements OnInit, OnDestroy {
   }
 
   /** Fetches every section in parallel, keeping existing values visible until each response lands.
-   * Default is cache-first; `{ force: true }` always hits the network (the SWR refresh after first paint). */
-  private async loadAllSections(opts: { force?: boolean } = {}): Promise<void> {
-    const force = !!opts.force;
+   * `known` paints whatever is cached; `force` always hits the network (the SWR refresh after first paint). */
+  private async loadAllSections(opts: CacheRead = {}): Promise<void> {
     try {
       // Uncached rows paint on arrival: awaiting them holds the skeleton over
       // cached rows for as long as a dead link takes to fail.
-      void this.playlistsApi.list({ force }).then(
+      void this.playlistsApi.list(opts).then(
         (pls) =>
           this.playlists.set(
             [...pls].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 20),
           ),
         () => undefined,
       );
-      void this.likesApi.mine(undefined, { force }).then((likes) => this.likes.set(likes), () => undefined);
+      void this.likesApi.mine(undefined, opts).then((likes) => this.likes.set(likes), () => undefined);
       const [libs, cw, recs] = await Promise.all([
-        this.librariesApi.listMine({ force }).catch(() => null),
-        this.streamingApi.getContinueWatching(undefined, { force }).catch(() => null),
-        this.streamingApi.getRecommendations({ force }).catch(() => null),
+        this.librariesApi.listMine(opts).catch(() => null),
+        this.streamingApi.getContinueWatching(undefined, opts).catch(() => null),
+        this.streamingApi.getRecommendations(opts).catch(() => null),
       ]);
       if (libs) this.libraries.set(libs);
       if (cw) this.continueWatchingRaw.set(cw);
       if (recs) this.recommendations.set(recs);
     } catch { /* ignore */ }
-    await this.loadFilteredSections({ force });
+    await this.loadFilteredSections(opts);
   }
 
-  private async loadFilteredSections(opts: { force?: boolean } = {}) {
-    const force = !!opts.force;
+  private async loadFilteredSections(opts: CacheRead = {}) {
     const mine = this.displaySettings.settings().onlyMyRequests;
     const mode = this.home.settings().recentlyAddedMode;
     const today = new Date();
@@ -422,7 +421,7 @@ export class HomeComponent implements OnInit, OnDestroy {
     try {
       if (wantRequests) {
         void this.requestsService
-          .list({ limit: 12 }, { force })
+          .list({ limit: 12 }, opts)
           .then((r) => this.recentRequests.set(r.data), () => undefined);
       }
       const [recent, calendar, libEntries] = await Promise.all([
@@ -433,9 +432,9 @@ export class HomeComponent implements OnInit, OnDestroy {
             excludeWatched: true,
             requestedByMe: mine || undefined,
           },
-          { force },
+          opts,
         ),
-        this.mediaService.getCalendar(startStr, in30dStr, true, mine, { force }).catch(() => []),
+        this.mediaService.getCalendar(startStr, in30dStr, true, mine, opts).catch(() => []),
         Promise.all(
           libSections.map((s) =>
             this.mediaService
@@ -447,7 +446,7 @@ export class HomeComponent implements OnInit, OnDestroy {
                   excludeWatched: true,
                   requestedByMe: mine || undefined,
                 },
-                { force },
+                opts,
               )
               .then((items) => [s.libraryId as number, items] as const)
               .catch(() => [s.libraryId as number, [] as Media[]] as const),
@@ -455,7 +454,7 @@ export class HomeComponent implements OnInit, OnDestroy {
         ),
       ]);
       this.recentMedia.set(recent);
-      void this.mediaService.getLeavingSoon({ force }).then((l) => this.leavingSoon.set(l), () => undefined);
+      void this.mediaService.getLeavingSoon(opts).then((l) => this.leavingSoon.set(l), () => undefined);
       this.libraryRecent.set(new Map(libEntries));
       const upcoming = calendar
         .filter((e) => !e.hasFile && (e.event === 'digital' || e.event === 'airing' || e.event === 'release'))

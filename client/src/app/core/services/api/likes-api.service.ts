@@ -1,7 +1,7 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
-import { CACHE_BYPASS_HEADER } from '../../interceptors/cache.interceptor';
+import { CacheRead, cacheHeaders } from '../../interceptors/cache.interceptor';
 
 /** Identifies liked content: movie (mediaId), season (+seasonId), episode (+episodeId). */
 export interface LikeTarget {
@@ -37,25 +37,26 @@ export class LikesApiService {
    *  detail page under a notification's heart) can refetch its state. */
   readonly changed = signal<{ mediaId: number } | null>(null);
 
-  private headers(force?: boolean) {
-    return force ? { headers: { [CACHE_BYPASS_HEADER]: '1' } } : {};
+  private headers(opts: CacheRead) {
+    const headers = cacheHeaders(opts);
+    return headers ? { headers } : {};
   }
 
   /** The caller's liked content, optionally scoped to a library. */
-  mine(libraryId?: number, opts: { force?: boolean } = {}) {
+  mine(libraryId?: number, opts: CacheRead = {}) {
     const params = libraryId ? { libraryId: String(libraryId) } : undefined;
     return firstValueFrom(
       this.http.get<LikedItem[]>('/api/likes', {
         ...(params ? { params } : {}),
-        ...this.headers(opts.force),
+        ...this.headers(opts),
       }),
     );
   }
 
   /** The caller's like state for a media (drives the detail-page hearts). */
-  state(mediaId: number, opts: { force?: boolean } = {}) {
+  state(mediaId: number, opts: CacheRead = {}) {
     return firstValueFrom(
-      this.http.get<LikeState>(`/api/likes/state/${mediaId}`, this.headers(opts.force)),
+      this.http.get<LikeState>(`/api/likes/state/${mediaId}`, this.headers(opts)),
     );
   }
 

@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
-import { CACHE_BYPASS_HEADER } from '../../interceptors/cache.interceptor';
+import { CacheRead, cacheHeaders } from '../../interceptors/cache.interceptor';
 import { Media } from './media.service';
 
 export type PlaylistRole = 'owner' | 'administrator' | 'editor' | 'viewer';
@@ -83,15 +83,15 @@ export interface AddToPlaylistBody {
 export class PlaylistsApiService {
   private readonly http = inject(HttpClient);
 
-  list(opts: { force?: boolean } = {}) {
-    const headers = opts.force ? { [CACHE_BYPASS_HEADER]: '1' } : undefined;
+  list(opts: CacheRead = {}) {
+    const headers = cacheHeaders(opts);
     return firstValueFrom(
       this.http.get<Playlist[]>('/api/playlists', headers ? { headers } : {}),
     );
   }
 
-  get(id: number, opts: { force?: boolean } = {}) {
-    const headers = opts.force ? { [CACHE_BYPASS_HEADER]: '1' } : undefined;
+  get(id: number, opts: CacheRead = {}) {
+    const headers = cacheHeaders(opts);
     return firstValueFrom(
       this.http.get<Playlist>(`/api/playlists/${id}`, headers ? { headers } : {}),
     );
@@ -109,8 +109,8 @@ export class PlaylistsApiService {
     return firstValueFrom(this.http.delete<void>(`/api/playlists/${id}`));
   }
 
-  items(id: number, opts: { force?: boolean } = {}) {
-    const headers = opts.force ? { [CACHE_BYPASS_HEADER]: '1' } : undefined;
+  items(id: number, opts: CacheRead = {}) {
+    const headers = cacheHeaders(opts);
     return firstValueFrom(
       this.http.get<PlaylistItem[]>(
         `/api/playlists/${id}/items`,

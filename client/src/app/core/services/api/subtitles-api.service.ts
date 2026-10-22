@@ -2,7 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { MediaType } from '../../enums/media-type.enum';
-import { CACHE_BYPASS_HEADER } from '../../interceptors/cache.interceptor';
+import { CacheRead, cacheHeaders } from '../../interceptors/cache.interceptor';
 
 export interface SubtitleFileRow {
   id: number;
@@ -59,11 +59,11 @@ export class SubtitlesApiService {
 
   /** `force` bypasses the SWR cache — the modal wants the true run state on open,
    *  not a stale body served while a reconnect-driven revalidation catches up. */
-  getForMedia(mediaId: number, opts: { force?: boolean } = {}) {
+  getForMedia(mediaId: number, opts: CacheRead = {}) {
     return firstValueFrom(
-      this.http.get<SubtitleFileRow[]>(`/api/media/${mediaId}/subtitles`, opts.force
-        ? { headers: { [CACHE_BYPASS_HEADER]: '1' } }
-        : {},
+      this.http.get<SubtitleFileRow[]>(`/api/media/${mediaId}/subtitles`, {
+        headers: cacheHeaders(opts),
+      }
       ),
     );
   }
