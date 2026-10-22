@@ -1,18 +1,10 @@
-import {
-  Component,
-  signal,
-  computed,
-  inject,
-  OnInit,
-  OnDestroy,
-} from '@angular/core';
-import { Capacitor } from '@capacitor/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { Component, signal, computed, inject } from '@angular/core';
 import { Router } from '@angular/router';
 import { NgTemplateOutlet } from '@angular/common';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import { DownloadCacheService, DownloadTask } from '../../core/services/download-cache.service';
+import type { DownloadTask } from '../../core/services/download-cache.service';
 import { DownloadManagerService } from '../../core/services/download-manager.service';
+import { isPausable, isTransferring } from '../../core/services/download-status';
 import { ConfirmationService } from '../../core/services/confirmation.service';
 import {
   LucideDownload,
@@ -38,11 +30,7 @@ import { groupDownloads } from './downloads-grouping';
 
 const openGroupKeys = signal<ReadonlySet<string>>(new Set());
 
-export interface DisplayDownloadTask extends DownloadTask {
-  downloadProgress?: number;
-}
-
-/** Downloads page: DownloadCacheService (localStorage) for task metadata, the native Java service and DownloadManagerService events for live progress. */
+/** Downloads page: renders the manager's `tasks` signal. */
 @Component({
   selector: 'app-downloads',
   imports: [
@@ -66,12 +54,7 @@ export interface DisplayDownloadTask extends DownloadTask {
   ],
   templateUrl: './downloads.html',
 })
-export class DownloadsComponent implements OnInit, OnDestroy {
-  private readonly isNative = Capacitor.isNativePlatform();
-  private visibilityHandler = () => {
-    if (document.visibilityState === 'visible') void this.load();
-  };
-  private readonly cache = inject(DownloadCacheService);
+export class DownloadsComponent {
   private readonly dlManager = inject(DownloadManagerService);
   private readonly confirmation = inject(ConfirmationService);
   private readonly translate = inject(TranslateService);
@@ -81,9 +64,6 @@ export class DownloadsComponent implements OnInit, OnDestroy {
   /** Ids being re-queued, so the button can't be double-tapped into two
    *  downloads of the same file. */
   readonly retrying = signal<ReadonlySet<number>>(new Set());
-
-  private readonly baseTasks = signal<DownloadTask[]>([]);
-  readonly loading = signal(true);
 
   protected readonly emptySelection: ReadonlySet<number> = new Set();
   readonly selectMode = signal(false);
@@ -104,63 +84,15 @@ export class DownloadsComponent implements OnInit, OnDestroy {
   protected readonly formatBytes = formatBytes;
 
 
-  /** Native/web state synced on every load(), keyed by taskId. */
-  private readonly nativeState = signal<Map<number, { progress: number; status: string }>>(new Map());
-
-  private readonly eventSub = this.dlManager.downloadEvents.pipe(takeUntilDestroyed()).subscribe((event) => {
-    if (event.type === 'progress') {
-      const status = event.status === 'downloading' ? 'transcoding'
-        : (event.status ?? 'transcoding');
-      this.nativeState.update((m) => {
-        const next = new Map(m);
-        next.set(event.taskId, { progress: event.progress, status });
-        return next;
-      });
-    } else if (event.type === 'complete') {
-      this.nativeState.update((m) => {
-        const next = new Map(m);
-        next.delete(event.taskId);
-        return next;
-      });
-      this.cache.markLocal(event.taskId);
-      void this.load();
-    } else {
-      void this.load();
-    }
-  });
-
-  /** Derived: merge cached tasks with live state */
-  readonly items = computed<DisplayDownloadTask[]>(() => {
-    const tasks = this.baseTasks();
-    const native = this.nativeState();
-    const active = this.cache.activeDownloads();
-    const localIds = this.cache.localTaskIds();
-
-    return tasks.map((task) => {
-      const ns = native.get(task.id);
-      if (ns) {
-        return { ...task, status: ns.status, progress: ns.progress } as DisplayDownloadTask;
-      }
-      if (task.status === 'ready') {
-        if (localIds.has(task.id)) {
-          return task;
-        }
-        const pct = active.get(task.id) ?? 0;
-        return { ...task, status: 'transcoding', progress: pct } as DisplayDownloadTask;
-      }
-      return task;
-    });
-  });
+  readonly items = this.dlManager.tasks;
 
   protected readonly auto = inject(AutoDownloadService);
   readonly entries = computed(() => groupDownloads(this.items()));
-  readonly pausable = computed(() => this.items().filter((t) => DownloadsComponent.PAUSABLE.includes(t.status)));
+  readonly pausable = computed(() => this.items().filter((t) => isPausable(t.status)));
   readonly paused = computed(() => this.items().filter((t) => t.status === 'paused'));
-  private static readonly PAUSABLE = ['queued', 'transcoding', 'pending', 'downloading'];
 
-  isPausable(task: DownloadTask): boolean {
-    return DownloadsComponent.PAUSABLE.includes(task.status);
-  }
+  protected readonly isPausable = (task: DownloadTask) => isPausable(task.status);
+  protected readonly isTransferring = (task: DownloadTask) => isTransferring(task.status);
 
   pauseItem(task: DownloadTask) {
     void this.dlManager.pauseDownload(task);
@@ -186,32 +118,6 @@ export class DownloadsComponent implements OnInit, OnDestroy {
   }
   readonly totalBytes = computed(() => this.items().reduce((n, t) => n + (t.sizeBytes ?? 0), 0));
 
-  ngOnInit() {
-    this.load();
-    document.addEventListener('visibilitychange', this.visibilityHandler);
-  }
-
-  ngOnDestroy() {
-    document.removeEventListener('visibilitychange', this.visibilityHandler);
-  }
-
-  async load() {
-    const cached = this.cache.load();
-    this.applyFilter(cached);
-    this.loading.set(false);
-  }
-
-
-
-  private applyFilter(list: DownloadTask[]) {
-    const filtered = list.filter((t) =>
-      ['transcoding', 'pending', 'queued', 'downloading', 'paused', 'failed', 'ready'].includes(
-        t.status,
-      ),
-    );
-    this.baseTasks.set(filtered);
-  }
-
   deleteItem(task: DownloadTask) {
     return this.deleteMany([task], this.translate.instant('downloads.confirm_delete'));
   }
@@ -229,8 +135,6 @@ export class DownloadsComponent implements OnInit, OnDestroy {
     for (const task of tasks) {
       try {
         await this.dlManager.deleteDownload(task);
-        this.cache.removeLocal(task.id);
-        this.baseTasks.update((list) => list.filter((t) => t.id !== task.id));
         this.selectedIds.update((s) => {
           const next = new Set(s);
           next.delete(task.id);
@@ -293,10 +197,8 @@ export class DownloadsComponent implements OnInit, OnDestroy {
     this.retrying.update((s) => new Set(s).add(task.id));
     try {
       await this.dlManager.retryDownload(task);
-      await this.load();
     } catch {
       this.toast.error(this.translate.instant('downloads.failed'));
-      await this.load();
     } finally {
       this.retrying.update((s) => {
         const next = new Set(s);
@@ -315,23 +217,4 @@ export class DownloadsComponent implements OnInit, OnDestroy {
       },
     });
   }
-
-  statusLabel(status: string): string {
-    switch (status) {
-      case 'transcoding':
-      case 'pending':
-        return 'downloads.downloading';
-      case 'downloading':
-        return 'downloads.downloading';
-      case 'queued':
-        return 'downloads.queued';
-      case 'ready':
-        return 'downloads.ready';
-      case 'failed':
-        return 'downloads.failed';
-      default:
-        return '';
-    }
-  }
-
 }

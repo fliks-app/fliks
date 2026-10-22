@@ -3,13 +3,12 @@ import { Router } from '@angular/router';
 import { Subject } from 'rxjs';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import { desktopDownloaderOrNull } from '../plugins/desktop-downloader.bridge';
+import type { NativeDownloadState } from './download-status';
 
-export interface NativeDownloadEvent {
-  type: 'progress' | 'complete' | 'failed' | 'removed';
-  id: string;
-  progress: number;
-  state: string;
-}
+/** `removed` also means cancelled from the notification. */
+export type NativeDownloadEvent =
+  | { type: 'progress'; id: string; progress: number; state: NativeDownloadState }
+  | { type: 'complete' | 'failed' | 'removed'; id: string; progress: number; state?: string };
 
 /** Pre-translated notification copy shown by the native download daemon (iOS),
  *  on the completion banner and on the download's Live Activity. */
@@ -91,7 +90,7 @@ export class DownloadNotificationService {
     if (DownloadNotification) {
       const emit = (type: NativeDownloadEvent['type']) =>
         (data: { id: string; progress: number; state: string }) => {
-          this.nativeEvents.next({ type, id: data.id, progress: data.progress, state: data.state });
+          this.nativeEvents.next({ type, id: data.id, progress: data.progress, state: data.state } as NativeDownloadEvent);
         };
       DownloadNotification.addListener('downloadProgress', emit('progress'));
       DownloadNotification.addListener('downloadComplete', emit('complete'));

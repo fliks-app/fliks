@@ -42,6 +42,16 @@ export class OfflineStorageService {
     return key.replace('download-', '');
   }
 
+  /** Desktop manifest id of a file: its task id, or the media file id for copies saved before tasks were the key. */
+  private async desktopId(key: string): Promise<string> {
+    const mfid = this.mfidFromKey(key);
+    const tasks = this.cache.load().filter((t) => String(t.mediaFileId) === mfid);
+    const task = tasks.find((t) => t.status !== 'failed') ?? tasks[0];
+    if (!task) return mfid;
+    const items = await this.downloader!.list();
+    return items.some((i) => i.id === mfid) ? mfid : String(task.id);
+  }
+
   /** Per (server, user) key for the Shaka offline URI map. */
   private shakaKey(): string {
     return `${SHAKA_OFFLINE_KEY}.${this.cache.scopeSuffix()}`;
@@ -49,7 +59,7 @@ export class OfflineStorageService {
 
   async getLocalUrl(key: string): Promise<string | null> {
     if (this.isDesktop) {
-      return this.downloader!.getLocalUrl(this.mfidFromKey(key));
+      return this.downloader!.getLocalUrl(await this.desktopId(key));
     }
     if (this.isNative) {
       return this.getNativeOfflineUrl(key);
@@ -201,7 +211,8 @@ export class OfflineStorageService {
     try {
       if (this.isDesktop) {
         const items = await this.downloader!.list();
-        return items.find((i) => i.id === String(mfid))?.size ?? null;
+        const id = await this.desktopId(key);
+        return items.find((i) => i.id === id)?.size ?? null;
       }
       if (this.isNative) {
         const task = this.cache
@@ -227,7 +238,7 @@ export class OfflineStorageService {
   }
 
   async delete(key: string): Promise<void> {
-    if (this.isDesktop) return this.downloader!.remove(this.mfidFromKey(key));
+    if (this.isDesktop) return this.downloader!.remove(await this.desktopId(key));
     if (this.isNative) return this.deleteNative(key);
     // Web: remove Shaka offline content
     const mfid = Number(key.replace('download-', ''));
@@ -331,7 +342,7 @@ export class OfflineStorageService {
   }
 
   async has(key: string): Promise<boolean> {
-    if (this.isDesktop) return (await this.downloader!.getLocalUrl(this.mfidFromKey(key))) !== null;
+    if (this.isDesktop) return (await this.downloader!.getLocalUrl(await this.desktopId(key))) !== null;
     if (this.isNative) {
       // Native offline content — resolve via the platform-specific path.
       return (await this.getNativeOfflineUrl(key)) !== null;
