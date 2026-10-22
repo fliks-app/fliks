@@ -151,7 +151,7 @@
             </button>
           } @else {
             <button class="flex flex-col items-center gap-1 text-sm" [attr.aria-label]="'downloads.downloading' | translate" (click)="openDownload.emit()">
-              <div class="radial-progress text-info" [style.--value]="d.progress" style="--size: 1.25rem; --thickness: 2px" role="progressbar" [attr.aria-valuenow]="d.progress"></div>
+              <div class="radial-progress text-info shadow-[inset_0_0_0_2px_color-mix(in_oklab,var(--color-base-content)_15%,transparent)]" [style.--value]="d.progress" style="--size: 1.25rem; --thickness: 2px" role="progressbar" [attr.aria-valuenow]="d.progress"></div>
               {{ d.progress }} %
             </button>
           }
@@ -341,7 +341,7 @@
                 </button>
               } @else {
                 <button type="button" class="btn btn-ghost btn btn-circle" [attr.aria-label]="'downloads.downloading' | translate" [title]="'downloads.downloading' | translate" (click)="openDownload.emit()">
-                  <div class="radial-progress text-info" [style.--value]="d.progress" style="--size: 1.1rem; --thickness: 2px" role="progressbar" [attr.aria-valuenow]="d.progress"></div>
+                  <div class="radial-progress text-info text-[0.6rem] font-semibold shadow-[inset_0_0_0_3px_color-mix(in_oklab,var(--color-base-content)_15%,transparent)]" [style.--value]="d.progress" style="--size: 2rem; --thickness: 3px" role="progressbar" [attr.aria-valuenow]="d.progress">{{ d.progress }}</div>
                 </button>
               }
             } @else {
