@@ -1,15 +1,9 @@
 package media.fliks.app;
 
-import android.app.Notification;
-import android.app.NotificationChannel;
-import android.app.NotificationManager;
 import android.content.Context;
-import android.graphics.Color;
-import android.os.Build;
 import android.util.Log;
 
 import androidx.annotation.OptIn;
-import androidx.core.app.NotificationCompat;
 import com.getcapacitor.JSObject;
 import androidx.media3.common.MimeTypes;
 import androidx.media3.common.util.UnstableApi;
@@ -24,7 +18,6 @@ import androidx.media3.exoplayer.offline.DefaultDownloadIndex;
 import androidx.media3.exoplayer.offline.Download;
 import androidx.media3.exoplayer.offline.DownloadManager;
 import androidx.media3.exoplayer.scheduler.Requirements;
-import androidx.media3.exoplayer.offline.DownloadNotificationHelper;
 import androidx.media3.exoplayer.offline.DownloadRequest;
 import androidx.media3.exoplayer.offline.DownloadService;
 
@@ -60,7 +53,6 @@ public class FlixDownloadUtil {
     private static DatabaseProvider databaseProvider;
     private static DefaultDownloadIndex downloadIndex;
     private static DownloadManager downloadManager;
-    private static DownloadNotificationHelper notificationHelper;
     private static String authToken;
 
     public static synchronized void setAuthToken(String token) {
@@ -140,7 +132,7 @@ public class FlixDownloadUtil {
 
     public static synchronized DownloadManager getDownloadManager(Context ctx) {
         if (downloadManager == null) {
-            ensureChannel(ctx);
+            FlixDownloadNotifications.ensureChannel(ctx);
             downloadManager = new DownloadManager(
                 ctx,
                 getDatabaseProvider(ctx),
@@ -152,6 +144,7 @@ public class FlixDownloadUtil {
             downloadManager.setRequirements(networkRequirements());
             // Emit progress/completion events to WebView — registered once on
             // the singleton so events flow regardless of service lifecycle.
+            Context appContext = ctx.getApplicationContext();
             downloadManager.addListener(new DownloadManager.Listener() {
                 @Override
                 public void onDownloadChanged(DownloadManager manager, Download download, Exception finalException) {
@@ -174,6 +167,12 @@ public class FlixDownloadUtil {
                     } else {
                         DownloadNotificationPlugin.emitEvent("downloadProgress", data);
                     }
+                    FlixDownloadNotifications.onChanged(appContext, manager, download);
+                }
+
+                @Override
+                public void onInitialized(DownloadManager manager) {
+                    FlixDownloadNotifications.refreshPaused(appContext, manager);
                 }
 
                 @Override
@@ -183,18 +182,11 @@ public class FlixDownloadUtil {
                     data.put("state", "removed");
                     data.put("progress", 0);
                     DownloadNotificationPlugin.emitEvent("downloadRemoved", data);
+                    FlixDownloadNotifications.onRemoved(appContext, manager, download);
                 }
             });
         }
         return downloadManager;
-    }
-
-    public static synchronized DownloadNotificationHelper getNotificationHelper(Context ctx) {
-        if (notificationHelper == null) {
-            ensureChannel(ctx);
-            notificationHelper = new DownloadNotificationHelper(ctx, DOWNLOAD_CHANNEL_ID);
-        }
-        return notificationHelper;
     }
 
     /** Build DataSource.Factory with auth header for segment fetches. */
@@ -220,9 +212,10 @@ public class FlixDownloadUtil {
     }
 
     /** Start downloading an HLS stream. */
-    public static void startDownload(Context ctx, String id, String hlsUrl) {
+    public static void startDownload(Context ctx, String id, String hlsUrl, String title) {
         DownloadRequest request = new DownloadRequest.Builder(id, android.net.Uri.parse(hlsUrl))
             .setMimeType(MimeTypes.APPLICATION_M3U8)
+            .setData(title.getBytes(java.nio.charset.StandardCharsets.UTF_8))
             .build();
         DownloadService.sendAddDownload(
             ctx, FlixDownloadService.class, request, /* foreground= */ true
@@ -252,20 +245,5 @@ public class FlixDownloadUtil {
     /** Resume all downloads. */
     public static void resumeDownloads(Context ctx) {
         DownloadService.sendResumeDownloads(ctx, FlixDownloadService.class, /* foreground= */ false);
-    }
-
-    private static void ensureChannel(Context ctx) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            NotificationChannel channel = new NotificationChannel(
-                DOWNLOAD_CHANNEL_ID,
-                "Téléchargements",
-                NotificationManager.IMPORTANCE_LOW
-            );
-            channel.setDescription("Téléchargement de médias pour lecture hors-ligne");
-            channel.enableLights(false);
-            channel.enableVibration(false);
-            NotificationManager nm = ctx.getSystemService(NotificationManager.class);
-            if (nm != null) nm.createNotificationChannel(channel);
-        }
     }
 }

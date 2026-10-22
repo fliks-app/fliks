@@ -147,9 +147,27 @@ export class DownloadManagerService {
     this.updateTaskStatus(taskId, status, progress);
   }
 
+  /** Hands the Android notifications their wording; native persists it, so a restarted service keeps the language. */
+  private syncNotificationCopy() {
+    const t = (key: string, params?: object) => this.translate.instant(`downloads.${key}`, params);
+    this.notif.setNotificationCopy({
+      channelName: t('notif_channel_name'),
+      channelDescription: t('notif_channel_description'),
+      progress: t('notif_progress'),
+      paused: t('notif_paused'),
+      complete: t('notif_complete'),
+      failed: t('notif_failed'),
+      activeCount: t('notif_active_count', { count: '%d' }),
+      timeLeft: t('notif_time_left', { time: '%s' }),
+      pause: t('notif_pause'),
+      resume: t('notif_resume'),
+    });
+  }
+
   /** Refreshes the copy on the iOS Live Activity covering the queue; the wording must come from here (ngx-translate, unreachable from the widget).
    *  An empty queue retires the card, the only reliable moment to clear one stranded by a force-quit. */
   private syncActivityCopy() {
+    this.syncNotificationCopy();
     if (Capacitor.getPlatform() !== 'ios') return;
     const active = this.cache
       .load()
@@ -405,7 +423,8 @@ export class DownloadManagerService {
     } else if (this.isNative) {
       const token =
         this.auth.streamToken() ?? this.auth.accessToken ?? '';
-      // Pre-translated banner copy for the iOS notification (the native side never hardcodes text); ignored on Android.
+      // Pre-translated copy: the native side never hardcodes text.
+      this.syncNotificationCopy();
       const notifTitle = episode ? `${title} · ${episode}` : title;
       this.notif.startDownload(String(taskId), hlsUrl, token, {
         notifTitle,
