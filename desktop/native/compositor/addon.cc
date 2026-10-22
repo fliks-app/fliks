@@ -266,6 +266,8 @@ void RenderThreadMain(GlState* s) {
   // GNOME/Ubuntu key the dock entry on this; default to "fliks" but let an
   // explicit launch-time SDL_VIDEO_X11_WMCLASS win (overwrite=0).
   setenv("SDL_VIDEO_X11_WMCLASS", "fliks", 0);
+  // SDL3-backed SDL2 prefers Wayland, where GNOME draws no window frame; X11 like the Electron side.
+  setenv("SDL_VIDEODRIVER", "x11", 0);
   // Without this SDL swallows the click that refocuses the window, so the first
   // click back into the app lands on nothing and everything needs clicking twice.
   SDL_SetHint(SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "1");
