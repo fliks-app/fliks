@@ -1028,7 +1028,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
           // Pin the quality constraint before load so ExoPlayer can't pick 4K on a phone (A/V desync): `auto`
           // leaves ABR free, `original` pins source dimensions, a specific rung pins its width/height.
-          if (mode !== 'direct') {
+          if (mode !== 'direct' && this.engine instanceof NativeEngine) {
             const savedQualityId = this.activeQualityId();
             if (savedQualityId !== 'auto') {
               let w: number;
@@ -1041,7 +1041,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
                 h = this.qualityManager.availableQualities()
                   .find(q => q.id === savedQualityId)?.height ?? 1080;
               }
-              (this.engine as NativeEngine).selectVariantTrack({ width: w, height: h });
+              this.engine.selectVariantTrack({ width: w, height: h });
             }
           }
           await this.prepareLoad();
