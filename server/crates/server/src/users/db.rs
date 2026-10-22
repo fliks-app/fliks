@@ -139,7 +139,7 @@ pub async fn add_library_access(
     .map(drop)
 }
 
-/// Revoke every live refresh token of the user except `keep` (a `refresh_tokens.id`).
+/// Revoke every live refresh token of the user except the family of `keep` (a `refresh_tokens.id`).
 pub async fn revoke_other_families(
     db: &PgPool,
     user_id: i32,
@@ -147,7 +147,8 @@ pub async fn revoke_other_families(
 ) -> Result<(), sqlx::Error> {
     sqlx::query!(
         r#"UPDATE refresh_tokens SET "revokedAt" = now()
-           WHERE "userId" = $1 AND "revokedAt" IS NULL AND ($2::int IS NULL OR "id" <> $2)"#,
+           WHERE "userId" = $1 AND "revokedAt" IS NULL AND ($2::int IS NULL
+                 OR "familyId" <> (SELECT "familyId" FROM refresh_tokens WHERE id = $2))"#,
         user_id,
         keep
     )

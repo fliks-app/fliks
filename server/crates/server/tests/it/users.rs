@@ -318,14 +318,18 @@ async fn create_defaults_and_conflict(pool: PgPool) {
 async fn password_change_revokes_every_session_and_share_disabled_tears_down(pool: PgPool) {
     let c = ctx(pool).await;
     let (a, ta) = c.user("a", "[]", false).await;
-    for (hash, used) in [("h1", "2026-01-01"), ("h2", "2026-02-01")] {
+    for (family, (hash, used)) in [("h1", "2026-01-01"), ("h2", "2026-02-01")]
+        .into_iter()
+        .enumerate()
+    {
         sqlx::query(
-            r#"INSERT INTO refresh_tokens ("userId", "tokenHash", "expiresAt", "lastUsedAt")
-               VALUES ($1, $2, now() + interval '1 day', $3::timestamptz)"#,
+            r#"INSERT INTO refresh_tokens ("userId", "tokenHash", "expiresAt", "lastUsedAt", "familyId")
+               VALUES ($1, $2, now() + interval '1 day', $3::timestamptz, $4)"#,
         )
         .bind(a)
         .bind(hash)
         .bind(used)
+        .bind(family as i32)
         .execute(&c.pool)
         .await
         .unwrap();

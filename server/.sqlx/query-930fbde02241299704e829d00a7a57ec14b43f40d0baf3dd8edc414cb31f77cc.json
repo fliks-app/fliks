@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH n AS (SELECT nextval(pg_get_serial_sequence('refresh_tokens', 'id'))::int AS id)\n           INSERT INTO refresh_tokens (id, \"familyId\", \"userId\", \"tokenHash\", \"expiresAt\", \"userAgent\")\n           SELECT n.id, COALESCE($1::int, n.id), $2, $3, $4, $5 FROM n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Varchar",
+        "Timestamptz",
+        "Varchar"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "930fbde02241299704e829d00a7a57ec14b43f40d0baf3dd8edc414cb31f77cc"
+}
