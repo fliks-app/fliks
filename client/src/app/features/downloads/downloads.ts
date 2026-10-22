@@ -36,6 +36,8 @@ import { AutoDownloadService } from '../../core/services/auto-download.service';
 import { AutoDownloadRuleComponent } from '../../shared/components/auto-download-rule/auto-download-rule';
 import { groupDownloads } from './downloads-grouping';
 
+const openGroupKeys = signal<ReadonlySet<string>>(new Set());
+
 export interface DisplayDownloadTask extends DownloadTask {
   downloadProgress?: number;
 }
@@ -85,8 +87,8 @@ export class DownloadsComponent implements OnInit, OnDestroy {
 
   protected readonly emptySelection: ReadonlySet<number> = new Set();
   readonly selectMode = signal(false);
-  /** Groups toggled away from their default (shows closed, a lone season open). */
-  protected readonly openKeys = signal<ReadonlySet<string>>(new Set());
+  /** Groups toggled away from their default (shows closed, a lone season open); app-wide so a trip to the player keeps them. */
+  protected readonly openKeys = openGroupKeys;
 
   protected toggleOpen(key: string): void {
     this.openKeys.update((keys) => {
