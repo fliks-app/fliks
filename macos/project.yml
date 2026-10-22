@@ -6,6 +6,11 @@ options:
   xcodeVersion: "16.0"
   generateEmptyDirectories: true
 
+packages:
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    exactVersion: 2.10.0
+
 settings:
   base:
     SWIFT_VERSION: "5.10"
@@ -22,6 +27,8 @@ targets:
         excludes:
           - "*.entitlements"
           - Info.plist
+    dependencies:
+      - package: Sparkle
     settings:
       base:
         # The .app bundle, executable, and Activity Monitor process name all

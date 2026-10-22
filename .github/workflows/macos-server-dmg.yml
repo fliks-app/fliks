@@ -156,6 +156,36 @@ jobs:
           xcrun stapler staple "$dmg"
           xcrun stapler validate "$dmg"
 
+      # ── Sparkle appcast ──
+      # The app reads it from releases/latest, so it always points at the newest DMG.
+      - name: Write Sparkle appcast
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+          VERSION: ${{ steps.version.outputs.version }}
+          RELEASE_URL: https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}
+          RELEASE_PAGE: https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}
+        run: |
+          dmg="$(find macos/build -name 'Fliks-*.dmg' | head -1)"
+          sign_update=macos/build/SourcePackages/artifacts/sparkle/Sparkle/bin/sign_update
+          sig="$(echo "$SPARKLE_PRIVATE_KEY" | "$sign_update" --ed-key-file - "$dmg")"
+          cat > macos/build/appcast-server-macos.xml <<EOF
+          <?xml version="1.0" encoding="utf-8"?>
+          <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+            <channel>
+              <title>Fliks Server</title>
+              <item>
+                <title>Fliks Server $VERSION</title>
+                <link>$RELEASE_PAGE</link>
+                <sparkle:version>$VERSION</sparkle:version>
+                <sparkle:shortVersionString>$VERSION</sparkle:shortVersionString>
+                <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+                <enclosure url="$RELEASE_URL/$(basename "$dmg")" $sig type="application/octet-stream"/>
+              </item>
+            </channel>
+          </rss>
+          EOF
+
       # ── Upload DMG as artifact (always) ──
       - name: Upload DMG artifact
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
@@ -179,5 +209,5 @@ jobs:
         # contents: write — attaching a file never needed it.
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload "${{ github.ref_name }}" macos/build/Fliks-*.dmg --clobber
+        run: gh release upload "${{ github.ref_name }}" macos/build/Fliks-*.dmg macos/build/appcast-server-macos.xml --clobber
         working-directory: ${{ github.workspace }}

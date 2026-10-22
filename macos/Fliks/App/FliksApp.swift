@@ -1,3 +1,4 @@
+import Sparkle
 import SwiftUI
 
 @main
@@ -6,7 +7,7 @@ struct FliksApp: App {
 
     var body: some Scene {
         MenuBarExtra {
-            MenuBarView(appState: appDelegate.appState)
+            MenuBarView(appState: appDelegate.appState, updater: appDelegate.updater.updater)
         } label: {
             MenuBarLabel(appState: appDelegate.appState)
         }
@@ -17,6 +18,7 @@ struct FliksApp: App {
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let appState = AppState()
+    let updater = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
 
     /// Menu, Cmd-Q, logout and an updater's terminate all land here. The server and
     /// Postgres outlive the app if it exits first, so it only exits once they
