@@ -1,87 +1,93 @@
 <ng-template #taskRow let-task let-poster="poster">
-  <div class="card card-side bg-base-100 shadow-sm border border-base-200 p-3 gap-3 items-center">
-    @if (selectMode()) {
-      <input
-        type="checkbox"
-        class="checkbox checkbox-primary checkbox-sm shrink-0"
-        [checked]="selectedIds().has(task.id)"
-        [attr.aria-label]="task.episodeLabel ?? task.media?.title"
-        (change)="toggleSelected(task.id)"
-      />
-    }
-    @if (poster) {
-      <div class="w-16 h-24 shrink-0 rounded overflow-hidden bg-base-300">
-        @if (task.media?.posterUrl) {
-          <img [cachedSrc]="task.media!.posterUrl | resolveUrl:'thumb'" [alt]="task.media!.title" class="w-full h-full object-cover" />
+  <div class="card bg-base-100 shadow-sm border border-base-200 p-3">
+    <div class="flex gap-3 items-center">
+      @if (selectMode()) {
+        <input
+          type="checkbox"
+          class="checkbox checkbox-primary checkbox-sm shrink-0"
+          [checked]="selectedIds().has(task.id)"
+          [attr.aria-label]="task.episodeLabel ?? task.media?.title"
+          (change)="toggleSelected(task.id)"
+        />
+      }
+      @if (poster) {
+        <div class="w-16 h-24 shrink-0 rounded overflow-hidden bg-base-300">
+          @if (task.media?.posterUrl) {
+            <img [cachedSrc]="task.media!.posterUrl | resolveUrl:'thumb'" [alt]="task.media!.title" class="w-full h-full object-cover" />
+          }
+        </div>
+      }
+
+      <div class="flex-1 min-w-0">
+        @if (poster || !task.episodeLabel) {
+          <a class="block font-medium text-base truncate hover:underline" [routerLink]="detailRoute(task)">{{ task.media?.title ?? '-' }}</a>
+        }
+        @if (task.episodeLabel) {
+          <a class="block truncate hover:underline {{ poster ? 'text-sm text-base-content/60' : 'font-medium text-base' }}"
+             [routerLink]="detailRoute(task)">{{ task.episodeLabel }}</a>
+        }
+        <p class="text-sm text-base-content/50 mt-0.5">
+          {{ task.quality }}@if (task.sizeBytes) { · {{ formatBytes(task.sizeBytes) }} }
+        </p>
+        @if (task.status === 'failed') {
+          <div class="flex items-center gap-1 mt-1 text-error text-sm">
+            <svg lucideAlertCircle class="h-4 w-4"></svg>
+            {{ 'downloads.failed' | translate }}
+          </div>
+        } @else if (task.status === 'ready') {
+          <span class="badge badge-sm badge-success mt-1">{{ 'downloads.ready' | translate }}</span>
         }
       </div>
-    }
 
-    <div class="flex-1 min-w-0">
-      @if (poster || !task.episodeLabel) {
-        <a class="block font-medium text-base line-clamp-1 hover:underline" [routerLink]="detailRoute(task)">{{ task.media?.title ?? '-' }}</a>
-      }
-      @if (task.episodeLabel) {
-        <a class="block line-clamp-1 hover:underline" [class]="poster ? 'text-sm text-base-content/60' : 'font-medium text-base'"
-           [routerLink]="detailRoute(task)">{{ task.episodeLabel }}</a>
-      }
-      <p class="text-sm text-base-content/50 mt-0.5">
-        {{ task.quality }}@if (task.sizeBytes) { · {{ formatBytes(task.sizeBytes) }} }
-      </p>
-
-      @if (task.status === 'queued') {
-        <progress class="progress progress-info w-full h-1.5 mt-2"></progress>
-        <p class="text-sm text-base-content/50 mt-1">{{ 'downloads.queued' | translate }}</p>
-      } @else if (task.status === 'paused') {
-        <progress class="progress w-full h-1.5 mt-2" [value]="task.progress" max="100"></progress>
-        <p class="text-sm text-base-content/50 mt-1">{{ 'downloads.paused' | translate }} {{ task.progress }}%</p>
-      } @else if (task.status === 'transcoding' || task.status === 'pending' || task.status === 'downloading') {
-        <progress class="progress progress-info w-full h-1.5 mt-2" [value]="task.progress" max="100"></progress>
-        <p class="text-sm text-base-content/50 mt-1">{{ 'downloads.downloading' | translate }} {{ task.progress }}%</p>
-      } @else if (task.status === 'failed') {
-        <div class="flex items-center gap-1 mt-1 text-error text-sm">
-          <svg lucideAlertCircle class="h-4 w-4"></svg>
-          {{ 'downloads.failed' | translate }}
+      @if (!selectMode()) {
+        <div class="flex items-center gap-1 shrink-0">
+          @if (task.status === 'ready') {
+            <button class="btn btn-ghost btn-sm btn-square" (click)="playOffline(task)">
+              <svg lucidePlay class="h-4 w-4"></svg>
+            </button>
+          } @else if (task.status === 'paused') {
+            <button class="btn btn-ghost btn-sm btn-square" [attr.aria-label]="'downloads.resume' | translate" (click)="resumeItem(task)">
+              <svg lucidePlay class="h-4 w-4"></svg>
+            </button>
+          } @else if (isPausable(task)) {
+            <button class="btn btn-ghost btn-sm btn-square" [attr.aria-label]="'downloads.pause' | translate" (click)="pauseItem(task)">
+              <svg lucidePause class="h-4 w-4"></svg>
+            </button>
+          }
+          @if (task.status === 'failed') {
+            <button
+              class="btn btn-ghost btn-sm btn-square"
+              [disabled]="retrying().has(task.id)"
+              [attr.aria-label]="'downloads.retry' | translate"
+              [title]="'downloads.retry' | translate"
+              (click)="retryItem(task)"
+            >
+              @if (retrying().has(task.id)) {
+                <span class="loading loading-spinner loading-xs"></span>
+              } @else {
+                <svg lucideRotateCcw class="h-4 w-4"></svg>
+              }
+            </button>
+          }
+          <button class="btn btn-ghost btn-sm btn-square text-error" (click)="deleteItem(task)">
+            <svg lucideTrash2 class="h-4 w-4"></svg>
+          </button>
         </div>
-      } @else if (task.status === 'ready') {
-        <span class="badge badge-sm badge-success mt-1">{{ 'downloads.ready' | translate }}</span>
       }
     </div>
-
-    @if (!selectMode()) {
-      <div class="flex items-center gap-1 shrink-0">
-        @if (task.status === 'ready') {
-          <button class="btn btn-ghost btn-sm btn-square" (click)="playOffline(task)">
-            <svg lucidePlay class="h-4 w-4"></svg>
-          </button>
-        } @else if (task.status === 'paused') {
-          <button class="btn btn-ghost btn-sm btn-square" [attr.aria-label]="'downloads.resume' | translate" (click)="resumeItem(task)">
-            <svg lucidePlay class="h-4 w-4"></svg>
-          </button>
-        } @else if (isPausable(task)) {
-          <button class="btn btn-ghost btn-sm btn-square" [attr.aria-label]="'downloads.pause' | translate" (click)="pauseItem(task)">
-            <svg lucidePause class="h-4 w-4"></svg>
-          </button>
-        }
-        @if (task.status === 'failed') {
-          <button
-            class="btn btn-ghost btn-sm btn-square"
-            [disabled]="retrying().has(task.id)"
-            [attr.aria-label]="'downloads.retry' | translate"
-            [title]="'downloads.retry' | translate"
-            (click)="retryItem(task)"
-          >
-            @if (retrying().has(task.id)) {
-              <span class="loading loading-spinner loading-xs"></span>
-            } @else {
-              <svg lucideRotateCcw class="h-4 w-4"></svg>
-            }
-          </button>
-        }
-        <button class="btn btn-ghost btn-sm btn-square text-error" (click)="deleteItem(task)">
-          <svg lucideTrash2 class="h-4 w-4"></svg>
-        </button>
-      </div>
+    @if (task.status === 'queued') {
+      <progress class="progress progress-info w-full h-1.5 mt-2"></progress>
+      <p class="text-sm text-base-content/50 mt-1">{{ 'downloads.queued' | translate }}</p>
+    } @else if (task.status === 'paused') {
+      <progress class="progress w-full h-1.5 mt-2" [value]="task.progress" max="100"></progress>
+      <p class="flex justify-between gap-2 text-sm text-base-content/50 mt-1">
+        <span>{{ 'downloads.paused' | translate }}</span><span class="tabular-nums">{{ task.progress }}%</span>
+      </p>
+    } @else if (task.status === 'transcoding' || task.status === 'pending' || task.status === 'downloading') {
+      <progress class="progress progress-info w-full h-1.5 mt-2" [value]="task.progress" max="100"></progress>
+      <p class="flex justify-between gap-2 text-sm text-base-content/50 mt-1">
+        <span class="truncate">{{ 'downloads.downloading' | translate }}</span><span class="tabular-nums">{{ task.progress }}%</span>
+      </p>
     }
   </div>
 </ng-template>
