@@ -1,8 +1,10 @@
+import Sparkle
 import SwiftUI
 
 /// SwiftUI content rendered inside the MenuBarExtra popover.
 struct MenuBarView: View {
     @ObservedObject var appState: AppState
+    let updater: SPUUpdater
 
     var body: some View {
         // Status header
@@ -47,6 +49,10 @@ struct MenuBarView: View {
 
         Button("View Logs...") {
             openLogs()
+        }
+
+        Button("Check for Updates...") {
+            updater.checkForUpdates()
         }
 
         Divider()

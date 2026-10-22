@@ -212,6 +212,18 @@ find "$RESOURCES" -type f -print0 \
     | xargs -0 -n1 -P "$(sysctl -n hw.ncpu)" bash -c \
         'if file -b "$1" 2>/dev/null | grep -qE "Mach-O.*(executable|shared library|bundle)"; then sign "$1"; fi' _
 
+# Sparkle's helpers keep their own entitlements, innermost first.
+SPARKLE="$APP_BUNDLE/Contents/Frameworks/Sparkle.framework"
+for part in Versions/B/XPCServices/Installer.xpc Versions/B/XPCServices/Downloader.xpc \
+    Versions/B/Autoupdate Versions/B/Updater.app ""; do
+    if [ "$SIGN_ID" = "-" ]; then
+        codesign --force --preserve-metadata=entitlements --sign - "$SPARKLE/$part"
+    else
+        codesign --force --options runtime --timestamp --preserve-metadata=entitlements \
+            --sign "$SIGN_ID" "$SPARKLE/$part"
+    fi
+done
+
 # Outer app bundle last (seals the signed contents).
 sign "$APP_BUNDLE"
 echo "    [done]"

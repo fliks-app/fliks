@@ -20,7 +20,7 @@
 	<string>5.0.0</string> <!-- x-release-please-version -->
 
 	<key>CFBundleVersion</key>
-	<string>1</string>
+	<string>5.0.0</string> <!-- x-release-please-version -->
 	<key>LSMinimumSystemVersion</key>
 	<string>13.0</string>
 	<key>CFBundleIconFile</key>
@@ -30,6 +30,12 @@
 	<key>TVDB_API_KEY</key>
 	<string>$(TVDB_API_KEY)</string>
 	<key>LSUIElement</key>
+	<true/>
+	<key>SUFeedURL</key>
+	<string>https://github.com/fliks-app/fliks/releases/latest/download/appcast-server-macos.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>c03betYlTAoF5XZyPB+cEn0DHL2JI8zW5UFA8NUG76Y=</string>
+	<key>SUEnableAutomaticChecks</key>
 	<true/>
 </dict>
 </plist>
