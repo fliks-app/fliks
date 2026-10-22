@@ -41,6 +41,8 @@ export interface DownloadTarget {
   mediaFileId?: number;
   title: string;
   episodeLabel?: string;
+  seasonNumber?: number;
+  episodeNumber?: number;
   posterUrl: string | null;
   type: string;
 }
@@ -249,6 +251,8 @@ export class DownloadManagerService {
           posterUrl: t.posterUrl,
           type: t.type,
           episodeId: t.episodeId,
+          seasonNumber: t.seasonNumber,
+          episodeNumber: t.episodeNumber,
           auto: opts?.auto,
         });
         started++;
@@ -288,6 +292,8 @@ export class DownloadManagerService {
       posterUrl?: string | null;
       type?: string;
       episodeId?: number;
+      seasonNumber?: number;
+      episodeNumber?: number;
       /** Set by the auto-download reconciler; enables auto-delete-after-watched. */
       auto?: boolean;
     },
@@ -297,6 +303,8 @@ export class DownloadManagerService {
       id: taskId,
       mediaId: meta?.mediaId ?? 0,
       episodeId: meta?.episodeId,
+      seasonNumber: meta?.seasonNumber,
+      episodeNumber: meta?.episodeNumber,
       mediaFileId,
       quality,
       status: 'transcoding',
@@ -396,6 +404,8 @@ export class DownloadManagerService {
         posterUrl: task.media?.posterUrl ?? null,
         type: task.media?.type,
         episodeId: task.episodeId,
+        seasonNumber: task.seasonNumber,
+        episodeNumber: task.episodeNumber,
         auto: task.auto,
       },
     );

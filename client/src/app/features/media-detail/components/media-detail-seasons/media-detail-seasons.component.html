@@ -30,6 +30,19 @@
         </button>
       </div>
     }
+    @if (canSelect()) {
+      <button
+        type="button"
+        class="order-last btn btn-sm shrink-0"
+        [class.btn-active]="selectMode()"
+        [class.ms-auto]="!canSwitchEpisodeView()"
+        [attr.aria-pressed]="selectMode()"
+        (click)="toggleSelectMode()"
+      >
+        <svg lucideListChecks class="h-4 w-4"></svg>
+        {{ 'downloads.select' | translate }}
+      </button>
+    }
     @if (selSeason) {
       <button
         type="button"
@@ -259,7 +272,24 @@
       <ul class="divide-y divide-base-content/10 border-t border-base-content/10">
         @for (ep of filteredEpisodes(); track ep.id) {
           <!-- Two columns; only the synopsis span changes (under the image on phone, beside it from sm), so one copy of the text. -->
-          <li appTvRow class="grid grid-cols-[auto_1fr] gap-x-3 sm:gap-x-4 gap-y-1.5 py-3">
+          <li appTvRow class="relative grid grid-cols-[auto_1fr] gap-x-3 sm:gap-x-4 gap-y-1.5 py-3">
+              @if (selectMode()) {
+                <button
+                  type="button"
+                  class="absolute inset-0 z-20"
+                  [class.cursor-pointer]="ep.hasFile"
+                  [disabled]="!ep.hasFile"
+                  [attr.aria-label]="episodeTitle(ep)"
+                  (click)="toggleSelected(ep)"
+                ></button>
+                <input
+                  type="checkbox"
+                  class="checkbox checkbox-primary checkbox-sm absolute top-5 left-2 z-30 pointer-events-none"
+                  [checked]="selectedEpisodeIds().has(ep.id)"
+                  [disabled]="!ep.hasFile"
+                  tabindex="-1"
+                />
+              }
               <!-- app-media-card with its caption dropped: badge, progress, play and watched toggle come from the one implementation. -->
               <app-media-card #stillCard [aspect]="'landscape'"
                 class="sm:row-span-2"
@@ -332,6 +362,19 @@
           </li>
         }
       </ul>
+      @if (selectMode()) {
+        <div class="sticky bottom-0 z-30 bg-base-200 border-t border-base-300 px-4 py-3 flex flex-wrap items-center gap-3 shadow-lg rounded-t-lg">
+          <span class="font-semibold text-sm">{{ 'bulk.selected' | translate:{ count: selectedEpisodeIds().size } }}</span>
+          <button type="button" class="btn btn-xs btn-ghost" (click)="selectAllEpisodes()">{{ 'library.bulk_select_all' | translate }}</button>
+          <button type="button" class="btn btn-xs btn-ghost" (click)="selectedEpisodeIds.set(emptySelection)">{{ 'library.bulk_deselect' | translate }}</button>
+          <span class="flex-1"></span>
+          <button type="button" class="btn btn-sm btn-primary" [disabled]="selectedEpisodeIds().size === 0" (click)="downloadSelectedEpisodes()">
+            <svg lucideDownload class="h-4 w-4"></svg>
+            {{ 'downloads.download' | translate }}
+          </button>
+          <button type="button" class="btn btn-sm btn-ghost" (click)="toggleSelectMode()">{{ 'library.bulk_cancel' | translate }}</button>
+        </div>
+      }
     } @else if (filteredEpisodes().length > 0) {
       <!-- Same top rule and inset as the list so toggling views doesn't shift the block; only where the toggle exists. -->
       <ng-template #episodeRow>

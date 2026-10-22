@@ -1,5 +1,110 @@
+<ng-template #taskRow let-task let-poster="poster">
+  <div class="card card-side bg-base-100 shadow-sm border border-base-200 p-3 gap-3 items-center">
+    @if (selectMode()) {
+      <input
+        type="checkbox"
+        class="checkbox checkbox-primary checkbox-sm shrink-0"
+        [checked]="selectedIds().has(task.id)"
+        [attr.aria-label]="task.episodeLabel ?? task.media?.title"
+        (change)="toggleSelected(task.id)"
+      />
+    }
+    @if (poster) {
+      <div class="w-16 h-24 shrink-0 rounded overflow-hidden bg-base-300">
+        @if (task.media?.posterUrl) {
+          <img [cachedSrc]="task.media!.posterUrl | resolveUrl:'thumb'" [alt]="task.media!.title" class="w-full h-full object-cover" />
+        }
+      </div>
+    }
+
+    <div class="flex-1 min-w-0">
+      @if (poster || !task.episodeLabel) {
+        <h3 class="font-medium text-sm line-clamp-1">{{ task.media?.title ?? '-' }}</h3>
+      }
+      @if (task.episodeLabel) {
+        <p class="text-xs line-clamp-1" [class]="poster ? 'text-base-content/60' : 'font-medium text-sm'">{{ task.episodeLabel }}</p>
+      }
+      <p class="text-xs text-base-content/50 mt-0.5">
+        {{ task.quality }}@if (task.sizeBytes) { · {{ formatBytes(task.sizeBytes) }} }
+      </p>
+
+      @if (task.status === 'queued') {
+        <progress class="progress progress-info w-full h-1.5 mt-2"></progress>
+        <p class="text-[10px] text-base-content/40 mt-0.5">{{ 'downloads.queued' | translate }}</p>
+      } @else if (task.status === 'transcoding' || task.status === 'pending' || task.status === 'downloading') {
+        <progress class="progress progress-info w-full h-1.5 mt-2" [value]="task.progress" max="100"></progress>
+        <p class="text-[10px] text-base-content/40 mt-0.5">{{ 'downloads.downloading' | translate }} {{ task.progress }}%</p>
+      } @else if (task.status === 'failed') {
+        <div class="flex items-center gap-1 mt-1 text-error text-xs">
+          <svg lucideAlertCircle class="h-3 w-3"></svg>
+          {{ 'downloads.failed' | translate }}
+        </div>
+      } @else if (task.status === 'ready') {
+        <span class="badge badge-sm badge-success mt-1">{{ 'downloads.ready' | translate }}</span>
+      }
+    </div>
+
+    @if (!selectMode()) {
+      <div class="flex items-center gap-1 shrink-0">
+        @if (task.status === 'ready') {
+          <button class="btn btn-ghost btn-sm btn-square" (click)="playOffline(task)">
+            <svg lucidePlay class="h-4 w-4"></svg>
+          </button>
+        }
+        @if (task.status === 'failed') {
+          <button
+            class="btn btn-ghost btn-sm btn-square"
+            [disabled]="retrying().has(task.id)"
+            [attr.aria-label]="'downloads.retry' | translate"
+            [title]="'downloads.retry' | translate"
+            (click)="retryItem(task)"
+          >
+            @if (retrying().has(task.id)) {
+              <span class="loading loading-spinner loading-xs"></span>
+            } @else {
+              <svg lucideRotateCcw class="h-4 w-4"></svg>
+            }
+          </button>
+        }
+        <button class="btn btn-ghost btn-sm btn-square text-error" (click)="deleteItem(task)">
+          <svg lucideTrash2 class="h-4 w-4"></svg>
+        </button>
+      </div>
+    }
+  </div>
+</ng-template>
+
 <div class="flex flex-col gap-4">
-  <h1 class="page-title">{{ 'downloads.title' | translate }}</h1>
+  <div class="flex items-center gap-2 flex-wrap">
+    <h1 class="page-title">{{ 'downloads.title' | translate }}</h1>
+    @if (totalBytes() > 0) {
+      <span class="text-sm text-base-content/60">{{ 'downloads.total_used' | translate:{ size: formatBytes(totalBytes()) } }}</span>
+    }
+    @if (hasActive()) {
+      <button type="button" class="btn btn-sm ms-auto" (click)="native.paused() ? native.resumeAll() : native.pauseAll()">
+        @if (native.paused()) {
+          <svg lucidePlay class="h-4 w-4"></svg>
+          {{ 'downloads.resume_all' | translate }}
+        } @else {
+          <svg lucidePause class="h-4 w-4"></svg>
+          {{ 'downloads.pause_all' | translate }}
+        }
+      </button>
+    }
+    @if (items().length > 0) {
+      <button
+        type="button"
+        class="btn btn-sm"
+        [class.ms-auto]="!hasActive()"
+        [class.btn-active]="selectMode()"
+        [attr.aria-pressed]="selectMode()"
+        (click)="toggleSelectMode()"
+      >
+        <svg lucideListChecks class="h-4 w-4"></svg>
+        {{ 'downloads.select' | translate }}
+      </button>
+    }
+  </div>
 
   @if (loading()) {
     <div class="flex justify-center py-12">
@@ -12,70 +117,98 @@
       <p class="text-sm mt-2">{{ 'downloads.empty_hint' | translate }}</p>
     </div>
   } @else {
+    @if (selectMode()) {
+      <div class="flex items-center gap-2 text-sm">
+        <button class="btn btn-xs btn-ghost" (click)="selectAll()">{{ 'library.bulk_select_all' | translate }}</button>
+        <button class="btn btn-xs btn-ghost" (click)="selectedIds.set(emptySelection)">{{ 'library.bulk_deselect' | translate }}</button>
+      </div>
+    }
     <div class="flex flex-col gap-3">
-      @for (task of items(); track task.id) {
-        <div class="card card-side bg-base-100 shadow-sm border border-base-200 p-3 gap-3 items-center">
-          <!-- Poster -->
-          <div class="w-16 h-24 shrink-0 rounded overflow-hidden bg-base-300">
-            @if (task.media?.posterUrl) {
-              <img [cachedSrc]="task.media!.posterUrl | resolveUrl:'thumb'" [alt]="task.media!.title" class="w-full h-full object-cover" />
-            }
-          </div>
-
-          <!-- Info -->
-          <div class="flex-1 min-w-0">
-            <h3 class="font-medium text-sm line-clamp-1">{{ task.media?.title ?? '-' }}</h3>
-            @if (task.episodeLabel) {
-              <p class="text-xs text-base-content/60 line-clamp-1">{{ task.episodeLabel }}</p>
-            }
-            <p class="text-xs text-base-content/50 mt-0.5">
-              {{ task.quality }}@if (task.sizeBytes) { · {{ formatBytes(task.sizeBytes) }} }
-            </p>
-
-            @if (task.status === 'queued') {
-              <progress class="progress progress-info w-full h-1.5 mt-2"></progress>
-              <p class="text-[10px] text-base-content/40 mt-0.5">{{ 'downloads.queued' | translate }}</p>
-            } @else if (task.status === 'transcoding' || task.status === 'pending' || task.status === 'downloading') {
-              <progress class="progress progress-info w-full h-1.5 mt-2" [value]="task.progress" max="100"></progress>
-              <p class="text-[10px] text-base-content/40 mt-0.5">{{ 'downloads.downloading' | translate }} {{ task.progress }}%</p>
-            } @else if (task.status === 'failed') {
-              <div class="flex items-center gap-1 mt-1 text-error text-xs">
-                <svg lucideAlertCircle class="h-3 w-3"></svg>
-                {{ 'downloads.failed' | translate }}
-              </div>
-            } @else if (task.status === 'ready') {
-              <span class="badge badge-sm badge-success mt-1">{{ 'downloads.ready' | translate }}</span>
-            }
-          </div>
-
-          <!-- Actions -->
-          <div class="flex items-center gap-1 shrink-0">
-            @if (task.status === 'ready') {
-              <button class="btn btn-ghost btn-sm btn-square" (click)="playOffline(task)">
-                <svg lucidePlay class="h-4 w-4"></svg>
-              </button>
-            }
-            @if (task.status === 'failed') {
-              <button
-                class="btn btn-ghost btn-sm btn-square"
-                [disabled]="retrying().has(task.id)"
-                [attr.aria-label]="'downloads.retry' | translate"
-                [title]="'downloads.retry' | translate"
-                (click)="retryItem(task)"
-              >
-                @if (retrying().has(task.id)) {
-                  <span class="loading loading-spinner loading-xs"></span>
-                } @else {
-                  <svg lucideRotateCcw class="h-4 w-4"></svg>
+      @for (entry of entries(); track entry.kind === 'movie' ? 'm' + entry.task.id : 's' + entry.show.mediaId) {
+        @if (entry.kind === 'movie') {
+          <ng-container *ngTemplateOutlet="taskRow; context: { $implicit: entry.task, poster: true }" />
+        } @else {
+          @let show = entry.show;
+          <details class="group card bg-base-100 shadow-sm border border-base-200" [open]="selectMode()">
+            <summary class="flex items-center gap-3 p-3 cursor-pointer list-none">
+              <div class="w-16 h-24 shrink-0 rounded overflow-hidden bg-base-300">
+                @if (show.posterUrl) {
+                  <img [cachedSrc]="show.posterUrl | resolveUrl:'thumb'" [alt]="show.title" class="w-full h-full object-cover" />
                 }
-              </button>
-            }
-            <button class="btn btn-ghost btn-sm btn-square text-error" (click)="deleteItem(task)">
-              <svg lucideTrash2 class="h-4 w-4"></svg>
-            </button>
-          </div>
-        </div>
+              </div>
+              <div class="flex-1 min-w-0">
+                <h3 class="font-medium text-sm line-clamp-1">{{ show.title }}</h3>
+                <p class="text-xs text-base-content/50 mt-0.5">
+                  {{ (show.tasks.length === 1 ? 'media_detail.episode_count_one' : 'media_detail.episode_count_other') | translate:{ count: show.tasks.length } }}@if (show.sizeBytes) { · {{ formatBytes(show.sizeBytes) }} }
+                </p>
+              </div>
+              @if (!selectMode()) {
+                <button
+                  class="btn btn-ghost btn-sm btn-square text-error"
+                  [attr.aria-label]="'downloads.delete_all' | translate"
+                  [title]="'downloads.delete_all' | translate"
+                  (click)="$event.preventDefault(); deleteGroup(show.tasks, show.title)"
+                >
+                  <svg lucideTrash2 class="h-4 w-4"></svg>
+                </button>
+              }
+              <svg lucideChevronRight class="h-4 w-4 shrink-0 transition-transform group-open:rotate-90"></svg>
+            </summary>
+            <div class="flex flex-col gap-2 px-3 pb-3">
+              @for (season of show.seasons; track season.seasonNumber) {
+                <details class="group/season" [open]="selectMode() || show.seasons.length === 1">
+                  <summary class="flex items-center gap-2 py-2 cursor-pointer list-none">
+                    <svg lucideChevronRight class="h-3 w-3 shrink-0 transition-transform group-open/season:rotate-90"></svg>
+                    <span class="flex-1 min-w-0 text-sm font-medium">
+                      @if (season.seasonNumber === null) {
+                        {{ 'downloads.other_episodes' | translate }}
+                      } @else {
+                        {{ season.seasonNumber | seasonLabel }}
+                      }
+                      <span class="text-xs font-normal text-base-content/50">
+                        · {{ (season.tasks.length === 1 ? 'media_detail.episode_count_one' : 'media_detail.episode_count_other') | translate:{ count: season.tasks.length } }}@if (season.sizeBytes) { · {{ formatBytes(season.sizeBytes) }} }
+                      </span>
+                    </span>
+                    @if (!selectMode()) {
+                      <button
+                        class="btn btn-ghost btn-xs btn-square text-error"
+                        [attr.aria-label]="'downloads.delete_all' | translate"
+                        [title]="'downloads.delete_all' | translate"
+                        (click)="$event.preventDefault(); deleteGroup(season.tasks, seasonName(show.title, season.seasonNumber))"
+                      >
+                        <svg lucideTrash2 class="h-3.5 w-3.5"></svg>
+                      </button>
+                    }
+                  </summary>
+                  <div class="flex flex-col gap-2">
+                    @for (task of season.tasks; track task.id) {
+                      <ng-container *ngTemplateOutlet="taskRow; context: { $implicit: task, poster: false }" />
+                    }
+                  </div>
+                </details>
+              }
+            </div>
+          </details>
+        }
       }
     </div>
+
+    @if (selectMode() && selectedIds().size > 0) {
+      <div class="sticky bottom-0 z-20 bg-base-200 border-t border-base-300 px-4 py-3 flex flex-wrap items-center gap-3 shadow-lg rounded-t-lg">
+        <span class="font-semibold text-sm">{{ 'bulk.selected' | translate:{ count: selectedIds().size } }}</span>
+        <span class="flex-1"></span>
+        @if (selectedFailed().length > 0) {
+          <button class="btn btn-sm" (click)="retrySelected()">
+            <svg lucideRotateCcw class="h-4 w-4"></svg>
+            {{ 'downloads.retry' | translate }}
+          </button>
+        }
+        <button class="btn btn-sm btn-error" (click)="deleteSelected()">
+          <svg lucideTrash2 class="h-4 w-4"></svg>
+          {{ 'downloads.delete' | translate }}
+        </button>
+        <button class="btn btn-sm btn-ghost" (click)="toggleSelectMode()">{{ 'library.bulk_cancel' | translate }}</button>
+      </div>
+    }
   }
 </div>

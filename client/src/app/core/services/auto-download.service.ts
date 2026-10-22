@@ -20,6 +20,8 @@ interface AutoTarget {
   episodeId?: number;
   title: string;
   episodeLabel?: string;
+  seasonNumber?: number;
+  episodeNumber?: number;
   posterUrl: string | null;
   type: string;
   watched: boolean;
@@ -154,6 +156,8 @@ export class AutoDownloadService {
       episodeId: ep?.id,
       title: item.media.title,
       episodeLabel: label,
+      seasonNumber: ep?.season?.seasonNumber,
+      episodeNumber: ep?.episodeNumber,
       posterUrl: item.media.posterUrl,
       type: item.media.type,
       watched: item.watched,

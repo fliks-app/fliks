@@ -1854,7 +1854,15 @@
     "notif_progress": "Download in corso",
     "notif_stale": "Avanzamento non disponibile",
     "notif_complete": "Download completato",
-    "notif_failed": "Download fallito"
+    "notif_failed": "Download fallito",
+    "select": "Seleziona",
+    "total_used": "{{size}} usati",
+    "delete_all": "Elimina tutto",
+    "other_episodes": "Altri episodi",
+    "confirm_delete_many": "Eliminare {{count}} download? I file verranno rimossi da questo dispositivo.",
+    "confirm_delete_group": "Eliminare {{count}} download di {{name}}? I file verranno rimossi da questo dispositivo.",
+    "pause_all": "Metti tutto in pausa",
+    "resume_all": "Riprendi tutto"
   },
   "setup_checklist": {
     "title": "Configurazione",
