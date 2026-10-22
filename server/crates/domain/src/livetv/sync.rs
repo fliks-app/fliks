@@ -336,7 +336,7 @@ mod tests {
         assert!(p.is_match("World NEWS").unwrap());
         assert!(!p.is_match("Adult news").unwrap());
         assert!(GroupPattern::compile("(").is_err());
-        let catastrophic = GroupPattern::compile(r"^(a+)+\1$").unwrap();
+        let catastrophic = GroupPattern::compile(r"^(a|aa)+\1$").unwrap();
         assert!(
             catastrophic
                 .is_match(&format!("{}b", "a".repeat(40)))

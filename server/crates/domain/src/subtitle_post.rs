@@ -56,7 +56,7 @@ pub fn common_fixes(content: &str, language: Option<&str>) -> String {
     let s = rx!(r"  +").replace_all(content, " ");
     let s = s.replace(". .", "..").replace("....", "...");
     let s = before.replace_all(&s, "$1");
-    let s = REPEAT.replace_all(&s, |c: &fancy_regex::Captures| c[1].repeat(3));
+    let s = REPEAT.replace_all(&s, |c: &fancy_regex::Captures<str>| c[1].repeat(3));
     let s = LINE_SPACE.replace_all(&s, "");
     let s = rx!(r"\A(\r?\n)+").replace(&s, "");
     rx!(r"(\r?\n){3,}").replace_all(&s, "$1$1").into_owned()
