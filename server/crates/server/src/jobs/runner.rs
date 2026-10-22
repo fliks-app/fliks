@@ -75,6 +75,9 @@ fn fire(st: AppState, name: &'static str) {
         return;
     };
     tokio::spawn(async move {
+        if crate::livetv::jobs::idle(&st, name).await {
+            return;
+        }
         audit::run_audited(&st, name, audit::Trigger::Scheduled, bodies::run(&st, name)).await;
         drop(claim);
     });
