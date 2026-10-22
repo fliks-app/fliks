@@ -256,7 +256,11 @@ function isNewer(latest: string | null, current: string): boolean {
     if (l > c) return true;
     if (l < c) return false;
   }
-  return false;
+  return !isPreRelease(latest) && isPreRelease(current);
+}
+
+function isPreRelease(v: string | null): boolean {
+  return (v ?? '').split('+')[0].includes('-');
 }
 
 /** Detect-only update check for builds electron-updater can't self-install. */

@@ -313,7 +313,8 @@
       "storage": "Storage",
       "home": "Home",
       "update": "Update"
-    }
+    },
+    "version": "Version {{version}}"
   },
   "update_settings": {
     "title": "Update",

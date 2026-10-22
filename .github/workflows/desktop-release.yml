@@ -311,7 +311,10 @@ jobs:
           else
             publish=never
           fi
-          npm run ${{ matrix.dist_script }} -- --publish "$publish" -c.extraMetadata.version=${{ steps.version.outputs.version }}
+          version=${{ steps.version.outputs.version }}
+          # release-please marks a suffixed version as a pre-release; electron-builder skips a type mismatch.
+          [[ "$version" == *-* ]] && type=prerelease || type=release
+          npm run ${{ matrix.dist_script }} -- --publish "$publish" -c.extraMetadata.version="$version" -c.publish.releaseType="$type"
 
       # ── Windows: pack win-unpacked into the Velopack Setup.exe + update feed ──
       # Default `win` channel; the Windows server uses `win-server` in the same release.

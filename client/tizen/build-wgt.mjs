@@ -120,7 +120,11 @@ console.log('[tizen] CSS downlevel guard passed');
 const configXml = resolve(here, 'config.xml');
 const iconSrc = resolve(here, 'icon.png');
 const iconFallback = resolve(clientRoot, 'public/icons/icon-512x512.png');
-copyFileSync(configXml, resolve(stage, 'config.xml'));
+// Tizen widget versions are N.N.N, so a pre-release ships under its release number.
+writeFileSync(
+  resolve(stage, 'config.xml'),
+  readFileSync(configXml, 'utf8').replace(/(<widget\b[^>]*\sversion=")([0-9.]+)[-+][^"]*"/, '$1$2"'),
+);
 copyFileSync(existsSync(iconSrc) ? iconSrc : iconFallback, resolve(stage, 'icon.png'));
 
 const pkg = JSON.parse(readFileSync(resolve(clientRoot, 'package.json'), 'utf8'));

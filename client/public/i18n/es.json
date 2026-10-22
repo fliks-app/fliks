@@ -313,7 +313,8 @@
       "storage": "Almacenamiento",
       "home": "Inicio",
       "update": "Actualización"
-    }
+    },
+    "version": "Versión {{version}}"
   },
   "update_settings": {
     "title": "Actualización",

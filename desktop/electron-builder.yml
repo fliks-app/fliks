@@ -37,6 +37,8 @@ publish:
   owner: fliks-app
   repo: fliks
   releaseType: release
+# A beta build publishes beta*.yml; stable builds also write them so a beta install moves to the release.
+generateUpdatesFilesForAllChannels: true
 directories:
   output: release
   buildResources: build

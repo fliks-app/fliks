@@ -313,7 +313,8 @@
       "storage": "Stockage",
       "home": "Accueil",
       "update": "Mise à jour"
-    }
+    },
+    "version": "Version {{version}}"
   },
   "update_settings": {
     "title": "Mise à jour",

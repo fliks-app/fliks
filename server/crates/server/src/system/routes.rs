@@ -107,7 +107,14 @@ fn interrupt() {
 
 #[utoipa::path(get, path = "/api/system/version", responses((status = 200)))]
 pub async fn version(_: Authed) -> Json<Value> {
-    Json(json!({"version": env!("CARGO_PKG_VERSION")}))
+    // Clients open every feature gate on a `-dev` server: the dev stack runs a debug build.
+    let v = env!("CARGO_PKG_VERSION");
+    let version = if cfg!(debug_assertions) {
+        format!("{v}-dev")
+    } else {
+        v.to_owned()
+    };
+    Json(json!({"version": version}))
 }
 
 #[utoipa::path(get, path = "/api/system/update", responses((status = 200)))]
