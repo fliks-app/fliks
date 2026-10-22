@@ -36,6 +36,7 @@ import { TrackManagerService, type LaunchTracks } from '../../../core/services/t
 import { NavbarService } from '../../../core/services/navbar.service';
 import { TvService } from '../../../core/services/tv.service';
 import { DeviceService } from '../../../core/services/device.service';
+import { AutoDownloadService } from '../../../core/services/auto-download.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { MobileFanartHeroComponent } from '../mobile-fanart-hero';
 import { SpoilerDirective } from '../../directives/spoiler.directive';
@@ -157,6 +158,7 @@ export class MediaInfoHeaderComponent {
   readonly navbar = inject(NavbarService);
   readonly tv = inject(TvService);
   private readonly device = inject(DeviceService);
+  private readonly autoDownload = inject(AutoDownloadService);
   private readonly mdUp = mediaQuerySignal(MD_BREAKPOINT_QUERY);
   /** The desktop tree from `md` up, and always on a TV (`tv:` in CSS); the mobile one otherwise. */
   protected readonly desktopLayout = computed(() => this.device.isTv() || this.mdUp());
@@ -665,6 +667,7 @@ export class MediaInfoHeaderComponent {
   private readonly extraGuards: Record<string, () => boolean> = {
     'core.recommend': () => !this.auth.sharingDisabled(),
     'core.download_series': () => !this.episodeId() && this.files().length > 0,
+    'core.auto_download_group': () => this.autoDownload.enabled && !this.episodeId(),
     'core.request_media': () => {
       const needsFile = this.mediaType() === 'movie' || !!this.episodeId();
       return !this.userHasOpenWholeRequest() && (!needsFile || !this.selectedFileId());
@@ -679,6 +682,10 @@ export class MediaInfoHeaderComponent {
     'media.toggle-like': () => this.likeToggled.emit(),
     'media.download': () => this.openDownload.emit(),
     'media.download-series': () => this.downloadSeries.emit(),
+    'media.auto-download-0': () => this.autoDownload.setSeriesKeep(this.mediaId(), null),
+    'media.auto-download-3': () => this.autoDownload.setSeriesKeep(this.mediaId(), 3),
+    'media.auto-download-5': () => this.autoDownload.setSeriesKeep(this.mediaId(), 5),
+    'media.auto-download-10': () => this.autoDownload.setSeriesKeep(this.mediaId(), 10),
     'media.toggle-series-watched': () => this.onToggleWatched(),
     'media.toggle-watched': () => this.onToggleWatched(),
     'media.add-to-playlist': () => this.addToPlaylist.emit(),
@@ -733,6 +740,8 @@ export class MediaInfoHeaderComponent {
   /** Same idea as {@link displayLabelKey}, for the one row whose icon shape
    *  (not just tint) follows live state. */
   displayIcon(item: ResolvedMediaAction): string {
+    const keep = this.autoKeepOf(item);
+    if (keep !== null) return keep === (this.autoDownload.seriesKeep(this.mediaId()) ?? 0) ? 'check' : item.icon;
     if (item.actionId === 'media.toggle-monitored') {
       return this.monitored() ? 'eye-off' : 'eye';
     }
@@ -760,9 +769,15 @@ export class MediaInfoHeaderComponent {
 
   /** One resolved row as a panel row. Recursive: a submenu's children go through
    *  the same label/icon resolution as any other row. */
+  private autoKeepOf(item: ResolvedMediaAction): number | null {
+    const m = item.actionId?.match(/^media\.auto-download-(\d+)$/);
+    return m ? Number(m[1]) : null;
+  }
+
   private toCardAction(item: ResolvedMediaAction): CardAction {
+    const keep = this.autoKeepOf(item);
     return {
-      labelKey: this.displayLabelKey(item),
+      ...(keep ? { label: this.translate.instant('downloads.auto_next', { count: keep }) } : { labelKey: this.displayLabelKey(item) }),
       icon: this.displayIcon(item),
       tone: item.tone,
       section: sectionOf(item.weight),

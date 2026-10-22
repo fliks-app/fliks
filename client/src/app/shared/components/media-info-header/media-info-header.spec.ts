@@ -12,6 +12,7 @@ import { AuthService } from '../../../core/services/auth.service';
 import { OfflinePlaybackSyncService } from '../../../core/services/offline-playback-sync.service';
 import { TvService } from '../../../core/services/tv.service';
 import { DeviceService } from '../../../core/services/device.service';
+import { AutoDownloadService } from '../../../core/services/auto-download.service';
 import { NavbarService } from '../../../core/services/navbar.service';
 import { PlayerSettingsService } from '../../../core/services/player-settings.service';
 import { TrackManagerService } from '../../../core/services/track-manager.service';
@@ -113,6 +114,7 @@ async function createFixture(
         },
       },
       { provide: TvService, useValue: { isTv: () => !!media.isTv } },
+      { provide: AutoDownloadService, useValue: { enabled: false, seriesKeep: () => null, setSeriesKeep: () => {} } },
       {
         provide: DeviceService,
         useValue: {

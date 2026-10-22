@@ -298,7 +298,6 @@
         }
 
         @if (m.type === 'series' && m.seasons?.length) {
-          <app-auto-download-rule class="block mb-3" [seriesId]="m.id" />
           <app-media-detail-seasons
             [media]="m"
             [selectedSeason]="activeSeason(m)"
@@ -330,8 +329,8 @@
             (viewSeasonTracking)="openTracking({ kind: 'season', seasonNumber: $event })"
             (toggleSeasonLike)="like.toggleSeason($event)"
             (recommendSeason)="recommendSeason($event)"
-            (downloadSeason)="downloadSeason($event)"
             (downloadEpisode)="downloadEpisode($event.season, $event.episode)"
+            (downloadSeason)="downloadSeason($event)"
             (downloadSelected)="downloadSeasons($event)"
           />
         }

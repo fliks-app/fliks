@@ -16,6 +16,7 @@ export type CoreMediaActionId =
   | 'media.toggle-like'
   | 'media.download'
   | 'media.download-series'
+  | `media.auto-download-${0 | 3 | 5 | 10}`
   | 'media.play'
   | 'media.open'
   | 'media.add-to-playlist'
@@ -38,6 +39,10 @@ const CORE_MEDIA_ACTION_IDS: ReadonlySet<string> = new Set<CoreMediaActionId>([
   'media.toggle-like',
   'media.download',
   'media.download-series',
+  'media.auto-download-0',
+  'media.auto-download-3',
+  'media.auto-download-5',
+  'media.auto-download-10',
   'media.play',
   'media.open',
   'media.add-to-playlist',

@@ -1,3 +1,4 @@
+import type { CardAction } from '../../../../core/services/card-actions.service';
 import {
   Component,
   computed,
@@ -262,6 +263,11 @@ export class MediaDetailSeasonsComponent {
     this.selectedEpisodeIds.set(new Set());
   }
 
+  episodeActions(season: Season, ep: Episode): CardAction[] {
+    if (this.hideControls() || this.tv.isTv() || !ep.hasFile) return [];
+    return [{ labelKey: 'downloads.download', icon: 'download', run: () => this.downloadEpisode.emit({ season, episode: ep }) }];
+  }
+
   toggleSelected(ep: Episode) {
     if (!ep.hasFile) return;
     this.selectedEpisodeIds.update((set) => {
@@ -270,6 +276,12 @@ export class MediaDetailSeasonsComponent {
       return next;
     });
   }
+
+  readonly allEpisodesSelected = computed(() => {
+    const ids = this.selectedEpisodeIds();
+    const selectable = this.filteredEpisodes().filter((e) => e.hasFile);
+    return selectable.length > 0 && selectable.every((e) => ids.has(e.id));
+  });
 
   selectAllEpisodes() {
     this.selectedEpisodeIds.set(new Set(this.filteredEpisodes().filter((e) => e.hasFile).map((e) => e.id)));
