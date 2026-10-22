@@ -1,0 +1,9 @@
+<div
+  class="grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none"
+  [style.grid-template-rows]="open() ? '1fr' : '0fr'"
+>
+  <!-- min-w-0: a grid item shrinks below its content only when clipped, and the clip goes away once open; else a card rail widens the page. -->
+  <div class="min-w-0" [class.overflow-hidden]="clipped()" [attr.inert]="open() ? null : ''">
+    <ng-content />
+  </div>
+</div>

@@ -150,8 +150,13 @@
           <ng-container *ngTemplateOutlet="taskRow; context: { $implicit: entry.task, poster: true }" />
         } @else {
           @let show = entry.show;
-          <details class="group card bg-base-100 shadow-sm border border-base-200" [open]="selectMode()">
-            <summary class="flex items-center gap-3 p-3 group-open:pb-1.5 cursor-pointer list-none">
+          @let showKey = 'show:' + show.mediaId;
+          @let showOpen = selectMode() || openKeys().has(showKey);
+          <!-- Header and card split the bottom padding, so opening adds height without moving anything above it. -->
+          <div class="card bg-base-100 shadow-sm border border-base-200 pb-1.5">
+            <div class="flex items-center gap-3 px-3 pt-3 pb-1.5 cursor-pointer"
+                 role="button" tabindex="0" [attr.aria-expanded]="showOpen"
+                 (click)="toggleOpen(showKey)" (keydown.enter)="toggleOpen(showKey)">
               <div class="w-16 h-24 shrink-0 rounded overflow-hidden bg-base-300">
                 @if (show.posterUrl) {
                   <img [cachedSrc]="show.posterUrl | resolveUrl:'thumb'" [alt]="show.title" class="w-full h-full object-cover" />
@@ -171,19 +176,23 @@
                   class="btn btn-ghost btn-sm btn-square text-error"
                   [attr.aria-label]="'downloads.delete_all' | translate"
                   [title]="'downloads.delete_all' | translate"
-                  (click)="$event.preventDefault(); deleteGroup(show.tasks, show.title)"
+                  (click)="$event.stopPropagation(); deleteGroup(show.tasks, show.title)"
                 >
                   <svg lucideTrash2 class="h-4 w-4"></svg>
                 </button>
               }
-              <svg lucideChevronRight class="h-4 w-4 shrink-0 transition-transform group-open:rotate-90"></svg>
-            </summary>
-            <div class="flex flex-col gap-2 px-3 pb-3">
+              <svg lucideChevronRight class="h-4 w-4 shrink-0 transition-transform duration-200" [class.rotate-90]="showOpen"></svg>
+            </div>
+            <app-collapse [open]="showOpen">
+            <div class="flex flex-col gap-2 px-3 pb-1.5">
               <app-auto-download-rule [seriesId]="show.mediaId" />
               @for (season of show.seasons; track season.seasonNumber) {
-                <details class="group/season" [open]="selectMode() || show.seasons.length === 1">
-                  <summary class="flex items-center gap-2 py-2 cursor-pointer list-none">
-                    <svg lucideChevronRight class="h-3 w-3 shrink-0 transition-transform group-open/season:rotate-90"></svg>
+                @let seasonKey = showKey + ':' + season.seasonNumber;
+                @let seasonOpen = selectMode() || (show.seasons.length === 1) !== openKeys().has(seasonKey);
+                <div>
+                  <div class="flex items-center gap-2 py-2 cursor-pointer" role="button" tabindex="0" [attr.aria-expanded]="seasonOpen"
+                       (click)="toggleOpen(seasonKey)" (keydown.enter)="toggleOpen(seasonKey)">
+                    <svg lucideChevronRight class="h-3 w-3 shrink-0 transition-transform duration-200" [class.rotate-90]="seasonOpen"></svg>
                     <span class="flex-1 min-w-0 text-sm font-medium">
                       @if (season.seasonNumber === null) {
                         {{ 'downloads.other_episodes' | translate }}
@@ -199,21 +208,24 @@
                         class="btn btn-ghost btn-xs btn-square text-error"
                         [attr.aria-label]="'downloads.delete_all' | translate"
                         [title]="'downloads.delete_all' | translate"
-                        (click)="$event.preventDefault(); deleteGroup(season.tasks, seasonName(show.title, season.seasonNumber))"
+                        (click)="$event.stopPropagation(); deleteGroup(season.tasks, seasonName(show.title, season.seasonNumber))"
                       >
                         <svg lucideTrash2 class="h-3.5 w-3.5"></svg>
                       </button>
                     }
-                  </summary>
-                  <div class="flex flex-col gap-2">
-                    @for (task of season.tasks; track task.id) {
-                      <ng-container *ngTemplateOutlet="taskRow; context: { $implicit: task, poster: false }" />
-                    }
                   </div>
-                </details>
+                  <app-collapse [open]="seasonOpen">
+                    <div class="flex flex-col gap-2">
+                      @for (task of season.tasks; track task.id) {
+                        <ng-container *ngTemplateOutlet="taskRow; context: { $implicit: task, poster: false }" />
+                      }
+                    </div>
+                  </app-collapse>
+                </div>
               }
             </div>
-          </details>
+            </app-collapse>
+          </div>
         }
       }
     </div>

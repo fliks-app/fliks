@@ -2980,19 +2980,14 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     let handoff: { media: Media } | undefined;
     if (!this.mediaId) {
       target = '/';
+    } else if (this.isOfflinePlayback) {
+      // Offline playback only starts from the downloads page.
+      target = '/downloads';
     } else if (this.queue.source() === 'playlist' && queueSourceId != null) {
       // Playing from a playlist returns to that playlist, not the item's page.
       target = `/playlists/${queueSourceId}`;
     } else {
-      // Offline never loads `this.media`; use the type stored on the download task so a downloaded series
-      // routes to /series (a wrong-kind URL redirects and breaks the topbar back button).
-      const offlineType = this.isOfflinePlayback
-        ? this.dlCache
-            .load()
-            .find((t) => t.mediaFileId === this.mediaFileId && t.status === 'ready')
-            ?.media?.type
-        : undefined;
-      const kind = (this.media?.type ?? offlineType) === 'series' ? 'series' : 'movies';
+      const kind = this.media?.type === 'series' ? 'series' : 'movies';
       if (this.media) handoff = { media: this.media };
       if (this.episodeId && kind === 'series') {
         // A finished episode returns to the NEXT episode's detail page, a mid-watch one to its own (to resume).
