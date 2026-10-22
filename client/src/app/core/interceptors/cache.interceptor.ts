@@ -1,12 +1,14 @@
-import { HttpInterceptorFn, HttpResponse } from '@angular/common/http';
+import { HttpEvent, HttpInterceptorFn, HttpResponse } from '@angular/common/http';
 import { Observable, of, tap } from 'rxjs';
 
-/** Stale-while-revalidate IndexedDB cache ("fliks-api-cache") for GET /api/*: stale hits revalidate in background, offline misses fail naturally. */
+/** IndexedDB cache ("fliks-api-cache") of the last known body of each GET /api/*. Invalidation marks
+ *  entries stale and never deletes them: the body stays the offline fallback and the paint-first read. */
 
 export const REQUEST_CACHE_DB = 'fliks-api-cache';
 const DB_NAME = REQUEST_CACHE_DB;
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE_NAME = 'responses';
+const INVALIDATIONS_STORE = 'invalidations';
 
 const CACHEABLE_PREFIXES = [
   '/api/media',
@@ -43,10 +45,19 @@ const DETAIL_PATTERN = /^\/api\/media\/\d+$/;
 const TTL_LIST = 5 * 60_000;
 const TTL_DETAIL = 4 * 60 * 60_000;
 
-interface CacheEntry {
+/** Bounds the store by count, not age: an entry is worth keeping however old it is. */
+const MAX_ENTRIES = 500;
+
+export interface CacheEntry {
   url: string;
   body: any;
+  /** When the request that produced `body` was sent, so a response racing an invalidation is stale. */
   timestamp: number;
+}
+
+interface Invalidation {
+  prefix: string;
+  at: number;
 }
 
 // ── IndexedDB helpers ──
@@ -57,40 +68,78 @@ let dbPromise: Promise<IDBDatabase> | null = null;
  *  flight for the previous account must not land in the new one's cache. */
 let cacheGeneration = 0;
 
-/** Past this, an entry is dead weight: too old to be a useful offline fallback,
- *  still scanned by every invalidation. Swept once per app start. */
-const MAX_AGE = 7 * 24 * 60 * 60_000;
+/** Mirrors INVALIDATIONS_STORE so a read sees an invalidation before its write commits. */
+let invalidations = new Map<string, number>();
 let pruned = false;
 
 function openDb(): Promise<IDBDatabase> {
   if (dbPromise) return dbPromise;
-  dbPromise = new Promise((resolve, reject) => {
+  dbPromise = new Promise<IDBDatabase>((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onupgradeneeded = () => {
-      if (!req.result.objectStoreNames.contains(STORE_NAME)) {
-        req.result.createObjectStore(STORE_NAME, { keyPath: 'url' });
+      const db = req.result;
+      const responses = db.objectStoreNames.contains(STORE_NAME)
+        ? req.transaction!.objectStore(STORE_NAME)
+        : db.createObjectStore(STORE_NAME, { keyPath: 'url' });
+      if (!responses.indexNames.contains('timestamp')) responses.createIndex('timestamp', 'timestamp');
+      if (!db.objectStoreNames.contains(INVALIDATIONS_STORE)) {
+        db.createObjectStore(INVALIDATIONS_STORE, { keyPath: 'prefix' });
       }
     };
-    req.onsuccess = () => { resolve(req.result); prune(req.result); };
+    req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
+  }).then(async (db) => {
+    await loadInvalidations(db);
+    prune(db);
+    return db;
   });
   return dbPromise;
 }
 
-/** Entries expire on read but are never deleted there, so a long-lived install
- *  keeps every URL it ever fetched and every invalidation pays for them. */
+function loadInvalidations(db: IDBDatabase): Promise<void> {
+  return new Promise((resolve) => {
+    try {
+      const req = db.transaction(INVALIDATIONS_STORE, 'readonly').objectStore(INVALIDATIONS_STORE).getAll();
+      req.onsuccess = () => {
+        for (const { prefix, at } of req.result as Invalidation[]) {
+          invalidations.set(prefix, Math.max(at, invalidations.get(prefix) ?? 0));
+        }
+        resolve();
+      };
+      req.onerror = () => resolve();
+    } catch {
+      resolve();
+    }
+  });
+}
+
+/** Drops the oldest entries past MAX_ENTRIES, then the invalidations older than every entry left. */
 function prune(db: IDBDatabase): void {
   if (pruned) return;
   pruned = true;
   try {
-    const store = db.transaction(STORE_NAME, 'readwrite').objectStore(STORE_NAME);
-    const cutoff = Date.now() - MAX_AGE;
-    const req = store.openCursor();
-    req.onsuccess = () => {
-      const cursor = req.result;
-      if (!cursor) return;
-      if ((cursor.value as CacheEntry).timestamp < cutoff) cursor.delete();
-      cursor.continue();
+    const tx = db.transaction([STORE_NAME, INVALIDATIONS_STORE], 'readwrite');
+    const store = tx.objectStore(STORE_NAME);
+    const byAge = store.index('timestamp');
+    const countReq = store.count();
+    countReq.onsuccess = () => {
+      let excess = countReq.result - MAX_ENTRIES;
+      const cursorReq = byAge.openKeyCursor();
+      cursorReq.onsuccess = () => {
+        const cursor = cursorReq.result;
+        if (cursor && excess-- > 0) {
+          store.delete(cursor.primaryKey);
+          cursor.continue();
+          return;
+        }
+        const oldest = cursor ? (cursor.key as number) : Infinity;
+        const marks = tx.objectStore(INVALIDATIONS_STORE);
+        for (const [prefix, at] of invalidations) {
+          if (at >= oldest) continue;
+          invalidations.delete(prefix);
+          marks.delete(prefix);
+        }
+      };
     };
   } catch { /* ignore */ }
 }
@@ -98,6 +147,7 @@ function prune(db: IDBDatabase): void {
 /** Wipe the IDB store, closing the module-level connection first so `deleteDatabase` can't hang `blocked`; bounded so it never gates a login spinner. */
 export function clearRequestCache(): Promise<void> {
   cacheGeneration++;
+  invalidations = new Map();
   const closeExisting = dbPromise
     ? dbPromise
         .then((db) => {
@@ -145,37 +195,35 @@ async function getCached(url: string): Promise<CacheEntry | null> {
 }
 
 /** Defer the write past render: `store.put` structured-clones the body on the main thread (a 700-item list stutters the spinner). */
-function putCacheWhenIdle(url: string, body: any, generation: number): void {
-  const write = () => void putCache(url, body, generation);
+function putCacheWhenIdle(url: string, body: any, sentAt: number, generation: number): void {
+  const write = () => void putCache(url, body, sentAt, generation);
   const ric = (globalThis as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => void })
     .requestIdleCallback;
   if (ric) ric(write, { timeout: 2000 });
   else setTimeout(write, 0);
 }
 
-async function putCache(url: string, body: any, generation: number): Promise<void> {
+async function putCache(url: string, body: any, sentAt: number, generation: number): Promise<void> {
   if (generation !== cacheGeneration) return;
   try {
     const db = await openDb();
     const tx = db.transaction(STORE_NAME, 'readwrite');
-    tx.objectStore(STORE_NAME).put({ url, body, timestamp: Date.now() } satisfies CacheEntry);
+    tx.objectStore(STORE_NAME).put({ url, body, timestamp: sentAt } satisfies CacheEntry);
   } catch { /* ignore */ }
 }
 
+/** Marks every entry under `prefix` stale: the next default read goes to the network. */
 export async function invalidatePrefix(prefix: string): Promise<void> {
+  const at = Date.now();
+  // A broader, newer mark covers the narrower ones.
+  const covered = [...invalidations.keys()].filter((p) => p.startsWith(prefix));
+  for (const p of covered) invalidations.delete(p);
+  invalidations.set(prefix, at);
   try {
     const db = await openDb();
-    const tx = db.transaction(STORE_NAME, 'readwrite');
-    const store = tx.objectStore(STORE_NAME);
-    // Key cursor, not openCursor: only the key is read here, and deserializing
-    // every cached body to drop it cost 5x more on a mid-size store.
-    const req = store.openKeyCursor();
-    req.onsuccess = () => {
-      const cursor = req.result;
-      if (!cursor) return;
-      if ((cursor.key as string).startsWith(prefix)) store.delete(cursor.key);
-      cursor.continue();
-    };
+    const marks = db.transaction(INVALIDATIONS_STORE, 'readwrite').objectStore(INVALIDATIONS_STORE);
+    for (const p of covered) marks.delete(p);
+    marks.put({ prefix, at } satisfies Invalidation);
   } catch { /* ignore */ }
 }
 
@@ -187,9 +235,20 @@ export function isCacheable(url: string): boolean {
   return CACHEABLE_PREFIXES.some((p) => url.startsWith(p));
 }
 
-function isFresh(entry: CacheEntry, url: string): boolean {
-  const ttl = DETAIL_PATTERN.test(url) ? TTL_DETAIL : TTL_LIST;
-  return Date.now() - entry.timestamp < ttl;
+function isInvalidated(entry: CacheEntry): boolean {
+  for (const [prefix, at] of invalidations) {
+    if (entry.timestamp < at && entry.url.startsWith(prefix)) return true;
+  }
+  return false;
+}
+
+/** `revalidate` serves the entry and refreshes it in background; `network` keeps it as the offline fallback. */
+export function readPlan(entry: CacheEntry | null, known: boolean): 'cached' | 'revalidate' | 'network' {
+  if (!entry) return 'network';
+  if (known) return 'cached';
+  if (isInvalidated(entry)) return 'network';
+  const ttl = DETAIL_PATTERN.test(entry.url) ? TTL_DETAIL : TTL_LIST;
+  return Date.now() - entry.timestamp < ttl ? 'cached' : 'revalidate';
 }
 
 function resourcePrefix(url: string): string {
@@ -199,13 +258,29 @@ function resourcePrefix(url: string): string {
 
 /** Opt-in: force fresh data for this request despite a fresh entry; stripped before it leaves the interceptor. */
 export const CACHE_BYPASS_HEADER = 'X-Cache-Bypass';
+/** Opt-in: answer with the last known body whatever its age or invalidation, with no network
+ *  call; for a caller that paints first and then revalidates with CACHE_BYPASS_HEADER. */
+export const CACHE_KNOWN_HEADER = 'X-Cache-Known';
+
+/** How a read may use the cache: `force` goes to the network, `known` paints whatever is cached. */
+export interface CacheRead {
+  force?: boolean;
+  known?: boolean;
+}
+
+export function cacheHeaders(opts: CacheRead): Record<string, string> | undefined {
+  if (opts.force) return { [CACHE_BYPASS_HEADER]: '1' };
+  if (opts.known) return { [CACHE_KNOWN_HEADER]: '1' };
+  return undefined;
+}
 
 export const cacheInterceptor: HttpInterceptorFn = (req, next) => {
   const url = req.urlWithParams;
   const generation = cacheGeneration;
+  const sentAt = Date.now();
 
   // Only a mutation the server accepted invalidates: a failed one offline would
-  // otherwise wipe the very entries the app falls back on.
+  // otherwise mark stale the very entries the app falls back on.
   if (req.method !== 'GET') {
     if (!req.url.startsWith('/api/')) return next(req);
     return next(req).pipe(
@@ -215,43 +290,44 @@ export const cacheInterceptor: HttpInterceptorFn = (req, next) => {
     );
   }
 
+  const known = req.headers.has(CACHE_KNOWN_HEADER);
+  const bypass = req.headers.has(CACHE_BYPASS_HEADER);
+  if (known || bypass) {
+    req = req.clone({ headers: req.headers.delete(CACHE_KNOWN_HEADER).delete(CACHE_BYPASS_HEADER) });
+  }
+
   if (!isCacheable(url)) return next(req);
+
+  const store = tap((event: HttpEvent<unknown>) => {
+    if (event instanceof HttpResponse && event.status === 200) {
+      putCacheWhenIdle(url, event.body, sentAt, generation);
+    }
+  });
 
   // Force-refresh path: skip the cache READ but still PUT the network
   // response so future cache-first callers get the refreshed value.
-  if (req.headers.has(CACHE_BYPASS_HEADER)) {
-    const cleanReq = req.clone({ headers: req.headers.delete(CACHE_BYPASS_HEADER) });
-    return next(cleanReq).pipe(
-      tap((event) => {
-        if (event instanceof HttpResponse && event.status === 200) {
-          putCacheWhenIdle(url, event.body, generation);
-        }
-      }),
-    );
-  }
+  if (bypass) return next(req).pipe(store);
 
   return new Observable((subscriber) => {
     getCached(url).then((entry) => {
-      if (entry) {
-        // Serve cached immediately.
-        subscriber.next(new HttpResponse({ status: 200, body: entry.body }));
-        if (isFresh(entry, url)) {
-          subscriber.complete();
-          return;
-        }
-        // Stale → revalidate in background, don't emit network response to caller.
+      const plan = readPlan(entry, known);
+      const cached = entry ? new HttpResponse({ status: 200, body: entry.body }) : null;
+      if (plan === 'cached') {
+        subscriber.next(cached!);
+        subscriber.complete();
+        return;
       }
+      const revalidating = plan === 'revalidate';
+      if (revalidating) subscriber.next(cached!);
 
-      const networkEmit = !entry; // Only emit to subscriber if no cache was served.
-      next(req).pipe(
-        tap((event) => {
-          if (event instanceof HttpResponse && event.status === 200) {
-            putCacheWhenIdle(url, event.body, generation);
-          }
-        }),
-      ).subscribe({
-        next: (event) => { if (networkEmit) subscriber.next(event); },
-        error: (err) => { if (networkEmit) subscriber.error(err); else subscriber.complete(); },
+      next(req).pipe(store).subscribe({
+        next: (event) => { if (!revalidating) subscriber.next(event); },
+        error: (err) => {
+          if (revalidating) subscriber.complete();
+          // An invalidated body still beats nothing when the server can't be reached.
+          else if (cached && err?.status === 0) { subscriber.next(cached); subscriber.complete(); }
+          else subscriber.error(err);
+        },
         complete: () => subscriber.complete(),
       });
     }).catch(() => {

@@ -4,7 +4,7 @@ import { firstValueFrom } from 'rxjs';
 import { AuthService } from '../auth.service';
 import { ServerConfigService } from '../server-config.service';
 import { CastService } from '../cast.service';
-import { CACHE_BYPASS_HEADER } from '../../interceptors/cache.interceptor';
+import { CacheRead, cacheHeaders } from '../../interceptors/cache.interceptor';
 import { SKIP_ERROR_TOAST } from '../../interceptors/error.interceptor';
 import {
   BrowserDeviceProfileService,
@@ -595,10 +595,10 @@ export class StreamingApiService {
     );
   }
 
-  getContinueWatching(libraryId?: number, opts: { force?: boolean } = {}) {
+  getContinueWatching(libraryId?: number, opts: CacheRead = {}) {
     const reqOpts: { params?: { libraryId: string }; headers?: { [k: string]: string } } = {};
     if (libraryId) reqOpts.params = { libraryId: String(libraryId) };
-    if (opts.force) reqOpts.headers = { [CACHE_BYPASS_HEADER]: '1' };
+    reqOpts.headers = cacheHeaders(opts);
     return firstValueFrom(
       this.http.get<ContinueWatchingItem[]>(
         '/api/playback/continue-watching',
@@ -608,7 +608,7 @@ export class StreamingApiService {
   }
 
   getRecommendations(
-    opts: { libraryId?: number; limit?: number; force?: boolean } = {},
+    opts: CacheRead & { libraryId?: number; limit?: number } = {},
   ) {
     const params: Record<string, string> = {};
     if (opts.libraryId) params['libraryId'] = String(opts.libraryId);
@@ -618,7 +618,7 @@ export class StreamingApiService {
       headers?: { [k: string]: string };
     } = {};
     if (Object.keys(params).length) reqOpts.params = params;
-    if (opts.force) reqOpts.headers = { [CACHE_BYPASS_HEADER]: '1' };
+    reqOpts.headers = cacheHeaders(opts);
     return firstValueFrom(
       this.http.get<RecommendationItem[]>(
         '/api/playback/recommendations',
@@ -647,12 +647,12 @@ export class StreamingApiService {
     );
   }
 
-  getHistory(page = 1, limit = 25, opts: { force?: boolean } = {}) {
+  getHistory(page = 1, limit = 25, opts: CacheRead = {}) {
     const reqOpts: {
       params: Record<string, string>;
       headers?: { [k: string]: string };
     } = { params: { page: String(page), limit: String(limit) } };
-    if (opts.force) reqOpts.headers = { [CACHE_BYPASS_HEADER]: '1' };
+    reqOpts.headers = cacheHeaders(opts);
     return firstValueFrom(
       this.http.get<{ data: WatchHistoryItem[]; total: number }>('/api/playback/history', reqOpts),
     );
@@ -665,8 +665,8 @@ export class StreamingApiService {
     );
   }
 
-  getWatchedMediaIds(opts: { force?: boolean } = {}): Promise<number[]> {
-    const headers = opts.force ? { [CACHE_BYPASS_HEADER]: '1' } : undefined;
+  getWatchedMediaIds(opts: CacheRead = {}): Promise<number[]> {
+    const headers = cacheHeaders(opts);
     return firstValueFrom(
       this.http.get<number[]>('/api/playback/watched-ids', headers ? { headers } : {}),
     );

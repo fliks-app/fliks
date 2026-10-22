@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
-import { CACHE_BYPASS_HEADER } from '../../interceptors/cache.interceptor';
+import { CacheRead, cacheHeaders } from '../../interceptors/cache.interceptor';
 import { ProfileVisibility } from '../auth.service';
 import { Playlist } from './playlists-api.service';
 import { RecommendationItem, WatchHistoryItem } from './streaming-api.service';
@@ -80,26 +80,27 @@ export interface SentRecommendation extends RecommendationCard {
 export class SocialApiService {
   private readonly http = inject(HttpClient);
 
-  private headers(force?: boolean) {
-    return force ? { headers: { [CACHE_BYPASS_HEADER]: '1' } } : {};
+  private headers(opts: CacheRead) {
+    const headers = cacheHeaders(opts);
+    return headers ? { headers } : {};
   }
 
   searchUsers(q: string) {
     return firstValueFrom(
       this.http.get<SocialUser[]>('/api/social/search', {
         params: { q },
-        ...this.headers(true),
+        ...this.headers({ force: true }),
       }),
     );
   }
 
   /** Media popular among the members the caller follows, for a library's
    *  Suggestions view. */
-  followingRecommendations(libraryId: number, opts: { force?: boolean } = {}) {
+  followingRecommendations(libraryId: number, opts: CacheRead = {}) {
     return firstValueFrom(
       this.http.get<RecommendationItem[]>('/api/social/recommendations', {
         params: { libraryId: String(libraryId) },
-        ...this.headers(opts.force),
+        ...this.headers(opts),
       }),
     );
   }
@@ -109,52 +110,52 @@ export class SocialApiService {
     return firstValueFrom(
       this.http.get<SocialUser[]>('/api/social/connectable', {
         params: { q },
-        ...this.headers(true),
+        ...this.headers({ force: true }),
       }),
     );
   }
 
-  getProfile(userId: number, opts: { force?: boolean } = {}) {
+  getProfile(userId: number, opts: CacheRead = {}) {
     return firstValueFrom(
       this.http.get<PublicProfile>(
         `/api/social/users/${userId}/profile`,
-        this.headers(opts.force),
+        this.headers(opts),
       ),
     );
   }
 
   /** Activity statistics for a profile's Statistics tab (owner, or a member who
    *  shares stats and whose profile the caller may see). */
-  getUserStats(userId: number, opts: { force?: boolean } = {}) {
+  getUserStats(userId: number, opts: CacheRead = {}) {
     return firstValueFrom(
       this.http.get<UserStats>(
         `/api/social/users/${userId}/stats`,
-        this.headers(opts.force),
+        this.headers(opts),
       ),
     );
   }
 
-  listFollowers(userId: number, opts: { force?: boolean } = {}) {
+  listFollowers(userId: number, opts: CacheRead = {}) {
     return firstValueFrom(
       this.http.get<SocialUser[]>(
         `/api/social/users/${userId}/followers`,
-        this.headers(opts.force),
+        this.headers(opts),
       ),
     );
   }
 
-  listFollowing(userId: number, opts: { force?: boolean } = {}) {
+  listFollowing(userId: number, opts: CacheRead = {}) {
     return firstValueFrom(
       this.http.get<SocialUser[]>(
         `/api/social/users/${userId}/following`,
-        this.headers(opts.force),
+        this.headers(opts),
       ),
     );
   }
 
-  listRequests(opts: { force?: boolean } = {}) {
+  listRequests(opts: CacheRead = {}) {
     return firstValueFrom(
-      this.http.get<SocialUser[]>('/api/social/requests', this.headers(opts.force)),
+      this.http.get<SocialUser[]>('/api/social/requests', this.headers(opts)),
     );
   }
 
@@ -190,21 +191,21 @@ export class SocialApiService {
 
   /** Content other members have recommended to me. Active feed by default;
    *  `includeDismissed` returns the full history (for the profile page). */
-  receivedRecommendations(opts: { force?: boolean; includeDismissed?: boolean } = {}) {
+  receivedRecommendations(opts: CacheRead & { includeDismissed?: boolean } = {}) {
     return firstValueFrom(
       this.http.get<ReceivedRecommendation[]>('/api/social/recommendations/received', {
         ...(opts.includeDismissed ? { params: { includeDismissed: 'true' } } : {}),
-        ...this.headers(opts.force),
+        ...this.headers(opts),
       }),
     );
   }
 
   /** Content I have recommended to other members. */
-  sentRecommendations(opts: { force?: boolean } = {}) {
+  sentRecommendations(opts: CacheRead = {}) {
     return firstValueFrom(
       this.http.get<SentRecommendation[]>(
         '/api/social/recommendations/sent',
-        this.headers(opts.force),
+        this.headers(opts),
       ),
     );
   }

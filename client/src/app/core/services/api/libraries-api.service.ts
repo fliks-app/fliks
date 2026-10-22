@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
-import { CACHE_BYPASS_HEADER } from '../../interceptors/cache.interceptor';
+import { CacheRead, cacheHeaders } from '../../interceptors/cache.interceptor';
 
 /** Lightweight library projection for non-admin users (sidebar, route resolution). */
 export interface LibrarySummary {
@@ -62,11 +62,11 @@ export class LibrariesApiService {
   }
 
   /** User-accessible lightweight list (sidebar, route resolution). */
-  listMine(opts: { force?: boolean } = {}) {
+  listMine(opts: CacheRead = {}) {
     return firstValueFrom(
       this.http.get<LibrarySummary[]>(
         '/api/libraries/mine',
-        opts.force ? { headers: { [CACHE_BYPASS_HEADER]: '1' } } : {},
+        { headers: cacheHeaders(opts) },
       ),
     );
   }

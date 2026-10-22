@@ -1,7 +1,14 @@
 import { HttpRequest, HttpResponse } from '@angular/common/http';
 import { of, throwError } from 'rxjs';
 import { vi } from 'vitest';
-import { cacheInterceptor, clearRequestCache, isCacheable } from './cache.interceptor';
+import {
+  CacheEntry,
+  cacheInterceptor,
+  clearRequestCache,
+  invalidatePrefix,
+  isCacheable,
+  readPlan,
+} from './cache.interceptor';
 
 describe('cache.interceptor — what may be cached', () => {
   it('caches the core reads it was built for', () => {
@@ -52,5 +59,40 @@ describe('cache.interceptor — mutations', () => {
   it('invalidates once the server accepted the mutation', () => {
     cacheInterceptor(post, () => of(new HttpResponse({ status: 204 }))).subscribe();
     expect(open).toHaveBeenCalled();
+  });
+});
+
+describe('cache.interceptor — read plan', () => {
+  const entry = (url: string, ageMs: number): CacheEntry => ({ url, body: [], timestamp: Date.now() - ageMs });
+
+  // The stubbed open never settles: only the synchronous, in-memory half of each call runs.
+  beforeEach(() => {
+    vi.stubGlobal('indexedDB', { open: vi.fn(() => ({})) });
+    void clearRequestCache();
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('serves a fresh entry and revalidates an expired one in background', () => {
+    expect(readPlan(entry('/api/media?libraryId=1', 1_000), false)).toBe('cached');
+    expect(readPlan(entry('/api/media?libraryId=1', 10 * 60_000), false)).toBe('revalidate');
+    expect(readPlan(null, false)).toBe('network');
+  });
+
+  it('sends an invalidated entry to the network but keeps it for a known read', () => {
+    const grid = entry('/api/media?libraryId=1', 1_000);
+    const other = entry('/api/playback/watched-ids', 1_000);
+    void invalidatePrefix('/api/media');
+    expect(readPlan(grid, false)).toBe('network');
+    expect(readPlan(grid, true)).toBe('cached');
+    expect(readPlan(other, false)).toBe('cached');
+  });
+
+  it('treats a body fetched after the invalidation as fresh', () => {
+    void invalidatePrefix('/api/media');
+    expect(readPlan(entry('/api/media/12', -1), false)).toBe('cached');
+  });
+
+  it('keeps a known body whatever its age', () => {
+    expect(readPlan(entry('/api/media?libraryId=1', 90 * 24 * 60 * 60_000), true)).toBe('cached');
   });
 });

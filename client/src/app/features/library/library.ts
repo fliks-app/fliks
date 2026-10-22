@@ -413,10 +413,14 @@ export class LibraryComponent implements OnInit, OnDestroy {
 
       // Resolve library by name
       if (!this.allLibraries.length) {
-        this.allLibraries = await this.librariesApi.listMine();
+        this.allLibraries = await this.librariesApi.listMine({ known: true });
       }
 
-      const lib = this.allLibraries.find((l) => l.name === name);
+      let lib = this.allLibraries.find((l) => l.name === name);
+      if (!lib) {
+        this.allLibraries = await this.librariesApi.listMine({ force: true }).catch(() => this.allLibraries);
+        lib = this.allLibraries.find((l) => l.name === name);
+      }
       this.library.set(lib ?? null);
       if (!lib) {
         this.stopLoading();
@@ -838,8 +842,8 @@ export class LibraryComponent implements OnInit, OnDestroy {
     const gen = ++this.loadGen;
     try {
       const [res, watchedIds] = await Promise.all([
-        this.mediaService.getAll(params),
-        this.streamingApi.getWatchedMediaIds().catch(() => [] as number[]),
+        this.mediaService.getAll(params, { known: true }),
+        this.streamingApi.getWatchedMediaIds({ known: true }).catch(() => [] as number[]),
       ]);
       // A slower answer to an earlier query must not replace a later one.
       if (gen !== this.loadGen) return;
@@ -849,7 +853,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
       if (gen === this.loadGen) this.loading.set(false);
     }
     queueMicrotask(() => {
-      // Cached lists paint instantly; revalidate to pick up changes before the 5 min TTL. The generation check drops stale results.
+      // Known lists paint instantly, however old; this pass brings in what changed. The generation check drops stale results.
       if (gen !== this.loadGen) return;
       void Promise.all([
         this.mediaService.getAll(params, { force: true }).catch(() => null),
