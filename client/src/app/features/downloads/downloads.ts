@@ -26,6 +26,7 @@ import {
   LucideX,
 } from '@lucide/angular';
 import { RouterLink } from '@angular/router';
+import { CollapseComponent } from '../../shared/components/collapse/collapse';
 import { ToastService } from '../../core/services/toast.service';
 import { formatBytes } from '../../shared/utils/download-format';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
@@ -59,6 +60,7 @@ export interface DisplayDownloadTask extends DownloadTask {
     LucidePause,
     LucideX,
     SeasonLabelPipe,
+    CollapseComponent,
   ],
   templateUrl: './downloads.html',
 })
@@ -83,6 +85,16 @@ export class DownloadsComponent implements OnInit, OnDestroy {
 
   protected readonly emptySelection: ReadonlySet<number> = new Set();
   readonly selectMode = signal(false);
+  /** Groups toggled away from their default (shows closed, a lone season open). */
+  protected readonly openKeys = signal<ReadonlySet<string>>(new Set());
+
+  protected toggleOpen(key: string): void {
+    this.openKeys.update((keys) => {
+      const next = new Set(keys);
+      if (!next.delete(key)) next.add(key);
+      return next;
+    });
+  }
   readonly selectedIds = signal<ReadonlySet<number>>(new Set());
   readonly selectedTasks = computed(() => this.items().filter((t) => this.selectedIds().has(t.id)));
   readonly selectedFailed = computed(() => this.selectedTasks().filter((t) => t.status === 'failed'));

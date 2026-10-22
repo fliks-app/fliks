@@ -172,6 +172,8 @@ export class LayoutComponent implements OnInit, OnDestroy {
     this.failedHeroLogoUrl.set(this.navbar.heroLogoUrl());
   }
   readonly isHomeRoute = signal(this.router.url === '/' || this.router.url.startsWith('/?'));
+  /** The downloads page is where an unreachable server sends you, so it doesn't repeat the warning. */
+  readonly isDownloadsRoute = signal(this.router.url.split('?')[0] === '/downloads');
 
   /** Fixed navbar's own clearance: height (0 on TV) plus safe area; 0 where the mobile navbar is hidden.
    *  Hero-blind on purpose: `body.hero-page` (styles.css) applies synchronously, a later value lets iOS 18.7 never re-lay out a cached page. */
@@ -349,6 +351,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
           this.replayPageEnter();
           this.bottomMenuOpen.set(false);
           this.isHomeRoute.set(e.urlAfterRedirects === '/' || e.urlAfterRedirects.startsWith('/?'));
+          this.isDownloadsRoute.set(e.urlAfterRedirects.split('?')[0] === '/downloads');
           this.syncNavbarTitleFromRoute();
         }
       });
