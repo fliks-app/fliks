@@ -5,6 +5,7 @@ import { MediaType } from '../../enums/media-type.enum';
 import { CACHE_BYPASS_HEADER } from '../../interceptors/cache.interceptor';
 import { SKIP_ERROR_TOAST } from '../../interceptors/error.interceptor';
 import { saveFile } from '../../plugins/save-file.plugin';
+import { ServerVersionService } from '../server-version.service';
 
 export interface QualityProfileBrief {
   id: number;
@@ -333,6 +334,7 @@ export interface MediaFileInfo {
 @Injectable({ providedIn: 'root' })
 export class MediaService {
   private readonly http = inject(HttpClient);
+  private readonly serverVersion = inject(ServerVersionService);
 
   getCounts() {
     return firstValueFrom(this.http.get<{ movies: number; series: number }>('/api/media/counts'));
@@ -412,7 +414,8 @@ export class MediaService {
     );
   }
 
-  getLeavingSoon(opts: { force?: boolean } = {}) {
+  async getLeavingSoon(opts: { force?: boolean } = {}): Promise<Media[]> {
+    if (!(await this.serverVersion.supportsWhenKnown('5.1.0'))) return [];
     const headers = opts.force ? { [CACHE_BYPASS_HEADER]: '1' } : undefined;
     return firstValueFrom(this.http.get<Media[]>('/api/media/leaving-soon', headers ? { headers } : {}));
   }

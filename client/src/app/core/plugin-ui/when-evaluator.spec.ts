@@ -88,4 +88,10 @@ describe('evaluateWhen', () => {
   it('fails closed for the whole array when one predicate is unknown, even if the rest pass', () => {
     expect(evaluateWhen(['isAdmin', 'somethingFromTheFuture'], ctx({ isAdmin: true }))).toBe(false);
   });
+
+  it('server:<version> asks the server gate, and stays closed without one', () => {
+    expect(evaluateWhen(['server:5.1.0'], ctx({ serverSupports: (v) => v === '5.1.0' }))).toBe(true);
+    expect(evaluateWhen(['server:5.2.0'], ctx({ serverSupports: (v) => v === '5.1.0' }))).toBe(false);
+    expect(evaluateWhen(['server:5.1.0'], ctx())).toBe(false);
+  });
 });

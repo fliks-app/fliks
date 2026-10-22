@@ -1,4 +1,5 @@
 import { provideZonelessChangeDetection } from '@angular/core';
+import { ServerVersionService } from '../../core/services/server-version.service';
 import { TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
 import { Subject } from 'rxjs';
@@ -44,6 +45,7 @@ function createService(opts: { isAdmin?: boolean; permissions?: string[]; entrie
       },
       { provide: TvService, useValue: { isTv: () => false } },
       { provide: DeviceService, useValue: { isTouch: () => false } },
+      { provide: ServerVersionService, useValue: { supports: () => true } },
       { provide: PluginUiRegistryService, useValue: { pluginEntries: () => opts.entries ?? [] } },
       // Only the current URL matters here; the service never navigates.
       { provide: Router, useValue: { events: new Subject(), url: opts.url ?? '/admin/settings' } },

@@ -9,6 +9,7 @@ import { CORE_SETTINGS_SECTIONS } from '../../core/plugin-ui/core-contributions'
 import { PluginUiRegistryService } from '../../core/plugin-ui/plugin-ui-registry.service';
 import { evaluateWhen, type WhenContext } from '../../core/plugin-ui/when-evaluator';
 import type { UiContribution } from '@fliks/plugin-ui';
+import { ServerVersionService } from '../../core/services/server-version.service';
 
 export interface ResolvedSettingsItem {
   id: string;
@@ -37,6 +38,7 @@ export class SettingsSectionsService {
   private readonly tv = inject(TvService);
   private readonly device = inject(DeviceService);
   private readonly router = inject(Router);
+  private readonly serverVersion = inject(ServerVersionService);
 
   /** Path only: a query string or a fragment is never part of what a nav entry addresses. */
   private readonly url = toSignal(
@@ -53,6 +55,7 @@ export class SettingsSectionsService {
       hasPermission: (p) => this.auth.hasPermission(p),
       isTv: this.tv.isTv(),
       isTouch: this.device.isTouch(),
+      serverSupports: (v) => this.serverVersion.supports(v),
     };
 
     const core = CORE_SETTINGS_SECTIONS.map((s) => ({
