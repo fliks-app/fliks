@@ -6,6 +6,7 @@ import { StreamingApiService } from './api/streaming-api.service';
 import { NetworkService } from './network.service';
 import { StorageScopeService } from './storage-scope.service';
 import { AppResumeService } from './app-resume.service';
+import { AutoDownloadService } from './auto-download.service';
 
 /** Resolve every already-queued microtask, including chained flush passes. */
 const settle = () => new Promise<void>((r) => setTimeout(r, 0));
@@ -14,6 +15,7 @@ function setup(opts: { online?: boolean } = {}) {
   const online = signal(opts.online ?? false);
   const updatePlaybackState = vi.fn(async () => ({}));
   const resume$ = new Subject<void>();
+  const reconcile = vi.fn(async () => {});
   localStorage.clear();
 
   TestBed.resetTestingModule();
@@ -24,10 +26,11 @@ function setup(opts: { online?: boolean } = {}) {
       { provide: NetworkService, useValue: { isOnline: online } },
       { provide: StorageScopeService, useValue: { scope: () => 'srv::1', suffix: () => 'srv::1', canPersist: () => true } },
       { provide: AppResumeService, useValue: { resume$ } },
+      { provide: AutoDownloadService, useValue: { reconcile } },
     ],
   });
   const svc = TestBed.inject(OfflinePlaybackSyncService);
-  return { svc, online, updatePlaybackState };
+  return { svc, online, updatePlaybackState, reconcile };
 }
 
 const update = (positionSeconds: number) => ({
@@ -61,16 +64,17 @@ describe('OfflinePlaybackSyncService', () => {
   });
 
   it('keeps the resume point after the queue has drained', async () => {
-    const { svc, online } = setup();
+    const { svc, online, reconcile } = setup();
     svc.queue(update(300));
     online.set(true);
     await settle();
     expect(svc.queuedPositionFor(7)).toBeNull();
     expect(svc.resumePositionFor(7)?.positionSeconds).toBe(300);
+    expect(reconcile).toHaveBeenCalledWith('offline-sync');
   });
 
   it('stops the pass at the first failure instead of walking the queue into it', async () => {
-    const { svc, online, updatePlaybackState } = setup();
+    const { svc, online, updatePlaybackState, reconcile } = setup();
     updatePlaybackState.mockRejectedValue(new Error('offline'));
     svc.queue(update(10));
     svc.queue({ ...update(20), mediaId: 8 });
@@ -78,6 +82,7 @@ describe('OfflinePlaybackSyncService', () => {
     await settle();
     expect(updatePlaybackState).toHaveBeenCalledTimes(1);
     expect(svc.pending()).toHaveLength(2);
+    expect(reconcile).not.toHaveBeenCalled();
   });
 
   it('does not drop a position queued while its own PUT was in flight', async () => {
