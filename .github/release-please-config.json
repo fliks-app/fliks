@@ -3,6 +3,7 @@
   "packages": {
     ".": {
       "release-type": "simple",
+      "prerelease": true,
       "package-name": "fliks",
       "include-component-in-tag": false,
       "changelog-path": "CHANGELOG.md",

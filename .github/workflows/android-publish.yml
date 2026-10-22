@@ -174,7 +174,8 @@ jobs:
   # error) can't skip amazon-appstore, which only needs the APK-attach job above.
   publish-play-store:
     needs: build-and-publish
-    if: github.event.inputs.apk_tag == ''
+    # Pre-releases (v5.1.0-beta.1) ship the APK on GitHub only, never to a store.
+    if: github.event.inputs.apk_tag == '' && !(startsWith(github.ref, 'refs/tags/v') && contains(github.ref_name, '-'))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -232,7 +233,7 @@ jobs:
     needs: build-and-publish
     # `always()`: build-and-publish is skipped (not failed) on an amazon-only
     # dispatch, and a skipped dependency would otherwise skip this job too.
-    if: always() && (needs.build-and-publish.result == 'success' || github.event.inputs.amazon_tag != '') && (startsWith(github.ref, 'refs/tags/v') || github.event.inputs.amazon_tag != '')
+    if: always() && !(startsWith(github.ref, 'refs/tags/v') && contains(github.ref_name, '-')) && (needs.build-and-publish.result == 'success' || github.event.inputs.amazon_tag != '') && (startsWith(github.ref, 'refs/tags/v') || github.event.inputs.amazon_tag != '')
     runs-on: ubuntu-latest
     # Two tags racing for the same open Amazon edit (`reuse-any-open-edit` below)
     # would clobber each other's changes; serialize per app, not per tag.

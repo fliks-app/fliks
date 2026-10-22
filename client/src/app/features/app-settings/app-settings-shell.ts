@@ -5,6 +5,7 @@ import { SettingsDrawerComponent } from '../../shared/components/settings-drawer
 import { LucideSettings, LucidePlay, LucideCaptions, LucideCast, LucideHardDrive, LucideMonitor, LucideMonitorSmartphone, LucideHouse, LucideDownload } from '@lucide/angular';
 import { TvService } from '../../core/services/tv.service';
 import { DeviceService } from '../../core/services/device.service';
+import { environment } from '../../../environments/environment';
 
 @Component({
   selector: 'app-app-settings-shell',
@@ -19,4 +20,5 @@ import { DeviceService } from '../../core/services/device.service';
 export class AppSettingsShellComponent {
   readonly tv = inject(TvService);
   readonly device = inject(DeviceService);
+  readonly version = environment.version;
 }

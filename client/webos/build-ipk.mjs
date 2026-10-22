@@ -34,7 +34,8 @@ execSync(`cp -R "${distBrowser}/." "${stage}/"`, { stdio: 'inherit' });
 const pkg = JSON.parse(readFileSync(resolve(clientRoot, 'package.json'), 'utf8'));
 const appInfoPath = resolve(here, 'appinfo.json');
 const appInfo = JSON.parse(readFileSync(appInfoPath, 'utf8'));
-appInfo.version = pkg.version ?? appInfo.version;
+// ares-package only accepts N.N.N, so a pre-release ships under its release number.
+appInfo.version = (pkg.version ?? appInfo.version).split(/[-+]/)[0];
 // LG only serves a 1920x1080 package to UHD models; FHD models need a
 // 1280x720 one. Same bundle either way - styles.css keys the 10-foot scale
 // on the viewport width, not the OS.

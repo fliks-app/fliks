@@ -77,7 +77,11 @@ pub fn is_newer(latest: &str, current: &str) -> bool {
             )
         })
         .find(|(x, y)| x != y)
-        .is_some_and(|(x, y)| x > y)
+        .map_or(!pre_release(latest) && pre_release(current), |(x, y)| x > y)
+}
+
+fn pre_release(v: &str) -> bool {
+    v.split('+').next().unwrap_or_default().contains('-')
 }
 
 fn disabled() -> bool {
@@ -179,5 +183,8 @@ mod tests {
         assert!(!newer("1.0.0", ""));
         assert!(newer("3rc1.0", "2.9"));
         assert!(!newer("1.2.3", "1.2.3"));
+        assert!(newer("v5.1.0", "5.1.0-beta.1"));
+        assert!(!newer("5.1.0-beta.2", "5.1.0-beta.1"));
+        assert!(!newer("5.1.0+build.2", "5.1.0"));
     }
 }

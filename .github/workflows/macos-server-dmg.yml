@@ -55,8 +55,9 @@ jobs:
           SHORT="$(echo "$RAW" | grep -oE '^[0-9]+(\.[0-9]+){0,2}' || true)"
           [ -z "$SHORT" ] && SHORT="0.0.0"
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $SHORT" macos/Fliks/Info.plist
-          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $SHORT" macos/Fliks/Info.plist
-          echo "Patched Info.plist: CFBundleShortVersionString=$SHORT (from $RAW)"
+          # Sparkle compares CFBundleVersion: the run number keeps 5.1.0 above its 5.1.0-beta.N.
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $GITHUB_RUN_NUMBER" macos/Fliks/Info.plist
+          echo "Patched Info.plist: CFBundleShortVersionString=$SHORT, CFBundleVersion=$GITHUB_RUN_NUMBER (from $RAW)"
 
       # ── Node.js for building the client ──
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -177,7 +178,7 @@ jobs:
               <item>
                 <title>Fliks Server $VERSION</title>
                 <link>$RELEASE_PAGE</link>
-                <sparkle:version>$VERSION</sparkle:version>
+                <sparkle:version>$GITHUB_RUN_NUMBER</sparkle:version>
                 <sparkle:shortVersionString>$VERSION</sparkle:shortVersionString>
                 <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
                 <enclosure url="$RELEASE_URL/$(basename "$dmg")" $sig type="application/octet-stream"/>
