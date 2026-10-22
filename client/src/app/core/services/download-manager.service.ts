@@ -114,15 +114,8 @@ export class DownloadManagerService {
   private readonly nativeSub = this.isNative ? this.notif.nativeEvents.subscribe((event) => this.onNativeEvent(event)) : null;
 
   private onNativeEvent(event: NativeDownloadEvent) {
-
     const taskId = Number(event.id) || 0;
-    this.emitEvent(
-      event.type === 'removed' ? 'failed' : event.type,
-      taskId,
-      event.progress,
-      event.state,
-    );
-
+    // Persist before emitting: listeners reload the cache synchronously and must read the new status.
     if (event.type === 'failed') {
       this.updateTaskStatus(taskId, 'failed', 0);
     } else if (event.type === 'complete') {
@@ -133,6 +126,7 @@ export class DownloadManagerService {
     } else if (event.type === 'progress') {
       this.persistProgress(taskId, event.progress, event.state);
     }
+    this.emitEvent(event.type === 'removed' ? 'failed' : event.type, taskId, event.progress, event.state);
     if (event.type !== 'progress') this.syncActivityCopy();
   }
 
@@ -230,7 +224,10 @@ export class DownloadManagerService {
   /** Held web downloads: Shaka's request filter awaits the gate, so stored segments survive while the tab lives. */
   private readonly webGates = new Map<number, { promise: Promise<void>; open: () => void }>();
 
+  // State is set before the platform call, so a native event raised during the call lands after it.
   async pauseDownload(task: DownloadTask): Promise<void> {
+    this.updateTaskStatus(task.id, 'paused', task.progress);
+    this.emitEvent('progress', task.id, task.progress, 'paused');
     if (this.isDesktop) {
       await this.downloader!.pause(String(task.mediaFileId));
     } else if (this.isNative) {
@@ -240,17 +237,17 @@ export class DownloadManagerService {
       const promise = new Promise<void>((r) => (open = r));
       this.webGates.set(task.id, { promise, open });
     }
-    this.updateTaskStatus(task.id, 'paused', task.progress);
-    this.emitEvent('progress', task.id, task.progress, 'paused');
   }
 
   async resumeDownload(task: DownloadTask): Promise<void> {
+    if (this.isDesktop && !task.hlsUrl) return;
+    this.updateTaskStatus(task.id, 'downloading', task.progress);
+    this.emitEvent('progress', task.id, task.progress, 'downloading');
     if (this.isDesktop) {
-      if (!task.hlsUrl) return;
       // Main keeps no paused state: a fresh start skips what is already on disk.
       void this.downloader!.start({
         id: String(task.mediaFileId),
-        url: task.hlsUrl,
+        url: task.hlsUrl!,
         quality: task.quality,
         filename: task.episodeLabel ? `${task.media?.title} - ${task.episodeLabel}` : (task.media?.title ?? ''),
       });
@@ -260,8 +257,6 @@ export class DownloadManagerService {
       this.webGates.get(task.id)?.open();
       this.webGates.delete(task.id);
     }
-    this.updateTaskStatus(task.id, 'downloading', task.progress);
-    this.emitEvent('progress', task.id, task.progress, 'downloading');
   }
 
   /** Sequentially download each target not already on device, at `rungKey` when the file offers it, else the nearest lower rung
