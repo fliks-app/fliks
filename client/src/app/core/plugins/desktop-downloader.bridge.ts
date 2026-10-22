@@ -18,11 +18,13 @@ export interface DesktopDownloadItem {
 
 export type DesktopDownloadStatus =
   | { id: string; state: 'progress'; received: number; total: number }
+  | { id: string; state: 'paused' }
   | { id: string; state: 'done'; item: DesktopDownloadItem }
   | { id: string; state: 'error'; message: string };
 
 export interface FliksDownloaderApi {
   start(req: DesktopDownloadRequest): Promise<void>;
+  pause(id: string): Promise<void>;
   cancel(id: string): Promise<void>;
   remove(id: string): Promise<void>;
   list(): Promise<DesktopDownloadItem[]>;

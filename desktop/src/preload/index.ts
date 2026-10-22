@@ -80,6 +80,7 @@ contextBridge.exposeInMainWorld('fliksUpdater', updater);
 // DownloadManager/OfflineStorage services on the desktop path.
 const downloader: FliksDownloaderApi = {
   start: (req: DesktopDownloadRequest) => ipcRenderer.invoke(DOWNLOAD_IPC.start, req),
+  pause: (id: string) => ipcRenderer.invoke(DOWNLOAD_IPC.pause, id),
   cancel: (id: string) => ipcRenderer.invoke(DOWNLOAD_IPC.cancel, id),
   remove: (id: string) => ipcRenderer.invoke(DOWNLOAD_IPC.remove, id),
   list: () => ipcRenderer.invoke(DOWNLOAD_IPC.list),

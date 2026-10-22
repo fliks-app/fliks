@@ -216,11 +216,13 @@ export interface DesktopDownloadItem {
 
 export type DesktopDownloadStatus =
   | { id: string; state: 'progress'; received: number; total: number }
+  | { id: string; state: 'paused' }
   | { id: string; state: 'done'; item: DesktopDownloadItem }
   | { id: string; state: 'error'; message: string };
 
 export const DOWNLOAD_IPC = {
   start: 'download:start',
+  pause: 'download:pause',
   cancel: 'download:cancel',
   remove: 'download:remove',
   list: 'download:list',
@@ -235,6 +237,8 @@ export const DOWNLOAD_IPC = {
 /** Exposed on `window.fliksDownloader` by the preload bridge. */
 export interface FliksDownloaderApi {
   start(req: DesktopDownloadRequest): Promise<void>;
+  /** Stop the transfer but keep what is on disk; resume by calling `start` again. */
+  pause(id: string): Promise<void>;
   cancel(id: string): Promise<void>;
   remove(id: string): Promise<void>;
   list(): Promise<DesktopDownloadItem[]>;

@@ -41,7 +41,7 @@ function safe(name: string): string {
 let manifest: Manifest | null = null;
 /** id → abort: tears down the in-flight single-file request + its write stream. */
 const active = new Map<string, () => void>();
-const hlsActive = new Map<string, { cancelled: boolean; abort?: () => void }>();
+const hlsActive = new Map<string, { cancelled: boolean; paused?: boolean; abort?: () => void; done?: Promise<void> }>();
 
 async function loadManifest(): Promise<Manifest> {
   if (manifest) return manifest;
@@ -110,24 +110,36 @@ async function start(req: DesktopDownloadRequest): Promise<void> {
   }
 
   const tmpPath = path.join(baseDir(), `${safe(req.id)}.part`);
+  // A leftover .part from a pause or crash is resumed with a Range request.
+  const offset = await fsp.stat(tmpPath).then((s) => s.size, () => 0);
   const request = net.request({ url: req.url, method: 'GET' });
+  if (offset > 0) request.setHeader('Range', `bytes=${offset}-`);
   let out: ReturnType<typeof createWriteStream> | null = null;
-  // Cancel = abort the request AND destroy the write stream (aborting the net
-  // request doesn't necessarily surface as a body 'error'), then drop the .part.
+  let stopped = false;
+  // Abort the request AND destroy the write stream (aborting the net request
+  // doesn't necessarily surface as a body 'error'); the caller owns the .part.
   active.set(req.id, () => {
+    stopped = true;
     try {
       request.abort();
     } catch {
       /* already ended */
     }
     out?.destroy();
-    cleanup(tmpPath);
   });
 
   request.on('response', (res) => {
     // Electron's net IncomingMessage is a Readable at runtime; its types omit
     // the stream methods, so read status/headers off `res` and stream via `body`.
     const body = res as unknown as Readable;
+    if (res.statusCode === 416 && offset > 0) {
+      // The .part no longer matches the source: restart from scratch.
+      active.delete(req.id);
+      body.resume();
+      cleanup(tmpPath);
+      void start(req);
+      return;
+    }
     if ((res.statusCode ?? 0) >= 400) {
       active.delete(req.id);
       broadcast({ id: req.id, state: 'error', message: `HTTP ${res.statusCode}` });
@@ -135,15 +147,23 @@ async function start(req: DesktopDownloadRequest): Promise<void> {
       return;
     }
     const headers = res.headers as Record<string, string | string[]>;
-    const total = Number((Array.isArray(headers['content-length']) ? headers['content-length'][0] : headers['content-length']) ?? 0);
+    const header = (k: string): string | undefined => {
+      const v = headers[k];
+      return Array.isArray(v) ? v[0] : v;
+    };
+    const resumed = res.statusCode === 206 && offset > 0;
+    const total = resumed
+      ? Number(/\/(\d+)\s*$/.exec(header('content-range') ?? '')?.[1] ?? 0)
+      : Number(header('content-length') ?? 0);
     const ext = resolveExt(headers);
     const finalPath = path.join(baseDir(), `${safe(req.id)}${ext}`);
-    const w = createWriteStream(tmpPath);
+    const w = createWriteStream(tmpPath, { flags: resumed ? 'a' : 'w' });
     out = w;
-    let received = 0;
+    let received = resumed ? offset : 0;
     let lastEmit = 0;
 
     const fail = (message: string): void => {
+      if (stopped) return;
       active.delete(req.id);
       w.destroy();
       cleanup(tmpPath);
@@ -185,6 +205,7 @@ async function start(req: DesktopDownloadRequest): Promise<void> {
     });
   });
   request.on('error', (e) => {
+    if (stopped) return;
     active.delete(req.id);
     cleanup(tmpPath);
     broadcast({ id: req.id, state: 'error', message: e.message });
@@ -196,8 +217,11 @@ async function start(req: DesktopDownloadRequest): Promise<void> {
  *  the local master.m3u8 so playback loads it via mpv (file://). */
 async function startHls(req: DesktopDownloadRequest): Promise<void> {
   const destDir = path.join(baseDir(), safe(req.id));
-  await fsp.rm(destDir, { recursive: true, force: true }).catch(() => {});
-  const control: { cancelled: boolean; abort?: () => void } = { cancelled: false };
+  let finish!: () => void;
+  const control: { cancelled: boolean; paused?: boolean; abort?: () => void; done?: Promise<void> } = {
+    cancelled: false,
+    done: new Promise<void>((r) => (finish = r)),
+  };
   hlsActive.set(req.id, control);
   let lastEmit = 0;
   try {
@@ -229,19 +253,45 @@ async function startHls(req: DesktopDownloadRequest): Promise<void> {
     await saveManifest();
     broadcast({ id: req.id, state: 'done', item });
   } catch (e) {
-    await fsp.rm(destDir, { recursive: true, force: true }).catch(() => {});
+    if (control.paused) {
+      broadcast({ id: req.id, state: 'paused' });
+    } else {
+      await fsp.rm(destDir, { recursive: true, force: true }).catch(() => {});
+    }
     if (!control.cancelled) {
       broadcast({ id: req.id, state: 'error', message: (e as Error).message });
     }
   } finally {
     hlsActive.delete(req.id);
+    finish();
   }
+}
+
+/** Stop the transfer, keep the data on disk; `start` again resumes it. */
+async function pause(id: string): Promise<void> {
+  const hls = hlsActive.get(id);
+  if (hls) {
+    hls.paused = hls.cancelled = true;
+    try {
+      hls.abort?.();
+    } catch {
+      /* request already ended */
+    }
+    await hls.done;
+    return;
+  }
+  const abort = active.get(id);
+  if (!abort) return;
+  active.delete(id);
+  abort();
+  broadcast({ id, state: 'paused' });
 }
 
 async function cancel(id: string): Promise<void> {
   const hls = hlsActive.get(id);
   if (hls) {
     hls.cancelled = true;
+    hls.paused = false;
     try {
       hls.abort?.();
     } catch {
@@ -252,6 +302,10 @@ async function cancel(id: string): Promise<void> {
   active.delete(id);
   abort?.();
   cleanup(path.join(baseDir(), `${safe(id)}.part`));
+  // A paused HLS download has no running task to drop its directory.
+  if (!(await loadManifest())[id]?.complete) {
+    await fsp.rm(path.join(baseDir(), safe(id)), { recursive: true, force: true }).catch(() => {});
+  }
 }
 
 async function remove(id: string): Promise<void> {
@@ -315,6 +369,7 @@ async function deleteFile(key: string): Promise<void> {
 /** Wire the renderer→main download channels. Registered once on app ready. */
 export function registerDownloadIpc(): void {
   ipcMain.handle(DOWNLOAD_IPC.start, (_e, req: DesktopDownloadRequest) => start(req));
+  ipcMain.handle(DOWNLOAD_IPC.pause, (_e, id: string) => pause(id));
   ipcMain.handle(DOWNLOAD_IPC.cancel, (_e, id: string) => cancel(id));
   ipcMain.handle(DOWNLOAD_IPC.remove, (_e, id: string) => remove(id));
   ipcMain.handle(DOWNLOAD_IPC.list, async () => Object.values(await loadManifest()));
