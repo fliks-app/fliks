@@ -424,7 +424,7 @@
         (selectedProviderChange)="selectedProvider.set($event)"
         (save)="saveLibrary()"
       />
-      <app-download-quality-modal #downloadModal (download)="onDownload($event)" />
+      <app-download-quality-modal #downloadModal (download)="onDownload($event)" (remove)="onRemoveDownload()" />
       <app-download-detail-modal #downloadDetailModal [progress]="activeDownload()" />
     </div>
   }

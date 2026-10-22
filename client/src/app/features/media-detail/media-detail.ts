@@ -1034,7 +1034,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     this.pendingDownloads = null;
     const fileId = this.downloadFileId();
     const task = this.fileDownload();
-    if (fileId) this.downloadModal()?.open(fileId, task?.status === 'ready' ? task.quality : null);
+    if (fileId) this.downloadModal()?.open(fileId, task?.quality ?? null);
   }
 
   openDownloadDetailModal() {
@@ -1043,6 +1043,18 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
 
   openSubtitles() {
     this.subtitleSection()?.show();
+  }
+
+  async onRemoveDownload() {
+    const task = this.fileDownload();
+    if (!task) return;
+    const confirmed = await this.confirmation.confirm({
+      title: this.translate.instant('common.confirm'),
+      message: this.translate.instant('downloads.confirm_delete'),
+      confirmLabel: this.translate.instant('common.delete'),
+      variant: 'danger',
+    });
+    if (confirmed) await this.downloadManager.deleteDownload(task);
   }
 
   async onDownload(ev: { mediaFileId: number; quality: string; unwatchedOnly: boolean }) {
@@ -1071,7 +1083,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       if (s && ep) {
         episode = episodeLabel(s.seasonNumber, ep.episodeNumber, ep.title);
       }
-      const prev = this.downloadManager.tasks().find((t) => t.mediaFileId === ev.mediaFileId && t.status === 'ready');
+      const prev = this.fileDownload();
       if (prev) await this.downloadManager.deleteDownload(prev);
       await this.downloadManager.createDownload(ev.mediaFileId, ev.quality, title, episode, {
         mediaId: m?.id,
