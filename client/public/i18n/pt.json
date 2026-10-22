@@ -1839,6 +1839,8 @@
     "on_device": "Neste dispositivo",
     "download": "Transferir",
     "choose_quality": "Escolher a qualidade",
+    "downloaded": "Transferido",
+    "change_quality": "Alterar a qualidade",
     "original": "Original",
     "original_file": "Ficheiro original",
     "original_file_note": "As legendas externas não serão incluídas",

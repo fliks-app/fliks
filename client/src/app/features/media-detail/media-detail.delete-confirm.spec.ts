@@ -49,7 +49,7 @@ const baseMovie: Media = {
 
 /** Deletion is destructive, so the confirm dialog must name the right consequence
  *  (folder removed vs. DB row only) before the user commits to it. */
-function createHarness() {
+function createHarness(downloadManager: object = {}) {
   const confirm = vi.fn().mockResolvedValue(false);
 
   TestBed.configureTestingModule({
@@ -80,7 +80,7 @@ function createHarness() {
       { provide: StreamingApiService, useValue: {} },
       { provide: MarkersApiService, useValue: {} },
       { provide: RequestsService, useValue: {} },
-      { provide: DownloadManagerService, useValue: {} },
+      { provide: DownloadManagerService, useValue: downloadManager },
       { provide: DownloadProgressService, useValue: { progress: signal(new Map()) } },
       { provide: TvService, useValue: { isTv: () => false } },
       { provide: ScrollMemoryService, useValue: { activate: vi.fn(), deactivate: vi.fn(), restoreSticky: vi.fn() } },
@@ -127,5 +127,33 @@ describe('MediaDetailComponent.deleteMedia - confirm message', () => {
     expect(confirm).toHaveBeenCalledWith(
       expect.objectContaining({ message: 'media_detail.delete_no_folder' }),
     );
+  });
+});
+
+describe('MediaDetailComponent.onDownload - change quality', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('deletes the downloaded copy, then creates the new quality', async () => {
+    const calls: string[] = [];
+    const ready = { id: 5, mediaFileId: 7, quality: '1080p', status: 'ready', progress: 100 };
+    const manager = {
+      tasks: signal([ready]),
+      deleteDownload: vi.fn(async () => void calls.push('delete')),
+      createDownload: vi.fn(async () => void calls.push('create')),
+    };
+    const { fixture } = createHarness(manager);
+    await fixture.componentInstance.onDownload({ mediaFileId: 7, quality: '720p', unwatchedOnly: false });
+
+    expect(manager.deleteDownload).toHaveBeenCalledWith(ready);
+    expect(calls).toEqual(['delete', 'create']);
+  });
+
+  it('only creates when nothing is downloaded', async () => {
+    const manager = { tasks: signal([]), deleteDownload: vi.fn(), createDownload: vi.fn(async () => {}) };
+    const { fixture } = createHarness(manager);
+    await fixture.componentInstance.onDownload({ mediaFileId: 7, quality: '720p', unwatchedOnly: false });
+
+    expect(manager.deleteDownload).not.toHaveBeenCalled();
+    expect(manager.createDownload).toHaveBeenCalled();
   });
 });

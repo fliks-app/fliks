@@ -1839,6 +1839,8 @@
     "on_device": "On this device",
     "download": "Download",
     "choose_quality": "Choose quality",
+    "downloaded": "Downloaded",
+    "change_quality": "Change quality",
     "original": "Original",
     "original_file": "Original file",
     "original_file_note": "External subtitles will not be included",

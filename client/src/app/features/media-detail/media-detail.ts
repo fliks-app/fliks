@@ -1019,10 +1019,22 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     void this.downloadModal()?.open(target.mediaFileId!);
   }
 
+  private downloadFileId() {
+    return this.episodeMode() ? this.episodeView.episodeActiveFileId() : this.activeFileId();
+  }
+
+  /** Download of the file on screen; a failed one reads as none. */
+  readonly fileDownload = computed(() => {
+    const id = this.downloadFileId();
+    const task = id ? this.downloadManager.tasks().find((t) => t.mediaFileId === id && t.status !== 'failed') : undefined;
+    return task ?? null;
+  });
+
   openDownloadModal() {
     this.pendingDownloads = null;
-    const fileId = this.episodeMode() ? this.episodeView.episodeActiveFileId() : this.activeFileId();
-    if (fileId) this.downloadModal()?.open(fileId);
+    const fileId = this.downloadFileId();
+    const task = this.fileDownload();
+    if (fileId) this.downloadModal()?.open(fileId, task?.status === 'ready' ? task.quality : null);
   }
 
   openDownloadDetailModal() {
@@ -1059,6 +1071,8 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       if (s && ep) {
         episode = episodeLabel(s.seasonNumber, ep.episodeNumber, ep.title);
       }
+      const prev = this.downloadManager.tasks().find((t) => t.mediaFileId === ev.mediaFileId && t.status === 'ready');
+      if (prev) await this.downloadManager.deleteDownload(prev);
       await this.downloadManager.createDownload(ev.mediaFileId, ev.quality, title, episode, {
         mediaId: m?.id,
         posterUrl: m?.posterUrl,

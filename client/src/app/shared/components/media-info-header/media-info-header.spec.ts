@@ -83,6 +83,7 @@ interface MediaFixture {
   /** Playback-state rows keyed by episodeId (0 = media-level), served to the
    *  header's `getPlaybackState` stub. Absent key → no row, like the API. */
   files?: { id: number; streamInfo?: unknown }[];
+  download?: { status: 'ready' | 'downloading'; progress: number } | null;
   play?: (ctx: unknown, fromStart: boolean) => Promise<void>;
   remembered?: string;
   subtitles?: { id: string; label: string; language: string; languageTag?: string }[];
@@ -178,6 +179,7 @@ async function createFixture(
   fixture.componentRef.setInput('episodeId', media.episodeId);
   fixture.componentRef.setInput('selectedFileId', media.selectedFileId);
   if (media.files) fixture.componentRef.setInput('files', media.files);
+  if (media.download) fixture.componentRef.setInput('download', media.download);
   if (media.subtitles) fixture.componentRef.setInput('subtitles', media.subtitles);
   fixture.componentRef.setInput('monitored', media.monitored);
   fixture.componentRef.setInput('qualityProfileName', media.qualityProfileName);
@@ -868,5 +870,33 @@ describe('MediaInfoHeaderComponent — remembered subtitle variant', () => {
   it('falls back to the language when the variant is gone, or the value has none', async () => {
     expect(await resolved('pt:embedded:pt-PT', subtitles.slice(0, 1))).toBe('emb-1');
     expect(await resolved('pt:embedded')).toBe('emb-1');
+  });
+});
+
+describe('MediaInfoHeaderComponent — download states', () => {
+  const movie = { mediaType: 'movie' as const, selectedFileId: 7, monitored: true, qualityProfileName: null };
+  const has = (f: ComponentFixture<MediaInfoHeaderComponent>, key: string) =>
+    (f.nativeElement as HTMLElement).querySelector(`[aria-label="${key}"]`) !== null;
+
+  it('offers the download button when nothing is on the device', async () => {
+    const f = await createFixture(OWNER, movie);
+    expect(has(f, 'downloads.download')).toBe(true);
+    expect(has(f, 'downloads.downloaded')).toBe(false);
+    expect(labels(f)).toContain('downloads.download');
+  });
+
+  it('shows a progress ring linking to the downloads while in flight', async () => {
+    const f = await createFixture(OWNER, { ...movie, download: { status: 'downloading', progress: 40 } });
+    const el = f.nativeElement as HTMLElement;
+    expect(el.querySelector('a[href="/downloads"] .radial-progress')).not.toBeNull();
+    expect(has(f, 'downloads.downloaded')).toBe(false);
+    expect(labels(f)).not.toContain('downloads.download');
+  });
+
+  it('shows the downloaded state and turns the menu entry into change quality', async () => {
+    const f = await createFixture(OWNER, { ...movie, download: { status: 'ready', progress: 100 } });
+    expect(has(f, 'downloads.downloaded')).toBe(true);
+    expect(labels(f)).toContain('downloads.change_quality');
+    expect(labels(f)).not.toContain('downloads.download');
   });
 });

@@ -1,7 +1,7 @@
 <dialog #dialog class="modal">
   <div class="modal-box max-w-sm">
     <div class="flex items-center justify-between mb-4">
-      <h3 class="text-lg font-bold">{{ 'downloads.choose_quality' | translate }}</h3>
+      <h3 class="text-lg font-bold">{{ (current() ? 'downloads.change_quality' : 'downloads.choose_quality') | translate }}</h3>
       <button class="btn btn-ghost btn-sm btn-circle" (click)="close()">
         <svg lucideX class="h-4 w-4"></svg>
       </button>
@@ -32,13 +32,17 @@
         @for (q of qualities(); track q.key) {
           <button
             class="btn justify-between gap-3"
-            [class.btn-outline]="q.key !== preselected()"
-            [class.btn-primary]="q.key === preselected()"
+            [class.btn-outline]="q.key !== (current() ?? preselected())"
+            [class.btn-primary]="q.key === (current() ?? preselected())"
             [disabled]="downloading()"
             (click)="selectQuality(q.key)"
           >
             <span class="flex items-center gap-2">
-              <svg lucideDownload class="h-4 w-4"></svg>
+              @if (q.key === current()) {
+                <svg lucideCircleCheck class="h-4 w-4"></svg>
+              } @else {
+                <svg lucideDownload class="h-4 w-4"></svg>
+              }
               {{ q.key === 'original' ? ('downloads.original' | translate) : q.key }}
             </span>
             @if (q.estimatedSize) {

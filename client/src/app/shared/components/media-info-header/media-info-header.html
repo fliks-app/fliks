@@ -143,10 +143,24 @@
         </button>
       }
       @if (selectedFileId() && (mediaType() === 'movie' || episodeId()) && !tv.isTv()) {
-        <button class="flex flex-col items-center gap-1 text-sm" (click)="openDownload.emit()">
-          <svg lucideDownload class="h-5 w-5"></svg>
-          {{ 'downloads.download' | translate }}
-        </button>
+        @if (download(); as d) {
+          @if (d.status === 'ready') {
+            <button class="flex flex-col items-center gap-1 text-sm text-success" (click)="openDownload.emit()">
+              <svg lucideCircleCheck class="h-5 w-5"></svg>
+              {{ 'downloads.downloaded' | translate }}
+            </button>
+          } @else {
+            <a routerLink="/downloads" class="flex flex-col items-center gap-1 text-sm">
+              <div class="radial-progress text-info" [style.--value]="d.progress" style="--size: 1.25rem; --thickness: 2px" role="progressbar" [attr.aria-valuenow]="d.progress"></div>
+              {{ 'downloads.downloading' | translate }}
+            </a>
+          }
+        } @else {
+          <button class="flex flex-col items-center gap-1 text-sm" (click)="openDownload.emit()">
+            <svg lucideDownload class="h-5 w-5"></svg>
+            {{ 'downloads.download' | translate }}
+          </button>
+        }
       }
       <!-- Like is a taste signal, not a playback action — available on movies,
            series and episodes, with or without a local file. -->
@@ -313,9 +327,21 @@
             </button>
           }
           @if ((mediaType() === 'movie' || episodeId()) && !tv.isTv()) {
-            <button type="button" class="btn btn-ghost btn btn-circle" (click)="openDownload.emit()">
-              <svg lucideDownload class="h-4 w-4"></svg>
-            </button>
+            @if (download(); as d) {
+              @if (d.status === 'ready') {
+                <button type="button" class="btn btn-ghost btn btn-circle text-success" [attr.aria-label]="'downloads.downloaded' | translate" [title]="'downloads.downloaded' | translate" (click)="openDownload.emit()">
+                  <svg lucideCircleCheck class="h-4 w-4"></svg>
+                </button>
+              } @else {
+                <a routerLink="/downloads" class="btn btn-ghost btn btn-circle" [attr.aria-label]="'downloads.downloading' | translate" [title]="'downloads.downloading' | translate">
+                  <div class="radial-progress text-info" [style.--value]="d.progress" style="--size: 1.1rem; --thickness: 2px" role="progressbar" [attr.aria-valuenow]="d.progress"></div>
+                </a>
+              }
+            } @else {
+              <button type="button" class="btn btn-ghost btn btn-circle" [attr.aria-label]="'downloads.download' | translate" (click)="openDownload.emit()">
+                <svg lucideDownload class="h-4 w-4"></svg>
+              </button>
+            }
           }
         }
         @if (canToggleWatched()) {

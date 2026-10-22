@@ -16,14 +16,14 @@ import {
 } from '../../../core/services/api/streaming-api.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { desktopDownloaderOrNull } from '../../../core/plugins/desktop-downloader.bridge';
-import { LucideDownload, LucideX } from '@lucide/angular';
+import { LucideCircleCheck, LucideDownload, LucideX } from '@lucide/angular';
 import { DownloadSettingsService } from '../../../core/services/download-settings.service';
 import { pickRung } from '../../../core/services/download-manager.service';
 import { formatBytes } from '../../utils/download-format';
 
 @Component({
   selector: 'app-download-quality-modal',
-  imports: [TranslatePipe, LucideDownload, LucideX],
+  imports: [TranslatePipe, LucideCircleCheck, LucideDownload, LucideX],
   templateUrl: './download-quality-modal.html',
 })
 export class DownloadQualityModalComponent {
@@ -56,6 +56,9 @@ export class DownloadQualityModalComponent {
 
   private mediaFileId = 0;
 
+  /** Quality already on the device when changing it; null for a fresh download. */
+  readonly current = signal<string | null>(null);
+
   /** Batch mode (season or show): the episode counts the size and checkbox speak of; null for a single file. */
   readonly batch = signal<{ all: number; unwatched: number } | null>(null);
   readonly unwatchedOnly = signal(true);
@@ -67,12 +70,14 @@ export class DownloadQualityModalComponent {
   /** `mediaFileId` is the first episode's file, whose estimates stand for all of them. */
   openBatch(mediaFileId: number, counts: { all: number; unwatched: number }) {
     this.batch.set(counts);
+    this.current.set(null);
     this.unwatchedOnly.set(true);
     return this.show(mediaFileId);
   }
 
-  open(mediaFileId: number) {
+  open(mediaFileId: number, current: string | null = null) {
     this.batch.set(null);
+    this.current.set(current);
     return this.show(mediaFileId);
   }
 
@@ -91,6 +96,7 @@ export class DownloadQualityModalComponent {
   }
 
   selectQuality(quality: string) {
+    if (quality === this.current()) return this.close();
     this.download.emit({ mediaFileId: this.mediaFileId, quality, unwatchedOnly: this.unwatchedOnly() });
     this.close();
   }
