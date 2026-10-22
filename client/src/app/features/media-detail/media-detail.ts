@@ -1002,8 +1002,9 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     this.openBatch(this.downloadTargets([season]));
   }
 
+  /** Episodes picked by hand: never filtered by watched state. */
   downloadSeasons(seasons: Season[]) {
-    this.openBatch(this.downloadTargets(seasons));
+    this.openBatch(this.downloadTargets(seasons).map((t) => ({ ...t, watched: false })));
   }
 
   downloadSeries() {
@@ -1013,7 +1014,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   downloadEpisode(season: Season, episode: Episode) {
     const [target] = this.downloadTargets([{ ...season, episodes: [episode] }]);
     if (!target) return;
-    this.pendingDownloads = [target];
+    this.pendingDownloads = [{ ...target, watched: false }];
     void this.downloadModal()?.open(target.mediaFileId!);
   }
 
@@ -1035,7 +1036,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     const pending = this.pendingDownloads;
     this.pendingDownloads = null;
     if (pending) {
-      const targets = pending.length > 1 && ev.unwatchedOnly ? pending.filter((t) => !t.watched) : pending;
+      const targets = ev.unwatchedOnly ? pending.filter((t) => !t.watched) : pending;
       const { started, failed } = await this.downloadManager.createMany(targets, ev.quality);
       if (started) this.toast.success(this.translate.instant('downloads.started'));
       else if (failed) this.toast.error(this.translate.instant('downloads.error'));

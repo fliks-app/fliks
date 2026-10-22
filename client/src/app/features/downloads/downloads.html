@@ -169,7 +169,7 @@
               }
               <svg lucideChevronRight class="h-4 w-4 shrink-0 transition-transform group-open:rotate-90"></svg>
             </summary>
-            <div class="flex flex-col gap-2 px-3 pb-3">
+            <div class="flex flex-col gap-2 px-3 pb-3 -mt-1.5">
               <app-auto-download-rule [seriesId]="show.mediaId" />
               @for (season of show.seasons; track season.seasonNumber) {
                 <details class="group/season" [open]="selectMode() || show.seasons.length === 1">
