@@ -1,10 +1,11 @@
-import { Component, signal, computed, inject } from '@angular/core';
+import { Component, signal, computed, inject, effect } from '@angular/core';
 import { Router } from '@angular/router';
 import { NgTemplateOutlet } from '@angular/common';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import type { DownloadTask } from '../../core/services/download-cache.service';
 import { DownloadManagerService } from '../../core/services/download-manager.service';
-import { isPausable, isTransferring } from '../../core/services/download-status';
+import { isActive, isPausable, isTransferring } from '../../core/services/download-status';
+import { DownloadNotificationService } from '../../core/services/download-notification.service';
 import { ConfirmationService } from '../../core/services/confirmation.service';
 import {
   LucideDownload,
@@ -26,7 +27,7 @@ import { CachedSrcDirective } from '../../shared/directives/cached-src.directive
 import { SeasonLabelPipe } from '../../core/pipes/season-label.pipe';
 import { AutoDownloadService } from '../../core/services/auto-download.service';
 import { AutoDownloadRuleComponent } from '../../shared/components/auto-download-rule/auto-download-rule';
-import { groupDownloads } from './downloads-grouping';
+import { groupDownloads, type ShowGroup } from './downloads-grouping';
 
 const openGroupKeys = signal<ReadonlySet<string>>(new Set());
 
@@ -60,6 +61,7 @@ export class DownloadsComponent {
   private readonly translate = inject(TranslateService);
   private readonly toast = inject(ToastService);
   private readonly router = inject(Router);
+  private readonly notif = inject(DownloadNotificationService);
 
   /** Ids being re-queued, so the button can't be double-tapped into two
    *  downloads of the same file. */
@@ -87,9 +89,32 @@ export class DownloadsComponent {
   readonly items = this.dlManager.tasks;
 
   protected readonly auto = inject(AutoDownloadService);
-  readonly entries = computed(() => groupDownloads(this.items()));
+  /** An in-flight movie lives only in the "in progress" section; episodes stay in their show so its header can summarise them. */
+  readonly entries = computed(() =>
+    groupDownloads(this.items().filter((t) => !isActive(t.status) || t.episodeId != null || !!t.episodeLabel)),
+  );
   readonly pausable = computed(() => this.items().filter((t) => isPausable(t.status)));
   readonly paused = computed(() => this.items().filter((t) => t.status === 'paused'));
+  /** Every in-flight task, moving ones first then held ones. */
+  readonly inProgress = computed(() =>
+    this.items()
+      .filter((t) => isActive(t.status))
+      .sort((a, b) => Number(a.status === 'paused') - Number(b.status === 'paused')),
+  );
+
+  protected readonly freeBytes = signal<number | null>(null);
+  private readonly settled = computed(() => `${this.items().filter((t) => t.status === 'ready').length}:${this.items().length}`);
+  private readonly freeSpaceEffect = effect(() => {
+    this.settled();
+    void this.notif.getFreeSpace().then((s) => this.freeBytes.set(s?.freeBytes ?? null));
+  });
+
+  /** In-flight count and mean percent of a show, or null when none is running. */
+  protected inFlight(show: ShowGroup): { count: number; percent: number } | null {
+    const live = show.tasks.filter((t) => isActive(t.status));
+    if (!live.length) return null;
+    return { count: live.length, percent: Math.round(live.reduce((n, t) => n + t.progress, 0) / live.length) };
+  }
 
   protected readonly isPausable = (task: DownloadTask) => isPausable(task.status);
   protected readonly isTransferring = (task: DownloadTask) => isTransferring(task.status);
