@@ -231,12 +231,13 @@ export class DownloadManagerService {
   async createMany(
     targets: DownloadTarget[],
     rungKey?: string,
-    opts?: { auto?: boolean },
+    opts?: { auto?: boolean; stop?: () => boolean },
   ): Promise<{ started: number; failed: number }> {
     const medias = new Map<number, Media | null>();
     let started = 0;
     let failed = 0;
     for (const t of targets) {
+      if (opts?.stop?.()) break;
       try {
         const fileId = t.mediaFileId ?? (await this.resolveFileId(t, medias));
         if (!fileId || this.isOnDevice(fileId)) continue;

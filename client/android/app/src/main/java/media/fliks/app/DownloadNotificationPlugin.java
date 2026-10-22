@@ -99,6 +99,24 @@ public class DownloadNotificationPlugin extends Plugin {
         call.resolve();
     }
 
+    @PluginMethod()
+    public void setWifiOnly(PluginCall call) {
+        FlixDownloadUtil.setWifiOnly(Boolean.TRUE.equals(call.getBoolean("enabled", false)));
+        call.resolve();
+    }
+
+    @PluginMethod()
+    public void pauseDownloads(PluginCall call) {
+        FlixDownloadUtil.pauseDownloads(getContext());
+        call.resolve();
+    }
+
+    @PluginMethod()
+    public void resumeDownloads(PluginCall call) {
+        FlixDownloadUtil.resumeDownloads(getContext());
+        call.resolve();
+    }
+
     /**
      * Every download the daemon knows about, in flight or finished.
      *

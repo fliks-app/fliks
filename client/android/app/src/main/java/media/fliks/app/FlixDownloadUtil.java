@@ -23,6 +23,7 @@ import androidx.media3.database.DatabaseProvider;
 import androidx.media3.exoplayer.offline.DefaultDownloadIndex;
 import androidx.media3.exoplayer.offline.Download;
 import androidx.media3.exoplayer.offline.DownloadManager;
+import androidx.media3.exoplayer.scheduler.Requirements;
 import androidx.media3.exoplayer.offline.DownloadNotificationHelper;
 import androidx.media3.exoplayer.offline.DownloadRequest;
 import androidx.media3.exoplayer.offline.DownloadService;
@@ -53,6 +54,7 @@ public class FlixDownloadUtil {
     /** Concurrent transfers, in force until the WebView pushes the user's
      *  setting. Held statically so it survives the manager being built later. */
     private static int maxParallelDownloads = 3;
+    private static boolean wifiOnly = false;
 
     private static SimpleCache cache;
     private static DatabaseProvider databaseProvider;
@@ -72,6 +74,18 @@ public class FlixDownloadUtil {
         if (downloadManager != null) {
             downloadManager.setMaxParallelDownloads(maxParallelDownloads);
         }
+    }
+
+    /** Wi-Fi only: hold transfers until an unmetered network is up. Remembered for a manager built later. */
+    public static synchronized void setWifiOnly(boolean value) {
+        wifiOnly = value;
+        if (downloadManager != null) {
+            downloadManager.setRequirements(networkRequirements());
+        }
+    }
+
+    private static Requirements networkRequirements() {
+        return new Requirements(wifiOnly ? Requirements.NETWORK_UNMETERED : Requirements.NETWORK);
     }
 
     /** One SQLite helper for the whole app. The cache, the manager and the
@@ -135,6 +149,7 @@ public class FlixDownloadUtil {
                 buildDownloadExecutor()
             );
             downloadManager.setMaxParallelDownloads(maxParallelDownloads);
+            downloadManager.setRequirements(networkRequirements());
             // Emit progress/completion events to WebView — registered once on
             // the singleton so events flow regardless of service lifecycle.
             downloadManager.addListener(new DownloadManager.Listener() {
