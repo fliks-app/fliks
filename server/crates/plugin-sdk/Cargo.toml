@@ -42,7 +42,7 @@ harness = [
 fliks-server = { path = "../server", optional = true }
 wit-parser = { version = "0.259", optional = true }
 ed25519-dalek = { version = "2", optional = true }
-base64 = { version = "0.22", optional = true }
+base64 = { version = "0.23", optional = true }
 tokio = { version = "1", features = ["net", "rt", "time"], optional = true }
 axum = { version = "0.8", default-features = false, optional = true }
 tower = { version = "0.5", features = ["util"], optional = true }
