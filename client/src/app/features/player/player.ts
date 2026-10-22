@@ -42,7 +42,7 @@ import { NavigationHistoryService } from '../../core/services/navigation-history
 import { ToastService } from '../../core/services/toast.service';
 import { NavbarService } from '../../core/services/navbar.service';
 import { PlaybackQueueService } from '../../core/services/playback-queue.service';
-import { buildPlayerStats, formatAudioLabel, formatAudioParts, playbackModeOf, SpriteMetadata, widthForProfile, type CropRect, type OfflineCrop } from '../../core/utils/player.utils';
+import { buildPlayerStats, formatAudioLabel, formatAudioParts, playbackModeOf, readyDownloadFor, SpriteMetadata, widthForProfile, type CropRect, type OfflineCrop } from '../../core/utils/player.utils';
 import { formatErrorDiagnostics, type PlaybackError } from '../../core/services/playback-engine/playback-error';
 import { environment } from '../../../environments/environment';
 import { normalizeLangCode } from '../../core/utils/language.utils';
@@ -625,6 +625,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private mediaFileId = 0;
   private mediaId = 0;
   private isOfflinePlayback = false;
+  private fromDownloads = false;
+  /** Offline playback loads no media record; the download carries the type for the back target. */
+  private offlineMediaType: string | undefined;
   private episodeId: number | undefined;
   private media: Media | null = null;
 
@@ -832,20 +835,24 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // fire a second one. Not reloadingStream: that would drop post-load reloads (burn-in).
     this.firstLoadPending = true;
     try {
-      // Only use offline playback if explicitly requested via query param
-      let offlineCheck: string | null = null;
-      if (qp['offline'] === '1') {
-        offlineCheck = await this.offlineStorage.getLocalUrl(`download-${this.mediaFileId}`).catch(() => null);
-        if (!offlineCheck) {
-          this.state.setError(this.translate.instant('player.offline_not_found'), {
-            source: 'session',
-          });
-          return;
-        }
+      // A finished download plays locally whatever the connectivity; `offline=1` (downloads page) insists on it.
+      const forced = qp['offline'] === '1';
+      this.fromDownloads = forced;
+      const download = readyDownloadFor(this.dlCache.load(), this.mediaFileId, this.castService.isConnected());
+      const offlineCheck =
+        forced || download
+          ? await this.offlineStorage.getLocalUrl(`download-${this.mediaFileId}`).catch(() => null)
+          : null;
+      if (forced && !offlineCheck) {
+        this.state.setError(this.translate.instant('player.offline_not_found'), {
+          source: 'session',
+        });
+        return;
+      }
+      if (offlineCheck) {
         this.isOfflinePlayback = true;
-        this.offlineCrop =
-          this.dlCache.load().find((t) => t.mediaFileId === this.mediaFileId && t.status === 'ready')
-            ?.offlineCrop ?? null;
+        this.offlineCrop = download?.offlineCrop ?? null;
+        this.offlineMediaType = download?.media?.type;
       }
 
       // playback-info runs once the media is known: its audio index picks the DEFAULT rendition, and
@@ -903,7 +910,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         }
       }
 
-      // Offline the server is unreachable, so the resume point comes from what this device recorded last.
+      // The server's resume point (another device may have advanced it) wins when it answers; else this device's last.
+      if (startTime == null && this.isOfflinePlayback && this.mediaId && this.network.isOnline()) {
+        const st = await this.streamingApi.getPlaybackState(this.mediaId, this.episodeId).catch(() => null);
+        if (st && !st.completed && st.positionSeconds > 10) startTime = st.positionSeconds;
+      }
       if (startTime == null && this.isOfflinePlayback && this.mediaId) {
         const local = this.offlineSync.resumePositionFor(this.mediaId, this.episodeId);
         if (local && local.positionSeconds > 10) startTime = local.positionSeconds;
@@ -927,6 +938,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           .load()
           .find((t) => t.mediaFileId === this.mediaFileId && t.status === 'ready');
         this.applyOfflineHeader(offlineTask);
+        this.loadMediaForLocalCopy();
         const offlineEdl = this.authService.user()?.edlEnabled === false ? undefined : offlineTask?.offlineEdl;
         this.edl.load(this.mediaFileId, offlineEdl);
         startTime = this.edlStartTime(startTime);
@@ -1757,17 +1769,33 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private readonly notificationNavEffect = effect(() => this.queueCtl.syncNotificationNav());
   private readonly autoAdvanceEffect = effect(() => this.queueCtl.autoAdvance());
 
-  /** Offline there is no media fetch: the header comes from the download, the logo from the server when it answers. */
+  /** The header from the download, so it shows offline; online, the media fetch fills in what the download lacks. */
   private applyOfflineHeader(task: DownloadTask | undefined): void {
     if (!task) return;
     this.mediaTitle.set(task.media?.title ?? '');
     const m = /^S(\d+)E(\d+)\s*(.*)$/.exec(task.episodeLabel ?? '');
     this.episodeTitle.set(m ? `S${+m[1]}:E${+m[2]}${m[3] ? ` - ${m[3]}` : ''}` : (task.episodeLabel ?? ''));
-    if (task.media?.logoUrl) {
-      this.mediaLogoUrl.set(task.media.logoUrl);
-    } else if (this.mediaId) {
-      void this.mediaService.getOne(this.mediaId).then((media) => this.mediaLogoUrl.set(media.logoUrl ?? null), () => {});
-    }
+    if (task.media?.logoUrl) this.mediaLogoUrl.set(task.media.logoUrl);
+  }
+
+  /** Online with a local copy: fetch the media record in parallel (not on the first-frame path) for the
+   *  header, next-episode and queue; the stream, tracks and subtitles stay local. */
+  private loadMediaForLocalCopy(): void {
+    if (!this.mediaId || !this.network.isOnline()) return;
+    const fileId = this.mediaFileId;
+    void this.mediaService.getOne(this.mediaId).then(
+      (media) => {
+        if (fileId !== this.mediaFileId) return;
+        this.media = media;
+        this.mediaLoadedTick.update((v) => v + 1);
+        this.mediaTitle.set(media.title);
+        this.mediaLogoUrl.set(media.logoUrl ?? null);
+        if (media.fanartUrl) this.fanartUrl.set(this.serverConfig.resolveUrl(media.fanartUrl));
+        this.applyEpisodeMetadata();
+        this.queueCtl.syncSeriesQueue();
+      },
+      () => {},
+    );
   }
 
   /** Sets the episode label and still backdrop (no-op for movies); the still beats series fanart. */
@@ -2980,14 +3008,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     let handoff: { media: Media } | undefined;
     if (!this.mediaId) {
       target = '/';
-    } else if (this.isOfflinePlayback) {
-      // Offline playback only starts from the downloads page.
+    } else if (this.fromDownloads) {
       target = '/downloads';
     } else if (this.queue.source() === 'playlist' && queueSourceId != null) {
       // Playing from a playlist returns to that playlist, not the item's page.
       target = `/playlists/${queueSourceId}`;
     } else {
-      const kind = this.media?.type === 'series' ? 'series' : 'movies';
+      const kind = (this.media?.type ?? this.offlineMediaType) === 'series' ? 'series' : 'movies';
       if (this.media) handoff = { media: this.media };
       if (this.episodeId && kind === 'series') {
         // A finished episode returns to the NEXT episode's detail page, a mid-watch one to its own (to resume).

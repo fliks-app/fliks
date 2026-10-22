@@ -1,4 +1,5 @@
-import { buildPlayerStats, computeVideoCropStyle, deliveredKindFromVariant, offlineCropOf, type BuildPlayerStatsParams } from './player.utils';
+import { buildPlayerStats, computeVideoCropStyle, deliveredKindFromVariant, offlineCropOf, readyDownloadFor, type BuildPlayerStatsParams } from './player.utils';
+import type { DownloadTask } from '../services/download-cache.service';
 import type { PlaybackInfoResponse } from '../services/api/streaming-api.service';
 
 const translate = { instant: (k: string) => k } as BuildPlayerStatsParams['translate'];
@@ -298,5 +299,23 @@ describe('offlineCropOf', () => {
   it('keeps nothing without a detected crop', () => {
     expect(offlineCropOf({ videoCopyStream: true, source: { width: 1920, height: 1080 } } as any)).toBeUndefined();
     expect(offlineCropOf(null)).toBeUndefined();
+  });
+});
+
+describe('readyDownloadFor', () => {
+  const task = (mediaFileId: number, status: string) => ({ mediaFileId, status }) as DownloadTask;
+  const tasks = [task(1, 'ready'), task(2, 'downloading')];
+
+  it('picks the ready download when not casting', () => {
+    expect(readyDownloadFor(tasks, 1, false)).toBe(tasks[0]);
+  });
+
+  it('uses the network while casting', () => {
+    expect(readyDownloadFor(tasks, 1, true)).toBeUndefined();
+  });
+
+  it('uses the network without a ready download', () => {
+    expect(readyDownloadFor(tasks, 2, false)).toBeUndefined();
+    expect(readyDownloadFor(tasks, 3, false)).toBeUndefined();
   });
 });
