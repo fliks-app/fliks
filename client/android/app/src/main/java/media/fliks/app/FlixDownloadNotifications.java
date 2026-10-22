@@ -96,8 +96,8 @@ final class FlixDownloadNotifications {
         String name = n == 1
             ? titleOf(ctx, items.get(0))
             : str(ctx, "activeCount", "%d").replace("%d", String.valueOf(n));
-        // Samsung's collapsed progress layout shows only the title and the bar, so the percentage leads the title.
-        String title = percent + "% · " + name;
+        // Samsung's collapsed progress layout shows only the title and the bar, so the percentage joins the title.
+        String title = name + " · " + percent + "%";
 
         NotificationCompat.Builder b = base(ctx)
             .setSmallIcon(paused ? android.R.drawable.stat_sys_download_done : android.R.drawable.stat_sys_download)
