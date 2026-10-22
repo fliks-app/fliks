@@ -1208,7 +1208,7 @@ dependencies = [
 
 [[package]]
 name = "fliks-server"
-version = "5.0.0"
+version = "5.1.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -1266,7 +1266,7 @@ dependencies = [
 
 [[package]]
 name = "fliks_domain"
-version = "5.0.0"
+version = "5.1.0"
 dependencies = [
  "chrono",
  "encoding_rs",
