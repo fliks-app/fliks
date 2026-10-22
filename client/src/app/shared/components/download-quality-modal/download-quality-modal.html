@@ -59,14 +59,6 @@
         }
       </div>
 
-      @if (current()) {
-        <div class="divider my-2"></div>
-        <button class="btn btn-outline btn-error justify-start gap-2 w-full" (click)="removeDownload()">
-          <svg lucideTrash2 class="h-4 w-4"></svg>
-          {{ 'downloads.delete_download' | translate }}
-        </button>
-      }
-
       @if (!isNative && !batch()) {
         <div class="divider my-2"></div>
         <button
@@ -80,6 +72,14 @@
         <p class="text-xs text-base-content/60 mt-1">
           {{ 'downloads.original_file_note' | translate }}
         </p>
+      }
+
+      @if (current()) {
+        <div class="divider my-2"></div>
+        <button class="btn btn-outline btn-error justify-start gap-2 w-full" (click)="removeDownload()">
+          <svg lucideTrash2 class="h-4 w-4"></svg>
+          {{ 'downloads.delete_download' | translate }}
+        </button>
       }
     }
 

@@ -330,7 +330,7 @@
             @if (download(); as d) {
               @if (d.status === 'ready') {
                 <button type="button" class="btn btn-ghost btn btn-circle text-success" [attr.aria-label]="'downloads.downloaded' | translate" [title]="'downloads.downloaded' | translate" (click)="openDownload.emit()">
-                  <svg lucideCircleCheck class="h-4 w-4"></svg>
+                  <svg lucideDownload class="h-5 w-5"></svg>
                 </button>
               } @else {
                 <button type="button" class="btn btn-ghost btn btn-circle" [attr.aria-label]="'downloads.downloading' | translate" [title]="'downloads.downloading' | translate" (click)="openDownload.emit()">
