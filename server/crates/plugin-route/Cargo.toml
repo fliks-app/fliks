@@ -6,4 +6,4 @@ license = "MIT OR Apache-2.0"
 description = "The plugin route matcher shared by the Fliks host and the plugin SDK"
 
 [dependencies]
-fancy-regex = "0.14"
+fancy-regex = "0.19"
