@@ -84,16 +84,18 @@ final class FlixDownloadNotifications {
         }
         int percent = n == 0 ? 0 : Math.round(sum / n);
 
-        String text = percent + "% · " + str(ctx, paused ? "paused" : "progress", "");
+        String text = str(ctx, paused ? "paused" : "progress", "");
         if (!paused) {
             long ms = remainingMs(key, sum, n);
             if (ms > 0) {
                 text += " · " + str(ctx, "timeLeft", "%s").replace("%s", DateUtils.formatElapsedTime(ms / 1000));
             }
         }
-        String title = n == 1
+        String name = n == 1
             ? titleOf(ctx, items.get(0))
             : str(ctx, "activeCount", "%d").replace("%d", String.valueOf(n));
+        // Samsung's collapsed progress layout shows only the title and the bar, so the percentage leads the title.
+        String title = percent + "% · " + name;
 
         NotificationCompat.Builder b = base(ctx)
             .setSmallIcon(paused ? android.R.drawable.stat_sys_download_done : android.R.drawable.stat_sys_download)
@@ -104,7 +106,7 @@ final class FlixDownloadNotifications {
             .setShowWhen(false)
             .setProgress(100, percent, !paused && sum <= 0);
         if (n > 1) {
-            NotificationCompat.InboxStyle inbox = new NotificationCompat.InboxStyle().setBigContentTitle(title);
+            NotificationCompat.InboxStyle inbox = new NotificationCompat.InboxStyle().setBigContentTitle(title).setSummaryText(text);
             for (int i = 0; i < Math.min(n, MAX_LINES); i++) {
                 Download d = items.get(i);
                 inbox.addLine(titleOf(ctx, d) + "  " + Math.round(Math.max(0f, d.getPercentDownloaded())) + "%");
