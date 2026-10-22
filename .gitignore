@@ -86,7 +86,7 @@ docker-compose.prod.yml
 .claude/scheduled_tasks.lock
 .claude/worktrees/
 
-/server/target/
+/server/**/target/
 .tags
 /server/.cargo/config.toml
 

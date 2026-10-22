@@ -6,7 +6,7 @@
 **/coverage
 client/android
 client/ios
-server/target
+server/**/target
 .claude
 .dev
 .github
