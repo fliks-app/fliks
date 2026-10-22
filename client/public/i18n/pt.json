@@ -1881,7 +1881,9 @@
     "paused": "Em pausa",
     "pause": "Pausar",
     "resume": "Retomar",
-    "auto_rule_label": "Download automático:"
+    "auto_rule_label": "Download automático:",
+    "episodes_queued_one": "1 episódio será baixado",
+    "episodes_queued_other": "{{count}} episódios serão baixados"
   },
   "setup_checklist": {
     "title": "Configuração",
