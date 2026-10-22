@@ -30,10 +30,12 @@
         </button>
       </div>
     }
+    <!-- Phones always wrap here, so the season picker gets its own row whatever the width. -->
+    <div class="order-last basis-full h-0 sm:hidden" aria-hidden="true"></div>
     @if (canSelect()) {
       <button
         type="button"
-        class="order-last btn btn-sm shrink-0 me-auto"
+        class="order-last btn btn-sm shrink-0 me-auto sm:me-0"
         [class.btn-active]="selectMode()"
         [attr.aria-pressed]="selectMode()"
         (click)="toggleSelectMode()"
