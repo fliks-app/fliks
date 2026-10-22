@@ -1052,6 +1052,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "fancy-regex"
+version = "0.19.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d301f5bf187b3c295fce6468d3875037a0bccc5f6b151c63cac2f85babf21912"
+dependencies = [
+ "bit-set",
+ "regex-automata",
+ "regex-syntax",
+]
+
+[[package]]
 name = "fastrand"
 version = "1.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1136,7 +1147,7 @@ dependencies = [
 name = "fliks-plugin-route"
 version = "0.1.0"
 dependencies = [
- "fancy-regex",
+ "fancy-regex 0.14.0",
 ]
 
 [[package]]
@@ -1226,7 +1237,7 @@ version = "5.0.0"
 dependencies = [
  "chrono",
  "encoding_rs",
- "fancy-regex",
+ "fancy-regex 0.19.2",
  "fliks-plugin-route",
  "percent-encoding",
  "quick-xml",
