@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DOWNLOAD_STATUSES, heldStatus, isActive, isPausable, isTransferring, normalizeStatus } from './download-status';
+import { DOWNLOAD_STATUSES, heldStatus, isActive, isPausable, isTransferring, normalizeStatus, nothingStartedKey } from './download-status';
 
 describe('download status', () => {
   it('maps the statuses saved before the union onto it', () => {
@@ -24,5 +24,11 @@ describe('download status', () => {
     expect(heldStatus('waiting_wifi')).toBe('waiting_wifi');
     expect(heldStatus('queued')).toBe('queued');
     expect(heldStatus('downloading')).toBeNull();
+  });
+
+  it('names an all-on-device batch apart from the other no-ops', () => {
+    expect(nothingStartedKey(3, 3)).toBe('downloads.already_downloaded');
+    expect(nothingStartedKey(1, 3)).toBe('downloads.nothing_new');
+    expect(nothingStartedKey(0, 0)).toBe('downloads.nothing_new');
   });
 });

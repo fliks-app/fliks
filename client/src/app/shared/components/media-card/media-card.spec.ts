@@ -760,3 +760,27 @@ describe('MediaCardComponent type badge scope', () => {
     localStorage.removeItem('display.settings');
   });
 });
+
+describe('MediaCardComponent download indicator', () => {
+  const host = (h: Harness) => h.fixture.nativeElement as HTMLElement;
+
+  it('shows nothing without a download or after a failure', async () => {
+    const h = await createFixture(FULL_MEMBER, { aspect: 'landscape', downloadState: null });
+    expect(host(h).querySelector('.radial-progress')).toBeNull();
+    expect(host(h).querySelector('[title="downloads.on_device"]')).toBeNull();
+    h.fixture.componentRef.setInput('downloadState', { status: 'failed', progress: 0 });
+    h.fixture.detectChanges();
+    expect(host(h).querySelector('.radial-progress')).toBeNull();
+    expect(host(h).querySelector('[title="downloads.on_device"]')).toBeNull();
+  });
+
+  it('shows the glyph when ready and a ring while in flight', async () => {
+    const h = await createFixture(FULL_MEMBER, { aspect: 'landscape', downloadState: { status: 'ready', progress: 100 } });
+    expect(host(h).querySelector('[title="downloads.on_device"]')).not.toBeNull();
+    expect(host(h).querySelector('.radial-progress')).toBeNull();
+    h.fixture.componentRef.setInput('downloadState', { status: 'downloading', progress: 40 });
+    h.fixture.detectChanges();
+    expect(host(h).querySelector('.radial-progress')?.getAttribute('aria-valuenow')).toBe('40');
+    expect(host(h).querySelector('[title="downloads.on_device"]')).toBeNull();
+  });
+});

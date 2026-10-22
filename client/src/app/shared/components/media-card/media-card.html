@@ -62,6 +62,23 @@
       </div>
     }
 
+    <!-- Bottom-left: on-device glyph, or a ring while the download is in flight (landscape; portrait keeps the rating there) -->
+    @if (downloadInFlight(); as d) {
+      <div
+        class="absolute bottom-2 left-2 z-10 rounded-full bg-black/60 p-0.5"
+        [attr.title]="'downloads.downloading' | translate"
+      >
+        <div class="radial-progress text-info" [style.--value]="d.progress" style="--size: 1.1rem; --thickness: 2px" role="progressbar" [attr.aria-valuenow]="d.progress" [attr.aria-label]="'downloads.downloading' | translate"></div>
+      </div>
+    } @else if (downloadState()?.status === 'ready') {
+      <div
+        class="absolute bottom-2 left-2 z-10 flex h-5 w-5 items-center justify-center rounded-full bg-black/60"
+        [attr.title]="'downloads.on_device' | translate"
+      >
+        <svg lucideDownload class="h-3 w-3 text-white" [strokeWidth]="2.5" [attr.aria-label]="'downloads.on_device' | translate"></svg>
+      </div>
+    }
+
     <!-- Top-left: missing-files indicator (auto), media type, status badge, episode number -->
     @if (_resolvedStatus() === 'missing' || statusBadge() || topLeftBadge() || typeBadge()) {
       <div class="absolute top-2 left-2 z-10 flex items-center gap-1">

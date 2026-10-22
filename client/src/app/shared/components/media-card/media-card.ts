@@ -2,7 +2,7 @@ import { Component, ElementRef, InjectionToken, input, output, computed, inject,
 import { Router, RouterLink } from '@angular/router';
 import { NgClass, DecimalPipe } from '@angular/common';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import { LucideFilm, LucidePlay, LucideStar, LucideCheck, LucideClock, LucideEllipsisVertical, LucideCircleX, LucideHeart } from '@lucide/angular';
+import { LucideFilm, LucidePlay, LucideStar, LucideCheck, LucideClock, LucideEllipsisVertical, LucideCircleX, LucideHeart, LucideDownload } from '@lucide/angular';
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 import { MediaType } from '../../../core/enums/media-type.enum';
 import { Media } from '../../../core/services/api/media.service';
@@ -33,6 +33,7 @@ import { CORE_MEDIA_ACTIONS, sectionOf } from '../media-info-header/core-media-a
 import { resolveMenuContributions } from '../../../core/plugin-ui/resolve-menu-contributions';
 import { resolveMediaAction, type MediaActionHandlers } from '../../../core/plugin-ui/media-action-registry';
 import { CachedSrcDirective } from '../../directives/cached-src.directive';
+import { isActive, type DownloadStatus } from '../../../core/services/download-status';
 import { DisplaySettingsService } from '../../../core/services/display-settings.service';
 
 /** Provided by the search page so its cards keep the type badge under the 'search' setting. */
@@ -51,11 +52,17 @@ export type BarStatus =
 export type CardBadge = 'library' | 'pending' | 'declined' | null;
 export type CardStatus = 'watched' | 'missing' | null;
 
+/** What the device holds for the card's title: shown as a glyph when ready, a ring while in flight. */
+export interface CardDownloadState {
+  status: DownloadStatus;
+  progress: number;
+}
+
 @Component({
   selector: 'app-media-card',
   imports: [
     CachedSrcDirective,RouterLink, NgClass, DecimalPipe, ResolveUrlPipe, TranslatePipe,
-    LucideFilm, LucidePlay, LucideStar, LucideCheck, LucideClock, LucideEllipsisVertical, LucideCircleX, LucideHeart,
+    LucideFilm, LucidePlay, LucideStar, LucideCheck, LucideClock, LucideEllipsisVertical, LucideCircleX, LucideHeart, LucideDownload,
     CardActionsDirective, SpoilerDirective],
   templateUrl: './media-card.html',
   // Stable card identity for focus memory (`focusIdAttr`); the focused figure wraps the link, so `href` can't serve.
@@ -121,6 +128,12 @@ export class MediaCardComponent {
   readonly mediaTypeBadge = input<MediaType | string | null>(null);
   readonly badge = input<CardBadge>(null);
   readonly status = input<CardStatus>(null);
+  /** Bottom-left download indicator; null shows nothing (failed counts as nothing). */
+  readonly downloadState = input<CardDownloadState | null>(null);
+  protected readonly downloadInFlight = computed(() => {
+    const d = this.downloadState();
+    return d && isActive(d.status) ? d : null;
+  });
 
   // Navigation (override media-derived link)
   readonly link = input<string[] | null>(null);

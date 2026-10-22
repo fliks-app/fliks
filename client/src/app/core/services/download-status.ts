@@ -24,3 +24,8 @@ export const isTransferring = (s: DownloadStatus): boolean => s === 'preparing' 
 export function heldStatus(state?: string): DownloadStatus | null {
   return state === 'queued' || state === 'paused' || state === 'waiting_wifi' ? state : null;
 }
+
+/** Toast key for a batch that started nothing: all targets already on the device, or nothing new. */
+export function nothingStartedKey(skipped: number, total: number): string {
+  return skipped > 0 && skipped === total ? 'downloads.already_downloaded' : 'downloads.nothing_new';
+}

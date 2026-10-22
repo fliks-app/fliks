@@ -56,6 +56,7 @@ import { CollapsibleSectionComponent } from '../../shared/components/collapsible
 import { MediaCardComponent } from '../../shared/components/media-card/media-card';
 import { DownloadQualityModalComponent } from '../../shared/components/download-quality-modal/download-quality-modal';
 import { DownloadManagerService, episodeLabel, type DownloadTarget } from '../../core/services/download-manager.service';
+import { nothingStartedKey } from '../../core/services/download-status';
 import { DownloadDetailModalComponent } from '../../shared/components/download-detail-modal/download-detail-modal';
 import { collectScopedLeaves, describeDownload } from '../../shared/utils/download-format';
 import { TvService } from '../../core/services/tv.service';
@@ -1037,10 +1038,10 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     this.pendingDownloads = null;
     if (pending) {
       const targets = ev.unwatchedOnly ? pending.filter((t) => !t.watched) : pending;
-      const { started, failed } = await this.downloadManager.createMany(targets, ev.quality);
+      const { started, failed, skipped } = await this.downloadManager.createMany(targets, ev.quality);
       if (started) this.toast.success(this.translate.instant('downloads.started'));
       else if (failed) this.toast.error(this.translate.instant('downloads.error'));
-      else this.toast.info(this.translate.instant('downloads.nothing_new'));
+      else this.toast.info(this.translate.instant(nothingStartedKey(skipped, targets.length)));
       return;
     }
     try {

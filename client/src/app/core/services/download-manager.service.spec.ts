@@ -147,20 +147,20 @@ describe('DownloadManagerService.createMany', () => {
     );
     const res = await service.createMany([target(1), target(2), target(3), target(4)], '1080p');
     expect(create.mock.calls.map((c) => [c[0], c[1]])).toEqual([[2, '1080p'], [3, '720p'], [4, '1080p']]);
-    expect(res).toEqual({ started: 3, failed: 0 });
+    expect(res).toEqual({ started: 3, failed: 0, skipped: 1 });
   });
 
   it('counts a failing target and keeps going', async () => {
     const { service, create } = setup([], { 1: ['720p'], 2: ['720p'] });
     create.mockRejectedValueOnce(new Error('x'));
     const res = await service.createMany([target(1), target(2)], '720p');
-    expect(res).toEqual({ started: 1, failed: 1 });
+    expect(res).toEqual({ started: 1, failed: 1, skipped: 0 });
   });
 
   it('stops before the next target once stop() turns true', async () => {
     const { service, create } = setup([], { 1: ['720p'], 2: ['720p'] });
     const res = await service.createMany([target(1), target(2)], '720p', { stop: () => create.mock.calls.length > 0 });
-    expect(res).toEqual({ started: 1, failed: 0 });
+    expect(res).toEqual({ started: 1, failed: 0, skipped: 0 });
   });
 });
 

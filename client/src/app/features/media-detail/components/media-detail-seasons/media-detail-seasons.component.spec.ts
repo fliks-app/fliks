@@ -1,4 +1,4 @@
-import { provideZonelessChangeDetection } from '@angular/core';
+import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { TranslateLoader, provideTranslateService } from '@ngx-translate/core';
@@ -7,6 +7,7 @@ import { MediaDetailSeasonsComponent } from './media-detail-seasons.component';
 import { Episode, Media, Season } from '../../../../core/services/api/media.service';
 import { PlayableMediaService } from '../../../../core/services/playable-media.service';
 import { AddToPlaylistService } from '../../../../core/services/add-to-playlist.service';
+import { DownloadManagerService } from '../../../../core/services/download-manager.service';
 import { TvService } from '../../../../core/services/tv.service';
 import { AuthService } from '../../../../core/services/auth.service';
 import { DeviceService } from '../../../../core/services/device.service';
@@ -72,6 +73,7 @@ async function createFixture(opts: FixtureOpts = {}): Promise<ComponentFixture<M
         loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } },
       }),
       { provide: TvService, useValue: { isTv: () => false } },
+      { provide: DownloadManagerService, useValue: { tasks: signal([]) } },
       { provide: AuthService, useValue: { hasPermission: () => false, sharingDisabled: () => false } },
       { provide: DeviceService, useValue: { input: () => 'mouse', isTouch: () => false } },
       { provide: PlayableMediaService, useValue: { play: () => Promise.resolve() } },

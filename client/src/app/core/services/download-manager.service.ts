@@ -256,15 +256,20 @@ export class DownloadManagerService {
     targets: DownloadTarget[],
     rungKey?: string,
     opts?: { auto?: boolean; stop?: () => boolean },
-  ): Promise<{ started: number; failed: number }> {
+  ): Promise<{ started: number; failed: number; skipped: number }> {
     const medias = new Map<number, Media | null>();
     let started = 0;
     let failed = 0;
+    let skipped = 0;
     for (const t of targets) {
       if (opts?.stop?.()) break;
       try {
         const fileId = t.mediaFileId ?? (await this.resolveFileId(t, medias));
-        if (!fileId || this.isOnDevice(fileId)) continue;
+        if (!fileId) continue;
+        if (this.isOnDevice(fileId)) {
+          skipped++;
+          continue;
+        }
         const qualities = await this.streamingApi.getDownloadQualities(fileId);
         const quality = rungKey ? pickRung(qualities, rungKey) : qualities[0];
         if (!quality) continue;
@@ -282,7 +287,7 @@ export class DownloadManagerService {
         failed++;
       }
     }
-    return { started, failed };
+    return { started, failed, skipped };
   }
 
   private async resolveFileId(t: DownloadTarget, medias: Map<number, Media | null>): Promise<number | null> {
