@@ -57,6 +57,6 @@ public class FlixDownloadService extends DownloadService {
             }
         }
 
-        return FlixDownloadNotifications.build(this, downloads);
+        return FlixDownloadNotifications.build(this, downloads, notMetRequirements);
     }
 }

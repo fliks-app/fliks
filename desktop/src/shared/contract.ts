@@ -230,6 +230,7 @@ export const DOWNLOAD_IPC = {
   saveFile: 'download:saveFile',
   fileUrl: 'download:fileUrl',
   deleteFile: 'download:deleteFile',
+  freeSpace: 'download:freeSpace',
   /** main → renderer (discriminated by DesktopDownloadStatus.state). */
   status: 'download:status',
 } as const;
@@ -249,6 +250,8 @@ export interface FliksDownloaderApi {
   /** file:// URL of a saved sidecar file, or null. */
   fileUrl(key: string): Promise<string | null>;
   deleteFile(key: string): Promise<void>;
+  /** Free and total bytes of the volume holding the downloads. */
+  freeSpace(): Promise<{ freeBytes: number; totalBytes: number }>;
   onStatus(handler: (status: DesktopDownloadStatus) => void): () => void;
 }
 

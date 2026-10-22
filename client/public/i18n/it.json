@@ -1863,6 +1863,8 @@
     "notif_time_left": "{{time}} rimanenti",
     "notif_pause": "Pausa",
     "notif_resume": "Riprendi",
+    "notif_cancel": "Annulla",
+    "notif_waiting_wifi": "In attesa del Wi-Fi",
     "select": "Seleziona",
     "total_used": "{{size}} usati",
     "delete_all": "Elimina tutto",

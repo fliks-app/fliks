@@ -34,6 +34,8 @@ public class DownloadNotificationPlugin extends Plugin {
 
     private static final String TAG = "DownloadNotification";
     private static DownloadNotificationPlugin instance;
+    /** A notification tap that arrived before the WebView listened. */
+    private static boolean pendingOpenDownloads;
 
     @Override
     public void load() {
@@ -54,6 +56,34 @@ public class DownloadNotificationPlugin extends Plugin {
         if (instance != null) {
             instance.notifyListeners(eventName, data);
         }
+    }
+
+    /** A notification tap asked for the downloads page; held until the WebView asks when it isn't up yet. */
+    public static void openDownloads() {
+        if (instance != null && instance.hasListeners("openDownloads")) {
+            instance.notifyListeners("openDownloads", new JSObject());
+        } else {
+            pendingOpenDownloads = true;
+        }
+    }
+
+    /** Whether a notification tap is waiting; reading it clears it. */
+    @PluginMethod()
+    public void consumeOpenDownloads(PluginCall call) {
+        JSObject result = new JSObject();
+        result.put("pending", pendingOpenDownloads);
+        pendingOpenDownloads = false;
+        call.resolve(result);
+    }
+
+    /** Free and total bytes on the volume holding the downloads. */
+    @PluginMethod()
+    public void getFreeSpace(PluginCall call) {
+        long[] space = FlixDownloadUtil.getSpace(getContext());
+        JSObject result = new JSObject();
+        result.put("freeBytes", space[0]);
+        result.put("totalBytes", space[1]);
+        call.resolve(result);
     }
 
     /** Start an HLS download via ExoPlayer DownloadManager. */
@@ -152,6 +182,7 @@ public class DownloadNotificationPlugin extends Plugin {
                 }
             }
             DownloadManager dm = FlixDownloadUtil.getDownloadManager(getContext());
+            int notMet = dm.getNotMetRequirements();
             if (dm.isInitialized()) {
                 for (Download dl : dm.getCurrentDownloads()) {
                     byId.put(dl.request.id, dl);
@@ -163,7 +194,7 @@ public class DownloadNotificationPlugin extends Plugin {
                 JSObject obj = new JSObject();
                 obj.put("id", dl.request.id);
                 obj.put("progress", Math.round(dl.getPercentDownloaded()));
-                obj.put("state", stateToString(dl.state));
+                obj.put("state", FlixDownloadUtil.stateName(dl, notMet));
                 obj.put("bytesDownloaded", dl.getBytesDownloaded());
                 arr.put(obj);
             }
@@ -209,17 +240,5 @@ public class DownloadNotificationPlugin extends Plugin {
             result.put("bytes", 0);
         }
         call.resolve(result);
-    }
-
-    private static String stateToString(int state) {
-        switch (state) {
-            case Download.STATE_QUEUED: return "queued";
-            case Download.STATE_DOWNLOADING: return "downloading";
-            case Download.STATE_COMPLETED: return "completed";
-            case Download.STATE_FAILED: return "failed";
-            case Download.STATE_REMOVING: return "removing";
-            case Download.STATE_STOPPED: return "paused";
-            default: return "unknown";
-        }
     }
 }

@@ -32,6 +32,7 @@ export interface FliksDownloaderApi {
   saveFile(key: string, url: string): Promise<boolean>;
   fileUrl(key: string): Promise<string | null>;
   deleteFile(key: string): Promise<void>;
+  freeSpace(): Promise<{ freeBytes: number; totalBytes: number }>;
   onStatus(handler: (status: DesktopDownloadStatus) => void): () => void;
 }
 
