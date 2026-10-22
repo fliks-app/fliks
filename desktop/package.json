@@ -31,8 +31,8 @@
     "@types/node": "^25.9.3",
     "electron": "^42.4.0",
     "electron-builder": "^26.15.3",
-    "esbuild": "^0.28.1",
-    "node-addon-api": "^8.8.0",
+    "esbuild": "^0.28.2",
+    "node-addon-api": "^8.9.2",
     "node-gyp": "^12.4.0",
     "typescript": "^7.0.2"
   }
