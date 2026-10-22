@@ -367,6 +367,13 @@ async function deleteFile(key: string): Promise<void> {
 }
 
 /** Wire the renderer→main download channels. Registered once on app ready. */
+async function freeSpace(): Promise<{ freeBytes: number; totalBytes: number }> {
+  const dir = baseDir();
+  await fsp.mkdir(dir, { recursive: true });
+  const st = await fsp.statfs(dir);
+  return { freeBytes: st.bavail * st.bsize, totalBytes: st.blocks * st.bsize };
+}
+
 export function registerDownloadIpc(): void {
   ipcMain.handle(DOWNLOAD_IPC.start, (_e, req: DesktopDownloadRequest) => start(req));
   ipcMain.handle(DOWNLOAD_IPC.pause, (_e, id: string) => pause(id));
@@ -377,4 +384,5 @@ export function registerDownloadIpc(): void {
   ipcMain.handle(DOWNLOAD_IPC.saveFile, (_e, key: string, url: string) => saveFile(key, url));
   ipcMain.handle(DOWNLOAD_IPC.fileUrl, (_e, key: string) => fileUrl(key));
   ipcMain.handle(DOWNLOAD_IPC.deleteFile, (_e, key: string) => deleteFile(key));
+  ipcMain.handle(DOWNLOAD_IPC.freeSpace, () => freeSpace());
 }

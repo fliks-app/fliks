@@ -36,8 +36,7 @@ enum BackgroundDownloadCompletion {
  * the disk without finishing any of them sooner.
  *
  *   methods  startDownload / removeDownload / getDownloads / isDownloaded
- *            / getOfflineUrl / pauseDownloads / resumeDownloads
- *            / setActivityCopy
+ *            / getOfflineUrl / setActivityCopy / getFreeSpace / consumeOpenDownloads
  *   events   downloadProgress | downloadComplete | downloadFailed | downloadRemoved
  *            each carrying { id, progress, state }
  */
@@ -53,13 +52,13 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
         CAPPluginMethod(name: "getOfflineUrl", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "pauseDownload", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "resumeDownload", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "pauseDownloads", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "resumeDownloads", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setActivityCopy", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setMaxConcurrentDownloads", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setWifiOnly", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "dismissActivity", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getDownloadSize", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "getFreeSpace", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "consumeOpenDownloads", returnType: CAPPluginReturnPromise),
     ]
 
     /// Concurrent transfers. HLS aggregate downloads are segment-chatty, so a
@@ -101,9 +100,6 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
     /// Ids whose task is still being created. The asset load is async, so they
     /// hold a slot before they ever reach `activeTasks`.
     private var starting: Set<String> = []
-    /// Set by `pauseDownloads`, so a finishing task doesn't pull the next
-    /// request out of the queue behind the user's back.
-    private var paused = false
     /// Downloads held one by one; they keep their task but give up their slot.
     private var pausedIds: Set<String> = []
 
@@ -150,6 +146,7 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
     }
 
     override public func load() {
+        Self.current = self
         // Restore the persisted id → relative-path map so completed downloads
         // survive an app restart.
         if let saved = UserDefaults.standard.dictionary(forKey: Self.assetsDefaultsKey) as? [String: String] {
@@ -241,7 +238,7 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
             self.startActivityIfNeeded()
             // Surface the state immediately so the UI leaves "transcoding" —
             // queued when it has to wait its turn, downloading when it doesn't.
-            let willStart = self.inFlightCount < self.maxConcurrentDownloads && !self.paused
+            let willStart = self.inFlightCount < self.maxConcurrentDownloads
             self.notifyListeners("downloadProgress", data: [
                 "id": id,
                 "progress": 0,
@@ -258,7 +255,6 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
 
     /// Start as many queued downloads as the concurrency cap allows.
     private func pumpQueue() {
-        guard !paused else { return }
         while inFlightCount < maxConcurrentDownloads, !pending.isEmpty {
             beginDownload(pending.removeFirst())
         }
@@ -436,6 +432,32 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
         }
     }
 
+    @objc func getFreeSpace(_ call: CAPPluginCall) {
+        let url = URL(fileURLWithPath: NSHomeDirectory())
+        let values = try? url.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey, .volumeTotalCapacityKey])
+        call.resolve([
+            "freeBytes": Int(values?.volumeAvailableCapacityForImportantUsage ?? 0),
+            "totalBytes": values?.volumeTotalCapacity ?? 0,
+        ])
+    }
+
+    /// A notification tap asked for the downloads page. Held until the WebView asks when it isn't up yet.
+    private static var pendingOpenDownloads = false
+    private static weak var current: DownloadPlugin?
+
+    static func openDownloads() {
+        if let plugin = current, plugin.hasListeners("openDownloads") {
+            plugin.notifyListeners("openDownloads", data: [:])
+        } else {
+            pendingOpenDownloads = true
+        }
+    }
+
+    @objc func consumeOpenDownloads(_ call: CAPPluginCall) {
+        call.resolve(["pending": Self.pendingOpenDownloads])
+        Self.pendingOpenDownloads = false
+    }
+
     @objc func isDownloaded(_ call: CAPPluginCall) {
         guard let id = call.getString("id") else {
             call.resolve(["downloaded": false])
@@ -506,21 +528,8 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
 
     @objc func resumeDownload(_ call: CAPPluginCall) {
         guard let id = call.getString("id"), pausedIds.remove(id) != nil else { return call.resolve() }
-        if !paused { activeTasks[id]?.resume() }
+        activeTasks[id]?.resume()
         notifyListeners("downloadProgress", data: ["id": id, "progress": Int(progressById[id] ?? 0), "state": "downloading"])
-        call.resolve()
-    }
-
-    @objc func pauseDownloads(_ call: CAPPluginCall) {
-        paused = true
-        for task in activeTasks.values { task.suspend() }
-        call.resolve()
-    }
-
-    @objc func resumeDownloads(_ call: CAPPluginCall) {
-        paused = false
-        for (id, task) in activeTasks where !pausedIds.contains(id) { task.resume() }
-        pumpQueue()
         call.resolve()
     }
 
@@ -868,6 +877,7 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
         content.title = copy.title
         content.body = success ? copy.complete : copy.failed
         content.sound = .default
+        content.userInfo = ["openDownloads": true]
         let request = UNNotificationRequest(
             identifier: "download-\(id)",
             content: content,

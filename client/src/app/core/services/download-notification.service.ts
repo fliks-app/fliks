@@ -1,6 +1,8 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
+import { Router } from '@angular/router';
 import { Subject } from 'rxjs';
 import { Capacitor, registerPlugin } from '@capacitor/core';
+import { desktopDownloaderOrNull } from '../plugins/desktop-downloader.bridge';
 
 export interface NativeDownloadEvent {
   type: 'progress' | 'complete' | 'failed' | 'removed';
@@ -45,6 +47,9 @@ export interface DownloadNotificationCopy {
   timeLeft: string;
   pause: string;
   resume: string;
+  cancel?: string;
+  /** Ongoing notification text while Wi-Fi only holds the queue. */
+  waitingWifi?: string;
 }
 
 interface DownloadNotificationPlugin {
@@ -64,6 +69,8 @@ interface DownloadNotificationPlugin {
   setWifiOnly(opts: { enabled: boolean }): Promise<void>;
   dismissActivity(): Promise<void>;
   getDownloadSize(opts: { id: string }): Promise<{ bytes: number }>;
+  getFreeSpace(): Promise<{ freeBytes: number; totalBytes: number }>;
+  consumeOpenDownloads(): Promise<{ pending: boolean }>;
   addListener(event: string, cb: (data: any) => void): Promise<any>;
 }
 
@@ -75,6 +82,7 @@ const DownloadNotification = Capacitor.isNativePlatform()
 @Injectable({ providedIn: 'root' })
 export class DownloadNotificationService {
   private readonly isNative = Capacitor.isNativePlatform();
+  private readonly router = inject(Router);
 
   /** Every native event: Media3 fires one per download in the same tick on pause, which a last-value signal would collapse. */
   readonly nativeEvents = new Subject<NativeDownloadEvent>();
@@ -89,6 +97,12 @@ export class DownloadNotificationService {
       DownloadNotification.addListener('downloadComplete', emit('complete'));
       DownloadNotification.addListener('downloadFailed', emit('failed'));
       DownloadNotification.addListener('downloadRemoved', emit('removed'));
+      // Notification tap: a warm start fires the event, a cold start leaves a flag to read once.
+      const open = () => void this.router.navigateByUrl('/downloads');
+      DownloadNotification.addListener('openDownloads', open);
+      DownloadNotification.consumeOpenDownloads()
+        .then(({ pending }) => pending && open())
+        .catch(() => {});
     }
   }
 
@@ -185,6 +199,19 @@ export class DownloadNotificationService {
       return result.downloaded;
     } catch {
       return false;
+    }
+  }
+
+  /** Free and total bytes where downloads are stored; null when the platform can't tell. */
+  async getFreeSpace(): Promise<{ freeBytes: number; totalBytes: number } | null> {
+    try {
+      if (DownloadNotification) return await DownloadNotification.getFreeSpace();
+      const desktop = desktopDownloaderOrNull();
+      if (desktop) return await desktop.freeSpace();
+      const { quota, usage } = await navigator.storage.estimate();
+      return quota === undefined ? null : { freeBytes: Math.max(0, quota - (usage ?? 0)), totalBytes: quota };
+    } catch {
+      return null;
     }
   }
 }

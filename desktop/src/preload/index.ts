@@ -88,6 +88,7 @@ const downloader: FliksDownloaderApi = {
   saveFile: (key: string, url: string) => ipcRenderer.invoke(DOWNLOAD_IPC.saveFile, key, url),
   fileUrl: (key: string) => ipcRenderer.invoke(DOWNLOAD_IPC.fileUrl, key),
   deleteFile: (key: string) => ipcRenderer.invoke(DOWNLOAD_IPC.deleteFile, key),
+  freeSpace: () => ipcRenderer.invoke(DOWNLOAD_IPC.freeSpace),
   onStatus: (handler: (status: DesktopDownloadStatus) => void) => {
     const listener = (_e: unknown, status: DesktopDownloadStatus) => handler(status);
     ipcRenderer.on(DOWNLOAD_IPC.status, listener);

@@ -31,6 +31,19 @@ public class MainActivity extends BridgeActivity {
     private boolean imeVisible = false;
 
     @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        handleDownloadsIntent(intent);
+    }
+
+    private static void handleDownloadsIntent(Intent intent) {
+        if (intent != null && intent.getBooleanExtra(FlixDownloadNotifications.EXTRA_OPEN_DOWNLOADS, false)) {
+            intent.removeExtra(FlixDownloadNotifications.EXTRA_OPEN_DOWNLOADS);
+            DownloadNotificationPlugin.openDownloads();
+        }
+    }
+
+    @Override
     protected void onCreate(Bundle savedInstanceState) {
         registerPlugin(ImmersivePlugin.class);
         registerPlugin(OrientationPlugin.class);
@@ -44,6 +57,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(RemoteNotificationPlugin.class);
         registerPlugin(SaveFilePlugin.class);
         super.onCreate(savedInstanceState);
+        if (savedInstanceState == null) handleDownloadsIntent(getIntent());
 
         // Request notification permission (Android 13+)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {

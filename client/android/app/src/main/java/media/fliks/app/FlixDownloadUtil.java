@@ -76,6 +76,23 @@ public class FlixDownloadUtil {
         }
     }
 
+    /** True when Wi-Fi only is on and the unmetered-network requirement is what holds transfers back. */
+    static synchronized boolean isWaitingWifi(int notMetRequirements) {
+        return wifiOnly && (notMetRequirements & Requirements.NETWORK_UNMETERED) != 0;
+    }
+
+    static String stateName(Download download, int notMetRequirements) {
+        switch (download.state) {
+            case Download.STATE_COMPLETED: return "completed";
+            case Download.STATE_FAILED: return "failed";
+            case Download.STATE_DOWNLOADING: return "downloading";
+            case Download.STATE_STOPPED: return "paused";
+            case Download.STATE_REMOVING: return "removing";
+            case Download.STATE_QUEUED: return isWaitingWifi(notMetRequirements) ? "waiting_wifi" : "queued";
+            default: return "queued";
+        }
+    }
+
     private static Requirements networkRequirements() {
         return new Requirements(wifiOnly ? Requirements.NETWORK_UNMETERED : Requirements.NETWORK);
     }
@@ -151,14 +168,7 @@ public class FlixDownloadUtil {
                     JSObject data = new JSObject();
                     data.put("id", download.request.id);
                     data.put("progress", Math.round(download.getPercentDownloaded()));
-                    String state;
-                    switch (download.state) {
-                        case Download.STATE_COMPLETED: state = "completed"; break;
-                        case Download.STATE_FAILED: state = "failed"; break;
-                        case Download.STATE_DOWNLOADING: state = "downloading"; break;
-                        case Download.STATE_STOPPED: state = "paused"; break;
-                        default: state = "queued";
-                    }
+                    String state = stateName(download, manager.getNotMetRequirements());
                     data.put("state", state);
                     if (download.state == Download.STATE_COMPLETED) {
                         DownloadNotificationPlugin.emitEvent("downloadComplete", data);
@@ -168,6 +178,19 @@ public class FlixDownloadUtil {
                         DownloadNotificationPlugin.emitEvent("downloadProgress", data);
                     }
                     FlixDownloadNotifications.onChanged(appContext, manager, download);
+                }
+
+                @Override
+                public void onRequirementsStateChanged(DownloadManager manager, Requirements requirements, int notMetRequirements) {
+                    for (Download download : manager.getCurrentDownloads()) {
+                        if (download.state != Download.STATE_QUEUED) continue;
+                        JSObject data = new JSObject();
+                        data.put("id", download.request.id);
+                        data.put("progress", Math.round(download.getPercentDownloaded()));
+                        data.put("state", stateName(download, notMetRequirements));
+                        DownloadNotificationPlugin.emitEvent("downloadProgress", data);
+                    }
+                    FlixDownloadNotifications.refreshPaused(appContext, manager);
                 }
 
                 @Override
@@ -237,13 +260,9 @@ public class FlixDownloadUtil {
         DownloadService.sendSetStopReason(ctx, FlixDownloadService.class, id, Download.STOP_REASON_NONE, /* foreground= */ false);
     }
 
-    /** Pause all downloads. */
-    public static void pauseDownloads(Context ctx) {
-        DownloadService.sendPauseDownloads(ctx, FlixDownloadService.class, /* foreground= */ false);
-    }
-
-    /** Resume all downloads. */
-    public static void resumeDownloads(Context ctx) {
-        DownloadService.sendResumeDownloads(ctx, FlixDownloadService.class, /* foreground= */ false);
+    /** Free and total bytes of the volume holding the offline cache. */
+    public static long[] getSpace(Context ctx) {
+        android.os.StatFs fs = new android.os.StatFs(ctx.getFilesDir().getPath());
+        return new long[] {fs.getAvailableBytes(), fs.getTotalBytes()};
     }
 }

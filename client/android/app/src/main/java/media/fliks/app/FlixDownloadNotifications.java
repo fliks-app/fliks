@@ -28,11 +28,12 @@ import java.util.List;
  *  All wording is translated by the WebView ({@link #setCopy}) and persisted for service restarts. */
 @OptIn(markerClass = UnstableApi.class)
 final class FlixDownloadNotifications {
+    static final String EXTRA_OPEN_DOWNLOADS = "fliks.openDownloads";
     static final int PAUSED_ID = FlixDownloadUtil.FOREGROUND_NOTIFICATION_ID + 1;
     private static final String PREFS = "fliks_download_copy";
     private static final String[] COPY_KEYS = {
         "channelName", "channelDescription", "progress", "paused", "complete", "failed",
-        "activeCount", "timeLeft", "pause", "resume",
+        "activeCount", "timeLeft", "pause", "resume", "cancel", "waitingWifi",
     };
     private static final int PAUSE_STOP_REASON = 1;
     private static final long WINDOW_MS = 30_000;
@@ -69,7 +70,7 @@ final class FlixDownloadNotifications {
     }
 
     /** Summary of the queue: the ongoing notification, or the paused one when nothing is moving. */
-    static Notification build(Context ctx, List<Download> downloads) {
+    static Notification build(Context ctx, List<Download> downloads, int notMetRequirements) {
         List<Download> items = new ArrayList<>();
         for (Download d : downloads) if (isActive(d)) items.add(d);
         boolean paused = items.isEmpty();
@@ -84,8 +85,9 @@ final class FlixDownloadNotifications {
         }
         int percent = n == 0 ? 0 : Math.round(sum / n);
 
-        String text = str(ctx, paused ? "paused" : "progress", "");
-        if (!paused) {
+        boolean waiting = !paused && FlixDownloadUtil.isWaitingWifi(notMetRequirements);
+        String text = str(ctx, paused ? "paused" : waiting ? "waitingWifi" : "progress", "");
+        if (!paused && !waiting) {
             long ms = remainingMs(key, sum, n);
             if (ms > 0) {
                 text += " · " + str(ctx, "timeLeft", "%s").replace("%s", DateUtils.formatElapsedTime(ms / 1000));
@@ -113,8 +115,10 @@ final class FlixDownloadNotifications {
             }
             b.setStyle(inbox);
         } else if (n == 1) {
+            String id = items.get(0).request.id;
             b.addAction(paused ? android.R.drawable.ic_media_play : android.R.drawable.ic_media_pause,
-                str(ctx, paused ? "resume" : "pause", ""), stopReasonIntent(ctx, items.get(0).request.id, paused));
+                str(ctx, paused ? "resume" : "pause", ""), stopReasonIntent(ctx, id, paused));
+            b.addAction(android.R.drawable.ic_menu_close_clear_cancel, str(ctx, "cancel", ""), removeIntent(ctx, id));
         }
         return b.build();
     }
@@ -157,12 +161,13 @@ final class FlixDownloadNotifications {
             }
             anyPaused |= isPaused(d);
         }
-        if (anyPaused) nm.notify(PAUSED_ID, build(ctx, downloads));
+        if (anyPaused) nm.notify(PAUSED_ID, build(ctx, downloads, manager.getNotMetRequirements()));
         else nm.cancel(PAUSED_ID);
     }
 
     private static NotificationCompat.Builder base(Context ctx) {
         Intent open = ctx.getPackageManager().getLaunchIntentForPackage(ctx.getPackageName());
+        open.putExtra(EXTRA_OPEN_DOWNLOADS, true);
         return new NotificationCompat.Builder(ctx, FlixDownloadUtil.DOWNLOAD_CHANNEL_ID)
             .setContentIntent(PendingIntent.getActivity(ctx, 0, open, PendingIntent.FLAG_IMMUTABLE))
             .setCategory(NotificationCompat.CATEGORY_PROGRESS);
@@ -173,6 +178,11 @@ final class FlixDownloadNotifications {
             ctx, FlixDownloadService.class, id,
             resume ? Download.STOP_REASON_NONE : PAUSE_STOP_REASON, /* foreground= */ false);
         return PendingIntent.getService(ctx, itemId(id), intent, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+    }
+
+    private static PendingIntent removeIntent(Context ctx, String id) {
+        Intent intent = DownloadService.buildRemoveDownloadIntent(ctx, FlixDownloadService.class, id, /* foreground= */ false);
+        return PendingIntent.getService(ctx, itemId(id) + 1, intent, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
     }
 
     private static boolean isActive(Download d) {
