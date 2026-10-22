@@ -34,6 +34,6 @@
     "esbuild": "^0.28.1",
     "node-addon-api": "^8.8.0",
     "node-gyp": "^12.4.0",
-    "typescript": "^6.0.3"
+    "typescript": "^7.0.2"
   }
 }
