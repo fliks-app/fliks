@@ -6,3 +6,26 @@ updates:
       interval: weekly
     commit-message:
       prefix: "ci"
+
+  # Minor and patch bumps land as one PR per directory; majors stay separate.
+  - package-ecosystem: npm
+    directories: [/client, /desktop, /tools]
+    schedule:
+      interval: weekly
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+    commit-message:
+      prefix: "chore"
+      include: scope
+
+  - package-ecosystem: cargo
+    directories: [/server, /server/crates/plugin-sdk]
+    schedule:
+      interval: weekly
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+    commit-message:
+      prefix: "chore"
+      include: scope
