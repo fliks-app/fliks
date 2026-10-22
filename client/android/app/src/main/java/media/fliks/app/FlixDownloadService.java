@@ -3,6 +3,7 @@ package media.fliks.app;
 import android.app.Notification;
 
 import androidx.annotation.Nullable;
+import androidx.core.app.ServiceCompat;
 import androidx.annotation.OptIn;
 import androidx.media3.common.util.UnstableApi;
 import androidx.media3.exoplayer.offline.Download;
@@ -27,6 +28,14 @@ public class FlixDownloadService extends DownloadService {
 
     public FlixDownloadService() {
         super(FlixDownloadUtil.FOREGROUND_NOTIFICATION_ID);
+    }
+
+    @Override
+    public void onDestroy() {
+        // Detach so the notification outlives the service, then settle it: paused queue or gone.
+        ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_DETACH);
+        super.onDestroy();
+        FlixDownloadNotifications.refreshPaused(this, getDownloadManager());
     }
 
     @Override
