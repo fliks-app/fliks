@@ -237,7 +237,13 @@ pub(crate) async fn refresh(
         // A truthy non-string cannot be a token; 4.x answers 500 here.
         Some(_) => return Err(AppError::unauthorized("Invalid refresh token")),
     };
-    let raw = raw.ok_or_else(|| AppError::unauthorized("Missing refresh token"))?;
+    let Some(raw) = raw else {
+        tracing::info!(
+            presented_user_agent = user_agent(&headers),
+            "refresh refused: no token"
+        );
+        return Err(AppError::unauthorized("Missing refresh token"));
+    };
     let r = db::refresh(
         &st.db,
         &raw,

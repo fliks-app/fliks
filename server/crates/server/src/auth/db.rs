@@ -92,15 +92,20 @@ pub async fn refresh(
     .fetch_optional(&mut *tx)
     .await?
     else {
+        tracing::info!(
+            presented_user_agent = user_agent,
+            "refresh refused: unknown token"
+        );
         return Ok(Refreshed::Invalid);
     };
     if let Some(revoked) = t.revoked_at {
         if (now - revoked).num_milliseconds() <= REUSE_GRACE_MS {
-            tracing::debug!(
+            tracing::info!(
                 user = t.user_id,
                 token = t.id,
                 family = t.family_id,
-                "refresh token already rotated"
+                presented_user_agent = user_agent,
+                "refresh refused: rotated within the grace"
             );
             return Ok(Refreshed::AlreadyRotated);
         }
@@ -138,6 +143,12 @@ pub async fn refresh(
         return Ok(Refreshed::Reuse);
     }
     if t.expires_at < now {
+        tracing::info!(
+            user = t.user_id,
+            token = t.id,
+            presented_user_agent = user_agent,
+            "refresh refused: expired"
+        );
         return Ok(Refreshed::Expired);
     }
     sqlx::query!(
@@ -154,6 +165,11 @@ pub async fn refresh(
     .fetch_one(&mut *tx)
     .await?;
     if !user.enabled {
+        tracing::info!(
+            user = t.user_id,
+            token = t.id,
+            "refresh refused: account disabled"
+        );
         tx.commit().await?;
         return Ok(Refreshed::Disabled);
     }
