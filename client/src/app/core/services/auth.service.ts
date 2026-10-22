@@ -508,8 +508,11 @@ export class AuthService {
       // Another tab may have rotated meanwhile: then our token was merely
       // stale, not dead — adopt the new one and let the caller retry.
       const stored = await this.readStoredRefreshToken();
-      if (this.cookieAuth && stored && stored !== refresh) {
+      if (stored && stored !== refresh) {
         this._refreshToken = stored;
+        if (!this.cookieAuth) {
+          this._accessToken = this.sessions.active()?.accessToken ?? this._accessToken;
+        }
         return true;
       }
       await this.dropActiveSession();
@@ -730,7 +733,7 @@ export class AuthService {
   /** Freshest persisted token. Re-read from storage on web, where another tab
    *  may have rotated it while we waited for the lock. */
   private async readStoredRefreshToken(): Promise<string | null> {
-    if (this.cookieAuth) await this.sessions.load();
+    await this.sessions.load();
     return this.sessions.active()?.refreshToken ?? this._refreshToken;
   }
 }

@@ -62,9 +62,12 @@ export const credentialsInterceptor: HttpInterceptorFn = (req, next) => {
       return from(auth.refreshAccessToken()).pipe(
         switchMap((refreshed): Observable<HttpEvent<unknown>> => {
           if (!refreshed) {
-            // Rotation failed: bubble the original 401 so the route
-            // guard / error handler can react (redirect to login).
-            return throwError(() => err);
+            // A dead session is already cleared (no refresh token left): bubble the 401. Otherwise the failure was transient, and a 401 would make callers drop a live session.
+            return throwError(() =>
+              auth.refreshToken
+                ? new HttpErrorResponse({ status: 0, url: err.url ?? undefined, error: err })
+                : err,
+            );
           }
           // Retry with the fresh credentials — attach() reads them live
           // from auth.accessToken / the session cookie.
