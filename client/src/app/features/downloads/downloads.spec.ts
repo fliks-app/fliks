@@ -60,19 +60,12 @@ describe('DownloadsComponent', () => {
     expect(el.textContent).toContain('64%');
   });
 
-  it('lists in-flight tasks in a section, moving before paused, once per movie', async () => {
-    const { fixture, component } = setup([task(1, 'paused', 30), task(2, 'downloading', 5), task(3, 'ready', 100)]);
-    expect(component.inProgress().map((t) => t.id)).toEqual([2, 1]);
+  it('lists an in-flight movie once, in the main list', async () => {
+    const { fixture } = setup([task(1, 'paused', 30), task(2, 'downloading', 5), task(3, 'ready', 100)]);
     await fixture.whenStable();
     const el: HTMLElement = fixture.nativeElement;
-    expect(el.querySelector('section')).not.toBeNull();
+    expect(el.querySelector('section')).toBeNull();
     expect(el.textContent?.match(/Movie 2/g)).toHaveLength(1);
-  });
-
-  it('hides the section when nothing is in flight', async () => {
-    const { fixture } = setup([task(3, 'ready', 100), task(4, 'failed')]);
-    await fixture.whenStable();
-    expect(fixture.nativeElement.querySelector('section')).toBeNull();
   });
 
   it('renders a waiting_wifi row as a held bar with its label', async () => {
