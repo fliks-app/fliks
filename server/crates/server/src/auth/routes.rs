@@ -198,7 +198,15 @@ pub(crate) async fn login(
         .ok_or_else(|| AppError::unauthorized("Account disabled"))?;
     let access = st.jwt.sign_access(user.id, &user.username)?;
     let mut conn = st.db.acquire().await?;
-    let refresh = db::issue(&mut conn, user.id, None, st.cfg.refresh_token_ttl_days, now).await?;
+    let refresh = db::issue(
+        &mut conn,
+        user.id,
+        None,
+        user_agent(&headers),
+        st.cfg.refresh_token_ttl_days,
+        now,
+    )
+    .await?;
     drop(conn);
     let set = cookie(&headers, &st, &access.token);
     let body = LoginBody {
@@ -229,7 +237,13 @@ pub(crate) async fn refresh(
         // A truthy non-string cannot be a token; 4.x answers 500 here.
         Some(_) => return Err(AppError::unauthorized("Invalid refresh token")),
     };
-    let raw = raw.ok_or_else(|| AppError::unauthorized("Missing refresh token"))?;
+    let Some(raw) = raw else {
+        tracing::info!(
+            presented_user_agent = user_agent(&headers),
+            "refresh refused: no token"
+        );
+        return Err(AppError::unauthorized("Missing refresh token"));
+    };
     let r = db::refresh(
         &st.db,
         &raw,
