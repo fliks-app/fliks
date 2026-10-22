@@ -9,7 +9,12 @@
 
     @if (current() && progress() !== null) {
       <div class="mb-4">
-        <progress class="progress progress-info w-full" [value]="progress()" max="100"></progress>
+        <div class="flex items-center gap-2">
+          <progress class="progress progress-info flex-1" [value]="progress()" max="100"></progress>
+          <button class="btn btn-ghost btn-xs btn-circle" [attr.aria-label]="'common.cancel' | translate" [title]="'common.cancel' | translate" (click)="removeDownload()">
+            <svg lucideX class="h-4 w-4"></svg>
+          </button>
+        </div>
         <p class="text-xs text-center mt-1 text-base-content/60">{{ 'downloads.downloading' | translate }} {{ progress() }}%</p>
       </div>
     }
@@ -74,7 +79,7 @@
         </p>
       }
 
-      @if (current()) {
+      @if (current() && progress() === null) {
         <div class="divider my-2"></div>
         <button class="btn btn-outline btn-error justify-start gap-2 w-full" (click)="removeDownload()">
           <svg lucideTrash2 class="h-4 w-4"></svg>
