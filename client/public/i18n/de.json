@@ -1860,7 +1860,9 @@
     "delete_all": "Alle löschen",
     "other_episodes": "Weitere Episoden",
     "confirm_delete_many": "{{count}} Downloads löschen? Die Dateien werden von diesem Gerät entfernt.",
-    "confirm_delete_group": "{{count}} Downloads von {{name}} löschen? Die Dateien werden von diesem Gerät entfernt."
+    "confirm_delete_group": "{{count}} Downloads von {{name}} löschen? Die Dateien werden von diesem Gerät entfernt.",
+    "pause_all": "Alle pausieren",
+    "resume_all": "Alle fortsetzen"
   },
   "setup_checklist": {
     "title": "Konfiguration",

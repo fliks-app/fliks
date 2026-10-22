@@ -1860,7 +1860,9 @@
     "delete_all": "Excluir tudo",
     "other_episodes": "Outros episódios",
     "confirm_delete_many": "Excluir {{count}} downloads? Os arquivos serão removidos deste dispositivo.",
-    "confirm_delete_group": "Excluir {{count}} downloads de {{name}}? Os arquivos serão removidos deste dispositivo."
+    "confirm_delete_group": "Excluir {{count}} downloads de {{name}}? Os arquivos serão removidos deste dispositivo.",
+    "pause_all": "Pausar tudo",
+    "resume_all": "Retomar tudo"
   },
   "setup_checklist": {
     "title": "Configuração",

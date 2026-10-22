@@ -1860,7 +1860,9 @@
     "delete_all": "Tout supprimer",
     "other_episodes": "Autres épisodes",
     "confirm_delete_many": "Supprimer {{count}} téléchargements ? Les fichiers seront retirés de cet appareil.",
-    "confirm_delete_group": "Supprimer {{count}} téléchargements de {{name}} ? Les fichiers seront retirés de cet appareil."
+    "confirm_delete_group": "Supprimer {{count}} téléchargements de {{name}} ? Les fichiers seront retirés de cet appareil.",
+    "pause_all": "Tout mettre en pause",
+    "resume_all": "Tout reprendre"
   },
   "setup_checklist": {
     "title": "Configuration",

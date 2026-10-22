@@ -22,7 +22,9 @@ import {
   LucideRotateCcw,
   LucideListChecks,
   LucideChevronRight,
+  LucidePause,
 } from '@lucide/angular';
+import { DownloadNotificationService } from '../../core/services/download-notification.service';
 import { ToastService } from '../../core/services/toast.service';
 import { formatBytes } from '../../shared/utils/download-format';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
@@ -49,6 +51,7 @@ export interface DisplayDownloadTask extends DownloadTask {
     LucideRotateCcw,
     LucideListChecks,
     LucideChevronRight,
+    LucidePause,
     SeasonLabelPipe,
   ],
   templateUrl: './downloads.html',
@@ -64,6 +67,7 @@ export class DownloadsComponent implements OnInit, OnDestroy {
   private readonly translate = inject(TranslateService);
   private readonly toast = inject(ToastService);
   private readonly router = inject(Router);
+  protected readonly native = inject(DownloadNotificationService);
 
   /** Ids being re-queued, so the button can't be double-tapped into two
    *  downloads of the same file. */
@@ -133,6 +137,9 @@ export class DownloadsComponent implements OnInit, OnDestroy {
   });
 
   readonly entries = computed(() => groupDownloads(this.items()));
+  readonly hasActive = computed(() =>
+    this.isNative && this.items().some((t) => ['queued', 'transcoding', 'pending', 'downloading'].includes(t.status)),
+  );
   readonly totalBytes = computed(() => this.items().reduce((n, t) => n + (t.sizeBytes ?? 0), 0));
 
   ngOnInit() {

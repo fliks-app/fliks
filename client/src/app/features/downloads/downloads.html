@@ -80,10 +80,22 @@
     @if (totalBytes() > 0) {
       <span class="text-sm text-base-content/60">{{ 'downloads.total_used' | translate:{ size: formatBytes(totalBytes()) } }}</span>
     }
+    @if (hasActive()) {
+      <button type="button" class="btn btn-sm ms-auto" (click)="native.paused() ? native.resumeAll() : native.pauseAll()">
+        @if (native.paused()) {
+          <svg lucidePlay class="h-4 w-4"></svg>
+          {{ 'downloads.resume_all' | translate }}
+        } @else {
+          <svg lucidePause class="h-4 w-4"></svg>
+          {{ 'downloads.pause_all' | translate }}
+        }
+      </button>
+    }
     @if (items().length > 0) {
       <button
         type="button"
-        class="btn btn-sm ms-auto"
+        class="btn btn-sm"
+        [class.ms-auto]="!hasActive()"
         [class.btn-active]="selectMode()"
         [attr.aria-pressed]="selectMode()"
         (click)="toggleSelectMode()"
