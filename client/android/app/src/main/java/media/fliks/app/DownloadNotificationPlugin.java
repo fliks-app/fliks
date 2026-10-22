@@ -8,6 +8,7 @@ import androidx.annotation.Nullable;
 import androidx.annotation.OptIn;
 import androidx.media3.common.util.UnstableApi;
 import androidx.media3.exoplayer.offline.Download;
+import androidx.media3.exoplayer.offline.DownloadService;
 import androidx.media3.exoplayer.offline.DownloadCursor;
 import androidx.media3.exoplayer.offline.DownloadManager;
 
@@ -40,6 +41,12 @@ public class DownloadNotificationPlugin extends Plugin {
         // Initialize DownloadManager early so its event listener is registered
         // before any download starts (listener lives in FlixDownloadUtil).
         FlixDownloadUtil.getDownloadManager(getContext());
+        // Media3 builds the manager paused and only the service resumes it, so unfinished downloads wait for a command otherwise.
+        try {
+            DownloadService.start(getContext(), FlixDownloadService.class);
+        } catch (IllegalStateException e) {
+            Log.w("DownloadNotification", "service start refused: " + e.getMessage());
+        }
     }
 
     /** Emit event to WebView JS (called from FlixDownloadUtil listener) */
@@ -106,14 +113,14 @@ public class DownloadNotificationPlugin extends Plugin {
     }
 
     @PluginMethod()
-    public void pauseDownloads(PluginCall call) {
-        FlixDownloadUtil.pauseDownloads(getContext());
+    public void pauseDownload(PluginCall call) {
+        FlixDownloadUtil.pauseDownload(getContext(), call.getString("id"));
         call.resolve();
     }
 
     @PluginMethod()
-    public void resumeDownloads(PluginCall call) {
-        FlixDownloadUtil.resumeDownloads(getContext());
+    public void resumeDownload(PluginCall call) {
+        FlixDownloadUtil.resumeDownload(getContext(), call.getString("id"));
         call.resolve();
     }
 
@@ -204,7 +211,7 @@ public class DownloadNotificationPlugin extends Plugin {
             case Download.STATE_COMPLETED: return "completed";
             case Download.STATE_FAILED: return "failed";
             case Download.STATE_REMOVING: return "removing";
-            case Download.STATE_STOPPED: return "stopped";
+            case Download.STATE_STOPPED: return "paused";
             default: return "unknown";
         }
     }

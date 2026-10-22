@@ -1,4 +1,5 @@
 import { Injectable, inject, effect, signal } from '@angular/core';
+import { Subject } from 'rxjs';
 import { Capacitor } from '@capacitor/core';
 import { StreamingApiService } from './api/streaming-api.service';
 import { SubtitlesApiService } from './api/subtitles-api.service';
@@ -7,7 +8,7 @@ import { isImageBasedSubtitleCodec } from '../utils/subtitle-codecs';
 import { embeddedSubtitleTag, embeddedSubtitleTitle, subtitleTrackKey } from '../utils/subtitle-tracks';
 import { OfflineStorageService } from './offline-storage.service';
 import { DownloadCacheService, DownloadTask, type OfflineSubtitle } from './download-cache.service';
-import { DownloadNotificationService } from './download-notification.service';
+import { DownloadNotificationService, type NativeDownloadEvent } from './download-notification.service';
 import { AuthService } from './auth.service';
 import { BrowserDeviceProfileService } from './browser-device-profile.service';
 import { TranslateService } from '@ngx-translate/core';
@@ -29,8 +30,6 @@ export interface DownloadEvent {
   progress: number;
   /** Task status: 'downloading' | etc. */
   status?: string;
-  /** Monotonic counter for signal uniqueness */
-  seq: number;
 }
 
 /** Something to put on the device: a movie, or one episode of a series. */
@@ -93,7 +92,6 @@ export class DownloadManagerService {
   private readonly network = inject(NetworkService);
 
   private readonly titles = new Map<number, { title: string; episode?: string }>();
-  private eventSeq = 0;
   private nextLocalId = Date.now();
 
   // Web downloads each spin up a hidden player + Shaka store, so they honour
@@ -102,21 +100,20 @@ export class DownloadManagerService {
   private readonly webQueue: Array<() => void> = [];
 
   /** Unified download event — fed by native bridge (Android/iOS) or Shaka (web). */
-  readonly lastDownloadEvent = signal<DownloadEvent | null>(null);
+  readonly downloadEvents = new Subject<DownloadEvent>();
 
   /** Bumped when {@link recover} finishes, so the auto-download reconciler runs
    *  after interrupted tasks are cleaned up instead of racing that pass. */
   readonly recoveredAt = signal(0);
 
   private emitEvent(type: DownloadEvent['type'], taskId: number, progress: number, status?: string) {
-    this.lastDownloadEvent.set({ type, taskId, progress, status, seq: ++this.eventSeq });
+    this.downloadEvents.next({ type, taskId, progress, status });
   }
 
   // --- Native: ExoPlayer DownloadManager events ---
-  private readonly nativeEffect = effect(() => {
-    if (!this.isNative) return;
-    const event = this.notif.nativeEvent();
-    if (!event) return;
+  private readonly nativeSub = this.isNative ? this.notif.nativeEvents.subscribe((event) => this.onNativeEvent(event)) : null;
+
+  private onNativeEvent(event: NativeDownloadEvent) {
 
     const taskId = Number(event.id) || 0;
     this.emitEvent(
@@ -137,10 +134,10 @@ export class DownloadManagerService {
       this.persistProgress(taskId, event.progress, event.state);
     }
     if (event.type !== 'progress') this.syncActivityCopy();
-  });
+  }
 
   /** In-flight statuses, in the order a task moves through them. */
-  private static readonly ACTIVE_STATUSES = ['transcoding', 'queued', 'downloading'];
+  private static readonly ACTIVE_STATUSES = ['transcoding', 'queued', 'downloading', 'paused'];
 
   /** Last percentage persisted per task, so the write below can be throttled. */
   private readonly persistedProgress = new Map<number, number>();
@@ -148,7 +145,7 @@ export class DownloadManagerService {
   /** Promotes the persisted status out of `transcoding` once the OS daemon owns the task ({@link recover} would cancel it otherwise).
    *  Progress is written in 5-point steps to spare localStorage, but a state change always lands. */
   private persistProgress(taskId: number, progress: number, state?: string) {
-    const status = state === 'queued' ? 'queued' : 'downloading';
+    const status = state === 'queued' || state === 'paused' ? state : 'downloading';
     const last = this.persistedProgress.get(taskId);
     const settled = this.cache.load().find((t) => t.id === taskId)?.status === status;
     if (settled && last !== undefined && progress - last < 5) return;
@@ -215,6 +212,8 @@ export class DownloadManagerService {
       const pct = s.total > 0 ? Math.round((s.received / s.total) * 100) : 0;
       this.cache.updateProgress(task.id, pct);
       this.emitEvent('progress', task.id, pct, 'downloading');
+    } else if (s.state === 'paused') {
+      return;
     } else if (s.state === 'done') {
       this.updateTaskStatus(task.id, 'ready', 100);
       this.emitEvent('complete', task.id, 100);
@@ -227,6 +226,43 @@ export class DownloadManagerService {
   }
 
   // ===== PUBLIC API =====
+
+  /** Held web downloads: Shaka's request filter awaits the gate, so stored segments survive while the tab lives. */
+  private readonly webGates = new Map<number, { promise: Promise<void>; open: () => void }>();
+
+  async pauseDownload(task: DownloadTask): Promise<void> {
+    if (this.isDesktop) {
+      await this.downloader!.pause(String(task.mediaFileId));
+    } else if (this.isNative) {
+      await this.notif.pauseDownload(String(task.id));
+    } else if (!this.webGates.has(task.id)) {
+      let open!: () => void;
+      const promise = new Promise<void>((r) => (open = r));
+      this.webGates.set(task.id, { promise, open });
+    }
+    this.updateTaskStatus(task.id, 'paused', task.progress);
+    this.emitEvent('progress', task.id, task.progress, 'paused');
+  }
+
+  async resumeDownload(task: DownloadTask): Promise<void> {
+    if (this.isDesktop) {
+      if (!task.hlsUrl) return;
+      // Main keeps no paused state: a fresh start skips what is already on disk.
+      void this.downloader!.start({
+        id: String(task.mediaFileId),
+        url: task.hlsUrl,
+        quality: task.quality,
+        filename: task.episodeLabel ? `${task.media?.title} - ${task.episodeLabel}` : (task.media?.title ?? ''),
+      });
+    } else if (this.isNative) {
+      await this.notif.resumeDownload(String(task.id));
+    } else {
+      this.webGates.get(task.id)?.open();
+      this.webGates.delete(task.id);
+    }
+    this.updateTaskStatus(task.id, 'downloading', task.progress);
+    this.emitEvent('progress', task.id, task.progress, 'downloading');
+  }
 
   /** Sequentially download each target not already on device, at `rungKey` when the file offers it, else the nearest lower rung
    *  (no key: the file's best). Failures are counted, not thrown, so one bad file doesn't stop the batch. */
@@ -412,6 +448,8 @@ export class DownloadManagerService {
   }
 
   async deleteDownload(task: DownloadTask) {
+    this.webGates.get(task.id)?.open();
+    this.webGates.delete(task.id);
     if (this.isNative) {
       await this.notif.removeDownload(String(task.id));
     }
@@ -476,6 +514,7 @@ export class DownloadManagerService {
         hlsUrl,
         task.mediaFileId,
         { title, episode: info?.episode },
+        () => this.webGates.get(downloadId)?.promise,
         (progress) => {
           const pct = Math.round(progress * 100);
           this.cache.updateProgress(downloadId, pct);
@@ -624,7 +663,7 @@ export class DownloadManagerService {
         // Anything held but not transferring reads as queued (ExoPlayer also parks `stopped` / `restarting`).
         this.updateTaskStatus(
           task.id,
-          native.state === 'downloading' ? 'downloading' : 'queued',
+          native.state === 'downloading' || native.state === 'paused' ? native.state : 'queued',
           native.progress,
         );
       }

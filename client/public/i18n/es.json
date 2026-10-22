@@ -1865,7 +1865,10 @@
     "confirm_delete_many": "¿Eliminar {{count}} descargas? Los archivos se quitarán de este dispositivo.",
     "confirm_delete_group": "¿Eliminar {{count}} descargas de {{name}}? Los archivos se quitarán de este dispositivo.",
     "pause_all": "Pausar todo",
-    "resume_all": "Reanudar todo"
+    "resume_all": "Reanudar todo",
+    "paused": "En pausa",
+    "pause": "Pausar",
+    "resume": "Reanudar"
   },
   "setup_checklist": {
     "title": "Configuración",

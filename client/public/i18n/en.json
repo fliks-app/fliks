@@ -1865,7 +1865,10 @@
     "confirm_delete_many": "Delete {{count}} downloads? The files will be removed from this device.",
     "confirm_delete_group": "Delete {{count}} downloads of {{name}}? The files will be removed from this device.",
     "pause_all": "Pause all",
-    "resume_all": "Resume all"
+    "resume_all": "Resume all",
+    "paused": "Paused",
+    "pause": "Pause",
+    "resume": "Resume"
   },
   "setup_checklist": {
     "title": "Setup",

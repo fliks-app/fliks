@@ -1865,7 +1865,10 @@
     "confirm_delete_many": "Eliminare {{count}} download? I file verranno rimossi da questo dispositivo.",
     "confirm_delete_group": "Eliminare {{count}} download di {{name}}? I file verranno rimossi da questo dispositivo.",
     "pause_all": "Metti tutto in pausa",
-    "resume_all": "Riprendi tutto"
+    "resume_all": "Riprendi tutto",
+    "paused": "In pausa",
+    "pause": "Metti in pausa",
+    "resume": "Riprendi"
   },
   "setup_checklist": {
     "title": "Configurazione",

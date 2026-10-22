@@ -1,5 +1,5 @@
+import { Subject } from 'rxjs';
 import { TestBed } from '@angular/core/testing';
-import { signal } from '@angular/core';
 import { TranslateService } from '@ngx-translate/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DownloadManagerService, pickRung } from './download-manager.service';
@@ -32,7 +32,7 @@ async function download(pi: object): Promise<DownloadTask> {
       { provide: MediaService, useValue: {} },
       { provide: OfflineStorageService, useValue: {} },
       { provide: DownloadCacheService, useValue: { load: () => saved, save: (t: DownloadTask[]) => (saved = t) } },
-      { provide: DownloadNotificationService, useValue: { nativeEvent: signal(null), startDownload: vi.fn() } },
+      { provide: DownloadNotificationService, useValue: { nativeEvents: new Subject(), startDownload: vi.fn() } },
       { provide: AuthService, useValue: { ensureStreamToken: () => Promise.resolve(), streamToken: () => 't' } },
       { provide: BrowserDeviceProfileService, useValue: { getProfile: () => ({}) } },
       { provide: TranslateService, useValue: { instant: (k: string) => k } },
@@ -85,7 +85,7 @@ describe('DownloadManagerService, offline subtitle identity', () => {
         { provide: MediaService, useValue: { getOne: () => Promise.resolve({ files: [] }) } },
         { provide: OfflineStorageService, useValue: { downloadSmallFile: () => Promise.resolve(true) } },
         { provide: DownloadCacheService, useValue: { load: () => saved, save: (t: DownloadTask[]) => (saved = t) } },
-        { provide: DownloadNotificationService, useValue: { nativeEvent: signal(null) } },
+        { provide: DownloadNotificationService, useValue: { nativeEvents: new Subject() } },
         { provide: AuthService, useValue: {} },
         { provide: BrowserDeviceProfileService, useValue: {} },
         { provide: TranslateService, useValue: { instant: (k: string) => k, currentLang: () => 'en', fallbackLang: () => 'en' } },
@@ -122,7 +122,7 @@ describe('DownloadManagerService.createMany', () => {
         { provide: MediaService, useValue: {} },
         { provide: OfflineStorageService, useValue: {} },
         { provide: DownloadCacheService, useValue: { load: () => onDevice } },
-        { provide: DownloadNotificationService, useValue: { nativeEvent: signal(null) } },
+        { provide: DownloadNotificationService, useValue: { nativeEvents: new Subject() } },
         { provide: AuthService, useValue: {} },
         { provide: BrowserDeviceProfileService, useValue: {} },
         { provide: TranslateService, useValue: {} },

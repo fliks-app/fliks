@@ -1,11 +1,13 @@
 @if (auto.enabled) {
-  <label class="flex items-center gap-2 text-sm">
+  <div class="flex items-center gap-2 text-sm">
     <span class="text-base-content/70">{{ 'downloads.auto_rule' | translate }}</span>
-    <select class="select select-bordered select-sm w-auto" [value]="auto.seriesKeep(seriesId()) ?? 0" (change)="change($any($event.target).value)">
-      <option value="0">{{ 'downloads.auto_off' | translate }}</option>
-      @for (n of auto.KEEP_OPTIONS; track n) {
-        <option [value]="n">{{ 'downloads.auto_next' | translate: { count: n } }}</option>
+    <app-dropdown-menu placement="bottom-start">
+      <button trigger type="button" class="select select-bordered select-sm w-fit text-left cursor-pointer">
+        {{ label(auto.seriesKeep(seriesId()) ?? 0) }}
+      </button>
+      @for (n of options; track n) {
+        <app-dropdown-option [head]="label(n)" [selected]="n === (auto.seriesKeep(seriesId()) ?? 0)" (click)="change(n)" />
       }
-    </select>
-  </label>
+    </app-dropdown-menu>
+  </div>
 }

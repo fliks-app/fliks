@@ -1,4 +1,5 @@
-import { Injectable, signal } from '@angular/core';
+import { Injectable } from '@angular/core';
+import { Subject } from 'rxjs';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 
 export interface NativeDownloadEvent {
@@ -6,7 +7,6 @@ export interface NativeDownloadEvent {
   id: string;
   progress: number;
   state: string;
-  seq: number;
 }
 
 /** Pre-translated notification copy shown by the native download daemon (iOS),
@@ -40,8 +40,8 @@ interface DownloadNotificationPlugin {
   isDownloaded(opts: { id: string }): Promise<{ downloaded: boolean }>;
   /** iOS: local `file://` URL of the downloaded .movpkg, or null. Unused on Android. */
   getOfflineUrl(opts: { id: string }): Promise<{ url: string | null }>;
-  pauseDownloads(): Promise<void>;
-  resumeDownloads(): Promise<void>;
+  pauseDownload(opts: { id: string }): Promise<void>;
+  resumeDownload(opts: { id: string }): Promise<void>;
   setActivityCopy(opts: DownloadActivityCopy): Promise<void>;
   setMaxConcurrentDownloads(opts: { max: number }): Promise<void>;
   setWifiOnly(opts: { enabled: boolean }): Promise<void>;
@@ -59,22 +59,14 @@ const DownloadNotification = Capacitor.isNativePlatform()
 export class DownloadNotificationService {
   private readonly isNative = Capacitor.isNativePlatform();
 
-  readonly nativeEvent = signal<NativeDownloadEvent | null>(null);
-  /** True while the native queue is paused by pauseAll(). */
-  readonly paused = signal(false);
-  private eventSeq = 0;
+  /** Every native event: Media3 fires one per download in the same tick on pause, which a last-value signal would collapse. */
+  readonly nativeEvents = new Subject<NativeDownloadEvent>();
 
   constructor() {
     if (DownloadNotification) {
       const emit = (type: NativeDownloadEvent['type']) =>
         (data: { id: string; progress: number; state: string }) => {
-          this.nativeEvent.set({
-            type,
-            id: data.id,
-            progress: data.progress,
-            state: data.state,
-            seq: ++this.eventSeq,
-          });
+          this.nativeEvents.next({ type, id: data.id, progress: data.progress, state: data.state });
         };
       DownloadNotification.addListener('downloadProgress', emit('progress'));
       DownloadNotification.addListener('downloadComplete', emit('complete'));
@@ -124,17 +116,15 @@ export class DownloadNotificationService {
     DownloadNotification.setWifiOnly({ enabled }).catch(() => {});
   }
 
-  /** Pause every native transfer; downloads stay queued until resumeAll(). */
-  async pauseAll(): Promise<void> {
+  /** Hold one transfer; the daemon keeps what it has and reports it `paused`. */
+  async pauseDownload(id: string): Promise<void> {
     if (!this.isNative || !DownloadNotification) return;
-    await DownloadNotification.pauseDownloads();
-    this.paused.set(true);
+    await DownloadNotification.pauseDownload({ id }).catch(() => {});
   }
 
-  async resumeAll(): Promise<void> {
+  async resumeDownload(id: string): Promise<void> {
     if (!this.isNative || !DownloadNotification) return;
-    await DownloadNotification.resumeDownloads();
-    this.paused.set(false);
+    await DownloadNotification.resumeDownload({ id }).catch(() => {});
   }
 
   /** Remove a download (cancel + delete cached data). */
