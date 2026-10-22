@@ -1827,6 +1827,9 @@
   "downloads": {
     "title": "Descargas",
     "download_season": "Descargar la temporada",
+    "auto_rule": "Descarga automática",
+    "auto_off": "Desactivada",
+    "auto_next": "Próximos {{count}} episodios",
     "download_series": "Descargar todos los episodios",
     "unwatched_only": "Solo episodios no vistos",
     "batch_count_one": "{{count}} episodio",
