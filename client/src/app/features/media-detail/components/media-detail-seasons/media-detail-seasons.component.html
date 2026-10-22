@@ -4,7 +4,9 @@
 <section class="space-y-4">
   @if (!hideControls()) {
   <div appTvRow class="flex items-center gap-2 flex-wrap">
-    @if (canSwitchEpisodeView()) {
+    <!-- Select mode forces the list view, so the switch has nothing to offer then. -->
+    @let showViewToggle = canSwitchEpisodeView() && !selectMode();
+    @if (showViewToggle) {
       <div class="order-last join ms-auto" role="group">
         <button
           type="button"
@@ -35,7 +37,7 @@
     @if (canSelect()) {
       <button
         type="button"
-        class="order-last btn btn-sm shrink-0 me-auto sm:me-0"
+        class="order-last btn btn-sm shrink-0 me-auto sm:me-0 {{ showViewToggle ? '' : 'sm:ms-auto' }}"
         [class.btn-active]="selectMode()"
         [attr.aria-pressed]="selectMode()"
         (click)="toggleSelectMode()"
@@ -48,7 +50,7 @@
       <button
         type="button"
         class="order-last btn btn-ghost btn-circle shrink-0"
-        [class.ms-auto]="!canSwitchEpisodeView()"
+        [class.ms-auto]="!showViewToggle && !canSelect()"
         (click)="toggleSeasonLike.emit(selSeason.id)"
         [attr.aria-label]="(isSeasonLiked(selSeason.id) ? 'likes.unlike_season' : 'likes.like_season') | translate"
       >
@@ -60,7 +62,7 @@
         ></svg>
       </button>
     }
-    <app-dropdown-menu placement="bottom-end" class="order-last" [class.ms-auto]="!canSwitchEpisodeView() && !selSeason">
+    <app-dropdown-menu placement="bottom-end" class="order-last" [class.ms-auto]="!showViewToggle && !canSelect() && !selSeason">
       <button trigger type="button" class="btn btn-ghost btn-circle shrink-0">
         <svg lucideEllipsisVertical class="h-5 w-5"></svg>
       </button>
