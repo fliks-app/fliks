@@ -118,4 +118,12 @@ describe('DownloadManagerService native events', () => {
     await done;
     expect(removeDownload).toHaveBeenCalledTimes(1);
   });
+
+  it('drops the task from the list as soon as its deletion starts', async () => {
+    cache.save([task(1, 'downloading', 40), task(2, 'ready', 100)]);
+    const done = service.deleteDownload(service.tasks()[0]);
+    expect(service.tasks().map((t) => t.id)).toEqual([2]);
+    await done;
+    expect(service.tasks().map((t) => t.id)).toEqual([2]);
+  });
 });
