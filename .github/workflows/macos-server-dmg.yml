@@ -167,8 +167,7 @@ jobs:
           RELEASE_PAGE: https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}
         run: |
           dmg="$(find macos/build -name 'Fliks-*.dmg' | head -1)"
-          sign_update="$(find macos/build/SourcePackages/artifacts -name sign_update -type f | head -1)"
-          test -n "$sign_update" || { echo "::error::sign_update not found"; exit 1; }
+          sign_update=macos/build/SourcePackages/artifacts/sparkle/Sparkle/bin/sign_update
           sig="$(echo "$SPARKLE_PRIVATE_KEY" | "$sign_update" --ed-key-file - "$dmg")"
           cat > macos/build/appcast-server-macos.xml <<EOF
           <?xml version="1.0" encoding="utf-8"?>
