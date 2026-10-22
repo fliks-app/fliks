@@ -33,9 +33,8 @@
     @if (canSelect()) {
       <button
         type="button"
-        class="order-last btn btn-sm shrink-0"
+        class="order-last btn btn-sm shrink-0 me-auto"
         [class.btn-active]="selectMode()"
-        [class.ms-auto]="!canSwitchEpisodeView()"
         [attr.aria-pressed]="selectMode()"
         (click)="toggleSelectMode()"
       >
@@ -272,7 +271,7 @@
       <ul class="divide-y divide-base-content/10 border-t border-base-content/10">
         @for (ep of filteredEpisodes(); track ep.id) {
           <!-- Two columns; only the synopsis span changes (under the image on phone, beside it from sm), so one copy of the text. -->
-          <li appTvRow class="relative grid grid-cols-[auto_1fr] gap-x-3 sm:gap-x-4 gap-y-1.5 py-3">
+          <li appTvRow class="relative grid grid-cols-[auto_1fr] gap-x-3 sm:gap-x-4 gap-y-1.5 py-3" [class.pl-9]="selectMode()">
               @if (selectMode()) {
                 <button
                   type="button"
@@ -284,7 +283,7 @@
                 ></button>
                 <input
                   type="checkbox"
-                  class="checkbox checkbox-primary checkbox-sm absolute top-5 left-2 z-30 pointer-events-none"
+                  class="checkbox checkbox-primary checkbox-sm absolute left-0 top-1/2 -translate-y-1/2 z-30 pointer-events-none"
                   [checked]="selectedEpisodeIds().has(ep.id)"
                   [disabled]="!ep.hasFile"
                   tabindex="-1"
@@ -306,6 +305,7 @@
                 [link]="episodeRoute(ep)"
                 [playlistMediaId]="m.id"
                 [playlistEpisodeId]="ep.id"
+                [extraActions]="selSeason ? episodeActions(selSeason, ep) : []"
                 [liked]="likedEpisodeIds().includes(ep.id)"
                 (likeToggled)="toggleEpisodeLike.emit(ep.id)"
                 [playable]="ep.hasFile"
@@ -328,16 +328,6 @@
                     (pointerdown)="stillCard.onAnchorPointerdown()"
                     class="flex-1 text-base sm:text-lg font-medium hover:underline line-clamp-2"
                   >{{ episodeTitle(ep) }}</a>
-                  @if (!hideControls() && !tv.isTv() && ep.hasFile && selSeason) {
-                    <button
-                      type="button"
-                      class="btn btn-ghost btn-circle btn-sm shrink-0"
-                      [attr.aria-label]="'downloads.download' | translate"
-                      (click)="downloadEpisode.emit({ season: selSeason, episode: ep })"
-                    >
-                      <svg lucideDownload class="h-4 w-4"></svg>
-                    </button>
-                  }
                 </div>
                 <span class="text-sm text-base-content/50 tabular-nums">
                   {{ episodeCardSubtitle((ep.airDate | localeDate), ep.runtime) }}
@@ -363,16 +353,20 @@
         }
       </ul>
       @if (selectMode()) {
-        <div class="sticky bottom-0 z-30 bg-base-200 border-t border-base-300 px-4 py-3 flex flex-wrap items-center gap-3 shadow-lg rounded-t-lg">
-          <span class="font-semibold text-sm">{{ 'bulk.selected' | translate:{ count: selectedEpisodeIds().size } }}</span>
-          <button type="button" class="btn btn-xs btn-ghost" (click)="selectAllEpisodes()">{{ 'library.bulk_select_all' | translate }}</button>
-          <button type="button" class="btn btn-xs btn-ghost" (click)="selectedEpisodeIds.set(emptySelection)">{{ 'library.bulk_deselect' | translate }}</button>
-          <span class="flex-1"></span>
-          <button type="button" class="btn btn-sm btn-primary" [disabled]="selectedEpisodeIds().size === 0" (click)="downloadSelectedEpisodes()">
-            <svg lucideDownload class="h-4 w-4"></svg>
-            {{ 'downloads.download' | translate }}
+        <div class="sticky bottom-[var(--chrome-bottom,0px)] z-30 bg-base-200 border border-base-300 p-2 flex items-center gap-1 shadow-lg rounded-lg">
+          <button type="button" class="btn btn-sm btn-ghost btn-circle" [attr.aria-label]="'library.bulk_cancel' | translate" (click)="toggleSelectMode()">
+            <svg lucideX class="h-4 w-4"></svg>
           </button>
-          <button type="button" class="btn btn-sm btn-ghost" (click)="toggleSelectMode()">{{ 'library.bulk_cancel' | translate }}</button>
+          <span class="font-semibold text-sm whitespace-nowrap">{{ 'bulk.selected' | translate:{ count: selectedEpisodeIds().size } }}</span>
+          <span class="flex-1"></span>
+          <button type="button" class="btn btn-sm btn-ghost" (click)="allEpisodesSelected() ? selectedEpisodeIds.set(emptySelection) : selectAllEpisodes()">
+            {{ (allEpisodesSelected() ? 'library.bulk_deselect' : 'library.bulk_select_all') | translate }}
+          </button>
+          <button type="button" class="btn btn-sm btn-primary" [disabled]="selectedEpisodeIds().size === 0"
+                  [attr.aria-label]="'downloads.download' | translate" (click)="downloadSelectedEpisodes()">
+            <svg lucideDownload class="h-4 w-4"></svg>
+            <span class="hidden sm:inline">{{ 'downloads.download' | translate }}</span>
+          </button>
         </div>
       }
     } @else if (filteredEpisodes().length > 0) {

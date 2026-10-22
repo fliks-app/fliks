@@ -23,6 +23,7 @@ import {
   LucideListChecks,
   LucideChevronRight,
   LucidePause,
+  LucideX,
 } from '@lucide/angular';
 import { DownloadNotificationService } from '../../core/services/download-notification.service';
 import { ToastService } from '../../core/services/toast.service';
@@ -55,6 +56,7 @@ export interface DisplayDownloadTask extends DownloadTask {
     LucideListChecks,
     LucideChevronRight,
     LucidePause,
+    LucideX,
     SeasonLabelPipe,
   ],
   templateUrl: './downloads.html',

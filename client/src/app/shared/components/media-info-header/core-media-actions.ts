@@ -36,6 +36,22 @@ export const CORE_MEDIA_ACTIONS: readonly UiContribution[] = [
     when: ['!isTv', 'mediaType:series'],
     action: { kind: 'action', actionId: 'media.download-series' },
   },
+  {
+    id: 'core.auto_download_group',
+    slot: 'media.actions',
+    weight: 141,
+    labelKey: 'downloads.auto_rule',
+    icon: 'download',
+    when: ['!isTv', 'mediaType:series'],
+    action: { kind: 'submenu' },
+    children: ([0, 3, 5, 10] as const).map((n, i) => ({
+      id: `core.auto_download_${n}`,
+      slot: 'media.actions' as const,
+      weight: i,
+      labelKey: n ? 'downloads.auto_next' : 'downloads.auto_off',
+      action: { kind: 'action' as const, actionId: `media.auto-download-${n}` },
+    })),
+  },
   // ── Rows a card owns ────────────────────────────────────────────────────
   // Play/Open say `surface:card`: on a detail page you are already there.
   {

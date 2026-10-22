@@ -56,7 +56,6 @@ import { CollapsibleSectionComponent } from '../../shared/components/collapsible
 import { MediaCardComponent } from '../../shared/components/media-card/media-card';
 import { DownloadQualityModalComponent } from '../../shared/components/download-quality-modal/download-quality-modal';
 import { DownloadManagerService, episodeLabel, type DownloadTarget } from '../../core/services/download-manager.service';
-import { AutoDownloadRuleComponent } from '../../shared/components/auto-download-rule/auto-download-rule';
 import { DownloadDetailModalComponent } from '../../shared/components/download-detail-modal/download-detail-modal';
 import { collectScopedLeaves, describeDownload } from '../../shared/utils/download-format';
 import { TvService } from '../../core/services/tv.service';
@@ -125,7 +124,6 @@ interface HandedEpisode {
     MediaCardComponent,
     DownloadQualityModalComponent,
     DownloadDetailModalComponent,
-    AutoDownloadRuleComponent,
     RouterLink,
     NgTemplateOutlet,
     ResolveUrlPipe,
