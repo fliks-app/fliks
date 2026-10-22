@@ -70,24 +70,32 @@ final class FlixDownloadNotifications {
 
     /** Summary of the queue: the ongoing notification, or the paused one when nothing is moving. */
     static Notification build(Context ctx, List<Download> downloads, int notMetRequirements) {
+        // Paused downloads are listed after the active ones, so a mixed queue shows every item.
         List<Download> items = new ArrayList<>();
         for (Download d : downloads) if (isActive(d)) items.add(d);
-        boolean paused = items.isEmpty();
-        if (paused) for (Download d : downloads) if (isPaused(d)) items.add(d);
+        int activeCount = items.size();
+        boolean paused = activeCount == 0;
+        for (Download d : downloads) if (isPaused(d)) items.add(d);
 
         int n = items.size();
         float sum = 0;
-        int key = n;
-        for (Download d : items) {
-            sum += Math.max(0f, d.getPercentDownloaded());
-            key = key * 31 + d.request.id.hashCode();
+        float activeSum = 0;
+        int key = activeCount;
+        for (int i = 0; i < n; i++) {
+            Download d = items.get(i);
+            float pct = Math.max(0f, d.getPercentDownloaded());
+            sum += pct;
+            if (i < activeCount) {
+                activeSum += pct;
+                key = key * 31 + d.request.id.hashCode();
+            }
         }
         int percent = n == 0 ? 0 : Math.round(sum / n);
 
         boolean waiting = !paused && FlixDownloadUtil.isWaitingWifi(notMetRequirements);
         String text = str(ctx, paused ? "paused" : waiting ? "waitingWifi" : "progress", "");
         if (!paused && !waiting) {
-            long ms = remainingMs(key, sum, n);
+            long ms = remainingMs(key, activeSum, activeCount);
             if (ms > 0) {
                 text += " · " + str(ctx, "timeLeft", "%s").replace("%s", DateUtils.formatElapsedTime(ms / 1000));
             }
@@ -110,7 +118,8 @@ final class FlixDownloadNotifications {
             NotificationCompat.InboxStyle inbox = new NotificationCompat.InboxStyle().setBigContentTitle(title).setSummaryText(text);
             for (int i = 0; i < Math.min(n, MAX_LINES); i++) {
                 Download d = items.get(i);
-                inbox.addLine(titleOf(ctx, d) + "  " + Math.round(Math.max(0f, d.getPercentDownloaded())) + "%");
+                String line = titleOf(ctx, d) + "  " + Math.round(Math.max(0f, d.getPercentDownloaded())) + "%";
+                inbox.addLine(i >= activeCount && !paused ? line + " · " + str(ctx, "paused", "") : line);
             }
             b.setStyle(inbox);
         } else if (n == 1) {
