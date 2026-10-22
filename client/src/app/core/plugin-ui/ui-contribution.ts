@@ -26,6 +26,8 @@ export type WhenPredicateName =
   | 'isTouch'
   /** The signed-in user has at least one Live TV channel to watch. */
   | 'liveTv'
+  /** The connected server is at least this release, e.g. `server:5.1.0`. */
+  | `server:${string}`
   /** Which menu is being built; a row names this only when it belongs to the card menu or the detail menu. */
   | 'surface:card'
   | 'surface:detail';

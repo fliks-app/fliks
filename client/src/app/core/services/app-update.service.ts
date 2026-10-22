@@ -1,10 +1,10 @@
 import { Injectable, computed, effect, inject, signal } from '@angular/core';
-import { HttpClient, HttpContext } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { Capacitor } from '@capacitor/core';
 import { firstValueFrom } from 'rxjs';
 import { DeviceService } from './device.service';
 import { AuthService } from './auth.service';
-import { SKIP_ERROR_TOAST } from '../interceptors/error.interceptor';
+import { ServerVersionService, isNewer } from './server-version.service';
 import {
   desktopUpdaterOrNull,
   type DesktopUpdateStatus,
@@ -32,18 +32,6 @@ export interface UpdateInfoView {
 
 const HIDE_UNTIL_KEY = 'fliks.updateHiddenForServer';
 const NEVER_AHEAD_KEY = 'fliks.updateNeverAheadOfServer';
-
-/** Numeric x.y.z compare, pre-release/build suffix dropped. */
-function isNewer(a: string, b: string): boolean {
-  const parse = (v: string) => v.trim().replace(/^v/i, '').split(/[-+]/)[0].split('.').map(Number);
-  const x = parse(a);
-  const y = parse(b);
-  if ([...x, ...y].some(Number.isNaN)) return false;
-  for (let i = 0; i < Math.max(x.length, y.length); i++) {
-    if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) > (y[i] ?? 0);
-  }
-  return false;
-}
 
 function readPref(key: string): string | null {
   try {
@@ -78,6 +66,7 @@ export class AppUpdateService {
   private readonly device = inject(DeviceService);
   private readonly auth = inject(AuthService);
   private readonly http = inject(HttpClient);
+  private readonly serverVersionService = inject(ServerVersionService);
 
   private readonly desktop = desktopUpdaterOrNull();
 
@@ -99,8 +88,8 @@ export class AppUpdateService {
   readonly releasesUrl = signal<string | null>(null);
   readonly errorMessage = signal<string | null>(null);
 
-  /** Version of the connected server; desktop mode only. */
-  readonly serverVersion = signal<string | null>(null);
+  /** Version of the connected server. */
+  readonly serverVersion = this.serverVersionService.version;
   /** The desktop update would run a client newer than its server. */
   readonly aheadOfServer = computed(() => {
     const next = this.info()?.version;
@@ -124,7 +113,6 @@ export class AppUpdateService {
   );
 
   private serverChecked = false;
-  private serverVersionFetched = false;
 
   constructor() {
     if (this.desktop) this.wireDesktop();
@@ -134,13 +122,6 @@ export class AppUpdateService {
       if (this.mode() === 'server' && !this.serverChecked) {
         this.serverChecked = true;
         void this.checkServer();
-      }
-    });
-
-    effect(() => {
-      if (this.mode() === 'desktop' && this.auth.user() && this.info() && !this.serverVersionFetched) {
-        this.serverVersionFetched = true;
-        void this.fetchServerVersion();
       }
     });
   }
@@ -160,7 +141,7 @@ export class AppUpdateService {
   /** Trigger a fresh check (used by a manual "check for updates" action). */
   async check(): Promise<void> {
     if (this.mode() === 'desktop') {
-      if (this.auth.user()) void this.fetchServerVersion();
+      if (this.auth.user()) void this.serverVersionService.refresh();
       await this.desktop?.check();
     } else if (this.mode() === 'server') {
       this.serverChecked = true;
@@ -216,19 +197,6 @@ export class AppUpdateService {
       case 'error':
         this.errorMessage.set(status.message);
         break;
-    }
-  }
-
-  private async fetchServerVersion(): Promise<void> {
-    try {
-      const { version } = await firstValueFrom(
-        this.http.get<{ version: string }>('/api/system/version', {
-          context: new HttpContext().set(SKIP_ERROR_TOAST, true),
-        }),
-      );
-      this.serverVersion.set(version);
-    } catch {
-      // Unknown server version: never warn, never hide.
     }
   }
 

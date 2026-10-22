@@ -55,7 +55,7 @@ export const CORE_SETTINGS_SECTIONS: readonly CoreSettingsSection[] = [
       { id: 'core.quality_definitions', slot: 'settings.page', weight: 300, labelKey: 'settings.nav.quality_definitions', action: { kind: 'route', path: '/admin/settings/quality-definitions' } },
       { id: 'core.custom_formats', slot: 'settings.page', weight: 400, labelKey: 'settings.nav.custom_formats', action: { kind: 'route', path: '/admin/settings/custom-formats' } },
       { id: 'core.auto_approval', slot: 'settings.page', weight: 500, labelKey: 'settings.nav.auto_approval', action: { kind: 'route', path: '/admin/settings/auto-approval' } },
-      { id: 'core.cleanup', slot: 'settings.page', weight: 600, labelKey: 'settings.nav.cleanup', action: { kind: 'route', path: '/admin/settings/cleanup' } },
+      { id: 'core.cleanup', slot: 'settings.page', weight: 600, labelKey: 'settings.nav.cleanup', when: ['server:5.1.0'], action: { kind: 'route', path: '/admin/settings/cleanup' } },
     ],
   },
   {

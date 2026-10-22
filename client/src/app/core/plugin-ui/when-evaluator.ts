@@ -15,6 +15,8 @@ export interface WhenContext {
   isTouch: boolean;
   /** The signed-in user has at least one Live TV channel. */
   liveTv?: boolean;
+  /** The connected server answers what the given release added. */
+  serverSupports?: (version: string) => boolean;
   /** Which menu is being built; an item names this only when it belongs to one (Play/Open mean nothing on a detail page). */
   surface?: 'card' | 'detail';
 }
@@ -35,6 +37,7 @@ function evaluateKnown(predicate: string, ctx: WhenContext): boolean | null {
   if (predicate === 'isTv') return ctx.isTv;
   if (predicate === 'isTouch') return ctx.isTouch;
   if (predicate === 'liveTv') return ctx.liveTv ?? false;
+  if (predicate.startsWith('server:')) return ctx.serverSupports?.(predicate.slice('server:'.length)) ?? false;
   if (predicate === 'surface:card') return ctx.surface === 'card';
   if (predicate === 'surface:detail') return ctx.surface === 'detail';
   return null;

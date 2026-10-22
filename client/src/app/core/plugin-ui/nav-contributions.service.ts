@@ -7,6 +7,7 @@ import { CORE_NAV_CONTRIBUTIONS, LIBRARIES_BLOCK_WEIGHT } from './core-contribut
 import { PluginUiRegistryService } from './plugin-ui-registry.service';
 import { evaluateWhen, type WhenContext } from './when-evaluator';
 import type { SlotId, UiContribution } from '@fliks/plugin-ui';
+import { ServerVersionService } from '../services/server-version.service';
 
 /** A `nav.main` / `nav.acquisition` contribution resolved to something a
  *  template can render directly, with visibility and action already decided. */
@@ -42,6 +43,7 @@ export class NavContributionsService {
   private readonly tv = inject(TvService);
   private readonly device = inject(DeviceService);
   private readonly liveTv = inject(LiveTvAvailabilityService);
+  private readonly serverVersion = inject(ServerVersionService);
 
   readonly mainItems = computed(() => this.resolve('nav.main'));
   readonly acquisitionItems = computed(() => this.resolve('nav.acquisition'));
@@ -64,6 +66,7 @@ export class NavContributionsService {
       isTv: this.tv.isTv(),
       isTouch: this.device.isTouch(),
       liveTv: this.liveTv.available(),
+      serverSupports: (v) => this.serverVersion.supports(v),
     };
     const items: ResolvedNavItem[] = [];
     for (const c of merged) {
