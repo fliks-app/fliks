@@ -1769,17 +1769,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private readonly notificationNavEffect = effect(() => this.queueCtl.syncNotificationNav());
   private readonly autoAdvanceEffect = effect(() => this.queueCtl.autoAdvance());
 
-  /** Offline there is no media fetch: the header comes from the download, the logo from the server when it answers. */
+  /** The header from the download, so it shows offline; online, the media fetch fills in what the download lacks. */
   private applyOfflineHeader(task: DownloadTask | undefined): void {
     if (!task) return;
     this.mediaTitle.set(task.media?.title ?? '');
     const m = /^S(\d+)E(\d+)\s*(.*)$/.exec(task.episodeLabel ?? '');
     this.episodeTitle.set(m ? `S${+m[1]}:E${+m[2]}${m[3] ? ` - ${m[3]}` : ''}` : (task.episodeLabel ?? ''));
-    if (task.media?.logoUrl) {
-      this.mediaLogoUrl.set(task.media.logoUrl);
-    } else if (this.mediaId) {
-      void this.mediaService.getOne(this.mediaId).then((media) => this.mediaLogoUrl.set(media.logoUrl ?? null), () => {});
-    }
+    if (task.media?.logoUrl) this.mediaLogoUrl.set(task.media.logoUrl);
   }
 
   /** Online with a local copy: fetch the media record in parallel (not on the first-frame path) for the
