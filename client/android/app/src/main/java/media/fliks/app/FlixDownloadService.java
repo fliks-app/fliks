@@ -7,7 +7,6 @@ import androidx.annotation.OptIn;
 import androidx.media3.common.util.UnstableApi;
 import androidx.media3.exoplayer.offline.Download;
 import androidx.media3.exoplayer.offline.DownloadManager;
-import androidx.media3.exoplayer.offline.DownloadNotificationHelper;
 import androidx.media3.exoplayer.offline.DownloadService;
 import androidx.media3.exoplayer.scheduler.Scheduler;
 
@@ -58,15 +57,6 @@ public class FlixDownloadService extends DownloadService {
             }
         }
 
-        DownloadNotificationHelper helper =
-            FlixDownloadUtil.getNotificationHelper(this);
-        return helper.buildProgressNotification(
-            this,
-            android.R.drawable.stat_sys_download,
-            /* contentIntent= */ null,
-            /* message= */ null,
-            downloads,
-            notMetRequirements
-        );
+        return FlixDownloadNotifications.build(this, downloads);
     }
 }

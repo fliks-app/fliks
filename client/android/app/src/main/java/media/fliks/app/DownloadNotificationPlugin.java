@@ -69,7 +69,14 @@ public class DownloadNotificationPlugin extends Plugin {
         }
 
         FlixDownloadUtil.setAuthToken(token);
-        FlixDownloadUtil.startDownload(getContext(), id, hlsUrl);
+        FlixDownloadUtil.startDownload(getContext(), id, hlsUrl, call.getString("notifTitle", ""));
+        call.resolve();
+    }
+
+    /** Translated notification wording and channel name, persisted for service restarts. */
+    @PluginMethod()
+    public void setNotificationCopy(PluginCall call) {
+        FlixDownloadNotifications.setCopy(getContext(), call.getData());
         call.resolve();
     }
 

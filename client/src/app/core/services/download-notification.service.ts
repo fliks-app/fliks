@@ -31,6 +31,22 @@ export interface DownloadActivityCopy {
   failed: string;
 }
 
+/** Pre-translated wording of the Android download notifications; `%d` and `%s` are filled natively. */
+export interface DownloadNotificationCopy {
+  channelName: string;
+  channelDescription: string;
+  progress: string;
+  paused: string;
+  complete: string;
+  failed: string;
+  /** Headline of a batch, `%d` the count. */
+  activeCount: string;
+  /** `%s` the remaining time. */
+  timeLeft: string;
+  pause: string;
+  resume: string;
+}
+
 interface DownloadNotificationPlugin {
   startDownload(
     opts: { id: string; hlsUrl: string; token: string } & Partial<DownloadNotifStrings>,
@@ -43,6 +59,7 @@ interface DownloadNotificationPlugin {
   pauseDownload(opts: { id: string }): Promise<void>;
   resumeDownload(opts: { id: string }): Promise<void>;
   setActivityCopy(opts: DownloadActivityCopy): Promise<void>;
+  setNotificationCopy(opts: DownloadNotificationCopy): Promise<void>;
   setMaxConcurrentDownloads(opts: { max: number }): Promise<void>;
   setWifiOnly(opts: { enabled: boolean }): Promise<void>;
   dismissActivity(): Promise<void>;
@@ -75,7 +92,7 @@ export class DownloadNotificationService {
     }
   }
 
-  /** Starts an HLS download via the native manager; `notif` is pre-translated iOS banner copy (Android builds its own). */
+  /** Starts an HLS download via the native manager; `notif` is pre-translated banner copy (iOS) and the notification title (Android). */
   startDownload(id: string, hlsUrl: string, token: string, notif?: DownloadNotifStrings): void {
     if (!this.isNative || !DownloadNotification) return;
     DownloadNotification.startDownload({ id, hlsUrl, token, ...(notif ?? {}) }).catch(() => {});
@@ -96,6 +113,12 @@ export class DownloadNotificationService {
   setActivityCopy(copy: DownloadActivityCopy): void {
     if (!DownloadNotification || Capacitor.getPlatform() !== 'ios') return;
     DownloadNotification.setActivityCopy(copy).catch(() => {});
+  }
+
+  /** Android: wording of the download notifications; gated like {@link setActivityCopy}. */
+  setNotificationCopy(copy: DownloadNotificationCopy): void {
+    if (!DownloadNotification || Capacitor.getPlatform() !== 'android') return;
+    DownloadNotification.setNotificationCopy(copy).catch(() => {});
   }
 
   /** Retire the iOS Live Activity for the download queue. */
