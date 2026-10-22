@@ -477,7 +477,7 @@ impl Engine {
             s.push_needed = true;
         }
         tracing::info!(
-            "engine {} hello OK (protocol {}, features {})",
+            "engine {} (protocol {}, features {})",
             h.engine_version,
             h.protocol_version,
             h.features.join(",")

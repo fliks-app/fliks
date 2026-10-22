@@ -83,10 +83,7 @@ pub fn apply(st: &AppState, ss: &StreamingConfig, redetect: bool) {
 async fn refresh(st: &AppState, node: &str) {
     match st.engine.capabilities_for(node).await {
         Ok(c) => {
-            tracing::info!(
-                "Hardware acceleration: {} (from the engine)",
-                c.capabilities.hw_accel
-            );
+            tracing::info!("Hardware acceleration: {}", c.capabilities.hw_accel);
             st.stream.hardware.store(c.capabilities);
         }
         Err(e) => tracing::warn!("engine capabilities unavailable: {e}"),
