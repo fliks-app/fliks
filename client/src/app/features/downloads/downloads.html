@@ -142,7 +142,7 @@
         } @else {
           @let show = entry.show;
           <details class="group card bg-base-100 shadow-sm border border-base-200" [open]="selectMode()">
-            <summary class="flex items-center gap-3 p-3 cursor-pointer list-none">
+            <summary class="flex items-center gap-3 p-3 group-open:pb-1.5 cursor-pointer list-none">
               <div class="w-16 h-24 shrink-0 rounded overflow-hidden bg-base-300">
                 @if (show.posterUrl) {
                   <img [cachedSrc]="show.posterUrl | resolveUrl:'thumb'" [alt]="show.title" class="w-full h-full object-cover" />
@@ -169,7 +169,7 @@
               }
               <svg lucideChevronRight class="h-4 w-4 shrink-0 transition-transform group-open:rotate-90"></svg>
             </summary>
-            <div class="flex flex-col gap-2 px-3 pb-3 -mt-1.5">
+            <div class="flex flex-col gap-2 px-3 pb-3">
               <app-auto-download-rule [seriesId]="show.mediaId" />
               @for (season of show.seasons; track season.seasonNumber) {
                 <details class="group/season" [open]="selectMode() || show.seasons.length === 1">
