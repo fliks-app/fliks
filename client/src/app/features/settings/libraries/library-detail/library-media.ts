@@ -89,8 +89,9 @@ export class LibraryMediaComponent implements OnInit {
           sortBy: 'title',
           sortOrder: 'ASC',
           unidentified: this.unidentifiedOnly() || undefined,
-        }),
-        this.mediaService.getAll({ libraryId, unidentified: true, limit: 1 }),
+        }, { force: true }),
+        // Background imports add rows with no client mutation to invalidate the cache.
+        this.mediaService.getAll({ libraryId, unidentified: true, limit: 1 }, { force: true }),
       ]);
       this.items.set(res.data);
       this.total.set(res.total);
