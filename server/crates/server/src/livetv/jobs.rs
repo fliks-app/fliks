@@ -21,6 +21,17 @@ pub fn is_due(
         .is_none_or(|t| now - t >= Duration::hours(i64::from(interval_hours)) - DUE_TOLERANCE)
 }
 
+/// A scheduled live TV job with nothing to act on is skipped before its audit row.
+pub async fn idle(st: &AppState, name: &str) -> bool {
+    let probe = match name {
+        "LiveTvSourceRefresh" => "SELECT EXISTS (SELECT 1 FROM livetv_sources WHERE enabled)",
+        "LiveTvGuideRefresh" => "SELECT EXISTS (SELECT 1 FROM livetv_guide_sources WHERE enabled)",
+        "LiveTvGuidePrune" => "SELECT EXISTS (SELECT 1 FROM livetv_programs)",
+        _ => return false,
+    };
+    matches!(sqlx::query_scalar(probe).fetch_one(&st.db).await, Ok(false))
+}
+
 /// `LiveTvSourceRefresh`: every enabled, due source in turn; one failing never costs the ones after it.
 pub async fn refresh_sources(st: &AppState) -> Result<(), String> {
     let sources: Vec<Source> = sqlx::query_as(&format!(
