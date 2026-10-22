@@ -143,10 +143,24 @@
         </button>
       }
       @if (selectedFileId() && (mediaType() === 'movie' || episodeId()) && !tv.isTv()) {
-        <button class="flex flex-col items-center gap-1 text-sm" (click)="openDownload.emit()">
-          <svg lucideDownload class="h-5 w-5"></svg>
-          {{ 'downloads.download' | translate }}
-        </button>
+        @if (download(); as d) {
+          @if (d.status === 'ready') {
+            <button class="flex flex-col items-center gap-1 text-sm text-success" (click)="openDownload.emit()">
+              <svg lucideCircleCheck class="h-5 w-5"></svg>
+              {{ 'downloads.downloaded' | translate }}
+            </button>
+          } @else {
+            <button class="flex flex-col items-center gap-1 text-sm" [attr.aria-label]="'downloads.downloading' | translate" (click)="openDownload.emit()">
+              <div class="radial-progress text-info shadow-[inset_0_0_0_2px_color-mix(in_oklab,var(--color-base-content)_15%,transparent)]" [style.--value]="d.progress" style="--size: 1.25rem; --thickness: 2px" role="progressbar" [attr.aria-valuenow]="d.progress"></div>
+              {{ d.progress }} %
+            </button>
+          }
+        } @else {
+          <button class="flex flex-col items-center gap-1 text-sm" (click)="openDownload.emit()">
+            <svg lucideDownload class="h-5 w-5"></svg>
+            {{ 'downloads.download' | translate }}
+          </button>
+        }
       }
       <!-- Like is a taste signal, not a playback action — available on movies,
            series and episodes, with or without a local file. -->
@@ -312,16 +326,30 @@
               {{ 'player.play_from_start' | translate }}
             </button>
           }
-          @if ((mediaType() === 'movie' || episodeId()) && !tv.isTv()) {
-            <button type="button" class="btn btn-ghost btn btn-circle" (click)="openDownload.emit()">
-              <svg lucideDownload class="h-4 w-4"></svg>
-            </button>
-          }
         }
         @if (canToggleWatched()) {
           <button type="button" class="btn btn-outline btn btn-circle" [attr.aria-label]="'media_info.watched' | translate" [class.btn-success]="watched()" [class.btn-ghost]="!watched()" (click)="onToggleWatched()">
             <svg lucideCheck class="h-4 w-4"></svg>
           </button>
+        }
+        @if (selectedFileId() || resumeMediaFileId()) {
+          @if ((mediaType() === 'movie' || episodeId()) && !tv.isTv()) {
+            @if (download(); as d) {
+              @if (d.status === 'ready') {
+                <button type="button" class="btn btn-ghost btn btn-circle text-success" [attr.aria-label]="'downloads.downloaded' | translate" [title]="'downloads.downloaded' | translate" (click)="openDownload.emit()">
+                  <svg lucideDownload class="h-5 w-5"></svg>
+                </button>
+              } @else {
+                <button type="button" class="btn btn-ghost btn btn-circle" [attr.aria-label]="'downloads.downloading' | translate" [title]="'downloads.downloading' | translate" (click)="openDownload.emit()">
+                  <div class="radial-progress text-info text-[0.6rem] font-semibold shadow-[inset_0_0_0_3px_color-mix(in_oklab,var(--color-base-content)_15%,transparent)]" [style.--value]="d.progress" style="--size: 2rem; --thickness: 3px" role="progressbar" [attr.aria-valuenow]="d.progress">{{ d.progress }}</div>
+                </button>
+              }
+            } @else {
+              <button type="button" class="btn btn-ghost btn btn-circle" [attr.aria-label]="'downloads.download' | translate" (click)="openDownload.emit()">
+                <svg lucideDownload class="h-4 w-4"></svg>
+              </button>
+            }
+          }
         }
         @if (badge(); as b) {
           <ng-container *ngTemplateOutlet="downloadBadge; context: { badge: b }"></ng-container>

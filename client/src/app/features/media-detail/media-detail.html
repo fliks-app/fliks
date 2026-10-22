@@ -75,6 +75,7 @@
           [grabBusy]="grabs.epHeaderGrabBusy()"
           [identified]="!unidentified()"
           (selectedFileIdChange)="selectedFileId.set($event)"
+          [download]="fileDownload()"
           (openDownload)="openDownloadModal()"
           (refreshMetadata)="refreshMetadata()"
           (toggleMonitored)="toggleMonitored()"
@@ -218,6 +219,7 @@
           [deleteLoading]="deleteLoading()"
           [identified]="!unidentified()"
           (selectedFileIdChange)="selectedFileId.set($event)"
+          [download]="fileDownload()"
           (openDownload)="openDownloadModal()"
           (downloadSeries)="downloadSeries()"
           (openProfiles)="openProfilesModal()"
@@ -422,7 +424,7 @@
         (selectedProviderChange)="selectedProvider.set($event)"
         (save)="saveLibrary()"
       />
-      <app-download-quality-modal #downloadModal (download)="onDownload($event)" />
+      <app-download-quality-modal #downloadModal [progress]="activeDownloadProgress()" (download)="onDownload($event)" (remove)="onRemoveDownload()" />
       <app-download-detail-modal #downloadDetailModal [progress]="activeDownload()" />
     </div>
   }

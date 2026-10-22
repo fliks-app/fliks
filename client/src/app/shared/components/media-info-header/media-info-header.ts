@@ -13,6 +13,7 @@ import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { FormsModule } from '@angular/forms';
 import {
   LucideCheck,
+  LucideCircleCheck,
   LucideDownload,
   LucideEllipsisVertical,
   LucideFilm,
@@ -36,6 +37,7 @@ import { TrackManagerService, type LaunchTracks } from '../../../core/services/t
 import { NavbarService } from '../../../core/services/navbar.service';
 import { TvService } from '../../../core/services/tv.service';
 import { DeviceService } from '../../../core/services/device.service';
+import type { DownloadStatus } from '../../../core/services/download-status';
 import { AutoDownloadService } from '../../../core/services/auto-download.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { MobileFanartHeroComponent } from '../mobile-fanart-hero';
@@ -144,7 +146,7 @@ interface AudioTrack {
     TvSelectDirective,
     NgTemplateOutlet,
     DecimalPipe, FormsModule, RouterLink, TranslatePipe,
-    LucideCheck, LucideDownload, LucideEllipsisVertical,
+    LucideCheck, LucideCircleCheck, LucideDownload, LucideEllipsisVertical,
     LucideFilm, LucideHeart, LucideListPlus, LucidePlay, LucideRotateCcw,
   ],
   templateUrl: './media-info-header.html',
@@ -282,6 +284,8 @@ export class MediaInfoHeaderComponent {
 
   // ── Outputs (delegated to parent) ──
   readonly selectedFileIdChange = output<number>();
+  /** Download of the file on screen; null when none (a failed one counts as none). */
+  readonly download = input<{ status: DownloadStatus; progress: number } | null>(null);
   readonly openDownload = output<void>();
   readonly downloadSeries = output<void>();
   readonly openProfiles = output<void>();
@@ -666,6 +670,7 @@ export class MediaInfoHeaderComponent {
   /** Visibility the `when` vocabulary can't express (an OR, or non-permission facts); only narrows, for three ids. */
   private readonly extraGuards: Record<string, () => boolean> = {
     'core.recommend': () => !this.auth.sharingDisabled(),
+    'core.download': () => !this.download() || this.download()?.status === 'ready',
     'core.download_series': () => !this.episodeId() && this.files().length > 0,
     'core.auto_download_group': () => this.autoDownload.enabled && !this.episodeId(),
     'core.request_media': () => {
@@ -731,6 +736,7 @@ export class MediaInfoHeaderComponent {
     if (item.actionId === 'media.toggle-watched') {
       return this.watched() ? 'media_card.mark_unwatched' : 'media_card.mark_watched';
     }
+    if (item.actionId === 'media.download' && this.download()) return 'downloads.change_quality';
     if (item.actionId === 'media.toggle-like') {
       return this.liked() ? 'media_detail.unlike' : 'media_detail.like';
     }

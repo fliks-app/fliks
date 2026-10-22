@@ -16,14 +16,14 @@ import {
 } from '../../../core/services/api/streaming-api.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { desktopDownloaderOrNull } from '../../../core/plugins/desktop-downloader.bridge';
-import { LucideDownload, LucideX } from '@lucide/angular';
+import { LucideCircleCheck, LucideDownload, LucideTrash2, LucideX } from '@lucide/angular';
 import { DownloadSettingsService } from '../../../core/services/download-settings.service';
 import { pickRung } from '../../../core/services/download-manager.service';
 import { formatBytes } from '../../utils/download-format';
 
 @Component({
   selector: 'app-download-quality-modal',
-  imports: [TranslatePipe, LucideDownload, LucideX],
+  imports: [TranslatePipe, LucideCircleCheck, LucideDownload, LucideTrash2, LucideX],
   templateUrl: './download-quality-modal.html',
 })
 export class DownloadQualityModalComponent {
@@ -53,8 +53,14 @@ export class DownloadQualityModalComponent {
   readonly downloadProgress = signal(0);
 
   readonly download = output<{ mediaFileId: number; quality: string; unwatchedOnly: boolean }>();
+  readonly remove = output<void>();
+  /** Progress of the download under way for this file; null when none. */
+  readonly progress = input<number | null>(null);
 
   private mediaFileId = 0;
+
+  /** Quality of the download already on the device or under way; null for a fresh download. */
+  readonly current = signal<string | null>(null);
 
   /** Batch mode (season or show): the episode counts the size and checkbox speak of; null for a single file. */
   readonly batch = signal<{ all: number; unwatched: number } | null>(null);
@@ -67,12 +73,14 @@ export class DownloadQualityModalComponent {
   /** `mediaFileId` is the first episode's file, whose estimates stand for all of them. */
   openBatch(mediaFileId: number, counts: { all: number; unwatched: number }) {
     this.batch.set(counts);
+    this.current.set(null);
     this.unwatchedOnly.set(true);
     return this.show(mediaFileId);
   }
 
-  open(mediaFileId: number) {
+  open(mediaFileId: number, current: string | null = null) {
     this.batch.set(null);
+    this.current.set(current);
     return this.show(mediaFileId);
   }
 
@@ -90,7 +98,13 @@ export class DownloadQualityModalComponent {
     }
   }
 
+  removeDownload() {
+    this.remove.emit();
+    this.close();
+  }
+
   selectQuality(quality: string) {
+    if (quality === this.current()) return this.close();
     this.download.emit({ mediaFileId: this.mediaFileId, quality, unwatchedOnly: this.unwatchedOnly() });
     this.close();
   }

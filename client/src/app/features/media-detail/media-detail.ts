@@ -56,7 +56,7 @@ import { CollapsibleSectionComponent } from '../../shared/components/collapsible
 import { MediaCardComponent } from '../../shared/components/media-card/media-card';
 import { DownloadQualityModalComponent } from '../../shared/components/download-quality-modal/download-quality-modal';
 import { DownloadManagerService, episodeLabel, type DownloadTarget } from '../../core/services/download-manager.service';
-import { nothingStartedKey } from '../../core/services/download-status';
+import { isActive, nothingStartedKey } from '../../core/services/download-status';
 import { DownloadDetailModalComponent } from '../../shared/components/download-detail-modal/download-detail-modal';
 import { collectScopedLeaves, describeDownload } from '../../shared/utils/download-format';
 import { TvService } from '../../core/services/tv.service';
@@ -1019,10 +1019,27 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     void this.downloadModal()?.open(target.mediaFileId!);
   }
 
+  private downloadFileId() {
+    return this.episodeMode() ? this.episodeView.episodeActiveFileId() : this.activeFileId();
+  }
+
+  /** Download of the file on screen; a failed one reads as none. */
+  readonly fileDownload = computed(() => {
+    const id = this.downloadFileId();
+    const task = id ? this.downloadManager.tasks().find((t) => t.mediaFileId === id && t.status !== 'failed') : undefined;
+    return task ?? null;
+  });
+
+  readonly activeDownloadProgress = computed(() => {
+    const t = this.fileDownload();
+    return t && isActive(t.status) ? t.progress : null;
+  });
+
   openDownloadModal() {
     this.pendingDownloads = null;
-    const fileId = this.episodeMode() ? this.episodeView.episodeActiveFileId() : this.activeFileId();
-    if (fileId) this.downloadModal()?.open(fileId);
+    const fileId = this.downloadFileId();
+    const task = this.fileDownload();
+    if (fileId) this.downloadModal()?.open(fileId, task?.quality ?? null);
   }
 
   openDownloadDetailModal() {
@@ -1031,6 +1048,19 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
 
   openSubtitles() {
     this.subtitleSection()?.show();
+  }
+
+  async onRemoveDownload() {
+    const task = this.fileDownload();
+    if (!task) return;
+    const active = isActive(task.status);
+    const confirmed = await this.confirmation.confirm({
+      title: this.translate.instant('common.confirm'),
+      message: this.translate.instant(active ? 'downloads.confirm_cancel' : 'downloads.confirm_delete'),
+      confirmLabel: this.translate.instant(active ? 'downloads.cancel_download' : 'common.delete'),
+      variant: 'danger',
+    });
+    if (confirmed) await this.downloadManager.deleteDownload(task);
   }
 
   async onDownload(ev: { mediaFileId: number; quality: string; unwatchedOnly: boolean }) {
@@ -1059,6 +1089,8 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       if (s && ep) {
         episode = episodeLabel(s.seasonNumber, ep.episodeNumber, ep.title);
       }
+      const prev = this.downloadManager.tasks().find((t) => t.mediaFileId === ev.mediaFileId && t.status !== 'failed');
+      if (prev) await this.downloadManager.deleteDownload(prev);
       await this.downloadManager.createDownload(ev.mediaFileId, ev.quality, title, episode, {
         mediaId: m?.id,
         posterUrl: m?.posterUrl,

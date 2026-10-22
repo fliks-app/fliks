@@ -1,4 +1,4 @@
-import { Injectable, inject, effect, signal, type Signal } from '@angular/core';
+import { Injectable, inject, computed, effect, signal, type Signal } from '@angular/core';
 import { Capacitor } from '@capacitor/core';
 import { StreamingApiService } from './api/streaming-api.service';
 import { SubtitlesApiService } from './api/subtitles-api.service';
@@ -91,15 +91,19 @@ export class DownloadManagerService {
   private webActive = 0;
   private readonly webQueue: Array<() => void> = [];
 
-  /** The persisted task list, the one source every reader derives from. */
-  readonly tasks: Signal<DownloadTask[]> = this.cache.tasks;
+  /** The persisted task list, the one source every reader derives from; a task being deleted is already gone. */
+  readonly tasks: Signal<DownloadTask[]> = computed(() => {
+    const deleting = this.deleting();
+    const tasks = this.cache.tasks();
+    return deleting.size ? tasks.filter((t) => !deleting.has(t.id)) : tasks;
+  });
 
   /** Bumped when {@link recover} finishes, so the auto-download reconciler runs
    *  after interrupted tasks are cleaned up instead of racing that pass. */
   readonly recoveredAt = signal(0);
 
   /** Ids mid-{@link deleteDownload}, so the native `removed` echo of our own removal isn't deleted twice. */
-  private readonly deleting = new Set<number>();
+  private readonly deleting = signal<ReadonlySet<number>>(new Set());
 
   // --- Native: ExoPlayer DownloadManager events ---
   // The bridge only emits on native, and gates its own calls, so neither needs a platform check here.
@@ -116,7 +120,7 @@ export class DownloadManagerService {
       void this.persistSize(taskId);
     } else if (event.type === 'removed') {
       const task = this.cache.load().find((t) => t.id === taskId);
-      if (task && !this.deleting.has(taskId)) void this.deleteDownload(task);
+      if (task && !this.deleting().has(taskId)) void this.deleteDownload(task);
     } else {
       this.persistProgress(taskId, event.progress, event.state);
     }
@@ -443,7 +447,7 @@ export class DownloadManagerService {
   }
 
   async deleteDownload(task: DownloadTask) {
-    this.deleting.add(task.id);
+    this.deleting.update((s) => new Set(s).add(task.id));
     try {
       this.webGates.get(task.id)?.open();
       this.webGates.delete(task.id);
@@ -467,7 +471,11 @@ export class DownloadManagerService {
       this.cache.remove(task.id);
       this.titles.delete(task.id);
     } finally {
-      this.deleting.delete(task.id);
+      this.deleting.update((s) => {
+        const next = new Set(s);
+        next.delete(task.id);
+        return next;
+      });
     }
   }
 
