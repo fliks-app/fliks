@@ -4,7 +4,7 @@ import { NgTemplateOutlet } from '@angular/common';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import type { DownloadTask } from '../../core/services/download-cache.service';
 import { DownloadManagerService } from '../../core/services/download-manager.service';
-import { isActive, isPausable, isTransferring } from '../../core/services/download-status';
+import { isPausable, isTransferring } from '../../core/services/download-status';
 import { DownloadNotificationService } from '../../core/services/download-notification.service';
 import { ConfirmationService } from '../../core/services/confirmation.service';
 import {
@@ -27,7 +27,7 @@ import { CachedSrcDirective } from '../../shared/directives/cached-src.directive
 import { SeasonLabelPipe } from '../../core/pipes/season-label.pipe';
 import { AutoDownloadService } from '../../core/services/auto-download.service';
 import { AutoDownloadRuleComponent } from '../../shared/components/auto-download-rule/auto-download-rule';
-import { groupDownloads, type ShowGroup } from './downloads-grouping';
+import { groupDownloads } from './downloads-grouping';
 
 const openGroupKeys = signal<ReadonlySet<string>>(new Set());
 
@@ -99,13 +99,6 @@ export class DownloadsComponent {
     this.settled();
     void this.notif.getFreeSpace().then((s) => this.freeBytes.set(s?.freeBytes ?? null));
   });
-
-  /** In-flight count and mean percent of a show, or null when none is running. */
-  protected inFlight(show: ShowGroup): { count: number; percent: number } | null {
-    const live = show.tasks.filter((t) => isActive(t.status));
-    if (!live.length) return null;
-    return { count: live.length, percent: Math.round(live.reduce((n, t) => n + t.progress, 0) / live.length) };
-  }
 
   protected readonly isPausable = (task: DownloadTask) => isPausable(task.status);
   protected readonly isTransferring = (task: DownloadTask) => isTransferring(task.status);

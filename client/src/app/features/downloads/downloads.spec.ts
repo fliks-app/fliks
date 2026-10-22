@@ -76,7 +76,7 @@ describe('DownloadsComponent', () => {
     expect(el.querySelector('[aria-label="downloads.pause"]')).toBeNull();
   });
 
-  it('shows free space, and summarises a show with in-flight episodes', async () => {
+  it('shows free space, with no in-flight summary on the show', async () => {
     const ep = (id: number, status: DownloadTask['status'], progress: number): DownloadTask => ({
       ...task(id, status, progress),
       mediaId: 9,
@@ -88,7 +88,7 @@ describe('DownloadsComponent', () => {
     await fixture.whenStable();
     const text = fixture.nativeElement.textContent;
     expect(text).toContain('downloads.total_free');
-    expect(text).toContain('downloads.group_in_progress');
+    expect(text).not.toContain('downloads.group_in_progress');
   });
 
   it('follows progress and status changes with no reload', () => {

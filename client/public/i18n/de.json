@@ -1872,7 +1872,6 @@
     "total_used": "{{size}} belegt",
     "total_free": "{{size}} frei",
     "waiting_wifi": "Warten auf WLAN",
-    "group_in_progress": "{{count}} laufend · {{percent}}%",
     "delete_all": "Alle löschen",
     "other_episodes": "Weitere Episoden",
     "confirm_delete_many": "{{count}} Downloads löschen? Die Dateien werden von diesem Gerät entfernt.",

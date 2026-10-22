@@ -164,7 +164,7 @@
               <div class="flex-1 min-w-0">
                 <h3 class="font-medium text-base line-clamp-1">{{ show.title }}</h3>
                 <p class="text-sm text-base-content/50 mt-0.5 truncate">
-                  {{ (show.tasks.length === 1 ? 'media_detail.episode_count_one' : 'media_detail.episode_count_other') | translate:{ count: show.tasks.length } }}@if (show.sizeBytes) { · {{ formatBytes(show.sizeBytes) }} }@if (inFlight(show); as live) { · {{ 'downloads.group_in_progress' | translate:{ count: live.count, percent: live.percent } }} }
+                  {{ (show.tasks.length === 1 ? 'media_detail.episode_count_one' : 'media_detail.episode_count_other') | translate:{ count: show.tasks.length } }}@if (show.sizeBytes) { · {{ formatBytes(show.sizeBytes) }} }
                 </p>
                 @if (auto.enabled && auto.seriesKeep(show.mediaId); as keep) {
                   <p class="text-sm text-primary mt-0.5">{{ 'downloads.auto_next' | translate:{ count: keep } }}</p>
