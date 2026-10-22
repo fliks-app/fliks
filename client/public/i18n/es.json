@@ -1868,7 +1868,8 @@
     "resume_all": "Reanudar todo",
     "paused": "En pausa",
     "pause": "Pausar",
-    "resume": "Reanudar"
+    "resume": "Reanudar",
+    "auto_rule_label": "Descarga automática:"
   },
   "setup_checklist": {
     "title": "Configuración",

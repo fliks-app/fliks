@@ -28,7 +28,7 @@ import { OfflineStorageService } from '../../core/services/offline-storage.servi
 import { OfflinePlaybackSyncService } from '../../core/services/offline-playback-sync.service';
 import { AutoDownloadService } from '../../core/services/auto-download.service';
 import { NetworkService } from '../../core/services/network.service';
-import { DownloadCacheService, type OfflineSubtitle } from '../../core/services/download-cache.service';
+import { DownloadCacheService, type DownloadTask, type OfflineSubtitle } from '../../core/services/download-cache.service';
 import {
   CastPlayerService,
   CastAudioOption,
@@ -926,6 +926,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         const offlineTask = this.dlCache
           .load()
           .find((t) => t.mediaFileId === this.mediaFileId && t.status === 'ready');
+        this.applyOfflineHeader(offlineTask);
         const offlineEdl = this.authService.user()?.edlEnabled === false ? undefined : offlineTask?.offlineEdl;
         this.edl.load(this.mediaFileId, offlineEdl);
         startTime = this.edlStartTime(startTime);
@@ -1755,6 +1756,19 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private readonly notificationLikeEffect = effect(() => this.queueCtl.trackNotificationLike());
   private readonly notificationNavEffect = effect(() => this.queueCtl.syncNotificationNav());
   private readonly autoAdvanceEffect = effect(() => this.queueCtl.autoAdvance());
+
+  /** Offline there is no media fetch: the header comes from the download, the logo from the server when it answers. */
+  private applyOfflineHeader(task: DownloadTask | undefined): void {
+    if (!task) return;
+    this.mediaTitle.set(task.media?.title ?? '');
+    const m = /^S(\d+)E(\d+)\s*(.*)$/.exec(task.episodeLabel ?? '');
+    this.episodeTitle.set(m ? `S${+m[1]}:E${+m[2]}${m[3] ? ` - ${m[3]}` : ''}` : (task.episodeLabel ?? ''));
+    if (task.media?.logoUrl) {
+      this.mediaLogoUrl.set(task.media.logoUrl);
+    } else if (this.mediaId) {
+      void this.mediaService.getOne(this.mediaId).then((media) => this.mediaLogoUrl.set(media.logoUrl ?? null), () => {});
+    }
+  }
 
   /** Sets the episode label and still backdrop (no-op for movies); the still beats series fanart. */
   private applyEpisodeMetadata(): void {

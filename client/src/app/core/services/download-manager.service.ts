@@ -594,12 +594,20 @@ export class DownloadManagerService {
       fanartUrl = media?.fanartUrl ?? null;
       if (si?.audio?.length > 1) audioStreams = si.audio;
 
-      this.prefetchArtwork(task.media?.posterUrl, fanartUrl);
+      const logoUrl = media?.logoUrl ?? null;
+      this.prefetchArtwork(task.media?.posterUrl, fanartUrl, logoUrl);
 
       // Persist subtitle + audio metadata on the task
       const tasks = this.cache.load();
       this.cache.save(tasks.map((t) =>
-        t.id === taskId ? { ...t, offlineSubtitles: offlineSubs, ...(audioStreams ? { audioStreams } : {}) } : t,
+        t.id === taskId
+          ? {
+              ...t,
+              offlineSubtitles: offlineSubs,
+              ...(audioStreams ? { audioStreams } : {}),
+              ...(t.media ? { media: { ...t.media, logoUrl } } : {}),
+            }
+          : t,
       ));
     } catch (e) {
       console.warn('[DL] Failed to pre-download subtitles:', e);
@@ -607,11 +615,12 @@ export class DownloadManagerService {
   }
 
   /** Pins the artwork on disk so the downloads page and detail header render offline. */
-  private prefetchArtwork(posterUrl?: string | null, fanartUrl?: string | null) {
+  private prefetchArtwork(posterUrl?: string | null, fanartUrl?: string | null, logoUrl?: string | null) {
     const wanted: [string | null | undefined, ImageSize][] = [
       [posterUrl, 'thumb'],
       [posterUrl, 'medium'],
       [fanartUrl, 'medium'],
+      [logoUrl, 'medium'],
     ];
     for (const [url, size] of wanted) {
       if (!url) continue;

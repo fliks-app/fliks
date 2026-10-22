@@ -1,6 +1,6 @@
 @if (auto.enabled) {
-  <div class="flex items-center gap-2 text-sm">
-    <span class="text-base-content/70">{{ 'downloads.auto_rule' | translate }}</span>
+  <div class="flex items-center justify-between gap-2 text-sm">
+    <span class="text-base-content/70">{{ 'downloads.auto_rule_label' | translate }}</span>
     <app-dropdown-menu placement="bottom-start">
       <button trigger type="button" class="select select-bordered select-sm w-fit text-left cursor-pointer">
         {{ label(auto.seriesKeep(seriesId()) ?? 0) }}

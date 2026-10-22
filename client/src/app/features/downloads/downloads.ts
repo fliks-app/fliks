@@ -191,7 +191,7 @@ export class DownloadsComponent implements OnInit, OnDestroy {
 
   private applyFilter(list: DownloadTask[]) {
     const filtered = list.filter((t) =>
-      ['transcoding', 'pending', 'queued', 'downloading', 'failed', 'ready'].includes(
+      ['transcoding', 'pending', 'queued', 'downloading', 'paused', 'failed', 'ready'].includes(
         t.status,
       ),
     );

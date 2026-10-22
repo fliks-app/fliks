@@ -1868,7 +1868,8 @@
     "resume_all": "Resume all",
     "paused": "Paused",
     "pause": "Pause",
-    "resume": "Resume"
+    "resume": "Resume",
+    "auto_rule_label": "Auto-download:"
   },
   "setup_checklist": {
     "title": "Setup",
