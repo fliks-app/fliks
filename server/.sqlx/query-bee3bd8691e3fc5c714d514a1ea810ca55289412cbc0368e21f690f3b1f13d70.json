@@ -1,0 +1,46 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT s.\"seasonNumber\" AS number, s.monitored AS was, m.id AS \"media_id?\",\n             m.type::text AS media_type, m.\"tmdbId\" AS tmdb_id\n           FROM seasons s LEFT JOIN media m ON m.id = s.\"mediaId\" WHERE s.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "number",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "was",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 2,
+        "name": "media_id?",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "media_type",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "tmdb_id",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      null,
+      true
+    ]
+  },
+  "hash": "bee3bd8691e3fc5c714d514a1ea810ca55289412cbc0368e21f690f3b1f13d70"
+}

@@ -5,7 +5,7 @@ use super::{
 };
 use crate::{
     ingest::load_media,
-    media::write::delete_media_file,
+    media::write::{delete_media_file, set_media_monitored, set_season_monitored},
     requests::services::{self, delete_media_folder},
     settings,
     state::AppState,
@@ -195,9 +195,7 @@ pub async fn act(
                 .await
                 .map_err(|e| e.text())?;
         }
-        sqlx::query("UPDATE media SET monitored = false WHERE id = $1")
-            .bind(id)
-            .execute(&st.db)
+        set_media_monitored(st, &[id], false)
             .await
             .map_err(|e| e.to_string())?;
         sqlx::query(
@@ -264,21 +262,14 @@ async fn act_scope(
             .await
             .map_err(|e| e.text())?;
     }
-    sqlx::query(
-        r#"UPDATE episodes SET monitored = false WHERE ($1::int IS NULL OR id = $1)
-        AND ($1::int IS NOT NULL OR "seasonId" = $2)"#,
-    )
-    .bind(scope.episode)
-    .bind(scope.season)
-    .execute(&st.db)
-    .await
-    .map_err(err)?;
-    if scope.episode.is_none() {
-        sqlx::query("UPDATE seasons SET monitored = false WHERE id = $1")
-            .bind(scope.season)
+    if let Some(episode) = scope.episode {
+        sqlx::query("UPDATE episodes SET monitored = false WHERE id = $1")
+            .bind(episode)
             .execute(&st.db)
             .await
             .map_err(err)?;
+    } else if let Some(season) = scope.season {
+        set_season_monitored(st, season, false).await.map_err(err)?;
     }
     sqlx::query(
         r#"DELETE FROM cleanup_candidates WHERE "mediaId" = $1 AND "seasonId" = $2

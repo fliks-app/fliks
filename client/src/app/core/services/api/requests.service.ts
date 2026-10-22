@@ -15,7 +15,8 @@ export type FliksRequestStatus =
   | 'declined'
   | 'processing'
   | 'available'
-  | 'failed';
+  | 'failed'
+  | 'removed';
 
 /** Whether the request adds a title to the library or asks to delete one that
  *  is already imported. Omitting `kind` on create defaults to an add request. */

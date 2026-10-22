@@ -5,13 +5,14 @@ use serde_json::{Map, Value, json};
 
 pub(crate) type Res<T> = Result<T, AppError>;
 
-pub const STATUSES: [&str; 6] = [
+pub const STATUSES: [&str; 7] = [
     "pending",
     "approved",
     "declined",
     "processing",
     "available",
     "failed",
+    "removed",
 ];
 pub const KINDS: [&str; 2] = ["add", "delete"];
 pub const MEDIA_TYPES: [&str; 2] = ["movie", "series"];

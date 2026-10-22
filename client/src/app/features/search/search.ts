@@ -156,7 +156,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
-  readonly requestedTmdbIds = signal<Map<number, FliksRequestStatus>>(new Map());
+  readonly requestedTmdbIds = signal<Map<string, FliksRequestStatus>>(new Map());
 
   private static readonly SCROLL_KEY = 'search';
   private searchTimer: ReturnType<typeof setTimeout> | null = null;
@@ -232,7 +232,13 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     if (this.auth.hasPermission('requests.create') && !this.auth.hasPermission('media.create')) {
       try {
         const res = await this.requestsApi.list({ limit: 200 });
-        this.requestedTmdbIds.set(new Map(res.data.map(r => [r.tmdbId, r.status])));
+        const byTitle = new Map<string, FliksRequestStatus>();
+        // Newest first: keep the first row of each title.
+        for (const r of res.data) {
+          const key = `${r.mediaType}:${r.tmdbId}`;
+          if (!byTitle.has(key)) byTitle.set(key, r.status);
+        }
+        this.requestedTmdbIds.set(byTitle);
       } catch { /* ignore */ }
     }
   }
@@ -704,8 +710,8 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
 
   cardStatus(row: MetadataSearchResult): CardBadge {
     if (row.existingMediaId) return 'library';
-    const reqStatus = this.requestedTmdbIds().get(row.tmdbId);
-    if (!reqStatus) return null;
+    const reqStatus = this.requestedTmdbIds().get(`${row.mediaType}:${row.tmdbId}`);
+    if (!reqStatus || reqStatus === 'removed') return null;
     if (reqStatus === 'declined' || reqStatus === 'failed') return 'declined';
     if (reqStatus === 'available') return 'library';
     return 'pending';

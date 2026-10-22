@@ -1317,7 +1317,8 @@
       "declined": "Refusée",
       "processing": "En traitement",
       "available": "Téléchargé",
-      "failed": "Échec"
+      "failed": "Échec",
+      "removed": "Retirée"
     }
   },
   "activity": {

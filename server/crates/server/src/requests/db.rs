@@ -433,13 +433,45 @@ pub async fn trim_seasons(db: &PgPool, id: i32, seasons: &[i64]) -> sqlx::Result
     Ok(())
 }
 
-/// Declines the rows and unlinks the media (`declineActiveLinkedRequests`, `onSeasonMonitorChange`).
+/// Declines the rows and unlinks the media (`onSeasonMonitorChange`).
 pub async fn decline_unlink(db: &PgPool, id: i32, reason: &str) -> sqlx::Result<()> {
     sqlx::query!(
         r#"UPDATE requests SET status = 'declined', "declinedReason" = $2, "mediaId" = NULL
            WHERE id = $1 AND status IN ('pending', 'approved', 'processing')"#,
         id,
         reason
+    )
+    .execute(db)
+    .await?;
+    Ok(())
+}
+
+/// An `available` row whose season left the monitored set: terminal, no longer blocks a re-request.
+pub async fn remove_unlink(db: &PgPool, id: i32) -> sqlx::Result<()> {
+    sqlx::query!(
+        r#"UPDATE requests SET status = 'removed', "mediaId" = NULL WHERE id = $1 AND status = 'available'"#,
+        id
+    )
+    .execute(db)
+    .await?;
+    Ok(())
+}
+
+/// The ADD rows linked to a media that left the library or was unmonitored: in-flight are declined with
+/// `reason`, `available` become `removed`, all unlinked.
+pub async fn retire_linked(db: &mut PgConnection, media_id: i32, reason: &str) -> sqlx::Result<()> {
+    sqlx::query!(
+        r#"UPDATE requests SET status = 'declined', "declinedReason" = $2, "mediaId" = NULL
+        WHERE "mediaId" = $1 AND kind = 'add' AND status IN ('pending', 'approved', 'processing')"#,
+        media_id,
+        reason
+    )
+    .execute(&mut *db)
+    .await?;
+    sqlx::query!(
+        r#"UPDATE requests SET status = 'removed', "mediaId" = NULL
+        WHERE "mediaId" = $1 AND kind = 'add' AND status = 'available'"#,
+        media_id
     )
     .execute(db)
     .await?;
@@ -455,14 +487,22 @@ pub async fn resolve_removed(db: &mut PgConnection, media_id: i32) -> sqlx::Resu
     )
     .execute(&mut *db)
     .await?;
-    sqlx::query!(
-        r#"UPDATE requests SET status = 'declined', "declinedReason" = 'Media removed from library', "mediaId" = NULL
-        WHERE "mediaId" = $1 AND kind = 'add' AND status IN ('pending', 'approved', 'processing')"#,
-        media_id
-    )
-    .execute(db)
-    .await?;
+    retire_linked(db, media_id, "Media removed from library").await?;
     Ok(())
+}
+
+/// The monitored season numbers of a series plus `season` (just unmonitored): what a whole-series request covered.
+pub async fn monitored_seasons(db: &PgPool, media_id: i32, season: i64) -> sqlx::Result<Vec<i64>> {
+    let season = i32::try_from(season).unwrap_or_default();
+    let nums = sqlx::query_scalar!(
+        r#"SELECT "seasonNumber" AS "n!" FROM seasons
+        WHERE "mediaId" = $1 AND (monitored OR "seasonNumber" = $2) ORDER BY 1"#,
+        media_id,
+        season
+    )
+    .fetch_all(db)
+    .await?;
+    Ok(nums.into_iter().map(i64::from).collect())
 }
 
 /// Whole media monitored, and the listed seasons of a series (`applyMonitoredForRequestScope`).
