@@ -45,7 +45,7 @@ subtle = "2"
 tower = { version = "0.5", features = ["util"] }
 percent-encoding = "2"
 croner = "4.0.1"
-miniz_oxide = "0.8"
+miniz_oxide = "0.9"
 flate2 = "1"
 bytes = "1"
 url = "2"
