@@ -377,6 +377,7 @@ export class AuthService {
       // The server may answer as somebody else — a cookie that outlived its
       // account, a token that never belonged to this one.
       if (raw.id !== userId) {
+        noteLogout('resume: /auth/me answered as another user');
         await this.sessions.remove(serverUrl, userId);
         this.clearInMemorySession();
         return 'expired';
@@ -388,6 +389,7 @@ export class AuthService {
     } catch (err) {
       const status = err instanceof HttpErrorResponse ? err.status : 0;
       if (status === 401 || status === 403) {
+        noteLogout('resume: /auth/me refused', err);
         await this.sessions.remove(serverUrl, userId);
         this.clearInMemorySession();
         return 'expired';
@@ -513,6 +515,7 @@ export class AuthService {
       if (status < 400 || status >= 500) return false;
       if (untracked(this._sessionEpoch) !== epoch) {
         // The refused credentials belong to a session we have already left.
+        noteLogout('refresh refused for a session already left', err);
         if (target) await this.sessions.remove(target.serverUrl, target.user.id);
         return false;
       }
@@ -526,7 +529,7 @@ export class AuthService {
         }
         return true;
       }
-      await this.dropActiveSession();
+      await this.dropActiveSession('refresh refused', err);
       return false;
     }
   }
@@ -640,7 +643,7 @@ export class AuthService {
       },
       error: (err: unknown) => {
         const status = (err as { status?: number })?.status ?? 0;
-        if (status === 401 || status === 403) void this.dropActiveSession();
+        if (status === 401 || status === 403) void this.dropActiveSession('/auth/me refused', err);
       },
     });
   }
@@ -657,7 +660,7 @@ export class AuthService {
         }),
       );
     } finally {
-      await this.dropActiveSession();
+      await this.dropActiveSession('user logout');
     }
   }
 
@@ -689,7 +692,8 @@ export class AuthService {
 
   /** Forget the signed-in session locally and send the user back to the picker.
    *  Used by logout and by a terminal credential rejection. */
-  private async dropActiveSession(): Promise<void> {
+  private async dropActiveSession(reason: string, err?: unknown): Promise<void> {
+    noteLogout(reason, err);
     const active = this.sessions.active();
     if (active) await this.sessions.remove(active.serverUrl, active.user.id);
     this.clearInMemorySession();
@@ -750,5 +754,25 @@ export class AuthService {
     await this.sessions.load();
     const active = this.sessions.active();
     return { token: active?.refreshToken ?? null, version: active?.tokenVersion ?? 0 };
+  }
+}
+
+const LAST_LOGOUT_KEY = 'fliks.lastLogout';
+
+/** Why this device last lost its session: console for the desktop log, storage for native where the console is unreadable. */
+function noteLogout(reason: string, err?: unknown): void {
+  const http = err instanceof HttpErrorResponse ? err : null;
+  const entry = {
+    at: new Date().toISOString(),
+    reason,
+    status: http?.status,
+    message: (http?.error as { message?: unknown } | null)?.message ?? http?.statusText,
+    url: http?.url?.replace(/\?.*$/, ''),
+  };
+  console.warn('[auth] session dropped', JSON.stringify(entry));
+  try {
+    localStorage.setItem(LAST_LOGOUT_KEY, JSON.stringify(entry));
+  } catch {
+    /* storage unavailable: the console line still records it */
   }
 }
