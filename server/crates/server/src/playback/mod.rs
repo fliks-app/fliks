@@ -4,6 +4,8 @@ mod beat;
 mod db;
 mod recommend;
 mod routes;
+#[cfg(test)]
+mod tests;
 mod watched;
 
 pub use beat::{__path_heartbeat, Debounce, heartbeat};

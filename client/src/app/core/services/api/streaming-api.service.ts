@@ -571,6 +571,8 @@ export class StreamingApiService {
       durationSeconds: number;
       mediaFileId: number;
       episodeId?: number;
+      /** Epoch ms of an offline replay; the server keeps a newer row over it. */
+      playedAt?: number;
       // Live-session heartbeat fields, present once `getPlaybackInfo` returned a `sessionId`; the backend tolerates their absence.
       sessionId?: string;
       state?: LivePlaybackState;

@@ -21,6 +21,7 @@ use axum::{
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
 };
+use chrono::{DateTime, Utc};
 use fliks_engine_core::api::{HeartbeatRequest, SessionKind};
 use serde_json::{Map, Value, json};
 use std::{collections::HashMap, sync::Mutex};
@@ -302,9 +303,13 @@ pub async fn heartbeat(
         num(&body, "positionSeconds").unwrap_or(0.0),
         num(&body, "durationSeconds").unwrap_or(0.0),
     );
-    if !st
-        .debounce
-        .flush(&key, now_ms() as i64, pos, dur, state_changed)
+    let client_played_at = int(&body, "playedAt")
+        .and_then(DateTime::from_timestamp_millis)
+        .map(|t| t.min(Utc::now()));
+    if client_played_at.is_none()
+        && !st
+            .debounce
+            .flush(&key, now_ms() as i64, pos, dur, state_changed)
     {
         return Ok(reply(lost, None));
     }
@@ -321,6 +326,7 @@ pub async fn heartbeat(
         duration: dur,
         file,
         episode: episode.and_then(|e| i32::try_from(e).ok()),
+        client_played_at,
     };
     let saved = watched::record_watch(&st.db, history_user, media, &watch).await?;
     Ok(reply(lost, Some(saved)))

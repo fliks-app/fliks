@@ -1,8 +1,9 @@
-import { Injectable, computed, effect, inject, signal } from '@angular/core';
+import { Injectable, Injector, computed, effect, inject, signal } from '@angular/core';
 import { StreamingApiService } from './api/streaming-api.service';
 import { NetworkService } from './network.service';
 import { StorageScopeService } from './storage-scope.service';
 import { AppResumeService } from './app-resume.service';
+import { AutoDownloadService } from './auto-download.service';
 import { invalidatePrefix } from '../interceptors/cache.interceptor';
 
 export interface PendingUpdate {
@@ -34,6 +35,7 @@ export class OfflinePlaybackSyncService {
   private readonly network = inject(NetworkService);
   private readonly scope = inject(StorageScopeService);
   private readonly appResume = inject(AppResumeService);
+  private readonly injector = inject(Injector);
 
   private readonly _pending = signal<PendingUpdate[]>([]);
   /** Queued positions not yet accepted by the server. */
@@ -166,6 +168,7 @@ export class OfflinePlaybackSyncService {
           durationSeconds: update.durationSeconds,
           mediaFileId: update.mediaFileId,
           episodeId: update.episodeId,
+          playedAt: update.updatedAt || undefined,
         });
         sent.push(update);
       } catch {
@@ -188,6 +191,8 @@ export class OfflinePlaybackSyncService {
     // Continue-watching and the resume points come out of the SWR cache, which
     // still holds the positions we just superseded.
     await invalidatePrefix('/api/playback');
+    // Lazy so the sync service does not instantiate auto-download at startup.
+    void this.injector.get(AutoDownloadService).reconcile('offline-sync');
   }
 
   private read(key: string): PendingUpdate[] {

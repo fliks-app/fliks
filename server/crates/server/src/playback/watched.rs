@@ -2,6 +2,7 @@
 use super::db::{find_state, fk, media_exists};
 use crate::http::AppError;
 use crate::playlists::remove_watched_from_auto_playlists;
+use chrono::{DateTime, Utc};
 use serde_json::{Value, json};
 use sqlx::PgPool;
 
@@ -292,11 +293,60 @@ pub struct Watch {
     pub duration: f64,
     pub file: i32,
     pub episode: Option<i32>,
+    /// When the client played it, for an offline replay; `None` for a live beat.
+    pub client_played_at: Option<DateTime<Utc>>,
 }
 
 /// Seconds before the end, or the fraction of the runtime, from which a title counts as watched.
 pub fn completes(pos: f64, dur: f64) -> bool {
     dur > 0.0 && (pos >= dur - 30.0 || pos >= dur * 0.9)
+}
+
+/// Writes an offline replay stamped with the time it was played.
+async fn write_replay(
+    db: &PgPool,
+    existing: Option<&super::db::StateRow>,
+    (user, media): (i32, i32),
+    w: &Watch,
+    at: DateTime<Utc>,
+    completed: bool,
+) -> sqlx::Result<()> {
+    let watched = w.position >= 5.0;
+    match existing {
+        Some(e) => sqlx::query(
+            r#"UPDATE playback_states
+               SET "positionSeconds" = $2,
+                   "durationSeconds" = CASE WHEN $3::float8 > 0 THEN $3 ELSE "durationSeconds" END,
+                   completed = $4, "hiddenFromContinueWatching" = false, "lastPlayedAt" = $5,
+                   "playedAt" = CASE WHEN $6 THEN $5 ELSE "playedAt" END, "mediaFileId" = $7
+               WHERE id = $1"#,
+        )
+        .bind(e.id)
+        .bind(w.position)
+        .bind(w.duration)
+        .bind(completed)
+        .bind(at)
+        .bind(watched)
+        .bind(w.file),
+        None => sqlx::query(
+            r#"INSERT INTO playback_states
+                 ("userId", "mediaId", "mediaFileId", "episodeId", "positionSeconds",
+                  "durationSeconds", completed, "lastPlayedAt", "playedAt")
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CASE WHEN $9 THEN $8 END)"#,
+        )
+        .bind(user)
+        .bind(media)
+        .bind(w.file)
+        .bind(w.episode)
+        .bind(w.position)
+        .bind(w.duration)
+        .bind(completed)
+        .bind(at)
+        .bind(watched),
+    }
+    .execute(db)
+    .await
+    .map(drop)
 }
 
 /// Upserts the viewer's row (movie row when `episode` is falsy) and returns it as `repo.save` did,
@@ -309,50 +359,61 @@ pub async fn record_watch(
 ) -> Result<Option<Value>, AppError> {
     let lookup = w.episode.filter(|e| *e != 0);
     let existing = find_state(db, user, media, lookup).await?;
-    let completed = completes(w.position, w.duration);
+    let replay = w.client_played_at;
+    let stale = replay
+        .zip(existing.as_ref())
+        .is_some_and(|(at, e)| e.last_played_at > at);
+    let was_completed = existing.as_ref().is_some_and(|e| e.completed);
+    let completed = completes(w.position, w.duration) || (replay.is_some() && was_completed);
     let watched = w.position >= 5.0;
-    let saved = match &existing {
-        Some(e) => sqlx::query!(
-            r#"UPDATE playback_states
+    let saved = if stale {
+        Ok(())
+    } else if let Some(at) = replay {
+        write_replay(db, existing.as_ref(), (user, media), w, at, completed).await
+    } else {
+        match &existing {
+            Some(e) => sqlx::query!(
+                r#"UPDATE playback_states
                SET "positionSeconds" = $2,
                    "durationSeconds" = CASE WHEN $3::float8 > 0 THEN $3 ELSE "durationSeconds" END,
                    completed = $4, "hiddenFromContinueWatching" = false, "lastPlayedAt" = now(),
                    "playedAt" = CASE WHEN $5 THEN now() ELSE "playedAt" END, "mediaFileId" = $6
                WHERE id = $1"#,
-            e.id,
-            w.position,
-            w.duration,
-            completed,
-            watched,
-            w.file
-        )
-        .execute(db)
-        .await
-        .map(drop),
-        None => sqlx::query!(
-            r#"INSERT INTO playback_states
+                e.id,
+                w.position,
+                w.duration,
+                completed,
+                watched,
+                w.file
+            )
+            .execute(db)
+            .await
+            .map(drop),
+            None => sqlx::query!(
+                r#"INSERT INTO playback_states
                  ("userId", "mediaId", "mediaFileId", "episodeId", "positionSeconds",
                   "durationSeconds", completed, "lastPlayedAt", "playedAt")
                VALUES ($1, $2, $3, $4, $5, $6, $7, now(), CASE WHEN $8 THEN now() END)"#,
-            user,
-            media,
-            w.file,
-            w.episode,
-            w.position,
-            w.duration,
-            completed,
-            watched
-        )
-        .execute(db)
-        .await
-        .map(drop),
+                user,
+                media,
+                w.file,
+                w.episode,
+                w.position,
+                w.duration,
+                completed,
+                watched
+            )
+            .execute(db)
+            .await
+            .map(drop),
+        }
     };
     match saved {
         Ok(()) => {}
         Err(sqlx::Error::Database(d)) if d.code().as_deref() == Some("23503") => return Ok(None),
         Err(e) => return Err(e.into()),
     }
-    if completed && existing.as_ref().is_none_or(|e| !e.completed) {
+    if completed && !was_completed && !stale {
         log_play(db, user, media, w.episode.filter(|e| *e != 0)).await?;
         let episodes = w.episode.map(|e| [e]);
         remove_watched_from_auto_playlists(db, user, media, episodes.as_ref().map(|e| &e[..]))
