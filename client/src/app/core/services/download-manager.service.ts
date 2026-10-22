@@ -142,6 +142,8 @@ export class DownloadManagerService {
       timeLeft: t('notif_time_left', { time: '%s' }),
       pause: t('notif_pause'),
       resume: t('notif_resume'),
+      cancel: t('notif_cancel'),
+      waitingWifi: t('notif_waiting_wifi'),
     });
   }
 

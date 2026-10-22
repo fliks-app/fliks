@@ -81,10 +81,10 @@
     @if (task.status === 'queued') {
       <progress class="progress progress-info w-full h-1.5 mt-2"></progress>
       <p class="text-sm text-base-content/50 mt-1">{{ 'downloads.queued' | translate }}</p>
-    } @else if (task.status === 'paused') {
+    } @else if (task.status === 'paused' || task.status === 'waiting_wifi') {
       <progress class="progress w-full h-1.5 mt-2" [value]="task.progress" max="100"></progress>
       <p class="flex justify-between gap-2 text-sm text-base-content/50 mt-1">
-        <span>{{ 'downloads.paused' | translate }}</span><span class="tabular-nums">{{ task.progress }}%</span>
+        <span class="truncate">{{ (task.status === 'paused' ? 'downloads.paused' : 'downloads.waiting_wifi') | translate }}</span><span class="tabular-nums">{{ task.progress }}%</span>
       </p>
     } @else if (isTransferring(task)) {
       <progress class="progress progress-info w-full h-1.5 mt-2" [value]="task.progress" max="100"></progress>
@@ -100,6 +100,9 @@
     <h1 class="page-title">{{ 'downloads.title' | translate }}</h1>
     @if (totalBytes() > 0) {
       <span class="text-sm text-base-content/60">{{ 'downloads.total_used' | translate:{ size: formatBytes(totalBytes()) } }}</span>
+    }
+    @if (freeBytes() !== null) {
+      <span class="text-sm text-base-content/60">{{ 'downloads.total_free' | translate:{ size: formatBytes(freeBytes()!) } }}</span>
     }
     @if (pausable().length > 0) {
       <button type="button" class="btn btn-sm ms-auto" (click)="pauseAll()">
@@ -140,6 +143,14 @@
         <button class="btn btn-xs btn-ghost" (click)="selectedIds.set(emptySelection)">{{ 'library.bulk_deselect' | translate }}</button>
       </div>
     }
+    @if (inProgress().length > 0) {
+      <section class="flex flex-col gap-3">
+        <h2 class="text-base font-semibold">{{ 'downloads.in_progress' | translate }}</h2>
+        @for (task of inProgress(); track task.id) {
+          <ng-container *ngTemplateOutlet="taskRow; context: { $implicit: task, poster: true }" />
+        }
+      </section>
+    }
     <div class="flex flex-col gap-3">
       @for (entry of entries(); track entry.kind === 'movie' ? 'm' + entry.task.id : 's' + entry.show.mediaId) {
         @if (entry.kind === 'movie') {
@@ -160,8 +171,8 @@
               </div>
               <div class="flex-1 min-w-0">
                 <h3 class="font-medium text-base line-clamp-1">{{ show.title }}</h3>
-                <p class="text-sm text-base-content/50 mt-0.5">
-                  {{ (show.tasks.length === 1 ? 'media_detail.episode_count_one' : 'media_detail.episode_count_other') | translate:{ count: show.tasks.length } }}@if (show.sizeBytes) { · {{ formatBytes(show.sizeBytes) }} }
+                <p class="text-sm text-base-content/50 mt-0.5 truncate">
+                  {{ (show.tasks.length === 1 ? 'media_detail.episode_count_one' : 'media_detail.episode_count_other') | translate:{ count: show.tasks.length } }}@if (show.sizeBytes) { · {{ formatBytes(show.sizeBytes) }} }@if (inFlight(show); as live) { · {{ 'downloads.group_in_progress' | translate:{ count: live.count, percent: live.percent } }} }
                 </p>
                 @if (auto.enabled && auto.seriesKeep(show.mediaId); as keep) {
                   <p class="text-sm text-primary mt-0.5">{{ 'downloads.auto_next' | translate:{ count: keep } }}</p>
