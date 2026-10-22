@@ -1,9 +1,10 @@
 import { HttpClient, HttpContext } from '@angular/common/http';
 import { Injectable, effect, inject, signal, untracked } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
-import { environment } from '../../../environments/environment';
+import { Capacitor } from '@capacitor/core';
 import { SKIP_ERROR_TOAST } from '../interceptors/error.interceptor';
 import { AuthService } from './auth.service';
+import { DeviceService } from './device.service';
 
 /** Numeric x.y.z compare, pre-release/build suffix dropped. */
 export function isNewer(a: string, b: string): boolean {
@@ -17,9 +18,9 @@ export function isNewer(a: string, b: string): boolean {
   return false;
 }
 
-/** A server at least as new as the app answers everything the app calls; an unknown version answers nothing new. */
-export function serverSupports(server: string | null, since: string, app: string): boolean {
-  return !!server && (!isNewer(since, server) || !isNewer(app, server));
+/** A `-dev` server runs the newest code; an unknown version answers nothing new. */
+export function serverSupports(server: string | null, since: string): boolean {
+  return !!server && (server.endsWith('-dev') || !isNewer(since, server));
 }
 
 /** Version of the connected server: an installed app can update before its server, so a feature added
@@ -28,6 +29,9 @@ export function serverSupports(server: string | null, since: string, app: string
 export class ServerVersionService {
   private readonly http = inject(HttpClient);
   private readonly auth = inject(AuthService);
+  private readonly device = inject(DeviceService);
+  /** A browser runs the build its server serves, so it never needs a gate. */
+  private readonly web = !Capacitor.isNativePlatform() && !this.device.isTv() && !this.device.isDesktopNative();
   readonly version = signal<string | null>(null);
   private inflight: Promise<void> | null = null;
 
@@ -48,12 +52,12 @@ export class ServerVersionService {
   }
 
   supports(since: string): boolean {
-    return serverSupports(this.version(), since, environment.version);
+    return this.web || serverSupports(this.version(), since);
   }
 
   /** `supports` for a call that can run before the first version request has answered. */
   async supportsWhenKnown(since: string): Promise<boolean> {
-    if (!this.version()) await this.refresh();
+    if (!this.web && !this.version()) await this.refresh();
     return this.supports(since);
   }
 }

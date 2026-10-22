@@ -12,7 +12,7 @@ Every route needs authentication (JWT or API key). The backup routes need `manag
 |---|---|---|---|---|---|
 | `GET /api/system/health` | `Read Settings` | none | 200 `{version: string, uptimeSeconds: int, database: {name:'PostgreSQL', ok: bool, message?: string}, installedPlugins: int, runningPlugins: int, restartSupervisor: string\|null}` | 401, 403; a database that is down is not an error (rule 4) | none |
 | `POST /api/system/restart` | `Manage Settings` | none (body ignored) | 201 `{ok: true, supervisor: string}` | 400 `No process supervisor detected`; 401, 403 | process exits 300 ms later (rule 8) |
-| `GET /api/system/version` | any authenticated user (`() => true`) | none | 200 `{version: string}` | 401 | none |
+| `GET /api/system/version` | any authenticated user (`() => true`) | none | 200 `{version: string}`, suffixed `-dev` in a debug build | 401 | none |
 | `GET /api/system/update` | `Read Settings` | none | 200 `UpdateStatus` (rule 10) | 401, 403 | outbound HTTPS to GitHub (cached 6 h) |
 | `GET /api/system/stats` | `Read Settings` | none | 200 `{movies: int, series: int, pendingRequests: int, diskSpace: {path: string, label: string, freeSpace: number, totalSpace: number}[]}` | 401, 403 | `statfs` per library |
 | `POST /api/system/backup` | `manage:all` | none | 201 `{filename: string, size: int}` | 500 tool message (rule 18) | writes a file, runs `pg_dump` |

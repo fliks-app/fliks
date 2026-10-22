@@ -6,6 +6,7 @@ import { AuthService } from '../services/auth.service';
 import { TvService } from '../services/tv.service';
 import { DeviceService } from '../services/device.service';
 import { LiveTvAvailabilityService } from '../services/live-tv-availability.service';
+import { ServerVersionService } from '../services/server-version.service';
 import type { SlotId, UiContribution } from '@fliks/plugin-ui';
 
 const contribution = (id: string, weight: number, overrides: Partial<UiContribution> = {}): UiContribution => ({
@@ -42,6 +43,7 @@ function createService(opts: {
       { provide: TvService, useValue: { isTv: () => !!opts.isTv } },
       { provide: DeviceService, useValue: { isTouch: () => false } },
       { provide: LiveTvAvailabilityService, useValue: { available: () => opts.liveTv ?? true } },
+      { provide: ServerVersionService, useValue: { supports: () => true } },
     ],
   });
   return TestBed.inject(NavContributionsService);
