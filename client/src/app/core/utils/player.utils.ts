@@ -1,3 +1,4 @@
+import type { DownloadTask } from '../services/download-cache.service';
 import type { TranslateService } from '@ngx-translate/core';
 import { languageTagWords, localizeLanguage, localizeLanguageTag, normalizeLangCode } from './language.utils';
 import type { PlayMethod, PlaybackInfoResponse } from '../services/api/streaming-api.service';
@@ -763,4 +764,10 @@ export function buildPlayerStats(p: BuildPlayerStatsParams): PlayerStats {
     audioPlaybackMode,
     audioTranscodeReasons,
   };
+}
+
+/** The finished download to play instead of the network stream; a Cast receiver can't read local files. */
+export function readyDownloadFor(tasks: readonly DownloadTask[], mediaFileId: number, casting: boolean): DownloadTask | undefined {
+  if (casting) return undefined;
+  return tasks.find((t) => t.mediaFileId === mediaFileId && t.status === 'ready');
 }
