@@ -1854,7 +1854,13 @@
     "notif_progress": "Téléchargement en cours",
     "notif_stale": "Progression indisponible",
     "notif_complete": "Téléchargement terminé",
-    "notif_failed": "Échec du téléchargement"
+    "notif_failed": "Échec du téléchargement",
+    "select": "Sélectionner",
+    "total_used": "{{size}} utilisés",
+    "delete_all": "Tout supprimer",
+    "other_episodes": "Autres épisodes",
+    "confirm_delete_many": "Supprimer {{count}} téléchargements ? Les fichiers seront retirés de cet appareil.",
+    "confirm_delete_group": "Supprimer {{count}} téléchargements de {{name}} ? Les fichiers seront retirés de cet appareil."
   },
   "setup_checklist": {
     "title": "Configuration",

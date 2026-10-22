@@ -31,6 +31,9 @@ export interface DownloadTask {
   status: string;
   progress: number;
   episodeLabel?: string;
+  /** Absent on tasks saved before they were kept; the grouping parses `episodeLabel` then. */
+  seasonNumber?: number;
+  episodeNumber?: number;
   error?: string;
   /** Created by the auto-download reconciler from an autoDownload playlist.
    *  Only these are removed once watched — manual downloads are never touched. */

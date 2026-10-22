@@ -1854,7 +1854,13 @@
     "notif_progress": "Wird heruntergeladen",
     "notif_stale": "Fortschritt nicht verfügbar",
     "notif_complete": "Download abgeschlossen",
-    "notif_failed": "Download fehlgeschlagen"
+    "notif_failed": "Download fehlgeschlagen",
+    "select": "Auswählen",
+    "total_used": "{{size}} belegt",
+    "delete_all": "Alle löschen",
+    "other_episodes": "Weitere Episoden",
+    "confirm_delete_many": "{{count}} Downloads löschen? Die Dateien werden von diesem Gerät entfernt.",
+    "confirm_delete_group": "{{count}} Downloads von {{name}} löschen? Die Dateien werden von diesem Gerät entfernt."
   },
   "setup_checklist": {
     "title": "Konfiguration",

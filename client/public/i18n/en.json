@@ -1854,7 +1854,13 @@
     "notif_progress": "Downloading",
     "notif_stale": "Progress unavailable",
     "notif_complete": "Download complete",
-    "notif_failed": "Download failed"
+    "notif_failed": "Download failed",
+    "select": "Select",
+    "total_used": "{{size}} used",
+    "delete_all": "Delete all",
+    "other_episodes": "Other episodes",
+    "confirm_delete_many": "Delete {{count}} downloads? The files will be removed from this device.",
+    "confirm_delete_group": "Delete {{count}} downloads of {{name}}? The files will be removed from this device."
   },
   "setup_checklist": {
     "title": "Setup",

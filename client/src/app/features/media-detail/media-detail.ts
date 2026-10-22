@@ -980,6 +980,8 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
           mediaFileId: file.id,
           title: m.title,
           episodeLabel: episodeLabel(s.seasonNumber, ep.episodeNumber, ep.title),
+          seasonNumber: s.seasonNumber,
+          episodeNumber: ep.episodeNumber,
           posterUrl: m.posterUrl,
           type: m.type,
           watched: watched.has(ep.id),
@@ -998,6 +1000,10 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
 
   downloadSeason(season: Season) {
     this.openBatch(this.downloadTargets([season]));
+  }
+
+  downloadSeasons(seasons: Season[]) {
+    this.openBatch(this.downloadTargets(seasons));
   }
 
   downloadSeries() {
@@ -1050,6 +1056,8 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
         posterUrl: m?.posterUrl,
         type: m?.type,
         episodeId: ep?.id,
+        seasonNumber: s?.seasonNumber,
+        episodeNumber: ep?.episodeNumber,
       });
       this.toast.success(this.translate.instant('downloads.started'));
     } catch {

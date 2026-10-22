@@ -1854,7 +1854,13 @@
     "notif_progress": "Descargando",
     "notif_stale": "Progreso no disponible",
     "notif_complete": "Descarga completada",
-    "notif_failed": "Error de descarga"
+    "notif_failed": "Error de descarga",
+    "select": "Seleccionar",
+    "total_used": "{{size}} usados",
+    "delete_all": "Eliminar todo",
+    "other_episodes": "Otros episodios",
+    "confirm_delete_many": "¿Eliminar {{count}} descargas? Los archivos se quitarán de este dispositivo.",
+    "confirm_delete_group": "¿Eliminar {{count}} descargas de {{name}}? Los archivos se quitarán de este dispositivo."
   },
   "setup_checklist": {
     "title": "Configuración",

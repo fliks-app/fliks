@@ -9,6 +9,7 @@ import {
 } from '@angular/core';
 import { Capacitor } from '@capacitor/core';
 import { Router } from '@angular/router';
+import { NgTemplateOutlet } from '@angular/common';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { DownloadCacheService, DownloadTask } from '../../core/services/download-cache.service';
 import { DownloadManagerService } from '../../core/services/download-manager.service';
@@ -19,11 +20,15 @@ import {
   LucidePlay,
   LucideAlertCircle,
   LucideRotateCcw,
+  LucideListChecks,
+  LucideChevronRight,
 } from '@lucide/angular';
 import { ToastService } from '../../core/services/toast.service';
 import { formatBytes } from '../../shared/utils/download-format';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { CachedSrcDirective } from '../../shared/directives/cached-src.directive';
+import { SeasonLabelPipe } from '../../core/pipes/season-label.pipe';
+import { groupDownloads } from './downloads-grouping';
 
 export interface DisplayDownloadTask extends DownloadTask {
   downloadProgress?: number;
@@ -33,6 +38,7 @@ export interface DisplayDownloadTask extends DownloadTask {
 @Component({
   selector: 'app-downloads',
   imports: [
+    NgTemplateOutlet,
     CachedSrcDirective,
     TranslatePipe,
     ResolveUrlPipe,
@@ -41,6 +47,9 @@ export interface DisplayDownloadTask extends DownloadTask {
     LucidePlay,
     LucideAlertCircle,
     LucideRotateCcw,
+    LucideListChecks,
+    LucideChevronRight,
+    SeasonLabelPipe,
   ],
   templateUrl: './downloads.html',
 })
@@ -62,6 +71,12 @@ export class DownloadsComponent implements OnInit, OnDestroy {
 
   private readonly baseTasks = signal<DownloadTask[]>([]);
   readonly loading = signal(true);
+
+  protected readonly emptySelection: ReadonlySet<number> = new Set();
+  readonly selectMode = signal(false);
+  readonly selectedIds = signal<ReadonlySet<number>>(new Set());
+  readonly selectedTasks = computed(() => this.items().filter((t) => this.selectedIds().has(t.id)));
+  readonly selectedFailed = computed(() => this.selectedTasks().filter((t) => t.status === 'failed'));
 
   protected readonly formatBytes = formatBytes;
 
@@ -117,6 +132,9 @@ export class DownloadsComponent implements OnInit, OnDestroy {
     });
   });
 
+  readonly entries = computed(() => groupDownloads(this.items()));
+  readonly totalBytes = computed(() => this.items().reduce((n, t) => n + (t.sizeBytes ?? 0), 0));
+
   ngOnInit() {
     this.load();
     document.addEventListener('visibilitychange', this.visibilityHandler);
@@ -143,17 +161,80 @@ export class DownloadsComponent implements OnInit, OnDestroy {
     this.baseTasks.set(filtered);
   }
 
-  async deleteItem(task: DownloadTask) {
+  deleteItem(task: DownloadTask) {
+    return this.deleteMany([task], this.translate.instant('downloads.confirm_delete'));
+  }
+
+  /** One confirmation, then each task in turn; failures are counted so one bad delete doesn't stop the rest. */
+  async deleteMany(tasks: DownloadTask[], message: string) {
     const confirmed = await this.confirmation.confirm({
       title: this.translate.instant('common.confirm'),
-      message: this.translate.instant('downloads.confirm_delete'),
+      message,
       confirmLabel: this.translate.instant('common.delete'),
       variant: 'danger',
     });
     if (!confirmed) return;
-    await this.dlManager.deleteDownload(task);
-    this.cache.removeLocal(task.id);
-    this.baseTasks.update((list) => list.filter((t) => t.id !== task.id));
+    let failed = 0;
+    for (const task of tasks) {
+      try {
+        await this.dlManager.deleteDownload(task);
+        this.cache.removeLocal(task.id);
+        this.baseTasks.update((list) => list.filter((t) => t.id !== task.id));
+        this.selectedIds.update((s) => {
+          const next = new Set(s);
+          next.delete(task.id);
+          return next;
+        });
+      } catch {
+        failed++;
+      }
+    }
+    if (failed) {
+      this.toast.warning(this.translate.instant('bulk.partial', { done: tasks.length - failed, failed }));
+    }
+  }
+
+  deleteGroup(tasks: DownloadTask[], name: string) {
+    return this.deleteMany(tasks, this.translate.instant('downloads.confirm_delete_group', { count: tasks.length, name }));
+  }
+
+  seasonName(show: string, seasonNumber: number | null): string {
+    if (seasonNumber === null) return show;
+    const season = this.translate.instant(
+      seasonNumber === 0 ? 'media_detail.specials' : 'media_detail.season_number',
+      { number: seasonNumber },
+    );
+    return `${show} · ${season}`;
+  }
+
+  toggleSelectMode() {
+    this.selectMode.update((v) => !v);
+    this.selectedIds.set(new Set());
+  }
+
+  toggleSelected(id: number) {
+    this.selectedIds.update((s) => {
+      const next = new Set(s);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+  }
+
+  selectAll() {
+    this.selectedIds.set(new Set(this.items().map((t) => t.id)));
+  }
+
+  deleteSelected() {
+    const tasks = this.selectedTasks();
+    return this.deleteMany(
+      tasks,
+      this.translate.instant('downloads.confirm_delete_many', { count: tasks.length }),
+    );
+  }
+
+  async retrySelected() {
+    for (const task of this.selectedFailed()) await this.retryItem(task);
+    this.selectedIds.set(new Set());
   }
 
   async retryItem(task: DownloadTask) {

@@ -1854,7 +1854,13 @@
     "notif_progress": "A transferir",
     "notif_stale": "Progresso indisponível",
     "notif_complete": "Transferência concluída",
-    "notif_failed": "Falha na transferência"
+    "notif_failed": "Falha na transferência",
+    "select": "Selecionar",
+    "total_used": "{{size}} usados",
+    "delete_all": "Excluir tudo",
+    "other_episodes": "Outros episódios",
+    "confirm_delete_many": "Excluir {{count}} downloads? Os arquivos serão removidos deste dispositivo.",
+    "confirm_delete_group": "Excluir {{count}} downloads de {{name}}? Os arquivos serão removidos deste dispositivo."
   },
   "setup_checklist": {
     "title": "Configuração",

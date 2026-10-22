@@ -155,6 +155,8 @@ export class MediaDetailSeasonsComponent {
   /** Toggle the viewer's like on this season (emits the season id). */
   readonly downloadSeason = output<Season>();
   readonly downloadEpisode = output<{ season: Season; episode: Episode }>();
+  /** Selected episodes, regrouped by season. */
+  readonly downloadSelected = output<Season[]>();
   readonly toggleSeasonLike = output<number>();
   readonly toggleEpisodeLike = output<number>();
   /** Recommend this season to another member (emits the season id). */
@@ -247,8 +249,40 @@ export class MediaDetailSeasonsComponent {
   readonly episodeView = signal<EpisodeView>(readEpisodeViewFromStorage());
   readonly canSwitchEpisodeView = computed(() => !this.hideControls());
   readonly showEpisodeList = computed(
-    () => this.canSwitchEpisodeView() && this.episodeView() === 'list',
+    () => this.canSwitchEpisodeView() && (this.selectMode() || this.episodeView() === 'list'),
   );
+
+  readonly selectMode = signal(false);
+  readonly selectedEpisodeIds = signal<ReadonlySet<number>>(new Set());
+  protected readonly emptySelection: ReadonlySet<number> = new Set();
+  readonly canSelect = computed(() => !this.hideControls() && !this.tv.isTv());
+
+  toggleSelectMode() {
+    this.selectMode.update((v) => !v);
+    this.selectedEpisodeIds.set(new Set());
+  }
+
+  toggleSelected(ep: Episode) {
+    if (!ep.hasFile) return;
+    this.selectedEpisodeIds.update((set) => {
+      const next = new Set(set);
+      if (!next.delete(ep.id)) next.add(ep.id);
+      return next;
+    });
+  }
+
+  selectAllEpisodes() {
+    this.selectedEpisodeIds.set(new Set(this.filteredEpisodes().filter((e) => e.hasFile).map((e) => e.id)));
+  }
+
+  downloadSelectedEpisodes() {
+    const ids = this.selectedEpisodeIds();
+    const seasons = (this.media().seasons ?? [])
+      .map((s) => ({ ...s, episodes: s.episodes.filter((e) => ids.has(e.id)) }))
+      .filter((s) => s.episodes.length);
+    this.downloadSelected.emit(seasons);
+    this.toggleSelectMode();
+  }
 
   setEpisodeView(view: EpisodeView) {
     this.episodeView.set(view);
