@@ -1372,3 +1372,16 @@ async fn act_skips_a_candidate_that_is_gone_or_not_due(pool: PgPool) {
 async fn both_levels(pool: &PgPool) {
     exec(pool, "UPDATE cleanup_rules SET levels = '{movie,series}'").await;
 }
+
+#[test]
+fn leaving_soon_dates_follow_the_id_when_a_media_vanished() {
+    let rows = vec![
+        (1, "2026-11-01".to_owned()),
+        (2, "2026-11-02".to_owned()),
+        (3, "2026-11-03".to_owned()),
+    ];
+    let mut items = vec![json!({"id": 1}), json!({"id": 3})];
+    routes::with_delete_at(&mut items, &rows);
+    assert_eq!(items[0]["deleteAt"], "2026-11-01");
+    assert_eq!(items[1]["deleteAt"], "2026-11-03");
+}
