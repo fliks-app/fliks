@@ -143,14 +143,6 @@
         <button class="btn btn-xs btn-ghost" (click)="selectedIds.set(emptySelection)">{{ 'library.bulk_deselect' | translate }}</button>
       </div>
     }
-    @if (inProgress().length > 0) {
-      <section class="flex flex-col gap-3">
-        <h2 class="text-base font-semibold">{{ 'downloads.in_progress' | translate }}</h2>
-        @for (task of inProgress(); track task.id) {
-          <ng-container *ngTemplateOutlet="taskRow; context: { $implicit: task, poster: true }" />
-        }
-      </section>
-    }
     <div class="flex flex-col gap-3">
       @for (entry of entries(); track entry.kind === 'movie' ? 'm' + entry.task.id : 's' + entry.show.mediaId) {
         @if (entry.kind === 'movie') {

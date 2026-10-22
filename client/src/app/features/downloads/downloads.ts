@@ -89,18 +89,9 @@ export class DownloadsComponent {
   readonly items = this.dlManager.tasks;
 
   protected readonly auto = inject(AutoDownloadService);
-  /** An in-flight movie lives only in the "in progress" section; episodes stay in their show so its header can summarise them. */
-  readonly entries = computed(() =>
-    groupDownloads(this.items().filter((t) => !isActive(t.status) || t.episodeId != null || !!t.episodeLabel)),
-  );
+  readonly entries = computed(() => groupDownloads(this.items()));
   readonly pausable = computed(() => this.items().filter((t) => isPausable(t.status)));
   readonly paused = computed(() => this.items().filter((t) => t.status === 'paused'));
-  /** Every in-flight task, moving ones first then held ones. */
-  readonly inProgress = computed(() =>
-    this.items()
-      .filter((t) => isActive(t.status))
-      .sort((a, b) => Number(a.status === 'paused') - Number(b.status === 'paused')),
-  );
 
   protected readonly freeBytes = signal<number | null>(null);
   private readonly settled = computed(() => `${this.items().filter((t) => t.status === 'ready').length}:${this.items().length}`);

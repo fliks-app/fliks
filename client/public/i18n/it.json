@@ -1872,7 +1872,6 @@
     "total_used": "{{size}} usati",
     "total_free": "{{size}} liberi",
     "waiting_wifi": "In attesa del Wi-Fi",
-    "in_progress": "In corso",
     "group_in_progress": "{{count}} in corso · {{percent}}%",
     "delete_all": "Elimina tutto",
     "other_episodes": "Altri episodi",
