@@ -141,6 +141,9 @@
                 <p class="text-xs text-base-content/50 mt-0.5">
                   {{ (show.tasks.length === 1 ? 'media_detail.episode_count_one' : 'media_detail.episode_count_other') | translate:{ count: show.tasks.length } }}@if (show.sizeBytes) { · {{ formatBytes(show.sizeBytes) }} }
                 </p>
+                @if (auto.enabled && auto.seriesKeep(show.mediaId); as keep) {
+                  <p class="text-xs text-primary mt-0.5">{{ 'downloads.auto_next' | translate:{ count: keep } }}</p>
+                }
               </div>
               @if (!selectMode()) {
                 <button
@@ -155,6 +158,7 @@
               <svg lucideChevronRight class="h-4 w-4 shrink-0 transition-transform group-open:rotate-90"></svg>
             </summary>
             <div class="flex flex-col gap-2 px-3 pb-3">
+              <app-auto-download-rule [seriesId]="show.mediaId" />
               @for (season of show.seasons; track season.seasonNumber) {
                 <details class="group/season" [open]="selectMode() || show.seasons.length === 1">
                   <summary class="flex items-center gap-2 py-2 cursor-pointer list-none">

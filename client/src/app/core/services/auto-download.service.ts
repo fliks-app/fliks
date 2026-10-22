@@ -1,4 +1,4 @@
-import { Injectable, effect, inject } from '@angular/core';
+import { Injectable, effect, inject, signal } from '@angular/core';
 import { Capacitor } from '@capacitor/core';
 import { AuthService } from './auth.service';
 import { TvService } from './tv.service';
@@ -8,6 +8,9 @@ import { DownloadManagerService, episodeLabel } from './download-manager.service
 import { DownloadCacheService, DownloadTask } from './download-cache.service';
 import { DownloadSettingsService } from './download-settings.service';
 import { autoCapReached } from './auto-download-cap';
+import { StorageScopeService } from './storage-scope.service';
+import { MediaService } from './api/media.service';
+import { pickNextEpisodes } from './auto-download-series';
 import { StreamingApiService } from './api/streaming-api.service';
 import {
   PlaylistsApiService,
@@ -18,6 +21,7 @@ import {
 interface AutoTarget {
   mediaId: number;
   episodeId?: number;
+  mediaFileId?: number;
   title: string;
   episodeLabel?: string;
   seasonNumber?: number;
@@ -43,6 +47,8 @@ export class AutoDownloadService {
   private readonly streamingApi = inject(StreamingApiService);
   private readonly settings = inject(DownloadSettingsService);
   private readonly playlistsApi = inject(PlaylistsApiService);
+  private readonly scope = inject(StorageScopeService);
+  private readonly mediaService = inject(MediaService);
 
   private running = false;
 
@@ -53,6 +59,7 @@ export class AutoDownloadService {
     effect(() => {
       if (this.downloads.recoveredAt() > 0) void this.reconcile('recovered');
     });
+    effect(() => this.rules.set(this.loadRules(this.scope.scope())));
     this.appResume.resume$.subscribe(() => void this.reconcile('resume'));
   }
 
@@ -85,6 +92,41 @@ export class AutoDownloadService {
     } catch {
       /* localStorage may be unavailable */
     }
+  }
+
+  /** Per-device "keep the next N episodes" rules, scoped to the server and user. */
+  readonly KEEP_OPTIONS = [3, 5, 10] as const;
+  private readonly rules = signal<Record<number, number>>({});
+
+  private rulesKey(): string {
+    return `fliks.series.autoDownload.${this.scope.suffix()}`;
+  }
+
+  private loadRules(scope: string): Record<number, number> {
+    try {
+      return JSON.parse(localStorage.getItem(`fliks.series.autoDownload.${scope}`) ?? '{}');
+    } catch {
+      return {};
+    }
+  }
+
+  seriesKeep(seriesId: number): number | null {
+    return this.rules()[seriesId] ?? null;
+  }
+
+  setSeriesKeep(seriesId: number, keep: number | null): void {
+    const rules = { ...this.rules() };
+    if (keep) rules[seriesId] = keep;
+    else delete rules[seriesId];
+    this.rules.set(rules);
+    if (this.scope.canPersist()) {
+      try {
+        localStorage.setItem(this.rulesKey(), JSON.stringify(rules));
+      } catch {
+        /* localStorage may be unavailable */
+      }
+    }
+    if (keep) void this.reconcile('series-rule');
   }
 
   /** Delete the matching auto-managed download as soon as an item is reported
@@ -135,6 +177,12 @@ export class AutoDownloadService {
           targets.set(key, this.toTarget(item));
         }
       }
+      for (const [id, keep] of Object.entries(this.rules())) {
+        for (const t of await this.seriesTargets(Number(id), keep)) {
+          const key = `${t.mediaId}:${t.episodeId}`;
+          if (!targets.has(key)) targets.set(key, t);
+        }
+      }
       this.log(`${targets.size} distinct target(s)`);
 
       await this.deleteWatched();
@@ -145,6 +193,30 @@ export class AutoDownloadService {
       this.log(`reconcile (${trigger}) error: ${(err as Error).message}`);
     } finally {
       this.running = false;
+    }
+  }
+
+  private async seriesTargets(seriesId: number, keep: number): Promise<AutoTarget[]> {
+    try {
+      const [media, watched] = await Promise.all([
+        this.mediaService.getOne(seriesId, { force: true }),
+        this.streamingApi.getWatchedEpisodeIds(seriesId),
+      ]);
+      return pickNextEpisodes(media, new Set(watched), keep).map(({ season, episode, mediaFileId }) => ({
+        mediaId: seriesId,
+        episodeId: episode.id,
+        mediaFileId,
+        title: media.title,
+        episodeLabel: episodeLabel(season, episode.episodeNumber, episode.title),
+        seasonNumber: season,
+        episodeNumber: episode.episodeNumber,
+        posterUrl: media.posterUrl,
+        type: media.type,
+        watched: false,
+      }));
+    } catch (err) {
+      this.log(`series ${seriesId} failed: ${(err as Error).message}`);
+      return [];
     }
   }
 

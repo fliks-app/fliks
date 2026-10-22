@@ -1827,6 +1827,9 @@
   "downloads": {
     "title": "Downloads",
     "download_season": "Download season",
+    "auto_rule": "Auto-download",
+    "auto_off": "Off",
+    "auto_next": "Next {{count}} episodes",
     "download_series": "Download all episodes",
     "unwatched_only": "Unwatched episodes only",
     "batch_count_one": "{{count}} episode",

@@ -1827,6 +1827,9 @@
   "downloads": {
     "title": "Transferências",
     "download_season": "Baixar a temporada",
+    "auto_rule": "Download automático",
+    "auto_off": "Desativado",
+    "auto_next": "Próximos {{count}} episódios",
     "download_series": "Baixar todos os episódios",
     "unwatched_only": "Apenas episódios não vistos",
     "batch_count_one": "{{count}} episódio",

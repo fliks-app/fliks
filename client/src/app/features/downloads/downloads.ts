@@ -30,6 +30,8 @@ import { formatBytes } from '../../shared/utils/download-format';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { CachedSrcDirective } from '../../shared/directives/cached-src.directive';
 import { SeasonLabelPipe } from '../../core/pipes/season-label.pipe';
+import { AutoDownloadService } from '../../core/services/auto-download.service';
+import { AutoDownloadRuleComponent } from '../../shared/components/auto-download-rule/auto-download-rule';
 import { groupDownloads } from './downloads-grouping';
 
 export interface DisplayDownloadTask extends DownloadTask {
@@ -43,6 +45,7 @@ export interface DisplayDownloadTask extends DownloadTask {
     NgTemplateOutlet,
     CachedSrcDirective,
     TranslatePipe,
+    AutoDownloadRuleComponent,
     ResolveUrlPipe,
     LucideDownload,
     LucideTrash2,
@@ -136,6 +139,7 @@ export class DownloadsComponent implements OnInit, OnDestroy {
     });
   });
 
+  protected readonly auto = inject(AutoDownloadService);
   readonly entries = computed(() => groupDownloads(this.items()));
   readonly hasActive = computed(() =>
     this.isNative && this.items().some((t) => ['queued', 'transcoding', 'pending', 'downloading'].includes(t.status)),

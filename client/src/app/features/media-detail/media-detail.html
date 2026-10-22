@@ -298,6 +298,7 @@
         }
 
         @if (m.type === 'series' && m.seasons?.length) {
+          <app-auto-download-rule class="block mb-3" [seriesId]="m.id" />
           <app-media-detail-seasons
             [media]="m"
             [selectedSeason]="activeSeason(m)"
