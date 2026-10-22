@@ -29,7 +29,6 @@ import java.util.List;
 @OptIn(markerClass = UnstableApi.class)
 final class FlixDownloadNotifications {
     static final String EXTRA_OPEN_DOWNLOADS = "fliks.openDownloads";
-    static final int PAUSED_ID = FlixDownloadUtil.FOREGROUND_NOTIFICATION_ID + 1;
     private static final String PREFS = "fliks_download_copy";
     private static final String[] COPY_KEYS = {
         "channelName", "channelDescription", "progress", "paused", "complete", "failed",
@@ -148,21 +147,20 @@ final class FlixDownloadNotifications {
         refreshPaused(ctx, manager);
     }
 
-    /** The service stops, taking its notification, once every download is paused; this one stays. */
+    /** With nothing active, the service's notification (detached when it stops) shows the paused queue or goes away;
+     *  same id, so pausing updates it in place instead of swapping notifications. */
     static void refreshPaused(Context ctx, DownloadManager manager) {
         NotificationManager nm = ctx.getSystemService(NotificationManager.class);
         if (nm == null) return;
         List<Download> downloads = manager.getCurrentDownloads();
         boolean anyPaused = false;
         for (Download d : downloads) {
-            if (isActive(d)) {
-                nm.cancel(PAUSED_ID);
-                return;
-            }
+            if (isActive(d)) return;
             anyPaused |= isPaused(d);
         }
-        if (anyPaused) nm.notify(PAUSED_ID, build(ctx, downloads, manager.getNotMetRequirements()));
-        else nm.cancel(PAUSED_ID);
+        int id = FlixDownloadUtil.FOREGROUND_NOTIFICATION_ID;
+        if (anyPaused) nm.notify(id, build(ctx, downloads, manager.getNotMetRequirements()));
+        else nm.cancel(id);
     }
 
     private static NotificationCompat.Builder base(Context ctx) {
