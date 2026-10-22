@@ -7,6 +7,13 @@
       </button>
     </div>
 
+    @if (current() && progress() !== null) {
+      <div class="mb-4">
+        <progress class="progress progress-info w-full" [value]="progress()" max="100"></progress>
+        <p class="text-xs text-center mt-1 text-base-content/60">{{ 'downloads.downloading' | translate }} {{ progress() }}%</p>
+      </div>
+    }
+
     @if (loading()) {
       <div class="flex justify-center py-6">
         <span class="loading loading-spinner loading-md"></span>

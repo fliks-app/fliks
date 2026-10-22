@@ -885,10 +885,13 @@ describe('MediaInfoHeaderComponent — download states', () => {
     expect(labels(f)).toContain('downloads.download');
   });
 
-  it('shows a progress ring linking to the downloads while in flight', async () => {
+  it('shows a progress ring that opens the quality picker while in flight', async () => {
     const f = await createFixture(OWNER, { ...movie, download: { status: 'downloading', progress: 40 } });
     const el = f.nativeElement as HTMLElement;
-    expect(el.querySelector('a[href="/downloads"] .radial-progress')).not.toBeNull();
+    const opened = vi.fn();
+    f.componentInstance.openDownload.subscribe(opened);
+    (el.querySelector('button .radial-progress')?.closest('button') as HTMLButtonElement).click();
+    expect(opened).toHaveBeenCalled();
     expect(has(f, 'downloads.downloaded')).toBe(false);
     expect(labels(f)).not.toContain('downloads.download');
   });

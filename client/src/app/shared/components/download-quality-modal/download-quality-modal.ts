@@ -54,6 +54,8 @@ export class DownloadQualityModalComponent {
 
   readonly download = output<{ mediaFileId: number; quality: string; unwatchedOnly: boolean }>();
   readonly remove = output<void>();
+  /** Progress of the download under way for this file; null when none. */
+  readonly progress = input<number | null>(null);
 
   private mediaFileId = 0;
 

@@ -56,7 +56,7 @@ import { CollapsibleSectionComponent } from '../../shared/components/collapsible
 import { MediaCardComponent } from '../../shared/components/media-card/media-card';
 import { DownloadQualityModalComponent } from '../../shared/components/download-quality-modal/download-quality-modal';
 import { DownloadManagerService, episodeLabel, type DownloadTarget } from '../../core/services/download-manager.service';
-import { nothingStartedKey } from '../../core/services/download-status';
+import { isActive, nothingStartedKey } from '../../core/services/download-status';
 import { DownloadDetailModalComponent } from '../../shared/components/download-detail-modal/download-detail-modal';
 import { collectScopedLeaves, describeDownload } from '../../shared/utils/download-format';
 import { TvService } from '../../core/services/tv.service';
@@ -1030,6 +1030,11 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     return task ?? null;
   });
 
+  readonly activeDownloadProgress = computed(() => {
+    const t = this.fileDownload();
+    return t && isActive(t.status) ? t.progress : null;
+  });
+
   openDownloadModal() {
     this.pendingDownloads = null;
     const fileId = this.downloadFileId();
@@ -1083,7 +1088,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       if (s && ep) {
         episode = episodeLabel(s.seasonNumber, ep.episodeNumber, ep.title);
       }
-      const prev = this.fileDownload();
+      const prev = this.downloadManager.tasks().find((t) => t.mediaFileId === ev.mediaFileId && t.status !== 'failed');
       if (prev) await this.downloadManager.deleteDownload(prev);
       await this.downloadManager.createDownload(ev.mediaFileId, ev.quality, title, episode, {
         mediaId: m?.id,
