@@ -89,3 +89,51 @@ async fn bulk_checks_permissions_and_reports_each_item(pool: PgPool) {
     .await;
     assert_eq!((s, b["results"][0]["ok"].clone()), (200, json!(true)));
 }
+
+async fn get(app: &Router, token: &str, method: &str, uri: &str) -> Value {
+    let req = Request::builder()
+        .method(method)
+        .uri(uri)
+        .header("authorization", format!("Bearer {token}"))
+        .body(Body::empty())
+        .unwrap();
+    let res = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status().as_u16(), 200, "{uri}");
+    let bytes = axum::body::to_bytes(res.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    serde_json::from_slice(&bytes).unwrap()
+}
+
+#[sqlx::test]
+async fn candidates_recommendations_and_preview_follow_library_access(pool: PgPool) {
+    fliks_server::db::migrate(&pool).await.unwrap();
+    let st = AppState::new(pool.clone(), Config::from_lookup(|_| None), SECRET);
+    for q in [
+        r#"INSERT INTO libraries (name) VALUES ('a'), ('b')"#,
+        r#"INSERT INTO media (title, type, "libraryId", "createdAt") VALUES
+           ('in-a', 'movie', 1, now() - interval '200 days'), ('in-b', 'movie', 2, now() - interval '200 days')"#,
+        r#"INSERT INTO roles (name, permissions) VALUES ('s', '["settings.access"]')"#,
+        r#"INSERT INTO users (username, "roleId") VALUES ('u', (SELECT id FROM roles))"#,
+        r#"INSERT INTO library_user_access ("userId", "libraryId") VALUES (1, 1)"#,
+        r#"INSERT INTO cleanup_rules (name, criteria, action) VALUES ('r', '{}', 'none')"#,
+    ] {
+        sqlx::query(q).execute(&pool).await.unwrap();
+    }
+    let token = st.jwt.sign_access(1, "u").unwrap().token;
+    let app = app::router(st.clone(), None, "/nonexistent".into(), None);
+    let titles = |rows: &Value| -> Vec<String> {
+        rows.as_array()
+            .unwrap()
+            .iter()
+            .map(|r| r["title"].as_str().unwrap().to_owned())
+            .collect()
+    };
+    let r = get(&app, &token, "GET", "/api/cleanup/recommendations").await;
+    assert_eq!(titles(&r["items"]), ["in-a"]);
+    fliks_server::cleanup::run(&st).await.unwrap();
+    let c = get(&app, &token, "GET", "/api/cleanup/candidates").await;
+    assert_eq!(titles(&c), ["in-a"]);
+    let p = get(&app, &token, "POST", "/api/cleanup/rules/1/preview").await;
+    assert_eq!(titles(&p["matches"]), ["in-a"]);
+}

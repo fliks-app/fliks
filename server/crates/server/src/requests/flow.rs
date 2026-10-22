@@ -643,7 +643,9 @@ async fn approve_delete(st: &AppState, a: &Authed, row: &db::Req) -> Res<Value> 
                 if let Some(path) = removed.disk_path {
                     tokio::spawn(async move {
                         let _lock = removed.lock;
-                        if let Err(e) = services::delete_media_folder(&path).await {
+                        if let Err(e) =
+                            crate::media::write::remove_media_folder(path.clone().into()).await
+                        {
                             tracing::error!(
                                 "Media file deletion failed after delete request #{id} — title=\"{}\" path=\"{path}\" error={e}",
                                 removed.title

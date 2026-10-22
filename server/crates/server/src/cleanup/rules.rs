@@ -4,6 +4,7 @@ use chrono::{DateTime, Utc};
 use serde::Serialize;
 use serde_json::Value;
 use sqlx::{FromRow, PgPool, Postgres, QueryBuilder};
+use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, FromRow, Serialize)]
 pub struct Match {
@@ -16,6 +17,9 @@ pub struct Match {
     #[sqlx(rename = "lastPlayedAt")]
     #[serde(rename = "lastPlayedAt", with = "iso_ms::opt")]
     pub last_played_at: Option<DateTime<Utc>>,
+    #[sqlx(rename = "libraryId")]
+    #[serde(skip)]
+    pub library_id: Option<i32>,
     #[sqlx(rename = "seasonId")]
     #[serde(rename = "seasonId")]
     pub season_id: Option<i32>,
@@ -35,10 +39,14 @@ const FILE_SIZE: &str =
     r#"COALESCE((SELECT SUM(f.size) FROM media_files f WHERE f."mediaId" = media.id), 0)"#;
 const LAST_PLAYED: &str =
     r#"(SELECT MAX(ps."lastPlayedAt") FROM playback_states ps WHERE ps."mediaId" = media.id)"#;
-const REQUESTER: &str = r#"r."mediaId" = media.id AND r.kind = 'add' AND r."userId" IS NOT NULL"#;
+const REQUESTER: &str = r#"r."mediaId" = media.id AND r.kind = 'add' AND r.status <> 'declined' AND r."userId" IS NOT NULL"#;
 
 fn int(c: &Value, k: &str) -> Option<i64> {
     c.get(k).and_then(Value::as_i64)
+}
+
+fn int32(c: &Value, k: &str) -> Option<i32> {
+    int(c, k).and_then(|n| i32::try_from(n).ok())
 }
 
 fn flag(c: &Value, k: &str) -> bool {
@@ -131,7 +139,7 @@ pub fn compile(
     let last_played = &sc.last_played;
     let mut q = QueryBuilder::new(format!(
         r#"SELECT media.id, media.title, media."type"::text AS "type", {size}::bigint AS size,
-        {last_played} AS "lastPlayedAt", {ids} FROM {from} WHERE NOT EXISTS
+        {last_played} AS "lastPlayedAt", media."libraryId" AS "libraryId", {ids} FROM {from} WHERE NOT EXISTS
         (SELECT 1 FROM cleanup_exclusions x WHERE x."mediaId" = media.id{excluded})"#
     ));
     if let Some(ep) = &sc.episodes {
@@ -163,23 +171,23 @@ pub fn compile(
         q.push(r#" AND media."type"::text = "#)
             .push_bind(level.to_owned());
     }
-    if let Some(d) = int(c, "addedOlderThanDays") {
+    if let Some(d) = int32(c, "addedOlderThanDays") {
         q.push(format!(
             " AND {} < now() - make_interval(days => ",
             sc.added
         ))
-        .push_bind(d as i32)
+        .push_bind(d)
         .push(")");
     }
-    if let Some(d) = int(c, "releasedOlderThanDays") {
+    if let Some(d) = int32(c, "releasedOlderThanDays") {
         q.push(format!(" AND {} < current_date - ", sc.released))
-            .push_bind(d as i32);
+            .push_bind(d);
     }
-    if let Some(d) = int(c, "lastPlayedOlderThanDays") {
+    if let Some(d) = int32(c, "lastPlayedOlderThanDays") {
         q.push(format!(
             " AND COALESCE({last_played}, '-infinity') < now() - make_interval(days => "
         ))
-        .push_bind(d as i32)
+        .push_bind(d)
         .push(")");
     }
     if let Some(n) = int(c, "playCountBelow") {
@@ -190,12 +198,12 @@ pub fn compile(
         q.push(r#" AND (SELECT COUNT(DISTINCT h."userId") FROM playback_history h WHERE h."mediaId" = media.id) < "#)
             .push_bind(n);
     }
-    if let Some(d) = int(c, "notPlayedInLastDays") {
+    if let Some(d) = int32(c, "notPlayedInLastDays") {
         q.push(
             r#" AND NOT EXISTS (SELECT 1 FROM playback_history h WHERE h."mediaId" = media.id
             AND h."playedAt" >= now() - make_interval(days => "#,
         )
-        .push_bind(d as i32)
+        .push_bind(d)
         .push("))");
     }
     if flag(c, "neverPlayed") {
@@ -223,9 +231,9 @@ pub fn compile(
         q.push(" AND media.rating > 0 AND media.rating < ")
             .push_bind(r);
     }
-    if let Some(v) = int(c, "minVotes") {
+    if let Some(v) = int32(c, "minVotes") {
         q.push(r#" AND (SELECT mm."voteCount" FROM media_metadata mm WHERE mm."mediaId" = media.id) >= "#)
-            .push_bind(v as i32);
+            .push_bind(v);
     }
     if let Some(gb) = c.get("sizeAboveGb").and_then(Value::as_f64) {
         q.push(format!(" AND {size} > "))
@@ -353,43 +361,35 @@ struct Recommendation {
     reasons: Vec<&'static str>,
 }
 
-/// `{reasons: {key, criteria, levels}[], items}`: titles matched by a built-in set, merged by media,
-/// without the whole-media candidates, biggest first.
-pub async fn recommendations(db: &PgPool) -> sqlx::Result<Value> {
-    let flagged: Vec<i32> = sqlx::query_scalar(
+/// `{reasons: {key, criteria, levels}[], items}`: titles matched by a built-in set in the `libraries`,
+/// merged by media, without the whole-media candidates, biggest first.
+pub async fn recommendations(db: &PgPool, libraries: &[i32]) -> sqlx::Result<Value> {
+    let flagged: HashSet<i32> = sqlx::query_scalar(
         r#"SELECT "mediaId" FROM cleanup_candidates WHERE "seasonId" IS NULL AND "episodeId" IS NULL"#,
     )
     .fetch_all(db)
-    .await?;
+    .await?
+    .into_iter()
+    .collect();
     let mut reasons = vec![];
-    let mut items: Vec<(Match, Vec<&str>)> = vec![];
+    let mut items: HashMap<i32, (Match, Vec<&str>)> = HashMap::new();
     for (key, criteria, levels) in RECOMMENDATIONS {
         let criteria: Value = serde_json::from_str(criteria).expect("built-in criteria");
         let lv: Vec<String> = levels.iter().map(|l| (*l).to_owned()).collect();
         for m in matched(db, &criteria, &lv, "delete").await? {
-            if flagged.contains(&m.id) {
+            if flagged.contains(&m.id) || !m.library_id.is_some_and(|l| libraries.contains(&l)) {
                 continue;
             }
-            match items.iter_mut().find(|(i, _)| i.id == m.id) {
-                Some((_, r)) => r.push(key),
-                None => items.push((m, vec![key])),
-            }
+            items.entry(m.id).or_insert_with(|| (m, vec![])).1.push(key);
         }
         reasons.push(serde_json::json!({"key": key, "criteria": criteria, "levels": levels}));
     }
+    let mut items: Vec<(Match, Vec<&str>)> = items.into_values().collect();
     items.sort_by_key(|(m, _)| (std::cmp::Reverse(m.size), m.id));
-    let ids: Vec<i32> = items.iter().map(|(m, _)| m.id).collect();
-    let libs: std::collections::HashMap<i32, Option<i32>> =
-        sqlx::query_as(r#"SELECT id, "libraryId" FROM media WHERE id = ANY($1)"#)
-            .bind(&ids)
-            .fetch_all(db)
-            .await?
-            .into_iter()
-            .collect();
     let items: Vec<Recommendation> = items
         .into_iter()
         .map(|(m, reasons)| Recommendation {
-            library_id: libs.get(&m.id).copied().flatten(),
+            library_id: m.library_id,
             media_id: m.id,
             title: m.title,
             media_type: m.media_type,

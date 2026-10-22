@@ -1,5 +1,8 @@
 //! Bodies and queries (`requests.md` routes table, rules 28-30): class-validator-shaped messages, 4.x coercions.
-use crate::http::{AppError, validate::int_param};
+use crate::http::{
+    AppError,
+    validate::{Check, int_param, int4, object},
+};
 use fliks_domain::media::query::js_number;
 use serde_json::{Map, Value, json};
 
@@ -39,154 +42,14 @@ impl<T: Copy> Field<T> {
     }
 }
 
-pub(crate) struct Check<'a> {
-    o: &'a Map<String, Value>,
-    prefix: &'a str,
-    pub(crate) errs: Vec<String>,
-}
-
-pub(crate) fn object(v: Value) -> Map<String, Value> {
-    match v {
-        Value::Object(o) => o,
-        _ => Map::new(),
-    }
-}
-
-/// `Number(x)` of a JSON value; `None` is NaN.
-fn coerce(v: &Value) -> Option<f64> {
-    match v {
-        Value::Number(n) => n.as_f64(),
-        Value::String(s) => js_number(s),
-        Value::Bool(b) => Some(f64::from(u8::from(*b))),
-        _ => None,
-    }
-}
-
-fn int4(n: f64) -> Option<i32> {
-    (n.fract() == 0.0 && (f64::from(i32::MIN)..=f64::from(i32::MAX)).contains(&n))
-        .then_some(n as i32)
-}
-
-impl<'a> Check<'a> {
-    pub(crate) fn new(o: &'a Map<String, Value>, known: &[&str], prefix: &'a str) -> Self {
-        let errs = o
-            .keys()
-            .filter(|k| !known.contains(&k.as_str()))
-            .map(|k| format!("{prefix}property {k} should not exist"))
-            .collect();
-        Self { o, prefix, errs }
-    }
-
-    pub(crate) fn err(&mut self, key: &str, what: &str) {
-        self.errs.push(format!("{}{key} {what}", self.prefix));
-    }
-
-    /// `@IsOptional`: absent and `null` skip every other validator.
-    fn get(&self, key: &str) -> Option<&'a Value> {
-        self.o.get(key).filter(|v| !v.is_null())
-    }
-
-    pub(crate) fn one_of(&mut self, key: &str, allowed: &[&str], optional: bool) -> Option<String> {
-        let v = if optional {
-            self.get(key)?
-        } else {
-            self.o.get(key).unwrap_or(&Value::Null)
-        };
-        match v.as_str().filter(|s| allowed.contains(s)) {
-            Some(s) => Some(s.to_owned()),
-            None => {
-                self.err(
-                    key,
-                    &format!(
-                        "must be one of the following values: {}",
-                        allowed.join(", ")
-                    ),
-                );
-                None
-            }
-        }
-    }
-
-    /// `@IsInt` (with `@Type(() => Number)` when `coerced`) and the bounds, messages in validator order.
-    pub(crate) fn int(
-        &mut self,
-        key: &str,
-        v: &Value,
-        coerced: bool,
-        min: Option<i32>,
-        max: Option<i32>,
-    ) -> Option<i32> {
-        let n = if coerced {
-            coerce(v)
-        } else {
-            v.as_f64().filter(|_| v.is_number())
-        };
-        let above = max.filter(|m| n.is_none_or(|n| n > f64::from(*m)));
-        let below = min.filter(|m| n.is_none_or(|n| n < f64::from(*m)));
-        if let Some(m) = above {
-            self.err(key, &format!("must not be greater than {m}"));
-        }
-        if let Some(m) = below {
-            self.err(key, &format!("must not be less than {m}"));
-        }
-        match n.and_then(int4) {
-            Some(i) if above.is_none() && below.is_none() => Some(i),
-            Some(_) => None,
-            // a whole number past int4 whose bound is already reported is not reported twice
-            None if n.is_some_and(|n| n.fract() == 0.0) && (above.is_some() || below.is_some()) => {
-                None
-            }
-            None => {
-                self.err(key, "must be an integer number");
-                None
-            }
-        }
-    }
-
-    fn opt_int(&mut self, key: &str, coerced: bool) -> Field<i32> {
-        match self.o.get(key) {
-            None => Field::Absent,
-            Some(Value::Null) => Field::Null,
-            Some(v) => self
-                .int(key, v, coerced, None, None)
-                .map_or(Field::Absent, Field::Val),
-        }
-    }
-
-    /// `@IsArray @IsInt({ each: true })` (`@Type(() => Number)` when `coerced`).
-    pub(crate) fn int_array(&mut self, key: &str, coerced: bool) -> Option<Vec<i64>> {
-        let v = self.get(key)?;
-        let Some(a) = v.as_array() else {
-            self.err(key, "must be an array");
-            return None;
-        };
-        let nums: Vec<Option<f64>> = a
-            .iter()
-            .map(|x| {
-                if coerced {
-                    coerce(x)
-                } else {
-                    x.as_f64().filter(|_| x.is_number())
-                }
-                .filter(|n| n.fract() == 0.0 && n.abs() <= 9.0e15)
-            })
-            .collect();
-        if nums.iter().any(Option::is_none) {
-            self.errs.push(format!(
-                "{}each value in {key} must be an integer number",
-                self.prefix
-            ));
-            return None;
-        }
-        Some(nums.into_iter().flatten().map(|n| n as i64).collect())
-    }
-
-    pub(crate) fn finish<T>(self, v: T) -> Res<T> {
-        if self.errs.is_empty() {
-            Ok(v)
-        } else {
-            Err(AppError::bad_request(self.errs))
-        }
+/// An optional integer field: absent, `null` or a value.
+fn opt_int(c: &mut Check, key: &str, coerced: bool) -> Field<i32> {
+    match c.o.get(key) {
+        None => Field::Absent,
+        Some(Value::Null) => Field::Null,
+        Some(v) => c
+            .int(key, v, coerced, None, None)
+            .map_or(Field::Absent, Field::Val),
     }
 }
 
@@ -235,9 +98,9 @@ pub fn create_request(v: Value) -> Res<CreateRequest> {
         c.err("title", "must be a string");
     }
     let seasons = c.int_array("seasons", true);
-    let quality = c.opt_int("qualityProfileId", true);
-    let language = c.opt_int("languageProfileId", true);
-    let library = c.opt_int("libraryId", true);
+    let quality = opt_int(&mut c, "qualityProfileId", true);
+    let language = opt_int(&mut c, "languageProfileId", true);
+    let library = opt_int(&mut c, "libraryId", true);
     let title = o
         .get("title")
         .and_then(Value::as_str)
@@ -271,9 +134,9 @@ pub fn update_request(v: Value) -> Res<UpdateRequest> {
         "",
     );
     let u = UpdateRequest {
-        quality_profile_id: c.opt_int("qualityProfileId", true),
-        language_profile_id: c.opt_int("languageProfileId", true),
-        library_id: c.opt_int("libraryId", true),
+        quality_profile_id: opt_int(&mut c, "qualityProfileId", true),
+        language_profile_id: opt_int(&mut c, "languageProfileId", true),
+        library_id: opt_int(&mut c, "libraryId", true),
     };
     c.finish(u)
 }

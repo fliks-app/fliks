@@ -92,6 +92,8 @@ export class CleanupSettingsComponent implements OnInit {
     'likedByFewerThan',
     'diskFreeBelowPercent',
   ];
+  /** The server rejects these below series level. */
+  protected readonly movieSeriesOnly: NumberKey[] = ['playCountBelow', 'playCountByUsersBelow', 'notPlayedInLastDays'];
   protected readonly flagFields: FlagKey[] = [
     'neverPlayed',
     'watchedByRequester',
@@ -293,6 +295,9 @@ export class CleanupSettingsComponent implements OnInit {
     if (!this.formEpisodeOnly()) {
       this.formCriteria.update(({ keepLatestEpisodes, ...rest }) => rest);
     }
+    if (this.formScoped()) {
+      this.formCriteria.update(({ playCountBelow, playCountByUsersBelow, notPlayedInLastDays, ...rest }) => rest);
+    }
     if (!this.formScoped()) this.formDeleteSeriesWhenEmpty.set(false);
   }
 
@@ -454,7 +459,7 @@ export class CleanupSettingsComponent implements OnInit {
 
   async saveMaxPerRun() {
     const n = this.maxPerRun();
-    if (n == null || n < 1) return;
+    if (n == null || n < 0) return;
     try {
       await this.settings.set(MAX_PER_RUN_KEY, String(Math.floor(n)));
     } catch {
@@ -493,10 +498,10 @@ export class CleanupSettingsComponent implements OnInit {
     try {
       const { results } = await this.api.bulk(action, picked);
       const failed = results.filter((r) => !r.ok).length;
-      const done = { size: results.length - failed };
+      const done = results.length - failed;
       await this.reload();
       const key = failed ? 'settings.cleanup.bulk_partial' : 'settings.cleanup.bulk_done';
-      const msg = this.translate.instant(key, { done: done.size, failed });
+      const msg = this.translate.instant(key, { done, failed });
       if (failed) this.toast.warning(msg);
       else this.toast.success(msg);
     } catch {
