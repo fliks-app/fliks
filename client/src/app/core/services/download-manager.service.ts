@@ -102,7 +102,8 @@ export class DownloadManagerService {
   private readonly deleting = new Set<number>();
 
   // --- Native: ExoPlayer DownloadManager events ---
-  private readonly nativeSub = this.isNative ? this.notif.nativeEvents.subscribe((event) => this.onNativeEvent(event)) : null;
+  // The bridge only emits on native, and gates its own calls, so neither needs a platform check here.
+  private readonly nativeSub = this.notif.nativeEvents.subscribe((event) => this.onNativeEvent(event));
 
   private onNativeEvent(event: NativeDownloadEvent) {
     const taskId = Number(event.id) || 0;
@@ -446,9 +447,7 @@ export class DownloadManagerService {
     try {
       this.webGates.get(task.id)?.open();
       this.webGates.delete(task.id);
-      if (this.isNative) {
-        await this.notif.removeDownload(String(task.id));
-      }
+      await this.notif.removeDownload(String(task.id));
       // Media, Shaka URI and VTTs are keyed by mediaFileId and shared with any
       // sibling task for the same file — only remove them when none remains.
       const sharedElsewhere = this.cache
@@ -726,7 +725,7 @@ export class DownloadManagerService {
         if (onStartup && t.auto) {
           await this.deleteDownload(t);
         } else {
-          if (this.isNative) await this.notif.removeDownload(String(t.id));
+          await this.notif.removeDownload(String(t.id));
           this.updateTaskStatus(t.id, 'failed', 0);
         }
       }

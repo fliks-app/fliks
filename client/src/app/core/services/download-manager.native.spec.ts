@@ -1,6 +1,5 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { Capacitor } from '@capacitor/core';
 import { TranslateService } from '@ngx-translate/core';
 import { Subject } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -37,8 +36,6 @@ describe('DownloadManagerService native events', () => {
 
   beforeEach(() => {
     localStorage.clear();
-    vi.spyOn(Capacitor, 'isNativePlatform').mockReturnValue(true);
-    vi.spyOn(Capacitor, 'getPlatform').mockReturnValue('android');
     removeDownload.mockClear();
     TestBed.configureTestingModule({
       providers: [
