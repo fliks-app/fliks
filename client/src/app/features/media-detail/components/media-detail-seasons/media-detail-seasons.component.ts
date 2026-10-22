@@ -10,6 +10,11 @@ import {
 } from '@angular/core';
 import { NgTemplateOutlet, UpperCasePipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
+import { DownloadManagerService } from '../../../../core/services/download-manager.service';
+import { ConfirmationService } from '../../../../core/services/confirmation.service';
+import type { CardDownloadState } from '../../../../shared/components/media-card/media-card';
+import { isActive } from '../../../../core/services/download-status';
+import type { DownloadTask } from '../../../../core/services/download-cache.service';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import {
   LucideCheck,
@@ -92,6 +97,8 @@ export class MediaDetailSeasonsComponent {
   private readonly device = inject(DeviceService);
   private readonly pluginUi = inject(PluginUiRegistryService);
   private readonly displaySettings = inject(DisplaySettingsService);
+  private readonly downloads = inject(DownloadManagerService);
+  private readonly confirmation = inject(ConfirmationService);
   readonly media = input.required<Media>();
   readonly selectedSeason = input<Season | null>(null);
   readonly activeSeasonId = input.required<number | null>();
@@ -263,9 +270,38 @@ export class MediaDetailSeasonsComponent {
     this.selectedEpisodeIds.set(new Set());
   }
 
+  /** Latest non-failed download of each episode of this series; empty on TV, which has no offline downloads. */
+  private readonly episodeTasks = computed(() => {
+    const map = new Map<number, DownloadTask>();
+    if (this.tv.isTv()) return map;
+    const mediaId = this.media().id;
+    for (const t of this.downloads.tasks()) {
+      if (t.mediaId === mediaId && t.episodeId != null && t.status !== 'failed') map.set(t.episodeId, t);
+    }
+    return map;
+  });
+
+  downloadStateOf(ep: Episode): CardDownloadState | null {
+    const t = this.episodeTasks().get(ep.id);
+    return t ? { status: t.status, progress: t.progress } : null;
+  }
+
   episodeActions(season: Season, ep: Episode): CardAction[] {
     if (this.tv.isTv() || !ep.hasFile) return [];
-    return [{ labelKey: 'downloads.download', icon: 'download', run: () => this.downloadEpisode.emit({ season, episode: ep }) }];
+    const task = this.episodeTasks().get(ep.id);
+    if (!task) return [{ labelKey: 'downloads.download', icon: 'download', run: () => this.downloadEpisode.emit({ season, episode: ep }) }];
+    if (isActive(task.status)) return [];
+    return [{ labelKey: 'downloads.delete_download', icon: 'trash-2', tone: 'danger', run: () => void this.deleteDownload(task) }];
+  }
+
+  private async deleteDownload(task: DownloadTask) {
+    const confirmed = await this.confirmation.confirm({
+      title: this.translate.instant('common.confirm'),
+      message: this.translate.instant('downloads.confirm_delete'),
+      confirmLabel: this.translate.instant('common.delete'),
+      variant: 'danger',
+    });
+    if (confirmed) await this.downloads.deleteDownload(task);
   }
 
   toggleSelected(ep: Episode) {
