@@ -150,9 +150,9 @@
               {{ 'downloads.downloaded' | translate }}
             </button>
           } @else {
-            <a routerLink="/downloads" class="flex flex-col items-center gap-1 text-sm">
+            <a routerLink="/downloads" class="flex flex-col items-center gap-1 text-sm" [attr.aria-label]="'downloads.downloading' | translate">
               <div class="radial-progress text-info" [style.--value]="d.progress" style="--size: 1.25rem; --thickness: 2px" role="progressbar" [attr.aria-valuenow]="d.progress"></div>
-              {{ 'downloads.downloading' | translate }}
+              {{ d.progress }} %
             </a>
           }
         } @else {
