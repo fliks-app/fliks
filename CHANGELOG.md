@@ -1,5 +1,71 @@
 # Changelog
 
+## [5.1.0](https://github.com/fliks-app/fliks/compare/v5.0.0...v5.1.0) (2026-10-22)
+
+
+### Features
+
+* **android:** richer download notification with titles, time left and actions ([#1928](https://github.com/fliks-app/fliks/issues/1928)) ([64bf283](https://github.com/fliks-app/fliks/commit/64bf2830fa3c8887bde4a6743f9536843e9cfa08))
+* **cleanup:** add library cleanup rules with a leaving-soon list ([#1863](https://github.com/fliks-app/fliks/issues/1863)) ([f084fce](https://github.com/fliks-app/fliks/commit/f084fcedade9455f9dea15dd4b1cbd237f6fac9f))
+* **cleanup:** add play history and play-count criteria ([#1870](https://github.com/fliks-app/fliks/issues/1870)) ([a01c472](https://github.com/fliks-app/fliks/commit/a01c472129b6bec41ca1518bbe2b3f7108a056c4))
+* **cleanup:** add season and episode level rules ([#1868](https://github.com/fliks-app/fliks/issues/1868)) ([3b08b72](https://github.com/fliks-app/fliks/commit/3b08b72c394e3cbeecfae1230cc4dbc011ada169))
+* **cleanup:** import and export rules, bulk candidate actions ([#1871](https://github.com/fliks-app/fliks/issues/1871)) ([aa83db1](https://github.com/fliks-app/fliks/commit/aa83db17c252dcadddf75ea5916cabc5bf0c6401))
+* **cleanup:** paginate and filter the recommendations ([#1877](https://github.com/fliks-app/fliks/issues/1877)) ([72bf7ed](https://github.com/fliks-app/fliks/commit/72bf7edb1a588f0626b72db9cec6bc03b6c2cc76))
+* **cleanup:** recommend titles to remove ([#1876](https://github.com/fliks-app/fliks/issues/1876)) ([0cf0673](https://github.com/fliks-app/fliks/commit/0cf0673783261339fb417cff83bc8eae3fb86066))
+* **cleanup:** send several reminders before removal ([#1869](https://github.com/fliks-app/fliks/issues/1869)) ([f75ab82](https://github.com/fliks-app/fliks/commit/f75ab826f69b3c630d0698b345e13c772ef0478c))
+* **client:** skip calls a server older than the app cannot answer ([#1913](https://github.com/fliks-app/fliks/issues/1913)) ([25942a4](https://github.com/fliks-app/fliks/commit/25942a4416fbf9b0800c2b5f03125946e56b4f3f))
+* **downloads:** animate show and season groups, return to downloads from offline playback ([#1929](https://github.com/fliks-app/fliks/issues/1929)) ([34fd9da](https://github.com/fliks-app/fliks/commit/34fd9da55542e13d35d3f68a7f57f26e5e741464))
+* **downloads:** default quality, wifi-only, auto cap and pause-all ([#1919](https://github.com/fliks-app/fliks/issues/1919)) ([7b103cf](https://github.com/fliks-app/fliks/commit/7b103cffdb6f3be7ddee4bed58def2f4f8d0c844))
+* **downloads:** download a whole season or show in one action ([#1916](https://github.com/fliks-app/fliks/issues/1916)) ([03a96e2](https://github.com/fliks-app/fliks/commit/03a96e2f55388475074e5b864e437ef9c0a66107))
+* **downloads:** in-progress section, wifi wait state and free space ([#1935](https://github.com/fliks-app/fliks/issues/1935)) ([fdb7505](https://github.com/fliks-app/fliks/commit/fdb7505180a950f4044208c89d898afb77891bef))
+* **downloads:** keep the next episodes of a series on the device ([#1921](https://github.com/fliks-app/fliks/issues/1921)) ([276068d](https://github.com/fliks-app/fliks/commit/276068d2465b3136737f663f01b1cd18585b7055))
+* **downloads:** move auto-download and episode download into menus ([#1922](https://github.com/fliks-app/fliks/issues/1922)) ([3fdf3f1](https://github.com/fliks-app/fliks/commit/3fdf3f1fb6e93358b42ffcf5a268138cd96a0072))
+* **downloads:** pause and resume each download on every platform ([#1924](https://github.com/fliks-app/fliks/issues/1924)) ([1adc893](https://github.com/fliks-app/fliks/commit/1adc893a5af18d6d3338dc9009ba314f8f6811d7))
+* **downloads:** select in bulk and group the downloads page by show ([#1920](https://github.com/fliks-app/fliks/issues/1920)) ([5d1b648](https://github.com/fliks-app/fliks/commit/5d1b648a87e52c580789b14796d78e9852d283b4))
+* **downloads:** waiting-for-wifi state, notification deep link, cancel action, free space ([#1932](https://github.com/fliks-app/fliks/issues/1932)) ([d0466eb](https://github.com/fliks-app/fliks/commit/d0466eba7278e78c4ca8efe8b9b9c92622e5ed24))
+* **macos:** update the server app in place with Sparkle ([#1899](https://github.com/fliks-app/fliks/issues/1899)) ([3b7aad6](https://github.com/fliks-app/fliks/commit/3b7aad688167369d3eaa5e70f98bf5cb989cad11))
+* **media-detail:** announce how many episodes a download will fetch ([#1946](https://github.com/fliks-app/fliks/issues/1946)) ([5f1b497](https://github.com/fliks-app/fliks/commit/5f1b497962d2371cf40a682ce3020c09e62a4120))
+* **media-detail:** show a downloaded media and let it change quality ([#1951](https://github.com/fliks-app/fliks/issues/1951)) ([1add891](https://github.com/fliks-app/fliks/commit/1add8913739c05ce4a4dcba5daabd2597c625467))
+* **media-detail:** show which episodes are on the device ([#1934](https://github.com/fliks-app/fliks/issues/1934)) ([c7c9870](https://github.com/fliks-app/fliks/commit/c7c987098baac352a259608355b3a8406c318094))
+* **player:** play the downloaded copy when there is one ([#1950](https://github.com/fliks-app/fliks/issues/1950)) ([87dec0d](https://github.com/fliks-app/fliks/commit/87dec0d7ddb50b9efc4daba96a3044ac192c0476))
+* support pre-release versions such as 5.1.0-beta.1 ([#1914](https://github.com/fliks-app/fliks/issues/1914)) ([3ee9d1a](https://github.com/fliks-app/fliks/commit/3ee9d1a9b607171b74ae9302a0f6a188067d1544))
+
+
+### Bug Fixes
+
+* **android:** keep one download notification when the queue pauses ([#1937](https://github.com/fliks-app/fliks/issues/1937)) ([76cb29e](https://github.com/fliks-app/fliks/commit/76cb29eec1c4635eef3a831831974573d2532ad4))
+* **android:** put the download title before its percentage in the notification ([#1936](https://github.com/fliks-app/fliks/issues/1936)) ([1b9fca0](https://github.com/fliks-app/fliks/commit/1b9fca0c40342cee866940eb6cfef768636a9239))
+* apply non-major npm audit fixes ([#1906](https://github.com/fliks-app/fliks/issues/1906)) ([a852757](https://github.com/fliks-app/fliks/commit/a852757d8e27c1a8f10774e22606008457d74b56))
+* **auth:** keep the session on a transient refresh failure ([#1947](https://github.com/fliks-app/fliks/issues/1947)) ([4e0b1d6](https://github.com/fliks-app/fliks/commit/4e0b1d61194d3f84865e39a96a685abaeead2dc1))
+* **auth:** revoke only the replaying device and only on a fork ([#1948](https://github.com/fliks-app/fliks/issues/1948)) ([2de89fa](https://github.com/fliks-app/fliks/commit/2de89fa1df30f67150f7cb3bbeb1cb1e5bc1b2c7))
+* **auth:** serialise session-store writes and never adopt an older token ([#1952](https://github.com/fliks-app/fliks/issues/1952)) ([1b976c4](https://github.com/fliks-app/fliks/commit/1b976c46e93709a81c7c3ef5265135ab23ac580b))
+* **cache:** keep the last known body of every cached read ([661da09](https://github.com/fliks-app/fliks/commit/661da096d7eb7cfff74165d00367cb63f9c5f6a3))
+* **cleanup:** close job races and scope lists to accessible libraries ([#1879](https://github.com/fliks-app/fliks/issues/1879)) ([625b71c](https://github.com/fliks-app/fliks/commit/625b71cb662d7578972022c9938890eda19902bf))
+* **client:** keep a gap above and below every modal ([#1873](https://github.com/fliks-app/fliks/issues/1873)) ([99f22f7](https://github.com/fliks-app/fliks/commit/99f22f7ee32f6aad717c74d717ba700ae7a1df02))
+* **client:** narrow the modal gap to 1rem on each side ([#1874](https://github.com/fliks-app/fliks/issues/1874)) ([bc7e96c](https://github.com/fliks-app/fliks/commit/bc7e96cb54a7112f20028e2ac1695c0e2fadad08))
+* **companion-import:** keep the chosen subtitle language when a file is picked ([#1867](https://github.com/fliks-app/fliks/issues/1867)) ([d805285](https://github.com/fliks-app/fliks/commit/d8052858c2b9f4a9d57035679c9b86b2b1d3ae4a))
+* **deps:** bump capacitor core, android and ios to 8.5.3 ([#1905](https://github.com/fliks-app/fliks/issues/1905)) ([b9862f6](https://github.com/fliks-app/fliks/commit/b9862f6af23e111701f2afa28a59e812ac047ab0))
+* **deps:** patch rustsec advisories in the server and plugin sdk ([#1909](https://github.com/fliks-app/fliks/issues/1909)) ([48e2db2](https://github.com/fliks-app/fliks/commit/48e2db21e5046043639aa1df9d69bc132dab355b))
+* **desktop:** keep the Linux window on X11 so it gets a frame ([#1941](https://github.com/fliks-app/fliks/issues/1941)) ([d3ee8cb](https://github.com/fliks-app/fliks/commit/d3ee8cbf25ffb0ba7fb2e074f54d4bb6026f00d9))
+* **downloads:** keep episode select mode open after a download ([#1923](https://github.com/fliks-app/fliks/issues/1923)) ([8fcfd2f](https://github.com/fliks-app/fliks/commit/8fcfd2fe34021a16bd4def72a1e8073ad6b4ef1e))
+* **downloads:** keep show and season groups open across navigation ([#1930](https://github.com/fliks-app/fliks/issues/1930)) ([96ecbb5](https://github.com/fliks-app/fliks/commit/96ecbb59c13a5b037a5f0e67d577a48cec7708a7))
+* **downloads:** list in-progress downloads once, keep paused ones in the notification ([#1938](https://github.com/fliks-app/fliks/issues/1938)) ([b22fc99](https://github.com/fliks-app/fliks/commit/b22fc99db9fd77c4b4df99c3b1e20483598b5934))
+* **downloads:** newest download last, no in-progress summary on shows ([#1939](https://github.com/fliks-app/fliks/issues/1939)) ([2e89037](https://github.com/fliks-app/fliks/commit/2e89037ce7d9a53ddca4dc17502dbe5ecf9f22c8))
+* **downloads:** record the last native event and stop filtering picked episodes ([#1925](https://github.com/fliks-app/fliks/issues/1925)) ([9be47bc](https://github.com/fliks-app/fliks/commit/9be47bc40d26bf2742645abda6b30ab89e34a94e))
+* **i18n:** agree the selected count with its number ([#1931](https://github.com/fliks-app/fliks/issues/1931)) ([71bf373](https://github.com/fliks-app/fliks/commit/71bf3731d66586f6f36293fad6c563959869cef6))
+* **library-media:** refresh the media list after a folder scan links files ([#1908](https://github.com/fliks-app/fliks/issues/1908)) ([5fe0db1](https://github.com/fliks-app/fliks/commit/5fe0db143b7a5423bf435d81702425ce4b95bc6e))
+* **livetv:** skip scheduled live TV jobs when nothing is configured ([#1902](https://github.com/fliks-app/fliks/issues/1902)) ([2b191f6](https://github.com/fliks-app/fliks/commit/2b191f6a88c1453096aed6cd151c2173f2106935))
+* **media-card:** pull the title closer to its poster on mobile ([#1912](https://github.com/fliks-app/fliks/issues/1912)) ([bc876c9](https://github.com/fliks-app/fliks/commit/bc876c9325e261e5a5065f41c10857d3156247fb))
+* **network:** count a connectivity doubt only when the status changes ([dcac506](https://github.com/fliks-app/fliks/commit/dcac506807f4449154c3ff174c451a41961cd251))
+* **playback:** ignore stale offline progress replays ([#1917](https://github.com/fliks-app/fliks/issues/1917)) ([f3520e1](https://github.com/fliks-app/fliks/commit/f3520e1634f9e3138ba706a0b28f44060e371cb0))
+* **player:** skip the pre-load quality pin on the desktop engine ([#1881](https://github.com/fliks-app/fliks/issues/1881)) ([91eb38b](https://github.com/fliks-app/fliks/commit/91eb38badad02021ac88c84864b4bd602071953f))
+* **requests:** let a removed title be requested again ([#1878](https://github.com/fliks-app/fliks/issues/1878)) ([7d08abc](https://github.com/fliks-app/fliks/commit/7d08abce81b30d631129a25976b2c02c1d55549b))
+
+
+### Reverts
+
+* keep the Linux window on X11 so it gets a frame ([#1944](https://github.com/fliks-app/fliks/issues/1944)) ([60c00bc](https://github.com/fliks-app/fliks/commit/60c00bca8f607b9c7c3bdb8c5f740e272abefa2f))
+
 ## [5.0.0](https://github.com/fliks-app/fliks/compare/v4.5.0...v5.0.0) (2026-10-20)
 
 
