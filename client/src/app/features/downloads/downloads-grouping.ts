@@ -33,7 +33,7 @@ const numbers = (t: DownloadTask) => {
 
 const sum = (tasks: DownloadTask[]) => tasks.reduce((n, t) => n + (t.sizeBytes ?? 0), 0);
 
-/** Movies stay single entries; episodes group by series then season, sorted numerically, entries by title. */
+/** Movies stay single entries; episodes group by series then season, sorted numerically; entries oldest first, so the latest download ends the list. */
 export function groupDownloads<T extends DownloadTask>(tasks: T[]): DownloadEntry<T>[] {
   const entries: DownloadEntry<T>[] = [];
   const shows = new Map<number, T[]>();
@@ -69,6 +69,8 @@ export function groupDownloads<T extends DownloadTask>(tasks: T[]): DownloadEntr
       },
     });
   }
-  const title = (e: DownloadEntry<T>) => (e.kind === 'movie' ? e.task.media?.title : e.show.title) ?? '';
-  return entries.sort((a, b) => title(a).localeCompare(title(b)));
+  // Local ids come from Date.now(), so they stand in for a missing createdAt.
+  const at = (t: DownloadTask) => Date.parse(t.createdAt) || t.id;
+  const latest = (e: DownloadEntry<T>) => (e.kind === 'movie' ? at(e.task) : Math.max(...e.show.tasks.map(at)));
+  return entries.sort((a, b) => latest(a) - latest(b));
 }
