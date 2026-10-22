@@ -210,11 +210,7 @@ export const cacheInterceptor: HttpInterceptorFn = (req, next) => {
     if (!req.url.startsWith('/api/')) return next(req);
     return next(req).pipe(
       tap((event) => {
-        if (!(event instanceof HttpResponse)) return;
-        const prefix = resourcePrefix(req.url);
-        void invalidatePrefix(prefix);
-        // An import creates media rows.
-        if (prefix === '/api/imports') void invalidatePrefix('/api/media');
+        if (event instanceof HttpResponse) void invalidatePrefix(resourcePrefix(req.url));
       }),
     );
   }
