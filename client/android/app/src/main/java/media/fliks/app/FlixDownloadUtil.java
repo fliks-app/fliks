@@ -163,6 +163,7 @@ public class FlixDownloadUtil {
                         case Download.STATE_COMPLETED: state = "completed"; break;
                         case Download.STATE_FAILED: state = "failed"; break;
                         case Download.STATE_DOWNLOADING: state = "downloading"; break;
+                        case Download.STATE_STOPPED: state = "paused"; break;
                         default: state = "queued";
                     }
                     data.put("state", state);
@@ -232,6 +233,15 @@ public class FlixDownloadUtil {
     /** Remove a download (cancel + delete cached data). */
     public static void removeDownload(Context ctx, String id) {
         DownloadService.sendRemoveDownload(ctx, FlixDownloadService.class, id, /* foreground= */ true);
+    }
+
+    /** Hold one download; a non-zero stop reason parks it in STATE_STOPPED until cleared. */
+    public static void pauseDownload(Context ctx, String id) {
+        DownloadService.sendSetStopReason(ctx, FlixDownloadService.class, id, 1, /* foreground= */ false);
+    }
+
+    public static void resumeDownload(Context ctx, String id) {
+        DownloadService.sendSetStopReason(ctx, FlixDownloadService.class, id, Download.STOP_REASON_NONE, /* foreground= */ false);
     }
 
     /** Pause all downloads. */

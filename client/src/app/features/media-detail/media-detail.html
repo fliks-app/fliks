@@ -107,6 +107,7 @@
               [likedEpisodeIds]="like.state().episodeIds"
               (toggleEpisodeLike)="like.toggleEpisode($event)"
               (toggleEpisodeWatched)="watched.onToggleEpisodeWatched(m.id, $event.episode, $event.watched)"
+              (downloadEpisode)="downloadEpisode($event.season, $event.episode)"
             />
           }
         }

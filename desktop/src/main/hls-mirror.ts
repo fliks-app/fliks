@@ -1,7 +1,7 @@
-import { net } from 'electron';
 import { createWriteStream, promises as fsp } from 'node:fs';
 import path from 'node:path';
 import { Readable } from 'node:stream';
+import type { ClientRequest } from 'node:http';
 
 // Mirror a transcoded HLS stream to disk so mpv can play it back offline, the
 // desktop equivalent of iOS's .movpkg / Android's ExoPlayer cache. Fetches the
@@ -10,13 +10,25 @@ import { Readable } from 'node:stream';
 // segments are pulled in playlist order so the backend's on-demand transcode
 // advances linearly (no seek/respawn). Returns the local master.m3u8 path.
 
-function readableOf(res: Electron.IncomingMessage): Readable {
+function readableOf(res: unknown): Readable {
   return res as unknown as Readable;
 }
 
-function fetchText(url: string, onRequest?: (abort: () => void) => void): Promise<string> {
+type RequestFn = (url: string) => Pick<ClientRequest, 'on' | 'end' | 'abort'>;
+
+// Loaded lazily so the module imports under plain node (tests inject `request`).
+const netRequest: RequestFn = (url) => {
+  const { net } = require('electron') as typeof import('electron');
+  return net.request({ url }) as unknown as ReturnType<RequestFn>;
+};
+
+function fetchText(
+  url: string,
+  onRequest: ((abort: () => void) => void) | undefined,
+  request: RequestFn,
+): Promise<string> {
   return new Promise((resolve, reject) => {
-    const req = net.request({ url });
+    const req = request(url);
     onRequest?.(() => req.abort());
     req.on('response', (res) => {
       const body = readableOf(res);
@@ -38,10 +50,14 @@ function fetchText(url: string, onRequest?: (abort: () => void) => void): Promis
 function fetchToFile(
   url: string,
   dest: string,
-  onRequest?: (abort: () => void) => void,
+  onRequest: ((abort: () => void) => void) | undefined,
+  request: RequestFn,
 ): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const req = net.request({ url });
+  // Write to a temp name and rename, so an interrupted fetch never leaves a
+  // partial file that a resume would take for complete.
+  const tmp = `${dest}.part`;
+  return new Promise<void>((resolve, reject) => {
+    const req = request(url);
     onRequest?.(() => req.abort());
     req.on('response', (res) => {
       const body = readableOf(res);
@@ -50,7 +66,7 @@ function fetchToFile(
         reject(new Error(`HTTP ${res.statusCode}`));
         return;
       }
-      const out = createWriteStream(dest);
+      const out = createWriteStream(tmp);
       out.on('error', reject);
       // pipe() doesn't close the dest when the SOURCE errors — destroy it here.
       body.on('error', (e) => {
@@ -58,12 +74,21 @@ function fetchToFile(
         reject(e);
       });
       body.pipe(out);
-      out.on('finish', () => resolve());
+      out.on('finish', () => fsp.rename(tmp, dest).then(resolve, reject));
     });
     req.on('error', reject);
     req.end();
+  }).catch(async (e) => {
+    await fsp.rm(tmp, { force: true });
+    throw e;
   });
 }
+
+const exists = (p: string): Promise<boolean> =>
+  fsp.access(p).then(
+    () => true,
+    () => false,
+  );
 
 /** Last path component of a URI, query stripped (e.g. `seg-0001.m4s`). */
 function basename(uri: string): string {
@@ -78,10 +103,13 @@ interface MirrorOpts {
   cancelled: () => boolean;
   /** Receives an abort handle for each in-flight fetch so a cancel is immediate. */
   onRequest?: (abort: () => void) => void;
+  /** Request factory; defaults to Electron's net (overridden by tests). */
+  request?: RequestFn;
 }
 
 export async function mirrorHls(opts: MirrorOpts): Promise<string> {
   const { masterUrl, quality, destDir, onProgress, cancelled, onRequest } = opts;
+  const request = opts.request ?? netRequest;
   const origin = new URL(masterUrl).origin;
   const token = new URL(masterUrl).searchParams.get('token') ?? '';
 
@@ -99,7 +127,7 @@ export async function mirrorHls(opts: MirrorOpts): Promise<string> {
   };
 
   await fsp.mkdir(destDir, { recursive: true });
-  const masterText = await fetchText(masterUrl, onRequest);
+  const masterText = await fetchText(masterUrl, onRequest, request);
   const mlines = masterText.split(/\r?\n/);
 
   // Pick one variant: the rung whose URI matches the requested quality, else
@@ -148,7 +176,7 @@ export async function mirrorHls(opts: MirrorOpts): Promise<string> {
   // the progress denominator — is known before pulling segments.
   const parsed = [];
   for (const c of children) {
-    const text = await fetchText(c.url, onRequest);
+    const text = await fetchText(c.url, onRequest, request);
     const init = /#EXT-X-MAP:URI="([^"]+)"/.exec(text)?.[1];
     const segs = text
       .split(/\r?\n/)
@@ -158,6 +186,10 @@ export async function mirrorHls(opts: MirrorOpts): Promise<string> {
   }
   const total = parsed.reduce((n, p) => n + p.segs.length + (p.init ? 1 : 0), 0);
   let received = 0;
+  // A file already on disk was completed by an earlier run (writes are atomic).
+  const fetchOnce = async (url: string, dest: string): Promise<void> => {
+    if (!(await exists(dest))) await fetchToFile(url, dest, onRequest, request);
+  };
 
   for (const p of parsed) {
     if (cancelled()) throw new Error('cancelled');
@@ -167,12 +199,12 @@ export async function mirrorHls(opts: MirrorOpts): Promise<string> {
     let initName: string | undefined;
     if (p.init) {
       initName = basename(p.init);
-      await fetchToFile(resolveFrom(p.child.url, p.init), path.join(cdir, initName), onRequest);
+      await fetchOnce(resolveFrom(p.child.url, p.init), path.join(cdir, initName));
       onProgress(++received, total);
     }
     for (const seg of p.segs) {
       if (cancelled()) throw new Error('cancelled');
-      await fetchToFile(resolveFrom(p.child.url, seg), path.join(cdir, basename(seg)), onRequest);
+      await fetchOnce(resolveFrom(p.child.url, seg), path.join(cdir, basename(seg)));
       onProgress(++received, total);
     }
 

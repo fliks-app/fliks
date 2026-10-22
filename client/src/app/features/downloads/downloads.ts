@@ -2,12 +2,12 @@ import {
   Component,
   signal,
   computed,
-  effect,
   inject,
   OnInit,
   OnDestroy,
 } from '@angular/core';
 import { Capacitor } from '@capacitor/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Router } from '@angular/router';
 import { NgTemplateOutlet } from '@angular/common';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
@@ -25,7 +25,7 @@ import {
   LucidePause,
   LucideX,
 } from '@lucide/angular';
-import { DownloadNotificationService } from '../../core/services/download-notification.service';
+import { RouterLink } from '@angular/router';
 import { ToastService } from '../../core/services/toast.service';
 import { formatBytes } from '../../shared/utils/download-format';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
@@ -44,6 +44,7 @@ export interface DisplayDownloadTask extends DownloadTask {
   selector: 'app-downloads',
   imports: [
     NgTemplateOutlet,
+    RouterLink,
     CachedSrcDirective,
     TranslatePipe,
     AutoDownloadRuleComponent,
@@ -72,7 +73,6 @@ export class DownloadsComponent implements OnInit, OnDestroy {
   private readonly translate = inject(TranslateService);
   private readonly toast = inject(ToastService);
   private readonly router = inject(Router);
-  protected readonly native = inject(DownloadNotificationService);
 
   /** Ids being re-queued, so the button can't be double-tapped into two
    *  downloads of the same file. */
@@ -93,10 +93,7 @@ export class DownloadsComponent implements OnInit, OnDestroy {
   /** Native/web state synced on every load(), keyed by taskId. */
   private readonly nativeState = signal<Map<number, { progress: number; status: string }>>(new Map());
 
-  /** React to download manager events for real-time UI updates */
-  private readonly eventEffect = effect(() => {
-    const event = this.dlManager.lastDownloadEvent();
-    if (!event) return;
+  private readonly eventSub = this.dlManager.downloadEvents.pipe(takeUntilDestroyed()).subscribe((event) => {
     if (event.type === 'progress') {
       const status = event.status === 'downloading' ? 'transcoding'
         : (event.status ?? 'transcoding');
@@ -143,9 +140,36 @@ export class DownloadsComponent implements OnInit, OnDestroy {
 
   protected readonly auto = inject(AutoDownloadService);
   readonly entries = computed(() => groupDownloads(this.items()));
-  readonly hasActive = computed(() =>
-    this.isNative && this.items().some((t) => ['queued', 'transcoding', 'pending', 'downloading'].includes(t.status)),
-  );
+  readonly pausable = computed(() => this.items().filter((t) => DownloadsComponent.PAUSABLE.includes(t.status)));
+  readonly paused = computed(() => this.items().filter((t) => t.status === 'paused'));
+  private static readonly PAUSABLE = ['queued', 'transcoding', 'pending', 'downloading'];
+
+  isPausable(task: DownloadTask): boolean {
+    return DownloadsComponent.PAUSABLE.includes(task.status);
+  }
+
+  pauseItem(task: DownloadTask) {
+    void this.dlManager.pauseDownload(task);
+  }
+
+  resumeItem(task: DownloadTask) {
+    void this.dlManager.resumeDownload(task);
+  }
+
+  pauseAll() {
+    for (const t of this.pausable()) this.pauseItem(t);
+  }
+
+  resumeAll() {
+    for (const t of this.paused()) this.resumeItem(t);
+  }
+
+  /** Detail page of the episode (or the movie) a download belongs to. */
+  detailRoute(task: DownloadTask): string[] | null {
+    if (!task.mediaId) return null;
+    if (task.episodeId != null) return ['/series', String(task.mediaId), 'episode', String(task.episodeId)];
+    return [task.media?.type === 'series' ? '/series' : '/movies', String(task.mediaId)];
+  }
   readonly totalBytes = computed(() => this.items().reduce((n, t) => n + (t.sizeBytes ?? 0), 0));
 
   ngOnInit() {
@@ -167,7 +191,7 @@ export class DownloadsComponent implements OnInit, OnDestroy {
 
   private applyFilter(list: DownloadTask[]) {
     const filtered = list.filter((t) =>
-      ['transcoding', 'pending', 'queued', 'downloading', 'failed', 'ready'].includes(
+      ['transcoding', 'pending', 'queued', 'downloading', 'paused', 'failed', 'ready'].includes(
         t.status,
       ),
     );

@@ -57,6 +57,8 @@ export interface DownloadTask {
     title: string;
     posterUrl: string | null;
     type: string;
+    /** Title logo, kept so the offline player header has it. */
+    logoUrl?: string | null;
   };
 }
 

@@ -19,24 +19,28 @@
 
     <div class="flex-1 min-w-0">
       @if (poster || !task.episodeLabel) {
-        <h3 class="font-medium text-sm line-clamp-1">{{ task.media?.title ?? '-' }}</h3>
+        <a class="block font-medium text-base line-clamp-1 hover:underline" [routerLink]="detailRoute(task)">{{ task.media?.title ?? '-' }}</a>
       }
       @if (task.episodeLabel) {
-        <p class="text-xs line-clamp-1" [class]="poster ? 'text-base-content/60' : 'font-medium text-sm'">{{ task.episodeLabel }}</p>
+        <a class="block line-clamp-1 hover:underline" [class]="poster ? 'text-sm text-base-content/60' : 'font-medium text-base'"
+           [routerLink]="detailRoute(task)">{{ task.episodeLabel }}</a>
       }
-      <p class="text-xs text-base-content/50 mt-0.5">
+      <p class="text-sm text-base-content/50 mt-0.5">
         {{ task.quality }}@if (task.sizeBytes) { · {{ formatBytes(task.sizeBytes) }} }
       </p>
 
       @if (task.status === 'queued') {
         <progress class="progress progress-info w-full h-1.5 mt-2"></progress>
-        <p class="text-[10px] text-base-content/40 mt-0.5">{{ 'downloads.queued' | translate }}</p>
+        <p class="text-sm text-base-content/50 mt-1">{{ 'downloads.queued' | translate }}</p>
+      } @else if (task.status === 'paused') {
+        <progress class="progress w-full h-1.5 mt-2" [value]="task.progress" max="100"></progress>
+        <p class="text-sm text-base-content/50 mt-1">{{ 'downloads.paused' | translate }} {{ task.progress }}%</p>
       } @else if (task.status === 'transcoding' || task.status === 'pending' || task.status === 'downloading') {
         <progress class="progress progress-info w-full h-1.5 mt-2" [value]="task.progress" max="100"></progress>
-        <p class="text-[10px] text-base-content/40 mt-0.5">{{ 'downloads.downloading' | translate }} {{ task.progress }}%</p>
+        <p class="text-sm text-base-content/50 mt-1">{{ 'downloads.downloading' | translate }} {{ task.progress }}%</p>
       } @else if (task.status === 'failed') {
-        <div class="flex items-center gap-1 mt-1 text-error text-xs">
-          <svg lucideAlertCircle class="h-3 w-3"></svg>
+        <div class="flex items-center gap-1 mt-1 text-error text-sm">
+          <svg lucideAlertCircle class="h-4 w-4"></svg>
           {{ 'downloads.failed' | translate }}
         </div>
       } @else if (task.status === 'ready') {
@@ -49,6 +53,14 @@
         @if (task.status === 'ready') {
           <button class="btn btn-ghost btn-sm btn-square" (click)="playOffline(task)">
             <svg lucidePlay class="h-4 w-4"></svg>
+          </button>
+        } @else if (task.status === 'paused') {
+          <button class="btn btn-ghost btn-sm btn-square" [attr.aria-label]="'downloads.resume' | translate" (click)="resumeItem(task)">
+            <svg lucidePlay class="h-4 w-4"></svg>
+          </button>
+        } @else if (isPausable(task)) {
+          <button class="btn btn-ghost btn-sm btn-square" [attr.aria-label]="'downloads.pause' | translate" (click)="pauseItem(task)">
+            <svg lucidePause class="h-4 w-4"></svg>
           </button>
         }
         @if (task.status === 'failed') {
@@ -80,22 +92,22 @@
     @if (totalBytes() > 0) {
       <span class="text-sm text-base-content/60">{{ 'downloads.total_used' | translate:{ size: formatBytes(totalBytes()) } }}</span>
     }
-    @if (hasActive()) {
-      <button type="button" class="btn btn-sm ms-auto" (click)="native.paused() ? native.resumeAll() : native.pauseAll()">
-        @if (native.paused()) {
-          <svg lucidePlay class="h-4 w-4"></svg>
-          {{ 'downloads.resume_all' | translate }}
-        } @else {
-          <svg lucidePause class="h-4 w-4"></svg>
-          {{ 'downloads.pause_all' | translate }}
-        }
+    @if (pausable().length > 0) {
+      <button type="button" class="btn btn-sm ms-auto" (click)="pauseAll()">
+        <svg lucidePause class="h-4 w-4"></svg>
+        {{ 'downloads.pause_all' | translate }}
+      </button>
+    } @else if (paused().length > 0) {
+      <button type="button" class="btn btn-sm ms-auto" (click)="resumeAll()">
+        <svg lucidePlay class="h-4 w-4"></svg>
+        {{ 'downloads.resume_all' | translate }}
       </button>
     }
     @if (items().length > 0) {
       <button
         type="button"
         class="btn btn-sm"
-        [class.ms-auto]="!hasActive()"
+        [class.ms-auto]="!pausable().length && !paused().length"
         [class.btn-active]="selectMode()"
         [attr.aria-pressed]="selectMode()"
         (click)="toggleSelectMode()"
@@ -137,12 +149,12 @@
                 }
               </div>
               <div class="flex-1 min-w-0">
-                <h3 class="font-medium text-sm line-clamp-1">{{ show.title }}</h3>
-                <p class="text-xs text-base-content/50 mt-0.5">
+                <h3 class="font-medium text-base line-clamp-1">{{ show.title }}</h3>
+                <p class="text-sm text-base-content/50 mt-0.5">
                   {{ (show.tasks.length === 1 ? 'media_detail.episode_count_one' : 'media_detail.episode_count_other') | translate:{ count: show.tasks.length } }}@if (show.sizeBytes) { · {{ formatBytes(show.sizeBytes) }} }
                 </p>
                 @if (auto.enabled && auto.seriesKeep(show.mediaId); as keep) {
-                  <p class="text-xs text-primary mt-0.5">{{ 'downloads.auto_next' | translate:{ count: keep } }}</p>
+                  <p class="text-sm text-primary mt-0.5">{{ 'downloads.auto_next' | translate:{ count: keep } }}</p>
                 }
               </div>
               @if (!selectMode()) {
@@ -169,7 +181,7 @@
                       } @else {
                         {{ season.seasonNumber | seasonLabel }}
                       }
-                      <span class="text-xs font-normal text-base-content/50">
+                      <span class="text-sm font-normal text-base-content/50">
                         · {{ (season.tasks.length === 1 ? 'media_detail.episode_count_one' : 'media_detail.episode_count_other') | translate:{ count: season.tasks.length } }}@if (season.sizeBytes) { · {{ formatBytes(season.sizeBytes) }} }
                       </span>
                     </span>

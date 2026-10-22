@@ -51,6 +51,8 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
         CAPPluginMethod(name: "getDownloads", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "isDownloaded", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getOfflineUrl", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "pauseDownload", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "resumeDownload", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "pauseDownloads", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "resumeDownloads", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setActivityCopy", returnType: CAPPluginReturnPromise),
@@ -102,6 +104,8 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
     /// Set by `pauseDownloads`, so a finishing task doesn't pull the next
     /// request out of the queue behind the user's back.
     private var paused = false
+    /// Downloads held one by one; they keep their task but give up their slot.
+    private var pausedIds: Set<String> = []
 
     /// The queue's Live Activity — one for the whole batch, not one per item.
     private var activity: Activity<DownloadActivityAttributes>?
@@ -250,7 +254,7 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
 
     // MARK: - Queue
 
-    private var inFlightCount: Int { activeTasks.count + starting.count }
+    private var inFlightCount: Int { activeTasks.keys.filter { !pausedIds.contains($0) }.count + starting.count }
 
     /// Start as many queued downloads as the concurrency cap allows.
     private func pumpQueue() {
@@ -356,6 +360,7 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
             || pending.contains { $0.id == id }
         activeTasks[id]?.cancel()
         activeTasks.removeValue(forKey: id)
+        pausedIds.remove(id)
         starting.remove(id)
         pending.removeAll { $0.id == id }
         progressById.removeValue(forKey: id)
@@ -401,7 +406,7 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
                 arr.append([
                     "id": id,
                     "progress": Int(self.progressById[id] ?? 0),
-                    "state": "downloading",
+                    "state": self.pausedIds.contains(id) ? "paused" : "downloading",
                 ])
             }
             self.activeTasks = live
@@ -490,6 +495,22 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
         call.resolve(["url": url.absoluteString])
     }
 
+    @objc func pauseDownload(_ call: CAPPluginCall) {
+        guard let id = call.getString("id"), let task = activeTasks[id] else { return call.resolve() }
+        pausedIds.insert(id)
+        task.suspend()
+        notifyListeners("downloadProgress", data: ["id": id, "progress": Int(progressById[id] ?? 0), "state": "paused"])
+        pumpQueue()
+        call.resolve()
+    }
+
+    @objc func resumeDownload(_ call: CAPPluginCall) {
+        guard let id = call.getString("id"), pausedIds.remove(id) != nil else { return call.resolve() }
+        if !paused { activeTasks[id]?.resume() }
+        notifyListeners("downloadProgress", data: ["id": id, "progress": Int(progressById[id] ?? 0), "state": "downloading"])
+        call.resolve()
+    }
+
     @objc func pauseDownloads(_ call: CAPPluginCall) {
         paused = true
         for task in activeTasks.values { task.suspend() }
@@ -498,7 +519,7 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
 
     @objc func resumeDownloads(_ call: CAPPluginCall) {
         paused = false
-        for task in activeTasks.values { task.resume() }
+        for (id, task) in activeTasks where !pausedIds.contains(id) { task.resume() }
         pumpQueue()
         call.resolve()
     }
@@ -603,6 +624,7 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
     public func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
         guard let id = task.taskDescription else { return }
         activeTasks.removeValue(forKey: id)
+        pausedIds.remove(id)
 
         if let error = error as NSError?, error.code != NSURLErrorCancelled {
             progressById.removeValue(forKey: id)

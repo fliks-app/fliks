@@ -264,7 +264,7 @@ export class MediaDetailSeasonsComponent {
   }
 
   episodeActions(season: Season, ep: Episode): CardAction[] {
-    if (this.hideControls() || this.tv.isTv() || !ep.hasFile) return [];
+    if (this.tv.isTv() || !ep.hasFile) return [];
     return [{ labelKey: 'downloads.download', icon: 'download', run: () => this.downloadEpisode.emit({ season, episode: ep }) }];
   }
 

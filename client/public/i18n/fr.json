@@ -1865,7 +1865,11 @@
     "confirm_delete_many": "Supprimer {{count}} téléchargements ? Les fichiers seront retirés de cet appareil.",
     "confirm_delete_group": "Supprimer {{count}} téléchargements de {{name}} ? Les fichiers seront retirés de cet appareil.",
     "pause_all": "Tout mettre en pause",
-    "resume_all": "Tout reprendre"
+    "resume_all": "Tout reprendre",
+    "paused": "En pause",
+    "pause": "Mettre en pause",
+    "resume": "Reprendre",
+    "auto_rule_label": "Téléchargement auto :"
   },
   "setup_checklist": {
     "title": "Configuration",

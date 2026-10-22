@@ -111,6 +111,7 @@ export class OfflineStorageService {
     hlsUrl: string,
     mediaFileId: number,
     meta: { title: string; episode?: string },
+    gate: () => Promise<void> | undefined,
     onProgress?: (progress: number) => void,
   ): Promise<string | null> {
     if (this.isNative) return null;
@@ -123,15 +124,14 @@ export class OfflineStorageService {
     const player = new shaka.Player();
     await player.attach(video);
 
-    // Configure auth header for segment fetches
+    // A promise-returning filter delays the request: pausing holds the next segment instead of aborting the store.
     const token = this.auth.accessToken;
-    if (token) {
-      player.getNetworkingEngine()?.registerRequestFilter((_type: any, request: any) => {
-        if (request.uris?.[0]?.includes('/api/')) {
-          request.headers['Authorization'] = `Bearer ${token}`;
-        }
-      });
-    }
+    player.getNetworkingEngine()?.registerRequestFilter(async (_type: any, request: any) => {
+      await gate();
+      if (token && request.uris?.[0]?.includes('/api/')) {
+        request.headers['Authorization'] = `Bearer ${token}`;
+      }
+    });
 
     const storage = new shaka.offline.Storage(player);
     storage.configure({

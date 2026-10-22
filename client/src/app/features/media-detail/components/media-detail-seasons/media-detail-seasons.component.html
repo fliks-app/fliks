@@ -387,6 +387,7 @@
             [link]="episodeRoute(ep)"
             [playlistMediaId]="m.id"
             [playlistEpisodeId]="ep.id"
+            [extraActions]="selSeason ? episodeActions(selSeason, ep) : []"
             [liked]="likedEpisodeIds().includes(ep.id)"
             (likeToggled)="toggleEpisodeLike.emit(ep.id)"
             [playable]="ep.hasFile"
