@@ -308,7 +308,7 @@ export class DownloadManagerService {
   }
 
   /** True when a (non-failed) download for this file already exists. */
-  private isOnDevice(mediaFileId: number): boolean {
+  isOnDevice(mediaFileId: number): boolean {
     return this.cache.load().some((t) => t.mediaFileId === mediaFileId && t.status !== 'failed');
   }
 

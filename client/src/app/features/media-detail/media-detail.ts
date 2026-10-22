@@ -1038,10 +1038,16 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     this.pendingDownloads = null;
     if (pending) {
       const targets = ev.unwatchedOnly ? pending.filter((t) => !t.watched) : pending;
+      // Announced up front: the batch creates its downloads one by one, which takes a while.
+      const count = targets.filter((t) => !t.mediaFileId || !this.downloadManager.isOnDevice(t.mediaFileId)).length;
+      if (count) {
+        this.toast.success(
+          this.translate.instant(count === 1 ? 'downloads.episodes_queued_one' : 'downloads.episodes_queued_other', { count }),
+        );
+      }
       const { started, failed, skipped } = await this.downloadManager.createMany(targets, ev.quality);
-      if (started) this.toast.success(this.translate.instant('downloads.started'));
-      else if (failed) this.toast.error(this.translate.instant('downloads.error'));
-      else this.toast.info(this.translate.instant(nothingStartedKey(skipped, targets.length)));
+      if (failed) this.toast.error(this.translate.instant('downloads.error'));
+      else if (!started) this.toast.info(this.translate.instant(nothingStartedKey(skipped, targets.length)));
       return;
     }
     try {
