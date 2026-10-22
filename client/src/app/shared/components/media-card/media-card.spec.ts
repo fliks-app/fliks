@@ -73,9 +73,10 @@ async function createFixture(
         useValue: {
           hasPermission: () => !!role.isAdmin,
           sharingDisabled: () => !!role.sharingDisabled,
+          user: () => null,
         },
       },
-      { provide: DeviceService, useValue: { input: () => 'mouse', isTouch: () => false } },
+      { provide: DeviceService, useValue: { input: () => 'mouse', isTouch: () => false, isTv: () => !!role.isTv, isDesktopNative: () => false } },
       { provide: AddToPlaylistService, useValue: addToPlaylist },
       { provide: RecommendService, useValue: recommend },
       { provide: PlayableMediaService, useValue: playableMedia },
