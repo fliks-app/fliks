@@ -1855,6 +1855,8 @@
     "failed": "Échec",
     "offline": "Hors ligne",
     "confirm_delete": "Supprimer ce téléchargement ? Le fichier sera supprimé de cet appareil.",
+    "confirm_cancel": "Arrêter ce téléchargement ? La partie déjà téléchargée sera supprimée.",
+    "cancel_download": "Arrêter",
     "retry": "Réessayer",
     "queued": "En attente",
     "notif_active_count": "{{count}} téléchargements",

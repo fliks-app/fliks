@@ -1855,6 +1855,8 @@
     "failed": "Fehlgeschlagen",
     "offline": "Offline",
     "confirm_delete": "Diesen Download löschen? Die Datei wird von diesem Gerät gelöscht.",
+    "confirm_cancel": "Diesen Download abbrechen? Der bereits heruntergeladene Teil wird entfernt.",
+    "cancel_download": "Abbrechen",
     "retry": "Erneut versuchen",
     "queued": "In Warteschlange",
     "notif_active_count": "{{count}} Downloads",

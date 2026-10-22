@@ -1053,11 +1053,11 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
   async onRemoveDownload() {
     const task = this.fileDownload();
     if (!task) return;
-    if (isActive(task.status)) return this.downloadManager.deleteDownload(task);
+    const active = isActive(task.status);
     const confirmed = await this.confirmation.confirm({
       title: this.translate.instant('common.confirm'),
-      message: this.translate.instant('downloads.confirm_delete'),
-      confirmLabel: this.translate.instant('common.delete'),
+      message: this.translate.instant(active ? 'downloads.confirm_cancel' : 'downloads.confirm_delete'),
+      confirmLabel: this.translate.instant(active ? 'downloads.cancel_download' : 'common.delete'),
       variant: 'danger',
     });
     if (confirmed) await this.downloadManager.deleteDownload(task);

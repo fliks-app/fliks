@@ -1855,6 +1855,8 @@
     "failed": "Failed",
     "offline": "Offline",
     "confirm_delete": "Delete this download? The file will be removed from this device.",
+    "confirm_cancel": "Stop this download? The part already downloaded will be removed.",
+    "cancel_download": "Stop",
     "retry": "Retry",
     "queued": "Queued",
     "notif_active_count": "{{count}} downloads",

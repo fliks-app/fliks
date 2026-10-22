@@ -1855,6 +1855,8 @@
     "failed": "Error",
     "offline": "Sin conexión",
     "confirm_delete": "¿Eliminar esta descarga? El archivo se eliminará de este dispositivo.",
+    "confirm_cancel": "¿Detener esta descarga? Se eliminará la parte ya descargada.",
+    "cancel_download": "Detener",
     "retry": "Reintentar",
     "queued": "En cola",
     "notif_active_count": "{{count}} descargas",
