@@ -1,5 +1,6 @@
 import { Injectable, signal } from '@angular/core';
 import { Capacitor } from '@capacitor/core';
+import type { ConnectionStatus } from '@capacitor/network';
 
 @Injectable({ providedIn: 'root' })
 export class NetworkService {
@@ -20,8 +21,16 @@ export class NetworkService {
     if (Capacitor.isNativePlatform()) {
       void import('@capacitor/network')
         .then(({ Network }) => {
-          void Network.getStatus().then((s) => this.isOnline.set(s.connected));
+          let last = '';
+          const key = (s: ConnectionStatus) => `${s.connected}:${s.connectionType}`;
+          void Network.getStatus().then((s) => {
+            last = key(s);
+            this.isOnline.set(s.connected);
+          });
+          // Android repeats an unchanged status on every link-property update, every few seconds on some phones.
           void Network.addListener('networkStatusChange', (s) => {
+            if (key(s) === last) return;
+            last = key(s);
             this.isOnline.set(s.connected);
             this.reportDoubt();
           });
