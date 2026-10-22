@@ -22,6 +22,10 @@ export class OrphanScanModalComponent {
 
   close() {
     this.dialogEl()?.nativeElement.close();
+  }
+
+  // Escape closes the dialog natively, without going through close().
+  onClosed() {
     if (this.panel()?.anyLinked()) this.linked.emit();
   }
 }

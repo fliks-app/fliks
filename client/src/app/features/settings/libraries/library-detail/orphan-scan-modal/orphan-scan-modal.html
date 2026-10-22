@@ -1,4 +1,4 @@
-<dialog #dialog class="modal">
+<dialog #dialog class="modal" (close)="onClosed()">
   <div class="modal-box max-w-3xl flex flex-col overflow-hidden">
     <div class="shrink-0">
       <app-modal-header>
