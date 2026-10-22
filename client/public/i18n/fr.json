@@ -908,7 +908,6 @@
     "sort_added": "Date d'ajout",
     "sort_rating": "Note TMDB",
     "bulk_edit": "Édition groupée",
-    "bulk_selected": "{{count}} sélectionné(s)",
     "bulk_apply": "Appliquer",
     "bulk_cancel": "Annuler",
     "bulk_select_all": "Tout sélectionner",
@@ -3231,7 +3230,8 @@
     "refresh": "Actualiser"
   },
   "bulk": {
-    "selected": "{{count}} sélectionnés",
+    "selected_one": "{{count}} sélectionné",
+    "selected_other": "{{count}} sélectionnés",
     "select_all": "Tout sélectionner",
     "select_row": "Sélectionner {{name}}",
     "clear": "Annuler la sélection",

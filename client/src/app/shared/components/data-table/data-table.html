@@ -44,7 +44,7 @@
     >
       @if (bulkSelect() && selectedRows().length > 0) {
         <span class="text-sm font-medium">
-          {{ 'bulk.selected' | translate: { count: selectedRows().length } }}
+          {{ (selectedRows().length === 1 ? 'bulk.selected_one' : 'bulk.selected_other') | translate: { count: selectedRows().length } }}
         </span>
         <div class="flex flex-wrap gap-2 ms-auto">
           @for (item of batchActions(); track item.action.labelKey) {

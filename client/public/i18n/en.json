@@ -908,7 +908,6 @@
     "sort_added": "Date added",
     "sort_rating": "TMDB rating",
     "bulk_edit": "Bulk edit",
-    "bulk_selected": "{{count}} selected",
     "bulk_apply": "Apply",
     "bulk_cancel": "Cancel",
     "bulk_select_all": "Select all",
@@ -3231,7 +3230,8 @@
     "refresh": "Refresh"
   },
   "bulk": {
-    "selected": "{{count}} selected",
+    "selected_one": "{{count}} selected",
+    "selected_other": "{{count}} selected",
     "select_all": "Select every row",
     "select_row": "Select {{name}}",
     "clear": "Clear",
