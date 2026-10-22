@@ -31,7 +31,9 @@
       <div class="flex flex-col gap-2">
         @for (q of qualities(); track q.key) {
           <button
-            class="btn btn-outline justify-between gap-3"
+            class="btn justify-between gap-3"
+            [class.btn-outline]="q.key !== preselected()"
+            [class.btn-primary]="q.key === preselected()"
             [disabled]="downloading()"
             (click)="selectQuality(q.key)"
           >

@@ -44,6 +44,7 @@ interface DownloadNotificationPlugin {
   resumeDownloads(): Promise<void>;
   setActivityCopy(opts: DownloadActivityCopy): Promise<void>;
   setMaxConcurrentDownloads(opts: { max: number }): Promise<void>;
+  setWifiOnly(opts: { enabled: boolean }): Promise<void>;
   dismissActivity(): Promise<void>;
   getDownloadSize(opts: { id: string }): Promise<{ bytes: number }>;
   addListener(event: string, cb: (data: any) => void): Promise<any>;
@@ -59,6 +60,8 @@ export class DownloadNotificationService {
   private readonly isNative = Capacitor.isNativePlatform();
 
   readonly nativeEvent = signal<NativeDownloadEvent | null>(null);
+  /** True while the native queue is paused by pauseAll(). */
+  readonly paused = signal(false);
   private eventSeq = 0;
 
   constructor() {
@@ -113,6 +116,25 @@ export class DownloadNotificationService {
   setMaxConcurrentDownloads(max: number): void {
     if (!this.isNative || !DownloadNotification) return;
     DownloadNotification.setMaxConcurrentDownloads({ max }).catch(() => {});
+  }
+
+  /** Android applies it at once; iOS reads it when the background session is next built (app launch). */
+  setWifiOnly(enabled: boolean): void {
+    if (!this.isNative || !DownloadNotification) return;
+    DownloadNotification.setWifiOnly({ enabled }).catch(() => {});
+  }
+
+  /** Pause every native transfer; downloads stay queued until resumeAll(). */
+  async pauseAll(): Promise<void> {
+    if (!this.isNative || !DownloadNotification) return;
+    await DownloadNotification.pauseDownloads();
+    this.paused.set(true);
+  }
+
+  async resumeAll(): Promise<void> {
+    if (!this.isNative || !DownloadNotification) return;
+    await DownloadNotification.resumeDownloads();
+    this.paused.set(false);
   }
 
   /** Remove a download (cancel + delete cached data). */

@@ -156,6 +156,12 @@ describe('DownloadManagerService.createMany', () => {
     const res = await service.createMany([target(1), target(2)], '720p');
     expect(res).toEqual({ started: 1, failed: 1 });
   });
+
+  it('stops before the next target once stop() turns true', async () => {
+    const { service, create } = setup([], { 1: ['720p'], 2: ['720p'] });
+    const res = await service.createMany([target(1), target(2)], '720p', { stop: () => create.mock.calls.length > 0 });
+    expect(res).toEqual({ started: 1, failed: 0 });
+  });
 });
 
 describe('pickRung', () => {

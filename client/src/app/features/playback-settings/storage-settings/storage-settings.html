@@ -39,6 +39,66 @@
 
     <div class="divider my-0"></div>
 
+    <!-- Default quality -->
+    <div class="flex items-center justify-between gap-4">
+      <div>
+        <p class="font-medium">{{ 'storage_settings.default_quality' | translate }}</p>
+        <p class="text-sm text-base-content/60">{{ 'storage_settings.default_quality_hint' | translate }}</p>
+      </div>
+      <select
+        appTvSelect
+        class="select select-sm select-bordered w-32"
+        [ngModel]="defaultQuality()"
+        (ngModelChange)="onDefaultQualityChange($event)"
+      >
+        @for (choice of qualityChoices; track choice) {
+          <option [ngValue]="choice">
+            {{ choice === '' ? ('storage_settings.quality_best' | translate) : choice === 'original' ? ('downloads.original' | translate) : choice }}
+          </option>
+        }
+      </select>
+    </div>
+
+    @if (showWifiOnly) {
+      <div class="divider my-0"></div>
+
+      <!-- Wi-Fi only -->
+      <div class="flex items-center justify-between gap-4">
+        <div>
+          <p class="font-medium">{{ 'storage_settings.wifi_only' | translate }}</p>
+          <p class="text-sm text-base-content/60">{{ 'storage_settings.wifi_only_hint' | translate }}</p>
+        </div>
+        <input
+          type="checkbox"
+          class="toggle toggle-primary"
+          [ngModel]="wifiOnly()"
+          (ngModelChange)="onWifiOnlyChange($event)"
+        />
+      </div>
+    }
+
+    @if (autoDownload.enabled) {
+      <div class="divider my-0"></div>
+
+      <!-- Auto-download storage cap -->
+      <div class="flex items-center justify-between gap-4">
+        <div>
+          <p class="font-medium">{{ 'storage_settings.auto_cap' | translate }}</p>
+          <p class="text-sm text-base-content/60">{{ 'storage_settings.auto_cap_hint' | translate }}</p>
+        </div>
+        <input
+          type="number"
+          min="0"
+          step="1"
+          class="input input-sm input-bordered w-20"
+          [ngModel]="autoCapGb()"
+          (ngModelChange)="onAutoCapChange($event)"
+        />
+      </div>
+    }
+
+    <div class="divider my-0"></div>
+
     <!-- Delete all downloads -->
     <div class="flex items-center justify-between">
       <div>

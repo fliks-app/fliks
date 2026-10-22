@@ -55,6 +55,7 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
         CAPPluginMethod(name: "resumeDownloads", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setActivityCopy", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setMaxConcurrentDownloads", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setWifiOnly", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "dismissActivity", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getDownloadSize", returnType: CAPPluginReturnPromise),
     ]
@@ -69,6 +70,8 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
     private static let assetsDefaultsKey = "fliks_offline_assets"
     /// UserDefaults key for the ids whose transfer actually finished.
     private static let completedDefaultsKey = "fliks_offline_completed"
+    /// Wi-Fi only; read when the session is built, so a change applies at next launch.
+    private static let wifiOnlyDefaultsKey = "fliks_downloads_wifi_only"
 
     private var downloadSession: AVAssetDownloadURLSession!
     /// taskDescription (our download id) → active aggregate download task.
@@ -164,6 +167,7 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
         let config = URLSessionConfiguration.background(
             withIdentifier: BackgroundDownloadCompletion.sessionIdentifier
         )
+        config.allowsCellularAccess = !UserDefaults.standard.bool(forKey: Self.wifiOnlyDefaultsKey)
         config.isDiscretionary = false          // start now, don't wait for wifi/charging
         config.sessionSendsLaunchEvents = true  // relaunch us to finish delivering events
         downloadSession = AVAssetDownloadURLSession(
@@ -509,6 +513,13 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
             self.maxConcurrentDownloads = max(1, min(5, requested))
             self.pumpQueue()
         }
+        call.resolve()
+    }
+
+    /// `allowsCellularAccess` is fixed per session, and rebuilding the background
+    /// session would orphan in-flight tasks, so the choice is stored and applied at next launch.
+    @objc func setWifiOnly(_ call: CAPPluginCall) {
+        UserDefaults.standard.set(call.getBool("enabled") ?? false, forKey: Self.wifiOnlyDefaultsKey)
         call.resolve()
     }
 

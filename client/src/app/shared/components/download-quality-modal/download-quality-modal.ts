@@ -17,6 +17,8 @@ import {
 import { AuthService } from '../../../core/services/auth.service';
 import { desktopDownloaderOrNull } from '../../../core/plugins/desktop-downloader.bridge';
 import { LucideDownload, LucideX } from '@lucide/angular';
+import { DownloadSettingsService } from '../../../core/services/download-settings.service';
+import { pickRung } from '../../../core/services/download-manager.service';
 import { formatBytes } from '../../utils/download-format';
 
 @Component({
@@ -27,6 +29,7 @@ import { formatBytes } from '../../utils/download-format';
 export class DownloadQualityModalComponent {
   private readonly streamingApi = inject(StreamingApiService);
   private readonly auth = inject(AuthService);
+  private readonly settings = inject(DownloadSettingsService);
 
   protected readonly formatBytes = formatBytes;
 
@@ -40,6 +43,11 @@ export class DownloadQualityModalComponent {
   @ViewChild('dialog') dialogRef!: ElementRef<HTMLDialogElement>;
 
   readonly qualities = signal<DownloadQuality[]>([]);
+  /** Offered rung closest to the user's default; highlighted, not started. */
+  readonly preselected = computed(() => {
+    const key = this.settings.defaultQuality();
+    return key ? (pickRung(this.qualities(), key)?.key ?? null) : null;
+  });
   readonly loading = signal(false);
   readonly downloading = signal(false);
   readonly downloadProgress = signal(0);

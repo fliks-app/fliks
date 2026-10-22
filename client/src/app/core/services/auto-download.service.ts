@@ -6,6 +6,8 @@ import { desktopDownloaderOrNull } from '../plugins/desktop-downloader.bridge';
 import { AppResumeService } from './app-resume.service';
 import { DownloadManagerService, episodeLabel } from './download-manager.service';
 import { DownloadCacheService, DownloadTask } from './download-cache.service';
+import { DownloadSettingsService } from './download-settings.service';
+import { autoCapReached } from './auto-download-cap';
 import { StreamingApiService } from './api/streaming-api.service';
 import {
   PlaylistsApiService,
@@ -37,6 +39,7 @@ export class AutoDownloadService {
   private readonly downloads = inject(DownloadManagerService);
   private readonly cache = inject(DownloadCacheService);
   private readonly streamingApi = inject(StreamingApiService);
+  private readonly settings = inject(DownloadSettingsService);
   private readonly playlistsApi = inject(PlaylistsApiService);
 
   private running = false;
@@ -157,12 +160,12 @@ export class AutoDownloadService {
     };
   }
 
-  /** Download every not-yet-watched target that isn't already on-device. */
+  /** Download every not-yet-watched target that isn't already on-device, until the auto storage cap is reached. */
   private async downloadMissing(targets: AutoTarget[]): Promise<void> {
     const { started, failed } = await this.downloads.createMany(
       targets.filter((t) => !t.watched),
-      undefined,
-      { auto: true },
+      this.settings.defaultQuality() || undefined,
+      { auto: true, stop: () => autoCapReached(this.cache.load(), this.settings.autoCapGb()) },
     );
     this.log(`downloaded ${started}, failed ${failed}`);
   }

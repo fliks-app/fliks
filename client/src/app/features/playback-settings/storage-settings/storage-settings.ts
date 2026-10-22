@@ -8,9 +8,12 @@ import { DownloadCacheService } from '../../../core/services/download-cache.serv
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { ServerCacheService } from '../../../core/services/server-cache.service';
 import {
+  DEFAULT_QUALITY_CHOICES,
   DownloadSettingsService,
   MAX_CONCURRENT_CHOICES,
 } from '../../../core/services/download-settings.service';
+import { Capacitor } from '@capacitor/core';
+import { AutoDownloadService } from '../../../core/services/auto-download.service';
 import { DeviceService } from '../../../core/services/device.service';
 
 @Component({
@@ -27,12 +30,31 @@ export class StorageSettingsPageComponent {
   private readonly serverCache = inject(ServerCacheService);
   private readonly downloadSettings = inject(DownloadSettingsService);
   private readonly device = inject(DeviceService);
+  readonly autoDownload = inject(AutoDownloadService);
 
   /** The desktop shell downloads through its own service, which this cap does
    *  not reach — don't offer a control that wouldn't do anything there. */
   readonly showConcurrency = !this.device.isDesktopNative();
   readonly concurrencyChoices = MAX_CONCURRENT_CHOICES;
   readonly maxConcurrent = this.downloadSettings.maxConcurrent;
+  readonly qualityChoices = DEFAULT_QUALITY_CHOICES;
+  readonly defaultQuality = this.downloadSettings.defaultQuality;
+  readonly wifiOnly = this.downloadSettings.wifiOnly;
+  readonly autoCapGb = this.downloadSettings.autoCapGb;
+  readonly showWifiOnly = Capacitor.isNativePlatform();
+
+  onDefaultQualityChange(value: string) {
+    this.downloadSettings.setDefaultQuality(value);
+  }
+
+  onWifiOnlyChange(value: boolean) {
+    this.downloadSettings.setWifiOnly(value);
+  }
+
+  onAutoCapChange(value: number | string) {
+    this.downloadSettings.setAutoCapGb(value);
+    void this.autoDownload.reconcile('settings');
+  }
 
   onMaxConcurrentChange(value: number) {
     this.downloadSettings.setMaxConcurrent(value);
