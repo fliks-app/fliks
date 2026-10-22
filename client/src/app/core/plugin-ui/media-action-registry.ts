@@ -15,6 +15,7 @@ export type CoreMediaActionId =
   | 'media.delete'
   | 'media.toggle-like'
   | 'media.download'
+  | 'media.download-series'
   | 'media.play'
   | 'media.open'
   | 'media.add-to-playlist'
@@ -36,6 +37,7 @@ const CORE_MEDIA_ACTION_IDS: ReadonlySet<string> = new Set<CoreMediaActionId>([
   'media.refresh-metadata',
   'media.toggle-like',
   'media.download',
+  'media.download-series',
   'media.play',
   'media.open',
   'media.add-to-playlist',

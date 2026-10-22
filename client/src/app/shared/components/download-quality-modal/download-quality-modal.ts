@@ -1,6 +1,7 @@
 import {
   Component,
   signal,
+  computed,
   input,
   output,
   inject,
@@ -43,11 +44,31 @@ export class DownloadQualityModalComponent {
   readonly downloading = signal(false);
   readonly downloadProgress = signal(0);
 
-  readonly download = output<{ mediaFileId: number; quality: string }>();
+  readonly download = output<{ mediaFileId: number; quality: string; unwatchedOnly: boolean }>();
 
   private mediaFileId = 0;
 
-  async open(mediaFileId: number) {
+  /** Batch mode (season or show): the episode counts the size and checkbox speak of; null for a single file. */
+  readonly batch = signal<{ all: number; unwatched: number } | null>(null);
+  readonly unwatchedOnly = signal(true);
+  readonly batchCount = computed(() => {
+    const b = this.batch();
+    return b ? (this.unwatchedOnly() ? b.unwatched : b.all) : 1;
+  });
+
+  /** `mediaFileId` is the first episode's file, whose estimates stand for all of them. */
+  openBatch(mediaFileId: number, counts: { all: number; unwatched: number }) {
+    this.batch.set(counts);
+    this.unwatchedOnly.set(true);
+    return this.show(mediaFileId);
+  }
+
+  open(mediaFileId: number) {
+    this.batch.set(null);
+    return this.show(mediaFileId);
+  }
+
+  private async show(mediaFileId: number) {
     this.mediaFileId = mediaFileId;
     this.loading.set(true);
     this.downloading.set(false);
@@ -62,7 +83,7 @@ export class DownloadQualityModalComponent {
   }
 
   selectQuality(quality: string) {
-    this.download.emit({ mediaFileId: this.mediaFileId, quality });
+    this.download.emit({ mediaFileId: this.mediaFileId, quality, unwatchedOnly: this.unwatchedOnly() });
     this.close();
   }
 

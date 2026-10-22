@@ -4,10 +4,9 @@ import { AuthService } from './auth.service';
 import { TvService } from './tv.service';
 import { desktopDownloaderOrNull } from '../plugins/desktop-downloader.bridge';
 import { AppResumeService } from './app-resume.service';
-import { DownloadManagerService } from './download-manager.service';
+import { DownloadManagerService, episodeLabel } from './download-manager.service';
 import { DownloadCacheService, DownloadTask } from './download-cache.service';
 import { StreamingApiService } from './api/streaming-api.service';
-import { MediaService, Media } from './api/media.service';
 import {
   PlaylistsApiService,
   PlaylistItem,
@@ -38,7 +37,6 @@ export class AutoDownloadService {
   private readonly downloads = inject(DownloadManagerService);
   private readonly cache = inject(DownloadCacheService);
   private readonly streamingApi = inject(StreamingApiService);
-  private readonly mediaService = inject(MediaService);
   private readonly playlistsApi = inject(PlaylistsApiService);
 
   private running = false;
@@ -147,18 +145,12 @@ export class AutoDownloadService {
 
   private toTarget(item: PlaylistItem): AutoTarget {
     const ep = item.episode;
-    let episodeLabel: string | undefined;
-    if (ep) {
-      const s = ep.season?.seasonNumber ?? 0;
-      episodeLabel =
-        `S${String(s).padStart(2, '0')}E${String(ep.episodeNumber).padStart(2, '0')}` +
-        (ep.title ? ` ${ep.title}` : '');
-    }
+    const label = ep ? episodeLabel(ep.season?.seasonNumber ?? 0, ep.episodeNumber, ep.title) : undefined;
     return {
       mediaId: item.media.id,
       episodeId: ep?.id,
       title: item.media.title,
-      episodeLabel,
+      episodeLabel: label,
       posterUrl: item.media.posterUrl,
       type: item.media.type,
       watched: item.watched,
@@ -167,42 +159,12 @@ export class AutoDownloadService {
 
   /** Download every not-yet-watched target that isn't already on-device. */
   private async downloadMissing(targets: AutoTarget[]): Promise<void> {
-    // one media fetch per series/movie, reused across its episodes
-    const mediaCache = new Map<number, Media | null>();
-    // sequential: paces session creation; the native daemon manages transfers
-    for (const t of targets) {
-      const label = t.episodeLabel ? `${t.title} ${t.episodeLabel}` : t.title;
-      if (t.watched) continue;
-      try {
-        const fileId = await this.resolveFileId(t, mediaCache);
-        if (!fileId) {
-          this.log(`skip "${label}" — no downloadable file`);
-          continue;
-        }
-        if (this.isOnDevice(fileId)) continue;
-        const qualities = await this.streamingApi.getDownloadQualities(fileId);
-        if (!qualities.length) {
-          this.log(`skip "${label}" — no qualities for file ${fileId}`);
-          continue;
-        }
-        this.log(`downloading "${label}" (file ${fileId}, ${qualities[0].key})`);
-        await this.downloads.createDownload(
-          fileId,
-          qualities[0].key,
-          t.title,
-          t.episodeLabel,
-          {
-            mediaId: t.mediaId,
-            posterUrl: t.posterUrl,
-            type: t.type,
-            episodeId: t.episodeId,
-            auto: true,
-          },
-        );
-      } catch (err) {
-        this.log(`download "${label}" failed: ${(err as Error).message}`);
-      }
-    }
+    const { started, failed } = await this.downloads.createMany(
+      targets.filter((t) => !t.watched),
+      undefined,
+      { auto: true },
+    );
+    this.log(`downloaded ${started}, failed ${failed}`);
   }
 
   /** Remove auto-managed downloads the user has finished watching. */
@@ -245,31 +207,5 @@ export class AutoDownloadService {
         /* offline / transient — retry next reconcile */
       }
     }
-  }
-
-  /** The movie file or the episode's file, or null when there's none. */
-  private async resolveFileId(
-    t: AutoTarget,
-    mediaCache: Map<number, Media | null>,
-  ): Promise<number | null> {
-    let media = mediaCache.get(t.mediaId);
-    if (media === undefined) {
-      media = await this.mediaService.getOne(t.mediaId).catch(() => null);
-      mediaCache.set(t.mediaId, media);
-    }
-    if (!media) return null;
-    const files = media.files ?? [];
-    const file =
-      t.episodeId != null
-        ? files.find((f) => f.episodeId === t.episodeId)
-        : (files.find((f) => f.episodeId == null) ?? files[0]);
-    return file?.id ?? null;
-  }
-
-  /** True when a (non-failed) download for this file already exists. */
-  private isOnDevice(mediaFileId: number): boolean {
-    return this.cache
-      .load()
-      .some((t) => t.mediaFileId === mediaFileId && t.status !== 'failed');
   }
 }

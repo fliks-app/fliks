@@ -153,6 +153,8 @@ export class MediaDetailSeasonsComponent {
   /** Open the tracking-status modal for this season (emits the season number). */
   readonly viewSeasonTracking = output<number>();
   /** Toggle the viewer's like on this season (emits the season id). */
+  readonly downloadSeason = output<Season>();
+  readonly downloadEpisode = output<{ season: Season; episode: Episode }>();
   readonly toggleSeasonLike = output<number>();
   readonly toggleEpisodeLike = output<number>();
   /** Recommend this season to another member (emits the season id). */
@@ -230,6 +232,10 @@ export class MediaDetailSeasonsComponent {
   /** TVDB reports a bare year, which date formatting would widen into a day. */
   seasonAirDateIsYearOnly(season: Season): boolean {
     return /^\d{4}$/.test(season.airDate ?? '');
+  }
+
+  hasFiles(season: Season): boolean {
+    return season.episodes.some((e) => e.hasFile);
   }
 
   seasonWatchedCount(season: Season): number {

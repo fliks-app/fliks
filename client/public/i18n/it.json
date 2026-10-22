@@ -1819,6 +1819,12 @@
   },
   "downloads": {
     "title": "Download",
+    "download_season": "Scarica la stagione",
+    "download_series": "Scarica tutti gli episodi",
+    "unwatched_only": "Solo episodi non visti",
+    "batch_count_one": "{{count}} episodio",
+    "batch_count_other": "{{count}} episodi",
+    "nothing_new": "Niente di nuovo da scaricare",
     "download": "Scarica",
     "choose_quality": "Scegli la qualità",
     "original": "Originale",

@@ -2,7 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
 import { TranslateService } from '@ngx-translate/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { DownloadManagerService } from './download-manager.service';
+import { DownloadManagerService, pickRung } from './download-manager.service';
 import { StreamingApiService } from './api/streaming-api.service';
 import { SubtitlesApiService } from './api/subtitles-api.service';
 import { MediaService } from './api/media.service';
@@ -101,5 +101,70 @@ describe('DownloadManagerService, offline subtitle identity', () => {
 
     expect(saved[0].offlineSubtitles?.map((s) => s.trackKey)).toEqual(['ext-40', 'emb-3']);
     expect(saved[0].offlineSubtitles?.[1]).toMatchObject({ forced: true, hearingImpaired: false, codec: 'subrip' });
+  });
+});
+
+describe('DownloadManagerService.createMany', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  function setup(onDevice: DownloadTask[], offered: Record<number, string[]>) {
+    TestBed.configureTestingModule({
+      providers: [
+        DownloadManagerService,
+        {
+          provide: StreamingApiService,
+          useValue: {
+            getDownloadQualities: (id: number) =>
+              Promise.resolve(offered[id].map((key) => ({ key, label: key, estimatedSize: 1 }))),
+          },
+        },
+        { provide: SubtitlesApiService, useValue: {} },
+        { provide: MediaService, useValue: {} },
+        { provide: OfflineStorageService, useValue: {} },
+        { provide: DownloadCacheService, useValue: { load: () => onDevice } },
+        { provide: DownloadNotificationService, useValue: { nativeEvent: signal(null) } },
+        { provide: AuthService, useValue: {} },
+        { provide: BrowserDeviceProfileService, useValue: {} },
+        { provide: TranslateService, useValue: {} },
+        { provide: AppSettingsService, useValue: {} },
+        { provide: ImageCacheService, useValue: {} },
+        { provide: DownloadSettingsService, useValue: {} },
+        { provide: ServerConfigService, useValue: { isNative: false } },
+        { provide: NetworkService, useValue: { isOnline: () => false } },
+      ],
+    });
+    const service = TestBed.inject(DownloadManagerService);
+    const create = vi.spyOn(service, 'createDownload').mockResolvedValue({} as DownloadTask);
+    return { service, create };
+  }
+
+  const target = (mediaFileId: number) => ({ mediaId: 1, mediaFileId, title: 'T', posterUrl: null, type: 'series' });
+
+  it('skips files already on device and falls back to the nearest lower rung', async () => {
+    const { service, create } = setup(
+      [{ mediaFileId: 1, status: 'ready' } as DownloadTask, { mediaFileId: 4, status: 'failed' } as DownloadTask],
+      { 2: ['1080p', '720p'], 3: ['720p', '480p'], 4: ['1080p'] },
+    );
+    const res = await service.createMany([target(1), target(2), target(3), target(4)], '1080p');
+    expect(create.mock.calls.map((c) => [c[0], c[1]])).toEqual([[2, '1080p'], [3, '720p'], [4, '1080p']]);
+    expect(res).toEqual({ started: 3, failed: 0 });
+  });
+
+  it('counts a failing target and keeps going', async () => {
+    const { service, create } = setup([], { 1: ['720p'], 2: ['720p'] });
+    create.mockRejectedValueOnce(new Error('x'));
+    const res = await service.createMany([target(1), target(2)], '720p');
+    expect(res).toEqual({ started: 1, failed: 1 });
+  });
+});
+
+describe('pickRung', () => {
+  const q = (...keys: string[]) => keys.map((key) => ({ key }));
+
+  it('prefers the exact rung, then the best below, then the lowest on offer', () => {
+    expect(pickRung(q('1080p', '720p'), '720p')?.key).toBe('720p');
+    expect(pickRung(q('720p', '480p'), '1080p')?.key).toBe('720p');
+    expect(pickRung(q('720p', '480p'), '360p')?.key).toBe('480p');
+    expect(pickRung(q('original', '720p'), '1080p')?.key).toBe('720p');
   });
 });

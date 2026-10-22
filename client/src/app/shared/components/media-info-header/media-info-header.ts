@@ -281,6 +281,7 @@ export class MediaInfoHeaderComponent {
   // ── Outputs (delegated to parent) ──
   readonly selectedFileIdChange = output<number>();
   readonly openDownload = output<void>();
+  readonly downloadSeries = output<void>();
   readonly openProfiles = output<void>();
   readonly openLibrary = output<void>();
   readonly refreshMetadata = output<void>();
@@ -663,6 +664,7 @@ export class MediaInfoHeaderComponent {
   /** Visibility the `when` vocabulary can't express (an OR, or non-permission facts); only narrows, for three ids. */
   private readonly extraGuards: Record<string, () => boolean> = {
     'core.recommend': () => !this.auth.sharingDisabled(),
+    'core.download_series': () => !this.episodeId() && this.files().length > 0,
     'core.request_media': () => {
       const needsFile = this.mediaType() === 'movie' || !!this.episodeId();
       return !this.userHasOpenWholeRequest() && (!needsFile || !this.selectedFileId());
@@ -676,6 +678,7 @@ export class MediaInfoHeaderComponent {
     'media.recommend': () => this.recommend.emit(),
     'media.toggle-like': () => this.likeToggled.emit(),
     'media.download': () => this.openDownload.emit(),
+    'media.download-series': () => this.downloadSeries.emit(),
     'media.toggle-series-watched': () => this.onToggleWatched(),
     'media.toggle-watched': () => this.onToggleWatched(),
     'media.add-to-playlist': () => this.addToPlaylist.emit(),

@@ -12,6 +12,22 @@
         <span class="loading loading-spinner loading-md"></span>
       </div>
     } @else {
+      @if (batch(); as b) {
+        @if (b.unwatched !== b.all) {
+          <label class="label cursor-pointer justify-start gap-3 mb-2">
+            <input
+              type="checkbox"
+              class="checkbox checkbox-sm"
+              [checked]="unwatchedOnly()"
+              (change)="unwatchedOnly.set($any($event.target).checked)"
+            />
+            <span class="label-text">{{ 'downloads.unwatched_only' | translate }}</span>
+          </label>
+        }
+        <p class="text-xs text-base-content/60 mb-2">
+          {{ (batchCount() === 1 ? 'downloads.batch_count_one' : 'downloads.batch_count_other') | translate: { count: batchCount() } }}
+        </p>
+      }
       <div class="flex flex-col gap-2">
         @for (q of qualities(); track q.key) {
           <button
@@ -24,13 +40,13 @@
               {{ q.key === 'original' ? ('downloads.original' | translate) : q.key }}
             </span>
             @if (q.estimatedSize) {
-              <span class="text-xs opacity-60">~{{ formatBytes(q.estimatedSize) }}</span>
+              <span class="text-xs opacity-60">~{{ formatBytes(q.estimatedSize * batchCount()) }}</span>
             }
           </button>
         }
       </div>
 
-      @if (!isNative) {
+      @if (!isNative && !batch()) {
         <div class="divider my-2"></div>
         <button
           class="btn btn-outline justify-start gap-2 w-full"

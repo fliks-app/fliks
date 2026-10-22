@@ -28,15 +28,13 @@ export const CORE_MEDIA_ACTIONS: readonly UiContribution[] = [
     action: { kind: 'action', actionId: 'media.download' },
   },
   {
-    // A card reports an episode as `series` + `isEpisode`; the detail header
-    // reports it as `movie`, so this twin covers the card surface only.
-    id: 'core.download_episode',
+    id: 'core.download_series',
     slot: 'media.actions',
     weight: 140,
-    labelKey: 'downloads.download',
+    labelKey: 'downloads.download_series',
     icon: 'download',
-    when: ['!isTv', 'hasFiles', 'isEpisode', 'surface:card'],
-    action: { kind: 'action', actionId: 'media.download' },
+    when: ['!isTv', 'mediaType:series'],
+    action: { kind: 'action', actionId: 'media.download-series' },
   },
   // ── Rows a card owns ────────────────────────────────────────────────────
   // Play/Open say `surface:card`: on a detail page you are already there.

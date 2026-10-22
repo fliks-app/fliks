@@ -55,7 +55,7 @@ import { HorizontalScrollerComponent } from '../../shared/components/horizontal-
 import { CollapsibleSectionComponent } from '../../shared/components/collapsible-section/collapsible-section';
 import { MediaCardComponent } from '../../shared/components/media-card/media-card';
 import { DownloadQualityModalComponent } from '../../shared/components/download-quality-modal/download-quality-modal';
-import { DownloadManagerService } from '../../core/services/download-manager.service';
+import { DownloadManagerService, episodeLabel, type DownloadTarget } from '../../core/services/download-manager.service';
 import { DownloadDetailModalComponent } from '../../shared/components/download-detail-modal/download-detail-modal';
 import { collectScopedLeaves, describeDownload } from '../../shared/utils/download-format';
 import { TvService } from '../../core/services/tv.service';
@@ -962,7 +962,57 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     }
   }
 
+  /** Targets chosen from a season, the series or an episode row; consumed by the next quality pick. */
+  private pendingDownloads: (DownloadTarget & { watched: boolean })[] | null = null;
+
+  private downloadTargets(seasons: Season[]): (DownloadTarget & { watched: boolean })[] {
+    const m = this.media();
+    if (!m) return [];
+    const watched = this.watched.episodeIds();
+    const targets: (DownloadTarget & { watched: boolean })[] = [];
+    for (const s of seasons) {
+      for (const ep of s.episodes) {
+        const file = m.files?.find((f) => f.episodeId === ep.id);
+        if (!file || targets.some((t) => t.mediaFileId === file.id)) continue;
+        targets.push({
+          mediaId: m.id,
+          episodeId: ep.id,
+          mediaFileId: file.id,
+          title: m.title,
+          episodeLabel: episodeLabel(s.seasonNumber, ep.episodeNumber, ep.title),
+          posterUrl: m.posterUrl,
+          type: m.type,
+          watched: watched.has(ep.id),
+        });
+      }
+    }
+    return targets;
+  }
+
+  private openBatch(targets: (DownloadTarget & { watched: boolean })[]) {
+    if (!targets.length) return;
+    this.pendingDownloads = targets;
+    const unwatched = targets.filter((t) => !t.watched).length;
+    void this.downloadModal()?.openBatch(targets[0].mediaFileId!, { all: targets.length, unwatched });
+  }
+
+  downloadSeason(season: Season) {
+    this.openBatch(this.downloadTargets([season]));
+  }
+
+  downloadSeries() {
+    this.openBatch(this.downloadTargets((this.media()?.seasons ?? []).filter((s) => s.seasonNumber > 0)));
+  }
+
+  downloadEpisode(season: Season, episode: Episode) {
+    const [target] = this.downloadTargets([{ ...season, episodes: [episode] }]);
+    if (!target) return;
+    this.pendingDownloads = [target];
+    void this.downloadModal()?.open(target.mediaFileId!);
+  }
+
   openDownloadModal() {
+    this.pendingDownloads = null;
     const fileId = this.episodeMode() ? this.episodeView.episodeActiveFileId() : this.activeFileId();
     if (fileId) this.downloadModal()?.open(fileId);
   }
@@ -975,7 +1025,17 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
     this.subtitleSection()?.show();
   }
 
-  async onDownload(ev: { mediaFileId: number; quality: string }) {
+  async onDownload(ev: { mediaFileId: number; quality: string; unwatchedOnly: boolean }) {
+    const pending = this.pendingDownloads;
+    this.pendingDownloads = null;
+    if (pending) {
+      const targets = pending.length > 1 && ev.unwatchedOnly ? pending.filter((t) => !t.watched) : pending;
+      const { started, failed } = await this.downloadManager.createMany(targets, ev.quality);
+      if (started) this.toast.success(this.translate.instant('downloads.started'));
+      else if (failed) this.toast.error(this.translate.instant('downloads.error'));
+      else this.toast.info(this.translate.instant('downloads.nothing_new'));
+      return;
+    }
     try {
       const m = this.media();
       const title = m?.title ?? 'Téléchargement';
@@ -983,8 +1043,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy {
       const s = this.focusedSeason();
       let episode: string | undefined;
       if (s && ep) {
-        episode = `S${String(s.seasonNumber).padStart(2, '0')}E${String(ep.episodeNumber).padStart(2, '0')}`;
-        if (ep.title) episode += ` ${ep.title}`;
+        episode = episodeLabel(s.seasonNumber, ep.episodeNumber, ep.title);
       }
       await this.downloadManager.createDownload(ev.mediaFileId, ev.quality, title, episode, {
         mediaId: m?.id,

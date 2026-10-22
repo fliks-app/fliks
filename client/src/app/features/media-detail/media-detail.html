@@ -218,6 +218,7 @@
           [identified]="!unidentified()"
           (selectedFileIdChange)="selectedFileId.set($event)"
           (openDownload)="openDownloadModal()"
+          (downloadSeries)="downloadSeries()"
           (openProfiles)="openProfilesModal()"
           (openLibrary)="openLibraryModal()"
           (refreshMetadata)="refreshMetadata()"
@@ -328,6 +329,8 @@
             (viewSeasonTracking)="openTracking({ kind: 'season', seasonNumber: $event })"
             (toggleSeasonLike)="like.toggleSeason($event)"
             (recommendSeason)="recommendSeason($event)"
+            (downloadSeason)="downloadSeason($event)"
+            (downloadEpisode)="downloadEpisode($event.season, $event.episode)"
           />
         }
 
