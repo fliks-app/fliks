@@ -63,7 +63,7 @@ webpki-roots = "1"
 anyhow = "1"
 http = "1"
 http-body = "1"
-ed25519-dalek = "2"
+ed25519-dalek = "3"
 nodejs-semver = "7"
 unicode-normalization = "0.1"
 
