@@ -159,7 +159,7 @@ fn is_caps_label(label: &str) -> bool {
 fn recurring_name_labels(cues: &[String]) -> std::collections::HashSet<String> {
     let mut counts: std::collections::HashMap<String, usize> = Default::default();
     for cue in cues {
-        for m in label_line().captures_iter(cue).flatten() {
+        for m in label_line().captures_iter(cue.as_str()).flatten() {
             let label = trim(&m[3]).to_owned();
             if name_label().is_match(&label) {
                 *counts.entry(label).or_default() += 1;
