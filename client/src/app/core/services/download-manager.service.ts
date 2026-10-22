@@ -2,7 +2,7 @@ import { Injectable, inject, effect, signal } from '@angular/core';
 import { Capacitor } from '@capacitor/core';
 import { StreamingApiService } from './api/streaming-api.service';
 import { SubtitlesApiService } from './api/subtitles-api.service';
-import { MediaService } from './api/media.service';
+import { MediaService, type Media } from './api/media.service';
 import { isImageBasedSubtitleCodec } from '../utils/subtitle-codecs';
 import { embeddedSubtitleTag, embeddedSubtitleTitle, subtitleTrackKey } from '../utils/subtitle-tracks';
 import { OfflineStorageService } from './offline-storage.service';
@@ -31,6 +31,36 @@ export interface DownloadEvent {
   status?: string;
   /** Monotonic counter for signal uniqueness */
   seq: number;
+}
+
+/** Something to put on the device: a movie, or one episode of a series. */
+export interface DownloadTarget {
+  mediaId: number;
+  episodeId?: number;
+  /** Known file; resolved from the media when absent. */
+  mediaFileId?: number;
+  title: string;
+  episodeLabel?: string;
+  posterUrl: string | null;
+  type: string;
+}
+
+/** `S01E02 Title`, the label stored on an episode download. */
+export function episodeLabel(season: number, episode: number, title?: string | null): string {
+  const code = `S${String(season).padStart(2, '0')}E${String(episode).padStart(2, '0')}`;
+  return title ? `${code} ${title}` : code;
+}
+
+/** Quality keys compare by height; `original` tops them all. */
+const rungRank = (key: string) => (key === 'original' ? Infinity : parseInt(key, 10) || 0);
+
+/** The wanted rung, else the best one below it, else the lowest on offer. */
+export function pickRung<T extends { key: string }>(qualities: T[], key: string): T | undefined {
+  const exact = qualities.find((q) => q.key === key);
+  if (exact) return exact;
+  const rank = rungRank(key);
+  const byRank = [...qualities].sort((a, b) => rungRank(b.key) - rungRank(a.key));
+  return byRank.find((q) => rungRank(q.key) <= rank) ?? byRank[byRank.length - 1];
 }
 
 /** Single entry point for downloads, fully client-side: ExoPlayer / AVAssetDownloadURLSession on native,
@@ -195,6 +225,57 @@ export class DownloadManagerService {
   }
 
   // ===== PUBLIC API =====
+
+  /** Sequentially download each target not already on device, at `rungKey` when the file offers it, else the nearest lower rung
+   *  (no key: the file's best). Failures are counted, not thrown, so one bad file doesn't stop the batch. */
+  async createMany(
+    targets: DownloadTarget[],
+    rungKey?: string,
+    opts?: { auto?: boolean },
+  ): Promise<{ started: number; failed: number }> {
+    const medias = new Map<number, Media | null>();
+    let started = 0;
+    let failed = 0;
+    for (const t of targets) {
+      try {
+        const fileId = t.mediaFileId ?? (await this.resolveFileId(t, medias));
+        if (!fileId || this.isOnDevice(fileId)) continue;
+        const qualities = await this.streamingApi.getDownloadQualities(fileId);
+        const quality = rungKey ? pickRung(qualities, rungKey) : qualities[0];
+        if (!quality) continue;
+        await this.createDownload(fileId, quality.key, t.title, t.episodeLabel, {
+          mediaId: t.mediaId,
+          posterUrl: t.posterUrl,
+          type: t.type,
+          episodeId: t.episodeId,
+          auto: opts?.auto,
+        });
+        started++;
+      } catch {
+        failed++;
+      }
+    }
+    return { started, failed };
+  }
+
+  private async resolveFileId(t: DownloadTarget, medias: Map<number, Media | null>): Promise<number | null> {
+    let media = medias.get(t.mediaId);
+    if (media === undefined) {
+      media = await this.mediaService.getOne(t.mediaId).catch(() => null);
+      medias.set(t.mediaId, media);
+    }
+    const files = media?.files ?? [];
+    const file =
+      t.episodeId != null
+        ? files.find((f) => f.episodeId === t.episodeId)
+        : (files.find((f) => f.episodeId == null) ?? files[0]);
+    return file?.id ?? null;
+  }
+
+  /** True when a (non-failed) download for this file already exists. */
+  private isOnDevice(mediaFileId: number): boolean {
+    return this.cache.load().some((t) => t.mediaFileId === mediaFileId && t.status !== 'failed');
+  }
 
   async createDownload(
     mediaFileId: number,

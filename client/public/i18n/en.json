@@ -1819,6 +1819,12 @@
   },
   "downloads": {
     "title": "Downloads",
+    "download_season": "Download season",
+    "download_series": "Download all episodes",
+    "unwatched_only": "Unwatched episodes only",
+    "batch_count_one": "{{count}} episode",
+    "batch_count_other": "{{count}} episodes",
+    "nothing_new": "Nothing new to download",
     "download": "Download",
     "choose_quality": "Choose quality",
     "original": "Original",

@@ -1819,6 +1819,12 @@
   },
   "downloads": {
     "title": "Downloads",
+    "download_season": "Staffel herunterladen",
+    "download_series": "Alle Folgen herunterladen",
+    "unwatched_only": "Nur ungesehene Folgen",
+    "batch_count_one": "{{count}} Folge",
+    "batch_count_other": "{{count}} Folgen",
+    "nothing_new": "Nichts Neues zum Herunterladen",
     "download": "Herunterladen",
     "choose_quality": "Qualität wählen",
     "original": "Original",

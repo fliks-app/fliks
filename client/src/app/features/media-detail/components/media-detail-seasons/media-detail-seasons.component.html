@@ -78,6 +78,16 @@
           <svg lucideListPlus class="h-5 w-5 shrink-0 opacity-80"></svg>
           <span class="flex-1">{{ 'playlists.add_season' | translate }}</span>
         </button>
+        @if (!tv.isTv() && hasFiles(selSeason)) {
+          <button
+            type="button"
+            class="dropdown-item text-white"
+            (click)="downloadSeason.emit(selSeason)"
+          >
+            <svg lucideDownload class="h-5 w-5 shrink-0 opacity-80"></svg>
+            <span class="flex-1">{{ 'downloads.download_season' | translate }}</span>
+          </button>
+        }
         <button
           type="button"
           class="dropdown-item text-white"
@@ -281,12 +291,24 @@
               />
 
               <div class="min-w-0 flex flex-col gap-0.5 sm:gap-1">
-                <a
-                  [routerLink]="episodeRoute(ep)"
-                  [state]="stillCard.navState()"
-                  (pointerdown)="stillCard.onAnchorPointerdown()"
-                  class="text-base sm:text-lg font-medium hover:underline line-clamp-2"
-                >{{ episodeTitle(ep) }}</a>
+                <div class="flex items-start gap-2">
+                  <a
+                    [routerLink]="episodeRoute(ep)"
+                    [state]="stillCard.navState()"
+                    (pointerdown)="stillCard.onAnchorPointerdown()"
+                    class="flex-1 text-base sm:text-lg font-medium hover:underline line-clamp-2"
+                  >{{ episodeTitle(ep) }}</a>
+                  @if (!hideControls() && !tv.isTv() && ep.hasFile && selSeason) {
+                    <button
+                      type="button"
+                      class="btn btn-ghost btn-circle btn-sm shrink-0"
+                      [attr.aria-label]="'downloads.download' | translate"
+                      (click)="downloadEpisode.emit({ season: selSeason, episode: ep })"
+                    >
+                      <svg lucideDownload class="h-4 w-4"></svg>
+                    </button>
+                  }
+                </div>
                 <span class="text-sm text-base-content/50 tabular-nums">
                   {{ episodeCardSubtitle((ep.airDate | localeDate), ep.runtime) }}
                 </span>

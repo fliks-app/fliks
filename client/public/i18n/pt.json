@@ -1819,6 +1819,12 @@
   },
   "downloads": {
     "title": "Transferências",
+    "download_season": "Baixar a temporada",
+    "download_series": "Baixar todos os episódios",
+    "unwatched_only": "Apenas episódios não vistos",
+    "batch_count_one": "{{count}} episódio",
+    "batch_count_other": "{{count}} episódios",
+    "nothing_new": "Nada de novo para baixar",
     "download": "Transferir",
     "choose_quality": "Escolher a qualidade",
     "original": "Original",
