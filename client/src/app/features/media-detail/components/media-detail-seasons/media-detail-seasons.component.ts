@@ -293,7 +293,6 @@ export class MediaDetailSeasonsComponent {
       .map((s) => ({ ...s, episodes: s.episodes.filter((e) => ids.has(e.id)) }))
       .filter((s) => s.episodes.length);
     this.downloadSelected.emit(seasons);
-    this.toggleSelectMode();
   }
 
   setEpisodeView(view: EpisodeView) {
