@@ -14,5 +14,6 @@
   "uiRevision": 2,
   "disableBackHistoryAPI": true,
   "supportTouchMode": "none",
-  "handlesRelaunch": false
+  "handlesRelaunch": false,
+  "requiredACG": []
 }
