@@ -134,6 +134,7 @@ export class AuthService {
   private readonly _serverFeatures = signal<string[]>([]);
   private _accessToken: string | null = null;
   private _refreshToken: string | null = null;
+  private _tokenVersion = 0;
   /** In-flight refresh request shared across concurrent 401s so we only
    *  rotate once even when 10 parallel calls all fail at the same time. */
   private _refreshInFlight: Promise<boolean> | null = null;
@@ -359,7 +360,7 @@ export class AuthService {
     this.clearInMemorySession();
     await this.serverCache.clearAll();
     await this.sessions.setActive(serverUrl, userId);
-    this.adoptSessionTokens(stored.accessToken, stored.refreshToken);
+    this.adoptSessionTokens(stored.accessToken, stored.refreshToken, stored.tokenVersion);
     // Instant: the stored profile renders the app while /auth/me confirms it.
     this._user.set(stored.user);
     this._sessionEpoch.update((n) => n + 1);
@@ -445,28 +446,37 @@ export class AuthService {
   /** Rotation invalidates the presented token, so racing tabs would replay a rotated one and the server revokes every session; Web Locks serialise tabs.
    * Native/TV run one webview and rely on {@link _refreshInFlight}. */
   private async runRefresh(): Promise<boolean> {
-    const tokenAtStart = this._refreshToken;
+    const versionAtStart = this._tokenVersion;
     const lockMgr =
       typeof navigator !== 'undefined' ? navigator.locks : undefined;
     if (this.cookieAuth && lockMgr) {
       return lockMgr.request('fliks-token-refresh', () =>
-        this.rotateOrAdopt(tokenAtStart),
+        this.rotateOrAdopt(versionAtStart),
       );
     }
-    return this.rotateOrAdopt(tokenAtStart);
+    return this.rotateOrAdopt(versionAtStart);
   }
 
   /** If another tab already rotated while we waited for the lock, adopt its token instead of replaying a revoked one. */
-  private async rotateOrAdopt(tokenAtStart: string | null): Promise<boolean> {
+  private async rotateOrAdopt(versionAtStart: number): Promise<boolean> {
     const stored = await this.readStoredRefreshToken();
-    if (this.cookieAuth && stored && stored !== tokenAtStart) {
-      this._refreshToken = stored;
+    if (this.cookieAuth && stored.token && stored.version > versionAtStart) {
+      this.adoptRefreshToken(stored);
       return true;
     }
-    return this.doRefresh(stored ?? tokenAtStart);
+    // Memory wins unless storage holds a strictly newer rotation.
+    if (stored.token && stored.version > this._tokenVersion) {
+      return this.doRefresh(stored.token, stored.version);
+    }
+    return this.doRefresh(this._refreshToken ?? stored.token, this._tokenVersion);
   }
 
-  private async doRefresh(refresh: string | null): Promise<boolean> {
+  private adoptRefreshToken(stored: { token: string | null; version: number }): void {
+    this._refreshToken = stored.token;
+    this._tokenVersion = stored.version;
+  }
+
+  private async doRefresh(refresh: string | null, sentVersion: number): Promise<boolean> {
     if (!refresh) return false;
     // Captured before the round-trip: the rotated pair belongs to THIS session,
     // and the user may switch account or server while we are in flight.
@@ -495,6 +505,7 @@ export class AuthService {
       if (untracked(this._sessionEpoch) !== epoch) return false;
       this._accessToken = res.accessToken;
       this._refreshToken = res.refreshToken;
+      this._tokenVersion = this.sessions.active()?.tokenVersion ?? this._tokenVersion + 1;
       return true;
     } catch (err) {
       const status = err instanceof HttpErrorResponse ? err.status : 0;
@@ -508,8 +519,8 @@ export class AuthService {
       // Another tab may have rotated meanwhile: then our token was merely
       // stale, not dead — adopt the new one and let the caller retry.
       const stored = await this.readStoredRefreshToken();
-      if (stored && stored !== refresh) {
-        this._refreshToken = stored;
+      if (stored.token && stored.version > sentVersion) {
+        this.adoptRefreshToken(stored);
         if (!this.cookieAuth) {
           this._accessToken = this.sessions.active()?.accessToken ?? this._accessToken;
         }
@@ -668,6 +679,7 @@ export class AuthService {
         lastUsedAt: Date.now(),
       });
       await this.sessions.setActive(serverUrl, user.id);
+      this._tokenVersion = this.sessions.get(serverUrl, user.id)?.tokenVersion ?? 0;
     } else {
       // Nothing to resume later, so nothing may stay flagged as signed in.
       await this.sessions.clearActive();
@@ -688,9 +700,11 @@ export class AuthService {
   private adoptSessionTokens(
     accessToken: string | null,
     refreshToken: string | null,
+    version = 0,
   ): void {
     this._accessToken = accessToken;
     this._refreshToken = refreshToken;
+    this._tokenVersion = version;
     this.resetStreamToken();
   }
 
@@ -717,7 +731,7 @@ export class AuthService {
     const active = this.sessions.active();
     if (!active) return null;
     if (!this._refreshToken) {
-      this.adoptSessionTokens(active.accessToken, active.refreshToken);
+      this.adoptSessionTokens(active.accessToken, active.refreshToken, active.tokenVersion);
     }
     return active.user;
   }
@@ -732,8 +746,9 @@ export class AuthService {
 
   /** Freshest persisted token. Re-read from storage on web, where another tab
    *  may have rotated it while we waited for the lock. */
-  private async readStoredRefreshToken(): Promise<string | null> {
+  private async readStoredRefreshToken(): Promise<{ token: string | null; version: number }> {
     await this.sessions.load();
-    return this.sessions.active()?.refreshToken ?? this._refreshToken;
+    const active = this.sessions.active();
+    return { token: active?.refreshToken ?? null, version: active?.tokenVersion ?? 0 };
   }
 }

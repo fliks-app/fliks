@@ -6,6 +6,7 @@ import {
   writePreference,
 } from '../utils/preference-storage';
 
+const STORE_LOCK = 'fliks-session-store';
 const SESSIONS_STORAGE_KEY = 'fliks_sessions';
 export const ACTIVE_SESSION_STORAGE_KEY = 'fliks_active_session';
 
@@ -23,6 +24,8 @@ export interface StoredSession {
   /** UNIX ms, or null when the server didn't report an expiry. */
   refreshExpiresAt: number | null;
   lastUsedAt: number;
+  /** Rotation counter, bumped on each stored pair; absent on sessions saved before it existed. */
+  tokenVersion?: number;
 }
 
 export interface SessionTokens {
@@ -104,6 +107,8 @@ export class SessionStoreService {
 
   readonly sessions = this._sessions.asReadonly();
 
+  private queue: Promise<unknown> = Promise.resolve();
+
   /** Session the app is currently signed into, or null when signed out. */
   readonly active = computed(() => {
     const key = this._activeKey();
@@ -128,7 +133,11 @@ export class SessionStoreService {
     return map;
   });
 
-  async load(): Promise<void> {
+  load(): Promise<void> {
+    return this.serial(() => this.loadNow());
+  }
+
+  private async loadNow(): Promise<void> {
     const [rawSessions, activeKey] = await Promise.all([
       readPreference(SESSIONS_STORAGE_KEY),
       readPreference(ACTIVE_SESSION_STORAGE_KEY),
@@ -154,7 +163,11 @@ export class SessionStoreService {
 
   /** Resolves `false` when the write failed. */
   async save(session: StoredSession): Promise<boolean> {
-    return this.mutate((list) => upsertSession(list, session));
+    return this.mutate((list) => {
+      const existing = findSession(list, session.serverUrl, session.user.id);
+      const tokenVersion = (existing?.tokenVersion ?? 0) + 1;
+      return upsertSession(list, { ...session, tokenVersion });
+    });
   }
 
   async setActive(serverUrl: string, userId: number): Promise<void> {
@@ -169,7 +182,7 @@ export class SessionStoreService {
 
   async clearActive(): Promise<void> {
     this._activeKey.set(null);
-    await removePreference(ACTIVE_SESSION_STORAGE_KEY);
+    await this.serial(() => removePreference(ACTIVE_SESSION_STORAGE_KEY));
   }
 
   async remove(serverUrl: string, userId: number): Promise<void> {
@@ -200,7 +213,12 @@ export class SessionStoreService {
     await this.mutate((list) => {
       const existing = findSession(list, serverUrl, userId);
       if (!existing) return list;
-      return upsertSession(list, { ...existing, ...tokens, lastUsedAt: Date.now() });
+      return upsertSession(list, {
+        ...existing,
+        ...tokens,
+        lastUsedAt: Date.now(),
+        tokenVersion: (existing.tokenVersion ?? 0) + 1,
+      });
     });
   }
 
@@ -211,15 +229,23 @@ export class SessionStoreService {
     });
   }
 
-  /** Read-modify-write against storage, not the in-memory list: two writers
-   *  would otherwise each persist their own snapshot and revert the other. */
-  private async mutate(
-    apply: (list: StoredSession[]) => StoredSession[],
-  ): Promise<boolean> {
-    const persisted = parseSessions(await readPreference(SESSIONS_STORAGE_KEY));
-    const next = pruneSessions(apply(persisted));
-    this._sessions.set(next);
-    return this.persist();
+  /** Read-modify-write against storage, serialised in this instance and across tabs:
+   *  an interleaved writer would otherwise put back a stale refresh token. */
+  private mutate(apply: (list: StoredSession[]) => StoredSession[]): Promise<boolean> {
+    return this.serial(async () => {
+      const persisted = parseSessions(await readPreference(SESSIONS_STORAGE_KEY));
+      this._sessions.set(pruneSessions(apply(persisted)));
+      return this.persist();
+    });
+  }
+
+  /** Never nest: a serial section awaiting another one would deadlock. */
+  private serial<T>(fn: () => Promise<T>): Promise<T> {
+    const locks = typeof navigator !== 'undefined' ? navigator.locks : undefined;
+    const run = () => (locks ? locks.request(STORE_LOCK, fn) : fn());
+    const result = this.queue.then(run, run);
+    this.queue = result.catch(() => undefined);
+    return result;
   }
 
   private async persist(): Promise<boolean> {

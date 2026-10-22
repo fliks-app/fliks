@@ -27,7 +27,12 @@ export async function writePreference(key: string, value: string): Promise<boole
       await Preferences.set({ key, value });
       return true;
     } catch {
-      /* fall through to localStorage */
+      // A stale Preferences value would shadow the localStorage fallback on read.
+      try {
+        await Preferences.remove({ key });
+      } catch {
+        return false;
+      }
     }
   }
   try {
