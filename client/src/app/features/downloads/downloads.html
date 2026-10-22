@@ -86,7 +86,7 @@
       <p class="flex justify-between gap-2 text-sm text-base-content/50 mt-1">
         <span>{{ 'downloads.paused' | translate }}</span><span class="tabular-nums">{{ task.progress }}%</span>
       </p>
-    } @else if (task.status === 'transcoding' || task.status === 'pending' || task.status === 'downloading') {
+    } @else if (isTransferring(task)) {
       <progress class="progress progress-info w-full h-1.5 mt-2" [value]="task.progress" max="100"></progress>
       <p class="flex justify-between gap-2 text-sm text-base-content/50 mt-1">
         <span class="truncate">{{ 'downloads.downloading' | translate }}</span><span class="tabular-nums">{{ task.progress }}%</span>
@@ -127,11 +127,7 @@
     }
   </div>
 
-  @if (loading()) {
-    <div class="flex justify-center py-12">
-      <span class="loading loading-spinner loading-lg"></span>
-    </div>
-  } @else if (items().length === 0) {
+  @if (items().length === 0) {
     <div class="text-center py-12 text-base-content/50">
       <svg lucideDownload class="h-12 w-12 mx-auto mb-3 opacity-30"></svg>
       <p class="text-lg">{{ 'downloads.empty' | translate }}</p>

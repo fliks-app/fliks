@@ -4,6 +4,7 @@ import { ServerConfigService } from './server-config.service';
 import { StorageScopeService } from './storage-scope.service';
 import type { OfflineCrop } from '../utils/player.utils';
 import type { EdlRange } from '../utils/edl-policy';
+import { normalizeStatus, type DownloadStatus } from './download-status';
 
 /** Client-side download task tracked in localStorage. */
 export interface OfflineSubtitle {
@@ -28,7 +29,7 @@ export interface DownloadTask {
   episodeId?: number;
   mediaFileId: number;
   quality: string;
-  status: string;
+  status: DownloadStatus;
   progress: number;
   episodeLabel?: string;
   /** Absent on tasks saved before they were kept; the grouping parses `episodeLabel` then. */
@@ -63,9 +64,10 @@ export interface DownloadTask {
 }
 
 const STORAGE_KEY = 'fliks.downloads.cache';
-const LOCAL_IDS_KEY = 'fliks.downloads.localIds';
+/** Progress ticks reach the signal at once; the localStorage write trails by this much. */
+const PERSIST_DELAY_MS = 1000;
 
-/** Tracks device download progress (in-memory signals) and persists the task list (localStorage), isolated per (server, user)
+/** The device's download list: one `tasks` signal, persisted (localStorage) and isolated per (server, user)
  *  so shared devices and colliding mediaFileIds never cross-surface. */
 @Injectable({ providedIn: 'root' })
 export class DownloadCacheService {
@@ -73,23 +75,26 @@ export class DownloadCacheService {
   private readonly serverConfig = inject(ServerConfigService);
   private readonly scope = inject(StorageScopeService);
 
-  /** Active device downloads with progress % */
-  readonly activeDownloads = signal<Map<number, number>>(new Map());
+  private readonly _tasks = signal<DownloadTask[]>(this.read());
+  readonly tasks = this._tasks.asReadonly();
 
-  /** Task IDs whose file is on device — persisted in localStorage */
-  readonly localTaskIds = signal<Set<number>>(new Set());
+  private hydratedKey = this.storageKey();
+  private pending: { key: string; tasks: DownloadTask[] } | null = null;
+  private timer: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
     // Re-hydrate on scope change (login / logout / server switch).
     effect(() => {
       this.auth.user();
       this.serverConfig.serverUrl();
-      this.localTaskIds.set(this.loadLocalIds());
+      untracked(() => {
+        const key = this.storageKey();
+        if (key === this.hydratedKey) return;
+        this.flush();
+        this.hydratedKey = key;
+        this._tasks.set(this.read());
+      });
     });
-  }
-
-  private canPersist(): boolean {
-    return this.scope.canPersist();
   }
 
   /** localStorage-key suffix isolating downloads to the current (server, user). */
@@ -101,88 +106,43 @@ export class DownloadCacheService {
     return `${STORAGE_KEY}.${this.scopeSuffix()}`;
   }
 
-  private localIdsKey(): string {
-    return `${LOCAL_IDS_KEY}.${this.scopeSuffix()}`;
-  }
-
-  private loadLocalIds(): Set<number> {
-    try {
-      const raw = localStorage.getItem(this.localIdsKey());
-      return raw ? new Set(JSON.parse(raw)) : new Set();
-    } catch { return new Set(); }
-  }
-
-  private persistLocalIds() {
-    if (!this.canPersist()) return;
-    // untracked: markLocal/removeLocal run inside effects that also write
-    // localTaskIds — a tracked read here would create a mutual-invalidation loop.
-    localStorage.setItem(this.localIdsKey(), JSON.stringify([...untracked(() => this.localTaskIds())]));
-  }
-
-  markLocal(taskId: number) {
-    this.localTaskIds.update((s) => new Set(s).add(taskId));
-    this.persistLocalIds();
-  }
-
-  removeLocal(taskId: number) {
-    this.localTaskIds.update((s) => { const n = new Set(s); n.delete(taskId); return n; });
-    this.persistLocalIds();
-  }
-
-  isLocal(taskId: number): boolean {
-    return this.localTaskIds().has(taskId);
-  }
-
-  markDownloading(taskId: number) {
-    this.activeDownloads.update((m) => new Map(m).set(taskId, 0));
-  }
-
-  updateProgress(taskId: number, percent: number) {
-    this.activeDownloads.update((m) => new Map(m).set(taskId, percent));
-  }
-
-  markDone(taskId: number) {
-    this.activeDownloads.update((m) => {
-      const next = new Map(m);
-      next.delete(taskId);
-      return next;
-    });
-  }
-
-  isDownloading(taskId: number): boolean {
-    return this.activeDownloads().has(taskId);
-  }
-
-  getProgress(taskId: number): number {
-    return this.activeDownloads().get(taskId) ?? 0;
-  }
-
-  /** Persist task list for offline recovery */
-  save(tasks: DownloadTask[]) {
-    if (!this.canPersist()) return;
-    try {
-      localStorage.setItem(this.storageKey(), JSON.stringify(tasks));
-    } catch {
-      // quota exceeded
-    }
-  }
-
-  /** Load cached task list (for offline) */
-  load(): DownloadTask[] {
+  private read(): DownloadTask[] {
     try {
       const raw = localStorage.getItem(this.storageKey());
-      return raw ? JSON.parse(raw) : [];
+      const list: DownloadTask[] = raw ? JSON.parse(raw) : [];
+      return list.map((t) => ({ ...t, status: normalizeStatus(t.status) }));
     } catch {
       return [];
     }
   }
 
-  has(taskId: number): boolean {
-    return this.isDownloading(taskId) || this.load().some((t) => t.id === taskId);
+  private flush() {
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = null;
+    const p = this.pending;
+    this.pending = null;
+    if (!p || !this.scope.canPersist()) return;
+    try {
+      localStorage.setItem(p.key, JSON.stringify(p.tasks));
+    } catch {
+      // quota exceeded
+    }
+  }
+
+  /** Replaces the list. `lazy` (progress ticks) trails the localStorage write; the signal is never delayed. */
+  save(tasks: DownloadTask[], lazy = false) {
+    this._tasks.set(tasks);
+    this.pending = { key: this.storageKey(), tasks };
+    if (!lazy) this.flush();
+    else this.timer ??= setTimeout(() => this.flush(), PERSIST_DELAY_MS);
+  }
+
+  /** Current list, untracked; read `tasks` in a computed or effect to react. */
+  load(): DownloadTask[] {
+    return untracked(this._tasks);
   }
 
   remove(taskId: number) {
-    const tasks = this.load().filter((t) => t.id !== taskId);
-    this.save(tasks);
+    this.save(this.load().filter((t) => t.id !== taskId));
   }
 }

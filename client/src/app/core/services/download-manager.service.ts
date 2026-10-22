@@ -1,5 +1,4 @@
-import { Injectable, inject, effect, signal } from '@angular/core';
-import { Subject } from 'rxjs';
+import { Injectable, inject, effect, signal, type Signal } from '@angular/core';
 import { Capacitor } from '@capacitor/core';
 import { StreamingApiService } from './api/streaming-api.service';
 import { SubtitlesApiService } from './api/subtitles-api.service';
@@ -9,6 +8,7 @@ import { embeddedSubtitleTag, embeddedSubtitleTitle, subtitleTrackKey } from '..
 import { OfflineStorageService } from './offline-storage.service';
 import { DownloadCacheService, DownloadTask, type OfflineSubtitle } from './download-cache.service';
 import { DownloadNotificationService, type NativeDownloadEvent } from './download-notification.service';
+import { heldStatus, isActive, type DownloadStatus } from './download-status';
 import { AuthService } from './auth.service';
 import { BrowserDeviceProfileService } from './browser-device-profile.service';
 import { TranslateService } from '@ngx-translate/core';
@@ -23,14 +23,6 @@ import {
   desktopDownloaderOrNull,
   type DesktopDownloadStatus,
 } from '../plugins/desktop-downloader.bridge';
-
-export interface DownloadEvent {
-  type: 'progress' | 'ready' | 'failed' | 'complete';
-  taskId: number;
-  progress: number;
-  /** Task status: 'downloading' | etc. */
-  status?: string;
-}
 
 /** Something to put on the device: a movie, or one episode of a series. */
 export interface DownloadTarget {
@@ -99,23 +91,21 @@ export class DownloadManagerService {
   private webActive = 0;
   private readonly webQueue: Array<() => void> = [];
 
-  /** Unified download event — fed by native bridge (Android/iOS) or Shaka (web). */
-  readonly downloadEvents = new Subject<DownloadEvent>();
+  /** The persisted task list, the one source every reader derives from. */
+  readonly tasks: Signal<DownloadTask[]> = this.cache.tasks;
 
   /** Bumped when {@link recover} finishes, so the auto-download reconciler runs
    *  after interrupted tasks are cleaned up instead of racing that pass. */
   readonly recoveredAt = signal(0);
 
-  private emitEvent(type: DownloadEvent['type'], taskId: number, progress: number, status?: string) {
-    this.downloadEvents.next({ type, taskId, progress, status });
-  }
+  /** Ids mid-{@link deleteDownload}, so the native `removed` echo of our own removal isn't deleted twice. */
+  private readonly deleting = new Set<number>();
 
   // --- Native: ExoPlayer DownloadManager events ---
   private readonly nativeSub = this.isNative ? this.notif.nativeEvents.subscribe((event) => this.onNativeEvent(event)) : null;
 
   private onNativeEvent(event: NativeDownloadEvent) {
     const taskId = Number(event.id) || 0;
-    // Persist before emitting: listeners reload the cache synchronously and must read the new status.
     if (event.type === 'failed') {
       this.updateTaskStatus(taskId, 'failed', 0);
     } else if (event.type === 'complete') {
@@ -123,28 +113,19 @@ export class DownloadManagerService {
       // Pre-download subtitles for offline playback (fire-and-forget)
       void this.preDownloadSubtitles(taskId);
       void this.persistSize(taskId);
-    } else if (event.type === 'progress') {
+    } else if (event.type === 'removed') {
+      const task = this.cache.load().find((t) => t.id === taskId);
+      if (task && !this.deleting.has(taskId)) void this.deleteDownload(task);
+    } else {
       this.persistProgress(taskId, event.progress, event.state);
     }
-    this.emitEvent(event.type === 'removed' ? 'failed' : event.type, taskId, event.progress, event.state);
     if (event.type !== 'progress') this.syncActivityCopy();
   }
 
-  /** In-flight statuses, in the order a task moves through them. */
-  private static readonly ACTIVE_STATUSES = ['transcoding', 'queued', 'downloading', 'paused'];
-
-  /** Last percentage persisted per task, so the write below can be throttled. */
-  private readonly persistedProgress = new Map<number, number>();
-
-  /** Promotes the persisted status out of `transcoding` once the OS daemon owns the task ({@link recover} would cancel it otherwise).
-   *  Progress is written in 5-point steps to spare localStorage, but a state change always lands. */
+  /** Promotes the persisted status out of `preparing` once the OS daemon owns the task ({@link recover} would cancel it otherwise). */
   private persistProgress(taskId: number, progress: number, state?: string) {
-    const status = state === 'queued' || state === 'paused' ? state : 'downloading';
-    const last = this.persistedProgress.get(taskId);
-    const settled = this.cache.load().find((t) => t.id === taskId)?.status === status;
-    if (settled && last !== undefined && progress - last < 5) return;
-    this.persistedProgress.set(taskId, progress);
-    this.updateTaskStatus(taskId, status, progress);
+    if (this.cache.load().find((t) => t.id === taskId)?.status === 'ready') return;
+    this.updateTaskStatus(taskId, heldStatus(state) ?? 'downloading', progress);
   }
 
   /** Hands the Android notifications their wording; native persists it, so a restarted service keeps the language. */
@@ -171,7 +152,7 @@ export class DownloadManagerService {
     if (Capacitor.getPlatform() !== 'ios') return;
     const active = this.cache
       .load()
-      .filter((t) => DownloadManagerService.ACTIVE_STATUSES.includes(t.status));
+      .filter((t) => isActive(t.status));
     if (!active.length) {
       this.notif.dismissActivity();
       return;
@@ -212,28 +193,22 @@ export class DownloadManagerService {
     this.downloader?.onStatus((s) => this.onDesktopStatus(s));
   }
 
-  /** Map a desktop (Electron) download status event onto the cache task keyed
-   *  by mediaFileId. Progress drives the badge; done pre-fetches subtitles. */
+  /** Map a desktop (Electron) download status event onto the in-flight task it names (the desktop id is the task id).
+   *  Progress drives the badge; done pre-fetches subtitles. */
   private onDesktopStatus(s: DesktopDownloadStatus): void {
-    const mfid = Number(s.id);
-    const task = this.cache
-      .load()
-      .find((t) => t.mediaFileId === mfid && t.status !== 'ready' && t.status !== 'failed');
+    const task = this.cache.load().find((t) => String(t.id) === s.id && isActive(t.status));
     if (!task) return;
     if (s.state === 'progress') {
       const pct = s.total > 0 ? Math.round((s.received / s.total) * 100) : 0;
-      this.cache.updateProgress(task.id, pct);
-      this.emitEvent('progress', task.id, pct, 'downloading');
+      this.updateTaskStatus(task.id, task.status === 'paused' ? 'paused' : 'downloading', pct);
     } else if (s.state === 'paused') {
       return;
     } else if (s.state === 'done') {
       this.updateTaskStatus(task.id, 'ready', 100);
-      this.emitEvent('complete', task.id, 100);
       void this.preDownloadSubtitles(task.id);
       void this.persistSize(task.id);
     } else {
       this.updateTaskStatus(task.id, 'failed', 0);
-      this.emitEvent('failed', task.id, 0);
     }
   }
 
@@ -245,9 +220,8 @@ export class DownloadManagerService {
   // State is set before the platform call, so a native event raised during the call lands after it.
   async pauseDownload(task: DownloadTask): Promise<void> {
     this.updateTaskStatus(task.id, 'paused', task.progress);
-    this.emitEvent('progress', task.id, task.progress, 'paused');
     if (this.isDesktop) {
-      await this.downloader!.pause(String(task.mediaFileId));
+      await this.downloader!.pause(String(task.id));
     } else if (this.isNative) {
       await this.notif.pauseDownload(String(task.id));
     } else if (!this.webGates.has(task.id)) {
@@ -260,11 +234,10 @@ export class DownloadManagerService {
   async resumeDownload(task: DownloadTask): Promise<void> {
     if (this.isDesktop && !task.hlsUrl) return;
     this.updateTaskStatus(task.id, 'downloading', task.progress);
-    this.emitEvent('progress', task.id, task.progress, 'downloading');
     if (this.isDesktop) {
       // Main keeps no paused state: a fresh start skips what is already on disk.
       void this.downloader!.start({
-        id: String(task.mediaFileId),
+        id: String(task.id),
         url: task.hlsUrl!,
         quality: task.quality,
         filename: task.episodeLabel ? `${task.media?.title} - ${task.episodeLabel}` : (task.media?.title ?? ''),
@@ -356,7 +329,7 @@ export class DownloadManagerService {
       episodeNumber: meta?.episodeNumber,
       mediaFileId,
       quality,
-      status: 'transcoding',
+      status: 'preparing',
       progress: 0,
       episodeLabel: episode,
       auto: meta?.auto,
@@ -384,11 +357,11 @@ export class DownloadManagerService {
       this.titles.set(taskId, { title, episode });
       this.persistTask(task);
       void this.downloader!.start({
-        id: String(mediaFileId),
+        id: String(taskId),
         url,
         filename: episode ? `${title} - ${episode}` : title,
       });
-      this.emitEvent('progress', taskId, 0, 'downloading');
+      this.updateTaskStatus(taskId, 'downloading', 0);
       return task;
     }
 
@@ -414,12 +387,12 @@ export class DownloadManagerService {
       // Desktop, transcoded rung: mirror the HLS bundle to disk and play it
       // offline via mpv (the local master.m3u8) — like the native offline flow.
       void this.downloader!.start({
-        id: String(mediaFileId),
+        id: String(taskId),
         url: hlsUrl,
         quality,
         filename: episode ? `${title} - ${episode}` : title,
       });
-      this.emitEvent('progress', taskId, 0, 'downloading');
+      this.updateTaskStatus(taskId, 'downloading', 0);
     } else if (this.isNative) {
       const token =
         this.auth.streamToken() ?? this.auth.accessToken ?? '';
@@ -462,30 +435,34 @@ export class DownloadManagerService {
   }
 
   async deleteDownload(task: DownloadTask) {
-    this.webGates.get(task.id)?.open();
-    this.webGates.delete(task.id);
-    if (this.isNative) {
-      await this.notif.removeDownload(String(task.id));
-    }
-    // Media, Shaka URI and VTTs are keyed by mediaFileId and shared with any
-    // sibling task for the same file — only remove them when none remains.
-    const sharedElsewhere = this.cache
-      .load()
-      .some(
-        (t) =>
-          t.id !== task.id &&
-          t.mediaFileId === task.mediaFileId &&
-          t.status !== 'failed',
-      );
-    if (!sharedElsewhere) {
-      await this.storage.delete(`download-${task.mediaFileId}`);
-      for (const sub of task.offlineSubtitles ?? []) {
-        await this.storage.deleteSmallFile(sub.key);
+    this.deleting.add(task.id);
+    try {
+      this.webGates.get(task.id)?.open();
+      this.webGates.delete(task.id);
+      if (this.isNative) {
+        await this.notif.removeDownload(String(task.id));
       }
+      // Media, Shaka URI and VTTs are keyed by mediaFileId and shared with any
+      // sibling task for the same file — only remove them when none remains.
+      const sharedElsewhere = this.cache
+        .load()
+        .some(
+          (t) =>
+            t.id !== task.id &&
+            t.mediaFileId === task.mediaFileId &&
+            t.status !== 'failed',
+        );
+      if (!sharedElsewhere) {
+        await this.storage.delete(`download-${task.mediaFileId}`);
+        for (const sub of task.offlineSubtitles ?? []) {
+          await this.storage.deleteSmallFile(sub.key);
+        }
+      }
+      this.cache.remove(task.id);
+      this.titles.delete(task.id);
+    } finally {
+      this.deleting.delete(task.id);
     }
-    this.cache.remove(task.id);
-    this.cache.removeLocal(task.id);
-    this.titles.delete(task.id);
   }
 
   // ===== WEB PATH =====
@@ -511,7 +488,6 @@ export class DownloadManagerService {
   /** Web offline download via Shaka's offline storage. */
   private async handleWebDownload(task: DownloadTask, hlsUrl: string) {
     const downloadId = task.id;
-    if (this.cache.isDownloading(downloadId)) return;
 
     const offlineUri = this.storage.getShakaOfflineUri(task.mediaFileId);
     if (offlineUri) {
@@ -520,8 +496,7 @@ export class DownloadManagerService {
 
     const info = this.titles.get(downloadId);
     const title = info?.title ?? task.media?.title ?? 'Download';
-    this.cache.markDownloading(downloadId);
-    this.emitEvent('progress', downloadId, 0, 'downloading');
+    this.updateTaskStatus(downloadId, 'downloading', 0);
 
     try {
       const storedUri = await this.storage.shakaStore(
@@ -531,14 +506,13 @@ export class DownloadManagerService {
         () => this.webGates.get(downloadId)?.promise,
         (progress) => {
           const pct = Math.round(progress * 100);
-          this.cache.updateProgress(downloadId, pct);
-          this.emitEvent('progress', downloadId, pct, 'downloading');
+          const held = this.cache.load().find((t) => t.id === downloadId)?.status === 'paused';
+          this.updateTaskStatus(downloadId, held ? 'paused' : 'downloading', pct);
         },
       );
 
       if (storedUri) {
         this.updateTaskStatus(downloadId, 'ready', 100);
-        this.emitEvent('complete', downloadId, 100);
         void this.preDownloadSubtitles(downloadId);
         void this.persistSize(downloadId);
       } else {
@@ -547,9 +521,6 @@ export class DownloadManagerService {
     } catch (err) {
       console.error('[DL] Shaka offline store failed:', err);
       this.updateTaskStatus(downloadId, 'failed', 0);
-      this.emitEvent('failed', downloadId, 0);
-    } finally {
-      this.cache.markDone(downloadId);
     }
   }
 
@@ -661,13 +632,13 @@ export class DownloadManagerService {
     ]);
   }
 
-  private updateTaskStatus(taskId: number, status: string, progress: number) {
+  /** The signal updates on every call; a repeated in-flight status only trails its localStorage write. */
+  private updateTaskStatus(taskId: number, status: DownloadStatus, progress: number) {
     const tasks = this.cache.load();
-    const updated = tasks.map((t) =>
-      t.id === taskId ? { ...t, status, progress } : t,
-    );
-    this.cache.save(updated);
-    if (status === 'ready') this.cache.markLocal(taskId);
+    const current = tasks.find((t) => t.id === taskId);
+    if (!current) return;
+    const lazy = current.status === status && isActive(status);
+    this.cache.save(tasks.map((t) => (t === current ? { ...t, status, progress } : t)), lazy);
   }
 
   /** Re-syncs one in-flight task with the native daemon; true when it still owns the task (live or finished).
@@ -682,11 +653,10 @@ export class DownloadManagerService {
         this.updateTaskStatus(task.id, 'ready', 100);
         void this.preDownloadSubtitles(task.id);
       } else {
-        this.persistedProgress.set(task.id, native.progress);
         // Anything held but not transferring reads as queued (ExoPlayer also parks `stopped` / `restarting`).
         this.updateTaskStatus(
           task.id,
-          native.state === 'downloading' || native.state === 'paused' ? native.state : 'queued',
+          heldStatus(native.state) ?? (native.state === 'downloading' ? 'downloading' : 'queued'),
           native.progress,
         );
       }
@@ -736,13 +706,12 @@ export class DownloadManagerService {
           const hasLocal = await this.storage.has(`download-${t.mediaFileId}`);
           if (!hasLocal) {
             this.cache.remove(t.id);
-            this.cache.removeLocal(t.id);
           }
         }
       } else if (t.status === 'failed') {
         // Remove stale failed tasks
         this.cache.remove(t.id);
-      } else if (DownloadManagerService.ACTIVE_STATUSES.includes(t.status)) {
+      } else if (isActive(t.status)) {
         // In-flight at last stop: ask the native daemon first, since only web's Shaka store died with the JS context.
         if (this.isNative && (await this.reconcileNative(t, nativeById))) continue;
 
