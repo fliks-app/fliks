@@ -50,7 +50,7 @@ fn widths(t: &Target) -> (Option<u32>, Option<u32>) {
             (Some(300), Some(780))
         }
         (Kind::Media, Variant::Logo) => (Some(185), Some(500)),
-        (Kind::Person, _) => (Some(45), None),
+        (Kind::Person, _) => (Some(45), Some(500)),
         (Kind::Episode, _) => (Some(300), Some(780)),
         (Kind::Season, _) => (Some(185), Some(500)),
         _ => (None, None),
@@ -687,7 +687,7 @@ mod tests {
                 Some(185),
                 Some(500),
             ),
-            (Target::person(5), "persons/5", Some(45), None),
+            (Target::person(5), "persons/5", Some(45), Some(500)),
             (Target::episode(6), "episodes/6", Some(300), Some(780)),
             (Target::season(7), "seasons/7", Some(185), Some(500)),
             (
