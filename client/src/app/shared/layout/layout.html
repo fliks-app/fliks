@@ -344,6 +344,8 @@
           </li>
         }
 
+        <!-- Held until the list lands: inserted under painted items, it would push them down. -->
+        @if (librariesLoaded()) {
         <li class="menu-title text-xs uppercase tracking-wider mt-3">{{ 'nav.section_library' | translate }}</li>
         @for (lib of displayLibraries(); track lib.id) {
           <li>
@@ -384,6 +386,7 @@
               }
             </a>
           </li>
+        }
         }
       </ul>
 
