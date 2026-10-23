@@ -38,7 +38,7 @@ No public route. The store is an in-process Rust module (`images::store`) with t
     | `media/poster`, `request/poster` | w185 | w500 | original |
     | `media/fanart`, `request/fanart` (and `fanart-<N>`, which maps to `fanart`) | w300 | w780 | original |
     | `media/logo` | w185 | w500 | original |
-    | `person` | w45 | (none) | original |
+    | `person` | w45 | w500 | original |
     | `episode` | w300 | w780 | original |
     | `season` | w185 | w500 | original |
     | any other key (`livetv`, `user`, `request/logo`) | (none) | (none) | original |
