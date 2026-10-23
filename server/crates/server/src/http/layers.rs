@@ -5,6 +5,8 @@ use axum::http::header::{ACCESS_CONTROL_REQUEST_METHOD, CACHE_CONTROL, CONTENT_T
 use axum::http::{Method, StatusCode};
 use axum::middleware::{Next, from_fn, from_fn_with_state};
 use axum::response::{IntoResponse, Response};
+use tower_http::compression::CompressionLayer;
+use tower_http::compression::predicate::{DefaultPredicate, NotForContentType, Predicate};
 use tower_http::cors::{AllowHeaders, AllowOrigin, CorsLayer};
 use tower_http::trace::TraceLayer;
 
@@ -113,11 +115,19 @@ pub fn apply(
             Method::DELETE,
         ])
         .allow_headers(AllowHeaders::mirror_request());
+    // Media and downloads stay byte-for-byte: already compressed, or served with a length and ranges.
+    let compress = DefaultPredicate::new()
+        .and(NotForContentType::const_new("video/"))
+        .and(NotForContentType::const_new("audio/"))
+        .and(NotForContentType::const_new("application/octet-stream"))
+        .and(NotForContentType::const_new("application/sql"))
+        .and(NotForContentType::const_new("application/zip"));
     router
         .layer(from_fn_with_state((body_limit_bytes, exempt), body_limit))
         .layer(from_fn(no_store_on_error))
         .layer(cors)
         .layer(from_fn(preflight_204))
+        .layer(CompressionLayer::new().compress_when(compress))
         .layer(TraceLayer::new_for_http().make_span_with(|r: &axum::http::Request<_>| {
             tracing::debug_span!("request", method = %r.method(), path = r.uri().path())
         }))
@@ -134,6 +144,11 @@ mod tests {
         let r = Router::new()
             .route("/ok", get(|| async { "ok" }))
             .route("/err", get(|| async { StatusCode::NOT_FOUND }))
+            .route("/list", get(|| async { axum::Json(vec!["title"; 64]) }))
+            .route(
+                "/video",
+                get(|| async { ([(CONTENT_TYPE, "video/mp4")], vec![0u8; 4096]) }),
+            )
             .route(
                 "/json",
                 post(|body: String| async move { body.len().to_string() }),
@@ -156,6 +171,20 @@ mod tests {
             err.headers()[CACHE_CONTROL],
             "no-store, no-cache, must-revalidate"
         );
+    }
+
+    #[tokio::test]
+    async fn compresses_json_never_media() {
+        let get = |path: &str| {
+            Request::get(path)
+                .header("accept-encoding", "gzip")
+                .body(Body::empty())
+                .unwrap()
+        };
+        let list = app(None).oneshot(get("/list")).await.unwrap();
+        assert_eq!(list.headers()["content-encoding"], "gzip");
+        let video = app(None).oneshot(get("/video")).await.unwrap();
+        assert!(video.headers().get("content-encoding").is_none());
     }
 
     #[test]
