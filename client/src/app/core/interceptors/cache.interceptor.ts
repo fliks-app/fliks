@@ -1,5 +1,5 @@
 import { HttpEvent, HttpInterceptorFn, HttpResponse } from '@angular/common/http';
-import { Observable, of, tap } from 'rxjs';
+import { finalize, Observable, of, share, tap } from 'rxjs';
 
 /** IndexedDB cache ("fliks-api-cache") of the last known body of each GET /api/*. Invalidation marks
  *  entries stale and never deletes them: the body stays the offline fallback and the paint-first read. */
@@ -148,6 +148,7 @@ function prune(db: IDBDatabase): void {
 export function clearRequestCache(): Promise<void> {
   cacheGeneration++;
   invalidations = new Map();
+  inFlight.clear();
   const closeExisting = dbPromise
     ? dbPromise
         .then((db) => {
@@ -215,6 +216,8 @@ async function putCache(url: string, body: any, sentAt: number, generation: numb
 /** Marks every entry under `prefix` stale: the next default read goes to the network. */
 export async function invalidatePrefix(prefix: string): Promise<void> {
   const at = Date.now();
+  // A request sent before the change may answer with what it replaced.
+  for (const key of [...inFlight.keys()]) if (key.startsWith(prefix)) inFlight.delete(key);
   // A broader, newer mark covers the narrower ones.
   const covered = [...invalidations.keys()].filter((p) => p.startsWith(prefix));
   for (const p of covered) invalidations.delete(p);
@@ -228,6 +231,20 @@ export async function invalidatePrefix(prefix: string): Promise<void> {
 }
 
 // ── Interceptor ──
+
+/** GETs on the wire, by URL: a refresh's paint-first and revalidate passes share one request. */
+const inFlight = new Map<string, Observable<HttpEvent<unknown>>>();
+
+function sharedGet(key: string, send: () => Observable<HttpEvent<unknown>>): Observable<HttpEvent<unknown>> {
+  const pending = inFlight.get(key);
+  if (pending) return pending;
+  const shared = send().pipe(
+    finalize(() => { if (inFlight.get(key) === shared) inFlight.delete(key); }),
+    share(),
+  );
+  inFlight.set(key, shared);
+  return shared;
+}
 
 export function isCacheable(url: string): boolean {
   if (EXCLUDED_PREFIXES.some((p) => url.startsWith(p))) return false;
@@ -296,7 +313,8 @@ export const cacheInterceptor: HttpInterceptorFn = (req, next) => {
     req = req.clone({ headers: req.headers.delete(CACHE_KNOWN_HEADER).delete(CACHE_BYPASS_HEADER) });
   }
 
-  if (!isCacheable(url)) return next(req);
+  const key = `${url} ${req.responseType}`;
+  if (!isCacheable(url)) return sharedGet(key, () => next(req));
 
   const store = tap((event: HttpEvent<unknown>) => {
     if (event instanceof HttpResponse && event.status === 200) {
@@ -306,7 +324,7 @@ export const cacheInterceptor: HttpInterceptorFn = (req, next) => {
 
   // Force-refresh path: skip the cache READ but still PUT the network
   // response so future cache-first callers get the refreshed value.
-  if (bypass) return next(req).pipe(store);
+  if (bypass) return sharedGet(key, () => next(req).pipe(store));
 
   return new Observable((subscriber) => {
     getCached(url).then((entry) => {
@@ -320,7 +338,7 @@ export const cacheInterceptor: HttpInterceptorFn = (req, next) => {
       const revalidating = plan === 'revalidate';
       if (revalidating) subscriber.next(cached!);
 
-      next(req).pipe(store).subscribe({
+      sharedGet(key, () => next(req).pipe(store)).subscribe({
         next: (event) => { if (!revalidating) subscriber.next(event); },
         error: (err) => {
           if (revalidating) subscriber.complete();

@@ -52,7 +52,7 @@ export class HorizontalScrollerComponent implements AfterViewInit, OnDestroy {
   }
 
   ngAfterViewInit() {
-    this.updateArrows();
+    // The observer's first callback lands after layout; a read here would force one.
     const el = this.scrollerEl()?.nativeElement;
     if (el) {
       this.resizeObserver = new ResizeObserver(() => this.updateArrows());
