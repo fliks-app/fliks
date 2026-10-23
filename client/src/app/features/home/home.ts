@@ -221,14 +221,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   private readonly importEffect = effect(() => {
     const ev = this.sse.lastEvent();
     if (ev?.type !== 'import.complete') return;
-    const wantRequests = this.visibleSections().some(
-      (s) => s.type === 'requests-recent',
-    );
-    if (!wantRequests) return;
-    this.requestsService
-      .list({ limit: 12 }, { force: true })
-      .then((r) => this.recentRequests.set(r.data))
-      .catch(() => {});
+    this.loadRecentRequests({ force: true });
   });
   /** Re-filters on the "only my requests" toggle; skips the first run since ngOnInit already loads. */
   private firstOnlyMyRequestsRun = true;
@@ -248,6 +241,7 @@ export class HomeComponent implements OnInit, OnDestroy {
       this.firstHomeSettingsRun = false;
       return;
     }
+    this.loadRecentRequests();
     void this.loadFilteredSections();
   });
 
@@ -387,6 +381,7 @@ export class HomeComponent implements OnInit, OnDestroy {
         () => undefined,
       );
       void this.likesApi.mine(undefined, opts).then((likes) => this.likes.set(likes), () => undefined);
+      this.loadRecentRequests(opts);
       const [libs, cw, recs] = await Promise.all([
         this.librariesApi.listMine(opts).catch(() => null),
         this.streamingApi.getContinueWatching(undefined, opts).catch(() => null),
@@ -397,6 +392,14 @@ export class HomeComponent implements OnInit, OnDestroy {
       if (recs) this.recommendations.set(recs);
     } catch { /* ignore */ }
     await this.loadFilteredSections(opts);
+  }
+
+  /** Uncached: sent before any await, so a refresh's two passes overlap and share one request. */
+  private loadRecentRequests(opts: CacheRead = {}) {
+    if (!this.visibleSections().some((s) => s.type === 'requests-recent')) return;
+    void this.requestsService
+      .list({ limit: 12 }, opts)
+      .then((r) => this.recentRequests.set(r.data), () => undefined);
   }
 
   private async loadFilteredSections(opts: CacheRead = {}) {
@@ -414,16 +417,8 @@ export class HomeComponent implements OnInit, OnDestroy {
     const libSections = this.visibleSections().filter(
       (s) => s.type === 'library-recent' && s.libraryId != null,
     );
-    const wantRequests = this.visibleSections().some(
-      (s) => s.type === 'requests-recent',
-    );
 
     try {
-      if (wantRequests) {
-        void this.requestsService
-          .list({ limit: 12 }, opts)
-          .then((r) => this.recentRequests.set(r.data), () => undefined);
-      }
       const [recent, calendar, libEntries] = await Promise.all([
         this.mediaService.getRecentlyAdded(
           {

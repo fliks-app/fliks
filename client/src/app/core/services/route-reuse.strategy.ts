@@ -31,6 +31,8 @@ export class CachingReuseStrategy implements RouteReuseStrategy {
   private readonly maxSize = inject(DeviceService).isTv() ? TV_MAX_CACHE_SIZE : MAX_CACHE_SIZE;
 
   private readonly attachedSubject = new Subject<string>();
+  /** The router calls `retrieve` twice per activation; one attach is announced once. */
+  private readonly pendingAttach = new Set<string>();
   private readonly detachedSubject = new Subject<string>();
   /** Fires (with the route key) when a previously detached route is reattached. */
   readonly attached$: Observable<string> = this.attachedSubject.asObservable();
@@ -125,6 +127,8 @@ export class CachingReuseStrategy implements RouteReuseStrategy {
   /** Attached means attached: `retrieve` runs a frame before the outlet swaps,
    *  so reclaiming global chrome there moves the page still on screen. */
   private notifyWhenActivated(key: string): void {
+    if (this.pendingAttach.has(key)) return;
+    this.pendingAttach.add(key);
     // Lazily resolved: the Router itself depends on this strategy.
     this.injector
       .get(Router)
@@ -138,6 +142,7 @@ export class CachingReuseStrategy implements RouteReuseStrategy {
         take(1),
       )
       .subscribe((e) => {
+        this.pendingAttach.delete(key);
         if (e instanceof NavigationEnd) this.attachedSubject.next(key);
       });
   }

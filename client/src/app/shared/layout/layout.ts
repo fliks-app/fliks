@@ -250,6 +250,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
 
   /** Accessible libraries for the sidebar (raw, as fetched). */
   readonly libraries = signal<LibrarySummary[]>([]);
+  readonly librariesLoaded = signal(false);
   /** Sidebar-facing list: the user's chosen order with hidden ones removed. */
   readonly displayLibraries = computed(() =>
     this.libraryPrefs.present(this.libraries()),
@@ -316,6 +317,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
     if (navigator.onLine) {
       this.refreshCounts();
     } else {
+      this.librariesLoaded.set(true);
       window.addEventListener('online', () => {
         this.refreshCounts();
       }, { once: true });
@@ -417,17 +419,19 @@ export class LayoutComponent implements OnInit, OnDestroy {
   }
 
   async refreshCounts() {
+    // The list paints from cache; waiting on the uncached counts lets it drop in late and shift the nav.
+    const libs = this.librariesApi
+      .listMine()
+      .then((l) => this.libraries.set(l), () => undefined)
+      .finally(() => this.librariesLoaded.set(true));
     try {
-      const [libs, counts] = await Promise.all([
-        this.librariesApi.listMine(),
-        this.countsApi.get(),
-      ]);
-      this.libraries.set(libs);
+      const counts = await this.countsApi.get();
       this.libraryCounts.set(counts.mediaByLibrary);
       this.badgeCounts.set({ ...counts.badgeCounts, pendingRequests: counts.pendingRequests });
     } catch {
       // silently ignore — counts are non-critical
     }
+    await libs;
   }
 
   /** Refreshes the badge counts only (no library list re-fetch) — the SSE

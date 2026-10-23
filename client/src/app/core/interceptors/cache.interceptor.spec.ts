@@ -1,5 +1,5 @@
 import { HttpRequest, HttpResponse } from '@angular/common/http';
-import { of, throwError } from 'rxjs';
+import { of, Subject, throwError } from 'rxjs';
 import { vi } from 'vitest';
 import {
   CacheEntry,
@@ -94,5 +94,39 @@ describe('cache.interceptor — read plan', () => {
 
   it('keeps a known body whatever its age', () => {
     expect(readPlan(entry('/api/media?libraryId=1', 90 * 24 * 60 * 60_000), true)).toBe('cached');
+  });
+});
+
+describe('cache.interceptor — requests in flight', () => {
+  const get = new HttpRequest('GET', '/api/playlists');
+
+  beforeEach(() => {
+    vi.stubGlobal('indexedDB', { open: vi.fn(() => ({})) });
+    void clearRequestCache();
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('shares one request between identical reads, and sends a new one once it landed', () => {
+    const wire = new Subject<HttpResponse<unknown>>();
+    const next = vi.fn(() => wire);
+    const bodies: unknown[] = [];
+    cacheInterceptor(get, next).subscribe((e) => bodies.push((e as HttpResponse<unknown>).body));
+    cacheInterceptor(get, next).subscribe((e) => bodies.push((e as HttpResponse<unknown>).body));
+    expect(next).toHaveBeenCalledTimes(1);
+
+    wire.next(new HttpResponse({ status: 200, body: [1] }));
+    wire.complete();
+    expect(bodies).toEqual([[1], [1]]);
+
+    cacheInterceptor(get, next).subscribe();
+    expect(next).toHaveBeenCalledTimes(2);
+  });
+
+  it('never hands a read sent before a change to a read sent after it', () => {
+    const next = vi.fn(() => new Subject<HttpResponse<unknown>>());
+    cacheInterceptor(get, next).subscribe();
+    void invalidatePrefix('/api/playlists');
+    cacheInterceptor(get, next).subscribe();
+    expect(next).toHaveBeenCalledTimes(2);
   });
 });

@@ -120,6 +120,8 @@ describe('CachingReuseStrategy', () => {
     events.next(new NavigationCancel(1, '/movies/7', ''));
     expect(attached).toEqual([]);
 
+    // The router retrieves twice per activation: one attach.
+    strategy.retrieve(snapshot);
     strategy.retrieve(snapshot);
     events.next(new NavigationEnd(2, '/movies/7', '/movies/7'));
     expect(attached).toEqual([strategy.keyFor(snapshot)]);
