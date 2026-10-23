@@ -1,5 +1,14 @@
 # Changelog
 
+## [5.1.1](https://github.com/fliks-app/fliks/compare/v5.1.0...v5.1.1) (2026-10-23)
+
+
+### Performance Improvements
+
+* **client:** stop duplicate API reads on cached-page returns ([#1954](https://github.com/fliks-app/fliks/issues/1954)) ([6a58d79](https://github.com/fliks-app/fliks/commit/6a58d79e9508a7630a22f725b427e5b7704d9fcb))
+* **images:** store a 500px medium avatar for persons ([#1956](https://github.com/fliks-app/fliks/issues/1956)) ([ecb3ac9](https://github.com/fliks-app/fliks/commit/ecb3ac9a90d306b5e88ff0fef3c7ab2fe9eee0d3))
+* **server:** compress API and static responses ([#1955](https://github.com/fliks-app/fliks/issues/1955)) ([7ff3c04](https://github.com/fliks-app/fliks/commit/7ff3c04568aa65f2b16692d971d017a7b86244ac))
+
 ## [5.1.0](https://github.com/fliks-app/fliks/compare/v5.0.0...v5.1.0) (2026-10-22)
 
 
