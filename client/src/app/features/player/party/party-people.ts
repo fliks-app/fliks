@@ -54,3 +54,8 @@ export function connectedCount(people: PartyPerson[]): number {
 export function missingCount(people: PartyPerson[]): number {
   return people.filter((p) => p.state === 'invited' || p.state === 'absent').length;
 }
+
+/** Voice is the player's business: pages outside it show people without it. */
+export function withoutVoice(people: PartyPerson[]): PartyPerson[] {
+  return people.map((p) => ({ ...p, voice: null, speaking: false }));
+}

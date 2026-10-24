@@ -16,13 +16,10 @@ import { ToastService } from '../../core/services/toast.service';
 import { formatTime } from '../../core/utils/player.utils';
 import { TvRowDirective } from '../../shared/directives/tv-row.directive';
 import { TvSectionDirective } from '../../shared/directives/tv-section.directive';
-import { PartyChatComponent } from '../player/party/party-chat';
-import { connectedCount, missingCount, partyPeople, type PartyPerson } from '../player/party/party-people';
+import { connectedCount, missingCount, partyPeople, withoutVoice, type PartyPerson } from '../player/party/party-people';
 import { PartyPersonRowComponent } from '../player/party/party-person-row';
 import { PartyHostSwitchesComponent } from '../player/party/party-host-switches';
-import { PartyVoiceBarComponent } from '../player/party/party-voice-bar';
-import { VoiceService } from '../../core/services/party/voice.service';
-import { LucideCalendarPlus, LucideCheck, LucideMic, LucidePlay, LucideShare2 } from '@lucide/angular';
+import { LucideCalendarPlus, LucideCheck, LucidePlay, LucideShare2 } from '@lucide/angular';
 import { BackgroundService } from '../../core/services/background.service';
 import { DeviceService } from '../../core/services/device.service';
 import { NavbarService } from '../../core/services/navbar.service';
@@ -43,13 +40,13 @@ import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 /** The lobby opens this long before the scheduled time (server `LOBBY_OPEN_BEFORE_MS`). */
 const LOBBY_OPEN_MS = 15 * 60_000;
 
-/** `/parties/:id`: a party's page. Scheduled: info, link and host actions; lobby open: members, ready, chat and start; live: join. */
+/** `/parties/:id`: a party's page. Scheduled: info, link and host actions; lobby open: members, ready and start; live: join. */
 @Component({
   selector: 'app-party-page',
   imports: [
-    FormsModule, NgTemplateOutlet, RouterLink, SynopsisComponent, TranslatePipe, ResolveUrlPipe, TranslatePluralPipe, TvSectionDirective, TvRowDirective, PartyChatComponent, PartyHostSwitchesComponent, PartyInviteePickerComponent, PartyPersonRowComponent,
-    PartyVoiceBarComponent, MobileFanartHeroComponent, UserAvatarComponent,
-    LucideCalendarPlus, LucideCheck, LucideMic, LucidePlay, LucideShare2,
+    FormsModule, NgTemplateOutlet, RouterLink, SynopsisComponent, TranslatePipe, ResolveUrlPipe, TranslatePluralPipe, TvSectionDirective, TvRowDirective, PartyHostSwitchesComponent, PartyInviteePickerComponent, PartyPersonRowComponent,
+    MobileFanartHeroComponent, UserAvatarComponent,
+    LucideCalendarPlus, LucideCheck, LucidePlay, LucideShare2,
   ],
   templateUrl: './party-page.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -65,7 +62,6 @@ export class PartyPageComponent implements OnInit, OnDestroy {
   private readonly sse = inject(SseService);
   private readonly mediaService = inject(MediaService);
   protected readonly party = inject(PartyService);
-  protected readonly voice = inject(VoiceService);
   protected readonly navbar = inject(NavbarService);
   protected readonly tv = inject(TvService);
   private readonly background = inject(BackgroundService);
@@ -145,11 +141,10 @@ export class PartyPageComponent implements OnInit, OnDestroy {
   protected readonly people = computed<PartyPerson[]>(() => {
     const v = this.view();
     const members = this.joined() ? this.party.members() : (v?.live?.members ?? []);
-    return v ? partyPeople(v.host, v.invitees, members, this.voice.speaking()) : [];
+    return v ? withoutVoice(partyPeople(v.host, v.invitees, members, new Set())) : [];
   });
   protected readonly connectedCount = computed(() => connectedCount(this.people()));
   protected readonly missingCount = computed(() => missingCount(this.people()));
-  protected readonly voiceCount = computed(() => (this.view()?.live?.members ?? []).filter((m) => m.voice).length);
   protected readonly canHost = computed(() =>
     this.joined() ? this.party.isHost() : this.view()?.host.userId === this.auth.user()?.id,
   );
