@@ -1,5 +1,6 @@
-<dialog #dialog class="modal">
-  <div class="modal-box max-w-2xl">
+<dialog #dialog class="modal" [style.padding-bottom.px]="keyboard.height()">
+  <!-- In the player the keyboard overlays the page: the box centres and shrinks into the space above it. -->
+  <div class="modal-box max-w-2xl" [style.max-height]="keyboard.height() ? 'calc(100% - 1rem)' : null">
     <app-modal-header [title]="'party.reaction_settings' | translate" />
     <div class="flex flex-col gap-4 pt-2">
       <app-toggle-field
@@ -24,7 +25,8 @@
           <svg lucideSearch class="h-4 w-4 text-base-content/50"></svg>
           <input
             data-no-focus-ring
-            type="search"
+            type="text"
+            enterkeyhint="search"
             class="grow"
             maxlength="100"
             [placeholder]="'common.search' | translate"
@@ -32,6 +34,11 @@
             [ngModel]="query()"
             (ngModelChange)="query.set($event)"
           />
+          @if (query()) {
+            <button type="button" class="btn btn-ghost btn-circle btn-sm -mr-2" [attr.aria-label]="'common.clear' | translate" (click)="query.set('')">
+              <svg lucideX class="h-4 w-4"></svg>
+            </button>
+          }
         </label>
         <div class="max-h-72 overflow-y-auto px-2 pt-2">
           @for (s of sections(); track s.key) {
