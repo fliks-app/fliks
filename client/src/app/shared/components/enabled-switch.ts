@@ -11,8 +11,6 @@ export class EnabledSwitchComponent {
   readonly busy = input(false);
   readonly disabled = input(false);
   readonly ariaLabelKey = input('common.active');
-  /** `success` reads as "enabled" in admin tables; `primary` for a plain preference. */
-  readonly tone = input<'success' | 'primary'>('success');
   readonly toggle = output<void>();
 
   private readonly checkbox = viewChild<ElementRef<HTMLInputElement>>('checkbox');

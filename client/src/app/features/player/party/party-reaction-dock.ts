@@ -21,6 +21,6 @@ export class PartyReactionDockComponent {
 
   protected send(emoji: string): void {
     this.party.react(emoji);
-    if (this.party.reactionAutoClose()) this.open.set(false);
+    if (!this.party.reactionKeepOpen()) this.open.set(false);
   }
 }

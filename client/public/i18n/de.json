@@ -3518,7 +3518,7 @@
     "join_failed": "Beitritt zur Party nicht möglich",
     "reaction_settings": "Reaktionen",
     "reaction_dock_show": "Reaktionsknopf auf dem Video anzeigen",
-    "reaction_auto_close": "Leiste nach dem Senden einklappen",
+    "reaction_keep_open": "Leiste offen lassen",
     "chat_name_sep": ": ",
     "tab_members": "Mitglieder",
     "host_badge": "Host",

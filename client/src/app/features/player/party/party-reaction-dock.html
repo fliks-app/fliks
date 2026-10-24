@@ -1,4 +1,4 @@
-@if (open()) {
+@if (open() && !party.reactionKeepOpen()) {
   <!-- An outside tap only folds the row; it must not reach the player and wake its controls. -->
   <div class="dock-backdrop" (click)="open.set(false)" (touchstart)="$event.stopPropagation()" (pointerdown)="$event.stopPropagation()"></div>
 }

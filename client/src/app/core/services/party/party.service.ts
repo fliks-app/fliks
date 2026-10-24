@@ -94,9 +94,9 @@ export class PartyService {
   readonly messages = signal<PartyMessage[]>([]);
   readonly unread = signal(0);
   readonly panelOpen = signal(false);
-  /** Reaction settings, per device: the floating button over the video, and whether its row folds after a send. */
+  /** Reaction settings, per device: the floating button over the video, and whether its row stays open. */
   readonly reactionDock = signal(readFlag('party.reactionDock', true));
-  readonly reactionAutoClose = signal(readFlag('party.reactionAutoClose', true));
+  readonly reactionKeepOpen = signal(readFlag('party.reactionKeepOpen', false));
   readonly bubbles = signal<PartyMessage[]>([]);
   readonly reactions = signal<FloatingReaction[]>([]);
   /** The party ended under us (host ended, expired, kicked): the player leaves. */
@@ -422,9 +422,9 @@ export class PartyService {
     writeFlag('party.reactionDock', on);
   }
 
-  setReactionAutoClose(on: boolean): void {
-    this.reactionAutoClose.set(on);
-    writeFlag('party.reactionAutoClose', on);
+  setReactionKeepOpen(on: boolean): void {
+    this.reactionKeepOpen.set(on);
+    writeFlag('party.reactionKeepOpen', on);
   }
 
   setPanelOpen(open: boolean): void {

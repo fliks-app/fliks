@@ -3518,7 +3518,7 @@
     "join_failed": "Impossible de rejoindre cette séance",
     "reaction_settings": "Réactions",
     "reaction_dock_show": "Afficher le bouton de réactions sur la vidéo",
-    "reaction_auto_close": "Refermer la barre après un envoi",
+    "reaction_keep_open": "Garder la barre ouverte",
     "chat_name_sep": "\u00a0: ",
     "tab_members": "Membres",
     "host_badge": "Hôte",
