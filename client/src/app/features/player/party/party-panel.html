@@ -9,7 +9,7 @@
       [attr.aria-pressed]="showMembers()"
       (click)="showMembers.set(!showMembers())"
     >
-      <svg lucideUsers class="h-4 w-4"></svg><span class="text-sm">{{ party.members().length }}</span>
+      <svg lucideUsers class="h-4 w-4"></svg><span class="text-sm">{{ connected() }}</span>
     </button>
     <button
       type="button"
@@ -29,38 +29,18 @@
   }
 
   @if (showMembers() && !keyboard.height()) {
+    <p class="px-3 pt-2 text-sm opacity-70">
+      {{ 'party.people_connected' | translatePlural: connected() }} · {{ 'party.people_invited' | translatePlural: party.party()?.invitees?.length ?? 0 }}
+    </p>
     <ul class="min-h-0 flex-1 overflow-y-auto px-3 py-2 text-sm">
-      @for (m of party.members(); track m.deviceId + ':' + m.userId) {
-        <li class="flex items-center gap-2 py-1.5">
-          <span
-            class="h-2.5 w-2.5 shrink-0 rounded-full"
-            [class.bg-success]="m.status === 'ready'"
-            [class.bg-warning]="m.status === 'buffering' || m.status === 'waiting'"
-            [class.bg-base-content]="m.status === 'away'"
-            [class.opacity-40]="m.status === 'away'"
-            [attr.title]="'party.status_' + m.status | translate"
-          ></span>
-          <span class="min-w-0 flex-1">
-            <span class="block truncate">{{ m.username }}</span>
-            <span class="block truncate text-sm opacity-60">{{ ('party.status_' + m.status) | translate }}</span>
-          </span>
-          @if (m.voice) {
-            <span
-              class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full"
-              [class.ring-2]="voice.speaking().has(m.deviceId)"
-              [class.ring-success]="voice.speaking().has(m.deviceId)"
-              [class.opacity-50]="m.voice.muted"
-              [attr.title]="(m.voice.muted ? 'party.voice_muted' : 'party.voice_on') | translate"
-            >
-              @if (m.voice.muted) { <svg lucideMicOff class="h-3.5 w-3.5"></svg> } @else { <svg lucideMic class="h-3.5 w-3.5"></svg> }
-            </span>
-          }
-          @if (m.role === 'host') {
-            <span class="badge badge-primary badge-sm gap-1"><svg lucideCrown class="h-3 w-3"></svg>{{ 'party.host_badge' | translate }}</span>
-          } @else if (party.isHost()) {
-            <button type="button" class="btn btn-ghost btn-xs" (click)="party.makeHost(m.userId)">{{ 'party.make_host' | translate }}</button>
-            <button type="button" class="btn btn-ghost btn-xs text-error" (click)="party.kick(m.userId)">{{ 'party.kick' | translate }}</button>
-          }
+      @for (p of people(); track p.userId) {
+        <li>
+          <app-party-person-row [person]="p">
+            @if (party.isHost() && !p.host && (p.state === 'connected' || p.state === 'link')) {
+              <button type="button" class="btn btn-ghost btn-xs" (click)="party.makeHost(p.userId)">{{ 'party.make_host' | translate }}</button>
+              <button type="button" class="btn btn-ghost btn-xs text-error" (click)="party.kick(p.userId)">{{ 'party.kick' | translate }}</button>
+            }
+          </app-party-person-row>
         </li>
       }
     </ul>

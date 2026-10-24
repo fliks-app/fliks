@@ -138,32 +138,7 @@
             </div>
             <ul class="flex flex-col gap-1 rounded-box bg-base-200 p-2">
               @for (p of people(); track p.userId) {
-                <li class="flex items-center gap-3 rounded-lg p-2">
-                  <span class="rounded-full" [class.ring-2]="p.speaking" [class.ring-success]="p.speaking" [class.opacity-50]="p.state === 'invited' || p.state === 'absent'">
-                    <app-user-avatar [username]="p.username" size="w-10 h-10 text-sm" />
-                  </span>
-                  <div class="min-w-0 flex-1">
-                    <div class="flex items-center gap-2">
-                      <span class="truncate font-medium">{{ p.username }}</span>
-                      @if (p.host) {
-                        <span class="badge badge-primary">{{ 'party.host_badge' | translate }}</span>
-                      }
-                    </div>
-                  </div>
-                  @if (p.voice) {
-                    <span [class.opacity-50]="p.voice.muted">
-                      @if (p.voice.muted) { <svg lucideMicOff class="h-4 w-4"></svg> } @else { <svg lucideMic class="h-4 w-4"></svg> }
-                    </span>
-                  }
-                  @switch (p.state) {
-                    @case ('connected') {
-                      <span class="badge" [class.badge-success]="p.status === 'ready'" [class.badge-warning]="p.status !== 'ready' && p.status !== 'away'" [class.badge-ghost]="p.status === 'away'">{{ ('party.status_' + p.status) | translate }}</span>
-                    }
-                    @case ('link') { <span class="badge badge-info badge-outline">{{ 'party.person_link' | translate }}</span> }
-                    @case ('invited') { <span class="badge badge-ghost">{{ 'party.person_invited' | translate }}</span> }
-                    @default { <span class="badge badge-ghost">{{ 'party.person_absent' | translate }}</span> }
-                  }
-                </li>
+                <li><app-party-person-row [person]="p" /></li>
               }
             </ul>
             @if (joined()) {

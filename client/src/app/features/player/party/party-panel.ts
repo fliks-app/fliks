@@ -1,6 +1,7 @@
-import { ChangeDetectionStrategy, Component, effect, inject, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, output, signal } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
-import { LucideCrown, LucideMic, LucideMicOff, LucideSettings, LucideUsers, LucideX } from '@lucide/angular';
+import { TranslatePluralPipe } from '../../../core/pipes/translate-plural.pipe';
+import { LucideSettings, LucideUsers, LucideX } from '@lucide/angular';
 import { DeviceService } from '../../../core/services/device.service';
 import { KeyboardOverlayService } from '../../../core/services/keyboard-overlay.service';
 import { DismissableStackService } from '../../../core/services/dismissable-stack.service';
@@ -8,11 +9,13 @@ import { VoiceService } from '../../../core/services/party/voice.service';
 import { PartyService } from '../../../core/services/party/party.service';
 import { TvSectionDirective } from '../../../shared/directives/tv-section.directive';
 import { PartyChatComponent } from './party-chat';
+import { connectedCount, partyPeople } from './party-people';
+import { PartyPersonRowComponent } from './party-person-row';
 import { PartyVoiceBarComponent } from './party-voice-bar';
 
 @Component({
   selector: 'app-party-panel',
-  imports: [TranslatePipe, LucideCrown, LucideMic, LucideMicOff, LucideSettings, LucideUsers, LucideX, TvSectionDirective, PartyChatComponent, PartyVoiceBarComponent],
+  imports: [TranslatePipe, TranslatePluralPipe, LucideSettings, LucideUsers, LucideX, TvSectionDirective, PartyChatComponent, PartyPersonRowComponent, PartyVoiceBarComponent],
   templateUrl: './party-panel.html',
   styleUrl: './party-panel.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -25,6 +28,11 @@ export class PartyPanelComponent {
   protected readonly isTv = inject(DeviceService).isTv;
   protected readonly keyboard = inject(KeyboardOverlayService);
   readonly openSettings = output<void>();
+  protected readonly people = computed(() => {
+    const p = this.party.party();
+    return p ? partyPeople(p.host, p.invitees, this.party.members(), this.voice.speaking()) : [];
+  });
+  protected readonly connected = computed(() => connectedCount(this.people()));
 
   protected readonly showMembers = signal(false);
 

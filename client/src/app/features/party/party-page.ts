@@ -4,7 +4,7 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { NgTemplateOutlet } from '@angular/common';
-import { PartyApiService, type PartyDto, type PartyMemberStatus, type PartySummaryDto, type PartySwitches } from '../../core/services/api/party-api.service';
+import { PartyApiService, type PartyDto, type PartySummaryDto, type PartySwitches } from '../../core/services/api/party-api.service';
 import { MediaService, type Media } from '../../core/services/api/media.service';
 import { saveFile } from '../../core/plugins/save-file.plugin';
 import { buildPartyIcs } from './party-ics';
@@ -17,10 +17,12 @@ import { formatTime } from '../../core/utils/player.utils';
 import { TvRowDirective } from '../../shared/directives/tv-row.directive';
 import { TvSectionDirective } from '../../shared/directives/tv-section.directive';
 import { PartyChatComponent } from '../player/party/party-chat';
+import { connectedCount, partyPeople, type PartyPerson } from '../player/party/party-people';
+import { PartyPersonRowComponent } from '../player/party/party-person-row';
 import { PartyHostSwitchesComponent } from '../player/party/party-host-switches';
 import { PartyVoiceBarComponent } from '../player/party/party-voice-bar';
 import { VoiceService } from '../../core/services/party/voice.service';
-import { LucideCalendarPlus, LucideCheck, LucideMic, LucideMicOff, LucidePlay, LucideShare2 } from '@lucide/angular';
+import { LucideCalendarPlus, LucideCheck, LucideMic, LucidePlay, LucideShare2 } from '@lucide/angular';
 import { BackgroundService } from '../../core/services/background.service';
 import { DeviceService } from '../../core/services/device.service';
 import { NavbarService } from '../../core/services/navbar.service';
@@ -41,26 +43,13 @@ import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 /** The lobby opens this long before the scheduled time (server `LOBBY_OPEN_BEFORE_MS`). */
 const LOBBY_OPEN_MS = 15 * 60_000;
 
-/** A person of the party: a live member, an invitee not here yet, or someone who came through the link. */
-export interface PartyPerson {
-  userId: number;
-  username: string;
-  host: boolean;
-  state: 'connected' | 'invited' | 'link' | 'absent';
-  status: PartyMemberStatus | null;
-  voice: { muted: boolean } | null;
-  speaking: boolean;
-}
-
-const STATE_RANK = { connected: 0, link: 1, invited: 2, absent: 3 } as const;
-
 /** `/parties/:id`: a party's page. Scheduled: info, link and host actions; lobby open: members, ready, chat and start; live: join. */
 @Component({
   selector: 'app-party-page',
   imports: [
-    FormsModule, NgTemplateOutlet, RouterLink, SynopsisComponent, TranslatePipe, ResolveUrlPipe, TranslatePluralPipe, TvSectionDirective, TvRowDirective, PartyChatComponent, PartyHostSwitchesComponent, PartyInviteePickerComponent,
+    FormsModule, NgTemplateOutlet, RouterLink, SynopsisComponent, TranslatePipe, ResolveUrlPipe, TranslatePluralPipe, TvSectionDirective, TvRowDirective, PartyChatComponent, PartyHostSwitchesComponent, PartyInviteePickerComponent, PartyPersonRowComponent,
     PartyVoiceBarComponent, MobileFanartHeroComponent, UserAvatarComponent,
-    LucideCalendarPlus, LucideCheck, LucideMic, LucideMicOff, LucidePlay, LucideShare2,
+    LucideCalendarPlus, LucideCheck, LucideMic, LucidePlay, LucideShare2,
   ],
   templateUrl: './party-page.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -155,32 +144,10 @@ export class PartyPageComponent implements OnInit, OnDestroy {
   );
   protected readonly people = computed<PartyPerson[]>(() => {
     const v = this.view();
-    if (!v) return [];
-    const speaking = this.voice.speaking();
-    const byUser = new Map<number, PartyPerson>();
-    for (const m of this.joined() ? this.party.members() : (v.live?.members ?? [])) {
-      const known = byUser.get(m.userId);
-      if (known) {
-        known.voice ??= m.voice;
-        known.speaking ||= speaking.has(m.deviceId);
-        if (known.status === 'ready' && m.status !== 'ready') known.status = m.status;
-        continue;
-      }
-      const invited = v.invitees.some((i) => i.userId === m.userId);
-      byUser.set(m.userId, {
-        userId: m.userId, username: m.username, host: m.role === 'host' || m.userId === v.host.userId,
-        state: invited || m.userId === v.host.userId ? 'connected' : 'link',
-        status: m.status, voice: m.voice, speaking: speaking.has(m.deviceId),
-      });
-    }
-    const absent = (u: { userId: number; username: string }, host: boolean, state: PartyPerson['state']): PartyPerson => ({
-      userId: u.userId, username: u.username, host, state, status: null, voice: null, speaking: false,
-    });
-    if (!byUser.has(v.host.userId)) byUser.set(v.host.userId, absent(v.host, true, 'absent'));
-    for (const i of v.invitees) if (!byUser.has(i.userId)) byUser.set(i.userId, absent(i, false, 'invited'));
-    return [...byUser.values()].sort((a, b) => Number(b.host) - Number(a.host) || STATE_RANK[a.state] - STATE_RANK[b.state]);
+    const members = this.joined() ? this.party.members() : (v?.live?.members ?? []);
+    return v ? partyPeople(v.host, v.invitees, members, this.voice.speaking()) : [];
   });
-  protected readonly connectedCount = computed(() => this.people().filter((p) => p.state === 'connected' || p.state === 'link').length);
+  protected readonly connectedCount = computed(() => connectedCount(this.people()));
   protected readonly voiceCount = computed(() => (this.view()?.live?.members ?? []).filter((m) => m.voice).length);
   protected readonly canHost = computed(() =>
     this.joined() ? this.party.isHost() : this.view()?.host.userId === this.auth.user()?.id,
