@@ -80,7 +80,7 @@ To each member connection (`emit_to_connection`):
 
 To users (`emit_to_users`):
 - `party.invited { partyId, name, scheduledAt, host: { userId, username }, item: PartyItem }` to invitees.
-- `party.starting { partyId, name }` to invitees when the lobby opens (15 min before) and when a party goes live.
+- `party.starting { partyId, name }` to invitees when the lobby opens (15 min before, or at once for a party for now) and when a party goes live; also to an invitee added while the lobby is open or the party is live.
 - `party.updated { partyId }` to owner + invitees on reschedule, cancel, start, end: the home rail refetches `GET /api/parties`.
 
 Clients drop any `party.state|members|settings` whose `rev` is ≤ the last applied one, and refetch `GET /api/parties/{id}` after an SSE reconnect or a `rev` gap.

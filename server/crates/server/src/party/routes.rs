@@ -873,5 +873,14 @@ pub async fn invite(
     let users = check_followed(&st, row.owner_id, &b.user_ids).await?;
     let added = db::add_invitees(&st.db, id, &users).await?;
     announce_invited(&st, &row, &added).await?;
+    if row.status == "live" || lobby_open(&row) {
+        st.hub.emit_to_users(
+            &added,
+            SseEvent::PartyStarting {
+                party_id: id.into(),
+                name: row.name.clone(),
+            },
+        );
+    }
     Ok(Json(dto(&st, &row, me).await?))
 }

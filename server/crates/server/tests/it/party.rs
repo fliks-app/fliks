@@ -355,6 +355,27 @@ async fn a_party_created_now_or_rescheduled_to_the_past_opens_its_lobby_at_once(
         .call("POST", &format!("/api/parties/{id}/start"), &a, None)
         .await;
     assert_eq!((s, p["status"].clone()), (200, json!("live")));
+    events_of(&mut sb, "party.starting").await;
+
+    let (_, p) = c
+        .call(
+            "POST",
+            "/api/parties",
+            &a,
+            Some(json!({"name": "solo", "mediaId": 1})),
+        )
+        .await;
+    let solo = p["id"].as_i64().unwrap();
+    let (s, _) = c
+        .call(
+            "POST",
+            &format!("/api/parties/{solo}/invitees"),
+            &a,
+            Some(json!({"userIds": [bob]})),
+        )
+        .await;
+    assert_eq!(s, 200);
+    assert_eq!(events_of(&mut sb, "party.starting").await.len(), 1);
 }
 
 #[sqlx::test(migrations = false)]
