@@ -1971,6 +1971,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.qoeGraceUntil = Date.now() + 3_000;
       this.reloadLoadPending = false;
       this.state.loading.set(false);
+      this.drainPendingReload();
     }
   }
 
@@ -3474,7 +3475,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   /** Reload the stream (burn-in toggle, audio switch). User-initiated, so re-arm the native recovery guard and
    *  serialise against other reloads/recoveries; `at` overrides the resume anchor. */
   async reloadStream(at?: number, why: ReloadWhy = { reason: 'other' }) {
-    if (!this.engine || this.reloadingStream) return;
+    if (!this.engine) return;
+    if (this.reloadingStream) {
+      // A pick made mid-reload is already persisted; replay it once the running reload settles.
+      if (at === undefined) this.pendingReload = why;
+      return;
+    }
     this.reloadingStream = true;
     this.reloadReachedPlayback = false;
     this.engine.resetRecoveryGuard();
@@ -3503,7 +3509,15 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.reloadingStream = false;
       this.qoeGraceUntil = Date.now() + 3_000;
       this.reloadLoadPending = false;
+      this.drainPendingReload();
     }
+  }
+
+  private pendingReload: ReloadWhy | null = null;
+  private drainPendingReload(): void {
+    const why = this.pendingReload;
+    this.pendingReload = null;
+    if (why && !this.destroyed) this.reloadStream(undefined, why).catch(() => {});
   }
 
   private async doReloadStream(currentPos: number) {
