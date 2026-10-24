@@ -105,10 +105,9 @@ export class PartyPageComponent implements OnInit, OnDestroy {
   /** The service copy while joined (it follows the events), else the page's own load. */
   protected readonly view = computed(() => (this.party.party()?.id === this.id ? this.party.party() : this.loaded()));
   protected readonly head = computed<PartySummaryDto | null>(() => this.view() ?? this.seed());
-  private readonly handedFanart = this.seed() ? (this.handedState()?.fanartUrl ?? null) : null;
   private readonly fanart = computed(() => {
-    const m = this.media();
-    return (m ? pickFanart(m) : null) ?? this.handedFanart;
+    const item = this.head()?.item;
+    return item ? pickFanart({ ...item, id: item.mediaId }) : null;
   });
   protected readonly heroUrl = computed(() => this.fanart() ?? this.head()?.item.posterUrl ?? null);
   protected readonly overview = computed(() => {
@@ -220,7 +219,7 @@ export class PartyPageComponent implements OnInit, OnDestroy {
     if (this.party.lobby() && this.party.party()?.id === this.id) void this.party.leave();
   }
 
-  private handedState(): { party?: PartySummaryDto; fanartUrl?: string | null } | null {
+  private handedState(): { party?: PartySummaryDto } | null {
     return this.router.getCurrentNavigation()?.extras.state ?? history.state;
   }
 
@@ -344,6 +343,17 @@ export class PartyPageComponent implements OnInit, OnDestroy {
     if (this.joined()) return this.party.setPolicy(policy);
     const dto = await this.run(() => this.api.update(this.id, { policy }));
     if (dto) this.apply(dto);
+  }
+
+  /** Host: takes a scheduled party live now, then joins it like everyone else. */
+  protected async startNow(): Promise<void> {
+    const ok = await this.confirm.confirm({
+      title: this.translate.instant('party.start_now_title'),
+      message: this.translate.instant('party.start_now_message'),
+      confirmLabel: this.translate.instant('party.start_now'),
+    });
+    if (!ok || !(await this.run(() => this.api.start(this.id)))) return;
+    await this.party.enter(this.id);
   }
 
   protected async regenerate(): Promise<void> {

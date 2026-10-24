@@ -223,26 +223,16 @@ export class HomeComponent implements OnInit, OnDestroy {
     return this.languageProfileNames().get(id) ?? `#${id}`;
   }
 
-  private readonly partyFanart = signal(new Map<number, string>());
   protected partyImage(p: PartySummaryDto): string | null {
-    return this.partyFanart().get(p.item.mediaId) ?? p.item.posterUrl;
+    return pickFanart({ ...p.item, id: p.item.mediaId }) ?? p.item.posterUrl;
   }
   protected partyState(p: PartySummaryDto): Record<string, unknown> {
-    return { party: p, fanartUrl: this.partyFanart().get(p.item.mediaId) ?? null };
+    return { party: p };
   }
 
   private loadParties(): void {
     void this.partyApi.list().then(
-      (l) => {
-        this.parties.set(l);
-        for (const id of new Set(l.map((p) => p.item.mediaId))) {
-          if (this.partyFanart().has(id)) continue;
-          void this.mediaService.getOne(id).then((m) => {
-            const url = pickFanart(m);
-            if (url) this.partyFanart.update((f) => new Map(f).set(id, url));
-          }, () => undefined);
-        }
-      },
+      (l) => this.parties.set(l),
       () => undefined,
     );
   }

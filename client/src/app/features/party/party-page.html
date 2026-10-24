@@ -192,6 +192,9 @@
             <section class="flex flex-col gap-3">
               <h2 class="text-lg font-bold">{{ 'party.manage' | translate }}</h2>
               <div appTvRow class="flex flex-wrap gap-2">
+                @if (!joined()) {
+                  <button type="button" class="btn btn-primary" [disabled]="busy()" (click)="startNow()">{{ 'party.start_now' | translate }}</button>
+                }
                 <button type="button" class="btn btn-ghost" (click)="openReschedule()">{{ 'party.reschedule' | translate }}</button>
                 <button type="button" class="btn btn-ghost" [disabled]="busy()" (click)="regenerate()">{{ 'party.regenerate_link' | translate }}</button>
                 <button type="button" class="btn btn-ghost" (click)="inviting.set(!inviting())">{{ 'party.invite_more' | translate }}</button>

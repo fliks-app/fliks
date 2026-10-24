@@ -20,6 +20,8 @@ export interface PartyItem {
   episodeId: number | null;
   title: string;
   posterUrl: string | null;
+  fanartUrl: string | null;
+  additionalFanartUrls: string[];
 }
 
 export interface PartyUser {
