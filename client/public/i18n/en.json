@@ -3516,6 +3516,7 @@
     "closed_kicked": "You were removed from the party",
     "joining": "Joining the party",
     "join_failed": "Could not join this party",
+    "reaction_dock_toggle": "Reaction button on the video",
     "chat_name_sep": ": ",
     "tab_members": "Members",
     "host_badge": "Host",

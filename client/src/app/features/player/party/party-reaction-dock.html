@@ -1,0 +1,27 @@
+@if (open()) {
+  <!-- An outside tap only folds the row; it must not reach the player and wake its controls. -->
+  <div class="dock-backdrop" (click)="open.set(false)" (touchstart)="$event.stopPropagation()" (pointerdown)="$event.stopPropagation()"></div>
+}
+<div class="relative flex items-center gap-1">
+  <div class="emojis flex gap-0.5 rounded-full p-1" [class.open]="open()" [attr.aria-hidden]="!open()">
+    @for (e of emojis; track e; let i = $index) {
+      <button
+        type="button"
+        class="emoji"
+        [style.--i]="emojis.length - 1 - i"
+        [attr.tabindex]="open() ? 0 : -1"
+        (click)="send(e)"
+      >{{ e }}</button>
+    }
+  </div>
+  <button
+    type="button"
+    class="dock-toggle"
+    [class.active]="open()"
+    [attr.aria-label]="'party.reactions' | translate"
+    [attr.aria-expanded]="open()"
+    (click)="open.set(!open())"
+  >
+    <svg lucideSmilePlus class="h-5 w-5"></svg>
+  </button>
+</div>

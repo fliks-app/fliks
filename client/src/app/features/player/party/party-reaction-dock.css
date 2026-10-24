@@ -1,0 +1,76 @@
+:host {
+  position: absolute;
+  right: calc(1rem + env(safe-area-inset-right, 0px));
+  bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+  z-index: 57;
+  /* Only the button and the open row take taps; the folded row must not swallow the video's. */
+  pointer-events: none;
+  transition: bottom 200ms ease;
+}
+/* Desktop keeps the dock while the controls show, above their bar. */
+:host(.lifted) {
+  bottom: 7rem;
+}
+.emojis {
+  background: rgb(0 0 0 / 0.6);
+  backdrop-filter: blur(4px);
+  transform-origin: right center;
+  clip-path: inset(0 0 0 100% round 9999px);
+  opacity: 0;
+  pointer-events: none;
+  transition: clip-path 220ms ease-out, opacity 150ms ease-out;
+}
+.emojis.open {
+  clip-path: inset(0 0 0 0 round 9999px);
+  opacity: 1;
+  pointer-events: auto;
+}
+.emojis > button {
+  transform: translateX(0.75rem);
+  opacity: 0;
+  transition: transform 200ms ease-out, opacity 200ms ease-out;
+  transition-delay: calc(var(--i) * 20ms);
+}
+.emojis.open > button {
+  transform: none;
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .emojis,
+  .emojis > button {
+    transition: none;
+  }
+}
+.dock-toggle {
+  pointer-events: auto;
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 9999px;
+  background: rgb(0 0 0 / 0.45);
+  color: #fff;
+  opacity: 0.7;
+  transition: opacity 150ms ease;
+}
+.dock-toggle:hover,
+.dock-toggle.active {
+  opacity: 1;
+}
+.emoji {
+  display: grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 9999px;
+  font-size: 1.375rem;
+  line-height: 1;
+}
+.emoji:active {
+  background: rgb(255 255 255 / 0.15);
+}
+.dock-backdrop {
+  position: fixed;
+  inset: 0;
+  pointer-events: auto;
+}

@@ -58,6 +58,16 @@ const REACTION_MS = 3000;
 const MAX_MESSAGES = 200;
 
 /** Party-wide state: usable outside the player (invites, join links), the player's PartyController drives the engine from it. */
+const REACTION_DOCK_KEY = 'party.reactionDock';
+
+function readReactionDock(): boolean {
+  try {
+    return localStorage.getItem(REACTION_DOCK_KEY) !== '0';
+  } catch {
+    return true;
+  }
+}
+
 @Injectable({ providedIn: 'root' })
 export class PartyService {
   private readonly api = inject(PartyApiService);
@@ -77,6 +87,8 @@ export class PartyService {
   readonly messages = signal<PartyMessage[]>([]);
   readonly unread = signal(0);
   readonly panelOpen = signal(false);
+  /** The floating reaction button over the video, shown or hidden from the player's top bar; kept per device. */
+  readonly reactionDock = signal(readReactionDock());
   readonly bubbles = signal<PartyMessage[]>([]);
   readonly reactions = signal<FloatingReaction[]>([]);
   /** The party ended under us (host ended, expired, kicked): the player leaves. */
@@ -395,6 +407,15 @@ export class PartyService {
     this.reset();
     this.toast.info(this.translate.instant(`party.closed_${reason}`));
     this.closed.next(reason);
+  }
+
+  setReactionDock(on: boolean): void {
+    this.reactionDock.set(on);
+    try {
+      localStorage.setItem(REACTION_DOCK_KEY, on ? '1' : '0');
+    } catch {
+      // storage unavailable: the choice lasts for this session
+    }
   }
 
   setPanelOpen(open: boolean): void {

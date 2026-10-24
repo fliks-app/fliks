@@ -65,8 +65,9 @@
         </button>
       }
       @if (partyActive()) {
+        <!-- TV reacts from this menu: the floating dock only shows with the controls hidden, out of D-pad reach. -->
         <div class="dropdown dropdown-end" [class.dropdown-open]="openDropdown() === 'reactions'">
-          <button type="button" class="btn btn-ghost btn-circle btn-md text-white" [attr.aria-label]="'party.reactions' | translate" (click)="toggleDropdown('reactions', $event)">
+          <button type="button" class="btn btn-ghost btn-circle btn-md" [class.text-info]="!isTv() && reactionDock()" [class.text-white]="isTv() || !reactionDock()" [attr.aria-label]="(isTv() ? 'party.reactions' : 'party.reaction_dock_toggle') | translate" [attr.aria-pressed]="isTv() ? null : reactionDock()" (click)="isTv() ? toggleDropdown('reactions', $event) : toggleReactionDock.emit()">
             <svg lucideSmilePlus [class]="isMobileTouch() ? 'h-5 w-5' : 'h-6 w-6'"></svg>
           </button>
           <div class="dropdown-content mt-2 flex gap-0.5 rounded-full bg-neutral/95 p-1 shadow-2xl backdrop-blur-sm">

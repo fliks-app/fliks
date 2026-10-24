@@ -3516,6 +3516,7 @@
     "closed_kicked": "Te han retirado de la sesión",
     "joining": "Entrando en la sesión",
     "join_failed": "No se pudo entrar en esta sesión",
+    "reaction_dock_toggle": "Botón de reacciones sobre el vídeo",
     "chat_name_sep": ": ",
     "tab_members": "Miembros",
     "host_badge": "Anfitrión",
