@@ -72,7 +72,7 @@ Consortium's emoji and CLDR data (Unicode-3.0).
 
 | Component | License | Source | Use |
 |---|---|---|---|
-| emojibase-data | MIT | https://github.com/milesj/emojibase | localized names and groups, copied to the client's `emoji-data/` assets |
+| emojibase-data | MIT | https://github.com/milesj/emojibase | localized names and groups, bundled as one lazy chunk per UI language |
 | emojis (Rust crate) | (MIT OR Apache-2.0) AND Unicode-3.0 | https://github.com/rossmacarthur/emojis | server-side check that a reaction is a standard emoji |
 
 ## Package-manager dependencies
