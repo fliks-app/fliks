@@ -1,3 +1,4 @@
+import { Share } from '@capacitor/share';
 import { Injectable, Injector, computed, effect, inject, signal, untracked } from '@angular/core';
 import { toObservable } from '@angular/core/rxjs-interop';
 import { HttpErrorResponse } from '@angular/common/http';
@@ -60,6 +61,10 @@ const BUBBLE_MS = 4000;
 export const REACTION_MS = 2000;
 const MAX_MESSAGES = 200;
 
+/** Closing the sheet rejects with an AbortError on the web and "Share canceled" on Android and iOS. */
+const isShareDismissal = (e: unknown): boolean =>
+  (e as DOMException)?.name === 'AbortError' || (e as Error)?.message === 'Share canceled';
+
 /** Party-wide state: usable outside the player (invites, join links), the player's PartyController drives the engine from it. */
 @Injectable({ providedIn: 'root' })
 export class PartyService {
@@ -117,6 +122,7 @@ export class PartyService {
   private wasConnected = false;
 
   constructor() {
+    void Share.canShare().then((r) => this.canShare.set(r.value), () => undefined);
     if (typeof matchMedia === 'function') {
       const mq = matchMedia('(orientation: portrait)');
       this.portrait.set(mq.matches);
@@ -152,21 +158,20 @@ export class PartyService {
     this.toast.success(
       this.translate.instant('party.toast_scheduled', { name: dto.name, link }),
       10000,
-      { label: this.translate.instant(this.canShare ? 'party.share_link' : 'party.copy_link'), run: () => void this.shareLink(link, dto.name) },
+      { label: this.translate.instant(this.canShare() ? 'party.share_link' : 'party.copy_link'), run: () => void this.shareLink(link, dto.name) },
     );
   }
 
-  /** The system share sheet (Android WebView, iOS WKWebView and most browsers expose it). */
-  readonly canShare = typeof navigator.share === 'function';
+  /** True where the OS share sheet exists (native shells, browsers with navigator.share). */
+  readonly canShare = signal(false);
 
-  /** Shares the link natively, else copies it. */
+  /** Opens the system share sheet when there is one, else copies the link. */
   async shareLink(link: string, title: string): Promise<void> {
-    if (!this.canShare) return this.copyLink(link);
+    if (!this.canShare()) return this.copyLink(link);
     try {
-      await navigator.share({ title, url: link });
+      await Share.share({ title, url: link });
     } catch (e) {
-      // Dismissing the sheet is not an error.
-      if ((e as DOMException)?.name !== 'AbortError') await this.copyLink(link);
+      if (!isShareDismissal(e)) await this.copyLink(link);
     }
   }
 
