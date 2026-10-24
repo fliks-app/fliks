@@ -67,6 +67,14 @@ export class PlayerStateService {
   /** Read at error time, not cached, so a mid-session play-method change is reflected. Registered once by PlayerComponent. */
   private dolbyVisionProbe: (() => boolean) | null = null;
 
+  /** Levels the voice ducker wrote (x1000), so their async `volumechange` is not saved as the user's level. */
+  private readonly duckWrites = new Set<number>();
+
+  noteDuckWrite(level: number): void {
+    if (this.duckWrites.size > 40) this.duckWrites.clear();
+    this.duckWrites.add(Math.round(level * 1000));
+  }
+
   constructor() {
     // Persist the level (not the mute flag) whenever it changes, so it carries
     // across reloads and navigations.
@@ -149,7 +157,8 @@ export class PlayerStateService {
     this.engine = engine;
 
     engine.on('volumechange', (e) => {
-      this.volume.set(e.volume);
+      // A party ducking write is not the user's level.
+      if (!this.duckWrites.delete(Math.round(e.volume * 1000))) this.volume.set(e.volume);
       this.muted.set(e.muted);
     });
 

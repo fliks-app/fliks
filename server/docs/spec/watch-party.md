@@ -62,7 +62,7 @@ DTOs (camelCase, every key present, `null` not absent):
 - `PartySummaryDto { id, name, status, scheduledAt: ISO|null, host: { userId, username }, item: PartyItem, memberCount: int }`
 - `PartyDto = PartySummaryDto + { policy, inviteToken: string|null (host and members only), invitees: { userId, username }[], live: PartyLive|null }`
 - `PartyLive { rev, state, anchor: { position, serverTimeMs }, members: PartyMember[], messages: PartyMessage[] (last 50) }`
-- `PartyMember { userId, username, deviceId, role, status, deviceName: string|null, formFactor: string|null }`
+- `PartyMember { userId, username, deviceId, role, status, deviceName: string|null, formFactor: string|null, voice: { muted: bool }|null }` (`voice` null = not in the voice channel)
 - `PartyMessage { id: u64, userId: int|null (null = system), username: string|null, text: string, system: { kind: string, by: string|null, args: object }|null, sentAtMs: i64 }`
 
 ## Events (SSE, `events-hub.md`)
@@ -83,6 +83,18 @@ To users (`emit_to_users`):
 Clients drop any `party.state|members|settings` whose `rev` is ≤ the last applied one, and refetch `GET /api/parties/{id}` after an SSE reconnect or a `rev` gap.
 
 System messages are `PartyMessage` with `system.kind` in `joined, left, paused, resumed, seeked, item_changed, host_changed, kicked`, `system.by` = username, `args` e.g. `{ position }`. The client translates `party.system.<kind>`.
+
+## Voice
+
+Peer-to-peer WebRTC audio, full mesh between the members in the voice channel; the server only relays signaling and never sees media.
+
+- `VOICE_MAX = 8` members in the voice channel per party; a 9th `voice` join gets 409 `party.error_voice_full`.
+- `POST /api/parties/{id}/voice { deviceId, joined: bool, muted: bool }` → 204. Sets or clears the member's `voice`; bumps `rev` and emits `party.members`. Leaving the party, a kick, or the member's removal clears it. An `away` member keeps `voice` (its peers drop the connection on their side and renegotiate on return).
+- `POST /api/parties/{id}/signal { deviceId, to: string (target deviceId), kind: offer|answer|ice|bye, data: object (max 16 KiB) }` → 204. Both sender and target must be members with `voice` set, else 409 `party.error_voice_not_joined`. Delivered as `party.signal { partyId, from: { userId, deviceId }, kind, data }` to the target member's connection only. Rate limit 60 per 10 s per member, else 429. Not stored, no `rev`.
+- Offer direction: on a new voice member, the member whose `deviceId` sorts lower sends the offer (no glare).
+- `GET /api/parties/ice` → `{ iceServers: RTCIceServer[] }` for any session user, from the setting `party_voice_ice_servers` (JSON array of `{ urls, username?, credential? }`); absent or invalid = `[{ "urls": "stun:stun.l.google.com:19302" }]`. A TURN server is the admin's to configure; credentials are passed through as stored.
+- System messages: `voice_joined`, `voice_left`.
+- Details: a `voice` call that only changes `muted` bumps `rev` without a system message; a `signal` with a `data` that is not an object or over 16 KiB serialized is 400 `party.error_invalid_data`; an empty `iceServers` array stored by the admin is returned as is; the rate limit counts only signals that passed the voice checks.
 
 ## State machine (pure module, unit-tested)
 

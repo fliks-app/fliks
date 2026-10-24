@@ -35,7 +35,11 @@ export interface PartyMember extends PartyUser {
   status: PartyMemberStatus;
   deviceName: string | null;
   formFactor: string | null;
+  /** In the voice channel (null = not in it). */
+  voice: { muted: boolean } | null;
 }
+
+export type PartySignalKind = 'offer' | 'answer' | 'ice' | 'bye';
 
 export interface PartyMessage {
   id: number;
@@ -142,6 +146,18 @@ export class PartyApiService {
 
   sendMessage(id: number, deviceId: string, text: string) {
     return firstValueFrom(this.http.post<PartyMessage>(`/api/parties/${id}/messages`, { deviceId, text }));
+  }
+
+  iceServers() {
+    return firstValueFrom(this.http.get<{ iceServers: RTCIceServer[] }>('/api/parties/ice', QUIET()));
+  }
+
+  voice(id: number, deviceId: string, joined: boolean, muted: boolean) {
+    return firstValueFrom(this.http.post<void>(`/api/parties/${id}/voice`, { deviceId, joined, muted }, QUIET()));
+  }
+
+  signal(id: number, deviceId: string, to: string, kind: PartySignalKind, data: object) {
+    return firstValueFrom(this.http.post<void>(`/api/parties/${id}/signal`, { deviceId, to, kind, data }, QUIET()));
   }
 
   react(id: number, deviceId: string, emoji: string) {

@@ -6,6 +6,9 @@ export const DRIFT_IGNORE_S = 0.5;
 export const DRIFT_SEEK_S = 3;
 export const DRIFT_CHECK_MS = 2000;
 export const SEEK_COOLDOWN_MS = 10_000;
+/** Cast `currentTime` is polled and coarse: a wider dead band, seek only, rarer corrections. */
+export const CAST_DRIFT_IGNORE_S = 1.5;
+export const CAST_SEEK_COOLDOWN_MS = 15_000;
 export const NUDGE_SLOW = 0.95;
 export const NUDGE_FAST = 1.05;
 
@@ -23,12 +26,12 @@ export type DriftAction =
 /** `drift` = local minus group, in seconds: positive means we are ahead. */
 export function driftAction(
   drift: number,
-  opts: { rateSupported: boolean; msSinceSeek: number; seekLocked: boolean },
+  opts: { rateSupported: boolean; msSinceSeek: number; seekLocked: boolean; ignoreS?: number; cooldownMs?: number },
 ): DriftAction {
   const abs = Math.abs(drift);
-  if (abs < DRIFT_IGNORE_S) return { kind: 'none', rate: 1 };
+  if (abs < (opts.ignoreS ?? DRIFT_IGNORE_S)) return { kind: 'none', rate: 1 };
   const nudge = opts.rateSupported && abs < DRIFT_SEEK_S;
   if (nudge) return { kind: 'rate', rate: drift > 0 ? NUDGE_SLOW : NUDGE_FAST };
-  if (opts.seekLocked || opts.msSinceSeek < SEEK_COOLDOWN_MS) return { kind: 'none', rate: 1 };
+  if (opts.seekLocked || opts.msSinceSeek < (opts.cooldownMs ?? SEEK_COOLDOWN_MS)) return { kind: 'none', rate: 1 };
   return { kind: 'seek' };
 }

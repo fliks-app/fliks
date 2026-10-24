@@ -2587,6 +2587,20 @@
         }
       }
     },
+    "/api/parties/ice": {
+      "get": {
+        "tags": [
+          "crate::party"
+        ],
+        "summary": "The `party_voice_ice_servers` array when it parses, else the public STUN default.",
+        "operationId": "ice",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/parties/{id}": {
       "get": {
         "tags": [
@@ -2726,6 +2740,19 @@
         }
       }
     },
+    "/api/parties/{id}/signal": {
+      "post": {
+        "tags": [
+          "crate::party"
+        ],
+        "operationId": "signal",
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/parties/{id}/start": {
       "post": {
         "tags": [
@@ -2745,6 +2772,19 @@
           "crate::party"
         ],
         "operationId": "status",
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/parties/{id}/voice": {
+      "post": {
+        "tags": [
+          "crate::party"
+        ],
+        "operationId": "voice",
         "responses": {
           "204": {
             "description": ""

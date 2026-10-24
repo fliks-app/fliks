@@ -164,6 +164,7 @@ pub fn member_dtos(st: &AppState, host_id: i32, members: &[Member]) -> Vec<Membe
                 status: m.status,
                 device_name: id.and_then(|t| t.identity.device_name.clone()),
                 form_factor: id.and_then(|t| t.identity.form_factor.clone()),
+                voice: m.voice,
             }
         })
         .collect()

@@ -10,6 +10,7 @@ import {
   LucidePlus,
   LucideTv,
 } from '@lucide/angular';
+import { PartyService } from '../../core/services/party/party.service';
 import { AirPlayService } from '../../core/services/airplay.service';
 import { CastService } from '../../core/services/cast.service';
 import { CastPlaybackTarget } from '../../core/services/cast-playback-target';
@@ -51,6 +52,7 @@ export class RemotePickerListComponent {
   protected readonly castService = inject(CastService);
   private readonly airPlay = inject(AirPlayService);
   private readonly castTarget = inject(CastPlaybackTarget);
+  private readonly party = inject(PartyService);
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
 
@@ -119,7 +121,8 @@ export class RemotePickerListComponent {
     const group = (r: PickerRow) => (r.kind === 'airplay' ? 0 : r.kind === 'remote' ? 2 : 1);
     const recent = (r: PickerRow) => (r.id === last ? 0 : 1);
     rows.sort((a, b) => group(a) - group(b) || recent(a) - recent(b));
-    return rows;
+    // AirPlay and remote targets move the playback off this device, which would leave the party.
+    return this.party.active() ? rows.filter((r) => r.kind === 'cast' || r.kind === 'cast-web') : rows;
   });
 
   /** The sheet branch mounts the list only while it is open, so this covers

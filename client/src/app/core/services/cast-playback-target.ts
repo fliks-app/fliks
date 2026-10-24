@@ -45,7 +45,11 @@ export class CastPlaybackTarget implements PlaybackTarget {
   readonly activeQualityId = this.cp.activeQualityId;
   readonly expanded = this.cp.expanded;
 
+  /** Set by the party controller: in a party the overlay's controls are intents, not receiver commands. */
+  partyIntercept: { active(): boolean; togglePlay(): boolean; seek(time: number): boolean; next(): boolean } | null = null;
+
   seek(time: number): void {
+    if (this.partyIntercept?.seek(time)) return;
     this.cast.seek(time);
   }
 
@@ -58,6 +62,7 @@ export class CastPlaybackTarget implements PlaybackTarget {
   }
 
   togglePlayPause(): void {
+    if (this.partyIntercept?.togglePlay()) return;
     this.cast.togglePlayPause();
   }
 
@@ -113,6 +118,7 @@ export class CastPlaybackTarget implements PlaybackTarget {
   });
 
   playNext(): void {
+    if (this.partyIntercept?.next()) return;
     const next = this.nextItem();
     if (!next?.mediaFileId) {
       console.warn('[cast-playback-target] playNext with nothing queued');
@@ -132,6 +138,8 @@ export class CastPlaybackTarget implements PlaybackTarget {
   /** Stop the media but stay on the device: the session outlives it, and the
    *  top-bar chip is how you come back to it. */
   stopPlayback(): void {
+    // The receiver must keep a stream for the party to drive: stopping leaves the cast instead.
+    if (this.partyIntercept?.active()) return this.disconnect();
     this.cast.stop();
     this.cp.clear();
     this.cp.expanded.set(false);

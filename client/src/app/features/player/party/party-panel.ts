@@ -1,17 +1,19 @@
 import { ChangeDetectionStrategy, Component, effect, inject, signal } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
-import { LucideCrown, LucideRefreshCw, LucideX } from '@lucide/angular';
+import { LucideCrown, LucideMic, LucideMicOff, LucideRefreshCw, LucideX } from '@lucide/angular';
 import { DeviceService } from '../../../core/services/device.service';
 import { DismissableStackService } from '../../../core/services/dismissable-stack.service';
+import { VoiceService } from '../../../core/services/party/voice.service';
 import { PartyService } from '../../../core/services/party/party.service';
 import { TvRowDirective } from '../../../shared/directives/tv-row.directive';
 import { TvSectionDirective } from '../../../shared/directives/tv-section.directive';
 import { PartyController } from '../party-controller';
 import { PartyChatComponent } from './party-chat';
+import { PartyVoiceBarComponent } from './party-voice-bar';
 
 @Component({
   selector: 'app-party-panel',
-  imports: [TranslatePipe, LucideCrown, LucideRefreshCw, LucideX, TvRowDirective, TvSectionDirective, PartyChatComponent],
+  imports: [TranslatePipe, LucideCrown, LucideMic, LucideMicOff, LucideRefreshCw, LucideX, TvRowDirective, TvSectionDirective, PartyChatComponent, PartyVoiceBarComponent],
   templateUrl: './party-panel.html',
   styleUrl: './party-panel.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -19,6 +21,7 @@ import { PartyChatComponent } from './party-chat';
 })
 export class PartyPanelComponent {
   protected readonly party = inject(PartyService);
+  protected readonly voice = inject(VoiceService);
   private readonly controller = inject(PartyController);
   private readonly dismissStack = inject(DismissableStackService);
   protected readonly isTv = inject(DeviceService).isTv;

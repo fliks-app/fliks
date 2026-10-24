@@ -12,5 +12,8 @@
        the app's Team ID. -->
   <key>com.apple.security.cs.disable-library-validation</key>
   <true/>
+  <!-- Microphone for watch-party voice chat. -->
+  <key>com.apple.security.device.audio-input</key>
+  <true/>
 </dict>
 </plist>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { driftAction, groupPosition } from './party-sync';
+import { CAST_DRIFT_IGNORE_S, CAST_SEEK_COOLDOWN_MS, driftAction, groupPosition } from './party-sync';
 
 const opts = { rateSupported: true, msSinceSeek: 60_000, seekLocked: false };
 
@@ -34,5 +34,21 @@ describe('driftAction', () => {
   it('rate-limits corrective seeks and never seeks while locked', () => {
     expect(driftAction(5, { ...opts, msSinceSeek: 9000 }).kind).toBe('none');
     expect(driftAction(5, { ...opts, seekLocked: true }).kind).toBe('none');
+  });
+});
+
+describe('driftAction on cast', () => {
+  const cast = { rateSupported: false, msSinceSeek: 60_000, seekLocked: false, ignoreS: CAST_DRIFT_IGNORE_S, cooldownMs: CAST_SEEK_COOLDOWN_MS };
+  it('leaves drift inside the 1.5 s band alone', () => {
+    expect(driftAction(1.4, cast).kind).toBe('none');
+    expect(driftAction(-1.49, cast).kind).toBe('none');
+  });
+  it('seeks, never nudges the rate, past the band', () => {
+    expect(driftAction(1.6, cast).kind).toBe('seek');
+    expect(driftAction(-2, cast).kind).toBe('seek');
+  });
+  it('allows one corrective seek per 15 s', () => {
+    expect(driftAction(5, { ...cast, msSinceSeek: 14_000 }).kind).toBe('none');
+    expect(driftAction(5, { ...cast, msSinceSeek: 15_000 }).kind).toBe('seek');
   });
 });

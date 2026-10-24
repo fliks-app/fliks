@@ -84,6 +84,7 @@ This domain stores every key; the semantics belong to consumers. Registry of doc
 | `livetv_segment_seconds`, `livetv_timeshift_minutes`, `livetv_probe_seconds`, `livetv_channel_idle_seconds`, `livetv_fast_zap` | integer with default; fast zap `'true'`/`'false'`/else null | engine push (engine push) |
 | `subtitle_translation_*` (enabled, engine, max_concurrency, gemini_api_key/model, openai_base_url/api_key/model, libretranslate_url/api_key) | | cache |
 | `metadata_language`, `metadata_region` | | cache |
+| `party_voice_ice_servers` (JSON `{urls, username?, credential?}[]`; absent or invalid = public STUN) | parsed per `GET /api/parties/ice` (`watch-party.md`, Voice) | none |
 | `plugin.<id>.<key>` | plugin `config.get` strips the prefix; writes tagged with the plugin id as origin | running-plugin notification |
 | `plugins.auto_update` (only `'false'` disables), `plugins.skip_compatibility_check` (`'true'`), plugin allow-unsigned key | read on demand | none |
 | `engine_url`, `engine_token`, `engine_path_mappings` (JSON `{from,to}[]`) | loaded by the engine remote settings loader, on init and on `reconfigure` | engine service fields, refreshed by an explicit `reconfigure` call, not by the change notification |

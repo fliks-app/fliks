@@ -33,6 +33,7 @@ pub fn router() -> Router<AppState> {
         .route("/api/time", get(time))
         .route("/api/parties", get(list).post(create))
         .route("/api/parties/by-token/{token}", get(by_token))
+        .route("/api/parties/ice", get(ice))
         .route("/api/parties/{id}", get(show).patch(patch).delete(end))
         .route("/api/parties/{id}/join", post(join))
         .route("/api/parties/{id}/start", post(start))
@@ -41,6 +42,8 @@ pub fn router() -> Router<AppState> {
         .route("/api/parties/{id}/status", post(status))
         .route("/api/parties/{id}/messages", post(message))
         .route("/api/parties/{id}/reactions", post(reaction))
+        .route("/api/parties/{id}/voice", post(voice))
+        .route("/api/parties/{id}/signal", post(signal))
         .route("/api/parties/{id}/members/{userId}/kick", post(kick))
         .route("/api/parties/{id}/members/{userId}/host", post(transfer))
         .route("/api/parties/{id}/invitees", post(invite))
@@ -106,6 +109,8 @@ fn machine_err(e: PartyErr) -> PartyError {
         PartyErr::RateLimited => fail(StatusCode::TOO_MANY_REQUESTS, "party.error_rate_limited"),
         PartyErr::Invalid(_) => fail(StatusCode::BAD_REQUEST, "party.error_invalid"),
         PartyErr::Stale => fail(StatusCode::CONFLICT, "party.error_stale"),
+        PartyErr::VoiceFull => fail(StatusCode::CONFLICT, "party.error_voice_full"),
+        PartyErr::VoiceNotJoined => fail(StatusCode::CONFLICT, "party.error_voice_not_joined"),
     }
 }
 
@@ -714,6 +719,67 @@ pub async fn reaction(
     .await?
     .map_err(machine_err)?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+#[utoipa::path(post, path = "/api/parties/{id}/voice", responses((status = 204)))]
+pub async fn voice(
+    State(st): State<AppState>,
+    SessionAuthed(a): SessionAuthed,
+    PathParams(id): PathParams<i32>,
+    ValidJson(b): ValidJson<VoiceIn>,
+) -> R<StatusCode> {
+    member_row(&st, id, a.user.id).await?;
+    run(&st, id, |l| {
+        l.set_voice(a.user.id, &b.device_id, b.joined, b.muted, now_ms())
+    })
+    .await?
+    .map_err(machine_err)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[utoipa::path(post, path = "/api/parties/{id}/signal", responses((status = 204)))]
+pub async fn signal(
+    State(st): State<AppState>,
+    SessionAuthed(a): SessionAuthed,
+    PathParams(id): PathParams<i32>,
+    ValidJson(b): ValidJson<SignalIn>,
+) -> R<StatusCode> {
+    b.validate()?;
+    member_row(&st, id, a.user.id).await?;
+    let (to_user, to_conn) = st
+        .parties
+        .act(id, |l| {
+            (
+                l.signal_target(a.user.id, &b.device_id, &b.to, now_ms()),
+                vec![],
+            )
+        })
+        .ok_or_else(not_live)?
+        .0
+        .map_err(machine_err)?;
+    st.hub.emit_to_connection(
+        to_user,
+        &to_conn,
+        SseEvent::PartySignal {
+            party_id: id.into(),
+            from: json!({ "userId": a.user.id, "deviceId": b.device_id }),
+            kind: json!(b.kind).as_str().unwrap_or_default().to_owned(),
+            data: b.data,
+        },
+    );
+    Ok(StatusCode::NO_CONTENT)
+}
+
+const DEFAULT_ICE: &str = "stun:stun.l.google.com:19302";
+
+/// The `party_voice_ice_servers` array when it parses, else the public STUN default.
+#[utoipa::path(get, path = "/api/parties/ice", responses((status = 200)))]
+pub async fn ice(State(st): State<AppState>, SessionAuthed(_): SessionAuthed) -> R<Json<Value>> {
+    let stored = db::setting(&st.db, "party_voice_ice_servers").await?;
+    let servers = stored
+        .and_then(|s| serde_json::from_str::<Vec<IceServer>>(&s).ok())
+        .map_or_else(|| json!([{ "urls": DEFAULT_ICE }]), |v| json!(v));
+    Ok(Json(json!({ "iceServers": servers })))
 }
 
 #[utoipa::path(post, path = "/api/parties/{id}/members/{userId}/kick", responses((status = 204)))]

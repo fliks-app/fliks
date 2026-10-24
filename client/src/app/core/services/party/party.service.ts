@@ -23,6 +23,7 @@ import { SseService, type PartyEvent } from '../sse.service';
 import { ToastService } from '../toast.service';
 import { translatedServerMessage } from '../../utils/server-message';
 import { resolvePlayableFile } from '../../../shared/utils/media-play.util';
+import { ServerConfigService } from '../server-config.service';
 import { ClockService } from './clock.service';
 
 /** What the engine has to follow: the last applied `party.state` (or the snapshot's equivalent). */
@@ -62,6 +63,7 @@ export class PartyService {
   private readonly api = inject(PartyApiService);
   private readonly sse = inject(SseService);
   private readonly auth = inject(AuthService);
+  private readonly serverConfig = inject(ServerConfigService);
   private readonly clock = inject(ClockService);
   private readonly router = inject(Router);
   private readonly toast = inject(ToastService);
@@ -143,8 +145,22 @@ export class PartyService {
     this.toast.success(
       this.translate.instant('party.toast_scheduled', { name: dto.name, link }),
       10000,
-      { label: this.translate.instant('party.copy_link'), run: () => void this.copyLink(link) },
+      { label: this.translate.instant(this.canShare ? 'party.share_link' : 'party.copy_link'), run: () => void this.shareLink(link, dto.name) },
     );
+  }
+
+  /** The system share sheet (Android WebView, iOS WKWebView and most browsers expose it). */
+  readonly canShare = typeof navigator.share === 'function';
+
+  /** Shares the link natively, else copies it. */
+  async shareLink(link: string, title: string): Promise<void> {
+    if (!this.canShare) return this.copyLink(link);
+    try {
+      await navigator.share({ title, url: link });
+    } catch (e) {
+      // Dismissing the sheet is not an error.
+      if ((e as DOMException)?.name !== 'AbortError') await this.copyLink(link);
+    }
   }
 
   async copyLink(link: string): Promise<void> {
@@ -157,7 +173,8 @@ export class PartyService {
   }
 
   inviteLink(token: string | null): string {
-    return token ? `${location.origin}/party/${token}` : '';
+    // Native shells run on an app-local origin: the link must carry the server's.
+    return token ? new URL(this.serverConfig.resolveUrl(`/party/${token}`), location.origin).href : '';
   }
 
   openPage(id: number, token?: string): void {
@@ -451,7 +468,7 @@ export class PartyService {
   }
 
   /** Intent/message calls are quiet at the HTTP layer: a stale seek resyncs from the body, anything else is named to the user. */
-  private onActionError(err: unknown): void {
+  onActionError(err: unknown): void {
     if (!(err instanceof HttpErrorResponse)) return;
     const body = err.error as { message?: unknown; id?: number; usernames?: string[] } | null;
     if (err.status === 409 && (body?.message === 'party.error_stale' || typeof body?.id === 'number')) {
