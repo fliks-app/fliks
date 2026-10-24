@@ -35,12 +35,12 @@ export class KeyboardOverlayService {
       ];
     } else {
       // The plugin's height counts insets outside the WebView; MainActivity measures the overlap itself.
-      addEventListener('imeOverlap', this.onOverlap);
+      addEventListener('ime', this.onIme);
       Immersive.setKeyboardOverlay({ enabled: true }).catch(() => {});
     }
   }
 
-  private readonly onOverlap = (e: Event) => this.height.set((e as CustomEvent<{ height: number }>).detail.height);
+  private readonly onIme = (e: Event) => this.height.set((e as CustomEvent<{ height: number }>).detail.height);
 
   leave(): void {
     if (!Capacitor.isNativePlatform() || this.users === 0 || --this.users > 0) return;
@@ -51,7 +51,7 @@ export class KeyboardOverlayService {
       if (this.previousResize) Keyboard.setResizeMode({ mode: this.previousResize }).catch(() => {});
       this.previousResize = null;
     } else {
-      removeEventListener('imeOverlap', this.onOverlap);
+      removeEventListener('ime', this.onIme);
       Immersive.setKeyboardOverlay({ enabled: false }).catch(() => {});
     }
   }

@@ -39,7 +39,7 @@ describe('KeyboardOverlayService', () => {
     expect(m.overlay).toHaveBeenCalledTimes(1);
     expect(m.overlay).toHaveBeenCalledWith({ enabled: true });
 
-    const overlap = (height: number) => dispatchEvent(new CustomEvent('imeOverlap', { detail: { height } }));
+    const overlap = (height: number) => dispatchEvent(new CustomEvent('ime', { detail: { visible: height > 0, height } }));
     overlap(140);
     expect(svc.height()).toBe(140);
     overlap(0);
