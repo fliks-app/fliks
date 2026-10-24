@@ -757,7 +757,7 @@ async fn a_stale_person_is_refreshed_with_its_avatar(pool: PgPool) {
     assert_eq!(std::fs::read(c.data.join("persons/1.jpg")).unwrap(), src);
     assert!(
         c.data.join("persons/1-thumb.jpg").exists()
-            && !c.data.join("persons/1-medium.jpg").exists()
+            && c.data.join("persons/1-medium.jpg").exists()
     );
     // the second call is inside the 7 days
     call(&c, "/api/persons/1", Some(&c.reader)).await;
