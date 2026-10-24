@@ -1,5 +1,10 @@
 <!-- The shell is the fullscreen element; in a party the player shrinks inside it to make room for the panel. -->
-<div #partyShell class="party-shell" [attr.data-party-dock]="partyPanelShown() ? party.dock() : null">
+<div
+  #partyShell
+  class="party-shell"
+  [attr.data-party-dock]="partyPanelShown() ? party.dock() : null"
+  [style.--keyboard-h.px]="keyboardOverlay.height()"
+>
 <!-- Local player (hidden when casting — Cast overlay is global in the layout) -->
 <div
   #playerContainer

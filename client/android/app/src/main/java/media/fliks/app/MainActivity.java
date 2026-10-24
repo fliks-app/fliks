@@ -30,6 +30,7 @@ public class MainActivity extends BridgeActivity {
     private BroadcastReceiver pipActionReceiver;
     private boolean imeVisible = false;
     private boolean keyboardOverlay = false;
+    private int imeOverlap = 0;
 
     @Override
     protected void onNewIntent(Intent intent) {
@@ -264,6 +265,7 @@ public class MainActivity extends BridgeActivity {
         ViewCompat.setOnApplyWindowInsetsListener(above, (v, insets) -> {
             // The WebView doesn't relayout while the keyboard overlays it, so report from here too.
             reportImeVisibility(insets.isVisible(WindowInsetsCompat.Type.ime()));
+            reportImeOverlap(v, webView, insets.getInsets(WindowInsetsCompat.Type.ime()).bottom);
             if (!keyboardOverlay) return ViewCompat.onApplyWindowInsets(v, insets);
             return ViewCompat.onApplyWindowInsets(v, new WindowInsetsCompat.Builder(insets)
                 .setInsets(WindowInsetsCompat.Type.ime(), androidx.core.graphics.Insets.NONE)
@@ -281,6 +283,21 @@ public class MainActivity extends BridgeActivity {
             if (insets == null) return;
             reportImeVisibility(insets.isVisible(WindowInsetsCompat.Type.ime()));
         });
+    }
+
+    /** How far the keyboard reaches into the WebView, in CSS px: what overlaid content must stay above. */
+    private void reportImeOverlap(android.view.View container, android.view.View webView, int imeBottom) {
+        int[] c = new int[2];
+        int[] w = new int[2];
+        container.getLocationInWindow(c);
+        webView.getLocationInWindow(w);
+        int imeTop = c[1] + container.getHeight() - imeBottom;
+        int overlap = Math.max(0, w[1] + webView.getHeight() - imeTop);
+        int css = Math.round(overlap / getResources().getDisplayMetrics().density);
+        if (css == imeOverlap) return;
+        imeOverlap = css;
+        String js = "window.dispatchEvent(new CustomEvent('imeOverlap', { detail: { height: " + css + " } }));";
+        getBridge().getWebView().evaluateJavascript(js, null);
     }
 
     private void reportImeVisibility(boolean visible) {

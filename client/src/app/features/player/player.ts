@@ -201,6 +201,9 @@ import { DefaultFocusDirective } from '../../shared/directives/default-focus.dir
     }
     .party-shell[data-party-dock='right'] > .player-container {
       right: 360px;
+      /* Beside the side panel there is room above the keyboard: the player fits there while typing. */
+      height: calc(100vh - var(--keyboard-h, 0px));
+      height: calc(100dvh - var(--keyboard-h, 0px));
     }
     .party-shell[data-party-dock='drawer'] > .player-container {
       right: 40%;
@@ -593,7 +596,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }), null);
   private readonly remoteCommandEffect = effect(() => this.remote.onAdminEvent());
   protected readonly party = inject(PartyService);
-  private readonly keyboardOverlay = inject(KeyboardOverlayService);
+  protected readonly keyboardOverlay = inject(KeyboardOverlayService);
   protected readonly partyCtl = inject(PartyController);
   private readonly _partyAttach = (this.partyCtl.attach({
     engine: () => this.engine,

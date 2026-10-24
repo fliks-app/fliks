@@ -39,15 +39,19 @@ describe('KeyboardOverlayService', () => {
     expect(m.overlay).toHaveBeenCalledTimes(1);
     expect(m.overlay).toHaveBeenCalledWith({ enabled: true });
 
-    m.listeners['keyboardWillShow']({ keyboardHeight: 140 });
+    const overlap = (height: number) => dispatchEvent(new CustomEvent('imeOverlap', { detail: { height } }));
+    overlap(140);
     expect(svc.height()).toBe(140);
-    m.listeners['keyboardWillHide']({ keyboardHeight: 0 });
+    overlap(0);
     expect(svc.height()).toBe(0);
+    expect(m.listeners['keyboardWillShow']).toBeUndefined();
 
     svc.leave();
     expect(m.overlay).toHaveBeenCalledTimes(1);
     svc.leave();
     expect(m.overlay).toHaveBeenLastCalledWith({ enabled: false });
+    overlap(200);
+    expect(svc.height()).toBe(0);
   });
 
   it('switches the iOS resize mode off and restores the previous one', async () => {
@@ -55,6 +59,8 @@ describe('KeyboardOverlayService', () => {
     const svc = new KeyboardOverlayService();
     svc.enter();
     await vi.waitFor(() => expect(m.setResizeMode).toHaveBeenCalledWith({ mode: 'none' }));
+    m.listeners['keyboardWillShow']({ keyboardHeight: 300 });
+    expect(svc.height()).toBe(300);
     svc.leave();
     expect(m.setResizeMode).toHaveBeenLastCalledWith({ mode: 'native' });
     expect(m.overlay).not.toHaveBeenCalled();
