@@ -213,3 +213,31 @@ describe('LivePlayerComponent — handlePlayError', () => {
     expect(router.navigate).not.toHaveBeenCalled();
   });
 });
+
+describe('LivePlayerComponent — sessionExpired', () => {
+  it('re-tunes the current channel once the session was reaped', async () => {
+    const { component, api, stopCalls, plays } = createComponent();
+    component.currentSessionId = 's5';
+    component.session.set(makeSession('s5', 5));
+    component.currentChannelId.set(5);
+    component.loading.set(false);
+
+    component.retuneAfterExpiry();
+    await flush();
+    plays.get(5)!.resolve(makeSession('s5b', 5));
+    await flush();
+
+    expect(stopCalls).toEqual(['s5']);
+    expect(api.play).toHaveBeenCalledWith(5, expect.anything());
+    expect(component.session().sessionId).toBe('s5b');
+  });
+
+  it('ignores an expiry while a tune is already running', () => {
+    const { component, api } = createComponent();
+    component.loading.set(true);
+
+    component.retuneAfterExpiry();
+
+    expect(api.play).not.toHaveBeenCalled();
+  });
+});
