@@ -26,7 +26,7 @@ use fliks_domain::{
     js::now_ms,
     party::{
         CloseReason, DEFAULT_REACTIONS, Effect, Error as PartyErr, Intent, Item,
-        LOBBY_OPEN_BEFORE_MS, Policy, REACTIONS,
+        LOBBY_OPEN_BEFORE_MS, Policy, REACTIONS, noto_code,
     },
 };
 use serde_json::{Value, json};
@@ -786,12 +786,15 @@ pub async fn ice(State(st): State<AppState>, SessionAuthed(_): SessionAuthed) ->
     Ok(Json(json!({ "iceServers": servers })))
 }
 
-/// The reaction catalog, each emoji with the URL of its animated asset under `/emoji`.
+/// The reaction catalog, each emoji with the URL of its animated asset under `/emoji`, or null.
 #[utoipa::path(get, path = "/api/parties/reactions", responses((status = 200)))]
 pub async fn reactions(SessionAuthed(_): SessionAuthed) -> Json<Value> {
     let reactions: Vec<Value> = REACTIONS
         .iter()
-        .map(|(emoji, code)| json!({ "emoji": emoji, "animation": format!("/emoji/{code}.webp") }))
+        .map(|&(emoji, animated)| {
+            let animation = animated.then(|| format!("/emoji/{}.webp", noto_code(emoji)));
+            json!({ "emoji": emoji, "animation": animation })
+        })
         .collect();
     Json(json!({ "reactions": reactions, "defaults": DEFAULT_REACTIONS }))
 }

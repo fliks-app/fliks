@@ -20,27 +20,24 @@
         <p class="text-xs" [class.text-warning]="full()" [class.opacity-70]="!full()">
           {{ (full() ? 'party.reaction_bar_full' : 'party.reaction_bar_hint') | translate: { max: max } }}
         </p>
-        <div class="grid grid-cols-6 gap-1">
+        <div class="grid grid-cols-6 gap-2">
           @for (e of catalog.emojis(); track e) {
             @let i = catalog.bar().indexOf(e);
             <button
               type="button"
-              class="btn btn-ghost btn-square relative h-11 w-full text-xl"
-              [class.btn-active]="i >= 0"
-              [class.ring-2]="i >= 0"
-              [class.ring-primary]="i >= 0"
+              class="btn btn-ghost relative h-11 w-full rounded-xl border-2 px-0 text-xl"
+              [class]="i >= 0 ? 'border-primary bg-primary/10' : 'border-transparent'"
               [attr.aria-pressed]="i >= 0"
               (click)="toggle(e)"
             >
               {{ e }}
               @if (i >= 0) {
-                <span class="badge badge-primary badge-xs absolute top-0 right-0">{{ i + 1 }}</span>
+                <span class="badge badge-primary badge-xs absolute -top-1.5 -right-1.5">{{ i + 1 }}</span>
               }
             </button>
           }
         </div>
       </div>
-      <p class="text-xs opacity-60">{{ 'party.reaction_credit' | translate }}</p>
     </div>
   </div>
   <form method="dialog" class="modal-backdrop"><button tabindex="-1">close</button></form>

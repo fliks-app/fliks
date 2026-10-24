@@ -12,44 +12,118 @@ pub const SCHEDULE_EXPIRY_MS: i64 = 7_200_000;
 pub const VOICE_MAX: usize = 8;
 pub const CHAT_CAP: usize = 200;
 pub const SNAPSHOT_MESSAGES: usize = 50;
-/// Reaction catalog, `(emoji, Noto codepoint id)`; `scripts/fetch-reaction-emoji.py` reads this block.
-pub const REACTIONS: [(&str, &str); 32] = [
-    ("👍", "1f44d"),
-    ("👎", "1f44e"),
-    ("😂", "1f602"),
-    ("🤣", "1f923"),
-    ("😮", "1f62e"),
-    ("😱", "1f631"),
-    ("😢", "1f622"),
-    ("😭", "1f62d"),
-    ("😡", "1f621"),
-    ("🤬", "1f92c"),
-    ("❤️", "2764_fe0f"),
-    ("😍", "1f60d"),
-    ("🥰", "1f970"),
-    ("🔥", "1f525"),
-    ("👏", "1f44f"),
-    ("🙌", "1f64c"),
-    ("🎉", "1f389"),
-    ("💯", "1f4af"),
-    ("🤔", "1f914"),
-    ("🙄", "1f644"),
-    ("😴", "1f634"),
-    ("🤯", "1f92f"),
-    ("😬", "1f62c"),
-    ("🫣", "1fae3"),
-    ("😅", "1f605"),
-    ("😎", "1f60e"),
-    ("🥲", "1f972"),
-    ("💀", "1f480"),
-    ("👀", "1f440"),
-    ("🍿", "1f37f"),
-    ("🤢", "1f922"),
-    ("😳", "1f633"),
+/// Reaction catalog, `(emoji, has an animated asset)`; the animated ones come first, and
+/// `scripts/fetch-reaction-emoji.py` reads this block to fetch them.
+pub const REACTIONS: [(&str, bool); 96] = [
+    ("👍", true),
+    ("👎", true),
+    ("😂", true),
+    ("🤣", true),
+    ("😮", true),
+    ("😱", true),
+    ("😢", true),
+    ("😭", true),
+    ("😡", true),
+    ("🤬", true),
+    ("❤️", true),
+    ("😍", true),
+    ("🥰", true),
+    ("🔥", true),
+    ("👏", true),
+    ("🙌", true),
+    ("🎉", true),
+    ("💯", true),
+    ("🤔", true),
+    ("🙄", true),
+    ("😴", true),
+    ("🤯", true),
+    ("😬", true),
+    ("🫣", true),
+    ("😅", true),
+    ("😎", true),
+    ("🥲", true),
+    ("💀", true),
+    ("👀", true),
+    ("🍿", true),
+    ("🤢", true),
+    ("😳", true),
+    ("😀", false),
+    ("😃", false),
+    ("😄", false),
+    ("😁", false),
+    ("😆", false),
+    ("😊", false),
+    ("🙂", false),
+    ("😉", false),
+    ("😇", false),
+    ("🤩", false),
+    ("😘", false),
+    ("😋", false),
+    ("😜", false),
+    ("🤪", false),
+    ("🤗", false),
+    ("🤭", false),
+    ("🤫", false),
+    ("😐", false),
+    ("😑", false),
+    ("😶", false),
+    ("😏", false),
+    ("😒", false),
+    ("😔", false),
+    ("😕", false),
+    ("🙃", false),
+    ("😲", false),
+    ("😨", false),
+    ("😰", false),
+    ("😥", false),
+    ("😓", false),
+    ("😩", false),
+    ("😫", false),
+    ("🥱", false),
+    ("😤", false),
+    ("😠", false),
+    ("🥺", false),
+    ("🤡", false),
+    ("👻", false),
+    ("👽", false),
+    ("🤖", false),
+    ("💩", false),
+    ("🙈", false),
+    ("🙉", false),
+    ("🙊", false),
+    ("💔", false),
+    ("💕", false),
+    ("✨", false),
+    ("⭐", false),
+    ("💥", false),
+    ("👌", false),
+    ("✌️", false),
+    ("🤞", false),
+    ("🤘", false),
+    ("👋", false),
+    ("🙏", false),
+    ("💪", false),
+    ("🤝", false),
+    ("👊", false),
+    ("✅", false),
+    ("❌", false),
+    ("❓", false),
+    ("🏆", false),
+    ("🎬", false),
+    ("📺", false),
 ];
 /// The reaction bar a device starts with.
 pub const DEFAULT_REACTIONS: [&str; 8] = ["👍", "😂", "😮", "😢", "😡", "❤️", "🔥", "👏"];
 const READY_TOLERANCE_S: f64 = 1.0;
+
+/// Noto's asset name for an emoji: its codepoints in lowercase hex, joined by `_`.
+pub fn noto_code(emoji: &str) -> String {
+    emoji
+        .chars()
+        .map(|c| format!("{:x}", c as u32))
+        .collect::<Vec<_>>()
+        .join("_")
+}
 const RATE_WINDOW_MS: i64 = 10_000;
 const MAX_MESSAGES: usize = 5;
 const MAX_REACTIONS: usize = 10;
@@ -975,10 +1049,7 @@ impl Live {
 mod tests {
     #[test]
     fn reaction_catalog_is_coherent() {
-        for (emoji, code) in REACTIONS {
-            let cps: Vec<String> = emoji.chars().map(|c| format!("{:x}", c as u32)).collect();
-            assert_eq!(code, cps.join("_"), "{emoji}");
-        }
+        assert_eq!(noto_code("❤️"), "2764_fe0f");
         let mut emojis: Vec<_> = REACTIONS.iter().map(|(e, _)| *e).collect();
         emojis.sort_unstable();
         emojis.dedup();

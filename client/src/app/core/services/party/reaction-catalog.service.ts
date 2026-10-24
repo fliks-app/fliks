@@ -25,7 +25,12 @@ export class ReactionCatalogService {
   readonly emojis = computed(() => this.catalog()?.reactions.map((r) => r.emoji) ?? []);
   readonly bar = computed(() => sanitizeBar(this.stored(), this.emojis(), this.catalog()?.defaults ?? []));
   private readonly animations = computed(
-    () => new Map(this.catalog()?.reactions.map((r) => [r.emoji, this.serverConfig.resolveUrl(r.animation)])),
+    () =>
+      new Map(
+        this.catalog()
+          ?.reactions.filter((r) => r.animation)
+          .map((r) => [r.emoji, this.serverConfig.resolveUrl(r.animation!)]),
+      ),
   );
 
   private loading: Promise<void> | null = null;

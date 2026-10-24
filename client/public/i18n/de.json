@@ -3523,7 +3523,6 @@
     "reaction_bar_reset": "Zurücksetzen",
     "reaction_bar_hint": "Bis zu {{max}} Emojis, in der Reihenfolge des Antippens.",
     "reaction_bar_full": "Die Leiste fasst höchstens {{max}} Emojis.",
-    "reaction_credit": "Animierte Emojis: Google Noto Emoji, CC BY 4.0.",
     "chat_name_sep": ": ",
     "tab_members": "Mitglieder",
     "host_badge": "Host",

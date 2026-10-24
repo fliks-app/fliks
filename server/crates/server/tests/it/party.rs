@@ -509,10 +509,20 @@ async fn the_catalog_route_lists_served_assets_and_reactions_are_checked_against
     assert_eq!(list.len(), fliks_domain::party::REACTIONS.len());
     assert_eq!(cat["defaults"].as_array().unwrap().len(), 8);
     let public = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../public");
-    for r in list {
-        let url = r["animation"].as_str().unwrap();
-        let file = url.strip_prefix("/").unwrap();
-        assert!(public.join(file).is_file(), "{url}");
+    let urls: Vec<&str> = list
+        .iter()
+        .filter_map(|r| r["animation"].as_str())
+        .collect();
+    let animated = fliks_domain::party::REACTIONS
+        .iter()
+        .filter(|r| r.1)
+        .count();
+    assert_eq!(urls.len(), animated);
+    for url in urls {
+        assert!(
+            public.join(url.strip_prefix('/').unwrap()).is_file(),
+            "{url}"
+        );
     }
     let id = party_with(&c, &h, vec![]).await;
     let _conn = c.connect(host, "d");

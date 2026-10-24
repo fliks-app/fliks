@@ -2606,7 +2606,7 @@
         "tags": [
           "crate::party"
         ],
-        "summary": "The reaction catalog, each emoji with the URL of its animated asset under `/emoji`.",
+        "summary": "The reaction catalog, each emoji with the URL of its animated asset under `/emoji`, or null.",
         "operationId": "reactions",
         "responses": {
           "200": {

@@ -7,6 +7,8 @@ import { PartyService } from '../../../core/services/party/party.service';
 import { TvRowDirective } from '../../../shared/directives/tv-row.directive';
 
 /** Reaction button of the player's action strip: opens a row of emojis to its left, one tap sends (and folds it back, per the reaction settings). */
+const POP_MS = 220;
+
 @Component({
   selector: 'app-party-reaction-dock',
   imports: [TranslatePipe, LucideSmilePlus, TvRowDirective],
@@ -33,9 +35,14 @@ export class PartyReactionDockComponent {
     });
   }
 
-  protected send(emoji: string): void {
+  protected send(emoji: string, event: Event): void {
     this.party.react(emoji);
-    if (!this.party.reactionKeepOpen()) this.fold();
+    const pop = (event.currentTarget as HTMLElement).animate(
+      [{ transform: 'scale(1)' }, { transform: 'scale(1.3)' }, { transform: 'scale(1)' }],
+      { duration: POP_MS, easing: 'ease-out' },
+    );
+    // The row folds once the tapped emoji has finished its pop, or the feedback is never seen.
+    if (!this.party.reactionKeepOpen()) pop.finished.then(() => this.fold(), () => this.fold());
   }
 
   /** Focus returns to the button when it sat on an emoji, which leaves the D-pad order as the row folds. */
