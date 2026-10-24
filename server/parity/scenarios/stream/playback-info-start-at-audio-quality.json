@@ -95,6 +95,7 @@
             "videoProfile": "high",
             "width": 160
           },
+          "startAtSeconds": 1,
           "tonemapping": false,
           "transcodeBitrateByQuality": {
             "1080p": {

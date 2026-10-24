@@ -22,6 +22,8 @@ const SSE_CONNECTION_HEADER = 'X-Fliks-Sse-Connection';
 export type PlayMethod = 'DirectPlay' | 'DirectStream' | 'Transcode';
 
 export interface PlaybackInfoResponse {
+  /** Where playback starts: the `startAt` sent, else the saved resume point, else 0. */
+  startAtSeconds: number;
   mediaFileId: number;
   playMethod: PlayMethod;
   playUrl: string;

@@ -96,6 +96,7 @@
             "videoProfile": "high",
             "width": 160
           },
+          "startAtSeconds": 0,
           "tonemapping": false,
           "transcodeReasons": [
             {
