@@ -38,7 +38,7 @@ export class PartyHostDialogComponent {
   /** The snapshot the server returned after a change. */
   readonly updated = output<PartyDto>();
 
-  protected readonly excluded = computed(() => [this.view().host.userId, ...this.view().invitees.map((i) => i.userId)]);
+  protected readonly excluded = computed(() => [this.view().host.userId, ...this.view().guests.map((i) => i.userId)]);
   protected readonly busy = signal(false);
   protected readonly rescheduling = signal(false);
   protected readonly newWhen = signal('');

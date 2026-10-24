@@ -1,4 +1,4 @@
-<span class="rounded-full" [class.ring-2]="person().speaking" [class.ring-success]="person().speaking" [class.opacity-50]="person().state === 'invited' || person().state === 'absent'">
+<span class="rounded-full" [class.ring-2]="person().speaking" [class.ring-success]="person().speaking" [class.opacity-50]="!person().connected">
   <app-user-avatar [username]="person().username" size="w-10 h-10 text-sm" />
 </span>
 <div class="min-w-0 flex-1">
@@ -14,12 +14,14 @@
     @if (voice.muted) { <svg lucideMicOff class="h-4 w-4"></svg> } @else { <svg lucideMic class="h-4 w-4"></svg> }
   </span>
 }
-@switch (person().state) {
-  @case ('connected') {
-    <span class="badge" [class.badge-success]="person().status === 'ready'" [class.badge-warning]="person().status !== 'ready' && person().status !== 'away'" [class.badge-ghost]="person().status === 'away'">{{ ('party.status_' + person().status) | translate }}</span>
-  }
-  @case ('link') { <span class="badge badge-info badge-outline">{{ 'party.person_link' | translate }}</span> }
-  @case ('invited') { <span class="badge badge-ghost">{{ 'party.person_invited' | translate }}</span> }
-  @default { <span class="badge badge-ghost">{{ 'party.person_absent' | translate }}</span> }
+@if (person().source === 'link') {
+  <span class="badge badge-info badge-outline">{{ 'party.person_link' | translate }}</span>
+}
+@if (person().connected) {
+  <span class="badge" [class.badge-success]="person().status === 'ready'" [class.badge-warning]="person().status !== 'ready' && person().status !== 'away'" [class.badge-ghost]="person().status === 'away'">{{ ('party.status_' + person().status) | translate }}</span>
+} @else if (person().source === 'invite') {
+  <span class="badge badge-ghost">{{ 'party.person_invited' | translate }}</span>
+} @else if (!person().source) {
+  <span class="badge badge-ghost">{{ 'party.person_absent' | translate }}</span>
 }
 <ng-content />

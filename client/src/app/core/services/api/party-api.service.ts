@@ -81,9 +81,15 @@ export interface PartySwitches {
   linkSharing: boolean;
 }
 
+export type PartyGuestSource = 'invite' | 'link';
+
+export interface PartyGuest extends PartyUser {
+  source: PartyGuestSource;
+}
+
 export interface PartyDto extends PartySummaryDto, PartySwitches {
   inviteToken: string | null;
-  invitees: PartyUser[];
+  guests: PartyGuest[];
   live: PartyLive | null;
 }
 

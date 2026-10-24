@@ -30,7 +30,7 @@ export class PartyPanelComponent {
   readonly openSettings = output<void>();
   protected readonly people = computed(() => {
     const p = this.party.party();
-    return p ? partyPeople(p.host, p.invitees, this.party.members(), this.voice.speaking()) : [];
+    return p ? partyPeople(p.host, p.guests, this.party.members(), this.voice.speaking()) : [];
   });
   protected readonly connected = computed(() => connectedCount(this.people()));
   protected readonly missing = computed(() => missingCount(this.people()));

@@ -36,7 +36,7 @@
       @for (p of people(); track p.userId) {
         <li>
           <app-party-person-row [person]="p">
-            @if (party.isHost() && !p.host && (p.state === 'connected' || p.state === 'link')) {
+            @if (party.isHost() && !p.host && p.connected) {
               <button type="button" class="btn btn-ghost btn-xs" (click)="party.makeHost(p.userId)">{{ 'party.make_host' | translate }}</button>
               <button type="button" class="btn btn-ghost btn-xs text-error" (click)="party.kick(p.userId)">{{ 'party.kick' | translate }}</button>
             }

@@ -136,7 +136,7 @@ export class PartyPageComponent implements OnInit, OnDestroy {
   protected readonly people = computed<PartyPerson[]>(() => {
     const v = this.view();
     const members = this.joined() ? this.party.members() : (v?.live?.members ?? []);
-    return v ? withoutVoice(partyPeople(v.host, v.invitees, members, new Set())) : [];
+    return v ? withoutVoice(partyPeople(v.host, v.guests, members, new Set())) : [];
   });
   protected readonly connectedCount = computed(() => connectedCount(this.people()));
   protected readonly missingCount = computed(() => missingCount(this.people()));
