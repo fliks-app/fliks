@@ -24,14 +24,9 @@
   bottom: 0;
 }
 :host([data-dock='drawer']) {
+  top: 0;
   right: 0;
   bottom: 0;
   width: 40%;
-  height: 60%;
   padding-right: env(safe-area-inset-right, 0px);
-}
-/* Focused input: full height so the keyboard never hides what is typed. */
-:host([data-dock='drawer']:focus-within) {
-  top: 0;
-  height: auto;
 }

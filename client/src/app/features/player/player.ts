@@ -199,6 +199,9 @@ import { DefaultFocusDirective } from '../../shared/directives/default-focus.dir
     .party-shell[data-party-dock='right'] > .player-container {
       right: 360px;
     }
+    .party-shell[data-party-dock='drawer'] > .player-container {
+      right: 40%;
+    }
     .party-shell[data-party-dock='tv'] > .player-container {
       right: 30%;
     }
