@@ -789,12 +789,17 @@ pub async fn ice(State(st): State<AppState>, SessionAuthed(_): SessionAuthed) ->
     Ok(Json(json!({ "iceServers": servers })))
 }
 
-/// The animated assets under `/emoji` keyed by emoji, and the default bar; any other emoji is static.
+/// The animated assets under `/api/emoji` keyed by emoji, and the default bar; any other emoji is static.
 #[utoipa::path(get, path = "/api/parties/reactions", responses((status = 200)))]
 pub async fn reactions(SessionAuthed(_): SessionAuthed) -> Json<Value> {
     let animations: serde_json::Map<String, Value> = ANIMATED_REACTIONS
         .iter()
-        .map(|&e| (e.to_owned(), json!(format!("/emoji/{}.webp", noto_code(e)))))
+        .map(|&e| {
+            (
+                e.to_owned(),
+                json!(format!("/api/emoji/{}.webp", noto_code(e))),
+            )
+        })
         .collect();
     Json(json!({ "animations": animations, "defaults": DEFAULT_REACTIONS }))
 }

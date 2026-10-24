@@ -2606,7 +2606,7 @@
         "tags": [
           "crate::party"
         ],
-        "summary": "The animated assets under `/emoji` keyed by emoji, and the default bar; any other emoji is static.",
+        "summary": "The animated assets under `/api/emoji` keyed by emoji, and the default bar; any other emoji is static.",
         "operationId": "reactions",
         "responses": {
           "200": {

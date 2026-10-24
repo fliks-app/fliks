@@ -515,10 +515,18 @@ async fn the_catalog_route_lists_served_assets_and_reactions_must_be_standard_em
     for url in animations.values() {
         let url = url.as_str().unwrap();
         assert!(
-            public.join(url.strip_prefix('/').unwrap()).is_file(),
+            public.join(url.strip_prefix("/api/").unwrap()).is_file(),
             "{url}"
         );
     }
+    // Served by the whole app under `/api`, past its `/api/{*rest}` catch-all.
+    let app = fliks_server::app::router(c.st.clone(), None, public, None);
+    let url = animations["🔥"].as_str().unwrap();
+    let res = app
+        .oneshot(Request::get(url).body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200, "{url}");
     let id = party_with(&c, &h, vec![]).await;
     let _conn = c.connect(host, "d");
     let join = format!("/api/parties/{id}/join");

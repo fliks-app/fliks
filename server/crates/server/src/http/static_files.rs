@@ -118,18 +118,23 @@ async fn long_cache(req: Request, next: Next) -> Response {
     res
 }
 
-/// `/cast` and `/emoji` (the reaction artwork, `<cast dir>/emoji`) always; the SPA at `/` (with `index.html`
-/// fallback) only when a client dir is set.
-pub fn router(client_dir: Option<PathBuf>, cast_dir: PathBuf) -> Router {
-    let emoji = Router::new()
-        .fallback_service(
-            ServeDir::new(cast_dir.join("emoji")).append_index_html_on_directories(false),
+/// The reaction artwork (`<cast dir>/emoji`), mounted by the app under `/api/emoji` like the other server assets.
+pub fn emoji(dir: PathBuf) -> Router {
+    // A route, not a fallback: a nested fallback-only router registers nothing and `/api/{*rest}` wins.
+    Router::new()
+        .route_service(
+            "/{*file}",
+            ServeDir::new(dir).append_index_html_on_directories(false),
         )
-        .layer(from_fn(long_cache));
+        .layer(from_fn(long_cache))
+        .layer(from_fn(validators))
+        .layer(from_fn(cannot_404))
+}
+
+/// `/cast` always; the SPA at `/` (with `index.html` fallback) only when a client dir is set.
+pub fn router(client_dir: Option<PathBuf>, cast_dir: PathBuf) -> Router {
     let cast = ServeDir::new(cast_dir).append_index_html_on_directories(false);
-    let mut r = Router::new()
-        .nest_service("/cast", cast)
-        .nest("/emoji", emoji);
+    let mut r = Router::new().nest_service("/cast", cast);
     if let Some(dir) = client_dir {
         r = r
             .fallback_service(ServeDir::new(&dir).fallback(ServeFile::new(dir.join("index.html"))));
@@ -204,7 +209,7 @@ mod tests {
         );
         std::fs::create_dir_all(k.join("emoji")).unwrap();
         std::fs::write(k.join("emoji/1f525.webp"), "w").unwrap();
-        let emoji = get(&r, "/emoji/1f525.webp", None).await;
+        let emoji = get(&emoji(k.join("emoji")), "/1f525.webp", None).await;
         assert_eq!(emoji.headers()[CACHE_CONTROL], "public, max-age=604800");
         let missing = get(&r, "/cast/nope.html", None).await;
         assert_eq!(missing.status(), 404);
