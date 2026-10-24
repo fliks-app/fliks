@@ -572,6 +572,36 @@ mod session_calls {
     }
 
     #[tokio::test]
+    async fn closes_a_session_it_opened_but_cannot_read() {
+        #[derive(serde::Deserialize, Debug)]
+        struct Needs {
+            #[allow(dead_code)]
+            required: u32,
+        }
+        let (f, e) = connected().await;
+        f.script(
+            "POST",
+            "/v1/sessions",
+            vec![ok(json!({"sessionId": "orphan"}))],
+        );
+        f.script("DELETE", "/v1/sessions/orphan", vec![status(204)]);
+        let client = e.need().unwrap();
+        let err = e
+            .open_retrying::<_, Needs>(
+                &client,
+                "POST /v1/sessions",
+                "/v1/sessions",
+                &json!({}),
+                false,
+            )
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("unreadable answer"), "{err}");
+        assert_eq!(f.seen("DELETE", "/v1/sessions/orphan").len(), 1);
+        assert_eq!(f.seen("POST", "/v1/sessions").len(), 1, "no retry on a 2xx");
+    }
+
+    #[tokio::test]
     async fn opens_a_live_session_waiting_out_the_detection_503_but_not_a_coded_one() {
         let f = Fake::start().await;
         let mut features = RUNTIME.to_vec();
@@ -1083,6 +1113,7 @@ mod events {
             frame(ended("s1")),
             frame(json!({"type": "FutureThing"})),
             ": ka\n\n".into(),
+            "data: {not json\n\n".into(),
             frame(ended("s2")),
         ])]);
         let e = engine_with(&f.url, fast());
@@ -1099,7 +1130,16 @@ mod events {
                 other => panic!("{other:?}"),
             }
         }
-        assert_eq!(sids, ["s1", "s2"], "the unknown type was skipped");
+        assert_eq!(
+            sids,
+            ["s1", "s2"],
+            "the unknown type and the bad frame were skipped"
+        );
+        assert_eq!(
+            f.seen("GET", "/v1/events").len(),
+            1,
+            "one connection throughout"
+        );
         let order = f.order();
         let at = |what: &str| order.iter().position(|r| r == what).unwrap();
         assert!(
