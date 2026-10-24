@@ -433,3 +433,15 @@ html.tv-host .toggle-primary[aria-checked='true'] {
 .modal-box {
   max-height: calc(100dvh - 2rem);
 }
+
+/* CDK drag and drop: siblings slide out of the way, and a dropped item glides into its slot. */
+.cdk-drop-list-dragging .cdk-drag:not(.cdk-drag-placeholder),
+.cdk-drag-animating {
+  transition: transform 220ms cubic-bezier(0, 0, 0.2, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .cdk-drop-list-dragging .cdk-drag:not(.cdk-drag-placeholder),
+  .cdk-drag-animating {
+    transition: none;
+  }
+}
