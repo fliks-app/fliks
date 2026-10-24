@@ -25,11 +25,6 @@
           <app-party-invitee-picker [(selected)]="invitees" />
         </div>
 
-        <label class="flex cursor-pointer items-center gap-2 text-sm">
-          <input type="checkbox" class="toggle toggle-sm" [checked]="hostOnly()" (change)="hostOnly.set($any($event.target).checked)" />
-          <span>{{ 'party.policy_host_only' | translate }}</span>
-        </label>
-
         <app-modal-footer>
           <button type="button" class="btn btn-ghost" (click)="close()">{{ 'common.cancel' | translate }}</button>
           <button type="submit" class="btn btn-primary" [disabled]="!canSubmit()">

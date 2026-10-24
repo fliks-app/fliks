@@ -27,7 +27,6 @@ export class PartyCreateModalComponent {
   protected readonly name = signal('');
   protected readonly later = signal(false);
   protected readonly when = signal('');
-  protected readonly hostOnly = signal(false);
   protected readonly invitees = signal<number[]>([]);
   protected readonly busy = signal(false);
   protected readonly open = signal(false);
@@ -47,7 +46,6 @@ export class PartyCreateModalComponent {
         soon.setMinutes(0, 0, 0);
         this.when.set(toLocalInput(soon));
         this.min.set(toLocalInput(new Date()));
-        this.hostOnly.set(false);
         this.invitees.set([]);
         this.open.set(true);
         dialog.nativeElement.showModal();
@@ -74,7 +72,6 @@ export class PartyCreateModalComponent {
         mediaFileId: t.mediaFileId,
         ...(t.episodeId != null && { episodeId: t.episodeId }),
         ...(this.later() && { scheduledAt: new Date(this.when()).toISOString() }),
-        policy: this.hostOnly() ? 'host_only' : 'everyone',
         inviteeIds: this.invitees(),
       });
       this.close();

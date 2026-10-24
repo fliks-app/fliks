@@ -1,9 +1,9 @@
 <div class="flex flex-col gap-4">
   <app-toggle-field
-    [label]="'party.policy_host_only' | translate"
+    [label]="'party.switch_playback_control' | translate"
     [disabled]="disabled()"
-    [value]="value().policy === 'host_only'"
-    (valueChange)="changed.emit({ policy: $event ? 'host_only' : 'everyone' })"
+    [value]="value().policy === 'everyone'"
+    (valueChange)="changed.emit({ policy: $event ? 'everyone' : 'host_only' })"
   />
   <app-toggle-field
     [label]="'party.switch_reactions' | translate"
