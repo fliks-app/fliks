@@ -2550,6 +2550,208 @@
         }
       }
     },
+    "/api/parties": {
+      "get": {
+        "tags": [
+          "crate::party"
+        ],
+        "operationId": "list",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "crate::party"
+        ],
+        "operationId": "create",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/parties/by-token/{token}": {
+      "get": {
+        "tags": [
+          "crate::party"
+        ],
+        "operationId": "by_token",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/parties/{id}": {
+      "get": {
+        "tags": [
+          "crate::party"
+        ],
+        "operationId": "show",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "crate::party"
+        ],
+        "operationId": "end",
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "crate::party"
+        ],
+        "operationId": "patch",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/parties/{id}/intent": {
+      "post": {
+        "tags": [
+          "crate::party"
+        ],
+        "operationId": "intent",
+        "responses": {
+          "202": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/parties/{id}/invitees": {
+      "post": {
+        "tags": [
+          "crate::party"
+        ],
+        "operationId": "invite",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/parties/{id}/join": {
+      "post": {
+        "tags": [
+          "crate::party"
+        ],
+        "operationId": "join",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/parties/{id}/leave": {
+      "post": {
+        "tags": [
+          "crate::party"
+        ],
+        "operationId": "leave",
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/parties/{id}/members/{userId}/host": {
+      "post": {
+        "tags": [
+          "crate::party"
+        ],
+        "operationId": "transfer",
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/parties/{id}/members/{userId}/kick": {
+      "post": {
+        "tags": [
+          "crate::party"
+        ],
+        "operationId": "kick",
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/parties/{id}/messages": {
+      "post": {
+        "tags": [
+          "crate::party"
+        ],
+        "operationId": "message",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/parties/{id}/reactions": {
+      "post": {
+        "tags": [
+          "crate::party"
+        ],
+        "operationId": "reaction",
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/parties/{id}/start": {
+      "post": {
+        "tags": [
+          "crate::party"
+        ],
+        "operationId": "start",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/parties/{id}/status": {
+      "post": {
+        "tags": [
+          "crate::party"
+        ],
+        "operationId": "status",
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/persons/search": {
       "get": {
         "tags": [
@@ -4737,6 +4939,19 @@
           "system"
         ],
         "operationId": "version",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/time": {
+      "get": {
+        "tags": [
+          "crate::party"
+        ],
+        "operationId": "time",
         "responses": {
           "200": {
             "description": ""

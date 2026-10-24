@@ -74,6 +74,23 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         crate::engine::remote::put_remote,
         crate::engine::remote::test_remote,
         crate::engine::resolve::resolve,
+        crate::party::time,
+        crate::party::create,
+        crate::party::list,
+        crate::party::show,
+        crate::party::by_token,
+        crate::party::patch,
+        crate::party::end,
+        crate::party::join,
+        crate::party::start,
+        crate::party::leave,
+        crate::party::intent,
+        crate::party::status,
+        crate::party::message,
+        crate::party::reaction,
+        crate::party::kick,
+        crate::party::transfer,
+        crate::party::invite,
         remote::targets,
         remote::register,
         remote::commands,
@@ -357,6 +374,7 @@ fn api() -> Router<AppState> {
         .merge(users::router())
         .merge(events::router())
         .merge(remote::router())
+        .merge(crate::party::router())
         .merge(playback::router())
         .merge(qoe::router())
         .merge(crate::stream::router())
