@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
-import { NEVER } from 'rxjs';
+import { NEVER, of, throwError } from 'rxjs';
 import { AuthService, type User } from './auth.service';
 import { ServerConfigService } from './server-config.service';
 import { ServerCacheService } from './server-cache.service';
@@ -44,5 +44,42 @@ describe('AuthService: server features are live-only', () => {
     // The stored snapshot renders instantly; /auth/me (stubbed as NEVER) never answers.
     service.ensureAuthenticated().subscribe();
     expect(service.hasServerFeature('deviceProfileExtensions')).toBe(false);
+  });
+});
+
+describe('AuthService.ensureStreamToken', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  function setup(post: () => unknown) {
+    TestBed.configureTestingModule({
+      providers: [
+        AuthService,
+        { provide: HttpClient, useValue: { get: () => NEVER, post } },
+        { provide: Router, useValue: {} },
+        { provide: ServerConfigService, useValue: { serverUrl: () => 'https://s', isNative: false } },
+        { provide: ServerCacheService, useValue: {} },
+        { provide: SessionStoreService, useValue: { active: () => null } },
+      ],
+    });
+    return TestBed.inject(AuthService);
+  }
+
+  it('retries once after a failed mint', async () => {
+    const post = vi
+      .fn()
+      .mockReturnValueOnce(throwError(() => new Error('blip')))
+      .mockReturnValueOnce(of({ streamToken: 'st', expiresAt: Date.now() + 3 * 3600_000 }));
+    const service = setup(post);
+
+    expect(await service.ensureStreamToken()).toBe('st');
+    expect(post).toHaveBeenCalledTimes(2);
+  });
+
+  it('returns null once the retry fails too', async () => {
+    const post = vi.fn(() => throwError(() => new Error('down')));
+    const service = setup(post);
+
+    expect(await service.ensureStreamToken()).toBeNull();
+    expect(post).toHaveBeenCalledTimes(2);
   });
 });
