@@ -1,0 +1,5 @@
+@if (src(); as url) {
+  <img [src]="url" [alt]="emoji()" loading="lazy" class="h-full w-full" (error)="failed.set(true)" />
+} @else {
+  {{ emoji() }}
+}

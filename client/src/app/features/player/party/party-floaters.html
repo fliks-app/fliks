@@ -1,6 +1,6 @@
 <div class="pointer-events-none absolute inset-0 z-[56] overflow-hidden" aria-hidden="true">
   @for (r of party.reactions(); track r.key) {
-    <span class="reaction" [style.left.%]="r.left" [attr.title]="r.username">{{ r.emoji }}</span>
+    <span class="reaction" [style.left.%]="r.left" [attr.title]="r.username"><app-party-emoji [emoji]="r.emoji" /></span>
   }
   <div class="absolute bottom-24 left-4 flex max-w-[70%] flex-col items-start gap-1">
     @for (m of party.bubbles(); track m.id) {

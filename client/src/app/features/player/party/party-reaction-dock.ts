@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
 import { LucideSmilePlus } from '@lucide/angular';
-import { PARTY_EMOJIS } from '../../../core/services/api/party-api.service';
+import { ReactionCatalogService } from '../../../core/services/party/reaction-catalog.service';
 import { PartyService } from '../../../core/services/party/party.service';
 
 /** Floating reaction button over the video: opens a row of emojis to its left, one tap sends (and folds it back, per the reaction settings). */
@@ -16,7 +16,7 @@ import { PartyService } from '../../../core/services/party/party.service';
 })
 export class PartyReactionDockComponent {
   protected readonly party = inject(PartyService);
-  protected readonly emojis = PARTY_EMOJIS;
+  protected readonly emojis = inject(ReactionCatalogService).bar;
   protected readonly open = signal(false);
 
   protected send(emoji: string): void {

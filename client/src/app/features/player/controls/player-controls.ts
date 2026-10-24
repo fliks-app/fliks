@@ -38,7 +38,7 @@ import { AppSettingsService } from '../../../core/services/app-settings.service'
 import { formatTime, SpriteMetadata } from '../../../core/utils/player.utils';
 import { focusOverlayEntry, initialOverlayFocus, scrollSelectedIntoView } from '../../../core/services/focusable.constants';
 import { SeekbarComponent } from '../../../shared/components/seekbar/seekbar';
-import { PARTY_EMOJIS } from '../../../core/services/api/party-api.service';
+import { ReactionCatalogService } from '../../../core/services/party/reaction-catalog.service';
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 import { CachedSrcDirective } from '../../../shared/directives/cached-src.directive';
 import { SelectedOptionDirective } from '../../../shared/directives/selected-option.directive';
@@ -363,7 +363,7 @@ export class PlayerControlsComponent {
   readonly toggleParty = output<void>();
   readonly react = output<string>();
   readonly openReactionSettings = output<void>();
-  protected readonly partyEmojis = PARTY_EMOJIS;
+  protected readonly partyEmojis = inject(ReactionCatalogService).bar;
   readonly toggleFillScreen = output<void>();
   readonly openMedia = output<void>();
   readonly seekDragChange = output<boolean>();

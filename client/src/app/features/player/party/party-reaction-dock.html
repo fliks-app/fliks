@@ -4,11 +4,11 @@
 }
 <div class="relative flex items-center gap-1">
   <div class="emojis flex gap-0.5 rounded-full p-1" [class.open]="open()" [attr.aria-hidden]="!open()">
-    @for (e of emojis; track e; let i = $index) {
+    @for (e of emojis(); track e; let i = $index) {
       <button
         type="button"
         class="emoji"
-        [style.--i]="emojis.length - 1 - i"
+        [style.--i]="emojis().length - 1 - i"
         [attr.tabindex]="open() ? 0 : -1"
         (click)="send(e)"
       >{{ e }}</button>

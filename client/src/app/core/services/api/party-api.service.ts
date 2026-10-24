@@ -9,7 +9,10 @@ export type PartyPlayState = 'idle' | 'waiting' | 'paused' | 'playing';
 export type PartyMemberStatus = 'ready' | 'buffering' | 'away' | 'waiting';
 export type PartyIntentAction = 'play' | 'pause' | 'seek' | 'setItem' | 'ended';
 
-export const PARTY_EMOJIS = ['👍', '😂', '😮', '😢', '😡', '❤️', '🔥', '👏'] as const;
+export interface PartyReactionCatalog {
+  reactions: { emoji: string; animation: string }[];
+  defaults: string[];
+}
 
 export interface PartyItem {
   mediaId: number;
@@ -150,6 +153,10 @@ export class PartyApiService {
 
   iceServers() {
     return firstValueFrom(this.http.get<{ iceServers: RTCIceServer[] }>('/api/parties/ice', QUIET()));
+  }
+
+  reactionCatalog() {
+    return firstValueFrom(this.http.get<PartyReactionCatalog>('/api/parties/reactions', QUIET()));
   }
 
   voice(id: number, deviceId: string, joined: boolean, muted: boolean) {
