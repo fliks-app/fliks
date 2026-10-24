@@ -3521,7 +3521,7 @@
     "reaction_keep_open": "Leiste offen lassen",
     "reaction_bar": "Emojis der Leiste",
     "reaction_bar_reset": "Zurücksetzen",
-    "reaction_bar_hint": "Bis zu {{max}} Emojis, in der Reihenfolge des Antippens.",
+    "reaction_bar_hint": "Bis zu {{max}} Emojis. Ziehe die Emojis der Leiste, um sie neu anzuordnen.",
     "reaction_bar_full": "Die Leiste fasst höchstens {{max}} Emojis.",
     "reaction_section_bar": "In der Leiste",
     "reaction_section_animated": "Animiert",

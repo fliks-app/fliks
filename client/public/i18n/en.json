@@ -3521,7 +3521,7 @@
     "reaction_keep_open": "Keep the bar open",
     "reaction_bar": "Bar emojis",
     "reaction_bar_reset": "Reset",
-    "reaction_bar_hint": "Up to {{max}} emojis, in tap order.",
+    "reaction_bar_hint": "Up to {{max}} emojis. Drag the ones in the bar to reorder them.",
     "reaction_bar_full": "The bar holds {{max}} emojis at most.",
     "reaction_section_bar": "In the bar",
     "reaction_section_animated": "Animated",

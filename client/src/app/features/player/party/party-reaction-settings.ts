@@ -1,3 +1,5 @@
+import { CdkDrag, CdkDragPlaceholder, CdkDropList } from '@angular/cdk/drag-drop';
+import { NgTemplateOutlet } from '@angular/common';
 import { ChangeDetectionStrategy, Component, ElementRef, computed, inject, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe } from '@ngx-translate/core';
@@ -6,6 +8,7 @@ import { EmojiDataService } from '../../../core/services/party/emoji-data.servic
 import { MAX_BAR } from '../../../core/services/party/reaction-bar';
 import { ReactionCatalogService } from '../../../core/services/party/reaction-catalog.service';
 import { PartyService } from '../../../core/services/party/party.service';
+import { DeviceService } from '../../../core/services/device.service';
 import { KeyboardOverlayService } from '../../../core/services/keyboard-overlay.service';
 import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-field/toggle-field';
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
@@ -21,7 +24,7 @@ interface Section {
 /** Reaction settings, opened from the player's top-bar reaction button; lives in the player so it shows in fullscreen. */
 @Component({
   selector: 'app-party-reaction-settings',
-  imports: [FormsModule, TranslatePipe, LucideSearch, LucideX, ModalHeaderComponent, ToggleFieldComponent],
+  imports: [FormsModule, NgTemplateOutlet, CdkDropList, CdkDrag, CdkDragPlaceholder, TranslatePipe, LucideSearch, LucideX, ModalHeaderComponent, ToggleFieldComponent],
   templateUrl: './party-reaction-settings.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -30,6 +33,7 @@ export class PartyReactionSettingsComponent {
   protected readonly catalog = inject(ReactionCatalogService);
   protected readonly data = inject(EmojiDataService);
   protected readonly keyboard = inject(KeyboardOverlayService);
+  protected readonly isTv = inject(DeviceService).isTv;
   protected readonly max = MAX_BAR;
   protected readonly query = signal('');
   /** Set when a tap was refused because the bar is full. */

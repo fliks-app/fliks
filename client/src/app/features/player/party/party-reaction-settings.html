@@ -47,24 +47,27 @@
                 @if (s.labelKey || s.label) {
                   <h3 class="mb-1 text-sm font-medium opacity-70">{{ s.labelKey ? (s.labelKey | translate) : s.label }}</h3>
                 }
-                <div class="grid grid-cols-6 gap-2 sm:grid-cols-8 md:grid-cols-10">
-                  @for (e of s.emojis; track e) {
-                    @let i = catalog.bar().indexOf(e);
-                    <button
-                      type="button"
-                      class="btn btn-ghost relative h-11 w-full rounded-xl border-2 px-0 text-xl"
-                      [class]="i >= 0 ? 'border-primary bg-primary/10' : 'border-transparent'"
-                      [attr.aria-pressed]="i >= 0"
-                      [attr.title]="data.label(e)"
-                      (click)="toggle(e)"
-                    >
-                      {{ e }}
-                      @if (i >= 0) {
-                        <span class="badge badge-primary badge-sm absolute -top-1.5 -right-1.5">{{ i + 1 }}</span>
-                      }
-                    </button>
-                  }
-                </div>
+                @if (s.key === 'bar') {
+                  <div
+                    cdkDropList
+                    cdkDropListOrientation="mixed"
+                    class="grid grid-cols-6 gap-2 sm:grid-cols-8 md:grid-cols-10"
+                    (cdkDropListDropped)="catalog.move($event.previousIndex, $event.currentIndex)"
+                  >
+                    @for (e of s.emojis; track e) {
+                      <div cdkDrag cdkDragPreviewContainer="parent" [cdkDragDisabled]="isTv()" class="cursor-grab">
+                        <ng-container *ngTemplateOutlet="cell; context: { $implicit: e }" />
+                        <div *cdkDragPlaceholder class="h-11 w-full rounded-xl border-2 border-dashed border-base-content/30 bg-base-content/10"></div>
+                      </div>
+                    }
+                  </div>
+                } @else {
+                  <div class="grid grid-cols-6 gap-2 sm:grid-cols-8 md:grid-cols-10">
+                    @for (e of s.emojis; track e) {
+                      <ng-container *ngTemplateOutlet="cell; context: { $implicit: e }" />
+                    }
+                  </div>
+                }
               </section>
             }
           }
@@ -77,3 +80,20 @@
   </div>
   <form method="dialog" class="modal-backdrop"><button tabindex="-1">close</button></form>
 </dialog>
+
+<ng-template #cell let-e>
+  @let i = catalog.bar().indexOf(e);
+  <button
+    type="button"
+    class="btn btn-ghost relative h-11 w-full rounded-xl border-2 px-0 text-xl"
+    [class]="i >= 0 ? 'border-primary bg-primary/10' : 'border-transparent'"
+    [attr.aria-pressed]="i >= 0"
+    [attr.title]="data.label(e)"
+    (click)="toggle(e)"
+  >
+    {{ e }}
+    @if (i >= 0) {
+      <span class="badge badge-primary badge-sm absolute -top-1.5 -right-1.5">{{ i + 1 }}</span>
+    }
+  </button>
+</ng-template>

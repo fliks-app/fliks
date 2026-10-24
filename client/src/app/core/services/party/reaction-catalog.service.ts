@@ -1,3 +1,4 @@
+import { moveItemInArray } from '@angular/cdk/drag-drop';
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { PartyApiService, type PartyReactionCatalog } from '../api/party-api.service';
 import { ServerConfigService } from '../server-config.service';
@@ -56,6 +57,13 @@ export class ReactionCatalogService {
     const next = toggleBar(this.bar(), emoji);
     if (next) this.save(next);
     return next !== null;
+  }
+
+  /** Moves the bar emoji at `from` to `to` (drag and drop in the settings). */
+  move(from: number, to: number): void {
+    const bar = [...this.bar()];
+    moveItemInArray(bar, from, to);
+    this.save(bar);
   }
 
   reset(): void {

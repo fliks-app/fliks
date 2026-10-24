@@ -3521,7 +3521,7 @@
     "reaction_keep_open": "Tieni la barra aperta",
     "reaction_bar": "Emoji della barra",
     "reaction_bar_reset": "Ripristina",
-    "reaction_bar_hint": "Fino a {{max}} emoji, nell'ordine in cui li tocchi.",
+    "reaction_bar_hint": "Fino a {{max}} emoji. Trascina quelli della barra per riordinarli.",
     "reaction_bar_full": "La barra contiene al massimo {{max}} emoji.",
     "reaction_section_bar": "Nella barra",
     "reaction_section_animated": "Animate",

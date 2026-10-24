@@ -3521,7 +3521,7 @@
     "reaction_keep_open": "Mantener la barra abierta",
     "reaction_bar": "Emojis de la barra",
     "reaction_bar_reset": "Restablecer",
-    "reaction_bar_hint": "Hasta {{max}} emojis, en el orden en que los pulses.",
+    "reaction_bar_hint": "Hasta {{max}} emojis. Arrastra los de la barra para cambiar su orden.",
     "reaction_bar_full": "La barra admite {{max}} emojis como máximo.",
     "reaction_section_bar": "En la barra",
     "reaction_section_animated": "Animados",
