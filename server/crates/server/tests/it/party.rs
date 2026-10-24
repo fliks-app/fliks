@@ -1041,7 +1041,7 @@ async fn next_skips_what_a_member_cannot_open_and_the_end_idles_the_party(pool: 
     assert_eq!(s, 202);
     let (_, now) = get().await;
     let kinds: Vec<_> = systems(&now).into_iter().map(|s| s.0).collect();
-    assert_eq!(kinds[kinds.len() - 2..], ["item_skipped", "playlist_ended"]);
+    assert_eq!(kinds[kinds.len() - 2..], ["item_skipped", "queue_ended"]);
     assert_eq!(
         (show(&now), now["item"]["episodeId"].clone()),
         (json!("idle"), json!(1))
@@ -1171,4 +1171,95 @@ async fn the_hosts_ended_moves_a_playlist_party_on_and_a_plain_party_only_idles(
         )
         .await;
     assert_eq!((s, msg(&e)), (400, Some("party.error_invalid")));
+}
+
+async fn step(c: &Ctx, a: &str, path: &str, action: &str) -> (u16, Value) {
+    let (_, now) = c.call("GET", path, a, None).await;
+    let rev = now["live"]["rev"].clone();
+    let body = json!({"deviceId": "da", "action": action, "baseRev": rev});
+    let (s, _) = c
+        .call("POST", &format!("{path}/intent"), a, Some(body))
+        .await;
+    let (_, now) = c.call("GET", path, a, None).await;
+    (s, now)
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_series_party_steps_through_the_episodes_with_a_file_in_player_order(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (alice, a) = c.user("alice", true).await;
+    let _ca = c.connect(alice, "da");
+    // Seasons 1 (special), 2, 3; episodes 1 S00E01 (file), 2 S01E02, 3 S01E01, 4 S01E03 (no file), 5 S02E01
+    sqlx::raw_sql(
+        r#"INSERT INTO media (title, type, "libraryId") VALUES ('Show', 'series', 1);
+           INSERT INTO seasons ("seasonNumber", "mediaId") VALUES (0, 2), (1, 2), (2, 2);
+           INSERT INTO episodes ("episodeNumber", title, "seasonId") VALUES
+             (1, 'sp', 1), (2, 'e2', 2), (1, 'e1', 2), (3, 'e3', 2), (1, 'f1', 3);
+           INSERT INTO media_files ("mediaId", "episodeId", "relativePath", size, quality) VALUES
+             (2, 1, 's', 1, 'q'), (2, 2, 'b', 1, 'q'), (2, 3, 'a', 1, 'q'), (2, 5, 'd', 1, 'q');"#,
+    )
+    .execute(&c.pool)
+    .await
+    .unwrap();
+    let (_, p) = c
+        .call(
+            "POST",
+            "/api/parties",
+            &a,
+            Some(json!({"name": "n", "mediaId": 2, "episodeId": 3})),
+        )
+        .await;
+    let id = p["id"].as_i64().unwrap();
+    c.call("POST", &format!("/api/parties/{id}/start"), &a, None)
+        .await;
+    c.call(
+        "POST",
+        &format!("/api/parties/{id}/join"),
+        &a,
+        Some(json!({"deviceId": "da"})),
+    )
+    .await;
+    let path = format!("/api/parties/{id}");
+    let (s, q) = c.call("GET", &format!("{path}/queue"), &a, None).await;
+    let eps: Vec<_> = q
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|i| i["episodeId"].clone())
+        .collect();
+    assert_eq!((s, eps), (200, vec![json!(3), json!(2), json!(5)]));
+
+    // previous at the first episode has nowhere to go: the party idles and says so
+    let (s, now) = step(&c, &a, &path, "previous").await;
+    let kinds: Vec<_> = systems(&now).into_iter().map(|s| s.0).collect();
+    assert_eq!((s, kinds.last().unwrap().as_str()), (202, "queue_ended"));
+    for want in [2, 5] {
+        let (s, now) = step(&c, &a, &path, "next").await;
+        assert_eq!((s, now["item"]["episodeId"].clone()), (202, json!(want)));
+        assert_eq!(now["item"]["mediaFileId"], Value::Null);
+    }
+    // the last episode: idle, nothing skipped for the episode without a file
+    let (_, now) = step(&c, &a, &path, "next").await;
+    let sys = systems(&now);
+    assert_eq!(sys.last().unwrap().0, "queue_ended");
+    assert!(sys.iter().all(|s| s.0 != "item_skipped"));
+    assert_eq!(
+        (
+            now["live"]["state"].clone(),
+            now["item"]["episodeId"].clone()
+        ),
+        (json!("idle"), json!(5))
+    );
+    let (_, now) = step(&c, &a, &path, "previous").await;
+    assert_eq!(now["item"]["episodeId"], 2);
+    // a special sits outside the queue: next starts at the top
+    c.call(
+        "POST",
+        &format!("{path}/intent"),
+        &a,
+        Some(json!({"deviceId": "da", "action": "setItem", "item": {"mediaId": 2, "episodeId": 1}, "baseRev": now["live"]["rev"]})),
+    )
+    .await;
+    let (_, now) = step(&c, &a, &path, "next").await;
+    assert_eq!(now["item"]["episodeId"], 3);
 }

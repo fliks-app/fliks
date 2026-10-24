@@ -383,6 +383,44 @@ pub struct QueueRow {
     pub playable: bool,
 }
 
+/// What a party steps through: its playlist, else the series of an episode it is on, else nothing.
+pub async fn queue_rows(
+    db: &PgPool,
+    playlist: Option<i32>,
+    current: &Item,
+) -> sqlx::Result<Vec<QueueRow>> {
+    match (playlist, current.episode_id) {
+        (Some(p), _) => playlist_rows(db, p).await,
+        (None, Some(_)) => series_rows(db, current.media_id).await,
+        (None, None) => Ok(vec![]),
+    }
+}
+
+/// The episodes of a series that have a file, in the order the player lists them: specials out, then
+/// season, episode, ids.
+async fn series_rows(db: &PgPool, media: i32) -> sqlx::Result<Vec<QueueRow>> {
+    let ids: Vec<i32> = sqlx::query_scalar(
+        r#"SELECT e.id FROM episodes e JOIN seasons s ON s.id = e."seasonId"
+           WHERE s."mediaId" = $1 AND s."seasonNumber" > 0
+             AND EXISTS (SELECT 1 FROM media_files f WHERE f."mediaId" = $1 AND f."episodeId" = e.id)
+           ORDER BY s."seasonNumber", e."episodeNumber", s.id, e.id"#,
+    )
+    .bind(media)
+    .fetch_all(db)
+    .await?;
+    Ok(ids
+        .into_iter()
+        .map(|id| QueueRow {
+            item: Item {
+                media_id: media,
+                media_file_id: None,
+                episode_id: Some(id),
+            },
+            playable: true,
+        })
+        .collect())
+}
+
 /// The playlist's rows in its order (`playlists.md` rule 13).
 pub async fn playlist_rows(db: &PgPool, playlist: i32) -> sqlx::Result<Vec<QueueRow>> {
     let rows: Vec<(i32, Option<i32>, bool)> = sqlx::query_as(

@@ -1,4 +1,4 @@
-//! The playlist side of a party (`docs/spec/watch-party.md`, Playlist parties): which row plays next.
+//! The queue side of a party (`docs/spec/watch-party.md`, Followed queue): which row plays next.
 use super::{db, registry::item_dto, routes::user_media_ok};
 use crate::{http::AppError, state::AppState};
 use fliks_domain::party::{Action, Effect, Error, Intent, Item, Live, candidates};
@@ -17,12 +17,11 @@ async fn title(st: &AppState, item: &Item) -> sqlx::Result<String> {
 /// The first row after (before) `current` that has a file and that every user in `users` can access.
 pub async fn step(
     st: &AppState,
-    playlist: i32,
+    rows: Vec<db::QueueRow>,
     current: &Item,
     forward: bool,
     users: &[i32],
 ) -> Result<Step, AppError> {
-    let rows = db::playlist_rows(&st.db, playlist).await?;
     let queue: Vec<Item> = rows.iter().map(|r| r.item.clone()).collect();
     // A media's access is the same for every row of it (episodes of one series).
     let mut shared: HashMap<i32, bool> = HashMap::new();

@@ -105,8 +105,8 @@ pub struct Item {
     pub episode_id: Option<i32>,
 }
 
-/// The playlist rows to try, nearest first, after (before) `current`. A current item that left the
-/// playlist counts as sitting before the first row: forward starts at the top, backward has none.
+/// The queue rows to try, nearest first, after (before) `current`. A current item that left the
+/// queue counts as sitting before the first row: forward starts at the top, backward has none.
 pub fn candidates(queue: &[Item], current: &Item, forward: bool) -> Vec<Item> {
     let at = queue
         .iter()
@@ -726,7 +726,7 @@ impl Live {
         self.state_effect(out, now, None, Some(by_of(by)), Some("ended"));
     }
 
-    /// A playlist step chosen by the server: one `item_skipped` message per passed-over title, then
+    /// A queue step chosen by the server: one `item_skipped` message per passed-over title, then
     /// `item` as a `setItem` would (`None`: nothing playable is left, the party idles). The gates of
     /// `setItem` run first, so a refused call leaves no message behind.
     pub fn advance(
@@ -760,7 +760,7 @@ impl Live {
             if self.state != State::Idle {
                 self.idle(&mut out, now, &actor);
             }
-            self.sys(&mut out, "playlist_ended", None, json!({}), now);
+            self.sys(&mut out, "queue_ended", None, json!({}), now);
             return Ok((self.rev, out));
         };
         let req = Intent {
@@ -1730,7 +1730,7 @@ mod tests {
     }
 
     #[test]
-    fn the_end_of_a_playlist_idles_the_party_and_says_so() {
+    fn the_end_of_the_queue_idles_the_party_and_says_so() {
         let mut l = party();
         l.state = State::Playing;
         let rev = l.rev;
@@ -1738,7 +1738,7 @@ mod tests {
         let out = l.advance(1, "d1", rev, &skipped, None, 5).unwrap().1;
         assert_eq!(l.state, State::Idle);
         assert_eq!(state_of(&out).unwrap().0, State::Idle);
-        assert_eq!(kinds(&out), ["item_skipped", "playlist_ended"]);
+        assert_eq!(kinds(&out), ["item_skipped", "queue_ended"]);
     }
 
     #[test]

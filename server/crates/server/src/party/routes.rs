@@ -1,7 +1,7 @@
 use super::{
     db::{self, Row},
     dto::*,
-    playlist,
+    queue as steps,
     registry::{self, deliver, item_dto, member_dtos, notify_updated},
 };
 use crate::{
@@ -684,20 +684,21 @@ pub async fn intent(
         title = Some(item_dto(&st, it).await?.title);
     }
     let step = match b.action {
+        IntentAction::Next | IntentAction::Previous if item.is_none() => Some(
+            queue_step(&st, &row, b.action == IntentAction::Next)
+                .await?
+                .ok_or_else(|| fail(StatusCode::BAD_REQUEST, "party.error_invalid"))?,
+        ),
         IntentAction::Next | IntentAction::Previous => {
-            let Some(playlist) = row.playlist_id.filter(|_| item.is_none()) else {
-                return Err(fail(StatusCode::BAD_REQUEST, "party.error_invalid"));
-            };
-            Some(playlist_step(&st, id, playlist, b.action == IntentAction::Next).await?)
+            return Err(fail(StatusCode::BAD_REQUEST, "party.error_invalid"));
         }
-        // A host's `ended` that idles the party moves a playlist party on.
-        IntentAction::Ended if row.playlist_id.is_some() => {
+        // A host's `ended` that idles the party moves a followed queue on.
+        IntentAction::Ended => {
             let view = st.parties.view(id).ok_or_else(not_live)?;
-            match row.playlist_id {
-                Some(playlist) if view.host_id == me && view.state != PlayState::Idle => {
-                    Some(playlist_step(&st, id, playlist, true).await?)
-                }
-                _ => None,
+            if view.host_id == me && view.state != PlayState::Idle {
+                queue_step(&st, &row, true).await?
+            } else {
+                None
             }
         }
         _ => None,
@@ -706,7 +707,7 @@ pub async fn intent(
         .parties
         .act(id, |l| {
             let result = match (b.action.machine(), step) {
-                (_, Some(step)) => playlist::apply(
+                (_, Some(step)) => steps::apply(
                     l,
                     me,
                     &b.device_id,
@@ -749,18 +750,20 @@ pub async fn intent(
     }
 }
 
-/// The playlist row to move to, judged for every user in the party right now.
-async fn playlist_step(
-    st: &AppState,
-    party: i32,
-    playlist: i32,
-    forward: bool,
-) -> R<playlist::Step> {
-    let view = st.parties.view(party).ok_or_else(not_live)?;
+/// The row to move to in what the party follows, judged for every user in the party right now;
+/// `None` when it follows nothing (a single movie).
+async fn queue_step(st: &AppState, row: &Row, forward: bool) -> R<Option<steps::Step>> {
+    let view = st.parties.view(row.id).ok_or_else(not_live)?;
+    let rows = db::queue_rows(&st.db, row.playlist_id, &view.item).await?;
+    if rows.is_empty() {
+        return Ok(None);
+    }
     let mut users: Vec<i32> = view.members.iter().map(|m| m.user_id).collect();
     users.sort_unstable();
     users.dedup();
-    Ok(playlist::step(st, playlist, &view.item, forward, &users).await?)
+    Ok(Some(
+        steps::step(st, rows, &view.item, forward, &users).await?,
+    ))
 }
 
 async fn run(
@@ -1002,12 +1005,11 @@ pub async fn queue(
     PathParams(id): PathParams<i32>,
 ) -> R<Json<Vec<PartyItem>>> {
     let row = member_row(&st, id, a.user.id).await?;
+    let current = st.parties.view(id).map_or_else(|| row.item(), |v| v.item);
     let mut out = vec![];
-    if let Some(playlist) = row.playlist_id {
-        for r in db::playlist_rows(&st.db, playlist).await? {
-            if media_ok(&st, &a, r.item.media_id).await? {
-                out.push(item_dto(&st, &r.item).await?);
-            }
+    for r in db::queue_rows(&st.db, row.playlist_id, &current).await? {
+        if media_ok(&st, &a, r.item.media_id).await? {
+            out.push(item_dto(&st, &r.item).await?);
         }
     }
     Ok(Json(out))
