@@ -143,8 +143,22 @@ export class PartyService {
     this.toast.success(
       this.translate.instant('party.toast_scheduled', { name: dto.name, link }),
       10000,
-      { label: this.translate.instant('party.copy_link'), run: () => void this.copyLink(link) },
+      { label: this.translate.instant(this.canShare ? 'party.share_link' : 'party.copy_link'), run: () => void this.shareLink(link, dto.name) },
     );
+  }
+
+  /** The system share sheet (Android WebView, iOS WKWebView and most browsers expose it). */
+  readonly canShare = typeof navigator.share === 'function';
+
+  /** Shares the link natively, else copies it. */
+  async shareLink(link: string, title: string): Promise<void> {
+    if (!this.canShare) return this.copyLink(link);
+    try {
+      await navigator.share({ title, url: link });
+    } catch (e) {
+      // Dismissing the sheet is not an error.
+      if ((e as DOMException)?.name !== 'AbortError') await this.copyLink(link);
+    }
   }
 
   async copyLink(link: string): Promise<void> {

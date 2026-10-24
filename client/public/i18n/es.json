@@ -3574,6 +3574,7 @@
     "go_home": "Volver al inicio",
     "toast_scheduled": "\"{{name}}\" está programada. Enlace: {{link}}",
     "copy_link": "Copiar enlace",
+    "share_link": "Compartir enlace",
     "link_copied": "Enlace copiado",
     "view": "Ver",
     "create_title": "Ver juntos",

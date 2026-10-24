@@ -129,7 +129,7 @@ export class PartyPageComponent implements OnInit, OnDestroy {
   }
 
   protected copy(): void {
-    void this.party.copyLink(this.link());
+    void this.party.shareLink(this.link(), this.view()?.name ?? '');
   }
 
   protected toggleReady(): void {

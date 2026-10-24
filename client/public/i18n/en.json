@@ -3574,6 +3574,7 @@
     "go_home": "Back to home",
     "toast_scheduled": "\"{{name}}\" is scheduled. Link: {{link}}",
     "copy_link": "Copy link",
+    "share_link": "Share link",
     "link_copied": "Link copied",
     "view": "View",
     "create_title": "Watch together",

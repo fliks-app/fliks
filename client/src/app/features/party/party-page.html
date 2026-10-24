@@ -77,7 +77,7 @@
         <h2 class="text-sm font-semibold">{{ 'party.link' | translate }}</h2>
         <div class="flex items-center gap-2">
           <input type="text" readonly class="input input-bordered input-sm min-w-0 flex-1" [value]="link()" [attr.aria-label]="'party.link' | translate" />
-          <button type="button" class="btn btn-sm" (click)="copy()">{{ 'party.copy_link' | translate }}</button>
+          <button type="button" class="btn btn-sm" (click)="copy()">{{ (party.canShare ? 'party.share_link' : 'party.copy_link') | translate }}</button>
         </div>
       </section>
     }
