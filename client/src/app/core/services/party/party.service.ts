@@ -23,6 +23,7 @@ import { SseService, type PartyEvent } from '../sse.service';
 import { ToastService } from '../toast.service';
 import { translatedServerMessage } from '../../utils/server-message';
 import { resolvePlayableFile } from '../../../shared/utils/media-play.util';
+import { ServerConfigService } from '../server-config.service';
 import { ClockService } from './clock.service';
 
 /** What the engine has to follow: the last applied `party.state` (or the snapshot's equivalent). */
@@ -62,6 +63,7 @@ export class PartyService {
   private readonly api = inject(PartyApiService);
   private readonly sse = inject(SseService);
   private readonly auth = inject(AuthService);
+  private readonly serverConfig = inject(ServerConfigService);
   private readonly clock = inject(ClockService);
   private readonly router = inject(Router);
   private readonly toast = inject(ToastService);
@@ -171,7 +173,8 @@ export class PartyService {
   }
 
   inviteLink(token: string | null): string {
-    return token ? `${location.origin}/party/${token}` : '';
+    // Native shells run on an app-local origin: the link must carry the server's.
+    return token ? new URL(this.serverConfig.resolveUrl(`/party/${token}`), location.origin).href : '';
   }
 
   openPage(id: number, token?: string): void {
