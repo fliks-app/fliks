@@ -3132,6 +3132,7 @@
     "sections_title": "Zones de l'accueil",
     "sections_hint": "Choisissez les zones à afficher et leur ordre. Glissez pour réordonner, ou utilisez les flèches.",
     "section": {
+      "watch_parties": "Séances",
       "libraries": "Bibliothèques",
       "continue_watching": "Reprendre la lecture",
       "recommendations": "Recommandations",

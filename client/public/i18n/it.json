@@ -3132,6 +3132,7 @@
     "sections_title": "Sezioni della home",
     "sections_hint": "Scegli le sezioni da mostrare e il loro ordine. Trascina per riordinare, oppure usa le frecce.",
     "section": {
+      "watch_parties": "Sessioni",
       "libraries": "Librerie",
       "continue_watching": "Riprendi la riproduzione",
       "recommendations": "Consigli",

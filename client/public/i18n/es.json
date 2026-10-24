@@ -3132,6 +3132,7 @@
     "sections_title": "Zonas del inicio",
     "sections_hint": "Elija las zonas a mostrar y su orden. Arrastre para reordenar, o use las flechas.",
     "section": {
+      "watch_parties": "Sesiones",
       "libraries": "Bibliotecas",
       "continue_watching": "Reanudar la reproducción",
       "recommendations": "Recomendaciones",

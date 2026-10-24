@@ -3132,6 +3132,7 @@
     "sections_title": "Bereiche der Startseite",
     "sections_hint": "Wählen Sie die anzuzeigenden Bereiche und ihre Reihenfolge. Ziehen Sie zum Neuanordnen oder verwenden Sie die Pfeile.",
     "section": {
+      "watch_parties": "Watch Partys",
       "libraries": "Bibliotheken",
       "continue_watching": "Wiedergabe fortsetzen",
       "recommendations": "Empfehlungen",

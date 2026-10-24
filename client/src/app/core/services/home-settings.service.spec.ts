@@ -28,6 +28,7 @@ describe('HomeSettingsService.resolve', () => {
   it('returns the canonical built-in order, all visible, for a fresh user', () => {
     const svc = make();
     expect(keys(svc.resolve([]))).toEqual([
+      'watch-parties',
       'received-recommendations',
       'libraries',
       'continue-watching',
@@ -46,6 +47,7 @@ describe('HomeSettingsService.resolve', () => {
       { key: 'likes', visible: false },
       { key: 'libraries', visible: true },
       { key: 'received-recommendations', visible: true },
+      { key: 'watch-parties', visible: true },
       { key: 'continue-watching', visible: true },
       { key: 'recommendations', visible: true },
       { key: 'recently-added', visible: true },
@@ -56,6 +58,7 @@ describe('HomeSettingsService.resolve', () => {
       'likes',
       'libraries',
       'received-recommendations',
+      'watch-parties',
       'continue-watching',
       'recommendations',
       'recently-added',
@@ -69,6 +72,7 @@ describe('HomeSettingsService.resolve', () => {
     const svc = make();
     // A layout saved before "likes" existed — every built-in but that one.
     svc.setOrder([
+      { key: 'watch-parties', visible: true },
       { key: 'received-recommendations', visible: true },
       { key: 'libraries', visible: true },
       { key: 'continue-watching', visible: true },
@@ -78,6 +82,7 @@ describe('HomeSettingsService.resolve', () => {
       { key: 'coming-soon', visible: true },
     ]);
     expect(keys(svc.resolve([]))).toEqual([
+      'watch-parties',
       'received-recommendations',
       'libraries',
       'continue-watching',
@@ -100,7 +105,32 @@ describe('HomeSettingsService.resolve', () => {
       { key: 'playlists', visible: true },
       { key: 'coming-soon', visible: true },
     ]);
-    expect(keys(svc.resolve([]))[0]).toBe('received-recommendations');
+    expect(keys(svc.resolve([])).slice(0, 2)).toEqual(['watch-parties', 'received-recommendations']);
+  });
+
+  it('puts watch-parties on top, visible, when a saved layout predates it', () => {
+    const svc = make();
+    svc.setOrder([
+      { key: 'received-recommendations', visible: true },
+      { key: 'libraries', visible: false },
+      { key: 'continue-watching', visible: true },
+    ]);
+    const resolved = svc.resolve([]);
+    expect(keys(resolved)[0]).toBe('watch-parties');
+    expect(resolved[0]).toMatchObject({ type: 'watch-parties', visible: true });
+    expect(resolved.find((s) => s.key === 'libraries')?.visible).toBe(false);
+  });
+
+  it('keeps a saved position and hidden state for watch-parties', () => {
+    const svc = make();
+    svc.setOrder([
+      { key: 'received-recommendations', visible: true },
+      { key: 'libraries', visible: true },
+      { key: 'watch-parties', visible: false },
+    ]);
+    const resolved = svc.resolve([]);
+    expect(keys(resolved).indexOf('watch-parties')).toBe(2);
+    expect(resolved[2].visible).toBe(false);
   });
 
   it('drops a saved zone whose library no longer exists', () => {
@@ -135,6 +165,7 @@ describe('HomeSettingsService.resolve', () => {
     svc.setOrder([
       { key: 'library-recent:1', visible: true },
       { key: 'received-recommendations', visible: true },
+      { key: 'watch-parties', visible: true },
       { key: 'libraries', visible: true },
       { key: 'continue-watching', visible: true },
       { key: 'recommendations', visible: true },
@@ -166,6 +197,7 @@ describe('HomeSettingsService.resolve', () => {
     svc.setOrder([
       { key: 'requests-recent', visible: false },
       { key: 'received-recommendations', visible: true },
+      { key: 'watch-parties', visible: true },
       { key: 'libraries', visible: true },
       { key: 'continue-watching', visible: true },
       { key: 'recommendations', visible: true },
@@ -213,6 +245,7 @@ describe('HomeSettingsService persistence', () => {
     svc.setMode('both');
     svc.resetLayout();
     expect(keys(svc.resolve([]))).toEqual([
+      'watch-parties',
       'received-recommendations',
       'libraries',
       'continue-watching',

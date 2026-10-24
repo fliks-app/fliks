@@ -50,26 +50,29 @@
 
   @if (!loadingFirstPass()) {
 
-  @if (parties().length) {
-    <app-horizontal-scroller [title]="'party.rail_title' | translate">
-      @for (p of parties(); track p.id) {
-        <app-media-card
-          [aspect]="'landscape'"
-          [attr.data-home-focus]="'party:' + p.id"
-          [imageUrl]="partyImage(p)"
-          [title]="p.name"
-          [subtitle]="partySubtitle(p)"
-          [topLeftBadge]="p.status === 'live' ? ('party.live' | translate) : undefined"
-          [link]="partyUrl(p)"
-          [linkState]="partyState(p)"
-          [posterName]="'party-poster-' + p.id"
-        />
-      }
-    </app-horizontal-scroller>
-  }
-
   @for (section of visibleSections(); track section.key) {
     @switch (section.type) {
+
+      <!-- Watch parties -->
+      @case ('watch-parties') {
+        @if (parties().length) {
+          <app-horizontal-scroller [title]="'party.rail_title' | translate">
+            @for (p of parties(); track p.id) {
+              <app-media-card
+                [aspect]="'landscape'"
+                [attr.data-home-focus]="'party:' + p.id"
+                [imageUrl]="partyImage(p)"
+                [title]="p.name"
+                [subtitle]="partySubtitle(p)"
+                [topLeftBadge]="p.status === 'live' ? ('party.live' | translate) : undefined"
+                [link]="partyUrl(p)"
+                [linkState]="partyState(p)"
+                [posterName]="'party-poster-' + p.id"
+              />
+            }
+          </app-horizontal-scroller>
+        }
+      }
 
       <!-- Member recommendations -->
       @case ('received-recommendations') {

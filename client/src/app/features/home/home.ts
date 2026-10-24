@@ -196,6 +196,7 @@ export class HomeComponent implements OnInit, OnDestroy {
 
   /** Shape of one skeleton row: how the zone's cards are laid out. */
   private static readonly SHAPES: Partial<Record<HomeSectionType, 'tile' | 'landscape' | 'portrait'>> = {
+    'watch-parties': 'landscape',
     libraries: 'tile',
     'continue-watching': 'landscape',
     likes: 'landscape',
@@ -338,6 +339,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   /** Cards actually rendered by each zone, for the layout snapshot. */
   private sectionCount(s: ResolvedHomeSection): number {
     switch (s.type) {
+      case 'watch-parties': return this.parties().length;
       case 'libraries': return this.displayLibraries().length;
       case 'continue-watching': return this.continueWatching().length;
       case 'recommendations': return this.recommendations().length;

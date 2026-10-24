@@ -3132,6 +3132,7 @@
     "sections_title": "Home sections",
     "sections_hint": "Choose which sections to show and their order. Drag to reorder, or use the arrows.",
     "section": {
+      "watch_parties": "Watch parties",
       "libraries": "Libraries",
       "continue_watching": "Continue watching",
       "recommendations": "Recommendations",
