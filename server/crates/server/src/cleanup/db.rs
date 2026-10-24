@@ -111,7 +111,7 @@ pub async fn candidates(db: &PgPool, libraries: &[i32]) -> sqlx::Result<Vec<Valu
             AND (c."episodeId" IS NULL OR f."episodeId" = c."episodeId")
             AND (c."seasonId" IS NULL OR f."episodeId" IN (SELECT id FROM episodes WHERE "seasonId" = c."seasonId"))), 0),
           'flaggedAt', iso_ms(c."flaggedAt"), 'deleteAt', iso_ms(c."deleteAt"))
-        FROM cleanup_candidates c JOIN media m ON m.id = c."mediaId" JOIN cleanup_rules r ON r.id = c."ruleId"
+        FROM cleanup_candidates c JOIN media m ON m.id = c."mediaId" JOIN cleanup_rules r ON r.id = c."ruleId" AND r.enabled
         LEFT JOIN seasons s ON s.id = c."seasonId" LEFT JOIN episodes e ON e.id = c."episodeId"
         WHERE m."libraryId" = ANY($1)
         ORDER BY c."deleteAt" ASC NULLS LAST, m.id ASC, s."seasonNumber" ASC NULLS FIRST, e."episodeNumber" ASC NULLS FIRST"#,
@@ -254,8 +254,8 @@ pub async fn unexclude(db: &PgPool, media_id: i32, scope: Scope) -> sqlx::Result
 /// `deleteAt` of one media (ISO), when it is flagged with a date.
 pub async fn delete_at(db: &PgPool, media_id: i32) -> sqlx::Result<Option<String>> {
     Ok(sqlx::query_scalar(
-        r#"SELECT iso_ms("deleteAt") FROM cleanup_candidates
-        WHERE "mediaId" = $1 AND "seasonId" IS NULL AND "episodeId" IS NULL"#,
+        r#"SELECT iso_ms(c."deleteAt") FROM cleanup_candidates c JOIN cleanup_rules r ON r.id = c."ruleId" AND r.enabled
+        WHERE c."mediaId" = $1 AND c."seasonId" IS NULL AND c."episodeId" IS NULL"#,
     )
     .bind(media_id)
     .fetch_optional(db)
@@ -266,8 +266,9 @@ pub async fn delete_at(db: &PgPool, media_id: i32) -> sqlx::Result<Option<String
 /// `deleteAt` (ISO) of the season and episode candidates of one media, with their scope.
 pub async fn scoped_delete_at(db: &PgPool, media_id: i32) -> sqlx::Result<Vec<(Scope, String)>> {
     let rows: Vec<(Option<i32>, Option<i32>, String)> = sqlx::query_as(
-        r#"SELECT "seasonId", "episodeId", iso_ms("deleteAt") FROM cleanup_candidates
-        WHERE "mediaId" = $1 AND "seasonId" IS NOT NULL AND "deleteAt" IS NOT NULL"#,
+        r#"SELECT c."seasonId", c."episodeId", iso_ms(c."deleteAt") FROM cleanup_candidates c
+        JOIN cleanup_rules r ON r.id = c."ruleId" AND r.enabled
+        WHERE c."mediaId" = $1 AND c."seasonId" IS NOT NULL AND c."deleteAt" IS NOT NULL"#,
     )
     .bind(media_id)
     .fetch_all(db)
@@ -288,6 +289,7 @@ pub async fn library_names(db: &PgPool) -> sqlx::Result<Vec<(i32, String)>> {
 pub async fn leaving_soon(db: &PgPool, libraries: &[i32]) -> sqlx::Result<Vec<(i32, String)>> {
     sqlx::query_as(
         r#"SELECT m.id, iso_ms(c."deleteAt") FROM cleanup_candidates c JOIN media m ON m.id = c."mediaId"
+        JOIN cleanup_rules r ON r.id = c."ruleId" AND r.enabled
         WHERE c."deleteAt" IS NOT NULL AND c."seasonId" IS NULL AND m."libraryId" = ANY($1)
         ORDER BY c."deleteAt", m.id"#,
     )
