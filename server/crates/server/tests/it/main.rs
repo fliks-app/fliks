@@ -13,6 +13,7 @@ mod metadata;
 mod migrations;
 mod notifications;
 mod parity;
+mod party;
 mod playback;
 mod playlists;
 mod plugins;

@@ -37,6 +37,7 @@ import { NetworkService } from '../../core/services/network.service';
 import { PageScrollerService } from '../../core/services/page-scroller.service';
 import { CardActionsPanelComponent } from '../components/card-actions-panel/card-actions-panel';
 import { AddToPlaylistModalComponent } from '../components/add-to-playlist-modal/add-to-playlist-modal.component';
+import { PartyCreateModalComponent } from '../../features/party/party-create-modal';
 import { RecommendModalComponent } from '../components/recommend-modal/recommend-modal.component';
 import { IdentifyModalHostComponent } from '../components/identify-modal-host/identify-modal-host';
 import { TrackingModalHostComponent } from '../components/tracking-modal-host/tracking-modal-host';
@@ -85,6 +86,7 @@ const SIDEBAR_COUNTS_DEBOUNCE_MS = 400;
     CardActionsPanelComponent,
     AddToPlaylistModalComponent,
     RecommendModalComponent,
+    PartyCreateModalComponent,
     TrackingModalHostComponent,
     IdentifyModalHostComponent,
     UserMenuComponent,

@@ -1,0 +1,54 @@
+<div class="flex h-full flex-col bg-base-100/95 text-base-content backdrop-blur-md" data-tv-zone appTvSection>
+  <header class="flex items-center gap-2 px-3 py-2">
+    <h2 class="min-w-0 flex-1 truncate text-sm font-semibold">{{ party.party()?.name }}</h2>
+    <button type="button" class="btn btn-ghost btn-sm" [attr.aria-label]="'party.resync' | translate" (click)="resync()">
+      <svg lucideRefreshCw class="h-4 w-4"></svg>
+      @if (!isTv()) { <span class="hidden sm:inline">{{ 'party.resync' | translate }}</span> }
+    </button>
+    <button type="button" class="btn btn-ghost btn-sm btn-square" [attr.aria-label]="'party.panel_close' | translate" (click)="close()">
+      <svg lucideX class="h-4 w-4"></svg>
+    </button>
+  </header>
+
+  <div role="tablist" class="tabs tabs-border px-3" appTvRow>
+    <button type="button" role="tab" class="tab" [class.tab-active]="tab() === 'chat'" (click)="tab.set('chat')">{{ 'party.tab_chat' | translate }}</button>
+    <button type="button" role="tab" class="tab" [class.tab-active]="tab() === 'members'" (click)="tab.set('members')">
+      {{ 'party.tab_members' | translate }} ({{ party.members().length }})
+    </button>
+  </div>
+
+  @if (tab() === 'members') {
+    <ul class="min-h-0 flex-1 overflow-y-auto px-3 py-2 text-sm">
+      @for (m of party.members(); track m.deviceId + ':' + m.userId) {
+        <li class="flex items-center gap-2 py-1.5">
+          <span
+            class="h-2.5 w-2.5 shrink-0 rounded-full"
+            [class.bg-success]="m.status === 'ready'"
+            [class.bg-warning]="m.status === 'buffering' || m.status === 'waiting'"
+            [class.bg-base-content]="m.status === 'away'"
+            [class.opacity-40]="m.status === 'away'"
+            [attr.title]="'party.status_' + m.status | translate"
+          ></span>
+          <span class="min-w-0 flex-1">
+            <span class="block truncate">{{ m.username }}</span>
+            <span class="block truncate text-xs opacity-60">{{ ('party.status_' + m.status) | translate }}@if (m.deviceName) { · {{ m.deviceName }} }</span>
+          </span>
+          @if (m.role === 'host') {
+            <span class="badge badge-primary badge-sm gap-1"><svg lucideCrown class="h-3 w-3"></svg>{{ 'party.host_badge' | translate }}</span>
+          } @else if (party.isHost()) {
+            <button type="button" class="btn btn-ghost btn-xs" (click)="party.makeHost(m.userId)">{{ 'party.make_host' | translate }}</button>
+            <button type="button" class="btn btn-ghost btn-xs text-error" (click)="party.kick(m.userId)">{{ 'party.kick' | translate }}</button>
+          }
+        </li>
+      }
+    </ul>
+    @if (party.isHost()) {
+      <label class="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm">
+        <input type="checkbox" class="toggle toggle-sm" [checked]="party.policy() === 'host_only'" (change)="setHostOnly($event)" />
+        <span>{{ 'party.policy_host_only' | translate }}</span>
+      </label>
+    }
+  } @else {
+    <app-party-chat />
+  }
+</div>

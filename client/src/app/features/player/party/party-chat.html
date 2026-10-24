@@ -1,0 +1,44 @@
+<div #list class="min-h-0 flex-1 space-y-1 overflow-y-auto px-3 py-2 text-sm">
+  @for (m of party.messages(); track m.id) {
+    @if (m.system) {
+      <p class="text-center text-xs italic opacity-60">{{ systemText(m) }}</p>
+    } @else {
+      <p class="break-words"><span class="font-semibold">{{ m.username }}</span> {{ m.text }}</p>
+    }
+  } @empty {
+    <p class="py-6 text-center text-xs opacity-60">{{ 'party.chat_empty' | translate }}</p>
+  }
+</div>
+
+<div class="flex flex-wrap justify-center gap-1 px-3 py-1" appTvRow [attr.aria-label]="'party.reactions' | translate">
+  @for (e of emojis; track e) {
+    <button type="button" class="btn btn-ghost btn-sm px-2 text-lg" (click)="party.react(e)">{{ e }}</button>
+  }
+</div>
+
+@if (isTv()) {
+  <div class="flex flex-wrap justify-center gap-1 px-3 py-1" appTvRow>
+    @for (key of phrases; track key) {
+      <button type="button" class="btn btn-outline btn-sm" (click)="sendPhrase(key)">{{ key | translate }}</button>
+    }
+    <button type="button" class="btn btn-sm" (click)="startWriting()">{{ 'party.tv_write' | translate }}</button>
+  </div>
+}
+
+@if (!isTv() || writing()) {
+  <form class="flex items-center gap-2 px-3 pb-3 pt-1" (submit)="$event.preventDefault(); send()">
+    <input
+      #input
+      type="text"
+      class="input input-sm min-w-0 flex-1"
+      [attr.maxlength]="maxLength"
+      [attr.placeholder]="'party.chat_placeholder' | translate"
+      [attr.aria-label]="'party.chat_placeholder' | translate"
+      (input)="onInput($event)"
+      autocomplete="off"
+    />
+    <button type="submit" class="btn btn-primary btn-sm btn-square" [attr.aria-label]="'party.chat_send' | translate" [disabled]="!draft().trim()">
+      <svg lucideSend class="h-4 w-4"></svg>
+    </button>
+  </form>
+}

@@ -1,0 +1,37 @@
+:host {
+  position: absolute;
+  z-index: 200;
+  display: block;
+  -webkit-user-select: text;
+  user-select: text;
+}
+:host([data-dock='right']) {
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 360px;
+}
+:host([data-dock='tv']) {
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 30%;
+}
+:host([data-dock='bottom']) {
+  top: 56.25vw;
+  left: 0;
+  right: 0;
+  bottom: 0;
+}
+:host([data-dock='drawer']) {
+  right: 0;
+  bottom: 0;
+  width: 40%;
+  height: 60%;
+  padding-right: env(safe-area-inset-right, 0px);
+}
+/* Focused input: full height so the keyboard never hides what is typed. */
+:host([data-dock='drawer']:focus-within) {
+  top: 0;
+  height: auto;
+}

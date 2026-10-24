@@ -1,0 +1,44 @@
+<dialog #dialog class="modal" (close)="open.set(false)">
+  <div class="modal-box max-w-md">
+    <app-modal-header [title]="'party.create_title' | translate" />
+
+    @if (open()) {
+      <form class="flex flex-col gap-3" (submit)="$event.preventDefault(); submit()">
+        <label class="form-control">
+          <span class="mb-1 text-sm font-semibold">{{ 'party.create_name' | translate }}</span>
+          <input type="text" class="input input-bordered w-full" maxlength="80" [ngModel]="name()" (ngModelChange)="name.set($event)" name="name" />
+        </label>
+
+        <div class="flex flex-col gap-2">
+          <span class="text-sm font-semibold">{{ 'party.create_when' | translate }}</span>
+          <div role="radiogroup" class="join">
+            <button type="button" role="radio" class="btn btn-sm join-item" [class.btn-primary]="!later()" [attr.aria-checked]="!later()" (click)="later.set(false)">{{ 'party.create_now' | translate }}</button>
+            <button type="button" role="radio" class="btn btn-sm join-item" [class.btn-primary]="later()" [attr.aria-checked]="later()" (click)="later.set(true)">{{ 'party.create_later' | translate }}</button>
+          </div>
+          @if (later()) {
+            <input type="datetime-local" class="input input-bordered w-full" [min]="min()" [ngModel]="when()" (ngModelChange)="when.set($event)" name="when" [attr.aria-label]="'party.create_later' | translate" />
+          }
+        </div>
+
+        <div class="flex flex-col gap-1">
+          <span class="text-sm font-semibold">{{ 'party.create_invitees' | translate }}</span>
+          <app-party-invitee-picker [(selected)]="invitees" />
+        </div>
+
+        <label class="flex cursor-pointer items-center gap-2 text-sm">
+          <input type="checkbox" class="toggle toggle-sm" [checked]="hostOnly()" (change)="hostOnly.set($any($event.target).checked)" />
+          <span>{{ 'party.policy_host_only' | translate }}</span>
+        </label>
+
+        <app-modal-footer>
+          <button type="button" class="btn btn-ghost" (click)="close()">{{ 'common.cancel' | translate }}</button>
+          <button type="submit" class="btn btn-primary" [disabled]="!canSubmit()">
+            @if (busy()) { <span class="loading loading-spinner loading-sm"></span> }
+            {{ (later() ? 'party.create_schedule' : 'party.create_start') | translate }}
+          </button>
+        </app-modal-footer>
+      </form>
+    }
+  </div>
+  <form method="dialog" class="modal-backdrop"><button tabindex="-1">close</button></form>
+</dialog>

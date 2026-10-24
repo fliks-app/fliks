@@ -50,6 +50,11 @@ export const routes: Routes = [
       import('./features/player/player').then((m) => m.PlayerComponent),
   },
   {
+    path: 'party/:token',
+    canActivate: [serverConfigGuard, authGuard, passwordChangeGuard],
+    loadComponent: () => import('./features/party/party-join').then((m) => m.PartyJoinComponent),
+  },
+  {
     path: 'watch-live/:channelId',
     canActivate: [serverConfigGuard, authGuard, passwordChangeGuard],
     loadComponent: () =>
@@ -70,6 +75,11 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/home/home').then((m) => m.HomeComponent),
         data: { titleKey: 'nav.home', reuse: true },
+      },
+      {
+        path: 'parties/:id',
+        loadComponent: () => import('./features/party/party-page').then((m) => m.PartyPageComponent),
+        data: { titleKey: 'party.watch_together' },
       },
       {
         path: 'libraries/:libraryName',

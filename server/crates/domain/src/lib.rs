@@ -12,6 +12,7 @@ pub mod naming;
 pub mod net;
 pub mod nfo;
 pub mod notifications;
+pub mod party;
 pub mod persons;
 pub mod plugins;
 pub mod profiles;

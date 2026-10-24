@@ -2,11 +2,17 @@ import { Injectable, signal } from '@angular/core';
 
 export type ToastType = 'success' | 'error' | 'warning' | 'info';
 
+export interface ToastAction {
+  label: string;
+  run: () => void;
+}
+
 export interface Toast {
   id: number;
   message: string;
   type: ToastType;
   duration: number;
+  action?: ToastAction;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -14,8 +20,8 @@ export class ToastService {
   private nextId = 0;
   readonly toasts = signal<Toast[]>([]);
 
-  success(message: string, duration = 4000) {
-    this.add(message, 'success', duration);
+  success(message: string, duration = 4000, action?: ToastAction) {
+    this.add(message, 'success', duration, action);
   }
 
   error(message: string, duration = 6000) {
@@ -26,17 +32,17 @@ export class ToastService {
     this.add(message, 'warning', duration);
   }
 
-  info(message: string, duration = 4000) {
-    this.add(message, 'info', duration);
+  info(message: string, duration = 4000, action?: ToastAction) {
+    this.add(message, 'info', duration, action);
   }
 
   dismiss(id: number) {
     this.toasts.update((list) => list.filter((t) => t.id !== id));
   }
 
-  private add(message: string, type: ToastType, duration: number) {
+  private add(message: string, type: ToastType, duration: number, action?: ToastAction) {
     const id = this.nextId++;
-    this.toasts.update((list) => [...list, { id, message, type, duration }]);
+    this.toasts.update((list) => [...list, { id, message, type, duration, action }]);
 
     if (duration > 0) {
       setTimeout(() => this.dismiss(id), duration);

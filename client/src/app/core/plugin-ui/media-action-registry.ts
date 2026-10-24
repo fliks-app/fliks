@@ -20,6 +20,7 @@ export type CoreMediaActionId =
   | 'media.play'
   | 'media.open'
   | 'media.add-to-playlist'
+  | 'media.watch-together'
   | 'media.toggle-watched'
   | 'media.remove'
   | 'media.identify'
@@ -46,6 +47,7 @@ const CORE_MEDIA_ACTION_IDS: ReadonlySet<string> = new Set<CoreMediaActionId>([
   'media.play',
   'media.open',
   'media.add-to-playlist',
+  'media.watch-together',
   'media.toggle-watched',
   'media.remove',
   'media.identify',

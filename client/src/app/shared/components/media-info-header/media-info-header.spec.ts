@@ -281,6 +281,7 @@ describe('MediaInfoHeaderComponent — media.actions permission matrix', () => {
     const fixture = await createFixture(OWNER, { mediaType: 'movie', ...MOVIE });
     expect(labels(fixture)).toEqual([
       'recommend.menu_item',
+      'party.watch_together',
       'media_detail.like',
       'media_detail.add_to_list',
       'media_card.mark_watched',
@@ -300,6 +301,7 @@ describe('MediaInfoHeaderComponent — media.actions permission matrix', () => {
     const fixture = await createFixture(OWNER, { mediaType: 'series', ...SERIES });
     expect(labels(fixture)).toEqual([
       'recommend.menu_item',
+      'party.watch_together',
       'media_detail.like',
       'media_detail.add_to_list',
       'media_detail.mark_series_watched',
@@ -318,6 +320,7 @@ describe('MediaInfoHeaderComponent — media.actions permission matrix', () => {
     const fixture = await createFixture(READER, { mediaType: 'movie', ...MOVIE });
     expect(labels(fixture)).toEqual([
       'recommend.menu_item',
+      'party.watch_together',
       'media_detail.like',
       'media_detail.add_to_list',
       'media_card.mark_watched',
@@ -330,6 +333,7 @@ describe('MediaInfoHeaderComponent — media.actions permission matrix', () => {
     const fixture = await createFixture(READER, { mediaType: 'series', ...SERIES });
     expect(labels(fixture)).toEqual([
       'recommend.menu_item',
+      'party.watch_together',
       'media_detail.like',
       'media_detail.add_to_list',
       'media_detail.mark_series_watched',
@@ -341,6 +345,7 @@ describe('MediaInfoHeaderComponent — media.actions permission matrix', () => {
     const fixture = await createFixture(REQUESTER, { mediaType: 'movie', ...MOVIE });
     expect(labels(fixture)).toEqual([
       'recommend.menu_item',
+      'party.watch_together',
       'media_detail.like',
       'media_detail.add_to_list',
       'media_card.mark_watched',
@@ -355,6 +360,7 @@ describe('MediaInfoHeaderComponent — media.actions permission matrix', () => {
     const fixture = await createFixture(REQUESTER, { mediaType: 'series', ...SERIES });
     expect(labels(fixture)).toEqual([
       'recommend.menu_item',
+      'party.watch_together',
       'media_detail.like',
       'media_detail.add_to_list',
       'media_detail.mark_series_watched',
@@ -368,6 +374,7 @@ describe('MediaInfoHeaderComponent — media.actions permission matrix', () => {
     const fixture = await createFixture(DELETER, { mediaType: 'movie', ...MOVIE });
     expect(labels(fixture)).toEqual([
       'recommend.menu_item',
+      'party.watch_together',
       'media_detail.like',
       'media_detail.add_to_list',
       'media_card.mark_watched',
@@ -381,6 +388,7 @@ describe('MediaInfoHeaderComponent — media.actions permission matrix', () => {
     const fixture = await createFixture(DELETER, { mediaType: 'series', ...SERIES });
     expect(labels(fixture)).toEqual([
       'recommend.menu_item',
+      'party.watch_together',
       'media_detail.like',
       'media_detail.add_to_list',
       'media_detail.mark_series_watched',

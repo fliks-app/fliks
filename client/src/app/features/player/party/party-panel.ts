@@ -1,0 +1,49 @@
+import { ChangeDetectionStrategy, Component, effect, inject, signal } from '@angular/core';
+import { TranslatePipe } from '@ngx-translate/core';
+import { LucideCrown, LucideRefreshCw, LucideX } from '@lucide/angular';
+import { DeviceService } from '../../../core/services/device.service';
+import { DismissableStackService } from '../../../core/services/dismissable-stack.service';
+import { PartyService } from '../../../core/services/party/party.service';
+import { TvRowDirective } from '../../../shared/directives/tv-row.directive';
+import { TvSectionDirective } from '../../../shared/directives/tv-section.directive';
+import { PartyController } from '../party-controller';
+import { PartyChatComponent } from './party-chat';
+
+@Component({
+  selector: 'app-party-panel',
+  imports: [TranslatePipe, LucideCrown, LucideRefreshCw, LucideX, TvRowDirective, TvSectionDirective, PartyChatComponent],
+  templateUrl: './party-panel.html',
+  styleUrl: './party-panel.css',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  host: { '[attr.data-dock]': 'party.dock()', '[class.party-tv]': 'isTv()' },
+})
+export class PartyPanelComponent {
+  protected readonly party = inject(PartyService);
+  private readonly controller = inject(PartyController);
+  private readonly dismissStack = inject(DismissableStackService);
+  protected readonly isTv = inject(DeviceService).isTv;
+
+  protected readonly tab = signal<'members' | 'chat'>('chat');
+
+  constructor() {
+    // Back closes the panel before it leaves the player.
+    effect((onCleanup) => {
+      if (!this.party.panelOpen()) return;
+      const close = () => this.party.setPanelOpen(false);
+      this.dismissStack.push(close);
+      onCleanup(() => this.dismissStack.remove(close));
+    });
+  }
+
+  protected close(): void {
+    this.party.setPanelOpen(false);
+  }
+
+  protected resync(): void {
+    this.controller.resync();
+  }
+
+  protected setHostOnly(event: Event): void {
+    void this.party.setPolicy((event.target as HTMLInputElement).checked ? 'host_only' : 'everyone');
+  }
+}
