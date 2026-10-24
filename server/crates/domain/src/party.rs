@@ -105,6 +105,20 @@ pub struct Item {
     pub episode_id: Option<i32>,
 }
 
+/// The playlist rows to try, nearest first, after (before) `current`. A current item that left the
+/// playlist counts as sitting before the first row: forward starts at the top, backward has none.
+pub fn candidates(queue: &[Item], current: &Item, forward: bool) -> Vec<Item> {
+    let at = queue
+        .iter()
+        .position(|i| i.media_id == current.media_id && i.episode_id == current.episode_id);
+    match (at, forward) {
+        (Some(i), true) => queue[i + 1..].to_vec(),
+        (Some(i), false) => queue[..i].iter().rev().cloned().collect(),
+        (None, true) => queue.to_vec(),
+        (None, false) => vec![],
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Anchor {
@@ -212,11 +226,13 @@ pub enum Error {
     VoiceNotJoined,
 }
 
-/// A client intent (`play|pause|seek|setItem|ended`) with the revision it was made on.
+/// A client intent (`play|pause|seek|setItem|ended`) with the revision it was made on;
+/// `item_title` labels a `setItem` in its system message.
 pub struct Intent {
     pub action: Action,
     pub position: Option<f64>,
     pub item: Option<Item>,
+    pub item_title: Option<String>,
     pub base_rev: u64,
 }
 
@@ -605,6 +621,7 @@ impl Live {
             action,
             position,
             item,
+            item_title,
             base_rev,
         } = req;
         let i = self.find(user_id, device_id).ok_or(Error::NotMember)?;
@@ -613,13 +630,7 @@ impl Live {
         let mut out = vec![];
         if action == Action::Ended {
             if host && self.state != State::Idle {
-                self.anchor = Anchor {
-                    position: self.position_at(now),
-                    server_time_ms: now,
-                };
-                self.state = State::Idle;
-                self.phase = None;
-                self.state_effect(&mut out, now, None, Some(by_of(&actor)), Some("ended"));
+                self.idle(&mut out, now, &actor);
             }
             return Ok((self.rev, out));
         }
@@ -692,11 +703,76 @@ impl Live {
                 let it = item.ok_or(Error::Invalid("item"))?;
                 self.item = it;
                 self.enter_waiting(&mut out, 0.0, playing_ctx, &actor, action, now);
-                self.sys(&mut out, "item_changed", Some(&name), json!({}), now);
+                self.sys(
+                    &mut out,
+                    "item_changed",
+                    Some(&name),
+                    json!({ "title": item_title }),
+                    now,
+                );
             }
             Action::Ended => {}
         }
         Ok((self.rev, out))
+    }
+
+    fn idle(&mut self, out: &mut Vec<Effect>, now: i64, by: &Member) {
+        self.anchor = Anchor {
+            position: self.position_at(now),
+            server_time_ms: now,
+        };
+        self.state = State::Idle;
+        self.phase = None;
+        self.state_effect(out, now, None, Some(by_of(by)), Some("ended"));
+    }
+
+    /// A playlist step chosen by the server: one `item_skipped` message per passed-over title, then
+    /// `item` as a `setItem` would (`None`: nothing playable is left, the party idles). The gates of
+    /// `setItem` run first, so a refused call leaves no message behind.
+    pub fn advance(
+        &mut self,
+        user_id: i32,
+        device_id: &str,
+        base_rev: u64,
+        skipped: &[String],
+        next: Option<(Item, String)>,
+        now: i64,
+    ) -> Result<(u64, Vec<Effect>), Error> {
+        let i = self.find(user_id, device_id).ok_or(Error::NotMember)?;
+        let actor = self.members[i].clone();
+        if self.policy == Policy::HostOnly && user_id != self.host_id {
+            return Err(Error::HostOnly);
+        }
+        if base_rev < self.rev {
+            return Err(Error::Stale);
+        }
+        let mut out = vec![];
+        for title in skipped {
+            self.sys(
+                &mut out,
+                "item_skipped",
+                None,
+                json!({ "title": title }),
+                now,
+            );
+        }
+        let Some((item, title)) = next else {
+            if self.state != State::Idle {
+                self.idle(&mut out, now, &actor);
+            }
+            self.sys(&mut out, "playlist_ended", None, json!({}), now);
+            return Ok((self.rev, out));
+        };
+        let req = Intent {
+            action: Action::SetItem,
+            position: None,
+            item: Some(item),
+            item_title: Some(title),
+            base_rev,
+        };
+        let (rev, effects) = self.intent(user_id, device_id, req, now)?;
+        out.extend(effects);
+        Ok((rev, out))
     }
 
     /// Rules 2 and 5: only an `ready` near the anchor counts during `waiting`.
@@ -1016,6 +1092,7 @@ mod tests {
                 action: Action::Play,
                 position: None,
                 item: None,
+                item_title: None,
                 base_rev: l.rev,
             },
             now,
@@ -1084,6 +1161,7 @@ mod tests {
                 action: Action::Seek,
                 position: Some(50.0),
                 item: None,
+                item_title: None,
                 base_rev: l.rev,
             },
             0,
@@ -1103,6 +1181,7 @@ mod tests {
                 action: Action::Seek,
                 position: Some(80.0),
                 item: None,
+                item_title: None,
                 base_rev: l.rev,
             },
             6000,
@@ -1124,6 +1203,7 @@ mod tests {
                 action: Action::Pause,
                 position: None,
                 item: None,
+                item_title: None,
                 base_rev: 0,
             },
             5,
@@ -1145,6 +1225,7 @@ mod tests {
                     action: Action::Pause,
                     position: None,
                     item: None,
+                    item_title: None,
                     base_rev: 0,
                 },
                 start + 4000,
@@ -1203,6 +1284,7 @@ mod tests {
                     action: a,
                     position: Some(1.0),
                     item: Some(item()),
+                    item_title: None,
                     base_rev: l.rev,
                 },
                 0,
@@ -1217,6 +1299,7 @@ mod tests {
                     action: Action::Play,
                     position: None,
                     item: None,
+                    item_title: None,
                     base_rev: l.rev
                 },
                 0
@@ -1238,6 +1321,7 @@ mod tests {
                 action: Action::Seek,
                 position: Some(9.0),
                 item: None,
+                item_title: None,
                 base_rev: old,
             },
             1,
@@ -1250,6 +1334,7 @@ mod tests {
                 action: Action::SetItem,
                 position: None,
                 item: Some(item()),
+                item_title: None,
                 base_rev: old,
             },
             1,
@@ -1263,6 +1348,7 @@ mod tests {
                     action: Action::Pause,
                     position: None,
                     item: None,
+                    item_title: None,
                     base_rev: old
                 },
                 1
@@ -1277,6 +1363,7 @@ mod tests {
                     action: Action::Play,
                     position: None,
                     item: None,
+                    item_title: None,
                     base_rev: old
                 },
                 2
@@ -1303,6 +1390,7 @@ mod tests {
                     action: Action::SetItem,
                     position: None,
                     item: Some(next.clone()),
+                    item_title: None,
                     base_rev: l.rev,
                 },
                 0,
@@ -1325,6 +1413,7 @@ mod tests {
                     action: Action::Ended,
                     position: None,
                     item: None,
+                    item_title: None,
                     base_rev: 0
                 },
                 5
@@ -1342,6 +1431,7 @@ mod tests {
                     action: Action::Ended,
                     position: None,
                     item: None,
+                    item_title: None,
                     base_rev: 0,
                 },
                 5,
@@ -1581,5 +1671,107 @@ mod tests {
         l.set_settings(None, None, Some(true), Some(true), Some(true));
         assert!(l.react(1, "d1", "x", 0).is_ok());
         assert!(l.post_message(1, "d1", "m", 0).is_ok());
+    }
+
+    fn row(media: i32, episode: Option<i32>) -> Item {
+        Item {
+            media_id: media,
+            media_file_id: None,
+            episode_id: episode,
+        }
+    }
+
+    #[test]
+    fn candidates_follow_the_queue_order_from_the_current_row() {
+        let q = [row(1, None), row(2, Some(7)), row(2, Some(8)), row(3, None)];
+        assert_eq!(candidates(&q, &row(2, Some(7)), true), q[2..].to_vec());
+        assert_eq!(
+            candidates(&q, &row(2, Some(8)), false),
+            vec![q[1].clone(), q[0].clone()]
+        );
+        assert!(candidates(&q, &row(3, None), true).is_empty());
+        assert!(candidates(&q, &row(1, None), false).is_empty());
+    }
+
+    #[test]
+    fn a_current_item_gone_from_the_queue_restarts_forward_and_stops_backward() {
+        let q = [row(1, None), row(2, None)];
+        assert_eq!(candidates(&q, &row(9, None), true), q.to_vec());
+        assert!(candidates(&q, &row(9, None), false).is_empty());
+    }
+
+    #[test]
+    fn set_item_names_the_new_item_in_its_system_message() {
+        let mut l = party();
+        let out = l
+            .intent(
+                1,
+                "d1",
+                Intent {
+                    action: Action::SetItem,
+                    position: None,
+                    item: Some(row(2, Some(3))),
+                    item_title: Some("Show S01E03".into()),
+                    base_rev: l.rev,
+                },
+                0,
+            )
+            .unwrap()
+            .1;
+        let sys = out
+            .iter()
+            .find_map(|e| match e {
+                Effect::Message(m) => m.system.clone(),
+                _ => None,
+            })
+            .unwrap();
+        assert_eq!(sys.kind, "item_changed");
+        assert_eq!(sys.args, json!({ "title": "Show S01E03" }));
+    }
+
+    #[test]
+    fn the_end_of_a_playlist_idles_the_party_and_says_so() {
+        let mut l = party();
+        l.state = State::Playing;
+        let rev = l.rev;
+        let skipped = ["Show S01E02".to_owned()];
+        let out = l.advance(1, "d1", rev, &skipped, None, 5).unwrap().1;
+        assert_eq!(l.state, State::Idle);
+        assert_eq!(state_of(&out).unwrap().0, State::Idle);
+        assert_eq!(kinds(&out), ["item_skipped", "playlist_ended"]);
+    }
+
+    #[test]
+    fn an_advance_skips_then_switches_and_a_refused_one_leaves_no_message() {
+        let mut l = party();
+        let rev = l.rev;
+        let next = Some((row(3, None), "Film".to_owned()));
+        let out = l
+            .advance(1, "d1", rev, &["Gap".to_owned()], next.clone(), 0)
+            .unwrap()
+            .1;
+        assert_eq!(kinds(&out), ["item_skipped", "item_changed"]);
+        assert_eq!(l.item, row(3, None));
+        let chat = l.chat.len();
+        assert_eq!(
+            l.advance(1, "d1", rev, &["Gap".to_owned()], next, 0)
+                .unwrap_err(),
+            Error::Stale
+        );
+        l.policy = Policy::HostOnly;
+        assert_eq!(
+            l.advance(2, "d2", l.rev, &[], None, 0).unwrap_err(),
+            Error::HostOnly
+        );
+        assert_eq!(l.chat.len(), chat);
+    }
+
+    fn kinds(out: &[Effect]) -> Vec<String> {
+        out.iter()
+            .filter_map(|e| match e {
+                Effect::Message(m) => m.system.as_ref().map(|s| s.kind.clone()),
+                _ => None,
+            })
+            .collect()
     }
 }

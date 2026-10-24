@@ -2741,6 +2741,19 @@
         }
       }
     },
+    "/api/parties/{id}/queue": {
+      "get": {
+        "tags": [
+          "crate::party"
+        ],
+        "operationId": "queue",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/parties/{id}/reactions": {
       "post": {
         "tags": [

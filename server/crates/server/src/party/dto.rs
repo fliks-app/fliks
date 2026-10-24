@@ -28,9 +28,10 @@ pub fn valid_name(name: &str) -> Result<String, AppError> {
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct Create {
     pub name: String,
-    pub media_id: i32,
+    pub media_id: Option<i32>,
     pub media_file_id: Option<i32>,
     pub episode_id: Option<i32>,
+    pub playlist_id: Option<i32>,
     pub scheduled_at: Option<DateTime<Utc>>,
     pub policy: Option<Policy>,
     pub reactions_enabled: Option<bool>,
@@ -96,11 +97,37 @@ impl From<ItemIn> for Item {
     }
 }
 
+/// `Action` plus the playlist steps, which the server turns into a `setItem` of its own choosing.
+#[derive(Deserialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum IntentAction {
+    Play,
+    Pause,
+    Seek,
+    SetItem,
+    Ended,
+    Next,
+    Previous,
+}
+
+impl IntentAction {
+    pub fn machine(self) -> Option<Action> {
+        match self {
+            Self::Play => Some(Action::Play),
+            Self::Pause => Some(Action::Pause),
+            Self::Seek => Some(Action::Seek),
+            Self::SetItem => Some(Action::SetItem),
+            Self::Ended => Some(Action::Ended),
+            Self::Next | Self::Previous => None,
+        }
+    }
+}
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct IntentIn {
     pub device_id: String,
-    pub action: Action,
+    pub action: IntentAction,
     pub position: Option<f64>,
     pub item: Option<ItemIn>,
     pub base_rev: u64,
@@ -218,6 +245,12 @@ pub struct GuestDto {
     pub source: String,
 }
 
+#[derive(Serialize, Clone)]
+pub struct PlaylistRef {
+    pub id: i32,
+    pub name: String,
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PartySummaryDto {
@@ -228,6 +261,7 @@ pub struct PartySummaryDto {
     pub scheduled_at: Option<DateTime<Utc>>,
     pub host: UserRef,
     pub item: PartyItem,
+    pub playlist: Option<PlaylistRef>,
     pub member_count: usize,
 }
 

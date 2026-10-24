@@ -13,6 +13,7 @@ pub struct Row {
     pub media_id: i32,
     pub media_file_id: Option<i32>,
     pub episode_id: Option<i32>,
+    pub playlist_id: Option<i32>,
     pub invite_token: String,
     pub policy: String,
     pub reactions_enabled: bool,
@@ -34,7 +35,7 @@ impl Row {
 }
 
 const COLS: &str = r#"id, name, "ownerId" AS owner_id, "mediaId" AS media_id,
-    "mediaFileId" AS media_file_id, "episodeId" AS episode_id, "inviteToken" AS invite_token,
+    "mediaFileId" AS media_file_id, "episodeId" AS episode_id, "playlistId" AS playlist_id, "inviteToken" AS invite_token,
     policy, "reactionsEnabled" AS reactions_enabled, "chatEnabled" AS chat_enabled,
     "linkSharing" AS link_sharing, "scheduledAt" AS scheduled_at, status, position"#;
 
@@ -48,6 +49,7 @@ pub struct New<'a> {
     pub name: &'a str,
     pub owner: i32,
     pub item: &'a Item,
+    pub playlist_id: Option<i32>,
     pub policy: &'a str,
     pub reactions_enabled: bool,
     pub chat_enabled: bool,
@@ -70,9 +72,9 @@ pub async fn insert(db: &PgPool, n: &New<'_>, invitees: &[i32]) -> sqlx::Result<
     let mut tx = db.begin().await?;
     let row = sqlx::query_as::<_, Row>(&format!(
         r#"INSERT INTO watch_parties (name, "ownerId", "mediaId", "mediaFileId", "episodeId",
-               "inviteToken", policy, "reactionsEnabled", "chatEnabled", "linkSharing", "scheduledAt",
-               status)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'scheduled')
+               "playlistId", "inviteToken", policy, "reactionsEnabled", "chatEnabled", "linkSharing",
+               "scheduledAt", status)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'scheduled')
            RETURNING {COLS}"#
     ))
     .bind(n.name)
@@ -80,6 +82,7 @@ pub async fn insert(db: &PgPool, n: &New<'_>, invitees: &[i32]) -> sqlx::Result<
     .bind(n.item.media_id)
     .bind(n.item.media_file_id)
     .bind(n.item.episode_id)
+    .bind(n.playlist_id)
     .bind(new_token())
     .bind(n.policy)
     .bind(n.reactions_enabled)
@@ -364,4 +367,42 @@ pub async fn item_valid(db: &PgPool, item: &Item) -> sqlx::Result<bool> {
     .bind(item.episode_id)
     .fetch_one(db)
     .await
+}
+
+/// Name of the playlist a party follows.
+pub async fn playlist_name(db: &PgPool, playlist: i32) -> sqlx::Result<Option<String>> {
+    sqlx::query_scalar("SELECT name FROM playlists WHERE id = $1")
+        .bind(playlist)
+        .fetch_optional(db)
+        .await
+}
+
+/// A playlist row as a party item; `playable` when the media has a file for it.
+pub struct QueueRow {
+    pub item: Item,
+    pub playable: bool,
+}
+
+/// The playlist's rows in its order (`playlists.md` rule 13).
+pub async fn playlist_rows(db: &PgPool, playlist: i32) -> sqlx::Result<Vec<QueueRow>> {
+    let rows: Vec<(i32, Option<i32>, bool)> = sqlx::query_as(
+        r#"SELECT pi."mediaId", pi."episodeId",
+                  EXISTS (SELECT 1 FROM media_files f WHERE f."mediaId" = pi."mediaId"
+                          AND (pi."episodeId" IS NULL OR f."episodeId" = pi."episodeId"))
+           FROM playlist_items pi WHERE pi."playlistId" = $1 ORDER BY pi.position, pi.id"#,
+    )
+    .bind(playlist)
+    .fetch_all(db)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|(media_id, episode_id, playable)| QueueRow {
+            item: Item {
+                media_id,
+                media_file_id: None,
+                episode_id,
+            },
+            playable,
+        })
+        .collect())
 }

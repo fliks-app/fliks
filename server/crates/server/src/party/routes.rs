@@ -1,6 +1,7 @@
 use super::{
     db::{self, Row},
     dto::*,
+    playlist,
     registry::{self, deliver, item_dto, member_dtos, notify_updated},
 };
 use crate::{
@@ -11,6 +12,7 @@ use crate::{
         validate::{PathParams, ValidJson},
     },
     libraries::acl::{accessible_library_ids, assert_media_accessible},
+    playlists::{self, Role},
     state::AppState,
 };
 use axum::{
@@ -26,7 +28,7 @@ use fliks_domain::{
     js::now_ms,
     party::{
         ANIMATED_REACTIONS, CloseReason, DEFAULT_REACTIONS, Effect, Error as PartyErr, Intent,
-        Item, LOBBY_OPEN_BEFORE_MS, Policy, noto_code,
+        Item, LOBBY_OPEN_BEFORE_MS, Policy, State as PlayState, noto_code,
     },
 };
 use serde_json::{Value, json};
@@ -51,6 +53,7 @@ pub fn router() -> Router<AppState> {
         .route("/api/parties/{id}/members/{userId}/kick", post(kick))
         .route("/api/parties/{id}/members/{userId}/host", post(transfer))
         .route("/api/parties/{id}/invitees", post(invite))
+        .route("/api/parties/{id}/queue", get(queue))
 }
 
 /// An `AppError`, or one that also carries a body field (`party` on 409 stale, `usernames`).
@@ -136,7 +139,7 @@ async fn media_ok(st: &AppState, user: &Authed, media: i32) -> Result<bool, AppE
 }
 
 /// Same test for another user, loaded like a request would.
-async fn user_media_ok(st: &AppState, user: i32, media: i32) -> Result<bool, AppError> {
+pub(super) async fn user_media_ok(st: &AppState, user: i32, media: i32) -> Result<bool, AppError> {
     let Some((u, role)) = load_enabled(&st.db, user).await? else {
         return Ok(false);
     };
@@ -228,6 +231,12 @@ async fn summary(st: &AppState, row: &Row) -> sqlx::Result<PartySummaryDto> {
     let host = view.as_ref().map_or(row.owner_id, |v| v.host_id);
     let item = view.as_ref().map_or_else(|| row.item(), |v| v.item.clone());
     let names = db::usernames(&st.db, &[host]).await?;
+    let playlist = match row.playlist_id {
+        Some(id) => db::playlist_name(&st.db, id)
+            .await?
+            .map(|name| PlaylistRef { id, name }),
+        None => None,
+    };
     Ok(PartySummaryDto {
         id: row.id,
         name: row.name.clone(),
@@ -238,6 +247,7 @@ async fn summary(st: &AppState, row: &Row) -> sqlx::Result<PartySummaryDto> {
             username: names.get(&host).cloned().unwrap_or_default(),
         },
         item: item_dto(st, &item).await?,
+        playlist,
         member_count: view.map_or(0, |v| v.members.len()),
     })
 }
@@ -327,6 +337,36 @@ async fn check_item(st: &AppState, item: &Item) -> R<()> {
     }
 }
 
+/// The item a party opens on: the requested one, else the playlist's first the owner can play.
+async fn first_item(st: &AppState, a: &Authed, b: &Create) -> R<Item> {
+    let requested = b.media_id.map(|media_id| Item {
+        media_id,
+        media_file_id: b.media_file_id,
+        episode_id: b.episode_id,
+    });
+    let Some(playlist) = b.playlist_id else {
+        let item =
+            requested.ok_or_else(|| fail(StatusCode::BAD_REQUEST, "party.error_invalid_item"))?;
+        let ids = accessible_library_ids(&st.db, a).await?;
+        assert_media_accessible(&st.db, item.media_id, &ids).await?;
+        return Ok(item);
+    };
+    playlists::assert_role(&st.db, a.user.id, playlist, Role::Viewer).await?;
+    let rows = db::playlist_rows(&st.db, playlist).await?;
+    for row in rows {
+        let wanted = requested
+            .as_ref()
+            .is_none_or(|r| r.media_id == row.item.media_id && r.episode_id == row.item.episode_id);
+        if wanted && row.playable && media_ok(st, a, row.item.media_id).await? {
+            return Ok(Item {
+                media_file_id: b.media_file_id,
+                ..row.item
+            });
+        }
+    }
+    Err(fail(StatusCode::BAD_REQUEST, "party.error_invalid_item"))
+}
+
 #[utoipa::path(post, path = "/api/parties", responses((status = 201)))]
 pub async fn create(
     State(st): State<AppState>,
@@ -335,13 +375,7 @@ pub async fn create(
 ) -> R<(StatusCode, Json<PartyDto>)> {
     b.validate()?;
     let me = a.user.id;
-    let ids = accessible_library_ids(&st.db, &a).await?;
-    assert_media_accessible(&st.db, b.media_id, &ids).await?;
-    let item = Item {
-        media_id: b.media_id,
-        media_file_id: b.media_file_id,
-        episode_id: b.episode_id,
-    };
+    let item = first_item(&st, &a, &b).await?;
     check_item(&st, &item).await?;
     let invitees = check_followed(&st, me, b.invitee_ids.as_deref().unwrap_or_default()).await?;
     let now = Utc::now();
@@ -363,6 +397,7 @@ pub async fn create(
             name: &valid_name(&b.name)?,
             owner: me,
             item: &item,
+            playlist_id: b.playlist_id,
             policy,
             scheduled_at: at,
         },
@@ -623,10 +658,8 @@ pub async fn intent(
     }
     st.parties.ensure(&row, false);
     let item: Option<Item> = b.item.map(Into::into);
-    if let Some(it) = item
-        .as_ref()
-        .filter(|_| b.action == fliks_domain::party::Action::SetItem)
-    {
+    let mut title = None;
+    if let (IntentAction::SetItem, Some(it)) = (b.action, item.as_ref()) {
         check_item(&st, it).await?;
         let view = st.parties.view(id).ok_or_else(not_live)?;
         let mut denied = vec![];
@@ -648,17 +681,55 @@ pub async fn intent(
                 json!(denied),
             ));
         }
+        title = Some(item_dto(&st, it).await?.title);
     }
+    let step = match b.action {
+        IntentAction::Next | IntentAction::Previous => {
+            let Some(playlist) = row.playlist_id.filter(|_| item.is_none()) else {
+                return Err(fail(StatusCode::BAD_REQUEST, "party.error_invalid"));
+            };
+            Some(playlist_step(&st, id, playlist, b.action == IntentAction::Next).await?)
+        }
+        // A host's `ended` that idles the party moves a playlist party on.
+        IntentAction::Ended if row.playlist_id.is_some() => {
+            let view = st.parties.view(id).ok_or_else(not_live)?;
+            match row.playlist_id {
+                Some(playlist) if view.host_id == me && view.state != PlayState::Idle => {
+                    Some(playlist_step(&st, id, playlist, true).await?)
+                }
+                _ => None,
+            }
+        }
+        _ => None,
+    };
     let (res, d) = st
         .parties
         .act(id, |l| {
-            let req = Intent {
-                action: b.action,
-                position: b.position,
-                item,
-                base_rev: b.base_rev,
+            let result = match (b.action.machine(), step) {
+                (_, Some(step)) => playlist::apply(
+                    l,
+                    me,
+                    &b.device_id,
+                    b.action == IntentAction::Ended,
+                    b.base_rev,
+                    step,
+                    now_ms(),
+                ),
+                (Some(action), None) => l.intent(
+                    me,
+                    &b.device_id,
+                    Intent {
+                        action,
+                        position: b.position,
+                        item,
+                        item_title: title,
+                        base_rev: b.base_rev,
+                    },
+                    now_ms(),
+                ),
+                (None, None) => Err(PartyErr::Invalid("action")),
             };
-            match l.intent(me, &b.device_id, req, now_ms()) {
+            match result {
                 Ok((rev, e)) => (Ok(rev), e),
                 Err(e) => (Err(e), vec![]),
             }
@@ -676,6 +747,20 @@ pub async fn intent(
         }
         Err(e) => Err(machine_err(e)),
     }
+}
+
+/// The playlist row to move to, judged for every user in the party right now.
+async fn playlist_step(
+    st: &AppState,
+    party: i32,
+    playlist: i32,
+    forward: bool,
+) -> R<playlist::Step> {
+    let view = st.parties.view(party).ok_or_else(not_live)?;
+    let mut users: Vec<i32> = view.members.iter().map(|m| m.user_id).collect();
+    users.sort_unstable();
+    users.dedup();
+    Ok(playlist::step(st, playlist, &view.item, forward, &users).await?)
 }
 
 async fn run(
@@ -908,4 +993,22 @@ pub async fn invite(
         );
     }
     Ok(Json(dto(&st, &row, me).await?))
+}
+
+#[utoipa::path(get, path = "/api/parties/{id}/queue", responses((status = 200)))]
+pub async fn queue(
+    State(st): State<AppState>,
+    SessionAuthed(a): SessionAuthed,
+    PathParams(id): PathParams<i32>,
+) -> R<Json<Vec<PartyItem>>> {
+    let row = member_row(&st, id, a.user.id).await?;
+    let mut out = vec![];
+    if let Some(playlist) = row.playlist_id {
+        for r in db::playlist_rows(&st.db, playlist).await? {
+            if media_ok(&st, &a, r.item.media_id).await? {
+                out.push(item_dto(&st, &r.item).await?);
+            }
+        }
+    }
+    Ok(Json(out))
 }

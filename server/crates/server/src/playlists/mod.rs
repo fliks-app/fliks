@@ -12,6 +12,7 @@ use axum::{
 };
 use sqlx::PgPool;
 
+pub use access::{Role, assert_role};
 pub use items::*;
 pub use routes::*;
 pub use view::visible_for_owner;
