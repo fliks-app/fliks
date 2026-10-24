@@ -16,11 +16,6 @@ use tower_http::services::{ServeDir, ServeFile};
 /// Weak ETag (`W/"<size hex>-<mtime seconds hex>"`, as 4.x), `Cache-Control` and `If-None-Match` 304.
 async fn validators(req: Request, next: Next) -> Response {
     let inm = req.headers().get(IF_NONE_MATCH).cloned();
-    let cache = if req.uri().path().starts_with("/cast/emoji/") {
-        "public, max-age=604800"
-    } else {
-        "public, max-age=0"
-    };
     let mut res = next.run(req).await;
     let ok = matches!(
         res.status(),
@@ -31,7 +26,7 @@ async fn validators(req: Request, next: Next) -> Response {
     }
     res.headers_mut()
         .entry(CACHE_CONTROL)
-        .or_insert(HeaderValue::from_static(cache));
+        .or_insert(HeaderValue::from_static("public, max-age=0"));
     add_charset(&mut res);
     if res.status() != StatusCode::OK {
         return res;
@@ -111,10 +106,30 @@ pub fn cannot(req: &Request) -> Response {
     AppError::not_found(format!("Cannot {} {url}", req.method())).into_response()
 }
 
-/// `/cast` always; the SPA at `/` (with `index.html` fallback) only when a client dir is set.
+/// Reaction emoji change only with the catalog, so clients keep them a week instead of revalidating each one.
+async fn long_cache(req: Request, next: Next) -> Response {
+    let mut res = next.run(req).await;
+    if res.status() == StatusCode::OK {
+        res.headers_mut().insert(
+            CACHE_CONTROL,
+            HeaderValue::from_static("public, max-age=604800"),
+        );
+    }
+    res
+}
+
+/// `/cast` and `/emoji` (the reaction artwork, `<cast dir>/emoji`) always; the SPA at `/` (with `index.html`
+/// fallback) only when a client dir is set.
 pub fn router(client_dir: Option<PathBuf>, cast_dir: PathBuf) -> Router {
+    let emoji = Router::new()
+        .fallback_service(
+            ServeDir::new(cast_dir.join("emoji")).append_index_html_on_directories(false),
+        )
+        .layer(from_fn(long_cache));
     let cast = ServeDir::new(cast_dir).append_index_html_on_directories(false);
-    let mut r = Router::new().nest_service("/cast", cast);
+    let mut r = Router::new()
+        .nest_service("/cast", cast)
+        .nest("/emoji", emoji);
     if let Some(dir) = client_dir {
         r = r
             .fallback_service(ServeDir::new(&dir).fallback(ServeFile::new(dir.join("index.html"))));
@@ -189,7 +204,7 @@ mod tests {
         );
         std::fs::create_dir_all(k.join("emoji")).unwrap();
         std::fs::write(k.join("emoji/1f525.webp"), "w").unwrap();
-        let emoji = get(&r, "/cast/emoji/1f525.webp", None).await;
+        let emoji = get(&r, "/emoji/1f525.webp", None).await;
         assert_eq!(emoji.headers()[CACHE_CONTROL], "public, max-age=604800");
         let missing = get(&r, "/cast/nope.html", None).await;
         assert_eq!(missing.status(), 404);

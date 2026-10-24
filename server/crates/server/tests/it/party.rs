@@ -511,7 +511,7 @@ async fn the_catalog_route_lists_served_assets_and_reactions_are_checked_against
     let public = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../public");
     for r in list {
         let url = r["animation"].as_str().unwrap();
-        let file = url.strip_prefix("/cast/").unwrap();
+        let file = url.strip_prefix("/").unwrap();
         assert!(public.join(file).is_file(), "{url}");
     }
     let id = party_with(&c, &h, vec![]).await;

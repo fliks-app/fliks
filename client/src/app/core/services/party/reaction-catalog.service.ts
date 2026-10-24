@@ -28,8 +28,18 @@ export class ReactionCatalogService {
     () => new Map(this.catalog()?.reactions.map((r) => [r.emoji, this.serverConfig.resolveUrl(r.animation)])),
   );
 
-  constructor() {
-    this.api.reactionCatalog().then((c) => this.catalog.set(c), () => undefined);
+  private loading: Promise<void> | null = null;
+
+  /** Fetches the catalog once; a failed fetch is retried by the next call instead of leaving the bar empty. */
+  load(): Promise<void> {
+    if (this.catalog()) return Promise.resolve();
+    this.loading ??= this.api.reactionCatalog().then(
+      (c) => this.catalog.set(c),
+      () => {
+        this.loading = null;
+      },
+    );
+    return this.loading;
   }
 
   animation(emoji: string): string | null {

@@ -786,12 +786,12 @@ pub async fn ice(State(st): State<AppState>, SessionAuthed(_): SessionAuthed) ->
     Ok(Json(json!({ "iceServers": servers })))
 }
 
-/// The reaction catalog, each emoji with the URL of its animated asset under `/cast/emoji`.
+/// The reaction catalog, each emoji with the URL of its animated asset under `/emoji`.
 #[utoipa::path(get, path = "/api/parties/reactions", responses((status = 200)))]
 pub async fn reactions(SessionAuthed(_): SessionAuthed) -> Json<Value> {
     let reactions: Vec<Value> = REACTIONS
         .iter()
-        .map(|(emoji, code)| json!({ "emoji": emoji, "animation": format!("/cast/emoji/{code}.webp") }))
+        .map(|(emoji, code)| json!({ "emoji": emoji, "animation": format!("/emoji/{code}.webp") }))
         .collect();
     Json(json!({ "reactions": reactions, "defaults": DEFAULT_REACTIONS }))
 }

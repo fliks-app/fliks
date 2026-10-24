@@ -25,6 +25,7 @@ import { translatedServerMessage } from '../../utils/server-message';
 import { resolvePlayableFile } from '../../../shared/utils/media-play.util';
 import { ServerConfigService } from '../server-config.service';
 import { ClockService } from './clock.service';
+import { ReactionCatalogService } from './reaction-catalog.service';
 
 /** What the engine has to follow: the last applied `party.state` (or the snapshot's equivalent). */
 export interface PartyLiveState {
@@ -81,6 +82,7 @@ export class PartyService {
   private readonly sse = inject(SseService);
   private readonly auth = inject(AuthService);
   private readonly serverConfig = inject(ServerConfigService);
+  private readonly reactionCatalog = inject(ReactionCatalogService);
   private readonly clock = inject(ClockService);
   private readonly router = inject(Router);
   private readonly toast = inject(ToastService);
@@ -281,6 +283,7 @@ export class PartyService {
 
   applySnapshot(dto: PartyDto): void {
     this.party.set(dto);
+    void this.reactionCatalog.load();
     const live = dto.live;
     if (!live) return;
     // A snapshot older than what events already applied would roll the party back.

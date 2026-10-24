@@ -32,6 +32,7 @@ export class PartyReactionSettingsComponent {
   }
 
   show(): void {
+    void this.catalog.load();
     this.dialog().nativeElement.showModal();
   }
 }
