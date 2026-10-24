@@ -1587,9 +1587,15 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   // ── Player actions ──
 
+  /** The sync tool pauses and plays locally; closing it rejoins the group. */
+  onCloseSubtitleSync() {
+    this.subs.onCloseSubtitleSync();
+    if (this.partyCtl.active()) this.partyCtl.resync();
+  }
+
   onTogglePlay() {
     if (!this.engine) return;
-    if (this.partyCtl.togglePlay()) return;
+    if (!this.subs.subtitleSyncOpen() && this.partyCtl.togglePlay()) return;
     // Coalesce rapid taps: a second toggle inside this window is dropped so play()/pause() can't interleave
     // with an in-flight MSE append and desync A/V.
     const now = Date.now();
@@ -3018,7 +3024,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }
 
   onSpeedChange(rate: number) {
-    if (!this.engine) return;
+    if (!this.engine || this.partyCtl.active()) return;
     this.engine.playbackRate = rate;
     // Read back rather than trust the request: an engine can silently keep the previous rate (e.g. Tizen AVPlay
     // outside READY/PLAYING/PAUSED).

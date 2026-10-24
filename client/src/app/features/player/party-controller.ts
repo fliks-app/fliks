@@ -83,8 +83,15 @@ export class PartyController {
     const live = this.party.live()!;
     // A tap during a wait would race the phase it is already in.
     if (live.state === 'waiting') return true;
-    void this.party.sendIntent(this.state.uiPaused() ? 'play' : 'pause');
+    if (live.state === 'idle' && this.state.ended()) void this.replay();
+    else void this.party.sendIntent(this.state.uiPaused() ? 'play' : 'pause');
     return true;
+  }
+
+  /** Past the end of the item the group would play from the end: restart it. */
+  private async replay(): Promise<void> {
+    await this.party.sendIntent('seek', { position: 0 });
+    await this.party.sendIntent('play');
   }
 
   seek(time: number): boolean {

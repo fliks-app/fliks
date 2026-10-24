@@ -77,6 +77,11 @@ export const routes: Routes = [
         data: { titleKey: 'nav.home', reuse: true },
       },
       {
+        path: 'parties/:id',
+        loadComponent: () => import('./features/party/party-page').then((m) => m.PartyPageComponent),
+        data: { titleKey: 'party.watch_together' },
+      },
+      {
         path: 'libraries/:libraryName',
         loadComponent: () =>
           import('./features/library/library').then((m) => m.LibraryComponent),

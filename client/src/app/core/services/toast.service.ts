@@ -20,8 +20,8 @@ export class ToastService {
   private nextId = 0;
   readonly toasts = signal<Toast[]>([]);
 
-  success(message: string, duration = 4000) {
-    this.add(message, 'success', duration);
+  success(message: string, duration = 4000, action?: ToastAction) {
+    this.add(message, 'success', duration, action);
   }
 
   error(message: string, duration = 6000) {

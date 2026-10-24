@@ -44,6 +44,14 @@ export interface FloatingReaction {
   left: number;
 }
 
+/** What the create dialog needs to know about the item to watch. */
+export interface PartyCreateTarget {
+  title: string;
+  mediaId: number;
+  mediaFileId: number;
+  episodeId?: number;
+}
+
 const BUBBLE_MS = 4000;
 const REACTION_MS = 3000;
 const MAX_MESSAGES = 200;
@@ -71,6 +79,11 @@ export class PartyService {
   readonly reactions = signal<FloatingReaction[]>([]);
   /** The party ended under us (host ended, expired, kicked): the player leaves. */
   readonly closed = new Subject<'host_ended' | 'expired' | 'kicked'>();
+
+  /** Set to open the create dialog mounted in the layout. */
+  readonly createRequest = signal<PartyCreateTarget | null>(null);
+  /** Joined to the lobby of a scheduled party (no player yet). */
+  readonly lobby = computed(() => this.party()?.status === 'scheduled' && this.live() !== null);
 
   readonly active = computed(() => this.party() !== null && this.live() !== null);
   readonly item = computed(() => this.live()?.item ?? this.party()?.item ?? null);
@@ -119,18 +132,46 @@ export class PartyService {
 
   // ── Entry points ──
 
+  /** Immediate parties open the player; a scheduled one is announced with its link. */
   async create(body: CreatePartyBody): Promise<void> {
     const dto = await this.api.create(body);
-    await this.enter(dto.id);
+    if (dto.status === 'live') {
+      await this.enter(dto.id);
+      return;
+    }
+    const link = this.inviteLink(dto.inviteToken);
+    this.toast.success(
+      this.translate.instant('party.toast_scheduled', { name: dto.name, link }),
+      10000,
+      { label: this.translate.instant('party.copy_link'), run: () => void this.copyLink(link) },
+    );
   }
 
-  /** Invite link: resolve, join, open the player. */
+  async copyLink(link: string): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(link);
+      this.toast.success(this.translate.instant('party.link_copied'));
+    } catch {
+      this.toast.error(this.translate.instant('party.error_generic'));
+    }
+  }
+
+  inviteLink(token: string | null): string {
+    return token ? `${location.origin}/party/${token}` : '';
+  }
+
+  openPage(id: number, token?: string): void {
+    void this.router.navigate(['/parties', id], token ? { queryParams: { token } } : {});
+  }
+
+  /** Invite link: resolve, then the player (live) or the page (scheduled). */
   async openByToken(token: string): Promise<void> {
     const dto = await this.api.byToken(token);
-    await this.enter(dto.id, token);
+    if (dto.status === 'live') await this.enter(dto.id, token);
+    else void this.router.navigate(['/parties', dto.id], { queryParams: { token }, replaceUrl: true });
   }
 
-  /** Join and open the player on the party item. Leaves again when the party has not started: phase A has no lobby. */
+  /** Join: the player for a live party, the page (lobby) for a scheduled one whose lobby is open. */
   async enter(id: number, token?: string): Promise<void> {
     const dto = await this.api.join(id, this.deviceId(), token);
     if (!dto.live) {
@@ -141,7 +182,27 @@ export class PartyService {
     this.reset();
     this.applySnapshot(dto);
     this.clock.start();
-    await this.openPlayer(dto.item);
+    if (dto.status === 'live') await this.openPlayer(dto.item);
+    else this.openPage(id, token);
+  }
+
+  /** Host: leaves the lobby for the player; the other members follow through the events. */
+  async start(): Promise<void> {
+    const id = this.party()?.id;
+    if (id == null) return;
+    try {
+      this.applySnapshot(await this.api.start(id));
+      await this.openPlayer(this.party()!.item);
+    } catch {
+      /* the error interceptor already toasted it */
+    }
+  }
+
+  async setReady(ready: boolean): Promise<void> {
+    const id = this.party()?.id;
+    if (id == null) return;
+    const position = this.live()?.anchor.position ?? 0;
+    await this.api.status(id, { deviceId: this.deviceId(), status: ready ? 'ready' : 'waiting', position }).catch(() => {});
   }
 
   async leave(): Promise<void> {
@@ -204,8 +265,11 @@ export class PartyService {
   async refetch(): Promise<void> {
     const id = this.party()?.id;
     if (id == null) return;
+    const wasLobby = this.lobby();
     try {
-      this.applySnapshot(await this.api.get(id));
+      const dto = await this.api.get(id);
+      this.applySnapshot(dto);
+      if (wasLobby && dto.status === 'live') await this.openPlayer(dto.item);
     } catch {
       /* the next event or reconnect retries */
     }
@@ -229,6 +293,10 @@ export class PartyService {
         this.onInvited(e);
         return;
       case 'party.starting':
+        if (e.partyId === this.party()?.id) {
+          void this.refetch();
+          return;
+        }
         this.toast.info(
           this.translate.instant('party.toast_starting', { name: e.name }),
           10000,
@@ -236,9 +304,12 @@ export class PartyService {
         );
         return;
       case 'party.updated':
+        if (e.partyId === this.party()?.id && this.lobby()) void this.refetch();
         return;
     }
     if (e.partyId !== this.party()?.id) return;
+    // The host's start is not announced to members: the first event after it reveals it.
+    if (this.lobby() && (e.type === 'party.state' || e.type === 'party.settings')) void this.refetch();
     switch (e.type) {
       case 'party.state':
         if (!this.acceptRev(e.rev)) return;
@@ -281,7 +352,9 @@ export class PartyService {
     this.toast.info(
       this.translate.instant('party.toast_invited', { host: e.host.username, name: e.name }),
       10000,
-      immediate ? { label: this.translate.instant('party.join'), run: () => void this.enter(e.partyId) } : undefined,
+      immediate
+        ? { label: this.translate.instant('party.join'), run: () => void this.enter(e.partyId) }
+        : { label: this.translate.instant('party.view'), run: () => this.openPage(e.partyId) },
     );
   }
 

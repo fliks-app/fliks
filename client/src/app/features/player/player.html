@@ -233,7 +233,7 @@
       [opener]="subs.subtitleSyncOpener"
       (selectTrack)="subs.selectById($event)"
       (contentChanged)="subs.onSubtitleContentChanged($event)"
-      (closed)="subs.onCloseSubtitleSync()"
+      (closed)="onCloseSubtitleSync()"
     />
   }
 

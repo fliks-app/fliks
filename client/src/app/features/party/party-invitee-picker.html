@@ -1,0 +1,22 @@
+@if (loading()) {
+  <span class="loading loading-spinner loading-sm"></span>
+} @else {
+  <ul class="scroll-ring-safe flex max-h-48 flex-col gap-1 overflow-y-auto">
+    @for (u of users(); track u.id) {
+      <li>
+        <label class="flex cursor-pointer items-center gap-3 rounded-lg p-2 hover:bg-base-200">
+          <input
+            type="checkbox"
+            class="checkbox checkbox-sm"
+            [checked]="selected().includes(u.id)"
+            (change)="toggle(u.id, $any($event.target).checked)"
+          />
+          <app-user-avatar [username]="u.username" [avatar]="u.avatar" size="w-7 h-7 text-xs" />
+          <span class="min-w-0 flex-1 truncate">{{ u.username }}</span>
+        </label>
+      </li>
+    } @empty {
+      <li class="text-sm text-base-content/50">{{ 'party.no_followed' | translate }}</li>
+    }
+  </ul>
+}

@@ -12,6 +12,8 @@ import { LibrariesApiService, LibrarySummary } from '../../core/services/api/lib
 import { PlaylistsApiService, Playlist } from '../../core/services/api/playlists-api.service';
 import { LikesApiService, LikedItem, LikeTarget } from '../../core/services/api/likes-api.service';
 import { RequestsService, FliksRequestRow } from '../../core/services/api/requests.service';
+import { PartyApiService, type PartySummaryDto } from '../../core/services/api/party-api.service';
+import { partyWhen } from '../party/party-time';
 import { SseService } from '../../core/services/sse.service';
 import {
   DownloadProgressService,
@@ -79,6 +81,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   private readonly likesApi = inject(LikesApiService);
   private readonly requestsService = inject(RequestsService);
   private readonly sse = inject(SseService);
+  private readonly partyApi = inject(PartyApiService);
   private readonly downloadProgress = inject(DownloadProgressService);
   private readonly profilesApi = inject(ProfilesService);
   private readonly scrollMemory = inject(ScrollMemoryService);
@@ -126,6 +129,19 @@ export class HomeComponent implements OnInit, OnDestroy {
   readonly recentMedia = signal<Media[]>([]);
   readonly comingSoon = signal<CalendarEntry[]>([]);
   readonly leavingSoon = signal<Media[]>([]);
+  /** Live and scheduled watch parties of the viewer, live first (server order). */
+  readonly parties = signal<PartySummaryDto[]>([]);
+  protected partyUrl(p: PartySummaryDto): string[] {
+    return ['/parties', '' + p.id];
+  }
+  protected partySubtitle(p: PartySummaryDto): string {
+    return p.status === 'live'
+      ? this.translate.instant('party.card_live', { host: p.host.username, count: p.memberCount })
+      : this.translate.instant('party.card_scheduled', {
+          when: p.scheduledAt ? partyWhen(p.scheduledAt, this.translate) : '',
+          host: p.host.username,
+        });
+  }
   protected readonly leavingLabel = (m: Media) => leavingLabel(this.translate, m.deleteAt!);
   readonly recommendations = signal<RecommendationItem[]>([]);
   /** Accessible playlists ordered by last modification, for the "playlists" zone. */
@@ -203,6 +219,15 @@ export class HomeComponent implements OnInit, OnDestroy {
     if (id == null) return '-';
     return this.languageProfileNames().get(id) ?? `#${id}`;
   }
+
+  private loadParties(): void {
+    void this.partyApi.list().then((l) => this.parties.set(l), () => undefined);
+  }
+
+  private readonly partyEvents = this.sse.partyEvents.subscribe((e) => {
+    if (this.routeFresh()) return;
+    if (e.type === 'party.updated' || e.type === 'party.invited' || e.type === 'party.starting') this.loadParties();
+  });
 
   /** A stopped playback (here or on a driven device) leaves the row stale; the server announces every stop to all connections. */
   private readonly playbackStopped = this.sse.stopped.subscribe(() => {
@@ -382,6 +407,7 @@ export class HomeComponent implements OnInit, OnDestroy {
       );
       void this.likesApi.mine(undefined, opts).then((likes) => this.likes.set(likes), () => undefined);
       this.loadRecentRequests(opts);
+      this.loadParties();
       const [libs, cw, recs] = await Promise.all([
         this.librariesApi.listMine(opts).catch(() => null),
         this.streamingApi.getContinueWatching(undefined, opts).catch(() => null),

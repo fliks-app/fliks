@@ -136,7 +136,7 @@ export class PartyApiService {
     return firstValueFrom(this.http.post<{ rev: number }>(`/api/parties/${id}/intent`, body, QUIET()));
   }
 
-  status(id: number, body: { deviceId: string; status: 'ready' | 'buffering'; position: number; rttMs?: number }) {
+  status(id: number, body: { deviceId: string; status: 'ready' | 'buffering' | 'waiting'; position: number; rttMs?: number }) {
     return firstValueFrom(this.http.post<void>(`/api/parties/${id}/status`, body, QUIET()));
   }
 

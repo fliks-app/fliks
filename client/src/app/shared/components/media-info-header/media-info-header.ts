@@ -495,15 +495,17 @@ export class MediaInfoHeaderComponent {
     }, fromStart);
   }
 
-  /** An immediate party on what Play would launch, named after the title. */
-  async watchTogether(): Promise<void> {
+  /** Opens the party dialog on what Play would launch. */
+  watchTogether(): void {
     const mediaFileId = this.resumeMediaFileId() ?? this.selectedFileId();
     if (!mediaFileId) return;
     const episodeId = this.resumeEpisodeId() ?? this.episodeId();
-    await this.injector
-      .get(PartyService)
-      .create({ name: this.title(), mediaId: this.mediaId(), mediaFileId, ...(episodeId != null && { episodeId }) })
-      .catch(() => {});
+    this.injector.get(PartyService).createRequest.set({
+      title: this.title(),
+      mediaId: this.mediaId(),
+      mediaFileId,
+      ...(episodeId != null && { episodeId }),
+    });
   }
 
   async onToggleWatched() {
@@ -708,7 +710,7 @@ export class MediaInfoHeaderComponent {
     'media.toggle-series-watched': () => this.onToggleWatched(),
     'media.toggle-watched': () => this.onToggleWatched(),
     'media.add-to-playlist': () => this.addToPlaylist.emit(),
-    'media.watch-together': () => void this.watchTogether(),
+    'media.watch-together': () => this.watchTogether(),
     'media.open-tracking': () => this.openTracking.emit(),
     'media.request': () => this.requestMedia.emit(),
     'media.grab-best': () => this.grabBest.emit(),
