@@ -214,7 +214,8 @@ async fn stale_seek_gets_the_snapshot_and_host_only_blocks_members(pool: PgPool)
         .await;
     let id = p["id"].as_i64().unwrap();
     let (_ca, _cb) = (c.connect(alice, "da"), c.connect(bob, "db"));
-    for (t, d) in [(&a, "da"), (&b, "db")] {
+    // bob joins with a web tab's full target id, alice with the bare device id
+    for (t, d) in [(&a, "da"), (&b, "db#tab")] {
         let (s, _) = c
             .call(
                 "POST",
@@ -228,7 +229,7 @@ async fn stale_seek_gets_the_snapshot_and_host_only_blocks_members(pool: PgPool)
     let intent = |d: &str, action: &str, rev: u64| json!({"deviceId": d, "action": action, "position": 30.0, "baseRev": rev});
     let url = format!("/api/parties/{id}/intent");
     let (s, r) = c
-        .call("POST", &url, &b, Some(intent("db", "play", 0)))
+        .call("POST", &url, &b, Some(intent("db#tab", "play", 0)))
         .await;
     assert_eq!(s, 202);
     assert!(r["rev"].as_u64().unwrap() > 1);
@@ -256,7 +257,7 @@ async fn stale_seek_gets_the_snapshot_and_host_only_blocks_members(pool: PgPool)
         .await;
     assert_eq!(s, 200);
     let (s, e) = c
-        .call("POST", &url, &b, Some(intent("db", "pause", 0)))
+        .call("POST", &url, &b, Some(intent("db#tab", "pause", 0)))
         .await;
     assert_eq!((s, msg(&e)), (403, Some("party.error_host_only")));
     let (s, e) = c
@@ -274,7 +275,7 @@ async fn stale_seek_gets_the_snapshot_and_host_only_blocks_members(pool: PgPool)
             "POST",
             &format!("/api/parties/{id}/messages"),
             &b,
-            Some(json!({"deviceId": "db", "text": "hello"})),
+            Some(json!({"deviceId": "db#tab", "text": "hello"})),
         )
         .await;
     assert_eq!((s, m["text"].clone()), (201, json!("hello")));

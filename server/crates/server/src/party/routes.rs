@@ -146,19 +146,26 @@ async fn user_media_ok(st: &AppState, user: i32, media: i32) -> Result<bool, App
     .await
 }
 
-/// The newest SSE connection of the device; a polled target cannot hold a party.
+/// The SSE connection whose target id is `device` (a web tab), else the newest of that bare
+/// device id; a polled target cannot hold a party.
 fn connection_for(st: &AppState, user: i32, device: &str) -> Option<String> {
-    st.hub
+    let live: Vec<_> = st
+        .hub
         .list_for_user(user)
         .into_iter()
-        .find(|t| {
-            !t.connection_id.starts_with("polled:")
-                && t.identity
+        .filter(|t| !t.connection_id.starts_with("polled:"))
+        .collect();
+    live.iter()
+        .find(|t| t.identity.target_id.as_deref() == Some(device))
+        .or_else(|| {
+            live.iter().find(|t| {
+                t.identity
                     .target_id
                     .as_deref()
                     .is_some_and(|id| id.split('#').next() == Some(device))
+            })
         })
-        .map(|t| t.connection_id)
+        .map(|t| t.connection_id.clone())
 }
 
 async fn row_of(st: &AppState, id: i32) -> R<Row> {

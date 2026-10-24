@@ -109,7 +109,7 @@ Every state, member or settings mutation bumps `rev` and emits the matching even
 - Error bodies are the usual `{statusCode, message, error}`, except 409 `party.error_stale`, whose body is the bare `PartyDto`;  409 `party.error_member_no_access` adds `usernames: string[]`.
 - `intent` returns 202 `{ rev }`; `ended` from a non-host is accepted and ignored. `leave`, `status` and chat need only a member of an in-memory party.
 - Rule 9 is polled by the 1 s tick through `Hub::has_connection`; there is no hub hook. After an SSE reconnect the member is `away`: the client calls `join` again (same `deviceId`) to re-attach its new connection.
-- `deviceId` maps to the newest non-polled SSE connection of the caller whose target id (`deviceId#tabNonce`) starts with that `deviceId`.
+- `deviceId` is the caller's SSE target id (`deviceId#tabNonce`, one member per tab) or a bare device id; it maps to the non-polled SSE connection with that exact target id, else the newest one whose target id starts with `deviceId#`.
 - `position(t)` is clamped to `anchor.position` while `t < anchor.serverTimeMs` (a pause during the start delay).
 - `system.by` is the acting username; for `host_changed` and `kicked`, `args.username` names the new host or the kicked user (`by` is null for an automatic transfer).
 - `party.starting` before a lobby opens is remembered in memory only: a restart inside the 15 min window repeats it once. The lobby and expiry checks run every 10 s from the registry tick, not the job scheduler.
