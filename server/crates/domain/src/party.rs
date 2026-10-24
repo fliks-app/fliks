@@ -312,6 +312,15 @@ impl Live {
             (!self.members.iter().any(|m| m.status != MemberStatus::Away)).then_some(now);
     }
 
+    /// `POST /start`: the lobby goes live and every member, invited or not, gets the new state.
+    pub fn go_live(&mut self, now: i64) -> Vec<Effect> {
+        let mut out = Vec::new();
+        self.lobby = false;
+        self.reset_empty(now);
+        self.state_effect(&mut out, now, None, None, None);
+        out
+    }
+
     fn bump(&mut self) -> u64 {
         self.rev += 1;
         self.rev
@@ -1060,6 +1069,9 @@ mod tests {
             .unwrap();
         assert_eq!(l.members[0].status, MemberStatus::Waiting);
         assert_eq!(l.state, State::Idle);
+        let out = l.go_live(3);
+        assert!(!l.lobby);
+        assert!(out.iter().any(|e| matches!(e, Effect::State { .. })));
     }
 
     #[test]

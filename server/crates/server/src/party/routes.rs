@@ -509,11 +509,9 @@ pub async fn start(
         db::set_live(&st.db, id).await?;
         row.status = "live".into();
         st.parties.ensure(&row, true);
-        st.parties.act(id, |l| {
-            l.lobby = false;
-            l.reset_empty(now_ms());
-            ((), vec![])
-        });
+        if let Some((_, d)) = st.parties.act(id, |l| ((), l.go_live(now_ms()))) {
+            deliver(&st, id, d).await;
+        }
         let invitees = db::invitees(&st.db, id).await?;
         st.hub.emit_to_users(
             &invitees,
