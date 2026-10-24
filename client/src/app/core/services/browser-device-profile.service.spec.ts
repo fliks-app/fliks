@@ -142,10 +142,10 @@ describe('BrowserDeviceProfileService, native codec levels', () => {
     containers: ['mp4'],
   };
 
-  function nativeProfile(platform: string) {
+  function nativeProfile(platform: string, avc = /avc1\.(42E01E|42001E|42001F|640028|640029)/) {
     vi.stubGlobal('MediaSource', {
       isTypeSupported: (t: string) =>
-        /avc1\.(42E01E|42001E|42001F|640028|640029)/.test(t) || /hvc1\.\d\.\d\.L(120|123|150|153)\.B0/.test(t),
+        avc.test(t) || /hvc1\.\d\.\d\.L(120|123|150|153)\.B0/.test(t),
     });
     const service = configure({
       isTv: () => false,
@@ -164,6 +164,11 @@ describe('BrowserDeviceProfileService, native codec levels', () => {
     const conditions = nativeProfile('ios').codecConditions ?? [];
     expect(conditions.find((c) => c.codec === 'h264')?.maxLevel).toBe(41);
     expect(conditions.find((c) => c.codec === 'hevc')?.maxLevel).toBe(153);
+  });
+
+  it('iOS probes H.264 past 4.1 when the decoder accepts level 4.2 and above', () => {
+    const conditions = nativeProfile('ios', /avc1\.(42E01E|42001E|42001F|640028|640029|64002A|640032|640033)/).codecConditions ?? [];
+    expect(conditions.find((c) => c.codec === 'h264')?.maxLevel).toBe(51);
   });
 
   it('Android leaves the level to the plugin', () => {
