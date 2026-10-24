@@ -10,7 +10,7 @@ export type PartyMemberStatus = 'ready' | 'buffering' | 'away' | 'waiting';
 export type PartyIntentAction = 'play' | 'pause' | 'seek' | 'setItem' | 'ended';
 
 export interface PartyReactionCatalog {
-  reactions: { emoji: string; animation: string | null }[];
+  animations: Record<string, string>;
   defaults: string[];
 }
 

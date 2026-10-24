@@ -24,6 +24,11 @@
               {
                 "glob": "**/*",
                 "input": "public"
+              },
+              {
+                "glob": "{de,en,es,fr,it,pt}/{compact,messages}.json",
+                "input": "node_modules/emojibase-data",
+                "output": "emoji-data"
               }
             ],
             "styles": [

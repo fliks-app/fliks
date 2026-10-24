@@ -1,25 +1,50 @@
-import { ChangeDetectionStrategy, Component, ElementRef, inject, signal, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, computed, inject, signal, viewChild } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { TranslatePipe } from '@ngx-translate/core';
+import { LucideSearch } from '@lucide/angular';
+import { EmojiDataService } from '../../../core/services/party/emoji-data.service';
 import { MAX_BAR } from '../../../core/services/party/reaction-bar';
 import { ReactionCatalogService } from '../../../core/services/party/reaction-catalog.service';
 import { PartyService } from '../../../core/services/party/party.service';
 import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-field/toggle-field';
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 
+interface Section {
+  key: string;
+  /** Already-localized header (emoji group), or the i18n key of one of ours; none for search results. */
+  label?: string;
+  labelKey?: string;
+  emojis: string[];
+}
+
 /** Reaction settings, opened from the player's top-bar reaction button; lives in the player so it shows in fullscreen. */
 @Component({
   selector: 'app-party-reaction-settings',
-  imports: [TranslatePipe, ModalHeaderComponent, ToggleFieldComponent],
+  imports: [FormsModule, TranslatePipe, LucideSearch, ModalHeaderComponent, ToggleFieldComponent],
   templateUrl: './party-reaction-settings.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class PartyReactionSettingsComponent {
   protected readonly party = inject(PartyService);
   protected readonly catalog = inject(ReactionCatalogService);
+  protected readonly data = inject(EmojiDataService);
   protected readonly max = MAX_BAR;
+  protected readonly query = signal('');
   /** Set when a tap was refused because the bar is full. */
   protected readonly full = signal(false);
   private readonly dialog = viewChild.required<ElementRef<HTMLDialogElement>>('dialog');
+
+  protected readonly searching = computed(() => this.query().trim() !== '');
+  protected readonly sections = computed<Section[]>(() => {
+    if (this.searching()) return [{ key: 'results', emojis: this.data.search(this.query()).map((e) => e.emoji) }];
+    const groups = this.data.groups();
+    const animated = groups.flatMap((g) => g.emojis.map((e) => e.emoji)).filter((e) => this.catalog.hasAnimation(e));
+    return [
+      { key: 'bar', labelKey: 'party.reaction_section_bar', emojis: this.catalog.bar() },
+      { key: 'animated', labelKey: 'party.reaction_section_animated', emojis: animated },
+      ...groups.map((g) => ({ key: g.key, label: g.label, emojis: g.emojis.map((e) => e.emoji) })),
+    ];
+  });
 
   protected toggle(emoji: string): void {
     const ok = this.catalog.toggle(emoji);
@@ -33,6 +58,7 @@ export class PartyReactionSettingsComponent {
 
   show(): void {
     void this.catalog.load();
+    void this.data.load();
     this.dialog().nativeElement.showModal();
   }
 }

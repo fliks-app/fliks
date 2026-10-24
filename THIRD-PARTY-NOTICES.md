@@ -65,6 +65,16 @@ The watch-party reactions ship the animated artwork below, resized (see
 |---|---|---|---|
 | Noto Emoji Animation (Google) | CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/) | https://googlefonts.github.io/noto-emoji-animation/ | resized to 72 px animated WebP |
 
+## Emoji data
+
+The watch-party reaction picker uses the two datasets below. Both are compiled from the Unicode
+Consortium's emoji and CLDR data (Unicode-3.0).
+
+| Component | License | Source | Use |
+|---|---|---|---|
+| emojibase-data | MIT | https://github.com/milesj/emojibase | localized names and groups, copied to the client's `emoji-data/` assets |
+| emojis (Rust crate) | (MIT OR Apache-2.0) AND Unicode-3.0 | https://github.com/rossmacarthur/emojis | server-side check that a reaction is a standard emoji |
+
 ## Package-manager dependencies
 
 npm, Gradle, CocoaPods and Swift packages declare their own licenses in their

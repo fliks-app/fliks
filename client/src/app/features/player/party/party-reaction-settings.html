@@ -1,5 +1,5 @@
 <dialog #dialog class="modal">
-  <div class="modal-box max-w-sm">
+  <div class="modal-box max-w-2xl">
     <app-modal-header [title]="'party.reaction_settings' | translate" />
     <div class="flex flex-col gap-4 pt-2">
       <app-toggle-field
@@ -17,24 +17,52 @@
           <span class="font-medium">{{ 'party.reaction_bar' | translate }}</span>
           <button type="button" class="link text-sm" (click)="reset()">{{ 'party.reaction_bar_reset' | translate }}</button>
         </div>
-        <p class="text-xs" [class.text-warning]="full()" [class.opacity-70]="!full()">
+        <p class="text-sm" [class.text-warning]="full()" [class.opacity-70]="!full()">
           {{ (full() ? 'party.reaction_bar_full' : 'party.reaction_bar_hint') | translate: { max: max } }}
         </p>
-        <div class="grid grid-cols-6 gap-2">
-          @for (e of catalog.emojis(); track e) {
-            @let i = catalog.bar().indexOf(e);
-            <button
-              type="button"
-              class="btn btn-ghost relative h-11 w-full rounded-xl border-2 px-0 text-xl"
-              [class]="i >= 0 ? 'border-primary bg-primary/10' : 'border-transparent'"
-              [attr.aria-pressed]="i >= 0"
-              (click)="toggle(e)"
-            >
-              {{ e }}
-              @if (i >= 0) {
-                <span class="badge badge-primary badge-xs absolute -top-1.5 -right-1.5">{{ i + 1 }}</span>
-              }
-            </button>
+        <label class="input input-bordered flex w-full items-center gap-2">
+          <svg lucideSearch class="h-4 w-4 text-base-content/50"></svg>
+          <input
+            data-no-focus-ring
+            type="search"
+            class="grow"
+            maxlength="100"
+            [placeholder]="'common.search' | translate"
+            [attr.aria-label]="'common.search' | translate"
+            [ngModel]="query()"
+            (ngModelChange)="query.set($event)"
+          />
+        </label>
+        <div class="max-h-72 overflow-y-auto px-2 pt-2">
+          @for (s of sections(); track s.key) {
+            @if (s.emojis.length) {
+              <section class="mb-3">
+                @if (s.labelKey || s.label) {
+                  <h3 class="mb-1 text-sm font-medium opacity-70">{{ s.labelKey ? (s.labelKey | translate) : s.label }}</h3>
+                }
+                <div class="grid grid-cols-6 gap-2 sm:grid-cols-8 md:grid-cols-10">
+                  @for (e of s.emojis; track e) {
+                    @let i = catalog.bar().indexOf(e);
+                    <button
+                      type="button"
+                      class="btn btn-ghost relative h-11 w-full rounded-xl border-2 px-0 text-xl"
+                      [class]="i >= 0 ? 'border-primary bg-primary/10' : 'border-transparent'"
+                      [attr.aria-pressed]="i >= 0"
+                      [attr.title]="data.label(e)"
+                      (click)="toggle(e)"
+                    >
+                      {{ e }}
+                      @if (i >= 0) {
+                        <span class="badge badge-primary badge-sm absolute -top-1.5 -right-1.5">{{ i + 1 }}</span>
+                      }
+                    </button>
+                  }
+                </div>
+              </section>
+            }
+          }
+          @if (searching() && !sections()[0].emojis.length) {
+            <p class="py-4 text-center text-sm opacity-70">{{ 'party.reaction_no_result' | translate }}</p>
           }
         </div>
       </div>

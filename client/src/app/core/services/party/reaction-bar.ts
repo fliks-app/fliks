@@ -1,9 +1,9 @@
 export const MAX_BAR = 8;
 
-/** The stored bar without emojis the catalog dropped; the defaults when nothing valid is left. */
-export function sanitizeBar(stored: readonly string[] | null, catalog: readonly string[], defaults: readonly string[]): string[] {
-  const kept = (stored ?? []).filter((e, i, l) => catalog.includes(e) && l.indexOf(e) === i).slice(0, MAX_BAR);
-  return kept.length ? kept : defaults.filter((e) => catalog.includes(e));
+/** The stored bar without duplicates or emojis outside `known`; `known` is null while the emoji data is not loaded, and everything passes. The defaults when nothing is left. */
+export function sanitizeBar(stored: readonly string[] | null, known: ReadonlySet<string> | null, defaults: readonly string[]): string[] {
+  const kept = (stored ?? []).filter((e, i, l) => (known?.has(e) ?? true) && l.indexOf(e) === i).slice(0, MAX_BAR);
+  return kept.length ? kept : [...defaults];
 }
 
 /** Adds or removes `emoji`; `null` when the change is refused (bar full, or last emoji). */

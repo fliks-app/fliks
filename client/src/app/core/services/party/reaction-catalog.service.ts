@@ -1,6 +1,7 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { PartyApiService, type PartyReactionCatalog } from '../api/party-api.service';
 import { ServerConfigService } from '../server-config.service';
+import { EmojiDataService } from './emoji-data.service';
 import { sanitizeBar, toggleBar } from './reaction-bar';
 
 const BAR_KEY = 'party.reactionBar';
@@ -14,23 +15,18 @@ function readBar(): string[] | null {
   }
 }
 
-/** The server-owned reaction catalog (fetched once) and this device's reaction bar. */
+/** The server's animated reactions and default bar (fetched once), and this device's reaction bar. */
 @Injectable({ providedIn: 'root' })
 export class ReactionCatalogService {
   private readonly api = inject(PartyApiService);
+  private readonly emojiData = inject(EmojiDataService);
   private readonly serverConfig = inject(ServerConfigService);
   private readonly catalog = signal<PartyReactionCatalog | null>(null);
   private readonly stored = signal<string[] | null>(readBar());
 
-  readonly emojis = computed(() => this.catalog()?.reactions.map((r) => r.emoji) ?? []);
-  readonly bar = computed(() => sanitizeBar(this.stored(), this.emojis(), this.catalog()?.defaults ?? []));
+  readonly bar = computed(() => sanitizeBar(this.stored(), this.emojiData.known(), this.catalog()?.defaults ?? []));
   private readonly animations = computed(
-    () =>
-      new Map(
-        this.catalog()
-          ?.reactions.filter((r) => r.animation)
-          .map((r) => [r.emoji, this.serverConfig.resolveUrl(r.animation!)]),
-      ),
+    () => new Map(Object.entries(this.catalog()?.animations ?? {}).map(([e, url]) => [e, this.serverConfig.resolveUrl(url)])),
   );
 
   private loading: Promise<void> | null = null;
@@ -45,6 +41,10 @@ export class ReactionCatalogService {
       },
     );
     return this.loading;
+  }
+
+  hasAnimation(emoji: string): boolean {
+    return this.animations().has(emoji);
   }
 
   animation(emoji: string): string | null {
