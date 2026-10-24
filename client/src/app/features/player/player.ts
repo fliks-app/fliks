@@ -20,6 +20,7 @@ import { BrowserDeviceProfileService, DeviceProfile } from '../../core/services/
 import type { PreRollItem } from '@fliks/plugin-ui';
 import { SseService, RemoteQualityRung } from '../../core/services/sse.service';
 import { RemoteService } from '../../core/services/remote.service';
+import { backTarget } from './back-target';
 import { remoteOverlayOpen } from '../../core/services/remote-playback-target';
 import { PickerRow } from '../../shared/remote-picker/remote-picker-list';
 import { AuthService } from '../../core/services/auth.service';
@@ -693,7 +694,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private mediaFileId = 0;
   private mediaId = 0;
   private isOfflinePlayback = false;
-  private fromDownloads = false;
   /** Offline playback loads no media record; the download carries the type for the back target. */
   private offlineMediaType: string | undefined;
   private episodeId: number | undefined;
@@ -906,7 +906,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     try {
       // A finished download plays locally whatever the connectivity; `offline=1` (downloads page) insists on it.
       const forced = qp['offline'] === '1';
-      this.fromDownloads = forced;
       const download = readyDownloadFor(this.dlCache.load(), this.mediaFileId, this.castService.isConnected());
       const offlineCheck =
         forced || download
@@ -3081,39 +3080,23 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   onBack() {
     this.savePosition();
-    // Explicit navigation, not history.back(): in-player navigation stacks several /watch entries. replaceUrl
-    // drops /watch so back doesn't reopen the player.
-    const queueSourceId = this.queue.sourceId();
-    let target: string;
-    // Same handoff as a media card: the detail page paints from the record the player holds instead of a
-    // skeleton; `getOne` still runs there for cast, crew and files.
-    let handoff: { media: Media } | undefined;
-    if (!this.mediaId) {
-      target = '/';
-    } else if (this.fromDownloads) {
-      target = '/downloads';
-    } else if (this.queue.source() === 'playlist' && queueSourceId != null) {
-      // Playing from a playlist returns to that playlist, not the item's page.
-      target = `/playlists/${queueSourceId}`;
-    } else {
-      const kind = (this.media?.type ?? this.offlineMediaType) === 'series' ? 'series' : 'movies';
-      if (this.media) handoff = { media: this.media };
-      if (this.episodeId && kind === 'series') {
-        // A finished episode returns to the NEXT episode's detail page, a mid-watch one to its own (to resume).
-        const next = this.queueCtl.nextEpisodeContext();
-        const epId =
-          this.episodeFinished() && next ? next.episodeId : this.episodeId;
-        target = `/series/${this.mediaId}/episode/${epId}`;
-      } else {
-        target = `/${kind}/${this.mediaId}`;
-      }
-    }
-    // If the previous URL is already the target, just pop /watch: replaceUrl would stack a duplicate (two
-    // backs). Mark the NavigationEnd as a back-pop so /watch isn't pushed on NavbarService's history.
+    const kind = (this.media?.type ?? this.offlineMediaType) === 'series' ? 'series' : 'movies';
+    const next = this.queueCtl.nextEpisodeContext();
+    const target = backTarget({
+      origin: this.navHistory.originUrl,
+      mediaId: this.mediaId,
+      kind,
+      episodeId: this.episodeId,
+      landingEpisodeId: this.episodeFinished() && next ? next.episodeId : this.episodeId,
+    });
+    // Same handoff as a media card: the detail page paints from the record the player holds.
+    const handoff = this.media && target.startsWith(`/${kind}/${this.mediaId}`) ? { media: this.media } : undefined;
+    // Landing on the origin pops /watch (replaceUrl would stack a duplicate); another target replaces it. Either
+    // way the NavigationEnd is marked a back-pop so /watch isn't pushed on NavbarService's history.
     this.navbar.markAsBackNavigation();
-    const prev = this.navHistory.previousUrl;
+    const prev = this.navHistory.originUrl;
     void this.animateClose().then(() => {
-      if (prev && prev.split('?')[0] === target) {
+      if (prev && prev.split('?')[0] === target.split('?')[0]) {
         history.back();
         return;
       }

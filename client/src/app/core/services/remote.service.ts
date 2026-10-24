@@ -338,11 +338,14 @@ export class RemoteService {
     if (cmd.episodeId) queryParams['episodeId'] = cmd.episodeId;
     if (cmd.positionSeconds !== undefined) queryParams['t'] = Math.floor(cmd.positionSeconds);
     // Only an on-screen player needs the bounce to remount; elsewhere it would flash the home page.
-    if (this.router.url.startsWith('/watch')) {
-      await this.router.navigateByUrl('/', { skipLocationChange: true });
-    }
+    const overPlayer = this.router.url.startsWith('/watch');
+    if (overPlayer) await this.router.navigateByUrl('/', { skipLocationChange: true });
     const tracks = launchTracksFromWire(cmd, cmd.mediaFileId);
-    await this.router.navigate(['/watch', cmd.mediaFileId], { queryParams, ...(tracks && { state: { tracks } }) });
+    await this.router.navigate(['/watch', cmd.mediaFileId], {
+      queryParams,
+      replaceUrl: overPlayer,
+      ...(tracks && { state: { tracks } }),
+    });
   }
 
   /** Never over a player: a controller browsing while the target plays must
