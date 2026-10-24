@@ -8,9 +8,7 @@ use crate::{events::SseEvent, state::AppState, sync::MutexExt};
 use chrono::{DateTime, Utc};
 use fliks_domain::{
     js::now_ms,
-    party::{
-        CloseReason, Effect, Item, LOBBY_OPEN_BEFORE_MS, Live, Member, Policy, SCHEDULE_EXPIRY_MS,
-    },
+    party::{CloseReason, Effect, Item, LOBBY_OPEN_BEFORE_MS, Live, Member, SCHEDULE_EXPIRY_MS},
 };
 use serde_json::{Value, to_value};
 use std::{
@@ -30,6 +28,8 @@ struct Inner {
     live: HashMap<i32, Live>,
     /// ponytail: lost on restart, so a restart inside the lobby window repeats `party.starting` once.
     notified: HashSet<i32>,
+    /// Held across a mutation and its delivery, so one party's events leave in `rev` order.
+    gates: HashMap<i32, Arc<tokio::sync::Mutex<()>>>,
 }
 
 #[derive(Clone, Default)]
@@ -44,7 +44,13 @@ pub struct View {
     pub host_id: i32,
     pub members: Vec<Member>,
     pub messages: Vec<fliks_domain::party::Message>,
-    pub blocked: Vec<i32>,
+}
+
+/// What a summary needs of a machine.
+pub struct Brief {
+    pub host_id: i32,
+    pub item: Item,
+    pub member_count: usize,
 }
 
 impl Parties {
@@ -54,14 +60,9 @@ impl Parties {
 
     /// Creates the machine for a row that has none: a `live` row boots paused (rule 10), else idle.
     pub fn ensure(&self, row: &Row, fresh: bool) {
-        let policy = if row.policy == "host_only" {
-            Policy::HostOnly
-        } else {
-            Policy::Everyone
-        };
         let args = (
             row.name.clone(),
-            policy,
+            row.policy,
             row.owner_id,
             row.item(),
             row.position,
@@ -83,10 +84,11 @@ impl Parties {
         });
     }
 
+    /// Frees the machine; the lobby notice stays, a still `scheduled` row must not repeat it.
     pub fn remove(&self, id: i32) {
         let mut g = self.inner();
         g.live.remove(&id);
-        g.notified.remove(&id);
+        g.gates.remove(&id);
     }
 
     pub fn forget_notice(&self, id: i32) {
@@ -108,8 +110,36 @@ impl Parties {
             host_id: l.host_id,
             members: l.members.clone(),
             messages: l.recent_messages(),
-            blocked: l.blocked.clone(),
         })
+    }
+
+    pub fn brief(&self, id: i32) -> Option<Brief> {
+        let g = self.inner();
+        let l = g.live.get(&id)?;
+        Some(Brief {
+            host_id: l.host_id,
+            item: l.item.clone(),
+            member_count: l.members.len(),
+        })
+    }
+
+    pub fn has_user(&self, id: i32, user: i32) -> bool {
+        self.inner().live.get(&id).is_some_and(|l| l.has_user(user))
+    }
+
+    /// Whether an `ended` from this device would take effect right now.
+    pub fn can_end(&self, id: i32, user: i32, device: &str, item: Option<&Item>) -> bool {
+        self.inner()
+            .live
+            .get(&id)
+            .is_some_and(|l| l.can_end(user, device, item))
+    }
+
+    fn gate(&self, id: i32) -> Option<Arc<tokio::sync::Mutex<()>>> {
+        let mut g = self.inner();
+        g.live
+            .contains_key(&id)
+            .then(|| g.gates.entry(id).or_default().clone())
     }
 
     /// Runs `f` on the machine under the lock; `None` when the party has no machine.
@@ -128,6 +158,16 @@ impl Parties {
                 audience: l.audience(),
             },
         ))
+    }
+}
+
+impl Brief {
+    pub fn of(v: &View) -> Self {
+        Self {
+            host_id: v.host_id,
+            item: v.item.clone(),
+            member_count: v.members.len(),
+        }
     }
 }
 
@@ -153,8 +193,17 @@ pub fn item_dto_of(info: Option<db::ItemInfo>, item: &Item) -> PartyItem {
 }
 
 pub async fn item_dto(st: &AppState, item: &Item) -> sqlx::Result<PartyItem> {
-    let info = db::item_info(&st.db, item.media_id, item.episode_id).await?;
-    Ok(item_dto_of(info, item))
+    Ok(item_dtos(st, std::slice::from_ref(item)).await?.remove(0))
+}
+
+/// One query for all the items, in the order given.
+pub async fn item_dtos(st: &AppState, items: &[Item]) -> sqlx::Result<Vec<PartyItem>> {
+    let keys: Vec<_> = items.iter().map(|i| (i.media_id, i.episode_id)).collect();
+    let infos = db::item_infos(&st.db, &keys).await?;
+    Ok(items
+        .iter()
+        .map(|i| item_dto_of(infos.get(&(i.media_id, i.episode_id)).cloned(), i))
+        .collect())
 }
 
 pub fn member_dtos(st: &AppState, host_id: i32, members: &[Member]) -> Vec<MemberDto> {
@@ -186,6 +235,20 @@ pub fn member_dtos(st: &AppState, host_id: i32, members: &[Member]) -> Vec<Membe
 
 fn json(v: impl serde::Serialize) -> Value {
     to_value(v).expect("typed dto")
+}
+
+/// Runs `f` on the machine and delivers its effects, serialized per party so events leave in the
+/// order the machine produced them; `None` when the party has no machine.
+pub async fn mutate<R>(
+    st: &AppState,
+    id: i32,
+    f: impl FnOnce(&mut Live) -> (R, Vec<Effect>),
+) -> Option<R> {
+    let gate = st.parties.gate(id)?;
+    let _held = gate.lock().await;
+    let (r, d) = st.parties.act(id, f)?;
+    deliver(st, id, d).await;
+    Some(r)
 }
 
 /// Persists and emits what a mutation produced; a failed write is logged, never fails the action.
@@ -303,10 +366,9 @@ pub async fn notify_updated(st: &AppState, row: &Row) -> sqlx::Result<()> {
 /// Sets `ended`, tells the members, drops the machine and refreshes the rail.
 pub async fn end(st: &AppState, row: &Row, reason: CloseReason) -> sqlx::Result<()> {
     db::set_ended(&st.db, row.id).await?;
-    if let Some((_, d)) = st.parties.act(row.id, |l| ((), vec![l.close(reason)])) {
-        deliver(st, row.id, d).await;
-    }
+    mutate(st, row.id, |l| ((), vec![l.close(reason)])).await;
     st.parties.remove(row.id);
+    st.parties.forget_notice(row.id);
     notify_updated(st, row).await
 }
 
@@ -340,22 +402,23 @@ pub fn spawn(st: &AppState) {
 async fn tick(st: &AppState) {
     let now = now_ms();
     for id in st.parties.ids() {
-        let Some((_, d)) = st
-            .parties
-            .act(id, |l| ((), l.tick(now, |c| st.hub.has_connection(c))))
+        let Some(expired) = mutate(st, id, |l| {
+            let effects = l.tick(now, |c| st.hub.has_connection(c));
+            let expired = effects.iter().any(|e| {
+                matches!(
+                    e,
+                    Effect::Closed {
+                        reason: CloseReason::Expired,
+                        ..
+                    }
+                )
+            });
+            (expired, effects)
+        })
+        .await
         else {
             continue;
         };
-        let expired = d.effects.iter().any(|e| {
-            matches!(
-                e,
-                Effect::Closed {
-                    reason: CloseReason::Expired,
-                    ..
-                }
-            )
-        });
-        deliver(st, id, d).await;
         if !expired {
             continue;
         }

@@ -259,6 +259,9 @@ pub struct PartySummaryDto {
     pub status: String,
     #[serde(with = "iso_ms::opt")]
     pub scheduled_at: Option<DateTime<Utc>>,
+    /// When the lobby opens, for a `scheduled` party.
+    #[serde(with = "iso_ms::opt")]
+    pub lobby_opens_at: Option<DateTime<Utc>>,
     pub host: UserRef,
     pub item: PartyItem,
     pub playlist: Option<PlaylistRef>,
