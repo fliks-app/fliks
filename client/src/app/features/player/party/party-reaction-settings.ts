@@ -20,7 +20,7 @@ interface Section {
   emojis: string[];
 }
 
-/** Reaction settings, opened from the player's top-bar reaction button; lives in the player so it shows in fullscreen. */
+/** Reaction settings, opened from the player's settings menu; lives in the player so it shows in fullscreen. */
 @Component({
   selector: 'app-party-reaction-settings',
   imports: [FormsModule, NgTemplateOutlet, CdkDropList, CdkDrag, CdkDragPlaceholder, TranslatePipe, LucideSearch, LucideX, ModalHeaderComponent, ToggleFieldComponent],

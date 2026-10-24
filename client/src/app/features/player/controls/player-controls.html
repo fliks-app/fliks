@@ -65,9 +65,6 @@
         </button>
       }
       @if (partyActive()) {
-        <button type="button" class="btn btn-ghost btn-circle btn-md text-white" [attr.aria-label]="'party.reaction_settings' | translate" (click)="openReactionSettings.emit()">
-          <svg lucideSmilePlus [class]="isMobileTouch() ? 'h-5 w-5' : 'h-6 w-6'"></svg>
-        </button>
         <button type="button" class="btn btn-ghost btn-circle btn-md relative" [class.text-info]="partyOpen()" [class.text-white]="!partyOpen()" [attr.aria-label]="'party.panel_toggle' | translate" [attr.aria-pressed]="partyOpen()" (click)="toggleParty.emit()">
           <svg lucideUsers [class]="isMobileTouch() ? 'h-5 w-5' : 'h-6 w-6'"></svg>
           @if (partyUnread() > 0 && !partyOpen()) {
@@ -416,6 +413,12 @@
         <span class="flex-1 text-left">{{ 'player.stats_for_nerds' | translate }}</span>
         @if (statsVisible()) { <svg lucideCheck class="h-5 w-5 text-white shrink-0"></svg> }
       </button>
+      @if (partyActive()) {
+        <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white active:bg-white/10" (click)="openReactionSettings.emit(); closeSheet()">
+          <svg lucideSmilePlus class="h-5 w-5 text-white/40 shrink-0"></svg>
+          <span class="flex-1 text-left">{{ 'party.reaction_settings' | translate }}</span>
+        </button>
+      }
       <div class="divider my-1 before:bg-white/10 after:bg-white/10"></div>
       <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white active:bg-white/10" (click)="openMedia.emit(); closeSheet()">
         <svg lucideExternalLink class="h-5 w-5 text-white/40 shrink-0"></svg>
@@ -494,6 +497,12 @@
           <span class="flex-1 text-left">{{ 'player.stats_for_nerds' | translate }}</span>
           @if (statsVisible()) { <svg lucideCheck class="h-4 w-4 text-white shrink-0"></svg> }
         </button>
+        @if (partyActive()) {
+          <button class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10" (click)="openReactionSettings.emit(); closeDropdown($event)">
+            <svg lucideSmilePlus class="h-4 w-4 text-white/40 shrink-0"></svg>
+            <span class="flex-1 text-left">{{ 'party.reaction_settings' | translate }}</span>
+          </button>
+        }
         <div class="divider my-1 before:bg-white/10 after:bg-white/10"></div>
         <!-- Open media page -->
         <button class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10" (click)="openMedia.emit(); closeDropdown($event)">
