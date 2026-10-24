@@ -10,6 +10,10 @@ import { ToastService } from '../../core/services/toast.service';
 import { VoiceService } from '../../core/services/party/voice.service';
 import { QueueController } from './queue-controller';
 import { VoiceDucker } from './party-ducking';
+import { CastService } from '../../core/services/cast.service';
+import { CastPlayerService } from '../../core/services/cast-player.service';
+import { CastPlaybackTarget } from '../../core/services/cast-playback-target';
+import { CastPartyOutput, type PartyOutput } from './party-output';
 import { DRIFT_CHECK_MS, driftAction, groupPosition } from './party-sync';
 
 export interface PartyHost {
@@ -42,6 +46,9 @@ export class PartyController {
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
   private readonly voice = inject(VoiceService);
+  private readonly castService = inject(CastService);
+  private readonly castTarget = inject(CastPlaybackTarget);
+  private readonly castOutput = new CastPartyOutput(this.castService, inject(CastPlayerService));
   private host!: PartyHost;
   private readonly ducker = new VoiceDucker(
     () => this.host?.engine() ?? null,
@@ -60,12 +67,49 @@ export class PartyController {
 
   readonly active = this.party.active;
 
+  private readonly localOutput: PartyOutput = {
+    ready: () => !!this.host.engine() && this.state.videoStarted(),
+    paused: () => this.host.engine()?.paused === true,
+    uiPaused: () => this.state.uiPaused(),
+    buffering: () => this.state.buffering(),
+    ended: () => this.state.ended(),
+    seekLocked: () => this.state.seekLocked(),
+    position: () => this.host.position(),
+    item: () => ({ mediaId: this.host.mediaId(), episodeId: this.host.episodeId() }),
+    seekTo: (t) => this.host.seekTo(t),
+    pause: () => this.host.pausePlayback(),
+    play: () => this.host.playLocal(),
+    slackS: SEEK_SLACK_S,
+    rate: {
+      get: () => this.host.engine()?.playbackRate ?? 1,
+      set: (r) => {
+        const engine = this.host.engine();
+        if (engine) engine.playbackRate = r;
+      },
+    },
+  };
+
+  /** The receiver while a Cast session is up, else the local engine. */
+  private out(): PartyOutput {
+    return this.castService.isConnected() ? this.castOutput : this.localOutput;
+  }
+
   attach(host: PartyHost): void {
     this.host = host;
     this.queueCtl.interceptAdvance = (auto) => {
       if (!this.party.active()) return false;
       if (!auto) void this.requestNext();
       return true;
+    };
+    this.castTarget.partyIntercept = {
+      active: () => this.party.active(),
+      togglePlay: () => this.togglePlay(),
+      seek: (t) => this.seek(t),
+      next: () => {
+        if (!this.party.active()) return false;
+        void this.requestNext();
+        return true;
+      },
     };
     this.closedSub = this.party.closed.subscribe(() => host.onBack());
     this.driftTimer = setInterval(() => this.checkDrift(), DRIFT_CHECK_MS);
@@ -78,6 +122,7 @@ export class PartyController {
     if (this.driftTimer) clearInterval(this.driftTimer);
     this.ducker.stop();
     this.queueCtl.interceptAdvance = null;
+    this.castTarget.partyIntercept = null;
     this.closedSub?.unsubscribe();
     // Closing the player is leaving the party.
     if (this.party.active()) void this.party.leave();
@@ -92,8 +137,8 @@ export class PartyController {
     const live = this.party.live()!;
     // A tap during a wait would race the phase it is already in.
     if (live.state === 'waiting') return true;
-    if (live.state === 'idle' && this.state.ended()) void this.replay();
-    else void this.party.sendIntent(this.state.uiPaused() ? 'play' : 'pause');
+    if (live.state === 'idle' && this.out().ended()) void this.replay();
+    else void this.party.sendIntent(this.out().uiPaused() ? 'play' : 'pause');
     return true;
   }
 
@@ -151,17 +196,17 @@ export class PartyController {
 
   /** Reports buffering/ready on engine changes; silent while an apply is settling, which reports `ready` itself. */
   private readonly bufferingEffect = effect(() => {
-    const status = this.state.buffering() ? 'buffering' : 'ready';
+    const status = this.out().buffering() ? 'buffering' : 'ready';
     untracked(() => {
       if (!this.party.active() || this.applying || status === this.lastReported) return;
       this.lastReported = status;
-      void this.party.reportStatus(status, this.host.position());
+      void this.party.reportStatus(status, this.out().position());
     });
   });
 
   /** The host's natural end: `ended`, then the next episode of the queue as an item switch. */
   private readonly endedEffect = effect(() => {
-    if (!this.state.ended()) return;
+    if (!this.out().ended()) return;
     untracked(() => {
       if (!this.party.active() || !this.party.isHost()) return;
       void this.party.sendIntent('ended').then(() => this.requestNext());
@@ -178,8 +223,7 @@ export class PartyController {
         await this.queueCtl.openPartyItem(live.item);
         if (!(await this.untilReady(gen))) return;
       }
-      const engine = this.host.engine();
-      if (!engine) return;
+      if (!this.out().ready()) return;
       if (live.state === 'playing') await this.applyPlaying(live, gen, force);
       else await this.applyHeld(live, gen, force);
     } finally {
@@ -188,12 +232,13 @@ export class PartyController {
   }
 
   private itemDiffers(live: PartyLiveState): boolean {
-    return live.item.mediaId !== this.host.mediaId() || (live.item.episodeId ?? undefined) !== this.host.episodeId();
+    const cur = this.out().item();
+    return live.item.mediaId !== cur.mediaId || (live.item.episodeId ?? undefined) !== cur.episodeId;
   }
 
   /** idle, paused and waiting all hold the engine paused at the anchor; waiting then reports `ready` once the seek has landed. */
   private async applyHeld(live: PartyLiveState, gen: number, force: boolean): Promise<void> {
-    await this.host.pausePlayback();
+    await this.out().pause();
     if (gen !== this.generation) return;
     if (!(await this.seekIfFar(live.anchor.position, gen, force))) return;
     this.reportReady(live.anchor.position);
@@ -203,24 +248,25 @@ export class PartyController {
     const startAt = live.whenMs ?? live.anchor.serverTimeMs;
     const wait = startAt - this.clock.serverNow();
     if (wait > 0) {
-      await this.host.pausePlayback();
+      await this.out().pause();
       if (gen !== this.generation) return;
       if (!(await this.seekIfFar(live.anchor.position, gen, force))) return;
       this.reportReady(live.anchor.position);
-      this.playTimer = setTimeout(() => this.host.playLocal(), wait);
+      this.playTimer = setTimeout(() => this.out().play(), wait);
       return;
     }
     // Late (or joining mid-play): land on the extrapolated position, then play.
     const target = groupPosition('playing', live.anchor, this.clock.serverNow());
-    if (!(await this.seekIfFar(target, gen, force || this.host.engine()?.paused === true))) return;
-    this.host.playLocal();
-    this.reportReady(this.host.position());
+    if (!(await this.seekIfFar(target, gen, force || this.out().paused()))) return;
+    this.out().play();
+    this.reportReady(this.out().position());
   }
 
   /** False when a newer apply superseded this one while waiting. */
   private async seekIfFar(target: number, gen: number, force: boolean): Promise<boolean> {
-    if (force || Math.abs(this.host.position() - target) > SEEK_SLACK_S) {
-      this.host.seekTo(target);
+    const out = this.out();
+    if (force || Math.abs(out.position() - target) > out.slackS) {
+      out.seekTo(target);
       this.lastCorrectiveSeek = Date.now();
       await this.untilUnlocked(gen);
     }
@@ -235,7 +281,7 @@ export class PartyController {
   private async untilReady(gen: number): Promise<boolean> {
     const deadline = Date.now() + READY_TIMEOUT_MS;
     while (!this.destroyed && gen === this.generation && Date.now() < deadline) {
-      if (this.host.engine() && this.state.videoStarted()) return true;
+      if (this.out().ready()) return true;
       await new Promise<void>((r) => setTimeout(r, POLL_MS));
     }
     return false;
@@ -243,7 +289,7 @@ export class PartyController {
 
   private async untilUnlocked(gen: number): Promise<void> {
     const deadline = Date.now() + UNLOCK_TIMEOUT_MS;
-    while (!this.destroyed && gen === this.generation && this.state.seekLocked() && Date.now() < deadline) {
+    while (!this.destroyed && gen === this.generation && this.out().seekLocked() && Date.now() < deadline) {
       await new Promise<void>((r) => setTimeout(r, POLL_MS));
     }
   }
@@ -262,22 +308,25 @@ export class PartyController {
 
   private checkDrift(): void {
     const live = this.party.live();
-    const engine = this.host?.engine();
-    if (!live || !engine || live.state !== 'playing' || this.applying) return;
+    const out = this.out();
+    if (!live || !this.host || !out.ready() || live.state !== 'playing' || this.applying) return;
     const now = this.clock.serverNow();
-    if (engine.paused || this.state.buffering() || now < (live.whenMs ?? live.anchor.serverTimeMs)) return;
-    const drift = this.host.position() - groupPosition('playing', live.anchor, now);
+    if (out.paused() || out.buffering() || now < (live.whenMs ?? live.anchor.serverTimeMs)) return;
+    const drift = out.position() - groupPosition('playing', live.anchor, now);
+    const rateOk = !!out.rate && this.rateSupported();
     const action = driftAction(drift, {
-      rateSupported: this.rateSupported(),
+      rateSupported: rateOk,
       msSinceSeek: Date.now() - this.lastCorrectiveSeek,
-      seekLocked: this.state.seekLocked(),
+      seekLocked: out.seekLocked(),
+      ...out.drift,
     });
     if (action.kind === 'seek') {
       this.lastCorrectiveSeek = Date.now();
-      this.host.seekTo(groupPosition('playing', live.anchor, now));
+      out.seekTo(groupPosition('playing', live.anchor, now));
       return;
     }
+    if (!out.rate) return;
     const rate = action.kind === 'rate' ? action.rate : 1;
-    if (engine.playbackRate !== rate && (action.kind === 'rate' || this.rateSupported())) engine.playbackRate = rate;
+    if (out.rate.get() !== rate && (action.kind === 'rate' || this.rateSupported())) out.rate.set(rate);
   }
 }

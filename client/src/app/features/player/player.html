@@ -191,7 +191,7 @@
     (speedChange)="onSpeedChange($event)"
     (back)="onBack()"
     [pipAvailable]="pipAvailable()"
-    [canPickDevice]="(castService.isAvailable() || airPlay.available() || remoteService.targets().length > 0) && !device.isTv() && !partyCtl.active()"
+    [canPickDevice]="(castService.isAvailable() || airPlay.available() || remoteService.targets().length > 0) && !device.isTv()"
     [castConnected]="castService.isConnected() || airPlay.videoActive()"
     [airPlayConnected]="airPlay.routeActive() || airPlay.videoActive()"
     [castConnecting]="castService.connecting()"

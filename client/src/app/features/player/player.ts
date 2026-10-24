@@ -533,7 +533,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     } else if (!casting && this.wasCasting) {
       // Just disconnected — reload local engine and resume at Cast position
       const castPos = this.castService.currentTime();
-      this.resumeLocalAfterCast(castPos);
+      void this.resumeLocalAfterCast(castPos).then(() => {
+        if (this.partyCtl.active()) this.partyCtl.resync();
+      });
     }
     this.wasCasting = casting;
   });
@@ -2254,7 +2256,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (this.engine) await this.engine.unload();
     await this.startCastFromPlayer(currentPos);
     this.castPlayerService.expanded.set(true);
-    this.onBack();
+    // Closing the player leaves the party: it stays mounted behind the cast overlay.
+    if (this.partyCtl.active()) this.partyCtl.resync();
+    else this.onBack();
   }
 
   onDisconnectCast() {
@@ -2591,6 +2595,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         this.subs.availableSubtitles(), this.mediaFileId, this.mediaId, this.targetAudioLanguage(),
       );
       await this.startCastFromPlayer(startPos, startSubtitle?.id ?? null);
+      if (this.partyCtl.active()) this.partyCtl.resync();
     } else if (!this.isNativeEngine() || this.isDesktopNative) {
       this.engine!.play().catch(() => {
         // No user gesture on a remotely started device: the browser refuses autoplay. Reported so a controller

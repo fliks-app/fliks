@@ -6,6 +6,7 @@ import { MediaService } from '../../core/services/api/media.service';
 import { StreamingApiService } from '../../core/services/api/streaming-api.service';
 import { LikesApiService } from '../../core/services/api/likes-api.service';
 import { CastService } from '../../core/services/cast.service';
+import { CastPlayerService } from '../../core/services/cast-player.service';
 import { DeviceService } from '../../core/services/device.service';
 import { NavbarService } from '../../core/services/navbar.service';
 import { NotificationLike } from '../../core/services/notification-like';
@@ -43,6 +44,7 @@ export class QueueController {
   private readonly state = inject(PlayerStateService);
   private readonly playerSettings = inject(PlayerSettingsService);
   private readonly castService = inject(CastService);
+  private readonly castPlayer = inject(CastPlayerService);
   private readonly device = inject(DeviceService);
   private readonly mediaService = inject(MediaService);
   private readonly streamingApi = inject(StreamingApiService);
@@ -245,6 +247,19 @@ export class QueueController {
       return;
     }
     if (this.state.ended()) await this.markCurrentComplete();
+    if (this.castService.isConnected()) {
+      // A remount would close the player, which leaves the party: switch the receiver in place.
+      const media = await this.mediaService.getOne(item.mediaId).catch(() => null);
+      await this.castPlayer.quickStart({
+        mediaFileId,
+        mediaId: item.mediaId,
+        episodeId: item.episodeId ?? undefined,
+        title: media?.title ?? '',
+        fanartUrl: media?.fanartUrl ?? null,
+        startTime: 0,
+      });
+      return;
+    }
     await this.loadItem(queueItem, mediaFileId);
   }
 
