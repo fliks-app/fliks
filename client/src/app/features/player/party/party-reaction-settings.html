@@ -48,16 +48,17 @@
                   <h3 class="mb-1 text-sm font-medium opacity-70">{{ s.labelKey ? (s.labelKey | translate) : s.label }}</h3>
                 }
                 @if (s.key === 'bar') {
+                  <!-- One row (8 at most): the horizontal strategy slides siblings with transforms, which animate; mixed reorders the DOM. -->
                   <div
                     cdkDropList
-                    cdkDropListOrientation="mixed"
-                    class="grid grid-cols-6 gap-2 sm:grid-cols-8 md:grid-cols-10"
+                    cdkDropListOrientation="horizontal"
+                    class="flex gap-2 overflow-x-auto pt-2"
                     (cdkDropListDropped)="catalog.move($event.previousIndex, $event.currentIndex)"
                   >
                     @for (e of s.emojis; track e) {
-                      <div cdkDrag cdkDragPreviewContainer="parent" [cdkDragDisabled]="isTv()" class="cursor-grab">
+                      <div cdkDrag cdkDragPreviewContainer="parent" [cdkDragDisabled]="isTv()" class="w-14 shrink-0 cursor-grab">
                         <ng-container *ngTemplateOutlet="cell; context: { $implicit: e }" />
-                        <div *cdkDragPlaceholder class="h-11 w-full rounded-xl border-2 border-dashed border-base-content/30 bg-base-content/10"></div>
+                        <div *cdkDragPlaceholder class="h-11 w-14 shrink-0 rounded-xl border-2 border-dashed border-base-content/30 bg-base-content/10"></div>
                       </div>
                     }
                   </div>
