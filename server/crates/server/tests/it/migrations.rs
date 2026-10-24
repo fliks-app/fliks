@@ -514,7 +514,7 @@ async fn m1787900_turns_level_into_levels(pool: PgPool) {
 }
 
 const V4_VERSIONS: i64 = 81;
-const SQL_FILES: i64 = 98;
+const SQL_FILES: i64 = 99;
 const LAST_V4_VERSION: i64 = 1_786_300_000_000;
 
 #[sqlx::test(migrations = false)]
