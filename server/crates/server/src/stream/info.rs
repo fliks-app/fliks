@@ -192,12 +192,14 @@ async fn run(
             Err(_) => None,
         },
     };
-    let settings = crate::engine::load_streaming(&st.db).await?;
-    hardware::apply(st, &settings, false);
-
     let mut info = file.info.take();
-    let held = scan::lookup(st, file.id, &file.absolute, info.as_mut()).await;
-    let position = start_position(st, a, &q, &file).await?;
+    let (settings, held, position) = tokio::join!(
+        crate::engine::load_streaming(&st.db),
+        scan::lookup(st, file.id, &file.absolute, info.as_mut()),
+        start_position(st, a, &q, &file),
+    );
+    hardware::apply(st, &settings?, false);
+    let position = position?;
     file.info = info;
     let renditions = if device.supports_hls_subtitles == Some(true) {
         Some(burn_in::renditions(st, &file).await)
@@ -255,7 +257,17 @@ async fn run(
         source_version: held.version,
         subtitle_renditions: renditions,
     };
-    let open = match st.engine.open_session(&request).await {
+    let fps = file
+        .info
+        .as_ref()
+        .and_then(|i| i.video.first())
+        .and_then(|v| v.frame_rate.as_deref())
+        .and_then(parse_source_fps);
+    let (open, (markers, pre_roll, edl)) = tokio::join!(
+        st.engine.open_session(&request),
+        side_reads(st, a, &file, fps)
+    );
+    let open = match open {
         Ok(o) => o,
         Err(e) => {
             if let (Some(t), Some(u)) = (&target, attributed) {
@@ -274,14 +286,19 @@ async fn run(
         position,
     );
     rescan_hint(st, &open, &file);
-    let fps = file
-        .info
-        .as_ref()
-        .and_then(|i| i.video.first())
-        .and_then(|v| v.frame_rate.as_deref())
-        .and_then(parse_source_fps);
-    let (markers, pre_roll, edl) = side_reads(st, a, &file, q.download, fps).await;
-    Ok(assemble(&open, &file, markers, pre_roll, edl))
+    if let (false, Some(media)) = (q.download, file.media_id)
+        && let Err(e) = db::mark_started(
+            &st.db,
+            a.user.id,
+            media,
+            file.id,
+            file.episode_id.filter(|e| *e != 0),
+        )
+        .await
+    {
+        tracing::warn!("Failed to mark session started: {e}");
+    }
+    Ok(assemble(&open, &file, position, markers, pre_roll, edl))
 }
 
 fn check_engine(st: &AppState) -> Result<(), AppError> {
@@ -361,19 +378,18 @@ fn register_live(
     }
 }
 
-/// The markers, the pre-roll and the EDL of a file; the session is also marked started.
+/// The markers, the pre-roll and the EDL of a file.
 async fn side_reads(
     st: &AppState,
     a: &crate::http::auth::Authed,
     file: &ResolvedFile,
-    download: bool,
     fps: Option<f64>,
 ) -> (
     Option<db::Markers>,
     Option<Vec<preroll::Item>>,
     Option<Vec<fliks_domain::edl::EdlRange>>,
 ) {
-    let (markers, pre_roll, edl, _) = tokio::join!(
+    let (markers, pre_roll, edl) = tokio::join!(
         async {
             let episode = file.episode_id.filter(|e| *e != 0)?;
             db::markers(&st.db, episode)
@@ -394,20 +410,6 @@ async fn side_reads(
                 edl::read(st, &file.absolute, fps).await
             } else {
                 None
-            }
-        },
-        async {
-            if let (false, Some(media)) = (download, file.media_id)
-                && let Err(e) = db::mark_started(
-                    &st.db,
-                    a.user.id,
-                    media,
-                    file.id,
-                    file.episode_id.filter(|e| *e != 0),
-                )
-                .await
-            {
-                tracing::warn!("Failed to mark session started: {e}");
             }
         },
     );
@@ -435,6 +437,7 @@ fn rescan_hint(st: &AppState, open: &OpenSessionResponse, file: &ResolvedFile) {
 fn assemble(
     open: &OpenSessionResponse,
     file: &ResolvedFile,
+    position: f64,
     markers: Option<db::Markers>,
     pre_roll: Option<Vec<preroll::Item>>,
     edl: Option<Vec<fliks_domain::edl::EdlRange>>,
@@ -502,6 +505,7 @@ fn assemble(
     if let Some(p) = pre_roll {
         put("preRoll", json!(p));
     }
+    put("startAtSeconds", position.into());
     put("sessionId", open.session_id.clone().into());
     put("profileHash", json!(open.profile_hash));
     Value::Object(out)

@@ -693,7 +693,7 @@ export class CastPlayerService {
     burnInId: number | undefined,
     audioIdx: number | undefined,
     quality: string | undefined,
-    startAt: number,
+    startAt: number | undefined,
   ) {
     const request = (profile: DeviceProfile) =>
       this.streamingApi.getPlaybackInfo(mfId, profile, burnInId, audioIdx, quality, startAt);
@@ -921,17 +921,11 @@ export class CastPlayerService {
     const needsMediaFetch =
       !opts.streamInfo ||
       this.playerSettings.get().audioSelectionMode === 'original';
-    const needsSavedState = opts.startTime == null;
-    const [mediaResult, subsResult, savedState, castInfo] = await Promise.all([
+    const [mediaResult, subsResult, castInfo] = await Promise.all([
       needsMediaFetch
         ? this.mediaService.getOne(opts.mediaId).catch(() => null)
         : Promise.resolve(null),
       this.subtitlesApi.getForMedia(opts.mediaId).catch(() => [] as SubtitleFileRow[]),
-      needsSavedState
-        ? this.streamingApi
-            .getPlaybackState(opts.mediaId, opts.episodeId)
-            .catch(() => null)
-        : Promise.resolve(null),
       this.authService.getCastInfo(),
     ]);
 
@@ -943,13 +937,6 @@ export class CastPlayerService {
       if (!fanartUrl && mediaResult.fanartUrl) fanartUrl = mediaResult.fanartUrl;
     }
     if (fanartUrl) fanartUrl = this.serverConfig.resolveUrl(fanartUrl);
-
-    // Resolve start position: explicit > saved playback state > 0
-    let startTime = opts.startTime;
-    if (startTime == null && savedState && !savedState.completed && savedState.positionSeconds > 10) {
-      startTime = savedState.positionSeconds;
-    }
-    startTime ??= 0;
 
     const launchPick = launchPickFor(opts.tracks, opts.mediaFileId);
     const audioStreams: AudioStreamChoice[] = streamInfo?.audio ?? [];
@@ -995,8 +982,10 @@ export class CastPlayerService {
     const startQuality = cs.maxQuality === 'original' ? '1080p' : cs.maxQuality;
     const pi = await this.getCastPlaybackInfo(
       opts.mediaFileId, castBurnInId(subtitleInfos, startSubtitle?.id ?? null) ?? undefined,
-      audioIndex, startQuality, Math.floor(startTime),
+      audioIndex, startQuality, opts.startTime == null ? undefined : Math.floor(opts.startTime),
     );
+    // Explicit start, else the server's resume point.
+    const startTime = opts.startTime ?? pi.startAtSeconds;
 
     const qualities = buildCastQualityOptions(pi.qualities, cs.maxQuality);
     const activeQualityId = qualities[0]?.id ?? '1080p';
