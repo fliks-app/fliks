@@ -1,7 +1,7 @@
 .reaction {
   position: absolute;
   bottom: 10%;
-  font-size: 2rem;
+  font-size: 3rem;
   animation: party-rise 3s ease-out forwards;
 }
 @keyframes party-rise {
