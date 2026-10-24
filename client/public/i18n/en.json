@@ -3654,7 +3654,7 @@
     "person_link": "Via the link",
     "person_absent": "Not connected",
     "policy_everyone": "Everyone controls playback",
-    "manage": "Manage",
+    "settings": "Settings",
     "people_connected_one": "{{count}} connected",
     "people_connected_other": "{{count}} connected",
     "people_missing_one": "{{count}} not here",

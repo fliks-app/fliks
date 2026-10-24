@@ -3654,7 +3654,7 @@
     "person_link": "Por el enlace",
     "person_absent": "No conectado",
     "policy_everyone": "Todos controlan la reproducción",
-    "manage": "Gestionar",
+    "settings": "Ajustes",
     "people_connected_one": "{{count}} conectado",
     "people_connected_other": "{{count}} conectados",
     "people_missing_one": "{{count}} ausente",

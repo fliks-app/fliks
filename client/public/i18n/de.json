@@ -3654,7 +3654,7 @@
     "person_link": "Über den Link",
     "person_absent": "Nicht verbunden",
     "policy_everyone": "Alle steuern die Wiedergabe",
-    "manage": "Verwalten",
+    "settings": "Einstellungen",
     "people_connected_one": "{{count}} verbunden",
     "people_connected_other": "{{count}} verbunden",
     "people_missing_one": "{{count}} fehlt",

@@ -1,0 +1,38 @@
+<dialog #dialog class="modal" [style.padding-bottom.px]="keyboard.height()">
+  <div class="modal-box max-w-md" [style.max-height]="keyboard.height() ? 'calc(100% - 1rem)' : null">
+    <app-modal-header [title]="'party.panel_menu' | translate" />
+    @let v = view();
+    <div class="flex flex-col gap-4 pt-2">
+      <app-party-host-switches [value]="v" [disabled]="busy()" (changed)="setSwitches($event)" />
+
+      @if (v.inviteToken) {
+        <div class="flex flex-col gap-2">
+          <h3 class="text-sm font-medium opacity-70">{{ 'party.link' | translate }}</h3>
+          <div appTvRow class="flex items-center gap-2">
+            <input type="text" readonly class="input input-bordered min-w-0 flex-1" [value]="link()" [attr.aria-label]="'party.link' | translate" />
+            <button type="button" class="btn btn-ghost shrink-0" [disabled]="busy()" (click)="regenerate()">{{ 'party.regenerate_link' | translate }}</button>
+          </div>
+        </div>
+      }
+
+      @if (v.status === 'scheduled') {
+        <div appTvRow class="flex flex-wrap gap-2">
+          <button type="button" class="btn btn-ghost" (click)="openReschedule()">{{ 'party.reschedule' | translate }}</button>
+          <button type="button" class="btn btn-ghost" (click)="inviting.set(!inviting())">{{ 'party.invite_more' | translate }}</button>
+        </div>
+        @if (rescheduling()) {
+          <div class="flex items-center gap-2">
+            <input type="datetime-local" class="input input-bordered min-w-0 flex-1" [ngModel]="newWhen()" (ngModelChange)="newWhen.set($event)" [attr.aria-label]="'party.reschedule' | translate" />
+            <button type="button" class="btn btn-primary" [disabled]="busy() || !newWhen()" (click)="reschedule()">{{ 'common.save' | translate }}</button>
+          </div>
+        }
+        @if (inviting()) {
+          <app-party-invitee-picker [exclude]="excluded()" [(selected)]="newInvitees" />
+          <button type="button" class="btn btn-primary self-start" [disabled]="busy() || !newInvitees().length" (click)="invite()">{{ 'party.invite' | translate }}</button>
+        }
+        <button type="button" class="btn btn-error btn-outline" [disabled]="busy()" (click)="cancel()">{{ 'party.cancel' | translate }}</button>
+      }
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button tabindex="-1">close</button></form>
+</dialog>

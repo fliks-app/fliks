@@ -3654,7 +3654,7 @@
     "person_link": "Via le lien",
     "person_absent": "Non connecté",
     "policy_everyone": "Tout le monde contrôle la lecture",
-    "manage": "Gérer",
+    "settings": "Réglages",
     "people_connected_one": "{{count}} connecté",
     "people_connected_other": "{{count}} connectés",
     "people_missing_one": "{{count}} absent",

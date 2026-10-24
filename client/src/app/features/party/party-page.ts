@@ -1,10 +1,9 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, OnDestroy, OnInit, computed, effect, inject, signal, untracked } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, OnDestroy, OnInit, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { NgTemplateOutlet } from '@angular/common';
-import { PartyApiService, type PartyDto, type PartySummaryDto, type PartySwitches } from '../../core/services/api/party-api.service';
+import { PartyApiService, type PartyDto, type PartySummaryDto } from '../../core/services/api/party-api.service';
 import { MediaService, type Media } from '../../core/services/api/media.service';
 import { saveFile } from '../../core/plugins/save-file.plugin';
 import { buildPartyIcs } from './party-ics';
@@ -17,9 +16,9 @@ import { formatTime } from '../../core/utils/player.utils';
 import { TvRowDirective } from '../../shared/directives/tv-row.directive';
 import { TvSectionDirective } from '../../shared/directives/tv-section.directive';
 import { connectedCount, missingCount, partyPeople, withoutVoice, type PartyPerson } from '../player/party/party-people';
+import { PartyHostDialogComponent } from './party-host-dialog';
 import { PartyPersonRowComponent } from '../player/party/party-person-row';
-import { PartyHostSwitchesComponent } from '../player/party/party-host-switches';
-import { LucideCalendarPlus, LucideCheck, LucidePlay, LucideShare2 } from '@lucide/angular';
+import { LucideCalendarPlus, LucideCheck, LucidePlay, LucideSettings, LucideShare2 } from '@lucide/angular';
 import { BackgroundService } from '../../core/services/background.service';
 import { DeviceService } from '../../core/services/device.service';
 import { NavbarService } from '../../core/services/navbar.service';
@@ -31,8 +30,6 @@ import { UserAvatarComponent } from '../../shared/components/user-avatar/user-av
 import { armPageSlide } from '../../shared/utils/page-slide';
 import { episodeLabel } from '../../shared/utils/episode-label';
 import { pickFanart } from '../../shared/utils/media-artwork.util';
-import { PartyInviteePickerComponent } from './party-invitee-picker';
-import { toLocalInput } from './party-create-modal';
 import { partyWhen } from './party-time';
 import { TranslatePluralPipe } from '../../core/pipes/translate-plural.pipe';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
@@ -40,13 +37,13 @@ import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 /** The lobby opens this long before the scheduled time (server `LOBBY_OPEN_BEFORE_MS`). */
 const LOBBY_OPEN_MS = 15 * 60_000;
 
-/** `/parties/:id`: a party's page. Scheduled: info, link and host actions; lobby open: members, ready and start; live: join. */
+/** `/parties/:id`: a party's page. Scheduled: info and host actions; lobby open: members, ready and start; live: join. */
 @Component({
   selector: 'app-party-page',
   imports: [
-    FormsModule, NgTemplateOutlet, RouterLink, SynopsisComponent, TranslatePipe, ResolveUrlPipe, TranslatePluralPipe, TvSectionDirective, TvRowDirective, PartyHostSwitchesComponent, PartyInviteePickerComponent, PartyPersonRowComponent,
+    NgTemplateOutlet, RouterLink, SynopsisComponent, TranslatePipe, ResolveUrlPipe, TranslatePluralPipe, TvSectionDirective, TvRowDirective, PartyHostDialogComponent, PartyPersonRowComponent,
     MobileFanartHeroComponent, UserAvatarComponent,
-    LucideCalendarPlus, LucideCheck, LucidePlay, LucideShare2,
+    LucideCalendarPlus, LucideCheck, LucidePlay, LucideSettings, LucideShare2,
   ],
   templateUrl: './party-page.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -68,16 +65,14 @@ export class PartyPageComponent implements OnInit, OnDestroy {
   private readonly device = inject(DeviceService);
   private readonly mdUp = mediaQuerySignal(MD_BREAKPOINT_QUERY);
 
+  protected readonly hostDialog = viewChild(PartyHostDialogComponent);
+
   private readonly id = Number(this.route.snapshot.params['id']);
   private readonly token: string | undefined = this.route.snapshot.queryParams['token'];
 
   private readonly loaded = signal<PartyDto | null>(null);
   protected readonly gone = signal(false);
   protected readonly now = signal(Date.now());
-  protected readonly rescheduling = signal(false);
-  protected readonly newWhen = signal('');
-  protected readonly inviting = signal(false);
-  protected readonly newInvitees = signal<number[]>([]);
   protected readonly busy = signal(false);
   private joining = false;
   protected readonly desktopLayout = computed(() => this.device.isTv() || this.mdUp());
@@ -149,7 +144,6 @@ export class PartyPageComponent implements OnInit, OnDestroy {
     this.joined() ? this.party.isHost() : this.view()?.host.userId === this.auth.user()?.id,
   );
   protected readonly link = computed(() => this.party.inviteLink(this.view()?.inviteToken ?? null));
-  protected readonly excluded = computed(() => [this.view()?.host.userId ?? 0, ...(this.view()?.invitees.map((i) => i.userId) ?? [])]);
   protected readonly ready = computed(() => this.party.me()?.status === 'ready');
 
   constructor() {
@@ -249,7 +243,7 @@ export class PartyPageComponent implements OnInit, OnDestroy {
     void this.party.start();
   }
 
-  private apply(dto: PartyDto): void {
+  protected apply(dto: PartyDto): void {
     this.loaded.set(dto);
     if (this.joined()) this.party.applySnapshot(dto);
   }
@@ -265,48 +259,6 @@ export class PartyPageComponent implements OnInit, OnDestroy {
     }
   }
 
-  protected openReschedule(): void {
-    const at = this.view()?.scheduledAt;
-    this.newWhen.set(toLocalInput(at ? new Date(at) : new Date()));
-    this.rescheduling.set(true);
-  }
-
-  protected async reschedule(): Promise<void> {
-    if (!this.newWhen()) return;
-    const at = new Date(this.newWhen());
-    const ok = await this.confirm.confirm({
-      title: this.translate.instant('party.reschedule_title'),
-      message: this.translate.instant('party.reschedule_message', {
-        name: this.view()?.name,
-        when: partyWhen(at.toISOString(), this.translate, this.now()),
-      }),
-      confirmLabel: this.translate.instant('party.reschedule'),
-    });
-    if (!ok) return;
-    const dto = await this.run(() => this.api.update(this.id, { scheduledAt: at.toISOString() }));
-    if (dto) {
-      this.apply(dto);
-      this.rescheduling.set(false);
-    }
-  }
-
-  protected async cancel(): Promise<void> {
-    const ok = await this.confirm.confirm({
-      title: this.translate.instant('party.cancel_title'),
-      message: this.translate.instant('party.cancel_message', { name: this.view()?.name }),
-      variant: 'danger',
-    });
-    if (!ok || (await this.run(() => this.api.end(this.id))) === null) return;
-    this.toast.info(this.translate.instant('party.closed_host_ended'));
-    void this.router.navigateByUrl('/');
-  }
-
-  protected async updateSettings(patch: Partial<PartySwitches>): Promise<void> {
-    if (this.joined()) return this.party.updateSettings(patch);
-    const dto = await this.run(() => this.api.update(this.id, patch));
-    if (dto) this.apply(dto);
-  }
-
   /** Host: moves the schedule to now, which opens the lobby; the page then joins it. */
   protected async startNow(): Promise<void> {
     const ok = await this.confirm.confirm({
@@ -317,28 +269,6 @@ export class PartyPageComponent implements OnInit, OnDestroy {
     if (!ok) return;
     const dto = await this.run(() => this.api.update(this.id, { scheduledAt: new Date().toISOString() }));
     if (dto) this.apply(dto);
-  }
-
-  protected async regenerate(): Promise<void> {
-    const ok = await this.confirm.confirm({
-      title: this.translate.instant('party.regenerate_title'),
-      message: this.translate.instant('party.regenerate_message'),
-      confirmLabel: this.translate.instant('party.regenerate_link'),
-      variant: 'warning',
-    });
-    if (!ok) return;
-    const dto = await this.run(() => this.api.update(this.id, { regenerateToken: true }));
-    if (dto) this.apply(dto);
-  }
-
-  protected async invite(): Promise<void> {
-    const ids = this.newInvitees();
-    if (!ids.length) return;
-    const dto = await this.run(() => this.api.invite(this.id, ids));
-    if (!dto) return;
-    this.apply(dto);
-    this.newInvitees.set([]);
-    this.inviting.set(false);
   }
 
   protected home(): void {

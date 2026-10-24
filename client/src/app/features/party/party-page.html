@@ -73,6 +73,9 @@
             <span class="loading loading-spinner loading-md"></span>
           }
         }
+        @if (h.status === 'scheduled' && canHost() && !joined()) {
+          <button type="button" class="btn btn-primary" [disabled]="busy()" (click)="startNow()">{{ 'party.start_now' | translate }}</button>
+        }
         @if (view()?.inviteToken) {
           <button type="button" class="btn btn-ghost gap-2" (click)="copy()">
             <svg lucideShare2 class="h-4 w-4"></svg>
@@ -83,6 +86,12 @@
           <button type="button" class="btn btn-ghost gap-2" (click)="addToCalendar()">
             <svg lucideCalendarPlus class="h-4 w-4"></svg>
             {{ 'party.add_to_calendar' | translate }}
+          </button>
+        }
+        @if (canHost() && view()) {
+          <button type="button" class="btn btn-ghost gap-2" (click)="hostDialog()?.show()">
+            <svg lucideSettings class="h-4 w-4"></svg>
+            {{ 'party.settings' | translate }}
           </button>
         }
       </div>
@@ -139,42 +148,11 @@
               }
             </ul>
           </section>
-
-          @if (v.inviteToken) {
-            <section class="flex flex-col gap-3">
-              <h2 class="text-lg font-bold">{{ 'party.link' | translate }}</h2>
-              <input type="text" readonly class="input input-bordered w-full" [value]="link()" [attr.aria-label]="'party.link' | translate" />
-            </section>
-          }
-
-          @if (canHost() && v.status === 'scheduled') {
-            <section class="flex flex-col gap-3">
-              <h2 class="text-lg font-bold">{{ 'party.manage' | translate }}</h2>
-              <app-party-host-switches [value]="v" [disabled]="busy()" (changed)="updateSettings($event)" />
-              <div appTvRow class="flex flex-wrap gap-2">
-                @if (!joined()) {
-                  <button type="button" class="btn btn-primary" [disabled]="busy()" (click)="startNow()">{{ 'party.start_now' | translate }}</button>
-                }
-                <button type="button" class="btn btn-ghost" (click)="openReschedule()">{{ 'party.reschedule' | translate }}</button>
-                <button type="button" class="btn btn-ghost" [disabled]="busy()" (click)="regenerate()">{{ 'party.regenerate_link' | translate }}</button>
-                <button type="button" class="btn btn-ghost" (click)="inviting.set(!inviting())">{{ 'party.invite_more' | translate }}</button>
-                <button type="button" class="btn btn-error btn-outline" [disabled]="busy()" (click)="cancel()">{{ 'party.cancel' | translate }}</button>
-              </div>
-              @if (rescheduling()) {
-                <div class="flex items-center gap-2">
-                  <input type="datetime-local" class="input input-bordered" [ngModel]="newWhen()" (ngModelChange)="newWhen.set($event)" [attr.aria-label]="'party.reschedule' | translate" />
-                  <button type="button" class="btn btn-primary" [disabled]="busy() || !newWhen()" (click)="reschedule()">{{ 'common.save' | translate }}</button>
-                </div>
-              }
-              @if (inviting()) {
-                <app-party-invitee-picker [exclude]="excluded()" [(selected)]="newInvitees" />
-                <button type="button" class="btn btn-primary self-start" [disabled]="busy() || !newInvitees().length" (click)="invite()">{{ 'party.invite' | translate }}</button>
-              }
-            </section>
-          }
         </div>
-
       </div>
+      @if (canHost()) {
+        <app-party-host-dialog [view]="v" [joined]="joined()" [link]="link()" (updated)="apply($event)" />
+      }
     } @else {
       <div class="flex justify-center py-8"><span class="loading loading-spinner loading-lg"></span></div>
     }
