@@ -203,7 +203,7 @@ import { DefaultFocusDirective } from '../../shared/directives/default-focus.dir
       -webkit-transform: translateZ(0);
     }
     @media (prefers-reduced-motion: no-preference) {
-      .party-shell > .player-container {
+      .party-shell.in-party > .player-container {
         transition:
           right 250ms cubic-bezier(0.2, 0, 0, 1),
           height 250ms cubic-bezier(0.2, 0, 0, 1);
