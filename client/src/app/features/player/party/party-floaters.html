@@ -2,7 +2,11 @@
   @for (r of party.reactions(); track r.key) {
     <span class="reaction" [style.left.%]="r.left" [attr.title]="r.username"><app-party-emoji [emoji]="r.emoji" /></span>
   }
-  <div class="absolute bottom-24 left-4 flex max-w-[70%] flex-col items-start gap-1">
+  <!-- Under the top bar, the newest message last. -->
+  <div
+    class="absolute flex max-w-[70%] flex-col items-end gap-1"
+    style="top: max(4.5rem, env(safe-area-inset-top)); right: max(1rem, env(safe-area-inset-right))"
+  >
     @for (m of party.bubbles(); track m.id) {
       <div class="rounded-2xl bg-black/70 px-3 py-1.5 text-sm text-white">
         @if (m.system) {
