@@ -10,6 +10,7 @@ import { ToastService } from '../../core/services/toast.service';
 import { ModalHeaderComponent } from '../../shared/components/modal-header';
 import { TvRowDirective } from '../../shared/directives/tv-row.directive';
 import { PartyHostSwitchesComponent } from '../player/party/party-host-switches';
+import { runBusy } from './party-busy';
 import { toLocalInput } from './party-create-modal';
 import { PartyInviteePickerComponent } from './party-invitee-picker';
 import { partyWhen } from './party-time';
@@ -52,20 +53,9 @@ export class PartyHostDialogComponent {
     this.dialog().nativeElement.showModal();
   }
 
-  private async run<T>(action: () => Promise<T>): Promise<T | null> {
-    this.busy.set(true);
-    try {
-      return await action();
-    } catch {
-      return null;
-    } finally {
-      this.busy.set(false);
-    }
-  }
-
   protected async setSwitches(patch: Partial<PartySwitches>): Promise<void> {
     if (this.joined()) return this.party.updateSettings(patch);
-    const dto = await this.run(() => this.api.update(this.view().id, patch));
+    const dto = await runBusy(this.busy, () => this.api.update(this.view().id, patch));
     if (dto) this.updated.emit(dto);
   }
 
@@ -77,7 +67,7 @@ export class PartyHostDialogComponent {
       variant: 'warning',
     });
     if (!ok) return;
-    const dto = await this.run(() => this.api.update(this.view().id, { regenerateToken: true }));
+    const dto = await runBusy(this.busy, () => this.api.update(this.view().id, { regenerateToken: true }));
     if (dto) this.updated.emit(dto);
   }
 
@@ -99,7 +89,7 @@ export class PartyHostDialogComponent {
       confirmLabel: this.translate.instant('party.reschedule'),
     });
     if (!ok) return;
-    const dto = await this.run(() => this.api.update(this.view().id, { scheduledAt: at.toISOString() }));
+    const dto = await runBusy(this.busy, () => this.api.update(this.view().id, { scheduledAt: at.toISOString() }));
     if (!dto) return;
     this.updated.emit(dto);
     this.rescheduling.set(false);
@@ -108,7 +98,7 @@ export class PartyHostDialogComponent {
   protected async invite(): Promise<void> {
     const ids = this.newInvitees();
     if (!ids.length) return;
-    const dto = await this.run(() => this.api.invite(this.view().id, ids));
+    const dto = await runBusy(this.busy, () => this.api.invite(this.view().id, ids));
     if (!dto) return;
     this.updated.emit(dto);
     this.newInvitees.set([]);
@@ -121,7 +111,7 @@ export class PartyHostDialogComponent {
       message: this.translate.instant('party.cancel_message', { name: this.view().name }),
       variant: 'danger',
     });
-    if (!ok || (await this.run(() => this.api.end(this.view().id))) === null) return;
+    if (!ok || (await runBusy(this.busy, () => this.api.end(this.view().id))) === null) return;
     this.dialog().nativeElement.close();
     this.toast.info(this.translate.instant('party.closed_host_ended'));
     void this.router.navigateByUrl('/');

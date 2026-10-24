@@ -235,8 +235,8 @@ export class QueueController {
     }
   }
 
-  /** Loads the item a party switched to, counting the one it ends as watched. */
-  async openPartyItem(item: { mediaId: number; mediaFileId: number | null; episodeId: number | null }): Promise<void> {
+  /** Loads the item a party switched to, counting the one it ends as watched; false when it cannot be opened. */
+  async openPartyItem(item: { mediaId: number; mediaFileId: number | null; episodeId: number | null }): Promise<boolean> {
     this.queue.syncTo(item.mediaId, item.episodeId ?? undefined);
     const queueItem: QueueItem = {
       mediaId: item.mediaId,
@@ -247,7 +247,7 @@ export class QueueController {
     const mediaFileId = await this.resolveItemFileId(queueItem);
     if (mediaFileId == null) {
       this.toast.error(this.translate.instant('player.next_unavailable'));
-      return;
+      return false;
     }
     if (this.state.ended()) await this.markCurrentComplete();
     if (this.castService.isConnected()) {
@@ -261,9 +261,10 @@ export class QueueController {
         fanartUrl: media?.fanartUrl ?? null,
         startTime: 0,
       });
-      return;
+      return true;
     }
     await this.loadItem(queueItem, mediaFileId);
+    return true;
   }
 
   /** Jumps to a queue item the user picked: unlike {@link advance} it does not mark the

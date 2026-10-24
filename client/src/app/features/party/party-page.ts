@@ -3,12 +3,13 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { NgTemplateOutlet } from '@angular/common';
-import { PartyApiService, type PartyDto, type PartySummaryDto } from '../../core/services/api/party-api.service';
+import { PartyApiService, type PartyDto, type PartyPreview, type PartySummaryDto } from '../../core/services/api/party-api.service';
 import { MediaService, type Media } from '../../core/services/api/media.service';
 import { saveFile } from '../../core/plugins/save-file.plugin';
 import { buildPartyIcs } from './party-ics';
 import { AuthService } from '../../core/services/auth.service';
 import { ConfirmationService } from '../../core/services/confirmation.service';
+import { ClockService } from '../../core/services/party/clock.service';
 import { PartyService } from '../../core/services/party/party.service';
 import { SseService } from '../../core/services/sse.service';
 import { ToastService } from '../../core/services/toast.service';
@@ -16,6 +17,7 @@ import { formatTime } from '../../core/utils/player.utils';
 import { TvRowDirective } from '../../shared/directives/tv-row.directive';
 import { TvSectionDirective } from '../../shared/directives/tv-section.directive';
 import { connectedCount, missingCount, partyPeople, withoutVoice, type PartyPerson } from '../player/party/party-people';
+import { runBusy } from './party-busy';
 import { PartyHostDialogComponent } from './party-host-dialog';
 import { PartyPersonRowComponent } from '../player/party/party-person-row';
 import { LucideCalendarPlus, LucideCheck, LucidePlay, LucideSettings, LucideShare2 } from '@lucide/angular';
@@ -34,8 +36,16 @@ import { partyWhen } from './party-time';
 import { TranslatePluralPipe } from '../../core/pipes/translate-plural.pipe';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 
-/** The lobby opens this long before the scheduled time (server `LOBBY_OPEN_BEFORE_MS`). */
-const LOBBY_OPEN_MS = 15 * 60_000;
+const JOIN_RETRY_MS = 10_000;
+
+function findEpisode(media: Media | null, id: number | null | undefined) {
+  if (id == null) return null;
+  for (const season of media?.seasons ?? []) {
+    const episode = season.episodes?.find((e) => e.id === id);
+    if (episode) return { season, episode };
+  }
+  return null;
+}
 
 /** `/parties/:id`: a party's page. Scheduled: info and host actions; lobby open: members, ready and start; live: join. */
 @Component({
@@ -57,6 +67,7 @@ export class PartyPageComponent implements OnInit, OnDestroy {
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
   private readonly sse = inject(SseService);
+  private readonly clock = inject(ClockService);
   private readonly mediaService = inject(MediaService);
   protected readonly party = inject(PartyService);
   protected readonly navbar = inject(NavbarService);
@@ -70,11 +81,12 @@ export class PartyPageComponent implements OnInit, OnDestroy {
   private readonly id = Number(this.route.snapshot.params['id']);
   private readonly token: string | undefined = this.route.snapshot.queryParams['token'];
 
-  private readonly loaded = signal<PartyDto | null>(null);
+  private readonly loaded = signal<PartyPreview | null>(null);
   protected readonly gone = signal(false);
-  protected readonly now = signal(Date.now());
+  /** The server's clock, so a device that runs fast does not open the lobby early. */
+  protected readonly now = signal(this.clock.serverNow());
   protected readonly busy = signal(false);
-  private joining = false;
+  private readonly joining = signal(false);
   protected readonly desktopLayout = computed(() => this.device.isTv() || this.mdUp());
   /** Pairs the page's picture with the home card it opened from. */
   protected readonly posterName = `party-poster-${this.id}`;
@@ -90,11 +102,9 @@ export class PartyPageComponent implements OnInit, OnDestroy {
     return item ? pickFanart({ ...item, id: item.mediaId }) : null;
   });
   protected readonly heroUrl = computed(() => this.fanart() ?? this.head()?.item.posterUrl ?? null);
+  private readonly episodeInfo = computed(() => findEpisode(this.media(), this.head()?.item.episodeId));
   protected readonly overview = computed(() => {
-    const m = this.media();
-    const id = this.head()?.item.episodeId;
-    const ep = id == null ? null : m?.seasons?.flatMap((s) => s.episodes ?? []).find((e) => e.id === id);
-    return ep?.overview || m?.overview || '';
+    return this.episodeInfo()?.episode.overview || this.media()?.overview || '';
   });
   protected readonly mediaLink = computed<string[] | null>(() => {
     const item = this.head()?.item;
@@ -105,22 +115,25 @@ export class PartyPageComponent implements OnInit, OnDestroy {
   });
   protected readonly armSlide = armPageSlide;
   protected readonly episode = computed(() => {
-    const id = this.head()?.item.episodeId;
-    if (id == null) return '';
-    for (const s of this.media()?.seasons ?? []) {
-      const e = s.episodes?.find((x) => x.id === id);
-      if (e) return episodeLabel({ seasonNumber: s.seasonNumber, episodeNumber: e.episodeNumber, episodeTitle: e.title });
-    }
-    return '';
+    const found = this.episodeInfo();
+    return found
+      ? episodeLabel({ seasonNumber: found.season.seasonNumber, episodeNumber: found.episode.episodeNumber, episodeTitle: found.episode.title })
+      : '';
   });
   protected readonly joined = computed(() => this.party.lobby() && this.party.party()?.id === this.id);
+  /** The full snapshot, which a non-member's preview is not. */
+  protected readonly hostView = computed<PartyDto | null>(() => {
+    const v = this.view();
+    return v && 'guests' in v ? (v as PartyDto) : null;
+  });
   private readonly msLeft = computed(() => {
     const at = this.view()?.scheduledAt;
     return at ? Date.parse(at) - this.now() : null;
   });
   protected readonly lobbyOpen = computed(() => {
     const v = this.view();
-    return v?.status === 'scheduled' && (v.live !== null || (this.msLeft() ?? Infinity) <= LOBBY_OPEN_MS);
+    if (v?.status !== 'scheduled') return false;
+    return !!v.live || (v.lobbyOpensAt != null && Date.parse(v.lobbyOpensAt) <= this.now());
   });
   protected readonly countdown = computed(() => {
     const left = this.msLeft();
@@ -136,7 +149,7 @@ export class PartyPageComponent implements OnInit, OnDestroy {
   protected readonly people = computed<PartyPerson[]>(() => {
     const v = this.view();
     const members = this.joined() ? this.party.members() : (v?.live?.members ?? []);
-    return v ? withoutVoice(partyPeople(v.host, v.guests, members, new Set())) : [];
+    return v ? withoutVoice(partyPeople(v.host, v.guests ?? [], members, new Set())) : [];
   });
   protected readonly connectedCount = computed(() => connectedCount(this.people()));
   protected readonly missingCount = computed(() => missingCount(this.people()));
@@ -147,10 +160,16 @@ export class PartyPageComponent implements OnInit, OnDestroy {
   protected readonly ready = computed(() => this.party.me()?.status === 'ready');
 
   constructor() {
-    const tick = setInterval(() => this.now.set(Date.now()), 1000);
-    inject(DestroyRef).onDestroy(() => clearInterval(tick));
+    // The page needs the clock offset before it has joined anything.
+    this.clock.start();
+    const tick = setInterval(() => this.now.set(this.clock.serverNow()), 1000);
+    inject(DestroyRef).onDestroy(() => {
+      clearInterval(tick);
+      if (!this.party.party()) this.clock.stop();
+    });
     this.sse.partyEvents.pipe(takeUntilDestroyed()).subscribe((e) => {
-      if ((e.type === 'party.updated' || e.type === 'party.settings') && e.partyId === this.id) void this.load();
+      // Joined, the service refetches on these and the page follows its copy.
+      if ((e.type === 'party.updated' || e.type === 'party.settings') && e.partyId === this.id && !this.joined()) void this.load();
     });
     this.party.closed.pipe(takeUntilDestroyed()).subscribe(() => void this.router.navigateByUrl('/'));
     effect(() => {
@@ -161,7 +180,7 @@ export class PartyPageComponent implements OnInit, OnDestroy {
     effect(() => this.background.set(this, this.fanart()));
     // The lobby opens by itself while the page is on screen.
     effect(() => {
-      if (!this.lobbyOpen() || this.joined() || this.joining) return;
+      if (!this.lobbyOpen() || this.joined() || this.joining()) return;
       untracked(() => void this.joinLobby());
     });
   }
@@ -185,9 +204,16 @@ export class PartyPageComponent implements OnInit, OnDestroy {
     return handed?.id === this.id ? handed : null;
   }
 
+  /** A member's own copy first (a regenerated token no longer resolves for them), the invite link's preview otherwise. */
+  private fetch(): Promise<PartyPreview> {
+    const token = this.token;
+    if (!token) return this.api.get(this.id);
+    return this.api.get(this.id, true).catch(() => this.api.byToken(token));
+  }
+
   private async load(): Promise<void> {
     try {
-      const dto = await (this.token ? this.api.byToken(this.token) : this.api.get(this.id));
+      const dto = await this.fetch();
       this.gone.set(dto.status === 'ended');
       this.loaded.set(dto);
       if (!this.media()) void this.mediaService.getOne(dto.item.mediaId).then((m) => this.media.set(m), () => undefined);
@@ -197,14 +223,13 @@ export class PartyPageComponent implements OnInit, OnDestroy {
   }
 
   private async joinLobby(): Promise<void> {
-    this.joining = true;
+    this.joining.set(true);
     try {
       await this.party.enter(this.id, this.token);
     } catch {
       /* not open yet or no access: the interceptor toasted it, the page stays informative */
     } finally {
-      // No retry loop on a refusal; the next lobby change (reload) may try again.
-      setTimeout(() => (this.joining = false), 10_000);
+      setTimeout(() => this.joining.set(false), JOIN_RETRY_MS);
     }
   }
 
@@ -220,7 +245,7 @@ export class PartyPageComponent implements OnInit, OnDestroy {
     const v = this.view();
     if (!v?.scheduledAt) return;
     const media = this.media() ?? (await this.mediaService.getOne(v.item.mediaId).catch(() => null));
-    const episode = media?.seasons?.flatMap((s) => s.episodes).find((e) => e.id === v.item.episodeId);
+    const episode = findEpisode(media, v.item.episodeId)?.episode;
     const ics = buildPartyIcs({
       id: v.id,
       name: v.name,
@@ -248,17 +273,6 @@ export class PartyPageComponent implements OnInit, OnDestroy {
     if (this.joined()) this.party.applySnapshot(dto);
   }
 
-  private async run<T>(action: () => Promise<T>): Promise<T | null> {
-    this.busy.set(true);
-    try {
-      return await action();
-    } catch {
-      return null;
-    } finally {
-      this.busy.set(false);
-    }
-  }
-
   /** Host: moves the schedule to now, which opens the lobby; the page then joins it. */
   protected async startNow(): Promise<void> {
     const ok = await this.confirm.confirm({
@@ -267,7 +281,7 @@ export class PartyPageComponent implements OnInit, OnDestroy {
       confirmLabel: this.translate.instant('party.start_now'),
     });
     if (!ok) return;
-    const dto = await this.run(() => this.api.update(this.id, { scheduledAt: new Date().toISOString() }));
+    const dto = await runBusy(this.busy, () => this.api.update(this.id, { scheduledAt: new Date().toISOString() }));
     if (dto) this.apply(dto);
   }
 

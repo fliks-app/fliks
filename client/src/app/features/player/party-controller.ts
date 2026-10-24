@@ -170,13 +170,13 @@ export class PartyController {
     return true;
   }
 
-  /** The server picks the item, skipping what a member cannot open; a film has no queue to step through. */
+  /** The server picks the item, skipping what a member cannot open, and refuses where there is no queue. */
   async requestNext(): Promise<void> {
-    if (this.queueCtl.queueItems().length && this.gate()) await this.party.sendIntent('next');
+    if (this.gate()) await this.party.sendIntent('next');
   }
 
   async requestPrevious(): Promise<void> {
-    if (this.queueCtl.queueItems().length && this.gate()) await this.party.sendIntent('previous');
+    if (this.gate()) await this.party.sendIntent('previous');
   }
 
   /** An item picked from the queue menu: the server moves everyone, this device included. */
@@ -236,7 +236,8 @@ export class PartyController {
     if (!this.out().ended()) return;
     untracked(() => {
       if (!this.party.active() || !this.party.isHost()) return;
-      void this.party.sendIntent('ended');
+      const { mediaId, episodeId } = this.out().item();
+      void this.party.sendIntent('ended', { item: { mediaId, ...(episodeId != null && { episodeId }) } });
     });
   });
 
@@ -247,7 +248,11 @@ export class PartyController {
     try {
       if (!(await this.untilReady(gen))) return;
       if (this.itemDiffers(live)) {
-        await this.queueCtl.openPartyItem(live.item);
+        if (!(await this.queueCtl.openPartyItem(live.item))) {
+          // This device cannot open it: the group must not wait on us.
+          if (gen === this.generation) this.host.onBack();
+          return;
+        }
         if (!(await this.untilReady(gen))) return;
       }
       if (!this.out().ready()) return;

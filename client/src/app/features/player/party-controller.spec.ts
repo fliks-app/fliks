@@ -15,7 +15,7 @@ import { ToastService } from '../../core/services/toast.service';
 import { PartyController, type PartyHost } from './party-controller';
 import { QueueController } from './queue-controller';
 
-function setup(opts: { canControl?: boolean; urlParty?: string; joined?: number; resumes?: boolean; film?: boolean } = {}) {
+function setup(opts: { canControl?: boolean; urlParty?: string; joined?: number; resumes?: boolean; film?: boolean; opens?: boolean } = {}) {
   const party = {
     active: signal(true),
     party: signal(opts.joined != null ? { id: opts.joined } : null),
@@ -49,6 +49,7 @@ function setup(opts: { canControl?: boolean; urlParty?: string; joined?: number;
             { mediaId: 1, mediaFileId: 11, episodeId: 101, title: '' },
           ],
     queueIndex: () => 0,
+    openPartyItem: vi.fn().mockResolvedValue(opts.opens ?? true),
   };
   const toast = { info: vi.fn(), error: vi.fn() };
   const route = { snapshot: { queryParams: opts.urlParty ? { party: opts.urlParty } : {} } };
@@ -175,15 +176,27 @@ describe('PartyController queue', () => {
     state.ended.set(true);
     TestBed.tick();
     await Promise.resolve();
-    expect(party.sendIntent.mock.calls).toEqual([['ended']]);
+    expect(party.sendIntent.mock.calls).toEqual([['ended', { item: { mediaId: 1 } }]]);
     ctl.dispose();
   });
 
-  it('has nothing to step through on a film', async () => {
+  it('leaves the answer on a film to the server', async () => {
     const { ctl, party } = setup({ joined: 3, film: true });
     await ctl.requestNext();
     await ctl.requestPrevious();
-    expect(party.sendIntent).not.toHaveBeenCalled();
+    expect(party.sendIntent.mock.calls).toEqual([['next'], ['previous']]);
+    ctl.dispose();
+  });
+
+  it('leaves the party instead of syncing the old item when the new one cannot be opened', async () => {
+    const { ctl, party, state, host } = setup({ joined: 3, opens: false });
+    state.videoStarted.set(true);
+    party.live.set({ state: 'paused', item: { mediaId: 2, episodeId: null }, anchor: { position: 5, serverTimeMs: 0 } });
+    TestBed.tick();
+    await new Promise<void>((r) => setTimeout(r));
+    expect(host.onBack).toHaveBeenCalled();
+    expect(host.seekTo).not.toHaveBeenCalled();
+    expect(party.reportStatus).not.toHaveBeenCalledWith('ready', expect.anything());
     ctl.dispose();
   });
 

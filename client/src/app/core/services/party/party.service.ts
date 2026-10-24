@@ -55,6 +55,17 @@ export type PartyCreateTarget = { title: string } & (
   | { playlistId: number }
 );
 
+export type PartyCloseReason = 'host_ended' | 'expired' | 'kicked';
+
+/** Why a refused rejoin means the party is gone for this device; null for a failure worth retrying later. */
+function closeReason(err: unknown): PartyCloseReason | null {
+  if (!(err instanceof HttpErrorResponse)) return null;
+  const message = (err.error as { message?: unknown } | null)?.message;
+  if (err.status === 404 || (err.status === 409 && message === 'party.error_ended')) return 'host_ended';
+  if (err.status === 409 && message === 'party.error_not_live') return 'expired';
+  return err.status === 403 ? 'kicked' : null;
+}
+
 const BUBBLE_MS = 4000;
 /** How long a reaction rises over the video; its CSS animation follows. */
 export const REACTION_MS = 2000;
@@ -90,7 +101,9 @@ export class PartyService {
   readonly bubbles = signal<PartyMessage[]>([]);
   readonly reactions = signal<FloatingReaction[]>([]);
   /** The party ended under us (host ended, expired, kicked): the player leaves. */
-  readonly closed = new Subject<'host_ended' | 'expired' | 'kicked'>();
+  readonly closed = new Subject<PartyCloseReason>();
+  /** A rejoin after a dropped stream or a server restart landed: what the server held about this device is fresh again. */
+  readonly rejoined = new Subject<void>();
 
   /** Set to open the create dialog mounted in the layout. */
   readonly createRequest = signal<PartyCreateTarget | null>(null);
@@ -120,6 +133,10 @@ export class PartyService {
   private lastRev = 0;
   private nextKey = 0;
   private wasConnected = false;
+  private refetching: Promise<void> | null = null;
+  private refetchAgain = false;
+  /** The item the queue was last loaded for; null until this party session loads one. */
+  private queuedFor: PartyItem | null = null;
 
   constructor() {
     void Share.canShare().then((r) => this.canShare.set(r.value), () => undefined);
@@ -272,14 +289,20 @@ export class PartyService {
     this.unread.set(0);
     this.panelOpen.set(false);
     this.lastRev = 0;
+    this.queuedFor = null;
   }
 
   /** The player menu lists the queue the server steps through, and the cursor follows the item. */
   private async loadQueue(): Promise<void> {
     const party = this.party();
     if (!party) return;
-    const items = await this.api.queue(party.id).catch(() => []);
-    if (!items.length) return;
+    const items = await this.api.queue(party.id).catch(() => null);
+    if (!items) return;
+    this.queuedFor = this.item();
+    if (!items.length) {
+      if (this.queue.source() === 'party') this.queue.clear();
+      return;
+    }
     this.queue.start(
       items.map((i) => ({
         mediaId: i.mediaId,
@@ -292,6 +315,14 @@ export class PartyService {
     );
     const cur = this.item();
     if (cur) this.queue.syncTo(cur.mediaId, cur.episodeId ?? undefined);
+  }
+
+  /** The server derives the queue from the current item, so another show, a movie or an edited playlist needs a reload. */
+  private syncQueue(item: PartyItem): void {
+    const q = this.queuedFor;
+    if (!q || (q.mediaId === item.mediaId && q.episodeId === item.episodeId)) return;
+    if (this.queue.items().some((i) => i.mediaId === item.mediaId && (i.episodeId ?? null) === item.episodeId)) return;
+    void this.loadQueue();
   }
 
   private async openPlayer(item: PartyItem): Promise<void> {
@@ -332,9 +363,26 @@ export class PartyService {
       by: null,
       action: null,
     });
+    this.syncQueue(dto.item);
   }
 
-  async refetch(): Promise<void> {
+  /** One fetch at a time: a call during a fetch asks for one more after it, so the start fan-out opens the player once. */
+  refetch(): Promise<void> {
+    if (this.refetching) {
+      this.refetchAgain = true;
+      return this.refetching;
+    }
+    const run = (async () => {
+      do {
+        this.refetchAgain = false;
+        await this.refetchOnce();
+      } while (this.refetchAgain);
+    })().finally(() => (this.refetching = null));
+    this.refetching = run;
+    return run;
+  }
+
+  private async refetchOnce(): Promise<void> {
     const id = this.party()?.id;
     if (id == null) return;
     const wasLobby = this.lobby();
@@ -351,9 +399,15 @@ export class PartyService {
     const id = this.party()?.id;
     if (id == null) return;
     try {
-      this.applySnapshot(await this.api.join(id, this.deviceId()));
+      const dto = await this.api.join(id, this.deviceId(), undefined, true);
+      // A restarted server counts revisions and messages from scratch.
+      this.lastRev = 0;
+      this.messages.set([]);
+      this.applySnapshot(dto);
+      this.rejoined.next();
     } catch (err) {
-      if (err instanceof HttpErrorResponse && err.status === 404) this.onClosed('host_ended');
+      const reason = closeReason(err);
+      if (reason) this.onClosed(reason);
     }
   }
 
@@ -389,6 +443,7 @@ export class PartyService {
           rev: e.rev, state: e.state, item: e.item, anchor: e.anchor, whenMs: e.whenMs, by: e.by, action: e.action,
         });
         this.party.update((p) => (p ? { ...p, item: e.item } : p));
+        this.syncQueue(e.item);
         break;
       case 'party.members':
         if (!this.acceptRev(e.rev)) return;
@@ -459,7 +514,7 @@ export class PartyService {
     setTimeout(() => this.reactions.update((l) => l.filter((x) => x.key !== key)), REACTION_MS);
   }
 
-  private onClosed(reason: 'host_ended' | 'expired' | 'kicked'): void {
+  private onClosed(reason: PartyCloseReason): void {
     this.reset();
     this.toast.info(this.translate.instant(`party.closed_${reason}`));
     this.closed.next(reason);
@@ -539,6 +594,8 @@ export class PartyService {
   onActionError(err: unknown): void {
     if (!(err instanceof HttpErrorResponse)) return;
     const body = err.error as { message?: unknown; id?: number; usernames?: string[] } | null;
+    // `previous` on the first item changes nothing.
+    if (err.status === 409 && body?.message === 'party.error_queue_start') return;
     if (err.status === 409 && (body?.message === 'party.error_stale' || typeof body?.id === 'number')) {
       if (typeof body?.id === 'number') this.applySnapshot(body as unknown as PartyDto);
       return;

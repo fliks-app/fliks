@@ -3,6 +3,7 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 import { PartyApiService, type PartyReactionCatalog } from '../api/party-api.service';
 import { ServerConfigService } from '../server-config.service';
 import { EmojiDataService } from './emoji-data.service';
+import { readFlag, readStored, writeFlag, writeStored } from './local-flag';
 import { sanitizeBar, toggleBar } from './reaction-bar';
 
 const BAR_KEY = 'party.reactionBar';
@@ -11,32 +12,9 @@ const DOCK_KEY = 'party.reactionDock';
 const KEEP_OPEN_KEY = 'party.reactionKeepOpen';
 const ROW_OPEN_KEY = 'party.reactionRowOpen';
 
-function read(key: string): string | null {
-  try {
-    return localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
-
-/** Storage failures keep the value for this session. */
-function write(key: string, value: string | null): void {
-  try {
-    if (value === null) localStorage.removeItem(key);
-    else localStorage.setItem(key, value);
-  } catch {
-    // storage unavailable
-  }
-}
-
-function readFlag(key: string, fallback: boolean): boolean {
-  const v = read(key);
-  return v === null ? fallback : v === '1';
-}
-
 function readBar(): string[] | null {
   try {
-    const v: unknown = JSON.parse(read(BAR_KEY) ?? 'null');
+    const v: unknown = JSON.parse(readStored(BAR_KEY) ?? 'null');
     return Array.isArray(v) ? v.filter((e): e is string => typeof e === 'string') : null;
   } catch {
     return null;
@@ -104,26 +82,26 @@ export class ReactionsService {
 
   setEnabled(on: boolean): void {
     this.enabled.set(on);
-    write(ENABLED_KEY, on ? '1' : '0');
+    writeFlag(ENABLED_KEY, on);
   }
 
   setDock(on: boolean): void {
     this.dock.set(on);
-    write(DOCK_KEY, on ? '1' : '0');
+    writeFlag(DOCK_KEY, on);
   }
 
   setKeepOpen(on: boolean): void {
     this.keepOpen.set(on);
-    write(KEEP_OPEN_KEY, on ? '1' : '0');
+    writeFlag(KEEP_OPEN_KEY, on);
   }
 
   setRowOpen(open: boolean): void {
     this.rowOpen.set(open);
-    write(ROW_OPEN_KEY, open ? '1' : '0');
+    writeFlag(ROW_OPEN_KEY, open);
   }
 
   private save(bar: string[] | null): void {
     this.stored.set(bar);
-    write(BAR_KEY, bar && JSON.stringify(bar));
+    writeStored(BAR_KEY, bar && JSON.stringify(bar));
   }
 }

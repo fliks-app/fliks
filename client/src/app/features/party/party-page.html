@@ -39,7 +39,7 @@
           {{ 'party.hosted_by' | translate: { host: h.host.username } }}
         </span>
         @if (view(); as v) {
-          @if (!canHost()) {
+          @if (!canHost() && v.policy) {
             <span>{{ ('party.policy_' + v.policy) | translate }}</span>
           }
         }
@@ -153,8 +153,8 @@
           </section>
         </div>
       </div>
-      @if (canHost()) {
-        <app-party-host-dialog [view]="v" [joined]="joined()" [link]="link()" (updated)="apply($event)" />
+      @if (canHost() && hostView(); as hv) {
+        <app-party-host-dialog [view]="hv" [joined]="joined()" [link]="link()" (updated)="apply($event)" />
       }
     } @else {
       <div class="flex justify-center py-8"><span class="loading loading-spinner loading-lg"></span></div>
