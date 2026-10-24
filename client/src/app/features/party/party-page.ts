@@ -4,6 +4,9 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { PartyApiService, type PartyDto } from '../../core/services/api/party-api.service';
+import { MediaService } from '../../core/services/api/media.service';
+import { saveFile } from '../../core/plugins/save-file.plugin';
+import { buildPartyIcs } from './party-ics';
 import { AuthService } from '../../core/services/auth.service';
 import { ConfirmationService } from '../../core/services/confirmation.service';
 import { PartyService } from '../../core/services/party/party.service';
@@ -38,6 +41,7 @@ export class PartyPageComponent implements OnInit, OnDestroy {
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
   private readonly sse = inject(SseService);
+  private readonly mediaService = inject(MediaService);
   protected readonly party = inject(PartyService);
   protected readonly voice = inject(VoiceService);
 
@@ -130,6 +134,25 @@ export class PartyPageComponent implements OnInit, OnDestroy {
 
   protected copy(): void {
     void this.party.shareLink(this.link(), this.view()?.name ?? '');
+  }
+
+  protected async addToCalendar(): Promise<void> {
+    const v = this.view();
+    if (!v?.scheduledAt) return;
+    const media = await this.mediaService.getOne(v.item.mediaId).catch(() => null);
+    const episode = media?.seasons?.flatMap((s) => s.episodes).find((e) => e.id === v.item.episodeId);
+    const ics = buildPartyIcs({
+      id: v.id,
+      name: v.name,
+      startsAt: new Date(v.scheduledAt),
+      runtimeMin: episode?.runtime ?? media?.runtime,
+      link: this.link(),
+    });
+    try {
+      await saveFile(new Blob([ics], { type: 'text/calendar;charset=utf-8' }), `party-${v.id}.ics`);
+    } catch {
+      this.toast.error(this.translate.instant('party.error_generic'));
+    }
   }
 
   protected toggleReady(): void {

@@ -3575,6 +3575,7 @@
     "toast_scheduled": "\"{{name}}\" está programada. Enlace: {{link}}",
     "copy_link": "Copiar enlace",
     "share_link": "Compartir enlace",
+    "add_to_calendar": "Añadir al calendario",
     "link_copied": "Enlace copiado",
     "view": "Ver",
     "create_title": "Ver juntos",

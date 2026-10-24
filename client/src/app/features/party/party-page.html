@@ -82,6 +82,10 @@
       </section>
     }
 
+    @if (v.status === 'scheduled' && v.scheduledAt) {
+      <button type="button" class="btn btn-sm self-start" (click)="addToCalendar()">{{ 'party.add_to_calendar' | translate }}</button>
+    }
+
     @if (canHost() && v.status === 'scheduled') {
       <section class="flex flex-col gap-3 border-t border-base-200 pt-3">
         <div class="flex flex-wrap gap-2">
