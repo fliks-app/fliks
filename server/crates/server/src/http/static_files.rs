@@ -11,6 +11,7 @@ use axum::http::header::{
 use axum::http::{HeaderValue, StatusCode};
 use axum::middleware::{Next, from_fn};
 use axum::response::{IntoResponse, Response};
+use axum::routing::get;
 use tower_http::services::{ServeDir, ServeFile};
 
 /// Weak ETag (`W/"<size hex>-<mtime seconds hex>"`, as 4.x), `Cache-Control` and `If-None-Match` 304.
@@ -134,7 +135,13 @@ pub fn emoji(dir: PathBuf) -> Router {
 /// `/cast` always; the SPA at `/` (with `index.html` fallback) only when a client dir is set.
 pub fn router(client_dir: Option<PathBuf>, cast_dir: PathBuf) -> Router {
     let cast = ServeDir::new(cast_dir).append_index_html_on_directories(false);
-    let mut r = Router::new().nest_service("/cast", cast);
+    // The reaction artwork lives under the cast dir but is served at `/api/emoji` only.
+    let mut r = Router::new()
+        .route(
+            "/cast/emoji/{*file}",
+            get(|| async { StatusCode::NOT_FOUND }),
+        )
+        .nest_service("/cast", cast);
     if let Some(dir) = client_dir {
         r = r
             .fallback_service(ServeDir::new(&dir).fallback(ServeFile::new(dir.join("index.html"))));
@@ -211,6 +218,8 @@ mod tests {
         std::fs::write(k.join("emoji/1f525.webp"), "w").unwrap();
         let emoji = get(&emoji(k.join("emoji")), "/1f525.webp", None).await;
         assert_eq!(emoji.headers()[CACHE_CONTROL], "public, max-age=604800");
+        let hidden = get(&r, "/cast/emoji/1f525.webp", None).await;
+        assert_eq!(hidden.status(), 404);
         let missing = get(&r, "/cast/nope.html", None).await;
         assert_eq!(missing.status(), 404);
         assert!(text(missing).await.contains("Cannot GET /cast/nope.html"));
