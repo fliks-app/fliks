@@ -469,7 +469,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   readonly edlMuted = computed(() => isMutedAt(this.edl.muteRanges(), this.currentTime()));
   private readonly _webCropAttach = (this.webCrop.attach(this), null);
   readonly inPipMode = signal(false);
-  /** The PiP window shows the picture alone: the party panel stays open underneath and returns with the player. */
   /** The party dialog to show; mounting it opens it, so its code loads only when asked for. */
   protected readonly partyDialog = signal<'party' | 'reactions' | null>(null);
   protected readonly partyPanelShown = computed(() => this.partyCtl.active() && this.party.panelOpen() && !this.inPipMode());
