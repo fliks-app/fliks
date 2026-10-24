@@ -14,6 +14,8 @@ import { LikesApiService, LikedItem, LikeTarget } from '../../core/services/api/
 import { RequestsService, FliksRequestRow } from '../../core/services/api/requests.service';
 import { PartyApiService, type PartySummaryDto } from '../../core/services/api/party-api.service';
 import { partyWhen } from '../party/party-time';
+import { pickFanart } from '../../shared/utils/media-artwork.util';
+import { translatePlural } from '../../core/pipes/translate-plural.pipe';
 import { SseService } from '../../core/services/sse.service';
 import {
   DownloadProgressService,
@@ -136,7 +138,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   }
   protected partySubtitle(p: PartySummaryDto): string {
     return p.status === 'live'
-      ? this.translate.instant('party.card_live', { host: p.host.username, count: p.memberCount })
+      ? translatePlural(this.translate, 'party.card_live', p.memberCount, { host: p.host.username })
       : this.translate.instant('party.card_scheduled', {
           when: p.scheduledAt ? partyWhen(p.scheduledAt, this.translate) : '',
           host: p.host.username,
@@ -220,8 +222,28 @@ export class HomeComponent implements OnInit, OnDestroy {
     return this.languageProfileNames().get(id) ?? `#${id}`;
   }
 
+  private readonly partyFanart = signal(new Map<number, string>());
+  protected partyImage(p: PartySummaryDto): string | null {
+    return this.partyFanart().get(p.item.mediaId) ?? p.item.posterUrl;
+  }
+  protected partyState(p: PartySummaryDto): Record<string, unknown> {
+    return { party: p, fanartUrl: this.partyFanart().get(p.item.mediaId) ?? null };
+  }
+
   private loadParties(): void {
-    void this.partyApi.list().then((l) => this.parties.set(l), () => undefined);
+    void this.partyApi.list().then(
+      (l) => {
+        this.parties.set(l);
+        for (const id of new Set(l.map((p) => p.item.mediaId))) {
+          if (this.partyFanart().has(id)) continue;
+          void this.mediaService.getOne(id).then((m) => {
+            const url = pickFanart(m);
+            if (url) this.partyFanart.update((f) => new Map(f).set(id, url));
+          }, () => undefined);
+        }
+      },
+      () => undefined,
+    );
   }
 
   private readonly partyEvents = this.sse.partyEvents.subscribe((e) => {

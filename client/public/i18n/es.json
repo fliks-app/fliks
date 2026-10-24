@@ -3620,7 +3620,6 @@
     "cancel_title": "Cancelar la sesión",
     "cancel_message": "¿Cancelar \"{{name}}\" para todos?",
     "rail_title": "Sesiones",
-    "card_live": "{{host}} · {{count}} viendo",
     "card_scheduled": "{{when}} · {{host}}",
     "today_at": "Hoy a las {{time}}",
     "tomorrow_at": "Mañana a las {{time}}",
@@ -3633,6 +3632,23 @@
     "error_invalid_name": "Nombre no válido",
     "error_invalid_text": "Mensaje no válido",
     "error_invalid_item": "Contenido no válido",
-    "error_invalid_invitees": "Invitados no válidos"
+    "error_invalid_invitees": "Invitados no válidos",
+    "status_scheduled": "Programada",
+    "status_lobby": "Sala abierta",
+    "people": "Participantes",
+    "person_invited": "Invitado",
+    "person_link": "Por el enlace",
+    "person_absent": "No conectado",
+    "policy_everyone": "Todos controlan la reproducción",
+    "chat_title": "Chat",
+    "manage": "Gestionar",
+    "people_connected_one": "{{count}} conectado",
+    "people_connected_other": "{{count}} conectados",
+    "people_invited_one": "{{count}} invitado",
+    "people_invited_other": "{{count}} invitados",
+    "voice_count_one": "{{count}} en voz",
+    "voice_count_other": "{{count}} en voz",
+    "card_live_one": "{{host}} · {{count}} viendo",
+    "card_live_other": "{{host}} · {{count}} viendo"
   }
 }

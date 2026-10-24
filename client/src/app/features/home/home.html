@@ -54,13 +54,15 @@
     <app-horizontal-scroller [title]="'party.rail_title' | translate">
       @for (p of parties(); track p.id) {
         <app-media-card
-          class="shrink-0 w-28 sm:w-32 lg:w-40"
+          [aspect]="'landscape'"
           [attr.data-home-focus]="'party:' + p.id"
-          [imageUrl]="p.item.posterUrl"
+          [imageUrl]="partyImage(p)"
           [title]="p.name"
           [subtitle]="partySubtitle(p)"
           [topLeftBadge]="p.status === 'live' ? ('party.live' | translate) : undefined"
           [link]="partyUrl(p)"
+          [linkState]="partyState(p)"
+          [posterName]="'party-poster-' + p.id"
         />
       }
     </app-horizontal-scroller>

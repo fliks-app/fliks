@@ -3620,7 +3620,6 @@
     "cancel_title": "Cancel the party",
     "cancel_message": "Cancel \"{{name}}\" for everyone?",
     "rail_title": "Watch parties",
-    "card_live": "{{host}} · {{count}} watching",
     "card_scheduled": "{{when}} · {{host}}",
     "today_at": "Today at {{time}}",
     "tomorrow_at": "Tomorrow at {{time}}",
@@ -3633,6 +3632,23 @@
     "error_invalid_name": "Invalid party name",
     "error_invalid_text": "Invalid message",
     "error_invalid_item": "Invalid media",
-    "error_invalid_invitees": "Invalid invitees"
+    "error_invalid_invitees": "Invalid invitees",
+    "status_scheduled": "Scheduled",
+    "status_lobby": "Lobby open",
+    "people": "People",
+    "person_invited": "Invited",
+    "person_link": "Via the link",
+    "person_absent": "Not connected",
+    "policy_everyone": "Everyone controls playback",
+    "chat_title": "Chat",
+    "manage": "Manage",
+    "people_connected_one": "{{count}} connected",
+    "people_connected_other": "{{count}} connected",
+    "people_invited_one": "{{count}} invited",
+    "people_invited_other": "{{count}} invited",
+    "voice_count_one": "{{count}} in voice",
+    "voice_count_other": "{{count}} in voice",
+    "card_live_one": "{{host}} · {{count}} watching",
+    "card_live_other": "{{host}} · {{count}} watching"
   }
 }

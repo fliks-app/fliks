@@ -201,6 +201,7 @@ export class MediaCardComponent {
   });
   /** Hands a full Media (or stub) to the detail page via router state so it renders without a spinner. */
   readonly navState = computed(() => {
+    if (this.linkState()) return this.linkState();
     const preview = this.previewTarget();
     if (preview) {
       return {
@@ -267,6 +268,10 @@ export class MediaCardComponent {
 
   /** Off when the destination is the page the card sits on: a duplicate name aborts the transition. */
   readonly posterMorph = input(true);
+  /** Pairing name of a destination that is not a media page; its hero must carry the same one. */
+  readonly posterName = input<string | null>(null);
+  /** Router state handed to [link]'s page, replacing the media seed. */
+  readonly linkState = input<Record<string, unknown> | undefined>(undefined);
 
   /** Opens the contextual panel anchored on the figure with placement 'card-top'. */
   protected openActions(event: Event) {
@@ -374,6 +379,11 @@ export class MediaCardComponent {
       return;
     }
     const img = this.imgRef()?.nativeElement;
+    const named = this.posterName();
+    if (named && img) {
+      stampPosterNamed(img, named, this.overlayRef()?.nativeElement);
+      return;
+    }
     const preview = this.previewTarget();
     if (preview && img) {
       stampPosterNamed(

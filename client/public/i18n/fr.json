@@ -3620,7 +3620,6 @@
     "cancel_title": "Annuler la séance",
     "cancel_message": "Annuler \"{{name}}\" pour tout le monde ?",
     "rail_title": "Séances",
-    "card_live": "{{host}} · {{count}} spectateurs",
     "card_scheduled": "{{when}} · {{host}}",
     "today_at": "Aujourd'hui à {{time}}",
     "tomorrow_at": "Demain à {{time}}",
@@ -3633,6 +3632,23 @@
     "error_invalid_name": "Nom de séance invalide",
     "error_invalid_text": "Message invalide",
     "error_invalid_item": "Média invalide",
-    "error_invalid_invitees": "Invités invalides"
+    "error_invalid_invitees": "Invités invalides",
+    "status_scheduled": "Planifiée",
+    "status_lobby": "Salon ouvert",
+    "people": "Participants",
+    "person_invited": "Invité",
+    "person_link": "Via le lien",
+    "person_absent": "Non connecté",
+    "policy_everyone": "Tout le monde contrôle la lecture",
+    "chat_title": "Discussion",
+    "manage": "Gérer",
+    "people_connected_one": "{{count}} connecté",
+    "people_connected_other": "{{count}} connectés",
+    "people_invited_one": "{{count}} invité",
+    "people_invited_other": "{{count}} invités",
+    "voice_count_one": "{{count}} en vocal",
+    "voice_count_other": "{{count}} en vocal",
+    "card_live_one": "{{host}} · {{count}} spectateur",
+    "card_live_other": "{{host}} · {{count}} spectateurs"
   }
 }

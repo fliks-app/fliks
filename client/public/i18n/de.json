@@ -3620,7 +3620,6 @@
     "cancel_title": "Session absagen",
     "cancel_message": "\"{{name}}\" für alle absagen?",
     "rail_title": "Watch Partys",
-    "card_live": "{{host}} · {{count}} schauen zu",
     "card_scheduled": "{{when}} · {{host}}",
     "today_at": "Heute um {{time}}",
     "tomorrow_at": "Morgen um {{time}}",
@@ -3633,6 +3632,23 @@
     "error_invalid_name": "Ungültiger Name",
     "error_invalid_text": "Ungültige Nachricht",
     "error_invalid_item": "Ungültiges Medium",
-    "error_invalid_invitees": "Ungültige Einladungen"
+    "error_invalid_invitees": "Ungültige Einladungen",
+    "status_scheduled": "Geplant",
+    "status_lobby": "Lobby offen",
+    "people": "Teilnehmer",
+    "person_invited": "Eingeladen",
+    "person_link": "Über den Link",
+    "person_absent": "Nicht verbunden",
+    "policy_everyone": "Alle steuern die Wiedergabe",
+    "chat_title": "Chat",
+    "manage": "Verwalten",
+    "people_connected_one": "{{count}} verbunden",
+    "people_connected_other": "{{count}} verbunden",
+    "people_invited_one": "{{count}} eingeladen",
+    "people_invited_other": "{{count}} eingeladen",
+    "voice_count_one": "{{count}} im Sprachkanal",
+    "voice_count_other": "{{count}} im Sprachkanal",
+    "card_live_one": "{{host}} · {{count}} schaut zu",
+    "card_live_other": "{{host}} · {{count}} schauen zu"
   }
 }
