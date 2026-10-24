@@ -1,6 +1,8 @@
 <div class="pointer-events-none absolute inset-0 z-[56] overflow-hidden" aria-hidden="true">
-  @for (r of party.reactions(); track r.key) {
-    <span class="reaction" [style.left.%]="r.left" [attr.title]="r.username"><app-party-emoji [emoji]="r.emoji" /></span>
+  @if (reactions.enabled()) {
+    @for (r of party.reactions(); track r.key) {
+      <span class="reaction" [style.left.%]="r.left" [attr.title]="r.username"><app-party-emoji [emoji]="r.emoji" /></span>
+    }
   }
   <!-- Under the top bar, the newest message last. -->
   <div

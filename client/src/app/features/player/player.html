@@ -227,7 +227,7 @@
     (toggleParty)="party.setPanelOpen(!party.panelOpen())"
     (openReactionSettings)="reactionSettings.show()"
   >
-    @if (partyCtl.active() && reactions.dock()) {
+    @if (partyCtl.active() && reactions.enabled() && reactions.dock()) {
       <app-party-reaction-dock />
     }
   </app-player-controls>

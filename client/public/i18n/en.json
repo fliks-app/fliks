@@ -3517,6 +3517,7 @@
     "joining": "Joining the party",
     "join_failed": "Could not join this party",
     "reaction_settings": "Reactions",
+    "reaction_enabled": "Reactions on this device",
     "reaction_dock_show": "Show the reaction button on the video",
     "reaction_keep_open": "Keep the bar open",
     "reaction_bar": "Bar emojis",

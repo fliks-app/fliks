@@ -3517,6 +3517,7 @@
     "joining": "Accesso alla sessione",
     "join_failed": "Impossibile entrare in questa sessione",
     "reaction_settings": "Reazioni",
+    "reaction_enabled": "Reazioni su questo dispositivo",
     "reaction_dock_show": "Mostra il pulsante delle reazioni sul video",
     "reaction_keep_open": "Tieni la barra aperta",
     "reaction_bar": "Emoji della barra",

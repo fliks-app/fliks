@@ -6,6 +6,7 @@ import { EmojiDataService } from './emoji-data.service';
 import { sanitizeBar, toggleBar } from './reaction-bar';
 
 const BAR_KEY = 'party.reactionBar';
+const ENABLED_KEY = 'party.reactionsEnabled';
 const DOCK_KEY = 'party.reactionDock';
 const KEEP_OPEN_KEY = 'party.reactionKeepOpen';
 const ROW_OPEN_KEY = 'party.reactionRowOpen';
@@ -56,6 +57,8 @@ export class ReactionsService {
     () => new Map(Object.entries(this.catalog()?.animations ?? {}).map(([e, url]) => [e, this.serverConfig.resolveUrl(url)])),
   );
 
+  /** Master switch: off hides the dock and the reactions rising over the video. */
+  readonly enabled = signal(readFlag(ENABLED_KEY, true));
   /** The floating reaction button over the video. */
   readonly dock = signal(readFlag(DOCK_KEY, true));
   /** The row stays open after a reaction is sent. */
@@ -97,6 +100,11 @@ export class ReactionsService {
 
   reset(): void {
     this.save(null);
+  }
+
+  setEnabled(on: boolean): void {
+    this.enabled.set(on);
+    write(ENABLED_KEY, on ? '1' : '0');
   }
 
   setDock(on: boolean): void {
