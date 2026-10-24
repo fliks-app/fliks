@@ -167,6 +167,16 @@ pub async fn scheduled_rows(db: &PgPool) -> sqlx::Result<Vec<Row>> {
     .await
 }
 
+/// The `app_settings` value of `key`, if any.
+pub async fn setting(db: &PgPool, key: &str) -> sqlx::Result<Option<String>> {
+    let v: Option<Option<String>> =
+        sqlx::query_scalar(r#"SELECT "value" FROM app_settings WHERE "key" = $1"#)
+            .bind(key)
+            .fetch_optional(db)
+            .await?;
+    Ok(v.flatten())
+}
+
 pub async fn update_settings(
     db: &PgPool,
     id: i32,

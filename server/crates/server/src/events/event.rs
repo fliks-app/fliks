@@ -1,4 +1,4 @@
-//! Wire events (`docs/spec/events-hub.md`, Events): the 49 `SseEvent` types, the 11 `DomainEvent`
+//! Wire events (`docs/spec/events-hub.md`, Events): the 50 `SseEvent` types, the 11 `DomainEvent`
 //! types and the plugin envelope. Field names and omission rules follow `JSON.stringify` of the 4.x objects.
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
@@ -475,6 +475,13 @@ pub enum SseEvent {
     PartyStarting { party_id: i64, name: String },
     #[serde(rename = "party.updated")]
     PartyUpdated { party_id: i64 },
+    #[serde(rename = "party.signal")]
+    PartySignal {
+        party_id: i64,
+        from: Value,
+        kind: String,
+        data: Value,
+    },
 }
 
 impl SseEvent {
@@ -590,7 +597,7 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    /// One minimal wire sample per `SseEvent` type of the spec table (49).
+    /// One minimal wire sample per `SseEvent` type of the spec table (50).
     fn samples() -> Vec<Value> {
         let sub = json!({"title": "T"});
         vec![
@@ -648,13 +655,14 @@ mod tests {
             json!({"type":"party.invited","partyId":1,"name":"n","scheduledAt":null,"host":{"userId":1,"username":"u"},"item":{"mediaId":1}}),
             json!({"type":"party.starting","partyId":1,"name":"n"}),
             json!({"type":"party.updated","partyId":1}),
+            json!({"type":"party.signal","partyId":1,"from":{"userId":2,"deviceId":"d"},"kind":"offer","data":{"sdp":"x"}}),
         ]
     }
 
     #[test]
     fn every_type_round_trips_to_the_same_json() {
         let all = samples();
-        assert_eq!(all.len(), 49);
+        assert_eq!(all.len(), 50);
         for want in all {
             let ev: SseEvent = serde_json::from_value(want.clone()).unwrap();
             assert_eq!(serde_json::to_value(&ev).unwrap(), want);

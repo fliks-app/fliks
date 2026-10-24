@@ -2,18 +2,20 @@
 use axum::{Router, body::Body, http::Request};
 use fliks_server::{
     config::Config,
-    events::{Connection, Identity},
+    events::{self, Connection, Identity},
     party,
     state::AppState,
 };
 use serde_json::{Value, json};
 use sqlx::PgPool;
+use std::time::Duration;
 use tower::ServiceExt;
 
 const SECRET: &str = "0123456789abcdef0123456789abcdef";
 
 struct Ctx {
     app: Router,
+    events: Router,
     st: AppState,
     pool: PgPool,
 }
@@ -30,6 +32,7 @@ async fn ctx(pool: PgPool) -> Ctx {
     let st = AppState::new(pool.clone(), Config::from_lookup(|_| None), SECRET);
     Ctx {
         app: party::router().with_state(st.clone()),
+        events: events::router().with_state(st.clone()),
         st,
         pool,
     }
@@ -73,6 +76,20 @@ impl Ctx {
                 ..Identity::default()
             },
         )
+    }
+
+    /// An SSE stream for `device` (a full target id); its party events are read with `signals`.
+    async fn stream(&self, token: &str, device: &str) -> axum::body::BodyDataStream {
+        let req = Request::builder()
+            .uri(format!(
+                "/api/system/events?device={}",
+                device.replace('#', "%23")
+            ))
+            .header("authorization", format!("Bearer {token}"))
+            .body(Body::empty())
+            .unwrap();
+        let res = self.events.clone().oneshot(req).await.unwrap();
+        res.into_body().into_data_stream()
     }
 
     async fn call(
@@ -325,4 +342,159 @@ async fn a_scheduled_party_opens_its_lobby_late_and_expires(pool: PgPool) {
     party::sweep(&c.st, chrono::Utc::now()).await.unwrap();
     let (s, p) = c.call("GET", &format!("/api/parties/{id}"), &a, None).await;
     assert_eq!((s, p["status"].clone()), (200, json!("ended")));
+}
+
+/// Every `party.signal` queued on the stream, read until it stays quiet.
+async fn signals(s: &mut axum::body::BodyDataStream) -> Vec<Value> {
+    use futures_util::StreamExt;
+    let mut out = vec![];
+    while let Ok(Some(Ok(chunk))) = tokio::time::timeout(Duration::from_millis(200), s.next()).await
+    {
+        for line in String::from_utf8_lossy(&chunk).lines() {
+            if let Some(v) = line
+                .strip_prefix("data: ")
+                .and_then(|d| serde_json::from_str::<Value>(d).ok())
+                .filter(|v| v["type"] == "party.signal")
+            {
+                out.push(v);
+            }
+        }
+    }
+    out
+}
+
+async fn party_with(c: &Ctx, tok: &str, invitees: Vec<i32>) -> i64 {
+    let (s, p) = c
+        .call(
+            "POST",
+            "/api/parties",
+            tok,
+            Some(json!({"name": "n", "mediaId": 1, "inviteeIds": invitees})),
+        )
+        .await;
+    assert_eq!(s, 201);
+    p["id"].as_i64().unwrap()
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_signal_reaches_only_its_target_and_both_sides_need_voice(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (alice, a) = c.user("alice", true).await;
+    let (bob, b) = c.user("bob", true).await;
+    let (carol, k) = c.user("carol", true).await;
+    c.follow(alice, bob).await;
+    c.follow(alice, carol).await;
+    let id = party_with(&c, &a, vec![bob, carol]).await;
+    let mut sa = c.stream(&a, "da").await;
+    let mut sb = c.stream(&b, "db").await;
+    let mut sk = c.stream(&k, "dc").await;
+    for (t, d) in [(&a, "da"), (&b, "db"), (&k, "dc")] {
+        let uri = format!("/api/parties/{id}/join");
+        let (s, _) = c.call("POST", &uri, t, Some(json!({"deviceId": d}))).await;
+        assert_eq!(s, 200);
+    }
+    let sig = json!({"deviceId": "da", "to": "db", "kind": "offer", "data": {"sdp": "x"}});
+    let url = format!("/api/parties/{id}/signal");
+    let (s, e) = c.call("POST", &url, &a, Some(sig.clone())).await;
+    assert_eq!((s, msg(&e)), (409, Some("party.error_voice_not_joined")));
+
+    let voice = |d: &str| json!({"deviceId": d, "joined": true, "muted": false});
+    let vurl = format!("/api/parties/{id}/voice");
+    let (s, _) = c.call("POST", &vurl, &a, Some(voice("da"))).await;
+    assert_eq!(s, 204);
+    let (s, e) = c.call("POST", &url, &a, Some(sig.clone())).await;
+    assert_eq!((s, msg(&e)), (409, Some("party.error_voice_not_joined")));
+    let (s, _) = c.call("POST", &vurl, &b, Some(voice("db"))).await;
+    assert_eq!(s, 204);
+    let (_, p) = c.call("GET", &format!("/api/parties/{id}"), &a, None).await;
+    let voices: Vec<_> = p["live"]["members"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|m| m["voice"].clone())
+        .collect();
+    assert_eq!(
+        voices,
+        [
+            json!({"muted": false}),
+            json!({"muted": false}),
+            Value::Null
+        ]
+    );
+
+    let (s, _) = c.call("POST", &url, &a, Some(sig)).await;
+    assert_eq!(s, 204);
+    let got = signals(&mut sb).await;
+    assert_eq!(got.len(), 1);
+    assert_eq!(got[0]["partyId"], id);
+    assert_eq!(got[0]["from"], json!({"userId": alice, "deviceId": "da"}));
+    assert_eq!(
+        (got[0]["kind"].clone(), got[0]["data"].clone()),
+        (json!("offer"), json!({"sdp": "x"}))
+    );
+    assert!(signals(&mut sa).await.is_empty());
+    assert!(signals(&mut sk).await.is_empty());
+
+    let big =
+        json!({"deviceId": "da", "to": "db", "kind": "ice", "data": {"x": "y".repeat(17_000)}});
+    let (s, _) = c.call("POST", &url, &a, Some(big)).await;
+    assert_eq!(s, 400);
+}
+
+#[sqlx::test(migrations = false)]
+async fn the_ninth_voice_member_gets_409_voice_full(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (host, h) = c.user("host", true).await;
+    let mut users = vec![];
+    for i in 0..8 {
+        let (u, t) = c.user(&format!("u{i}"), true).await;
+        c.follow(host, u).await;
+        users.push((u, t));
+    }
+    let id = party_with(&c, &h, users.iter().map(|u| u.0).collect()).await;
+    let mut all = vec![(host, h)];
+    all.extend(users);
+    let _conns: Vec<_> = all.iter().map(|(u, _)| c.connect(*u, "d")).collect();
+    let vurl = format!("/api/parties/{id}/voice");
+    let body = json!({"deviceId": "d", "joined": true, "muted": false});
+    for (n, (_, t)) in all.iter().enumerate() {
+        let (s, _) = c
+            .call(
+                "POST",
+                &format!("/api/parties/{id}/join"),
+                t,
+                Some(json!({"deviceId": "d"})),
+            )
+            .await;
+        assert_eq!(s, 200);
+        let (s, e) = c.call("POST", &vurl, t, Some(body.clone())).await;
+        if n < 8 {
+            assert_eq!(s, 204);
+        } else {
+            assert_eq!((s, msg(&e)), (409, Some("party.error_voice_full")));
+        }
+    }
+}
+
+#[sqlx::test(migrations = false)]
+async fn ice_defaults_to_stun_and_follows_the_setting(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (_, a) = c.user("alice", false).await;
+    let default = json!({"iceServers": [{"urls": "stun:stun.l.google.com:19302"}]});
+    let (s, e) = c.call("GET", "/api/parties/ice", &a, None).await;
+    assert_eq!((s, e), (200, default.clone()));
+    let set = |v: &str| {
+        let q = sqlx::query(
+            r#"INSERT INTO app_settings ("key", "value") VALUES ('party_voice_ice_servers', $1)
+               ON CONFLICT ("key") DO UPDATE SET "value" = $1"#,
+        )
+        .bind(v.to_owned());
+        q.execute(&c.pool)
+    };
+    set("not json").await.unwrap();
+    assert_eq!(c.call("GET", "/api/parties/ice", &a, None).await.1, default);
+    let servers = json!([{"urls": ["turn:t.example:3478"], "username": "u", "credential": "p"}]);
+    set(&servers.to_string()).await.unwrap();
+    let (s, e) = c.call("GET", "/api/parties/ice", &a, None).await;
+    assert_eq!((s, e), (200, json!({"iceServers": servers})));
 }

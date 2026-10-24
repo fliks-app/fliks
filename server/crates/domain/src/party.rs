@@ -9,6 +9,7 @@ pub const AWAY_GRACE_MS: i64 = 120_000;
 pub const EMPTY_TTL_MS: i64 = 600_000;
 pub const LOBBY_OPEN_BEFORE_MS: i64 = 900_000;
 pub const SCHEDULE_EXPIRY_MS: i64 = 7_200_000;
+pub const VOICE_MAX: usize = 8;
 pub const CHAT_CAP: usize = 200;
 pub const SNAPSHOT_MESSAGES: usize = 50;
 pub const REACTIONS: [&str; 8] = ["👍", "😂", "😮", "😢", "😡", "❤️", "🔥", "👏"];
@@ -16,6 +17,7 @@ const READY_TOLERANCE_S: f64 = 1.0;
 const RATE_WINDOW_MS: i64 = 10_000;
 const MAX_MESSAGES: usize = 5;
 const MAX_REACTIONS: usize = 10;
+const MAX_SIGNALS: usize = 60;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -94,6 +96,12 @@ pub struct Anchor {
     pub server_time_ms: i64,
 }
 
+/// A member in the voice channel.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct Voice {
+    pub muted: bool,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Member {
     pub user_id: i32,
@@ -104,6 +112,7 @@ pub struct Member {
     pub last_seen_ms: i64,
     pub rtt_ms: i64,
     pub away_since: Option<i64>,
+    pub voice: Option<Voice>,
     joined: u64,
 }
 
@@ -178,6 +187,8 @@ pub enum Error {
     Stale,
     Invalid(&'static str),
     RateLimited,
+    VoiceFull,
+    VoiceNotJoined,
 }
 
 /// A client intent (`play|pause|seek|setItem|ended`) with the revision it was made on.
@@ -214,7 +225,14 @@ pub struct Live {
     empty_since: Option<i64>,
     next_msg: u64,
     next_join: u64,
-    limits: HashMap<(i32, String, bool), VecDeque<i64>>,
+    limits: HashMap<(i32, String, Limit), VecDeque<i64>>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum Limit {
+    Message,
+    Reaction,
+    Signal,
 }
 
 fn by_of(m: &Member) -> By {
@@ -522,6 +540,7 @@ impl Live {
                     last_seen_ms: now,
                     rtt_ms: 0,
                     away_since: None,
+                    voice: None,
                     joined: self.next_join,
                 });
                 true
@@ -806,16 +825,13 @@ impl Live {
         }
     }
 
-    fn rate_ok(&mut self, user: i32, device: &str, reaction: bool, now: i64) -> bool {
-        let max = if reaction {
-            MAX_REACTIONS
-        } else {
-            MAX_MESSAGES
+    fn rate_ok(&mut self, user: i32, device: &str, kind: Limit, now: i64) -> bool {
+        let max = match kind {
+            Limit::Message => MAX_MESSAGES,
+            Limit::Reaction => MAX_REACTIONS,
+            Limit::Signal => MAX_SIGNALS,
         };
-        let q = self
-            .limits
-            .entry((user, device.into(), reaction))
-            .or_default();
+        let q = self.limits.entry((user, device.into(), kind)).or_default();
         while q.front().is_some_and(|t| now - t >= RATE_WINDOW_MS) {
             q.pop_front();
         }
@@ -826,6 +842,54 @@ impl Live {
         true
     }
 
+    /// Joins, leaves or mutes the voice channel; always bumps `rev`.
+    pub fn set_voice(
+        &mut self,
+        user_id: i32,
+        device_id: &str,
+        joined: bool,
+        muted: bool,
+        now: i64,
+    ) -> Result<Vec<Effect>, Error> {
+        let i = self.find(user_id, device_id).ok_or(Error::NotMember)?;
+        let was = self.members[i].voice.is_some();
+        let count = self.members.iter().filter(|m| m.voice.is_some()).count();
+        if joined && !was && count >= VOICE_MAX {
+            return Err(Error::VoiceFull);
+        }
+        self.members[i].voice = joined.then_some(Voice { muted });
+        let mut out = vec![];
+        self.members_effect(&mut out);
+        if joined != was {
+            let kind = if joined { "voice_joined" } else { "voice_left" };
+            let name = self.members[i].username.clone();
+            self.sys(&mut out, kind, Some(&name), json!({}), now);
+        }
+        Ok(out)
+    }
+
+    /// The `(user, connection)` a signal goes to; both ends need `voice`.
+    pub fn signal_target(
+        &mut self,
+        user_id: i32,
+        device_id: &str,
+        to: &str,
+        now: i64,
+    ) -> Result<(i32, String), Error> {
+        let i = self.find(user_id, device_id).ok_or(Error::NotMember)?;
+        let target = self
+            .members
+            .iter()
+            .find(|m| m.device_id == to && m.voice.is_some())
+            .map(|m| (m.user_id, m.connection_id.clone()));
+        let target = target.filter(|_| self.members[i].voice.is_some());
+        let target = target.ok_or(Error::VoiceNotJoined)?;
+        if !self.rate_ok(user_id, device_id, Limit::Signal, now) {
+            return Err(Error::RateLimited);
+        }
+        Ok(target)
+    }
+
     pub fn post_message(
         &mut self,
         user_id: i32,
@@ -834,7 +898,7 @@ impl Live {
         now: i64,
     ) -> Result<(Message, Vec<Effect>), Error> {
         let i = self.find(user_id, device_id).ok_or(Error::NotMember)?;
-        if !self.rate_ok(user_id, device_id, false, now) {
+        if !self.rate_ok(user_id, device_id, Limit::Message, now) {
             return Err(Error::RateLimited);
         }
         let m = Message {
@@ -860,7 +924,7 @@ impl Live {
         if !REACTIONS.contains(&emoji) {
             return Err(Error::Invalid("emoji"));
         }
-        if !self.rate_ok(user_id, device_id, true, now) {
+        if !self.rate_ok(user_id, device_id, Limit::Reaction, now) {
             return Err(Error::RateLimited);
         }
         Ok(vec![Effect::Reaction {
@@ -1340,6 +1404,97 @@ mod tests {
             l.react(2, "d2", "x", 0).unwrap_err(),
             Error::Invalid("emoji")
         );
+    }
+
+    fn voice(l: &mut Live, user: i32, dev: &str, joined: bool) -> Result<Vec<Effect>, Error> {
+        l.set_voice(user, dev, joined, false, 0)
+    }
+
+    #[test]
+    fn voice_join_and_leave_bump_rev_and_write_a_system_message() {
+        let mut l = party();
+        let rev = l.rev;
+        let out = voice(&mut l, 2, "d2", true).unwrap();
+        assert_eq!(l.rev, rev + 1);
+        assert_eq!(l.members[1].voice, Some(Voice { muted: false }));
+        assert!(out.iter().any(|e| matches!(e, Effect::Message(m)
+            if m.system.as_ref().is_some_and(|s| s.kind == "voice_joined"))));
+        let out = l.set_voice(2, "d2", true, true, 1).unwrap();
+        assert_eq!(l.members[1].voice, Some(Voice { muted: true }));
+        assert!(!out.iter().any(|e| matches!(e, Effect::Message(_))));
+        let out = voice(&mut l, 2, "d2", false).unwrap();
+        assert_eq!(l.members[1].voice, None);
+        assert!(out.iter().any(|e| matches!(e, Effect::Message(m)
+            if m.system.as_ref().is_some_and(|s| s.kind == "voice_left"))));
+        assert_eq!(voice(&mut l, 3, "d3", true), Err(Error::NotMember));
+    }
+
+    #[test]
+    fn the_ninth_voice_member_is_refused_but_a_mute_change_is_not() {
+        let mut l = Live::new("p".into(), Policy::Everyone, 1, item(), 0.0, 0);
+        for i in 0..=VOICE_MAX as i32 {
+            l.join(i, "u", "d", &format!("c{i}"), 0);
+        }
+        for i in 0..VOICE_MAX as i32 {
+            voice(&mut l, i, "d", true).unwrap();
+        }
+        assert_eq!(
+            voice(&mut l, VOICE_MAX as i32, "d", true),
+            Err(Error::VoiceFull)
+        );
+        l.set_voice(0, "d", true, true, 0).unwrap();
+        voice(&mut l, 0, "d", false).unwrap();
+        voice(&mut l, VOICE_MAX as i32, "d", true).unwrap();
+    }
+
+    #[test]
+    fn voice_is_cleared_by_leave_kick_and_removal_and_kept_while_away() {
+        let mut l = party();
+        voice(&mut l, 1, "d1", true).unwrap();
+        voice(&mut l, 2, "d2", true).unwrap();
+        l.tick(1, |c| c != "c2");
+        assert_eq!(l.members[1].status, MemberStatus::Away);
+        assert!(l.members[1].voice.is_some());
+        l.join(2, "bob", "d2", "c2b", 2);
+        assert!(l.members[1].voice.is_some());
+        l.kick(2, "alice", 3).unwrap();
+        l.join(2, "bob", "d2", "c2", 4);
+        assert_eq!(l.members[1].voice, None);
+        voice(&mut l, 2, "d2", true).unwrap();
+        l.leave(2, "d2", 5).unwrap();
+        l.join(2, "bob", "d2", "c2", 6);
+        assert_eq!(l.members[1].voice, None);
+        voice(&mut l, 2, "d2", true).unwrap();
+        l.tick(7, |c| c != "c2");
+        l.tick(7 + AWAY_GRACE_MS, |c| c != "c2");
+        assert_eq!(l.members.len(), 1);
+    }
+
+    #[test]
+    fn signals_need_voice_on_both_sides_and_are_rate_limited() {
+        let mut l = party();
+        assert_eq!(
+            l.signal_target(1, "d1", "d2", 0),
+            Err(Error::VoiceNotJoined)
+        );
+        voice(&mut l, 1, "d1", true).unwrap();
+        assert_eq!(
+            l.signal_target(1, "d1", "d2", 0),
+            Err(Error::VoiceNotJoined)
+        );
+        voice(&mut l, 2, "d2", true).unwrap();
+        assert_eq!(l.signal_target(1, "d1", "d2", 0), Ok((2, "c2".into())));
+        assert_eq!(
+            l.signal_target(1, "d1", "nope", 0),
+            Err(Error::VoiceNotJoined)
+        );
+        let rev = l.rev;
+        for _ in 1..MAX_SIGNALS {
+            l.signal_target(1, "d1", "d2", 1).unwrap();
+        }
+        assert_eq!(l.signal_target(1, "d1", "d2", 2), Err(Error::RateLimited));
+        assert!(l.signal_target(1, "d1", "d2", RATE_WINDOW_MS + 1).is_ok());
+        assert_eq!(l.rev, rev);
     }
 
     #[test]

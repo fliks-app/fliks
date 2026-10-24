@@ -156,6 +156,7 @@ Audience legend: B = broadcast to every connection; U(x) = connections of user x
 | 47 | `party.invited` | Us(invitees) | `{partyId, name, scheduledAt: string|null, host: {userId, username}, item: PartyItem}` |
 | 48 | `party.starting` | Us(invitees) | `{partyId, name}` |
 | 49 | `party.updated` | Us(owner + invitees) | `{partyId}` |
+| 50 | `party.signal` | C (one member: the target) | `{partyId, from: {userId, deviceId}, kind: 'offer'|'answer'|'ice'|'bye', data: object}` (`watch-party.md`, Voice) |
 
 Row 37 is two wire types and row 2 (`ping`) and row 40 are not in the `SseEvent` union, so the table lists 39 `SseEvent` types (the union writes the three `social.followed|follow_request|follow_accepted` as one member at). All `*.started/completed/failed/progress` rows are fire-and-forget; none is retried.
 

@@ -1,11 +1,14 @@
 //! Request bodies and response shapes (`docs/spec/watch-party.md`, DTOs): every key present.
 use crate::http::{AppError, json::iso_ms};
 use chrono::{DateTime, Utc};
-use fliks_domain::party::{Action, Anchor, Item, MemberStatus, Message, Policy, Role, State};
+use fliks_domain::party::{
+    Action, Anchor, Item, MemberStatus, Message, Policy, Role, State, Voice,
+};
 use serde::{Deserialize, Deserializer, Serialize};
 
 const MAX_INVITEES: usize = 50;
 const MAX_TEXT: usize = 500;
+const MAX_SIGNAL_BYTES: usize = 16 * 1024;
 
 fn nullable<'de, D: Deserializer<'de>, T: Deserialize<'de>>(
     d: D,
@@ -132,6 +135,42 @@ impl MessageIn {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct VoiceIn {
+    pub device_id: String,
+    pub joined: bool,
+    pub muted: bool,
+}
+
+#[derive(Deserialize, Serialize, Clone, Copy)]
+#[serde(rename_all = "lowercase")]
+pub enum SignalKind {
+    Offer,
+    Answer,
+    Ice,
+    Bye,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct SignalIn {
+    pub device_id: String,
+    pub to: String,
+    pub kind: SignalKind,
+    pub data: serde_json::Value,
+}
+
+impl SignalIn {
+    pub fn validate(&self) -> Result<(), AppError> {
+        if self.data.is_object() && self.data.to_string().len() <= MAX_SIGNAL_BYTES {
+            Ok(())
+        } else {
+            Err(invalid("data"))
+        }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct ReactionIn {
     pub device_id: String,
     pub emoji: String,
@@ -192,6 +231,7 @@ pub struct MemberDto {
     pub status: MemberStatus,
     pub device_name: Option<String>,
     pub form_factor: Option<String>,
+    pub voice: Option<Voice>,
 }
 
 #[derive(Serialize)]
@@ -213,4 +253,21 @@ pub struct PartyDto {
     pub invite_token: Option<String>,
     pub invitees: Vec<UserRef>,
     pub live: Option<PartyLive>,
+}
+
+/// `RTCIceServer`; credentials pass through as stored.
+#[derive(Deserialize, Serialize)]
+pub struct IceServer {
+    pub urls: IceUrls,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub username: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub credential: Option<String>,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(untagged)]
+pub enum IceUrls {
+    One(String),
+    Many(Vec<String>),
 }
