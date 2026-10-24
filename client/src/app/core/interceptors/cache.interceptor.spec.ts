@@ -10,6 +10,12 @@ import {
   readPlan,
 } from './cache.interceptor';
 
+// Spec files share module state (isolate: false): drop the never-settling open the stubs leave behind.
+afterEach(() => {
+  vi.unstubAllGlobals();
+  void clearRequestCache();
+});
+
 describe('cache.interceptor — what may be cached', () => {
   it('caches the core reads it was built for', () => {
     expect(isCacheable('/api/media/12')).toBe(true);
@@ -49,7 +55,6 @@ describe('cache.interceptor — mutations', () => {
     vi.stubGlobal('indexedDB', { open });
     await clearRequestCache();
   });
-  afterEach(() => vi.unstubAllGlobals());
 
   it('keeps the cache when the mutation never reaches the server', () => {
     cacheInterceptor(post, () => throwError(() => ({ status: 0 }))).subscribe({ error: () => undefined });
@@ -70,7 +75,6 @@ describe('cache.interceptor — read plan', () => {
     vi.stubGlobal('indexedDB', { open: vi.fn(() => ({})) });
     void clearRequestCache();
   });
-  afterEach(() => vi.unstubAllGlobals());
 
   it('serves a fresh entry and revalidates an expired one in background', () => {
     expect(readPlan(entry('/api/media?libraryId=1', 1_000), false)).toBe('cached');
@@ -104,7 +108,6 @@ describe('cache.interceptor — requests in flight', () => {
     vi.stubGlobal('indexedDB', { open: vi.fn(() => ({})) });
     void clearRequestCache();
   });
-  afterEach(() => vi.unstubAllGlobals());
 
   it('shares one request between identical reads, and sends a new one once it landed', () => {
     const wire = new Subject<HttpResponse<unknown>>();
