@@ -110,6 +110,8 @@ fn machine_err(e: PartyErr) -> PartyError {
     match e {
         PartyErr::NotMember => fail(StatusCode::FORBIDDEN, "party.error_not_member"),
         PartyErr::HostOnly => fail(StatusCode::FORBIDDEN, "party.error_host_only"),
+        PartyErr::ReactionsOff => fail(StatusCode::FORBIDDEN, "party.error_reactions_off"),
+        PartyErr::ChatOff => fail(StatusCode::FORBIDDEN, "party.error_chat_off"),
         PartyErr::RateLimited => fail(StatusCode::TOO_MANY_REQUESTS, "party.error_rate_limited"),
         PartyErr::Invalid(_) => fail(StatusCode::BAD_REQUEST, "party.error_invalid"),
         PartyErr::Stale => fail(StatusCode::CONFLICT, "party.error_stale"),
@@ -266,6 +268,8 @@ async fn dto(st: &AppState, row: &Row, viewer: i32) -> sqlx::Result<PartyDto> {
         } else {
             Policy::Everyone
         },
+        reactions_enabled: row.reactions_enabled,
+        chat_enabled: row.chat_enabled,
         invite_token: sees_token.then(|| row.invite_token.clone()),
         invitees: ids
             .into_iter()
@@ -343,9 +347,14 @@ pub async fn create(
     } else {
         "everyone"
     };
+    let (inherit_reactions, inherit_chat) = db::owner_switches(&st.db, me)
+        .await?
+        .unwrap_or((true, true));
     let row = db::insert(
         &st.db,
         &db::New {
+            reactions_enabled: b.reactions_enabled.unwrap_or(inherit_reactions),
+            chat_enabled: b.chat_enabled.unwrap_or(inherit_chat),
             name: &valid_name(&b.name)?,
             owner: me,
             item: &item,
@@ -428,6 +437,8 @@ pub async fn patch(
         }
         .into();
     }
+    row.reactions_enabled = b.reactions_enabled.unwrap_or(row.reactions_enabled);
+    row.chat_enabled = b.chat_enabled.unwrap_or(row.chat_enabled);
     let regenerate = b.regenerate_token == Some(true);
     if regenerate {
         row.invite_token = db::new_token();
@@ -437,14 +448,21 @@ pub async fn patch(
         id,
         &row.name,
         &row.policy,
+        (row.reactions_enabled, row.chat_enabled),
         row.scheduled_at,
         &row.invite_token,
     )
     .await?;
-    if (name.is_some() || b.policy.is_some())
-        && let Some((_, d)) = st
-            .parties
-            .act(id, |l| ((), l.set_settings(name.clone(), b.policy)))
+    if (name.is_some()
+        || b.policy.is_some()
+        || b.reactions_enabled.is_some()
+        || b.chat_enabled.is_some())
+        && let Some((_, d)) = st.parties.act(id, |l| {
+            (
+                (),
+                l.set_settings(name.clone(), b.policy, b.reactions_enabled, b.chat_enabled),
+            )
+        })
     {
         deliver(&st, id, d).await;
     }

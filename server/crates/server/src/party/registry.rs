@@ -69,13 +69,16 @@ impl Parties {
         );
         self.inner().live.entry(row.id).or_insert_with(|| {
             let (n, p, h, i, pos, now) = args;
-            if row.status == "live" && !fresh {
+            let mut l = if row.status == "live" && !fresh {
                 Live::boot(n, p, h, i, pos, now)
             } else {
                 let mut l = Live::new(n, p, h, i, pos, now);
                 l.lobby = row.status == "scheduled";
                 l
-            }
+            };
+            l.reactions_enabled = row.reactions_enabled;
+            l.chat_enabled = row.chat_enabled;
+            l
         });
     }
 
@@ -236,11 +239,19 @@ pub async fn deliver(st: &AppState, party: i32, d: Delivery) {
                 rev: rev as i64,
                 members: json(member_dtos(st, host_id, &members)),
             }),
-            Effect::Settings { rev, name, policy } => emit(SseEvent::PartySettings {
+            Effect::Settings {
+                rev,
+                name,
+                policy,
+                reactions_enabled,
+                chat_enabled,
+            } => emit(SseEvent::PartySettings {
                 party_id: pid,
                 rev: rev as i64,
                 name,
                 policy: json(policy).as_str().unwrap_or_default().to_owned(),
+                reactions_enabled,
+                chat_enabled,
             }),
             Effect::Message(m) => emit(SseEvent::PartyMessage {
                 party_id: pid,

@@ -33,6 +33,8 @@ pub struct Create {
     pub episode_id: Option<i32>,
     pub scheduled_at: Option<DateTime<Utc>>,
     pub policy: Option<Policy>,
+    pub reactions_enabled: Option<bool>,
+    pub chat_enabled: Option<bool>,
     pub invitee_ids: Option<Vec<i32>>,
 }
 
@@ -55,6 +57,8 @@ impl Create {
 pub struct Patch {
     pub name: Option<String>,
     pub policy: Option<Policy>,
+    pub reactions_enabled: Option<bool>,
+    pub chat_enabled: Option<bool>,
     pub scheduled_at: Option<DateTime<Utc>>,
     pub regenerate_token: Option<bool>,
 }
@@ -245,6 +249,8 @@ pub struct PartyDto {
     #[serde(flatten)]
     pub summary: PartySummaryDto,
     pub policy: Policy,
+    pub reactions_enabled: bool,
+    pub chat_enabled: bool,
     pub invite_token: Option<String>,
     pub invitees: Vec<UserRef>,
     pub live: Option<PartyLive>,

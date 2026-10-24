@@ -451,6 +451,8 @@ pub enum SseEvent {
         rev: i64,
         name: String,
         policy: String,
+        reactions_enabled: bool,
+        chat_enabled: bool,
     },
     #[serde(rename = "party.message")]
     PartyMessage { party_id: i64, message: Value },

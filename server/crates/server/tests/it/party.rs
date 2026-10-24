@@ -358,6 +358,88 @@ async fn a_party_created_now_or_rescheduled_to_the_past_opens_its_lobby_at_once(
 }
 
 #[sqlx::test(migrations = false)]
+async fn host_switches_gate_reactions_and_chat_and_seed_the_next_party(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (alice, a) = c.user("alice", true).await;
+    let (bob, b) = c.user("bob", true).await;
+    c.follow(alice, bob).await;
+    let id = party_with(&c, &a, vec![bob]).await;
+    let mut sb = c.stream(&b, "db").await;
+    let _ca = c.connect(alice, "da");
+    for (t, d) in [(&a, "da"), (&b, "db")] {
+        let uri = format!("/api/parties/{id}/join");
+        c.call("POST", &uri, t, Some(json!({"deviceId": d}))).await;
+    }
+    let url = format!("/api/parties/{id}");
+    let (s, e) = c
+        .call("PATCH", &url, &b, Some(json!({"chatEnabled": false})))
+        .await;
+    assert_eq!((s, msg(&e)), (403, Some("party.error_not_host")));
+    let (s, p) = c
+        .call(
+            "PATCH",
+            &url,
+            &a,
+            Some(json!({"chatEnabled": false, "reactionsEnabled": false})),
+        )
+        .await;
+    assert_eq!(
+        (s, p["chatEnabled"].clone(), p["reactionsEnabled"].clone()),
+        (200, json!(false), json!(false))
+    );
+    let settings = events_of(&mut sb, "party.settings").await;
+    assert_eq!(settings.last().unwrap()["chatEnabled"], json!(false));
+    assert_eq!(settings.last().unwrap()["reactionsEnabled"], json!(false));
+
+    let (s, e) = c
+        .call(
+            "POST",
+            &format!("{url}/messages"),
+            &b,
+            Some(json!({"deviceId": "db", "text": "hi"})),
+        )
+        .await;
+    assert_eq!((s, msg(&e)), (403, Some("party.error_chat_off")));
+    let (s, e) = c
+        .call(
+            "POST",
+            &format!("{url}/reactions"),
+            &b,
+            Some(json!({"deviceId": "db", "emoji": "👍"})),
+        )
+        .await;
+    assert_eq!((s, msg(&e)), (403, Some("party.error_reactions_off")));
+
+    let (_, next) = c
+        .call(
+            "POST",
+            "/api/parties",
+            &a,
+            Some(json!({"name": "next", "mediaId": 1})),
+        )
+        .await;
+    assert_eq!(
+        (
+            next["chatEnabled"].clone(),
+            next["reactionsEnabled"].clone()
+        ),
+        (json!(false), json!(false))
+    );
+    let (_, own) = c
+        .call(
+            "POST",
+            "/api/parties",
+            &a,
+            Some(json!({"name": "own", "mediaId": 1, "chatEnabled": true})),
+        )
+        .await;
+    assert_eq!(
+        (own["chatEnabled"].clone(), own["reactionsEnabled"].clone()),
+        (json!(true), json!(false))
+    );
+}
+
+#[sqlx::test(migrations = false)]
 async fn a_scheduled_party_opens_its_lobby_late_and_expires(pool: PgPool) {
     let c = ctx(pool).await;
     let (_, a) = c.user("alice", true).await;

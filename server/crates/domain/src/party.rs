@@ -178,6 +178,8 @@ pub enum Effect {
         rev: u64,
         name: String,
         policy: Policy,
+        reactions_enabled: bool,
+        chat_enabled: bool,
     },
     Message(Message),
     Reaction {
@@ -200,6 +202,8 @@ pub enum Effect {
 pub enum Error {
     NotMember,
     HostOnly,
+    ReactionsOff,
+    ChatOff,
     Stale,
     Invalid(&'static str),
     RateLimited,
@@ -226,6 +230,9 @@ struct Phase {
 pub struct Live {
     pub name: String,
     pub policy: Policy,
+    /// Host switches for the whole party: reactions and chat messages are refused while off.
+    pub reactions_enabled: bool,
+    pub chat_enabled: bool,
     pub host_id: i32,
     pub item: Item,
     pub state: State,
@@ -271,6 +278,8 @@ impl Live {
         Self {
             name,
             policy,
+            reactions_enabled: true,
+            chat_enabled: true,
             host_id,
             item,
             state: State::Idle,
@@ -766,21 +775,29 @@ impl Live {
         out
     }
 
-    pub fn set_settings(&mut self, name: Option<String>, policy: Option<Policy>) -> Vec<Effect> {
-        let mut out = vec![];
+    pub fn set_settings(
+        &mut self,
+        name: Option<String>,
+        policy: Option<Policy>,
+        reactions_enabled: Option<bool>,
+        chat_enabled: Option<bool>,
+    ) -> Vec<Effect> {
         if let Some(n) = name {
             self.name = n;
         }
         if let Some(p) = policy {
             self.policy = p;
         }
+        self.reactions_enabled = reactions_enabled.unwrap_or(self.reactions_enabled);
+        self.chat_enabled = chat_enabled.unwrap_or(self.chat_enabled);
         let rev = self.bump();
-        out.push(Effect::Settings {
+        vec![Effect::Settings {
             rev,
             name: self.name.clone(),
             policy: self.policy,
-        });
-        out
+            reactions_enabled: self.reactions_enabled,
+            chat_enabled: self.chat_enabled,
+        }]
     }
 
     /// The target must be a member; the host role moves to that user.
@@ -914,6 +931,9 @@ impl Live {
         now: i64,
     ) -> Result<(Message, Vec<Effect>), Error> {
         let i = self.find(user_id, device_id).ok_or(Error::NotMember)?;
+        if !self.chat_enabled {
+            return Err(Error::ChatOff);
+        }
         if !self.rate_ok(user_id, device_id, Limit::Message, now) {
             return Err(Error::RateLimited);
         }
@@ -937,6 +957,9 @@ impl Live {
         now: i64,
     ) -> Result<Vec<Effect>, Error> {
         let i = self.find(user_id, device_id).ok_or(Error::NotMember)?;
+        if !self.reactions_enabled {
+            return Err(Error::ReactionsOff);
+        }
         if !self.rate_ok(user_id, device_id, Limit::Reaction, now) {
             return Err(Error::RateLimited);
         }
@@ -1520,12 +1543,35 @@ mod tests {
     fn every_mutation_bumps_rev_and_chat_is_a_ring() {
         let mut l = party();
         let r = l.rev;
-        l.set_settings(Some("n".into()), Some(Policy::HostOnly));
+        l.set_settings(Some("n".into()), Some(Policy::HostOnly), None, None);
         assert_eq!(l.rev, r + 1);
         for i in 0..250 {
             l.post_message(1, "d1", "m", i * RATE_WINDOW_MS).unwrap();
         }
         assert_eq!(l.chat.len(), CHAT_CAP);
         assert_eq!(l.recent_messages().len(), SNAPSHOT_MESSAGES);
+    }
+
+    #[test]
+    fn switched_off_chat_and_reactions_refuse_but_system_messages_flow() {
+        let mut l = party();
+        let r = l.rev;
+        let e = l.set_settings(None, None, Some(false), Some(false));
+        assert!(matches!(
+            e[0],
+            Effect::Settings {
+                reactions_enabled: false,
+                chat_enabled: false,
+                ..
+            }
+        ));
+        assert_eq!(l.rev, r + 1);
+        assert_eq!(l.react(1, "d1", "x", 0), Err(Error::ReactionsOff));
+        assert_eq!(l.post_message(1, "d1", "m", 0).unwrap_err(), Error::ChatOff);
+        let left = l.leave(2, "d2", 1).unwrap();
+        assert!(left.iter().any(|e| matches!(e, Effect::Message(_))));
+        l.set_settings(None, None, Some(true), Some(true));
+        assert!(l.react(1, "d1", "x", 0).is_ok());
+        assert!(l.post_message(1, "d1", "m", 0).is_ok());
     }
 }
