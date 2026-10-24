@@ -56,6 +56,15 @@ with Fliks' AGPL-3.0. Every build below links an FFmpeg configured with
 | mpv.exe and its DLLs (Windows, zhongfly/mpv-winbuild, GPL variant) | GPL-3.0 | https://github.com/zhongfly/mpv-winbuild |
 | Electron (bundles Chromium) | MIT (Chromium: BSD-3-Clause and others) | https://github.com/electron/electron |
 
+## Server: reaction emoji artwork
+
+The watch-party reactions ship the animated artwork below, resized (see
+`server/public/emoji/LICENSE.md`). It is the one modified third-party asset.
+
+| Component | License | Source | Modification |
+|---|---|---|---|
+| Noto Emoji Animation (Google) | CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/) | https://googlefonts.github.io/noto-emoji-animation/ | resized to 72 px animated WebP |
+
 ## Package-manager dependencies
 
 npm, Gradle, CocoaPods and Swift packages declare their own licenses in their
