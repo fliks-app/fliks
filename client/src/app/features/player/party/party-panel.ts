@@ -41,8 +41,4 @@ export class PartyPanelComponent {
   protected close(): void {
     this.party.setPanelOpen(false);
   }
-
-  protected setHostOnly(event: Event): void {
-    void this.party.setPolicy((event.target as HTMLInputElement).checked ? 'host_only' : 'everyone');
-  }
 }

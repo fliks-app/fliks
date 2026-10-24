@@ -4,7 +4,7 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { NgTemplateOutlet } from '@angular/common';
-import { PartyApiService, type PartyDto, type PartyMemberStatus, type PartySummaryDto } from '../../core/services/api/party-api.service';
+import { PartyApiService, type PartyDto, type PartyMemberStatus, type PartySummaryDto, type PartySwitches } from '../../core/services/api/party-api.service';
 import { MediaService, type Media } from '../../core/services/api/media.service';
 import { saveFile } from '../../core/plugins/save-file.plugin';
 import { buildPartyIcs } from './party-ics';
@@ -17,6 +17,7 @@ import { formatTime } from '../../core/utils/player.utils';
 import { TvRowDirective } from '../../shared/directives/tv-row.directive';
 import { TvSectionDirective } from '../../shared/directives/tv-section.directive';
 import { PartyChatComponent } from '../player/party/party-chat';
+import { PartyHostSwitchesComponent } from '../player/party/party-host-switches';
 import { PartyVoiceBarComponent } from '../player/party/party-voice-bar';
 import { VoiceService } from '../../core/services/party/voice.service';
 import { LucideCalendarPlus, LucideCheck, LucideMic, LucideMicOff, LucidePlay, LucideShare2 } from '@lucide/angular';
@@ -27,7 +28,6 @@ import { TvService } from '../../core/services/tv.service';
 import { MD_BREAKPOINT_QUERY, mediaQuerySignal } from '../../core/utils/viewport';
 import { MobileFanartHeroComponent } from '../../shared/components/mobile-fanart-hero';
 import { SynopsisComponent } from '../../shared/components/synopsis/synopsis';
-import { ToggleFieldComponent } from '../../shared/components/forms/toggle-field/toggle-field';
 import { UserAvatarComponent } from '../../shared/components/user-avatar/user-avatar';
 import { armPageSlide } from '../../shared/utils/page-slide';
 import { episodeLabel } from '../../shared/utils/episode-label';
@@ -58,7 +58,7 @@ const STATE_RANK = { connected: 0, link: 1, invited: 2, absent: 3 } as const;
 @Component({
   selector: 'app-party-page',
   imports: [
-    FormsModule, NgTemplateOutlet, ToggleFieldComponent, RouterLink, SynopsisComponent, TranslatePipe, ResolveUrlPipe, TranslatePluralPipe, TvSectionDirective, TvRowDirective, PartyChatComponent, PartyInviteePickerComponent,
+    FormsModule, NgTemplateOutlet, RouterLink, SynopsisComponent, TranslatePipe, ResolveUrlPipe, TranslatePluralPipe, TvSectionDirective, TvRowDirective, PartyChatComponent, PartyHostSwitchesComponent, PartyInviteePickerComponent,
     PartyVoiceBarComponent, MobileFanartHeroComponent, UserAvatarComponent,
     LucideCalendarPlus, LucideCheck, LucideMic, LucideMicOff, LucidePlay, LucideShare2,
   ],
@@ -338,10 +338,9 @@ export class PartyPageComponent implements OnInit, OnDestroy {
     void this.router.navigateByUrl('/');
   }
 
-  protected async setHostOnly(on: boolean): Promise<void> {
-    const policy = on ? 'host_only' : 'everyone';
-    if (this.joined()) return this.party.setPolicy(policy);
-    const dto = await this.run(() => this.api.update(this.id, { policy }));
+  protected async updateSettings(patch: Partial<PartySwitches>): Promise<void> {
+    if (this.joined()) return this.party.updateSettings(patch);
+    const dto = await this.run(() => this.api.update(this.id, patch));
     if (dto) this.apply(dto);
   }
 

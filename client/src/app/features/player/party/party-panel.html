@@ -64,12 +64,6 @@
         </li>
       }
     </ul>
-    @if (party.isHost()) {
-      <label class="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm">
-        <input type="checkbox" class="toggle toggle-sm" [checked]="party.policy() === 'host_only'" (change)="setHostOnly($event)" />
-        <span>{{ 'party.policy_host_only' | translate }}</span>
-      </label>
-    }
   } @else {
     <app-party-chat />
   }

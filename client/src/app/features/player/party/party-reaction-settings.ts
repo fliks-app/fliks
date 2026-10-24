@@ -6,6 +6,7 @@ import { TranslatePipe } from '@ngx-translate/core';
 import { LucideSearch, LucideX } from '@lucide/angular';
 import { EmojiDataService } from '../../../core/services/party/emoji-data.service';
 import { MAX_BAR } from '../../../core/services/party/reaction-bar';
+import { PartyService } from '../../../core/services/party/party.service';
 import { ReactionsService } from '../../../core/services/party/reactions.service';
 import { DeviceService } from '../../../core/services/device.service';
 import { KeyboardOverlayService } from '../../../core/services/keyboard-overlay.service';
@@ -29,6 +30,7 @@ interface Section {
 })
 export class PartyReactionSettingsComponent {
   protected readonly reactions = inject(ReactionsService);
+  protected readonly party = inject(PartyService);
   protected readonly data = inject(EmojiDataService);
   protected readonly keyboard = inject(KeyboardOverlayService);
   protected readonly isTv = inject(DeviceService).isTv;

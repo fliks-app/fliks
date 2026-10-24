@@ -73,8 +73,14 @@ export interface PartySummaryDto {
   memberCount: number;
 }
 
-export interface PartyDto extends PartySummaryDto {
+/** The host's party-wide switches. */
+export interface PartySwitches {
   policy: PartyPolicy;
+  reactionsEnabled: boolean;
+  chatEnabled: boolean;
+}
+
+export interface PartyDto extends PartySummaryDto, PartySwitches {
   inviteToken: string | null;
   invitees: PartyUser[];
   live: PartyLive | null;
@@ -121,7 +127,7 @@ export class PartyApiService {
     return firstValueFrom(this.http.get<PartyDto>(`/api/parties/by-token/${encodeURIComponent(token)}`));
   }
 
-  update(id: number, body: { name?: string; policy?: PartyPolicy; scheduledAt?: string | null; regenerateToken?: boolean }) {
+  update(id: number, body: Partial<PartySwitches> & { name?: string; scheduledAt?: string | null; regenerateToken?: boolean }) {
     return firstValueFrom(this.http.patch<PartyDto>(`/api/parties/${id}`, body));
   }
 

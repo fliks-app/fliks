@@ -90,16 +90,6 @@
         }
       </div>
 
-      @if (canHost() && view(); as v) {
-        <app-toggle-field
-          class="mt-3"
-          [value]="v.policy === 'host_only'"
-          [disabled]="busy()"
-          [label]="'party.policy_host_only' | translate"
-          (valueChange)="setHostOnly($event)"
-        />
-      }
-
       @if (overview()) {
         <app-synopsis class="mt-4" [text]="overview()" textClass="text-base-content/80 lg:text-base-content/90 leading-relaxed whitespace-pre-line" />
       }
@@ -191,6 +181,7 @@
           @if (canHost() && v.status === 'scheduled') {
             <section class="flex flex-col gap-3">
               <h2 class="text-lg font-bold">{{ 'party.manage' | translate }}</h2>
+              <app-party-host-switches [value]="v" [disabled]="busy()" (changed)="updateSettings($event)" />
               <div appTvRow class="flex flex-wrap gap-2">
                 @if (!joined()) {
                   <button type="button" class="btn btn-primary" [disabled]="busy()" (click)="startNow()">{{ 'party.start_now' | translate }}</button>

@@ -2,6 +2,11 @@
   <div class="modal-box max-w-md" [style.max-height]="keyboard.height() ? 'calc(100% - 1rem)' : null">
     <app-modal-header [title]="'party.panel_menu' | translate" />
     <div class="flex flex-col gap-4 pt-2">
+      @if (party.isHost() && party.party(); as p) {
+        <h3 class="text-sm font-medium opacity-70">{{ 'party.settings_for_everyone' | translate }}</h3>
+        <app-party-host-switches [value]="p" (changed)="party.updateSettings($event)" />
+        <h3 class="text-sm font-medium opacity-70">{{ 'party.settings_for_me' | translate }}</h3>
+      }
       <button type="button" class="btn btn-ghost h-auto justify-start gap-3 px-2 py-2 text-left" (click)="resync()">
         <svg lucideRefreshCw class="h-4 w-4 shrink-0"></svg>
         <span class="flex flex-col">

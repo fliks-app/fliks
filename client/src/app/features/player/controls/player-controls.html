@@ -416,7 +416,10 @@
       @if (partyActive()) {
         <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white active:bg-white/10" (click)="openReactionSettings.emit(); closeSheet()">
           <svg lucideSmilePlus class="h-5 w-5 text-white/40 shrink-0"></svg>
-          <span class="flex-1 text-left">{{ 'party.reaction_settings' | translate }}</span>
+          <span class="flex-1 text-left">
+            {{ 'party.reaction_settings' | translate }}
+            @if (partyReactionsOff()) { <span class="block text-sm text-white/50">{{ 'party.reactions_off_notice' | translate }}</span> }
+          </span>
         </button>
       }
       <div class="divider my-1 before:bg-white/10 after:bg-white/10"></div>
@@ -500,7 +503,10 @@
         @if (partyActive()) {
           <button class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10" (click)="openReactionSettings.emit(); closeDropdown($event)">
             <svg lucideSmilePlus class="h-4 w-4 text-white/40 shrink-0"></svg>
-            <span class="flex-1 text-left">{{ 'party.reaction_settings' | translate }}</span>
+            <span class="flex-1 text-left">
+            {{ 'party.reaction_settings' | translate }}
+            @if (partyReactionsOff()) { <span class="block text-sm text-white/50">{{ 'party.reactions_off_notice' | translate }}</span> }
+          </span>
           </button>
         }
         <div class="divider my-1 before:bg-white/10 after:bg-white/10"></div>

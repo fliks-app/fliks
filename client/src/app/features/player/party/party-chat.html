@@ -10,7 +10,9 @@
   }
 </div>
 
-@if (showPhrases()) {
+@if (!party.chatEnabled()) {
+  <p class="px-3 pb-3 pt-1 text-center text-sm opacity-60">{{ 'party.chat_off' | translate }}</p>
+} @else if (showPhrases()) {
   <div class="[scrollbar-width:none] flex gap-1 overflow-x-auto px-3 py-1" appTvRow>
     @for (key of phrases; track key) {
       <button type="button" class="btn btn-outline btn-sm shrink-0" (click)="sendPhrase(key)">{{ key | translate }}</button>
@@ -21,7 +23,7 @@
   </div>
 }
 
-@if (!isTv() || writing()) {
+@if (party.chatEnabled() && (!isTv() || writing())) {
   <form class="flex items-center gap-2 px-3 pb-3 pt-1" (submit)="$event.preventDefault(); send()">
     <input
       #input

@@ -1,0 +1,20 @@
+<div class="flex flex-col gap-4">
+  <app-toggle-field
+    [label]="'party.policy_host_only' | translate"
+    [disabled]="disabled()"
+    [value]="value().policy === 'host_only'"
+    (valueChange)="changed.emit({ policy: $event ? 'host_only' : 'everyone' })"
+  />
+  <app-toggle-field
+    [label]="'party.switch_reactions' | translate"
+    [disabled]="disabled()"
+    [value]="value().reactionsEnabled"
+    (valueChange)="changed.emit({ reactionsEnabled: $event })"
+  />
+  <app-toggle-field
+    [label]="'party.switch_chat' | translate"
+    [disabled]="disabled()"
+    [value]="value().chatEnabled"
+    (valueChange)="changed.emit({ chatEnabled: $event })"
+  />
+</div>

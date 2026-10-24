@@ -14,7 +14,7 @@ import {
   type PartyMember,
   type PartyMessage,
   type PartyPlayState,
-  type PartyPolicy,
+  type PartySwitches,
   type PartyUser,
 } from '../api/party-api.service';
 import { MediaService } from '../api/media.service';
@@ -95,6 +95,8 @@ export class PartyService {
   readonly active = computed(() => this.party() !== null && this.live() !== null);
   readonly item = computed(() => this.live()?.item ?? this.party()?.item ?? null);
   readonly policy = computed(() => this.party()?.policy ?? 'everyone');
+  readonly reactionsEnabled = computed(() => this.party()?.reactionsEnabled ?? true);
+  readonly chatEnabled = computed(() => this.party()?.chatEnabled ?? true);
   readonly me = computed(() => {
     const id = this.sse.targetId();
     return this.members().find((m) => m.userId === this.auth.user()?.id && m.deviceId === id) ?? null;
@@ -367,7 +369,9 @@ export class PartyService {
         break;
       case 'party.settings':
         if (!this.acceptRev(e.rev)) return;
-        this.party.update((p) => (p ? { ...p, name: e.name, policy: e.policy } : p));
+        this.party.update((p) =>
+          p ? { ...p, name: e.name, policy: e.policy, reactionsEnabled: e.reactionsEnabled, chatEnabled: e.chatEnabled } : p,
+        );
         break;
       case 'party.message':
         this.onMessage(e.message);
@@ -479,8 +483,8 @@ export class PartyService {
     await this.hostAction((id) => this.api.transferHost(id, userId));
   }
 
-  async setPolicy(policy: PartyPolicy): Promise<void> {
-    await this.hostAction((id) => this.api.update(id, { policy }));
+  async updateSettings(patch: Partial<PartySwitches>): Promise<void> {
+    await this.hostAction((id) => this.api.update(id, patch));
   }
 
   private async hostAction(run: (id: number) => Promise<unknown>): Promise<void> {

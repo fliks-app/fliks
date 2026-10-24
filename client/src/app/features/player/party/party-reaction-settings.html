@@ -3,6 +3,9 @@
   <div class="modal-box max-w-2xl" [style.max-height]="keyboard.height() ? 'calc(100% - 1rem)' : null">
     <app-modal-header [title]="'party.reaction_settings' | translate" />
     <div class="flex flex-col gap-4 pt-2">
+      @if (!party.reactionsEnabled()) {
+        <p class="text-sm text-warning">{{ 'party.reactions_off_notice' | translate }}</p>
+      }
       <app-toggle-field
         [label]="'party.reaction_enabled' | translate"
         [value]="reactions.enabled()"

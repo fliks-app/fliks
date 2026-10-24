@@ -367,6 +367,8 @@ export class PlayerControlsComponent {
   readonly pickDevice = output<PickerRow>();
   /** In a watch party: shows the party button, with the unread chat count on it. */
   readonly partyActive = input(false);
+  /** The host switched reactions off for the party: the settings entry says so. */
+  readonly partyReactionsOff = input(false);
   readonly partyUnread = input(0);
   readonly partyOpen = input(false);
   readonly toggleParty = output<void>();

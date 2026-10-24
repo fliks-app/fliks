@@ -223,12 +223,13 @@
     (panelOpenChange)="chrome.onPanelOpenChange($event)"
     (openSubtitleSync)="subs.onOpenSubtitleSync($event)"
     [partyActive]="partyCtl.active()"
+    [partyReactionsOff]="!party.reactionsEnabled()"
     [partyUnread]="party.unread()"
     [partyOpen]="party.panelOpen()"
     (toggleParty)="party.setPanelOpen(!party.panelOpen())"
     (openReactionSettings)="reactionSettings.show()"
   >
-    @if (partyCtl.active() && reactions.enabled() && reactions.dock()) {
+    @if (partyCtl.active() && party.reactionsEnabled() && reactions.enabled() && reactions.dock()) {
       <app-party-reaction-dock />
     }
   </app-player-controls>
