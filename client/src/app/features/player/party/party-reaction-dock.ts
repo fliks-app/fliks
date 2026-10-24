@@ -38,7 +38,7 @@ export class PartyReactionDockComponent {
   protected send(emoji: string, event: Event): void {
     this.party.react(emoji);
     const pop = (event.currentTarget as HTMLElement).animate(
-      [{ transform: 'scale(1)' }, { transform: 'scale(1.3)' }, { transform: 'scale(1)' }],
+      [{ transform: 'scale(1)' }, { transform: 'scale(1.2)' }, { transform: 'scale(1)' }],
       { duration: POP_MS, easing: 'ease-out' },
     );
     // The row folds once the tapped emoji has finished its pop, or the feedback is never seen.
