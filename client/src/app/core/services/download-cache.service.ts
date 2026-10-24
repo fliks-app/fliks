@@ -42,6 +42,8 @@ export interface DownloadTask {
   createdAt: string;
   /** HLS URL used for the download — needed for native offline playback via CacheDataSource. */
   hlsUrl?: string;
+  /** The pinned server session the transfer runs on, released once the task settles. */
+  sessionId?: string;
   /** Bytes the finished download occupies on device, measured once it lands (mid-transfer figures are the part received). */
   sizeBytes?: number;
   /** Pre-downloaded subtitle metadata for offline playback. `trackKey` is the online id (`emb-<streamIndex>` / `ext-<id>`);

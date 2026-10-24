@@ -1412,6 +1412,7 @@
     "stream_message_send": "Send",
     "stream_message_sent": "Message sent",
     "streams_empty": "No video activity in progress",
+    "streams_downloads_title": "Downloads in progress",
     "streams_label_stream": "Stream",
     "streams_label_video": "Video",
     "streams_label_audio": "Audio",

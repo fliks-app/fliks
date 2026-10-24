@@ -1,11 +1,5 @@
-import {
-  Component,
-  OnDestroy,
-  OnInit,
-  inject,
-  signal,
-} from '@angular/core';
-import { UpperCasePipe } from '@angular/common';
+import { Component, computed, OnDestroy, OnInit, inject, signal } from '@angular/core';
+import { NgTemplateOutlet, UpperCasePipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { FormsModule } from '@angular/forms';
@@ -24,6 +18,7 @@ import { ModalHeaderComponent } from '../../../shared/components/modal-header';
   imports: [
     ModalHeaderComponent,
     ModalFooterComponent,
+    NgTemplateOutlet,
     UpperCasePipe,
     RouterLink,
     TranslatePipe,
@@ -45,6 +40,8 @@ export class SystemStreamsComponent implements OnInit, OnDestroy {
   private intervalId: ReturnType<typeof setInterval> | null = null;
 
   readonly streams = signal<ActiveStream[]>([]);
+  readonly playing = computed(() => this.streams().filter((s) => !s.download));
+  readonly downloads = computed(() => this.streams().filter((s) => s.download));
   readonly loading = signal(true);
   readonly pausedSessions = signal(new Set<string>());
   readonly messageTarget = signal<ActiveStream | null>(null);

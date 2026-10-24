@@ -1412,6 +1412,7 @@
     "stream_message_send": "Enviar",
     "stream_message_sent": "Mensagem enviada",
     "streams_empty": "Nenhuma atividade de vídeo em curso",
+    "streams_downloads_title": "Transferências em curso",
     "streams_label_stream": "Fluxo",
     "streams_label_video": "Vídeo",
     "streams_label_audio": "Áudio",
