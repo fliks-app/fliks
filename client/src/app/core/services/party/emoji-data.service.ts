@@ -1,7 +1,5 @@
-import { HttpBackend, HttpClient } from '@angular/common/http';
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { TranslateService } from '@ngx-translate/core';
-import { firstValueFrom } from 'rxjs';
 import { type EmojiEntry, type EmojiGroup, normalizeText, searchEmojis } from './emoji-search';
 
 interface CompactEmoji {
@@ -16,13 +14,25 @@ interface Messages {
 }
 
 const FALLBACK_LANG = 'en';
+/** One lazy chunk per UI language, resolved by the bundler like any dependency and fetched only when the picker opens. */
+const LOCALES: Record<string, () => Promise<[CompactEmoji[], Messages]>> = {
+  de: () => Promise.all([import('emojibase-data/de/compact.json'), import('emojibase-data/de/messages.json')]).then(unwrap),
+  en: () => Promise.all([import('emojibase-data/en/compact.json'), import('emojibase-data/en/messages.json')]).then(unwrap),
+  es: () => Promise.all([import('emojibase-data/es/compact.json'), import('emojibase-data/es/messages.json')]).then(unwrap),
+  fr: () => Promise.all([import('emojibase-data/fr/compact.json'), import('emojibase-data/fr/messages.json')]).then(unwrap),
+  it: () => Promise.all([import('emojibase-data/it/compact.json'), import('emojibase-data/it/messages.json')]).then(unwrap),
+  pt: () => Promise.all([import('emojibase-data/pt/compact.json'), import('emojibase-data/pt/messages.json')]).then(unwrap),
+};
+
+function unwrap([emojis, messages]: [{ default: unknown }, { default: unknown }]): [CompactEmoji[], Messages] {
+  return [emojis.default as CompactEmoji[], messages.default as Messages];
+}
 /** Skin-tone and hair components are not emojis on their own. */
 const COMPONENT_GROUP = 'component';
 
-/** The standard emoji set with its names in the UI language, fetched from the static `emoji-data/` assets on first use. */
+/** The standard emoji set with its names in the UI language, loaded on first use. */
 @Injectable({ providedIn: 'root' })
 export class EmojiDataService {
-  private readonly http = new HttpClient(inject(HttpBackend));
   private readonly translate = inject(TranslateService);
   private readonly loaded = signal<{ lang: string; groups: EmojiGroup[] } | null>(null);
   private loading: { lang: string; done: Promise<void> } | null = null;
@@ -66,12 +76,9 @@ export class EmojiDataService {
   }
 
   private async fetch(lang: string): Promise<EmojiGroup[]> {
-    // Relative to <base href>, like the i18n files: a leading "/" breaks on TV (file://).
-    const base = `emoji-data/${lang}`;
-    const [emojis, messages] = await Promise.all([
-      firstValueFrom(this.http.get<CompactEmoji[]>(`${base}/compact.json`)),
-      firstValueFrom(this.http.get<Messages>(`${base}/messages.json`)),
-    ]);
+    const loader = LOCALES[lang];
+    if (!loader) throw new Error(`no emoji data for ${lang}`);
+    const [emojis, messages] = await loader();
     return messages.groups
       .filter((g) => g.key !== COMPONENT_GROUP)
       .map((g) => ({

@@ -33,7 +33,6 @@
         "files": [
           "/icons/**",
           "/i18n/**",
-          "/emoji-data/**",
           "/*.(svg|cur|jpg|jpeg|png|apng|webp|avif|gif|ico)"
         ]
       }

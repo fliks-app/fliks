@@ -113,7 +113,9 @@
   }
 
   @if (partyCtl.active() && !inPipMode()) {
-    <app-party-floaters />
+    @defer {
+      <app-party-floaters />
+    }
   }
 
   @if (edlNotice(); as notice) {
@@ -250,7 +252,10 @@
 </div>
 
 @if (partyPanelShown()) {
-  <app-party-panel />
+  <!-- Party UI loads with the first party, out of the player chunk. -->
+  @defer {
+    <app-party-panel />
+  }
 }
 <app-party-reaction-settings #reactionSettings />
 </div>
