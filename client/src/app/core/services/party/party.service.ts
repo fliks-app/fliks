@@ -1,7 +1,8 @@
-import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
+import { Injectable, Injector, computed, effect, inject, signal, untracked } from '@angular/core';
+import { toObservable } from '@angular/core/rxjs-interop';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Router } from '@angular/router';
-import { Subject } from 'rxjs';
+import { Subject, filter, firstValueFrom } from 'rxjs';
 import { TranslateService } from '@ngx-translate/core';
 import {
   PartyApiService,
@@ -73,6 +74,7 @@ export class PartyService {
   private readonly translate = inject(TranslateService);
   private readonly mediaService = inject(MediaService);
   private readonly device = inject(DeviceService);
+  private readonly injector = inject(Injector);
 
   readonly party = signal<PartyDto | null>(null);
   readonly live = signal<PartyLiveState | null>(null);
@@ -199,11 +201,31 @@ export class PartyService {
       this.toast.info(this.translate.instant('party.toast_not_started'));
       return;
     }
+    this.adopt(dto);
+    if (dto.status === 'live') await this.openPlayer(dto.item);
+    else this.openPage(id, token);
+  }
+
+  /** Rejoins the live party of a reloaded player URL, once the stream is up; false when it cannot be rejoined. */
+  async resume(id: number): Promise<boolean> {
+    await firstValueFrom(toObservable(this.sse.connected, { injector: this.injector }).pipe(filter(Boolean)));
+    try {
+      const dto = await this.api.join(id, this.deviceId(), undefined, true);
+      if (dto.status !== 'live' || !dto.live) {
+        await this.api.leave(id, this.deviceId()).catch(() => {});
+        return false;
+      }
+      this.adopt(dto);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private adopt(dto: PartyDto): void {
     this.reset();
     this.applySnapshot(dto);
     this.clock.start();
-    if (dto.status === 'live') await this.openPlayer(dto.item);
-    else this.openPage(id, token);
   }
 
   /** Host: leaves the lobby for the player; the other members follow through the events. */
@@ -255,7 +277,7 @@ export class PartyService {
       await this.leave();
       return;
     }
-    const queryParams: Record<string, number> = { mediaId: item.mediaId };
+    const queryParams: Record<string, number> = { mediaId: item.mediaId, party: this.party()!.id };
     if (item.episodeId != null) queryParams['episodeId'] = item.episodeId;
     await this.router.navigate(['/watch', fileId], { queryParams });
   }

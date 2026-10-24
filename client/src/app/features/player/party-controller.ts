@@ -1,5 +1,6 @@
 import { Injectable, effect, inject, untracked } from '@angular/core';
 import type { Subscription } from 'rxjs';
+import { ActivatedRoute, Router } from '@angular/router';
 import { TranslateService } from '@ngx-translate/core';
 import { ClockService } from '../../core/services/party/clock.service';
 import { PartyService, type PartyLiveState } from '../../core/services/party/party.service';
@@ -46,6 +47,8 @@ export class PartyController {
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
   private readonly voice = inject(VoiceService);
+  private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
   private readonly castService = inject(CastService);
   private readonly castTarget = inject(CastPlaybackTarget);
   private readonly castOutput = new CastPartyOutput(this.castService, inject(CastPlayerService));
@@ -113,6 +116,16 @@ export class PartyController {
     };
     this.closedSub = this.party.closed.subscribe(() => host.onBack());
     this.driftTimer = setInterval(() => this.checkDrift(), DRIFT_CHECK_MS);
+    void this.resumeFromUrl();
+  }
+
+  /** A reloaded player carries `party=<id>` while the in-memory party is gone: rejoin it, else play solo. */
+  private async resumeFromUrl(): Promise<void> {
+    const id = Number(this.route.snapshot.queryParams['party']);
+    if (!id || this.party.party()?.id === id) return;
+    if (await this.party.resume(id) || this.destroyed) return;
+    this.toast.error(this.translate.instant('party.error_resume'));
+    void this.router.navigate([], { relativeTo: this.route, queryParams: { party: null }, queryParamsHandling: 'merge', replaceUrl: true });
   }
 
   dispose(): void {

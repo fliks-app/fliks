@@ -3573,6 +3573,7 @@
     "error_voice_full": "Der Sprachkanal ist voll",
     "error_voice_not_joined": "Tritt zuerst dem Sprachchat bei",
     "error_generic": "Die Party-Aktion ist fehlgeschlagen",
+    "error_resume": "Die Party konnte nicht wieder betreten werden, Wiedergabe allein",
     "error_not_found": "Party nicht gefunden",
     "error_not_host": "Das kann nur der Host",
     "error_host_only": "Nur der Host steuert die Wiedergabe",

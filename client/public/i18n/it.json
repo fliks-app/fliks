@@ -3573,6 +3573,7 @@
     "error_voice_full": "Il canale vocale è pieno",
     "error_voice_not_joined": "Entra prima nel canale vocale",
     "error_generic": "L'azione sulla sessione non è riuscita",
+    "error_resume": "Impossibile rientrare nella sessione, riproduzione in solitaria",
     "error_not_found": "Sessione non trovata",
     "error_not_host": "Solo l'host può farlo",
     "error_host_only": "Solo l'host controlla la riproduzione",

@@ -3573,6 +3573,7 @@
     "error_voice_full": "Le salon vocal est plein",
     "error_voice_not_joined": "Rejoignez d'abord le vocal",
     "error_generic": "L'action sur la séance a échoué",
+    "error_resume": "Impossible de rejoindre la séance, lecture en solo",
     "error_not_found": "Séance introuvable",
     "error_not_host": "Seul l'hôte peut faire cela",
     "error_host_only": "Seul l'hôte contrôle la lecture",

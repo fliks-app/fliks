@@ -3573,6 +3573,7 @@
     "error_voice_full": "The voice channel is full",
     "error_voice_not_joined": "Join the voice channel first",
     "error_generic": "The party action failed",
+    "error_resume": "Could not rejoin the party, playing solo",
     "error_not_found": "Party not found",
     "error_not_host": "Only the host can do this",
     "error_host_only": "Only the host controls playback",

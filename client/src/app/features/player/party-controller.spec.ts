@@ -1,5 +1,6 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { ActivatedRoute, Router } from '@angular/router';
 import { TranslateService } from '@ngx-translate/core';
 import { describe, expect, it, vi } from 'vitest';
 import { CastService } from '../../core/services/cast.service';
@@ -14,9 +15,11 @@ import { ToastService } from '../../core/services/toast.service';
 import { PartyController, type PartyHost } from './party-controller';
 import { QueueController } from './queue-controller';
 
-function setup(opts: { canControl?: boolean } = {}) {
+function setup(opts: { canControl?: boolean; urlParty?: string; joined?: number; resumes?: boolean } = {}) {
   const party = {
     active: signal(true),
+    party: signal(opts.joined != null ? { id: opts.joined } : null),
+    resume: vi.fn().mockResolvedValue(opts.resumes ?? true),
     live: signal<unknown>(null),
     canControl: signal(opts.canControl ?? true),
     isHost: signal(false),
@@ -36,7 +39,9 @@ function setup(opts: { canControl?: boolean } = {}) {
     pause: vi.fn(),
   };
   const queue = { upNext: () => null, interceptAdvance: null as unknown };
-  const toast = { info: vi.fn() };
+  const toast = { info: vi.fn(), error: vi.fn() };
+  const route = { snapshot: { queryParams: opts.urlParty ? { party: opts.urlParty } : {} } };
+  const router = { navigate: vi.fn() };
   TestBed.configureTestingModule({
     providers: [
       PartyController,
@@ -50,6 +55,8 @@ function setup(opts: { canControl?: boolean } = {}) {
       { provide: CastPlaybackTarget, useValue: { partyIntercept: null } },
       { provide: DeviceService, useValue: { tvPlatform: () => null, isTv: () => false } },
       { provide: ToastService, useValue: toast },
+      { provide: ActivatedRoute, useValue: route },
+      { provide: Router, useValue: router },
       { provide: TranslateService, useValue: { instant: (k: string) => k } },
     ],
   });
@@ -67,7 +74,7 @@ function setup(opts: { canControl?: boolean } = {}) {
     onBack: vi.fn(),
   };
   ctl.attach(host);
-  return { ctl, party, state, engine, host, queue, toast, cast };
+  return { ctl, party, state, engine, host, queue, toast, cast, router, route };
 }
 
 describe('PartyController user actions', () => {
@@ -107,6 +114,44 @@ describe('PartyController user actions', () => {
     party.active.set(false);
     expect(ctl.togglePlay()).toBe(false);
     expect(ctl.seek(5)).toBe(false);
+    ctl.dispose();
+  });
+});
+
+describe('PartyController resume from the URL', () => {
+  const flush = () => new Promise<void>((r) => setTimeout(r));
+
+  it('joins the party named by a reloaded player URL', () => {
+    const { ctl, party } = setup({ urlParty: '37' });
+    expect(party.resume).toHaveBeenCalledWith(37);
+    ctl.dispose();
+  });
+
+  it('does not join twice when the app already is in that party', () => {
+    const { ctl, party } = setup({ urlParty: '37', joined: 37 });
+    expect(party.resume).not.toHaveBeenCalled();
+    ctl.dispose();
+  });
+
+  it('does nothing without the param', () => {
+    const { ctl, party } = setup();
+    expect(party.resume).not.toHaveBeenCalled();
+    ctl.dispose();
+  });
+
+  it('toasts and drops the param when the party cannot be rejoined', async () => {
+    const { ctl, toast, router } = setup({ urlParty: '37', resumes: false });
+    await flush();
+    expect(toast.error).toHaveBeenCalledWith('party.error_resume');
+    expect(router.navigate).toHaveBeenCalledWith([], expect.objectContaining({ queryParams: { party: null }, replaceUrl: true }));
+    ctl.dispose();
+  });
+
+  it('keeps the param after a successful join', async () => {
+    const { ctl, toast, router } = setup({ urlParty: '37' });
+    await flush();
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(router.navigate).not.toHaveBeenCalled();
     ctl.dispose();
   });
 });

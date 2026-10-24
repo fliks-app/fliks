@@ -127,8 +127,10 @@ export class PartyApiService {
     return firstValueFrom(this.http.delete<void>(`/api/parties/${id}`));
   }
 
-  join(id: number, deviceId: string, token?: string) {
-    return firstValueFrom(this.http.post<PartyDto>(`/api/parties/${id}/join`, { deviceId, ...(token && { token }) }));
+  join(id: number, deviceId: string, token?: string, quiet = false) {
+    return firstValueFrom(
+      this.http.post<PartyDto>(`/api/parties/${id}/join`, { deviceId, ...(token && { token }) }, quiet ? QUIET() : {}),
+    );
   }
 
   start(id: number) {

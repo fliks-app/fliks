@@ -15,6 +15,7 @@ import { PlayerStateService } from '../../core/services/player-state.service';
 import { PlaybackQueueService, type QueueItem } from '../../core/services/playback-queue.service';
 import { ServerConfigService } from '../../core/services/server-config.service';
 import { ToastService } from '../../core/services/toast.service';
+import { PartyService } from '../../core/services/party/party.service';
 import { NativePlayer } from '../../core/plugins/native-player.plugin';
 import { buildSeriesQueueItems, resolvePlayableFile } from '../../shared/utils/media-play.util';
 
@@ -52,6 +53,7 @@ export class QueueController {
   private readonly navbar = inject(NavbarService);
   private readonly router = inject(Router);
   private readonly toast = inject(ToastService);
+  private readonly party = inject(PartyService);
   private readonly translate = inject(TranslateService);
   private host!: QueueHost;
 
@@ -300,6 +302,8 @@ export class QueueController {
 
     const qp: Record<string, number> = { mediaId: item.mediaId };
     if (item.episodeId) qp['episodeId'] = item.episodeId;
+    const partyId = this.party.party()?.id;
+    if (partyId != null) qp['party'] = partyId;
     const sourceId = this.queue.sourceId();
     // Only a playlist queue is re-established from the URL; a series queue is
     // rebuilt from the loaded media, so it needs no param.

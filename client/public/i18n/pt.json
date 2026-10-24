@@ -3573,6 +3573,7 @@
     "error_voice_full": "O canal de voz está cheio",
     "error_voice_not_joined": "Entre primeiro no canal de voz",
     "error_generic": "A ação da sessão falhou",
+    "error_resume": "Não foi possível voltar à sessão, reprodução a solo",
     "error_not_found": "Sessão não encontrada",
     "error_not_host": "Só o anfitrião pode fazer isto",
     "error_host_only": "Só o anfitrião controla a reprodução",
