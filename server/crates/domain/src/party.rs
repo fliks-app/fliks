@@ -146,6 +146,7 @@ pub enum Effect {
     },
     Members {
         rev: u64,
+        host_id: i32,
         members: Vec<Member>,
     },
     Settings {
@@ -179,6 +180,14 @@ pub enum Error {
     RateLimited,
 }
 
+/// A client intent (`play|pause|seek|setItem|ended`) with the revision it was made on.
+pub struct Intent {
+    pub action: Action,
+    pub position: Option<f64>,
+    pub item: Option<Item>,
+    pub base_rev: u64,
+}
+
 #[derive(Debug, Clone)]
 struct Phase {
     target_playing: bool,
@@ -199,6 +208,8 @@ pub struct Live {
     pub chat: VecDeque<Message>,
     /// Users kicked since the last token regeneration.
     pub blocked: Vec<i32>,
+    /// A scheduled party's open lobby: members start `waiting` until they say ready.
+    pub lobby: bool,
     phase: Option<Phase>,
     empty_since: Option<i64>,
     next_msg: u64,
@@ -237,6 +248,7 @@ impl Live {
             members: vec![],
             chat: VecDeque::new(),
             blocked: vec![],
+            lobby: false,
             phase: None,
             empty_since: Some(now),
             next_msg: 1,
@@ -340,6 +352,7 @@ impl Live {
         let rev = self.bump();
         out.push(Effect::Members {
             rev,
+            host_id: self.host_id,
             members: self.members.clone(),
         });
     }
@@ -475,7 +488,7 @@ impl Live {
         now: i64,
     ) -> Vec<Effect> {
         let mut out = vec![];
-        let status = if self.state == State::Waiting {
+        let status = if self.state == State::Waiting || self.lobby {
             MemberStatus::Waiting
         } else {
             MemberStatus::Ready
@@ -528,12 +541,15 @@ impl Live {
         &mut self,
         user_id: i32,
         device_id: &str,
-        action: Action,
-        position: Option<f64>,
-        item: Option<Item>,
-        base_rev: u64,
+        req: Intent,
         now: i64,
     ) -> Result<(u64, Vec<Effect>), Error> {
+        let Intent {
+            action,
+            position,
+            item,
+            base_rev,
+        } = req;
         let i = self.find(user_id, device_id).ok_or(Error::NotMember)?;
         let actor = self.members[i].clone();
         let host = user_id == self.host_id;
@@ -571,10 +587,10 @@ impl Live {
                         json!({ "position": p }),
                         now,
                     );
-                } else if self.state == State::Waiting {
-                    if let Some(p) = &mut self.phase {
-                        p.target_playing = true;
-                    }
+                } else if self.state == State::Waiting
+                    && let Some(p) = &mut self.phase
+                {
+                    p.target_playing = true;
                 }
             }
             Action::Pause => match self.state {
@@ -646,8 +662,8 @@ impl Live {
         }
         let new = match status {
             MemberStatus::Ready if waiting && !near => m.status,
-            MemberStatus::Ready | MemberStatus::Buffering => status,
-            _ => return Err(Error::Invalid("status")),
+            MemberStatus::Ready | MemberStatus::Buffering | MemberStatus::Waiting => status,
+            MemberStatus::Away => return Err(Error::Invalid("status")),
         };
         let mut out = vec![];
         if new != m.status {
@@ -867,9 +883,19 @@ mod tests {
     }
 
     fn play(l: &mut Live, user: i32, dev: &str, now: i64) -> Vec<Effect> {
-        l.intent(user, dev, Action::Play, None, None, l.rev, now)
-            .unwrap()
-            .1
+        l.intent(
+            user,
+            dev,
+            Intent {
+                action: Action::Play,
+                position: None,
+                item: None,
+                base_rev: l.rev,
+            },
+            now,
+        )
+        .unwrap()
+        .1
     }
 
     fn ready(l: &mut Live, user: i32, dev: &str, pos: f64, now: i64) -> Vec<Effect> {
@@ -893,7 +919,7 @@ mod tests {
         assert!(
             ready(&mut l, 1, "d1", 0.0, 1100)
                 .iter()
-                .all(|e| state_of(&[e.clone()]).is_none())
+                .all(|e| state_of(std::slice::from_ref(e)).is_none())
         );
         l.members[1].rtt_ms = 400;
         let out = ready(&mut l, 2, "d2", 0.5, 1200);
@@ -925,8 +951,18 @@ mod tests {
     fn seek_while_paused_ends_paused_and_while_playing_ends_playing() {
         let mut l = party();
         l.state = State::Paused;
-        l.intent(1, "d1", Action::Seek, Some(50.0), None, l.rev, 0)
-            .unwrap();
+        l.intent(
+            1,
+            "d1",
+            Intent {
+                action: Action::Seek,
+                position: Some(50.0),
+                item: None,
+                base_rev: l.rev,
+            },
+            0,
+        )
+        .unwrap();
         ready(&mut l, 1, "d1", 50.0, 1);
         let out = ready(&mut l, 2, "d2", 50.0, 2);
         assert_eq!(state_of(&out), Some((State::Paused, None)));
@@ -934,8 +970,18 @@ mod tests {
         ready(&mut l, 1, "d1", 50.0, 4);
         ready(&mut l, 2, "d2", 50.0, 5);
         assert_eq!(l.state, State::Playing);
-        l.intent(2, "d2", Action::Seek, Some(80.0), None, l.rev, 6000)
-            .unwrap();
+        l.intent(
+            2,
+            "d2",
+            Intent {
+                action: Action::Seek,
+                position: Some(80.0),
+                item: None,
+                base_rev: l.rev,
+            },
+            6000,
+        )
+        .unwrap();
         ready(&mut l, 1, "d1", 80.0, 6001);
         let out = ready(&mut l, 2, "d2", 80.0, 6002);
         assert_eq!(state_of(&out).map(|s| s.0), Some(State::Playing));
@@ -945,7 +991,18 @@ mod tests {
     fn pause_while_playing_is_immediate_and_while_waiting_retargets() {
         let mut l = party();
         play(&mut l, 1, "d1", 0);
-        l.intent(2, "d2", Action::Pause, None, None, 0, 5).unwrap();
+        l.intent(
+            2,
+            "d2",
+            Intent {
+                action: Action::Pause,
+                position: None,
+                item: None,
+                base_rev: 0,
+            },
+            5,
+        )
+        .unwrap();
         ready(&mut l, 1, "d1", 0.0, 6);
         let out = ready(&mut l, 2, "d2", 0.0, 7);
         assert_eq!(state_of(&out), Some((State::Paused, None)));
@@ -955,7 +1012,17 @@ mod tests {
         assert_eq!(l.state, State::Playing);
         let start = l.anchor.server_time_ms;
         let out = l
-            .intent(1, "d1", Action::Pause, None, None, 0, start + 4000)
+            .intent(
+                1,
+                "d1",
+                Intent {
+                    action: Action::Pause,
+                    position: None,
+                    item: None,
+                    base_rev: 0,
+                },
+                start + 4000,
+            )
             .unwrap()
             .1;
         assert_eq!(state_of(&out), Some((State::Paused, None)));
@@ -981,16 +1048,51 @@ mod tests {
     }
 
     #[test]
+    fn lobby_members_start_waiting_and_toggle_ready() {
+        let mut l = Live::new("p".into(), Policy::Everyone, 1, item(), 0.0, 0);
+        l.lobby = true;
+        l.join(2, "bob", "d2", "c2", 0);
+        assert_eq!(l.members[0].status, MemberStatus::Waiting);
+        let out = ready(&mut l, 2, "d2", 0.0, 1);
+        assert!(out.iter().any(|e| matches!(e, Effect::Members { .. })));
+        assert_eq!(l.members[0].status, MemberStatus::Ready);
+        l.status(2, "d2", MemberStatus::Waiting, 0.0, None, 2)
+            .unwrap();
+        assert_eq!(l.members[0].status, MemberStatus::Waiting);
+        assert_eq!(l.state, State::Idle);
+    }
+
+    #[test]
     fn host_only_blocks_non_host_moves_but_not_status() {
         let mut l = party();
         l.policy = Policy::HostOnly;
         for a in [Action::Play, Action::Pause, Action::Seek, Action::SetItem] {
-            let r = l.intent(2, "d2", a, Some(1.0), Some(item()), l.rev, 0);
+            let r = l.intent(
+                2,
+                "d2",
+                Intent {
+                    action: a,
+                    position: Some(1.0),
+                    item: Some(item()),
+                    base_rev: l.rev,
+                },
+                0,
+            );
             assert_eq!(r.unwrap_err(), Error::HostOnly);
         }
         assert!(
-            l.intent(1, "d1", Action::Play, None, None, l.rev, 0)
-                .is_ok()
+            l.intent(
+                1,
+                "d1",
+                Intent {
+                    action: Action::Play,
+                    position: None,
+                    item: None,
+                    base_rev: l.rev
+                },
+                0
+            )
+            .is_ok()
         );
     }
 
@@ -1000,12 +1102,58 @@ mod tests {
         let old = l.rev;
         play(&mut l, 1, "d1", 0);
         assert!(l.rev > old);
-        let r = l.intent(2, "d2", Action::Seek, Some(9.0), None, old, 1);
+        let r = l.intent(
+            2,
+            "d2",
+            Intent {
+                action: Action::Seek,
+                position: Some(9.0),
+                item: None,
+                base_rev: old,
+            },
+            1,
+        );
         assert_eq!(r.unwrap_err(), Error::Stale);
-        let r = l.intent(2, "d2", Action::SetItem, None, Some(item()), old, 1);
+        let r = l.intent(
+            2,
+            "d2",
+            Intent {
+                action: Action::SetItem,
+                position: None,
+                item: Some(item()),
+                base_rev: old,
+            },
+            1,
+        );
         assert_eq!(r.unwrap_err(), Error::Stale);
-        assert!(l.intent(2, "d2", Action::Pause, None, None, old, 1).is_ok());
-        assert!(l.intent(2, "d2", Action::Play, None, None, old, 2).is_ok());
+        assert!(
+            l.intent(
+                2,
+                "d2",
+                Intent {
+                    action: Action::Pause,
+                    position: None,
+                    item: None,
+                    base_rev: old
+                },
+                1
+            )
+            .is_ok()
+        );
+        assert!(
+            l.intent(
+                2,
+                "d2",
+                Intent {
+                    action: Action::Play,
+                    position: None,
+                    item: None,
+                    base_rev: old
+                },
+                2
+            )
+            .is_ok()
+        );
     }
 
     #[test]
@@ -1019,7 +1167,17 @@ mod tests {
             episode_id: Some(7),
         };
         let out = l
-            .intent(1, "d1", Action::SetItem, None, Some(next.clone()), l.rev, 0)
+            .intent(
+                1,
+                "d1",
+                Intent {
+                    action: Action::SetItem,
+                    position: None,
+                    item: Some(next.clone()),
+                    base_rev: l.rev,
+                },
+                0,
+            )
             .unwrap()
             .1;
         assert_eq!(l.item, next);
@@ -1031,14 +1189,34 @@ mod tests {
         l.state = State::Playing;
         let before = l.rev;
         assert!(
-            l.intent(2, "d2", Action::Ended, None, None, 0, 5)
-                .unwrap()
-                .1
-                .is_empty()
+            l.intent(
+                2,
+                "d2",
+                Intent {
+                    action: Action::Ended,
+                    position: None,
+                    item: None,
+                    base_rev: 0
+                },
+                5
+            )
+            .unwrap()
+            .1
+            .is_empty()
         );
         assert_eq!(l.rev, before);
         let out = l
-            .intent(1, "d1", Action::Ended, None, None, 0, 5)
+            .intent(
+                1,
+                "d1",
+                Intent {
+                    action: Action::Ended,
+                    position: None,
+                    item: None,
+                    base_rev: 0,
+                },
+                5,
+            )
             .unwrap()
             .1;
         assert_eq!(state_of(&out), Some((State::Idle, None)));
