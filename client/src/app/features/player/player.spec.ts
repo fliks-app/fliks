@@ -229,7 +229,7 @@ function createHarness(opts: {
       {
         provide: AuthService,
         useValue: {
-          ensureStreamToken: vi.fn(async () => {}),
+          ensureStreamToken: vi.fn(async () => 'tok'),
           streamToken: () => 'tok',
           accessToken: 'tok',
           user: () => ({ id: 1 }),
@@ -672,6 +672,13 @@ describe('PlayerComponent wake / resume', () => {
     await flush();
 
     expect(run).toHaveBeenCalledTimes(1);
+  });
+
+  it('a failed stream-token mint fails the load instead of baking the access token', async () => {
+    const h = createHarness();
+    h.component.authService.ensureStreamToken = vi.fn(async () => null);
+
+    await expect(h.component.requireStreamToken()).rejects.toThrow('stream token unavailable');
   });
 
   it('direct play has no encoder to warm', async () => {
