@@ -35,6 +35,7 @@ pub struct Create {
     pub policy: Option<Policy>,
     pub reactions_enabled: Option<bool>,
     pub chat_enabled: Option<bool>,
+    pub link_sharing: Option<bool>,
     pub invitee_ids: Option<Vec<i32>>,
 }
 
@@ -59,6 +60,7 @@ pub struct Patch {
     pub policy: Option<Policy>,
     pub reactions_enabled: Option<bool>,
     pub chat_enabled: Option<bool>,
+    pub link_sharing: Option<bool>,
     pub scheduled_at: Option<DateTime<Utc>>,
     pub regenerate_token: Option<bool>,
 }
@@ -251,6 +253,7 @@ pub struct PartyDto {
     pub policy: Policy,
     pub reactions_enabled: bool,
     pub chat_enabled: bool,
+    pub link_sharing: bool,
     pub invite_token: Option<String>,
     pub invitees: Vec<UserRef>,
     pub live: Option<PartyLive>,

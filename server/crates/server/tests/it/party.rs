@@ -461,6 +461,55 @@ async fn host_switches_gate_reactions_and_chat_and_seed_the_next_party(pool: PgP
 }
 
 #[sqlx::test(migrations = false)]
+async fn a_party_without_link_sharing_hides_the_token_from_members(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (alice, a) = c.user("alice", true).await;
+    let (bob, b) = c.user("bob", true).await;
+    c.follow(alice, bob).await;
+    let id = party_with(&c, &a, vec![bob]).await;
+    let mut sb = c.stream(&b, "db").await;
+    let _ca = c.connect(alice, "da");
+    for (t, d) in [(&a, "da"), (&b, "db")] {
+        let uri = format!("/api/parties/{id}/join");
+        c.call("POST", &uri, t, Some(json!({"deviceId": d}))).await;
+    }
+    let url = format!("/api/parties/{id}");
+    let (_, p) = c.call("GET", &url, &b, None).await;
+    let token = p["inviteToken"].as_str().unwrap().to_owned();
+    let (s, e) = c
+        .call("PATCH", &url, &b, Some(json!({"linkSharing": false})))
+        .await;
+    assert_eq!((s, msg(&e)), (403, Some("party.error_not_host")));
+    let (s, p) = c
+        .call("PATCH", &url, &a, Some(json!({"linkSharing": false})))
+        .await;
+    assert_eq!((s, p["inviteToken"].as_str()), (200, Some(token.as_str())));
+    let settings = events_of(&mut sb, "party.settings").await;
+    assert_eq!(settings.last().unwrap()["linkSharing"], json!(false));
+    let (_, p) = c.call("GET", &url, &b, None).await;
+    assert_eq!(
+        (p["linkSharing"].clone(), p["inviteToken"].clone()),
+        (json!(false), Value::Null)
+    );
+    let join = json!({"deviceId": "db", "token": token});
+    let (s, _) = c.call("POST", &format!("{url}/join"), &b, Some(join)).await;
+    assert_eq!(s, 200);
+    let (_, next) = c
+        .call(
+            "POST",
+            "/api/parties",
+            &a,
+            Some(json!({"name": "next", "mediaId": 1})),
+        )
+        .await;
+    assert_eq!(next["linkSharing"], json!(false));
+    c.call("PATCH", &url, &a, Some(json!({"linkSharing": true})))
+        .await;
+    let (_, p) = c.call("GET", &url, &b, None).await;
+    assert_eq!(p["inviteToken"].as_str(), Some(token.as_str()));
+}
+
+#[sqlx::test(migrations = false)]
 async fn a_scheduled_party_opens_its_lobby_late_and_expires(pool: PgPool) {
     let c = ctx(pool).await;
     let (_, a) = c.user("alice", true).await;

@@ -180,6 +180,7 @@ pub enum Effect {
         policy: Policy,
         reactions_enabled: bool,
         chat_enabled: bool,
+        link_sharing: bool,
     },
     Message(Message),
     Reaction {
@@ -233,6 +234,8 @@ pub struct Live {
     /// Host switches for the whole party: reactions and chat messages are refused while off.
     pub reactions_enabled: bool,
     pub chat_enabled: bool,
+    /// Whether members, not only the host, receive the invite token.
+    pub link_sharing: bool,
     pub host_id: i32,
     pub item: Item,
     pub state: State,
@@ -280,6 +283,7 @@ impl Live {
             policy,
             reactions_enabled: true,
             chat_enabled: true,
+            link_sharing: true,
             host_id,
             item,
             state: State::Idle,
@@ -781,6 +785,7 @@ impl Live {
         policy: Option<Policy>,
         reactions_enabled: Option<bool>,
         chat_enabled: Option<bool>,
+        link_sharing: Option<bool>,
     ) -> Vec<Effect> {
         if let Some(n) = name {
             self.name = n;
@@ -790,6 +795,7 @@ impl Live {
         }
         self.reactions_enabled = reactions_enabled.unwrap_or(self.reactions_enabled);
         self.chat_enabled = chat_enabled.unwrap_or(self.chat_enabled);
+        self.link_sharing = link_sharing.unwrap_or(self.link_sharing);
         let rev = self.bump();
         vec![Effect::Settings {
             rev,
@@ -797,6 +803,7 @@ impl Live {
             policy: self.policy,
             reactions_enabled: self.reactions_enabled,
             chat_enabled: self.chat_enabled,
+            link_sharing: self.link_sharing,
         }]
     }
 
@@ -1543,7 +1550,7 @@ mod tests {
     fn every_mutation_bumps_rev_and_chat_is_a_ring() {
         let mut l = party();
         let r = l.rev;
-        l.set_settings(Some("n".into()), Some(Policy::HostOnly), None, None);
+        l.set_settings(Some("n".into()), Some(Policy::HostOnly), None, None, None);
         assert_eq!(l.rev, r + 1);
         for i in 0..250 {
             l.post_message(1, "d1", "m", i * RATE_WINDOW_MS).unwrap();
@@ -1556,12 +1563,13 @@ mod tests {
     fn switched_off_chat_and_reactions_refuse_but_system_messages_flow() {
         let mut l = party();
         let r = l.rev;
-        let e = l.set_settings(None, None, Some(false), Some(false));
+        let e = l.set_settings(None, None, Some(false), Some(false), Some(false));
         assert!(matches!(
             e[0],
             Effect::Settings {
                 reactions_enabled: false,
                 chat_enabled: false,
+                link_sharing: false,
                 ..
             }
         ));
@@ -1570,7 +1578,7 @@ mod tests {
         assert_eq!(l.post_message(1, "d1", "m", 0).unwrap_err(), Error::ChatOff);
         let left = l.leave(2, "d2", 1).unwrap();
         assert!(left.iter().any(|e| matches!(e, Effect::Message(_))));
-        l.set_settings(None, None, Some(true), Some(true));
+        l.set_settings(None, None, Some(true), Some(true), Some(true));
         assert!(l.react(1, "d1", "x", 0).is_ok());
         assert!(l.post_message(1, "d1", "m", 0).is_ok());
     }

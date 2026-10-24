@@ -17,6 +17,7 @@ pub struct Row {
     pub policy: String,
     pub reactions_enabled: bool,
     pub chat_enabled: bool,
+    pub link_sharing: bool,
     pub scheduled_at: Option<DateTime<Utc>>,
     pub status: String,
     pub position: f64,
@@ -35,7 +36,7 @@ impl Row {
 const COLS: &str = r#"id, name, "ownerId" AS owner_id, "mediaId" AS media_id,
     "mediaFileId" AS media_file_id, "episodeId" AS episode_id, "inviteToken" AS invite_token,
     policy, "reactionsEnabled" AS reactions_enabled, "chatEnabled" AS chat_enabled,
-    "scheduledAt" AS scheduled_at, status, position"#;
+    "linkSharing" AS link_sharing, "scheduledAt" AS scheduled_at, status, position"#;
 
 pub fn new_token() -> String {
     let mut b = [0u8; 16];
@@ -50,13 +51,14 @@ pub struct New<'a> {
     pub policy: &'a str,
     pub reactions_enabled: bool,
     pub chat_enabled: bool,
+    pub link_sharing: bool,
     pub scheduled_at: DateTime<Utc>,
 }
 
-/// The owner's reactions and chat switches on their latest party, for the next one's defaults.
-pub async fn owner_switches(db: &PgPool, owner: i32) -> sqlx::Result<Option<(bool, bool)>> {
+/// The owner's host switches on their latest party, for the next one's defaults.
+pub async fn owner_switches(db: &PgPool, owner: i32) -> sqlx::Result<Option<(bool, bool, bool)>> {
     sqlx::query_as(
-        r#"SELECT "reactionsEnabled", "chatEnabled" FROM watch_parties
+        r#"SELECT "reactionsEnabled", "chatEnabled", "linkSharing" FROM watch_parties
            WHERE "ownerId" = $1 ORDER BY "createdAt" DESC, id DESC LIMIT 1"#,
     )
     .bind(owner)
@@ -68,8 +70,9 @@ pub async fn insert(db: &PgPool, n: &New<'_>, invitees: &[i32]) -> sqlx::Result<
     let mut tx = db.begin().await?;
     let row = sqlx::query_as::<_, Row>(&format!(
         r#"INSERT INTO watch_parties (name, "ownerId", "mediaId", "mediaFileId", "episodeId",
-               "inviteToken", policy, "reactionsEnabled", "chatEnabled", "scheduledAt", status)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'scheduled')
+               "inviteToken", policy, "reactionsEnabled", "chatEnabled", "linkSharing", "scheduledAt",
+               status)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'scheduled')
            RETURNING {COLS}"#
     ))
     .bind(n.name)
@@ -81,6 +84,7 @@ pub async fn insert(db: &PgPool, n: &New<'_>, invitees: &[i32]) -> sqlx::Result<
     .bind(n.policy)
     .bind(n.reactions_enabled)
     .bind(n.chat_enabled)
+    .bind(n.link_sharing)
     .bind(n.scheduled_at)
     .fetch_one(&mut *tx)
     .await?;
@@ -197,13 +201,13 @@ pub async fn update_settings(
     id: i32,
     name: &str,
     policy: &str,
-    switches: (bool, bool),
+    switches: (bool, bool, bool),
     scheduled_at: Option<DateTime<Utc>>,
     token: &str,
 ) -> sqlx::Result<()> {
     sqlx::query(
         r#"UPDATE watch_parties SET name = $2, policy = $3, "reactionsEnabled" = $4,
-               "chatEnabled" = $5, "scheduledAt" = $6, "inviteToken" = $7
+               "chatEnabled" = $5, "linkSharing" = $6, "scheduledAt" = $7, "inviteToken" = $8
            WHERE id = $1"#,
     )
     .bind(id)
@@ -211,6 +215,7 @@ pub async fn update_settings(
     .bind(policy)
     .bind(switches.0)
     .bind(switches.1)
+    .bind(switches.2)
     .bind(scheduled_at)
     .bind(token)
     .execute(db)

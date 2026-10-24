@@ -78,6 +78,7 @@ impl Parties {
             };
             l.reactions_enabled = row.reactions_enabled;
             l.chat_enabled = row.chat_enabled;
+            l.link_sharing = row.link_sharing;
             l
         });
     }
@@ -245,6 +246,7 @@ pub async fn deliver(st: &AppState, party: i32, d: Delivery) {
                 policy,
                 reactions_enabled,
                 chat_enabled,
+                link_sharing,
             } => emit(SseEvent::PartySettings {
                 party_id: pid,
                 rev: rev as i64,
@@ -252,6 +254,7 @@ pub async fn deliver(st: &AppState, party: i32, d: Delivery) {
                 policy: json(policy).as_str().unwrap_or_default().to_owned(),
                 reactions_enabled,
                 chat_enabled,
+                link_sharing,
             }),
             Effect::Message(m) => emit(SseEvent::PartyMessage {
                 party_id: pid,
