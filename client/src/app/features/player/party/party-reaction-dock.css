@@ -43,6 +43,7 @@
   }
 }
 .dock-toggle {
+  cursor: pointer;
   pointer-events: auto;
   display: grid;
   place-items: center;
@@ -79,6 +80,7 @@
   opacity: 1;
 }
 .emoji {
+  cursor: pointer;
   flex-shrink: 0;
   display: grid;
   place-items: center;
