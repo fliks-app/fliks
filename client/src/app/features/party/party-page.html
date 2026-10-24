@@ -7,7 +7,7 @@
   } @else if (view(); as v) {
     <header class="flex gap-4">
       @if (v.item.posterUrl) {
-        <img [src]="v.item.posterUrl" alt="" class="h-36 w-24 shrink-0 rounded-lg object-cover" />
+        <img [src]="v.item.posterUrl | resolveUrl: 'medium'" alt="" class="h-36 w-24 shrink-0 rounded-lg object-cover" />
       }
       <div class="min-w-0 flex-1">
         <h1 class="truncate text-xl font-semibold">{{ v.name }}</h1>

@@ -21,6 +21,7 @@ import { LucideMic, LucideMicOff } from '@lucide/angular';
 import { PartyInviteePickerComponent } from './party-invitee-picker';
 import { toLocalInput } from './party-create-modal';
 import { partyWhen } from './party-time';
+import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 
 /** The lobby opens this long before the scheduled time (server `LOBBY_OPEN_BEFORE_MS`). */
 const LOBBY_OPEN_MS = 15 * 60_000;
@@ -28,7 +29,7 @@ const LOBBY_OPEN_MS = 15 * 60_000;
 /** `/parties/:id`: a party's page. Scheduled: info, link and host actions; lobby open: members, ready, chat and start; live: join. */
 @Component({
   selector: 'app-party-page',
-  imports: [FormsModule, TranslatePipe, TvSectionDirective, PartyChatComponent, PartyInviteePickerComponent, PartyVoiceBarComponent, LucideMic, LucideMicOff],
+  imports: [FormsModule, TranslatePipe, ResolveUrlPipe, TvSectionDirective, PartyChatComponent, PartyInviteePickerComponent, PartyVoiceBarComponent, LucideMic, LucideMicOff],
   templateUrl: './party-page.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
