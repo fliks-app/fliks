@@ -33,6 +33,7 @@ export class PartyReactionSettingsComponent {
   protected readonly party = inject(PartyService);
   protected readonly data = inject(EmojiDataService);
   protected readonly keyboard = inject(KeyboardOverlayService);
+  protected readonly skeletonCells = Array.from({ length: 30 }, (_, i) => i);
   protected readonly isTv = inject(DeviceService).isTv;
   protected readonly max = MAX_BAR;
   protected readonly query = signal('');

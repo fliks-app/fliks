@@ -82,7 +82,15 @@
               </section>
             }
           }
-          @if (searching() && !sections()[0].emojis.length) {
+          @if (!data.known()) {
+            <!-- The emoji names load on first open: the grid keeps its shape meanwhile. -->
+            <div class="skeleton mb-2 h-4 w-32"></div>
+            <div class="grid grid-cols-6 gap-2 sm:grid-cols-8 md:grid-cols-10" aria-hidden="true">
+              @for (i of skeletonCells; track i) {
+                <div class="skeleton h-11 rounded-xl"></div>
+              }
+            </div>
+          } @else if (searching() && !sections()[0].emojis.length) {
             <p class="py-4 text-center text-sm opacity-70">{{ 'party.reaction_no_result' | translate }}</p>
           }
         </div>
