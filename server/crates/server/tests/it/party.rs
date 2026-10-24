@@ -500,25 +500,20 @@ async fn ice_defaults_to_stun_and_follows_the_setting(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
-async fn the_catalog_route_lists_served_assets_and_reactions_are_checked_against_it(pool: PgPool) {
+async fn the_catalog_route_lists_served_assets_and_reactions_must_be_standard_emoji(pool: PgPool) {
     let c = ctx(pool).await;
     let (host, h) = c.user("host", true).await;
     let (s, cat) = c.call("GET", "/api/parties/reactions", &h, None).await;
     assert_eq!(s, 200);
-    let list = cat["reactions"].as_array().unwrap();
-    assert_eq!(list.len(), fliks_domain::party::REACTIONS.len());
+    let animations = cat["animations"].as_object().unwrap();
+    assert_eq!(
+        animations.len(),
+        fliks_domain::party::ANIMATED_REACTIONS.len()
+    );
     assert_eq!(cat["defaults"].as_array().unwrap().len(), 8);
     let public = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../public");
-    let urls: Vec<&str> = list
-        .iter()
-        .filter_map(|r| r["animation"].as_str())
-        .collect();
-    let animated = fliks_domain::party::REACTIONS
-        .iter()
-        .filter(|r| r.1)
-        .count();
-    assert_eq!(urls.len(), animated);
-    for url in urls {
+    for url in animations.values() {
+        let url = url.as_str().unwrap();
         assert!(
             public.join(url.strip_prefix('/').unwrap()).is_file(),
             "{url}"
@@ -541,6 +536,17 @@ async fn the_catalog_route_lists_served_assets_and_reactions_are_checked_against
         )
         .await;
     assert_eq!(s, 204);
+    for emoji in ["🖕", "👍🏽"] {
+        let (s, _) = c
+            .call(
+                "POST",
+                &url,
+                &h,
+                Some(json!({"deviceId": "d", "emoji": emoji})),
+            )
+            .await;
+        assert_eq!(s, 204, "{emoji}");
+    }
     let (s, e) = c
         .call(
             "POST",

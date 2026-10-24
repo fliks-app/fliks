@@ -12,105 +12,11 @@ pub const SCHEDULE_EXPIRY_MS: i64 = 7_200_000;
 pub const VOICE_MAX: usize = 8;
 pub const CHAT_CAP: usize = 200;
 pub const SNAPSHOT_MESSAGES: usize = 50;
-/// Reaction catalog, `(emoji, has an animated asset)`; the animated ones come first, and
-/// `scripts/fetch-reaction-emoji.py` reads this block to fetch them.
-pub const REACTIONS: [(&str, bool); 96] = [
-    ("👍", true),
-    ("👎", true),
-    ("😂", true),
-    ("🤣", true),
-    ("😮", true),
-    ("😱", true),
-    ("😢", true),
-    ("😭", true),
-    ("😡", true),
-    ("🤬", true),
-    ("❤️", true),
-    ("😍", true),
-    ("🥰", true),
-    ("🔥", true),
-    ("👏", true),
-    ("🙌", true),
-    ("🎉", true),
-    ("💯", true),
-    ("🤔", true),
-    ("🙄", true),
-    ("😴", true),
-    ("🤯", true),
-    ("😬", true),
-    ("🫣", true),
-    ("😅", true),
-    ("😎", true),
-    ("🥲", true),
-    ("💀", true),
-    ("👀", true),
-    ("🍿", true),
-    ("🤢", true),
-    ("😳", true),
-    ("😀", false),
-    ("😃", false),
-    ("😄", false),
-    ("😁", false),
-    ("😆", false),
-    ("😊", false),
-    ("🙂", false),
-    ("😉", false),
-    ("😇", false),
-    ("🤩", false),
-    ("😘", false),
-    ("😋", false),
-    ("😜", false),
-    ("🤪", false),
-    ("🤗", false),
-    ("🤭", false),
-    ("🤫", false),
-    ("😐", false),
-    ("😑", false),
-    ("😶", false),
-    ("😏", false),
-    ("😒", false),
-    ("😔", false),
-    ("😕", false),
-    ("🙃", false),
-    ("😲", false),
-    ("😨", false),
-    ("😰", false),
-    ("😥", false),
-    ("😓", false),
-    ("😩", false),
-    ("😫", false),
-    ("🥱", false),
-    ("😤", false),
-    ("😠", false),
-    ("🥺", false),
-    ("🤡", false),
-    ("👻", false),
-    ("👽", false),
-    ("🤖", false),
-    ("💩", false),
-    ("🙈", false),
-    ("🙉", false),
-    ("🙊", false),
-    ("💔", false),
-    ("💕", false),
-    ("✨", false),
-    ("⭐", false),
-    ("💥", false),
-    ("👌", false),
-    ("✌️", false),
-    ("🤞", false),
-    ("🤘", false),
-    ("👋", false),
-    ("🙏", false),
-    ("💪", false),
-    ("🤝", false),
-    ("👊", false),
-    ("✅", false),
-    ("❌", false),
-    ("❓", false),
-    ("🏆", false),
-    ("🎬", false),
-    ("📺", false),
+/// Reactions with an animated asset under `public/emoji/`; `scripts/fetch-reaction-emoji.py` reads
+/// this block to fetch them.
+pub const ANIMATED_REACTIONS: [&str; 32] = [
+    "👍", "👎", "😂", "🤣", "😮", "😱", "😢", "😭", "😡", "🤬", "❤️", "😍", "🥰", "🔥", "👏", "🙌",
+    "🎉", "💯", "🤔", "🙄", "😴", "🤯", "😬", "🫣", "😅", "😎", "🥲", "💀", "👀", "🍿", "🤢", "😳",
 ];
 /// The reaction bar a device starts with.
 pub const DEFAULT_REACTIONS: [&str; 8] = ["👍", "😂", "😮", "😢", "😡", "❤️", "🔥", "👏"];
@@ -1031,9 +937,6 @@ impl Live {
         now: i64,
     ) -> Result<Vec<Effect>, Error> {
         let i = self.find(user_id, device_id).ok_or(Error::NotMember)?;
-        if !REACTIONS.iter().any(|(e, _)| *e == emoji) {
-            return Err(Error::Invalid("emoji"));
-        }
         if !self.rate_ok(user_id, device_id, Limit::Reaction, now) {
             return Err(Error::RateLimited);
         }
@@ -1050,10 +953,10 @@ mod tests {
     #[test]
     fn reaction_catalog_is_coherent() {
         assert_eq!(noto_code("❤️"), "2764_fe0f");
-        let mut emojis: Vec<_> = REACTIONS.iter().map(|(e, _)| *e).collect();
+        let mut emojis = ANIMATED_REACTIONS.to_vec();
         emojis.sort_unstable();
         emojis.dedup();
-        assert_eq!(emojis.len(), REACTIONS.len());
+        assert_eq!(emojis.len(), ANIMATED_REACTIONS.len());
         assert!(DEFAULT_REACTIONS.iter().all(|d| emojis.contains(d)));
     }
 
@@ -1520,10 +1423,6 @@ mod tests {
             l.react(1, "d1", "🔥", i).unwrap();
         }
         assert_eq!(l.react(1, "d1", "🔥", 10).unwrap_err(), Error::RateLimited);
-        assert_eq!(
-            l.react(2, "d2", "x", 0).unwrap_err(),
-            Error::Invalid("emoji")
-        );
     }
 
     fn voice(l: &mut Live, user: i32, dev: &str, joined: bool) -> Result<Vec<Effect>, Error> {
