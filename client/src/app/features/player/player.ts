@@ -570,6 +570,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     engine: () => this.engine,
     controls: () => this.controls(),
     isTv: () => this.device.isTv(),
+    canControlPlayback: () => this.party.canControl(),
     playbackRate: () => this.playbackRate(),
     onTogglePlay: () => this.onTogglePlay(),
     onSeek: (t) => this.onSeek(t),

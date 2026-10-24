@@ -44,6 +44,18 @@ describe('SeekbarComponent keyboard preview', () => {
     expect(bar.previewVisible()).toBe(false);
   });
 
+  it('ignores keys when disabled', () => {
+    const fixture = TestBed.createComponent(SeekbarComponent);
+    fixture.componentRef.setInput('duration', 600);
+    fixture.componentRef.setInput('disabled', true);
+    const seeks: number[] = [];
+    fixture.componentInstance.seek.subscribe((t) => seeks.push(t));
+    fixture.componentInstance.onKeydown(arrow('ArrowRight'));
+    vi.advanceTimersByTime(2000);
+    expect(fixture.componentInstance.dragging()).toBe(false);
+    expect(seeks).toEqual([]);
+  });
+
   it('accumulates discrete taps into one growing offset', () => {
     const seeks: number[] = [];
     bar.seek.subscribe((t) => seeks.push(t));

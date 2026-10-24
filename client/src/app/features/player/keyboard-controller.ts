@@ -7,6 +7,8 @@ export interface KeyboardHost {
   engine(): PlaybackEngine | null;
   controls(): PlayerControlsComponent | undefined;
   isTv(): boolean;
+  /** False for a non-host of a host-only party: play, pause and seek keys do nothing. */
+  canControlPlayback(): boolean;
   playbackRate(): number;
   onTogglePlay(): void;
   onSeek(time: number): void;
@@ -27,6 +29,7 @@ export class KeyboardController {
     if ((e.target as HTMLElement).tagName === 'INPUT') return;
     const engine = this.host.engine();
     if (!engine) return;
+    const control = this.host.canControlPlayback();
 
     // Back keys must bubble to the window handler in `app.ts` so the player can be left.
     // Older Tizen reports 10009 with no reliable `e.key`, so `keyCode` stays load-bearing.
@@ -41,7 +44,7 @@ export class KeyboardController {
 
     // Controls hidden + Left/Right: raise the seek OSD and let the seekbar own the scrub.
     const isSeekArrow = e.key === 'ArrowLeft' || e.key === 'ArrowRight';
-    if (!this.host.chrome.visible() && isSeekArrow) {
+    if (!this.host.chrome.visible() && isSeekArrow && control) {
       e.preventDefault();
       e.stopPropagation();
       this.host.chrome.show(true);
@@ -83,24 +86,26 @@ export class KeyboardController {
           return; // fall through to native activation
         }
         e.preventDefault();
-        this.host.onTogglePlay();
+        if (control) this.host.onTogglePlay();
         break;
       // The trailing chrome.show() restarts the countdown, so the first-frame effect can't snap the bar shut.
       case 'ArrowLeft':
-        if (!arrowSeekAllowed) break;
+        if (!arrowSeekAllowed || !control) break;
         e.preventDefault();
         this.host.onSeek(engine.currentTime - 10);
         break;
       case 'ArrowRight':
-        if (!arrowSeekAllowed) break;
+        if (!arrowSeekAllowed || !control) break;
         e.preventDefault();
         this.host.onSeek(engine.currentTime + 10);
         break;
       case 'j':
+        if (!control) break;
         e.preventDefault();
         this.host.onSeek(engine.currentTime - 30);
         break;
       case 'l':
+        if (!control) break;
         e.preventDefault();
         this.host.onSeek(engine.currentTime + 30);
         break;
@@ -140,6 +145,7 @@ export class KeyboardController {
         break;
       case ',':
       case '.':
+        if (!control) break;
         e.preventDefault();
         this.host.stepFrame(e.key === '.' ? 1 : -1);
         break;

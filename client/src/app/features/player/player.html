@@ -222,6 +222,7 @@
     (skipPreRoll)="skipPreRoll()"
     (panelOpenChange)="chrome.onPanelOpenChange($event)"
     (openSubtitleSync)="subs.onOpenSubtitleSync($event)"
+    [canControlPlayback]="party.canControl()"
     [partyActive]="partyCtl.active()"
     [partyReactionsOff]="!party.reactionsEnabled()"
     [partyUnread]="party.unread()"
