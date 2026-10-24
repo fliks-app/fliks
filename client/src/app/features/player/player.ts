@@ -909,7 +909,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // built.
       const streamTokenPromise = this.isOfflinePlayback
         ? null
-        : this.authService.ensureStreamToken();
+        : this.requireStreamToken();
+      streamTokenPromise?.catch(() => {});
 
       // Load media info + playback state in parallel
       // No stopSessions here — getOrCreateSession handles stale sessions naturally
@@ -1935,7 +1936,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       await this.planSubtitleDelivery();
 
       // Re-negotiate the stream for the new file (DirectPlay vs the ladder).
-      await this.authService.ensureStreamToken();
+      await this.requireStreamToken();
       this.playbackInfo = await this.negotiatePlayback();
       const pi = this.playbackInfo;
       this.adoptPlaybackInfo(pi);
@@ -2498,7 +2499,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.adoptPlaybackInfo(this.playbackInfo);
       // Refresh a near-expiry stream token first: it's baked into every segment URL and can't be swapped after
       // load.
-      await this.authService.ensureStreamToken();
+      await this.requireStreamToken();
       const { url, mimeType } = this.buildPlayUrl({
         sid: this.playbackInfo.sessionId,
       });
@@ -2659,6 +2660,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // Reveal the controls across the switch so the new title/episode shows;
     // the auto-hide countdown retracts them on the usual delay.
     this.chrome.show();
+  }
+
+  /** Segment URLs bake the token at load: a failed mint must fail the load, not fall back to the 1 h access token. */
+  private async requireStreamToken(): Promise<void> {
+    if (!(await this.authService.ensureStreamToken())) throw new Error('stream token unavailable');
   }
 
   /** Wires the two ways a live session goes bad: `sessionExpired` (a backend
@@ -3522,7 +3528,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       const mode = this.playbackMode();
       // Refresh a near-expiry stream token first: it's baked into every segment URL and can't be swapped after
       // load.
-      await this.authService.ensureStreamToken();
+      await this.requireStreamToken();
       const { url, mimeType } = this.buildPlayUrl({ startTime: currentPos });
       await this.prepareLoad();
       await this.engine.load(url, currentPos, mimeType);
