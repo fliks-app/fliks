@@ -135,6 +135,7 @@ img[data-hero-muted] {
 
 /* A sliding page's hero and its stamped card are named so they stand still while the page moves under them. */
 html.vt-slide app-media-info-header img,
+html.vt-slide app-party-page img,
 html.vt-slide [data-poster-stamped] {
   view-transition-name: none !important;
 }

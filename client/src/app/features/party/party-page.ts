@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, OnDestroy, OnInit, computed, effect, inject, signal, untracked } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { NgTemplateOutlet } from '@angular/common';
@@ -26,7 +26,10 @@ import { NavbarService } from '../../core/services/navbar.service';
 import { TvService } from '../../core/services/tv.service';
 import { MD_BREAKPOINT_QUERY, mediaQuerySignal } from '../../core/utils/viewport';
 import { MobileFanartHeroComponent } from '../../shared/components/mobile-fanart-hero';
+import { SynopsisComponent } from '../../shared/components/synopsis/synopsis';
+import { ToggleFieldComponent } from '../../shared/components/forms/toggle-field/toggle-field';
 import { UserAvatarComponent } from '../../shared/components/user-avatar/user-avatar';
+import { armPageSlide } from '../../shared/utils/page-slide';
 import { episodeLabel } from '../../shared/utils/episode-label';
 import { pickFanart } from '../../shared/utils/media-artwork.util';
 import { PartyInviteePickerComponent } from './party-invitee-picker';
@@ -55,7 +58,7 @@ const STATE_RANK = { connected: 0, link: 1, invited: 2, absent: 3 } as const;
 @Component({
   selector: 'app-party-page',
   imports: [
-    FormsModule, NgTemplateOutlet, TranslatePipe, ResolveUrlPipe, TranslatePluralPipe, TvSectionDirective, TvRowDirective, PartyChatComponent, PartyInviteePickerComponent,
+    FormsModule, NgTemplateOutlet, ToggleFieldComponent, RouterLink, SynopsisComponent, TranslatePipe, ResolveUrlPipe, TranslatePluralPipe, TvSectionDirective, TvRowDirective, PartyChatComponent, PartyInviteePickerComponent,
     PartyVoiceBarComponent, MobileFanartHeroComponent, UserAvatarComponent,
     LucideCalendarPlus, LucideCheck, LucideMic, LucideMicOff, LucidePlay, LucideShare2,
   ],
@@ -108,6 +111,20 @@ export class PartyPageComponent implements OnInit, OnDestroy {
     return (m ? pickFanart(m) : null) ?? this.handedFanart;
   });
   protected readonly heroUrl = computed(() => this.fanart() ?? this.head()?.item.posterUrl ?? null);
+  protected readonly overview = computed(() => {
+    const m = this.media();
+    const id = this.head()?.item.episodeId;
+    const ep = id == null ? null : m?.seasons?.flatMap((s) => s.episodes ?? []).find((e) => e.id === id);
+    return ep?.overview || m?.overview || '';
+  });
+  protected readonly mediaLink = computed<string[] | null>(() => {
+    const item = this.head()?.item;
+    const m = this.media();
+    if (!item || !m) return null;
+    const base = ['/' + (m.type === 'movie' ? 'movies' : 'series'), '' + item.mediaId];
+    return item.episodeId == null ? base : [...base, 'episode', '' + item.episodeId];
+  });
+  protected readonly armSlide = armPageSlide;
   protected readonly episode = computed(() => {
     const id = this.head()?.item.episodeId;
     if (id == null) return '';
@@ -177,7 +194,7 @@ export class PartyPageComponent implements OnInit, OnDestroy {
     const tick = setInterval(() => this.now.set(Date.now()), 1000);
     inject(DestroyRef).onDestroy(() => clearInterval(tick));
     this.sse.partyEvents.pipe(takeUntilDestroyed()).subscribe((e) => {
-      if (e.type === 'party.updated' && e.partyId === this.id) void this.load();
+      if ((e.type === 'party.updated' || e.type === 'party.settings') && e.partyId === this.id) void this.load();
     });
     this.party.closed.pipe(takeUntilDestroyed()).subscribe(() => void this.router.navigateByUrl('/'));
     effect(() => {
@@ -320,6 +337,13 @@ export class PartyPageComponent implements OnInit, OnDestroy {
     if (!ok || (await this.run(() => this.api.end(this.id))) === null) return;
     this.toast.info(this.translate.instant('party.closed_host_ended'));
     void this.router.navigateByUrl('/');
+  }
+
+  protected async setHostOnly(on: boolean): Promise<void> {
+    const policy = on ? 'host_only' : 'everyone';
+    if (this.joined()) return this.party.setPolicy(policy);
+    const dto = await this.run(() => this.api.update(this.id, { policy }));
+    if (dto) this.apply(dto);
   }
 
   protected async regenerate(): Promise<void> {
