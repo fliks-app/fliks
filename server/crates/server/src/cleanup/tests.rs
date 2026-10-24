@@ -357,6 +357,28 @@ async fn a_media_that_stops_matching_is_unflagged(pool: PgPool) {
 }
 
 #[sqlx::test]
+async fn a_disabled_rule_hides_its_dates_before_the_next_run(pool: PgPool) {
+    let s = seed(&pool).await;
+    let st = state(&pool).await;
+    let id = rule(&pool, json!({"neverPlayed": true}), "delete", Some(7)).await;
+    job::run(&st).await.unwrap();
+    let lib1: i32 = scalar(
+        &pool,
+        &format!(r#"SELECT "libraryId" FROM media WHERE id = {}"#, s.m1),
+    )
+    .await;
+    assert!(db::delete_at(&pool, s.m1).await.unwrap().is_some());
+    assert!(!db::leaving_soon(&pool, &[lib1]).await.unwrap().is_empty());
+    exec(
+        &pool,
+        &format!("UPDATE cleanup_rules SET enabled = false WHERE id = {id}"),
+    )
+    .await;
+    assert_eq!(db::delete_at(&pool, s.m1).await.unwrap(), None);
+    assert!(db::leaving_soon(&pool, &[lib1]).await.unwrap().is_empty());
+}
+
+#[sqlx::test]
 async fn the_none_action_flags_but_never_acts(pool: PgPool) {
     seed(&pool).await;
     let st = state(&pool).await;
