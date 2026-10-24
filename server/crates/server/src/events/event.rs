@@ -1,4 +1,4 @@
-//! Wire events (`docs/spec/events-hub.md`, Events): the 40 `SseEvent` types, the 11 `DomainEvent`
+//! Wire events (`docs/spec/events-hub.md`, Events): the 49 `SseEvent` types, the 11 `DomainEvent`
 //! types and the plugin envelope. Field names and omission rules follow `JSON.stringify` of the 4.x objects.
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
@@ -428,6 +428,53 @@ pub enum SseEvent {
         avatar: Option<String>,
         media_title: String,
     },
+    #[serde(rename = "party.state")]
+    PartyState {
+        party_id: i64,
+        rev: i64,
+        state: String,
+        item: Value,
+        anchor: Value,
+        when_ms: Option<i64>,
+        by: Option<Value>,
+        action: Option<String>,
+    },
+    #[serde(rename = "party.members")]
+    PartyMembers {
+        party_id: i64,
+        rev: i64,
+        members: Value,
+    },
+    #[serde(rename = "party.settings")]
+    PartySettings {
+        party_id: i64,
+        rev: i64,
+        name: String,
+        policy: String,
+    },
+    #[serde(rename = "party.message")]
+    PartyMessage { party_id: i64, message: Value },
+    #[serde(rename = "party.reaction")]
+    PartyReaction {
+        party_id: i64,
+        user_id: i64,
+        username: String,
+        emoji: String,
+    },
+    #[serde(rename = "party.closed")]
+    PartyClosed { party_id: i64, reason: String },
+    #[serde(rename = "party.invited")]
+    PartyInvited {
+        party_id: i64,
+        name: String,
+        scheduled_at: Option<String>,
+        host: Value,
+        item: Value,
+    },
+    #[serde(rename = "party.starting")]
+    PartyStarting { party_id: i64, name: String },
+    #[serde(rename = "party.updated")]
+    PartyUpdated { party_id: i64 },
 }
 
 impl SseEvent {
@@ -543,7 +590,7 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    /// One minimal wire sample per `SseEvent` type of the spec table (40).
+    /// One minimal wire sample per `SseEvent` type of the spec table (49).
     fn samples() -> Vec<Value> {
         let sub = json!({"title": "T"});
         vec![
@@ -592,13 +639,22 @@ mod tests {
             json!({"type":"social.follow_request","userId":1,"username":"u","avatar":"a"}),
             json!({"type":"social.follow_accepted","userId":1,"username":"u","avatar":null}),
             json!({"type":"social.content_recommended","userId":1,"username":"u","avatar":null,"mediaTitle":"m"}),
+            json!({"type":"party.state","partyId":1,"rev":2,"state":"playing","item":{"mediaId":1},"anchor":{"position":1.5,"serverTimeMs":3},"whenMs":null,"by":{"userId":1,"username":"u"},"action":"play"}),
+            json!({"type":"party.members","partyId":1,"rev":2,"members":[]}),
+            json!({"type":"party.settings","partyId":1,"rev":2,"name":"n","policy":"host_only"}),
+            json!({"type":"party.message","partyId":1,"message":{"id":1}}),
+            json!({"type":"party.reaction","partyId":1,"userId":2,"username":"u","emoji":"x"}),
+            json!({"type":"party.closed","partyId":1,"reason":"expired"}),
+            json!({"type":"party.invited","partyId":1,"name":"n","scheduledAt":null,"host":{"userId":1,"username":"u"},"item":{"mediaId":1}}),
+            json!({"type":"party.starting","partyId":1,"name":"n"}),
+            json!({"type":"party.updated","partyId":1}),
         ]
     }
 
     #[test]
     fn every_type_round_trips_to_the_same_json() {
         let all = samples();
-        assert_eq!(all.len(), 40);
+        assert_eq!(all.len(), 49);
         for want in all {
             let ev: SseEvent = serde_json::from_value(want.clone()).unwrap();
             assert_eq!(serde_json::to_value(&ev).unwrap(), want);

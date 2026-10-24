@@ -101,7 +101,7 @@ The hub and registry are in-memory: no SQL. Audience resolution for media-scoped
 
 ## Events
 
-### Wire events (`SseEvent`, 39 named types + `ping` + `plugin.<id>.<type>`)
+### Wire events (`SseEvent`, 48 named types + `ping` + `plugin.<id>.<type>`)
 
 Audience legend: B = broadcast to every connection; U(x) = connections of user x (+household hook for the three `remote.*` types); Us(list) = connections of those users; C = one connection. Payload types are TypeScript-style; `?` = may be absent on the wire.
 
@@ -147,6 +147,15 @@ Audience legend: B = broadcast to every connection; U(x) = connections of user x
 | 38 | `social.follow_accepted` | U(requester) | `{userId, username, avatar: string|null}` |
 | 39 | `social.content_recommended` | U(recipient) | `{userId, username, avatar: string|null, mediaTitle: string}` |
 | 40 | `plugin.<pluginId>.<type>` (raw, outside the union) | B, or Us(`[userId]`), or Us(recipientsForMedia) | `{payload: unknown}` (plus `type`) |
+| 41 | `party.state` | C (each member of the party) | `{partyId: number, rev: number, state: 'idle'|'waiting'|'paused'|'playing', item: PartyItem, anchor: {position: number, serverTimeMs: number}, whenMs: number|null, by: {userId, username}|null, action: string|null}` (`watch-party.md`) |
+| 42 | `party.members` | C (members) | `{partyId, rev, members: PartyMember[]}` |
+| 43 | `party.settings` | C (members) | `{partyId, rev, name: string, policy: 'everyone'|'host_only'}` |
+| 44 | `party.message` | C (members) | `{partyId, message: PartyMessage}` |
+| 45 | `party.reaction` | C (members) | `{partyId, userId, username, emoji: string}` |
+| 46 | `party.closed` | C (members) | `{partyId, reason: 'host_ended'|'expired'|'kicked'}` |
+| 47 | `party.invited` | Us(invitees) | `{partyId, name, scheduledAt: string|null, host: {userId, username}, item: PartyItem}` |
+| 48 | `party.starting` | Us(invitees) | `{partyId, name}` |
+| 49 | `party.updated` | Us(owner + invitees) | `{partyId}` |
 
 Row 37 is two wire types and row 2 (`ping`) and row 40 are not in the `SseEvent` union, so the table lists 39 `SseEvent` types (the union writes the three `social.followed|follow_request|follow_accepted` as one member at). All `*.started/completed/failed/progress` rows are fire-and-forget; none is retried.
 
