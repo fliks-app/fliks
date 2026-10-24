@@ -307,6 +307,8 @@ export class PartyService {
     }
     const queryParams: Record<string, number> = { mediaId: item.mediaId, party: this.party()!.id };
     if (item.episodeId != null) queryParams['episodeId'] = item.episodeId;
+    const playlist = this.party()!.playlist;
+    if (playlist) queryParams['playlistId'] = playlist.id;
     await this.router.navigate(['/watch', fileId], { queryParams });
   }
 
