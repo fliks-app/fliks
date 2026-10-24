@@ -261,8 +261,9 @@
 @if (partyPanelShown()) {
   <!-- Party UI loads with the first party, out of the player chunk. -->
   @defer {
-    <app-party-panel animate.enter="party-panel-in" animate.leave="party-panel-out" />
+    <app-party-panel animate.enter="party-panel-in" animate.leave="party-panel-out" (openSettings)="partySettings.show()" />
   }
 }
 <app-party-reaction-settings #reactionSettings />
+<app-party-settings #partySettings />
 </div>

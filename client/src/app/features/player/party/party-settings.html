@@ -1,0 +1,18 @@
+<dialog #dialog class="modal" [style.padding-bottom.px]="keyboard.height()">
+  <div class="modal-box max-w-md" [style.max-height]="keyboard.height() ? 'calc(100% - 1rem)' : null">
+    <app-modal-header [title]="'party.panel_menu' | translate" />
+    <div class="flex flex-col gap-4 pt-2">
+      <button type="button" class="btn btn-ghost h-auto justify-start gap-3 px-2 py-2 text-left" (click)="resync()">
+        <svg lucideRefreshCw class="h-4 w-4 shrink-0"></svg>
+        <span class="flex flex-col">
+          <span class="font-medium">{{ 'party.resync' | translate }}</span>
+          <span class="text-sm font-normal opacity-70">{{ 'party.resync_hint' | translate }}</span>
+        </span>
+      </button>
+      @if (voice.supported) {
+        <app-toggle-field [label]="'party.voice_duck' | translate" [value]="voice.duck()" (valueChange)="voice.setDuck($event)" />
+      }
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button tabindex="-1">close</button></form>
+</dialog>

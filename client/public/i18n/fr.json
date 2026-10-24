@@ -3540,6 +3540,7 @@
     "policy_host_only": "Seul l'hôte contrôle la lecture",
     "panel_menu": "Réglages de la soirée",
     "resync": "Resynchroniser",
+    "resync_hint": "Réaligne ta lecture sur celle du groupe.",
     "chat_placeholder": "Message",
     "chat_send": "Envoyer",
     "chat_empty": "Aucun message",

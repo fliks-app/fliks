@@ -1,5 +1,5 @@
 <div class="flex h-full flex-col bg-base-100/95 text-base-content backdrop-blur-md" data-tv-zone appTvSection>
-  <header class="relative flex items-center gap-2 px-3 py-2">
+  <header class="flex items-center gap-2 px-3 py-2">
     <app-party-voice-bar variant="controls" />
     <button
       type="button"
@@ -15,32 +15,13 @@
       type="button"
       class="btn btn-ghost btn-sm btn-square"
       [attr.aria-label]="'party.panel_menu' | translate"
-      [attr.aria-expanded]="menuOpen()"
-      (click)="menuOpen.set(!menuOpen())"
+      (click)="openSettings.emit()"
     >
       <svg lucideSettings class="h-4 w-4"></svg>
     </button>
     <button type="button" class="btn btn-ghost btn-sm btn-square" [attr.aria-label]="'party.panel_close' | translate" (click)="close()">
       <svg lucideX class="h-4 w-4"></svg>
     </button>
-    @if (menuOpen()) {
-      <div class="fixed inset-0 z-10" (click)="menuOpen.set(false)"></div>
-      <ul class="menu absolute right-3 top-full z-20 w-max max-w-[90%] rounded-2xl bg-neutral/95 p-1 text-neutral-content shadow-2xl backdrop-blur-sm" appTvRow>
-        <li>
-          <button type="button" (click)="resync(); menuOpen.set(false)">
-            <svg lucideRefreshCw class="h-4 w-4"></svg>{{ 'party.resync' | translate }}
-          </button>
-        </li>
-        @if (voice.supported) {
-          <li>
-            <label class="flex cursor-pointer items-center gap-2">
-              <input type="checkbox" class="toggle toggle-sm" [checked]="voice.duck()" (change)="voice.setDuck(!voice.duck())" />
-              <span>{{ 'party.voice_duck' | translate }}</span>
-            </label>
-          </li>
-        }
-      </ul>
-    }
   </header>
 
   @if (!keyboard.height()) {

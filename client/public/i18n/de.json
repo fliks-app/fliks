@@ -3540,6 +3540,7 @@
     "policy_host_only": "Nur der Host steuert die Wiedergabe",
     "panel_menu": "Party-Einstellungen",
     "resync": "Neu synchronisieren",
+    "resync_hint": "Gleicht deine Wiedergabe mit der Gruppe ab.",
     "chat_placeholder": "Nachricht",
     "chat_send": "Senden",
     "chat_empty": "Noch keine Nachrichten",

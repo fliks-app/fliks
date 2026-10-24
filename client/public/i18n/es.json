@@ -3540,6 +3540,7 @@
     "policy_host_only": "Solo el anfitrión controla la reproducción",
     "panel_menu": "Ajustes de la sesión",
     "resync": "Resincronizar",
+    "resync_hint": "Vuelve a alinear tu reproducción con la del grupo.",
     "chat_placeholder": "Mensaje",
     "chat_send": "Enviar",
     "chat_empty": "Aún no hay mensajes",

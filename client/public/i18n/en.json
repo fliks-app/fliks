@@ -3540,6 +3540,7 @@
     "policy_host_only": "Only the host controls playback",
     "panel_menu": "Party settings",
     "resync": "Resync",
+    "resync_hint": "Realign your playback with the group.",
     "chat_placeholder": "Message",
     "chat_send": "Send",
     "chat_empty": "No messages yet",
