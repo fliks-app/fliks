@@ -10,8 +10,7 @@ import { TvRowDirective } from '../../../shared/directives/tv-row.directive';
 
 const MAX_LENGTH = 500;
 
-/** Messages, reactions and the composer of the current party: shared by the player panel and the lobby. */
-
+/** Messages and the composer of the current party: shared by the player panel and the lobby. */
 @Component({
   selector: 'app-party-chat',
   imports: [TranslatePipe, LucideSend, TvRowDirective],
@@ -24,9 +23,9 @@ export class PartyChatComponent {
   private readonly translate = inject(TranslateService);
   protected readonly isTv = inject(DeviceService).isTv;
   private readonly keyboard = inject(KeyboardOverlayService);
-  /** Phrases stand in for the keyboard on the TV and on a phone in landscape, where it fills the screen. */
-  // While typing, the space left above the keyboard holds only the messages and the input.
   protected readonly typing = computed(() => this.keyboard.height() > 0);
+  /** Phrases stand in for the keyboard on the TV and on a phone in landscape, where it fills the screen;
+   *  while typing, the room above the keyboard is left to the messages and the input. */
   protected readonly showPhrases = computed(() => !this.typing() && (this.isTv() || this.party.dock() === 'drawer'));
 
   protected readonly maxLength = MAX_LENGTH;

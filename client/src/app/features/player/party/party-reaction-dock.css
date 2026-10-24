@@ -14,7 +14,6 @@
   padding: 0.25rem;
   background: rgb(0 0 0 / 0.6);
   backdrop-filter: blur(4px);
-  transform-origin: right center;
   clip-path: inset(0 0 0 100% round 9999px);
   opacity: 0;
   pointer-events: none;

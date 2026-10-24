@@ -208,7 +208,7 @@ public class NativePlayerPlugin extends Plugin {
         });
     }
 
-    /** The player container's rectangle in CSS px; null fills the WebView's parent. */
+    /** The player container's rectangle in CSS px; a negative width or height fills the WebView's parent. */
     @PluginMethod()
     public void resize(PluginCall call) {
         int x = call.getInt("x", 0);
