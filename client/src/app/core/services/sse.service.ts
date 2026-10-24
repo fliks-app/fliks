@@ -14,7 +14,7 @@ import { DeviceService } from './device.service';
 import { SystemInfoService } from './system-info.service';
 import { currentTargetId } from './remote-target-id';
 import type {
-  PartyAnchor, PartyItem, PartyMember, PartyMessage, PartyPlayState, PartyPolicy, PartyUser,
+  PartyAnchor, PartyItem, PartyMember, PartyMessage, PartyPlayState, PartyPolicy, PartySignalKind, PartyUser,
 } from './api/party-api.service';
 
 /** A brief Wi-Fi handoff or the resume-reconnect race shouldn't flash a banner. */
@@ -106,7 +106,8 @@ export type PartyEvent =
   | { type: 'party.closed'; partyId: number; reason: 'host_ended' | 'expired' | 'kicked' }
   | { type: 'party.invited'; partyId: number; name: string; scheduledAt: string | null; host: PartyUser; item: PartyItem }
   | { type: 'party.starting'; partyId: number; name: string }
-  | { type: 'party.updated'; partyId: number };
+  | { type: 'party.updated'; partyId: number }
+  | { type: 'party.signal'; partyId: number; from: PartyUser & { deviceId: string }; kind: PartySignalKind; data: Record<string, unknown> };
 
 /** `sessionStorage` key for the per-tab half of this device's target id. */
 const TAB_NONCE_KEY = 'fliks.remote.tabNonce';

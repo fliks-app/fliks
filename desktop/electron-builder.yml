@@ -86,6 +86,8 @@ mac:
   gatekeeperAssess: false
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
+  extendInfo:
+    NSMicrophoneUsageDescription: Fliks uses the microphone for voice chat in watch parties.
   notarize: true
 # Windows ships through Velopack (see desktop-release.yml): electron-builder only
 # produces win-unpacked, which vpk packs into Setup.exe + the update feed.

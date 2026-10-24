@@ -7,7 +7,9 @@ import { DeviceService } from '../../core/services/device.service';
 import { PlayerStateService } from '../../core/services/player-state.service';
 import type { PlaybackEngine } from '../../core/services/playback-engine/playback-engine';
 import { ToastService } from '../../core/services/toast.service';
+import { VoiceService } from '../../core/services/party/voice.service';
 import { QueueController } from './queue-controller';
+import { VoiceDucker } from './party-ducking';
 import { DRIFT_CHECK_MS, driftAction, groupPosition } from './party-sync';
 
 export interface PartyHost {
@@ -39,7 +41,13 @@ export class PartyController {
   private readonly device = inject(DeviceService);
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
+  private readonly voice = inject(VoiceService);
   private host!: PartyHost;
+  private readonly ducker = new VoiceDucker(
+    () => this.host?.engine() ?? null,
+    () => this.state.volume(),
+    (level) => this.state.noteDuckWrite(level),
+  );
 
   private generation = 0;
   private playTimer: ReturnType<typeof setTimeout> | null = null;
@@ -68,6 +76,7 @@ export class PartyController {
     this.generation++;
     this.clearPlayTimer();
     if (this.driftTimer) clearInterval(this.driftTimer);
+    this.ducker.stop();
     this.queueCtl.interceptAdvance = null;
     this.closedSub?.unsubscribe();
     // Closing the player is leaving the party.
@@ -128,6 +137,11 @@ export class PartyController {
   }
 
   // ── Party state -> engine ──
+
+  private readonly duckEffect = effect(() => {
+    const duck = this.voice.duck() && this.voice.othersSpeaking();
+    untracked(() => (this.host ? this.ducker.set(duck) : undefined));
+  });
 
   private readonly liveEffect = effect(() => {
     const live = this.party.live();

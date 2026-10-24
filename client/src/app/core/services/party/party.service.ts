@@ -451,7 +451,7 @@ export class PartyService {
   }
 
   /** Intent/message calls are quiet at the HTTP layer: a stale seek resyncs from the body, anything else is named to the user. */
-  private onActionError(err: unknown): void {
+  onActionError(err: unknown): void {
     if (!(err instanceof HttpErrorResponse)) return;
     const body = err.error as { message?: unknown; id?: number; usernames?: string[] } | null;
     if (err.status === 409 && (body?.message === 'party.error_stale' || typeof body?.id === 'number')) {

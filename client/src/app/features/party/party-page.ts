@@ -12,6 +12,9 @@ import { ToastService } from '../../core/services/toast.service';
 import { formatTime } from '../../core/utils/player.utils';
 import { TvSectionDirective } from '../../shared/directives/tv-section.directive';
 import { PartyChatComponent } from '../player/party/party-chat';
+import { PartyVoiceBarComponent } from '../player/party/party-voice-bar';
+import { VoiceService } from '../../core/services/party/voice.service';
+import { LucideMic, LucideMicOff } from '@lucide/angular';
 import { PartyInviteePickerComponent } from './party-invitee-picker';
 import { toLocalInput } from './party-create-modal';
 import { partyWhen } from './party-time';
@@ -22,7 +25,7 @@ const LOBBY_OPEN_MS = 15 * 60_000;
 /** `/parties/:id`: a party's page. Scheduled: info, link and host actions; lobby open: members, ready, chat and start; live: join. */
 @Component({
   selector: 'app-party-page',
-  imports: [FormsModule, TranslatePipe, TvSectionDirective, PartyChatComponent, PartyInviteePickerComponent],
+  imports: [FormsModule, TranslatePipe, TvSectionDirective, PartyChatComponent, PartyInviteePickerComponent, PartyVoiceBarComponent, LucideMic, LucideMicOff],
   templateUrl: './party-page.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -36,6 +39,7 @@ export class PartyPageComponent implements OnInit, OnDestroy {
   private readonly translate = inject(TranslateService);
   private readonly sse = inject(SseService);
   protected readonly party = inject(PartyService);
+  protected readonly voice = inject(VoiceService);
 
   private readonly id = Number(this.route.snapshot.params['id']);
   private readonly token: string | undefined = this.route.snapshot.queryParams['token'];

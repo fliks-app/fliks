@@ -29,6 +29,16 @@ export function installCorsBypass(): void {
     callback({ responseHeaders: headers });
   });
 
+  // Everything stays allowed as before except video capture: only the voice-chat microphone is granted.
+  const allowed = (permission: string, mediaTypes?: readonly string[]) =>
+    permission !== 'media' || (mediaTypes ?? []).every((t) => t === 'audio');
+  session.defaultSession.setPermissionRequestHandler((_wc, permission, callback, details) =>
+    callback(allowed(permission, (details as { mediaTypes?: string[] }).mediaTypes)),
+  );
+  session.defaultSession.setPermissionCheckHandler((_wc, permission, _origin, details) =>
+    allowed(permission, (details as { mediaType?: string }).mediaType ? [(details as { mediaType: string }).mediaType] : undefined),
+  );
+
   // A renderer network failure only ever surfaces as a bare `status 0` — this
   // is the one place the underlying ERR_* (reset / TLS / network-changed) is
   // available at all.
