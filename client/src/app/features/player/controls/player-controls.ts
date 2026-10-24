@@ -6,6 +6,7 @@ import {
   Injector,
   afterNextRender,
   computed,
+  contentChild,
   effect,
   inject,
   input,
@@ -38,7 +39,7 @@ import { AppSettingsService } from '../../../core/services/app-settings.service'
 import { formatTime, SpriteMetadata } from '../../../core/utils/player.utils';
 import { focusOverlayEntry, initialOverlayFocus, scrollSelectedIntoView } from '../../../core/services/focusable.constants';
 import { SeekbarComponent } from '../../../shared/components/seekbar/seekbar';
-import { ReactionCatalogService } from '../../../core/services/party/reaction-catalog.service';
+import { PartyReactionDockComponent } from '../party/party-reaction-dock';
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 import { CachedSrcDirective } from '../../../shared/directives/cached-src.directive';
 import { SelectedOptionDirective } from '../../../shared/directives/selected-option.directive';
@@ -71,7 +72,7 @@ import {
 } from '@lucide/angular';
 
 /** The click-driven panels: a desktop dropdown, or a bottom sheet on touch. */
-type PanelName = 'subtitles' | 'audio' | 'speed' | 'settings' | 'devices' | 'reactions';
+type PanelName = 'subtitles' | 'audio' | 'speed' | 'settings' | 'devices';
 
 /** Panels of the subtitles menu: the track list, the appearance summary, then
  *  one leaf list per appearance field. */
@@ -135,7 +136,10 @@ interface AppearanceRow {
   templateUrl: './player-controls.html',
   // Bar insets live on the host so the floating cues inherit them and line up
   // with the controls' right edge.
-  host: { class: '[--ctrl-px:1rem] [--ctrl-pb:0.5rem] sm:[--ctrl-pb:1rem] xl:[--ctrl-inset:1rem]' },
+  host: {
+    class: '[--ctrl-px:1rem] [--ctrl-pb:0.5rem] sm:[--ctrl-pb:1rem] xl:[--ctrl-inset:1rem]',
+    '[style.--strip-h]': "hasStrip() ? '3rem' : null",
+  },
 })
 export class PlayerControlsComponent {
   private readonly device = inject(DeviceService);
@@ -177,7 +181,8 @@ export class PlayerControlsComponent {
     // Propagate any-panel-open state to the parent player so it can suspend
     // its auto-hide timer while a dropdown or bottom sheet is up.
     effect(() => {
-      const open = this.openDropdown() !== null || this.activeSheet() !== null;
+      // The TV strip leaves with the controls, so an open reaction row keeps them up.
+      const open = this.openDropdown() !== null || this.activeSheet() !== null || (this.isTv() && !!this.dock()?.open());
       if (open === this.lastPanelOpen) return;
       this.lastPanelOpen = open;
       this.panelOpenChange.emit(open);
@@ -361,9 +366,11 @@ export class PlayerControlsComponent {
   readonly partyUnread = input(0);
   readonly partyOpen = input(false);
   readonly toggleParty = output<void>();
-  readonly react = output<string>();
   readonly openReactionSettings = output<void>();
-  protected readonly partyEmojis = inject(ReactionCatalogService).bar;
+  /** The action strip's right slot: the party reaction button, projected by the player. */
+  protected readonly dock = contentChild(PartyReactionDockComponent);
+  /** The strip exists once it has an action; a left action (info) joins this condition. */
+  protected readonly hasStrip = computed(() => !!this.dock());
   readonly toggleFillScreen = output<void>();
   readonly openMedia = output<void>();
   readonly seekDragChange = output<boolean>();

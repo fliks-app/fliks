@@ -1,8 +1,8 @@
 @if (open() && !party.reactionKeepOpen()) {
   <!-- An outside tap only folds the row; it must not reach the player and wake its controls. -->
-  <div class="dock-backdrop" (click)="open.set(false)" (touchstart)="$event.stopPropagation()" (pointerdown)="$event.stopPropagation()"></div>
+  <div class="dock-backdrop" (click)="fold()" (touchstart)="$event.stopPropagation()" (pointerdown)="$event.stopPropagation()"></div>
 }
-<div class="relative flex items-center gap-1">
+<div class="relative flex items-center" appTvRow>
   <div class="emojis flex gap-0.5 rounded-full p-1" [class.open]="open()" [attr.aria-hidden]="!open()">
     @for (e of emojis(); track e; let i = $index) {
       <button
@@ -15,6 +15,7 @@
     }
   </div>
   <button
+    #toggle
     type="button"
     class="dock-toggle"
     [class.active]="open()"

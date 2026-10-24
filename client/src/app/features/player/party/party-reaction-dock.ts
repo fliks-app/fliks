@@ -1,13 +1,15 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, effect, inject, signal, viewChild } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
 import { LucideSmilePlus } from '@lucide/angular';
+import { DismissableStackService } from '../../../core/services/dismissable-stack.service';
 import { ReactionCatalogService } from '../../../core/services/party/reaction-catalog.service';
 import { PartyService } from '../../../core/services/party/party.service';
+import { TvRowDirective } from '../../../shared/directives/tv-row.directive';
 
-/** Floating reaction button over the video: opens a row of emojis to its left, one tap sends (and folds it back, per the reaction settings). */
+/** Reaction button of the player's action strip: opens a row of emojis to its left, one tap sends (and folds it back, per the reaction settings). */
 @Component({
   selector: 'app-party-reaction-dock',
-  imports: [TranslatePipe, LucideSmilePlus],
+  imports: [TranslatePipe, LucideSmilePlus, TvRowDirective],
   templateUrl: './party-reaction-dock.html',
   styleUrl: './party-reaction-dock.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -17,10 +19,30 @@ import { PartyService } from '../../../core/services/party/party.service';
 export class PartyReactionDockComponent {
   protected readonly party = inject(PartyService);
   protected readonly emojis = inject(ReactionCatalogService).bar;
-  protected readonly open = signal(false);
+  private readonly dismissStack = inject(DismissableStackService);
+  private readonly toggleBtn = viewChild.required<ElementRef<HTMLButtonElement>>('toggle');
+  readonly open = signal(false);
+
+  constructor() {
+    // Back folds the row before anything else, like the player's other menus.
+    effect((onCleanup) => {
+      if (!this.open()) return;
+      const fold = () => this.fold();
+      this.dismissStack.push(fold);
+      onCleanup(() => this.dismissStack.remove(fold));
+    });
+  }
 
   protected send(emoji: string): void {
     this.party.react(emoji);
-    if (!this.party.reactionKeepOpen()) this.open.set(false);
+    if (!this.party.reactionKeepOpen()) this.fold();
+  }
+
+  /** Focus returns to the button when it sat on an emoji, which leaves the D-pad order as the row folds. */
+  protected fold(): void {
+    const btn = this.toggleBtn().nativeElement;
+    const inRow = !!document.activeElement?.closest('.emojis');
+    this.open.set(false);
+    if (inRow) btn.focus({ preventScroll: true });
   }
 }

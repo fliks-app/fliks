@@ -1,17 +1,15 @@
 :host {
-  position: absolute;
-  right: calc(1rem + env(safe-area-inset-right, 0px));
-  bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
-  z-index: 57;
+  display: block;
   /* Only the button and the open row take taps; the folded row must not swallow the video's. */
   pointer-events: none;
-  transition: bottom 200ms ease;
 }
-/* Desktop keeps the dock while the controls show, above their bar. */
-:host(.lifted) {
-  bottom: 7rem;
-}
+/* Out of flow, so the strip is as wide as the button alone; a narrow screen scrolls the row. */
 .emojis {
+  position: absolute;
+  right: calc(100% + 0.25rem);
+  max-width: calc(100vw - 6rem);
+  overflow-x: auto;
+  scrollbar-width: none;
   background: rgb(0 0 0 / 0.6);
   backdrop-filter: blur(4px);
   transform-origin: right center;
@@ -58,6 +56,7 @@
   opacity: 1;
 }
 .emoji {
+  flex-shrink: 0;
   display: grid;
   place-items: center;
   width: 2.5rem;

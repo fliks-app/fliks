@@ -65,17 +65,9 @@
         </button>
       }
       @if (partyActive()) {
-        <!-- TV reacts from this menu: the floating dock only shows with the controls hidden, out of D-pad reach. -->
-        <div class="dropdown dropdown-end" [class.dropdown-open]="openDropdown() === 'reactions'">
-          <button type="button" class="btn btn-ghost btn-circle btn-md text-white" [attr.aria-label]="(isTv() ? 'party.reactions' : 'party.reaction_settings') | translate" (click)="isTv() ? toggleDropdown('reactions', $event) : openReactionSettings.emit()">
-            <svg lucideSmilePlus [class]="isMobileTouch() ? 'h-5 w-5' : 'h-6 w-6'"></svg>
-          </button>
-          <div class="dropdown-content mt-2 flex gap-0.5 rounded-full bg-neutral/95 p-1 shadow-2xl backdrop-blur-sm">
-            @for (e of partyEmojis(); track e) {
-              <button type="button" class="btn btn-ghost btn-circle btn-sm text-lg" (click)="react.emit(e); openDropdown.set(null)">{{ e }}</button>
-            }
-          </div>
-        </div>
+        <button type="button" class="btn btn-ghost btn-circle btn-md text-white" [attr.aria-label]="'party.reaction_settings' | translate" (click)="openReactionSettings.emit()">
+          <svg lucideSmilePlus [class]="isMobileTouch() ? 'h-5 w-5' : 'h-6 w-6'"></svg>
+        </button>
         <button type="button" class="btn btn-ghost btn-circle btn-md relative" [class.text-info]="partyOpen()" [class.text-white]="!partyOpen()" [attr.aria-label]="'party.panel_toggle' | translate" [attr.aria-pressed]="partyOpen()" (click)="toggleParty.emit()">
           <svg lucideUsers [class]="isMobileTouch() ? 'h-5 w-5' : 'h-6 w-6'"></svg>
           @if (partyUnread() > 0 && !partyOpen()) {
@@ -146,7 +138,7 @@
 <div
   class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent transition-opacity duration-300 pt-12"
   [class]="seekDragging() ? 'z-[55]' : 'z-40'"
-  style="padding-left: calc(max(var(--ctrl-px), env(safe-area-inset-left)) + 0.25rem + var(--ctrl-inset, 0px)); padding-right: calc(max(var(--ctrl-px), env(safe-area-inset-right)) + 0.25rem + var(--ctrl-inset, 0px)); padding-bottom: calc(max(var(--ctrl-pb), env(safe-area-inset-bottom)) + var(--ctrl-inset, 0px));"
+  style="padding-left: calc(max(var(--ctrl-px), env(safe-area-inset-left)) + 0.25rem + var(--ctrl-inset, 0px)); padding-right: calc(max(var(--ctrl-px), env(safe-area-inset-right)) + 0.25rem + var(--ctrl-inset, 0px)); padding-bottom: calc(max(var(--ctrl-pb), env(safe-area-inset-bottom)) + var(--ctrl-inset, 0px) + var(--strip-h, 0px));"
   [class.opacity-0]="!visible()"
   [class.pointer-events-none]="!visible()"
 >
@@ -291,6 +283,18 @@
     </div>
   }
 </div>
+
+<!-- ===== ACTION STRIP: bottom row under the controls, outside their fade so the reaction button can stay up alone. =====
+     The bottom section reserves its height (--strip-h); a left action (info) goes in the first slot and fades with the controls. -->
+@if (hasStrip() && (!isTv() || visible())) {
+  <div
+    class="pointer-events-none absolute left-0 right-0 z-[57] flex h-11 items-center justify-between"
+    style="padding-left: calc(max(var(--ctrl-px), env(safe-area-inset-left)) + 0.25rem + var(--ctrl-inset, 0px)); padding-right: calc(max(var(--ctrl-px), env(safe-area-inset-right)) + 0.25rem + var(--ctrl-inset, 0px)); bottom: calc(max(var(--ctrl-pb), env(safe-area-inset-bottom)) + var(--ctrl-inset, 0px));"
+  >
+    <div class="flex items-center gap-1.5 transition-opacity duration-300" [class.opacity-0]="!visible()" [class.pointer-events-none]="!visible()"></div>
+    <ng-content />
+  </div>
+}
 
 <!-- ===== Skip intro floating button ===== -->
 @if (skipIntroCue()) {

@@ -114,9 +114,6 @@
 
   @if (partyCtl.active() && !inPipMode()) {
     <app-party-floaters />
-    @if (party.reactionDock() && !device.isTv() && (!chrome.visible() || !device.isTouch())) {
-      <app-party-reaction-dock [class.lifted]="chrome.visible()" />
-    }
   }
 
   @if (edlNotice(); as notice) {
@@ -220,9 +217,12 @@
     [partyUnread]="party.unread()"
     [partyOpen]="party.panelOpen()"
     (toggleParty)="party.setPanelOpen(!party.panelOpen())"
-    (react)="party.react($event)"
     (openReactionSettings)="reactionSettings.show()"
-  />
+  >
+    @if (partyCtl.active() && party.reactionDock()) {
+      <app-party-reaction-dock />
+    }
+  </app-player-controls>
   }
 
   @if (subs.subtitleSyncOpen() && subs.syncSubtitle(); as sub) {
