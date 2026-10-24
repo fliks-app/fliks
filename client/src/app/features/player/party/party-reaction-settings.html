@@ -1,0 +1,26 @@
+<dialog #dialog class="modal">
+  <div class="modal-box max-w-sm">
+    <app-modal-header [title]="'party.reaction_settings' | translate" />
+    <div class="flex flex-col gap-4 pt-2">
+      <label class="flex cursor-pointer items-center justify-between gap-4">
+        <span>{{ 'party.reaction_dock_show' | translate }}</span>
+        <app-enabled-switch
+          tone="primary"
+          [enabled]="party.reactionDock()"
+          ariaLabelKey="party.reaction_dock_show"
+          (toggle)="party.setReactionDock(!party.reactionDock())"
+        />
+      </label>
+      <label class="flex cursor-pointer items-center justify-between gap-4">
+        <span>{{ 'party.reaction_auto_close' | translate }}</span>
+        <app-enabled-switch
+          tone="primary"
+          [enabled]="party.reactionAutoClose()"
+          ariaLabelKey="party.reaction_auto_close"
+          (toggle)="party.setReactionAutoClose(!party.reactionAutoClose())"
+        />
+      </label>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button tabindex="-1">close</button></form>
+</dialog>

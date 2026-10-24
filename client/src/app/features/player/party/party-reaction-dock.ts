@@ -4,7 +4,7 @@ import { LucideSmilePlus } from '@lucide/angular';
 import { PARTY_EMOJIS } from '../../../core/services/api/party-api.service';
 import { PartyService } from '../../../core/services/party/party.service';
 
-/** Floating reaction button over the video: opens a row of emojis to its left, one tap sends and folds it back. */
+/** Floating reaction button over the video: opens a row of emojis to its left, one tap sends (and folds it back, per the reaction settings). */
 @Component({
   selector: 'app-party-reaction-dock',
   imports: [TranslatePipe, LucideSmilePlus],
@@ -21,6 +21,6 @@ export class PartyReactionDockComponent {
 
   protected send(emoji: string): void {
     this.party.react(emoji);
-    this.open.set(false);
+    if (this.party.reactionAutoClose()) this.open.set(false);
   }
 }

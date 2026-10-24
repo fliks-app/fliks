@@ -1,7 +1,9 @@
 <input
   #checkbox
   type="checkbox"
-  class="toggle toggle-sm toggle-success"
+  class="toggle toggle-sm"
+  [class.toggle-success]="tone() === 'success'"
+  [class.toggle-primary]="tone() === 'primary'"
   [checked]="enabled()"
   [disabled]="busy() || disabled()"
   [attr.aria-label]="ariaLabelKey() | translate"

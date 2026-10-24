@@ -362,8 +362,7 @@ export class PlayerControlsComponent {
   readonly partyOpen = input(false);
   readonly toggleParty = output<void>();
   readonly react = output<string>();
-  readonly reactionDock = input(true);
-  readonly toggleReactionDock = output<void>();
+  readonly openReactionSettings = output<void>();
   protected readonly partyEmojis = PARTY_EMOJIS;
   readonly toggleFillScreen = output<void>();
   readonly openMedia = output<void>();

@@ -58,13 +58,20 @@ const REACTION_MS = 3000;
 const MAX_MESSAGES = 200;
 
 /** Party-wide state: usable outside the player (invites, join links), the player's PartyController drives the engine from it. */
-const REACTION_DOCK_KEY = 'party.reactionDock';
-
-function readReactionDock(): boolean {
+function readFlag(key: string, fallback: boolean): boolean {
   try {
-    return localStorage.getItem(REACTION_DOCK_KEY) !== '0';
+    const v = localStorage.getItem(key);
+    return v === null ? fallback : v === '1';
   } catch {
-    return true;
+    return fallback;
+  }
+}
+
+function writeFlag(key: string, on: boolean): void {
+  try {
+    localStorage.setItem(key, on ? '1' : '0');
+  } catch {
+    // storage unavailable: the choice lasts for this session
   }
 }
 
@@ -87,8 +94,9 @@ export class PartyService {
   readonly messages = signal<PartyMessage[]>([]);
   readonly unread = signal(0);
   readonly panelOpen = signal(false);
-  /** The floating reaction button over the video, shown or hidden from the player's top bar; kept per device. */
-  readonly reactionDock = signal(readReactionDock());
+  /** Reaction settings, per device: the floating button over the video, and whether its row folds after a send. */
+  readonly reactionDock = signal(readFlag('party.reactionDock', true));
+  readonly reactionAutoClose = signal(readFlag('party.reactionAutoClose', true));
   readonly bubbles = signal<PartyMessage[]>([]);
   readonly reactions = signal<FloatingReaction[]>([]);
   /** The party ended under us (host ended, expired, kicked): the player leaves. */
@@ -411,11 +419,12 @@ export class PartyService {
 
   setReactionDock(on: boolean): void {
     this.reactionDock.set(on);
-    try {
-      localStorage.setItem(REACTION_DOCK_KEY, on ? '1' : '0');
-    } catch {
-      // storage unavailable: the choice lasts for this session
-    }
+    writeFlag('party.reactionDock', on);
+  }
+
+  setReactionAutoClose(on: boolean): void {
+    this.reactionAutoClose.set(on);
+    writeFlag('party.reactionAutoClose', on);
   }
 
   setPanelOpen(open: boolean): void {

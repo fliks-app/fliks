@@ -221,8 +221,7 @@
     [partyOpen]="party.panelOpen()"
     (toggleParty)="party.setPanelOpen(!party.panelOpen())"
     (react)="party.react($event)"
-    [reactionDock]="party.reactionDock()"
-    (toggleReactionDock)="party.setReactionDock(!party.reactionDock())"
+    (openReactionSettings)="reactionSettings.show()"
   />
   }
 
@@ -253,4 +252,5 @@
 @if (partyPanelShown()) {
   <app-party-panel />
 }
+<app-party-reaction-settings #reactionSettings />
 </div>

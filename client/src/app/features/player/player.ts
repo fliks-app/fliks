@@ -121,6 +121,7 @@ import { PartyService } from '../../core/services/party/party.service';
 import { PartyPanelComponent } from './party/party-panel';
 import { PartyFloatersComponent } from './party/party-floaters';
 import { PartyReactionDockComponent } from './party/party-reaction-dock';
+import { PartyReactionSettingsComponent } from './party/party-reaction-settings';
 import { KeyboardController } from './keyboard-controller';
 import { SubtitleController } from './subtitle-controller';
 import { isMutedAt } from '../../core/utils/edl-policy';
@@ -129,7 +130,7 @@ import { SubtitleSyncPanelComponent } from './overlay/subtitle-sync-panel/subtit
 import { DefaultFocusDirective } from '../../shared/directives/default-focus.directive';
 
 @Component({
-  imports: [TranslatePipe, LucideAirplay, LucideInfo, LucideVolumeX, LucideX, PlayerControlsComponent, PlayerStatsOverlayComponent, SubtitleSyncPanelComponent, PlayerErrorOverlayComponent, DefaultFocusDirective, PartyPanelComponent, PartyFloatersComponent, PartyReactionDockComponent],
+  imports: [TranslatePipe, LucideAirplay, LucideInfo, LucideVolumeX, LucideX, PlayerControlsComponent, PlayerStatsOverlayComponent, SubtitleSyncPanelComponent, PlayerErrorOverlayComponent, DefaultFocusDirective, PartyPanelComponent, PartyFloatersComponent, PartyReactionDockComponent, PartyReactionSettingsComponent],
   templateUrl: './player.html',
   providers: [ControlsVisibilityService, CopyFallbackController, WebVideoCropController, QueueController, RemoteController, PartyController, SubtitleController],
   encapsulation: ViewEncapsulation.None,
