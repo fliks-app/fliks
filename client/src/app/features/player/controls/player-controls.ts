@@ -138,7 +138,11 @@ interface AppearanceRow {
   // with the controls' right edge.
   host: {
     class: '[--ctrl-px:1rem] [--ctrl-pb:0.5rem] sm:[--ctrl-pb:1rem] xl:[--ctrl-inset:1rem]',
-    '[style.--strip-h]': "hasStrip() ? '3rem' : null",
+    style:
+      '--bar-pl: calc(max(var(--ctrl-px), env(safe-area-inset-left)) + 0.25rem + var(--ctrl-inset, 0px)); ' +
+      '--bar-pr: calc(max(var(--ctrl-px), env(safe-area-inset-right)) + 0.25rem + var(--ctrl-inset, 0px)); ' +
+      '--bar-pb: calc(max(var(--ctrl-pb), var(--safe-bottom)) + var(--ctrl-inset, 0px))',
+    '[style.--strip-h]': "dock() ? '3rem' : null",
   },
 })
 export class PlayerControlsComponent {
@@ -367,10 +371,8 @@ export class PlayerControlsComponent {
   readonly partyOpen = input(false);
   readonly toggleParty = output<void>();
   readonly openReactionSettings = output<void>();
-  /** The action strip's right slot: the party reaction button, projected by the player. */
+  /** The action strip's content: the party reaction button, projected by the player. */
   protected readonly dock = contentChild(PartyReactionDockComponent);
-  /** The strip exists once it has an action; a left action (info) joins this condition. */
-  protected readonly hasStrip = computed(() => !!this.dock());
   readonly toggleFillScreen = output<void>();
   readonly openMedia = output<void>();
   readonly seekDragChange = output<boolean>();
