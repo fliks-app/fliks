@@ -6,8 +6,9 @@ pub mod search;
 pub mod similarity;
 
 /// Container extensions treated as a playable video file (lower-case, dot-prefixed).
-pub const VIDEO_EXTS: [&str; 8] = [
-    ".mkv", ".mp4", ".avi", ".mov", ".ts", ".m2ts", ".wmv", ".flv",
+pub const VIDEO_EXTS: [&str; 14] = [
+    ".mkv", ".mp4", ".avi", ".mov", ".ts", ".m2ts", ".wmv", ".flv", ".webm", ".m4v", ".mpg",
+    ".mpeg", ".ogm", ".mts",
 ];
 
 /// Episode numbers on disk in one season: `(number, endNumber, hasFile)` rows, each file covering
