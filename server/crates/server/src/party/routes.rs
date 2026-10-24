@@ -409,12 +409,6 @@ pub async fn patch(
         if row.status != "scheduled" {
             return Err(fail(StatusCode::CONFLICT, "party.error_not_scheduled"));
         }
-        // null cancels the session, like DELETE.
-        let Some(at) = at else {
-            registry::end(&st, &row, CloseReason::HostEnded).await?;
-            row.status = "ended".into();
-            return Ok(Json(dto(&st, &row, me).await?));
-        };
         row.scheduled_at = Some(at);
         st.parties.forget_notice(id);
     }

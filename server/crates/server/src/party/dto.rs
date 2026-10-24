@@ -4,17 +4,11 @@ use chrono::{DateTime, Utc};
 use fliks_domain::party::{
     Action, Anchor, Item, MemberStatus, Message, Policy, Role, State, Voice,
 };
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 
 const MAX_INVITEES: usize = 50;
 const MAX_TEXT: usize = 500;
 const MAX_SIGNAL_BYTES: usize = 16 * 1024;
-
-fn nullable<'de, D: Deserializer<'de>, T: Deserialize<'de>>(
-    d: D,
-) -> Result<Option<Option<T>>, D::Error> {
-    Option::<T>::deserialize(d).map(Some)
-}
 
 fn invalid(what: &str) -> AppError {
     AppError::bad_request(format!("party.error_invalid_{what}"))
@@ -61,8 +55,7 @@ impl Create {
 pub struct Patch {
     pub name: Option<String>,
     pub policy: Option<Policy>,
-    #[serde(default, deserialize_with = "nullable")]
-    pub scheduled_at: Option<Option<DateTime<Utc>>>,
+    pub scheduled_at: Option<DateTime<Utc>>,
     pub regenerate_token: Option<bool>,
 }
 
