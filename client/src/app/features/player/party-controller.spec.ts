@@ -38,7 +38,15 @@ function setup(opts: { canControl?: boolean; urlParty?: string; joined?: number;
     play: vi.fn(),
     pause: vi.fn(),
   };
-  const queue = { upNext: () => null, interceptAdvance: null as unknown };
+  const queue = {
+    upNext: () => null,
+    interceptAdvance: null as unknown,
+    queueItems: () => [
+      { mediaId: 1, mediaFileId: 10, episodeId: 100, title: '' },
+      { mediaId: 1, mediaFileId: 11, episodeId: 101, title: '' },
+    ],
+    queueIndex: () => 0,
+  };
   const toast = { info: vi.fn(), error: vi.fn() };
   const route = { snapshot: { queryParams: opts.urlParty ? { party: opts.urlParty } : {} } };
   const router = { navigate: vi.fn() };
@@ -104,6 +112,27 @@ describe('PartyController user actions', () => {
     const { ctl, party, toast } = setup({ canControl: false });
     party.live.set({ state: 'paused' });
     ctl.togglePlay();
+    expect(party.sendIntent).not.toHaveBeenCalled();
+    expect(toast.info).toHaveBeenCalled();
+    ctl.dispose();
+  });
+
+  it('sends a picked queue item as one setItem intent and does not navigate', async () => {
+    const { ctl, party, router } = setup();
+    await ctl.requestQueueItem(1);
+    expect(party.sendIntent).toHaveBeenCalledWith('setItem', {
+      item: { mediaId: 1, mediaFileId: 11, episodeId: 101 },
+    });
+    expect(router.navigate).not.toHaveBeenCalled();
+    ctl.dispose();
+  });
+
+  it('ignores the playing item and refuses a pick without control', async () => {
+    const { ctl, party, toast } = setup();
+    await ctl.requestQueueItem(0);
+    expect(party.sendIntent).not.toHaveBeenCalled();
+    party.canControl.set(false);
+    await ctl.requestQueueItem(1);
     expect(party.sendIntent).not.toHaveBeenCalled();
     expect(toast.info).toHaveBeenCalled();
     ctl.dispose();

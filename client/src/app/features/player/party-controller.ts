@@ -10,6 +10,7 @@ import type { PlaybackEngine } from '../../core/services/playback-engine/playbac
 import { ToastService } from '../../core/services/toast.service';
 import { VoiceService } from '../../core/services/party/voice.service';
 import { QueueController } from './queue-controller';
+import type { QueueItem } from '../../core/services/playback-queue.service';
 import { VoiceDucker } from './party-ducking';
 import { CastService } from '../../core/services/cast.service';
 import { CastPlayerService } from '../../core/services/cast-player.service';
@@ -170,14 +171,23 @@ export class PartyController {
   }
 
   async requestNext(): Promise<void> {
-    if (!this.gate()) return;
     const next = this.queueCtl.upNext();
-    if (!next) return;
+    if (next) await this.requestItem(next);
+  }
+
+  /** An episode picked from the queue menu: the server moves everyone, this device included. */
+  async requestQueueItem(index: number): Promise<void> {
+    const item = this.queueCtl.queueItems()[index];
+    if (item && index !== this.queueCtl.queueIndex()) await this.requestItem(item);
+  }
+
+  private async requestItem(item: QueueItem): Promise<void> {
+    if (!this.gate()) return;
     await this.party.sendIntent('setItem', {
       item: {
-        mediaId: next.mediaId,
-        ...(next.mediaFileId != null && { mediaFileId: next.mediaFileId }),
-        ...(next.episodeId != null && { episodeId: next.episodeId }),
+        mediaId: item.mediaId,
+        ...(item.mediaFileId != null && { mediaFileId: item.mediaFileId }),
+        ...(item.episodeId != null && { episodeId: item.episodeId }),
       },
     });
   }
