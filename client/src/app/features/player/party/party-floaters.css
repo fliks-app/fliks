@@ -2,7 +2,7 @@
   position: absolute;
   bottom: 10%;
   font-size: 2.5rem;
-  /* The rise starts fast and settles; the fade accelerates and is gone by 80%, while the rise settles. */
+  /* The rise starts fast and settles; the fade accelerates and is gone by 80%. */
   animation:
     party-rise 3s cubic-bezier(0.33, 1, 0.68, 1) forwards,
     party-fade 3s cubic-bezier(0.55, 0, 1, 0.45) forwards;
