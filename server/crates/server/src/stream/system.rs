@@ -61,6 +61,8 @@ pub struct ActiveStream {
     audio_mode: &'static str,
     transcode_percent: Option<f64>,
     client_tonemap: bool,
+    /// An offline-download session (pinned), not a playback.
+    download: bool,
     video_reasons: Vec<String>,
     audio_reasons: Vec<String>,
     container_reasons: Vec<String>,
@@ -284,6 +286,7 @@ fn row_of(
         container_reasons: reasons("Container"),
         qoe,
         engine_status: st.engine.status(),
+        download: s.engine.as_ref().is_some_and(|e| e.pinned),
         job: s.engine.as_ref().and_then(|e| e.job.clone()),
         quality,
     }
@@ -365,6 +368,7 @@ async fn live_tv_rows(st: &AppState, host_hw: &str) -> Vec<ActiveStream> {
                 },
                 transcode_percent: None,
                 client_tonemap: false,
+                download: false,
                 video_reasons: vec![],
                 audio_reasons: vec![],
                 container_reasons: vec![],

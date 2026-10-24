@@ -389,6 +389,7 @@ export class DownloadManagerService {
     );
     const hlsUrl = this.streamingApi.resolveDownloadUrl(mediaFileId, quality, playbackInfo);
     task.hlsUrl = hlsUrl;
+    task.sessionId = playbackInfo.sessionId;
     task.offlineCrop = offlineCropOf(playbackInfo);
     task.offlineEdl = playbackInfo.edl;
 
@@ -452,6 +453,7 @@ export class DownloadManagerService {
       this.webGates.get(task.id)?.open();
       this.webGates.delete(task.id);
       await this.notif.removeDownload(String(task.id));
+      if (task.sessionId) this.streamingApi.stopSession(task.sessionId).catch(() => {});
       // Media, Shaka URI and VTTs are keyed by mediaFileId and shared with any
       // sibling task for the same file — only remove them when none remains.
       const sharedElsewhere = this.cache
@@ -652,7 +654,10 @@ export class DownloadManagerService {
     const current = tasks.find((t) => t.id === taskId);
     if (!current) return;
     const lazy = current.status === status && isActive(status);
-    this.cache.save(tasks.map((t) => (t === current ? { ...t, status, progress } : t)), lazy);
+    const settledSid = status === 'ready' || status === 'failed' ? current.sessionId : undefined;
+    const next = { ...current, status, progress, ...(settledSid && { sessionId: undefined }) };
+    this.cache.save(tasks.map((t) => (t === current ? next : t)), lazy);
+    if (settledSid) this.streamingApi.stopSession(settledSid).catch(() => {});
   }
 
   /** Re-syncs one in-flight task with the native daemon; true when it still owns the task (live or finished).

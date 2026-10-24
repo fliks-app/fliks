@@ -47,6 +47,8 @@ export interface ActiveStream {
   transcodePercent: number | null;
   /** HDR served untouched to a client that tone-maps it to its SDR display. */
   clientTonemap: boolean;
+  /** An offline download transferring, not a playback. */
+  download: boolean;
   videoReasons: string[];
   audioReasons: string[];
   containerReasons: string[];
