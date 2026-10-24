@@ -3,6 +3,7 @@ import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { LucideSend } from '@lucide/angular';
 import { PARTY_EMOJIS, type PartyMessage } from '../../../core/services/api/party-api.service';
 import { DeviceService } from '../../../core/services/device.service';
+import { KeyboardOverlayService } from '../../../core/services/keyboard-overlay.service';
 import { PartyService } from '../../../core/services/party/party.service';
 import { formatTime } from '../../../core/utils/player.utils';
 import { TvRowDirective } from '../../../shared/directives/tv-row.directive';
@@ -21,8 +22,11 @@ export class PartyChatComponent {
   protected readonly party = inject(PartyService);
   private readonly translate = inject(TranslateService);
   protected readonly isTv = inject(DeviceService).isTv;
+  private readonly keyboard = inject(KeyboardOverlayService);
   /** Phrases stand in for the keyboard on the TV and on a phone in landscape, where it fills the screen. */
-  protected readonly showPhrases = computed(() => this.isTv() || this.party.dock() === 'drawer');
+  // While typing, the space left above the keyboard holds only the messages and the input.
+  protected readonly typing = computed(() => this.keyboard.height() > 0);
+  protected readonly showPhrases = computed(() => !this.typing() && (this.isTv() || this.party.dock() === 'drawer'));
 
   protected readonly maxLength = MAX_LENGTH;
   protected readonly emojis = PARTY_EMOJIS;
@@ -37,8 +41,10 @@ export class PartyChatComponent {
   constructor() {
     effect(() => {
       this.party.messages();
+      // The keyboard shrinks the list: keep the latest messages in view.
+      this.typing();
       const el = this.list()?.nativeElement;
-      if (el) queueMicrotask(() => (el.scrollTop = el.scrollHeight));
+      if (el) requestAnimationFrame(() => (el.scrollTop = el.scrollHeight));
     });
   }
 

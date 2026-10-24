@@ -3,7 +3,17 @@
     <app-party-voice-bar variant="controls" />
     <button
       type="button"
-      class="btn btn-ghost btn-sm btn-square ml-auto"
+      class="btn btn-ghost btn-sm ml-auto gap-1 px-2"
+      [class.text-primary]="showMembers()"
+      [attr.aria-label]="'party.tab_members' | translate"
+      [attr.aria-pressed]="showMembers()"
+      (click)="showMembers.set(!showMembers())"
+    >
+      <svg lucideUsers class="h-4 w-4"></svg><span class="text-xs">{{ party.members().length }}</span>
+    </button>
+    <button
+      type="button"
+      class="btn btn-ghost btn-sm btn-square"
       [attr.aria-label]="'party.panel_menu' | translate"
       [attr.aria-expanded]="menuOpen()"
       (click)="menuOpen.set(!menuOpen())"
@@ -33,16 +43,11 @@
     }
   </header>
 
-  <app-party-voice-bar variant="hint" class="empty:hidden" />
+  @if (!keyboard.height()) {
+    <app-party-voice-bar variant="hint" />
+  }
 
-  <div role="tablist" class="tabs tabs-border px-3" appTvRow>
-    <button type="button" role="tab" class="tab" [class.tab-active]="tab() === 'chat'" (click)="tab.set('chat')">{{ 'party.tab_chat' | translate }}</button>
-    <button type="button" role="tab" class="tab" [class.tab-active]="tab() === 'members'" (click)="tab.set('members')">
-      {{ 'party.tab_members' | translate }} ({{ party.members().length }})
-    </button>
-  </div>
-
-  @if (tab() === 'members') {
+  @if (showMembers() && !keyboard.height()) {
     <ul class="min-h-0 flex-1 overflow-y-auto px-3 py-2 text-sm">
       @for (m of party.members(); track m.deviceId + ':' + m.userId) {
         <li class="flex items-center gap-2 py-1.5">

@@ -1,4 +1,4 @@
-@if (voice.supported) {
+@if (voice.supported && (variant() !== 'hint' || voice.joined())) {
   <div [class]="variant() === 'controls' ? 'flex items-center gap-2 text-sm' : 'flex flex-col gap-2 px-3 py-2 text-sm'">
     @if (variant() !== 'hint') {
       <div class="flex items-center gap-2">

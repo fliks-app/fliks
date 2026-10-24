@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, effect, inject, signal } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
-import { LucideCrown, LucideMic, LucideMicOff, LucideRefreshCw, LucideSettings, LucideX } from '@lucide/angular';
+import { LucideCrown, LucideMic, LucideMicOff, LucideRefreshCw, LucideSettings, LucideUsers, LucideX } from '@lucide/angular';
 import { DeviceService } from '../../../core/services/device.service';
 import { KeyboardOverlayService } from '../../../core/services/keyboard-overlay.service';
 import { DismissableStackService } from '../../../core/services/dismissable-stack.service';
@@ -14,7 +14,7 @@ import { PartyVoiceBarComponent } from './party-voice-bar';
 
 @Component({
   selector: 'app-party-panel',
-  imports: [TranslatePipe, LucideCrown, LucideMic, LucideMicOff, LucideRefreshCw, LucideSettings, LucideX, TvRowDirective, TvSectionDirective, PartyChatComponent, PartyVoiceBarComponent],
+  imports: [TranslatePipe, LucideCrown, LucideMic, LucideMicOff, LucideRefreshCw, LucideSettings, LucideUsers, LucideX, TvRowDirective, TvSectionDirective, PartyChatComponent, PartyVoiceBarComponent],
   templateUrl: './party-panel.html',
   styleUrl: './party-panel.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -29,7 +29,7 @@ export class PartyPanelComponent {
   protected readonly keyboard = inject(KeyboardOverlayService);
   protected readonly menuOpen = signal(false);
 
-  protected readonly tab = signal<'members' | 'chat'>('chat');
+  protected readonly showMembers = signal(false);
 
   constructor() {
     // Back closes the panel before it leaves the player.
