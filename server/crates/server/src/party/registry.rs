@@ -127,14 +127,24 @@ impl Parties {
     }
 }
 
-pub fn item_dto_of(info: Option<(String, Option<String>)>, item: &Item) -> PartyItem {
-    let (title, poster_url) = info.unwrap_or_default();
+pub fn item_dto_of(info: Option<db::ItemInfo>, item: &Item) -> PartyItem {
+    let (title, poster_url, fanart_url, additional_fanart_urls) = match info {
+        Some(i) => (
+            i.title,
+            i.poster_url,
+            i.fanart_url,
+            i.additional_fanart_urls,
+        ),
+        None => Default::default(),
+    };
     PartyItem {
         media_id: item.media_id,
         media_file_id: item.media_file_id,
         episode_id: item.episode_id,
         title,
         poster_url,
+        fanart_url,
+        additional_fanart_urls,
     }
 }
 

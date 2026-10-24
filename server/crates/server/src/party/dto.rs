@@ -199,6 +199,8 @@ pub struct PartyItem {
     pub episode_id: Option<i32>,
     pub title: String,
     pub poster_url: Option<String>,
+    pub fanart_url: Option<String>,
+    pub additional_fanart_urls: Vec<String>,
 }
 
 #[derive(Serialize, Clone)]

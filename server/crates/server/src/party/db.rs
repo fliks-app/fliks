@@ -251,14 +251,23 @@ pub async fn followed(db: &PgPool, owner: i32, users: &[i32]) -> sqlx::Result<Ve
     .await
 }
 
-/// Media title (with `S01E02` for an episode) and poster; `None` when the media is gone.
+/// What a party shows of its media; the fanart fields are the media DTO's, picked from by the client.
+pub struct ItemInfo {
+    pub title: String,
+    pub poster_url: Option<String>,
+    pub fanart_url: Option<String>,
+    pub additional_fanart_urls: Vec<String>,
+}
+
+/// Media title (with `S01E02` for an episode) and artwork; `None` when the media is gone.
 pub async fn item_info(
     db: &PgPool,
     media: i32,
     episode: Option<i32>,
-) -> sqlx::Result<Option<(String, Option<String>)>> {
-    let Some((title, poster)) = sqlx::query_as::<_, (String, Option<String>)>(
-        r#"SELECT title, "posterUrl" FROM media WHERE id = $1"#,
+) -> sqlx::Result<Option<ItemInfo>> {
+    type Row = (String, Option<String>, Option<String>, Option<Vec<String>>);
+    let Some((title, poster_url, fanart_url, additional)) = sqlx::query_as::<_, Row>(
+        r#"SELECT title, "posterUrl", "fanartUrl", "additionalFanartUrls" FROM media WHERE id = $1"#,
     )
     .bind(media)
     .fetch_optional(db)
@@ -282,7 +291,12 @@ pub async fn item_info(
         Some((s, e)) => format!("{title} S{s:02}E{e:02}"),
         None => title,
     };
-    Ok(Some((title, poster)))
+    Ok(Some(ItemInfo {
+        title,
+        poster_url,
+        fanart_url,
+        additional_fanart_urls: additional.unwrap_or_default(),
+    }))
 }
 
 /// True when the file and the episode (if given) belong to the media.

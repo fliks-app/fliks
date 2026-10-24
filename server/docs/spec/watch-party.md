@@ -59,7 +59,7 @@ Module `server/crates/server/src/party/`. Error messages are translation keys.
 | `POST /api/parties/{id}/invitees` | `{ userIds: int[] }` | `PartyDto` | host only; followed users only; emits `party.invited`. |
 
 DTOs (camelCase, every key present, `null` not absent):
-- `PartyItem { mediaId, mediaFileId: int|null, episodeId: int|null, title: string, posterUrl: string|null }`
+- `PartyItem { mediaId, mediaFileId: int|null, episodeId: int|null, title: string, posterUrl: string|null, fanartUrl: string|null, additionalFanartUrls: string[] }` (the media DTO's artwork fields, so the client picks the same backdrop)
 - `PartySummaryDto { id, name, status, scheduledAt: ISO|null, host: { userId, username }, item: PartyItem, memberCount: int }`
 - `PartyDto = PartySummaryDto + { policy, inviteToken: string|null (host and members only), invitees: { userId, username }[], live: PartyLive|null }`
 - `PartyLive { rev, state, anchor: { position, serverTimeMs }, members: PartyMember[], messages: PartyMessage[] (last 50) }`
