@@ -55,7 +55,7 @@ export interface PartyCreateTarget {
 }
 
 const BUBBLE_MS = 4000;
-const REACTION_MS = 3000;
+const REACTION_MS = 4000;
 const MAX_MESSAGES = 200;
 
 /** Party-wide state: usable outside the player (invites, join links), the player's PartyController drives the engine from it. */

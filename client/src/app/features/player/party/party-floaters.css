@@ -4,12 +4,12 @@
   font-size: 2.5rem;
   /* The rise eases out; the emoji stays opaque for the first half, then fades out. */
   animation:
-    party-rise 3s ease-out forwards,
-    party-fade 3s ease-in-out forwards;
+    party-rise 4s ease-out forwards,
+    party-fade 4s ease-in-out forwards;
 }
 @keyframes party-rise {
   from { transform: translateY(0); }
-  to { transform: translateY(-60vh); }
+  to { transform: translateY(-40vh); }
 }
 @keyframes party-fade {
   0%,
@@ -17,5 +17,5 @@
   100% { opacity: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .reaction { animation: party-fade 3s ease-in-out forwards; }
+  .reaction { animation: party-fade 4s ease-in-out forwards; }
 }
