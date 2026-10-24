@@ -16,6 +16,11 @@ use tower_http::services::{ServeDir, ServeFile};
 /// Weak ETag (`W/"<size hex>-<mtime seconds hex>"`, as 4.x), `Cache-Control` and `If-None-Match` 304.
 async fn validators(req: Request, next: Next) -> Response {
     let inm = req.headers().get(IF_NONE_MATCH).cloned();
+    let cache = if req.uri().path().starts_with("/cast/emoji/") {
+        "public, max-age=604800"
+    } else {
+        "public, max-age=0"
+    };
     let mut res = next.run(req).await;
     let ok = matches!(
         res.status(),
@@ -26,7 +31,7 @@ async fn validators(req: Request, next: Next) -> Response {
     }
     res.headers_mut()
         .entry(CACHE_CONTROL)
-        .or_insert(HeaderValue::from_static("public, max-age=0"));
+        .or_insert(HeaderValue::from_static(cache));
     add_charset(&mut res);
     if res.status() != StatusCode::OK {
         return res;
@@ -162,7 +167,7 @@ mod tests {
     #[tokio::test]
     async fn serves_files_spa_cast_and_cannot_404() {
         let (c, k) = dirs("serve");
-        let r = router(Some(c), k);
+        let r = router(Some(c), k.clone());
         let file = get(&r, "/app.js", None).await;
         assert_eq!(file.status(), 200);
         assert_eq!(file.headers()[CACHE_CONTROL], "public, max-age=0");
@@ -182,6 +187,10 @@ mod tests {
             text(get(&r, "/cast/receiver.html", None).await).await,
             "cast"
         );
+        std::fs::create_dir_all(k.join("emoji")).unwrap();
+        std::fs::write(k.join("emoji/1f525.webp"), "w").unwrap();
+        let emoji = get(&r, "/cast/emoji/1f525.webp", None).await;
+        assert_eq!(emoji.headers()[CACHE_CONTROL], "public, max-age=604800");
         let missing = get(&r, "/cast/nope.html", None).await;
         assert_eq!(missing.status(), 404);
         assert!(text(missing).await.contains("Cannot GET /cast/nope.html"));

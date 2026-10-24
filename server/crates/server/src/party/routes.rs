@@ -24,7 +24,10 @@ use chrono::Utc;
 use fliks_domain::{
     acl::Permissions,
     js::now_ms,
-    party::{CloseReason, Effect, Error as PartyErr, Intent, Item, LOBBY_OPEN_BEFORE_MS, Policy},
+    party::{
+        CloseReason, DEFAULT_REACTIONS, Effect, Error as PartyErr, Intent, Item,
+        LOBBY_OPEN_BEFORE_MS, Policy, REACTIONS,
+    },
 };
 use serde_json::{Value, json};
 
@@ -34,6 +37,7 @@ pub fn router() -> Router<AppState> {
         .route("/api/parties", get(list).post(create))
         .route("/api/parties/by-token/{token}", get(by_token))
         .route("/api/parties/ice", get(ice))
+        .route("/api/parties/reactions", get(reactions))
         .route("/api/parties/{id}", get(show).patch(patch).delete(end))
         .route("/api/parties/{id}/join", post(join))
         .route("/api/parties/{id}/start", post(start))
@@ -780,6 +784,16 @@ pub async fn ice(State(st): State<AppState>, SessionAuthed(_): SessionAuthed) ->
         .and_then(|s| serde_json::from_str::<Vec<IceServer>>(&s).ok())
         .map_or_else(|| json!([{ "urls": DEFAULT_ICE }]), |v| json!(v));
     Ok(Json(json!({ "iceServers": servers })))
+}
+
+/// The reaction catalog, each emoji with the URL of its animated asset under `/cast/emoji`.
+#[utoipa::path(get, path = "/api/parties/reactions", responses((status = 200)))]
+pub async fn reactions(SessionAuthed(_): SessionAuthed) -> Json<Value> {
+    let reactions: Vec<Value> = REACTIONS
+        .iter()
+        .map(|(emoji, code)| json!({ "emoji": emoji, "animation": format!("/cast/emoji/{code}.webp") }))
+        .collect();
+    Json(json!({ "reactions": reactions, "defaults": DEFAULT_REACTIONS }))
 }
 
 #[utoipa::path(post, path = "/api/parties/{id}/members/{userId}/kick", responses((status = 204)))]

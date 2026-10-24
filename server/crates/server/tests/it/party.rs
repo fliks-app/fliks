@@ -498,3 +498,46 @@ async fn ice_defaults_to_stun_and_follows_the_setting(pool: PgPool) {
     let (s, e) = c.call("GET", "/api/parties/ice", &a, None).await;
     assert_eq!((s, e), (200, json!({"iceServers": servers})));
 }
+
+#[sqlx::test(migrations = false)]
+async fn the_catalog_route_lists_served_assets_and_reactions_are_checked_against_it(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (host, h) = c.user("host", true).await;
+    let (s, cat) = c.call("GET", "/api/parties/reactions", &h, None).await;
+    assert_eq!(s, 200);
+    let list = cat["reactions"].as_array().unwrap();
+    assert_eq!(list.len(), fliks_domain::party::REACTIONS.len());
+    assert_eq!(cat["defaults"].as_array().unwrap().len(), 8);
+    let public = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../public");
+    for r in list {
+        let url = r["animation"].as_str().unwrap();
+        let file = url.strip_prefix("/cast/").unwrap();
+        assert!(public.join(file).is_file(), "{url}");
+    }
+    let id = party_with(&c, &h, vec![]).await;
+    let _conn = c.connect(host, "d");
+    let join = format!("/api/parties/{id}/join");
+    let (s, _) = c
+        .call("POST", &join, &h, Some(json!({"deviceId": "d"})))
+        .await;
+    assert_eq!(s, 200);
+    let url = format!("/api/parties/{id}/reactions");
+    let (s, _) = c
+        .call(
+            "POST",
+            &url,
+            &h,
+            Some(json!({"deviceId": "d", "emoji": "💀"})),
+        )
+        .await;
+    assert_eq!(s, 204);
+    let (s, e) = c
+        .call(
+            "POST",
+            &url,
+            &h,
+            Some(json!({"deviceId": "d", "emoji": "x"})),
+        )
+        .await;
+    assert_eq!((s, msg(&e)), (400, Some("party.error_invalid")));
+}

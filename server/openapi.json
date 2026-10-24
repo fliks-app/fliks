@@ -2601,6 +2601,20 @@
         }
       }
     },
+    "/api/parties/reactions": {
+      "get": {
+        "tags": [
+          "crate::party"
+        ],
+        "summary": "The reaction catalog, each emoji with the URL of its animated asset under `/cast/emoji`.",
+        "operationId": "reactions",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/parties/{id}": {
       "get": {
         "tags": [
