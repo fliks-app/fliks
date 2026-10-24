@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, ElementRef, effect, inject, viewChild } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
-import { LucideSmilePlus } from '@lucide/angular';
+import { LucideSmilePlus, LucideX } from '@lucide/angular';
 import { DismissableStackService } from '../../../core/services/dismissable-stack.service';
 import { ReactionsService } from '../../../core/services/party/reactions.service';
 import { PartyService } from '../../../core/services/party/party.service';
@@ -11,7 +11,7 @@ const POP_MS = 220;
 /** Reaction button of the player's action strip: opens a row of emojis to its left, one tap sends (and folds it back, per the reaction settings). */
 @Component({
   selector: 'app-party-reaction-dock',
-  imports: [TranslatePipe, LucideSmilePlus, TvRowDirective],
+  imports: [TranslatePipe, LucideSmilePlus, LucideX, TvRowDirective],
   templateUrl: './party-reaction-dock.html',
   styleUrl: './party-reaction-dock.css',
   changeDetection: ChangeDetectionStrategy.OnPush,

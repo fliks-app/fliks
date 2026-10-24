@@ -19,10 +19,11 @@
     type="button"
     class="dock-toggle"
     [class.active]="open()"
-    [attr.aria-label]="'party.reactions' | translate"
+    [attr.aria-label]="(open() ? 'party.reactions_hide' : 'party.reactions_show') | translate"
     [attr.aria-expanded]="open()"
     (click)="reactions.setRowOpen(!open())"
   >
-    <svg lucideSmilePlus class="h-5 w-5"></svg>
+    <svg lucideSmilePlus class="icon icon-closed h-5 w-5"></svg>
+    <svg lucideX class="icon icon-open h-5 w-5"></svg>
   </button>
 </div>
