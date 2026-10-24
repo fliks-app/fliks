@@ -18,3 +18,26 @@
 @media (prefers-reduced-motion: reduce) {
   .reaction { animation: party-fade 2s cubic-bezier(0.7, 0, 0.84, 0) forwards; }
 }
+.bubble {
+  /* A grid row that can collapse, so the bubbles around one that comes or goes slide instead of jumping. */
+  display: grid;
+  grid-template-rows: 1fr;
+  justify-items: end;
+  padding-top: 0.25rem;
+}
+.bubble-in {
+  animation: bubble-in 240ms ease-out;
+}
+.bubble-out {
+  animation: bubble-out 280ms ease-in forwards;
+}
+@keyframes bubble-in {
+  from { grid-template-rows: 0fr; padding-top: 0; opacity: 0; transform: translateY(0.5rem); }
+}
+@keyframes bubble-out {
+  to { grid-template-rows: 0fr; padding-top: 0; opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bubble-in,
+  .bubble-out { animation-duration: 1ms; }
+}
