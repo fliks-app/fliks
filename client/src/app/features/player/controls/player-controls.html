@@ -138,7 +138,7 @@
 <div
   class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent transition-opacity duration-300 pt-12"
   [class]="seekDragging() ? 'z-[55]' : 'z-40'"
-  style="padding-left: calc(max(var(--ctrl-px), env(safe-area-inset-left)) + 0.25rem + var(--ctrl-inset, 0px)); padding-right: calc(max(var(--ctrl-px), env(safe-area-inset-right)) + 0.25rem + var(--ctrl-inset, 0px)); padding-bottom: calc(max(var(--ctrl-pb), env(safe-area-inset-bottom)) + var(--ctrl-inset, 0px) + var(--strip-h, 0px));"
+  style="padding-left: calc(max(var(--ctrl-px), env(safe-area-inset-left)) + 0.25rem + var(--ctrl-inset, 0px)); padding-right: calc(max(var(--ctrl-px), env(safe-area-inset-right)) + 0.25rem + var(--ctrl-inset, 0px)); padding-bottom: calc(max(var(--ctrl-pb), var(--safe-bottom)) + var(--ctrl-inset, 0px) + var(--strip-h, 0px));"
   [class.opacity-0]="!visible()"
   [class.pointer-events-none]="!visible()"
 >
@@ -289,7 +289,7 @@
 @if (hasStrip() && (!isTv() || visible())) {
   <div
     class="pointer-events-none absolute left-0 right-0 z-[57] flex h-11 items-center justify-between"
-    style="padding-left: calc(max(var(--ctrl-px), env(safe-area-inset-left)) + 0.25rem + var(--ctrl-inset, 0px)); padding-right: calc(max(var(--ctrl-px), env(safe-area-inset-right)) + 0.25rem + var(--ctrl-inset, 0px)); bottom: calc(max(var(--ctrl-pb), env(safe-area-inset-bottom)) + var(--ctrl-inset, 0px));"
+    style="padding-left: calc(max(var(--ctrl-px), env(safe-area-inset-left)) + 0.25rem + var(--ctrl-inset, 0px)); padding-right: calc(max(var(--ctrl-px), env(safe-area-inset-right)) + 0.25rem + var(--ctrl-inset, 0px)); bottom: calc(max(var(--ctrl-pb), var(--safe-bottom)) + var(--ctrl-inset, 0px));"
   >
     <div class="flex items-center gap-1.5 transition-opacity duration-300" [class.opacity-0]="!visible()" [class.pointer-events-none]="!visible()"></div>
     <ng-content />

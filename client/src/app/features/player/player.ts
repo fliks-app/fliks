@@ -142,6 +142,8 @@ import { DefaultFocusDirective } from '../../shared/directives/default-focus.dir
       inset: 0;
       height: 100vh;
       height: 100dvh;
+      /* The bottom inset the controls clear; none once the container no longer reaches the screen's bottom. */
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
       background-color: #000;
       z-index: 100;
       overflow: hidden;
@@ -201,9 +203,12 @@ import { DefaultFocusDirective } from '../../shared/directives/default-focus.dir
     }
     .party-shell[data-party-dock='right'] > .player-container {
       right: 360px;
-      /* Beside the side panel there is room above the keyboard: the player fits there while typing. */
-      height: calc(100vh - var(--keyboard-h, 0px));
-      height: calc(100dvh - var(--keyboard-h, 0px));
+    }
+    /* Beside the side panel there is room above the keyboard: the player fits there while typing. */
+    .party-shell.keyboard-open[data-party-dock='right'] > .player-container {
+      height: calc(100vh - var(--keyboard-h));
+      height: calc(100dvh - var(--keyboard-h));
+      --safe-bottom: 0px;
     }
     .party-shell[data-party-dock='drawer'] > .player-container {
       right: 40%;
