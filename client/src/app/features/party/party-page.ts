@@ -294,7 +294,17 @@ export class PartyPageComponent implements OnInit, OnDestroy {
 
   protected async reschedule(): Promise<void> {
     if (!this.newWhen()) return;
-    const dto = await this.run(() => this.api.update(this.id, { scheduledAt: new Date(this.newWhen()).toISOString() }));
+    const at = new Date(this.newWhen());
+    const ok = await this.confirm.confirm({
+      title: this.translate.instant('party.reschedule_title'),
+      message: this.translate.instant('party.reschedule_message', {
+        name: this.view()?.name,
+        when: partyWhen(at.toISOString(), this.translate, this.now()),
+      }),
+      confirmLabel: this.translate.instant('party.reschedule'),
+    });
+    if (!ok) return;
+    const dto = await this.run(() => this.api.update(this.id, { scheduledAt: at.toISOString() }));
     if (dto) {
       this.apply(dto);
       this.rescheduling.set(false);
@@ -313,6 +323,13 @@ export class PartyPageComponent implements OnInit, OnDestroy {
   }
 
   protected async regenerate(): Promise<void> {
+    const ok = await this.confirm.confirm({
+      title: this.translate.instant('party.regenerate_title'),
+      message: this.translate.instant('party.regenerate_message'),
+      confirmLabel: this.translate.instant('party.regenerate_link'),
+      variant: 'warning',
+    });
+    if (!ok) return;
     const dto = await this.run(() => this.api.update(this.id, { regenerateToken: true }));
     if (dto) this.apply(dto);
   }

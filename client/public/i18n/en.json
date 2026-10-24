@@ -3650,6 +3650,10 @@
     "voice_count_one": "{{count}} in voice",
     "voice_count_other": "{{count}} in voice",
     "card_live_one": "{{host}} · {{count}} watching",
-    "card_live_other": "{{host}} · {{count}} watching"
+    "card_live_other": "{{host}} · {{count}} watching",
+    "reschedule_title": "Reschedule the party",
+    "reschedule_message": "New date for \"{{name}}\": {{when}}. Confirm?",
+    "regenerate_title": "Create a new link",
+    "regenerate_message": "The current invite link will stop working. Anyone who only has it will lose access."
   }
 }

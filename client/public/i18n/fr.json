@@ -3650,6 +3650,10 @@
     "voice_count_one": "{{count}} en vocal",
     "voice_count_other": "{{count}} en vocal",
     "card_live_one": "{{host}} · {{count}} spectateur",
-    "card_live_other": "{{host}} · {{count}} spectateurs"
+    "card_live_other": "{{host}} · {{count}} spectateurs",
+    "reschedule_title": "Reprogrammer la séance",
+    "reschedule_message": "Nouvelle date pour \"{{name}}\" : {{when}}. Confirmer ?",
+    "regenerate_title": "Créer un nouveau lien",
+    "regenerate_message": "Le lien d'invitation actuel ne fonctionnera plus. Les personnes qui n'ont que celui-ci perdront l'accès."
   }
 }

@@ -3650,6 +3650,10 @@
     "voice_count_one": "{{count}} im Sprachkanal",
     "voice_count_other": "{{count}} im Sprachkanal",
     "card_live_one": "{{host}} · {{count}} schaut zu",
-    "card_live_other": "{{host}} · {{count}} schauen zu"
+    "card_live_other": "{{host}} · {{count}} schauen zu",
+    "reschedule_title": "Watch Party verschieben",
+    "reschedule_message": "Neuer Termin für \"{{name}}\": {{when}}. Bestätigen?",
+    "regenerate_title": "Neuen Link erstellen",
+    "regenerate_message": "Der aktuelle Einladungslink funktioniert nicht mehr. Wer nur diesen Link hat, verliert den Zugang."
   }
 }

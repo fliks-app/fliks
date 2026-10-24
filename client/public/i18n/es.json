@@ -3650,6 +3650,10 @@
     "voice_count_one": "{{count}} en voz",
     "voice_count_other": "{{count}} en voz",
     "card_live_one": "{{host}} · {{count}} viendo",
-    "card_live_other": "{{host}} · {{count}} viendo"
+    "card_live_other": "{{host}} · {{count}} viendo",
+    "reschedule_title": "Reprogramar la sesión",
+    "reschedule_message": "Nueva fecha para \"{{name}}\": {{when}}. ¿Confirmar?",
+    "regenerate_title": "Crear un enlace nuevo",
+    "regenerate_message": "El enlace de invitación actual dejará de funcionar. Quien solo tenga ese enlace perderá el acceso."
   }
 }
