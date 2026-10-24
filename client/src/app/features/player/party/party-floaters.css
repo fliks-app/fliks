@@ -2,9 +2,9 @@
   position: absolute;
   bottom: 10%;
   font-size: 2.5rem;
-  /* The rise eases out; the fade runs the whole way on an ease-in curve, barely visible at first. */
+  /* The rise starts fast and settles; the fade runs the whole way on an ease-in curve. */
   animation:
-    party-rise 3s ease-out forwards,
+    party-rise 3s cubic-bezier(0.16, 1, 0.3, 1) forwards,
     party-fade 3s cubic-bezier(0.55, 0, 1, 0.45) forwards;
 }
 @keyframes party-rise {
