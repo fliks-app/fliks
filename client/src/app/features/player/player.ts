@@ -2548,6 +2548,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    *  recoverConfirmPending}), so a quick re-fail keeps counting toward {@link maxRecoverAttempts}. */
   private recoverAttempts = 0;
   private readonly maxRecoverAttempts = 3;
+  /** A recovery that found the network down: re-run on reconnect without spending an attempt. */
+  private recoverWhenOnline: { reason: QoeRecoveryReason; frozenSince?: number } | null = null;
   /** Pending backoff retry between failed recovery attempts (2s → 4s). */
   private recoverRetryTimer: ReturnType<typeof setTimeout> | null = null;
   /** A recovery reload just resolved; counters clear only after the playhead advances for {@link
@@ -2802,6 +2804,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // A frozen interval is not a frozen playhead: skip the stall watchdog's black-screen reload this tick.
       this.resetStallWatchdog();
       void this.resumeAfterGap();
+    } else if (this.recoverWhenOnline && this.network.isOnline()) {
+      const { reason, frozenSince } = this.recoverWhenOnline;
+      this.recoverWhenOnline = null;
+      void this.recoverFromLostSession(reason, frozenSince);
     } else if (
       this.resumeDue &&
       this.network.isOnline() &&
@@ -2925,6 +2931,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     }
     if (this.castService.isConnected()) return;
     if (!this.engine || !this.mediaFileId) return;
+    if (!this.network.isOnline()) {
+      this.recoverWhenOnline ??= { reason, frozenSince };
+      this.state.setRecovering(true);
+      return;
+    }
     // The first trigger names the episode. An open stall already counts the freeze on the old sid, so the wait
     // starts now; otherwise at the last progress. A lost sid's open stall moves to the new one.
     if (!this.recoveryEpisode) {
@@ -2964,7 +2975,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.recoverConfirmPending = true;
       this.recoverConfirmAt = Date.now();
     } catch (e) {
-      if (this.recoverAttempts >= this.maxRecoverAttempts) {
+      if (!this.network.isOnline()) {
+        this.recoverAttempts -= 1;
+        this.recoverWhenOnline ??= { reason };
+      } else if (this.recoverAttempts >= this.maxRecoverAttempts) {
         this.giveUpRecovery(e);
       } else {
         // Hold the recovering veil up across the backoff so the user sees a
