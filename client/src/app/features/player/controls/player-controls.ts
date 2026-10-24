@@ -593,7 +593,7 @@ export class PlayerControlsComponent {
     if (this.isMobileTouch()) return this.tapOverlay.emit();
     if (this.hasOpenDropdown()) return this.closeDropdown(event);
     clearTimeout(this.surfaceClickTimer);
-    if (event.detail > 1) return;
+    if (event.detail > 1 || !this.canControlPlayback()) return;
     this.surfaceClickTimer = setTimeout(() => this.togglePlay.emit(), 250);
   }
 

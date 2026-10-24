@@ -17,7 +17,7 @@ import { formatTime } from '../../core/utils/player.utils';
 import { TvRowDirective } from '../../shared/directives/tv-row.directive';
 import { TvSectionDirective } from '../../shared/directives/tv-section.directive';
 import { PartyChatComponent } from '../player/party/party-chat';
-import { connectedCount, partyPeople, type PartyPerson } from '../player/party/party-people';
+import { connectedCount, missingCount, partyPeople, type PartyPerson } from '../player/party/party-people';
 import { PartyPersonRowComponent } from '../player/party/party-person-row';
 import { PartyHostSwitchesComponent } from '../player/party/party-host-switches';
 import { PartyVoiceBarComponent } from '../player/party/party-voice-bar';
@@ -148,6 +148,7 @@ export class PartyPageComponent implements OnInit, OnDestroy {
     return v ? partyPeople(v.host, v.invitees, members, this.voice.speaking()) : [];
   });
   protected readonly connectedCount = computed(() => connectedCount(this.people()));
+  protected readonly missingCount = computed(() => missingCount(this.people()));
   protected readonly voiceCount = computed(() => (this.view()?.live?.members ?? []).filter((m) => m.voice).length);
   protected readonly canHost = computed(() =>
     this.joined() ? this.party.isHost() : this.view()?.host.userId === this.auth.user()?.id,

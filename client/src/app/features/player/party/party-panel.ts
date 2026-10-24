@@ -9,7 +9,7 @@ import { VoiceService } from '../../../core/services/party/voice.service';
 import { PartyService } from '../../../core/services/party/party.service';
 import { TvSectionDirective } from '../../../shared/directives/tv-section.directive';
 import { PartyChatComponent } from './party-chat';
-import { connectedCount, partyPeople } from './party-people';
+import { connectedCount, missingCount, partyPeople } from './party-people';
 import { PartyPersonRowComponent } from './party-person-row';
 import { PartyVoiceBarComponent } from './party-voice-bar';
 
@@ -33,6 +33,7 @@ export class PartyPanelComponent {
     return p ? partyPeople(p.host, p.invitees, this.party.members(), this.voice.speaking()) : [];
   });
   protected readonly connected = computed(() => connectedCount(this.people()));
+  protected readonly missing = computed(() => missingCount(this.people()));
 
   protected readonly showMembers = signal(false);
 

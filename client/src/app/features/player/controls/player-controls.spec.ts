@@ -2,11 +2,12 @@ import { PlayerControlsComponent } from './player-controls';
 
 describe('PlayerControlsComponent surface clicks', () => {
   const proto = PlayerControlsComponent.prototype;
-  const make = () => {
+  const make = (canControl = true) => {
     const calls: string[] = [];
     const ctrl = {
       isMobileTouch: () => false,
       hasOpenDropdown: () => false,
+      canControlPlayback: () => canControl,
       togglePlay: { emit: () => calls.push('play') },
       toggleFullscreen: { emit: () => calls.push('fullscreen') },
     } as unknown as PlayerControlsComponent;
@@ -21,6 +22,13 @@ describe('PlayerControlsComponent surface clicks', () => {
     proto.onSurfaceClick.call(ctrl, new MouseEvent('click', { detail: 1 }));
     vi.advanceTimersByTime(300);
     expect(calls).toEqual(['play']);
+  });
+
+  it('does nothing when the party host holds playback', () => {
+    const { ctrl, calls } = make(false);
+    proto.onSurfaceClick.call(ctrl, new MouseEvent('click', { detail: 1 }));
+    vi.advanceTimersByTime(300);
+    expect(calls).toEqual([]);
   });
 
   it('only toggles fullscreen on a double click', () => {

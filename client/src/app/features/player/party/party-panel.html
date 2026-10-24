@@ -30,7 +30,7 @@
 
   @if (showMembers() && !keyboard.height()) {
     <p class="px-3 pt-2 text-sm opacity-70">
-      {{ 'party.people_connected' | translatePlural: connected() }} · {{ 'party.people_invited' | translatePlural: party.party()?.invitees?.length ?? 0 }}
+      {{ 'party.people_connected' | translatePlural: connected() }}@if (missing()) { · {{ 'party.people_missing' | translatePlural: missing() }} }
     </p>
     <ul class="min-h-0 flex-1 overflow-y-auto px-3 py-2 text-sm">
       @for (p of people(); track p.userId) {

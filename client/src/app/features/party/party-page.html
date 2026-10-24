@@ -134,7 +134,7 @@
           <section class="flex flex-col gap-3">
             <div class="flex flex-wrap items-baseline justify-between gap-x-3">
               <h2 class="text-lg font-bold">{{ 'party.people' | translate }}</h2>
-              <span class="text-sm text-base-content/60">{{ 'party.people_connected' | translatePlural: connectedCount() }} · {{ 'party.people_invited' | translatePlural: v.invitees.length }}</span>
+              <span class="text-sm text-base-content/60">{{ 'party.people_connected' | translatePlural: connectedCount() }}@if (missingCount()) { · {{ 'party.people_missing' | translatePlural: missingCount() }} }</span>
             </div>
             <ul class="flex flex-col gap-1 rounded-box bg-base-200 p-2">
               @for (p of people(); track p.userId) {

@@ -49,3 +49,8 @@ export function partyPeople(
 export function connectedCount(people: PartyPerson[]): number {
   return people.filter((p) => p.state === 'connected' || p.state === 'link').length;
 }
+
+/** Expected but not here: invitees, and the party's own host when someone else holds the role. */
+export function missingCount(people: PartyPerson[]): number {
+  return people.filter((p) => p.state === 'invited' || p.state === 'absent').length;
+}
