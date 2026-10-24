@@ -29,7 +29,7 @@ export function installCorsBypass(): void {
     callback({ responseHeaders: headers });
   });
 
-  // Everything stays allowed as before except video capture: only the voice-chat microphone is granted.
+  // Video capture is denied: the voice chat needs only the microphone.
   const allowed = (permission: string, mediaTypes?: readonly string[]) =>
     permission !== 'media' || (mediaTypes ?? []).every((t) => t === 'audio');
   session.defaultSession.setPermissionRequestHandler((_wc, permission, callback, details) =>
