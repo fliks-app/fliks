@@ -173,13 +173,20 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         let height = call.getInt("height") ?? 0
 
         DispatchQueue.main.async { [weak self] in
-            self?.playerView?.frame = CGRect(
-                x: CGFloat(x),
-                y: CGFloat(y),
-                width: width < 0 ? UIScreen.main.bounds.width : CGFloat(width),
-                height: height < 0 ? UIScreen.main.bounds.height : CGFloat(height)
-            )
-            self?.layoutVideoLayer()
+            guard let self = self, let view = self.playerView else {
+                call.resolve()
+                return
+            }
+            // -1 follows the WebView's parent again, rotations included; a rectangle is the player container in CSS points.
+            if width < 0 || height < 0 {
+                view.frame = view.superview?.bounds ?? UIScreen.main.bounds
+                view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            } else {
+                view.autoresizingMask = []
+                let origin = self.bridge?.webView?.frame.origin ?? .zero
+                view.frame = CGRect(x: origin.x + CGFloat(x), y: origin.y + CGFloat(y), width: CGFloat(width), height: CGFloat(height))
+            }
+            self.layoutVideoLayer()
             call.resolve()
         }
     }

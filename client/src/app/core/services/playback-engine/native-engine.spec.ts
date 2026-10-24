@@ -11,7 +11,18 @@ const plugin = vi.hoisted(() => ({
   setSubtitleStyle: vi.fn(() => Promise.resolve()),
   destroy: vi.fn(() => Promise.resolve()),
   getQoe: vi.fn(() => Promise.resolve({ engine: 'exoplayer' })),
+  resize: vi.fn((_options: unknown) => Promise.resolve()),
 }));
+
+// jsdom ships no ResizeObserver; init() observes the player container.
+let onResize = () => {};
+(globalThis as { ResizeObserver?: unknown }).ResizeObserver = class {
+  constructor(cb: () => void) {
+    onResize = cb;
+  }
+  observe() {}
+  disconnect() {}
+};
 
 // Loaded after the mock: other specs mock @capacitor/core differently and share the plugin module.
 let NativeEngine: typeof import('./native-engine').NativeEngine;
@@ -166,5 +177,28 @@ describe('NativeEngine.getQoeSample', () => {
 describe('NativeEngine position cadence', () => {
   it('declares the 1 s refresh of ExoPlayer and AVPlayer so the freeze watch waits for it', () => {
     expect(new NativeEngine().positionUpdateMs).toBe(1_000);
+  });
+});
+
+describe('NativeEngine surface placement', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('keeps the native surface on the container rectangle', async () => {
+    let box = { left: 0, top: 0, right: innerWidth, bottom: innerHeight, width: innerWidth, height: innerHeight };
+    const container = document.createElement('div');
+    container.getBoundingClientRect = () => box as DOMRect;
+    const engine = new NativeEngine();
+    await engine.init(container);
+    expect(plugin.resize).not.toHaveBeenCalled();
+
+    box = { ...box, right: innerWidth * 0.6, width: innerWidth * 0.6 };
+    onResize();
+    expect(plugin.resize).toHaveBeenLastCalledWith({ x: 0, y: 0, width: Math.round(innerWidth * 0.6), height: innerHeight });
+
+    box = { ...box, right: innerWidth, width: innerWidth };
+    onResize();
+    expect(plugin.resize).toHaveBeenLastCalledWith({ x: 0, y: 0, width: -1, height: -1 });
+    expect(plugin.resize).toHaveBeenCalledTimes(2);
+    await engine.destroy();
   });
 });

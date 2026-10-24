@@ -61,12 +61,13 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
 
   private _initialized = false;
 
-  async init(_container: HTMLElement): Promise<void> {
+  async init(container: HTMLElement): Promise<void> {
     // Pass 0,0 with -1,-1 (MATCH_PARENT) to fill the entire screen.
     // The native SurfaceView sits behind the transparent WebView.
     await NativePlayer.create({ x: 0, y: 0, width: -1, height: -1 });
     this._initialized = true;
     this.bindWindowEvents();
+    this.followContainer(container);
     if (this._subtitleStyle) {
       NativePlayer.setSubtitleStyle(this._subtitleStyle).catch(() => {});
     }
@@ -75,6 +76,8 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
   async destroy(): Promise<void> {
     this._initialized = false;
     this.unbindWindowEvents();
+    this.viewportObserver?.disconnect();
+    this.viewportObserver = null;
     this._activeTrackId = null;
     this._crop = null;
     // Without this each navigation leaks listeners onto the long-lived NativePlayer bridge.
@@ -398,6 +401,29 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
   }
 
   // ── Window event bridge ──
+
+  private viewportObserver: ResizeObserver | null = null;
+  private viewport = '';
+
+  /** The native surface sits behind the WebView: it is kept on the container's rectangle, so a layout that
+   *  shrinks the player (a side panel) moves the picture with the controls. A full-viewport container sends -1. */
+  private followContainer(container: HTMLElement): void {
+    const sync = () => {
+      const r = container.getBoundingClientRect();
+      const full = r.left <= 0 && r.top <= 0 && r.right >= innerWidth && r.bottom >= innerHeight;
+      const rect = full
+        ? { x: 0, y: 0, width: -1, height: -1 }
+        : { x: Math.round(r.left), y: Math.round(r.top), width: Math.round(r.width), height: Math.round(r.height) };
+      const key = `${rect.x},${rect.y},${rect.width},${rect.height}`;
+      if (key === this.viewport || !this._initialized) return;
+      this.viewport = key;
+      NativePlayer.resize(rect).catch(() => {});
+    };
+    this.viewportObserver = new ResizeObserver(sync);
+    this.viewportObserver.observe(container);
+    this.viewport = '0,0,-1,-1';
+    sync();
+  }
 
   private bindWindowEvents(): void {
     const bind = (eventName: string, fn: EventListener) => {

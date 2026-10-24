@@ -76,6 +76,7 @@ public class NativePlayerPlugin extends Plugin {
     private SubtitleOverlay subtitles;
     private boolean fillScreen = false;
     private VideoCropLayout.Crop crop;
+    private int[] viewport;
     // Presented size from onVideoSizeChanged (pixelWidthHeightRatio-corrected); 0 until known.
     private float displayWidth = 0f;
     private float displayHeight = 0f;
@@ -198,6 +199,7 @@ public class NativePlayerPlugin extends Plugin {
                 shutter = null;
             }
             crop = null;
+            viewport = null;
             fillScreen = false;
             displayWidth = 0f;
             displayHeight = 0f;
@@ -206,10 +208,36 @@ public class NativePlayerPlugin extends Plugin {
         });
     }
 
+    /** The player container's rectangle in CSS px; null fills the WebView's parent. */
     @PluginMethod()
     public void resize(PluginCall call) {
-        // Wrapper is MATCH_PARENT — no resize needed. Kept for interface compatibility.
-        call.resolve();
+        int x = call.getInt("x", 0);
+        int y = call.getInt("y", 0);
+        int w = call.getInt("width", -1);
+        int h = call.getInt("height", -1);
+        mainHandler.post(() -> {
+            viewport = w < 0 || h < 0 ? null : new int[] {x, y, w, h};
+            applyViewport();
+            call.resolve();
+        });
+    }
+
+    /** Video and text subtitles sit on the viewport, scaled from CSS px to the WebView's pixels. */
+    private void applyViewport() {
+        if (wrapper == null) return;
+        FrameLayout.LayoutParams lp;
+        if (viewport == null) {
+            lp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+        } else {
+            android.webkit.WebView webView = getBridge().getWebView();
+            float d = getContext().getResources().getDisplayMetrics().density;
+            lp = new FrameLayout.LayoutParams(
+                    Math.round(viewport[2] * d), Math.round(viewport[3] * d), Gravity.TOP | Gravity.LEFT);
+            lp.leftMargin = webView.getLeft() + Math.round(viewport[0] * d);
+            lp.topMargin = webView.getTop() + Math.round(viewport[1] * d);
+        }
+        wrapper.setLayoutParams(lp);
+        if (subtitles != null) subtitles.setViewport(new FrameLayout.LayoutParams(lp));
     }
 
     /** Screen stays awake while the session is advancing or stalled mid-play;

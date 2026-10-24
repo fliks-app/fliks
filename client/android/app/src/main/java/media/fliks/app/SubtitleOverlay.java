@@ -153,6 +153,11 @@ class SubtitleOverlay {
         if (subtitleView != null) subtitleView.setAlpha(alpha);
     }
 
+    /** Text subtitles follow the video's viewport; bitmap ones already live inside the wrapper. */
+    void setViewport(FrameLayout.LayoutParams lp) {
+        if (subtitleView != null) subtitleView.setLayoutParams(lp);
+    }
+
     void detach() {
         if (subtitleView != null) {
             ViewGroup parent = (ViewGroup) subtitleView.getParent();
