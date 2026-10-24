@@ -1,6 +1,6 @@
 import { CdkDrag, CdkDragPlaceholder, CdkDropList } from '@angular/cdk/drag-drop';
 import { NgTemplateOutlet } from '@angular/common';
-import { ChangeDetectionStrategy, Component, ElementRef, computed, inject, signal, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, afterNextRender, computed, inject, output, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe } from '@ngx-translate/core';
 import { LucideSearch, LucideX } from '@lucide/angular';
@@ -39,6 +39,16 @@ export class PartyReactionSettingsComponent {
   /** Set when a tap was refused because the bar is full. */
   protected readonly full = signal(false);
   private readonly dialog = viewChild.required<ElementRef<HTMLDialogElement>>('dialog');
+  /** The player mounts the dialog to open it and drops it on close. */
+  readonly closed = output<void>();
+
+  constructor() {
+    afterNextRender(() => {
+      void this.reactions.load();
+      void this.data.load();
+      this.dialog().nativeElement.showModal();
+    });
+  }
 
   protected readonly searching = computed(() => this.query().trim() !== '');
   protected readonly sections = computed<Section[]>(() => {
@@ -62,9 +72,4 @@ export class PartyReactionSettingsComponent {
     this.full.set(false);
   }
 
-  show(): void {
-    void this.reactions.load();
-    void this.data.load();
-    this.dialog().nativeElement.showModal();
-  }
 }

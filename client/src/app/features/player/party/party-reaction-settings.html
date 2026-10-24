@@ -1,4 +1,4 @@
-<dialog #dialog class="modal" [style.padding-bottom.px]="keyboard.height()">
+<dialog #dialog class="modal" (close)="closed.emit()" [style.padding-bottom.px]="keyboard.height()">
   <!-- In the player the keyboard overlays the page: the box centres and shrinks into the space above it. -->
   <div class="modal-box max-w-2xl" [style.max-height]="keyboard.height() ? 'calc(100% - 1rem)' : null">
     <app-modal-header [title]="'party.reaction_settings' | translate" />

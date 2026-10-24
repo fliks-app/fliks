@@ -228,7 +228,7 @@
     [partyUnread]="party.unread()"
     [partyOpen]="party.panelOpen()"
     (toggleParty)="party.setPanelOpen(!party.panelOpen())"
-    (openReactionSettings)="reactionSettings.show()"
+    (openReactionSettings)="partyDialog.set('reactions')"
   >
     @if (partyCtl.active() && party.reactionsEnabled() && reactions.enabled() && reactions.dock()) {
       <app-party-reaction-dock />
@@ -263,9 +263,16 @@
 @if (partyPanelShown()) {
   <!-- Party UI loads with the first party, out of the player chunk. -->
   @defer {
-    <app-party-panel animate.enter="party-panel-in" animate.leave="party-panel-out" (openSettings)="partySettings.show()" />
+    <app-party-panel animate.enter="party-panel-in" animate.leave="party-panel-out" (openSettings)="partyDialog.set('party')" />
   }
 }
-<app-party-reaction-settings #reactionSettings />
-<app-party-settings #partySettings />
+@if (partyCtl.active() && partyDialog(); as dialog) {
+  @defer {
+    @if (dialog === 'reactions') {
+      <app-party-reaction-settings (closed)="partyDialog.set(null)" />
+    } @else {
+      <app-party-settings (closed)="partyDialog.set(null)" />
+    }
+  }
+}
 </div>

@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, ElementRef, inject, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, afterNextRender, inject, output, viewChild } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
 import { LucideRefreshCw } from '@lucide/angular';
 import { KeyboardOverlayService } from '../../../core/services/keyboard-overlay.service';
@@ -22,13 +22,18 @@ export class PartySettingsComponent {
   protected readonly keyboard = inject(KeyboardOverlayService);
   private readonly controller = inject(PartyController);
   private readonly dialog = viewChild.required<ElementRef<HTMLDialogElement>>('dialog');
+  /** The player mounts the dialog to open it and drops it on close. */
+  readonly closed = output<void>();
+
+  constructor() {
+    afterNextRender(() => {
+      this.dialog().nativeElement.showModal();
+    });
+  }
 
   protected resync(): void {
     this.controller.resync();
     this.dialog().nativeElement.close();
   }
 
-  show(): void {
-    this.dialog().nativeElement.showModal();
-  }
 }

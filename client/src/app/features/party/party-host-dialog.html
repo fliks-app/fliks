@@ -1,6 +1,6 @@
 <dialog #dialog class="modal" [style.padding-bottom.px]="keyboard.height()">
   <div class="modal-box max-w-md" [style.max-height]="keyboard.height() ? 'calc(100% - 1rem)' : null">
-    <app-modal-header [title]="'party.panel_menu' | translate" />
+    <app-modal-header [title]="'party.settings' | translate" />
     @let v = view();
     <div class="flex flex-col gap-4 pt-2">
       <app-party-host-switches [value]="v" [disabled]="busy()" (changed)="setSwitches($event)" />
