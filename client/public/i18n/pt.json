@@ -3516,6 +3516,7 @@
     "closed_kicked": "Foi removido da sessão",
     "joining": "A entrar na sessão",
     "join_failed": "Não foi possível entrar nesta sessão",
+    "chat_name_sep": ": ",
     "tab_members": "Membros",
     "host_badge": "Anfitrião",
     "status_ready": "Pronto",

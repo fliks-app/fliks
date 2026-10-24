@@ -11,12 +11,6 @@ import { TvRowDirective } from '../../../shared/directives/tv-row.directive';
 const MAX_LENGTH = 500;
 
 /** Messages, reactions and the composer of the current party: shared by the player panel and the lobby. */
-const NAME_COLORS = ['var(--color-primary)', 'var(--color-secondary)', 'var(--color-accent)', 'var(--color-info)', 'var(--color-success)', 'var(--color-warning)'];
-
-/** A stable theme colour per member, so a name never reads as part of the message. */
-export function partyNameColor(userId: number | null): string {
-  return NAME_COLORS[(userId ?? 0) % NAME_COLORS.length];
-}
 
 @Component({
   selector: 'app-party-chat',
@@ -44,8 +38,6 @@ export class PartyChatComponent {
 
   private readonly list = viewChild<ElementRef<HTMLElement>>('list');
   private readonly input = viewChild<ElementRef<HTMLInputElement>>('input');
-
-  protected readonly nameColor = partyNameColor;
 
   constructor() {
     effect(() => {

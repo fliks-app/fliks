@@ -3,7 +3,7 @@
     @if (m.system) {
       <p class="text-center text-xs italic opacity-60">{{ systemText(m) }}</p>
     } @else {
-      <p class="break-words"><span class="font-semibold" [style.color]="nameColor(m.userId)">{{ m.username }}</span><span class="opacity-50">: </span>{{ m.text }}</p>
+      <p class="break-words"><span class="font-semibold">{{ m.username }}</span>{{ 'party.chat_name_sep' | translate }}<span class="opacity-80">{{ m.text }}</span></p>
     }
   } @empty {
     <p class="py-6 text-center text-xs opacity-60">{{ 'party.chat_empty' | translate }}</p>

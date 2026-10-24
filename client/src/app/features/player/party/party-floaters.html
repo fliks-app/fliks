@@ -8,7 +8,7 @@
         @if (m.system) {
           <span class="italic opacity-80">{{ m.system.by }}</span>
         } @else {
-          <span class="font-semibold" [style.color]="nameColor(m.userId)">{{ m.username }}</span><span class="opacity-60">: </span>{{ m.text }}
+          <span class="font-semibold">{{ m.username }}</span>{{ 'party.chat_name_sep' | translate }}<span class="opacity-80">{{ m.text }}</span>
         }
       </div>
     }

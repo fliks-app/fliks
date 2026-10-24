@@ -3516,6 +3516,7 @@
     "closed_kicked": "Vous avez été retiré de la séance",
     "joining": "Connexion à la séance",
     "join_failed": "Impossible de rejoindre cette séance",
+    "chat_name_sep": "\u00a0: ",
     "tab_members": "Membres",
     "host_badge": "Hôte",
     "status_ready": "Prêt",
