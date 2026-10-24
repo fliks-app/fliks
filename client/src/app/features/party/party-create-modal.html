@@ -4,6 +4,9 @@
 
     @if (open()) {
       <form class="flex flex-col gap-3" (submit)="$event.preventDefault(); submit()">
+        @if (target()?.playlistId != null) {
+          <p class="text-sm text-base-content/70">{{ 'party.playlist_label' | translate: { name: target()!.title } }}</p>
+        }
         <label class="form-control">
           <span class="mb-1 text-sm font-semibold">{{ 'party.create_name' | translate }}</span>
           <input type="text" class="input input-bordered w-full" maxlength="80" [ngModel]="name()" (ngModelChange)="name.set($event)" name="name" />

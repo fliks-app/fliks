@@ -1478,7 +1478,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           };
         };
         engine.onNext = () => void this.queueCtl.advance();
-        engine.onPrevious = () => void this.queueCtl.playQueueItem(this.queue.index() - 1);
+        engine.onPrevious = () =>
+          void (this.partyCtl.active() ? this.partyCtl.requestPrevious() : this.queueCtl.playQueueItem(this.queue.index() - 1));
         engine.onStop = () => this.onBack();
         engine.onToggleLike = () => void this.queueCtl.notificationLike.toggle();
       }

@@ -3506,6 +3506,7 @@
   },
   "party": {
     "watch_together": "Gemeinsam ansehen",
+    "playlist_label": "Playlist: {{name}}",
     "join": "Beitreten",
     "panel_toggle": "Watch-Party",
     "panel_close": "Party-Bereich schließen",
@@ -3565,7 +3566,9 @@
       "paused": "{{by}} hat pausiert",
       "resumed": "{{by}} hat fortgesetzt",
       "seeked": "{{by}} ist zu {{position}} gesprungen",
-      "item_changed": "{{by}} hat den Titel gewechselt",
+      "item_changed": "{{by}} hat zu {{title}} gewechselt",
+      "item_skipped": "{{title}} übersprungen, nicht für alle verfügbar",
+      "playlist_ended": "Ende der Playlist",
       "host_changed": "{{by}} ist jetzt Host",
       "kicked": "{{by}} hat ein Mitglied entfernt",
       "voice_joined": "{{by}} ist dem Sprachchat beigetreten",

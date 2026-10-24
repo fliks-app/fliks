@@ -170,9 +170,22 @@ export class PartyController {
     return true;
   }
 
+  /** A playlist party leaves the choice to the server, which skips what a member cannot open. */
   async requestNext(): Promise<void> {
+    if (this.party.party()?.playlist) {
+      if (this.gate()) await this.party.sendIntent('next');
+      return;
+    }
     const next = this.queueCtl.upNext();
     if (next) await this.requestItem(next);
+  }
+
+  async requestPrevious(): Promise<void> {
+    if (this.party.party()?.playlist) {
+      if (this.gate()) await this.party.sendIntent('previous');
+      return;
+    }
+    await this.requestQueueItem(this.queueCtl.queueIndex() - 1);
   }
 
   /** An episode picked from the queue menu: the server moves everyone, this device included. */
@@ -227,12 +240,12 @@ export class PartyController {
     });
   });
 
-  /** The host's natural end: `ended`, then the next episode of the queue as an item switch. */
+  /** The host's natural end: `ended`, then the next episode of the queue as an item switch (a playlist party advances on the server). */
   private readonly endedEffect = effect(() => {
     if (!this.out().ended()) return;
     untracked(() => {
       if (!this.party.active() || !this.party.isHost()) return;
-      void this.party.sendIntent('ended').then(() => this.requestNext());
+      void this.party.sendIntent('ended').then(() => (this.party.party()?.playlist ? undefined : this.requestNext()));
     });
   });
 

@@ -137,12 +137,14 @@ export class HomeComponent implements OnInit, OnDestroy {
     return ['/parties', '' + p.id];
   }
   protected partySubtitle(p: PartySummaryDto): string {
-    return p.status === 'live'
-      ? translatePlural(this.translate, 'party.card_live', p.memberCount, { host: p.host.username })
-      : this.translate.instant('party.card_scheduled', {
-          when: p.scheduledAt ? partyWhen(p.scheduledAt, this.translate) : '',
-          host: p.host.username,
-        });
+    const when =
+      p.status === 'live'
+        ? translatePlural(this.translate, 'party.card_live', p.memberCount, { host: p.host.username })
+        : this.translate.instant('party.card_scheduled', {
+            when: p.scheduledAt ? partyWhen(p.scheduledAt, this.translate) : '',
+            host: p.host.username,
+          });
+    return p.playlist ? `${when} · ${this.translate.instant('party.playlist_label', { name: p.playlist.name })}` : when;
   }
   protected readonly leavingLabel = (m: Media) => leavingLabel(this.translate, m.deleteAt!);
   readonly recommendations = signal<RecommendationItem[]>([]);

@@ -3506,6 +3506,7 @@
   },
   "party": {
     "watch_together": "Guarda insieme",
+    "playlist_label": "Playlist: {{name}}",
     "join": "Partecipa",
     "panel_toggle": "Sessione di gruppo",
     "panel_close": "Chiudi il pannello della sessione",
@@ -3565,7 +3566,9 @@
       "paused": "{{by}} ha messo in pausa",
       "resumed": "{{by}} ha ripreso",
       "seeked": "{{by}} è saltato a {{position}}",
-      "item_changed": "{{by}} ha cambiato titolo",
+      "item_changed": "{{by}} è passato a {{title}}",
+      "item_skipped": "{{title}} saltato, non disponibile per tutti",
+      "playlist_ended": "Fine della playlist",
       "host_changed": "{{by}} è ora l'host",
       "kicked": "{{by}} ha rimosso un membro",
       "voice_joined": "{{by}} è entrato nella voce",

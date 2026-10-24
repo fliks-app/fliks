@@ -7,7 +7,7 @@ export type PartyStatus = 'scheduled' | 'live' | 'ended';
 export type PartyPolicy = 'everyone' | 'host_only';
 export type PartyPlayState = 'idle' | 'waiting' | 'paused' | 'playing';
 export type PartyMemberStatus = 'ready' | 'buffering' | 'away' | 'waiting';
-export type PartyIntentAction = 'play' | 'pause' | 'seek' | 'setItem' | 'ended';
+export type PartyIntentAction = 'play' | 'pause' | 'seek' | 'setItem' | 'ended' | 'next' | 'previous';
 
 export interface PartyReactionCatalog {
   animations: Record<string, string>;
@@ -63,6 +63,11 @@ export interface PartyLive {
   messages: PartyMessage[];
 }
 
+export interface PartyPlaylistRef {
+  id: number;
+  name: string;
+}
+
 export interface PartySummaryDto {
   id: number;
   name: string;
@@ -70,6 +75,8 @@ export interface PartySummaryDto {
   scheduledAt: string | null;
   host: PartyUser;
   item: PartyItem;
+  /** The playlist the party follows; the server picks what plays next from it. */
+  playlist: PartyPlaylistRef | null;
   memberCount: number;
 }
 
@@ -95,9 +102,10 @@ export interface PartyDto extends PartySummaryDto, PartySwitches {
 
 export interface CreatePartyBody {
   name: string;
-  mediaId: number;
+  mediaId?: number;
   mediaFileId?: number;
   episodeId?: number;
+  playlistId?: number;
   scheduledAt?: string;
   policy?: PartyPolicy;
   inviteeIds?: number[];
@@ -120,6 +128,10 @@ export class PartyApiService {
 
   create(body: CreatePartyBody) {
     return firstValueFrom(this.http.post<PartyDto>('/api/parties', body));
+  }
+
+  queue(id: number) {
+    return firstValueFrom(this.http.get<PartyItem[]>(`/api/parties/${id}/queue`));
   }
 
   list() {

@@ -7,6 +7,9 @@
   } @else if (head(); as h) {
     <ng-template #info>
       <h1 class="text-3xl lg:text-4xl font-semibold lg:font-bold tracking-tight leading-tight">{{ h.name }}</h1>
+      @if (h.playlist; as pl) {
+        <p class="text-base-content/60 mt-0.5 lg:mt-1">{{ 'party.playlist_label' | translate: { name: pl.name } }}</p>
+      }
       <p class="text-base-content/70 mt-0.5 lg:mt-1 lg:text-lg">
         @if (mediaLink(); as link) {
           <a [routerLink]="link" (pointerup)="armSlide()" class="hover:underline rounded">{{ h.item.title }}</a>

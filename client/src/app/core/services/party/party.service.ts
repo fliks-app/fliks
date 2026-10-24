@@ -19,6 +19,7 @@ import {
   type PartyUser,
 } from '../api/party-api.service';
 import { MediaService } from '../api/media.service';
+import { PlaybackQueueService } from '../playback-queue.service';
 import { AuthService } from '../auth.service';
 import { DeviceService } from '../device.service';
 import { SseService, type PartyEvent } from '../sse.service';
@@ -48,13 +49,11 @@ export interface FloatingReaction {
   left: number;
 }
 
-/** What the create dialog needs to know about the item to watch. */
-export interface PartyCreateTarget {
-  title: string;
-  mediaId: number;
-  mediaFileId: number;
-  episodeId?: number;
-}
+/** What the create dialog needs to know about what to watch: one item, or a playlist the party follows. */
+export type PartyCreateTarget = { title: string } & (
+  | { mediaId: number; mediaFileId: number; episodeId?: number; playlistId?: undefined }
+  | { playlistId: number }
+);
 
 const BUBBLE_MS = 4000;
 /** How long a reaction rises over the video; its CSS animation follows. */
@@ -78,6 +77,7 @@ export class PartyService {
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
   private readonly mediaService = inject(MediaService);
+  private readonly queue = inject(PlaybackQueueService);
   private readonly device = inject(DeviceService);
   private readonly injector = inject(Injector);
 
@@ -223,6 +223,7 @@ export class PartyService {
         return false;
       }
       this.adopt(dto);
+      await this.loadQueue();
       return true;
     } catch {
       return false;
@@ -273,7 +274,27 @@ export class PartyService {
     this.lastRev = 0;
   }
 
+  /** A playlist party plays from the party's own queue, so the player menu lists it and the cursor follows the item. */
+  private async loadQueue(): Promise<void> {
+    const party = this.party();
+    if (!party?.playlist) return;
+    const items = await this.api.queue(party.id).catch(() => []);
+    this.queue.start(
+      items.map((i) => ({
+        mediaId: i.mediaId,
+        ...(i.episodeId != null && { episodeId: i.episodeId }),
+        title: i.title,
+        fanartUrl: i.fanartUrl,
+      })),
+      0,
+      { source: 'playlist', sourceId: party.playlist.id, autoplay: false },
+    );
+    const cur = this.item();
+    if (cur) this.queue.syncTo(cur.mediaId, cur.episodeId ?? undefined);
+  }
+
   private async openPlayer(item: PartyItem): Promise<void> {
+    await this.loadQueue();
     let fileId = item.mediaFileId;
     if (fileId == null) {
       const media = await this.mediaService.getOne(item.mediaId).catch(() => null);

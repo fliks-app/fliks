@@ -68,9 +68,9 @@ export class PartyCreateModalComponent {
     try {
       await this.party.create({
         name: this.name().trim(),
-        mediaId: t.mediaId,
-        mediaFileId: t.mediaFileId,
-        ...(t.episodeId != null && { episodeId: t.episodeId }),
+        ...(t.playlistId != null
+          ? { playlistId: t.playlistId }
+          : { mediaId: t.mediaId, mediaFileId: t.mediaFileId, ...(t.episodeId != null && { episodeId: t.episodeId }) }),
         ...(this.later() && { scheduledAt: new Date(this.when()).toISOString() }),
         inviteeIds: this.invitees(),
       });

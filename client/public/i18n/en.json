@@ -3506,6 +3506,7 @@
   },
   "party": {
     "watch_together": "Watch together",
+    "playlist_label": "Playlist: {{name}}",
     "join": "Join",
     "panel_toggle": "Watch party",
     "panel_close": "Close the party panel",
@@ -3565,7 +3566,9 @@
       "paused": "{{by}} paused",
       "resumed": "{{by}} resumed",
       "seeked": "{{by}} jumped to {{position}}",
-      "item_changed": "{{by}} changed the title",
+      "item_changed": "{{by}} switched to {{title}}",
+      "item_skipped": "{{title}} skipped, not available to everyone",
+      "playlist_ended": "End of the playlist",
       "host_changed": "{{by}} is now the host",
       "kicked": "{{by}} removed a member",
       "voice_joined": "{{by}} joined voice",

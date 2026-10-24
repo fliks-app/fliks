@@ -237,6 +237,7 @@ export class QueueController {
 
   /** Loads the item a party switched to, counting the one it ends as watched. */
   async openPartyItem(item: { mediaId: number; mediaFileId: number | null; episodeId: number | null }): Promise<void> {
+    this.queue.syncTo(item.mediaId, item.episodeId ?? undefined);
     const queueItem: QueueItem = {
       mediaId: item.mediaId,
       mediaFileId: item.mediaFileId ?? undefined,
