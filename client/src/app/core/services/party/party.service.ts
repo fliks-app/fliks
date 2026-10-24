@@ -274,11 +274,12 @@ export class PartyService {
     this.lastRev = 0;
   }
 
-  /** A playlist party plays from the party's own queue, so the player menu lists it and the cursor follows the item. */
+  /** The player menu lists the queue the server steps through, and the cursor follows the item. */
   private async loadQueue(): Promise<void> {
     const party = this.party();
-    if (!party?.playlist) return;
+    if (!party) return;
     const items = await this.api.queue(party.id).catch(() => []);
+    if (!items.length) return;
     this.queue.start(
       items.map((i) => ({
         mediaId: i.mediaId,
@@ -287,7 +288,7 @@ export class PartyService {
         fanartUrl: i.fanartUrl,
       })),
       0,
-      { source: 'playlist', sourceId: party.playlist.id, autoplay: false },
+      { source: 'party', sourceId: party.id, autoplay: false },
     );
     const cur = this.item();
     if (cur) this.queue.syncTo(cur.mediaId, cur.episodeId ?? undefined);
@@ -307,8 +308,6 @@ export class PartyService {
     }
     const queryParams: Record<string, number> = { mediaId: item.mediaId, party: this.party()!.id };
     if (item.episodeId != null) queryParams['episodeId'] = item.episodeId;
-    const playlist = this.party()!.playlist;
-    if (playlist) queryParams['playlistId'] = playlist.id;
     await this.router.navigate(['/watch', fileId], { queryParams });
   }
 

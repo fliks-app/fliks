@@ -3568,7 +3568,7 @@
       "seeked": "{{by}} ist zu {{position}} gesprungen",
       "item_changed": "{{by}} hat zu {{title}} gewechselt",
       "item_skipped": "{{title}} übersprungen, nicht für alle verfügbar",
-      "playlist_ended": "Ende der Playlist",
+      "queue_ended": "Ende der Warteschlange",
       "host_changed": "{{by}} ist jetzt Host",
       "kicked": "{{by}} hat ein Mitglied entfernt",
       "voice_joined": "{{by}} ist dem Sprachchat beigetreten",

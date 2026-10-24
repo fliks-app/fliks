@@ -3568,7 +3568,7 @@
       "seeked": "{{by}} a avancé à {{position}}",
       "item_changed": "{{by}} est passé à {{title}}",
       "item_skipped": "{{title}} ignoré, indisponible pour tous",
-      "playlist_ended": "Fin de la playlist",
+      "queue_ended": "Fin de la file d'attente",
       "host_changed": "{{by}} est maintenant l'hôte",
       "kicked": "{{by}} a retiré un membre",
       "voice_joined": "{{by}} a rejoint le vocal",

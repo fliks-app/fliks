@@ -170,25 +170,16 @@ export class PartyController {
     return true;
   }
 
-  /** A playlist party leaves the choice to the server, which skips what a member cannot open. */
+  /** The server picks the item, skipping what a member cannot open; a film has no queue to step through. */
   async requestNext(): Promise<void> {
-    if (this.party.party()?.playlist) {
-      if (this.gate()) await this.party.sendIntent('next');
-      return;
-    }
-    const next = this.queueCtl.upNext();
-    if (next) await this.requestItem(next);
+    if (this.queueCtl.queueItems().length && this.gate()) await this.party.sendIntent('next');
   }
 
   async requestPrevious(): Promise<void> {
-    if (this.party.party()?.playlist) {
-      if (this.gate()) await this.party.sendIntent('previous');
-      return;
-    }
-    await this.requestQueueItem(this.queueCtl.queueIndex() - 1);
+    if (this.queueCtl.queueItems().length && this.gate()) await this.party.sendIntent('previous');
   }
 
-  /** An episode picked from the queue menu: the server moves everyone, this device included. */
+  /** An item picked from the queue menu: the server moves everyone, this device included. */
   async requestQueueItem(index: number): Promise<void> {
     const item = this.queueCtl.queueItems()[index];
     if (item && index !== this.queueCtl.queueIndex()) await this.requestItem(item);
@@ -240,12 +231,12 @@ export class PartyController {
     });
   });
 
-  /** The host's natural end: `ended`, then the next episode of the queue as an item switch (a playlist party advances on the server). */
+  /** The host's natural end: the server idles the party and moves it on along its queue. */
   private readonly endedEffect = effect(() => {
     if (!this.out().ended()) return;
     untracked(() => {
       if (!this.party.active() || !this.party.isHost()) return;
-      void this.party.sendIntent('ended').then(() => (this.party.party()?.playlist ? undefined : this.requestNext()));
+      void this.party.sendIntent('ended');
     });
   });
 

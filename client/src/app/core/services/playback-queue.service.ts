@@ -11,9 +11,9 @@ export interface QueueItem {
   stillUrl?: string | null;
 }
 
-/** Where the active queue came from: an explicit playlist, or the episodes of
- *  the series currently playing (built from its loaded media). */
-export type QueueSource = 'playlist' | 'series';
+/** Where the active queue came from: an explicit playlist, the episodes of the series currently playing
+ *  (built from its loaded media), or a watch party's own queue (`sourceId` is the party id). */
+export type QueueSource = 'playlist' | 'series' | 'party';
 
 /** The active explicit playback queue (a playlist). A launcher sets it before navigating;
  *  the player clears it when opened without a source, so a standalone play never inherits a stale queue. */

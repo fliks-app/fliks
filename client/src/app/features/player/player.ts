@@ -884,13 +884,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.episodeId = qp['episodeId'] ? +qp['episodeId'] : undefined;
     const resumeTime = 't' in qp ? +qp['t'] : undefined;
 
-    // A playlist launch registers its queue and passes the id; consume it only on a match, any other entry
-    // drops the queue (a series queue is rebuilt by syncSeriesQueue once the media loads).
+    // A playlist or party launch registers its queue and passes the id; consume it only on a match, any other
+    // entry drops the queue (a series queue is rebuilt by syncSeriesQueue once the media loads).
     const playlistId = qp['playlistId'] ? +qp['playlistId'] : undefined;
+    const partyId = qp['party'] ? +qp['party'] : undefined;
     if (
-      playlistId &&
-      this.queue.source() === 'playlist' &&
-      this.queue.sourceId() === playlistId
+      (playlistId && this.queue.source() === 'playlist' && this.queue.sourceId() === playlistId) ||
+      (partyId && this.queue.source() === 'party' && this.queue.sourceId() === partyId)
     ) {
       this.queue.syncTo(this.mediaId, this.episodeId);
     } else {

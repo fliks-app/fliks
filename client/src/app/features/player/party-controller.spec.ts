@@ -15,10 +15,10 @@ import { ToastService } from '../../core/services/toast.service';
 import { PartyController, type PartyHost } from './party-controller';
 import { QueueController } from './queue-controller';
 
-function setup(opts: { canControl?: boolean; urlParty?: string; joined?: number; resumes?: boolean; playlist?: boolean } = {}) {
+function setup(opts: { canControl?: boolean; urlParty?: string; joined?: number; resumes?: boolean; film?: boolean } = {}) {
   const party = {
     active: signal(true),
-    party: signal(opts.joined != null ? { id: opts.joined, playlist: opts.playlist ? { id: 7, name: 'p' } : null } : null),
+    party: signal(opts.joined != null ? { id: opts.joined } : null),
     resume: vi.fn().mockResolvedValue(opts.resumes ?? true),
     live: signal<unknown>(null),
     canControl: signal(opts.canControl ?? true),
@@ -41,10 +41,13 @@ function setup(opts: { canControl?: boolean; urlParty?: string; joined?: number;
   const queue = {
     upNext: () => null,
     interceptAdvance: null as unknown,
-    queueItems: () => [
-      { mediaId: 1, mediaFileId: 10, episodeId: 100, title: '' },
-      { mediaId: 1, mediaFileId: 11, episodeId: 101, title: '' },
-    ],
+    queueItems: () =>
+      opts.film
+        ? []
+        : [
+            { mediaId: 1, mediaFileId: 10, episodeId: 100, title: '' },
+            { mediaId: 1, mediaFileId: 11, episodeId: 101, title: '' },
+          ],
     queueIndex: () => 0,
   };
   const toast = { info: vi.fn(), error: vi.fn() };
@@ -147,9 +150,9 @@ describe('PartyController user actions', () => {
   });
 });
 
-describe('PartyController in a playlist party', () => {
+describe('PartyController queue', () => {
   it('asks the server for the next and the previous item instead of picking one', async () => {
-    const { ctl, party, router } = setup({ joined: 3, playlist: true });
+    const { ctl, party, router } = setup({ joined: 3 });
     await ctl.requestNext();
     await ctl.requestPrevious();
     expect(party.sendIntent.mock.calls).toEqual([['next'], ['previous']]);
@@ -158,7 +161,7 @@ describe('PartyController in a playlist party', () => {
   });
 
   it('refuses next and previous without control', async () => {
-    const { ctl, party, toast } = setup({ joined: 3, playlist: true, canControl: false });
+    const { ctl, party, toast } = setup({ joined: 3, canControl: false });
     await ctl.requestNext();
     await ctl.requestPrevious();
     expect(party.sendIntent).not.toHaveBeenCalled();
@@ -167,7 +170,7 @@ describe('PartyController in a playlist party', () => {
   });
 
   it('reports the end of an item and lets the server advance', async () => {
-    const { ctl, party, state } = setup({ joined: 3, playlist: true });
+    const { ctl, party, state } = setup({ joined: 3 });
     party.isHost.set(true);
     state.ended.set(true);
     TestBed.tick();
@@ -176,10 +179,20 @@ describe('PartyController in a playlist party', () => {
     ctl.dispose();
   });
 
-  it('has nothing to step back to on the first item outside a playlist party', async () => {
-    const { ctl, party } = setup({ joined: 3 });
+  it('has nothing to step through on a film', async () => {
+    const { ctl, party } = setup({ joined: 3, film: true });
+    await ctl.requestNext();
     await ctl.requestPrevious();
     expect(party.sendIntent).not.toHaveBeenCalled();
+    ctl.dispose();
+  });
+
+  it('sends an item picked from the queue menu as setItem', async () => {
+    const { ctl, party } = setup({ joined: 3 });
+    await ctl.requestQueueItem(1);
+    expect(party.sendIntent).toHaveBeenCalledWith('setItem', {
+      item: { mediaId: 1, mediaFileId: 11, episodeId: 101 },
+    });
     ctl.dispose();
   });
 });

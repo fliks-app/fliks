@@ -150,9 +150,9 @@ export class QueueController {
   }
 
   /** Fills the queue with the series' episodes that have a file, so the list and auto-advance
-   *  work outside a playlist. No-op while a playlist owns the queue. */
+   *  work outside a playlist. No-op while a playlist or a party owns the queue. */
   syncSeriesQueue(): void {
-    if (this.queue.source() === 'playlist') return; // the playlist owns the queue
+    if (this.queue.source() === 'playlist' || this.queue.source() === 'party') return;
     const m = this.host.media();
     const episodeId = this.host.episodeId();
     if (!m || !episodeId) {
