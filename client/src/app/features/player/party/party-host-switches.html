@@ -17,4 +17,10 @@
     [value]="value().chatEnabled"
     (valueChange)="changed.emit({ chatEnabled: $event })"
   />
+  <app-toggle-field
+    [label]="'party.switch_link_sharing' | translate"
+    [disabled]="disabled()"
+    [value]="value().linkSharing"
+    (valueChange)="changed.emit({ linkSharing: $event })"
+  />
 </div>

@@ -78,6 +78,7 @@ export interface PartySwitches {
   policy: PartyPolicy;
   reactionsEnabled: boolean;
   chatEnabled: boolean;
+  linkSharing: boolean;
 }
 
 export interface PartyDto extends PartySummaryDto, PartySwitches {

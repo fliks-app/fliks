@@ -375,8 +375,20 @@ export class PartyService {
       case 'party.settings':
         if (!this.acceptRev(e.rev)) return;
         this.party.update((p) =>
-          p ? { ...p, name: e.name, policy: e.policy, reactionsEnabled: e.reactionsEnabled, chatEnabled: e.chatEnabled } : p,
+          p
+            ? {
+                ...p,
+                name: e.name,
+                policy: e.policy,
+                reactionsEnabled: e.reactionsEnabled,
+                chatEnabled: e.chatEnabled,
+                linkSharing: e.linkSharing,
+                inviteToken: e.linkSharing || this.isHost() ? p.inviteToken : null,
+              }
+            : p,
         );
+        // The event carries no token: a member who lost it gets it back with a snapshot.
+        if (e.linkSharing && !this.isHost() && !this.party()?.inviteToken) void this.refetch();
         break;
       case 'party.message':
         this.onMessage(e.message);
