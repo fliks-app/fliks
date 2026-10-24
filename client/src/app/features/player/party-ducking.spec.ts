@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { DUCK_FACTOR, VoiceDucker } from './party-ducking';
+import { DUCK_FACTOR, RELEASE_HOLD_MS, VoiceDucker } from './party-ducking';
 
 describe('VoiceDucker', () => {
   beforeEach(() => vi.useFakeTimers());
@@ -18,8 +18,19 @@ describe('VoiceDucker', () => {
     vi.advanceTimersByTime(400);
     expect(engine.volume).toBeCloseTo(0.8 * DUCK_FACTOR);
     ducker.set(false);
-    vi.advanceTimersByTime(400);
+    vi.advanceTimersByTime(RELEASE_HOLD_MS + 400);
     expect(engine.volume).toBeCloseTo(0.8);
+  });
+
+  it('stays ducked through a pause shorter than the hold', () => {
+    const { engine, ducker } = setup();
+    ducker.set(true);
+    vi.advanceTimersByTime(400);
+    ducker.set(false);
+    vi.advanceTimersByTime(RELEASE_HOLD_MS - 100);
+    ducker.set(true);
+    vi.advanceTimersByTime(RELEASE_HOLD_MS + 400);
+    expect(engine.volume).toBeCloseTo(0.8 * DUCK_FACTOR);
   });
 
   it('announces every level it writes', () => {

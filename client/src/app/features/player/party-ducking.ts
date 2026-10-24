@@ -1,6 +1,8 @@
 export const DUCK_FACTOR = 0.4;
 const RAMP_MS = 250;
 const STEP_MS = 25;
+// Speech pauses must not pump the movie volume back up between words.
+export const RELEASE_HOLD_MS = 1200;
 
 export interface DuckEngine {
   volume: number;
@@ -12,6 +14,7 @@ export interface DuckEngine {
 export class VoiceDucker {
   private timer: ReturnType<typeof setInterval> | null = null;
   private level: number | null = null;
+  private release: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     private readonly engine: () => DuckEngine | null,
@@ -20,6 +23,19 @@ export class VoiceDucker {
   ) {}
 
   set(active: boolean): void {
+    if (this.release) clearTimeout(this.release);
+    this.release = null;
+    if (!active && this.level !== null) {
+      this.release = setTimeout(() => {
+        this.release = null;
+        this.apply(false);
+      }, RELEASE_HOLD_MS);
+      return;
+    }
+    this.apply(active);
+  }
+
+  private apply(active: boolean): void {
     const e = this.engine();
     if (!e?.supportsVolume) return;
     const target = active ? this.base() * DUCK_FACTOR : this.base();
@@ -48,6 +64,8 @@ export class VoiceDucker {
 
   /** Puts the user's level back at once (leaving the party, engine teardown). */
   stop(): void {
+    if (this.release) clearTimeout(this.release);
+    this.release = null;
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
     if (this.level === null) return;
