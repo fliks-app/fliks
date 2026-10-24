@@ -5,7 +5,7 @@
   /* The rise starts fast and settles; the fade accelerates to the end, 2 s at most on screen. */
   animation:
     party-rise 2s cubic-bezier(0.61, 1, 0.88, 1) forwards,
-    party-fade 2s cubic-bezier(0.55, 0, 1, 0.45) forwards;
+    party-fade 2s cubic-bezier(0.7, 0, 0.84, 0) forwards;
 }
 @keyframes party-rise {
   from { transform: translateY(0); }
@@ -16,5 +16,5 @@
   to { opacity: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .reaction { animation: party-fade 2s cubic-bezier(0.55, 0, 1, 0.45) forwards; }
+  .reaction { animation: party-fade 2s cubic-bezier(0.7, 0, 0.84, 0) forwards; }
 }
