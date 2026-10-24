@@ -65,6 +65,7 @@ volumes/*
 !/scripts/bump-engine.sh
 !/scripts/with-test-postgres.sh
 !/scripts/embedded-postgres.conf
+!/scripts/fetch-reaction-emoji.py
 logos/
 plans/
 # Scratch documentation stays local; the plugin contract is shared, so it is tracked.
