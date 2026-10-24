@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, ElementRef, effect, inject, signal, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, computed, effect, inject, signal, viewChild } from '@angular/core';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { LucideSend } from '@lucide/angular';
 import { PARTY_EMOJIS, type PartyMessage } from '../../../core/services/api/party-api.service';
@@ -21,6 +21,8 @@ export class PartyChatComponent {
   protected readonly party = inject(PartyService);
   private readonly translate = inject(TranslateService);
   protected readonly isTv = inject(DeviceService).isTv;
+  /** Phrases stand in for the keyboard on the TV and on a phone in landscape, where it fills the screen. */
+  protected readonly showPhrases = computed(() => this.isTv() || this.party.dock() === 'drawer');
 
   protected readonly maxLength = MAX_LENGTH;
   protected readonly emojis = PARTY_EMOJIS;

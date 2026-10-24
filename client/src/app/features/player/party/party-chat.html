@@ -10,18 +10,20 @@
   }
 </div>
 
-<div class="flex flex-wrap justify-center gap-1 px-3 py-1" appTvRow [attr.aria-label]="'party.reactions' | translate">
+<div class="[scrollbar-width:none] flex gap-0.5 overflow-x-auto px-3 py-1" appTvRow [attr.aria-label]="'party.reactions' | translate">
   @for (e of emojis; track e) {
-    <button type="button" class="btn btn-ghost btn-sm px-2 text-lg" (click)="party.react(e)">{{ e }}</button>
+    <button type="button" class="btn btn-ghost btn-sm min-w-8 flex-1 px-0 text-lg" (click)="party.react(e)">{{ e }}</button>
   }
 </div>
 
-@if (isTv()) {
-  <div class="flex flex-wrap justify-center gap-1 px-3 py-1" appTvRow>
+@if (showPhrases()) {
+  <div class="[scrollbar-width:none] flex gap-1 overflow-x-auto px-3 py-1" appTvRow>
     @for (key of phrases; track key) {
-      <button type="button" class="btn btn-outline btn-sm" (click)="sendPhrase(key)">{{ key | translate }}</button>
+      <button type="button" class="btn btn-outline btn-sm shrink-0" (click)="sendPhrase(key)">{{ key | translate }}</button>
     }
-    <button type="button" class="btn btn-sm" (click)="startWriting()">{{ 'party.tv_write' | translate }}</button>
+    @if (isTv()) {
+      <button type="button" class="btn btn-sm shrink-0" (click)="startWriting()">{{ 'party.tv_write' | translate }}</button>
+    }
   </div>
 }
 

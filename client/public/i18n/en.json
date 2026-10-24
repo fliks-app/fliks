@@ -3526,6 +3526,7 @@
     "kick": "Remove",
     "make_host": "Make host",
     "policy_host_only": "Only the host controls playback",
+    "panel_menu": "Party settings",
     "resync": "Resync",
     "chat_placeholder": "Message",
     "chat_send": "Send",

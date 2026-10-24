@@ -1,40 +1,46 @@
 @if (voice.supported) {
-  <div class="flex flex-col gap-2 px-3 py-2 text-sm">
-    <div class="flex items-center gap-2">
-      @if (voice.joined()) {
-        <button
-          type="button"
-          class="btn btn-sm btn-square"
-          [class.btn-error]="!voice.muted()"
-          [disabled]="voice.listenOnly()"
-          [attr.aria-label]="(voice.muted() ? 'party.voice_unmute' : 'party.voice_mute') | translate"
-          [attr.aria-pressed]="!voice.muted()"
-          (click)="voice.toggleMute()"
-        >
-          @if (voice.muted()) { <svg lucideMicOff class="h-4 w-4"></svg> } @else { <svg lucideMic class="h-4 w-4"></svg> }
-        </button>
-        <button type="button" class="btn btn-sm" (click)="voice.leave()">{{ 'party.voice_leave' | translate }}</button>
-      } @else {
-        <button type="button" class="btn btn-sm btn-primary gap-1" [disabled]="voice.busy()" (click)="voice.join()">
-          <svg lucideMic class="h-4 w-4"></svg>{{ 'party.voice_join' | translate }}
-        </button>
+  <div [class]="variant() === 'controls' ? 'flex items-center gap-2 text-sm' : 'flex flex-col gap-2 px-3 py-2 text-sm'">
+    @if (variant() !== 'hint') {
+      <div class="flex items-center gap-2">
+        @if (voice.joined()) {
+          <button
+            type="button"
+            class="btn btn-sm btn-square"
+            [class.btn-error]="!voice.muted()"
+            [disabled]="voice.listenOnly()"
+            [attr.aria-label]="(voice.muted() ? 'party.voice_unmute' : 'party.voice_mute') | translate"
+            [attr.aria-pressed]="!voice.muted()"
+            (click)="voice.toggleMute()"
+          >
+            @if (voice.muted()) { <svg lucideMicOff class="h-4 w-4"></svg> } @else { <svg lucideMic class="h-4 w-4"></svg> }
+          </button>
+          <button type="button" class="btn btn-sm" (click)="voice.leave()">{{ 'party.voice_leave' | translate }}</button>
+        } @else {
+          <button type="button" class="btn btn-sm btn-primary gap-1" [disabled]="voice.busy()" (click)="voice.join()">
+            <svg lucideMic class="h-4 w-4"></svg>{{ 'party.voice_join' | translate }}
+          </button>
+        }
+        @if (variant() === 'full') {
+          <button
+            type="button"
+            class="btn btn-ghost btn-sm btn-square ml-auto"
+            [class.text-primary]="voice.duck()"
+            [attr.aria-label]="'party.voice_duck' | translate"
+            [attr.title]="'party.voice_duck' | translate"
+            [attr.aria-pressed]="voice.duck()"
+            (click)="voice.setDuck(!voice.duck())"
+          >
+            <svg lucideVolume1 class="h-4 w-4"></svg>
+          </button>
+        }
+      </div>
+    }
+    @if (variant() !== 'controls') {
+      @if (voice.joined() && voice.listenOnly()) {
+        <p class="text-xs opacity-70">{{ 'party.voice_listen_only_' + voice.listenOnlyReason() | translate }}</p>
+      } @else if (voice.joined()) {
+        <p class="flex items-center gap-1 text-xs opacity-60"><svg lucideHeadphones class="h-3 w-3 shrink-0"></svg>{{ 'party.voice_headphones' | translate }}</p>
       }
-      <button
-        type="button"
-        class="btn btn-ghost btn-sm btn-square ml-auto"
-        [class.text-primary]="voice.duck()"
-        [attr.aria-label]="'party.voice_duck' | translate"
-        [attr.title]="'party.voice_duck' | translate"
-        [attr.aria-pressed]="voice.duck()"
-        (click)="voice.setDuck(!voice.duck())"
-      >
-        <svg lucideVolume1 class="h-4 w-4"></svg>
-      </button>
-    </div>
-    @if (voice.joined() && voice.listenOnly()) {
-      <p class="text-xs opacity-70">{{ 'party.voice_listen_only_' + voice.listenOnlyReason() | translate }}</p>
-    } @else if (voice.joined()) {
-      <p class="flex items-center gap-1 text-xs opacity-60"><svg lucideHeadphones class="h-3 w-3 shrink-0"></svg>{{ 'party.voice_headphones' | translate }}</p>
     }
   </div>
 }
