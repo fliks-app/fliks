@@ -141,10 +141,10 @@ export class PartyService {
 
   // ── Entry points ──
 
-  /** Immediate parties open the player; a scheduled one is announced with its link. */
+  /** A party for now opens its lobby page; a scheduled one is announced with its link. */
   async create(body: CreatePartyBody): Promise<void> {
     const dto = await this.api.create(body);
-    if (dto.status === 'live') {
+    if (!body.scheduledAt) {
       await this.enter(dto.id);
       return;
     }
@@ -395,13 +395,12 @@ export class PartyService {
   }
 
   private onInvited(e: Extract<PartyEvent, { type: 'party.invited' }>): void {
-    const immediate = !e.scheduledAt || new Date(e.scheduledAt).getTime() <= Date.now();
+    // A party for now opens its lobby, which sends `party.starting` with the join action.
+    if (!e.scheduledAt || new Date(e.scheduledAt).getTime() <= Date.now()) return;
     this.toast.info(
       this.translate.instant('party.toast_invited', { host: e.host.username, name: e.name }),
       10000,
-      immediate
-        ? { label: this.translate.instant('party.join'), run: () => void this.enter(e.partyId) }
-        : { label: this.translate.instant('party.view'), run: () => this.openPage(e.partyId) },
+      { label: this.translate.instant('party.view'), run: () => this.openPage(e.partyId) },
     );
   }
 

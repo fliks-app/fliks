@@ -158,7 +158,7 @@ export class PartyPageComponent implements OnInit, OnDestroy {
     if (!v) return [];
     const speaking = this.voice.speaking();
     const byUser = new Map<number, PartyPerson>();
-    for (const m of v.live?.members ?? []) {
+    for (const m of this.joined() ? this.party.members() : (v.live?.members ?? [])) {
       const known = byUser.get(m.userId);
       if (known) {
         known.voice ??= m.voice;
@@ -344,15 +344,16 @@ export class PartyPageComponent implements OnInit, OnDestroy {
     if (dto) this.apply(dto);
   }
 
-  /** Host: takes a scheduled party live now, then joins it like everyone else. */
+  /** Host: moves the schedule to now, which opens the lobby; the page then joins it. */
   protected async startNow(): Promise<void> {
     const ok = await this.confirm.confirm({
       title: this.translate.instant('party.start_now_title'),
       message: this.translate.instant('party.start_now_message'),
       confirmLabel: this.translate.instant('party.start_now'),
     });
-    if (!ok || !(await this.run(() => this.api.start(this.id)))) return;
-    await this.party.enter(this.id);
+    if (!ok) return;
+    const dto = await this.run(() => this.api.update(this.id, { scheduledAt: new Date().toISOString() }));
+    if (dto) this.apply(dto);
   }
 
   protected async regenerate(): Promise<void> {
