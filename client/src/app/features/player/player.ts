@@ -450,6 +450,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   readonly edlMuted = computed(() => isMutedAt(this.edl.muteRanges(), this.currentTime()));
   private readonly _webCropAttach = (this.webCrop.attach(this), null);
   readonly inPipMode = signal(false);
+  /** The PiP window shows the picture alone: the party panel stays open underneath and returns with the player. */
+  protected readonly partyPanelShown = computed(() => this.partyCtl.active() && this.party.panelOpen() && !this.inPipMode());
   readonly pipAvailable = signal(true);
   readonly canLockOrientation = Capacitor.getPlatform() === 'ios';
   readonly orientationLocked = signal(false);

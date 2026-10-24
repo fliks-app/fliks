@@ -1,5 +1,5 @@
 <!-- The shell is the fullscreen element; in a party the player shrinks inside it to make room for the panel. -->
-<div #partyShell class="party-shell" [attr.data-party-dock]="partyCtl.active() && party.panelOpen() ? party.dock() : null">
+<div #partyShell class="party-shell" [attr.data-party-dock]="partyPanelShown() ? party.dock() : null">
 <!-- Local player (hidden when casting — Cast overlay is global in the layout) -->
 <div
   #playerContainer
@@ -112,7 +112,7 @@
     </div>
   }
 
-  @if (partyCtl.active()) {
+  @if (partyCtl.active() && !inPipMode()) {
     <app-party-floaters />
     @if (party.reactionDock() && !device.isTv() && (!chrome.visible() || !device.isTouch())) {
       <app-party-reaction-dock [class.lifted]="chrome.visible()" />
@@ -250,7 +250,7 @@
   />
 </div>
 
-@if (partyCtl.active() && party.panelOpen()) {
+@if (partyPanelShown()) {
   <app-party-panel />
 }
 </div>
