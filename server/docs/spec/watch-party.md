@@ -1,6 +1,6 @@
 # Spec: watch party
 
-Synchronized playback of one media item between several users, with an ephemeral chat. Persisted part: the party row and its invitees. Live part (state machine, members, chat): in memory in a `PartyRegistry` held by `AppState`, like `presence.md`.
+Synchronized playback of one media item between several users, with an ephemeral chat. Persisted part: the party row and its guests (invitees and link joiners). Live part (state machine, members, chat): in memory in a `PartyRegistry` held by `AppState`, like `presence.md`.
 
 ## Model
 
@@ -15,7 +15,7 @@ Table `watch_parties`:
 - `position double precision NOT NULL DEFAULT 0` (source-timeline seconds, written on every state transition, not on drift beacons)
 - `createdAt`, `startedAt NULL`, `endedAt NULL`
 
-Table `watch_party_invitees`: `partyId FK watch_parties ON DELETE CASCADE`, `userId FK users ON DELETE CASCADE`, PK `(partyId, userId)`.
+Table `watch_party_invitees`: `partyId FK watch_parties ON DELETE CASCADE`, `userId FK users ON DELETE CASCADE`, PK `(partyId, userId)`, `source text NOT NULL DEFAULT 'invite'` (`invite` | `link`, CHECK). A row is a guest of the party: `invite` for an explicit invitation, `link` for a user who joined with the token.
 
 Live state, only while `status = live`:
 - `state`: `idle | waiting | paused | playing`
@@ -28,7 +28,7 @@ Live state, only while `status = live`:
 
 - Every route requires a session credential (`SessionAuthed`). No CASL policy beyond that.
 - Creating a party: the owner must pass `assert_media_accessible` on `mediaId`. Each invitee must be a user the owner follows with an `accepted` follow; otherwise 400 `party.error_invitee_not_followed`.
-- Viewing or joining: the owner, any invitee, or anyone presenting the `inviteToken` (any account). The joiner must pass `assert_media_accessible` on the current item, else 403 `party.error_no_access` (the client names the party and the media).
+- Viewing or joining: the owner, any guest (invitee or link joiner), or anyone presenting the `inviteToken` (any account). The joiner must pass `assert_media_accessible` on the current item, else 403 `party.error_no_access` (the client names the party and the media).
 - `setItem` to a new item: every current member must pass `assert_media_accessible`; otherwise 409 `party.error_member_no_access` with `{ usernames: string[] }`.
 - Host-only actions: `PATCH`, `DELETE`, schedule, kick, transfer, `start`, token regeneration. Others get 403 `party.error_not_host`.
 - `reactionsEnabled = false`: `POST /reactions` is 403 `party.error_reactions_off`; `chatEnabled = false`: `POST /messages` (quick phrases included) is 403 `party.error_chat_off`. System messages keep flowing.
@@ -44,12 +44,12 @@ Module `server/crates/server/src/party/`. Error messages are translation keys.
 |---|---|---|---|
 | `GET /api/time` | none | `{ t1: i64, t2: i64 }` | server epoch ms at request reception (`t1`) and right before writing the response (`t2`). Any authenticated caller. |
 | `POST /api/parties` | `{ name, mediaId, mediaFileId?, episodeId?, scheduledAt?: ISO, policy?, reactionsEnabled?, chatEnabled?, linkSharing?, inviteeIds?: int[] (max 50) }` | 201 `PartyDto` | `scheduledAt` null or in the past ⇒ `scheduledAt = now`. The party is always `scheduled`; when its lobby window is open (always for "now") the lobby machine exists at once, with `live` non-null, and `party.starting` goes to the invitees right away. Going live is `POST /start`. Emits `party.invited` to invitees. A switch left out takes the owner's value from their most recent party (default true). |
-| `GET /api/parties` | none | `PartySummaryDto[]` | parties with status `scheduled` or `live` where the caller is owner or invitee; `live` first, then `scheduledAt` ascending. |
+| `GET /api/parties` | none | `PartySummaryDto[]` | parties with status `scheduled` or `live` where the caller is owner or has a guest row (invitee or link joiner); `live` first, then `scheduledAt` ascending. |
 | `GET /api/parties/{id}` | none | `PartyDto` | full snapshot; `live` is filled whenever the party has an in-memory state: `live`, or a `scheduled` party whose lobby is open. Also allowed to a member who joined with the token. |
 | `GET /api/parties/by-token/{token}` | none | `PartyDto` | resolves an invite link; does not join. |
 | `PATCH /api/parties/{id}` | `{ name?, policy?, reactionsEnabled?, chatEnabled?, linkSharing?, scheduledAt?: ISO, regenerateToken?: bool }` | `PartyDto` | host only; `scheduledAt` only while `scheduled` (else 409 `party.error_not_scheduled`); a past date is clamped to now, which opens the lobby at once (machine and `party.starting` immediately, not at the next sweep). Cancelling is `DELETE`; starting early is `POST /start`, which takes a scheduled party live at any time. Emits `party.updated` to invitees and `party.members`-style `party.settings` to members. |
 | `DELETE /api/parties/{id}` | none | 204 | host only; sets `ended`, emits `party.closed {reason: 'host_ended'}` to members and `party.updated` to invitees. |
-| `POST /api/parties/{id}/join` | `{ deviceId, token? }` | `PartyDto` | opens the lobby of a `scheduled` party if within 15 min of `scheduledAt` (status stays `scheduled`, members are kept in memory); before that 409 `party.error_not_open`. `connectionId` = the caller's SSE connection for that `deviceId` (from the hub); none ⇒ 409 `party.error_no_connection`. Rejoining with the same `(userId, deviceId)` replaces the connection and resets status. |
+| `POST /api/parties/{id}/join` | `{ deviceId, token? }` | `PartyDto` | opens the lobby of a `scheduled` party if within 15 min of `scheduledAt` (status stays `scheduled`, members are kept in memory); before that 409 `party.error_not_open`. `connectionId` = the caller's SSE connection for that `deviceId` (from the hub); none ⇒ 409 `party.error_no_connection`. Rejoining with the same `(userId, deviceId)` replaces the connection and resets status. A successful join with the token by a user without a guest row inserts one with `source = link`. |
 | `POST /api/parties/{id}/start` | none | `PartyDto` | host only; `scheduled` ⇒ `live`, `startedAt = now`, state `idle`; the only way to go live. |
 | `POST /api/parties/{id}/leave` | `{ deviceId }` | 204 | removes the member; host leaving ⇒ host transferred to the oldest member. |
 | `POST /api/parties/{id}/intent` | `{ deviceId, action: play\|pause\|seek\|setItem\|ended, position?: f64, item?: { mediaId, mediaFileId?, episodeId? }, baseRev: u64 }` | 202 `{ rev }` | `baseRev < rev` and action is `seek` or `setItem` ⇒ 409 `party.error_stale` with the `PartyDto` in body. `play`/`pause` are applied whatever `baseRev`. `ended` is only honoured from the host. |
@@ -57,14 +57,14 @@ Module `server/crates/server/src/party/`. Error messages are translation keys.
 | `POST /api/parties/{id}/messages` | `{ deviceId, text (1..500) }` | 201 `PartyMessage` | max 5 messages per 10 s per member, else 429 `party.error_rate_limited`. |
 | `GET /api/parties/reactions` | none | `{ animations: { [emoji]: string }, defaults: string[] }` | the emojis that have an animated asset (32), each mapped to the server-relative URL of a 72 px animated WebP, `/api/emoji/<Noto codepoint id>.webp`, served without auth from `<cast dir>/emoji/` (`public/emoji/`) with `Cache-Control: public, max-age=604800`; every other emoji is static. `defaults` is the default bar (`👍 😂 😮 😢 😡 ❤️ 🔥 👏`). Any session user. Registered before `/api/parties/{id}`. |
 | `POST /api/parties/{id}/reactions` | `{ deviceId, emoji }` | 204 | `emoji` is any single standard emoji known to the Unicode emoji data (the `emojis` crate: skin-tone variants and unqualified forms included), checked before membership, else 400 `party.error_invalid`; relayed as sent; max 10 per 10 s; not stored. |
-| `POST /api/parties/{id}/members/{userId}/kick` | none | 204 | host only; removes every member of that user and blocks rejoin with the token until the token is regenerated. |
+| `POST /api/parties/{id}/members/{userId}/kick` | none | 204 | host only; removes every member of that user and deletes the user's guest row (any source) and blocks rejoin with the token until the token is regenerated. |
 | `POST /api/parties/{id}/members/{userId}/host` | none | 204 | host only; transfers the host role. |
-| `POST /api/parties/{id}/invitees` | `{ userIds: int[] }` | `PartyDto` | host only; followed users only; emits `party.invited`. |
+| `POST /api/parties/{id}/invitees` | `{ userIds: int[] }` | `PartyDto` | host only; followed users only; emits `party.invited`; a link joiner invited this way becomes an `invite` row. |
 
 DTOs (camelCase, every key present, `null` not absent):
 - `PartyItem { mediaId, mediaFileId: int|null, episodeId: int|null, title: string, posterUrl: string|null, fanartUrl: string|null, additionalFanartUrls: string[] }` (the media DTO's artwork fields, so the client picks the same backdrop)
 - `PartySummaryDto { id, name, status, scheduledAt: ISO|null, host: { userId, username }, item: PartyItem, memberCount: int }`
-- `PartyDto = PartySummaryDto + { policy, reactionsEnabled, chatEnabled, linkSharing, inviteToken: string|null (host, and members while `linkSharing`), invitees: { userId, username }[], live: PartyLive|null }`
+- `PartyDto = PartySummaryDto + { policy, reactionsEnabled, chatEnabled, linkSharing, inviteToken: string|null (host, and members while `linkSharing`), guests: { userId, username, source: 'invite'|'link' }[], live: PartyLive|null }`
 - `PartyLive { rev, state, anchor: { position, serverTimeMs }, members: PartyMember[], messages: PartyMessage[] (last 50) }`
 - `PartyMember { userId, username, deviceId, role, status, deviceName: string|null, formFactor: string|null, voice: { muted: bool }|null }` (`voice` null = not in the voice channel)
 - `PartyMessage { id: u64, userId: int|null (null = system), username: string|null, text: string, system: { kind: string, by: string|null, args: object }|null, sentAtMs: i64 }`
@@ -80,9 +80,9 @@ To each member connection (`emit_to_connection`):
 - `party.closed { partyId, reason: host_ended|expired|kicked }`
 
 To users (`emit_to_users`):
-- `party.invited { partyId, name, scheduledAt, host: { userId, username }, item: PartyItem }` to invitees.
-- `party.starting { partyId, name }` to invitees when the lobby opens (15 min before, or at once for a party for now) and when a party goes live; also to an invitee added while the lobby is open or the party is live.
-- `party.updated { partyId }` to owner + invitees on reschedule, cancel, start, end: the home rail refetches `GET /api/parties`.
+- `party.invited { partyId, name, scheduledAt, host: { userId, username }, item: PartyItem }` to explicit invitees only (a link joiner upgraded by an invitation included, never a plain link join).
+- `party.starting { partyId, name }` to every guest when the lobby opens (15 min before, or at once for a party for now) and when a party goes live; also to an invitee added while the lobby is open or the party is live.
+- `party.updated { partyId }` to owner + every guest on reschedule, cancel, start, end, and when a guest row is added by a link join or removed by a kick (the kicked user included): the home rail refetches `GET /api/parties`.
 
 Clients drop any `party.state|members|settings` whose `rev` is ≤ the last applied one, and refetch `GET /api/parties/{id}` after an SSE reconnect or a `rev` gap.
 

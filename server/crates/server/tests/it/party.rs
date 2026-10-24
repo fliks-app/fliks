@@ -780,3 +780,58 @@ async fn the_catalog_route_lists_served_assets_and_reactions_must_be_standard_em
         .await;
     assert_eq!((s, msg(&e)), (400, Some("party.error_invalid")));
 }
+
+#[sqlx::test(migrations = false)]
+async fn a_link_joiner_is_remembered_upgraded_by_an_invite_and_forgotten_on_kick(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (alice, a) = c.user("alice", true).await;
+    let (bob, b) = c.user("bob", true).await;
+    c.follow(alice, bob).await;
+    let id = party_with(&c, &a, vec![]).await;
+    let url = format!("/api/parties/{id}");
+    let (_, p) = c.call("GET", &url, &a, None).await;
+    let token = p["inviteToken"].as_str().unwrap().to_owned();
+    let _ca = c.connect(alice, "da");
+    let _cb = c.connect(bob, "db");
+    let join = json!({"deviceId": "db", "token": token});
+
+    let (_, list) = c.call("GET", "/api/parties", &b, None).await;
+    assert_eq!(list.as_array().unwrap().len(), 0);
+    let (s, p) = c.call("POST", &format!("{url}/join"), &b, Some(join)).await;
+    assert_eq!(s, 200);
+    assert_eq!(
+        p["guests"],
+        json!([{"userId": bob, "username": "bob", "source": "link"}])
+    );
+    let (_, list) = c.call("GET", "/api/parties", &b, None).await;
+    assert_eq!(list.as_array().unwrap().len(), 1);
+
+    let mut sb = c.stream(&b, "db").await;
+    let (s, p) = c
+        .call(
+            "POST",
+            &format!("{url}/invitees"),
+            &a,
+            Some(json!({"userIds": [bob]})),
+        )
+        .await;
+    assert_eq!(s, 200);
+    assert_eq!(p["guests"][0]["source"], "invite");
+    assert_eq!(events_of(&mut sb, "party.invited").await.len(), 1);
+
+    let (s, _) = c
+        .call("POST", &format!("{url}/members/{bob}/kick"), &a, None)
+        .await;
+    assert_eq!(s, 204);
+    let (_, list) = c.call("GET", "/api/parties", &b, None).await;
+    assert_eq!(list.as_array().unwrap().len(), 0);
+    let (s, e) = c
+        .call(
+            "POST",
+            &format!("{url}/join"),
+            &b,
+            Some(json!({"deviceId": "db", "token": token})),
+        )
+        .await;
+    assert_eq!((s, msg(&e)), (403, Some("party.error_kicked")));
+}

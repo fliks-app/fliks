@@ -287,9 +287,9 @@ pub async fn deliver(st: &AppState, party: i32, d: Delivery) {
     }
 }
 
-/// Owner and invitees, for the home rail.
+/// Owner and every guest, for the home rail.
 pub async fn notify_updated(st: &AppState, row: &Row) -> sqlx::Result<()> {
-    let mut users = db::invitees(&st.db, row.id).await?;
+    let mut users = db::guest_ids(&st.db, row.id).await?;
     users.push(row.owner_id);
     st.hub.emit_to_users(
         &users,
@@ -387,14 +387,14 @@ pub async fn sweep(st: &AppState, now: DateTime<Utc>) -> sqlx::Result<()> {
     Ok(())
 }
 
-/// Tells the invitees their lobby is open, once per schedule.
+/// Tells the guests their lobby is open, once per schedule.
 async fn announce_lobby(st: &AppState, row: &Row) -> sqlx::Result<()> {
     if !st.parties.inner().notified.insert(row.id) {
         return Ok(());
     }
-    let invitees = db::invitees(&st.db, row.id).await?;
+    let guests = db::guest_ids(&st.db, row.id).await?;
     st.hub.emit_to_users(
-        &invitees,
+        &guests,
         SseEvent::PartyStarting {
             party_id: row.id.into(),
             name: row.name.clone(),
@@ -403,7 +403,7 @@ async fn announce_lobby(st: &AppState, row: &Row) -> sqlx::Result<()> {
     Ok(())
 }
 
-/// Opens a lobby now instead of at the next sweep: its machine exists and the invitees are told.
+/// Opens a lobby now instead of at the next sweep: its machine exists and the guests are told.
 pub async fn open_lobby(st: &AppState, row: &Row) -> sqlx::Result<()> {
     st.parties.ensure(row, false);
     announce_lobby(st, row).await

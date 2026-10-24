@@ -248,7 +248,8 @@ async fn dto(st: &AppState, row: &Row, viewer: i32) -> sqlx::Result<PartyDto> {
     }
     let summary = summary(st, row).await?;
     let view = st.parties.view(row.id);
-    let ids = db::invitees(&st.db, row.id).await?;
+    let guests = db::guests(&st.db, row.id).await?;
+    let ids: Vec<i32> = guests.iter().map(|g| g.0).collect();
     let names = db::usernames(&st.db, &ids).await?;
     let sees_token = viewer == summary.host.user_id
         || (row.link_sharing
@@ -273,11 +274,12 @@ async fn dto(st: &AppState, row: &Row, viewer: i32) -> sqlx::Result<PartyDto> {
         chat_enabled: row.chat_enabled,
         link_sharing: row.link_sharing,
         invite_token: sees_token.then(|| row.invite_token.clone()),
-        invitees: ids
+        guests: guests
             .into_iter()
-            .map(|id| UserRef {
+            .map(|(id, source)| GuestDto {
                 user_id: id,
                 username: names.get(&id).cloned().unwrap_or_default(),
+                source,
             })
             .collect(),
         live,
@@ -529,6 +531,10 @@ pub async fn join(
     }
     let conn = connection_for(&st, me, &b.device_id)
         .ok_or_else(|| fail(StatusCode::CONFLICT, "party.error_no_connection"))?;
+    if how == Access::TokenOnly {
+        db::add_link_guest(&st.db, id, me).await?;
+        notify_updated(&st, &row).await?;
+    }
     let name = a.user.username.clone();
     if let Some((_, d)) = st.parties.act(id, |l| {
         ((), l.join(me, &name, &b.device_id, &conn, now_ms()))
@@ -556,9 +562,9 @@ pub async fn start(
         if let Some((_, d)) = st.parties.act(id, |l| ((), l.go_live(now_ms()))) {
             deliver(&st, id, d).await;
         }
-        let invitees = db::invitees(&st.db, id).await?;
+        let guests = db::guest_ids(&st.db, id).await?;
         st.hub.emit_to_users(
-            &invitees,
+            &guests,
             SseEvent::PartyStarting {
                 party_id: id.into(),
                 name: row.name.clone(),
@@ -843,6 +849,14 @@ pub async fn kick(
     run(&st, id, |l| l.kick(user, &a.user.username, now_ms()))
         .await?
         .map_err(target_err)?;
+    db::remove_guest(&st.db, id, user).await?;
+    notify_updated(&st, &row).await?;
+    st.hub.emit_to_users(
+        &[user],
+        SseEvent::PartyUpdated {
+            party_id: id.into(),
+        },
+    );
     Ok(StatusCode::NO_CONTENT)
 }
 

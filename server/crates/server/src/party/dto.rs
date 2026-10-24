@@ -209,6 +209,15 @@ pub struct UserRef {
     pub username: String,
 }
 
+/// A party row for a user: `source` is `invite` or `link`.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GuestDto {
+    pub user_id: i32,
+    pub username: String,
+    pub source: String,
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PartySummaryDto {
@@ -255,7 +264,7 @@ pub struct PartyDto {
     pub chat_enabled: bool,
     pub link_sharing: bool,
     pub invite_token: Option<String>,
-    pub invitees: Vec<UserRef>,
+    pub guests: Vec<GuestDto>,
     pub live: Option<PartyLive>,
 }
 

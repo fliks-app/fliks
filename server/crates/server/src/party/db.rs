@@ -109,11 +109,13 @@ async fn add_invitees_in(
     Ok(())
 }
 
-/// The users newly invited (already invited ones are skipped).
+/// The users newly invited: a link joiner is upgraded, an already invited user is skipped.
 pub async fn add_invitees(db: &PgPool, party: i32, users: &[i32]) -> sqlx::Result<Vec<i32>> {
     sqlx::query_scalar(
         r#"INSERT INTO watch_party_invitees ("partyId", "userId")
-           SELECT $1, u FROM unnest($2::int[]) AS u ON CONFLICT DO NOTHING RETURNING "userId""#,
+           SELECT $1, u FROM unnest($2::int[]) AS u
+           ON CONFLICT ("partyId", "userId") DO UPDATE SET "source" = 'invite'
+           WHERE watch_party_invitees."source" = 'link' RETURNING "userId""#,
     )
     .bind(party)
     .bind(users)
@@ -137,13 +139,40 @@ pub async fn by_token(db: &PgPool, token: &str) -> sqlx::Result<Option<Row>> {
     .await
 }
 
-pub async fn invitees(db: &PgPool, party: i32) -> sqlx::Result<Vec<i32>> {
-    sqlx::query_scalar(
-        r#"SELECT "userId" FROM watch_party_invitees WHERE "partyId" = $1 ORDER BY "userId""#,
+/// Every row of the party, invitees and link joiners: `(userId, source)`.
+pub async fn guests(db: &PgPool, party: i32) -> sqlx::Result<Vec<(i32, String)>> {
+    sqlx::query_as(
+        r#"SELECT "userId", "source" FROM watch_party_invitees WHERE "partyId" = $1 ORDER BY "userId""#,
     )
     .bind(party)
     .fetch_all(db)
     .await
+}
+
+pub async fn guest_ids(db: &PgPool, party: i32) -> sqlx::Result<Vec<i32>> {
+    Ok(guests(db, party).await?.into_iter().map(|g| g.0).collect())
+}
+
+/// Remembers a user who joined through the link; an existing row keeps its source.
+pub async fn add_link_guest(db: &PgPool, party: i32, user: i32) -> sqlx::Result<()> {
+    sqlx::query(
+        r#"INSERT INTO watch_party_invitees ("partyId", "userId", "source") VALUES ($1, $2, 'link')
+           ON CONFLICT DO NOTHING"#,
+    )
+    .bind(party)
+    .bind(user)
+    .execute(db)
+    .await?;
+    Ok(())
+}
+
+pub async fn remove_guest(db: &PgPool, party: i32, user: i32) -> sqlx::Result<()> {
+    sqlx::query(r#"DELETE FROM watch_party_invitees WHERE "partyId" = $1 AND "userId" = $2"#)
+        .bind(party)
+        .bind(user)
+        .execute(db)
+        .await?;
+    Ok(())
 }
 
 pub async fn is_invitee(db: &PgPool, party: i32, user: i32) -> sqlx::Result<bool> {
