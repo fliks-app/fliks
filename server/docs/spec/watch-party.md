@@ -9,7 +9,7 @@ Table `watch_parties`:
 - `mediaId int FK media ON DELETE CASCADE`, `mediaFileId int NULL`, `episodeId int NULL`
 - `inviteToken text UNIQUE NOT NULL` (22 chars base64url, 128 random bits)
 - `policy text NOT NULL DEFAULT 'everyone'` (`everyone` | `host_only`)
-- `scheduledAt timestamptz NULL` (null = immediate)
+- `scheduledAt timestamptz NULL` (set on every party created since the lobby rule: "now" is the creation time; null only on a row that went live before it)
 - `status text NOT NULL` (`scheduled` | `live` | `ended`)
 - `position double precision NOT NULL DEFAULT 0` (source-timeline seconds, written on every state transition, not on drift beacons)
 - `createdAt`, `startedAt NULL`, `endedAt NULL`
@@ -40,14 +40,14 @@ Module `server/crates/server/src/party/`. Error messages are translation keys.
 | Method path | Body / query | Response | Notes |
 |---|---|---|---|
 | `GET /api/time` | none | `{ t1: i64, t2: i64 }` | server epoch ms at request reception (`t1`) and right before writing the response (`t2`). Any authenticated caller. |
-| `POST /api/parties` | `{ name, mediaId, mediaFileId?, episodeId?, scheduledAt?: ISO, policy?, inviteeIds?: int[] (max 50) }` | 201 `PartyDto` | `scheduledAt` null or in the past ⇒ `status = live`, the owner becomes host and the party starts `idle`. Else `scheduled`. Emits `party.invited` to invitees. |
+| `POST /api/parties` | `{ name, mediaId, mediaFileId?, episodeId?, scheduledAt?: ISO, policy?, inviteeIds?: int[] (max 50) }` | 201 `PartyDto` | `scheduledAt` null or in the past ⇒ `scheduledAt = now`. The party is always `scheduled`; when its lobby window is open (always for "now") the lobby machine exists at once, with `live` non-null, and `party.starting` goes to the invitees right away. Going live is `POST /start`. Emits `party.invited` to invitees. |
 | `GET /api/parties` | none | `PartySummaryDto[]` | parties with status `scheduled` or `live` where the caller is owner or invitee; `live` first, then `scheduledAt` ascending. |
 | `GET /api/parties/{id}` | none | `PartyDto` | full snapshot; `live` is filled whenever the party has an in-memory state: `live`, or a `scheduled` party whose lobby is open. Also allowed to a member who joined with the token. |
 | `GET /api/parties/by-token/{token}` | none | `PartyDto` | resolves an invite link; does not join. |
-| `PATCH /api/parties/{id}` | `{ name?, policy?, scheduledAt?: ISO, regenerateToken?: bool }` | `PartyDto` | host only; `scheduledAt` only while `scheduled` (else 409 `party.error_not_scheduled`). Cancelling is `DELETE`; starting early is `POST /start`, which takes a scheduled party live at any time. Emits `party.updated` to invitees and `party.members`-style `party.settings` to members. |
+| `PATCH /api/parties/{id}` | `{ name?, policy?, scheduledAt?: ISO, regenerateToken?: bool }` | `PartyDto` | host only; `scheduledAt` only while `scheduled` (else 409 `party.error_not_scheduled`); a past date is clamped to now, which opens the lobby at once (machine and `party.starting` immediately, not at the next sweep). Cancelling is `DELETE`; starting early is `POST /start`, which takes a scheduled party live at any time. Emits `party.updated` to invitees and `party.members`-style `party.settings` to members. |
 | `DELETE /api/parties/{id}` | none | 204 | host only; sets `ended`, emits `party.closed {reason: 'host_ended'}` to members and `party.updated` to invitees. |
 | `POST /api/parties/{id}/join` | `{ deviceId, token? }` | `PartyDto` | opens the lobby of a `scheduled` party if within 15 min of `scheduledAt` (status stays `scheduled`, members are kept in memory); before that 409 `party.error_not_open`. `connectionId` = the caller's SSE connection for that `deviceId` (from the hub); none ⇒ 409 `party.error_no_connection`. Rejoining with the same `(userId, deviceId)` replaces the connection and resets status. |
-| `POST /api/parties/{id}/start` | none | `PartyDto` | host only; `scheduled` ⇒ `live`, `startedAt = now`, state `idle`. |
+| `POST /api/parties/{id}/start` | none | `PartyDto` | host only; `scheduled` ⇒ `live`, `startedAt = now`, state `idle`; the only way to go live. |
 | `POST /api/parties/{id}/leave` | `{ deviceId }` | 204 | removes the member; host leaving ⇒ host transferred to the oldest member. |
 | `POST /api/parties/{id}/intent` | `{ deviceId, action: play\|pause\|seek\|setItem\|ended, position?: f64, item?: { mediaId, mediaFileId?, episodeId? }, baseRev: u64 }` | 202 `{ rev }` | `baseRev < rev` and action is `seek` or `setItem` ⇒ 409 `party.error_stale` with the `PartyDto` in body. `play`/`pause` are applied whatever `baseRev`. `ended` is only honoured from the host. |
 | `POST /api/parties/{id}/status` | `{ deviceId, status: ready\|buffering\|waiting, position: f64, rttMs?: int }` | 204 | updates the member; may complete a `waiting` phase. `waiting` means "not ready" (the lobby toggle). |

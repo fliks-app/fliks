@@ -177,6 +177,11 @@ fn connection_for(st: &AppState, user: i32, device: &str) -> Option<String> {
         .map(|t| t.connection_id.clone())
 }
 
+fn lobby_open(row: &Row) -> bool {
+    let at = row.scheduled_at.map_or(i64::MAX, |t| t.timestamp_millis());
+    now_ms() >= at - LOBBY_OPEN_BEFORE_MS
+}
+
 async fn row_of(st: &AppState, id: i32) -> R<Row> {
     db::get(&st.db, id).await?.ok_or_else(not_found)
 }
@@ -331,7 +336,8 @@ pub async fn create(
     };
     check_item(&st, &item).await?;
     let invitees = check_followed(&st, me, b.invitee_ids.as_deref().unwrap_or_default()).await?;
-    let live = b.scheduled_at.is_none_or(|t| t <= Utc::now());
+    let now = Utc::now();
+    let at = b.scheduled_at.filter(|t| *t > now).unwrap_or(now);
     let policy = if b.policy == Some(Policy::HostOnly) {
         "host_only"
     } else {
@@ -344,16 +350,15 @@ pub async fn create(
             owner: me,
             item: &item,
             policy,
-            scheduled_at: if live { None } else { b.scheduled_at },
-            live,
+            scheduled_at: at,
         },
         &invitees,
     )
     .await?;
-    if live {
-        st.parties.ensure(&row, true);
-    }
     announce_invited(&st, &row, &invitees).await?;
+    if lobby_open(&row) {
+        registry::open_lobby(&st, &row).await?;
+    }
     Ok((StatusCode::CREATED, Json(dto(&st, &row, me).await?)))
 }
 
@@ -409,7 +414,7 @@ pub async fn patch(
         if row.status != "scheduled" {
             return Err(fail(StatusCode::CONFLICT, "party.error_not_scheduled"));
         }
-        row.scheduled_at = Some(at);
+        row.scheduled_at = Some(at.max(Utc::now()));
         st.parties.forget_notice(id);
     }
     if let Some(n) = &name {
@@ -449,6 +454,9 @@ pub async fn patch(
             ((), vec![])
         });
     }
+    if b.scheduled_at.is_some() && lobby_open(&row) {
+        registry::open_lobby(&st, &row).await?;
+    }
     notify_updated(&st, &row).await?;
     Ok(Json(dto(&st, &row, me).await?))
 }
@@ -479,11 +487,8 @@ pub async fn join(
     let row = row_of(&st, id).await?;
     let how = access(&st, &row, me, b.token.as_deref()).await?;
     require_open(&row)?;
-    if row.status == "scheduled" {
-        let at = row.scheduled_at.map_or(i64::MAX, |t| t.timestamp_millis());
-        if now_ms() < at - LOBBY_OPEN_BEFORE_MS {
-            return Err(fail(StatusCode::CONFLICT, "party.error_not_open"));
-        }
+    if row.status == "scheduled" && !lobby_open(&row) {
+        return Err(fail(StatusCode::CONFLICT, "party.error_not_open"));
     }
     st.parties.ensure(&row, false);
     let view = st.parties.view(id).ok_or_else(not_live)?;

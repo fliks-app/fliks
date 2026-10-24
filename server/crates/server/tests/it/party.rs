@@ -155,7 +155,7 @@ async fn create_checks_follows_and_join_checks_access_and_connection(pool: PgPoo
         .call("POST", "/api/parties", &a, Some(body(vec![bob])))
         .await;
     assert_eq!(s, 201);
-    assert_eq!(p["status"], "live");
+    assert_eq!(p["status"], "scheduled");
     assert_eq!(p["host"]["username"], "alice");
     assert_eq!(p["inviteToken"].as_str().unwrap().len(), 22);
     assert_eq!(p["live"]["state"], "idle");
@@ -230,6 +230,10 @@ async fn stale_seek_gets_the_snapshot_and_host_only_blocks_members(pool: PgPool)
         )
         .await;
     let id = p["id"].as_i64().unwrap();
+    let (s, _) = c
+        .call("POST", &format!("/api/parties/{id}/start"), &a, None)
+        .await;
+    assert_eq!(s, 200);
     let (_ca, _cb) = (c.connect(alice, "da"), c.connect(bob, "db"));
     // bob joins with a web tab's full target id, alice with the bare device id
     for (t, d) in [(&a, "da"), (&b, "db#tab")] {
@@ -305,6 +309,55 @@ async fn stale_seek_gets_the_snapshot_and_host_only_blocks_members(pool: PgPool)
 }
 
 #[sqlx::test(migrations = false)]
+async fn a_party_created_now_or_rescheduled_to_the_past_opens_its_lobby_at_once(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (alice, a) = c.user("alice", true).await;
+    let (bob, b) = c.user("bob", true).await;
+    c.follow(alice, bob).await;
+    let mut sb = c.stream(&b, "db").await;
+    let (s, p) = c
+        .call(
+            "POST",
+            "/api/parties",
+            &a,
+            Some(json!({"name": "now", "mediaId": 1, "inviteeIds": [bob]})),
+        )
+        .await;
+    assert_eq!((s, p["status"].clone()), (201, json!("scheduled")));
+    assert_eq!(p["live"]["state"], "idle");
+    assert!(p["scheduledAt"].is_string());
+    assert_eq!(events_of(&mut sb, "party.starting").await.len(), 1);
+
+    let at = |mins: i64| (chrono::Utc::now() + chrono::Duration::minutes(mins)).to_rfc3339();
+    let (_, p) = c
+        .call(
+            "POST",
+            "/api/parties",
+            &a,
+            Some(
+                json!({"name": "later", "mediaId": 1, "inviteeIds": [bob], "scheduledAt": at(60)}),
+            ),
+        )
+        .await;
+    let id = p["id"].as_i64().unwrap();
+    assert_eq!(p["live"], Value::Null);
+    let (s, p) = c
+        .call(
+            "PATCH",
+            &format!("/api/parties/{id}"),
+            &a,
+            Some(json!({"scheduledAt": at(-5)})),
+        )
+        .await;
+    assert_eq!((s, p["live"]["state"].clone()), (200, json!("idle")));
+    assert_eq!(events_of(&mut sb, "party.starting").await.len(), 1);
+    let (s, p) = c
+        .call("POST", &format!("/api/parties/{id}/start"), &a, None)
+        .await;
+    assert_eq!((s, p["status"].clone()), (200, json!("live")));
+}
+
+#[sqlx::test(migrations = false)]
 async fn a_scheduled_party_opens_its_lobby_late_and_expires(pool: PgPool) {
     let c = ctx(pool).await;
     let (_, a) = c.user("alice", true).await;
@@ -344,8 +397,8 @@ async fn a_scheduled_party_opens_its_lobby_late_and_expires(pool: PgPool) {
     assert_eq!((s, p["status"].clone()), (200, json!("ended")));
 }
 
-/// Every `party.signal` queued on the stream, read until it stays quiet.
-async fn signals(s: &mut axum::body::BodyDataStream) -> Vec<Value> {
+/// Every `kind` event queued on the stream, read until it stays quiet.
+async fn events_of(s: &mut axum::body::BodyDataStream, kind: &str) -> Vec<Value> {
     use futures_util::StreamExt;
     let mut out = vec![];
     while let Ok(Some(Ok(chunk))) = tokio::time::timeout(Duration::from_millis(200), s.next()).await
@@ -354,7 +407,7 @@ async fn signals(s: &mut axum::body::BodyDataStream) -> Vec<Value> {
             if let Some(v) = line
                 .strip_prefix("data: ")
                 .and_then(|d| serde_json::from_str::<Value>(d).ok())
-                .filter(|v| v["type"] == "party.signal")
+                .filter(|v| v["type"] == kind)
             {
                 out.push(v);
             }
@@ -363,6 +416,11 @@ async fn signals(s: &mut axum::body::BodyDataStream) -> Vec<Value> {
     out
 }
 
+async fn signals(s: &mut axum::body::BodyDataStream) -> Vec<Value> {
+    events_of(s, "party.signal").await
+}
+
+/// A party the host has taken live; the lobby comes first.
 async fn party_with(c: &Ctx, tok: &str, invitees: Vec<i32>) -> i64 {
     let (s, p) = c
         .call(
@@ -373,7 +431,12 @@ async fn party_with(c: &Ctx, tok: &str, invitees: Vec<i32>) -> i64 {
         )
         .await;
     assert_eq!(s, 201);
-    p["id"].as_i64().unwrap()
+    let id = p["id"].as_i64().unwrap();
+    let (s, _) = c
+        .call("POST", &format!("/api/parties/{id}/start"), tok, None)
+        .await;
+    assert_eq!(s, 200);
+    id
 }
 
 #[sqlx::test(migrations = false)]

@@ -366,17 +366,31 @@ pub async fn sweep(st: &AppState, now: DateTime<Utc>) -> sqlx::Result<()> {
         };
         if now_ms >= at + SCHEDULE_EXPIRY_MS {
             end(st, &row, CloseReason::Expired).await?;
-        } else if now_ms >= at - LOBBY_OPEN_BEFORE_MS && st.parties.inner().notified.insert(row.id)
-        {
-            let invitees = db::invitees(&st.db, row.id).await?;
-            st.hub.emit_to_users(
-                &invitees,
-                SseEvent::PartyStarting {
-                    party_id: row.id.into(),
-                    name: row.name.clone(),
-                },
-            );
+        } else if now_ms >= at - LOBBY_OPEN_BEFORE_MS {
+            announce_lobby(st, &row).await?;
         }
     }
     Ok(())
+}
+
+/// Tells the invitees their lobby is open, once per schedule.
+async fn announce_lobby(st: &AppState, row: &Row) -> sqlx::Result<()> {
+    if !st.parties.inner().notified.insert(row.id) {
+        return Ok(());
+    }
+    let invitees = db::invitees(&st.db, row.id).await?;
+    st.hub.emit_to_users(
+        &invitees,
+        SseEvent::PartyStarting {
+            party_id: row.id.into(),
+            name: row.name.clone(),
+        },
+    );
+    Ok(())
+}
+
+/// Opens a lobby now instead of at the next sweep: its machine exists and the invitees are told.
+pub async fn open_lobby(st: &AppState, row: &Row) -> sqlx::Result<()> {
+    st.parties.ensure(row, false);
+    announce_lobby(st, row).await
 }

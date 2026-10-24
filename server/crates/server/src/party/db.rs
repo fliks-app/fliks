@@ -45,16 +45,15 @@ pub struct New<'a> {
     pub owner: i32,
     pub item: &'a Item,
     pub policy: &'a str,
-    pub scheduled_at: Option<DateTime<Utc>>,
-    pub live: bool,
+    pub scheduled_at: DateTime<Utc>,
 }
 
 pub async fn insert(db: &PgPool, n: &New<'_>, invitees: &[i32]) -> sqlx::Result<Row> {
     let mut tx = db.begin().await?;
     let row = sqlx::query_as::<_, Row>(&format!(
         r#"INSERT INTO watch_parties (name, "ownerId", "mediaId", "mediaFileId", "episodeId",
-               "inviteToken", policy, "scheduledAt", status, "startedAt")
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CASE WHEN $10 THEN now() END)
+               "inviteToken", policy, "scheduledAt", status)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'scheduled')
            RETURNING {COLS}"#
     ))
     .bind(n.name)
@@ -65,8 +64,6 @@ pub async fn insert(db: &PgPool, n: &New<'_>, invitees: &[i32]) -> sqlx::Result<
     .bind(new_token())
     .bind(n.policy)
     .bind(n.scheduled_at)
-    .bind(if n.live { "live" } else { "scheduled" })
-    .bind(n.live)
     .fetch_one(&mut *tx)
     .await?;
     add_invitees_in(&mut tx, row.id, invitees).await?;
