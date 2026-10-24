@@ -1,5 +1,19 @@
 # Changelog
 
+## [5.2.0](https://github.com/fliks-app/fliks/compare/v5.1.1...v5.2.0) (2026-10-24)
+
+
+### Features
+
+* **party:** add voice chat, cast members, share and calendar ([#1961](https://github.com/fliks-app/fliks/issues/1961)) ([970c080](https://github.com/fliks-app/fliks/commit/970c080bcd52bf0807411621df48d13df9034daa))
+* **party:** add watch parties with synced playback and chat ([#1958](https://github.com/fliks-app/fliks/issues/1958)) ([deaf540](https://github.com/fliks-app/fliks/commit/deaf540d939cc94c4c396c8ba7ec1911c0596338))
+* **streams:** list download sessions in their own section ([#1963](https://github.com/fliks-app/fliks/issues/1963)) ([b8e82a4](https://github.com/fliks-app/fliks/commit/b8e82a457f581facba7524cc11acae110babe635))
+
+
+### Bug Fixes
+
+* **cleanup:** hide dates of candidates under a disabled rule ([#1962](https://github.com/fliks-app/fliks/issues/1962)) ([4234997](https://github.com/fliks-app/fliks/commit/4234997b8a7be0dd3a7f56bfc78822d13e996fda))
+
 ## [5.1.1](https://github.com/fliks-app/fliks/compare/v5.1.0...v5.1.1) (2026-10-23)
 
 
