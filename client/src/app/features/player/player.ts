@@ -116,6 +116,7 @@ import { CueController } from './cue-controller';
 import { QueueController } from './queue-controller';
 import { RemoteController } from './remote-controller';
 import { PartyController } from './party-controller';
+import { KeyboardOverlayService } from '../../core/services/keyboard-overlay.service';
 import { PartyService } from '../../core/services/party/party.service';
 import { PartyPanelComponent } from './party/party-panel';
 import { PartyFloatersComponent } from './party/party-floaters';
@@ -588,6 +589,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }), null);
   private readonly remoteCommandEffect = effect(() => this.remote.onAdminEvent());
   protected readonly party = inject(PartyService);
+  private readonly keyboardOverlay = inject(KeyboardOverlayService);
   protected readonly partyCtl = inject(PartyController);
   private readonly _partyAttach = (this.partyCtl.attach({
     engine: () => this.engine,
@@ -826,6 +828,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   // ── Lifecycle ──
 
   async ngAfterViewInit() {
+    this.keyboardOverlay.enter();
     this.state.reset();
     this.qoe.reset();
     this.recoveryEpisode = null;
@@ -1238,6 +1241,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   ngOnDestroy() {
     this.destroyed = true;
+    this.keyboardOverlay.leave();
     this.edl.clear();
     this.webCrop.destroy();
     this.detachAirPlay();

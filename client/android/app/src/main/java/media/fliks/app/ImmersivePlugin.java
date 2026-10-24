@@ -44,6 +44,17 @@ public class ImmersivePlugin extends Plugin {
     }
 
     @PluginMethod()
+    public void setKeyboardOverlay(PluginCall call) {
+        boolean enabled = call.getBoolean("enabled", false);
+        getActivity().runOnUiThread(() -> {
+            if (getActivity() instanceof MainActivity) {
+                ((MainActivity) getActivity()).setKeyboardOverlay(enabled);
+            }
+            call.resolve();
+        });
+    }
+
+    @PluginMethod()
     public void applyEdgeToEdge(PluginCall call) {
         if (getActivity() instanceof MainActivity) {
             ((MainActivity) getActivity()).reapplyEdgeToEdge();

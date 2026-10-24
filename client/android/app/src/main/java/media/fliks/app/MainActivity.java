@@ -29,6 +29,7 @@ public class MainActivity extends BridgeActivity {
     private android.app.PictureInPictureParams pipParams = null;
     private BroadcastReceiver pipActionReceiver;
     private boolean imeVisible = false;
+    private boolean keyboardOverlay = false;
 
     @Override
     protected void onNewIntent(Intent intent) {
@@ -94,6 +95,7 @@ public class MainActivity extends BridgeActivity {
 
         applyEdgeToEdge();
         watchImeVisibility();
+        installKeyboardOverlayFilter();
 
         // Set initial status bar icon color — post to run after Capacitor setup
         getWindow().getDecorView().post(() -> setLightStatusBar(false));
@@ -248,6 +250,28 @@ public class MainActivity extends BridgeActivity {
         getWindow().getDecorView().post(this::reapplyEdgeToEdge);
     }
 
+    /** Called by ImmersivePlugin: the keyboard covers the WebView instead of shrinking it. */
+    public void setKeyboardOverlay(boolean enabled) {
+        keyboardOverlay = enabled;
+        getWindow().getDecorView().requestApplyInsets();
+    }
+
+    /** Sits above Capacitor's SystemBars listener (on the WebView's parent) and hides the IME from
+     *  it while the overlay is on, so the WebView is never padded; the Keyboard plugin reads root insets. */
+    private void installKeyboardOverlayFilter() {
+        android.view.View webView = getBridge().getWebView();
+        android.view.View above = (android.view.View) webView.getParent().getParent();
+        ViewCompat.setOnApplyWindowInsetsListener(above, (v, insets) -> {
+            // The WebView doesn't relayout while the keyboard overlays it, so report from here too.
+            reportImeVisibility(insets.isVisible(WindowInsetsCompat.Type.ime()));
+            if (!keyboardOverlay) return ViewCompat.onApplyWindowInsets(v, insets);
+            return ViewCompat.onApplyWindowInsets(v, new WindowInsetsCompat.Builder(insets)
+                .setInsets(WindowInsetsCompat.Type.ime(), androidx.core.graphics.Insets.NONE)
+                .setVisible(WindowInsetsCompat.Type.ime(), false)
+                .build());
+        });
+    }
+
     /** Reports the soft keyboard's settled visibility: the Keyboard plugin only reads insets
      *  animations, and a cancelled back gesture brings the keyboard back without one. */
     private void watchImeVisibility() {
@@ -255,12 +279,15 @@ public class MainActivity extends BridgeActivity {
         webView.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
             WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(v);
             if (insets == null) return;
-            boolean visible = insets.isVisible(WindowInsetsCompat.Type.ime());
-            if (visible == imeVisible) return;
-            imeVisible = visible;
-            String js = "window.dispatchEvent(new CustomEvent('imeVisibility', { detail: { visible: " + visible + " } }));";
-            webView.evaluateJavascript(js, null);
+            reportImeVisibility(insets.isVisible(WindowInsetsCompat.Type.ime()));
         });
+    }
+
+    private void reportImeVisibility(boolean visible) {
+        if (visible == imeVisible) return;
+        imeVisible = visible;
+        String js = "window.dispatchEvent(new CustomEvent('imeVisibility', { detail: { visible: " + visible + " } }));";
+        getBridge().getWebView().evaluateJavascript(js, null);
     }
 
     /** True when the device is in television (leanback) UI mode. */
