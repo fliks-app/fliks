@@ -225,19 +225,28 @@ public class NativePlayerPlugin extends Plugin {
     /** Video and text subtitles sit on the viewport, scaled from CSS px to the WebView's pixels. */
     private void applyViewport() {
         if (wrapper == null) return;
-        FrameLayout.LayoutParams lp;
-        if (viewport == null) {
-            lp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
-        } else {
+        int[] box = {ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT, 0, 0};
+        if (viewport != null) {
             android.webkit.WebView webView = getBridge().getWebView();
             float d = getContext().getResources().getDisplayMetrics().density;
-            lp = new FrameLayout.LayoutParams(
-                    Math.round(viewport[2] * d), Math.round(viewport[3] * d), Gravity.TOP | Gravity.LEFT);
-            lp.leftMargin = webView.getLeft() + Math.round(viewport[0] * d);
-            lp.topMargin = webView.getTop() + Math.round(viewport[1] * d);
+            box = new int[] {
+                    Math.round(viewport[2] * d),
+                    Math.round(viewport[3] * d),
+                    webView.getLeft() + Math.round(viewport[0] * d),
+                    webView.getTop() + Math.round(viewport[1] * d)};
         }
-        wrapper.setLayoutParams(lp);
-        if (subtitles != null) subtitles.setViewport(new FrameLayout.LayoutParams(lp));
+        place(wrapper, box);
+        if (subtitles != null) subtitles.setViewport(box);
+    }
+
+    /** Edits the params the host layout generated (a CoordinatorLayout in Capacitor): a fresh FrameLayout one crashes its measure. */
+    static void place(View v, int[] box) {
+        ViewGroup.MarginLayoutParams lp = (ViewGroup.MarginLayoutParams) v.getLayoutParams();
+        lp.width = box[0];
+        lp.height = box[1];
+        lp.leftMargin = box[2];
+        lp.topMargin = box[3];
+        v.setLayoutParams(lp);
     }
 
     /** Screen stays awake while the session is advancing or stalled mid-play;

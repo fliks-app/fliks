@@ -154,8 +154,8 @@ class SubtitleOverlay {
     }
 
     /** Text subtitles follow the video's viewport; bitmap ones already live inside the wrapper. */
-    void setViewport(FrameLayout.LayoutParams lp) {
-        if (subtitleView != null) subtitleView.setLayoutParams(lp);
+    void setViewport(int[] box) {
+        if (subtitleView != null) NativePlayerPlugin.place(subtitleView, box);
     }
 
     void detach() {
