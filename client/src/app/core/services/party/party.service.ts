@@ -25,7 +25,7 @@ import { translatedServerMessage } from '../../utils/server-message';
 import { resolvePlayableFile } from '../../../shared/utils/media-play.util';
 import { ServerConfigService } from '../server-config.service';
 import { ClockService } from './clock.service';
-import { ReactionCatalogService } from './reaction-catalog.service';
+import { ReactionsService } from './reactions.service';
 
 /** What the engine has to follow: the last applied `party.state` (or the snapshot's equivalent). */
 export interface PartyLiveState {
@@ -59,30 +59,13 @@ const REACTION_MS = 2000;
 const MAX_MESSAGES = 200;
 
 /** Party-wide state: usable outside the player (invites, join links), the player's PartyController drives the engine from it. */
-function readFlag(key: string, fallback: boolean): boolean {
-  try {
-    const v = localStorage.getItem(key);
-    return v === null ? fallback : v === '1';
-  } catch {
-    return fallback;
-  }
-}
-
-function writeFlag(key: string, on: boolean): void {
-  try {
-    localStorage.setItem(key, on ? '1' : '0');
-  } catch {
-    // storage unavailable: the choice lasts for this session
-  }
-}
-
 @Injectable({ providedIn: 'root' })
 export class PartyService {
   private readonly api = inject(PartyApiService);
   private readonly sse = inject(SseService);
   private readonly auth = inject(AuthService);
   private readonly serverConfig = inject(ServerConfigService);
-  private readonly reactionCatalog = inject(ReactionCatalogService);
+  private readonly reactionCatalog = inject(ReactionsService);
   private readonly clock = inject(ClockService);
   private readonly router = inject(Router);
   private readonly toast = inject(ToastService);
@@ -96,11 +79,6 @@ export class PartyService {
   readonly messages = signal<PartyMessage[]>([]);
   readonly unread = signal(0);
   readonly panelOpen = signal(false);
-  /** Reaction settings, per device: the floating button over the video, and whether its row stays open. */
-  readonly reactionDock = signal(readFlag('party.reactionDock', true));
-  readonly reactionKeepOpen = signal(readFlag('party.reactionKeepOpen', false));
-  /** Whether the reaction row is unfolded; restored at the next party. */
-  readonly reactionRowOpen = signal(readFlag('party.reactionRowOpen', false));
   readonly bubbles = signal<PartyMessage[]>([]);
   readonly reactions = signal<FloatingReaction[]>([]);
   /** The party ended under us (host ended, expired, kicked): the player leaves. */
@@ -420,21 +398,6 @@ export class PartyService {
     this.reset();
     this.toast.info(this.translate.instant(`party.closed_${reason}`));
     this.closed.next(reason);
-  }
-
-  setReactionDock(on: boolean): void {
-    this.reactionDock.set(on);
-    writeFlag('party.reactionDock', on);
-  }
-
-  setReactionRowOpen(open: boolean): void {
-    this.reactionRowOpen.set(open);
-    writeFlag('party.reactionRowOpen', open);
-  }
-
-  setReactionKeepOpen(on: boolean): void {
-    this.reactionKeepOpen.set(on);
-    writeFlag('party.reactionKeepOpen', on);
   }
 
   setPanelOpen(open: boolean): void {

@@ -6,8 +6,7 @@ import { TranslatePipe } from '@ngx-translate/core';
 import { LucideSearch, LucideX } from '@lucide/angular';
 import { EmojiDataService } from '../../../core/services/party/emoji-data.service';
 import { MAX_BAR } from '../../../core/services/party/reaction-bar';
-import { ReactionCatalogService } from '../../../core/services/party/reaction-catalog.service';
-import { PartyService } from '../../../core/services/party/party.service';
+import { ReactionsService } from '../../../core/services/party/reactions.service';
 import { DeviceService } from '../../../core/services/device.service';
 import { KeyboardOverlayService } from '../../../core/services/keyboard-overlay.service';
 import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-field/toggle-field';
@@ -29,8 +28,7 @@ interface Section {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class PartyReactionSettingsComponent {
-  protected readonly party = inject(PartyService);
-  protected readonly catalog = inject(ReactionCatalogService);
+  protected readonly reactions = inject(ReactionsService);
   protected readonly data = inject(EmojiDataService);
   protected readonly keyboard = inject(KeyboardOverlayService);
   protected readonly isTv = inject(DeviceService).isTv;
@@ -44,26 +42,26 @@ export class PartyReactionSettingsComponent {
   protected readonly sections = computed<Section[]>(() => {
     if (this.searching()) return [{ key: 'results', emojis: this.data.search(this.query()).map((e) => e.emoji) }];
     const groups = this.data.groups();
-    const animated = groups.flatMap((g) => g.emojis.map((e) => e.emoji)).filter((e) => this.catalog.hasAnimation(e));
+    const animated = groups.flatMap((g) => g.emojis.map((e) => e.emoji)).filter((e) => this.reactions.animation(e) !== null);
     return [
-      { key: 'bar', labelKey: 'party.reaction_section_bar', emojis: this.catalog.bar() },
+      { key: 'bar', labelKey: 'party.reaction_section_bar', emojis: this.reactions.bar() },
       { key: 'animated', labelKey: 'party.reaction_section_animated', emojis: animated },
       ...groups.map((g) => ({ key: g.key, label: g.label, emojis: g.emojis.map((e) => e.emoji) })),
     ];
   });
 
   protected toggle(emoji: string): void {
-    const ok = this.catalog.toggle(emoji);
-    this.full.set(!ok && !this.catalog.bar().includes(emoji));
+    const ok = this.reactions.toggle(emoji);
+    this.full.set(!ok && !this.reactions.bar().includes(emoji));
   }
 
   protected reset(): void {
-    this.catalog.reset();
+    this.reactions.reset();
     this.full.set(false);
   }
 
   show(): void {
-    void this.catalog.load();
+    void this.reactions.load();
     void this.data.load();
     this.dialog().nativeElement.showModal();
   }

@@ -118,6 +118,7 @@ import { RemoteController } from './remote-controller';
 import { PartyController } from './party-controller';
 import { KeyboardOverlayService } from '../../core/services/keyboard-overlay.service';
 import { PartyService } from '../../core/services/party/party.service';
+import { ReactionsService } from '../../core/services/party/reactions.service';
 import { PartyPanelComponent } from './party/party-panel';
 import { PartyFloatersComponent } from './party/party-floaters';
 import { PartyReactionDockComponent } from './party/party-reaction-dock';
@@ -601,6 +602,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }), null);
   private readonly remoteCommandEffect = effect(() => this.remote.onAdminEvent());
   protected readonly party = inject(PartyService);
+  protected readonly reactions = inject(ReactionsService);
   protected readonly keyboardOverlay = inject(KeyboardOverlayService);
   protected readonly partyCtl = inject(PartyController);
   private readonly _partyAttach = (this.partyCtl.attach({

@@ -6,19 +6,45 @@ import { EmojiDataService } from './emoji-data.service';
 import { sanitizeBar, toggleBar } from './reaction-bar';
 
 const BAR_KEY = 'party.reactionBar';
+const DOCK_KEY = 'party.reactionDock';
+const KEEP_OPEN_KEY = 'party.reactionKeepOpen';
+const ROW_OPEN_KEY = 'party.reactionRowOpen';
+
+function read(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+/** Storage failures keep the value for this session. */
+function write(key: string, value: string | null): void {
+  try {
+    if (value === null) localStorage.removeItem(key);
+    else localStorage.setItem(key, value);
+  } catch {
+    // storage unavailable
+  }
+}
+
+function readFlag(key: string, fallback: boolean): boolean {
+  const v = read(key);
+  return v === null ? fallback : v === '1';
+}
 
 function readBar(): string[] | null {
   try {
-    const v: unknown = JSON.parse(localStorage.getItem(BAR_KEY) ?? 'null');
+    const v: unknown = JSON.parse(read(BAR_KEY) ?? 'null');
     return Array.isArray(v) ? v.filter((e): e is string => typeof e === 'string') : null;
   } catch {
     return null;
   }
 }
 
-/** The server's animated reactions and default bar (fetched once), and this device's reaction bar. */
+/** The server's reaction catalog (fetched once), and this device's reaction bar and settings. */
 @Injectable({ providedIn: 'root' })
-export class ReactionCatalogService {
+export class ReactionsService {
   private readonly api = inject(PartyApiService);
   private readonly emojiData = inject(EmojiDataService);
   private readonly serverConfig = inject(ServerConfigService);
@@ -29,6 +55,13 @@ export class ReactionCatalogService {
   private readonly animations = computed(
     () => new Map(Object.entries(this.catalog()?.animations ?? {}).map(([e, url]) => [e, this.serverConfig.resolveUrl(url)])),
   );
+
+  /** The floating reaction button over the video. */
+  readonly dock = signal(readFlag(DOCK_KEY, true));
+  /** The row stays open after a reaction is sent. */
+  readonly keepOpen = signal(readFlag(KEEP_OPEN_KEY, false));
+  /** The row is unfolded; restored at the next party. */
+  readonly rowOpen = signal(readFlag(ROW_OPEN_KEY, false));
 
   private loading: Promise<void> | null = null;
 
@@ -42,10 +75,6 @@ export class ReactionCatalogService {
       },
     );
     return this.loading;
-  }
-
-  hasAnimation(emoji: string): boolean {
-    return this.animations().has(emoji);
   }
 
   animation(emoji: string): string | null {
@@ -70,13 +99,23 @@ export class ReactionCatalogService {
     this.save(null);
   }
 
+  setDock(on: boolean): void {
+    this.dock.set(on);
+    write(DOCK_KEY, on ? '1' : '0');
+  }
+
+  setKeepOpen(on: boolean): void {
+    this.keepOpen.set(on);
+    write(KEEP_OPEN_KEY, on ? '1' : '0');
+  }
+
+  setRowOpen(open: boolean): void {
+    this.rowOpen.set(open);
+    write(ROW_OPEN_KEY, open ? '1' : '0');
+  }
+
   private save(bar: string[] | null): void {
     this.stored.set(bar);
-    try {
-      if (bar) localStorage.setItem(BAR_KEY, JSON.stringify(bar));
-      else localStorage.removeItem(BAR_KEY);
-    } catch {
-      // storage unavailable: the choice lasts for this session
-    }
+    write(BAR_KEY, bar && JSON.stringify(bar));
   }
 }

@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
-import { ReactionCatalogService } from '../../../core/services/party/reaction-catalog.service';
+import { ReactionsService } from '../../../core/services/party/reactions.service';
 
 /** A reaction as its animated image; the text glyph when it has none or the image fails. */
 @Component({
@@ -11,6 +11,6 @@ import { ReactionCatalogService } from '../../../core/services/party/reaction-ca
 export class PartyEmojiComponent {
   readonly emoji = input.required<string>();
   protected readonly failed = signal(false);
-  protected readonly src = computed(() => (this.failed() ? null : this.catalog.animation(this.emoji())));
-  private readonly catalog = inject(ReactionCatalogService);
+  protected readonly src = computed(() => (this.failed() ? null : this.reactions.animation(this.emoji())));
+  private readonly reactions = inject(ReactionsService);
 }

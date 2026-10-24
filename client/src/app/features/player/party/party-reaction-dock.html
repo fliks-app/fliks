@@ -1,14 +1,14 @@
-@if (open() && !party.reactionKeepOpen()) {
+@if (open() && !reactions.keepOpen()) {
   <!-- An outside tap only folds the row; it must not reach the player and wake its controls. -->
   <div class="dock-backdrop" (click)="fold()" (touchstart)="$event.stopPropagation()" (pointerdown)="$event.stopPropagation()"></div>
 }
 <div class="relative flex items-center" appTvRow>
   <div class="emojis flex gap-0.5 rounded-full" [class.open]="open()" [attr.aria-hidden]="!open()">
-    @for (e of emojis(); track e; let i = $index) {
+    @for (e of reactions.bar(); track e; let i = $index) {
       <button
         type="button"
         class="emoji"
-        [style.--i]="emojis().length - 1 - i"
+        [style.--i]="$count - 1 - i"
         [attr.tabindex]="open() ? 0 : -1"
         (click)="send(e, $event)"
       >{{ e }}</button>
@@ -21,7 +21,7 @@
     [class.active]="open()"
     [attr.aria-label]="'party.reactions' | translate"
     [attr.aria-expanded]="open()"
-    (click)="party.setReactionRowOpen(!open())"
+    (click)="reactions.setRowOpen(!open())"
   >
     <svg lucideSmilePlus class="h-5 w-5"></svg>
   </button>

@@ -5,13 +5,13 @@
     <div class="flex flex-col gap-4 pt-2">
       <app-toggle-field
         [label]="'party.reaction_dock_show' | translate"
-        [value]="party.reactionDock()"
-        (valueChange)="party.setReactionDock($event)"
+        [value]="reactions.dock()"
+        (valueChange)="reactions.setDock($event)"
       />
       <app-toggle-field
         [label]="'party.reaction_keep_open' | translate"
-        [value]="party.reactionKeepOpen()"
-        (valueChange)="party.setReactionKeepOpen($event)"
+        [value]="reactions.keepOpen()"
+        (valueChange)="reactions.setKeepOpen($event)"
       />
       <div class="flex flex-col gap-2">
         <div class="flex items-center justify-between gap-2">
@@ -53,7 +53,7 @@
                     cdkDropList
                     cdkDropListOrientation="horizontal"
                     class="flex gap-2 overflow-x-auto pt-2"
-                    (cdkDropListDropped)="catalog.move($event.previousIndex, $event.currentIndex)"
+                    (cdkDropListDropped)="reactions.move($event.previousIndex, $event.currentIndex)"
                   >
                     @for (e of s.emojis; track e) {
                       <div cdkDrag cdkDragPreviewContainer="parent" [cdkDragDisabled]="isTv()" class="w-14 shrink-0 cursor-grab">
@@ -83,7 +83,7 @@
 </dialog>
 
 <ng-template #cell let-e>
-  @let i = catalog.bar().indexOf(e);
+  @let i = reactions.bar().indexOf(e);
   <button
     type="button"
     class="btn btn-ghost relative h-11 w-full rounded-xl border-2 px-0 text-xl"
