@@ -37,9 +37,9 @@
     }
     @if (variant() !== 'controls') {
       @if (voice.joined() && voice.listenOnly()) {
-        <p class="text-xs opacity-70">{{ 'party.voice_listen_only_' + voice.listenOnlyReason() | translate }}</p>
+        <p class="text-sm opacity-70">{{ 'party.voice_listen_only_' + voice.listenOnlyReason() | translate }}</p>
       } @else if (voice.joined()) {
-        <p class="flex items-center gap-1 text-xs opacity-60"><svg lucideHeadphones class="h-3 w-3 shrink-0"></svg>{{ 'party.voice_headphones' | translate }}</p>
+        <p class="flex items-center gap-1 text-sm opacity-60"><svg lucideHeadphones class="h-3 w-3 shrink-0"></svg>{{ 'party.voice_headphones' | translate }}</p>
       }
     }
   </div>

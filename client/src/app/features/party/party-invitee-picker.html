@@ -11,7 +11,7 @@
             [checked]="selected().includes(u.id)"
             (change)="toggle(u.id, $any($event.target).checked)"
           />
-          <app-user-avatar [username]="u.username" [avatar]="u.avatar" size="w-7 h-7 text-xs" />
+          <app-user-avatar [username]="u.username" [avatar]="u.avatar" size="w-7 h-7 text-sm" />
           <span class="min-w-0 flex-1 truncate">{{ u.username }}</span>
         </label>
       </li>
