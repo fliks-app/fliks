@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, ElementRef, computed, effect, inject, signal, viewChild } from '@angular/core';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { LucideSend } from '@lucide/angular';
-import { PARTY_EMOJIS, type PartyMessage } from '../../../core/services/api/party-api.service';
+import { type PartyMessage } from '../../../core/services/api/party-api.service';
 import { DeviceService } from '../../../core/services/device.service';
 import { KeyboardOverlayService } from '../../../core/services/keyboard-overlay.service';
 import { PartyService } from '../../../core/services/party/party.service';
@@ -30,7 +30,6 @@ export class PartyChatComponent {
   protected readonly showPhrases = computed(() => !this.typing() && (this.isTv() || this.party.dock() === 'drawer'));
 
   protected readonly maxLength = MAX_LENGTH;
-  protected readonly emojis = PARTY_EMOJIS;
   protected readonly phrases = ['party.tv_phrase_pause', 'party.tv_phrase_5min', 'party.tv_phrase_wait'];
   /** TV: free text stays closed until the viewer asks for it. */
   protected readonly writing = signal(false);

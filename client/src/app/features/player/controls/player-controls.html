@@ -65,6 +65,16 @@
         </button>
       }
       @if (partyActive()) {
+        <div class="dropdown dropdown-end" [class.dropdown-open]="openDropdown() === 'reactions'">
+          <button type="button" class="btn btn-ghost btn-circle btn-md text-white" [attr.aria-label]="'party.reactions' | translate" (click)="toggleDropdown('reactions', $event)">
+            <svg lucideSmilePlus [class]="isMobileTouch() ? 'h-5 w-5' : 'h-6 w-6'"></svg>
+          </button>
+          <div class="dropdown-content mt-2 flex gap-0.5 rounded-full bg-neutral/95 p-1 shadow-2xl backdrop-blur-sm">
+            @for (e of partyEmojis; track e) {
+              <button type="button" class="btn btn-ghost btn-circle btn-sm text-lg" (click)="react.emit(e); openDropdown.set(null)">{{ e }}</button>
+            }
+          </div>
+        </div>
         <button type="button" class="btn btn-ghost btn-circle btn-md relative" [class.text-info]="partyOpen()" [class.text-white]="!partyOpen()" [attr.aria-label]="'party.panel_toggle' | translate" [attr.aria-pressed]="partyOpen()" (click)="toggleParty.emit()">
           <svg lucideUsers [class]="isMobileTouch() ? 'h-5 w-5' : 'h-6 w-6'"></svg>
           @if (partyUnread() > 0 && !partyOpen()) {

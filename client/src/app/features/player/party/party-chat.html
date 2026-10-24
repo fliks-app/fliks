@@ -10,14 +10,6 @@
   }
 </div>
 
-@if (!typing()) {
-  <div class="[scrollbar-width:none] flex gap-0.5 overflow-x-auto px-3 py-1" appTvRow [attr.aria-label]="'party.reactions' | translate">
-    @for (e of emojis; track e) {
-      <button type="button" class="btn btn-ghost btn-sm min-w-8 flex-1 px-0 text-lg" (click)="party.react(e)">{{ e }}</button>
-    }
-  </div>
-}
-
 @if (showPhrases()) {
   <div class="[scrollbar-width:none] flex gap-1 overflow-x-auto px-3 py-1" appTvRow>
     @for (key of phrases; track key) {

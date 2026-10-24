@@ -38,6 +38,7 @@ import { AppSettingsService } from '../../../core/services/app-settings.service'
 import { formatTime, SpriteMetadata } from '../../../core/utils/player.utils';
 import { focusOverlayEntry, initialOverlayFocus, scrollSelectedIntoView } from '../../../core/services/focusable.constants';
 import { SeekbarComponent } from '../../../shared/components/seekbar/seekbar';
+import { PARTY_EMOJIS } from '../../../core/services/api/party-api.service';
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 import { CachedSrcDirective } from '../../../shared/directives/cached-src.directive';
 import { SelectedOptionDirective } from '../../../shared/directives/selected-option.directive';
@@ -58,6 +59,7 @@ import {
   LucideRotateCw,
   LucideSettings,
   LucideSkipForward,
+  LucideSmilePlus,
   LucideCast,
   LucideUsers,
   LucideHeadphones,
@@ -69,7 +71,7 @@ import {
 } from '@lucide/angular';
 
 /** The click-driven panels: a desktop dropdown, or a bottom sheet on touch. */
-type PanelName = 'subtitles' | 'audio' | 'speed' | 'settings' | 'devices';
+type PanelName = 'subtitles' | 'audio' | 'speed' | 'settings' | 'devices' | 'reactions';
 
 /** Panels of the subtitles menu: the track list, the appearance summary, then
  *  one leaf list per appearance field. */
@@ -112,6 +114,7 @@ interface AppearanceRow {
     LucideRotateCcw,
     LucideRotateCw,
     LucideSkipForward,
+    LucideSmilePlus,
     LucideCast,
     LucideUsers,
     LucideHeadphones,
@@ -358,6 +361,8 @@ export class PlayerControlsComponent {
   readonly partyUnread = input(0);
   readonly partyOpen = input(false);
   readonly toggleParty = output<void>();
+  readonly react = output<string>();
+  protected readonly partyEmojis = PARTY_EMOJIS;
   readonly toggleFillScreen = output<void>();
   readonly openMedia = output<void>();
   readonly seekDragChange = output<boolean>();
