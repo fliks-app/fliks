@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, ElementRef, effect, inject, signal, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, effect, inject, viewChild } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
 import { LucideSmilePlus } from '@lucide/angular';
 import { DismissableStackService } from '../../../core/services/dismissable-stack.service';
@@ -23,7 +23,7 @@ export class PartyReactionDockComponent {
   protected readonly emojis = inject(ReactionCatalogService).bar;
   private readonly dismissStack = inject(DismissableStackService);
   private readonly toggleBtn = viewChild.required<ElementRef<HTMLButtonElement>>('toggle');
-  readonly open = signal(false);
+  readonly open = this.party.reactionRowOpen.asReadonly();
 
   constructor() {
     // Back folds the row before anything else, like the player's other menus.
@@ -49,7 +49,7 @@ export class PartyReactionDockComponent {
   protected fold(): void {
     const btn = this.toggleBtn().nativeElement;
     const inRow = !!document.activeElement?.closest('.emojis');
-    this.open.set(false);
+    this.party.setReactionRowOpen(false);
     if (inRow) btn.focus({ preventScroll: true });
   }
 }

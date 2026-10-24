@@ -4,7 +4,7 @@
   font-size: 2.5rem;
   /* The rise starts fast and settles; the fade accelerates to the end, 2 s at most on screen. */
   animation:
-    party-rise 2s cubic-bezier(0.33, 1, 0.68, 1) forwards,
+    party-rise 2s cubic-bezier(0.61, 1, 0.88, 1) forwards,
     party-fade 2s cubic-bezier(0.55, 0, 1, 0.45) forwards;
 }
 @keyframes party-rise {

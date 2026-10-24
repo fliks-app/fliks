@@ -21,7 +21,7 @@
     [class.active]="open()"
     [attr.aria-label]="'party.reactions' | translate"
     [attr.aria-expanded]="open()"
-    (click)="open.set(!open())"
+    (click)="party.setReactionRowOpen(!open())"
   >
     <svg lucideSmilePlus class="h-5 w-5"></svg>
   </button>

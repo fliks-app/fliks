@@ -99,6 +99,8 @@ export class PartyService {
   /** Reaction settings, per device: the floating button over the video, and whether its row stays open. */
   readonly reactionDock = signal(readFlag('party.reactionDock', true));
   readonly reactionKeepOpen = signal(readFlag('party.reactionKeepOpen', false));
+  /** Whether the reaction row is unfolded; restored at the next party. */
+  readonly reactionRowOpen = signal(readFlag('party.reactionRowOpen', false));
   readonly bubbles = signal<PartyMessage[]>([]);
   readonly reactions = signal<FloatingReaction[]>([]);
   /** The party ended under us (host ended, expired, kicked): the player leaves. */
@@ -423,6 +425,11 @@ export class PartyService {
   setReactionDock(on: boolean): void {
     this.reactionDock.set(on);
     writeFlag('party.reactionDock', on);
+  }
+
+  setReactionRowOpen(open: boolean): void {
+    this.reactionRowOpen.set(open);
+    writeFlag('party.reactionRowOpen', open);
   }
 
   setReactionKeepOpen(on: boolean): void {
