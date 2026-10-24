@@ -21,6 +21,10 @@ pub const ANIMATED_REACTIONS: [&str; 32] = [
 /// The reaction bar a device starts with.
 pub const DEFAULT_REACTIONS: [&str; 8] = ["👍", "😂", "😮", "😢", "😡", "❤️", "🔥", "👏"];
 const READY_TOLERANCE_S: f64 = 1.0;
+const RATE_WINDOW_MS: i64 = 10_000;
+const MAX_MESSAGES: usize = 5;
+const MAX_REACTIONS: usize = 10;
+const MAX_SIGNALS: usize = 60;
 
 /// Noto's asset name for an emoji: its codepoints in lowercase hex, joined by `_`.
 pub fn noto_code(emoji: &str) -> String {
@@ -30,10 +34,6 @@ pub fn noto_code(emoji: &str) -> String {
         .collect::<Vec<_>>()
         .join("_")
 }
-const RATE_WINDOW_MS: i64 = 10_000;
-const MAX_MESSAGES: usize = 5;
-const MAX_REACTIONS: usize = 10;
-const MAX_SIGNALS: usize = 60;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -950,6 +950,8 @@ impl Live {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     #[test]
     fn reaction_catalog_is_coherent() {
         assert_eq!(noto_code("❤️"), "2764_fe0f");
@@ -959,8 +961,6 @@ mod tests {
         assert_eq!(emojis.len(), ANIMATED_REACTIONS.len());
         assert!(DEFAULT_REACTIONS.iter().all(|d| emojis.contains(d)));
     }
-
-    use super::*;
 
     fn item() -> Item {
         Item {
