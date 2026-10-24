@@ -115,8 +115,10 @@ impl Engine {
             let Some(chunk) = chunk else { return Ok(()) };
             deadline = Instant::now() + t.events_idle;
             for data in parser.push(&chunk) {
-                let value: Value = serde_json::from_str(&data).map_err(|e| e.to_string())?;
-                self.handle(value);
+                match serde_json::from_str(&data) {
+                    Ok(value) => self.handle(value),
+                    Err(e) => tracing::warn!("engine events: frame skipped: {e}"),
+                }
             }
         }
     }

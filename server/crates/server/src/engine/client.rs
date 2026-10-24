@@ -52,10 +52,16 @@ impl Reply {
 
     /// The 2xx JSON body as `T`; `None` on any other status or a body that is not a `T`.
     pub fn data<T: DeserializeOwned>(&self) -> Option<T> {
+        self.parse().ok()
+    }
+
+    /// The body as `T`, or why it is not one.
+    pub fn parse<T: DeserializeOwned>(&self) -> Result<T, String> {
         if !self.ok() {
-            return None;
+            return Err(format!("status {}", self.status.as_u16()));
         }
-        T::deserialize(self.body.as_ref()?).ok()
+        let body = self.body.as_ref().ok_or("no JSON body")?;
+        T::deserialize(body).map_err(|e| e.to_string())
     }
 
     /// The `code` of an error body (`live_at_capacity`, ...).
