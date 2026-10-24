@@ -73,6 +73,15 @@ export const CORE_MEDIA_ACTIONS: readonly UiContribution[] = [
     action: { kind: 'action', actionId: 'media.open' },
   },
   {
+    id: 'core.watch_together',
+    slot: 'media.actions',
+    weight: 105,
+    labelKey: 'party.watch_together',
+    icon: 'user-plus',
+    when: ['surface:detail'],
+    action: { kind: 'action', actionId: 'media.watch-together' },
+  },
+  {
     id: 'core.add_to_playlist',
     slot: 'media.actions',
     weight: 150,

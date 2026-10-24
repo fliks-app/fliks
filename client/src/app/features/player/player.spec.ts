@@ -215,7 +215,7 @@ function createHarness(opts: {
           engineTraits: () => ENGINE_TRAITS[EngineKind.WEB],
         },
       },
-      { provide: SseService, useValue: { connectionId: () => null, lastEvent: () => null } },
+      { provide: SseService, useValue: { connectionId: () => null, lastEvent: () => null, connected: () => false, targetId: () => null, partyEvents: new Subject() } },
       {
         provide: RemoteService,
         useValue: {

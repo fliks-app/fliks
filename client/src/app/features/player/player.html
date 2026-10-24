@@ -1,3 +1,5 @@
+<!-- The shell is the fullscreen element; in a party the player shrinks inside it to make room for the panel. -->
+<div #partyShell class="party-shell" [attr.data-party-dock]="partyCtl.active() && party.panelOpen() ? party.dock() : null">
 <!-- Local player (hidden when casting — Cast overlay is global in the layout) -->
 <div
   #playerContainer
@@ -110,6 +112,10 @@
     </div>
   }
 
+  @if (partyCtl.active()) {
+    <app-party-floaters />
+  }
+
   @if (edlNotice(); as notice) {
     <div
       class="absolute left-1/2 -translate-x-1/2 z-[55] pointer-events-none"
@@ -151,7 +157,7 @@
     [episodeTitle]="displayEpisodeTitle()"
     [hasNext]="queueCtl.upNext() !== null"
     [nextLabelKey]="queueCtl.nextLabelKey()"
-    [queueItems]="preRollActive() ? [] : queueCtl.queueItems()"
+    [queueItems]="preRollActive() || partyCtl.active() ? [] : queueCtl.queueItems()"
     [queueIndex]="queueCtl.queueIndex()"
     (selectQueueItem)="queueCtl.playQueueItem($event)"
     [activeQualityLabel]="activeQualityLabel()"
@@ -185,7 +191,7 @@
     (speedChange)="onSpeedChange($event)"
     (back)="onBack()"
     [pipAvailable]="pipAvailable()"
-    [canPickDevice]="(castService.isAvailable() || airPlay.available() || remoteService.targets().length > 0) && !device.isTv()"
+    [canPickDevice]="(castService.isAvailable() || airPlay.available() || remoteService.targets().length > 0) && !device.isTv() && !partyCtl.active()"
     [castConnected]="castService.isConnected() || airPlay.videoActive()"
     [airPlayConnected]="airPlay.routeActive() || airPlay.videoActive()"
     [castConnecting]="castService.connecting()"
@@ -207,6 +213,10 @@
     (skipPreRoll)="skipPreRoll()"
     (panelOpenChange)="chrome.onPanelOpenChange($event)"
     (openSubtitleSync)="subs.onOpenSubtitleSync($event)"
+    [partyActive]="partyCtl.active()"
+    [partyUnread]="party.unread()"
+    [partyOpen]="party.panelOpen()"
+    (toggleParty)="party.setPanelOpen(!party.panelOpen())"
   />
   }
 
@@ -232,4 +242,9 @@
     [stats]="playerStats()"
     (close)="onCloseStats()"
   />
+</div>
+
+@if (partyCtl.active() && party.panelOpen()) {
+  <app-party-panel />
+}
 </div>

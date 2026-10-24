@@ -1,0 +1,9 @@
+<div class="flex min-h-dvh flex-col items-center justify-center gap-4 bg-base-100 p-6 text-center">
+  @if (failed()) {
+    <p>{{ 'party.join_failed' | translate }}</p>
+    <button type="button" class="btn btn-primary" (click)="home()">{{ 'party.go_home' | translate }}</button>
+  } @else {
+    <span class="loading loading-spinner loading-lg"></span>
+    <p class="text-sm opacity-70">{{ 'party.joining' | translate }}</p>
+  }
+</div>

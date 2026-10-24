@@ -1,0 +1,14 @@
+.reaction {
+  position: absolute;
+  bottom: 10%;
+  font-size: 2rem;
+  animation: party-rise 3s ease-out forwards;
+}
+@keyframes party-rise {
+  from { transform: translateY(0); opacity: 1; }
+  to { transform: translateY(-60vh); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .reaction { animation-name: party-fade; }
+  @keyframes party-fade { to { opacity: 0; } }
+}

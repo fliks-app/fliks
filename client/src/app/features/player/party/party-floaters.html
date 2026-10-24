@@ -1,0 +1,16 @@
+<div class="pointer-events-none absolute inset-0 z-[56] overflow-hidden" aria-hidden="true">
+  @for (r of party.reactions(); track r.key) {
+    <span class="reaction" [style.left.%]="r.left" [attr.title]="r.username">{{ r.emoji }}</span>
+  }
+  <div class="absolute bottom-24 left-4 flex max-w-[70%] flex-col items-start gap-1">
+    @for (m of party.bubbles(); track m.id) {
+      <div class="rounded-2xl bg-black/70 px-3 py-1.5 text-sm text-white">
+        @if (m.system) {
+          <span class="italic opacity-80">{{ m.system.by }}</span>
+        } @else {
+          <span class="font-semibold">{{ m.username }}</span> {{ m.text }}
+        }
+      </div>
+    }
+  </div>
+</div>

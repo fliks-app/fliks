@@ -3,6 +3,7 @@ import {
   computed,
   effect,
   inject,
+  Injector,
   input,
   output,
   signal,
@@ -23,6 +24,7 @@ import {
   LucideRotateCcw,
 } from '@lucide/angular';
 import { PlayableMediaService } from '../../../core/services/playable-media.service';
+import { PartyService } from '../../../core/services/party/party.service';
 import {
   StreamingApiService,
   type PlaybackState,
@@ -166,6 +168,7 @@ export class MediaInfoHeaderComponent {
   protected readonly desktopLayout = computed(() => this.device.isTv() || this.mdUp());
   readonly auth = inject(AuthService);
   private readonly playable = inject(PlayableMediaService);
+  private readonly injector = inject(Injector);
   private readonly spoilers = inject(SpoilerService);
   private readonly streamingApi = inject(StreamingApiService);
   private readonly offlineSync = inject(OfflinePlaybackSyncService);
@@ -492,6 +495,17 @@ export class MediaInfoHeaderComponent {
     }, fromStart);
   }
 
+  /** An immediate party on what Play would launch, named after the title. */
+  async watchTogether(): Promise<void> {
+    const mediaFileId = this.resumeMediaFileId() ?? this.selectedFileId();
+    if (!mediaFileId) return;
+    const episodeId = this.resumeEpisodeId() ?? this.episodeId();
+    await this.injector
+      .get(PartyService)
+      .create({ name: this.title(), mediaId: this.mediaId(), mediaFileId, ...(episodeId != null && { episodeId }) })
+      .catch(() => {});
+  }
+
   async onToggleWatched() {
     const mediaId = this.mediaId();
     // Series root toggle: bulk mark every episode as (un)watched.
@@ -694,6 +708,7 @@ export class MediaInfoHeaderComponent {
     'media.toggle-series-watched': () => this.onToggleWatched(),
     'media.toggle-watched': () => this.onToggleWatched(),
     'media.add-to-playlist': () => this.addToPlaylist.emit(),
+    'media.watch-together': () => void this.watchTogether(),
     'media.open-tracking': () => this.openTracking.emit(),
     'media.request': () => this.requestMedia.emit(),
     'media.grab-best': () => this.grabBest.emit(),

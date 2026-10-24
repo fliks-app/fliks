@@ -115,6 +115,10 @@ import { EdlController } from './edl-controller';
 import { CueController } from './cue-controller';
 import { QueueController } from './queue-controller';
 import { RemoteController } from './remote-controller';
+import { PartyController } from './party-controller';
+import { PartyService } from '../../core/services/party/party.service';
+import { PartyPanelComponent } from './party/party-panel';
+import { PartyFloatersComponent } from './party/party-floaters';
 import { KeyboardController } from './keyboard-controller';
 import { SubtitleController } from './subtitle-controller';
 import { isMutedAt } from '../../core/utils/edl-policy';
@@ -123,9 +127,9 @@ import { SubtitleSyncPanelComponent } from './overlay/subtitle-sync-panel/subtit
 import { DefaultFocusDirective } from '../../shared/directives/default-focus.directive';
 
 @Component({
-  imports: [TranslatePipe, LucideAirplay, LucideInfo, LucideVolumeX, LucideX, PlayerControlsComponent, PlayerStatsOverlayComponent, SubtitleSyncPanelComponent, PlayerErrorOverlayComponent, DefaultFocusDirective],
+  imports: [TranslatePipe, LucideAirplay, LucideInfo, LucideVolumeX, LucideX, PlayerControlsComponent, PlayerStatsOverlayComponent, SubtitleSyncPanelComponent, PlayerErrorOverlayComponent, DefaultFocusDirective, PartyPanelComponent, PartyFloatersComponent],
   templateUrl: './player.html',
-  providers: [ControlsVisibilityService, CopyFallbackController, WebVideoCropController, QueueController, RemoteController, SubtitleController],
+  providers: [ControlsVisibilityService, CopyFallbackController, WebVideoCropController, QueueController, RemoteController, PartyController, SubtitleController],
   encapsulation: ViewEncapsulation.None,
   styles: [`
     .player-container {
@@ -185,6 +189,22 @@ import { DefaultFocusDirective } from '../../shared/directives/default-focus.dir
           opacity: 0;
         }
       }
+    }
+    .party-shell {
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      -webkit-transform: translateZ(0);
+    }
+    .party-shell[data-party-dock='right'] > .player-container {
+      right: 360px;
+    }
+    .party-shell[data-party-dock='tv'] > .player-container {
+      right: 30%;
+    }
+    .party-shell[data-party-dock='bottom'] > .player-container {
+      bottom: auto;
+      height: 56.25vw;
     }
     .player-container.native-player > .player-video {
       display: none !important;
@@ -268,6 +288,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private readonly videoEl = viewChild<ElementRef<HTMLVideoElement>>('videoElement');
   private readonly containerEl = viewChild<ElementRef<HTMLDivElement>>('playerContainer');
   private readonly controls = viewChild(PlayerControlsComponent);
+  private readonly shellEl = viewChild<ElementRef<HTMLDivElement>>('partyShell');
 
   /** Active engine (Shaka on web, Native on Android/iOS); Cast is driven by castPlayerService + castService. */
   private engine: PlaybackEngine | null = null;
@@ -561,6 +582,21 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     onSelectQualityById: (id) => this.onSelectQualityById(id),
   }), null);
   private readonly remoteCommandEffect = effect(() => this.remote.onAdminEvent());
+  protected readonly party = inject(PartyService);
+  protected readonly partyCtl = inject(PartyController);
+  private readonly _partyAttach = (this.partyCtl.attach({
+    engine: () => this.engine,
+    mediaId: () => this.mediaId,
+    episodeId: () => this.episodeId,
+    seekTo: (t) => this.seekInternal(t),
+    pausePlayback: () => this.pausePlayback(),
+    playLocal: () => {
+      this.state.paused.set(false);
+      this.engine?.play().catch(() => this.state.paused.set(this.engine?.paused ?? true));
+    },
+    position: () => (this.state.seekLocked() ? this.state.currentTime() : (this.engine?.currentTime ?? 0)),
+    onBack: () => this.onBack(),
+  }), null);
 
   // Immersive mode: landscape=always, portrait=only while playing with controls hidden
   private readonly immersiveEffect = effect(() => {
@@ -1202,6 +1238,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.detachAirPlay();
     if (this.forcedSaveTrailing) clearTimeout(this.forcedSaveTrailing);
     this.remote.dispose();
+    this.partyCtl.dispose();
     this.savePosition();
     this.qoe.setStalled(false, { sessionId: this.activeSessionId(), position: this.engine?.currentTime ?? 0 });
     this.qoe.flushKeepalive(this.activeSessionId());
@@ -1552,6 +1589,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   onTogglePlay() {
     if (!this.engine) return;
+    if (this.partyCtl.togglePlay()) return;
     // Coalesce rapid taps: a second toggle inside this window is dropped so play()/pause() can't interleave
     // with an in-flight MSE append and desync A/V.
     const now = Date.now();
@@ -1598,6 +1636,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }
 
   onSeek(time: number) {
+    if (this.partyCtl.seek(time)) return;
     const dur = this.duration();
     if (!dur) {
       // Clamping to Math.min(time, 0) would jump to the start and report
@@ -2112,7 +2151,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (document.fullscreenElement) {
       document.exitFullscreen();
     } else {
-      const el = this.containerEl()?.nativeElement ?? document.documentElement;
+      const el = this.shellEl()?.nativeElement ?? this.containerEl()?.nativeElement ?? document.documentElement;
       el.requestFullscreen();
     }
   }

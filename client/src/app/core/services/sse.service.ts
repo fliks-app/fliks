@@ -13,6 +13,9 @@ import { getOrCreateDeviceId } from '../utils/device-info';
 import { DeviceService } from './device.service';
 import { SystemInfoService } from './system-info.service';
 import { currentTargetId } from './remote-target-id';
+import type {
+  PartyAnchor, PartyItem, PartyMember, PartyMessage, PartyPlayState, PartyPolicy, PartyUser,
+} from './api/party-api.service';
 
 /** A brief Wi-Fi handoff or the resume-reconnect race shouldn't flash a banner. */
 const UNREACHABLE_DEBOUNCE_MS = 5000;
@@ -80,6 +83,30 @@ export interface RemoteState {
   subtitleTrackIndex: number | null;
   lastCmdId: string | null;
 }
+
+export interface PartyStateEvent {
+  type: 'party.state';
+  partyId: number;
+  rev: number;
+  state: PartyPlayState;
+  item: PartyItem;
+  anchor: PartyAnchor;
+  /** Server epoch ms at which `playing` applies; null = now. */
+  whenMs: number | null;
+  by: PartyUser | null;
+  action: string | null;
+}
+
+export type PartyEvent =
+  | PartyStateEvent
+  | { type: 'party.members'; partyId: number; rev: number; members: PartyMember[] }
+  | { type: 'party.settings'; partyId: number; rev: number; name: string; policy: PartyPolicy }
+  | { type: 'party.message'; partyId: number; message: PartyMessage }
+  | { type: 'party.reaction'; partyId: number; userId: number; username: string; emoji: string }
+  | { type: 'party.closed'; partyId: number; reason: 'host_ended' | 'expired' | 'kicked' }
+  | { type: 'party.invited'; partyId: number; name: string; scheduledAt: string | null; host: PartyUser; item: PartyItem }
+  | { type: 'party.starting'; partyId: number; name: string }
+  | { type: 'party.updated'; partyId: number };
 
 /** `sessionStorage` key for the per-tab half of this device's target id. */
 const TAB_NONCE_KEY = 'fliks.remote.tabNonce';
@@ -159,6 +186,8 @@ export class SseService implements OnDestroy {
   readonly subtitleSyncCancelled = new Subject<number>();
   /** A target leaving its player; transient, so not on `lastEvent`, which `remote.targets_changed` replaces before any effect runs. */
   readonly stopped = new Subject<string>();
+  /** Watch-party events, routed on their own Subject like `commands`: each one matters, not just the latest. */
+  readonly partyEvents = new Subject<PartyEvent>();
   /** Own signal: fires every 10s per playing session for every device, and `lastEvent` is read by a dozen unrelated effects. */
   readonly remoteState = signal<RemoteState | null>(null);
   private eventSource: EventSource | null = null;
@@ -336,6 +365,10 @@ export class SseService implements OnDestroy {
         }
         if (data.type === 'remote.stopped') {
           this.stopped.next(String(data['targetId'] ?? ''));
+          return;
+        }
+        if (data.type.startsWith('party.')) {
+          this.partyEvents.next(data as unknown as PartyEvent);
           return;
         }
         if (data.type === 'remote.state') {

@@ -111,6 +111,9 @@ export class QueueController {
   /** Guards {@link advance} against re-entry while a switch resolves. */
   private advancing = false;
 
+  /** Set by the party controller: in a party the server owns what plays next. Returns true when it took the call. */
+  interceptAdvance: ((auto: boolean) => boolean) | null = null;
+
   attach(host: QueueHost): void {
     this.host = host;
   }
@@ -139,7 +142,7 @@ export class QueueController {
     if (this.state.error()) return;
     if (!this.autoplayEnabled()) return;
     if (!this.upNext()) return;
-    void this.advance();
+    void this.advance(true);
   }
 
   /** Fills the queue with the series' episodes that have a file, so the list and auto-advance
@@ -185,7 +188,8 @@ export class QueueController {
 
   /** Plays {@link upNext} in place, skipping playlist items whose file is unavailable.
    *  Offline and Cast remount instead: their source is not a re-negotiable local stream. */
-  async advance(): Promise<void> {
+  async advance(auto = false): Promise<void> {
+    if (this.interceptAdvance?.(auto)) return;
     // Don't move the queue cursor while a quality/audio reload is still settling.
     if (this.advancing || this.host.reloadingStream()) return;
     if (!this.upNext()) {
@@ -225,6 +229,23 @@ export class QueueController {
     } finally {
       this.advancing = false;
     }
+  }
+
+  /** Loads the item a party switched to, counting the one it ends as watched. */
+  async openPartyItem(item: { mediaId: number; mediaFileId: number | null; episodeId: number | null }): Promise<void> {
+    const queueItem: QueueItem = {
+      mediaId: item.mediaId,
+      mediaFileId: item.mediaFileId ?? undefined,
+      episodeId: item.episodeId ?? undefined,
+      title: '',
+    };
+    const mediaFileId = await this.resolveItemFileId(queueItem);
+    if (mediaFileId == null) {
+      this.toast.error(this.translate.instant('player.next_unavailable'));
+      return;
+    }
+    if (this.state.ended()) await this.markCurrentComplete();
+    await this.loadItem(queueItem, mediaFileId);
   }
 
   /** Jumps to a queue item the user picked: unlike {@link advance} it does not mark the

@@ -64,6 +64,14 @@
           <svg lucidePictureInPicture2 [class]="isMobileTouch() ? 'h-5 w-5' : 'h-6 w-6'"></svg>
         </button>
       }
+      @if (partyActive()) {
+        <button type="button" class="btn btn-ghost btn-circle btn-md relative" [class.text-info]="partyOpen()" [class.text-white]="!partyOpen()" [attr.aria-label]="'party.panel_toggle' | translate" [attr.aria-pressed]="partyOpen()" (click)="toggleParty.emit()">
+          <svg lucideUsers [class]="isMobileTouch() ? 'h-5 w-5' : 'h-6 w-6'"></svg>
+          @if (partyUnread() > 0 && !partyOpen()) {
+            <span class="badge badge-primary badge-xs absolute top-1 right-1 min-w-4 px-1">{{ partyUnread() > 9 ? '9+' : partyUnread() }}</span>
+          }
+        </button>
+      }
       <!-- Play on another device: the same unified list as the top bar, in the
            player's own dropdown / sheet so it survives fullscreen. -->
       @if (canPickDevice()) {

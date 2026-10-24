@@ -50,6 +50,11 @@ export const routes: Routes = [
       import('./features/player/player').then((m) => m.PlayerComponent),
   },
   {
+    path: 'party/:token',
+    canActivate: [serverConfigGuard, authGuard, passwordChangeGuard],
+    loadComponent: () => import('./features/party/party-join').then((m) => m.PartyJoinComponent),
+  },
+  {
     path: 'watch-live/:channelId',
     canActivate: [serverConfigGuard, authGuard, passwordChangeGuard],
     loadComponent: () =>
