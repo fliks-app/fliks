@@ -407,10 +407,16 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
   }
 
   configure(config: EngineConfig): void {
-    // Handle ABR enable/disable
+    // ABR off needs nothing here: a manual pick goes through selectVariantTrack, which pins the variant.
     if (config?.abr?.enabled === true) {
       // Auto mode: remove resolution constraints
       NativePlayer.setMaxResolution({ width: 0, height: 0 });
+    }
+    const preferredAudioLanguage = config?.preferredAudioLanguage;
+    const defaultBandwidthEstimate = config?.abr?.defaultBandwidthEstimate;
+    if (preferredAudioLanguage !== undefined || defaultBandwidthEstimate !== undefined) {
+      // Builds without the method (and iOS) reject: nothing to apply there.
+      NativePlayer.configure({ preferredAudioLanguage, defaultBandwidthEstimate }).catch(() => {});
     }
   }
 

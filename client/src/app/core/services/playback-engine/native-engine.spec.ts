@@ -12,6 +12,8 @@ const plugin = vi.hoisted(() => ({
   destroy: vi.fn(() => Promise.resolve()),
   getQoe: vi.fn(() => Promise.resolve({ engine: 'exoplayer' })),
   resize: vi.fn((_options: unknown) => Promise.resolve()),
+  configure: vi.fn((_options: unknown) => Promise.resolve()),
+  setMaxResolution: vi.fn((_options: unknown) => Promise.resolve()),
 }));
 
 // jsdom ships no ResizeObserver; init() observes the player container.
@@ -215,5 +217,35 @@ describe('NativeEngine surface placement', () => {
     expect(plugin.resize).toHaveBeenLastCalledWith({ x: 0, y: 0, width: -1, height: -1 });
     expect(plugin.resize).toHaveBeenCalledTimes(2);
     await engine.destroy();
+  });
+});
+
+describe('NativeEngine.configure', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('forwards the preferred audio language, an empty one included', () => {
+    const engine = new NativeEngine();
+    engine.configure({ preferredAudioLanguage: 'fr' });
+    engine.configure({ preferredAudioLanguage: '' });
+    expect(plugin.configure).toHaveBeenNthCalledWith(1, { preferredAudioLanguage: 'fr', defaultBandwidthEstimate: undefined });
+    expect(plugin.configure).toHaveBeenNthCalledWith(2, { preferredAudioLanguage: '', defaultBandwidthEstimate: undefined });
+  });
+
+  it('forwards the starting bandwidth and lifts the resolution cap in auto', () => {
+    new NativeEngine().configure({ abr: { enabled: true, defaultBandwidthEstimate: 100_000_000 } });
+    expect(plugin.configure).toHaveBeenCalledWith({ preferredAudioLanguage: undefined, defaultBandwidthEstimate: 100_000_000 });
+    expect(plugin.setMaxResolution).toHaveBeenCalledWith({ width: 0, height: 0 });
+  });
+
+  it('sends nothing native for ABR off', () => {
+    new NativeEngine().configure({ abr: { enabled: false } });
+    expect(plugin.configure).not.toHaveBeenCalled();
+    expect(plugin.setMaxResolution).not.toHaveBeenCalled();
+  });
+
+  it('tolerates a build without the method', async () => {
+    plugin.configure.mockRejectedValueOnce(new Error('not implemented'));
+    expect(() => new NativeEngine().configure({ preferredAudioLanguage: 'fr' })).not.toThrow();
+    await Promise.resolve();
   });
 });

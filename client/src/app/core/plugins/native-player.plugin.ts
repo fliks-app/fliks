@@ -156,6 +156,11 @@ export interface NativePlayerPlugin {
   /** Set screen brightness. -1 = restore system default, 1.0 = max. */
   setBrightness(options: { brightness: number }): Promise<void>;
 
+  // ── Configuration ──
+
+  /** Android only: language the player opens on (empty clears) and ABR's starting bandwidth in bps. Sent before load(). */
+  configure(options: { preferredAudioLanguage?: string; defaultBandwidthEstimate?: number }): Promise<void>;
+
   // ── Quality ──
 
   /** Set max video resolution constraint. Pass 0,0 for auto (no restriction). */
