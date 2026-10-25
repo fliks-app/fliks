@@ -72,7 +72,7 @@ import { imageUrlWithSize } from '../../core/pipes/resolve-url.pipe';
 import { PlayerStateService } from '../../core/services/player-state.service';
 import { subtitleManifestRank } from '../../core/utils/subtitle-tracks';
 import { TrackManagerService, SubtitleOption, type LaunchTracks, launchPickFor, streamIndexForTrack, trackForStreamIndex } from '../../core/services/track-manager.service';
-import { QualityManagerService } from '../../core/services/quality-manager.service';
+import { BEST_QUALITY_ID, QualityManagerService } from '../../core/services/quality-manager.service';
 import { DeviceService, viewTransitionsEnabled } from '../../core/services/device.service';
 
 /** An audio entry of the menu: an engine track (or a streamInfo fallback) labelled from streamInfo. */
@@ -2370,6 +2370,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    *  no client-side ABR (desktop mpv). Single source for every playback-info/stream-url call. */
   private resolveStartQuality(): string | undefined {
     const active = this.activeQualityId();
+    // `best` is client-only: the first negotiation goes out like auto, then adoptNegotiatedQuality names the rung.
+    if (active === BEST_QUALITY_ID) return undefined;
     if (active !== 'auto') return active;
     // Still 'auto': DirectStream's playUrl carries remux=1 alone, and a
     // pinned rung here would collapse the master onto a transcoded rung.

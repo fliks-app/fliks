@@ -1,7 +1,7 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { TranslateService } from '@ngx-translate/core';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PlayerSettingsService } from './player-settings.service';
 import { BEST_QUALITY_ID, highestRungId, QualityManagerService, type QualityOption } from './quality-manager.service';
 
@@ -62,7 +62,7 @@ describe('QualityManagerService preference', () => {
     qm.restorePreference();
     expect(qm.activeQualityId()).toBe(BEST_QUALITY_ID);
     qm.buildQualityOptions(fourK);
-    qm.adoptNegotiatedQuality('2160p');
+    qm.adoptNegotiatedQuality('auto');
     expect(qm.activeQualityId()).toBe('2160p');
   });
 
@@ -73,8 +73,30 @@ describe('QualityManagerService preference', () => {
     qm.restorePreference();
     expect(qm.activeQualityId()).toBe(BEST_QUALITY_ID);
     qm.buildQualityOptions(only720);
-    qm.adoptNegotiatedQuality('720p');
+    qm.adoptNegotiatedQuality('auto');
     expect(qm.activeQualityId()).toBe('720p');
+  });
+
+  it('locks a restored best to the top rung with ABR off, like an explicit pick', () => {
+    const qm = setup();
+    localStorage.setItem('player.qualityId', JSON.stringify({ id: 'best' }));
+    qm.restorePreference();
+    qm.buildQualityOptions(fourK);
+    qm.adoptNegotiatedQuality('auto');
+    const configure = vi.fn();
+    const selectVariantTrack = vi.fn();
+    const tracks = [{ id: 1, height: 2160, originalVideoId: '/2160p/' }, { id: 2, height: 1080, originalVideoId: '/1080p/' }];
+    const engine = { configure, selectVariantTrack, getVariantTracks: () => tracks, paused: false } as never;
+    qm.applyQualityPreferenceAfterLoad(engine, 'transcode');
+    expect(configure).toHaveBeenCalledWith({ abr: { enabled: false } });
+    expect(selectVariantTrack).toHaveBeenCalledWith(tracks[0], true);
+  });
+
+  it('adopts the served rung once best is resolved', () => {
+    const qm = setup();
+    qm.buildQualityOptions(fourK);
+    qm.adoptNegotiatedQuality('1080p');
+    expect(qm.activeQualityId()).toBe('1080p');
   });
 
   it('keeps a pick below the top as a literal rung', () => {
