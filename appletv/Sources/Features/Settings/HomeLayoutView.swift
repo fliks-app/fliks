@@ -132,6 +132,7 @@ struct HomeLayoutView: View {
 
     private func label(for row: ResolvedHomeSection) -> String {
         switch row.type {
+        case .watchParties: tr("party.rail_title")
         case .libraries: tr("home.libraries")
         case .continueWatching: tr("home.continue_watching")
         case .recommendations: tr("home.recommendations")
