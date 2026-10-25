@@ -14,6 +14,7 @@
   "setup.test_error": "No se pudo conectar con este servidor",
   "setup.known_servers": "Servidores recientes",
   "select_user.title": "¿Quién ve?",
+  "select_user.setup_required": "Este servidor aún no tiene ninguna cuenta. Ábrelo en un navegador para crear el administrador y vuelve después.",
   "select_user.other_user": "Otro usuario",
   "select_user.change_server": "Cambiar servidor",
   "select_user.quick_connect": "Conexión rápida (recomendado)",

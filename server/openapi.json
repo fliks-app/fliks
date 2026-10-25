@@ -153,6 +153,31 @@
         }
       }
     },
+    "/api/auth/setup": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "setup_status",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "First-boot admin: allowed only while `users` is empty, serialised by an advisory lock.",
+        "operationId": "setup",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/auth/stream-token": {
       "post": {
         "tags": [

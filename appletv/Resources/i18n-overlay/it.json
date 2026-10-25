@@ -13,6 +13,7 @@
   "setup.test_error": "Impossibile raggiungere questo server",
   "setup.known_servers": "Server recenti",
   "select_user.title": "Chi guarda?",
+  "select_user.setup_required": "Questo server non ha ancora alcun account. Aprilo in un browser per creare l'amministratore, poi torna qui.",
   "select_user.other_user": "Altro utente",
   "select_user.quick_connect": "Connessione rapida (consigliata)",
   "select_user.use_password": "Usa password",

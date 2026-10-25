@@ -86,9 +86,6 @@ pub async fn serve(cfg: Config) -> Result<(), BoxError> {
     roles::seed(&pool).await?;
     profiles::seed_quality_definitions(&pool).await?;
     profiles::warn_invalid_regexes(&pool).await?;
-    users::seed_admin(&pool)
-        .await
-        .map_err(|e| format!("seed admin: {e:?}"))?;
     let secret = jwt_secret::resolve(&cfg);
     let db = pool.clone();
     let state = AppState::new(pool, cfg, &secret);

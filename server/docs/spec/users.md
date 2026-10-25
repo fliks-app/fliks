@@ -36,7 +36,7 @@ A scoped (`stream`) token is answered 401 on every one of these (auth rule 12).
 
 ### B. Seeding
 
-7. At boot, if `users` is empty: insert `{username:'admin', passwordHash: bcrypt12('password'), isAdmin: true, enabled: true}` (no `roleId`, `requirePasswordChange` stays `false`, `email` null); logs two warnings. It runs after migrations, before listening, and stays when `POST /api/auth/register` requires `users.manage` (`auth.md`).
+7. Nothing is seeded at boot: the first admin is created through `POST /api/auth/setup` (`auth.md` rule 38).
 
 ### C. Create
 

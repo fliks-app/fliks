@@ -243,16 +243,11 @@ docker compose up -d
 ### First run
 
 Whichever you picked, open `http://<host>:4848` in a browser — on the
-machine itself that's `http://localhost:4848`. Sign in with the account
-Fliks creates on its first boot:
-
-| Username | Password |
-|---|---|
-| `admin` | `password` |
-
-Change that password right away — user menu → **Account**. Then add a
-library pointing at your video folder (`/medias` under Docker), and Fliks
-scans it and goes looking for the covers.
+machine itself that's `http://localhost:4848`. A fresh install has no
+account: Fliks shows a setup page where you pick the administrator's username
+and password (at least 8 characters). Then add a library pointing at your
+video folder (`/medias` under Docker), and Fliks scans it and goes looking for
+the covers.
 
 Then install the app on your phone or TV, point it at the same address,
 and you're done.

@@ -33,6 +33,7 @@ pub fn router() -> Router<AppState> {
         .route("/api/auth/refresh", post(refresh))
         .route("/api/auth/logout", post(logout))
         .route("/api/auth/register", post(register))
+        .route("/api/auth/setup", get(setup_status).post(setup))
         .route("/api/auth/me", get(me))
         .route("/api/auth/users-public", get(users_public))
         .route("/api/auth/cast-info", post(cast_info))
@@ -387,6 +388,65 @@ pub(crate) async fn register(
     let (user, _) = load_enabled(&st.db, id).await?.ok_or_else(internal)?;
     // The saved entity has no loaded role: role/permissions follow `isAdmin` only (rule 37).
     Ok((StatusCode::CREATED, Json(safe_user(&st, user, None).await)).into_response())
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct SetupDto {
+    username: String,
+    password: String,
+}
+
+#[utoipa::path(get, path = "/api/auth/setup", responses((status = 200)))]
+pub(crate) async fn setup_status(State(st): State<AppState>) -> Result<Json<Value>, AppError> {
+    let empty = sqlx::query_scalar!(r#"SELECT NOT EXISTS(SELECT 1 FROM users) AS "empty!""#)
+        .fetch_one(&st.db)
+        .await?;
+    Ok(Json(json!({ "required": empty })))
+}
+
+/// First-boot admin: allowed only while `users` is empty, serialised by an advisory lock.
+#[utoipa::path(post, path = "/api/auth/setup", responses((status = 201)))]
+pub(crate) async fn setup(
+    State(st): State<AppState>,
+    ValidJson(dto): ValidJson<SetupDto>,
+) -> Result<StatusCode, AppError> {
+    let mut errs = vec![];
+    non_empty(&mut errs, "username", dto.username.trim());
+    if dto.password.chars().count() < 8 {
+        errs.push("password must be longer than or equal to 8 characters".into());
+    }
+    check(errs)?;
+    if !setup_status(State(st.clone())).await?.0["required"]
+        .as_bool()
+        .unwrap_or(false)
+    {
+        return Err(AppError::conflict("Setup already completed"));
+    }
+    let password = dto.password;
+    let hash = tokio::task::spawn_blocking(move || bcrypt::hash(password, BCRYPT_COST))
+        .await
+        .map_err(|_| internal())?
+        .map_err(|_| internal())?;
+    let mut tx = st.db.begin().await?;
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtext('first_admin_setup'))")
+        .execute(&mut *tx)
+        .await?;
+    let empty = sqlx::query_scalar!(r#"SELECT NOT EXISTS(SELECT 1 FROM users) AS "empty!""#)
+        .fetch_one(&mut *tx)
+        .await?;
+    if !empty {
+        return Err(AppError::conflict("Setup already completed"));
+    }
+    sqlx::query!(
+        r#"INSERT INTO users (username, "passwordHash", "isAdmin", enabled) VALUES ($1, $2, true, true)"#,
+        dto.username.trim(),
+        hash
+    )
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok(StatusCode::CREATED)
 }
 
 #[utoipa::path(get, path = "/api/auth/me", responses((status = 200)))]

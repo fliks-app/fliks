@@ -402,3 +402,52 @@ async fn failed_logins_are_limited_per_address_and_username(pool: PgPool) {
         "a success reset the count"
     );
 }
+
+#[sqlx::test(migrations = false)]
+async fn first_admin_setup(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    let (_, _, s) = call(&c, "GET", "/api/auth/setup", &[], None).await;
+    assert_eq!(s, json!({"required": true}));
+    let short = json!({"username": "root", "password": "short"});
+    let (s, _, _) = call(&c, "POST", "/api/auth/setup", &[], Some(short)).await;
+    assert_eq!(s, 400);
+    let body = json!({"username": "root", "password": "long-enough-pass"});
+    let (s, _, _) = call(&c, "POST", "/api/auth/setup", &[], Some(body.clone())).await;
+    assert_eq!(s, 201);
+    let (s, _, _) = call(&c, "POST", "/api/auth/setup", &[], Some(body)).await;
+    assert_eq!(s, 409);
+    let (_, _, s) = call(&c, "GET", "/api/auth/setup", &[], None).await;
+    assert_eq!(s, json!({"required": false}));
+    let login = json!({"username": "root", "password": "long-enough-pass"});
+    let (s, _, r) = call(&c, "POST", "/api/auth/login", &[], Some(login)).await;
+    assert_eq!((s, r["user"]["isAdmin"].clone()), (201, json!(true)));
+}
+
+#[sqlx::test(migrations = false)]
+async fn first_admin_setup_refused_with_users(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    user(&pool, "bob", Some("[]"), false, true).await;
+    let body = json!({"username": "root", "password": "long-enough-pass"});
+    let (s, _, _) = call(&c, "POST", "/api/auth/setup", &[], Some(body)).await;
+    assert_eq!(s, 409);
+}
+
+#[sqlx::test(migrations = false)]
+async fn first_admin_setup_race(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    let calls = (0..6).map(|i| {
+        let body = json!({"username": format!("root{i}"), "password": "long-enough-pass"});
+        call(&c, "POST", "/api/auth/setup", &[], Some(body))
+    });
+    let created = futures_util::future::join_all(calls)
+        .await
+        .into_iter()
+        .filter(|(s, _, _)| *s == 201)
+        .count();
+    assert_eq!(created, 1);
+    let n: i64 = sqlx::query_scalar("SELECT count(*) FROM users")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(n, 1);
+}

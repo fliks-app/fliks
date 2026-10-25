@@ -11,6 +11,7 @@ struct SelectUserView: View {
     @State private var serverUsers: [PublicUser] = []
     @State private var loading = true
     @State private var loadError = false
+    @State private var needsSetup = false
     @State private var notice: String?
     @State private var resuming: Int?
     @State private var openSheetFor: PublicUser?
@@ -36,6 +37,10 @@ struct SelectUserView: View {
 
             if loading {
                 ProgressView()
+            } else if needsSetup {
+                Text(tr("select_user.setup_required"))
+                    .multilineTextAlignment(.center)
+                Button(tr("common.retry")) { Task { await load() } }
             } else if loadError && users.isEmpty {
                 VStack(spacing: 16) {
                     Text(tr("select_user.load_error"))
@@ -109,6 +114,8 @@ struct SelectUserView: View {
     private func load() async {
         loading = true
         loadError = false
+        // A fresh server has no account yet: the first admin is created in a browser.
+        needsSetup = (try? await APIClient.shared.get("/api/auth/setup") as SetupStatus)?.required ?? false
         do {
             serverUsers = try await APIClient.shared.get("/api/auth/users-public")
         } catch {
@@ -117,6 +124,8 @@ struct SelectUserView: View {
         loading = false
     }
 }
+
+private struct SetupStatus: Decodable { let required: Bool }
 
 /// No system focus decoration (no scale, no highlight card) — the tile draws
 /// its own focus ring.

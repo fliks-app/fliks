@@ -12,6 +12,7 @@
   "setup.test_success": "Serveur joignable",
   "setup.test_error": "Impossible de joindre ce serveur",
   "setup.known_servers": "Serveurs récents",
+  "select_user.setup_required": "Ce serveur n'a pas encore de compte. Ouvrez-le dans un navigateur pour créer l'administrateur, puis revenez.",
   "select_user.other_user": "Autre utilisateur",
   "select_user.quick_connect": "Connexion rapide (recommandé)",
   "select_user.use_password": "Utiliser un mot de passe",

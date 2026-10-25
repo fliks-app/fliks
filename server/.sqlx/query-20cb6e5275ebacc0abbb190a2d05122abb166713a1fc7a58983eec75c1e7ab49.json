@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO users (username, \"passwordHash\", \"isAdmin\", enabled) VALUES ($1, $2, true, true)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Varchar"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "20cb6e5275ebacc0abbb190a2d05122abb166713a1fc7a58983eec75c1e7ab49"
+}

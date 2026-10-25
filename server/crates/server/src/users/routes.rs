@@ -483,26 +483,6 @@ pub async fn clear_avatar(
     public(&st.db, id).await
 }
 
-/// Boot seed (rule 7): an empty `users` table gets `admin` / `password`.
-pub async fn seed_admin(db: &PgPool) -> Result<(), AppError> {
-    let empty = sqlx::query_scalar!(r#"SELECT NOT EXISTS(SELECT 1 FROM users) AS "empty!""#)
-        .fetch_one(db)
-        .await?;
-    if !empty {
-        return Ok(());
-    }
-    let password = hash("password".into()).await?;
-    sqlx::query!(
-        r#"INSERT INTO users (username, "passwordHash", "isAdmin", enabled) VALUES ('admin', $1, true, true)"#,
-        password
-    )
-    .execute(db)
-    .await?;
-    tracing::warn!("no users: created default admin 'admin' with password 'password'");
-    tracing::warn!("change the default admin password now");
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     /// 4.x verifies only `$2a$`/`$2b$` hashes, so `$2b$` must keep being written.

@@ -12,6 +12,7 @@
   "setup.test_success": "Server erreichbar",
   "setup.test_error": "Server nicht erreichbar",
   "setup.known_servers": "Letzte Server",
+  "select_user.setup_required": "Dieser Server hat noch kein Konto. Öffnen Sie ihn in einem Browser, um den Administrator anzulegen, und kehren Sie dann zurück.",
   "select_user.other_user": "Anderer Benutzer",
   "select_user.quick_connect": "Quick Connect (empfohlen)",
   "select_user.use_password": "Passwort verwenden",

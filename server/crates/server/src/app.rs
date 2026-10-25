@@ -36,6 +36,8 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         auth::refresh,
         auth::logout,
         auth::register,
+        auth::setup_status,
+        auth::setup,
         auth::me,
         auth::users_public,
         auth::cast_info,
