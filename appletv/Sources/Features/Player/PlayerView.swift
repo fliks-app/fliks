@@ -95,9 +95,8 @@ struct PlayerView: View {
             let inParty = party.takeHandoff()
             partyBound = inParty
             do {
-                // A party opens the stream at the group's position, so a paused party shows its frame without a far seek.
                 try await coordinator.load(mediaFileId: mediaFileId, mediaId: mediaId, episodeId: episodeId,
-                                           startAt: inParty ? party.groupStartPosition() : startAt, autoplay: !inParty)
+                                           startAt: startAt, autoplay: !inParty)
                 if inParty {
                     party.onClosed = { _ in onExit() }
                     let controller = PartyController(player: coordinator)
@@ -105,6 +104,7 @@ struct PlayerView: View {
                     controller.attach()
                 }
             } catch {
+                print("player: load failed: \(error)")
                 loadErrorText = tr("player.load_error")
                 if inParty { await party.leave() }
             }

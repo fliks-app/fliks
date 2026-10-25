@@ -249,16 +249,10 @@ import UIKit
     func partySetRate(_ rate: Float) { if player?.rate != 0 { player?.rate = rate } }
     var currentRate: Float { player?.rate ?? 1 }
 
-    /// Moves to `seconds` exactly and waits for the seek to land, at most `timeout`: a paused player may
-    /// never complete it, and the party must not wait on that.
-    func partySeek(to seconds: Double, timeout: Duration = .seconds(8)) async {
+    /// Moves to `seconds` exactly and waits for the seek to land.
+    func partySeek(to seconds: Double) async {
         guard let player else { return }
-        await withTaskGroup(of: Void.self) { group in
-            group.addTask { _ = await player.seek(to: Self.seekTime(seconds), toleranceBefore: .zero, toleranceAfter: .zero) }
-            group.addTask { try? await Task.sleep(for: timeout) }
-            await group.next()
-            group.cancelAll()
-        }
+        _ = await player.seek(to: Self.seekTime(seconds), toleranceBefore: .zero, toleranceAfter: .zero)
     }
 
     // MARK: - Now-playing metadata
