@@ -4,6 +4,7 @@ use crate::{
     metadata::{tmdb, tvdb},
 };
 use sqlx::postgres::PgConnectOptions;
+use std::net::{IpAddr, Ipv4Addr};
 use std::path::PathBuf;
 
 const DEFAULT_PORT: u16 = 4849;
@@ -30,6 +31,8 @@ impl std::fmt::Debug for Secret {
 #[derive(Debug, Clone)]
 pub struct Config {
     pub port: u16,
+    /// `FLIKS_BIND`: listen address, 0.0.0.0 unless set (the image sets loopback).
+    pub bind: IpAddr,
     pub db: PgConnectOptions,
     /// The pool's password, for `pg_dump` / `psql` (`PgConnectOptions` has no getter).
     pub db_password: Secret,
@@ -87,8 +90,12 @@ impl Config {
             .username(&get("DB_USERNAME").unwrap_or_else(|| "fliks".into()))
             .password(&db_password)
             .database(&get("DB_NAME").unwrap_or_else(|| "fliks".into()));
+        let bind = get("FLIKS_BIND")
+            .and_then(|v| v.trim().parse().ok())
+            .unwrap_or(IpAddr::V4(Ipv4Addr::UNSPECIFIED));
         Self {
             port,
+            bind,
             db,
             db_password: Secret(db_password),
             cors_origin: text("CORS_ORIGIN"),
@@ -184,6 +191,16 @@ mod tests {
         assert_eq!(cfg(&[("PORT", "abc")]).port, 4849);
         assert_eq!(cfg(&[("PORT", "0")]).port, 4849);
         assert_eq!(cfg(&[("PORT", "3001")]).port, 3001);
+    }
+
+    #[test]
+    fn bind_defaults_to_all_interfaces_and_the_env_overrides() {
+        assert_eq!(cfg(&[]).bind.to_string(), "0.0.0.0");
+        assert_eq!(
+            cfg(&[("FLIKS_BIND", "127.0.0.1")]).bind.to_string(),
+            "127.0.0.1"
+        );
+        assert_eq!(cfg(&[("FLIKS_BIND", "nope")]).bind.to_string(), "0.0.0.0");
     }
 
     #[test]
