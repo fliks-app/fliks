@@ -18,6 +18,12 @@ enum PartyPeople {
         return following.filter { !taken.contains($0.id) }
     }
 
+    /// Guests with no connected member yet (the host excluded): invited or link-joined but not here.
+    static func pending(host: PartyUser, guests: [PartyGuest], members: [PartyMember]) -> [PartyGuest] {
+        let present = Set(members.filter { $0.status != "away" }.map(\.userId))
+        return guests.filter { $0.userId != host.userId && !present.contains($0.userId) }
+    }
+
     /// The host first, then every guest, each marked present when a member of that user is connected.
     static func people(host: PartyUser, guests: [PartyGuest], members: [PartyMember]) -> [Person] {
         let present = Set(members.filter { $0.status != "away" }.map(\.userId))

@@ -7,6 +7,7 @@ struct PartyLobbyView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var visible = false
     @State private var selected: PartyMember?
+    @State private var selectedGuest: PartyGuest?
 
     var body: some View {
         ScrollView {
@@ -41,6 +42,16 @@ struct PartyLobbyView: View {
             Button(tr("party.kick"), role: .destructive) { Task { await service.kick(member.userId) } }
             Button(tr("common.cancel"), role: .cancel) {}
         }
+        .confirmationDialog(selectedGuest?.username ?? "", isPresented: Binding(get: { selectedGuest != nil }, set: { if !$0 { selectedGuest = nil } }),
+                            titleVisibility: .visible, presenting: selectedGuest) { guest in
+            Button(tr("party.kick"), role: .destructive) { Task { await service.kick(guest.userId) } }
+            Button(tr("common.cancel"), role: .cancel) {}
+        }
+    }
+
+    private func pending() -> [PartyGuest] {
+        guard let party = service.party else { return [] }
+        return PartyPeople.pending(host: party.host, guests: party.guests ?? [], members: service.members)
     }
 
     private func header(_ party: Party) -> some View {
@@ -98,6 +109,12 @@ struct PartyLobbyView: View {
                                    caption: member.isHost ? tr("party.host_badge") : tr("party.status_\(member.status)"),
                                    badge: PartyBadge.status(member.status), dimmed: member.status == "away",
                                    action: service.isHost && !member.isHost ? { selected = member } : nil)
+                    }
+                    ForEach(pending(), id: \.userId) { guest in
+                        AvatarTile(name: guest.username,
+                                   caption: tr(guest.source == "link" ? "party.person_link" : "party.person_invited"),
+                                   badge: PartyBadge.Badge(symbol: "envelope.fill", color: .gray), dimmed: true,
+                                   action: service.isHost ? { selectedGuest = guest } : nil)
                     }
                     if service.isHost {
                         AvatarTile(name: tr("party.invite"), symbol: "plus") { service.sheet = .invite }

@@ -6,8 +6,9 @@ enum PartyMenu {
     static func key(_ p: PartyService) -> String {
         let members = p.members.map { "\($0.id):\($0.status):\($0.role)" }.joined(separator: ",")
         let queue = p.queue.map { "\($0.mediaId).\($0.episodeId ?? 0)" }.joined(separator: ",")
+        let pend = pending(p).map { "\($0.userId)" }.joined(separator: ",")
         let cur = p.item.map { "\($0.mediaId).\($0.episodeId ?? 0)" } ?? ""
-        return [members, p.policy, String(p.chatEnabled), String(p.isHost), queue, cur].joined(separator: "|")
+        return [members, pend, p.policy, String(p.chatEnabled), String(p.isHost), queue, cur].joined(separator: "|")
     }
 
     static func build(_ p: PartyService, onResync: @escaping () -> Void, onLeave: @escaping () -> Void) -> UIMenu {
@@ -23,6 +24,11 @@ enum PartyMenu {
         return UIMenu(title: tr("party.panel_toggle"), image: UIImage(systemName: "person.2.fill"), children: children)
     }
 
+    private static func pending(_ p: PartyService) -> [PartyGuest] {
+        guard let party = p.party else { return [] }
+        return PartyPeople.pending(host: party.host, guests: party.guests ?? [], members: p.members)
+    }
+
     private static func membersMenu(_ p: PartyService) -> UIMenu {
         let myId = AuthService.shared.currentUser?.id
         let rows = p.members.map { m -> UIMenuElement in
@@ -33,7 +39,13 @@ enum PartyMenu {
                 UIAction(title: tr("party.kick"), attributes: .destructive) { _ in Task { await p.kick(m.userId) } },
             ])
         }
-        var all = rows
+        var all = rows + pending(p).map { guest -> UIMenuElement in
+            let label = "\(guest.username) · \(tr(guest.source == "link" ? "party.person_link" : "party.person_invited"))"
+            guard p.isHost else { return UIAction(title: label, attributes: .disabled) { _ in } }
+            return UIMenu(title: label, children: [
+                UIAction(title: tr("party.kick"), attributes: .destructive) { _ in Task { await p.kick(guest.userId) } },
+            ])
+        }
         if p.isHost {
             all.append(UIAction(title: tr("party.invite"), image: UIImage(systemName: "person.badge.plus")) { _ in p.sheet = .invite })
         }

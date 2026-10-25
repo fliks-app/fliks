@@ -30,4 +30,11 @@ final class PartyPeopleTests: XCTestCase {
         let party = try JSONDecoder.fliks.decode(Party.self, from: Data(json.utf8))
         XCTAssertEqual(party.guests?.first?.source, "invite")
     }
+
+    func testPendingAreGuestsWithNoConnectedMember() {
+        let guests = [PartyGuest(userId: 1, username: "host", source: "invite"), .init(userId: 2, username: "a", source: "invite"),
+                      .init(userId: 3, username: "b", source: "link"), .init(userId: 4, username: "c", source: "invite")]
+        let pending = PartyPeople.pending(host: host, guests: guests, members: [member(3), member(4, "away")])
+        XCTAssertEqual(pending.map(\.userId), [2, 4])
+    }
 }
