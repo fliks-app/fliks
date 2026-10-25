@@ -478,7 +478,7 @@ export class StreamingApiService {
     startQuality?: string,
     startAt?: number,
     download?: boolean,
-    opts?: { skipErrorToast?: boolean },
+    opts?: { skipErrorToast?: boolean; replaces?: string },
   ): Promise<PlaybackInfoResponse> {
     const query = this.buildQuery({
       token: this.playbackToken ?? undefined,
@@ -487,6 +487,7 @@ export class StreamingApiService {
       startQuality: startQuality || undefined,
       startAt: startAt ?? undefined,
       download: download ? true : undefined,
+      replaces: opts?.replaces,
     });
     return firstValueFrom(
       this.http.post<PlaybackInfoResponse>(

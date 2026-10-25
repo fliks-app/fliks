@@ -40,6 +40,7 @@ pub struct Params {
     pub start_quality: Option<String>,
     pub start_at: Option<f64>,
     pub download: bool,
+    pub replaces: Option<String>,
 }
 
 /// JS `parseInt(v, 10)`: the leading integer, `None` for NaN.
@@ -93,6 +94,9 @@ pub(super) fn parse_query(pairs: &[(String, String)]) -> Result<Params, AppError
         start_quality: first("startQuality").map(str::to_owned),
         start_at,
         download: first("download") == Some("1"),
+        replaces: first("replaces")
+            .filter(|v| !v.is_empty())
+            .map(str::to_owned),
     })
 }
 
@@ -264,7 +268,7 @@ async fn run(
         .and_then(|v| v.frame_rate.as_deref())
         .and_then(parse_source_fps);
     let (open, (markers, pre_roll, edl)) = tokio::join!(
-        st.engine.open_session(&request),
+        st.engine.open_session(&request, q.replaces.as_deref()),
         side_reads(st, a, &file, fps)
     );
     let open = match open {

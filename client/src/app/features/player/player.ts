@@ -2346,7 +2346,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private async negotiatePlayback(
     startAt?: number,
     over: Partial<{ fileId: number; profile: DeviceProfile; burnInId: number | null; quality: string }> = {},
-    opts?: { skipErrorToast?: boolean },
+    opts?: { skipErrorToast?: boolean; replaces?: string },
   ): Promise<PlaybackInfoResponse> {
     const fileId = over.fileId ?? this.mediaFileId;
     const onScreen = fileId === this.mediaFileId;
@@ -2523,6 +2523,15 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.edl.load(this.mediaFileId, pi.edl);
   }
 
+  /** The old sid must not outlive the new open as a sibling that splits onto a cold job: the server retires
+   *  it inside `playback-info` when it can, else it is stopped first. */
+  private async retirePreviousSession(sid: string | undefined): Promise<{ replaces?: string }> {
+    if (!sid) return {};
+    if (this.authService.hasServerFeature('sessionReplaces')) return { replaces: sid };
+    await this.streamingApi.stopSession(sid).catch(() => {});
+    return {};
+  }
+
   /** Mint a fresh LiveSession via `playback-info` and reload the engine at
    *  `pos` with the new sid. False when the remux fallback took the reload over. */
   private async refreshSidAndReload(
@@ -2532,15 +2541,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (!this.engine || !this.mediaFileId) return true;
     const endReload = this.state.beginReload();
     try {
-      // Drop and await the prior sid before minting: a stall recovery still has a live session, which the
-      // backend would otherwise treat as a concurrent sibling and split onto a cold job.
-      const prevSid = this.playbackInfo?.sessionId;
-      if (prevSid) {
-        await this.streamingApi.stopSession(prevSid).catch(() => {});
-      }
+      const replace = await this.retirePreviousSession(this.playbackInfo?.sessionId);
       if (opts.unmute) this.engine.muted = false;
       const wasPaused = opts.preservePause ? this.pauseIntent() : false;
-      this.playbackInfo = await this.negotiatePlayback(this.reloadStartAt(pos));
+      this.playbackInfo = await this.negotiatePlayback(this.reloadStartAt(pos), {}, replace);
       this.adoptPlaybackInfo(this.playbackInfo);
       // Refresh a near-expiry stream token first: it's baked into every segment URL and can't be swapped after
       // load.
@@ -3609,14 +3613,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         await NativePlayer.stop().catch(() => {});
       }
 
-      // Stop only this device's session — multi-device viewers on the
-      // same file with a different profile should stay alive.
-      const currentSid = this.playbackInfo?.sessionId;
-      if (currentSid) {
-        await this.streamingApi.stopSession(currentSid).catch(() => {});
-      }
+      // Only this device's session goes; multi-device viewers on the same file stay alive.
+      const replace = await this.retirePreviousSession(this.playbackInfo?.sessionId);
 
-      this.playbackInfo = await this.negotiatePlayback(this.reloadStartAt(currentPos));
+      this.playbackInfo = await this.negotiatePlayback(this.reloadStartAt(currentPos), {}, replace);
       const pi = this.playbackInfo;
       this.adoptPlaybackInfo(pi);
 
