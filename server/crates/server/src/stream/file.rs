@@ -42,7 +42,9 @@ fn content_type(ext: &str) -> &'static str {
         ".mkv" => "video/x-matroska",
         ".avi" => "video/x-msvideo",
         ".mov" => "video/quicktime",
-        ".ts" | ".m2ts" => "video/mp2t",
+        ".ts" | ".m2ts" | ".mts" => "video/mp2t",
+        ".mpg" | ".mpeg" => "video/mpeg",
+        ".ogm" => "video/ogg",
         _ => "application/octet-stream",
     }
 }
