@@ -180,6 +180,8 @@ export class CastService implements OnDestroy {
   readonly currentTime = signal(0);
   readonly duration = signal(0);
   readonly isPaused = signal(true);
+  /** The receiver reached the natural end of the media (IDLE, reason FINISHED); cleared by the next LOAD. */
+  readonly ended = signal(false);
   /** Receiver (Cast device) output level 0..1 and mute flag, mirrored from the
    *  RemotePlayer (web) / native plugin poll. Drives the cast volume slider. */
   readonly volume = signal(1);
@@ -292,6 +294,7 @@ export class CastService implements OnDestroy {
         this.duration.set(e.detail?.duration ?? 0);
         this.isPaused.set(e.detail?.isPaused ?? true);
         this.buffering.set(e.detail?.buffering ?? false);
+        this.ended.set(e.detail?.ended ?? false);
         // Volume fields are optional — older native builds omit them; skip
         // the mirror rather than snapping the slider to a default.
         if (e.detail?.volume != null) this.volume.set(e.detail.volume);
@@ -379,11 +382,14 @@ export class CastService implements OnDestroy {
       );
       this.remotePlayerController.addEventListener(
         cast.framework.RemotePlayerEventType.PLAYER_STATE_CHANGED,
-        () =>
-          this.buffering.set(
-            this.remotePlayer.playerState ===
-              chrome.cast.media.PlayerState.BUFFERING,
-          ),
+        () => {
+          const state = this.remotePlayer.playerState;
+          this.buffering.set(state === chrome.cast.media.PlayerState.BUFFERING);
+          this.ended.set(
+            state === chrome.cast.media.PlayerState.IDLE &&
+              this.session?.getMediaSession?.()?.idleReason === chrome.cast.media.IdleReason.FINISHED,
+          );
+        },
       );
       this.remotePlayerController.addEventListener(
         cast.framework.RemotePlayerEventType.VOLUME_LEVEL_CHANGED,
@@ -568,6 +574,7 @@ export class CastService implements OnDestroy {
     // Drops a pending seek from a prior stream so a trailing dispatch can't hit the new session at a stale target.
     this.clearSeekCoalescing();
     this.cancelTextReapply();
+    this.ended.set(false);
     this.wantedTextTrackId = info.activeSubtitleTrackId ?? 0;
     const load = this.sendLoad(info);
     // Waiters on pendingLoad only need it settled; the failure goes to our caller.

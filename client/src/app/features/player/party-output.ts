@@ -30,7 +30,7 @@ export class CastPartyOutput implements PartyOutput {
   readonly drift = { ignoreS: CAST_DRIFT_IGNORE_S, cooldownMs: CAST_SEEK_COOLDOWN_MS };
 
   constructor(
-    private readonly cast: Pick<CastService, 'isConnected' | 'isPaused' | 'buffering' | 'currentTime' | 'duration' | 'seek' | 'play' | 'pause'>,
+    private readonly cast: Pick<CastService, 'isConnected' | 'isPaused' | 'ended' | 'buffering' | 'currentTime' | 'duration' | 'seek' | 'play' | 'pause'>,
     private readonly player: Pick<CastPlayerService, 'hasMedia' | 'mediaId' | 'episodeId'>,
   ) {}
 
@@ -38,7 +38,7 @@ export class CastPartyOutput implements PartyOutput {
   paused = () => this.cast.isPaused();
   uiPaused = () => this.cast.isPaused();
   buffering = () => this.cast.buffering();
-  ended = () => false;
+  ended = () => this.cast.ended();
   seekLocked = () => false;
   position = () => this.cast.currentTime();
   item = () => ({ mediaId: this.player.mediaId(), episodeId: this.player.episodeId() });

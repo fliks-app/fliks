@@ -5,6 +5,7 @@ import { parseAudioIndex } from '../utils/player.utils';
 import { TranslateService } from '@ngx-translate/core';
 import { PlaybackOption, PlaybackTarget } from './playback-target';
 import { MediaService } from './api/media.service';
+import { PlayerSettingsService } from './player-settings.service';
 import { QueueItem } from './playback-queue.service';
 import { resolveNextEpisodeItem } from '../../shared/utils/media-play.util';
 
@@ -15,6 +16,7 @@ export class CastPlaybackTarget implements PlaybackTarget {
   private readonly cp = inject(CastPlayerService);
   private readonly translate = inject(TranslateService);
   private readonly mediaService = inject(MediaService);
+  private readonly playerSettings = inject(PlayerSettingsService);
 
   readonly buffering = this.cast.buffering;
   readonly currentTime = this.cast.currentTime;
@@ -114,6 +116,15 @@ export class CastPlaybackTarget implements PlaybackTarget {
           this.nextItem.set(resolveNextEpisodeItem(m, episodeId));
         })
         .catch((err) => console.warn('[cast-playback-target] next episode lookup failed', err));
+    });
+  });
+
+  /** Solo auto-next; a party host's end goes through the party's `ended` intent. */
+  private readonly endedEffect = effect(() => {
+    if (!this.cast.ended()) return;
+    untracked(() => {
+      if (this.partyIntercept?.active() || !this.playerSettings.settings().autoPlayNext || !this.canPlayNext()) return;
+      this.playNext();
     });
   });
 

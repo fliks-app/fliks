@@ -122,7 +122,8 @@ extension CastPlugin {
         let volume = currentSession?.currentDeviceVolume ?? 1
         let muted = currentSession?.currentDeviceMuted ?? false
 
-        emitMediaUpdate(time: time, duration: duration, paused: paused, volume: volume, muted: muted)
+        let ended = status.playerState == .idle && status.idleReason == .finished
+        emitMediaUpdate(time: time, duration: duration, paused: paused, volume: volume, muted: muted, ended: ended)
     }
 
     // MARK: - Helpers
@@ -145,8 +146,8 @@ extension CastPlugin {
         }
     }
 
-    func emitMediaUpdate(time: TimeInterval, duration: TimeInterval, paused: Bool, volume: Float, muted: Bool) {
-        let js = "window.dispatchEvent(new CustomEvent('castMediaUpdate', { detail: { currentTime: \(time), duration: \(duration), isPaused: \(paused), volume: \(volume), muted: \(muted) } }));"
+    func emitMediaUpdate(time: TimeInterval, duration: TimeInterval, paused: Bool, volume: Float, muted: Bool, ended: Bool) {
+        let js = "window.dispatchEvent(new CustomEvent('castMediaUpdate', { detail: { currentTime: \(time), duration: \(duration), isPaused: \(paused), volume: \(volume), muted: \(muted), ended: \(ended) } }));"
         DispatchQueue.main.async { [weak self] in
             self?.bridge?.webView?.evaluateJavaScript(js)
         }
