@@ -72,6 +72,7 @@
               <svg lucideCheck class="h-5 w-5"></svg>
               {{ (ready() ? 'party.not_ready' : 'party.ready') | translate }}
             </button>
+            <button type="button" class="btn btn-ghost" (click)="leave()">{{ 'party.leave' | translate }}</button>
           } @else {
             <span class="loading loading-spinner loading-md"></span>
           }

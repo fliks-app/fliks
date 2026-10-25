@@ -23,6 +23,7 @@ import { PlaybackQueueService } from '../playback-queue.service';
 import { AuthService } from '../auth.service';
 import { DeviceService } from '../device.service';
 import { SseService, type PartyEvent } from '../sse.service';
+import { ConfirmationService } from '../confirmation.service';
 import { ToastService } from '../toast.service';
 import { translatedServerMessage } from '../../utils/server-message';
 import { resolvePlayableFile } from '../../../shared/utils/media-play.util';
@@ -86,6 +87,7 @@ export class PartyService {
   private readonly clock = inject(ClockService);
   private readonly router = inject(Router);
   private readonly toast = inject(ToastService);
+  private readonly confirmation = inject(ConfirmationService);
   private readonly translate = inject(TranslateService);
   private readonly mediaService = inject(MediaService);
   private readonly queue = inject(PlaybackQueueService);
@@ -276,6 +278,22 @@ export class PartyService {
   async end(): Promise<void> {
     const id = this.party()?.id;
     if (id != null) await this.api.end(id);
+  }
+
+  /** The explicit leave action: the host ends the party for everyone after a confirmation, a member just leaves. False when declined. */
+  async leaveOrEnd(): Promise<boolean> {
+    if (this.isHost()) {
+      const ok = await this.confirmation.confirm({
+        title: this.translate.instant('party.leave_host_title'),
+        message: this.translate.instant('party.leave_host_message', { name: this.party()?.name }),
+        confirmLabel: this.translate.instant('party.leave_host_confirm'),
+        variant: 'danger',
+      });
+      if (ok) await this.end();
+      return ok;
+    }
+    await this.leave();
+    return true;
   }
 
   async leave(): Promise<void> {

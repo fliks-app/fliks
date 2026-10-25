@@ -5,9 +5,10 @@ import { Router } from '@angular/router';
 import { TranslateService } from '@ngx-translate/core';
 import { Subject } from 'rxjs';
 import { describe, expect, it, vi } from 'vitest';
-import { PartyApiService, type PartyDto, type PartyItem } from '../api/party-api.service';
+import { PartyApiService, type PartyDto, type PartyItem, type PartyMember } from '../api/party-api.service';
 import { MediaService } from '../api/media.service';
 import { AuthService } from '../auth.service';
+import { ConfirmationService } from '../confirmation.service';
 import { DeviceService } from '../device.service';
 import { PlaybackQueueService } from '../playback-queue.service';
 import { ServerConfigService } from '../server-config.service';
@@ -31,12 +32,13 @@ function dto(rev: number, over: Partial<PartyDto> = {}): PartyDto {
   };
 }
 
-function setup(connected = false) {
+function setup(connected = false, confirmed = true) {
   const events = new Subject<PartyEvent>();
   const api = {
     join: vi.fn(), get: vi.fn(), queue: vi.fn().mockResolvedValue([item(1, 100), item(1, 101)]),
-    leave: vi.fn().mockResolvedValue(undefined),
+    leave: vi.fn().mockResolvedValue(undefined), end: vi.fn().mockResolvedValue(undefined),
   };
+  const confirm = vi.fn().mockResolvedValue(confirmed);
   const sse = { partyEvents: events, connected: signal(connected), targetId: signal('dev') };
   const router = { navigate: vi.fn().mockResolvedValue(true) };
   TestBed.configureTestingModule({
@@ -49,13 +51,14 @@ function setup(connected = false) {
       { provide: ReactionsService, useValue: { load: vi.fn() } },
       { provide: ClockService, useValue: { start: vi.fn(), stop: vi.fn(), rttMs: signal(0) } },
       { provide: Router, useValue: router },
+      { provide: ConfirmationService, useValue: { confirm } },
       { provide: ToastService, useValue: { info: vi.fn(), error: vi.fn(), success: vi.fn() } },
       { provide: TranslateService, useValue: { instant: (k: string) => k } },
       { provide: MediaService, useValue: { getOne: vi.fn() } },
       { provide: DeviceService, useValue: { isTv: () => false, isPhone: () => false } },
     ],
   });
-  return { svc: TestBed.inject(PartyService), api, sse, events, router, queue: TestBed.inject(PlaybackQueueService) };
+  return { svc: TestBed.inject(PartyService), api, confirm, sse, events, router, queue: TestBed.inject(PlaybackQueueService) };
 }
 
 const http = (status: number, message: string) => new HttpErrorResponse({ status, error: { message } });
@@ -129,5 +132,36 @@ describe('PartyService refetch', () => {
     expect(api.get).toHaveBeenCalledTimes(2);
     expect(router.navigate).toHaveBeenCalledTimes(1);
     expect(api.queue).toHaveBeenCalledTimes(1);
+  });
+});
+
+const withMe = (role: 'host' | 'member') =>
+  dto(1, { live: { ...dto(1).live!, members: [{ userId: 1, deviceId: 'dev', role } as PartyMember] } });
+
+describe('PartyService leaveOrEnd', () => {
+  it('asks the host, then ends the party instead of leaving', async () => {
+    const { svc, api, confirm } = setup();
+    svc.applySnapshot(withMe('host'));
+    expect(await svc.leaveOrEnd()).toBe(true);
+    expect(confirm).toHaveBeenCalledOnce();
+    expect(api.end).toHaveBeenCalledWith(7);
+    expect(api.leave).not.toHaveBeenCalled();
+  });
+
+  it('does nothing when the host declines', async () => {
+    const { svc, api } = setup(false, false);
+    svc.applySnapshot(withMe('host'));
+    expect(await svc.leaveOrEnd()).toBe(false);
+    expect(api.end).not.toHaveBeenCalled();
+    expect(api.leave).not.toHaveBeenCalled();
+  });
+
+  it('lets a member leave without a dialog', async () => {
+    const { svc, api, confirm } = setup();
+    svc.applySnapshot(withMe('member'));
+    expect(await svc.leaveOrEnd()).toBe(true);
+    expect(confirm).not.toHaveBeenCalled();
+    expect(api.leave).toHaveBeenCalledOnce();
+    expect(api.end).not.toHaveBeenCalled();
   });
 });

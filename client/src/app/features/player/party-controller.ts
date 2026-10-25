@@ -129,6 +129,12 @@ export class PartyController {
     void this.router.navigate([], { relativeTo: this.route, queryParams: { party: null }, queryParamsHandling: 'merge', replaceUrl: true });
   }
 
+  /** Explicit leave: a host's ends the party (the `party.closed` event exits), a member's takes the player out here. */
+  async leave(): Promise<void> {
+    const wasHost = this.party.isHost();
+    if ((await this.party.leaveOrEnd()) && !wasHost) this.host.onBack();
+  }
+
   dispose(): void {
     this.destroyed = true;
     this.generation++;

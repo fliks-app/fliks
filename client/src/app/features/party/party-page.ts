@@ -268,6 +268,10 @@ export class PartyPageComponent implements OnInit, OnDestroy {
     void this.party.start();
   }
 
+  protected async leave(): Promise<void> {
+    if (await this.party.leaveOrEnd()) void this.router.navigateByUrl('/');
+  }
+
   protected apply(dto: PartyDto): void {
     this.loaded.set(dto);
     if (this.joined()) this.party.applySnapshot(dto);
