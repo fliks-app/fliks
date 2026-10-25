@@ -23,6 +23,7 @@ struct MediaDetailView: View {
     @Environment(Backdrop.self) private var backdrop
     @Environment(WatchedStore.self) private var watched
     @Environment(PlaylistPicker.self) private var playlistPicker
+    @Environment(PartyService.self) private var party
 
     private var isWatched: Bool { watched.isWatched(mediaId: mediaId) }
 
@@ -113,6 +114,16 @@ struct MediaDetailView: View {
                         Label(target.resume ? tr("common.resume") : tr("common.play"), systemImage: "play.fill")
                     }
                     .buttonStyle(.borderedProminent)
+
+                    Button(action: {
+                        Task {
+                            await party.create(name: media.title, mediaId: mediaId,
+                                               mediaFileId: target.mediaFileId, episodeId: target.episodeId)
+                        }
+                    }) {
+                        Label(tr("party.watch_together"), systemImage: "person.2.fill")
+                    }
+                    .buttonStyle(.bordered)
                 }
                 Button(action: { Task { await toggleFavorite() } }) {
                     Label {

@@ -20,6 +20,7 @@ struct EpisodeDetailView: View {
     @Environment(Backdrop.self) private var backdrop
     @Environment(WatchedStore.self) private var watched
     @Environment(PlaylistPicker.self) private var playlistPicker
+    @Environment(PartyService.self) private var party
 
     private var isWatched: Bool { watched.isWatched(mediaId: mediaId, episodeId: episodeId) }
 
@@ -117,6 +118,15 @@ struct EpisodeDetailView: View {
                         .buttonStyle(.borderedProminent)
                         .focused($playFocused)
                         .onAppear { playFocused = true }
+
+                        Button {
+                            Task {
+                                await party.create(name: media.title, mediaId: mediaId, mediaFileId: fileId, episodeId: episode.id)
+                            }
+                        } label: {
+                            Label(tr("party.watch_together"), systemImage: "person.2.fill")
+                        }
+                        .buttonStyle(.bordered)
                     }
                     Button {
                         Task { await watched.toggle(mediaId: mediaId, episodeId: episode.id) }

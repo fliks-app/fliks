@@ -13,6 +13,7 @@ struct RootView: View {
     @State private var homeRefresh = HomeRefresh.shared
     @State private var watched = WatchedStore.shared
     @State private var playlistPicker = PlaylistPicker.shared
+    @State private var party = PartyService.shared
     @State private var path = NavigationPath()
     @Environment(\.scenePhase) private var scenePhase
 
@@ -27,6 +28,7 @@ struct RootView: View {
             .environment(homeRefresh)
             .environment(watched)
             .environment(playlistPicker)
+            .environment(party)
             .id(locale.lang)
             .task {
                 if server.isConfigured { await auth.bootstrap() }
@@ -46,6 +48,10 @@ struct RootView: View {
                     path = NavigationPath()
                     path.append(Route.player(mediaFileId: mediaFileId, mediaId: mediaId,
                                               episodeId: episodeId, startAt: startAt))
+                }
+                party.onOpenLobby = { _ in path.append(Route.partyLobby) }
+                party.onOpenPlayer = { mediaFileId, mediaId, episodeId in
+                    path.append(Route.player(mediaFileId: mediaFileId, mediaId: mediaId, episodeId: episodeId, startAt: 0))
                 }
             }
             .sheet(item: Binding(get: { playlistPicker.target },
@@ -148,6 +154,10 @@ struct RootView: View {
                             path.append(Route.player(mediaFileId: mediaFileId, mediaId: mediaId,
                                                       episodeId: episodeId, startAt: startAt))
                         })
+                    case .parties:
+                        PartiesView()
+                    case .partyLobby:
+                        PartyLobbyView()
                     case .settings:
                         SettingsView()
                     default:
@@ -215,6 +225,10 @@ struct Sidebar: View {
 
             SidebarRow(label: tr("sidebar.playlists"), systemImage: "list.and.film", focusID: "playlists", focused: $focused) {
                 path.append(Route.playlists)
+            }
+
+            SidebarRow(label: tr("party.rail_title"), systemImage: "person.2.fill", focusID: "parties", focused: $focused) {
+                path.append(Route.parties)
             }
 
             Spacer()

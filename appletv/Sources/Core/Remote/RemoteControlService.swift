@@ -67,7 +67,7 @@ import UIKit
         do {
             let commands: [RemoteCommand] = try await api.get(path)
             for cmd in commands { await apply(cmd) }
-        } catch APIError.badStatus(404) {
+        } catch APIError.badStatus(404, _) {
             // The registry has forgotten this target (backend restart) - only a
             // fresh register() can make us controllable again.
             print("remote: target \(targetId) unknown to server (404), re-registering")

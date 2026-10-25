@@ -15,6 +15,8 @@ struct PlayerView: View {
     var onExit: () -> Void
 
     @State private var coordinator = PlayerCoordinator()
+    @State private var partyController: PartyController?
+    @Environment(PartyService.self) private var party
     @State private var loading = true
     @State private var loadErrorText: String?
 
@@ -50,6 +52,21 @@ struct PlayerView: View {
                     .padding(60)
             }
 
+            if partyController != nil {
+                PartyBubbles()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                    .padding(60)
+            }
+
+            if partyController != nil, let notice = party.notice {
+                Text(notice)
+                    .font(.callout)
+                    .padding(12)
+                    .background(.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 8))
+                    .padding(.top, 60)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            }
+
             if let notice = coordinator.edlNotice {
                 Text(notice)
                     .font(.callout)
@@ -73,14 +90,27 @@ struct PlayerView: View {
         }
         .task {
             coordinator.onStopRequested = onExit
+            let inParty = party.active
             do {
-                try await coordinator.load(mediaFileId: mediaFileId, mediaId: mediaId, episodeId: episodeId, startAt: startAt)
+                try await coordinator.load(mediaFileId: mediaFileId, mediaId: mediaId, episodeId: episodeId,
+                                           startAt: startAt, autoplay: !inParty)
+                if inParty {
+                    party.onClosed = { _ in onExit() }
+                    let controller = PartyController(player: coordinator)
+                    partyController = controller
+                    controller.attach()
+                }
             } catch {
                 loadErrorText = tr("player.load_error")
+                if inParty { await party.leave() }
             }
             loading = false
         }
-        .onDisappear { coordinator.teardown() }
+        .onDisappear {
+            partyController?.detach()
+            party.onClosed = nil
+            coordinator.teardown()
+        }
     }
 }
 
@@ -94,6 +124,7 @@ private struct PlayerContainer: UIViewControllerRepresentable {
         vc.player = player
         vc.requiresLinearPlayback = false
         coordinator.playerViewController = vc
+        coordinator.applyTransportMenus()
         return vc
     }
 

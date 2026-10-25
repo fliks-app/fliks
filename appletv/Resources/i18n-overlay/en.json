@@ -93,5 +93,12 @@
   "settings.lang.kor": "Korean",
   "settings.lang.zho": "Chinese",
   "settings.lang.rus": "Russian",
-  "settings.lang.ara": "Arabic"
+  "settings.lang.ara": "Arabic",
+  "party.tv_leave": "Leave the party",
+  "party.tv_chat": "Chat",
+  "party.tv_queue": "Queue",
+  "party.tv_join_code": "Join with a code",
+  "party.tv_code_placeholder": "Invite code or link",
+  "party.tv_no_parties": "No watch party right now",
+  "party.tv_wait_host": "Waiting for the host to start"
 }

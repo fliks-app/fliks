@@ -2,14 +2,15 @@ import Foundation
 
 enum APIError: Error, CustomStringConvertible {
     case badURL
-    case badStatus(Int)
+    /// `message` is the server's error body message, a translation key for the party routes.
+    case badStatus(Int, message: String? = nil)
     case transport(String)
     case decoding(String)
 
     var description: String {
         switch self {
         case .badURL: return "Invalid URL"
-        case .badStatus(let code): return "HTTP \(code)"
+        case .badStatus(let code, _): return "HTTP \(code)"
         case .transport(let msg): return msg
         case .decoding(let msg): return "decode: \(msg)"
         }
@@ -128,6 +129,10 @@ final class APIClient {
         try await request(path, method: "PUT", query: [:], body: try JSONEncoder.fliks.encode(body))
     }
 
+    func patch<T: Decodable, B: Encodable>(_ path: String, body: B) async throws -> T {
+        try await request(path, method: "PATCH", query: [:], body: try JSONEncoder.fliks.encode(body))
+    }
+
     func put<B: Encodable>(_ path: String, body: B) async throws {
         try await requestVoid(path, method: "PUT", body: try JSONEncoder.fliks.encode(body))
     }
@@ -208,7 +213,8 @@ final class APIClient {
             return try await raw(path, method: method, query: query, body: body, headers: headers, isRetry: true)
         }
         guard (200..<300).contains(http.statusCode) else {
-            throw APIError.badStatus(http.statusCode)
+            let message = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["message"] as? String
+            throw APIError.badStatus(http.statusCode, message: message)
         }
         return (data, http)
     }

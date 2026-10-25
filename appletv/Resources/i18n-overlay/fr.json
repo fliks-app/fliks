@@ -87,5 +87,12 @@
   "settings.lang.kor": "Coréen",
   "settings.lang.zho": "Chinois",
   "settings.lang.rus": "Russe",
-  "settings.lang.ara": "Arabe"
+  "settings.lang.ara": "Arabe",
+  "party.tv_leave": "Quitter la séance",
+  "party.tv_chat": "Discussion",
+  "party.tv_queue": "File d'attente",
+  "party.tv_join_code": "Rejoindre avec un code",
+  "party.tv_code_placeholder": "Code ou lien d'invitation",
+  "party.tv_no_parties": "Aucune séance pour le moment",
+  "party.tv_wait_host": "En attente du démarrage par l'hôte"
 }
