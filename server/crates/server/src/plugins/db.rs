@@ -113,6 +113,7 @@ impl PluginDb {
             db: self.clone(),
             _permit: permit,
             busy: false,
+            cancelled: false,
         })
     }
 
@@ -147,9 +148,11 @@ impl PluginDb {
             Err(_) => {
                 let _ = lease.client().cancel_token().cancel_query(NoTls).await;
                 lease.busy = false;
+                lease.cancelled = true;
                 Err(self.cut().await)
             }
         };
+        lease.cancelled |= matches!(&out, Err(e) if e.code == "ERR_RESULT_TOO_LARGE");
         lease.settle(out).await
     }
 
@@ -280,6 +283,8 @@ struct Lease {
     db: Arc<PluginDb>,
     _permit: OwnedSemaphorePermit,
     busy: bool,
+    /// A cancel is async on the server: it can land on the next query of a reused connection.
+    cancelled: bool,
 }
 
 impl Lease {
@@ -289,7 +294,7 @@ impl Lease {
     async fn settle<T>(mut self, r: Result<T, DbError>) -> Result<T, DbError> {
         self.busy = false;
         let c = self.client.take().expect("leased");
-        if c.batch_execute("DISCARD ALL").await.is_ok() {
+        if !self.cancelled && c.batch_execute("DISCARD ALL").await.is_ok() {
             self.db.idle.lock_clean().push((c, Instant::now()));
         }
         r
@@ -304,6 +309,7 @@ impl Drop for Lease {
         tokio::spawn(async move {
             if busy {
                 let _ = c.cancel_token().cancel_query(NoTls).await;
+                return;
             }
             if c.batch_execute("DISCARD ALL").await.is_ok() {
                 db.idle.lock_clean().push((c, Instant::now()));
