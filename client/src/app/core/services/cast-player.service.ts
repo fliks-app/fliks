@@ -5,14 +5,14 @@ import type { QoeSample } from './playback-engine';
 import { hasQoeData } from './playback-engine/playback-engine';
 import { QoeReporter, newPlaybackId } from './qoe-reporter.service';
 import type { QoeRecoveryReason } from './api/qoe-api.service';
-import { CastSettingsService } from './cast-settings.service';
+import { CastDeviceCapabilities, CastSettingsService } from './cast-settings.service';
 import { StreamingApiService, type PlayMethod } from './api/streaming-api.service';
 import { SubtitlesApiService, type SubtitleFileRow } from './api/subtitles-api.service';
 import { AppSettingsService } from './app-settings.service';
 import { buildSubtitleTracks } from '../utils/subtitle-tracks';
 import { normalizeLangCode } from '../utils/language.utils';
 import { AuthService } from './auth.service';
-import { DeviceProfile } from './browser-device-profile.service';
+import { CodecCondition, DeviceProfile } from './browser-device-profile.service';
 import {
   CAST_CUSTOM_DATA_BUDGET,
   encodeEdlWire,
@@ -153,6 +153,9 @@ interface CastResumeState {
   activeBurnInId: number | null;
 }
 
+/** Receiver probe version that reports the 10-bit and HDR fields; an older cached answer is re-probed. */
+const RECEIVER_CAPS_VERSION = 2;
+
 /** A receiver sample older than this is dropped (receiver gone or not pushing). */
 const QOE_STALE_MS = 30_000;
 type ReceiverSample = NonNullable<ReturnType<CastService['receiverQoe']>>;
@@ -177,8 +180,8 @@ export class CastPlayerService {
   private readonly translate = inject(TranslateService);
   private readonly toast = inject(ToastService);
 
-  /** Profile from the receiver-probed MSE codecs; empty `videoCodecs` keeps Cast on transcode.
-   * Without cached caps it falls back to AAC-only stereo, safer than failing to play. */
+  /** Profile from the receiver-probed MSE codecs. A receiver that predates probe v2 (or no probe) keeps
+   * `videoCodecs` empty, so the engine transcodes to H.264 SDR; without caps audio is AAC-only stereo. */
   getCastDeviceProfile(): DeviceProfile {
     const cs = this.castSettings.get();
     const maxChannels = cs.audioChannels ?? 2;
@@ -201,14 +204,16 @@ export class CastPlayerService {
       c === 'aac-he' ? 'aac' : c,
     );
 
+    const { videoCodecs, codecConditions, hdrCapable } = this.receiverVideo(caps);
+
     return {
       directPlayProfiles: [
-        { containers: ['hls'], videoCodecs: [], audioCodecs },
+        { containers: ['hls'], videoCodecs, audioCodecs },
       ],
-      codecConditions: [],
+      codecConditions,
       maxStreamingBitrate: 20_000_000,
       maxAudioChannels: maxChannels,
-      supportsHdr: cs.hdr ?? false,
+      supportsHdr: (cs.hdr ?? false) && hdrCapable,
       deviceType: 'desktop',
       deviceName: deviceName ? `Chromecast - ${deviceName}` : 'Chromecast',
       // HLS-TS stays off on Cast: it breaks mid-file resume (Shaka 3016) and Shaka can't transmux Dolby from TS.
@@ -216,6 +221,35 @@ export class CastPlayerService {
       // The Cast receiver runs Shaka (seg-0 fetched on load-then-seek, real ABR); CAST traits leave the other flags undefined.
       ...ENGINE_TRAITS[EngineKind.CAST],
     };
+  }
+
+  /** Conservative video side of the profile: only a v2 receiver, and only what its MSE reports; levels
+   * are capped below what receivers over-report. HDR needs a 10-bit decoder and an HDR display. */
+  private receiverVideo(caps: CastDeviceCapabilities | null) {
+    const none = { videoCodecs: [] as string[], codecConditions: [] as CodecCondition[], hdrCapable: false };
+    if (!caps || (caps.v ?? 1) < RECEIVER_CAPS_VERSION || !caps.videoCodecs.includes('h264')) return none;
+    const videoCodecs = ['h264', 'avc1'];
+    const codecConditions: CodecCondition[] = [
+      { codec: 'h264', maxLevel: 41, profiles: ['baseline', 'constrained baseline', 'main', 'high'], maxBitDepth: 8 },
+    ];
+    if (caps.videoCodecs.includes('hevc')) {
+      videoCodecs.push('hevc', 'h265', 'hvc1', 'hev1');
+      codecConditions.push({
+        codec: 'hevc', maxLevel: 150,
+        profiles: caps.hevcMain10 ? ['main', 'main 10'] : ['main'],
+        maxBitDepth: caps.hevcMain10 ? 10 : 8,
+      });
+    }
+    if (caps.videoCodecs.includes('av1')) {
+      videoCodecs.push('av1');
+      codecConditions.push({
+        codec: 'av1',
+        profiles: caps.av1Main10 ? ['main', 'high'] : ['main'],
+        maxBitDepth: caps.av1Main10 ? 10 : 8,
+      });
+    }
+    const hdrCapable = caps.hdr === true && !!(caps.hevcMain10 || caps.av1Main10);
+    return { videoCodecs, codecConditions, hdrCapable };
   }
 
   /** Cache key for receiver-probed capabilities. */
@@ -245,7 +279,7 @@ export class CastPlayerService {
     // Skip if we already have caps for this device — the probe is idempotent
     // but each round-trip is ~150–300 ms and slows the first loadMedia.
     const cached = this.castSettings.getDeviceCapabilities(deviceName);
-    if (cached) {
+    if (cached && (cached.v ?? 1) >= RECEIVER_CAPS_VERSION) {
       return;
     }
 
@@ -265,6 +299,10 @@ export class CastPlayerService {
           this.castSettings.setDeviceCapabilities(deviceName, {
             audioCodecs: Array.isArray(data.audioCodecs) ? data.audioCodecs : [],
             videoCodecs: Array.isArray(data.videoCodecs) ? data.videoCodecs : [],
+            v: typeof data.v === 'number' ? data.v : undefined,
+            hevcMain10: data.hevcMain10 === true,
+            av1Main10: data.av1Main10 === true,
+            hdr: data.hdr === true,
           });
         } catch (err) {
           console.warn('[fliks-cast/sender] probe parse error:', err);
@@ -625,7 +663,7 @@ export class CastPlayerService {
     castInfo: { token: string; streamBaseUrl: string },
     autoplay: boolean,
   ): Promise<boolean> {
-    // getCastDeviceProfile lists no direct-play video codec: DirectPlay is unexpected here.
+    // The profile lists only the hls container: DirectPlay is unexpected here.
     if (pi.playMethod === 'DirectPlay') {
       console.warn('[cast] unexpected DirectPlay decision for a Cast session', pi);
     }
