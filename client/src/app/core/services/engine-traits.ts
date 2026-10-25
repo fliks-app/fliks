@@ -17,6 +17,8 @@ export enum EngineKind {
 export interface EngineTraits {
   /** Force MPEG-TS HLS only for single-audio sources (Tizen AVPlay). */
   useTsOnSingleAudio?: boolean;
+  /** A single-audio source may keep its video copied into MPEG-TS, so only the audio is re-encoded (needs an engine that reads it). */
+  supportsTsRemux?: boolean;
   /** Engine consumes HLS `SUBTITLES` renditions natively. */
   supportsHlsSubtitles?: boolean;
   /** Engine surfaces one audio track per LANGUAGE rather than one per
@@ -97,6 +99,7 @@ export const ENGINE_TRAITS: Record<EngineKind, EngineTraits> = {
   // MKV natively, so a compatible source Direct Plays without a remux.
   [EngineKind.TIZEN]: {
     useTsOnSingleAudio: true,
+    supportsTsRemux: true,
     supportsHlsSubtitles: false,
     supportsIFrameTrickPlay: true,
     supportsImageSubtitles: false,

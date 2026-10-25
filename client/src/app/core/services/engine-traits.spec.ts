@@ -52,6 +52,7 @@ const EXPECTED: Record<EngineKind, EngineTraits> = {
   },
   [EngineKind.TIZEN]: {
     useTsOnSingleAudio: true,
+    supportsTsRemux: true,
     supportsHlsSubtitles: false,
     supportsIFrameTrickPlay: true,
     supportsImageSubtitles: false,
@@ -167,6 +168,7 @@ describe('ENGINE_TRAITS reproduces the original ternaries', () => {
     it(`tvPlatform=${tvPlatform} isNative=${isNative}`, () => {
       const traits = ENGINE_TRAITS[engineKindFor(tvPlatform, isNative)];
       expect(traits.useTsOnSingleAudio).toBe(tvPlatform === 'tizen');
+      expect(traits.supportsTsRemux ?? false).toBe(tvPlatform === 'tizen');
       expect(traits.supportsHlsSubtitles).toBe(
         tvPlatform !== 'tizen' && tvPlatform !== 'webos',
       );

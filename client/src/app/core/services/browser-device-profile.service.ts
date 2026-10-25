@@ -120,6 +120,9 @@ export interface DeviceProfile {
   /** Force MPEG-TS only when the source has at most one audio track (Tizen AVPlay stalls on single-audio fMP4). */
   useTsOnSingleAudio?: boolean;
 
+  /** With MPEG-TS selected, a single-audio source may copy its video into TS instead of a full transcode. */
+  supportsTsRemux?: boolean;
+
   /** Client renders HLS `SUBTITLES` renditions natively; when false the backend omits them and the client
    *  renders a sidecar VTT itself (TVs). */
   supportsHlsSubtitles?: boolean;
@@ -574,6 +577,7 @@ export class BrowserDeviceProfileService {
       useTs,
       // Tizen alone needs MPEG-TS on single-audio sources (issue #148).
       useTsOnSingleAudio: traits.useTsOnSingleAudio,
+      supportsTsRemux: traits.supportsTsRemux,
       // Only Tizen and webOS opt out of native SUBTITLES renditions: their cue APIs are limited, so they use a DOM overlay.
       supportsHlsSubtitles: traits.supportsHlsSubtitles,
       dedupesAudioByLanguage: traits.dedupesAudioByLanguage,
