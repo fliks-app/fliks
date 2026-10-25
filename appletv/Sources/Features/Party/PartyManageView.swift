@@ -136,8 +136,8 @@ struct PartySettingsView: View {
                     Button(tr("common.cancel"), role: .cancel) {}
                 } message: { Text(tr("party.regenerate_message")) }
             Spacer(minLength: 80)
-            Button(tr("party.cancel"), role: .destructive) { confirmEnd = true }
-                .buttonStyle(.bordered)
+            Button(tr("party.cancel")) { confirmEnd = true }
+                .buttonStyle(DestructiveButtonStyle())
                 .confirmationDialog(tr("party.cancel_title"), isPresented: $confirmEnd, titleVisibility: .visible) {
                     Button(tr("party.cancel"), role: .destructive) { Task { await service.endParty() } }
                     Button(tr("common.cancel"), role: .cancel) {}

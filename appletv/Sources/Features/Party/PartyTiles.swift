@@ -57,3 +57,28 @@ struct AvatarTile: View {
             }
     }
 }
+
+/// Destructive action: red text on the translucent button, dark red on the white focused one, so it
+/// stays legible in both states (the system bordered style renders light red on white).
+struct DestructiveButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        Body(configuration: configuration)
+    }
+
+    private struct Body: View {
+        let configuration: ButtonStyle.Configuration
+        @Environment(\.isFocused) private var focused
+
+        var body: some View {
+            configuration.label
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(focused ? Color(red: 0.62, green: 0.05, blue: 0.05) : Color(red: 1, green: 0.38, blue: 0.35))
+                .padding(.horizontal, 28)
+                .padding(.vertical, 16)
+                .background(Capsule().fill(focused ? Color.white : Color.white.opacity(0.16)))
+                .scaleEffect(focused ? 1.06 : 1)
+                .opacity(configuration.isPressed ? 0.85 : 1)
+                .animation(.easeOut(duration: 0.15), value: focused)
+        }
+    }
+}

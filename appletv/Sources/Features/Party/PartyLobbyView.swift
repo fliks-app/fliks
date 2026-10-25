@@ -76,10 +76,10 @@ struct PartyLobbyView: View {
                 }
                 .buttonStyle(.bordered)
                 Spacer(minLength: 80)
-                Button(role: .destructive) { Task { await service.leave() } } label: {
+                Button { Task { await service.leave() } } label: {
                     Label(tr("party.tv_leave"), systemImage: "rectangle.portrait.and.arrow.right")
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(DestructiveButtonStyle())
             }
             if !service.isHost {
                 Text(tr("party.tv_wait_host")).font(.callout).foregroundStyle(.secondary)
