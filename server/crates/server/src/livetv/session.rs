@@ -48,6 +48,7 @@ use std::{
 pub struct HSource {
     pub id: i32,
     pub name: String,
+    pub url: String,
     pub expires_at: Option<DateTime<Utc>>,
     pub account_status: Option<String>,
     pub user_agent: Option<String>,
@@ -91,6 +92,7 @@ struct StreamJoin {
     last_ok_at: Option<DateTime<Utc>>,
     source_id: i32,
     source_name: String,
+    source_url: String,
     source_expires_at: Option<DateTime<Utc>>,
     source_account_status: Option<String>,
     source_user_agent: Option<String>,
@@ -114,6 +116,7 @@ impl From<StreamJoin> for HStream {
             source: HSource {
                 id: r.source_id,
                 name: r.source_name,
+                url: r.source_url,
                 expires_at: r.source_expires_at,
                 account_status: r.source_account_status,
                 user_agent: r.source_user_agent,
@@ -133,7 +136,7 @@ pub async fn load_streams(
 ) -> sqlx::Result<Vec<HStream>> {
     let rows: Vec<StreamJoin> = sqlx::query_as(
         r#"SELECT s.id, s.url, s.priority, s."userAgent", s.referer, s."probedContainer", s."probedVideoCodec",
-                  s."probedAudioCodec", s."lastError", s."lastOkAt", src.id AS source_id, src.name AS source_name,
+                  s."probedAudioCodec", s."lastError", s."lastOkAt", src.id AS source_id, src.name AS source_name, src.url AS source_url,
                   src."expiresAt" AS source_expires_at, src."accountStatus" AS source_account_status,
                   src."userAgent" AS source_user_agent, src.referer AS source_referer,
                   src."maxStreams" AS source_max_streams
@@ -295,6 +298,7 @@ fn upstream(s: &HStream, at_capacity: bool) -> LiveUpstream {
         probed_video_codec: s.probed_video_codec.clone(),
         probed_audio_codec: s.probed_audio_codec.clone(),
         at_capacity,
+        vetted: super::lineup::provider_chosen(&s.source.url, &s.url),
     }
 }
 

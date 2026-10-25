@@ -1424,6 +1424,7 @@ mod sessions {
         let w = world(pool).await;
         let c = &w.c;
         stream(&c.pool, w.a, w.src1, "http://h/a2.ts", 0).await;
+        stream(&c.pool, w.a, w.src1, "http://169.254.169.254/a3.ts", 5).await;
         sqlx::query(r#"UPDATE livetv_sources SET "userAgent" = 'SrcAgent/1', referer = 'http://ref/' WHERE id = $1"#).bind(w.src1).execute(&c.pool).await.unwrap();
         sqlx::query(r#"UPDATE livetv_channel_streams SET "userAgent" = 'EntryAgent/1', "probedVideoCodec" = 'h264' WHERE url = 'http://h/a2.ts'"#).execute(&c.pool).await.unwrap();
         sqlx::query(r#"UPDATE livetv_channel_streams SET "lastError" = 'boom' WHERE id = $1"#)
@@ -1462,6 +1463,12 @@ mod sessions {
             "the entry's agent wins"
         );
         assert_eq!(ups[0]["probedVideoCodec"], "h264");
+        let vetted: Vec<_> = ups.iter().map(|u| u["vetted"] == true).collect();
+        assert_eq!(
+            vetted,
+            [false, false, true],
+            "only the url off the source host is vetted"
+        );
         assert_eq!(
             ups[1]["headers"],
             json!({"User-Agent": "SrcAgent/1", "Referer": "http://ref/"})
