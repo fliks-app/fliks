@@ -90,11 +90,7 @@ private struct RisingEmoji: View {
     @State private var risen = false
 
     var body: some View {
-        VStack(spacing: 4) {
-            Text(reaction.emoji).font(.system(size: 72))
-            Text(reaction.username).font(.caption2).padding(.horizontal, 8)
-                .background(.black.opacity(0.5), in: Capsule())
-        }
+        Text(reaction.emoji).font(.system(size: 72))
         .padding(.bottom, 120)
         .offset(x: risen ? (reaction.left < 0.5 ? 30 : -30) : 0, y: risen ? -420 : 0)
         .opacity(risen ? 0 : 1)
