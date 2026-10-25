@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 use std::time::UNIX_EPOCH;
 
+use super::csp;
 use super::error::AppError;
 use axum::Router;
 use axum::body::Body;
@@ -143,8 +144,12 @@ pub fn router(client_dir: Option<PathBuf>, cast_dir: PathBuf) -> Router {
         )
         .nest_service("/cast", cast);
     if let Some(dir) = client_dir {
-        r = r
-            .fallback_service(ServeDir::new(&dir).fallback(ServeFile::new(dir.join("index.html"))));
+        let spa = ServeDir::new(&dir).fallback(ServeFile::new(dir.join("index.html")));
+        r = r.fallback_service(
+            Router::new()
+                .fallback_service(spa)
+                .layer(from_fn(csp::on_html)),
+        );
     }
     r.layer(from_fn(validators)).layer(from_fn(cannot_404))
 }
@@ -226,6 +231,22 @@ mod tests {
         let post = send(&r, Request::post("/app.js?a=1"), None).await;
         assert_eq!(post.status(), 404);
         assert!(text(post).await.contains("Cannot POST /app.js?a=1"));
+    }
+
+    #[tokio::test]
+    async fn csp_report_only_on_the_spa_document_alone() {
+        let (c, k) = dirs("csp");
+        let r = router(Some(c), k);
+        const H: &str = "content-security-policy-report-only";
+        assert!(get(&r, "/", None).await.headers().contains_key(H));
+        assert!(get(&r, "/some/route", None).await.headers().contains_key(H));
+        assert!(!get(&r, "/app.js", None).await.headers().contains_key(H));
+        assert!(
+            !get(&r, "/cast/receiver.html", None)
+                .await
+                .headers()
+                .contains_key(H)
+        );
     }
 
     #[tokio::test]
