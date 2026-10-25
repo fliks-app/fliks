@@ -41,7 +41,7 @@ Status codes: a 409 or 503 refusal with an object body sends that object verbati
 14. `lastPlayedAt` of the channel and of the pref is not written (`livetv-access.md` rule 19). `mode` in the answer is the engine's effective mode (a remux of a non-H.264 upstream is `transcode`, `[engine:docs/spec/live.md:15]`).
 15. Zap: there is no server-side zap. Changing channel is `play` on the new channel, optionally followed by `DELETE` of the previous session; the host never ends the previous viewer, so a client that forgets holds a viewer (and possibly a provider connection) until the engine's idle expiry (`liveSessionTtlMs`, 30 s without data-plane requests). A user may hold several viewers unless the admin sets the per-user cap (rule 39).
 16. Failover is the engine's: it tries the upstreams in the order sent, skips an upstream after 2 failures, restarts in place on stall or exit, and ends the session when all failed (`[engine:docs/spec/live.md:22-23]`). The host's part is: the order at open (rule 5), persisting each attempt (rule 23), moving the capacity hold to the source that feeds (rule 22) and counting a dead channel (rule 26). It never re-opens.
-17. Stream token: minted in-process as `sign_live(user, sid)` for the sid the engine answered: a `StreamAuthed`-class token (claims `sub`, `username`, `scope:"stream"`, `STREAM_TOKEN_TTL` default 12 h, `auth.md` rule 5) carrying a `live: <sid>` claim (rule 40). A mint failure is a 500.
+17. Stream token: minted in-process as `sign_live(user, sid)` for the sid the engine answered: a `StreamAuthed`-class token (claims `sub`, `username`, `scope:"stream"`, fixed 12 h, not `STREAM_TOKEN_TTL`) carrying a `live: <sid>` claim (rule 40). A mint failure is a 500.
 
 ### Leaving and heartbeat
 

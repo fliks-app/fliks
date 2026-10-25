@@ -33,7 +33,7 @@ async function download(pi: object): Promise<DownloadTask> {
       { provide: OfflineStorageService, useValue: {} },
       { provide: DownloadCacheService, useValue: { load: () => saved, save: (t: DownloadTask[]) => (saved = t) } },
       { provide: DownloadNotificationService, useValue: { nativeEvents: new Subject(), startDownload: vi.fn() } },
-      { provide: AuthService, useValue: { ensureStreamToken: () => Promise.resolve(), streamToken: () => 't' } },
+      { provide: AuthService, useValue: { ensureStreamToken: () => Promise.resolve(), playbackTokenFor: () => 't' } },
       { provide: BrowserDeviceProfileService, useValue: { getProfile: () => ({}) } },
       { provide: TranslateService, useValue: { instant: (k: string) => k } },
       { provide: AppSettingsService, useValue: {} },

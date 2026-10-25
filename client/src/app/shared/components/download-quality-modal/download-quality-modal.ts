@@ -117,7 +117,7 @@ export class DownloadQualityModalComponent {
       this.selectQuality('original');
       return;
     }
-    await this.auth.ensureStreamToken();
+    await this.auth.ensureStreamToken(this.mediaFileId);
     const url = this.streamingApi.getOriginalDownloadUrl(this.mediaFileId);
     const a = document.createElement('a');
     a.href = url;

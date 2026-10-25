@@ -19,6 +19,7 @@ function build(opts: { isNative?: boolean; token?: string | null } = {}) {
     get playbackToken() {
       return opts.token === undefined ? 'tok' : opts.token;
     },
+    playbackTokenFor: () => (opts.token === undefined ? 'tok' : opts.token),
   };
   return service;
 }

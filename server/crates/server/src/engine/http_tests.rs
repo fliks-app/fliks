@@ -629,6 +629,43 @@ mod resolve {
     }
 
     #[sqlx::test(migrations = false)]
+    async fn a_file_bound_stream_token_opens_only_its_file(pool: PgPool) {
+        let w = world(pool).await;
+        let jwt = &w.c.st.jwt;
+        let bound = |file: i32| {
+            jwt.sign_stream_for(w.member.0, "member", file as u32)
+                .unwrap()
+                .token
+        };
+        let ask = |credential: String, media: i32, purpose: &str| {
+            resolve(
+                &w,
+                json!({"mediaId": media, "credential": credential, "purpose": purpose}),
+            )
+        };
+        let (_, own) = ask(bound(w.file), w.file, "stream").await;
+        assert_eq!(own["allow"], true);
+        for purpose in ["stream", "download", "sprite"] {
+            assert_eq!(
+                ask(bound(w.file), w.loose, purpose).await.1,
+                denied(),
+                "{purpose}"
+            );
+        }
+        assert_eq!(
+            ask(bound(w.loose), w.file, "stream").await.1["allow"],
+            false
+        );
+        // Legacy unbound stream token and the access token still open any readable file.
+        let legacy = jwt.sign_stream(w.member.0, "member").unwrap().token;
+        assert_eq!(ask(legacy, w.file, "stream").await.1["allow"], true);
+        assert_eq!(
+            ask(w.member.1.clone(), w.file, "stream").await.1["allow"],
+            true
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
     async fn a_live_token_opens_only_its_own_viewer(pool: PgPool) {
         let w = world(pool).await;
         let live =

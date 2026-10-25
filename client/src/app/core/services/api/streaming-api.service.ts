@@ -249,6 +249,12 @@ export class StreamingApiService {
     return this.auth.playbackToken;
   }
 
+  /** The file-bound token of the `/api/stream/<id>/...` path a URL points at (the server refuses another file's). */
+  private tokenFor(path: string): string | null {
+    const id = /\/api\/stream\/(\d+)(?:[/?]|$)/.exec(path)?.[1];
+    return id ? this.auth.playbackTokenFor(+id) : this.playbackToken;
+  }
+
   /** URL-encoded `key=value&...` in insertion order, skipping undefined and empty
    *  strings (`true` -> `1`); the query builder for every method below. */
   private buildQuery(parts: Record<string, string | number | true | undefined>): string {
@@ -292,7 +298,7 @@ export class StreamingApiService {
       ? this.serverConfig.resolveUrl(`/api/stream/${mediaFileId}/master.m3u8`)
       : `/api/stream/${mediaFileId}/master.m3u8`;
     const query = this.hlsQuery({
-      token: this.playbackToken,
+      token: this.tokenFor(base),
       sid: sessionId,
       startQuality,
       startAt,
@@ -313,7 +319,7 @@ export class StreamingApiService {
       return this.withTokenAndSid(base, opts.sid);
     }
     const query = this.hlsQuery({
-      token: this.playbackToken,
+      token: this.tokenFor(path),
       sid: opts.sid,
       remux,
       startQuality: opts.startQuality,
@@ -365,7 +371,7 @@ export class StreamingApiService {
     const base = this.serverConfig.isNative
       ? this.serverConfig.resolveUrl(`/api/stream/${mediaFileId}`)
       : `/api/stream/${mediaFileId}`;
-    const query = this.buildQuery({ download: true, token: this.playbackToken ?? undefined });
+    const query = this.buildQuery({ download: true, token: this.tokenFor(base) ?? undefined });
     return `${base}?${query}`;
   }
 
@@ -384,7 +390,7 @@ export class StreamingApiService {
   /** Token+sid query shared by `buildPlayUrl`'s DirectPlay branch and the
    *  sidecar/thumbnail URL builders below. */
   private withTokenAndSid(base: string, sessionId?: string): string {
-    const query = this.hlsQuery({ token: this.playbackToken, sid: sessionId });
+    const query = this.hlsQuery({ token: this.tokenFor(base), sid: sessionId });
     return query ? `${base}?${query}` : base;
   }
 

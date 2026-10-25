@@ -65,8 +65,8 @@ services:
       # a separate refresh token (REFRESH_TOKEN_TTL_DAYS, default 60d) keeps
       # you signed in past this window.
       # JWT_EXPIRATION: 1h
-      # Playback-token lifetime. Default 12h.
-      # STREAM_TOKEN_TTL: 12h
+      # Playback-token lifetime. Default 6h. Each token opens one media file.
+      # STREAM_TOKEN_TTL: 6h
       # Signing key. Generated into /app/conf on first start when unset.
       # JWT_SECRET: ''
       # Metadata providers. Baked into the published image — set your own only

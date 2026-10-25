@@ -8,6 +8,9 @@ use std::collections::HashSet;
 /// Cast tokens live a fixed 4 h (`auth.md` rule 5).
 pub const CAST_TTL_SECS: u64 = 4 * 3600;
 
+/// A live token is minted once and never refreshed by released clients, so it keeps the former 12 h.
+const LIVE_TTL_SECS: u64 = 12 * 3600;
+
 /// Any claim value other than `stream` is still "scoped" (`auth.md` rule 10).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -15,6 +18,13 @@ pub enum TokenScope {
     Stream,
     #[serde(other)]
     Other,
+}
+
+/// What a token is bound to besides its user: a live viewer session or a media file.
+#[derive(Default)]
+struct Bound<'a> {
+    live: Option<&'a str>,
+    mf: Option<u32>,
 }
 
 #[derive(Serialize)]
@@ -25,6 +35,8 @@ struct SignClaims<'a> {
     scope: Option<TokenScope>,
     #[serde(skip_serializing_if = "Option::is_none")]
     live: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    mf: Option<u32>,
     iat: i64,
     exp: i64,
 }
@@ -36,6 +48,8 @@ pub struct Claims {
     pub scope: Option<TokenScope>,
     /// The live viewer session a token is bound to: it opens that data plane and nothing else.
     pub live: Option<String>,
+    /// The media file a stream token opens on the data plane; absent on legacy tokens, which open any.
+    pub mf: Option<u32>,
     pub exp: i64,
 }
 
@@ -75,7 +89,13 @@ impl Jwt {
     }
 
     pub fn sign_access(&self, user_id: i32, username: &str) -> Result<Signed, AppError> {
-        self.sign(user_id, username, None, self.access_ttl_secs, None)
+        self.sign(
+            user_id,
+            username,
+            None,
+            self.access_ttl_secs,
+            Bound::default(),
+        )
     }
 
     pub fn sign_stream(&self, user_id: i32, username: &str) -> Result<Signed, AppError> {
@@ -84,7 +104,25 @@ impl Jwt {
             username,
             Some(TokenScope::Stream),
             self.stream_ttl_secs,
-            None,
+            Bound::default(),
+        )
+    }
+
+    pub fn sign_stream_for(
+        &self,
+        user_id: i32,
+        username: &str,
+        media_file_id: u32,
+    ) -> Result<Signed, AppError> {
+        self.sign(
+            user_id,
+            username,
+            Some(TokenScope::Stream),
+            self.stream_ttl_secs,
+            Bound {
+                mf: Some(media_file_id),
+                ..Bound::default()
+            },
         )
     }
 
@@ -93,8 +131,11 @@ impl Jwt {
             user_id,
             username,
             Some(TokenScope::Stream),
-            self.stream_ttl_secs,
-            Some(sid),
+            LIVE_TTL_SECS,
+            Bound {
+                live: Some(sid),
+                ..Bound::default()
+            },
         )
     }
 
@@ -104,7 +145,7 @@ impl Jwt {
             username,
             Some(TokenScope::Stream),
             CAST_TTL_SECS,
-            None,
+            Bound::default(),
         )
     }
 
@@ -114,9 +155,16 @@ impl Jwt {
         username: &str,
         scope: Option<TokenScope>,
         ttl_secs: u64,
-        live: Option<&str>,
+        bound: Bound,
     ) -> Result<Signed, AppError> {
-        self.sign_at(Utc::now().timestamp(), sub, username, scope, ttl_secs, live)
+        self.sign_at(
+            Utc::now().timestamp(),
+            sub,
+            username,
+            scope,
+            ttl_secs,
+            bound,
+        )
     }
 
     fn sign_at(
@@ -126,14 +174,15 @@ impl Jwt {
         username: &str,
         scope: Option<TokenScope>,
         ttl_secs: u64,
-        live: Option<&str>,
+        bound: Bound,
     ) -> Result<Signed, AppError> {
         let exp = iat.saturating_add(i64::try_from(ttl_secs).unwrap_or(i64::MAX));
         let claims = SignClaims {
             sub,
             username,
             scope,
-            live,
+            live: bound.live,
+            mf: bound.mf,
             iat,
             exp,
         };
@@ -322,6 +371,26 @@ mod tests {
         assert_eq!(j.verify(&s.token).unwrap().scope, Some(TokenScope::Stream));
         assert_eq!(j.verify(&c.token).unwrap().scope, Some(TokenScope::Stream));
         assert_eq!(c.exp - Utc::now().timestamp(), CAST_TTL_SECS as i64);
+    }
+
+    #[test]
+    fn a_file_bound_stream_token_carries_mf_and_a_legacy_one_does_not() {
+        let j = jwt();
+        let bound = j
+            .verify(&j.sign_stream_for(1, "a", 42).unwrap().token)
+            .unwrap();
+        assert_eq!(
+            (bound.scope, bound.mf),
+            (Some(TokenScope::Stream), Some(42))
+        );
+        assert_eq!(
+            j.verify(&j.sign_stream(1, "a").unwrap().token).unwrap().mf,
+            None
+        );
+        assert_eq!(
+            j.verify(&j.sign_access(1, "a").unwrap().token).unwrap().mf,
+            None
+        );
     }
 
     #[test]

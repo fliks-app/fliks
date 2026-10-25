@@ -19,7 +19,7 @@ Environment variables read by `fliks-server`, with defaults and parsing rules.
 | `JWT_SECRET` | none (else file `<conf>/.jwt-secret` or generated) | empty = unset (truthiness); file content trimmed; generated 32-byte hex written mode 0600; in-memory fallback if the write fails |
 | `FLIKS_CONF_DIR` | none (writable probe: `override \|\| '/app/conf'`, then temp) | `.trim`, empty = unset |
 | `JWT_EXPIRATION` | **`'1h'`** | the env string is parsed by `ms`; a unitless string is milliseconds (`3600` = 3.6 s token). The access cookie `Max-Age` equals the token lifetime; an unparsable value or one under 1 s falls back to the default with a warning |
-| `STREAM_TOKEN_TTL` | `'12h'` | same as `JWT_EXPIRATION` (unitless = ms); `expiresAt` follows the same `ms` parser; an unparsable value or one under 1 s falls back to 12h with a warning |
+| `STREAM_TOKEN_TTL` | `'6h'` | same as `JWT_EXPIRATION` (unitless = ms); `expiresAt` follows the same `ms` parser; an unparsable value or one under 1 s falls back to 6h with a warning |
 | `REFRESH_TOKEN_TTL_DAYS` | `'60'` | `parseInt(raw, 10)`, must be finite and `> 0` else 60 |
 
 ## Engine

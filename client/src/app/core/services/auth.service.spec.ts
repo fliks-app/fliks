@@ -50,7 +50,7 @@ describe('AuthService: server features are live-only', () => {
 describe('AuthService.ensureStreamToken', () => {
   afterEach(() => TestBed.resetTestingModule());
 
-  function setup(post: () => unknown) {
+  function setup(post: (...args: any[]) => unknown) {
     TestBed.configureTestingModule({
       providers: [
         AuthService,
@@ -71,7 +71,32 @@ describe('AuthService.ensureStreamToken', () => {
       .mockReturnValueOnce(of({ streamToken: 'st', expiresAt: Date.now() + 3 * 3600_000 }));
     const service = setup(post);
 
-    expect(await service.ensureStreamToken()).toBe('st');
+    expect(await service.ensureStreamToken(7)).toBe('st');
+    expect(post).toHaveBeenCalledTimes(2);
+    expect(post).toHaveBeenCalledWith('/api/auth/stream-token', { mediaFileId: 7 });
+  });
+
+  it('keeps one token per file and falls back to the access token for another', async () => {
+    const post = vi.fn((_url: string, body: { mediaFileId: number }) =>
+      of({ streamToken: `st${body.mediaFileId}`, expiresAt: Date.now() + 3 * 3600_000 }),
+    );
+    const service = setup(post);
+
+    await service.ensureStreamToken(1);
+    await service.ensureStreamToken(2);
+    await service.ensureStreamToken(1);
+    expect(post).toHaveBeenCalledTimes(2);
+    expect(service.playbackTokenFor(1)).toBe('st1');
+    expect(service.playbackTokenFor(2)).toBe('st2');
+    expect(service.playbackTokenFor(3)).toBe(service.accessToken);
+  });
+
+  it('remints a token with less than 30 minutes left', async () => {
+    const post = vi.fn(() => of({ streamToken: 'st', expiresAt: Date.now() + 10 * 60_000 }));
+    const service = setup(post);
+
+    await service.ensureStreamToken(1);
+    await service.ensureStreamToken(1);
     expect(post).toHaveBeenCalledTimes(2);
   });
 
@@ -79,7 +104,7 @@ describe('AuthService.ensureStreamToken', () => {
     const post = vi.fn(() => throwError(() => new Error('down')));
     const service = setup(post);
 
-    expect(await service.ensureStreamToken()).toBeNull();
+    expect(await service.ensureStreamToken(7)).toBeNull();
     expect(post).toHaveBeenCalledTimes(2);
   });
 });

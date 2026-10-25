@@ -552,12 +552,23 @@ pub(crate) async fn cast_info(
         .into_response())
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct StreamTokenDto {
+    media_file_id: Option<u32>,
+}
+
 #[utoipa::path(post, path = "/api/auth/stream-token", responses((status = 200)))]
 pub(crate) async fn stream_token(
     State(st): State<AppState>,
     a: Authed,
+    body: Option<Json<StreamTokenDto>>,
 ) -> Result<Response, AppError> {
-    let token = st.jwt.sign_stream(a.user.id, &a.user.username)?.token;
+    let token = match body.and_then(|Json(b)| b.media_file_id) {
+        Some(file) => st.jwt.sign_stream_for(a.user.id, &a.user.username, file)?,
+        None => st.jwt.sign_stream(a.user.id, &a.user.username)?,
+    }
+    .token;
     let expires_at = Utc::now().timestamp_millis() + (st.jwt.stream_ttl_secs as i64) * 1000;
     Ok((
         StatusCode::CREATED,

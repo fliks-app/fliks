@@ -138,11 +138,11 @@ export class AuthService {
   /** In-flight refresh request shared across concurrent 401s so we only
    *  rotate once even when 10 parallel calls all fail at the same time. */
   private _refreshInFlight: Promise<boolean> | null = null;
-  /** Long-lived stream JWT cached for the player + URL builders. See
-   *  ensureStreamToken() for the lifecycle. */
+  /** Stream JWTs, one per media file (the server binds each to the file it was minted for). Latest minted feeds
+   *  the non-file URLs; see ensureStreamToken() for the lifecycle. */
   private _streamToken = signal<string | null>(null);
-  private _streamTokenExpiresAt = 0;
-  private _streamTokenInFlight: Promise<string | null> | null = null;
+  private _streamTokens = new Map<number, { token: string; expiresAt: number }>();
+  private _streamTokensInFlight = new Map<number, Promise<string | null>>();
   private readonly _sessionEpoch = signal(0);
 
   constructor() {
@@ -181,10 +181,13 @@ export class AuthService {
     return this._refreshToken;
   }
 
-  /** Cached value; call ensureStreamToken() before starting playback to avoid a near-expiry token. */
-  readonly streamToken = this._streamToken.asReadonly();
+  /** The stream token minted for `mediaFileId` while it is still valid, else the access token. */
+  playbackTokenFor(mediaFileId: number): string | null {
+    const t = this._streamTokens.get(mediaFileId);
+    return t && t.expiresAt > Date.now() ? t.token : this._accessToken;
+  }
 
-  /** For URL query params where no header fits (HLS URLs, cross-origin `<img>`): the stream token if present, else the access token. */
+  /** For URL query params of routes that are not bound to a file (cross-origin `<img>`, session calls): the latest stream token, else the access token. */
   get playbackToken(): string | null {
     return this._streamToken() ?? this._accessToken;
   }
@@ -549,24 +552,26 @@ export class AuthService {
     }
   }
 
-  /** Reused while more than 30 min of life remain: playback URLs bake the token at `engine.load()`, so it must outlast the longest film.
-   * Single-flight. */
-  async ensureStreamToken(): Promise<string | null> {
+  /** Mints (or reuses while more than 30 min of life remain) the token for one media file. Playback URLs bake it
+   *  at `engine.load()`, so a stream outlives it only within the server TTL; heartbeats call this to keep later
+   *  URLs fresh. Single-flight per file. */
+  async ensureStreamToken(mediaFileId: number): Promise<string | null> {
     const minRemaining = 30 * 60 * 1000;
-    if (
-      this._streamToken() &&
-      this._streamTokenExpiresAt - Date.now() > minRemaining
-    ) {
-      return this._streamToken();
+    const cached = this._streamTokens.get(mediaFileId);
+    if (cached && cached.expiresAt - Date.now() > minRemaining) {
+      this._streamToken.set(cached.token);
+      return cached.token;
     }
-    if (this._streamTokenInFlight) return this._streamTokenInFlight;
-    this._streamTokenInFlight = (async () => {
+    const inFlight = this._streamTokensInFlight.get(mediaFileId);
+    if (inFlight) return inFlight;
+    const epoch = this._sessionEpoch();
+    const minted = (async () => {
       try {
         const mint = () =>
           firstValueFrom(
             this.http.post<{ streamToken: string; expiresAt: number }>(
               '/api/auth/stream-token',
-              {},
+              { mediaFileId },
             ),
           );
         // One retry rides out a server blip; a second failure returns null.
@@ -574,16 +579,19 @@ export class AuthService {
           await new Promise((r) => setTimeout(r, 500));
           return mint();
         });
+        // A token of an ended session must not outlive it.
+        if (epoch !== this._sessionEpoch()) return null;
+        this._streamTokens.set(mediaFileId, { token: res.streamToken, expiresAt: res.expiresAt });
         this._streamToken.set(res.streamToken);
-        this._streamTokenExpiresAt = res.expiresAt;
         return res.streamToken;
       } catch {
         return null;
       } finally {
-        this._streamTokenInFlight = null;
+        this._streamTokensInFlight.delete(mediaFileId);
       }
     })();
-    return this._streamTokenInFlight;
+    this._streamTokensInFlight.set(mediaFileId, minted);
+    return minted;
   }
 
   register(username: string, password: string, email?: string) {
@@ -736,7 +744,7 @@ export class AuthService {
   /** Drop everything session-bound from memory, leaving stored sessions alone. */
   private clearInMemorySession(): void {
     this._refreshInFlight = null;
-    this._streamTokenInFlight = null;
+    this._streamTokensInFlight.clear();
     this.adoptSessionTokens(null, null);
     this._user.set(null);
     this._serverFeatures.set([]);
@@ -747,7 +755,7 @@ export class AuthService {
    *  never outlive the session that minted it. */
   private resetStreamToken(): void {
     this._streamToken.set(null);
-    this._streamTokenExpiresAt = 0;
+    this._streamTokens.clear();
   }
 
   /** Adopt the stored session into memory and return its profile. Synchronous
