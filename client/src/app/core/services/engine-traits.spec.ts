@@ -7,6 +7,7 @@ const EXPECTED: Record<EngineKind, EngineTraits> = {
   [EngineKind.WEB]: {
     useTsOnSingleAudio: false,
     supportsHlsSubtitles: true,
+    rendersStyledSubtitles: false,
     supportsImageSubtitles: false,
     sideloadsDirectPlaySubtitles: true,
     probesSegZero: true,
@@ -16,6 +17,7 @@ const EXPECTED: Record<EngineKind, EngineTraits> = {
   [EngineKind.ANDROID]: {
     useTsOnSingleAudio: false,
     supportsHlsSubtitles: true,
+    rendersStyledSubtitles: false,
     supportsImageSubtitles: true,
     sideloadsDirectPlaySubtitles: true,
     probesSegZero: false,
@@ -26,6 +28,7 @@ const EXPECTED: Record<EngineKind, EngineTraits> = {
     useTsOnSingleAudio: false,
     supportsHlsSubtitles: true,
     supportsMuxedAudioRendition: true,
+    rendersStyledSubtitles: false,
     supportsImageSubtitles: false,
     sideloadsDirectPlaySubtitles: false,
     probesSegZero: false,
@@ -35,6 +38,7 @@ const EXPECTED: Record<EngineKind, EngineTraits> = {
   [EngineKind.DESKTOP]: {
     useTsOnSingleAudio: false,
     supportsHlsSubtitles: false,
+    rendersStyledSubtitles: true,
     supportsImageSubtitles: true,
     sideloadsDirectPlaySubtitles: true,
     probesSegZero: true,
@@ -44,6 +48,7 @@ const EXPECTED: Record<EngineKind, EngineTraits> = {
   [EngineKind.ANDROID_TV]: {
     useTsOnSingleAudio: false,
     supportsHlsSubtitles: true,
+    rendersStyledSubtitles: false,
     supportsImageSubtitles: true,
     sideloadsDirectPlaySubtitles: true,
     probesSegZero: false,
@@ -54,6 +59,7 @@ const EXPECTED: Record<EngineKind, EngineTraits> = {
     useTsOnSingleAudio: true,
     supportsHlsSubtitles: false,
     supportsIFrameTrickPlay: true,
+    rendersStyledSubtitles: false,
     supportsImageSubtitles: false,
     sideloadsDirectPlaySubtitles: true,
     probesSegZero: false,
@@ -64,6 +70,7 @@ const EXPECTED: Record<EngineKind, EngineTraits> = {
     useTsOnSingleAudio: false,
     supportsHlsSubtitles: false,
     dedupesAudioByLanguage: true,
+    rendersStyledSubtitles: false,
     supportsImageSubtitles: false,
     sideloadsDirectPlaySubtitles: true,
     probesSegZero: false,

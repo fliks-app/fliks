@@ -3,7 +3,7 @@ import { TranslateService } from '@ngx-translate/core';
 import type { ReloadWhy } from './player-qoe';
 import type { PlaybackEngine } from '../../core/services/playback-engine/playback-engine';
 import type { PlaybackMode } from '../../core/utils/player.utils';
-import { subtitleManifestRank } from '../../core/utils/subtitle-tracks';
+import { burnsIn, subtitleManifestRank } from '../../core/utils/subtitle-tracks';
 import { AuthService } from '../../core/services/auth.service';
 import { BrowserDeviceProfileService } from '../../core/services/browser-device-profile.service';
 import { CastService } from '../../core/services/cast.service';
@@ -105,9 +105,12 @@ export class SubtitleController {
 
   /** A viewer's pick (menu, remote command): applied, then remembered. Automatic picks
    *  use {@link applySubtitle} alone, so they never harden into the viewer's choice. */
-  async selectSubtitle(sub: SubtitleOption | null): Promise<void> {
+  async selectSubtitle(picked: SubtitleOption | null): Promise<void> {
+    const sub = picked?.styled
+      ? { ...picked, burnIn: burnsIn(picked, !!this.deviceProfileService.engineTraits().rendersStyledSubtitles) }
+      : picked;
     if (!(await this.applySubtitle(sub))) return;
-    const image = !!(sub?.isImage || sub?.burnIn);
+    const image = !!sub?.isImage;
     this.trackManager.saveSubtitleSelection(
       this.host.mediaId(),
       sub?.language ?? null,
@@ -117,6 +120,11 @@ export class SubtitleController {
       sub?.hearingImpaired,
       sub?.languageTag,
     );
+  }
+
+  /** An automatic pick shows a styled track as plain text: burn-in reloads the stream, so only a viewer's pick may start it. */
+  plainIfStyled(sub: SubtitleOption | null): SubtitleOption | null {
+    return sub?.styled ? { ...sub, burnIn: false } : sub;
   }
 
   /** Puts `sub` on screen (null: Off) and moves the active id. False when it did
@@ -139,6 +147,9 @@ export class SubtitleController {
       }
       return request === this.subtitleRequest;
     }
+
+    // Options carry the burn-in state the pick resolved to, for restore and the pickers.
+    this.availableSubtitles.update((l) => l.map((s) => (s.id === sub.id && s.burnIn !== sub.burnIn ? { ...s, burnIn: sub.burnIn } : s)));
 
     // A bitmap sub the engine can't render from this playback is burned in: the
     // reload re-negotiates with it, and the server answers with a transcode.
@@ -235,6 +246,7 @@ export class SubtitleController {
    *  playback carries the track, which only a DirectPlay container does. */
   private burnsIn(sub: SubtitleOption): boolean {
     if (!sub.burnIn) return false;
+    if (!sub.isImage) return true;
     const rendersFromContainer =
       this.deviceProfileService.engineTraits().supportsImageSubtitles === true &&
       this.host.playbackMode() === 'direct' &&

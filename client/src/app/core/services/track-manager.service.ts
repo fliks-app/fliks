@@ -12,10 +12,11 @@ import {
 } from './player-settings.service';
 import { SubtitlesApiService } from './api/subtitles-api.service';
 import { StreamingApiService } from './api/streaming-api.service';
+import { BrowserDeviceProfileService } from './browser-device-profile.service';
 import { AppSettingsService } from './app-settings.service';
 import { formatSubtitleLabel, formatSubtitleParts, type SubtitleLabelSource } from '../utils/player.utils';
 import { isImageBasedSubtitleCodec } from '../utils/subtitle-codecs';
-import { buildSubtitleTracks } from '../utils/subtitle-tracks';
+import { buildSubtitleTracks, burnsIn } from '../utils/subtitle-tracks';
 import { normalizeLangCode, normalizeLangTag } from '../utils/language.utils';
 import type { PlaybackEngine, AudioTrack } from './playback-engine/playback-engine';
 
@@ -28,7 +29,9 @@ export interface SubtitleOption {
   languageTag?: string | null;
   /** True for bitmap subs (PGS/VOBSUB), regardless of how they're shown. */
   isImage?: boolean;
-  /** True for a bitmap sub: burned in server-side unless the engine renders it (decided per playback, see `PlayerComponent.burnsIn`). */
+  /** True for ASS/SSA the viewer lets burn-in carry (see `burnsIn`). */
+  styled?: boolean;
+  /** Burned in server-side: a bitmap sub unless the engine renders it (decided per playback, see `SubtitleController.burnsIn`), or styled ASS/SSA on a client that can't draw it. */
   burnIn: boolean;
   /** Database subtitle ID (for burn-in request) */
   subtitleDbId?: number;
@@ -63,6 +66,7 @@ export class TrackManagerService {
   private readonly playerSettings = inject(PlayerSettingsService);
   private readonly subtitlesApi = inject(SubtitlesApiService);
   private readonly appSettings = inject(AppSettingsService);
+  private readonly deviceProfile = inject(BrowserDeviceProfileService);
   private readonly translate = inject(TranslateService);
 
   // ── Audio track methods ──
@@ -170,6 +174,7 @@ export class TrackManagerService {
       const file = media?.files?.find((f) => f.id === mediaFileId);
       const si = file?.streamInfo as any;
       const tracks = buildSubtitleTracks(subs, mediaFileId, { hideBurnIn, streams: si?.subtitles });
+      const rendersStyled = !!this.deviceProfile.engineTraits().rendersStyledSubtitles;
       const options: SubtitleOption[] = tracks.map((t, i) => ({
         id: t.key,
         ...this.describeSubtitle(t, i + 1),
@@ -182,7 +187,8 @@ export class TrackManagerService {
         language: t.language,
         languageTag: t.languageTag,
         isImage: t.isImage,
-        burnIn: t.isImage,
+        styled: t.styled,
+        burnIn: burnsIn(t, rendersStyled),
         subtitleDbId: t.subtitleId,
         forced: t.forced,
         hearingImpaired: t.hearingImpaired,
