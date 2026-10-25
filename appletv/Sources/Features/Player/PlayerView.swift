@@ -109,6 +109,11 @@ struct PlayerView: View {
             }
             loading = false
         }
+        .confirmationDialog(tr("party.tv_leave"), isPresented: Binding(get: { party.leaveConfirm }, set: { party.leaveConfirm = $0 }),
+                            titleVisibility: .visible) {
+            Button(tr("party.tv_leave_host_confirm"), role: .destructive) { Task { await party.endParty() } }
+            Button(tr("common.cancel"), role: .cancel) {}
+        } message: { Text(trp("party.tv_leave_host_message", ["name": party.party?.name ?? ""])) }
         .onDisappear {
             if let partyController { partyController.detach() } else if partyBound { Task { await party.leave() } }
             party.onClosed = nil

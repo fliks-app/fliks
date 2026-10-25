@@ -6,6 +6,38 @@ private struct RingStyle: ButtonStyle {
     }
 }
 
+/// Name, item, host and start time of a party.
+struct PartyHeaderView: View {
+    let party: Party
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(party.name).font(.system(size: 48, weight: .bold))
+            if party.item.title != party.name { Text(party.item.title).font(.title3) }
+            HStack(spacing: 16) {
+                Text(trp("party.hosted_by", ["host": party.host.username]))
+                Text(party.scheduledAt.map(PartyDate.text)
+                     ?? tr(party.status == "live" ? "party.live" : "party.status_lobby"))
+            }
+            .font(.callout)
+            .foregroundStyle(.secondary)
+        }
+    }
+}
+
+extension PartyPeople.Person {
+    /// Host badge, or invited / via link, plus "not connected" when absent.
+    var caption: String {
+        let base: String
+        switch kind {
+        case .host: return tr("party.host_badge")
+        case .invited: base = tr("party.person_invited")
+        case .link: base = tr("party.person_link")
+        }
+        return present ? base : "\(base) · \(tr("party.person_absent"))"
+    }
+}
+
 enum PartyBadge {
     struct Badge { let symbol: String; let color: Color }
 

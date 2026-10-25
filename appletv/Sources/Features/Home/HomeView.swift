@@ -18,6 +18,7 @@ struct HomeView: View {
     var onSelectEpisode: (_ mediaId: Int, _ episodeId: Int) -> Void
     var onSelectLibrary: (Int) -> Void
     var onSelectPlaylist: (Int) -> Void
+    var onSelectParty: (Int) -> Void
 
     @Environment(AuthService.self) private var auth
     @Environment(HomeSettingsStore.self) private var homeSettings
@@ -45,7 +46,8 @@ struct HomeView: View {
                         onSelectMedia: onSelectMedia,
                         onSelectEpisode: onSelectEpisode,
                         onSelectLibrary: onSelectLibrary,
-                        onSelectPlaylist: onSelectPlaylist
+                        onSelectPlaylist: onSelectPlaylist,
+                        onSelectParty: onSelectParty
                     )
                 }
             }

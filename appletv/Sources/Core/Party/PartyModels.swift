@@ -174,7 +174,7 @@ extension Party {
             let key = memberCount == 1 ? "party.card_live_one" : "party.card_live_other"
             base = trp(key, ["host": host.username, "count": String(memberCount)])
         } else {
-            let when = scheduledAt.map { $0.formatted(date: .abbreviated, time: .shortened) } ?? ""
+            let when = scheduledAt.map(PartyDate.text) ?? ""
             base = trp("party.card_scheduled", ["when": when, "host": host.username])
         }
         guard let playlist else { return base }

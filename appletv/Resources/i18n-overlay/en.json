@@ -105,5 +105,7 @@
   "party.tv_chat_history": "Messages",
   "party.end": "End the party",
   "party.end_title": "End the party",
-  "party.end_message": "End \"{{name}}\" for everyone?"
+  "party.end_message": "End \"{{name}}\" for everyone?",
+  "party.tv_leave_host_message": "You are the host: leaving ends \"{{name}}\" for everyone.",
+  "party.tv_leave_host_confirm": "Leave and end"
 }

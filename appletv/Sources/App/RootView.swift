@@ -50,6 +50,7 @@ struct RootView: View {
                                               episodeId: episodeId, startAt: startAt))
                 }
                 party.onOpenLobby = { _ in path.append(Route.partyLobby) }
+                party.onGoHome = { path = NavigationPath() }
                 party.onOpenPlayer = { mediaFileId, mediaId, episodeId in
                     path.append(Route.player(mediaFileId: mediaFileId, mediaId: mediaId, episodeId: episodeId, startAt: 0))
                 }
@@ -110,7 +111,8 @@ struct RootView: View {
                         onSelectMedia: { path.append(Route.mediaDetail(id: $0)) },
                         onSelectEpisode: { path.append(Route.episodeDetail(mediaId: $0, episodeId: $1)) },
                         onSelectLibrary: { path.append(Route.library(id: $0)) },
-                        onSelectPlaylist: { path.append(Route.playlistDetail(id: $0)) }
+                        onSelectPlaylist: { path.append(Route.playlistDetail(id: $0)) },
+                        onSelectParty: { path.append(Route.partyDetail(id: $0)) }
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .focusSection()
@@ -127,7 +129,8 @@ struct RootView: View {
                             onSelectMedia: { path.append(Route.mediaDetail(id: $0)) },
                             onSelectEpisode: { path.append(Route.episodeDetail(mediaId: $0, episodeId: $1)) },
                             onSelectLibrary: { path.append(Route.library(id: $0)) },
-                            onSelectPlaylist: { path.append(Route.playlistDetail(id: $0)) }
+                            onSelectPlaylist: { path.append(Route.playlistDetail(id: $0)) },
+                            onSelectParty: { path.append(Route.partyDetail(id: $0)) }
                         )
                     case let .library(id):
                         LibraryView(libraryId: id, onSelectMedia: { path.append(Route.mediaDetail(id: $0)) })
@@ -166,6 +169,8 @@ struct RootView: View {
                         })
                     case .partyLobby:
                         PartyLobbyView()
+                    case let .partyDetail(id):
+                        PartyDetailView(partyId: id)
                     case .settings:
                         SettingsView()
                     default:

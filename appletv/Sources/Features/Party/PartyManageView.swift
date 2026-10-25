@@ -48,20 +48,20 @@ struct PartyInviteView: View {
     @Namespace private var focusScope
 
     private var candidateList: [SocialUser] {
-        guard let party = service.party, service.isHost else { return [] }
+        guard let party = service.managed, service.managedIsHost else { return [] }
         return PartyPeople.candidates(following: following, host: party.host, guests: party.guests ?? [])
     }
 
     var body: some View {
         PartySheetPage(title: tr("party.invite")) {
-            if let party = service.party {
+            if let party = service.managed {
                 HStack(alignment: .top, spacing: 60) {
                     TileSection(title: tr("party.people")) {
-                        ForEach(PartyPeople.people(host: party.host, guests: party.guests ?? [], members: service.members)) { person in
-                            AvatarTile(name: person.username, caption: label(person), dimmed: !person.present)
+                        ForEach(PartyPeople.people(host: party.host, guests: party.guests ?? [], members: service.managedMembers)) { person in
+                            AvatarTile(name: person.username, caption: person.caption, dimmed: !person.present)
                         }
                     }
-                    if service.isHost {
+                    if service.managedIsHost {
                         TileSection(title: tr("party.create_invitees")) {
                             if candidateList.isEmpty {
                                 Text(tr("party.no_followed")).foregroundStyle(.secondary)
@@ -80,7 +80,7 @@ struct PartyInviteView: View {
         } bar: {
             VStack(spacing: 14) {
                 HStack(spacing: 30) {
-                    if service.isHost, !candidateList.isEmpty {
+                    if service.managedIsHost, !candidateList.isEmpty {
                         Button(action: send) {
                             Text(picked.isEmpty ? tr("party.invite") : "\(tr("party.invite")) (\(picked.count))")
                         }
@@ -91,7 +91,7 @@ struct PartyInviteView: View {
                         .buttonStyle(.bordered)
                         .prefersDefaultFocus(candidateList.isEmpty, in: focusScope)
                 }
-                if service.isHost, !candidateList.isEmpty, picked.isEmpty {
+                if service.managedIsHost, !candidateList.isEmpty, picked.isEmpty {
                     Text(tr("party.tv_invite_hint")).font(.callout).foregroundStyle(.secondary)
                 }
             }
@@ -114,27 +114,17 @@ struct PartyInviteView: View {
         Task { await service.invite(ids) }
     }
 
-    private func label(_ person: PartyPeople.Person) -> String {
-        let base: String
-        switch person.kind {
-        case .host: return tr("party.host_badge")
-        case .invited: base = tr("party.person_invited")
-        case .link: base = tr("party.person_link")
-        }
-        return person.present ? base : "\(base) · \(tr("party.person_absent"))"
-    }
 }
 
 /// The party switches: editable by the host, read-only for members, plus the host's link and end actions.
 struct PartySettingsView: View {
     @Environment(PartyService.self) private var service
     @State private var confirmRegenerate = false
-    @State private var confirmEnd = false
 
     var body: some View {
         PartySheetPage(title: tr("party.settings")) {
             ScrollView {
-                if let party = service.party {
+                if let party = service.managed {
                     VStack(alignment: .leading, spacing: 28) {
                         toggle(tr("party.switch_playback_control"), party.policy != "host_only") {
                             await service.updateSettings(policy: $0 ? "everyone" : "host_only")
@@ -146,7 +136,7 @@ struct PartySettingsView: View {
                         toggle(tr("party.switch_link_sharing"), party.linkSharing ?? true) {
                             await service.updateSettings(linkSharing: $0)
                         }
-                        if !service.isHost {
+                        if !service.managedIsHost {
                             Text(tr("party.tv_host_only_hint")).font(.callout).foregroundStyle(.secondary)
                         }
                     }
@@ -157,20 +147,14 @@ struct PartySettingsView: View {
             }
         } bar: {
             HStack(spacing: 30) {
-                if service.isHost {
+                if service.managedIsHost {
                     Button(tr("party.regenerate_link")) { confirmRegenerate = true }
                         .buttonStyle(.bordered)
                         .confirmationDialog(tr("party.regenerate_title"), isPresented: $confirmRegenerate, titleVisibility: .visible) {
                             Button(tr("party.regenerate_link")) { Task { await service.regenerateLink() } }
                             Button(tr("common.cancel"), role: .cancel) {}
                         } message: { Text(tr("party.regenerate_message")) }
-                    let key = service.party?.status == "live" ? "party.end" : "party.cancel"
-                    Button(tr(key)) { confirmEnd = true }
-                        .buttonStyle(DestructiveButtonStyle())
-                        .confirmationDialog(tr("\(key)_title"), isPresented: $confirmEnd, titleVisibility: .visible) {
-                            Button(tr(key), role: .destructive) { Task { await service.endParty() } }
-                            Button(tr("common.cancel"), role: .cancel) {}
-                        } message: { Text(trp("\(key)_message", ["name": service.party?.name ?? ""])) }
+                    EndPartyButton()
                 }
                 Button(tr("party.tv_close")) { service.sheet = nil }
                     .buttonStyle(.bordered)
@@ -181,6 +165,22 @@ struct PartySettingsView: View {
 
     private func toggle(_ label: String, _ value: Bool, _ set: @escaping (Bool) async -> Void) -> some View {
         Toggle(label, isOn: Binding(get: { value }, set: { v in Task { await set(v) } }))
-            .disabled(!service.isHost)
+            .disabled(!service.managedIsHost)
+    }
+}
+
+/// "Annuler la séance" before it starts, "Terminer la séance" once live, each with its confirmation.
+struct EndPartyButton: View {
+    @Environment(PartyService.self) private var service
+    @State private var confirm = false
+
+    var body: some View {
+        let key = service.managed?.status == "live" ? "party.end" : "party.cancel"
+        Button(tr(key)) { confirm = true }
+            .buttonStyle(DestructiveButtonStyle())
+            .confirmationDialog(tr("\(key)_title"), isPresented: $confirm, titleVisibility: .visible) {
+                Button(tr(key), role: .destructive) { Task { await service.endParty() } }
+                Button(tr("common.cancel"), role: .cancel) {}
+            } message: { Text(trp("\(key)_message", ["name": service.managed?.name ?? ""])) }
     }
 }

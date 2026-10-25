@@ -299,6 +299,6 @@ final class PartyController {
         guard key != menuKey else { return }
         menuKey = key
         player.partyMenus = [PartyMenu.build(party, onResync: { [weak self] in self?.resync() },
-                                              onLeave: { [weak self] in self?.player.onStopRequested?() })]
+                                              onLeave: { [weak party = self.party] in Task { await party?.leaveToHome() } })]
     }
 }

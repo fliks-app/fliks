@@ -12,6 +12,7 @@ enum PartyMenu {
     }
 
     static func build(_ p: PartyService, onResync: @escaping () -> Void, onLeave: @escaping () -> Void) -> UIMenu {
+        // The host leaving ends the party, so it asks first; a member just leaves.
         var children: [UIMenuElement] = [membersMenu(p)]
         if p.chatEnabled { children.append(chatMenu(p)) }
         if p.reactionsEnabled { children.append(reactionsMenu(p)) }
@@ -20,7 +21,7 @@ enum PartyMenu {
         children.append(UIAction(title: tr("party.settings"), image: UIImage(systemName: "gearshape")) { _ in p.sheet = .settings })
         children.append(UIMenu(options: .displayInline, children: [
             UIAction(title: tr("party.tv_leave"), image: UIImage(systemName: "rectangle.portrait.and.arrow.right"),
-                     attributes: .destructive) { _ in onLeave() },
+                     attributes: .destructive) { _ in if p.isHost { p.leaveConfirm = true } else { onLeave() } },
         ]))
         return UIMenu(title: tr("party.panel_toggle"), image: UIImage(systemName: "person.2.fill"), children: children)
     }

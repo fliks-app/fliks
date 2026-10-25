@@ -98,5 +98,7 @@
   "party.tv_chat_history": "Nachrichten",
   "party.end": "Watch Party beenden",
   "party.end_title": "Watch Party beenden",
-  "party.end_message": "\"{{name}}\" für alle beenden?"
+  "party.end_message": "\"{{name}}\" für alle beenden?",
+  "party.tv_leave_host_message": "Du bist der Gastgeber: Wenn du gehst, wird \"{{name}}\" für alle beendet.",
+  "party.tv_leave_host_confirm": "Verlassen und beenden"
 }

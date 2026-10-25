@@ -19,6 +19,10 @@ import Foundation
     private(set) var homeParties: [Party] = []
     /// The invite or settings sheet, shared by the lobby and the player.
     var sheet: Sheet?
+    /// The host asked to leave from the player menu: confirm before ending the party for everyone.
+    var leaveConfirm = false
+    /// The party the detail page shows while not joined, so the invite and settings pages can act on it.
+    private(set) var preview: Party?
     /// A short line for the screen in front (errors, refusals), cleared after a few seconds.
     private(set) var notice: String?
 
@@ -37,6 +41,8 @@ import Foundation
     @ObservationIgnored var onOpenLobby: ((Int) -> Void)?
     @ObservationIgnored var onLive: ((PartyLiveState) -> Void)?
     @ObservationIgnored var onClosed: ((String) -> Void)?
+    /// Pops the whole navigation stack back to the Home.
+    @ObservationIgnored var onGoHome: (() -> Void)?
     @ObservationIgnored var onRejoined: (() -> Void)?
 
     private static let maxMessages = 200
@@ -65,6 +71,15 @@ import Foundation
     var chatEnabled: Bool { party?.chatEnabled ?? true }
     var reactionsEnabled: Bool { party?.reactionsEnabled ?? true }
     var canControl: Bool { isHost || policy == "everyone" }
+    /// The joined party, else the one on the detail page.
+    var managed: Party? { party ?? preview }
+    var managedIsHost: Bool {
+        party != nil ? isHost : preview?.host.userId == AuthService.shared.currentUser?.id
+    }
+    var managedMembers: [PartyMember] { party != nil ? members : preview?.live?.members ?? [] }
+
+    func setPreview(_ dto: Party?) { preview = dto }
+
     var item: PartyItem? { live?.item ?? party?.item }
 
     // MARK: - Entry points
@@ -120,6 +135,12 @@ import Foundation
     func setReady(_ ready: Bool) async {
         guard let id = party?.id else { return }
         try? await sendStatus(id: id, status: ready ? "ready" : "waiting", position: live?.anchor.position ?? 0)
+    }
+
+    /// An explicit leave: the viewer lands on the Home, unlike an exit from the player.
+    func leaveToHome() async {
+        await leave()
+        onGoHome?()
     }
 
     func leave() async {
@@ -204,10 +225,10 @@ import Foundation
     }
 
     private func patch<B: Encodable>(_ body: B) async {
-        guard let id = party?.id else { return }
+        guard let id = managed?.id else { return }
         do {
             let dto: Party = try await APIClient.shared.patch("/api/parties/\(id)", body: body)
-            applySnapshot(dto)
+            applyManaged(dto)
         } catch {
             show(describe(error))
         }
@@ -215,10 +236,10 @@ import Foundation
 
     func invite(_ userIds: [Int]) async {
         struct Body: Encodable { let userIds: [Int] }
-        guard let id = party?.id, !userIds.isEmpty else { return }
+        guard let id = managed?.id, !userIds.isEmpty else { return }
         do {
             let dto: Party = try await APIClient.shared.post("/api/parties/\(id)/invitees", body: Body(userIds: userIds))
-            applySnapshot(dto)
+            applyManaged(dto)
         } catch {
             show(describe(error))
         }
@@ -226,15 +247,24 @@ import Foundation
 
     /// Host only: ends the party for everyone, the `party.closed` event then closes it here too.
     func endParty() async {
-        guard let id = party?.id else { return }
+        guard let id = managed?.id else { return }
         do {
             try await APIClient.shared.delete("/api/parties/\(id)")
+            // Not joined: no `party.closed` will come, the detail page follows its own refresh.
+            if party == nil { preview = nil; sheet = nil; onGoHome?() }
         } catch {
             show(describe(error))
         }
     }
 
-    func reload() async { await refetch() }
+    func reload() async {
+        if party != nil { return await refetch() }
+        if let id = preview?.id, let dto: Party = try? await APIClient.shared.get("/api/parties/\(id)") { preview = dto }
+    }
+
+    private func applyManaged(_ dto: Party) {
+        if party?.id == dto.id { applySnapshot(dto) } else { preview = dto }
+    }
 
     func refreshHomeParties() async {
         do {
@@ -285,6 +315,7 @@ import Foundation
         reactions = []
         queue = []
         sheet = nil
+        leaveConfirm = false
         lastRev = 0
         queuedFor = nil
     }
@@ -462,6 +493,7 @@ import Foundation
         stream.stop()
         show(tr("party.closed_\(reason)"))
         onClosed?(reason)
+        onGoHome?()
     }
 
     // MARK: - Notices

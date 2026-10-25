@@ -104,5 +104,7 @@
   "party.tv_chat_history": "Mensagens",
   "party.end": "Terminar a sessão",
   "party.end_title": "Terminar a sessão",
-  "party.end_message": "Terminar \"{{name}}\" para todos?"
+  "party.end_message": "Terminar \"{{name}}\" para todos?",
+  "party.tv_leave_host_message": "Você é o anfitrião: sair encerrará \"{{name}}\" para todos.",
+  "party.tv_leave_host_confirm": "Sair e encerrar"
 }

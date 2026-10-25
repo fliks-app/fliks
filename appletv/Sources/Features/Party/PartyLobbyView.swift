@@ -8,12 +8,13 @@ struct PartyLobbyView: View {
     @State private var visible = false
     @State private var selected: PartyMember?
     @State private var selectedGuest: PartyGuest?
+    @State private var confirmLeave = false
 
     var body: some View {
         ScrollView {
             if let party = service.party {
                 VStack(alignment: .leading, spacing: 44) {
-                    header(party)
+                    PartyHeaderView(party: party)
                     actions
                     members
                 }
@@ -42,6 +43,10 @@ struct PartyLobbyView: View {
             Button(tr("party.kick"), role: .destructive) { Task { await service.kick(member.userId) } }
             Button(tr("common.cancel"), role: .cancel) {}
         }
+        .confirmationDialog(tr("party.tv_leave"), isPresented: $confirmLeave, titleVisibility: .visible) {
+            Button(tr("party.tv_leave_host_confirm"), role: .destructive) { Task { await service.endParty() } }
+            Button(tr("common.cancel"), role: .cancel) {}
+        } message: { Text(trp("party.tv_leave_host_message", ["name": service.party?.name ?? ""])) }
         .confirmationDialog(selectedGuest?.username ?? "", isPresented: Binding(get: { selectedGuest != nil }, set: { if !$0 { selectedGuest = nil } }),
                             titleVisibility: .visible, presenting: selectedGuest) { guest in
             Button(tr("party.kick"), role: .destructive) { Task { await service.kick(guest.userId) } }
@@ -52,19 +57,6 @@ struct PartyLobbyView: View {
     private func pending() -> [PartyGuest] {
         guard let party = service.party else { return [] }
         return PartyPeople.pending(host: party.host, guests: party.guests ?? [], members: service.members)
-    }
-
-    private func header(_ party: Party) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text(party.name).font(.system(size: 48, weight: .bold))
-            if party.item.title != party.name { Text(party.item.title).font(.title3) }
-            HStack(spacing: 16) {
-                Text(trp("party.hosted_by", ["host": party.host.username]))
-                Text(party.scheduledAt.map { $0.formatted(date: .abbreviated, time: .shortened) } ?? tr("party.status_lobby"))
-            }
-            .font(.callout)
-            .foregroundStyle(.secondary)
-        }
     }
 
     private var actions: some View {
@@ -87,7 +79,7 @@ struct PartyLobbyView: View {
                 }
                 .buttonStyle(.bordered)
                 Spacer(minLength: 80)
-                Button { Task { await service.leave() } } label: {
+                Button { if service.isHost { confirmLeave = true } else { Task { await service.leaveToHome() } } } label: {
                     Label(tr("party.tv_leave"), systemImage: "rectangle.portrait.and.arrow.right")
                 }
                 .buttonStyle(DestructiveButtonStyle())
