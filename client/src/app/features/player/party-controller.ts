@@ -16,7 +16,7 @@ import { CastService } from '../../core/services/cast.service';
 import { CastPlayerService } from '../../core/services/cast-player.service';
 import { CastPlaybackTarget } from '../../core/services/cast-playback-target';
 import { CastPartyOutput, type PartyOutput } from './party-output';
-import { DRIFT_CHECK_MS, driftAction, groupPosition } from './party-sync';
+import { DRIFT_CHECK_MS, driftAction, driftProfile, groupPosition } from './party-sync';
 
 export interface PartyHost {
   engine(): PlaybackEngine | null;
@@ -297,7 +297,8 @@ export class PartyController {
   /** False when a newer apply superseded this one while waiting. */
   private async seekIfFar(target: number, gen: number, force: boolean): Promise<boolean> {
     const out = this.out();
-    if (force || Math.abs(out.position() - target) > out.slackS) {
+    const step = out === this.localOutput ? (this.host.engine()?.positionStepS ?? 0) : 0;
+    if (force || Math.abs(out.position() - target) > out.slackS + step) {
       out.seekTo(target);
       this.lastCorrectiveSeek = Date.now();
       await this.untilUnlocked(gen);
@@ -346,11 +347,12 @@ export class PartyController {
     if (out.paused() || out.buffering() || now < (live.whenMs ?? live.anchor.serverTimeMs)) return;
     const drift = out.position() - groupPosition('playing', live.anchor, now);
     const rateOk = !!out.rate && this.rateSupported();
+    const positionStepS = this.host.engine()?.positionStepS ?? 0;
     const action = driftAction(drift, {
       rateSupported: rateOk,
       msSinceSeek: Date.now() - this.lastCorrectiveSeek,
       seekLocked: out.seekLocked(),
-      ...out.drift,
+      ...(out.drift ?? driftProfile({ positionStepS, rateSupported: rateOk })),
     });
     if (action.kind === 'seek') {
       this.lastCorrectiveSeek = Date.now();

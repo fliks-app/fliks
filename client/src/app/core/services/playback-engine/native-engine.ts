@@ -250,6 +250,8 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
   get paused(): boolean {
     return this._paused;
   }
+  /** The bridge emits `timeUpdate` once per second. */
+  readonly positionStepS = 1;
   get buffered(): number {
     return this._buffered;
   }
