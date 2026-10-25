@@ -27,7 +27,7 @@ Environment variables read by `fliks-server`, with defaults and parsing rules.
 | Variable | Default | Parsing |
 |---|---|---|
 | `FLIKS_ENGINE_URL` | `''` | string as-is (`?? ''`); a saved URL takes precedence |
-| `FLIKS_ENGINE_TOKEN` | `''` | string as-is (`?? ''`); a saved token takes precedence |
+| `FLIKS_ENGINE_TOKEN` | `''` (else, with `FLIKS_ENGINE_URL` set, file `<conf>/.engine-token` or generated) | empty = unset; file and fallback as `JWT_SECRET`; a saved token takes precedence |
 | `FLIKS_HOST_URL` | none (fallback: `http://127.0.0.1:` + the listen port) | string as-is, empty = unset |
 | `PORT` | `4849` (set by the engine) | `Number(raw)`; non-numeric = default |
 
