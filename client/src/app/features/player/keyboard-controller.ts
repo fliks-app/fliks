@@ -1,6 +1,7 @@
 import type { PlaybackEngine } from '../../core/services/playback-engine/playback-engine';
 import type { PlayerControlsComponent } from './controls/player-controls';
 import type { ControlsVisibilityService } from './controls/controls-visibility';
+import { mediaKeyAction } from './media-keys';
 
 export interface KeyboardHost {
   chrome: ControlsVisibilityService;
@@ -34,13 +35,35 @@ export class KeyboardController {
     // Back keys must bubble to the window handler in `app.ts` so the player can be left.
     // Older Tizen reports 10009 with no reliable `e.key`, so `keyCode` stays load-bearing.
     const tizenKeyCode = (e as { keyCode: number }).keyCode;
-    const isBackKey = tizenKeyCode === 10009 || e.key === 'XF86Back' || e.key === 'GoBack' || e.key === 'Escape';
+    const isBackKey =
+      tizenKeyCode === 10009 || e.key === 'XF86Back' || e.key === 'GoBack' || e.key === 'Escape';
 
     // A focused floating cue is visible while the bar is hidden: it gets its activation key.
     const activeEl = document.activeElement as HTMLElement | null;
     const cueFocused = !!activeEl?.closest('.player-floating-cue');
     // The sync panel owns its keys; only Back still reaches the handlers below.
     if (!isBackKey && activeEl?.closest('app-subtitle-sync-panel')) return;
+
+    const media = mediaKeyAction({ key: e.key, keyCode: tizenKeyCode });
+    if (media) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (media === 'stop') {
+        this.host.onBack();
+        return;
+      }
+      if (!control) return;
+      if (
+        media === 'toggle' ||
+        (media === 'play' && engine.paused) ||
+        (media === 'pause' && !engine.paused)
+      ) {
+        this.host.onTogglePlay();
+      } else if (media === 'forward') this.host.onSeek(engine.currentTime + 10);
+      else if (media === 'rewind') this.host.onSeek(engine.currentTime - 10);
+      this.host.chrome.show();
+      return;
+    }
 
     // Controls hidden + Left/Right: raise the seek OSD and let the seekbar own the scrub.
     const isSeekArrow = e.key === 'ArrowLeft' || e.key === 'ArrowRight';
