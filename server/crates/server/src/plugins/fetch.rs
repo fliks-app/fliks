@@ -7,7 +7,8 @@ use std::time::Duration;
 use tokio::time::Instant;
 
 const CATALOG_TIMEOUT: Duration = Duration::from_secs(10);
-const ARCHIVE_TIMEOUT: Duration = Duration::from_secs(30);
+const ARCHIVE_TIMEOUT: Duration = Duration::from_secs(300);
+const READ_IDLE: Duration = Duration::from_secs(30);
 const MAX_HOPS: usize = 5;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -59,6 +60,7 @@ impl Fetcher {
         let mut b = Client::builder()
             .redirect(redirect::Policy::none())
             .timeout(timeout)
+            .read_timeout(READ_IDLE)
             .user_agent(ua);
         for r in &self.roots {
             b = b.add_root_certificate(r.clone());
@@ -133,8 +135,8 @@ impl Fetcher {
         Self::body(res, cap, None).await
     }
 
-    /// The archive of a catalog version: https only, at most 5 https redirects, 30 s and `cap`
-    /// over the whole chain; a hop off the `zipUrl` host goes through the outbound guard.
+    /// The archive of a catalog version: https only, at most 5 https redirects, 5 min in all, 30 s idle, and
+    /// `cap` over the whole chain; a hop off the `zipUrl` host goes through the outbound guard.
     pub async fn archive(&self, zip_url: &str, cap: usize) -> Result<Vec<u8>, ArchiveError> {
         let first =
             Url::parse(zip_url).map_err(|_| ArchiveError::Failed("invalid archive URL".into()))?;
