@@ -10,12 +10,6 @@ import {
   readPlan,
 } from './cache.interceptor';
 
-// Spec files share module state (isolate: false): drop the never-settling open the stubs leave behind.
-afterEach(() => {
-  vi.unstubAllGlobals();
-  void clearRequestCache();
-});
-
 describe('cache.interceptor — what may be cached', () => {
   it('caches the core reads it was built for', () => {
     expect(isCacheable('/api/media/12')).toBe(true);

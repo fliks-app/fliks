@@ -1,3 +1,5 @@
+import { KeyboardOverlayService } from './keyboard-overlay.service';
+
 const m = vi.hoisted(() => ({
   platform: 'android',
   overlay: vi.fn(() => Promise.resolve()),
@@ -24,12 +26,7 @@ vi.mock('@capacitor/keyboard', () => ({
 }));
 
 describe('KeyboardOverlayService', () => {
-  let KeyboardOverlayService: typeof import('./keyboard-overlay.service').KeyboardOverlayService;
-
-  beforeEach(async () => {
-    // Specs share a worker: another file may already hold the service bound to the real Capacitor.
-    vi.resetModules();
-    ({ KeyboardOverlayService } = await import('./keyboard-overlay.service'));
+  beforeEach(() => {
     vi.clearAllMocks();
     for (const k of Object.keys(m.listeners)) delete m.listeners[k];
     m.platform = 'android';
