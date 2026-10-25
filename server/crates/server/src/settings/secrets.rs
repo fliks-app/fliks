@@ -86,7 +86,7 @@ impl Secrets {
 }
 
 /// `plugin.<id>.<field>` for every `secret: true` field of the manifest's form pages (groups included).
-fn plugin_secret_keys(id: &str, manifest: &Value) -> Vec<String> {
+pub fn plugin_secret_keys(id: &str, manifest: &Value) -> Vec<String> {
     let pages = manifest
         .pointer("/ui/configPages")
         .and_then(Value::as_array);

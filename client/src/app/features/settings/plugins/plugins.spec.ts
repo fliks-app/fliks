@@ -32,6 +32,7 @@ const ROW: PluginSummary = {
 };
 
 const confirmation = { confirm: () => Promise.resolve(true), confirmWithToggle: vi.fn() };
+const saved: string[] = [];
 
 async function createComponent(rows: PluginSummary[] = [ROW]) {
   confirmation.confirmWithToggle.mockResolvedValue({ ok: true, toggle: false });
@@ -195,5 +196,29 @@ describe('PluginsSettingsComponent — held update', () => {
   it('shows nothing without one', async () => {
     const { fixture } = await createComponent();
     expect((fixture.nativeElement as HTMLElement).textContent).not.toContain('held_update');
+  });
+});
+
+describe('PluginsSettingsComponent — export', () => {
+  afterEach(() => TestBed.inject(HttpTestingController).verify());
+
+  it.each([
+    [false, '/api/plugins/fliks.acme/export'],
+    [true, '/api/plugins/fliks.acme/export?includeSecrets=true'],
+  ])('include secrets %s asks for %s', async (flag, url) => {
+    URL.createObjectURL = () => 'blob:x';
+    URL.revokeObjectURL = () => undefined;
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+      saved.push(this.download);
+    });
+    const { fixture, http } = await createComponent();
+    confirmation.confirmWithToggle.mockResolvedValue({ ok: true, toggle: flag });
+
+    void fixture.componentInstance.exportData(ROW);
+    await settle(fixture);
+    http.expectOne((r) => r.urlWithParams === url && r.method === 'GET').flush(new Blob(['{}']));
+    await settle(fixture);
+
+    expect(saved).toContain('fliks.acme.export.json');
   });
 });
