@@ -36,8 +36,9 @@
         {
           "target_name": "fliks_smtc_win",
           "sources": [ "player_win/smtc.cc" ],
+          # include_dir has backslashes here, which gyp's shlex split eats.
           "include_dirs": [
-            "<!@(node -p \"require('node-addon-api').include_dir\")"
+            "<!@(node -p \"require('node-addon-api').include_dir.split(require('path').sep).join('/')\")"
           ],
           "libraries": [ "-lwindowsapp.lib" ],
           "defines": [ "NAPI_VERSION=8", "NAPI_CPP_EXCEPTIONS", "NOMINMAX", "WIN32_LEAN_AND_MEAN" ],
