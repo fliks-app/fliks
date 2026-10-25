@@ -16,6 +16,7 @@ struct PlayerView: View {
 
     @State private var coordinator = PlayerCoordinator()
     @State private var partyController: PartyController?
+    @State private var partyBound = false
     @Environment(PartyService.self) private var party
     @State private var loading = true
     @State private var loadErrorText: String?
@@ -90,7 +91,8 @@ struct PlayerView: View {
         }
         .task {
             coordinator.onStopRequested = onExit
-            let inParty = party.active
+            let inParty = party.takeHandoff()
+            partyBound = inParty
             do {
                 try await coordinator.load(mediaFileId: mediaFileId, mediaId: mediaId, episodeId: episodeId,
                                            startAt: startAt, autoplay: !inParty)
@@ -101,13 +103,14 @@ struct PlayerView: View {
                     controller.attach()
                 }
             } catch {
+                print("player: load failed: \(error)")
                 loadErrorText = tr("player.load_error")
                 if inParty { await party.leave() }
             }
             loading = false
         }
         .onDisappear {
-            partyController?.detach()
+            if let partyController { partyController.detach() } else if partyBound { Task { await party.leave() } }
             party.onClosed = nil
             coordinator.teardown()
         }

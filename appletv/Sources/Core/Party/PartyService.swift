@@ -27,6 +27,7 @@ import Foundation
     @ObservationIgnored private var refetchAgain = false
     @ObservationIgnored private var noticeTask: Task<Void, Never>?
     @ObservationIgnored private var queuedFor: PartyItem?
+    @ObservationIgnored private var handoff = false
 
     /// File to play, media, episode: pushes the player for the party's current item.
     @ObservationIgnored var onOpenPlayer: ((Int, Int, Int?) -> Void)?
@@ -338,7 +339,14 @@ import Foundation
             await leave()
             return
         }
+        handoff = true
         onOpenPlayer?(fileId, item.mediaId, item.episodeId)
+    }
+
+    /// True once for the player the party just opened; any other playback is a plain one, whatever the party state.
+    func takeHandoff() -> Bool {
+        defer { handoff = false }
+        return handoff && active
     }
 
     // MARK: - Queue
