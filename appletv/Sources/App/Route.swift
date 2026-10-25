@@ -15,6 +15,8 @@ enum Route: Hashable {
     case search
     case playlists
     case playlistDetail(id: Int)
+    case partyLobby
+    case partyDetail(id: Int)
     case settings
 
     // `episodeId` is nil for a movie; `startAt` is the resume position in

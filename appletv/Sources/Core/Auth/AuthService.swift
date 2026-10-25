@@ -76,7 +76,7 @@ import Foundation
             guard sessionEpoch == epoch, let active = sessions.active else { return }
             currentUser = user
             sessions.updateUser(active.serverUrl, active.user.id, user)
-        } catch APIError.badStatus(let code) where (400..<500).contains(code) {
+        } catch APIError.badStatus(let code, _) where (400..<500).contains(code) {
             guard sessionEpoch == epoch else { return }
             dropActiveSession()
         } catch {}
@@ -158,7 +158,7 @@ import Foundation
             currentUser = user
             sessions.updateUser(serverUrl, userId, user)
             return .resumed
-        } catch APIError.badStatus(let code) where (400..<500).contains(code) {
+        } catch APIError.badStatus(let code, _) where (400..<500).contains(code) {
             sessions.remove(serverUrl, userId)
             clearInMemorySession()
             return .expired
@@ -207,7 +207,7 @@ import Foundation
         let pair: TokenPair
         do {
             pair = try await api.post("/api/auth/refresh", body: Body(refreshToken: refreshToken))
-        } catch APIError.badStatus(let code) where (400..<500).contains(code) {
+        } catch APIError.badStatus(let code, _) where (400..<500).contains(code) {
             if sessionEpoch == epoch {
                 dropActiveSession()
             } else if let target {

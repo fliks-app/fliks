@@ -65,9 +65,12 @@ struct HomeRow: View {
     var onSelectEpisode: (_ mediaId: Int, _ episodeId: Int) -> Void
     var onSelectLibrary: (Int) -> Void
     var onSelectPlaylist: (Int) -> Void
+    var onSelectParty: (Int) -> Void
 
     var body: some View {
         switch section.type {
+        case .watchParties:
+            WatchPartiesRow(onSelect: onSelectParty)
         case .receivedRecommendations:
             // Parity with the web client: this social surface is hidden on
             // every TV form factor (`!tv.isTv()` gate on the Angular card).
@@ -94,6 +97,24 @@ struct HomeRow: View {
                 libraryId: section.libraryId,
                 onSelect: onSelectMedia
             )
+        }
+    }
+}
+
+// MARK: - Watch parties
+
+/// Live and scheduled parties of the viewer, live first (server order); nothing when there are none.
+private struct WatchPartiesRow: View {
+    var onSelect: (Int) -> Void
+    @Environment(PartyService.self) private var service
+
+    var body: some View {
+        ZoneRow(title: tr("party.rail_title"), portrait: false, state: .loaded(service.homeParties)) { party in
+            MediaCard(imagePath: party.item.fanartUrl ?? party.item.posterUrl, title: party.name,
+                      subtitle: party.cardSubtitle, portrait: false, backdropPath: party.item.fanartUrl,
+                      cornerLabel: party.status == "live" ? tr("party.live") : nil) {
+                onSelect(party.id)
+            }
         }
     }
 }

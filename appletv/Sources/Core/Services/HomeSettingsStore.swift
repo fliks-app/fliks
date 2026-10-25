@@ -19,6 +19,7 @@ struct HomeSettings: Codable {
 }
 
 enum HomeSectionType: String {
+    case watchParties = "watch-parties"
     case receivedRecommendations = "received-recommendations"
     case libraries
     case continueWatching = "continue-watching"
@@ -50,7 +51,7 @@ struct ResolvedHomeSection: Identifiable {
     private static let storageKey = "home.settings"
     private static let libraryRecentPrefix = "library-recent:"
     private static let builtinOrder = [
-        "received-recommendations", "libraries", "continue-watching",
+        "watch-parties", "received-recommendations", "libraries", "continue-watching",
         "recommendations", "likes", "recently-added", "playlists", "coming-soon",
     ]
     private static let defaultSettings = HomeSettings(
@@ -101,10 +102,14 @@ struct ResolvedHomeSection: Identifiable {
             merged.append(pref)
             seen.insert(pref.key)
         }
-        // Saved layouts predating this zone get it on top, not appended at the bottom.
+        // Saved layouts predating these zones get them on top, not appended at the bottom; parties sit above all.
         if !seen.contains("received-recommendations") {
             merged.insert(HomeSectionPref(key: "received-recommendations", visible: true), at: 0)
             seen.insert("received-recommendations")
+        }
+        if !seen.contains("watch-parties") {
+            merged.insert(HomeSectionPref(key: "watch-parties", visible: true), at: 0)
+            seen.insert("watch-parties")
         }
         for key in Self.builtinOrder where !seen.contains(key) {
             merged.append(HomeSectionPref(key: key, visible: true))

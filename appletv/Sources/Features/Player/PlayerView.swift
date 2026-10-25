@@ -15,6 +15,9 @@ struct PlayerView: View {
     var onExit: () -> Void
 
     @State private var coordinator = PlayerCoordinator()
+    @State private var partyController: PartyController?
+    @State private var partyBound = false
+    @Environment(PartyService.self) private var party
     @State private var loading = true
     @State private var loadErrorText: String?
 
@@ -50,6 +53,22 @@ struct PlayerView: View {
                     .padding(60)
             }
 
+            if partyController != nil {
+                PartyReactionsOverlay()
+                PartyBubbles()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                    .padding(60)
+            }
+
+            if partyController != nil, let notice = party.notice {
+                Text(notice)
+                    .font(.callout)
+                    .padding(12)
+                    .background(.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 8))
+                    .padding(.top, 60)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            }
+
             if let notice = coordinator.edlNotice {
                 Text(notice)
                     .font(.callout)
@@ -73,14 +92,33 @@ struct PlayerView: View {
         }
         .task {
             coordinator.onStopRequested = onExit
+            let inParty = party.takeHandoff()
+            partyBound = inParty
             do {
-                try await coordinator.load(mediaFileId: mediaFileId, mediaId: mediaId, episodeId: episodeId, startAt: startAt)
+                try await coordinator.load(mediaFileId: mediaFileId, mediaId: mediaId, episodeId: episodeId,
+                                           startAt: startAt, autoplay: !inParty)
+                if inParty {
+                    party.onClosed = { _ in onExit() }
+                    let controller = PartyController(player: coordinator)
+                    partyController = controller
+                    controller.attach()
+                }
             } catch {
                 loadErrorText = tr("player.load_error")
+                if inParty { await party.leave() }
             }
             loading = false
         }
-        .onDisappear { coordinator.teardown() }
+        .confirmationDialog(tr("party.tv_leave"), isPresented: Binding(get: { party.leaveConfirm }, set: { party.leaveConfirm = $0 }),
+                            titleVisibility: .visible) {
+            Button(tr("party.tv_leave_host_confirm"), role: .destructive) { Task { await party.endParty() } }
+            Button(tr("common.cancel"), role: .cancel) {}
+        } message: { Text(trp("party.tv_leave_host_message", ["name": party.party?.name ?? ""])) }
+        .onDisappear {
+            if let partyController { partyController.detach() } else if partyBound { Task { await party.leave() } }
+            party.onClosed = nil
+            coordinator.teardown()
+        }
     }
 }
 
@@ -94,6 +132,7 @@ private struct PlayerContainer: UIViewControllerRepresentable {
         vc.player = player
         vc.requiresLinearPlayback = false
         coordinator.playerViewController = vc
+        coordinator.applyTransportMenus()
         return vc
     }
 

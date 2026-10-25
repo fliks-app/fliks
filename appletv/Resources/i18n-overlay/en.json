@@ -93,5 +93,19 @@
   "settings.lang.kor": "Korean",
   "settings.lang.zho": "Chinese",
   "settings.lang.rus": "Russian",
-  "settings.lang.ara": "Arabic"
+  "settings.lang.ara": "Arabic",
+  "party.tv_leave": "Leave the party",
+  "party.tv_chat": "Chat",
+  "party.tv_queue": "Queue",
+  "party.tv_wait_host": "Waiting for the host to start",
+  "party.tv_host_only_hint": "Only the host can change these settings",
+  "playlists.add_to_short": "Add to",
+  "party.tv_close": "Close",
+  "party.tv_invite_hint": "Select people to invite",
+  "party.tv_chat_history": "Messages",
+  "party.end": "End the party",
+  "party.end_title": "End the party",
+  "party.end_message": "End \"{{name}}\" for everyone?",
+  "party.tv_leave_host_message": "You are the host: leaving ends \"{{name}}\" for everyone.",
+  "party.tv_leave_host_confirm": "Leave and end"
 }
