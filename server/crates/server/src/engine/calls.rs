@@ -263,23 +263,22 @@ impl Engine {
     }
 
     /// `POST /v1/sessions`, waiting out the 503 + `Retry-After` of the first detection run.
-    /// `replaces` retires that session in the same call, sent only to an engine that lists
-    /// `session-replaces`.
+    /// `replaces` retires that session in the same call; an engine without `session-replaces` is
+    /// not sent it.
     pub async fn open_session(
         &self,
         body: &OpenSessionRequest,
         replaces: Option<&str>,
     ) -> Result<OpenSessionResponse, EngineError> {
         let client = self.need()?;
-        let mut body = serde_json::to_value(body).map_err(|e| EngineError::Other(e.to_string()))?;
-        if let Some(sid) = replaces
-            && self
-                .engine_features()
-                .iter()
-                .any(|f| f == "session-replaces")
-        {
-            body["replaces"] = sid.into();
-        }
+        let mut body = body.clone();
+        body.replaces = replaces
+            .filter(|_| {
+                self.engine_features()
+                    .iter()
+                    .any(|f| f == "session-replaces")
+            })
+            .map(str::to_owned);
         self.open_retrying(&client, "POST /v1/sessions", "/v1/sessions", &body, false)
             .await
     }

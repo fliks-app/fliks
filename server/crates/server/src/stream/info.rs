@@ -260,6 +260,7 @@ async fn run(
         burn_in: burn_in.map(|b| b.spec),
         source_version: held.version,
         subtitle_renditions: renditions,
+        replaces: None,
     };
     let fps = file
         .info

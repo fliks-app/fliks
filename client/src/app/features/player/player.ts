@@ -2540,8 +2540,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   ): Promise<boolean> {
     if (!this.engine || !this.mediaFileId) return true;
     const endReload = this.state.beginReload();
+    let replace: { replaces?: string } = {};
     try {
-      const replace = await this.retirePreviousSession(this.playbackInfo?.sessionId);
+      replace = await this.retirePreviousSession(this.playbackInfo?.sessionId);
       if (opts.unmute) this.engine.muted = false;
       const wasPaused = opts.preservePause ? this.pauseIntent() : false;
       this.playbackInfo = await this.negotiatePlayback(this.reloadStartAt(pos), {}, replace);
@@ -2563,11 +2564,17 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       await this.subs.restoreSubtitle(pos);
       return true;
     } catch (e) {
+      this.stopUnreplaced(replace);
       if (!this.fallBackFromRemuxOnLoadError(e, pos)) throw e;
       return false;
     } finally {
       endReload();
     }
+  }
+
+  /** A reload that failed after the serial stop was skipped: the old session would live until its TTL. */
+  private stopUnreplaced(r: { replaces?: string }): void {
+    if (r.replaces) void this.streamingApi.stopSession(r.replaces).catch(() => {});
   }
 
   /** Restore the play/pause state the user intended before a reload (quality/audio/subtitle switch, recovery).
@@ -3603,6 +3610,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (!this.engine) return;
     const endReload = this.state.beginReload();
     this.reloadLoadPending = true;
+    let replace: { replaces?: string } = {};
     try {
       // Capture the user's play/pause intent before tearing the stream down — a
       // quality / audio / subtitle switch must not resume a paused player.
@@ -3614,7 +3622,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       }
 
       // Only this device's session goes; multi-device viewers on the same file stay alive.
-      const replace = await this.retirePreviousSession(this.playbackInfo?.sessionId);
+      replace = await this.retirePreviousSession(this.playbackInfo?.sessionId);
 
       this.playbackInfo = await this.negotiatePlayback(this.reloadStartAt(currentPos), {}, replace);
       const pi = this.playbackInfo;
@@ -3635,6 +3643,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.restorePlayState(wasPaused);
 
       await this.subs.restoreSubtitle(currentPos);
+    } catch (e) {
+      this.stopUnreplaced(replace);
+      throw e;
     } finally {
       endReload();
     }
