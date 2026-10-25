@@ -21,6 +21,8 @@ struct HomeView: View {
 
     @Environment(AuthService.self) private var auth
     @Environment(HomeSettingsStore.self) private var homeSettings
+    @Environment(PartyService.self) private var party
+    @Environment(HomeRefresh.self) private var refresh
     @State private var librariesState: ZoneState<Library> = .loading
 
     private var requestsAllowed: Bool {
@@ -51,6 +53,14 @@ struct HomeView: View {
             .padding(.vertical, 48)
         }
         .task { await loadLibraries() }
+        // Fetched here, not in the row: an empty rail renders nothing, so a task on it would never run. The
+        // stream is only open inside a party, hence the timer instead of `party.updated`.
+        .task(id: refresh.tick) {
+            while !Task.isCancelled {
+                await party.refreshHomeParties()
+                try? await Task.sleep(for: .seconds(15))
+            }
+        }
     }
 
     private func loadLibraries() async {

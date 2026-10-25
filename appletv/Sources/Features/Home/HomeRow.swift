@@ -105,22 +105,13 @@ struct HomeRow: View {
 /// Live and scheduled parties of the viewer, live first (server order); nothing when there are none.
 private struct WatchPartiesRow: View {
     @Environment(PartyService.self) private var service
-    @Environment(HomeRefresh.self) private var refresh
-    @State private var state: ZoneState<Party> = .loaded([])
 
     var body: some View {
-        ZoneRow(title: tr("party.rail_title"), portrait: false, state: state) { party in
+        ZoneRow(title: tr("party.rail_title"), portrait: false, state: .loaded(service.homeParties)) { party in
             MediaCard(imagePath: party.item.fanartUrl ?? party.item.posterUrl, title: party.name,
                       subtitle: party.cardSubtitle, portrait: false, backdropPath: party.item.fanartUrl,
                       cornerLabel: party.status == "live" ? tr("party.live") : nil) {
                 Task { await service.enter(id: party.id) }
-            }
-        }
-        // The stream is only open inside a party, so the rail refreshes on a timer instead of on `party.updated`.
-        .task(id: refresh.tick) {
-            while !Task.isCancelled {
-                if let list: [Party] = try? await APIClient.shared.get("/api/parties") { state = .loaded(list) }
-                try? await Task.sleep(for: .seconds(15))
             }
         }
     }

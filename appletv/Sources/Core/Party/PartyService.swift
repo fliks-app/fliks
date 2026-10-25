@@ -13,6 +13,8 @@ import Foundation
     private(set) var bubbles: [PartyMessage] = []
     private(set) var queue: [PartyItem] = []
     enum Sheet: String, Identifiable { case invite, settings; var id: String { rawValue } }
+    /// Live and scheduled parties of the viewer, for the Home rail.
+    private(set) var homeParties: [Party] = []
     /// The invite or settings sheet, shared by the lobby and the player.
     var sheet: Sheet?
     /// A short line for the screen in front (errors, refusals), cleared after a few seconds.
@@ -231,6 +233,14 @@ import Foundation
     }
 
     func reload() async { await refetch() }
+
+    func refreshHomeParties() async {
+        do {
+            homeParties = try await APIClient.shared.get("/api/parties")
+        } catch {
+            print("party: home rail fetch failed: \(error)")
+        }
+    }
 
     private func hostAction(_ path: String) async {
         guard let id = party?.id else { return }
