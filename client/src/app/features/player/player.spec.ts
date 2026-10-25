@@ -660,6 +660,20 @@ describe('PlayerComponent wake / resume', () => {
     expect(h.streamingApi.getPlaybackInfo).toHaveBeenCalled();
   });
 
+  it('a quality pick made during a running reload is replayed once it settles', async () => {
+    const h = createHarness();
+    h.component.reloadingStream = true;
+    await h.component.reloadStream(undefined, { reason: 'quality' });
+    expect(h.streamingApi.getPlaybackInfo).not.toHaveBeenCalled();
+
+    h.component.reloadingStream = false;
+    const run = vi.spyOn(h.component, 'doReloadStream').mockResolvedValue(undefined);
+    h.component.drainPendingReload();
+    await flush();
+
+    expect(run).toHaveBeenCalledTimes(1);
+  });
+
   it('direct play has no encoder to warm', async () => {
     const h = createHarness();
     const fetchMock = vi.fn(async () => ({ ok: true }) as any);
