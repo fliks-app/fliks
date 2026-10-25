@@ -127,6 +127,16 @@ impl Ctx {
     }
 }
 
+async fn more_media(c: &Ctx, n: usize) {
+    for i in 0..n {
+        sqlx::query(r#"INSERT INTO media (title, type, "libraryId") VALUES ($1, 'movie', 1)"#)
+            .bind(format!("m{i}"))
+            .execute(&c.pool)
+            .await
+            .unwrap();
+    }
+}
+
 fn msg(v: &Value) -> Option<&str> {
     v["message"].as_str()
 }
@@ -311,6 +321,7 @@ async fn stale_seek_gets_the_snapshot_and_host_only_blocks_members(pool: PgPool)
 #[sqlx::test(migrations = false)]
 async fn a_party_created_now_or_rescheduled_to_the_past_opens_its_lobby_at_once(pool: PgPool) {
     let c = ctx(pool).await;
+    more_media(&c, 1).await;
     let (alice, a) = c.user("alice", true).await;
     let (bob, b) = c.user("bob", true).await;
     c.follow(alice, bob).await;
@@ -362,7 +373,7 @@ async fn a_party_created_now_or_rescheduled_to_the_past_opens_its_lobby_at_once(
             "POST",
             "/api/parties",
             &a,
-            Some(json!({"name": "solo", "mediaId": 1})),
+            Some(json!({"name": "solo", "mediaId": 2})),
         )
         .await;
     let solo = p["id"].as_i64().unwrap();
@@ -381,6 +392,7 @@ async fn a_party_created_now_or_rescheduled_to_the_past_opens_its_lobby_at_once(
 #[sqlx::test(migrations = false)]
 async fn host_switches_gate_reactions_and_chat_and_seed_the_next_party(pool: PgPool) {
     let c = ctx(pool).await;
+    more_media(&c, 2).await;
     let (alice, a) = c.user("alice", true).await;
     let (bob, b) = c.user("bob", true).await;
     c.follow(alice, bob).await;
@@ -436,7 +448,7 @@ async fn host_switches_gate_reactions_and_chat_and_seed_the_next_party(pool: PgP
             "POST",
             "/api/parties",
             &a,
-            Some(json!({"name": "next", "mediaId": 1})),
+            Some(json!({"name": "next", "mediaId": 2})),
         )
         .await;
     assert_eq!(
@@ -451,7 +463,7 @@ async fn host_switches_gate_reactions_and_chat_and_seed_the_next_party(pool: PgP
             "POST",
             "/api/parties",
             &a,
-            Some(json!({"name": "own", "mediaId": 1, "chatEnabled": true})),
+            Some(json!({"name": "own", "mediaId": 3, "chatEnabled": true})),
         )
         .await;
     assert_eq!(
@@ -463,6 +475,7 @@ async fn host_switches_gate_reactions_and_chat_and_seed_the_next_party(pool: PgP
 #[sqlx::test(migrations = false)]
 async fn a_party_without_link_sharing_hides_the_token_from_members(pool: PgPool) {
     let c = ctx(pool).await;
+    more_media(&c, 1).await;
     let (alice, a) = c.user("alice", true).await;
     let (bob, b) = c.user("bob", true).await;
     c.follow(alice, bob).await;
@@ -499,7 +512,7 @@ async fn a_party_without_link_sharing_hides_the_token_from_members(pool: PgPool)
             "POST",
             "/api/parties",
             &a,
-            Some(json!({"name": "next", "mediaId": 1})),
+            Some(json!({"name": "next", "mediaId": 2})),
         )
         .await;
     assert_eq!(next["linkSharing"], json!(false));
@@ -1550,4 +1563,65 @@ async fn an_item_a_user_cannot_open_is_not_named_to_them(pool: PgPool) {
     assert_eq!(list[0]["item"]["title"], "");
     let (_, p) = c.call("GET", &format!("/api/parties/{id}"), &b, None).await;
     assert_eq!(p["item"]["title"], "");
+}
+
+#[sqlx::test(migrations = false)]
+async fn creating_a_party_twice_returns_the_open_one(pool: PgPool) {
+    let c = ctx(pool).await;
+    more_media(&c, 1).await;
+    let (_, a) = c.user("alice", true).await;
+    let (_, b) = c.user("bob", true).await;
+    let make = |tok: &str, media: i32, at: Option<&str>| {
+        let body = json!({"name": "n", "mediaId": media, "scheduledAt": at});
+        let tok = tok.to_owned();
+        let c = &c;
+        async move {
+            let (s, p) = c.call("POST", "/api/parties", &tok, Some(body)).await;
+            assert_eq!(s, 201);
+            p["id"].as_i64().unwrap()
+        }
+    };
+
+    let first = make(&a, 1, None).await;
+    assert_eq!(make(&a, 1, None).await, first);
+    assert_ne!(make(&a, 2, None).await, first);
+    assert_ne!(make(&b, 1, None).await, first);
+
+    sqlx::query("UPDATE watch_parties SET status = 'ended' WHERE id = $1")
+        .bind(first as i32)
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    let next = make(&a, 1, None).await;
+    assert_ne!(next, first);
+
+    let (t1, t2) = ("2099-01-01T10:00:00Z", "2099-01-01T12:00:00Z");
+    let s1 = make(&a, 1, Some(t1)).await;
+    let s2 = make(&a, 1, Some(t2)).await;
+    assert_ne!(s1, s2);
+    assert_ne!(s1, next);
+    assert_eq!(make(&a, 1, Some(t1)).await, s1);
+    assert_eq!(make(&a, 1, Some(t2)).await, s2);
+}
+
+#[sqlx::test(migrations = false)]
+async fn simultaneous_creates_yield_one_party(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (_, a) = c.user("alice", true).await;
+    let body = json!({"name": "n", "mediaId": 1});
+    let calls = (0..6).map(|_| c.call("POST", "/api/parties", &a, Some(body.clone())));
+    let ids: Vec<i64> = futures_util::future::join_all(calls)
+        .await
+        .into_iter()
+        .map(|(s, p)| {
+            assert_eq!(s, 201);
+            p["id"].as_i64().unwrap()
+        })
+        .collect();
+    assert!(ids.iter().all(|i| *i == ids[0]));
+    let n: i64 = sqlx::query_scalar("SELECT count(*) FROM watch_parties")
+        .fetch_one(&c.pool)
+        .await
+        .unwrap();
+    assert_eq!(n, 1);
 }

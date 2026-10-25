@@ -443,12 +443,13 @@ pub async fn create(
     check_item(&st, &item).await?;
     let invitees = check_followed(&st, me, b.invitee_ids.as_deref().unwrap_or_default()).await?;
     let now = Utc::now();
-    let at = b.scheduled_at.filter(|t| *t > now).unwrap_or(now);
+    let scheduled = b.scheduled_at.filter(|t| *t > now);
+    let at = scheduled.unwrap_or(now);
     let policy = b.policy.unwrap_or(Policy::Everyone);
     let (inherit_reactions, inherit_chat, inherit_link) = db::owner_switches(&st.db, me)
         .await?
         .unwrap_or((true, true, true));
-    let row = db::insert(
+    let (row, created) = db::insert(
         &st.db,
         &db::New {
             reactions_enabled: b.reactions_enabled.unwrap_or(inherit_reactions),
@@ -462,11 +463,19 @@ pub async fn create(
             scheduled_at: at,
         },
         &invitees,
+        scheduled.is_none(),
+        now + chrono::Duration::milliseconds(LOBBY_OPEN_BEFORE_MS),
     )
     .await?;
-    announce_invited(&st, &row, &invitees).await?;
-    if lobby_open(&row) {
-        registry::open_lobby(&st, &row).await?;
+    if !created {
+        if row.status == "live" || lobby_open(&row) {
+            st.parties.ensure(&row, false);
+        }
+    } else {
+        announce_invited(&st, &row, &invitees).await?;
+        if lobby_open(&row) {
+            registry::open_lobby(&st, &row).await?;
+        }
     }
     Ok((StatusCode::CREATED, Json(dto(&st, &row, me, true).await?)))
 }
