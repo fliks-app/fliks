@@ -59,6 +59,7 @@ const DEVICE_PROFILE = { deviceType: 'desktop', supportsAbr: true } as DevicePro
 
 function buildPi(mediaFileId: number, overrides: Partial<PlaybackInfoResponse> = {}): PlaybackInfoResponse {
   return {
+    startAtSeconds: 0,
     mediaFileId,
     playMethod: 'DirectPlay',
     playUrl: '',
@@ -475,7 +476,7 @@ describe('PlayerComponent pre-roll', () => {
     // The backend answers `preRoll` on every playback-info call, including a plain in-place
     // reload — the client must ignore it there.
     h.streamingApi.getPlaybackInfo.mockResolvedValueOnce(
-      buildPi(NEXT_FILE_ID, { preRoll: [{ mediaFileId: TRAILER_FILE_ID }] }),
+      buildPi(NEXT_FILE_ID, { preRoll: [{ mediaFileId: TRAILER_FILE_ID }], startAtSeconds: 42 }),
     );
 
     await h.component.reloadForEpisode(NEXT_FILE_ID, MEDIA_ID, undefined);
@@ -483,21 +484,22 @@ describe('PlayerComponent pre-roll', () => {
 
     expect(h.component.preRollActive()).toBe(false);
     expect(h.streamingApi.getPlaybackInfo.mock.calls.map((c: unknown[]) => c[0])).not.toContain(TRAILER_FILE_ID);
-    // A normal reload still looks up where to resume; only a pre-roll transition skips it.
-    expect(h.streamingApi.getPlaybackState).toHaveBeenCalled();
+    // A normal reload resumes at the server's start; only a pre-roll transition skips it.
+    expect(h.streamingApi.getPlaybackState).not.toHaveBeenCalled();
+    expect(h.engine.loadCalls.at(-1)?.startTime).toBe(42);
     expect(h.engine.loadCalls.at(-1)?.url).toBe(`stream://${NEXT_FILE_ID}?sid=sid-${NEXT_FILE_ID}`);
   });
 
   it('a pre-roll transition does not resume it from the main film\'s stored position', async () => {
     const h = createHarness({ preRoll: [{ mediaFileId: TRAILER_FILE_ID }] });
     await h.component.maybeStartPreRoll(undefined, DEVICE_PROFILE);
-    h.streamingApi.getPlaybackState.mockClear();
+    h.streamingApi.getPlaybackInfo.mockResolvedValueOnce(buildPi(TRAILER_FILE_ID, { startAtSeconds: 42 }));
 
     h.component.skipPreRoll();
     await flush();
 
     // `noResumeLookup`: the stored position belongs to the film, not to what plays before it.
-    expect(h.streamingApi.getPlaybackState).not.toHaveBeenCalled();
+    expect(h.engine.loadCalls.at(-1)?.startTime ?? 0).toBe(0);
   });
 
   it('keeps progress gated while remounting away from a dead pre-roll', async () => {

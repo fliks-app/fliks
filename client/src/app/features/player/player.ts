@@ -944,16 +944,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // No stopSessions here — getOrCreateSession handles stale sessions naturally
       if (this.mediaId && !this.isOfflinePlayback) {
         const mediaPromise = this.mediaService.getOne(this.mediaId);
-        const statePromise =
-          startTime == null
-            ? this.streamingApi.getPlaybackState(this.mediaId, this.episodeId).catch(() => null)
-            : Promise.resolve(null);
         const media = await mediaPromise;
         this.media = media;
         this.resolveAudioTarget();
         await this.planSubtitleDelivery();
         requestPlaybackInfo();
-        const playbackState = await statePromise;
 
         this.mediaLoadedTick.update(v => v + 1);
         this.mediaTitle.set(media.title);
@@ -969,11 +964,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         const knownDuration = si?.durationSeconds;
         if (knownDuration && knownDuration > 0) {
           this.state.duration.set(knownDuration);
-        }
-
-        // Resume position from playback state
-        if (startTime == null && playbackState && !playbackState.completed && playbackState.positionSeconds > 10) {
-          startTime = playbackState.positionSeconds;
         }
       }
 
@@ -1042,6 +1032,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         // Await playback-info (kicked off in parallel with media load above)
         requestPlaybackInfo();
         this.playbackInfo = await playbackInfoPromise!;
+        startTime ??= this.playbackInfo.startAtSeconds || undefined;
+        this.pendingStartTime = startTime ?? 0;
         await this.maybeStartPreRoll(startTime);
         const pi = this.playbackInfo!;
 
@@ -1949,18 +1941,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       const knownDuration = (file?.streamInfo as any)?.durationSeconds;
       if (knownDuration && knownDuration > 0) this.state.duration.set(knownDuration);
 
-      // Resume point of the incoming episode. Skipped for a pre-roll transition:
-      // mediaId/episodeId stay on the main film, so this would seek a trailer to it.
-      if (!opts.noResumeLookup) {
-        const playbackState = await this.streamingApi
-          .getPlaybackState(this.mediaId, this.episodeId)
-          .catch(() => null);
-        if (playbackState && !playbackState.completed && playbackState.positionSeconds > 10) {
-          startTime = playbackState.positionSeconds;
-        }
-      }
-      this.pendingStartTime = startTime ?? 0;
-
       // The new file opens on its own audio pick; the backend marks it DEFAULT.
       this.resolveAudioTarget();
       await this.planSubtitleDelivery();
@@ -1969,6 +1949,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       await this.authService.ensureStreamToken();
       this.playbackInfo = await this.negotiatePlayback();
       const pi = this.playbackInfo;
+      // Skipped for a pre-roll transition: the ids stay on the main film, so it would seek a trailer.
+      if (!opts.noResumeLookup) startTime = pi.startAtSeconds || undefined;
+      this.pendingStartTime = startTime ?? 0;
       this.adoptPlaybackInfo(pi);
       startTime = this.edlStartTime(startTime);
 

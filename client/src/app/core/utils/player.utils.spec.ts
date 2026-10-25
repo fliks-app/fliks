@@ -19,6 +19,7 @@ function basePi(overrides: Partial<PlaybackInfoResponse> = {}): PlaybackInfoResp
     hwAccel: 'none',
     tonemapping: false,
     source: { container: 'mp4', videoCodec: 'h264', audioCodec: 'aac' },
+    startAtSeconds: 0,
     ...overrides,
   };
 }
