@@ -97,10 +97,6 @@ struct PartyManageView: View {
 
     @ViewBuilder private func link(_ party: Party) -> some View {
         Section(tr("party.link")) {
-            if let token = party.inviteToken {
-                Text(ServerStore.shared.resolveUrl("/party/\(token)")).font(.callout)
-                Text(token).font(.callout.monospaced()).foregroundStyle(.secondary)
-            }
             if service.isHost {
                 Button(tr("party.regenerate_link")) { confirmRegenerate = true }
                     .confirmationDialog(tr("party.regenerate_title"), isPresented: $confirmRegenerate, titleVisibility: .visible) {

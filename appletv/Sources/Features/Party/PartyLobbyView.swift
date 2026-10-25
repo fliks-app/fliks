@@ -3,7 +3,6 @@ import SwiftUI
 /// A scheduled party whose lobby is open: who is here, ready toggle, and the host's start.
 struct PartyLobbyView: View {
     @Environment(PartyService.self) private var service
-    @Environment(ServerStore.self) private var server
     @Environment(\.dismiss) private var dismiss
     @State private var visible = false
 
@@ -12,13 +11,8 @@ struct PartyLobbyView: View {
             if let party = service.party {
                 Section {
                     Text(party.name).font(.title2.bold())
-                    Text(party.item.title).foregroundStyle(.secondary)
+                    if party.item.title != party.name { Text(party.item.title).foregroundStyle(.secondary) }
                     Text(trp("party.hosted_by", ["host": party.host.username])).foregroundStyle(.secondary)
-                    if let token = party.inviteToken {
-                        Text("\(tr("party.link")): \(server.resolveUrl("/party/\(token)"))")
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                    }
                 }
                 Section(tr("party.tab_members")) {
                     ForEach(service.members) { member in
