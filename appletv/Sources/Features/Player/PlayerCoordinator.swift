@@ -733,7 +733,9 @@ import UIKit
     private var qualityMenu: UIMenu?
 
     func applyTransportMenus() {
-        playerViewController?.transportBarCustomMenuItems = [qualityMenu].compactMap { $0 } + partyMenus
+        var menus: [UIMenu] = []
+        if let qualityMenu { menus.append(qualityMenu) }
+        playerViewController?.transportBarCustomMenuItems = menus + partyMenus
     }
 
     private func selectQuality(_ id: String) {
