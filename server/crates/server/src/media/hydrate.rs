@@ -6,6 +6,16 @@ use std::collections::HashMap;
 
 /// `MLI` for `ids`, in that order; `sizeOnDisk` and `episodeStats` included, `watched`/`progressPercent` not.
 pub async fn items(db: &PgPool, ids: &[i32], see_paths: bool) -> Result<Vec<Value>, sqlx::Error> {
+    items_view(db, ids, see_paths, false).await
+}
+
+/// `items`, or with `grid` the library grid shape: `files` holds only the first file, plus `fileCount`.
+pub async fn items_view(
+    db: &PgPool,
+    ids: &[i32],
+    see_paths: bool,
+    grid: bool,
+) -> Result<Vec<Value>, sqlx::Error> {
     let rows = sqlx::query!(
         r#"SELECT media.id AS "id!", l.path AS lib_path, media."folderName" AS folder_name,
   (jsonb_build_object(
@@ -44,8 +54,11 @@ pub async fn items(db: &PgPool, ids: &[i32], see_paths: bool) -> Result<Vec<Valu
           'relativePath', f."relativePath", 'size', f.size, 'quality', f.quality, 'language', f.language,
           'streamInfo', f."streamInfo", 'osdbHash', f."osdbHash", 'osdbBytesize', f."osdbBytesize",
           'mediaId', f."mediaId", 'episodeId', f."episodeId") ORDER BY f.id)
-      FROM media_files f WHERE f."mediaId" = media.id), '[]'::jsonb),
+      FROM media_files f WHERE f."mediaId" = media.id
+        AND (NOT $2 OR f.id = (SELECT MIN(g.id) FROM media_files g WHERE g."mediaId" = media.id))), '[]'::jsonb),
     'sizeOnDisk', COALESCE((SELECT SUM(f.size) FROM media_files f WHERE f."mediaId" = media.id), 0))
+  || CASE WHEN $2 THEN jsonb_build_object('fileCount',
+       (SELECT COUNT(*) FROM media_files f WHERE f."mediaId" = media.id)) ELSE '{}'::jsonb END
   || CASE WHEN media.type = 'series' AND st.total > 0 THEN
        jsonb_build_object('episodeStats', jsonb_build_object('totalEpisodes', st.total, 'downloadedEpisodes', st.downloaded))
      ELSE '{}'::jsonb END) AS "json!: Value"
@@ -62,7 +75,8 @@ LEFT JOIN LATERAL (
   FROM seasons s JOIN episodes e ON e."seasonId" = s.id
   WHERE s."mediaId" = media.id AND s."seasonNumber" > 0) st ON media.type = 'series'
 WHERE media.id = ANY($1)"#,
-        ids
+        ids,
+        grid
     )
     .fetch_all(db)
     .await?;

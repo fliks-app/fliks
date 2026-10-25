@@ -305,11 +305,15 @@ pub async fn find_all(
     }
     let page_ids: Vec<i32> = qb.build_query_scalar().fetch_all(db).await?;
 
-    let mut qb = QueryBuilder::new("SELECT COUNT(*)");
-    push_scope(&mut qb, p, ids, uid, map.as_ref(), today);
-    let total: i64 = qb.build_query_scalar().fetch_one(db).await?;
+    let total = if paging.is_none() {
+        page_ids.len() as i64
+    } else {
+        let mut qb = QueryBuilder::new("SELECT COUNT(*)");
+        push_scope(&mut qb, p, ids, uid, map.as_ref(), today);
+        qb.build_query_scalar().fetch_one(db).await?
+    };
 
-    let mut data = hydrate::items(db, &page_ids, see_paths).await?;
+    let mut data = hydrate::items_view(db, &page_ids, see_paths, p.grid).await?;
     attach_watched(db, &mut data, &page_ids, uid).await?;
     Ok(Page { data, total })
 }
