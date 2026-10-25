@@ -166,6 +166,14 @@ export class PluginsSettingsComponent implements OnInit {
     return detail || null;
   }
 
+  /** The held update's explanation for the badge modal. */
+  heldDetail(row: PluginSummary): string | null {
+    const h = row.heldUpdate;
+    if (!h) return null;
+    const key = h.reason === 'new-scopes' ? 'new_scopes' : 'failed';
+    return this.translate.instant(`settings.plugins.held_update.${key}`, { version: h.version, detail: h.detail });
+  }
+
   async toggleEnabled(row: PluginSummary, enabled: boolean): Promise<void> {
     if (this.togglingId()) return;
     this.togglingId.set(row.pluginId);

@@ -2,7 +2,7 @@
 //! (`plugins.md` rules 25-29).
 use super::fetch::ArchiveError;
 use super::install::{InstallError, Report, carries_grant, ie};
-use super::packages::{self, Source};
+use super::packages::{self, Package, Source};
 use super::{Plugins, archive, catalog, trust};
 use crate::state::AppState;
 use axum::http::StatusCode;
@@ -190,6 +190,29 @@ impl Plugins {
         self.inspect_and_stage(&bytes, "catalog").await
     }
 
+    /// Puts the previous archive back after an unattended upgrade failed to activate, and holds the
+    /// failed version so the next run does not retry it.
+    async fn roll_back(&self, prev: &Package, failed: &str, why: &str) {
+        let restored = async {
+            let i = self
+                .inspect_bytes(&prev.archive)
+                .await
+                .map_err(|r| r.detail)?;
+            self.promote(&prev.archive, &i, &prev.origin)
+                .await
+                .map_err(|e| e.message)
+        }
+        .await;
+        if let Err(e) = restored {
+            tracing::error!(
+                "auto-update: {} not restored to {}: {e}",
+                prev.plugin_id,
+                prev.version
+            );
+        }
+        let _ = packages::hold_update(&self.db, &prev.plugin_id, failed, "failed", why).await;
+    }
+
     /// Rule 29: the newest installable version, unattended only when official and consent-free.
     pub async fn auto_update(&self) -> Value {
         let mut updated = vec![];
@@ -237,6 +260,14 @@ impl Plugins {
                 tracing::warn!("auto-update: {id}@{version} skipped — {reason}");
                 skipped.push(json!({"pluginId": id, "version": version, "reason": reason}));
             };
+            if pkg
+                .held_update
+                .as_ref()
+                .is_some_and(|h| h["version"] == version.as_str() && h["reason"] == "failed")
+            {
+                skip("it failed to activate before; an admin has to install it".into());
+                continue;
+            }
             let report = match self
                 .inspect_from_catalog(source, &pkg.plugin_id, &version)
                 .await
@@ -276,6 +307,26 @@ impl Plugins {
                 );
                 continue;
             }
+            let granted = packages::granted_scopes(&self.db, &id).await.ok().flatten();
+            let new_scopes: Vec<&str> = granted
+                .iter()
+                .flat_map(|g| {
+                    report
+                        .capabilities
+                        .iter()
+                        .flatten()
+                        .filter_map(|c| c.strip_prefix("scope:"))
+                        .filter(|s| !g.iter().any(|x| x == s))
+                })
+                .collect();
+            if !new_scopes.is_empty() {
+                let detail = new_scopes.join(", ");
+                let _ = packages::hold_update(&self.db, &id, &version, "new-scopes", &detail).await;
+                skip(format!(
+                    "the new version requests scopes ({detail}), which need an admin's consent"
+                ));
+                continue;
+            }
             match self.confirm(&staging, &sha).await {
                 Ok(r) if r.status == "active" => {
                     tracing::info!("auto-update: {} {} → {version}", pkg.plugin_id, pkg.version);
@@ -283,10 +334,13 @@ impl Plugins {
                         json!({"pluginId": pkg.plugin_id, "from": pkg.version, "to": version}),
                     );
                 }
-                Ok(r) => skip(
-                    r.reason
-                        .unwrap_or_else(|| "install did not activate".into()),
-                ),
+                Ok(r) => {
+                    let why = r
+                        .reason
+                        .unwrap_or_else(|| "install did not activate".into());
+                    self.roll_back(&pkg, &version, &why).await;
+                    skip(format!("{why}; kept {}", pkg.version));
+                }
                 Err(e) => skip(e.message),
             }
         }

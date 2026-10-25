@@ -2721,6 +2721,12 @@
       "tier_process": "Process",
       "status_active": "Active",
       "status_failed": "Failed",
+      "held_update": {
+        "badge": "Update {{version}} zurückgehalten",
+        "title": "Zurückgehaltenes Update",
+        "new_scopes": "Version {{version}} verlangt neue Berechtigungen ({{detail}}). Installiere sie über den Katalog, um sie zu prüfen und zu erteilen.",
+        "failed": "Version {{version}} konnte nicht starten, daher wurde die vorherige Version wiederhergestellt: {{detail}}. Installiere sie von Hand, sobald der Fehler behoben ist."
+      },
       "uninstall": "Uninstall",
       "confirm_uninstall": "„{{name}}“ deinstallieren? Alle zu diesem Plugin gehörenden Daten gehen verloren.",
       "uninstalled": "Plugin uninstalled.",

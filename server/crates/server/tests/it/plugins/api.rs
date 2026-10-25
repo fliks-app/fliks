@@ -1159,3 +1159,125 @@ async fn signature_and_signer_gates() {
     assert_eq!(r["status"], "active", "{r}");
     s.finish().await;
 }
+
+/// B3 and B4: an unattended upgrade that fails to activate is rolled back and held, one that asks for
+/// new scopes is held, and an admin's confirm of it grants them.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn auto_update_rolls_back_and_holds_new_scopes() {
+    let Some((m, w)) = fixture() else { return };
+    let Some(s) = Scratch::create("autoupd").await else {
+        return;
+    };
+    let cat = catalog().await;
+    let ca = cat.ca.clone();
+    let h = harness_with(&s, "autoupd", Arc::new(|_| {}), move |o| {
+        o.fetch = Fetcher {
+            net: StubNet::new(1, tokio_rustls::rustls::RootCertStore::empty(), &[]),
+            roots: vec![ca.clone()],
+        };
+    })
+    .await;
+    let url = format!("https://localhost:{}/catalog.json", cat.port);
+    let key =
+        base64::engine::general_purpose::STANDARD.encode(test_key().verifying_key().to_bytes());
+    let (_, src) = h
+        .call(
+            "POST",
+            "/api/plugins/sources",
+            Some(&h.admin),
+            Some(json!({"url": url, "publicKey": key})),
+        )
+        .await;
+    let id = src["id"].as_i64().unwrap();
+    let mut small = m.clone();
+    small["scopes"] = json!(["config:rw"]);
+    assert_eq!(
+        h.install(&pack(&small, "0.1.0", &w, Some(&test_key())))
+            .await["status"],
+        "active"
+    );
+    let offer = async |mf: &Value, version: &str, wasm: &[u8]| {
+        let bytes = pack(mf, version, wasm, Some(&test_key()));
+        let path = format!("/fixture-{version}.fkplugin");
+        {
+            let mut a = cat.archives.lock().unwrap();
+            a.retain(|(p, _)| *p != path);
+            a.push((path.clone(), bytes.clone()));
+        }
+        let doc = json!({"plugins": [{"id": "fliks.fixture", "name": "Fixture", "description": "", "author": "a",
+            "kind": "process", "versions": [{"version": version, "pluginApi": 2, "fliks": ">=5.0.0 <6.0.0",
+            "zipUrl": format!("https://localhost:{}{path}", cat.port), "sha256": archive::sha256_hex(&bytes)}]}]});
+        *cat.doc.lock().unwrap() = serde_json::to_vec(&doc).unwrap();
+        h.call(
+            "POST",
+            &format!("/api/plugins/sources/{id}/refresh"),
+            Some(&h.admin),
+            None,
+        )
+        .await;
+        bytes
+    };
+    let installed = async || {
+        packages::find(&s.pool, "fliks.fixture")
+            .await
+            .unwrap()
+            .unwrap()
+    };
+    // The fixture guest only activates as 0.1.0, so the installed row is aged to look older.
+    let age = async |keep_hold: bool| {
+        let q = if keep_hold {
+            r#"UPDATE plugin_packages SET version = '0.0.9'"#
+        } else {
+            r#"UPDATE plugin_packages SET version = '0.0.9', "heldUpdate" = NULL"#
+        };
+        sqlx::query(q).execute(&s.pool).await.unwrap();
+    };
+    age(true).await;
+    let mut broken = small.clone();
+    broken["routes"][0]["method"] = json!("NOPE");
+    offer(&broken, "0.1.0", &w).await;
+    let out = h.st.plugins.auto_update().await;
+    assert_eq!(out["updated"], json!([]), "{out}");
+    let p = installed().await;
+    assert_eq!(p.status, "active", "{out}");
+    let held = p.held_update.clone().unwrap_or_else(|| panic!("{out}"));
+    assert_eq!(held["reason"], "failed");
+    assert!(
+        h.st.plugins.rt("fliks.fixture").is_some(),
+        "the old archive runs again"
+    );
+    age(true).await;
+    let again = h.st.plugins.auto_update().await;
+    assert!(
+        again["skipped"][0]["reason"]
+            .as_str()
+            .unwrap()
+            .contains("failed to activate"),
+        "{again}"
+    );
+    // A newer version would carry another number than the held one.
+    age(false).await;
+    let full = offer(&m, "0.1.0", &w).await;
+    let out = h.st.plugins.auto_update().await;
+    assert!(
+        out["skipped"][0]["reason"]
+            .as_str()
+            .unwrap()
+            .contains("media:read"),
+        "{out}"
+    );
+    let p = installed().await;
+    assert_eq!(p.version, "0.0.9");
+    assert_eq!(p.held_update.unwrap()["reason"], "new-scopes");
+    let r = h.install(&full).await;
+    assert_eq!(r["status"], "active", "{r}");
+    let p = installed().await;
+    assert!(p.held_update.is_none());
+    let scopes = packages::granted_scopes(&s.pool, "fliks.fixture")
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(scopes.iter().any(|x| x == "media:read"));
+    h.finish().await;
+    s.finish().await;
+}

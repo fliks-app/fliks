@@ -22,6 +22,8 @@ export interface PluginSummary {
   /** `process` only — null for `data`, which has no supervisor. */
   processState?: string | null;
   statusMessage?: string;
+  /** An update the unattended path did not install, with the reason. */
+  heldUpdate?: { version: string; reason: 'new-scopes' | 'failed'; detail: string };
 }
 
 /** Mirrors backend `ProcessPluginMetrics` (`supervisor/plugin-supervisor.ts`). */

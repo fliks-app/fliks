@@ -21,6 +21,9 @@ pub struct Package {
     pub status_reason: Option<String>,
     #[sqlx(rename = "networkInternal")]
     pub network_internal: bool,
+    /// An update the unattended path did not install: `{version, reason, detail}`.
+    #[sqlx(rename = "heldUpdate")]
+    pub held_update: Option<Value>,
 }
 
 impl Package {
@@ -30,7 +33,7 @@ impl Package {
 }
 
 const COLUMNS: &str = r#"id, "pluginId", version, archive, origin::text AS origin, signature, "verifiedByKeyId",
-    manifest, enabled, status::text AS status, "statusReason", "networkInternal""#;
+    manifest, enabled, status::text AS status, "statusReason", "networkInternal", "heldUpdate""#;
 
 pub async fn all(db: &PgPool) -> sqlx::Result<Vec<Package>> {
     sqlx::query_as(&format!(
@@ -95,7 +98,7 @@ pub async fn upsert(db: &PgPool, u: Upsert<'_>) -> sqlx::Result<bool> {
              origin = EXCLUDED.origin, signature = EXCLUDED.signature, "verifiedByKeyId" = EXCLUDED."verifiedByKeyId",
              manifest = EXCLUDED.manifest, status = 'active', "statusReason" = NULL,
              "networkInternal" = EXCLUDED."networkInternal", "cwasmSha256" = NULL, "cwasmEngine" = NULL,
-             "updatedAt" = now()
+             "heldUpdate" = NULL, "updatedAt" = now()
            RETURNING enabled"#,
     )
     .bind(u.plugin_id)
@@ -110,6 +113,22 @@ pub async fn upsert(db: &PgPool, u: Upsert<'_>) -> sqlx::Result<bool> {
     .await
 }
 
+/// Records why `version` was not installed unattended; an install of any version clears it.
+pub async fn hold_update(
+    db: &PgPool,
+    id: &str,
+    version: &str,
+    reason: &str,
+    detail: &str,
+) -> sqlx::Result<()> {
+    sqlx::query(r#"UPDATE plugin_packages SET "heldUpdate" = $2 WHERE "pluginId" = $1"#)
+        .bind(id)
+        .bind(serde_json::json!({"version": version, "reason": reason, "detail": detail}))
+        .execute(db)
+        .await
+        .map(drop)
+}
+
 pub async fn delete(db: &PgPool, id: &str) -> sqlx::Result<()> {
     sqlx::query(r#"DELETE FROM plugin_packages WHERE "pluginId" = $1"#)
         .bind(id)
@@ -118,8 +137,32 @@ pub async fn delete(db: &PgPool, id: &str) -> sqlx::Result<()> {
         .map(drop)
 }
 
+/// The scopes an admin consented to; `None` before the first activation.
+pub async fn granted_scopes(db: &PgPool, id: &str) -> sqlx::Result<Option<Vec<String>>> {
+    sqlx::query_scalar(r#"SELECT scopes FROM plugin_registrations WHERE "pluginId" = $1"#)
+        .bind(id)
+        .fetch_optional(db)
+        .await
+}
+
+/// A confirmed install is the consent to the manifest's scopes, wider or narrower than before.
+pub async fn grant_scopes(db: &PgPool, id: &str, m: &Value) -> sqlx::Result<()> {
+    let scopes: Vec<String> = m["scopes"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|v| v.as_str().map(str::to_owned))
+        .collect();
+    sqlx::query(r#"UPDATE plugin_registrations SET scopes = $2 WHERE "pluginId" = $1"#)
+        .bind(id)
+        .bind(scopes)
+        .execute(db)
+        .await
+        .map(drop)
+}
+
 /// Created at the first activation with `scopes` and `ingestRoots`; an existing row keeps its
-/// scopes and re-reads `ingestRoots` and the manifest (rule 19 (5)).
+/// scopes (only a confirmed install changes them, `grant_scopes`) and re-reads `ingestRoots` and the manifest (rule 19 (5)).
 pub async fn upsert_registration(db: &PgPool, id: &str, m: &Value) -> sqlx::Result<()> {
     let strs = |k: &str| -> Vec<String> {
         m[k].as_array()

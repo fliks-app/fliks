@@ -157,3 +157,18 @@ describe('PluginsSettingsComponent — enable/disable toggle', () => {
     expect(fixture.nativeElement.querySelector('tbody app-error-badge button')).toBeNull();
   });
 });
+
+describe('PluginsSettingsComponent — held update', () => {
+  afterEach(() => TestBed.inject(HttpTestingController).verify());
+
+  it('flags an update the unattended path left alone', async () => {
+    const held = { version: '2.0.0', reason: 'new-scopes', detail: 'media:read' } as const;
+    const { fixture } = await createComponent([{ ...ROW, heldUpdate: held }]);
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('settings.plugins.held_update.badge');
+  });
+
+  it('shows nothing without one', async () => {
+    const { fixture } = await createComponent();
+    expect((fixture.nativeElement as HTMLElement).textContent).not.toContain('held_update');
+  });
+});

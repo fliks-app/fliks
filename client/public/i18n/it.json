@@ -2721,6 +2721,12 @@
       "tier_process": "Process",
       "status_active": "Active",
       "status_failed": "Failed",
+      "held_update": {
+        "badge": "Aggiornamento {{version}} trattenuto",
+        "title": "Aggiornamento trattenuto",
+        "new_scopes": "La versione {{version}} richiede nuovi permessi ({{detail}}). Installala dal catalogo per esaminarli e concederli.",
+        "failed": "La versione {{version}} non è partita, quindi è stata ripristinata la versione precedente: {{detail}}. Installala a mano quando sarà corretta."
+      },
       "uninstall": "Uninstall",
       "confirm_uninstall": "Disinstallare «{{name}}»? I dati associati a questo plugin andranno perduti.",
       "uninstalled": "Plugin uninstalled.",
