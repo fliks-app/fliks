@@ -14,6 +14,7 @@ import { IPC, type DesktopEvent } from '../shared/contract';
 import { LinuxCompositorPlayer, type CompositorAddon } from './mpv/linux-compositor-player';
 import { forwardPlayerEvents } from './window/forward-events';
 import { registerPlayerIpc } from './ipc';
+import { toElectronKey } from './keymap';
 
 // Velopack's install/update/uninstall hooks run and exit here, before any Electron startup.
 if (process.platform === 'win32') {
@@ -157,21 +158,6 @@ function computeDeviceName(): string {
   }
   return os.hostname().replace(/\.local$/, '');
 }
-
-const KEYMAP: Record<string, string> = {
-  Return: 'Enter',
-  Backspace: 'Backspace',
-  Tab: 'Tab',
-  Escape: 'Escape',
-  Space: 'Space',
-  Left: 'Left',
-  Right: 'Right',
-  Up: 'Up',
-  Down: 'Down',
-  Delete: 'Delete',
-  Home: 'Home',
-  End: 'End',
-};
 
 // Chromium cursor name → index into the addon's SDL system-cursor table. These
 // are Blink's legacy names, where "pointer" is the plain arrow and "hand" is
@@ -407,8 +393,8 @@ app.whenReady().then(async () => {
       } as any);
     else if (i.kind === 'text') wc.sendInputEvent({ type: 'char', keyCode: i.text } as any);
     else if (i.kind === 'key') {
-      const k = KEYMAP[i.key];
-      if (k) wc.sendInputEvent({ type: i.down ? 'keyDown' : 'keyUp', keyCode: k } as any);
+      const k = toElectronKey(i.key, i.mod | 0);
+      if (k) wc.sendInputEvent({ type: i.down ? 'keyDown' : 'keyUp', ...k } as any);
     }
   });
 

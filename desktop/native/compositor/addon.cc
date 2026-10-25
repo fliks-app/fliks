@@ -352,8 +352,9 @@ void RenderThreadMain(GlState* s) {
         }
         case SDL_KEYDOWN:
         case SDL_KEYUP: {
-          snprintf(ib, sizeof(ib), "{\"kind\":\"key\",\"down\":%s,\"key\":\"%s\"}",
-                   ev.type == SDL_KEYDOWN ? "true" : "false", SDL_GetKeyName(ev.key.keysym.sym));
+          snprintf(ib, sizeof(ib), "{\"kind\":\"key\",\"down\":%s,\"key\":\"%s\",\"mod\":%d}",
+                   ev.type == SDL_KEYDOWN ? "true" : "false", SDL_GetKeyName(ev.key.keysym.sym),
+                   (int)ev.key.keysym.mod);
           emitInput(ib);
           break;
         }
