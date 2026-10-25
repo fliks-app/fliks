@@ -18,6 +18,8 @@ export interface QualityOption {
 
 /** Persisted user choice for quality (same key across sessions). */
 const PLAYER_QUALITY_STORAGE_KEY = 'player.qualityId';
+/** Persisted for a pick of the top rung: the best quality of whichever title plays next (the engine resolves it). */
+export const BEST_QUALITY_ID = 'best';
 
 /** ABR: prefer starting at 720p+ and staying there; go below only when no variant meets the restriction. */
 // Seed high so Shaka picks the top variant on the first segment; ABR recalibrates once real bandwidth is observed.
@@ -93,7 +95,7 @@ export class QualityManagerService {
     return highestRungId(this.availableQualities());
   }
 
-  /** Restore the persisted rung BEFORE negotiating playback; applied verbatim since the backend resolves rungs minted on another ladder. */
+  /** Restore the persisted rung BEFORE negotiating playback; sent verbatim since the engine resolves `best` and rungs minted on another ladder, then `adoptNegotiatedQuality` names the rung served. */
   restorePreference(): void {
     this.activeQualityId.set(this.readFromStorage() ?? 'auto');
   }
@@ -205,13 +207,14 @@ export class QualityManagerService {
     this.selectQuality(option, engine, playbackMode, true);
   }
 
-  /** Persist the chosen rung id. Re-sent on the next negotiation, where the
-   *  backend maps it onto the ladder it serves. */
+  /** Persist the chosen rung id, or `best` for the top rung. Re-sent on the next negotiation, where the
+   *  engine maps it onto the ladder it serves. */
   persistPreference(option: QualityOption): void {
+    const id = option.id !== 'auto' && option.id === this.topRungId() ? BEST_QUALITY_ID : option.id;
     try {
       localStorage.setItem(
         PLAYER_QUALITY_STORAGE_KEY,
-        JSON.stringify({ id: option.id }),
+        JSON.stringify({ id }),
       );
     } catch {
       /* private mode / quota */
