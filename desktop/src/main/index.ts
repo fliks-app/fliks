@@ -2,6 +2,8 @@ import { app, BrowserWindow, ipcMain, Menu, shell } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
+import { createHash } from 'node:crypto';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { registerAppSchemePrivileged, registerAppProtocol, APP_URL } from './protocol';
@@ -10,7 +12,7 @@ import { appendLog, echoRendererConsole, redactQuery } from './log-file';
 import { setupUpdater } from './updater';
 import { registerDownloadIpc } from './download';
 import { registerCastIpc } from './cast';
-import { IPC, type DesktopEvent } from '../shared/contract';
+import { IPC, type DesktopEvent, type DesktopMediaMetadata } from '../shared/contract';
 import { LinuxCompositorPlayer, type CompositorAddon } from './mpv/linux-compositor-player';
 import { forwardPlayerEvents } from './window/forward-events';
 import { registerPlayerIpc } from './ipc';
@@ -176,10 +178,57 @@ const CURSOR_SHAPES: Record<string, number> = {
 const WHEEL_PIXELS_PER_NOTCH = 100;
 
 let uiWin: BrowserWindow | null = null;
+// Set where the OS has a media session to feed (Linux MPRIS).
+let setOsMediaSession: ((meta: DesktopMediaMetadata | null) => Promise<void>) | null = null;
 const inputCounts: Record<string, number> = {};
 
 function send(ev: DesktopEvent): void {
   if (uiWin && !uiWin.isDestroyed()) uiWin.webContents.send(IPC.event, ev);
+}
+
+/** Feeds MPRIS from the player and the page's metadata; returns what withdraws the session. */
+function startMpris(player: LinuxCompositorPlayer): () => void {
+  let mpris: import('./mpris').Mpris | null = null;
+  let artwork: string | null = null;
+  const withdraw = () => {
+    if (artwork) fs.rm(artwork, { force: true }, () => {});
+    artwork = null;
+    void mpris?.setMetadata(null);
+  };
+  setOsMediaSession = async (meta) => {
+    if (!meta) return withdraw();
+    try {
+      if (!mpris) {
+        const { Mpris } = await import('./mpris');
+        mpris = new Mpris((keyCode) => {
+          for (const type of ['keyDown', 'keyUp'] as const)
+            uiWin?.webContents.sendInputEvent({ type, keyCode } as any);
+        });
+        player.on('stateChanged', ({ state }) => {
+          if (state === 'playing') mpris?.setStatus('Playing');
+          else if (state === 'paused') mpris?.setStatus('Paused');
+          else if (state === 'ended' || state === 'idle' || state === 'error') mpris?.setStatus('Stopped');
+        });
+      }
+      const artworkUrl = meta.artworkUrl ? await cacheArtwork(meta.artworkUrl) : undefined;
+      if (artwork) fs.rm(artwork, { force: true }, () => {});
+      artwork = artworkUrl ? fileURLToPath(artworkUrl) : null;
+      await mpris.setMetadata({ ...meta, artworkUrl });
+    } catch (e) {
+      console.error('[mpris] unavailable', e);
+    }
+  };
+  return withdraw;
+}
+
+/** The OS fetches artwork itself, without the page's session: hand it a local copy. */
+async function cacheArtwork(url: string): Promise<string | undefined> {
+  if (!uiWin || uiWin.isDestroyed()) return undefined;
+  const res = await uiWin.webContents.session.fetch(url);
+  if (!res.ok) return undefined;
+  const file = path.join(os.tmpdir(), `fliks-artwork-${createHash('sha1').update(url).digest('hex')}`);
+  fs.writeFileSync(file, Buffer.from(await res.arrayBuffer()));
+  return pathToFileURL(file).href;
 }
 
 function rendererUrl(haveApp: boolean): string {
@@ -246,6 +295,8 @@ app.whenReady().then(async () => {
     systemName: systemName(),
     deviceName: deviceName(),
   }));
+
+  ipcMain.handle(IPC.setMediaSession, (_e, meta: DesktopMediaMetadata | null) => setOsMediaSession?.(meta));
 
   ipcMain.handle(IPC.getPlayerCapabilities, async () => {
     const { getPlayerCapabilities } = await import('./window/backends/capabilities');
@@ -347,6 +398,7 @@ app.whenReady().then(async () => {
   });
   forwardPlayerEvents(player, send);
   await player.start();
+  const stopOsMediaSession = startMpris(player);
 
   // SDL input (the addon owns the visible window) → the offscreen webContents.
   addon.onInput((json) => {
@@ -404,6 +456,7 @@ app.whenReady().then(async () => {
     setCursorVisible: (visible) => addon.setCursorVisible(visible),
     resize: () => {},
     destroy: () => player.destroy(),
+    onStop: stopOsMediaSession,
   });
 
   uiWin.loadURL(haveApp ? APP_URL : 'data:text/html,<body style="background:%231d232a"></body>');

@@ -129,6 +129,8 @@ export interface FliksDesktopApi {
   setMuteRanges?(ranges: { start: number; end: number }[]): Promise<void>;
   resize(rect: DesktopRect): Promise<void>;
   setFullscreen(enabled: boolean): Promise<void>;
+  /** Describes the playback to the OS media widgets; null withdraws it. */
+  setMediaSession(meta: { title: string; artist?: string; artworkUrl?: string } | null): Promise<void>;
   destroy(): Promise<void>;
   /** Native host OS identity (e.g. { systemName: "macOS 26" }). */
   getSystemInfo(): Promise<DesktopSystemInfo>;

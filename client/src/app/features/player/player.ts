@@ -987,11 +987,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         const artwork: MediaImage[] = [];
         if (this.media?.posterUrl) artwork.push({ src: this.serverConfig.resolveUrl(this.media.posterUrl), sizes: '300x450', type: 'image/jpeg' });
         if (this.media?.fanartUrl) artwork.push({ src: this.serverConfig.resolveUrl(this.media.fanartUrl), sizes: '1280x720', type: 'image/jpeg' });
-        navigator.mediaSession.metadata = new MediaMetadata({
-          title: this.episodeTitle() || this.mediaTitle(),
-          artist: this.episodeTitle() ? this.mediaTitle() : undefined,
-          artwork,
-        });
+        const title = this.episodeTitle() || this.mediaTitle();
+        const artist = this.episodeTitle() ? this.mediaTitle() : undefined;
+        navigator.mediaSession.metadata = new MediaMetadata({ title, artist, artwork });
+        void window.fliksDesktop?.setMediaSession({ title, artist, artworkUrl: artwork[0]?.src });
       }
 
       if (this.isOfflinePlayback) {
