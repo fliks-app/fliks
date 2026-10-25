@@ -192,6 +192,22 @@ async fn db_driver() {
         (json!(["one", "two"]), json!([])),
         "an empty result keeps its columns"
     );
+    let r = call(
+        "/test/db/query",
+        q(
+            "SELECT repeat('x', 1000000) FROM generate_series(1, 40)",
+            json!([]),
+        ),
+        &[],
+    )
+    .await;
+    assert_eq!(r["error"], "ERR_RESULT_TOO_LARGE", "{r}");
+    let r = call("/test/db/query", q("SELECT 1 AS one", json!([])), &[]).await;
+    assert_eq!(
+        r["rows"],
+        json!([[1]]),
+        "the connection survives the cut: {r}"
+    );
     let t = Instant::now();
     let r = call("/test/db/sleep", vec![], &[("s", "30")]).await;
     assert_eq!(r["error"], "57014", "{r}");
