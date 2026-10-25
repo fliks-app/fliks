@@ -28,16 +28,18 @@ struct PartyInviteView: View {
     var body: some View {
         PartySheetPage(title: tr("party.invite")) {
             if let party = service.party {
-                VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: 10) {
                     Text(tr("party.people")).font(.headline).foregroundStyle(.secondary)
-                    ForEach(PartyPeople.people(host: party.host, guests: party.guests ?? [], members: service.members)) { person in
-                        HStack {
-                            Text(person.username)
-                            Spacer()
-                            Text(label(person)).foregroundStyle(.secondary)
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(alignment: .top, spacing: 36) {
+                            ForEach(PartyPeople.people(host: party.host, guests: party.guests ?? [], members: service.members)) { person in
+                                AvatarTile(name: person.username, caption: label(person), dimmed: !person.present)
+                            }
                         }
-                        .padding(.horizontal, 8)
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 24)
                     }
+                    .scrollClipDisabled()
                 }
                 if service.isHost { candidates(party) }
             }
@@ -66,19 +68,19 @@ struct PartyInviteView: View {
         VStack(alignment: .leading, spacing: 20) {
             Text(tr("party.create_invitees")).font(.headline).foregroundStyle(.secondary)
             if list.isEmpty { Text(tr("party.no_followed")).foregroundStyle(.secondary) }
-            ForEach(list) { user in
-                Button {
-                    if picked.contains(user.id) { picked.remove(user.id) } else { picked.insert(user.id) }
-                } label: {
-                    HStack {
-                        Text(user.username)
-                        Spacer()
-                        Image(systemName: picked.contains(user.id) ? "checkmark.circle.fill" : "circle")
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(alignment: .top, spacing: 36) {
+                    ForEach(list) { user in
+                        AvatarTile(name: user.username,
+                                   badge: picked.contains(user.id) ? PartyBadge.Badge(symbol: "checkmark.circle.fill", color: .green) : nil) {
+                            if picked.contains(user.id) { picked.remove(user.id) } else { picked.insert(user.id) }
+                        }
                     }
-                    .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.bordered)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 24)
             }
+            .scrollClipDisabled()
             if !list.isEmpty {
                 Button(tr("party.invite")) {
                     let ids = Array(picked)
@@ -126,13 +128,14 @@ struct PartySettingsView: View {
     }
 
     @ViewBuilder private func hostActions(_ party: Party) -> some View {
-        VStack(alignment: .leading, spacing: 24) {
+        HStack(spacing: 24) {
             Button(tr("party.regenerate_link")) { confirmRegenerate = true }
                 .buttonStyle(.bordered)
                 .confirmationDialog(tr("party.regenerate_title"), isPresented: $confirmRegenerate, titleVisibility: .visible) {
                     Button(tr("party.regenerate_link")) { Task { await service.regenerateLink() } }
                     Button(tr("common.cancel"), role: .cancel) {}
                 } message: { Text(tr("party.regenerate_message")) }
+            Spacer(minLength: 80)
             Button(tr("party.cancel"), role: .destructive) { confirmEnd = true }
                 .buttonStyle(.bordered)
                 .confirmationDialog(tr("party.cancel_title"), isPresented: $confirmEnd, titleVisibility: .visible) {
