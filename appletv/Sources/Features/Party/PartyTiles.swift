@@ -20,6 +20,8 @@ struct AvatarTile: View {
     var caption: String?
     var badge: PartyBadge.Badge?
     var dimmed = false
+    /// An SF Symbol in place of the initial (the "add" tile).
+    var symbol: String?
     var action: (() -> Void)?
 
     var body: some View {
@@ -39,7 +41,9 @@ struct AvatarTile: View {
     }
 
     private var circle: some View {
-        Text(String(name.prefix(1)).uppercased())
+        Group {
+            if let symbol { Image(systemName: symbol) } else { Text(String(name.prefix(1)).uppercased()) }
+        }
             .font(.system(size: 52, weight: .bold))
             .frame(width: 140, height: 140)
             .background(Circle().fill(.white.opacity(0.18)))

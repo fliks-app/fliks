@@ -15,7 +15,6 @@ enum PartyMenu {
         if p.chatEnabled { children.append(chatMenu(p)) }
         if p.canControl, !p.queue.isEmpty { children.append(queueMenu(p)) }
         children.append(UIAction(title: tr("party.resync"), image: UIImage(systemName: "arrow.triangle.2.circlepath")) { _ in onResync() })
-        children.append(UIAction(title: tr("party.invite"), image: UIImage(systemName: "person.badge.plus")) { _ in p.sheet = .invite })
         children.append(UIAction(title: tr("party.settings"), image: UIImage(systemName: "gearshape")) { _ in p.sheet = .settings })
         children.append(UIMenu(options: .displayInline, children: [
             UIAction(title: tr("party.tv_leave"), image: UIImage(systemName: "rectangle.portrait.and.arrow.right"),
@@ -33,6 +32,10 @@ enum PartyMenu {
                 UIAction(title: tr("party.make_host")) { _ in Task { await p.makeHost(m.userId) } },
                 UIAction(title: tr("party.kick"), attributes: .destructive) { _ in Task { await p.kick(m.userId) } },
             ])
+        }
+        var rows = rows
+        if p.isHost {
+            rows.append(UIAction(title: tr("party.invite"), image: UIImage(systemName: "person.badge.plus")) { _ in p.sheet = .invite })
         }
         return UIMenu(title: "\(tr("party.tab_members")) (\(p.members.count))", image: UIImage(systemName: "person.3"), children: rows)
     }

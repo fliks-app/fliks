@@ -71,10 +71,6 @@ struct PartyLobbyView: View {
                           systemImage: ready ? "checkmark.circle.fill" : "circle")
                 }
                 .buttonStyle(.bordered)
-                Button { service.sheet = .invite } label: {
-                    Label(tr("party.invite"), systemImage: "person.badge.plus")
-                }
-                .buttonStyle(.bordered)
                 Button { service.sheet = .settings } label: {
                     Label(tr("party.settings"), systemImage: "gearshape")
                 }
@@ -102,6 +98,9 @@ struct PartyLobbyView: View {
                                    caption: member.isHost ? tr("party.host_badge") : tr("party.status_\(member.status)"),
                                    badge: PartyBadge.status(member.status), dimmed: member.status == "away",
                                    action: service.isHost && !member.isHost ? { selected = member } : nil)
+                    }
+                    if service.isHost {
+                        AvatarTile(name: tr("party.invite"), symbol: "plus") { service.sheet = .invite }
                     }
                 }
                 .padding(.horizontal, 20)
