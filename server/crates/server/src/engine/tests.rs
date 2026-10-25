@@ -510,7 +510,8 @@ mod runtime {
             [
                 "deviceProfileExtensions",
                 "hlsSubtitleRequest",
-                "muxedAudioRendition"
+                "muxedAudioRendition",
+                "sessionReplaces"
             ]
         );
         let (_f, e) = with(&["probe", "capabilities", "serve"]).await;
@@ -641,17 +642,6 @@ mod session_calls {
             };
             assert_eq!((*got, got_code.as_deref()), (st, Some(code)));
         }
-    }
-
-    #[tokio::test]
-    async fn refuses_a_live_open_on_an_engine_without_the_live_runtime() {
-        let (_f, e) = connected().await;
-        let body = serde_json::from_value(
-            json!({"channelId": "c", "upstreams": [], "capacityToken": "t"}),
-        )
-        .unwrap();
-        let err = e.open_live(&body).await.unwrap_err();
-        assert_eq!(err.to_string(), "The engine has no live TV runtime");
     }
 
     #[tokio::test]

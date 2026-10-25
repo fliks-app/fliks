@@ -765,25 +765,8 @@ fn the_golden_decision_reads_as_an_engine_answer() {
 }
 
 #[sqlx::test(migrations = false)]
-async fn replaces_is_withheld_from_an_engine_without_the_feature(pool: PgPool) {
+async fn replaces_reaches_the_engine(pool: PgPool) {
     let c = ctx(pool, true).await;
-    info(&c, "?token=tok&replaces=abc").await;
-    assert!(
-        c.fake.seen("POST", "/v1/sessions")[0]
-            .body
-            .get("replaces")
-            .is_none()
-    );
-}
-
-#[sqlx::test(migrations = false)]
-async fn replaces_reaches_an_engine_that_lists_it(pool: PgPool) {
-    let features: Vec<&str> = RUNTIME
-        .iter()
-        .copied()
-        .chain(["session-replaces"])
-        .collect();
-    let c = ctx_with(pool, true, &features).await;
     info(&c, "?token=tok&replaces=abc").await;
     assert_eq!(
         c.fake.seen("POST", "/v1/sessions")[0].body["replaces"],

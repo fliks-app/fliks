@@ -109,7 +109,7 @@ pub fn spawn(st: &AppState) {
 /// An engine failure on a route that does not map it: 503 for the engine states that mean unavailable, else a 500.
 fn engine_err(e: EngineError) -> AppError {
     match e {
-        EngineError::NotRunning | EngineError::NoLive => {
+        EngineError::NotRunning => {
             AppError::with_message(StatusCode::SERVICE_UNAVAILABLE, e.to_string())
         }
         e => {

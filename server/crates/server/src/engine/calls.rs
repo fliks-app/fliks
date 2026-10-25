@@ -21,8 +21,6 @@ const DEFAULT_RENDER_NODE: &str = "/dev/dri/renderD128";
 pub enum EngineError {
     /// No adopted engine: 503 "The streaming engine is not running".
     NotRunning,
-    /// The engine has no `live` feature: 503 "The engine has no live TV runtime".
-    NoLive,
     /// A non-2xx answer: `what` names the call, `code` is the error body's `code` (`live_at_capacity`).
     Http {
         what: String,
@@ -61,7 +59,6 @@ impl fmt::Display for EngineError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::NotRunning => f.write_str("The streaming engine is not running"),
-            Self::NoLive => f.write_str("The engine has no live TV runtime"),
             Self::Http { what, status, .. } => write!(f, "{what} -> {status}"),
             Self::Transport(e) | Self::Other(e) => f.write_str(e),
             Self::Job { state, what } => write!(f, "engine job {state}: {what}"),
@@ -272,13 +269,7 @@ impl Engine {
     ) -> Result<OpenSessionResponse, EngineError> {
         let client = self.need()?;
         let mut body = body.clone();
-        body.replaces = replaces
-            .filter(|_| {
-                self.engine_features()
-                    .iter()
-                    .any(|f| f == "session-replaces")
-            })
-            .map(str::to_owned);
+        body.replaces = replaces.map(str::to_owned);
         self.open_retrying(&client, "POST /v1/sessions", "/v1/sessions", &body, false)
             .await
     }
@@ -286,9 +277,6 @@ impl Engine {
     /// `POST /v1/live`; a `live_*` error body surfaces as `Http` with its `code`.
     pub async fn open_live(&self, body: &OpenLiveRequest) -> Result<OpenLiveResponse, EngineError> {
         let client = self.need()?;
-        if !self.engine_features().iter().any(|f| f == "live") {
-            return Err(EngineError::NoLive);
-        }
         self.open_retrying(&client, "POST /v1/live", "/v1/live", body, true)
             .await
     }

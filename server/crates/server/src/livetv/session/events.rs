@@ -307,9 +307,6 @@ pub fn spawn(st: &AppState) {
         loop {
             match rx.recv().await {
                 Ok(Feed::Resync(..)) => {
-                    if !st.engine.engine_features().iter().any(|f| f == "live") {
-                        continue;
-                    }
                     if let Err(e) = resync(&st).await {
                         tracing::warn!("live TV resync failed: {e}");
                         tokio::time::sleep(std::time::Duration::from_secs(1)).await;

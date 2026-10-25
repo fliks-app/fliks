@@ -246,7 +246,7 @@ fn unavailable(channel: &str) -> PlayError {
 /// The engine's refusals, as the client reads them (it treats every 5xx alike).
 fn engine_failure(e: &EngineError) -> AppError {
     match e {
-        EngineError::NotRunning | EngineError::NoLive => {
+        EngineError::NotRunning => {
             AppError::with_message(StatusCode::SERVICE_UNAVAILABLE, e.to_string())
         }
         EngineError::Transport(_) => AppError::with_message(

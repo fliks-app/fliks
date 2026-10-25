@@ -44,7 +44,7 @@ const SERVER_FEATURES: [(&str, &str); 4] = [
     ("deviceProfileExtensions", "decide"),
     ("hlsSubtitleRequest", "serve"),
     ("muxedAudioRendition", "serve"),
-    ("sessionReplaces", "session-replaces"),
+    ("sessionReplaces", "sessions"),
 ];
 
 /// Deadlines and intervals; tests shrink them, the real ones are the contract.
