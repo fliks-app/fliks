@@ -29,10 +29,9 @@ import { mapTrackList, parseTracks, type MpvTrack } from './tracks';
 import { QoeReader } from './qoe';
 import { isPrematureEof } from './eof-guard';
 import { TypedEmitter } from './typed-emitter';
-import type { NowPlayingNative } from '../now-playing';
+import type { NowPlayingAddon } from '../now-playing';
 
-export type MacAddon = NowPlayingNative & {
-  onRemoteCommand(cb: (name: string) => void): void;
+export type MacAddon = NowPlayingAddon & {
   start(o: { wid: string; scale?: number }): void;
   onEvent(cb: (json: string) => void): void;
   load(o: MpvLoadRequest): void;

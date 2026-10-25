@@ -23,7 +23,10 @@ export interface PlayerIpcHost {
 }
 
 /** Wire the renderer→main invoke channels to the host's mpv player. */
-export function registerPlayerIpc(session: PlayerIpcHost): void {
+export function registerPlayerIpc(
+  session: PlayerIpcHost,
+  hooks: { onPlaybackRate?: (rate: number) => void } = {},
+): void {
   ipcMain.handle(IPC.load, (_e, opts: DesktopLoadOptions) => {
     console.log('[ipc] load:', redactQuery(opts.url), 'start=', opts.startTime ?? 0, 'headers=', Object.keys(opts.headers ?? {}).join(','));
     return session.player.load(opts);
@@ -42,7 +45,10 @@ export function registerPlayerIpc(session: PlayerIpcHost): void {
     setPlaybackKeepAwake(false);
     session.onStop?.();
   });
-  ipcMain.handle(IPC.setPlaybackRate, (_e, rate: number) => session.player.setPlaybackRate(rate));
+  ipcMain.handle(IPC.setPlaybackRate, async (_e, rate: number) => {
+    await session.player.setPlaybackRate(rate);
+    hooks.onPlaybackRate?.(rate);
+  });
   ipcMain.handle(IPC.setVolume, (_e, volume: number) => session.player.setVolume(volume));
   ipcMain.handle(IPC.setMuted, (_e, muted: boolean) => session.player.setMuted(muted));
   ipcMain.handle(IPC.setMuteRanges, (_e, ranges: DesktopMuteRange[]) =>

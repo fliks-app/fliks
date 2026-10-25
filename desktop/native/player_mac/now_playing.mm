@@ -11,7 +11,14 @@ bool g_commandFnReady = false;
 MPMediaItemArtwork* g_artwork = nil;
 bool g_commandsOn = false;
 
-// Next/previous are the client's +-10 s seek; scrubbing has no path through the client's seek flow, so it stays off.
+void EmitCommand(NSString* name, double position) {
+  if (!g_commandFnReady) return;
+  std::string s = [name UTF8String];
+  g_commandFn.NonBlockingCall([s, position](Napi::Env env, Napi::Function fn) {
+    fn.Call({Napi::String::New(env, s), Napi::Number::New(env, position)});
+  });
+}
+
 void EnableCommands() {
   MPRemoteCommandCenter* c = [MPRemoteCommandCenter sharedCommandCenter];
   NSDictionary<NSString*, MPRemoteCommand*>* cmds = @{
@@ -27,14 +34,15 @@ void EnableCommands() {
     MPRemoteCommand* cmd = cmds[name];
     cmd.enabled = YES;
     [cmd addTargetWithHandler:^MPRemoteCommandHandlerStatus(MPRemoteCommandEvent*) {
-      if (g_commandFnReady) {
-        std::string s = [name UTF8String];
-        g_commandFn.NonBlockingCall([s](Napi::Env env, Napi::Function fn) { fn.Call({Napi::String::New(env, s)}); });
-      }
+      EmitCommand(name, 0);
       return MPRemoteCommandHandlerStatusSuccess;
     }];
   }
-  c.changePlaybackPositionCommand.enabled = NO;
+  c.changePlaybackPositionCommand.enabled = YES;
+  [c.changePlaybackPositionCommand addTargetWithHandler:^MPRemoteCommandHandlerStatus(MPRemoteCommandEvent* e) {
+    EmitCommand(@"seek", ((MPChangePlaybackPositionCommandEvent*)e).positionTime);
+    return MPRemoteCommandHandlerStatusSuccess;
+  }];
   c.seekForwardCommand.enabled = NO;
   c.seekBackwardCommand.enabled = NO;
   c.skipForwardCommand.enabled = NO;
@@ -44,14 +52,14 @@ void EnableCommands() {
 void DisableCommands() {
   MPRemoteCommandCenter* c = [MPRemoteCommandCenter sharedCommandCenter];
   for (MPRemoteCommand* cmd in @[c.playCommand, c.pauseCommand, c.togglePlayPauseCommand, c.stopCommand,
-                                 c.nextTrackCommand, c.previousTrackCommand]) {
+                                 c.nextTrackCommand, c.previousTrackCommand, c.changePlaybackPositionCommand]) {
     cmd.enabled = NO;
     [cmd removeTarget:nil];
   }
   g_commandsOn = false;
 }
 
-// onRemoteCommand(cb): cb receives play | pause | toggle | stop | next | previous.
+// onRemoteCommand(cb): cb receives play | pause | toggle | stop | next | previous, or seek with the position in seconds.
 Napi::Value OnRemoteCommand(const Napi::CallbackInfo& info) {
   if (g_commandFnReady) {
     g_commandFn.Release();
@@ -62,7 +70,7 @@ Napi::Value OnRemoteCommand(const Napi::CallbackInfo& info) {
   return info.Env().Undefined();
 }
 
-// setNowPlaying({title, artist?, artwork?: Buffer, duration, elapsed, playing}); artwork is kept until clearNowPlaying.
+// setNowPlaying({title, artist?, artwork?: Buffer, duration, elapsed, rate, playing}); artwork is kept until clearNowPlaying.
 Napi::Value SetNowPlaying(const Napi::CallbackInfo& info) {
   Napi::Object o = info[0].As<Napi::Object>();
   if (!g_commandsOn) EnableCommands();
@@ -80,7 +88,7 @@ Napi::Value SetNowPlaying(const Napi::CallbackInfo& info) {
   if (g_artwork) d[MPMediaItemPropertyArtwork] = g_artwork;
   d[MPMediaItemPropertyPlaybackDuration] = @(o.Get("duration").ToNumber().DoubleValue());
   d[MPNowPlayingInfoPropertyElapsedPlaybackTime] = @(o.Get("elapsed").ToNumber().DoubleValue());
-  d[MPNowPlayingInfoPropertyPlaybackRate] = @(playing ? 1.0 : 0.0);
+  d[MPNowPlayingInfoPropertyPlaybackRate] = @(playing ? o.Get("rate").ToNumber().DoubleValue() : 0.0);
   d[MPNowPlayingInfoPropertyMediaType] = @(MPNowPlayingInfoMediaTypeVideo);
   MPNowPlayingInfoCenter* center = [MPNowPlayingInfoCenter defaultCenter];
   center.nowPlayingInfo = d;

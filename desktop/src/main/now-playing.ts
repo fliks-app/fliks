@@ -7,14 +7,15 @@ export interface NowPlayingNative {
     artwork?: Buffer;
     duration: number;
     elapsed: number;
+    rate: number;
     playing: boolean;
   }): void;
   clearNowPlaying(): void;
 }
 
-/** A platform's media controls: what NowPlaying publishes to, and the buttons it sends back (play | pause | toggle | stop | next | previous). */
+/** A platform's media controls: what NowPlaying publishes to, and what it sends back: play | pause | toggle | stop | next | previous, or seek with a position in seconds. */
 export interface NowPlayingAddon extends NowPlayingNative {
-  onRemoteCommand(cb: (name: string) => void): void;
+  onRemoteCommand(cb: (name: string, position?: number) => void): void;
 }
 
 /** The OS extrapolates the elapsed time from the rate: only a seek or drift past this needs a push. */
@@ -29,8 +30,10 @@ export class NowPlaying {
   private playing = false;
   private duration = 0;
   private position = 0;
+  private rate = 1;
   private pushedAt = 0;
   private pushedPosition = 0;
+  private pushedRate = 1;
 
   private readonly native: NowPlayingNative;
   private readonly now: () => number;
@@ -59,11 +62,17 @@ export class NowPlaying {
     }
   }
 
+  setRate(rate: number): void {
+    if (rate === this.rate) return;
+    this.rate = rate;
+    if (this.active) this.push();
+  }
+
   setPosition({ position, duration }: DesktopPositionInfo): void {
     this.position = position;
     this.duration = duration;
     if (!this.active) return;
-    const expected = this.pushedPosition + (this.playing ? (this.now() - this.pushedAt) / 1000 : 0);
+    const expected = this.pushedPosition + (this.playing ? ((this.now() - this.pushedAt) / 1000) * this.pushedRate : 0);
     if (Math.abs(position - expected) > DRIFT_SECONDS) this.push();
   }
 
@@ -75,11 +84,13 @@ export class NowPlaying {
       artwork: this.artworkSent ? undefined : this.artwork,
       duration: this.duration,
       elapsed: this.position,
+      rate: this.rate,
       playing: this.playing,
     });
     this.artworkSent = true;
     this.pushedAt = this.now();
     this.pushedPosition = this.position;
+    this.pushedRate = this.rate;
   }
 
   private clear(): void {
