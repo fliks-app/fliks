@@ -298,6 +298,16 @@ impl Plugins {
                     e.version
                 );
             }
+            if let Some(e) = &existing
+                && e.verified_by_key_id.is_some()
+                && e.verified_by_key_id != i.signed_by
+            {
+                return Err(ie(
+                    StatusCode::CONFLICT,
+                    "PLUGIN_SIGNER_CHANGED",
+                    "the signer differs from the installed version: uninstall the plugin first",
+                ));
+            }
             manifest::check_files(i)
                 .map_err(|r| ie(StatusCode::UNPROCESSABLE_ENTITY, r.code, r.detail))?;
             if m["kind"] == "process" && m["database"]["schema"] == Value::Bool(true) {

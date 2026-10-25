@@ -2,7 +2,7 @@
 use super::harness::*;
 use super::net::{Reply, StubNet, pki, stub};
 use base64::Engine;
-use ed25519_dalek::Signer;
+use ed25519_dalek::{Signer, SigningKey};
 use fliks_server::plugins::fetch::Fetcher;
 use fliks_server::plugins::{archive, packages};
 use serde_json::{Value, json};
@@ -1120,5 +1120,42 @@ async fn disabled_plugins_never_refresh_the_catalog() {
             .unwrap();
     assert_eq!((at, err), (None, None));
     h.finish().await;
+    s.finish().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn signature_and_signer_gates() {
+    let Some((m, w)) = fixture() else { return };
+    let Some(s) = Scratch::create("signer").await else {
+        return;
+    };
+    let h = harness(&s, "signer", |_| {}).await;
+    let stranger = SigningKey::from_bytes(&[9u8; 32]);
+    let (_, r) = h.upload(&pack(&m, "0.1.0", &w, Some(&stranger))).await;
+    assert_eq!(
+        r["refusalCode"], "PLUGIN_UNSIGNED",
+        "a signature no trusted key verifies: {r}"
+    );
+    assert_eq!(
+        h.install(&pack(&m, "0.1.0", &w, Some(&test_key()))).await["status"],
+        "active"
+    );
+    allow_unsigned(&h).await;
+    let (_, r) = h.upload(&pack(&m, "0.1.0", &w, None)).await;
+    let (st, c) = h
+        .call(
+            "POST",
+            "/api/plugins/import/confirm",
+            Some(&h.admin),
+            Some(json!({"stagingId": r["stagingId"], "sha256": r["sha256"]})),
+        )
+        .await;
+    assert_eq!(
+        (st, c["code"].as_str()),
+        (409, Some("PLUGIN_SIGNER_CHANGED")),
+        "{c}"
+    );
+    let r = h.install(&pack(&m, "0.1.0", &w, Some(&test_key()))).await;
+    assert_eq!(r["status"], "active", "{r}");
     s.finish().await;
 }

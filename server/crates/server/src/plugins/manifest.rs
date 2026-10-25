@@ -481,10 +481,10 @@ pub fn inspect(buf: &[u8], allow_unsigned: bool, keys: &Keys) -> Result<Inspecte
         ));
     }
     if process {
-        if signature == Trust::Unsigned && !allow_unsigned {
+        if signature != Trust::Official && !allow_unsigned {
             return Err(refuse(
                 "PLUGIN_UNSIGNED",
-                "process-tier plugins must be signed unless unsigned plugins are allowed",
+                "process-tier plugins must carry a trusted signature unless unsigned plugins are allowed",
             ));
         }
         let code: std::collections::BTreeSet<&str> = archive

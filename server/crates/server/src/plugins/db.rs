@@ -4,6 +4,7 @@ use super::runtime::{DbError, Param, RowSet, Value};
 use crate::sync::MutexExt;
 use bytes::BytesMut;
 use chrono::DateTime;
+use futures_util::TryStreamExt;
 use sqlx::{PgPool, Postgres, Transaction};
 
 type Tx = Transaction<'static, Postgres>;
@@ -15,6 +16,8 @@ use tokio_postgres::{Client, NoTls};
 
 pub const QUERY_DEADLINE: Duration = Duration::from_secs(60);
 pub const MIGRATE_DEADLINE: Duration = Duration::from_secs(600);
+/// Cap on the rows a query may buffer in the server process.
+pub const MAX_RESULT_BYTES: usize = 32 * 1024 * 1024;
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(2);
 const IDLE_CLOSE: Duration = Duration::from_secs(600);
 pub const UNAVAILABLE: &str = "unavailable";
@@ -245,10 +248,24 @@ async fn run(c: &Client, sql: &str, params: &[TextParam], rows: bool) -> Result<
     }
     if rows {
         let cols = stmt.columns().iter().map(|c| c.name().to_owned()).collect();
-        c.query(&stmt, &refs)
-            .await
-            .map(|r| Out::Rows(cols, r))
-            .map_err(pg_err)
+        let stream = c.query_raw(&stmt, refs).await.map_err(pg_err)?;
+        let mut stream = std::pin::pin!(stream);
+        let (mut out, mut bytes) = (Vec::new(), 0);
+        while let Some(row) = stream.try_next().await.map_err(pg_err)? {
+            bytes += (0..row.len())
+                .map(|i| row.get::<_, Raw>(i).0.map_or(0, <[u8]>::len))
+                .sum::<usize>();
+            if bytes > MAX_RESULT_BYTES {
+                // The backend would keep producing rows for a dropped stream.
+                let _ = c.cancel_token().cancel_query(NoTls).await;
+                return Err(err(
+                    "ERR_RESULT_TOO_LARGE",
+                    format!("result exceeds {MAX_RESULT_BYTES} bytes"),
+                ));
+            }
+            out.push(row);
+        }
+        Ok(Out::Rows(cols, out))
     } else {
         c.execute(&stmt, &refs)
             .await
