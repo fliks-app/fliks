@@ -1671,6 +1671,23 @@ describe('PlayerComponent reload QoE event', () => {
     ]);
   });
 
+  it('shows a styled track as plain text when picked automatically, and burns it in when the viewer picks it', async () => {
+    const { h, spy } = spied();
+    h.component.subs.availableSubtitles.set([
+      subOption('emb-2', 'en', { burnIn: true, styled: true, subtitleDbId: 5 }),
+    ]);
+    const styled = h.component.subs.availableSubtitles()[0];
+
+    await h.component.subs.applySubtitle(h.component.subs.plainIfStyled(styled));
+    expect(spy).not.toHaveBeenCalled();
+    expect(h.component.subs.activeBurnInId).toBeNull();
+    expect(h.component.subs.availableSubtitles()[0].burnIn).toBe(false);
+
+    await h.component.subs.selectSubtitle(h.component.subs.availableSubtitles()[0]);
+    expect(spy.mock.calls.map((c) => c[2])).toEqual([{ reason: 'subtitles', to: 'en' }]);
+    expect(h.component.subs.activeBurnInId).toBe(5);
+  });
+
   it('reports a quality reload as quality, so no event is added for it', async () => {
     const { h, spy } = spied();
     TestBed.inject(QualityManagerService).availableQualities.set([

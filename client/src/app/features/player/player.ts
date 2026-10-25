@@ -2452,7 +2452,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.availableAudioTracks(),
       this.activeAudioTrackId(),
       this.mediaFileId,
-      (sub) => this.subs.applySubtitle(sub),
+      (sub) => this.subs.applySubtitle(this.subs.plainIfStyled(sub)),
       this.mediaId,
       this.targetAudioLanguage(),
       picked,
@@ -2467,7 +2467,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const auto: { sub: SubtitleOption | null } = { sub: null };
     await this.trackManager.autoSelectSubtitle(
       await this.itemSubtitles(), [], null, this.mediaFileId,
-      async (sub) => { auto.sub = sub; },
+      async (sub) => { auto.sub = this.subs.plainIfStyled(sub); },
       this.mediaId, this.targetAudioLanguage(), this.launchPick()?.subtitleId,
     );
     this.subs.needsHlsSubtitles = !!auto.sub && !auto.sub.burnIn;
