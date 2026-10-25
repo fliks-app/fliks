@@ -109,4 +109,6 @@ HEALTHCHECK --interval=30s --timeout=15s --start-period=60s --retries=3 \
   CMD ["fliks-server", "healthcheck"]
 
 # The engine owns the public port (PORT) and forwards non-media routes to fliks-server on 4849.
+# The server listens on loopback only: the login limiter trusts the gateway's X-Forwarded-For.
+ENV FLIKS_BIND=127.0.0.1
 CMD ["sh", "-c", "exec fliks-engine --supervise --upstream http://127.0.0.1:4849 --public-listen 0.0.0.0:${PORT:-4848} -- fliks-server"]

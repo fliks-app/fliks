@@ -119,7 +119,7 @@ pub async fn serve(cfg: Config) -> Result<(), BoxError> {
         cfg.cast_dir.clone(),
         cfg.cors_origin.clone(),
     );
-    let listener = tokio::net::TcpListener::bind(("0.0.0.0", cfg.port)).await?;
+    let listener = tokio::net::TcpListener::bind((cfg.bind, cfg.port)).await?;
     auth::spawn_jobs(db);
     jobs::spawn(&state);
     subtitles::scheduler::spawn_tick(&state);
