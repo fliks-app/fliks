@@ -83,7 +83,7 @@ jobs:
       - uses: taiki-e/install-action@9252097d36d2d3618ad98f5d873696a962b6897c # nextest
       # Includes the plugin host tests (`--test plugins`), which fail under CI without the fixture.
       # nextest pools every test binary instead of running them one after another; this workspace has no doctests.
-      - run: cargo nextest run --workspace
+      - run: cargo nextest run --workspace --no-fail-fast
       - name: plugin SDK tests (harness on the fixture)
         working-directory: server/crates/plugin-sdk
         run: cargo test --workspace
