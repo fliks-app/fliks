@@ -116,9 +116,30 @@ impl ConnectionTest {
     }
 }
 
-/// `data` or `Http` with the call's name.
+/// `data`, `Http` with the call's name, or `Other` with why a 2xx body is not a `T`.
 fn expect<T: serde::de::DeserializeOwned>(what: &str, reply: &Reply) -> Result<T, EngineError> {
-    reply.data().ok_or_else(|| EngineError::http(what, reply))
+    match reply.parse() {
+        Ok(data) => Ok(data),
+        Err(e) if reply.ok() => Err(EngineError::Other(format!(
+            "{what}: unreadable answer: {e}"
+        ))),
+        Err(_) => Err(EngineError::http(what, reply)),
+    }
+}
+
+/// A session the engine opened but the host cannot read is closed, else it runs until the engine reaps it.
+async fn release_unread(client: &Client, reply: &Reply) {
+    let Some(sid) = reply.body.as_ref().and_then(|b| b["sessionId"].as_str()) else {
+        return;
+    };
+    match client
+        .delete(&format!("/v1/sessions/{}", enc(sid)), &[])
+        .await
+    {
+        Ok(r) if !r.ok() => tracing::warn!("DELETE unread session -> {}", r.status.as_u16()),
+        Err(e) => tracing::warn!("DELETE unread session failed: {}", e.without_url()),
+        Ok(_) => {}
+    }
 }
 
 fn seconds(t: &Timing, secs: f64) -> std::time::Duration {
@@ -273,8 +294,13 @@ impl Engine {
         let deadline = Instant::now() + t.open_deadline;
         loop {
             let reply = client.send(Method::POST, path, body).await?;
-            if let Some(data) = reply.data() {
-                return Ok(data);
+            match expect(what, &reply) {
+                Ok(data) => return Ok(data),
+                Err(e @ EngineError::Other(_)) => {
+                    release_unread(client, &reply).await;
+                    return Err(e);
+                }
+                Err(_) => {}
             }
             let coded = coded_errors_are_final && reply.code().is_some();
             if reply.status.as_u16() != 503 || coded || Instant::now() > deadline {
