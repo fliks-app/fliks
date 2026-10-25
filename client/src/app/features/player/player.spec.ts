@@ -716,6 +716,20 @@ describe('PlayerComponent wake / resume', () => {
     expect(h.streamingApi.updatePlaybackState).toHaveBeenCalled();
   });
 
+  it('a native tick beats the heartbeat once 10 s have passed since the last save', async () => {
+    const h = createHarness();
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true }) as any));
+    h.component.lastSaveAt = Date.now() - 4_000;
+    h.component.heartbeatOnNativeTick();
+    await flush();
+    expect(h.streamingApi.updatePlaybackState).not.toHaveBeenCalled();
+
+    h.component.lastSaveAt = Date.now() - 10_500;
+    h.component.heartbeatOnNativeTick();
+    await flush();
+    expect(h.streamingApi.updatePlaybackState).toHaveBeenCalledTimes(1);
+  });
+
   it('a heartbeat lost to the network is retried, not swallowed', async () => {
     const h = createHarness();
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true }) as any));

@@ -52,7 +52,8 @@ import {
   SUBTITLE_SIZE_MAP, SUBTITLE_COLOR_MAP, SUBTITLE_SHADOW_MAP, SUBTITLE_BG_MAP,
   type AudioStreamChoice,
 } from '../../core/services/player-settings.service';
-import { Capacitor, registerPlugin } from '@capacitor/core';
+import { Capacitor, registerPlugin, type PluginListenerHandle } from '@capacitor/core';
+import { App as CapApp } from '@capacitor/app';
 
 import type { AudioTrack, PlaybackEngine, QoeSample, VariantTrack } from '../../core/services/playback-engine/playback-engine';
 import { QoeReporter } from '../../core/services/qoe-reporter.service';
@@ -94,6 +95,7 @@ interface ImmersivePlugin {
 /** Long enough to fold a start-up burst into one report, short enough that a
  *  controller still sees the change in about a frame's time. */
 const FORCED_SAVE_COALESCE_MS = 300;
+const HEARTBEAT_MS = 10_000;
 
 const Immersive = registerPlugin<ImmersivePlugin>('Immersive');
 
@@ -333,6 +335,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }
 
   private saveInterval: ReturnType<typeof setInterval> | null = null;
+  private appPauseListener: PluginListenerHandle | null = null;
   /** {@link completePostLoadSetup} runs once per mount, from the first load or its copy fallback. */
   private firstLoadSetupDone = false;
   /** True while the user is actively dragging / scrubbing the seekbar. */
@@ -1250,6 +1253,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       window.addEventListener('pipModeChanged', this.onPipModeChanged as EventListener);
       window.addEventListener('pipAction', this.onPipAction as EventListener);
       Pip.setAutoEnter({ enabled: true }).catch(() => {});
+      // Leaving the app (Home, PiP, lock) may be followed by a kill: save the position now.
+      void CapApp.addListener('pause', () => void this.savePosition(true)).then((h) => {
+        if (this.destroyed) void h.remove();
+        else this.appPauseListener = h;
+      });
     }
     // app.ts dispatches 'app:playerBack' on hardware/gesture back while on /watch, so it takes the same
     // onBack() path as the back arrow (replaceUrl to media detail).
@@ -1307,6 +1315,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       Pip.setAutoEnter({ enabled: false }).catch(() => {});
       window.removeEventListener('pipModeChanged', this.onPipModeChanged as EventListener);
       window.removeEventListener('pipAction', this.onPipAction as EventListener);
+      void this.appPauseListener?.remove();
     }
   }
 
@@ -1512,6 +1521,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.state.videoStarted.set(true);
     });
     this.wireErrorRecovery(engine);
+    if (engine instanceof NativeEngine) engine.on('timeUpdate', this.heartbeatOnNativeTick);
 
     // Engines may re-emit audio tracks (e.g. rendition switch): never replace a good list with a smaller one,
     // except engine-sourced tracks (audio-*/shaka-*), which always replace the si-* fallback (PID switching).
@@ -2633,7 +2643,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.chrome.resetHideTimer();
 
     // Save position every 10s + immediately on seek
-    this.saveInterval = setInterval(() => this.savePosition(), 10_000);
+    this.saveInterval = setInterval(() => this.savePosition(), HEARTBEAT_MS);
     this.resetStallWatchdog();
     const video = this.videoEl()?.nativeElement;
     if (video) {
@@ -3662,6 +3672,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const pos = this.availableAudioTracks().findIndex((t) => t.id === id);
     return pos >= 0 ? pos : null;
   }
+
+  /** Native ticks are not throttled in the background, unlike {@link saveInterval}: they keep the
+   *  heartbeat going in PiP and with the screen off. */
+  private heartbeatOnNativeTick = () => {
+    if (Date.now() - this.lastSaveAt >= HEARTBEAT_MS) void this.savePosition();
+  };
 
   private async savePosition(force = false) {
     if (force) {
