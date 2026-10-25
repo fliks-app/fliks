@@ -3568,6 +3568,7 @@
       "seeked": "{{by}} ha saltado a {{position}}",
       "item_changed": "{{by}} cambió a {{title}}",
       "item_skipped": "{{title}} omitido, no disponible para todos",
+      "item_skipped_hidden": "Se omitió un elemento, no disponible para todos",
       "queue_ended": "Fin de la cola",
       "host_changed": "{{by}} es ahora el anfitrión",
       "kicked": "{{by}} ha retirado a un miembro",

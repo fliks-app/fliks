@@ -193,6 +193,19 @@ pub async fn kick_guest(db: &PgPool, party: i32, user: i32) -> sqlx::Result<()> 
     Ok(())
 }
 
+/// Removes every user who joined through the link, except `keep` (the live host); they are
+/// returned so the caller can drop them from the live party.
+pub async fn drop_link_guests(db: &PgPool, party: i32, keep: i32) -> sqlx::Result<Vec<i32>> {
+    sqlx::query_scalar(
+        r#"DELETE FROM watch_party_invitees
+           WHERE "partyId" = $1 AND "source" = 'link' AND "userId" <> $2 RETURNING "userId""#,
+    )
+    .bind(party)
+    .bind(keep)
+    .fetch_all(db)
+    .await
+}
+
 pub async fn clear_kicked(db: &PgPool, party: i32) -> sqlx::Result<()> {
     sqlx::query(r#"DELETE FROM watch_party_invitees WHERE "partyId" = $1 AND "source" = 'kicked'"#)
         .bind(party)

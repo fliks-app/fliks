@@ -3568,6 +3568,7 @@
       "seeked": "{{by}} è saltato a {{position}}",
       "item_changed": "{{by}} è passato a {{title}}",
       "item_skipped": "{{title}} saltato, non disponibile per tutti",
+      "item_skipped_hidden": "Un elemento è stato saltato, non disponibile per tutti",
       "queue_ended": "Fine della coda",
       "host_changed": "{{by}} è ora l'host",
       "kicked": "{{by}} ha rimosso un membro",

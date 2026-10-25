@@ -50,7 +50,9 @@ export class PartyChatComponent {
   protected systemText(m: PartyMessage): string {
     const sys = m.system!;
     const position = typeof sys.args?.['position'] === 'number' ? formatTime(sys.args['position']) : '';
-    return this.translate.instant(`party.system.${sys.kind}`, { by: sys.by ?? '', position, title: sys.args?.['title'] ?? '' });
+    const title = sys.args?.['title'] ?? '';
+    const kind = sys.kind === 'item_skipped' && !title ? 'item_skipped_hidden' : sys.kind;
+    return this.translate.instant(`party.system.${kind}`, { by: sys.by ?? '', position, title });
   }
 
   protected onInput(event: Event): void {
