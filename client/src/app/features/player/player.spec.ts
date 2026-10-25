@@ -184,6 +184,7 @@ function createHarness(opts: {
     getHlsUrl,
     buildPlayUrl,
     getStopSessionUrl: vi.fn(() => 'stop://x'),
+    positionRequest: vi.fn((id: number) => ({ url: `pos://${id}`, init: { method: 'PUT', keepalive: true } })),
     getThumbnailMetadataUrl: vi.fn(() => ''),
     getThumbnailSpriteUrl: vi.fn(() => ''),
     getSubtitleUrl: vi.fn(() => ''),
@@ -3216,5 +3217,19 @@ describe('PlayerComponent stall counting', () => {
     c.onTvVisibility();
     expect(engine.restore).toHaveBeenCalled();
     vis.mockRestore();
+  });
+
+  it('unload banks the playhead with a keepalive PUT that carries no sid', () => {
+    const h = createHarness();
+    const c = h.component as any;
+    h.engine.currentTime = 123;
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response());
+    c.onBeforeUnload();
+    const put = fetchSpy.mock.calls.find(([u]) => String(u).startsWith('pos://'))!;
+    expect(put[1]!.method).toBe('PUT');
+    const body = JSON.parse(put[1]!.body as string);
+    expect(body.positionSeconds).toBe(123);
+    expect(body.sessionId).toBeUndefined();
+    fetchSpy.mockRestore();
   });
 });
