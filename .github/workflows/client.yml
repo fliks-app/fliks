@@ -26,6 +26,7 @@ jobs:
     # Release PRs only bump versions; main re-runs this after the merge.
     if: ${{ !startsWith(github.head_ref, 'release-please--') }}
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: client
@@ -42,6 +43,7 @@ jobs:
   desktop:
     if: ${{ !startsWith(github.head_ref, 'release-please--') }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: desktop

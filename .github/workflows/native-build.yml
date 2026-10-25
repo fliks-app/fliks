@@ -33,6 +33,7 @@ permissions:
 jobs:
   android:
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     defaults:
       run:
         working-directory: client
@@ -75,6 +76,10 @@ jobs:
 
       - name: Compile Android shell
         run: ./gradlew --no-daemon assembleDebug
+        working-directory: client/android
+
+      - name: Android unit tests
+        run: ./gradlew --no-daemon testDebugUnitTest
         working-directory: client/android
 
   ios:
