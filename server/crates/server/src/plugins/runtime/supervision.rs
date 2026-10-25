@@ -80,7 +80,7 @@ impl PluginRt {
     pub(super) fn lost(self: &Arc<Self>, lane: &Lane, db: bool, why: &str) {
         if db && lane.kind == LaneKind::Core {
             tracing::warn!(
-                "plugin \"{}\" core call lost to the database ({why})",
+                "plugin \"{}\" core call lost, instance re-created without a crash ({why})",
                 self.sh.id
             );
             let rt = self.clone();
@@ -230,6 +230,7 @@ impl PluginRt {
             }
             let ok = match self.health().await {
                 Ok(h) => h.ok,
+                Err(CallError::Timeout) => false,
                 Err(_) => continue,
             };
             let db = self.core.last_db.load(Ordering::SeqCst);

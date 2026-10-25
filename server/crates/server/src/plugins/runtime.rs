@@ -48,6 +48,7 @@ pub struct Deadlines {
     pub hello: Duration,
     pub start: Duration,
     pub short: Duration,
+    pub health: Duration,
     pub event: Duration,
     pub http: Duration,
     pub pre_roll: Duration,
@@ -64,6 +65,7 @@ impl Default for Deadlines {
             hello: s(10),
             start: s(900),
             short: s(3),
+            health: s(10),
             event: s(60),
             http: s(180),
             pre_roll: s(3),
@@ -269,6 +271,13 @@ impl ResourceLimiter for Ctx {
         if desired > self.mem_max {
             wasmtime::bail!("memory limit of {} MiB exceeded", self.mem_max >> 20);
         }
+        let total = self.sh.mem_total.load(Ordering::Relaxed);
+        if over_plugin_budget(total, desired - current, self.mem_max) {
+            wasmtime::bail!(
+                "plugin memory budget of {} MiB exceeded",
+                (self.mem_max * PLUGIN_MEM_FACTOR) >> 20
+            );
+        }
         self.mem += desired - current;
         self.sh
             .mem_total
@@ -406,6 +415,12 @@ impl std::fmt::Display for SpawnError {
 }
 
 const RING: usize = 64;
+fn over_plugin_budget(total: usize, grow: usize, mem_max: usize) -> bool {
+    total.saturating_add(grow) > mem_max.saturating_mul(PLUGIN_MEM_FACTOR)
+}
+
+/// All instances of a plugin together may hold this many times its `memoryMb`.
+const PLUGIN_MEM_FACTOR: usize = 2;
 
 fn call_fn<R: Send + 'static>(
     f: impl for<'a> FnOnce(&'a mut Inst) -> BoxFuture<'a, wasmtime::Result<R>> + Send + 'static,
@@ -653,4 +668,16 @@ pub fn set_mode(p: &std::path::Path, mode: u32) {
     }
     #[cfg(not(unix))]
     let _ = (p, mode);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::over_plugin_budget;
+
+    #[test]
+    fn instances_share_a_budget_of_twice_the_declared_memory() {
+        let mib = 1 << 20;
+        assert!(!over_plugin_budget(64 * mib, 64 * mib, 64 * mib));
+        assert!(over_plugin_budget(100 * mib, 64 * mib, 64 * mib));
+    }
 }

@@ -125,10 +125,10 @@ pub async fn done(core: &PgPool, plugin: &str, key: &str, version: i64) -> sqlx:
     Ok(())
 }
 
-/// Undoes a claim the runner could not honour (a restore began): due again at once.
+/// Undoes a claim whose key is still running: due again once that run has had a moment to end.
 pub async fn release(core: &PgPool, plugin: &str, key: &str, version: i64) -> sqlx::Result<()> {
     sqlx::query(
-        r#"UPDATE plugin_scheduled_calls SET attempt = attempt - 1, "runAt" = now()
+        r#"UPDATE plugin_scheduled_calls SET attempt = attempt - 1, "runAt" = now() + interval '5 seconds'
            WHERE "pluginId" = $1 AND key = $2 AND version = $3"#,
     )
     .bind(plugin)

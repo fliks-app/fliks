@@ -39,7 +39,7 @@ use runtime::{Env, HostConfig, PluginRt, Shared, SpawnError, State};
 use serde_json::Value;
 use sqlx::PgPool;
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
 use std::time::Duration;
@@ -73,7 +73,12 @@ impl Options {
             .map(|v| v.trim().to_owned())
             .filter(|v| !v.is_empty())
             .map_or_else(
-                || std::env::temp_dir().join("fliks-plugins"),
+                || {
+                    default_runtime_dir(
+                        &std::env::temp_dir().join("fliks-plugins"),
+                        crate::paths::data_dir().join("plugins"),
+                    )
+                },
                 |d| PathBuf::from(d).join("fliks-plugins"),
             );
         Options {
@@ -91,6 +96,20 @@ impl Options {
             ready_wait: READY_WAIT,
         }
     }
+}
+
+/// `new` (under the data dir), after moving over the plugin files the temp dir held before.
+/// Left in place when the move fails (another filesystem), so no plugin loses its `/data`.
+fn default_runtime_dir(legacy: &Path, new: PathBuf) -> PathBuf {
+    let (old_data, new_data) = (legacy.join("data"), new.join("data"));
+    if old_data.is_dir() && !new_data.exists() {
+        let moved =
+            std::fs::create_dir_all(&new).and_then(|()| std::fs::rename(&old_data, &new_data));
+        if moved.is_err() {
+            return legacy.to_path_buf();
+        }
+    }
+    new
 }
 
 /// The live runtime: the wasm engine and one `PluginRt` per started plugin.
@@ -523,5 +542,29 @@ impl Plugins {
             let id = rt.sh.id.to_string();
             self.stop_rt(&id).await;
         }
+    }
+}
+
+#[cfg(test)]
+mod runtime_dir_tests {
+    use super::default_runtime_dir;
+
+    #[test]
+    fn plugin_files_of_the_temp_dir_move_under_the_data_dir() {
+        let root = std::env::temp_dir().join(format!("fliks-rtdir-{}", std::process::id()));
+        let (legacy, new) = (root.join("tmp/fliks-plugins"), root.join("data/plugins"));
+        std::fs::create_dir_all(legacy.join("data/p")).unwrap();
+        std::fs::write(legacy.join("data/p/f"), b"kept").unwrap();
+        assert_eq!(default_runtime_dir(&legacy, new.clone()), new);
+        assert_eq!(std::fs::read(new.join("data/p/f")).unwrap(), b"kept");
+        assert!(!legacy.join("data").exists());
+        std::fs::create_dir_all(legacy.join("data/q")).unwrap();
+        assert_eq!(
+            default_runtime_dir(&legacy, new.clone()),
+            new,
+            "existing data is never replaced"
+        );
+        assert!(legacy.join("data/q").exists());
+        std::fs::remove_dir_all(root).unwrap();
     }
 }

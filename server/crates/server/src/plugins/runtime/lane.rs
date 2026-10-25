@@ -31,6 +31,8 @@ pub struct Budget {
     pub queue_wait: Duration,
     /// Pre-roll: one bound over the wait and the call.
     pub inclusive: bool,
+    /// A timeout re-creates the instance without counting a crash; the caller owns the escalation.
+    pub soft: bool,
 }
 
 impl Budget {
@@ -39,6 +41,7 @@ impl Budget {
             deadline,
             queue_wait: deadline,
             inclusive: false,
+            soft: false,
         }
     }
 }
@@ -196,7 +199,11 @@ impl Lane {
                 // The epoch callback interrupts at the call's deadline: that is a timeout (rule 39).
                 let timeout = trap.downcast_ref::<Trap>() == Some(&Trap::Interrupt);
                 if current {
-                    rt.lost(self, db, if timeout { "deadline" } else { &why });
+                    rt.lost(
+                        self,
+                        db || (timeout && budget.soft),
+                        if timeout { "deadline" } else { &why },
+                    );
                 }
                 if timeout {
                     return Err(CallError::Timeout);
@@ -206,7 +213,7 @@ impl Lane {
             Err(_) => {
                 drop(slot);
                 if current {
-                    rt.lost(self, db, "deadline");
+                    rt.lost(self, db || budget.soft, "deadline");
                 }
                 Err(CallError::Timeout)
             }
