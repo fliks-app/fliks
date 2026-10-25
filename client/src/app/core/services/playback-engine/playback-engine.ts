@@ -290,6 +290,8 @@ export interface PlaybackEngine {
   readonly currentTime: number;
   readonly duration: number;
   readonly paused: boolean;
+  /** Seconds between `currentTime` updates when the engine reports it in coarse steps. */
+  readonly positionStepS?: number;
   readonly buffered: number;
   /** What a seek can land on: on live it is the sliding window, since `duration` is infinite and `buffered` a few seconds. */
   readonly seekRange: SeekRange;

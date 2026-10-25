@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CAST_DRIFT_IGNORE_S, CAST_SEEK_COOLDOWN_MS, driftAction, groupPosition } from './party-sync';
+import { CAST_DRIFT_IGNORE_S, CAST_SEEK_COOLDOWN_MS, driftAction, driftProfile, groupPosition } from './party-sync';
 
 const opts = { rateSupported: true, msSinceSeek: 60_000, seekLocked: false };
 
@@ -50,5 +50,17 @@ describe('driftAction on cast', () => {
   it('allows one corrective seek per 15 s', () => {
     expect(driftAction(5, { ...cast, msSinceSeek: 14_000 }).kind).toBe('none');
     expect(driftAction(5, { ...cast, msSinceSeek: 15_000 }).kind).toBe('seek');
+  });
+});
+
+describe('driftProfile', () => {
+  it('keeps the web defaults for a continuous position with rate support', () => {
+    expect(driftProfile({ positionStepS: 0, rateSupported: true })).toEqual({ ignoreS: 0.5, cooldownMs: 10_000 });
+  });
+  it('widens the dead band by the position step so an in-sync device is not nudged', () => {
+    expect(driftProfile({ positionStepS: 1, rateSupported: true }).ignoreS).toBe(1.5);
+  });
+  it('uses a wide band and a long cooldown without rate support', () => {
+    expect(driftProfile({ positionStepS: 0, rateSupported: false })).toEqual({ ignoreS: 1.5, cooldownMs: 25_000 });
   });
 });
