@@ -107,7 +107,7 @@ export class SubtitleController {
    *  use {@link applySubtitle} alone, so they never harden into the viewer's choice. */
   async selectSubtitle(sub: SubtitleOption | null): Promise<void> {
     if (!(await this.applySubtitle(sub))) return;
-    const image = !!(sub?.isImage || sub?.burnIn);
+    const image = !!sub?.isImage;
     this.trackManager.saveSubtitleSelection(
       this.host.mediaId(),
       sub?.language ?? null,
@@ -235,6 +235,7 @@ export class SubtitleController {
    *  playback carries the track, which only a DirectPlay container does. */
   private burnsIn(sub: SubtitleOption): boolean {
     if (!sub.burnIn) return false;
+    if (!sub.isImage) return true;
     const rendersFromContainer =
       this.deviceProfileService.engineTraits().supportsImageSubtitles === true &&
       this.host.playbackMode() === 'direct' &&

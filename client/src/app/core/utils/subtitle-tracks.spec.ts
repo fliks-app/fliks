@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildSubtitleTracks, embeddedSubtitleTitle, subtitleManifestRank, subtitleTrackKey } from './subtitle-tracks';
+import { buildSubtitleTracks, burnsIn, embeddedSubtitleTitle, subtitleManifestRank, subtitleTrackKey } from './subtitle-tracks';
 
 describe('subtitle track identity', () => {
   it('keys a sidecar by its DB id and an in-container track by its stream index', () => {
@@ -34,5 +34,27 @@ describe('embedded subtitle titles', () => {
   it('carries the title onto the built tracks', () => {
     const tracks = buildSubtitleTracks([row(1, 10), row(2, 11)], 1, { hideBurnIn: false, streams });
     expect(tracks.map((t) => [t.key, t.title])).toEqual([['emb-10', 'Latin American'], ['emb-11', null]]);
+  });
+});
+
+describe('burn-in rule', () => {
+  const ass = { id: 1, mediaFileId: 1, language: 'en', codec: 'ass', streamIndex: 3 };
+  const srt = { id: 2, mediaFileId: 1, language: 'en', relativePath: 'a.srt' };
+  const sidecarAss = { id: 3, mediaFileId: 1, language: 'en', relativePath: 'a.ssa' };
+
+  it('marks embedded and sidecar ASS/SSA as styled, not SRT', () => {
+    const t = buildSubtitleTracks([ass, srt, sidecarAss], 1, { hideBurnIn: false });
+    expect(t.map((x) => x.styled)).toEqual([true, false, true]);
+  });
+
+  it('hideBurnIn keeps ASS as plain text', () => {
+    expect(buildSubtitleTracks([ass], 1, { hideBurnIn: true })[0].styled).toBe(false);
+  });
+
+  it('burns styled tracks only on a client that cannot render them; bitmaps always', () => {
+    expect(burnsIn({ styled: true }, false)).toBe(true);
+    expect(burnsIn({ styled: true }, true)).toBe(false);
+    expect(burnsIn({ isImage: true }, true)).toBe(true);
+    expect(burnsIn({}, false)).toBe(false);
   });
 });

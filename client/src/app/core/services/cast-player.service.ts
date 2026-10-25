@@ -9,7 +9,7 @@ import { CastDeviceCapabilities, CastSettingsService } from './cast-settings.ser
 import { StreamingApiService, type PlayMethod } from './api/streaming-api.service';
 import { SubtitlesApiService, type SubtitleFileRow } from './api/subtitles-api.service';
 import { AppSettingsService } from './app-settings.service';
-import { buildSubtitleTracks } from '../utils/subtitle-tracks';
+import { buildSubtitleTracks, burnsIn } from '../utils/subtitle-tracks';
 import { normalizeLangCode } from '../utils/language.utils';
 import { AuthService } from './auth.service';
 import { CodecCondition, DeviceProfile } from './browser-device-profile.service';
@@ -127,10 +127,10 @@ export function buildCastQualityOptions(
 }
 
 /** The burn-in a Cast LOAD needs for `activeId`. The receiver can't draw bitmap
- *  subtitles, so every image track is burned in, whatever the local device renders itself. */
+ *  subtitles, so every image and styled track is burned in, whatever the local device renders itself. */
 export function castBurnInId(subtitles: SubtitleOption[], activeId: string | null): number | null {
   const active = subtitles.find((s) => s.id === activeId);
-  return active?.isImage ? (active.subtitleDbId ?? null) : null;
+  return active && burnsIn(active, false) ? (active.subtitleDbId ?? null) : null;
 }
 
 /** Everything {@link CastPlayerService} needs to take a session over again. */
@@ -403,7 +403,7 @@ export class CastPlayerService {
     // non-burn-in one in list order.
     let trackId = 1;
     this.availableSubtitles.set(opts.subtitles.map(s => {
-      const burnIn = !!s.isImage;
+      const burnIn = burnsIn(s, false);
       return {
         id: s.id,
         label: s.label,
@@ -927,7 +927,7 @@ export class CastPlayerService {
     }
     this.activeSubtitleId.set(id);
     this.rememberSubtitle(opt);
-    const burnInId = opt?.isImage ? (opt.subtitleDbId ?? null) : null;
+    const burnInId = opt?.burnIn ? (opt.subtitleDbId ?? null) : null;
     // A burn-in change reloads, and the new LOAD already carries the active text track.
     if (burnInId !== this.activeBurnInId) {
       this.activeBurnInId = burnInId;
@@ -1040,7 +1040,8 @@ export class CastPlayerService {
       language: t.language,
       languageTag: t.languageTag,
       isImage: t.isImage,
-      burnIn: t.isImage,
+      styled: t.styled,
+      burnIn: burnsIn(t, false),
       providerType: t.providerType,
       subtitleDbId: t.subtitleId,
       url:

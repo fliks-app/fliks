@@ -30,6 +30,8 @@ export interface EngineTraits {
   supportsIFrameTrickPlay?: boolean;
   /** Engine renders bitmap (PGS/VOBSUB) subtitles from the container, so only DirectPlay carries them; otherwise burned in server-side. */
   supportsImageSubtitles?: boolean;
+  /** Engine draws ASS/SSA with its styling (libass); otherwise such a track is burned in server-side. Client-only. */
+  rendersStyledSubtitles?: boolean;
   /** Engine can attach a text subtitle to a raw DirectPlay file; else it needs an HLS `SUBTITLES` rendition. Client-only (absent on CAST). */
   sideloadsDirectPlaySubtitles?: boolean;
   /** Engine fetches seg-0 on a load-then-seek (web/Shaka + Cast receiver). */
@@ -46,6 +48,7 @@ export const ENGINE_TRAITS: Record<EngineKind, EngineTraits> = {
   [EngineKind.WEB]: {
     useTsOnSingleAudio: false,
     supportsHlsSubtitles: true,
+    rendersStyledSubtitles: false,
     supportsImageSubtitles: false,
     sideloadsDirectPlaySubtitles: true,
     probesSegZero: true,
@@ -55,6 +58,7 @@ export const ENGINE_TRAITS: Record<EngineKind, EngineTraits> = {
   [EngineKind.ANDROID]: {
     useTsOnSingleAudio: false,
     supportsHlsSubtitles: true,
+    rendersStyledSubtitles: false,
     supportsImageSubtitles: true,
     sideloadsDirectPlaySubtitles: true,
     probesSegZero: false,
@@ -67,6 +71,7 @@ export const ENGINE_TRAITS: Record<EngineKind, EngineTraits> = {
     useTsOnSingleAudio: false,
     supportsHlsSubtitles: true,
     supportsMuxedAudioRendition: true,
+    rendersStyledSubtitles: false,
     supportsImageSubtitles: false,
     sideloadsDirectPlaySubtitles: false,
     probesSegZero: false,
@@ -78,6 +83,7 @@ export const ENGINE_TRAITS: Record<EngineKind, EngineTraits> = {
   [EngineKind.DESKTOP]: {
     useTsOnSingleAudio: false,
     supportsHlsSubtitles: false,
+    rendersStyledSubtitles: true,
     supportsImageSubtitles: true,
     sideloadsDirectPlaySubtitles: true,
     probesSegZero: true,
@@ -87,6 +93,7 @@ export const ENGINE_TRAITS: Record<EngineKind, EngineTraits> = {
   [EngineKind.ANDROID_TV]: {
     useTsOnSingleAudio: false,
     supportsHlsSubtitles: true,
+    rendersStyledSubtitles: false,
     supportsImageSubtitles: true,
     sideloadsDirectPlaySubtitles: true,
     probesSegZero: false,
@@ -99,6 +106,7 @@ export const ENGINE_TRAITS: Record<EngineKind, EngineTraits> = {
     useTsOnSingleAudio: true,
     supportsHlsSubtitles: false,
     supportsIFrameTrickPlay: true,
+    rendersStyledSubtitles: false,
     supportsImageSubtitles: false,
     sideloadsDirectPlaySubtitles: true,
     probesSegZero: false,
@@ -110,6 +118,7 @@ export const ENGINE_TRAITS: Record<EngineKind, EngineTraits> = {
     useTsOnSingleAudio: false,
     supportsHlsSubtitles: false,
     dedupesAudioByLanguage: true,
+    rendersStyledSubtitles: false,
     supportsImageSubtitles: false,
     sideloadsDirectPlaySubtitles: true,
     probesSegZero: false,

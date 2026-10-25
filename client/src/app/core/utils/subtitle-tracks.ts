@@ -1,4 +1,4 @@
-import { isImageBasedSubtitleCodec } from './subtitle-codecs';
+import { isAssSubtitle, isImageBasedSubtitleCodec } from './subtitle-codecs';
 import { normalizeLangCode } from './language.utils';
 
 /** Minimal subtitle row shape the builder needs (satisfied by SubtitleFileRow). */
@@ -63,6 +63,13 @@ export interface SubtitleTrack {
   providerType: string | null;
   /** Bitmap track (PGS/VOBSUB…) that can't be served as text — burn-in only. */
   isImage: boolean;
+  /** ASS/SSA the viewer lets burn-in carry: a client that can't draw the styling burns it in. */
+  styled: boolean;
+}
+
+/** The one rule for burn-in by track type: bitmaps always, styled ASS/SSA unless the client renders it. */
+export function burnsIn(t: { isImage?: boolean; styled?: boolean }, rendersStyled: boolean): boolean {
+  return !!t.isImage || (!!t.styled && !rendersStyled);
 }
 
 /** The stable id of a subtitle row, or null when it is neither a sidecar file nor in-container. */
@@ -117,6 +124,7 @@ export function buildSubtitleTracks(
       kind,
       providerType: sub.providerType ?? null,
       isImage,
+      styled: !opts.hideBurnIn && isAssSubtitle(sub),
     });
   }
   return out;
