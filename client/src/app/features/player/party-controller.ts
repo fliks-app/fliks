@@ -115,7 +115,7 @@ export class PartyController {
         return true;
       },
     };
-    this.closedSub = this.party.closed.subscribe(() => host.onBack());
+    this.closedSub = this.party.closed.subscribe(() => this.goHome());
     this.driftTimer = setInterval(() => this.checkDrift(), DRIFT_CHECK_MS);
     void this.resumeFromUrl();
   }
@@ -129,10 +129,14 @@ export class PartyController {
     void this.router.navigate([], { relativeTo: this.route, queryParams: { party: null }, queryParamsHandling: 'merge', replaceUrl: true });
   }
 
-  /** Explicit leave: a host's ends the party (the `party.closed` event exits), a member's takes the player out here. */
+  /** Explicit leave: a host's ends the party (the `party.closed` event exits), a member's goes home here. */
   async leave(): Promise<void> {
     const wasHost = this.party.isHost();
-    if ((await this.party.leaveOrEnd()) && !wasHost) this.host.onBack();
+    if ((await this.party.leaveOrEnd()) && !wasHost) this.goHome();
+  }
+
+  private goHome(): void {
+    void this.router.navigateByUrl('/', { replaceUrl: true });
   }
 
   dispose(): void {
