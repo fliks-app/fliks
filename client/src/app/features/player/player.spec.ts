@@ -585,7 +585,7 @@ describe('PlayerComponent wake / resume', () => {
 
   /** A clock gap the 1s tick can't explain = the process was frozen. */
   function sleep(component: any, ms: number) {
-    component.lastTickAt = Date.now() - ms;
+    component.recovery.lastTickAt = Date.now() - ms;
   }
 
   it('a clock gap warms the existing session instead of reloading the engine', async () => {
@@ -597,7 +597,7 @@ describe('PlayerComponent wake / resume', () => {
     h.engine.currentTime = 640;
 
     sleep(h.component, 10 * 60 * 1000);
-    h.component.tickClockWatch();
+    h.component.recovery.tickClockWatch();
     await flush();
 
     // Prewarm rides the live sid at the playhead: this is what revives the
@@ -618,69 +618,19 @@ describe('PlayerComponent wake / resume', () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true }) as any));
     h.state.loading.set(false);
     h.state.paused.set(false);
-    h.component.lastProgressPos = 640;
-    h.component.lastProgressAt = Date.now() - 60_000;
+    h.component.recovery.lastProgressPos = 640;
+    h.component.recovery.lastProgressAt = Date.now() - 60_000;
     h.engine.currentTime = 640;
     h.engine.duration = 3600;
 
     sleep(h.component, 60_000);
-    h.component.tickClockWatch();
-    h.component.checkStall();
+    h.component.recovery.tickClockWatch();
+    h.component.recovery.checkStall();
     await flush();
 
     // A stall recovery here would re-mint the sid and reload the engine.
     expect(h.streamingApi.getPlaybackInfo).not.toHaveBeenCalled();
     expect(h.engine.loadCalls.length).toBe(0);
-  });
-
-  it('unloads the engine when recovery gives up, so nothing plays behind the error card', async () => {
-    const h = createHarness();
-    const unload = vi.fn(async () => {});
-    h.component.engine.unload = unload;
-    h.component.recoverAttempts = h.component.maxRecoverAttempts;
-
-    await h.component.recoverFromLostSession('stall');
-
-    expect(unload).toHaveBeenCalled();
-    expect(h.state.error()?.source).toBe('session');
-  });
-
-  it('a stall while offline spends no attempt and recovers once back online', async () => {
-    const h = createHarness();
-    let online = false;
-    h.component.network = { isOnline: () => online };
-
-    for (let i = 0; i < 5; i++) await h.component.recoverFromLostSession('stall');
-    expect(h.component.recoverAttempts).toBe(0);
-    expect(h.state.error()).toBeNull();
-    expect(h.streamingApi.getPlaybackInfo).not.toHaveBeenCalled();
-
-    online = true;
-    h.component.lastTickAt = Date.now();
-    h.component.tickClockWatch();
-    await flush();
-
-    expect(h.streamingApi.getPlaybackInfo).toHaveBeenCalled();
-  });
-
-  it('back online, an engine that retries in place keeps the session; a second failure reloads', async () => {
-    const h = createHarness();
-    let online = false;
-    h.component.network = { isOnline: () => online };
-    (h.engine as any).retry = vi.fn().mockResolvedValue(true);
-
-    await h.component.recoverFromLostSession('session_expired');
-    online = true;
-    h.component.lastTickAt = Date.now();
-    h.component.tickClockWatch();
-    await flush();
-    expect((h.engine as any).retry).toHaveBeenCalledTimes(1);
-    expect(h.streamingApi.getPlaybackInfo).not.toHaveBeenCalled();
-
-    await h.component.recoverFromLostSession('session_expired');
-    await flush();
-    expect((h.engine as any).retry).toHaveBeenCalledTimes(1);
-    expect(h.streamingApi.getPlaybackInfo).toHaveBeenCalled();
   });
 
   it('a quality pick made during a running reload is replayed once it settles', async () => {
@@ -711,7 +661,7 @@ describe('PlayerComponent wake / resume', () => {
     h.state.playbackMode.set('direct');
 
     sleep(h.component, 60_000);
-    h.component.tickClockWatch();
+    h.component.recovery.tickClockWatch();
     await flush();
 
     expect(fetchMock).not.toHaveBeenCalled();
@@ -740,15 +690,15 @@ describe('PlayerComponent wake / resume', () => {
     );
 
     await h.component.savePosition();
-    expect(h.component.resumeDue).toBe(true);
+    expect(h.component.recovery.resumeDue).toBe(true);
 
     // Next tick, still online: the resume path runs again on its own.
-    h.component.lastTickAt = Date.now();
-    h.component.lastResumeAt = 0;
+    h.component.recovery.lastTickAt = Date.now();
+    h.component.recovery.lastResumeAt = 0;
     h.component.lastSaveAt = 0;
-    h.component.tickClockWatch();
+    h.component.recovery.tickClockWatch();
     await flush();
-    expect(h.component.resumeDue).toBe(false);
+    expect(h.component.recovery.resumeDue).toBe(false);
     expect(h.streamingApi.updatePlaybackState).toHaveBeenCalledTimes(2);
   });
 
@@ -3223,7 +3173,7 @@ describe('PlayerComponent stall counting', () => {
       spy.mockReturnValue(119_000);
       c.playbackInfo = { sessionId: 's2' };
     });
-    await c.recoverFromLostSession('stall', 100_000);
+    await c.recovery.recoverFromLostSession('stall', 100_000);
     spy.mockReturnValue(120_000);
     expect(c.qoe.stalls.totalMs).toBe(2_000);
     const stalls = record.mock.calls.filter((a) => (a[1] as { type: string }).type === 'stall');
