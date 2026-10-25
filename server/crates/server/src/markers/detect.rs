@@ -93,14 +93,6 @@ async fn pass(
     } else {
         ("intro", "Fingerprinting")
     };
-    if !st
-        .engine
-        .engine_features()
-        .iter()
-        .any(|f| f == "intro-detect")
-    {
-        return Err("The engine has no intro-detect feature".into());
-    }
     let info = db::season_info(&st.db, season)
         .await
         .map_err(|e| e.to_string())?
