@@ -80,19 +80,6 @@ import Foundation
         }
     }
 
-    /// The code is the invite token, alone or as the tail of an invite link.
-    func join(code: String) async {
-        let token = code.trimmingCharacters(in: .whitespacesAndNewlines)
-            .split(separator: "/").last.map(String.init)?.split(separator: "?").first.map(String.init) ?? ""
-        guard !token.isEmpty else { return }
-        do {
-            let dto: Party = try await APIClient.shared.get("/api/parties/by-token/\(token)")
-            await enter(id: dto.id, token: token)
-        } catch {
-            show(describe(error))
-        }
-    }
-
     /// The player for a live party, the lobby for a scheduled one whose lobby is open.
     func enter(id: Int, token: String? = nil) async {
         struct Body: Encodable { let deviceId: String; let token: String? }

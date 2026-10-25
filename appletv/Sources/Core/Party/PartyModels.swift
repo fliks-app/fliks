@@ -161,3 +161,19 @@ enum PartyEvent {
         }
     }
 }
+
+extension Party {
+    /// Host and member count when live, else host and start time; plus the playlist it follows.
+    var cardSubtitle: String {
+        let base: String
+        if status == "live" {
+            let key = memberCount == 1 ? "party.card_live_one" : "party.card_live_other"
+            base = trp(key, ["host": host.username, "count": String(memberCount)])
+        } else {
+            let when = scheduledAt.map { $0.formatted(date: .abbreviated, time: .shortened) } ?? ""
+            base = trp("party.card_scheduled", ["when": when, "host": host.username])
+        }
+        guard let playlist else { return base }
+        return "\(base) · \(trp("party.playlist_label", ["name": playlist.name]))"
+    }
+}

@@ -15,7 +15,6 @@ enum Route: Hashable {
     case search
     case playlists
     case playlistDetail(id: Int)
-    case parties
     case partyLobby
     case settings
 

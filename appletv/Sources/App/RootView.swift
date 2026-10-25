@@ -163,8 +163,6 @@ struct RootView: View {
                             path.append(Route.player(mediaFileId: mediaFileId, mediaId: mediaId,
                                                       episodeId: episodeId, startAt: startAt))
                         })
-                    case .parties:
-                        PartiesView()
                     case .partyLobby:
                         PartyLobbyView()
                     case .settings:
@@ -234,10 +232,6 @@ struct Sidebar: View {
 
             SidebarRow(label: tr("sidebar.playlists"), systemImage: "list.and.film", focusID: "playlists", focused: $focused) {
                 path.append(Route.playlists)
-            }
-
-            SidebarRow(label: tr("party.rail_title"), systemImage: "person.2.fill", focusID: "parties", focused: $focused) {
-                path.append(Route.parties)
             }
 
             Spacer()
