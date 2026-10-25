@@ -13,6 +13,12 @@ export interface CastDeviceCapabilities {
   audioCodecs: string[];
   /** Video codecs `MediaSource.isTypeSupported` accepts on the receiver. */
   videoCodecs: string[];
+  /** Probe protocol version the receiver answered with; absent on a receiver that predates the 10-bit/HDR fields. */
+  v?: number;
+  hevcMain10?: boolean;
+  av1Main10?: boolean;
+  /** The TV the receiver drives presents HDR. */
+  hdr?: boolean;
 }
 
 export interface CastSettings {

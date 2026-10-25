@@ -445,7 +445,16 @@ context.addCustomMessageListener(CAPS_NAMESPACE, (event) => {
   const videoCodecs = CAPS_VIDEO
     .filter((c) => probe(`video/mp4; codecs="${c.codec}"`))
     .map((c) => c.label);
-  const reply = { type: 'caps', audioCodecs, videoCodecs };
+  // v2 adds the 10-bit and HDR fields; senders ignore them on a v1 reply.
+  let hdr = false;
+  try {
+    hdr = !!context.getDeviceCapabilities?.()?.[cast.framework.system.DeviceCapabilities.IS_HDR_SUPPORTED];
+  } catch { /* old firmware: no capability API */ }
+  const reply = {
+    type: 'caps', v: 2, audioCodecs, videoCodecs, hdr,
+    hevcMain10: probe('video/mp4; codecs="hvc1.2.4.L150.B0"'),
+    av1Main10: probe('video/mp4; codecs="av01.0.08M.10"'),
+  };
   console.log('[fliks-cast] caps probe →', JSON.stringify(reply));
   context.sendCustomMessage(CAPS_NAMESPACE, event.senderId, reply);
 });
