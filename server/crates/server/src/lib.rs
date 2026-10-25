@@ -90,6 +90,10 @@ pub async fn serve(cfg: Config) -> Result<(), BoxError> {
         .await
         .map_err(|e| format!("seed admin: {e:?}"))?;
     let secret = jwt_secret::resolve(&cfg);
+    let mut cfg = cfg;
+    if !cfg.engine_url.is_empty() {
+        cfg.engine_token = jwt_secret::resolve_engine_token(&cfg);
+    }
     let db = pool.clone();
     let state = AppState::new(pool, cfg, &secret);
     // The plugin host keeps the state for the process lifetime (a cycle only `serve` may create).

@@ -1,4 +1,4 @@
-//! Resolves the JWT secret like 4.x, creating `<conf>/.jwt-secret` where 4.x looks for it.
+//! Resolves the JWT secret like 4.x, creating `<conf>/.jwt-secret` where 4.x looks for it; same for the engine token.
 use crate::config::{Config, random_hex};
 use std::fs::{self, DirBuilder, OpenOptions};
 use std::io::{ErrorKind, Write};
@@ -39,11 +39,23 @@ fn read(file: &Path) -> Option<String> {
 /// `JWT_SECRET`, else the conf file, else a fresh one written 0600 (`create_new`: the first writer wins).
 /// A failed write only warns and yields a process-local secret, lost at the next start.
 pub fn resolve(cfg: &Config) -> String {
-    if let Some(s) = &cfg.jwt_secret {
-        return s.clone();
+    cfg.jwt_secret
+        .clone()
+        .unwrap_or_else(|| resolve_file(cfg, ".jwt-secret"))
+}
+
+/// The engine control token when `FLIKS_ENGINE_TOKEN` is empty: same file pattern, `.engine-token`.
+pub fn resolve_engine_token(cfg: &Config) -> String {
+    if cfg.engine_token.is_empty() {
+        resolve_file(cfg, ".engine-token")
+    } else {
+        cfg.engine_token.clone()
     }
+}
+
+fn resolve_file(cfg: &Config, name: &str) -> String {
     let dir = conf_dir(cfg);
-    let file = dir.join(".jwt-secret");
+    let file = dir.join(name);
     if let Some(s) = read(&file) {
         return s;
     }
@@ -59,14 +71,11 @@ pub fn resolve(cfg: &Config) -> String {
     match result {
         Ok(()) => secret,
         Err(e) if e.kind() == ErrorKind::AlreadyExists => read(&file).unwrap_or_else(|| {
-            tracing::warn!(
-                "{} is empty: using a process-local JWT secret",
-                file.display()
-            );
+            tracing::warn!("{} is empty: using a process-local secret", file.display());
             secret
         }),
         Err(e) => {
-            tracing::warn!("cannot persist the JWT secret in {}: {e}", dir.display());
+            tracing::warn!("cannot persist {name} in {}: {e}", dir.display());
             secret
         }
     }
@@ -105,6 +114,23 @@ mod tests {
         );
         assert_eq!(resolve(&cfg_in(&conf, None)), secret);
         assert_eq!(fs::read_to_string(&file).unwrap(), secret);
+        fs::remove_dir_all(&base).unwrap();
+    }
+
+    #[test]
+    fn engine_token_env_wins_else_file() {
+        let base = std::env::temp_dir().join(format!("fliks-jwt-{}", random_hex(4)));
+        let conf = base.join("conf");
+        let mut c = cfg_in(&conf, None);
+        c.engine_token = "set".into();
+        assert_eq!(resolve_engine_token(&c), "set");
+        assert!(!base.exists());
+        c.engine_token = String::new();
+        let t = resolve_engine_token(&c);
+        assert_eq!(t.len(), 64);
+        assert_eq!(fs::read_to_string(conf.join(".engine-token")).unwrap(), t);
+        assert_eq!(resolve_engine_token(&c), t);
+        assert_ne!(resolve(&c), t);
         fs::remove_dir_all(&base).unwrap();
     }
 
