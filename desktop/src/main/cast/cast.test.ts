@@ -159,6 +159,7 @@ test('a playing status becomes a media update', () => {
       duration: 3600,
       isPaused: false,
       buffering: false,
+      ended: false,
       volume: 0.6,
       muted: false,
     },
@@ -176,6 +177,7 @@ test('IDLE/ERROR becomes a recoverable error carrying the playhead', () => {
 test('IDLE without an error reason is an ordinary update, not a failure', () => {
   const event = mediaStatusEvent({ playerState: 'IDLE', idleReason: 'FINISHED' }, undefined);
   assert.equal(event.name, 'castMediaUpdate');
+  assert.equal((event.detail as { ended?: boolean }).ended, true);
 });
 
 const TRACKS = [

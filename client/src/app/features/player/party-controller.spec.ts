@@ -32,6 +32,7 @@ function setup(opts: { canControl?: boolean; urlParty?: string; joined?: number;
     isConnected: signal(false),
     isPaused: signal(true),
     buffering: signal(false),
+    ended: signal(false),
     currentTime: signal(0),
     duration: signal(100),
     seek: vi.fn(),

@@ -456,8 +456,8 @@ context.addCustomMessageListener(CAPS_NAMESPACE, (event) => {
 // the Fliks web/Android paths use, so all three clients share buffering
 // and ABR behaviour.
 //
-// `disableIdleTimeout: true` keeps the receiver alive between clips so
-// queue/skip-intro features work later without re-launching the app.
+// The CAF idle timeout stays on: once the media ends the receiver closes instead of
+// leaving the splash on the TV forever (a sender's next LOAD arrives within seconds).
 // `autoResumeDuration: 5` starts/resumes playback on 5s of buffered media
 // (default 10) — snappier resume after a seek or transient stall.
 // `supportedCommands` is set explicitly so the sender's transport
@@ -470,7 +470,6 @@ context.addCustomMessageListener(CAPS_NAMESPACE, (event) => {
 // no override can lift.
 
 const options = new cast.framework.CastReceiverOptions();
-options.disableIdleTimeout = true;
 options.useShakaForHls = true;
 options.customNamespaces = {
   [FLIKS_NAMESPACE]: cast.framework.system.MessageType.JSON,

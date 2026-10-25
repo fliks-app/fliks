@@ -350,6 +350,7 @@ export interface DesktopCastMediaUpdate {
   duration?: number;
   isPaused?: boolean;
   buffering?: boolean;
+  ended?: boolean;
   volume?: number;
   muted?: boolean;
 }

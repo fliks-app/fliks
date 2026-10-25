@@ -301,10 +301,11 @@ public class CastPlugin extends Plugin {
     }
 
     private void notifyJSTime(double time, double duration, boolean paused, boolean buffering,
-                             double volume, boolean muted) {
+                             double volume, boolean muted, boolean ended) {
         String js = "window.dispatchEvent(new CustomEvent('castMediaUpdate', { detail: { "
             + "currentTime: " + time + ", duration: " + duration + ", isPaused: " + paused
             + ", buffering: " + buffering + ", volume: " + volume + ", muted: " + muted
+            + ", ended: " + ended
             + " } }));";
         getBridge().getWebView().post(() ->
             getBridge().getWebView().evaluateJavascript(js, null)
@@ -884,7 +885,9 @@ public class CastPlugin extends Plugin {
                         // Device volume isn't in MediaStatus: read it off the session each tick so TV remote or cast dialog changes reach the slider.
                         double volume = castSession.getVolume();
                         boolean muted = castSession.isMute();
-                        notifyJSTime(time, duration, paused, buffering, volume, muted);
+                        boolean ended = state == MediaStatus.PLAYER_STATE_IDLE
+                            && status.getIdleReason() == MediaStatus.IDLE_REASON_FINISHED;
+                        notifyJSTime(time, duration, paused, buffering, volume, muted, ended);
                     }
                     pollHandler.postDelayed(this, 1000);
                 } catch (Exception e) {

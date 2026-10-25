@@ -33,6 +33,7 @@ export function mediaStatusEvent(
       duration: Number(media?.['duration']) || undefined,
       isPaused: playerState === 'PAUSED',
       buffering: playerState === 'BUFFERING',
+      ended: playerState === 'IDLE' && status['idleReason'] === 'FINISHED',
       volume: volume?.level,
       muted: volume?.muted,
     },

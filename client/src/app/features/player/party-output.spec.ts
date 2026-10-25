@@ -7,6 +7,7 @@ function make() {
     isConnected: signal(true),
     isPaused: signal(true),
     buffering: signal(false),
+    ended: signal(false),
     currentTime: signal(12),
     duration: signal(0),
     seek: vi.fn(),
@@ -35,6 +36,8 @@ describe('CastPartyOutput', () => {
     expect(out.buffering()).toBe(true);
     expect(out.position()).toBe(12);
     expect(out.item()).toEqual({ mediaId: 7, episodeId: 3 });
+    cast.ended.set(true);
+    expect(out.ended()).toBe(true);
   });
 
   it('drives the receiver', async () => {
