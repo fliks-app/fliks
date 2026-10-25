@@ -457,6 +457,39 @@ async fn rescan_refuses_a_missing_folder_and_reconciles(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
+async fn rescan_probes_only_what_changed(pool: PgPool) {
+    let c = ctx(pool).await;
+    let lib = c.dir.join("movies");
+    let l = library(&c, "M", &lib, r#"["movie"]"#).await;
+    touch(&lib.join("A/A.mkv"), b"a");
+    let a = media(&c, l, "A", "movie").await;
+    file_row(&c, a, "A.mkv").await;
+    let probes = |c: &Ctx| c.fake.seen("POST", "/v1/probe").len();
+    let first = rescan(&c, a).await.unwrap();
+    assert_eq!(
+        (first.updated, probes(&c)),
+        (1, 2),
+        "unstamped row: probe + embedded detection"
+    );
+    let second = rescan(&c, a).await.unwrap();
+    assert_eq!(
+        (second.updated, probes(&c)),
+        (0, 2),
+        "stamped and unchanged: no probe"
+    );
+    sqlx::query(r#"UPDATE media_files SET "mtimeMs" = 0"#)
+        .execute(&c.st.db)
+        .await
+        .unwrap();
+    let third = rescan(&c, a).await.unwrap();
+    assert_eq!(
+        (third.updated, probes(&c)),
+        (1, 4),
+        "a moved mtime probes again"
+    );
+}
+
+#[sqlx::test(migrations = false)]
 async fn relink_in_place_is_contained(pool: PgPool) {
     let c = ctx(pool).await;
     let lib = c.dir.join("movies");
