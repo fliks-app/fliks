@@ -76,7 +76,7 @@ Napi::Value SetNowPlaying(const Napi::CallbackInfo& info) {
   BOOL playing = o.Get("playing").ToBoolean().Value();
   NSMutableDictionary* d = [NSMutableDictionary dictionary];
   d[MPMediaItemPropertyTitle] = @(o.Get("title").ToString().Utf8Value().c_str());
-  if (o.Has("artist")) d[MPMediaItemPropertyArtist] = @(o.Get("artist").ToString().Utf8Value().c_str());
+  if (o.Get("artist").IsString()) d[MPMediaItemPropertyArtist] = @(o.Get("artist").ToString().Utf8Value().c_str());
   if (g_artwork) d[MPMediaItemPropertyArtwork] = g_artwork;
   d[MPMediaItemPropertyPlaybackDuration] = @(o.Get("duration").ToNumber().DoubleValue());
   d[MPNowPlayingInfoPropertyElapsedPlaybackTime] = @(o.Get("elapsed").ToNumber().DoubleValue());
