@@ -57,6 +57,13 @@ export interface DesktopSubtitleStyle {
   topMarginPercent?: number;
 }
 
+/** What the OS media widgets show for the current playback; `artworkUrl` must be fetchable by the OS. */
+export interface DesktopMediaMetadata {
+  title: string;
+  artist?: string;
+  artworkUrl?: string;
+}
+
 export interface DesktopRect {
   x: number;
   y: number;
@@ -133,6 +140,7 @@ export const IPC = {
   setMuted: 'player:setMuted',
   setMuteRanges: 'player:setMuteRanges',
   setFullscreen: 'player:setFullscreen',
+  setMediaSession: 'player:setMediaSession',
   getPosition: 'player:getPosition',
   getQoe: 'player:getQoe',
   getAudioTracks: 'player:getAudioTracks',
@@ -281,6 +289,8 @@ export interface FliksDesktopApi {
   /** Replace the silenced content-time ranges ([] clears). Survives reloads. */
   setMuteRanges(ranges: DesktopMuteRange[]): Promise<void>;
   setFullscreen(enabled: boolean): Promise<void>;
+  /** Describes the playback to the OS media widgets; null withdraws it. */
+  setMediaSession(meta: DesktopMediaMetadata | null): Promise<void>;
   getPosition(): Promise<DesktopPositionInfo>;
   getQoe(): Promise<DesktopQoe | null>;
   getAudioTracks(): Promise<DesktopAudioTrack[]>;

@@ -18,6 +18,8 @@ export interface PlayerIpcHost {
   destroy(): Promise<void>;
   /** Absent where the page is the visible surface and its CSS cursor already applies. */
   setCursorVisible?(visible: boolean): void;
+  /** Playback was stopped by the renderer. */
+  onStop?(): void;
 }
 
 /** Wire the renderer→main invoke channels to the host's mpv player. */
@@ -38,6 +40,7 @@ export function registerPlayerIpc(session: PlayerIpcHost): void {
   ipcMain.handle(IPC.stop, async () => {
     await session.player.stop();
     setPlaybackKeepAwake(false);
+    session.onStop?.();
   });
   ipcMain.handle(IPC.setPlaybackRate, (_e, rate: number) => session.player.setPlaybackRate(rate));
   ipcMain.handle(IPC.setVolume, (_e, volume: number) => session.player.setVolume(volume));
