@@ -211,14 +211,14 @@ pub async fn guide_url(source: &super::model::Source) -> Result<(String, bool), 
         })
 }
 
-/// `true` when `guide` is not on the host the admin configured as `source_url`.
-fn provider_chosen(source_url: &str, guide: &str) -> bool {
+/// `true` when `url` is not on the host the admin configured as `source_url`.
+pub(super) fn provider_chosen(source_url: &str, url: &str) -> bool {
     let host = |u: &str| {
         Url::parse(u)
             .ok()
             .and_then(|u| u.host_str().map(str::to_ascii_lowercase))
     };
-    host(guide).is_none_or(|g| host(source_url) != Some(g))
+    host(url).is_none_or(|g| host(source_url) != Some(g))
 }
 
 /// `true` for a URL the DTO accepts as a location: http or https with a host.
