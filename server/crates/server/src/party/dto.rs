@@ -4,17 +4,11 @@ use chrono::{DateTime, Utc};
 use fliks_domain::party::{
     Action, Anchor, Item, MemberStatus, Message, Policy, Role, State, Voice,
 };
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 
 const MAX_INVITEES: usize = 50;
 const MAX_TEXT: usize = 500;
 const MAX_SIGNAL_BYTES: usize = 16 * 1024;
-
-fn nullable<'de, D: Deserializer<'de>, T: Deserialize<'de>>(
-    d: D,
-) -> Result<Option<Option<T>>, D::Error> {
-    Option::<T>::deserialize(d).map(Some)
-}
 
 fn invalid(what: &str) -> AppError {
     AppError::bad_request(format!("party.error_invalid_{what}"))
@@ -34,11 +28,15 @@ pub fn valid_name(name: &str) -> Result<String, AppError> {
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct Create {
     pub name: String,
-    pub media_id: i32,
+    pub media_id: Option<i32>,
     pub media_file_id: Option<i32>,
     pub episode_id: Option<i32>,
+    pub playlist_id: Option<i32>,
     pub scheduled_at: Option<DateTime<Utc>>,
     pub policy: Option<Policy>,
+    pub reactions_enabled: Option<bool>,
+    pub chat_enabled: Option<bool>,
+    pub link_sharing: Option<bool>,
     pub invitee_ids: Option<Vec<i32>>,
 }
 
@@ -61,8 +59,10 @@ impl Create {
 pub struct Patch {
     pub name: Option<String>,
     pub policy: Option<Policy>,
-    #[serde(default, deserialize_with = "nullable")]
-    pub scheduled_at: Option<Option<DateTime<Utc>>>,
+    pub reactions_enabled: Option<bool>,
+    pub chat_enabled: Option<bool>,
+    pub link_sharing: Option<bool>,
+    pub scheduled_at: Option<DateTime<Utc>>,
     pub regenerate_token: Option<bool>,
 }
 
@@ -97,11 +97,37 @@ impl From<ItemIn> for Item {
     }
 }
 
+/// `Action` plus the playlist steps, which the server turns into a `setItem` of its own choosing.
+#[derive(Deserialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum IntentAction {
+    Play,
+    Pause,
+    Seek,
+    SetItem,
+    Ended,
+    Next,
+    Previous,
+}
+
+impl IntentAction {
+    pub fn machine(self) -> Option<Action> {
+        match self {
+            Self::Play => Some(Action::Play),
+            Self::Pause => Some(Action::Pause),
+            Self::Seek => Some(Action::Seek),
+            Self::SetItem => Some(Action::SetItem),
+            Self::Ended => Some(Action::Ended),
+            Self::Next | Self::Previous => None,
+        }
+    }
+}
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct IntentIn {
     pub device_id: String,
-    pub action: Action,
+    pub action: IntentAction,
     pub position: Option<f64>,
     pub item: Option<ItemIn>,
     pub base_rev: u64,
@@ -199,6 +225,8 @@ pub struct PartyItem {
     pub episode_id: Option<i32>,
     pub title: String,
     pub poster_url: Option<String>,
+    pub fanart_url: Option<String>,
+    pub additional_fanart_urls: Vec<String>,
 }
 
 #[derive(Serialize, Clone)]
@@ -206,6 +234,21 @@ pub struct PartyItem {
 pub struct UserRef {
     pub user_id: i32,
     pub username: String,
+}
+
+/// A party row for a user: `source` is `invite` or `link`.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GuestDto {
+    pub user_id: i32,
+    pub username: String,
+    pub source: String,
+}
+
+#[derive(Serialize, Clone)]
+pub struct PlaylistRef {
+    pub id: i32,
+    pub name: String,
 }
 
 #[derive(Serialize)]
@@ -216,8 +259,12 @@ pub struct PartySummaryDto {
     pub status: String,
     #[serde(with = "iso_ms::opt")]
     pub scheduled_at: Option<DateTime<Utc>>,
+    /// When the lobby opens, for a `scheduled` party.
+    #[serde(with = "iso_ms::opt")]
+    pub lobby_opens_at: Option<DateTime<Utc>>,
     pub host: UserRef,
     pub item: PartyItem,
+    pub playlist: Option<PlaylistRef>,
     pub member_count: usize,
 }
 
@@ -250,8 +297,11 @@ pub struct PartyDto {
     #[serde(flatten)]
     pub summary: PartySummaryDto,
     pub policy: Policy,
+    pub reactions_enabled: bool,
+    pub chat_enabled: bool,
+    pub link_sharing: bool,
     pub invite_token: Option<String>,
-    pub invitees: Vec<UserRef>,
+    pub guests: Vec<GuestDto>,
     pub live: Option<PartyLive>,
 }
 

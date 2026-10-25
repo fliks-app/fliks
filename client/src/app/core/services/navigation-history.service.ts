@@ -2,24 +2,26 @@ import { Injectable, inject } from '@angular/core';
 import { NavigationEnd, Router } from '@angular/router';
 import { filter } from 'rxjs';
 
-/** Tracks the URL before the current navigation, so the player's onBack can `history.back()` when the previous entry is already the target, avoiding a duplicate from replaceUrl. */
+/** Remembers the last page before the player, kept across /watch to /watch hops, so leaving the player returns there. */
 @Injectable({ providedIn: 'root' })
 export class NavigationHistoryService {
   private readonly router = inject(Router);
-  private _previousUrl: string | null = null;
+  private _originUrl: string | null = null;
   private _currentUrl: string | null = null;
 
   constructor() {
     this.router.events
       .pipe(filter((e): e is NavigationEnd => e instanceof NavigationEnd))
       .subscribe((e) => {
-        this._previousUrl = this._currentUrl;
+        // A skipLocationChange bounce through `/` only remounts the player; it is no page.
+        if (this.router.getCurrentNavigation()?.extras.skipLocationChange) return;
+        if (!this._currentUrl?.startsWith('/watch')) this._originUrl = this._currentUrl;
         this._currentUrl = e.urlAfterRedirects;
       });
   }
 
-  /** URL that was active before the current navigation, or null on first nav. */
-  get previousUrl(): string | null {
-    return this._previousUrl;
+  /** Last non-player URL before the current one, or null on first nav. */
+  get originUrl(): string | null {
+    return this._originUrl;
   }
 }

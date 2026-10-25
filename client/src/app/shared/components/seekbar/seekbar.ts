@@ -33,6 +33,8 @@ export class SeekbarComponent {
   readonly spriteUrl = input<string | null>(null);
   readonly spriteMetadata = input<SpriteMetadata | null>(null);
   readonly variant = input<'player' | 'cast'>('player');
+  /** Shows progress only: no scrub, seek or hover preview. */
+  readonly disabled = input(false);
   readonly showTooltip = input(true);
   readonly showBuffered = input(true);
   /** Indeterminate sweep while the engine buffers, so the bar reads as working even when the playhead is still. */
@@ -287,6 +289,7 @@ export class SeekbarComponent {
   });
 
   onProgressDown(event: PointerEvent) {
+    if (this.disabled()) return;
     const bar = event.currentTarget as HTMLElement;
     event.preventDefault();
 
@@ -347,7 +350,7 @@ export class SeekbarComponent {
   }
 
   onProgressHover(event: PointerEvent) {
-    if (this.dragging()) return;
+    if (this.disabled() || this.dragging()) return;
     const bar = event.currentTarget as HTMLElement;
     this.hovering.set(true);
     const hover = this.clampToSeekable(calcDragTime(event, bar, this.duration()));
@@ -372,7 +375,7 @@ export class SeekbarComponent {
 
   onKeydown(e: KeyboardEvent) {
     const dur = this.duration();
-    if (!dur) return;
+    if (!dur || this.disabled()) return;
 
     let direction = 0;
     switch (e.key) {

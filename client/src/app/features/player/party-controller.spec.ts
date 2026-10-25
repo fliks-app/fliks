@@ -1,5 +1,6 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { ActivatedRoute, Router } from '@angular/router';
 import { TranslateService } from '@ngx-translate/core';
 import { describe, expect, it, vi } from 'vitest';
 import { CastService } from '../../core/services/cast.service';
@@ -14,9 +15,11 @@ import { ToastService } from '../../core/services/toast.service';
 import { PartyController, type PartyHost } from './party-controller';
 import { QueueController } from './queue-controller';
 
-function setup(opts: { canControl?: boolean } = {}) {
+function setup(opts: { canControl?: boolean; urlParty?: string; joined?: number; resumes?: boolean; film?: boolean; opens?: boolean } = {}) {
   const party = {
     active: signal(true),
+    party: signal(opts.joined != null ? { id: opts.joined } : null),
+    resume: vi.fn().mockResolvedValue(opts.resumes ?? true),
     live: signal<unknown>(null),
     canControl: signal(opts.canControl ?? true),
     isHost: signal(false),
@@ -35,8 +38,22 @@ function setup(opts: { canControl?: boolean } = {}) {
     play: vi.fn(),
     pause: vi.fn(),
   };
-  const queue = { upNext: () => null, interceptAdvance: null as unknown };
-  const toast = { info: vi.fn() };
+  const queue = {
+    upNext: () => null,
+    interceptAdvance: null as unknown,
+    queueItems: () =>
+      opts.film
+        ? []
+        : [
+            { mediaId: 1, mediaFileId: 10, episodeId: 100, title: '' },
+            { mediaId: 1, mediaFileId: 11, episodeId: 101, title: '' },
+          ],
+    queueIndex: () => 0,
+    openPartyItem: vi.fn().mockResolvedValue(opts.opens ?? true),
+  };
+  const toast = { info: vi.fn(), error: vi.fn() };
+  const route = { snapshot: { queryParams: opts.urlParty ? { party: opts.urlParty } : {} } };
+  const router = { navigate: vi.fn() };
   TestBed.configureTestingModule({
     providers: [
       PartyController,
@@ -50,6 +67,8 @@ function setup(opts: { canControl?: boolean } = {}) {
       { provide: CastPlaybackTarget, useValue: { partyIntercept: null } },
       { provide: DeviceService, useValue: { tvPlatform: () => null, isTv: () => false } },
       { provide: ToastService, useValue: toast },
+      { provide: ActivatedRoute, useValue: route },
+      { provide: Router, useValue: router },
       { provide: TranslateService, useValue: { instant: (k: string) => k } },
     ],
   });
@@ -67,7 +86,7 @@ function setup(opts: { canControl?: boolean } = {}) {
     onBack: vi.fn(),
   };
   ctl.attach(host);
-  return { ctl, party, state, engine, host, queue, toast, cast };
+  return { ctl, party, state, engine, host, queue, toast, cast, router, route };
 }
 
 describe('PartyController user actions', () => {
@@ -102,11 +121,129 @@ describe('PartyController user actions', () => {
     ctl.dispose();
   });
 
+  it('sends a picked queue item as one setItem intent and does not navigate', async () => {
+    const { ctl, party, router } = setup();
+    await ctl.requestQueueItem(1);
+    expect(party.sendIntent).toHaveBeenCalledWith('setItem', {
+      item: { mediaId: 1, mediaFileId: 11, episodeId: 101 },
+    });
+    expect(router.navigate).not.toHaveBeenCalled();
+    ctl.dispose();
+  });
+
+  it('ignores the playing item and refuses a pick without control', async () => {
+    const { ctl, party, toast } = setup();
+    await ctl.requestQueueItem(0);
+    expect(party.sendIntent).not.toHaveBeenCalled();
+    party.canControl.set(false);
+    await ctl.requestQueueItem(1);
+    expect(party.sendIntent).not.toHaveBeenCalled();
+    expect(toast.info).toHaveBeenCalled();
+    ctl.dispose();
+  });
+
   it('lets the player act normally outside a party', () => {
     const { ctl, party } = setup();
     party.active.set(false);
     expect(ctl.togglePlay()).toBe(false);
     expect(ctl.seek(5)).toBe(false);
+    ctl.dispose();
+  });
+});
+
+describe('PartyController queue', () => {
+  it('asks the server for the next and the previous item instead of picking one', async () => {
+    const { ctl, party, router } = setup({ joined: 3 });
+    await ctl.requestNext();
+    await ctl.requestPrevious();
+    expect(party.sendIntent.mock.calls).toEqual([['next'], ['previous']]);
+    expect(router.navigate).not.toHaveBeenCalled();
+    ctl.dispose();
+  });
+
+  it('refuses next and previous without control', async () => {
+    const { ctl, party, toast } = setup({ joined: 3, canControl: false });
+    await ctl.requestNext();
+    await ctl.requestPrevious();
+    expect(party.sendIntent).not.toHaveBeenCalled();
+    expect(toast.info).toHaveBeenCalledTimes(2);
+    ctl.dispose();
+  });
+
+  it('reports the end of an item and lets the server advance', async () => {
+    const { ctl, party, state } = setup({ joined: 3 });
+    party.isHost.set(true);
+    state.ended.set(true);
+    TestBed.tick();
+    await Promise.resolve();
+    expect(party.sendIntent.mock.calls).toEqual([['ended', { item: { mediaId: 1 } }]]);
+    ctl.dispose();
+  });
+
+  it('leaves the answer on a film to the server', async () => {
+    const { ctl, party } = setup({ joined: 3, film: true });
+    await ctl.requestNext();
+    await ctl.requestPrevious();
+    expect(party.sendIntent.mock.calls).toEqual([['next'], ['previous']]);
+    ctl.dispose();
+  });
+
+  it('leaves the party instead of syncing the old item when the new one cannot be opened', async () => {
+    const { ctl, party, state, host } = setup({ joined: 3, opens: false });
+    state.videoStarted.set(true);
+    party.live.set({ state: 'paused', item: { mediaId: 2, episodeId: null }, anchor: { position: 5, serverTimeMs: 0 } });
+    TestBed.tick();
+    await new Promise<void>((r) => setTimeout(r));
+    expect(host.onBack).toHaveBeenCalled();
+    expect(host.seekTo).not.toHaveBeenCalled();
+    expect(party.reportStatus).not.toHaveBeenCalledWith('ready', expect.anything());
+    ctl.dispose();
+  });
+
+  it('sends an item picked from the queue menu as setItem', async () => {
+    const { ctl, party } = setup({ joined: 3 });
+    await ctl.requestQueueItem(1);
+    expect(party.sendIntent).toHaveBeenCalledWith('setItem', {
+      item: { mediaId: 1, mediaFileId: 11, episodeId: 101 },
+    });
+    ctl.dispose();
+  });
+});
+
+describe('PartyController resume from the URL', () => {
+  const flush = () => new Promise<void>((r) => setTimeout(r));
+
+  it('joins the party named by a reloaded player URL', () => {
+    const { ctl, party } = setup({ urlParty: '37' });
+    expect(party.resume).toHaveBeenCalledWith(37);
+    ctl.dispose();
+  });
+
+  it('does not join twice when the app already is in that party', () => {
+    const { ctl, party } = setup({ urlParty: '37', joined: 37 });
+    expect(party.resume).not.toHaveBeenCalled();
+    ctl.dispose();
+  });
+
+  it('does nothing without the param', () => {
+    const { ctl, party } = setup();
+    expect(party.resume).not.toHaveBeenCalled();
+    ctl.dispose();
+  });
+
+  it('toasts and drops the param when the party cannot be rejoined', async () => {
+    const { ctl, toast, router } = setup({ urlParty: '37', resumes: false });
+    await flush();
+    expect(toast.error).toHaveBeenCalledWith('party.error_resume');
+    expect(router.navigate).toHaveBeenCalledWith([], expect.objectContaining({ queryParams: { party: null }, replaceUrl: true }));
+    ctl.dispose();
+  });
+
+  it('keeps the param after a successful join', async () => {
+    const { ctl, toast, router } = setup({ urlParty: '37' });
+    await flush();
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(router.navigate).not.toHaveBeenCalled();
     ctl.dispose();
   });
 });

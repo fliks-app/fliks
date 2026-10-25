@@ -1,110 +1,163 @@
-<div class="mx-auto flex max-w-3xl flex-col gap-4 p-4" data-tv-zone appTvSection>
+<div appTvSection appDefaultFocus="[autofocus]" class="flex flex-col gap-6">
   @if (gone()) {
     <div class="flex flex-col items-center gap-4 py-16 text-center">
       <p>{{ 'party.page_gone' | translate }}</p>
-      <button type="button" class="btn btn-primary" (click)="home()">{{ 'party.go_home' | translate }}</button>
+      <button type="button" class="btn btn-primary" autofocus (click)="home()">{{ 'party.go_home' | translate }}</button>
     </div>
-  } @else if (view(); as v) {
-    <header class="flex gap-4">
-      @if (v.item.posterUrl) {
-        <img [src]="v.item.posterUrl" alt="" class="h-36 w-24 shrink-0 rounded-lg object-cover" />
+  } @else if (head(); as h) {
+    <ng-template #info>
+      <h1 class="text-3xl lg:text-4xl font-semibold lg:font-bold tracking-tight leading-tight">{{ h.name }}</h1>
+      @if (h.playlist; as pl) {
+        <p class="text-base-content/60 mt-0.5 lg:mt-1">{{ 'party.playlist_label' | translate: { name: pl.name } }}</p>
       }
-      <div class="min-w-0 flex-1">
-        <h1 class="truncate text-xl font-semibold">{{ v.name }}</h1>
-        <p class="truncate text-sm opacity-70">{{ v.item.title }}</p>
-        <p class="mt-1 text-sm">{{ 'party.hosted_by' | translate: { host: v.host.username } }}</p>
-        @if (v.status === 'live') {
-          <span class="badge badge-error mt-2">{{ 'party.live' | translate }}</span>
-        } @else if (v.scheduledAt) {
-          <p class="mt-2 text-sm font-medium">{{ when() }}</p>
+      <p class="text-base-content/70 mt-0.5 lg:mt-1 lg:text-lg">
+        @if (mediaLink(); as link) {
+          <a [routerLink]="link" (pointerup)="armSlide()" class="hover:underline rounded">{{ h.item.title }}</a>
+        } @else {
+          {{ h.item.title }}
+        }
+        @if (episode()) { · {{ episode() }}}
+      </p>
+
+      <div class="flex flex-wrap items-center gap-x-3 lg:gap-x-4 gap-y-1 mt-2 lg:mt-3 text-base-content/60">
+        @switch (phase()) {
+          @case ('live') { <span class="badge badge-error">{{ 'party.live' | translate }}</span> }
+          @case ('lobby') { <span class="badge badge-warning">{{ 'party.status_lobby' | translate }}</span> }
+          @default { <span class="badge badge-primary badge-outline">{{ 'party.status_scheduled' | translate }}</span> }
+        }
+        @if (h.status !== 'live' && h.scheduledAt) {
+          <span>{{ when() }}</span>
           @if (countdown(); as c) {
-            <p class="text-sm opacity-70">{{ 'party.starts_in' | translate: { time: c } }}</p>
+            <span>{{ 'party.starts_in' | translate: { time: c } }}</span>
           }
         }
       </div>
-    </header>
 
-    @if (v.status === 'live') {
-      <button type="button" class="btn btn-primary" (click)="join()">{{ 'party.join' | translate }}</button>
-    } @else if (lobbyOpen()) {
-      @if (joined()) {
-        <section class="flex flex-col gap-2">
-          <h2 class="text-sm font-semibold">{{ 'party.tab_members' | translate }} ({{ party.members().length }})</h2>
-          <ul class="flex flex-col gap-1 text-sm">
-            @for (m of party.members(); track m.deviceId + ':' + m.userId) {
-              <li class="flex items-center gap-2">
-                <span class="h-2.5 w-2.5 shrink-0 rounded-full" [class.bg-success]="m.status === 'ready'" [class.bg-warning]="m.status !== 'ready'"></span>
-                <span class="min-w-0 flex-1 truncate">{{ m.username }}</span>
-                @if (m.voice) {
-                  <span class="rounded-full p-0.5" [class.ring-2]="voice.speaking().has(m.deviceId)" [class.ring-success]="voice.speaking().has(m.deviceId)" [class.opacity-50]="m.voice.muted">
-                    @if (m.voice.muted) { <svg lucideMicOff class="h-3.5 w-3.5"></svg> } @else { <svg lucideMic class="h-3.5 w-3.5"></svg> }
-                  </span>
-                }
-                @if (m.role === 'host') {
-                  <span class="badge badge-primary badge-sm">{{ 'party.host_badge' | translate }}</span>
-                }
-                <span class="text-xs opacity-60">{{ ('party.status_' + m.status) | translate }}</span>
-              </li>
+      <div class="flex flex-wrap items-center gap-x-3 lg:gap-x-4 gap-y-1 mt-2 text-base-content/60">
+        <span class="flex items-center gap-2">
+          <app-user-avatar [username]="h.host.username" size="w-6 h-6 text-sm" />
+          {{ 'party.hosted_by' | translate: { host: h.host.username } }}
+        </span>
+        @if (view(); as v) {
+          @if (!canHost() && v.policy) {
+            <span>{{ ('party.policy_' + v.policy) | translate }}</span>
+          }
+        }
+      </div>
+
+      <div appTvRow class="flex flex-wrap items-center gap-2 mt-6 mb-2">
+        @if (phase() === 'live') {
+          <button type="button" class="btn btn-primary gap-2" [class.flex-1]="!desktopLayout()" autofocus (click)="join()">
+            <svg lucidePlay class="h-5 w-5" fill="currentColor"></svg>
+            {{ 'party.join' | translate }}
+          </button>
+        } @else if (phase() === 'lobby') {
+          @if (joined()) {
+            @if (party.isHost()) {
+              <button type="button" class="btn btn-primary gap-2" [class.flex-1]="!desktopLayout()" autofocus (click)="start()">
+                <svg lucidePlay class="h-5 w-5" fill="currentColor"></svg>
+                {{ 'party.start' | translate }}
+              </button>
             }
-          </ul>
-          <app-party-voice-bar />
-          <div class="flex flex-wrap gap-2 pt-1">
-            <button type="button" class="btn" [class.btn-success]="ready()" (click)="toggleReady()">
+            <button
+              type="button"
+              class="btn gap-2"
+              [class.flex-1]="!desktopLayout()"
+              [class.btn-primary]="!ready() && !party.isHost()"
+              [class.btn-success]="ready()"
+              [class.btn-outline]="!ready() && party.isHost()"
+              [attr.autofocus]="party.isHost() ? null : ''"
+              (click)="toggleReady()"
+            >
+              <svg lucideCheck class="h-5 w-5"></svg>
               {{ (ready() ? 'party.not_ready' : 'party.ready') | translate }}
             </button>
-            @if (party.isHost()) {
-              <button type="button" class="btn btn-primary" (click)="start()">{{ 'party.start' | translate }}</button>
-            }
-          </div>
-        </section>
-        <div class="flex h-80 flex-col rounded-box bg-base-200">
-          <app-party-chat />
+          } @else {
+            <span class="loading loading-spinner loading-md"></span>
+          }
+        }
+        @if (h.status === 'scheduled' && canHost() && !joined()) {
+          <button type="button" class="btn btn-primary" [disabled]="busy()" (click)="startNow()">{{ 'party.start_now' | translate }}</button>
+        }
+        @if (view()?.inviteToken) {
+          <button type="button" class="btn btn-ghost gap-2" (click)="copy()">
+            <svg lucideShare2 class="h-4 w-4"></svg>
+            {{ (party.canShare() ? 'party.share_link' : 'party.copy_link') | translate }}
+          </button>
+        }
+        @if (h.status === 'scheduled' && h.scheduledAt) {
+          <button type="button" class="btn btn-ghost gap-2" (click)="addToCalendar()">
+            <svg lucideCalendarPlus class="h-4 w-4"></svg>
+            {{ 'party.add_to_calendar' | translate }}
+          </button>
+        }
+        @if (canHost() && view()) {
+          <button type="button" class="btn btn-ghost gap-2" (click)="hostDialog()?.show()">
+            <svg lucideSettings class="h-4 w-4"></svg>
+            {{ 'party.settings' | translate }}
+          </button>
+        }
+      </div>
+
+      @if (overview()) {
+        <app-synopsis class="mt-4" [text]="overview()" textClass="text-base-content/80 lg:text-base-content/90 leading-relaxed whitespace-pre-line" />
+      }
+    </ng-template>
+
+    @if (!desktopLayout()) {
+      <div>
+        <app-mobile-fanart-hero class="block" [fanartUrl]="heroUrl()" [viewTransitionName]="posterName" />
+        <div data-hero-lead class="-mt-16 relative z-20">
+          <ng-container *ngTemplateOutlet="info" />
         </div>
-      } @else {
-        <span class="loading loading-spinner loading-md"></span>
+      </div>
+    } @else {
+      <div
+        class="flex gap-6 lg:gap-10 relative z-20"
+        [style.padding-top]="!navbar.isHeroPage() || navbar.effectiveSidebarPinned() || tv.isTv() ? null : navbar.mobileNavbarVisible() ? 'calc(env(safe-area-inset-top, 0px) + 3rem)' : null"
+      >
+        <div class="shrink-0 rounded-xl overflow-hidden w-[140px] lg:w-[200px] xl:w-[220px] 2xl:w-[280px]">
+          @if (h.item.posterUrl) {
+            <img
+              [src]="h.item.posterUrl | resolveUrl: 'medium'"
+              [alt]="h.item.title"
+              loading="eager"
+              fetchpriority="high"
+              decoding="async"
+              class="w-full aspect-2/3 rounded-xl object-cover bg-base-300"
+              [style.view-transition-name]="posterName"
+            />
+          } @else {
+            <div class="aspect-2/3 rounded-xl bg-base-300"></div>
+          }
+        </div>
+        <div class="flex-1 min-w-0 pt-2">
+          <ng-container *ngTemplateOutlet="info" />
+        </div>
+      </div>
+    }
+
+    @if (view(); as v) {
+      <div class="grid items-start gap-6">
+        <div class="flex min-w-0 flex-col gap-6">
+          <section class="flex flex-col gap-3">
+            <div class="flex flex-wrap items-baseline justify-between gap-x-3">
+              <h2 class="text-lg font-bold">{{ 'party.people' | translate }}</h2>
+              <span class="text-sm text-base-content/60">{{ 'party.people_connected' | translatePlural: connectedCount() }}@if (missingCount()) { · {{ 'party.people_missing' | translatePlural: missingCount() }} }</span>
+            </div>
+            <ul class="flex flex-col gap-1 rounded-box bg-base-200 p-2">
+              @for (p of people(); track p.userId) {
+                <li><app-party-person-row [person]="p" /></li>
+              }
+            </ul>
+          </section>
+        </div>
+      </div>
+      @if (canHost() && hostView(); as hv) {
+        <app-party-host-dialog [view]="hv" [joined]="joined()" [link]="link()" (updated)="apply($event)" />
       }
     } @else {
-      <section class="flex flex-col gap-1">
-        <h2 class="text-sm font-semibold">{{ 'party.invitees' | translate }}</h2>
-        <p class="text-sm opacity-80">
-          @for (i of v.invitees; track i.userId) { {{ i.username }}{{ $last ? '' : ', ' }} } @empty { {{ 'party.no_invitees' | translate }} }
-        </p>
-      </section>
-    }
-
-    @if (v.inviteToken) {
-      <section class="flex flex-col gap-1">
-        <h2 class="text-sm font-semibold">{{ 'party.link' | translate }}</h2>
-        <div class="flex items-center gap-2">
-          <input type="text" readonly class="input input-bordered input-sm min-w-0 flex-1" [value]="link()" [attr.aria-label]="'party.link' | translate" />
-          <button type="button" class="btn btn-sm" (click)="copy()">{{ (party.canShare ? 'party.share_link' : 'party.copy_link') | translate }}</button>
-        </div>
-      </section>
-    }
-
-    @if (v.status === 'scheduled' && v.scheduledAt) {
-      <button type="button" class="btn btn-sm self-start" (click)="addToCalendar()">{{ 'party.add_to_calendar' | translate }}</button>
-    }
-
-    @if (canHost() && v.status === 'scheduled') {
-      <section class="flex flex-col gap-3 border-t border-base-200 pt-3">
-        <div class="flex flex-wrap gap-2">
-          <button type="button" class="btn btn-sm" (click)="openReschedule()">{{ 'party.reschedule' | translate }}</button>
-          <button type="button" class="btn btn-sm" [disabled]="busy()" (click)="regenerate()">{{ 'party.regenerate_link' | translate }}</button>
-          <button type="button" class="btn btn-sm" (click)="inviting.set(!inviting())">{{ 'party.invite_more' | translate }}</button>
-          <button type="button" class="btn btn-sm btn-error btn-outline" [disabled]="busy()" (click)="cancel()">{{ 'party.cancel' | translate }}</button>
-        </div>
-        @if (rescheduling()) {
-          <div class="flex items-center gap-2">
-            <input type="datetime-local" class="input input-bordered input-sm" [ngModel]="newWhen()" (ngModelChange)="newWhen.set($event)" [attr.aria-label]="'party.reschedule' | translate" />
-            <button type="button" class="btn btn-primary btn-sm" [disabled]="busy() || !newWhen()" (click)="reschedule()">{{ 'common.save' | translate }}</button>
-          </div>
-        }
-        @if (inviting()) {
-          <app-party-invitee-picker [exclude]="excluded()" [(selected)]="newInvitees" />
-          <button type="button" class="btn btn-primary btn-sm self-start" [disabled]="busy() || !newInvitees().length" (click)="invite()">{{ 'party.invite' | translate }}</button>
-        }
-      </section>
+      <div class="flex justify-center py-8"><span class="loading loading-spinner loading-lg"></span></div>
     }
   } @else {
     <div class="flex justify-center py-16"><span class="loading loading-spinner loading-lg"></span></div>

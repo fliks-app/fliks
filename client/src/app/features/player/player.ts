@@ -20,6 +20,7 @@ import { BrowserDeviceProfileService, DeviceProfile } from '../../core/services/
 import type { PreRollItem } from '@fliks/plugin-ui';
 import { SseService, RemoteQualityRung } from '../../core/services/sse.service';
 import { RemoteService } from '../../core/services/remote.service';
+import { backTarget } from './back-target';
 import { remoteOverlayOpen } from '../../core/services/remote-playback-target';
 import { PickerRow } from '../../shared/remote-picker/remote-picker-list';
 import { AuthService } from '../../core/services/auth.service';
@@ -116,9 +117,14 @@ import { CueController } from './cue-controller';
 import { QueueController } from './queue-controller';
 import { RemoteController } from './remote-controller';
 import { PartyController } from './party-controller';
+import { KeyboardOverlayService } from '../../core/services/keyboard-overlay.service';
 import { PartyService } from '../../core/services/party/party.service';
+import { ReactionsService } from '../../core/services/party/reactions.service';
 import { PartyPanelComponent } from './party/party-panel';
 import { PartyFloatersComponent } from './party/party-floaters';
+import { PartyReactionDockComponent } from './party/party-reaction-dock';
+import { PartyReactionSettingsComponent } from './party/party-reaction-settings';
+import { PartySettingsComponent } from './party/party-settings';
 import { KeyboardController } from './keyboard-controller';
 import { SubtitleController } from './subtitle-controller';
 import { isMutedAt } from '../../core/utils/edl-policy';
@@ -127,7 +133,7 @@ import { SubtitleSyncPanelComponent } from './overlay/subtitle-sync-panel/subtit
 import { DefaultFocusDirective } from '../../shared/directives/default-focus.directive';
 
 @Component({
-  imports: [TranslatePipe, LucideAirplay, LucideInfo, LucideVolumeX, LucideX, PlayerControlsComponent, PlayerStatsOverlayComponent, SubtitleSyncPanelComponent, PlayerErrorOverlayComponent, DefaultFocusDirective, PartyPanelComponent, PartyFloatersComponent],
+  imports: [TranslatePipe, LucideAirplay, LucideInfo, LucideVolumeX, LucideX, PlayerControlsComponent, PlayerStatsOverlayComponent, SubtitleSyncPanelComponent, PlayerErrorOverlayComponent, DefaultFocusDirective, PartyPanelComponent, PartyFloatersComponent, PartyReactionDockComponent, PartyReactionSettingsComponent, PartySettingsComponent],
   templateUrl: './player.html',
   providers: [ControlsVisibilityService, CopyFallbackController, WebVideoCropController, QueueController, RemoteController, PartyController, SubtitleController],
   encapsulation: ViewEncapsulation.None,
@@ -139,6 +145,8 @@ import { DefaultFocusDirective } from '../../shared/directives/default-focus.dir
       inset: 0;
       height: 100vh;
       height: 100dvh;
+      /* The bottom inset the controls clear; none once the container no longer reaches the screen's bottom. */
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
       background-color: #000;
       z-index: 100;
       overflow: hidden;
@@ -196,8 +204,24 @@ import { DefaultFocusDirective } from '../../shared/directives/default-focus.dir
       z-index: 100;
       -webkit-transform: translateZ(0);
     }
+    @media (prefers-reduced-motion: no-preference) {
+      .party-shell.in-party > .player-container {
+        transition:
+          right 250ms cubic-bezier(0.2, 0, 0, 1),
+          height 250ms cubic-bezier(0.2, 0, 0, 1);
+      }
+    }
     .party-shell[data-party-dock='right'] > .player-container {
       right: 360px;
+    }
+    /* Beside the side panel there is room above the keyboard: the player fits there while typing. */
+    .party-shell.keyboard-open[data-party-dock='right'] > .player-container {
+      height: calc(100vh - var(--keyboard-h));
+      height: calc(100dvh - var(--keyboard-h));
+      --safe-bottom: 0px;
+    }
+    .party-shell[data-party-dock='drawer'] > .player-container {
+      right: 40%;
     }
     .party-shell[data-party-dock='tv'] > .player-container {
       right: 30%;
@@ -445,6 +469,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   readonly edlMuted = computed(() => isMutedAt(this.edl.muteRanges(), this.currentTime()));
   private readonly _webCropAttach = (this.webCrop.attach(this), null);
   readonly inPipMode = signal(false);
+  /** The party dialog to show; mounting it opens it, so its code loads only when asked for. */
+  protected readonly partyDialog = signal<'party' | 'reactions' | null>(null);
+  protected readonly partyPanelShown = computed(() => this.partyCtl.active() && this.party.panelOpen() && !this.inPipMode());
   readonly pipAvailable = signal(true);
   readonly canLockOrientation = Capacitor.getPlatform() === 'ios';
   readonly orientationLocked = signal(false);
@@ -545,6 +572,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     engine: () => this.engine,
     controls: () => this.controls(),
     isTv: () => this.device.isTv(),
+    canControlPlayback: () => this.party.canControl(),
     playbackRate: () => this.playbackRate(),
     onTogglePlay: () => this.onTogglePlay(),
     onSeek: (t) => this.onSeek(t),
@@ -585,6 +613,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }), null);
   private readonly remoteCommandEffect = effect(() => this.remote.onAdminEvent());
   protected readonly party = inject(PartyService);
+  protected readonly reactions = inject(ReactionsService);
+  protected readonly keyboardOverlay = inject(KeyboardOverlayService);
   protected readonly partyCtl = inject(PartyController);
   private readonly _partyAttach = (this.partyCtl.attach({
     engine: () => this.engine,
@@ -663,7 +693,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private mediaFileId = 0;
   private mediaId = 0;
   private isOfflinePlayback = false;
-  private fromDownloads = false;
   /** Offline playback loads no media record; the download carries the type for the back target. */
   private offlineMediaType: string | undefined;
   private episodeId: number | undefined;
@@ -823,6 +852,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   // ── Lifecycle ──
 
   async ngAfterViewInit() {
+    this.keyboardOverlay.enter();
     this.state.reset();
     this.qoe.reset();
     this.recoveryEpisode = null;
@@ -853,13 +883,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.episodeId = qp['episodeId'] ? +qp['episodeId'] : undefined;
     const resumeTime = 't' in qp ? +qp['t'] : undefined;
 
-    // A playlist launch registers its queue and passes the id; consume it only on a match, any other entry
-    // drops the queue (a series queue is rebuilt by syncSeriesQueue once the media loads).
+    // A playlist or party launch registers its queue and passes the id; consume it only on a match, any other
+    // entry drops the queue (a series queue is rebuilt by syncSeriesQueue once the media loads).
     const playlistId = qp['playlistId'] ? +qp['playlistId'] : undefined;
+    const partyId = qp['party'] ? +qp['party'] : undefined;
     if (
-      playlistId &&
-      this.queue.source() === 'playlist' &&
-      this.queue.sourceId() === playlistId
+      (playlistId && this.queue.source() === 'playlist' && this.queue.sourceId() === playlistId) ||
+      (partyId && this.queue.source() === 'party' && this.queue.sourceId() === partyId)
     ) {
       this.queue.syncTo(this.mediaId, this.episodeId);
     } else {
@@ -875,7 +905,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     try {
       // A finished download plays locally whatever the connectivity; `offline=1` (downloads page) insists on it.
       const forced = qp['offline'] === '1';
-      this.fromDownloads = forced;
       const download = readyDownloadFor(this.dlCache.load(), this.mediaFileId, this.castService.isConnected());
       const offlineCheck =
         forced || download
@@ -1235,6 +1264,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   ngOnDestroy() {
     this.destroyed = true;
+    this.keyboardOverlay.leave();
     this.edl.clear();
     this.webCrop.destroy();
     this.detachAirPlay();
@@ -1447,7 +1477,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           };
         };
         engine.onNext = () => void this.queueCtl.advance();
-        engine.onPrevious = () => void this.queueCtl.playQueueItem(this.queue.index() - 1);
+        engine.onPrevious = () =>
+          void (this.partyCtl.active() ? this.partyCtl.requestPrevious() : this.queueCtl.playQueueItem(this.queue.index() - 1));
         engine.onStop = () => this.onBack();
         engine.onToggleLike = () => void this.queueCtl.notificationLike.toggle();
       }
@@ -3049,39 +3080,23 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   onBack() {
     this.savePosition();
-    // Explicit navigation, not history.back(): in-player navigation stacks several /watch entries. replaceUrl
-    // drops /watch so back doesn't reopen the player.
-    const queueSourceId = this.queue.sourceId();
-    let target: string;
-    // Same handoff as a media card: the detail page paints from the record the player holds instead of a
-    // skeleton; `getOne` still runs there for cast, crew and files.
-    let handoff: { media: Media } | undefined;
-    if (!this.mediaId) {
-      target = '/';
-    } else if (this.fromDownloads) {
-      target = '/downloads';
-    } else if (this.queue.source() === 'playlist' && queueSourceId != null) {
-      // Playing from a playlist returns to that playlist, not the item's page.
-      target = `/playlists/${queueSourceId}`;
-    } else {
-      const kind = (this.media?.type ?? this.offlineMediaType) === 'series' ? 'series' : 'movies';
-      if (this.media) handoff = { media: this.media };
-      if (this.episodeId && kind === 'series') {
-        // A finished episode returns to the NEXT episode's detail page, a mid-watch one to its own (to resume).
-        const next = this.queueCtl.nextEpisodeContext();
-        const epId =
-          this.episodeFinished() && next ? next.episodeId : this.episodeId;
-        target = `/series/${this.mediaId}/episode/${epId}`;
-      } else {
-        target = `/${kind}/${this.mediaId}`;
-      }
-    }
-    // If the previous URL is already the target, just pop /watch: replaceUrl would stack a duplicate (two
-    // backs). Mark the NavigationEnd as a back-pop so /watch isn't pushed on NavbarService's history.
+    const kind = (this.media?.type ?? this.offlineMediaType) === 'series' ? 'series' : 'movies';
+    const next = this.queueCtl.nextEpisodeContext();
+    const target = backTarget({
+      origin: this.navHistory.originUrl,
+      mediaId: this.mediaId,
+      kind,
+      episodeId: this.episodeId,
+      landingEpisodeId: this.episodeFinished() && next ? next.episodeId : this.episodeId,
+    });
+    // Same handoff as a media card: the detail page paints from the record the player holds.
+    const handoff = this.media && target.startsWith(`/${kind}/${this.mediaId}`) ? { media: this.media } : undefined;
+    // Landing on the origin pops /watch (replaceUrl would stack a duplicate); another target replaces it. Either
+    // way the NavigationEnd is marked a back-pop so /watch isn't pushed on NavbarService's history.
     this.navbar.markAsBackNavigation();
-    const prev = this.navHistory.previousUrl;
+    const prev = this.navHistory.originUrl;
     void this.animateClose().then(() => {
-      if (prev && prev.split('?')[0] === target) {
+      if (prev && prev.split('?')[0] === target.split('?')[0]) {
         history.back();
         return;
       }

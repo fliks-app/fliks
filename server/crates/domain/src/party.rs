@@ -12,12 +12,28 @@ pub const SCHEDULE_EXPIRY_MS: i64 = 7_200_000;
 pub const VOICE_MAX: usize = 8;
 pub const CHAT_CAP: usize = 200;
 pub const SNAPSHOT_MESSAGES: usize = 50;
-pub const REACTIONS: [&str; 8] = ["👍", "😂", "😮", "😢", "😡", "❤️", "🔥", "👏"];
+/// Reactions with an animated asset under `public/emoji/`; `scripts/fetch-reaction-emoji.py` reads
+/// this block to fetch them.
+pub const ANIMATED_REACTIONS: [&str; 32] = [
+    "👍", "👎", "😂", "🤣", "😮", "😱", "😢", "😭", "😡", "🤬", "❤️", "😍", "🥰", "🔥", "👏", "🙌",
+    "🎉", "💯", "🤔", "🙄", "😴", "🤯", "😬", "🫣", "😅", "😎", "🥲", "💀", "👀", "🍿", "🤢", "😳",
+];
+/// The reaction bar a device starts with.
+pub const DEFAULT_REACTIONS: [&str; 8] = ["👍", "😂", "😮", "😢", "😡", "❤️", "🔥", "👏"];
 const READY_TOLERANCE_S: f64 = 1.0;
 const RATE_WINDOW_MS: i64 = 10_000;
 const MAX_MESSAGES: usize = 5;
 const MAX_REACTIONS: usize = 10;
 const MAX_SIGNALS: usize = 60;
+
+/// Noto's asset name for an emoji: its codepoints in lowercase hex, joined by `_`.
+pub fn noto_code(emoji: &str) -> String {
+    emoji
+        .chars()
+        .map(|c| format!("{:x}", c as u32))
+        .collect::<Vec<_>>()
+        .join("_")
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -49,6 +65,28 @@ pub enum Role {
 pub enum Policy {
     Everyone,
     HostOnly,
+}
+
+impl Policy {
+    /// The `watch_parties.policy` column value.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Everyone => "everyone",
+            Self::HostOnly => "host_only",
+        }
+    }
+}
+
+impl TryFrom<String> for Policy {
+    type Error = String;
+
+    fn try_from(s: String) -> Result<Self, String> {
+        match s.as_str() {
+            "everyone" => Ok(Self::Everyone),
+            "host_only" => Ok(Self::HostOnly),
+            _ => Err(format!("unknown party policy `{s}`")),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -87,6 +125,30 @@ pub struct Item {
     pub media_id: i32,
     pub media_file_id: Option<i32>,
     pub episode_id: Option<i32>,
+}
+
+/// The queue rows to try, nearest first, after (before) `current`. A current item that left the
+/// queue counts as sitting before the first row: forward starts at the top, backward has none.
+pub fn candidates(queue: &[Item], current: &Item, forward: bool) -> Vec<Item> {
+    let at = queue.iter().position(|i| same_row(i, current));
+    match (at, forward) {
+        (Some(i), true) => queue[i + 1..].to_vec(),
+        (Some(i), false) => queue[..i].iter().rev().cloned().collect(),
+        (None, true) => queue.to_vec(),
+        (None, false) => vec![],
+    }
+}
+
+fn same_row(a: &Item, b: &Item) -> bool {
+    a.media_id == b.media_id && a.episode_id == b.episode_id
+}
+
+/// The server's pick for a queue step: the titles passed over and the row that plays (`None`:
+/// nothing playable is left in that direction).
+pub struct Step {
+    pub forward: bool,
+    pub skipped: Vec<String>,
+    pub next: Option<(Item, String)>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
@@ -162,6 +224,9 @@ pub enum Effect {
         rev: u64,
         name: String,
         policy: Policy,
+        reactions_enabled: bool,
+        chat_enabled: bool,
+        link_sharing: bool,
     },
     Message(Message),
     Reaction {
@@ -184,6 +249,8 @@ pub enum Effect {
 pub enum Error {
     NotMember,
     HostOnly,
+    ReactionsOff,
+    ChatOff,
     Stale,
     Invalid(&'static str),
     RateLimited,
@@ -191,11 +258,13 @@ pub enum Error {
     VoiceNotJoined,
 }
 
-/// A client intent (`play|pause|seek|setItem|ended`) with the revision it was made on.
+/// A client intent (`play|pause|seek|setItem|ended`) with the revision it was made on;
+/// `item_title` labels a `setItem` in its system message; an `ended` names `item`, the one it ended.
 pub struct Intent {
     pub action: Action,
     pub position: Option<f64>,
     pub item: Option<Item>,
+    pub item_title: Option<String>,
     pub base_rev: u64,
 }
 
@@ -210,6 +279,11 @@ struct Phase {
 pub struct Live {
     pub name: String,
     pub policy: Policy,
+    /// Host switches for the whole party: reactions and chat messages are refused while off.
+    pub reactions_enabled: bool,
+    pub chat_enabled: bool,
+    /// Whether members, not only the host, receive the invite token.
+    pub link_sharing: bool,
     pub host_id: i32,
     pub item: Item,
     pub state: State,
@@ -217,8 +291,6 @@ pub struct Live {
     pub rev: u64,
     pub members: Vec<Member>,
     pub chat: VecDeque<Message>,
-    /// Users kicked since the last token regeneration.
-    pub blocked: Vec<i32>,
     /// A scheduled party's open lobby: members start `waiting` until they say ready.
     pub lobby: bool,
     phase: Option<Phase>,
@@ -243,7 +315,8 @@ fn by_of(m: &Member) -> By {
 }
 
 impl Live {
-    /// A party that has just opened: idle at `position`, host = the owner.
+    /// A party that has just opened: idle at `position`, host = the owner. `rev` and message ids
+    /// start at `now` so a recreated machine never reuses what a client already holds.
     pub fn new(
         name: String,
         policy: Policy,
@@ -255,6 +328,9 @@ impl Live {
         Self {
             name,
             policy,
+            reactions_enabled: true,
+            chat_enabled: true,
+            link_sharing: true,
             host_id,
             item,
             state: State::Idle,
@@ -262,14 +338,13 @@ impl Live {
                 position,
                 server_time_ms: now,
             },
-            rev: 1,
+            rev: now.max(1) as u64,
             members: vec![],
             chat: VecDeque::new(),
-            blocked: vec![],
             lobby: false,
             phase: None,
             empty_since: Some(now),
-            next_msg: 1,
+            next_msg: now.max(1) as u64,
             next_join: 0,
             limits: HashMap::new(),
         }
@@ -482,19 +557,23 @@ impl Live {
         }
     }
 
-    fn transfer_if_host_gone(&mut self, out: &mut Vec<Effect>, now: i64) {
+    /// Moves the host role to the oldest present member when the host has no member left; returns
+    /// the new host's username.
+    fn hand_over(&mut self) -> Option<String> {
         if self.has_user(self.host_id) {
-            return;
+            return None;
         }
         let next = self
             .members
             .iter()
-            .filter(|m| m.status != MemberStatus::Away)
-            .chain(&self.members)
-            .min_by_key(|m| (m.status == MemberStatus::Away, m.joined))
-            .map(|m| (m.user_id, m.username.clone()));
-        if let Some((id, username)) = next {
-            self.host_id = id;
+            .min_by_key(|m| (m.status == MemberStatus::Away, m.joined))?;
+        let (id, username) = (next.user_id, next.username.clone());
+        self.host_id = id;
+        Some(username)
+    }
+
+    fn announce_host(&mut self, out: &mut Vec<Effect>, username: Option<String>, now: i64) {
+        if let Some(username) = username {
             self.sys(
                 out,
                 "host_changed",
@@ -503,6 +582,18 @@ impl Live {
                 now,
             );
         }
+    }
+
+    /// Drops the rate counters of members who left, keeping a window still running so a rejoin
+    /// cannot reset it.
+    fn prune_limits(&mut self, now: i64) {
+        let members = &self.members;
+        self.limits.retain(|(user, device, _), q| {
+            members
+                .iter()
+                .any(|m| m.user_id == *user && m.device_id == *device)
+                || q.back().is_some_and(|t| now - t < RATE_WINDOW_MS)
+        });
     }
 
     /// A rejoin of the same `(user, device)` replaces the connection and resets the status.
@@ -557,10 +648,12 @@ impl Live {
     pub fn leave(&mut self, user_id: i32, device_id: &str, now: i64) -> Result<Vec<Effect>, Error> {
         let i = self.find(user_id, device_id).ok_or(Error::NotMember)?;
         let m = self.members.remove(i);
+        self.prune_limits(now);
+        let host = self.hand_over();
         let mut out = vec![];
         self.members_effect(&mut out);
         self.sys(&mut out, "left", Some(&m.username), json!({}), now);
-        self.transfer_if_host_gone(&mut out, now);
+        self.announce_host(&mut out, host, now);
         self.settle(&mut out, now);
         Ok(out)
     }
@@ -576,6 +669,7 @@ impl Live {
             action,
             position,
             item,
+            item_title,
             base_rev,
         } = req;
         let i = self.find(user_id, device_id).ok_or(Error::NotMember)?;
@@ -583,14 +677,8 @@ impl Live {
         let host = user_id == self.host_id;
         let mut out = vec![];
         if action == Action::Ended {
-            if host && self.state != State::Idle {
-                self.anchor = Anchor {
-                    position: self.position_at(now),
-                    server_time_ms: now,
-                };
-                self.state = State::Idle;
-                self.phase = None;
-                self.state_effect(&mut out, now, None, Some(by_of(&actor)), Some("ended"));
+            if self.can_end(user_id, device_id, item.as_ref()) {
+                self.idle(&mut out, now, &actor);
             }
             return Ok((self.rev, out));
         }
@@ -661,13 +749,125 @@ impl Live {
             }
             Action::SetItem => {
                 let it = item.ok_or(Error::Invalid("item"))?;
-                self.item = it;
-                self.enter_waiting(&mut out, 0.0, playing_ctx, &actor, action, now);
-                self.sys(&mut out, "item_changed", Some(&name), json!({}), now);
+                self.change_item(&mut out, &actor, it, item_title, now);
             }
             Action::Ended => {}
         }
         Ok((self.rev, out))
+    }
+
+    /// `setItem` once its gates passed: the item changes, everyone waits at 0.
+    fn change_item(
+        &mut self,
+        out: &mut Vec<Effect>,
+        actor: &Member,
+        item: Item,
+        title: Option<String>,
+        now: i64,
+    ) {
+        let playing = self.state == State::Playing;
+        self.item = item;
+        self.enter_waiting(out, 0.0, playing, actor, Action::SetItem, now);
+        self.sys(
+            out,
+            "item_changed",
+            Some(&actor.username),
+            json!({ "title": title }),
+            now,
+        );
+    }
+
+    fn idle(&mut self, out: &mut Vec<Effect>, now: i64, by: &Member) {
+        self.anchor = Anchor {
+            position: self.position_at(now),
+            server_time_ms: now,
+        };
+        self.state = State::Idle;
+        self.phase = None;
+        self.state_effect(out, now, None, Some(by_of(by)), Some("ended"));
+    }
+
+    /// Whether an `ended` takes effect: the party plays or is paused on `item` (any item when the
+    /// client sent none) and the sender is the host, or any member naming `item` while the host is away.
+    pub fn can_end(&self, user_id: i32, device_id: &str, item: Option<&Item>) -> bool {
+        let host_away = !self
+            .members
+            .iter()
+            .any(|m| m.user_id == self.host_id && m.status != MemberStatus::Away);
+        self.find(user_id, device_id).is_some()
+            && matches!(self.state, State::Playing | State::Paused)
+            && item.is_none_or(|i| same_row(i, &self.item))
+            && (user_id == self.host_id || (item.is_some() && host_away))
+    }
+
+    /// A queue step chosen by the server: one `item_skipped` message per passed-over title, then
+    /// `step.next` as a `setItem` would (`None`: nothing playable is left). The gates of `setItem`
+    /// run first, so a refused call leaves no message behind. Only a forward step that finds
+    /// nothing idles the party and appends `queue_ended`, once; a backward one, or a forward one on
+    /// an already idle party, changes nothing.
+    pub fn advance(
+        &mut self,
+        user_id: i32,
+        device_id: &str,
+        base_rev: u64,
+        step: Step,
+        now: i64,
+    ) -> Result<(u64, Vec<Effect>), Error> {
+        let i = self.find(user_id, device_id).ok_or(Error::NotMember)?;
+        let actor = self.members[i].clone();
+        if self.policy == Policy::HostOnly && user_id != self.host_id {
+            return Err(Error::HostOnly);
+        }
+        if base_rev < self.rev {
+            return Err(Error::Stale);
+        }
+        let mut out = vec![];
+        self.walk(&mut out, &actor, step, false, now);
+        Ok((self.rev, out))
+    }
+
+    /// A host `ended` (or a member's while the host is away) that moves the queue on, in one step
+    /// under one lock. Nothing happens unless the party is still on `from`, the item `step` was
+    /// computed for.
+    pub fn advance_after_ended(
+        &mut self,
+        user_id: i32,
+        device_id: &str,
+        item: Option<&Item>,
+        from: &Item,
+        step: Step,
+        now: i64,
+    ) -> Result<(u64, Vec<Effect>), Error> {
+        let i = self.find(user_id, device_id).ok_or(Error::NotMember)?;
+        let actor = self.members[i].clone();
+        let mut out = vec![];
+        if self.can_end(user_id, device_id, item) && same_row(from, &self.item) {
+            self.idle(&mut out, now, &actor);
+            self.walk(&mut out, &actor, step, true, now);
+        }
+        Ok((self.rev, out))
+    }
+
+    fn walk(&mut self, out: &mut Vec<Effect>, actor: &Member, step: Step, ended: bool, now: i64) {
+        let Some((item, title)) = step.next else {
+            if !step.forward || (self.state == State::Idle && !ended) {
+                return;
+            }
+            self.skipped(out, &step.skipped, now);
+            if self.state != State::Idle {
+                self.idle(out, now, actor);
+            }
+            self.sys(out, "queue_ended", None, json!({}), now);
+            return;
+        };
+        self.skipped(out, &step.skipped, now);
+        self.change_item(out, actor, item, Some(title), now);
+    }
+
+    fn skipped(&mut self, out: &mut Vec<Effect>, titles: &[String], now: i64) {
+        for title in titles {
+            self.sys(out, "item_skipped", None, json!({ "title": title }), now);
+        }
     }
 
     /// Rules 2 and 5: only an `ready` near the anchor counts during `waiting`.
@@ -721,15 +921,15 @@ impl Live {
             .cloned()
             .collect();
         self.members.retain(|m| !gone.contains(m));
+        self.prune_limits(now);
+        let host = self.hand_over();
         if changed || !gone.is_empty() {
             self.members_effect(&mut out);
         }
         for m in &gone {
             self.sys(&mut out, "left", Some(&m.username), json!({}), now);
         }
-        if !gone.is_empty() {
-            self.transfer_if_host_gone(&mut out, now);
-        }
+        self.announce_host(&mut out, host, now);
         if self.state == State::Waiting
             && (self.all_ready()
                 || self
@@ -750,21 +950,32 @@ impl Live {
         out
     }
 
-    pub fn set_settings(&mut self, name: Option<String>, policy: Option<Policy>) -> Vec<Effect> {
-        let mut out = vec![];
+    pub fn set_settings(
+        &mut self,
+        name: Option<String>,
+        policy: Option<Policy>,
+        reactions_enabled: Option<bool>,
+        chat_enabled: Option<bool>,
+        link_sharing: Option<bool>,
+    ) -> Vec<Effect> {
         if let Some(n) = name {
             self.name = n;
         }
         if let Some(p) = policy {
             self.policy = p;
         }
+        self.reactions_enabled = reactions_enabled.unwrap_or(self.reactions_enabled);
+        self.chat_enabled = chat_enabled.unwrap_or(self.chat_enabled);
+        self.link_sharing = link_sharing.unwrap_or(self.link_sharing);
         let rev = self.bump();
-        out.push(Effect::Settings {
+        vec![Effect::Settings {
             rev,
             name: self.name.clone(),
             policy: self.policy,
-        });
-        out
+            reactions_enabled: self.reactions_enabled,
+            chat_enabled: self.chat_enabled,
+            link_sharing: self.link_sharing,
+        }]
     }
 
     /// The target must be a member; the host role moves to that user.
@@ -788,7 +999,7 @@ impl Live {
         Ok(out)
     }
 
-    /// Removes every member of the user and blocks token rejoin (`blocked`).
+    /// Removes every member of the user; the caller records the kick so the token stops working.
     pub fn kick(&mut self, user_id: i32, by: &str, now: i64) -> Result<Vec<Effect>, Error> {
         if user_id == self.host_id {
             return Err(Error::Invalid("host"));
@@ -798,7 +1009,7 @@ impl Live {
         self.members = keep;
         let first = gone.first().ok_or(Error::NotMember)?;
         let username = first.username.clone();
-        self.blocked.push(user_id);
+        self.prune_limits(now);
         let mut out = vec![Effect::Closed {
             reason: CloseReason::Kicked,
             to: gone
@@ -853,7 +1064,11 @@ impl Live {
     ) -> Result<Vec<Effect>, Error> {
         let i = self.find(user_id, device_id).ok_or(Error::NotMember)?;
         let was = self.members[i].voice.is_some();
-        let count = self.members.iter().filter(|m| m.voice.is_some()).count();
+        let count = self
+            .members
+            .iter()
+            .filter(|m| m.voice.is_some() && m.status != MemberStatus::Away)
+            .count();
         if joined && !was && count >= VOICE_MAX {
             return Err(Error::VoiceFull);
         }
@@ -898,6 +1113,9 @@ impl Live {
         now: i64,
     ) -> Result<(Message, Vec<Effect>), Error> {
         let i = self.find(user_id, device_id).ok_or(Error::NotMember)?;
+        if !self.chat_enabled {
+            return Err(Error::ChatOff);
+        }
         if !self.rate_ok(user_id, device_id, Limit::Message, now) {
             return Err(Error::RateLimited);
         }
@@ -921,8 +1139,8 @@ impl Live {
         now: i64,
     ) -> Result<Vec<Effect>, Error> {
         let i = self.find(user_id, device_id).ok_or(Error::NotMember)?;
-        if !REACTIONS.contains(&emoji) {
-            return Err(Error::Invalid("emoji"));
+        if !self.reactions_enabled {
+            return Err(Error::ReactionsOff);
         }
         if !self.rate_ok(user_id, device_id, Limit::Reaction, now) {
             return Err(Error::RateLimited);
@@ -938,6 +1156,16 @@ impl Live {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reaction_catalog_is_coherent() {
+        assert_eq!(noto_code("❤️"), "2764_fe0f");
+        let mut emojis = ANIMATED_REACTIONS.to_vec();
+        emojis.sort_unstable();
+        emojis.dedup();
+        assert_eq!(emojis.len(), ANIMATED_REACTIONS.len());
+        assert!(DEFAULT_REACTIONS.iter().all(|d| emojis.contains(d)));
+    }
 
     fn item() -> Item {
         Item {
@@ -963,6 +1191,7 @@ mod tests {
                 action: Action::Play,
                 position: None,
                 item: None,
+                item_title: None,
                 base_rev: l.rev,
             },
             now,
@@ -1031,6 +1260,7 @@ mod tests {
                 action: Action::Seek,
                 position: Some(50.0),
                 item: None,
+                item_title: None,
                 base_rev: l.rev,
             },
             0,
@@ -1050,6 +1280,7 @@ mod tests {
                 action: Action::Seek,
                 position: Some(80.0),
                 item: None,
+                item_title: None,
                 base_rev: l.rev,
             },
             6000,
@@ -1071,6 +1302,7 @@ mod tests {
                 action: Action::Pause,
                 position: None,
                 item: None,
+                item_title: None,
                 base_rev: 0,
             },
             5,
@@ -1092,6 +1324,7 @@ mod tests {
                     action: Action::Pause,
                     position: None,
                     item: None,
+                    item_title: None,
                     base_rev: 0,
                 },
                 start + 4000,
@@ -1150,6 +1383,7 @@ mod tests {
                     action: a,
                     position: Some(1.0),
                     item: Some(item()),
+                    item_title: None,
                     base_rev: l.rev,
                 },
                 0,
@@ -1164,6 +1398,7 @@ mod tests {
                     action: Action::Play,
                     position: None,
                     item: None,
+                    item_title: None,
                     base_rev: l.rev
                 },
                 0
@@ -1185,6 +1420,7 @@ mod tests {
                 action: Action::Seek,
                 position: Some(9.0),
                 item: None,
+                item_title: None,
                 base_rev: old,
             },
             1,
@@ -1197,6 +1433,7 @@ mod tests {
                 action: Action::SetItem,
                 position: None,
                 item: Some(item()),
+                item_title: None,
                 base_rev: old,
             },
             1,
@@ -1210,6 +1447,7 @@ mod tests {
                     action: Action::Pause,
                     position: None,
                     item: None,
+                    item_title: None,
                     base_rev: old
                 },
                 1
@@ -1224,6 +1462,7 @@ mod tests {
                     action: Action::Play,
                     position: None,
                     item: None,
+                    item_title: None,
                     base_rev: old
                 },
                 2
@@ -1250,6 +1489,7 @@ mod tests {
                     action: Action::SetItem,
                     position: None,
                     item: Some(next.clone()),
+                    item_title: None,
                     base_rev: l.rev,
                 },
                 0,
@@ -1272,6 +1512,7 @@ mod tests {
                     action: Action::Ended,
                     position: None,
                     item: None,
+                    item_title: None,
                     base_rev: 0
                 },
                 5
@@ -1289,6 +1530,7 @@ mod tests {
                     action: Action::Ended,
                     position: None,
                     item: None,
+                    item_title: None,
                     base_rev: 0,
                 },
                 5,
@@ -1372,7 +1614,7 @@ mod tests {
     }
 
     #[test]
-    fn kick_removes_every_device_and_blocks_the_user() {
+    fn kick_removes_every_device_of_the_user() {
         let mut l = party();
         l.join(2, "bob", "d2b", "c2b", 0);
         let out = l.kick(2, "alice", 5).unwrap();
@@ -1380,7 +1622,6 @@ mod tests {
             matches!(&out[0], Effect::Closed { reason: CloseReason::Kicked, to } if to.len() == 2)
         );
         assert!(!l.has_user(2));
-        assert_eq!(l.blocked, vec![2]);
         assert_eq!(l.kick(1, "alice", 6).unwrap_err(), Error::Invalid("host"));
     }
 
@@ -1400,10 +1641,6 @@ mod tests {
             l.react(1, "d1", "🔥", i).unwrap();
         }
         assert_eq!(l.react(1, "d1", "🔥", 10).unwrap_err(), Error::RateLimited);
-        assert_eq!(
-            l.react(2, "d2", "x", 0).unwrap_err(),
-            Error::Invalid("emoji")
-        );
     }
 
     fn voice(l: &mut Live, user: i32, dev: &str, joined: bool) -> Result<Vec<Effect>, Error> {
@@ -1501,12 +1738,297 @@ mod tests {
     fn every_mutation_bumps_rev_and_chat_is_a_ring() {
         let mut l = party();
         let r = l.rev;
-        l.set_settings(Some("n".into()), Some(Policy::HostOnly));
+        l.set_settings(Some("n".into()), Some(Policy::HostOnly), None, None, None);
         assert_eq!(l.rev, r + 1);
         for i in 0..250 {
             l.post_message(1, "d1", "m", i * RATE_WINDOW_MS).unwrap();
         }
         assert_eq!(l.chat.len(), CHAT_CAP);
         assert_eq!(l.recent_messages().len(), SNAPSHOT_MESSAGES);
+    }
+
+    #[test]
+    fn switched_off_chat_and_reactions_refuse_but_system_messages_flow() {
+        let mut l = party();
+        let r = l.rev;
+        let e = l.set_settings(None, None, Some(false), Some(false), Some(false));
+        assert!(matches!(
+            e[0],
+            Effect::Settings {
+                reactions_enabled: false,
+                chat_enabled: false,
+                link_sharing: false,
+                ..
+            }
+        ));
+        assert_eq!(l.rev, r + 1);
+        assert_eq!(l.react(1, "d1", "x", 0), Err(Error::ReactionsOff));
+        assert_eq!(l.post_message(1, "d1", "m", 0).unwrap_err(), Error::ChatOff);
+        let left = l.leave(2, "d2", 1).unwrap();
+        assert!(left.iter().any(|e| matches!(e, Effect::Message(_))));
+        l.set_settings(None, None, Some(true), Some(true), Some(true));
+        assert!(l.react(1, "d1", "x", 0).is_ok());
+        assert!(l.post_message(1, "d1", "m", 0).is_ok());
+    }
+
+    fn row(media: i32, episode: Option<i32>) -> Item {
+        Item {
+            media_id: media,
+            media_file_id: None,
+            episode_id: episode,
+        }
+    }
+
+    #[test]
+    fn candidates_follow_the_queue_order_from_the_current_row() {
+        let q = [row(1, None), row(2, Some(7)), row(2, Some(8)), row(3, None)];
+        assert_eq!(candidates(&q, &row(2, Some(7)), true), q[2..].to_vec());
+        assert_eq!(
+            candidates(&q, &row(2, Some(8)), false),
+            vec![q[1].clone(), q[0].clone()]
+        );
+        assert!(candidates(&q, &row(3, None), true).is_empty());
+        assert!(candidates(&q, &row(1, None), false).is_empty());
+    }
+
+    #[test]
+    fn a_current_item_gone_from_the_queue_restarts_forward_and_stops_backward() {
+        let q = [row(1, None), row(2, None)];
+        assert_eq!(candidates(&q, &row(9, None), true), q.to_vec());
+        assert!(candidates(&q, &row(9, None), false).is_empty());
+    }
+
+    #[test]
+    fn set_item_names_the_new_item_in_its_system_message() {
+        let mut l = party();
+        let out = l
+            .intent(
+                1,
+                "d1",
+                Intent {
+                    action: Action::SetItem,
+                    position: None,
+                    item: Some(row(2, Some(3))),
+                    item_title: Some("Show S01E03".into()),
+                    base_rev: l.rev,
+                },
+                0,
+            )
+            .unwrap()
+            .1;
+        let sys = out
+            .iter()
+            .find_map(|e| match e {
+                Effect::Message(m) => m.system.clone(),
+                _ => None,
+            })
+            .unwrap();
+        assert_eq!(sys.kind, "item_changed");
+        assert_eq!(sys.args, json!({ "title": "Show S01E03" }));
+    }
+
+    fn step(forward: bool, skipped: &[&str], next: Option<(Item, &str)>) -> Step {
+        Step {
+            forward,
+            skipped: skipped.iter().map(|s| (*s).to_owned()).collect(),
+            next: next.map(|(i, t)| (i, t.to_owned())),
+        }
+    }
+
+    #[test]
+    fn the_end_of_the_queue_idles_the_party_once() {
+        let mut l = party();
+        l.state = State::Playing;
+        let rev = l.rev;
+        let out = l
+            .advance(1, "d1", rev, step(true, &["Show S01E02"], None), 5)
+            .unwrap()
+            .1;
+        assert_eq!(l.state, State::Idle);
+        assert_eq!(state_of(&out).unwrap().0, State::Idle);
+        assert_eq!(kinds(&out), ["item_skipped", "queue_ended"]);
+        let (rev, chat) = (l.rev, l.chat.len());
+        let out = l
+            .advance(1, "d1", rev, step(true, &["Show S01E02"], None), 6)
+            .unwrap()
+            .1;
+        assert!(out.is_empty());
+        assert_eq!((l.rev, l.chat.len()), (rev, chat));
+    }
+
+    #[test]
+    fn a_backward_step_with_nothing_found_changes_nothing() {
+        let mut l = party();
+        l.state = State::Playing;
+        let (rev, chat) = (l.rev, l.chat.len());
+        let out = l
+            .advance(1, "d1", rev, step(false, &["Gap"], None), 5)
+            .unwrap()
+            .1;
+        assert!(out.is_empty());
+        assert_eq!((l.state, l.rev, l.chat.len()), (State::Playing, rev, chat));
+    }
+
+    #[test]
+    fn an_advance_skips_then_switches_and_a_refused_one_leaves_no_message() {
+        let mut l = party();
+        let rev = l.rev;
+        let next = || step(true, &["Gap"], Some((row(3, None), "Film")));
+        let out = l.advance(1, "d1", rev, next(), 0).unwrap().1;
+        assert_eq!(kinds(&out), ["item_skipped", "item_changed"]);
+        assert_eq!(l.item, row(3, None));
+        let chat = l.chat.len();
+        assert_eq!(
+            l.advance(1, "d1", rev, next(), 0).unwrap_err(),
+            Error::Stale
+        );
+        l.policy = Policy::HostOnly;
+        assert_eq!(
+            l.advance(2, "d2", l.rev, step(true, &[], None), 0)
+                .unwrap_err(),
+            Error::HostOnly
+        );
+        assert_eq!(l.chat.len(), chat);
+    }
+
+    fn ended(l: &mut Live, user: i32, dev: &str, item: Option<Item>) -> Vec<Effect> {
+        l.intent(
+            user,
+            dev,
+            Intent {
+                action: Action::Ended,
+                position: None,
+                item,
+                item_title: None,
+                base_rev: 0,
+            },
+            9,
+        )
+        .unwrap()
+        .1
+    }
+
+    #[test]
+    fn an_ended_counts_only_for_the_current_item_while_playing_or_paused() {
+        let mut l = party();
+        l.state = State::Playing;
+        assert!(ended(&mut l, 1, "d1", Some(row(9, None))).is_empty());
+        assert_eq!(l.state, State::Playing);
+        assert_eq!(
+            state_of(&ended(&mut l, 1, "d1", Some(item()))).unwrap().0,
+            State::Idle
+        );
+        // A second device's `ended` for the same item finds the party idle.
+        assert!(ended(&mut l, 1, "d1", Some(item())).is_empty());
+        l.state = State::Waiting;
+        assert!(ended(&mut l, 1, "d1", None).is_empty());
+    }
+
+    #[test]
+    fn a_member_ends_the_item_only_while_the_host_is_away_and_names_it() {
+        let mut l = party();
+        l.state = State::Playing;
+        assert!(ended(&mut l, 2, "d2", Some(item())).is_empty());
+        l.tick(0, |c| c != "c1");
+        assert!(ended(&mut l, 2, "d2", None).is_empty());
+        assert!(ended(&mut l, 2, "d2", Some(row(9, None))).is_empty());
+        assert_eq!(l.state, State::Playing);
+        assert_eq!(
+            state_of(&ended(&mut l, 2, "d2", Some(item()))).unwrap().0,
+            State::Idle
+        );
+    }
+
+    #[test]
+    fn an_ended_advance_is_dropped_when_the_item_moved_on() {
+        let mut l = party();
+        l.state = State::Playing;
+        let to = || step(true, &[], Some((row(3, None), "Film")));
+        let out = l
+            .advance_after_ended(1, "d1", None, &row(8, None), to(), 5)
+            .unwrap()
+            .1;
+        assert!(out.is_empty());
+        assert_eq!((l.state, l.item.clone()), (State::Playing, item()));
+        let out = l
+            .advance_after_ended(1, "d1", Some(&item()), &item(), to(), 5)
+            .unwrap()
+            .1;
+        assert_eq!(kinds(&out), ["item_changed"]);
+        assert_eq!(l.item, row(3, None));
+        let out = l
+            .advance_after_ended(1, "d1", Some(&item()), &item(), step(true, &[], None), 6)
+            .unwrap()
+            .1;
+        assert!(out.is_empty());
+    }
+
+    #[test]
+    fn the_end_of_the_queue_after_an_ended_says_so_once() {
+        let mut l = party();
+        l.state = State::Playing;
+        let out = l
+            .advance_after_ended(1, "d1", Some(&item()), &item(), step(true, &[], None), 5)
+            .unwrap()
+            .1;
+        assert_eq!(state_of(&out).unwrap().0, State::Idle);
+        assert_eq!(kinds(&out), ["queue_ended"]);
+    }
+
+    #[test]
+    fn handover_is_decided_before_the_members_are_announced() {
+        let mut l = party();
+        let host_of = |out: &[Effect]| {
+            out.iter().find_map(|e| match e {
+                Effect::Members { host_id, .. } => Some(*host_id),
+                _ => None,
+            })
+        };
+        let out = l.leave(1, "d1", 5).unwrap();
+        assert_eq!((l.host_id, host_of(&out)), (2, Some(2)));
+        let mut l = party();
+        l.tick(0, |c| c != "c1");
+        let out = l.tick(AWAY_GRACE_MS, |c| c != "c1");
+        assert_eq!((l.host_id, host_of(&out)), (2, Some(2)));
+    }
+
+    #[test]
+    fn rev_and_message_ids_start_past_what_an_older_machine_issued() {
+        let old = Live::new("p".into(), Policy::Everyone, 1, item(), 0.0, 1_000);
+        let mut new = Live::new("p".into(), Policy::Everyone, 1, item(), 0.0, 5_000);
+        assert!(new.rev > old.rev + 1_000);
+        new.join(1, "alice", "d1", "c1", 5_000);
+        assert!(new.chat[0].id >= 5_000);
+    }
+
+    #[test]
+    fn away_members_do_not_fill_the_voice_channel() {
+        let mut l = party();
+        for u in 3..=9 {
+            l.join(u, "x", "d", &format!("c{u}"), 0);
+            voice(&mut l, u, "d", true).unwrap();
+        }
+        assert!(voice(&mut l, 1, "d1", true).is_ok());
+        l.tick(0, |c| c != "c3");
+        assert!(voice(&mut l, 2, "d2", true).is_ok());
+    }
+
+    #[test]
+    fn a_left_member_keeps_a_running_rate_window_and_drops_a_finished_one() {
+        let mut l = party();
+        l.post_message(2, "d2", "m", 0).unwrap();
+        l.leave(2, "d2", 1).unwrap();
+        assert_eq!(l.limits.len(), 1);
+        l.leave(1, "d1", RATE_WINDOW_MS + 1).unwrap();
+        assert!(l.limits.is_empty());
+    }
+
+    fn kinds(out: &[Effect]) -> Vec<String> {
+        out.iter()
+            .filter_map(|e| match e {
+                Effect::Message(m) => m.system.as_ref().map(|s| s.kind.clone()),
+                _ => None,
+            })
+            .collect()
     }
 }

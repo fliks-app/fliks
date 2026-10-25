@@ -1,7 +1,9 @@
-import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
+import { Share } from '@capacitor/share';
+import { Injectable, Injector, computed, effect, inject, signal, untracked } from '@angular/core';
+import { toObservable } from '@angular/core/rxjs-interop';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Router } from '@angular/router';
-import { Subject } from 'rxjs';
+import { Subject, filter, firstValueFrom } from 'rxjs';
 import { TranslateService } from '@ngx-translate/core';
 import {
   PartyApiService,
@@ -13,10 +15,11 @@ import {
   type PartyMember,
   type PartyMessage,
   type PartyPlayState,
-  type PartyPolicy,
+  type PartySwitches,
   type PartyUser,
 } from '../api/party-api.service';
 import { MediaService } from '../api/media.service';
+import { PlaybackQueueService } from '../playback-queue.service';
 import { AuthService } from '../auth.service';
 import { DeviceService } from '../device.service';
 import { SseService, type PartyEvent } from '../sse.service';
@@ -25,6 +28,7 @@ import { translatedServerMessage } from '../../utils/server-message';
 import { resolvePlayableFile } from '../../../shared/utils/media-play.util';
 import { ServerConfigService } from '../server-config.service';
 import { ClockService } from './clock.service';
+import { ReactionsService } from './reactions.service';
 
 /** What the engine has to follow: the last applied `party.state` (or the snapshot's equivalent). */
 export interface PartyLiveState {
@@ -45,17 +49,31 @@ export interface FloatingReaction {
   left: number;
 }
 
-/** What the create dialog needs to know about the item to watch. */
-export interface PartyCreateTarget {
-  title: string;
-  mediaId: number;
-  mediaFileId: number;
-  episodeId?: number;
+/** What the create dialog needs to know about what to watch: one item, or a playlist the party follows. */
+export type PartyCreateTarget = { title: string } & (
+  | { mediaId: number; mediaFileId: number; episodeId?: number; playlistId?: undefined }
+  | { playlistId: number }
+);
+
+export type PartyCloseReason = 'host_ended' | 'expired' | 'kicked';
+
+/** Why a refused rejoin means the party is gone for this device; null for a failure worth retrying later. */
+function closeReason(err: unknown): PartyCloseReason | null {
+  if (!(err instanceof HttpErrorResponse)) return null;
+  const message = (err.error as { message?: unknown } | null)?.message;
+  if (err.status === 404 || (err.status === 409 && message === 'party.error_ended')) return 'host_ended';
+  if (err.status === 409 && message === 'party.error_not_live') return 'expired';
+  return err.status === 403 ? 'kicked' : null;
 }
 
 const BUBBLE_MS = 4000;
-const REACTION_MS = 3000;
+/** How long a reaction rises over the video; its CSS animation follows. */
+export const REACTION_MS = 2000;
 const MAX_MESSAGES = 200;
+
+/** Closing the sheet rejects with an AbortError on the web and "Share canceled" on Android and iOS. */
+const isShareDismissal = (e: unknown): boolean =>
+  (e as DOMException)?.name === 'AbortError' || (e as Error)?.message === 'Share canceled';
 
 /** Party-wide state: usable outside the player (invites, join links), the player's PartyController drives the engine from it. */
 @Injectable({ providedIn: 'root' })
@@ -64,12 +82,15 @@ export class PartyService {
   private readonly sse = inject(SseService);
   private readonly auth = inject(AuthService);
   private readonly serverConfig = inject(ServerConfigService);
+  private readonly reactionCatalog = inject(ReactionsService);
   private readonly clock = inject(ClockService);
   private readonly router = inject(Router);
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
   private readonly mediaService = inject(MediaService);
+  private readonly queue = inject(PlaybackQueueService);
   private readonly device = inject(DeviceService);
+  private readonly injector = inject(Injector);
 
   readonly party = signal<PartyDto | null>(null);
   readonly live = signal<PartyLiveState | null>(null);
@@ -80,7 +101,9 @@ export class PartyService {
   readonly bubbles = signal<PartyMessage[]>([]);
   readonly reactions = signal<FloatingReaction[]>([]);
   /** The party ended under us (host ended, expired, kicked): the player leaves. */
-  readonly closed = new Subject<'host_ended' | 'expired' | 'kicked'>();
+  readonly closed = new Subject<PartyCloseReason>();
+  /** A rejoin after a dropped stream or a server restart landed: what the server held about this device is fresh again. */
+  readonly rejoined = new Subject<void>();
 
   /** Set to open the create dialog mounted in the layout. */
   readonly createRequest = signal<PartyCreateTarget | null>(null);
@@ -90,6 +113,8 @@ export class PartyService {
   readonly active = computed(() => this.party() !== null && this.live() !== null);
   readonly item = computed(() => this.live()?.item ?? this.party()?.item ?? null);
   readonly policy = computed(() => this.party()?.policy ?? 'everyone');
+  readonly reactionsEnabled = computed(() => this.party()?.reactionsEnabled ?? true);
+  readonly chatEnabled = computed(() => this.party()?.chatEnabled ?? true);
   readonly me = computed(() => {
     const id = this.sse.targetId();
     return this.members().find((m) => m.userId === this.auth.user()?.id && m.deviceId === id) ?? null;
@@ -108,8 +133,13 @@ export class PartyService {
   private lastRev = 0;
   private nextKey = 0;
   private wasConnected = false;
+  private refetching: Promise<void> | null = null;
+  private refetchAgain = false;
+  /** The item the queue was last loaded for; null until this party session loads one. */
+  private queuedFor: PartyItem | null = null;
 
   constructor() {
+    void Share.canShare().then((r) => this.canShare.set(r.value), () => undefined);
     if (typeof matchMedia === 'function') {
       const mq = matchMedia('(orientation: portrait)');
       this.portrait.set(mq.matches);
@@ -134,10 +164,10 @@ export class PartyService {
 
   // ── Entry points ──
 
-  /** Immediate parties open the player; a scheduled one is announced with its link. */
+  /** A party for now opens its lobby page; a scheduled one is announced with its link. */
   async create(body: CreatePartyBody): Promise<void> {
     const dto = await this.api.create(body);
-    if (dto.status === 'live') {
+    if (!body.scheduledAt) {
       await this.enter(dto.id);
       return;
     }
@@ -145,21 +175,20 @@ export class PartyService {
     this.toast.success(
       this.translate.instant('party.toast_scheduled', { name: dto.name, link }),
       10000,
-      { label: this.translate.instant(this.canShare ? 'party.share_link' : 'party.copy_link'), run: () => void this.shareLink(link, dto.name) },
+      { label: this.translate.instant(this.canShare() ? 'party.share_link' : 'party.copy_link'), run: () => void this.shareLink(link, dto.name) },
     );
   }
 
-  /** The system share sheet (Android WebView, iOS WKWebView and most browsers expose it). */
-  readonly canShare = typeof navigator.share === 'function';
+  /** True where the OS share sheet exists (native shells, browsers with navigator.share). */
+  readonly canShare = signal(false);
 
-  /** Shares the link natively, else copies it. */
+  /** Opens the system share sheet when there is one, else copies the link. */
   async shareLink(link: string, title: string): Promise<void> {
-    if (!this.canShare) return this.copyLink(link);
+    if (!this.canShare()) return this.copyLink(link);
     try {
-      await navigator.share({ title, url: link });
+      await Share.share({ title, url: link });
     } catch (e) {
-      // Dismissing the sheet is not an error.
-      if ((e as DOMException)?.name !== 'AbortError') await this.copyLink(link);
+      if (!isShareDismissal(e)) await this.copyLink(link);
     }
   }
 
@@ -196,11 +225,32 @@ export class PartyService {
       this.toast.info(this.translate.instant('party.toast_not_started'));
       return;
     }
+    this.adopt(dto);
+    if (dto.status === 'live') await this.openPlayer(dto.item);
+    else this.openPage(id, token);
+  }
+
+  /** Rejoins the live party of a reloaded player URL, once the stream is up; false when it cannot be rejoined. */
+  async resume(id: number): Promise<boolean> {
+    await firstValueFrom(toObservable(this.sse.connected, { injector: this.injector }).pipe(filter(Boolean)));
+    try {
+      const dto = await this.api.join(id, this.deviceId(), undefined, true);
+      if (dto.status !== 'live' || !dto.live) {
+        await this.api.leave(id, this.deviceId()).catch(() => {});
+        return false;
+      }
+      this.adopt(dto);
+      await this.loadQueue();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private adopt(dto: PartyDto): void {
     this.reset();
     this.applySnapshot(dto);
     this.clock.start();
-    if (dto.status === 'live') await this.openPlayer(dto.item);
-    else this.openPage(id, token);
   }
 
   /** Host: leaves the lobby for the player; the other members follow through the events. */
@@ -239,9 +289,44 @@ export class PartyService {
     this.unread.set(0);
     this.panelOpen.set(false);
     this.lastRev = 0;
+    this.queuedFor = null;
+  }
+
+  /** The player menu lists the queue the server steps through, and the cursor follows the item. */
+  private async loadQueue(): Promise<void> {
+    const party = this.party();
+    if (!party) return;
+    const items = await this.api.queue(party.id).catch(() => null);
+    if (!items) return;
+    this.queuedFor = this.item();
+    if (!items.length) {
+      if (this.queue.source() === 'party') this.queue.clear();
+      return;
+    }
+    this.queue.start(
+      items.map((i) => ({
+        mediaId: i.mediaId,
+        ...(i.episodeId != null && { episodeId: i.episodeId }),
+        title: i.title,
+        fanartUrl: i.fanartUrl,
+      })),
+      0,
+      { source: 'party', sourceId: party.id, autoplay: false },
+    );
+    const cur = this.item();
+    if (cur) this.queue.syncTo(cur.mediaId, cur.episodeId ?? undefined);
+  }
+
+  /** The server derives the queue from the current item, so another show, a movie or an edited playlist needs a reload. */
+  private syncQueue(item: PartyItem): void {
+    const q = this.queuedFor;
+    if (!q || (q.mediaId === item.mediaId && q.episodeId === item.episodeId)) return;
+    if (this.queue.items().some((i) => i.mediaId === item.mediaId && (i.episodeId ?? null) === item.episodeId)) return;
+    void this.loadQueue();
   }
 
   private async openPlayer(item: PartyItem): Promise<void> {
+    await this.loadQueue();
     let fileId = item.mediaFileId;
     if (fileId == null) {
       const media = await this.mediaService.getOne(item.mediaId).catch(() => null);
@@ -252,7 +337,7 @@ export class PartyService {
       await this.leave();
       return;
     }
-    const queryParams: Record<string, number> = { mediaId: item.mediaId };
+    const queryParams: Record<string, number> = { mediaId: item.mediaId, party: this.party()!.id };
     if (item.episodeId != null) queryParams['episodeId'] = item.episodeId;
     await this.router.navigate(['/watch', fileId], { queryParams });
   }
@@ -261,6 +346,7 @@ export class PartyService {
 
   applySnapshot(dto: PartyDto): void {
     this.party.set(dto);
+    void this.reactionCatalog.load();
     const live = dto.live;
     if (!live) return;
     // A snapshot older than what events already applied would roll the party back.
@@ -277,9 +363,26 @@ export class PartyService {
       by: null,
       action: null,
     });
+    this.syncQueue(dto.item);
   }
 
-  async refetch(): Promise<void> {
+  /** One fetch at a time: a call during a fetch asks for one more after it, so the start fan-out opens the player once. */
+  refetch(): Promise<void> {
+    if (this.refetching) {
+      this.refetchAgain = true;
+      return this.refetching;
+    }
+    const run = (async () => {
+      do {
+        this.refetchAgain = false;
+        await this.refetchOnce();
+      } while (this.refetchAgain);
+    })().finally(() => (this.refetching = null));
+    this.refetching = run;
+    return run;
+  }
+
+  private async refetchOnce(): Promise<void> {
     const id = this.party()?.id;
     if (id == null) return;
     const wasLobby = this.lobby();
@@ -296,9 +399,15 @@ export class PartyService {
     const id = this.party()?.id;
     if (id == null) return;
     try {
-      this.applySnapshot(await this.api.join(id, this.deviceId()));
+      const dto = await this.api.join(id, this.deviceId(), undefined, true);
+      // A restarted server counts revisions and messages from scratch.
+      this.lastRev = 0;
+      this.messages.set([]);
+      this.applySnapshot(dto);
+      this.rejoined.next();
     } catch (err) {
-      if (err instanceof HttpErrorResponse && err.status === 404) this.onClosed('host_ended');
+      const reason = closeReason(err);
+      if (reason) this.onClosed(reason);
     }
   }
 
@@ -334,6 +443,7 @@ export class PartyService {
           rev: e.rev, state: e.state, item: e.item, anchor: e.anchor, whenMs: e.whenMs, by: e.by, action: e.action,
         });
         this.party.update((p) => (p ? { ...p, item: e.item } : p));
+        this.syncQueue(e.item);
         break;
       case 'party.members':
         if (!this.acceptRev(e.rev)) return;
@@ -341,7 +451,21 @@ export class PartyService {
         break;
       case 'party.settings':
         if (!this.acceptRev(e.rev)) return;
-        this.party.update((p) => (p ? { ...p, name: e.name, policy: e.policy } : p));
+        this.party.update((p) =>
+          p
+            ? {
+                ...p,
+                name: e.name,
+                policy: e.policy,
+                reactionsEnabled: e.reactionsEnabled,
+                chatEnabled: e.chatEnabled,
+                linkSharing: e.linkSharing,
+                inviteToken: e.linkSharing || this.isHost() ? p.inviteToken : null,
+              }
+            : p,
+        );
+        // The event carries no token: a member who lost it gets it back with a snapshot.
+        if (e.linkSharing && !this.isHost() && !this.party()?.inviteToken) void this.refetch();
         break;
       case 'party.message':
         this.onMessage(e.message);
@@ -365,13 +489,12 @@ export class PartyService {
   }
 
   private onInvited(e: Extract<PartyEvent, { type: 'party.invited' }>): void {
-    const immediate = !e.scheduledAt || new Date(e.scheduledAt).getTime() <= Date.now();
+    // A party for now opens its lobby, which sends `party.starting` with the join action.
+    if (!e.scheduledAt || new Date(e.scheduledAt).getTime() <= Date.now()) return;
     this.toast.info(
       this.translate.instant('party.toast_invited', { host: e.host.username, name: e.name }),
       10000,
-      immediate
-        ? { label: this.translate.instant('party.join'), run: () => void this.enter(e.partyId) }
-        : { label: this.translate.instant('party.view'), run: () => this.openPage(e.partyId) },
+      { label: this.translate.instant('party.view'), run: () => this.openPage(e.partyId) },
     );
   }
 
@@ -391,7 +514,7 @@ export class PartyService {
     setTimeout(() => this.reactions.update((l) => l.filter((x) => x.key !== key)), REACTION_MS);
   }
 
-  private onClosed(reason: 'host_ended' | 'expired' | 'kicked'): void {
+  private onClosed(reason: PartyCloseReason): void {
     this.reset();
     this.toast.info(this.translate.instant(`party.closed_${reason}`));
     this.closed.next(reason);
@@ -453,8 +576,8 @@ export class PartyService {
     await this.hostAction((id) => this.api.transferHost(id, userId));
   }
 
-  async setPolicy(policy: PartyPolicy): Promise<void> {
-    await this.hostAction((id) => this.api.update(id, { policy }));
+  async updateSettings(patch: Partial<PartySwitches>): Promise<void> {
+    await this.hostAction((id) => this.api.update(id, patch));
   }
 
   private async hostAction(run: (id: number) => Promise<unknown>): Promise<void> {
@@ -471,6 +594,8 @@ export class PartyService {
   onActionError(err: unknown): void {
     if (!(err instanceof HttpErrorResponse)) return;
     const body = err.error as { message?: unknown; id?: number; usernames?: string[] } | null;
+    // `previous` on the first item changes nothing.
+    if (err.status === 409 && body?.message === 'party.error_queue_start') return;
     if (err.status === 409 && (body?.message === 'party.error_stale' || typeof body?.id === 'number')) {
       if (typeof body?.id === 'number') this.applySnapshot(body as unknown as PartyDto);
       return;

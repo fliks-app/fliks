@@ -1,5 +1,6 @@
 import { Injectable, effect, inject, untracked } from '@angular/core';
 import type { Subscription } from 'rxjs';
+import { ActivatedRoute, Router } from '@angular/router';
 import { TranslateService } from '@ngx-translate/core';
 import { ClockService } from '../../core/services/party/clock.service';
 import { PartyService, type PartyLiveState } from '../../core/services/party/party.service';
@@ -9,6 +10,7 @@ import type { PlaybackEngine } from '../../core/services/playback-engine/playbac
 import { ToastService } from '../../core/services/toast.service';
 import { VoiceService } from '../../core/services/party/voice.service';
 import { QueueController } from './queue-controller';
+import type { QueueItem } from '../../core/services/playback-queue.service';
 import { VoiceDucker } from './party-ducking';
 import { CastService } from '../../core/services/cast.service';
 import { CastPlayerService } from '../../core/services/cast-player.service';
@@ -46,6 +48,8 @@ export class PartyController {
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
   private readonly voice = inject(VoiceService);
+  private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
   private readonly castService = inject(CastService);
   private readonly castTarget = inject(CastPlaybackTarget);
   private readonly castOutput = new CastPartyOutput(this.castService, inject(CastPlayerService));
@@ -113,6 +117,16 @@ export class PartyController {
     };
     this.closedSub = this.party.closed.subscribe(() => host.onBack());
     this.driftTimer = setInterval(() => this.checkDrift(), DRIFT_CHECK_MS);
+    void this.resumeFromUrl();
+  }
+
+  /** A reloaded player carries `party=<id>` while the in-memory party is gone: rejoin it, else play solo. */
+  private async resumeFromUrl(): Promise<void> {
+    const id = Number(this.route.snapshot.queryParams['party']);
+    if (!id || this.party.party()?.id === id) return;
+    if (await this.party.resume(id) || this.destroyed) return;
+    this.toast.error(this.translate.instant('party.error_resume'));
+    void this.router.navigate([], { relativeTo: this.route, queryParams: { party: null }, queryParamsHandling: 'merge', replaceUrl: true });
   }
 
   dispose(): void {
@@ -156,15 +170,28 @@ export class PartyController {
     return true;
   }
 
+  /** The server picks the item, skipping what a member cannot open, and refuses where there is no queue. */
   async requestNext(): Promise<void> {
+    if (this.gate()) await this.party.sendIntent('next');
+  }
+
+  async requestPrevious(): Promise<void> {
+    if (this.gate()) await this.party.sendIntent('previous');
+  }
+
+  /** An item picked from the queue menu: the server moves everyone, this device included. */
+  async requestQueueItem(index: number): Promise<void> {
+    const item = this.queueCtl.queueItems()[index];
+    if (item && index !== this.queueCtl.queueIndex()) await this.requestItem(item);
+  }
+
+  private async requestItem(item: QueueItem): Promise<void> {
     if (!this.gate()) return;
-    const next = this.queueCtl.upNext();
-    if (!next) return;
     await this.party.sendIntent('setItem', {
       item: {
-        mediaId: next.mediaId,
-        ...(next.mediaFileId != null && { mediaFileId: next.mediaFileId }),
-        ...(next.episodeId != null && { episodeId: next.episodeId }),
+        mediaId: item.mediaId,
+        ...(item.mediaFileId != null && { mediaFileId: item.mediaFileId }),
+        ...(item.episodeId != null && { episodeId: item.episodeId }),
       },
     });
   }
@@ -204,12 +231,13 @@ export class PartyController {
     });
   });
 
-  /** The host's natural end: `ended`, then the next episode of the queue as an item switch. */
+  /** The host's natural end: the server idles the party and moves it on along its queue. */
   private readonly endedEffect = effect(() => {
     if (!this.out().ended()) return;
     untracked(() => {
       if (!this.party.active() || !this.party.isHost()) return;
-      void this.party.sendIntent('ended').then(() => this.requestNext());
+      const { mediaId, episodeId } = this.out().item();
+      void this.party.sendIntent('ended', { item: { mediaId, ...(episodeId != null && { episodeId }) } });
     });
   });
 
@@ -220,7 +248,11 @@ export class PartyController {
     try {
       if (!(await this.untilReady(gen))) return;
       if (this.itemDiffers(live)) {
-        await this.queueCtl.openPartyItem(live.item);
+        if (!(await this.queueCtl.openPartyItem(live.item))) {
+          // This device cannot open it: the group must not wait on us.
+          if (gen === this.generation) this.host.onBack();
+          return;
+        }
         if (!(await this.untilReady(gen))) return;
       }
       if (!this.out().ready()) return;

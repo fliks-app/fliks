@@ -309,7 +309,7 @@ describe('RemoteService applyLoad', () => {
     });
 
     await vi.waitFor(() => expect(navigateSpy).toHaveBeenCalled());
-    expect(navigateSpy).toHaveBeenCalledWith(['/watch', 42], { queryParams: { t: 0 } });
+    expect(navigateSpy).toHaveBeenCalledWith(['/watch', 42], { queryParams: { t: 0 }, replaceUrl: false });
   });
 
   async function loadedWith(extra: Partial<RemoteCommand>) {

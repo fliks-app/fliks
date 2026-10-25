@@ -1,14 +1,41 @@
 .reaction {
   position: absolute;
   bottom: 10%;
-  font-size: 2rem;
-  animation: party-rise 3s ease-out forwards;
+  font-size: 2.5rem;
+  /* The rise starts fast and settles; the fade accelerates to the end. */
+  animation:
+    party-rise var(--reaction-ms) cubic-bezier(0.61, 1, 0.88, 1) forwards,
+    party-fade var(--reaction-ms) cubic-bezier(0.7, 0, 0.84, 0) forwards;
 }
 @keyframes party-rise {
-  from { transform: translateY(0); opacity: 1; }
-  to { transform: translateY(-60vh); opacity: 0; }
+  from { transform: translateY(0); }
+  to { transform: translateY(-40vh); }
+}
+@keyframes party-fade {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+.bubble {
+  /* A grid row that can collapse, so the bubbles around one that comes or goes slide instead of jumping. */
+  display: grid;
+  grid-template-rows: 1fr;
+  justify-items: end;
+  padding-top: 0.25rem;
+}
+.bubble-in {
+  animation: bubble-in 240ms ease-out;
+}
+.bubble-out {
+  animation: bubble-out 280ms ease-in forwards;
+}
+@keyframes bubble-in {
+  from { grid-template-rows: 0fr; padding-top: 0; opacity: 0; transform: translateY(0.5rem); }
+}
+@keyframes bubble-out {
+  to { grid-template-rows: 0fr; padding-top: 0; opacity: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .reaction { animation-name: party-fade; }
-  @keyframes party-fade { to { opacity: 0; } }
+  .reaction { animation: party-fade var(--reaction-ms) cubic-bezier(0.7, 0, 0.84, 0) forwards; }
+  .bubble-in,
+  .bubble-out { animation-duration: 1ms; }
 }

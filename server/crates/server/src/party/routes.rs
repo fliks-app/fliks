@@ -1,7 +1,8 @@
 use super::{
     db::{self, Row},
     dto::*,
-    registry::{self, deliver, item_dto, member_dtos, notify_updated},
+    queue as steps,
+    registry::{self, Brief, View, item_dto, item_dtos, member_dtos, mutate, notify_updated},
 };
 use crate::{
     events::SseEvent,
@@ -11,6 +12,7 @@ use crate::{
         validate::{PathParams, ValidJson},
     },
     libraries::acl::{accessible_library_ids, assert_media_accessible},
+    playlists::{self, Role},
     state::AppState,
 };
 use axum::{
@@ -24,9 +26,13 @@ use chrono::Utc;
 use fliks_domain::{
     acl::Permissions,
     js::now_ms,
-    party::{CloseReason, Effect, Error as PartyErr, Intent, Item, LOBBY_OPEN_BEFORE_MS, Policy},
+    party::{
+        ANIMATED_REACTIONS, CloseReason, DEFAULT_REACTIONS, Effect, Error as PartyErr, Intent,
+        Item, LOBBY_OPEN_BEFORE_MS, Policy, noto_code,
+    },
 };
 use serde_json::{Value, json};
+use std::collections::HashMap;
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -34,6 +40,7 @@ pub fn router() -> Router<AppState> {
         .route("/api/parties", get(list).post(create))
         .route("/api/parties/by-token/{token}", get(by_token))
         .route("/api/parties/ice", get(ice))
+        .route("/api/parties/reactions", get(reactions))
         .route("/api/parties/{id}", get(show).patch(patch).delete(end))
         .route("/api/parties/{id}/join", post(join))
         .route("/api/parties/{id}/start", post(start))
@@ -47,6 +54,7 @@ pub fn router() -> Router<AppState> {
         .route("/api/parties/{id}/members/{userId}/kick", post(kick))
         .route("/api/parties/{id}/members/{userId}/host", post(transfer))
         .route("/api/parties/{id}/invitees", post(invite))
+        .route("/api/parties/{id}/queue", get(queue))
 }
 
 /// An `AppError`, or one that also carries a body field (`party` on 409 stale, `usernames`).
@@ -106,6 +114,8 @@ fn machine_err(e: PartyErr) -> PartyError {
     match e {
         PartyErr::NotMember => fail(StatusCode::FORBIDDEN, "party.error_not_member"),
         PartyErr::HostOnly => fail(StatusCode::FORBIDDEN, "party.error_host_only"),
+        PartyErr::ReactionsOff => fail(StatusCode::FORBIDDEN, "party.error_reactions_off"),
+        PartyErr::ChatOff => fail(StatusCode::FORBIDDEN, "party.error_chat_off"),
         PartyErr::RateLimited => fail(StatusCode::TOO_MANY_REQUESTS, "party.error_rate_limited"),
         PartyErr::Invalid(_) => fail(StatusCode::BAD_REQUEST, "party.error_invalid"),
         PartyErr::Stale => fail(StatusCode::CONFLICT, "party.error_stale"),
@@ -129,26 +139,23 @@ async fn media_ok(st: &AppState, user: &Authed, media: i32) -> Result<bool, AppE
     }
 }
 
-/// Same test for another user, loaded like a request would.
-async fn user_media_ok(st: &AppState, user: i32, media: i32) -> Result<bool, AppError> {
+/// The libraries another user can open, loaded like a request would; `None` for a user who is
+/// disabled or gone.
+pub(super) async fn user_libraries(st: &AppState, user: i32) -> Result<Option<Vec<i32>>, AppError> {
     let Some((u, role)) = load_enabled(&st.db, user).await? else {
-        return Ok(false);
+        return Ok(None);
     };
     let perms = Permissions::from(
         role.as_ref().map_or(&[][..], |r| &r.permissions),
         u.is_admin,
     );
-    media_ok(
-        st,
-        &Authed {
-            user: u,
-            role,
-            perms,
-            scope: None,
-        },
-        media,
-    )
-    .await
+    let authed = Authed {
+        user: u,
+        role,
+        perms,
+        scope: None,
+    };
+    Ok(Some(accessible_library_ids(&st.db, &authed).await?))
 }
 
 /// The SSE connection whose target id is `device` (a web tab), else the newest of that bare
@@ -173,6 +180,11 @@ fn connection_for(st: &AppState, user: i32, device: &str) -> Option<String> {
         .map(|t| t.connection_id.clone())
 }
 
+fn lobby_open(row: &Row) -> bool {
+    let at = row.scheduled_at.map_or(i64::MAX, |t| t.timestamp_millis());
+    now_ms() >= at - LOBBY_OPEN_BEFORE_MS
+}
+
 async fn row_of(st: &AppState, id: i32) -> R<Row> {
     db::get(&st.db, id).await?.ok_or_else(not_found)
 }
@@ -194,7 +206,7 @@ async fn access(st: &AppState, row: &Row, me: i32, token: Option<&str>) -> R<Acc
 }
 
 fn host_of(st: &AppState, row: &Row) -> i32 {
-    st.parties.view(row.id).map_or(row.owner_id, |v| v.host_id)
+    st.parties.brief(row.id).map_or(row.owner_id, |b| b.host_id)
 }
 
 fn require_host(st: &AppState, row: &Row, me: i32) -> R<()> {
@@ -212,38 +224,87 @@ fn require_open(row: &Row) -> R<()> {
     Ok(())
 }
 
-async fn summary(st: &AppState, row: &Row) -> sqlx::Result<PartySummaryDto> {
-    let view = st.parties.view(row.id);
-    let host = view.as_ref().map_or(row.owner_id, |v| v.host_id);
-    let item = view.as_ref().map_or_else(|| row.item(), |v| v.item.clone());
-    let names = db::usernames(&st.db, &[host]).await?;
-    Ok(PartySummaryDto {
-        id: row.id,
-        name: row.name.clone(),
-        status: row.status.clone(),
-        scheduled_at: row.scheduled_at,
-        host: UserRef {
-            user_id: host,
-            username: names.get(&host).cloned().unwrap_or_default(),
-        },
-        item: item_dto(st, &item).await?,
-        member_count: view.map_or(0, |v| v.members.len()),
-    })
+/// Summaries of `rows` in three batched queries, whatever their number.
+async fn summaries(st: &AppState, rows: &[Row]) -> sqlx::Result<Vec<PartySummaryDto>> {
+    let rows: Vec<_> = rows.iter().map(|r| (r, st.parties.brief(r.id))).collect();
+    summaries_with(st, &rows).await
 }
 
-async fn dto(st: &AppState, row: &Row, viewer: i32) -> sqlx::Result<PartyDto> {
+async fn summaries_with(
+    st: &AppState,
+    rows: &[(&Row, Option<Brief>)],
+) -> sqlx::Result<Vec<PartySummaryDto>> {
+    if rows.is_empty() {
+        return Ok(vec![]);
+    }
+    let hosts: Vec<i32> = rows
+        .iter()
+        .map(|(r, b)| b.as_ref().map_or(r.owner_id, |b| b.host_id))
+        .collect();
+    let names = db::usernames(&st.db, &hosts).await?;
+    let playlist_ids: Vec<i32> = rows.iter().filter_map(|(r, _)| r.playlist_id).collect();
+    let playlists = if playlist_ids.is_empty() {
+        HashMap::new()
+    } else {
+        db::playlist_names(&st.db, &playlist_ids).await?
+    };
+    let items: Vec<Item> = rows
+        .iter()
+        .map(|(r, b)| b.as_ref().map_or_else(|| r.item(), |b| b.item.clone()))
+        .collect();
+    let dtos = item_dtos(st, &items).await?;
+    Ok(rows
+        .iter()
+        .zip(hosts)
+        .zip(dtos)
+        .map(|(((row, brief), host), item)| PartySummaryDto {
+            id: row.id,
+            name: row.name.clone(),
+            status: row.status.clone(),
+            scheduled_at: row.scheduled_at,
+            lobby_opens_at: row
+                .scheduled_at
+                .filter(|_| row.status == "scheduled")
+                .map(|t| t - chrono::Duration::milliseconds(LOBBY_OPEN_BEFORE_MS)),
+            host: UserRef {
+                user_id: host,
+                username: names.get(&host).cloned().unwrap_or_default(),
+            },
+            item,
+            playlist: row.playlist_id.and_then(|id| {
+                playlists.get(&id).map(|name| PlaylistRef {
+                    id,
+                    name: name.clone(),
+                })
+            }),
+            member_count: brief.as_ref().map_or(0, |b| b.member_count),
+        })
+        .collect())
+}
+
+/// The snapshot for `viewer`; without `full` (a token holder who has not joined) only the summary
+/// and the switches, no guests, members, messages or anchor.
+async fn dto(st: &AppState, row: &Row, viewer: i32, full: bool) -> sqlx::Result<PartyDto> {
     if row.status == "live" {
         st.parties.ensure(row, false);
     }
-    let summary = summary(st, row).await?;
     let view = st.parties.view(row.id);
-    let ids = db::invitees(&st.db, row.id).await?;
-    let names = db::usernames(&st.db, &ids).await?;
+    let brief = view.as_ref().map(Brief::of);
+    let summary = summaries_with(st, &[(row, brief)])
+        .await?
+        .pop()
+        .expect("one row, one summary");
+    let guests = if full {
+        db::guests(&st.db, row.id).await?
+    } else {
+        vec![]
+    };
     let sees_token = viewer == summary.host.user_id
-        || view
-            .as_ref()
-            .is_some_and(|v| v.members.iter().any(|m| m.user_id == viewer));
-    let live = view.map(|v| PartyLive {
+        || (row.link_sharing
+            && view
+                .as_ref()
+                .is_some_and(|v| v.members.iter().any(|m| m.user_id == viewer)));
+    let live = view.filter(|_| full).map(|v: View| PartyLive {
         rev: v.rev,
         state: v.state,
         anchor: v.anchor,
@@ -252,17 +313,17 @@ async fn dto(st: &AppState, row: &Row, viewer: i32) -> sqlx::Result<PartyDto> {
     });
     Ok(PartyDto {
         summary,
-        policy: if row.policy == "host_only" {
-            Policy::HostOnly
-        } else {
-            Policy::Everyone
-        },
+        policy: row.policy,
+        reactions_enabled: row.reactions_enabled,
+        chat_enabled: row.chat_enabled,
+        link_sharing: row.link_sharing,
         invite_token: sees_token.then(|| row.invite_token.clone()),
-        invitees: ids
+        guests: guests
             .into_iter()
-            .map(|id| UserRef {
-                user_id: id,
-                username: names.get(&id).cloned().unwrap_or_default(),
+            .map(|(user_id, username, source)| GuestDto {
+                user_id,
+                username,
+                source,
             })
             .collect(),
         live,
@@ -273,7 +334,10 @@ async fn announce_invited(st: &AppState, row: &Row, users: &[i32]) -> sqlx::Resu
     if users.is_empty() {
         return Ok(());
     }
-    let s = summary(st, row).await?;
+    let s = summaries(st, std::slice::from_ref(row))
+        .await?
+        .pop()
+        .expect("one row, one summary");
     st.hub.emit_to_users(
         users,
         SseEvent::PartyInvited {
@@ -310,6 +374,36 @@ async fn check_item(st: &AppState, item: &Item) -> R<()> {
     }
 }
 
+/// The item a party opens on: the requested one, else the playlist's first the owner can play.
+async fn first_item(st: &AppState, a: &Authed, b: &Create) -> R<Item> {
+    let requested = b.media_id.map(|media_id| Item {
+        media_id,
+        media_file_id: b.media_file_id,
+        episode_id: b.episode_id,
+    });
+    let Some(playlist) = b.playlist_id else {
+        let item =
+            requested.ok_or_else(|| fail(StatusCode::BAD_REQUEST, "party.error_invalid_item"))?;
+        let ids = accessible_library_ids(&st.db, a).await?;
+        assert_media_accessible(&st.db, item.media_id, &ids).await?;
+        return Ok(item);
+    };
+    playlists::assert_role(&st.db, a.user.id, playlist, Role::Viewer).await?;
+    let rows = db::playlist_rows(&st.db, playlist).await?;
+    for row in rows {
+        let wanted = requested
+            .as_ref()
+            .is_none_or(|r| r.media_id == row.item.media_id && r.episode_id == row.item.episode_id);
+        if wanted && row.playable && media_ok(st, a, row.item.media_id).await? {
+            return Ok(Item {
+                media_file_id: b.media_file_id,
+                ..row.item
+            });
+        }
+    }
+    Err(fail(StatusCode::BAD_REQUEST, "party.error_invalid_item"))
+}
+
 #[utoipa::path(post, path = "/api/parties", responses((status = 201)))]
 pub async fn create(
     State(st): State<AppState>,
@@ -318,39 +412,36 @@ pub async fn create(
 ) -> R<(StatusCode, Json<PartyDto>)> {
     b.validate()?;
     let me = a.user.id;
-    let ids = accessible_library_ids(&st.db, &a).await?;
-    assert_media_accessible(&st.db, b.media_id, &ids).await?;
-    let item = Item {
-        media_id: b.media_id,
-        media_file_id: b.media_file_id,
-        episode_id: b.episode_id,
-    };
+    let item = first_item(&st, &a, &b).await?;
     check_item(&st, &item).await?;
     let invitees = check_followed(&st, me, b.invitee_ids.as_deref().unwrap_or_default()).await?;
-    let live = b.scheduled_at.is_none_or(|t| t <= Utc::now());
-    let policy = if b.policy == Some(Policy::HostOnly) {
-        "host_only"
-    } else {
-        "everyone"
-    };
+    let now = Utc::now();
+    let at = b.scheduled_at.filter(|t| *t > now).unwrap_or(now);
+    let policy = b.policy.unwrap_or(Policy::Everyone);
+    let (inherit_reactions, inherit_chat, inherit_link) = db::owner_switches(&st.db, me)
+        .await?
+        .unwrap_or((true, true, true));
     let row = db::insert(
         &st.db,
         &db::New {
+            reactions_enabled: b.reactions_enabled.unwrap_or(inherit_reactions),
+            chat_enabled: b.chat_enabled.unwrap_or(inherit_chat),
+            link_sharing: b.link_sharing.unwrap_or(inherit_link),
             name: &valid_name(&b.name)?,
             owner: me,
             item: &item,
+            playlist_id: b.playlist_id,
             policy,
-            scheduled_at: if live { None } else { b.scheduled_at },
-            live,
+            scheduled_at: at,
         },
         &invitees,
     )
     .await?;
-    if live {
-        st.parties.ensure(&row, true);
-    }
     announce_invited(&st, &row, &invitees).await?;
-    Ok((StatusCode::CREATED, Json(dto(&st, &row, me).await?)))
+    if lobby_open(&row) {
+        registry::open_lobby(&st, &row).await?;
+    }
+    Ok((StatusCode::CREATED, Json(dto(&st, &row, me, true).await?)))
 }
 
 #[utoipa::path(get, path = "/api/parties", responses((status = 200)))]
@@ -358,14 +449,11 @@ pub async fn list(
     State(st): State<AppState>,
     SessionAuthed(a): SessionAuthed,
 ) -> R<Json<Vec<PartySummaryDto>>> {
-    let mut out = vec![];
-    for row in db::listed(&st.db, a.user.id).await? {
-        if row.status == "live" {
-            st.parties.ensure(&row, false);
-        }
-        out.push(summary(&st, &row).await?);
+    let rows = db::listed(&st.db, a.user.id).await?;
+    for row in rows.iter().filter(|r| r.status == "live") {
+        st.parties.ensure(row, false);
     }
-    Ok(Json(out))
+    Ok(Json(summaries(&st, &rows).await?))
 }
 
 #[utoipa::path(get, path = "/api/parties/{id}", responses((status = 200)))]
@@ -375,7 +463,7 @@ pub async fn show(
     PathParams(id): PathParams<i32>,
 ) -> R<Json<PartyDto>> {
     let row = member_row(&st, id, a.user.id).await?;
-    Ok(Json(dto(&st, &row, a.user.id).await?))
+    Ok(Json(dto(&st, &row, a.user.id, true).await?))
 }
 
 #[utoipa::path(get, path = "/api/parties/by-token/{token}", responses((status = 200)))]
@@ -385,7 +473,12 @@ pub async fn by_token(
     PathParams(token): PathParams<String>,
 ) -> R<Json<PartyDto>> {
     let row = db::by_token(&st.db, &token).await?.ok_or_else(not_found)?;
-    Ok(Json(dto(&st, &row, a.user.id).await?))
+    let me = a.user.id;
+    let how = access(&st, &row, me, Some(&token)).await?;
+    if how == Access::TokenOnly && db::is_kicked(&st.db, row.id, me).await? {
+        return Err(fail(StatusCode::FORBIDDEN, "party.error_kicked"));
+    }
+    Ok(Json(dto(&st, &row, me, how == Access::Member).await?))
 }
 
 #[utoipa::path(patch, path = "/api/parties/{id}", responses((status = 200)))]
@@ -401,30 +494,21 @@ pub async fn patch(
     require_host(&st, &row, me)?;
     require_open(&row)?;
     let name = b.name.as_deref().map(valid_name).transpose()?;
+    let renamed = name.as_ref().is_some_and(|n| *n != row.name);
     if let Some(at) = b.scheduled_at {
         if row.status != "scheduled" {
             return Err(fail(StatusCode::CONFLICT, "party.error_not_scheduled"));
         }
-        // null cancels the session, like DELETE.
-        let Some(at) = at else {
-            registry::end(&st, &row, CloseReason::HostEnded).await?;
-            row.status = "ended".into();
-            return Ok(Json(dto(&st, &row, me).await?));
-        };
-        row.scheduled_at = Some(at);
+        row.scheduled_at = Some(at.max(Utc::now()));
         st.parties.forget_notice(id);
     }
     if let Some(n) = &name {
         row.name.clone_from(n);
     }
-    if let Some(p) = b.policy {
-        row.policy = if p == Policy::HostOnly {
-            "host_only"
-        } else {
-            "everyone"
-        }
-        .into();
-    }
+    row.policy = b.policy.unwrap_or(row.policy);
+    row.reactions_enabled = b.reactions_enabled.unwrap_or(row.reactions_enabled);
+    row.chat_enabled = b.chat_enabled.unwrap_or(row.chat_enabled);
+    row.link_sharing = b.link_sharing.unwrap_or(row.link_sharing);
     let regenerate = b.regenerate_token == Some(true);
     if regenerate {
         row.invite_token = db::new_token();
@@ -433,26 +517,42 @@ pub async fn patch(
         &st.db,
         id,
         &row.name,
-        &row.policy,
+        row.policy,
+        (row.reactions_enabled, row.chat_enabled, row.link_sharing),
         row.scheduled_at,
         &row.invite_token,
     )
     .await?;
-    if (name.is_some() || b.policy.is_some())
-        && let Some((_, d)) = st
-            .parties
-            .act(id, |l| ((), l.set_settings(name.clone(), b.policy)))
+    if name.is_some()
+        || b.policy.is_some()
+        || b.reactions_enabled.is_some()
+        || b.chat_enabled.is_some()
+        || b.link_sharing.is_some()
     {
-        deliver(&st, id, d).await;
+        mutate(&st, id, |l| {
+            (
+                (),
+                l.set_settings(
+                    name.clone(),
+                    b.policy,
+                    b.reactions_enabled,
+                    b.chat_enabled,
+                    b.link_sharing,
+                ),
+            )
+        })
+        .await;
     }
     if regenerate {
-        st.parties.act(id, |l| {
-            l.blocked.clear();
-            ((), vec![])
-        });
+        db::clear_kicked(&st.db, id).await?;
     }
-    notify_updated(&st, &row).await?;
-    Ok(Json(dto(&st, &row, me).await?))
+    if b.scheduled_at.is_some() && lobby_open(&row) {
+        registry::open_lobby(&st, &row).await?;
+    }
+    if b.scheduled_at.is_some() || renamed {
+        notify_updated(&st, &row).await?;
+    }
+    Ok(Json(dto(&st, &row, me, true).await?))
 }
 
 #[utoipa::path(delete, path = "/api/parties/{id}", responses((status = 204)))]
@@ -481,29 +581,29 @@ pub async fn join(
     let row = row_of(&st, id).await?;
     let how = access(&st, &row, me, b.token.as_deref()).await?;
     require_open(&row)?;
-    if row.status == "scheduled" {
-        let at = row.scheduled_at.map_or(i64::MAX, |t| t.timestamp_millis());
-        if now_ms() < at - LOBBY_OPEN_BEFORE_MS {
-            return Err(fail(StatusCode::CONFLICT, "party.error_not_open"));
-        }
+    if row.status == "scheduled" && !lobby_open(&row) {
+        return Err(fail(StatusCode::CONFLICT, "party.error_not_open"));
     }
     st.parties.ensure(&row, false);
-    let view = st.parties.view(id).ok_or_else(not_live)?;
-    if how == Access::TokenOnly && view.blocked.contains(&me) {
+    let item = st.parties.brief(id).ok_or_else(not_live)?.item;
+    if how == Access::TokenOnly && db::is_kicked(&st.db, id, me).await? {
         return Err(fail(StatusCode::FORBIDDEN, "party.error_kicked"));
     }
-    if !media_ok(&st, &a, view.item.media_id).await? {
+    if !media_ok(&st, &a, item.media_id).await? {
         return Err(fail(StatusCode::FORBIDDEN, "party.error_no_access"));
     }
     let conn = connection_for(&st, me, &b.device_id)
         .ok_or_else(|| fail(StatusCode::CONFLICT, "party.error_no_connection"))?;
-    let name = a.user.username.clone();
-    if let Some((_, d)) = st.parties.act(id, |l| {
-        ((), l.join(me, &name, &b.device_id, &conn, now_ms()))
-    }) {
-        deliver(&st, id, d).await;
+    if how == Access::TokenOnly {
+        db::add_link_guest(&st.db, id, me).await?;
+        notify_updated(&st, &row).await?;
     }
-    Ok(Json(dto(&st, &row, me).await?))
+    let name = a.user.username.clone();
+    mutate(&st, id, |l| {
+        ((), l.join(me, &name, &b.device_id, &conn, now_ms()))
+    })
+    .await;
+    Ok(Json(dto(&st, &row, me, true).await?))
 }
 
 #[utoipa::path(post, path = "/api/parties/{id}/start", responses((status = 200)))]
@@ -521,12 +621,10 @@ pub async fn start(
         db::set_live(&st.db, id).await?;
         row.status = "live".into();
         st.parties.ensure(&row, true);
-        if let Some((_, d)) = st.parties.act(id, |l| ((), l.go_live(now_ms()))) {
-            deliver(&st, id, d).await;
-        }
-        let invitees = db::invitees(&st.db, id).await?;
+        mutate(&st, id, |l| ((), l.go_live(now_ms()))).await;
+        let guests = db::guest_ids(&st.db, id).await?;
         st.hub.emit_to_users(
-            &invitees,
+            &guests,
             SseEvent::PartyStarting {
                 party_id: id.into(),
                 name: row.name.clone(),
@@ -534,7 +632,7 @@ pub async fn start(
         );
         notify_updated(&st, &row).await?;
     }
-    Ok(Json(dto(&st, &row, me).await?))
+    Ok(Json(dto(&st, &row, me, true).await?))
 }
 
 #[utoipa::path(post, path = "/api/parties/{id}/leave", responses((status = 204)))]
@@ -546,26 +644,18 @@ pub async fn leave(
 ) -> R<StatusCode> {
     let me = a.user.id;
     member_row(&st, id, me).await?;
-    if let Some((_, d)) = st
-        .parties
-        .act(id, |l| match l.leave(me, &b.device_id, now_ms()) {
-            Ok(e) => ((), e),
-            Err(_) => ((), vec![]),
-        })
-    {
-        deliver(&st, id, d).await;
-    }
+    mutate(&st, id, |l| match l.leave(me, &b.device_id, now_ms()) {
+        Ok(e) => ((), e),
+        Err(_) => ((), vec![]),
+    })
+    .await;
     Ok(StatusCode::NO_CONTENT)
 }
 
 /// The row for a member, owner or invitee; anyone else gets the 404 of an unknown party.
 async fn member_row(st: &AppState, id: i32, me: i32) -> R<Row> {
     let row = row_of(st, id).await?;
-    let member = st
-        .parties
-        .view(id)
-        .is_some_and(|v| v.members.iter().any(|m| m.user_id == me));
-    if !member {
+    if !st.parties.has_user(id, me) {
         access(st, &row, me, None).await?;
     }
     Ok(row)
@@ -585,12 +675,11 @@ pub async fn intent(
     }
     st.parties.ensure(&row, false);
     let item: Option<Item> = b.item.map(Into::into);
-    if let Some(it) = item
-        .as_ref()
-        .filter(|_| b.action == fliks_domain::party::Action::SetItem)
-    {
+    let mut title = None;
+    if let (IntentAction::SetItem, Some(it)) = (b.action, item.as_ref()) {
         check_item(&st, it).await?;
         let view = st.parties.view(id).ok_or_else(not_live)?;
+        let library = db::media_libraries(&st.db, &[it.media_id]).await?;
         let mut denied = vec![];
         let mut checked = vec![];
         for m in &view.members {
@@ -598,7 +687,10 @@ pub async fn intent(
                 continue;
             }
             checked.push(m.user_id);
-            if !user_media_ok(&st, m.user_id, it.media_id).await? {
+            let open = user_libraries(&st, m.user_id)
+                .await?
+                .is_some_and(|ids| library.get(&it.media_id).is_some_and(|l| ids.contains(l)));
+            if !open {
                 denied.push(m.username.clone());
             }
         }
@@ -610,27 +702,55 @@ pub async fn intent(
                 json!(denied),
             ));
         }
+        title = Some(item_dto(&st, it).await?.title);
     }
-    let (res, d) = st
-        .parties
-        .act(id, |l| {
-            let req = Intent {
-                action: b.action,
-                position: b.position,
-                item,
-                base_rev: b.base_rev,
-            };
-            match l.intent(me, &b.device_id, req, now_ms()) {
-                Ok((rev, e)) => (Ok(rev), e),
-                Err(e) => (Err(e), vec![]),
+    let plan = match b.action {
+        IntentAction::Next | IntentAction::Previous if item.is_none() => Some(
+            queue_step(&st, &row, b.action == IntentAction::Next)
+                .await?
+                .ok_or_else(|| fail(StatusCode::BAD_REQUEST, "party.error_invalid"))?,
+        ),
+        IntentAction::Next | IntentAction::Previous => {
+            return Err(fail(StatusCode::BAD_REQUEST, "party.error_invalid"));
+        }
+        // An `ended` that takes effect moves a followed queue on.
+        IntentAction::Ended if st.parties.can_end(id, me, &b.device_id, item.as_ref()) => {
+            queue_step(&st, &row, true).await?
+        }
+        _ => None,
+    };
+    let ended = b.action == IntentAction::Ended;
+    let res = mutate(&st, id, |l| {
+        let result = match (b.action.machine(), plan) {
+            (_, Some((step, from))) if ended => {
+                l.advance_after_ended(me, &b.device_id, item.as_ref(), &from, step, now_ms())
             }
-        })
-        .ok_or_else(not_live)?;
-    deliver(&st, id, d).await;
+            (_, Some((step, _))) => l.advance(me, &b.device_id, b.base_rev, step, now_ms()),
+            (Some(action), None) => l.intent(
+                me,
+                &b.device_id,
+                Intent {
+                    action,
+                    position: b.position,
+                    item,
+                    item_title: title,
+                    base_rev: b.base_rev,
+                },
+                now_ms(),
+            ),
+            (None, None) => Err(PartyErr::Invalid("action")),
+        };
+        match result {
+            Ok((rev, e)) => (Ok(rev), e),
+            Err(e) => (Err(e), vec![]),
+        }
+    })
+    .await
+    .ok_or_else(not_live)?;
     match res {
         Ok(rev) => Ok((StatusCode::ACCEPTED, Json(json!({ "rev": rev })))),
         Err(PartyErr::Stale) => {
-            let snap = dto(&st, &row, me).await?;
+            let snap = dto(&st, &row, me, true).await?;
             Err(PartyError::Bare(
                 StatusCode::CONFLICT,
                 serde_json::to_value(snap).expect("typed dto"),
@@ -640,20 +760,36 @@ pub async fn intent(
     }
 }
 
+/// The step to take in what the party follows, judged for every user in the party right now, and
+/// the item it was computed from; `None` when it follows nothing (a single movie).
+async fn queue_step(
+    st: &AppState,
+    row: &Row,
+    forward: bool,
+) -> R<Option<(fliks_domain::party::Step, Item)>> {
+    let view = st.parties.view(row.id).ok_or_else(not_live)?;
+    let rows = db::queue_rows(&st.db, row.playlist_id, &view.item).await?;
+    if rows.is_empty() {
+        return Ok(None);
+    }
+    let mut users: Vec<i32> = view.members.iter().map(|m| m.user_id).collect();
+    users.sort_unstable();
+    users.dedup();
+    let step = steps::step(st, rows, &view.item, forward, &users).await?;
+    Ok(Some((step, view.item)))
+}
+
 async fn run(
     st: &AppState,
     id: i32,
     f: impl FnOnce(&mut fliks_domain::party::Live) -> Result<Vec<Effect>, PartyErr>,
 ) -> R<Result<(), PartyErr>> {
-    let (res, d) = st
-        .parties
-        .act(id, |l| match f(l) {
-            Ok(e) => (Ok(()), e),
-            Err(e) => (Err(e), vec![]),
-        })
-        .ok_or_else(not_live)?;
-    deliver(st, id, d).await;
-    Ok(res)
+    mutate(st, id, |l| match f(l) {
+        Ok(e) => (Ok(()), e),
+        Err(e) => (Err(e), vec![]),
+    })
+    .await
+    .ok_or_else(not_live)
 }
 
 #[utoipa::path(post, path = "/api/parties/{id}/status", responses((status = 204)))]
@@ -688,17 +824,15 @@ pub async fn message(
 ) -> R<(StatusCode, Json<Value>)> {
     let text = b.text()?;
     member_row(&st, id, a.user.id).await?;
-    let (res, d) = st
-        .parties
-        .act(id, |l| {
-            match l.post_message(a.user.id, &b.device_id, text, now_ms()) {
-                Ok((m, e)) => (Ok(m), e),
-                Err(e) => (Err(e), vec![]),
-            }
-        })
-        .ok_or_else(not_live)?;
-    deliver(&st, id, d).await;
-    let m = res.map_err(machine_err)?;
+    let m = mutate(&st, id, |l| {
+        match l.post_message(a.user.id, &b.device_id, text, now_ms()) {
+            Ok((m, e)) => (Ok(m), e),
+            Err(e) => (Err(e), vec![]),
+        }
+    })
+    .await
+    .ok_or_else(not_live)?
+    .map_err(machine_err)?;
     Ok((
         StatusCode::CREATED,
         Json(serde_json::to_value(m).expect("typed dto")),
@@ -712,6 +846,9 @@ pub async fn reaction(
     PathParams(id): PathParams<i32>,
     ValidJson(b): ValidJson<ReactionIn>,
 ) -> R<StatusCode> {
+    if emojis::get(&b.emoji).is_none() {
+        return Err(fail(StatusCode::BAD_REQUEST, "party.error_invalid"));
+    }
     member_row(&st, id, a.user.id).await?;
     run(&st, id, |l| {
         l.react(a.user.id, &b.device_id, &b.emoji, now_ms())
@@ -782,6 +919,21 @@ pub async fn ice(State(st): State<AppState>, SessionAuthed(_): SessionAuthed) ->
     Ok(Json(json!({ "iceServers": servers })))
 }
 
+/// The animated assets under `/api/emoji` keyed by emoji, and the default bar; any other emoji is static.
+#[utoipa::path(get, path = "/api/parties/reactions", responses((status = 200)))]
+pub async fn reactions(SessionAuthed(_): SessionAuthed) -> Json<Value> {
+    let animations: serde_json::Map<String, Value> = ANIMATED_REACTIONS
+        .iter()
+        .map(|&e| {
+            (
+                e.to_owned(),
+                json!(format!("/api/emoji/{}.webp", noto_code(e))),
+            )
+        })
+        .collect();
+    Json(json!({ "animations": animations, "defaults": DEFAULT_REACTIONS }))
+}
+
 #[utoipa::path(post, path = "/api/parties/{id}/members/{userId}/kick", responses((status = 204)))]
 pub async fn kick(
     State(st): State<AppState>,
@@ -793,6 +945,14 @@ pub async fn kick(
     run(&st, id, |l| l.kick(user, &a.user.username, now_ms()))
         .await?
         .map_err(target_err)?;
+    db::kick_guest(&st.db, id, user).await?;
+    notify_updated(&st, &row).await?;
+    st.hub.emit_to_users(
+        &[user],
+        SseEvent::PartyUpdated {
+            party_id: id.into(),
+        },
+    );
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -834,5 +994,36 @@ pub async fn invite(
     let users = check_followed(&st, row.owner_id, &b.user_ids).await?;
     let added = db::add_invitees(&st.db, id, &users).await?;
     announce_invited(&st, &row, &added).await?;
-    Ok(Json(dto(&st, &row, me).await?))
+    if row.status == "live" || lobby_open(&row) {
+        st.hub.emit_to_users(
+            &added,
+            SseEvent::PartyStarting {
+                party_id: id.into(),
+                name: row.name.clone(),
+            },
+        );
+    }
+    Ok(Json(dto(&st, &row, me, true).await?))
+}
+
+#[utoipa::path(get, path = "/api/parties/{id}/queue", responses((status = 200)))]
+pub async fn queue(
+    State(st): State<AppState>,
+    SessionAuthed(a): SessionAuthed,
+    PathParams(id): PathParams<i32>,
+) -> R<Json<Vec<PartyItem>>> {
+    let row = member_row(&st, id, a.user.id).await?;
+    let current = st.parties.brief(id).map_or_else(|| row.item(), |b| b.item);
+    let rows = db::queue_rows(&st.db, row.playlist_id, &current).await?;
+    let ids = accessible_library_ids(&st.db, &a).await?;
+    let mut medias: Vec<i32> = rows.iter().map(|r| r.item.media_id).collect();
+    medias.sort_unstable();
+    medias.dedup();
+    let libraries = db::media_libraries(&st.db, &medias).await?;
+    let visible: Vec<Item> = rows
+        .into_iter()
+        .map(|r| r.item)
+        .filter(|i| libraries.get(&i.media_id).is_some_and(|l| ids.contains(l)))
+        .collect();
+    Ok(Json(item_dtos(&st, &visible).await?))
 }

@@ -19,6 +19,7 @@ parity = []
 [dependencies]
 axum = { version = "0.8", features = ["multipart"] }
 dunce = "1"
+emojis = "0.9"
 jsonwebtoken = { version = "10", default-features = false, features = ["rust_crypto"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls-webpki-roots", "gzip", "deflate", "brotli", "zstd"] }
 serde_path_to_error = "0.1"

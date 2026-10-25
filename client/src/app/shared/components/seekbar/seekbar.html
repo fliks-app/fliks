@@ -1,9 +1,10 @@
 <div
   #trackRoot
   data-no-focus-ring
-  class="group relative w-full flex items-center cursor-pointer touch-none focus:outline-none"
-  [class]="variant() === 'player' ? 'h-6' : 'h-5'"
-  tabindex="0"
+  class="group relative w-full flex items-center touch-none focus:outline-none"
+  [class]="(variant() === 'player' ? 'h-6' : 'h-5') + (disabled() ? '' : ' cursor-pointer')"
+  [attr.tabindex]="disabled() ? -1 : 0"
+  [attr.aria-disabled]="disabled()"
   role="slider"
   [attr.aria-valuemin]="0"
   [attr.aria-valuemax]="duration() || 0"

@@ -331,7 +331,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
       Keyboard.addListener('keyboardWillHide', () => this.keyboardOpen.set(false));
       // Android's settled state (MainActivity), which the plugin misses when a back
       // gesture over the keyboard is cancelled.
-      fromEvent<CustomEvent<{ visible: boolean }>>(window, 'imeVisibility')
+      fromEvent<CustomEvent<{ visible: boolean }>>(window, 'ime')
         .pipe(takeUntilDestroyed(this.destroyRef))
         .subscribe((e) => this.keyboardOpen.set(e.detail.visible));
       // The height before the keyboard took its share, for what must hold still over it.

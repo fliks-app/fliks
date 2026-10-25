@@ -4,6 +4,7 @@ import { PartyApiService, type PartyMember, type PartySignalKind } from '../api/
 import { DeviceService } from '../device.service';
 import { SseService } from '../sse.service';
 import { ToastService } from '../toast.service';
+import { readFlag, writeFlag } from './local-flag';
 import { PartyService } from './party.service';
 import { SPEAK_HANG_MS, SPEAK_THRESHOLD, diffPeers, offersTo, rms, routeSignal } from './voice-mesh';
 
@@ -44,7 +45,7 @@ export class VoiceService {
   );
   readonly busy = signal(false);
   readonly speaking = signal<ReadonlySet<string>>(new Set());
-  readonly duck = signal(loadDuck());
+  readonly duck = signal(readFlag(DUCK_KEY, true));
   /** Someone else is audible: the player lowers the movie. */
   readonly othersSpeaking = computed(() => {
     const me = this.sse.targetId();
@@ -71,23 +72,22 @@ export class VoiceService {
         else if (this.joined()) this.sync(members);
       });
     });
-    // The SSE rejoin marks us away for the others: renegotiate with everyone.
-    let wasConnected = this.sse.connected();
-    effect(() => {
-      const connected = this.sse.connected();
-      untracked(() => {
-        if (connected && !wasConnected && this.joined()) this.resetPeers();
-        wasConnected = connected;
-      });
-    });
+    this.party.rejoined.subscribe(() => void this.onRejoin());
     if (typeof addEventListener === 'function') addEventListener('pagehide', () => this.onUnload());
   }
 
   setDuck(on: boolean): void {
     this.duck.set(on);
-    try {
-      localStorage.setItem(DUCK_KEY, on ? '1' : '0');
-    } catch { /* session-only */ }
+    writeFlag(DUCK_KEY, on);
+  }
+
+  /** The server forgot or marked away our voice flag (restart, long drop): say it again, then renegotiate with everyone. */
+  private async onRejoin(): Promise<void> {
+    const id = this.party.party()?.id;
+    const me = this.sse.targetId();
+    if (!this.joined() || id == null || !me) return;
+    await this.api.voice(id, me, true, this.muted()).catch((err) => this.party.onActionError(err));
+    this.resetPeers();
   }
 
   async join(): Promise<void> {
@@ -350,21 +350,7 @@ export class VoiceService {
     const id = this.party.party()?.id;
     const me = this.sse.targetId();
     if (!this.joined() || id == null || !me) return;
-    void fetch(`/api/parties/${id}/voice`, {
-      method: 'POST',
-      keepalive: true,
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ deviceId: me, joined: false, muted: true }),
-    }).catch(() => {});
+    this.api.leaveVoiceOnUnload(id, me);
     this.teardown();
-  }
-}
-
-function loadDuck(): boolean {
-  try {
-    return localStorage.getItem(DUCK_KEY) !== '0';
-  } catch {
-    return true;
   }
 }

@@ -1,5 +1,12 @@
 <!-- The shell is the fullscreen element; in a party the player shrinks inside it to make room for the panel. -->
-<div #partyShell class="party-shell" [attr.data-party-dock]="partyCtl.active() && party.panelOpen() ? party.dock() : null">
+<div
+  #partyShell
+  class="party-shell"
+  [attr.data-party-dock]="partyPanelShown() ? party.dock() : null"
+  [class.in-party]="partyCtl.active()"
+  [class.keyboard-open]="keyboardOverlay.height() > 0"
+  [style.--keyboard-h.px]="keyboardOverlay.height()"
+>
 <!-- Local player (hidden when casting — Cast overlay is global in the layout) -->
 <div
   #playerContainer
@@ -112,8 +119,10 @@
     </div>
   }
 
-  @if (partyCtl.active()) {
-    <app-party-floaters />
+  @if (partyCtl.active() && !inPipMode()) {
+    @defer {
+      <app-party-floaters />
+    }
   }
 
   @if (edlNotice(); as notice) {
@@ -157,9 +166,9 @@
     [episodeTitle]="displayEpisodeTitle()"
     [hasNext]="queueCtl.upNext() !== null"
     [nextLabelKey]="queueCtl.nextLabelKey()"
-    [queueItems]="preRollActive() || partyCtl.active() ? [] : queueCtl.queueItems()"
+    [queueItems]="preRollActive() || (partyCtl.active() && !party.canControl()) ? [] : queueCtl.queueItems()"
     [queueIndex]="queueCtl.queueIndex()"
-    (selectQueueItem)="queueCtl.playQueueItem($event)"
+    (selectQueueItem)="partyCtl.active() ? partyCtl.requestQueueItem($event) : queueCtl.playQueueItem($event)"
     [activeQualityLabel]="activeQualityLabel()"
     [isNative]="isNative"
     [isDesktop]="isDesktopNative"
@@ -213,11 +222,18 @@
     (skipPreRoll)="skipPreRoll()"
     (panelOpenChange)="chrome.onPanelOpenChange($event)"
     (openSubtitleSync)="subs.onOpenSubtitleSync($event)"
+    [canControlPlayback]="party.canControl()"
     [partyActive]="partyCtl.active()"
+    [partyReactionsOff]="!party.reactionsEnabled()"
     [partyUnread]="party.unread()"
     [partyOpen]="party.panelOpen()"
     (toggleParty)="party.setPanelOpen(!party.panelOpen())"
-  />
+    (openReactionSettings)="partyDialog.set('reactions')"
+  >
+    @if (partyCtl.active() && party.reactionsEnabled() && reactions.enabled() && reactions.dock()) {
+      <app-party-reaction-dock />
+    }
+  </app-player-controls>
   }
 
   @if (subs.subtitleSyncOpen() && subs.syncSubtitle(); as sub) {
@@ -244,7 +260,19 @@
   />
 </div>
 
-@if (partyCtl.active() && party.panelOpen()) {
-  <app-party-panel />
+@if (partyPanelShown()) {
+  <!-- Party UI loads with the first party, out of the player chunk. -->
+  @defer {
+    <app-party-panel animate.enter="party-panel-in" animate.leave="party-panel-out" (openSettings)="partyDialog.set('party')" />
+  }
+}
+@if (partyCtl.active() && partyDialog(); as dialog) {
+  @defer {
+    @if (dialog === 'reactions') {
+      <app-party-reaction-settings (closed)="partyDialog.set(null)" />
+    } @else {
+      <app-party-settings (closed)="partyDialog.set(null)" />
+    }
+  }
 }
 </div>

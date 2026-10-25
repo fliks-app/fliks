@@ -80,6 +80,7 @@ const POSTER_ROUTES = new Set<string | undefined>([
   'add/tv/:provider/:externalId',
   'add/movie/:tmdbId',
   'add/tv/:tmdbId',
+  'parties/:id',
 ]);
 
 /** The player pairs with nothing — it has no poster, and its own close animation

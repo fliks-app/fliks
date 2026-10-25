@@ -4,6 +4,9 @@
 
     @if (open()) {
       <form class="flex flex-col gap-3" (submit)="$event.preventDefault(); submit()">
+        @if (target()?.playlistId != null) {
+          <p class="text-sm text-base-content/70">{{ 'party.playlist_label' | translate: { name: target()!.title } }}</p>
+        }
         <label class="form-control">
           <span class="mb-1 text-sm font-semibold">{{ 'party.create_name' | translate }}</span>
           <input type="text" class="input input-bordered w-full" maxlength="80" [ngModel]="name()" (ngModelChange)="name.set($event)" name="name" />
@@ -24,11 +27,6 @@
           <span class="text-sm font-semibold">{{ 'party.create_invitees' | translate }}</span>
           <app-party-invitee-picker [(selected)]="invitees" />
         </div>
-
-        <label class="flex cursor-pointer items-center gap-2 text-sm">
-          <input type="checkbox" class="toggle toggle-sm" [checked]="hostOnly()" (change)="hostOnly.set($any($event.target).checked)" />
-          <span>{{ 'party.policy_host_only' | translate }}</span>
-        </label>
 
         <app-modal-footer>
           <button type="button" class="btn btn-ghost" (click)="close()">{{ 'common.cancel' | translate }}</button>

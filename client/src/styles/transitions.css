@@ -123,7 +123,8 @@ html.vt-poster-out nav.navbar {
   view-transition-name: vt-topbar;
 }
 html.vt-poster-in app-media-info-header [data-hero-lead],
-html.vt-poster-in app-tmdb-preview [data-hero-lead] {
+html.vt-poster-in app-tmdb-preview [data-hero-lead],
+html.vt-poster-in app-party-page [data-hero-lead] {
   view-transition-name: vt-hero-lead;
 }
 /* Set for the length of one transition; see muteHeroUntilDone. Important, or
@@ -134,6 +135,7 @@ img[data-hero-muted] {
 
 /* A sliding page's hero and its stamped card are named so they stand still while the page moves under them. */
 html.vt-slide app-media-info-header img,
+html.vt-slide app-party-page img,
 html.vt-slide [data-poster-stamped] {
   view-transition-name: none !important;
 }
@@ -255,7 +257,8 @@ html.vt-player-close::view-transition-group(root) {
   z-index: 2;
 }
 /* Nothing pairs with the destination poster on close: keep it out of the capture so it paints with the page. */
-html.vt-player-close app-media-info-header img {
+html.vt-player-close app-media-info-header img,
+html.vt-player-close app-party-page img {
   view-transition-name: none !important;
 }
 @keyframes player-close {

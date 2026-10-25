@@ -15,6 +15,7 @@ import { PlayerStateService } from '../../core/services/player-state.service';
 import { PlaybackQueueService, type QueueItem } from '../../core/services/playback-queue.service';
 import { ServerConfigService } from '../../core/services/server-config.service';
 import { ToastService } from '../../core/services/toast.service';
+import { PartyService } from '../../core/services/party/party.service';
 import { NativePlayer } from '../../core/plugins/native-player.plugin';
 import { buildSeriesQueueItems, resolvePlayableFile } from '../../shared/utils/media-play.util';
 
@@ -52,6 +53,7 @@ export class QueueController {
   private readonly navbar = inject(NavbarService);
   private readonly router = inject(Router);
   private readonly toast = inject(ToastService);
+  private readonly party = inject(PartyService);
   private readonly translate = inject(TranslateService);
   private host!: QueueHost;
 
@@ -148,9 +150,9 @@ export class QueueController {
   }
 
   /** Fills the queue with the series' episodes that have a file, so the list and auto-advance
-   *  work outside a playlist. No-op while a playlist owns the queue. */
+   *  work outside a playlist. No-op while a playlist or a party owns the queue. */
   syncSeriesQueue(): void {
-    if (this.queue.source() === 'playlist') return; // the playlist owns the queue
+    if (this.queue.source() === 'playlist' || this.queue.source() === 'party') return;
     const m = this.host.media();
     const episodeId = this.host.episodeId();
     if (!m || !episodeId) {
@@ -233,8 +235,9 @@ export class QueueController {
     }
   }
 
-  /** Loads the item a party switched to, counting the one it ends as watched. */
-  async openPartyItem(item: { mediaId: number; mediaFileId: number | null; episodeId: number | null }): Promise<void> {
+  /** Loads the item a party switched to, counting the one it ends as watched; false when it cannot be opened. */
+  async openPartyItem(item: { mediaId: number; mediaFileId: number | null; episodeId: number | null }): Promise<boolean> {
+    this.queue.syncTo(item.mediaId, item.episodeId ?? undefined);
     const queueItem: QueueItem = {
       mediaId: item.mediaId,
       mediaFileId: item.mediaFileId ?? undefined,
@@ -244,7 +247,7 @@ export class QueueController {
     const mediaFileId = await this.resolveItemFileId(queueItem);
     if (mediaFileId == null) {
       this.toast.error(this.translate.instant('player.next_unavailable'));
-      return;
+      return false;
     }
     if (this.state.ended()) await this.markCurrentComplete();
     if (this.castService.isConnected()) {
@@ -258,9 +261,10 @@ export class QueueController {
         fanartUrl: media?.fanartUrl ?? null,
         startTime: 0,
       });
-      return;
+      return true;
     }
     await this.loadItem(queueItem, mediaFileId);
+    return true;
   }
 
   /** Jumps to a queue item the user picked: unlike {@link advance} it does not mark the
@@ -300,6 +304,8 @@ export class QueueController {
 
     const qp: Record<string, number> = { mediaId: item.mediaId };
     if (item.episodeId) qp['episodeId'] = item.episodeId;
+    const partyId = this.party.party()?.id;
+    if (partyId != null) qp['party'] = partyId;
     const sourceId = this.queue.sourceId();
     // Only a playlist queue is re-established from the URL; a series queue is
     // rebuilt from the loaded media, so it needs no param.

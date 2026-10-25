@@ -5,6 +5,7 @@ import { TvService } from './tv.service';
 /** Stable identity of a home zone. Built-ins are fixed; per-library
  *  "recently added" zones are keyed by their library id. */
 export type HomeSectionKey =
+  | 'watch-parties'
   | 'received-recommendations'
   | 'libraries'
   | 'continue-watching'
@@ -17,6 +18,7 @@ export type HomeSectionKey =
   | `library-recent:${number}`;
 
 export type HomeSectionType =
+  | 'watch-parties'
   | 'received-recommendations'
   | 'libraries'
   | 'continue-watching'
@@ -54,6 +56,7 @@ const STORAGE_KEY = 'home.settings';
 const LIBRARY_RECENT_PREFIX = 'library-recent:';
 
 const BUILTIN_ORDER: HomeSectionKey[] = [
+  'watch-parties',
   'received-recommendations',
   'libraries',
   'continue-watching',
@@ -139,10 +142,16 @@ export class HomeSettingsService {
     }
 
     // Saved layouts predating this zone get it on top (new users get it first via DEFAULTS), so it skips the generic append.
-    const otherBuiltins = DEFAULTS.order.filter((p) => p.key !== 'received-recommendations');
+    const otherBuiltins = DEFAULTS.order.filter(
+      (p) => p.key !== 'received-recommendations' && p.key !== 'watch-parties',
+    );
     let merged = mergeOrdered(this.settings().order, otherBuiltins, available, (p) => p.key);
     if (!merged.some((p) => p.key === 'received-recommendations')) {
       merged = [{ key: 'received-recommendations', visible: true }, ...merged];
+    }
+    // Same for watch parties, which sit above everything.
+    if (!merged.some((p) => p.key === 'watch-parties')) {
+      merged = [{ key: 'watch-parties', visible: true }, ...merged];
     }
     // Permission-gated: defaults visible just above "recently-added" unless a saved order (handled above) wins.
     if (available.has('requests-recent') && !merged.some((p) => p.key === 'requests-recent')) {

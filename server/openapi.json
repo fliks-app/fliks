@@ -2601,6 +2601,20 @@
         }
       }
     },
+    "/api/parties/reactions": {
+      "get": {
+        "tags": [
+          "crate::party"
+        ],
+        "summary": "The animated assets under `/api/emoji` keyed by emoji, and the default bar; any other emoji is static.",
+        "operationId": "reactions",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/parties/{id}": {
       "get": {
         "tags": [
@@ -2722,6 +2736,19 @@
         "operationId": "message",
         "responses": {
           "201": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/parties/{id}/queue": {
+      "get": {
+        "tags": [
+          "crate::party"
+        ],
+        "operationId": "queue",
+        "responses": {
+          "200": {
             "description": ""
           }
         }

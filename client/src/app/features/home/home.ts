@@ -14,6 +14,8 @@ import { LikesApiService, LikedItem, LikeTarget } from '../../core/services/api/
 import { RequestsService, FliksRequestRow } from '../../core/services/api/requests.service';
 import { PartyApiService, type PartySummaryDto } from '../../core/services/api/party-api.service';
 import { partyWhen } from '../party/party-time';
+import { pickFanart } from '../../shared/utils/media-artwork.util';
+import { translatePlural } from '../../core/pipes/translate-plural.pipe';
 import { SseService } from '../../core/services/sse.service';
 import {
   DownloadProgressService,
@@ -135,12 +137,14 @@ export class HomeComponent implements OnInit, OnDestroy {
     return ['/parties', '' + p.id];
   }
   protected partySubtitle(p: PartySummaryDto): string {
-    return p.status === 'live'
-      ? this.translate.instant('party.card_live', { host: p.host.username, count: p.memberCount })
-      : this.translate.instant('party.card_scheduled', {
-          when: p.scheduledAt ? partyWhen(p.scheduledAt, this.translate) : '',
-          host: p.host.username,
-        });
+    const when =
+      p.status === 'live'
+        ? translatePlural(this.translate, 'party.card_live', p.memberCount, { host: p.host.username })
+        : this.translate.instant('party.card_scheduled', {
+            when: p.scheduledAt ? partyWhen(p.scheduledAt, this.translate) : '',
+            host: p.host.username,
+          });
+    return p.playlist ? `${when} · ${this.translate.instant('party.playlist_label', { name: p.playlist.name })}` : when;
   }
   protected readonly leavingLabel = (m: Media) => leavingLabel(this.translate, m.deleteAt!);
   readonly recommendations = signal<RecommendationItem[]>([]);
@@ -194,6 +198,7 @@ export class HomeComponent implements OnInit, OnDestroy {
 
   /** Shape of one skeleton row: how the zone's cards are laid out. */
   private static readonly SHAPES: Partial<Record<HomeSectionType, 'tile' | 'landscape' | 'portrait'>> = {
+    'watch-parties': 'landscape',
     libraries: 'tile',
     'continue-watching': 'landscape',
     likes: 'landscape',
@@ -220,8 +225,18 @@ export class HomeComponent implements OnInit, OnDestroy {
     return this.languageProfileNames().get(id) ?? `#${id}`;
   }
 
+  protected partyImage(p: PartySummaryDto): string | null {
+    return pickFanart({ ...p.item, id: p.item.mediaId }) ?? p.item.posterUrl;
+  }
+  protected partyState(p: PartySummaryDto): Record<string, unknown> {
+    return { party: p };
+  }
+
   private loadParties(): void {
-    void this.partyApi.list().then((l) => this.parties.set(l), () => undefined);
+    void this.partyApi.list().then(
+      (l) => this.parties.set(l),
+      () => undefined,
+    );
   }
 
   private readonly partyEvents = this.sse.partyEvents.subscribe((e) => {
@@ -316,6 +331,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   /** Cards actually rendered by each zone, for the layout snapshot. */
   private sectionCount(s: ResolvedHomeSection): number {
     switch (s.type) {
+      case 'watch-parties': return this.parties().length;
       case 'libraries': return this.displayLibraries().length;
       case 'continue-watching': return this.continueWatching().length;
       case 'recommendations': return this.recommendations().length;

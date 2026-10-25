@@ -1,0 +1,17 @@
+import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import { TranslatePipe } from '@ngx-translate/core';
+import { type PartySwitches } from '../../../core/services/api/party-api.service';
+import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-field/toggle-field';
+
+/** The host's party-wide switches, shared by the player's settings dialog and the party page. */
+@Component({
+  selector: 'app-party-host-switches',
+  imports: [TranslatePipe, ToggleFieldComponent],
+  templateUrl: './party-host-switches.html',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class PartyHostSwitchesComponent {
+  readonly value = input.required<PartySwitches>();
+  readonly disabled = input(false);
+  readonly changed = output<Partial<PartySwitches>>();
+}

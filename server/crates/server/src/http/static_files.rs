@@ -11,6 +11,7 @@ use axum::http::header::{
 use axum::http::{HeaderValue, StatusCode};
 use axum::middleware::{Next, from_fn};
 use axum::response::{IntoResponse, Response};
+use axum::routing::get;
 use tower_http::services::{ServeDir, ServeFile};
 
 /// Weak ETag (`W/"<size hex>-<mtime seconds hex>"`, as 4.x), `Cache-Control` and `If-None-Match` 304.
@@ -106,10 +107,41 @@ pub fn cannot(req: &Request) -> Response {
     AppError::not_found(format!("Cannot {} {url}", req.method())).into_response()
 }
 
+/// Reaction emoji change only with the catalog, so clients keep them a week instead of revalidating each one.
+async fn long_cache(req: Request, next: Next) -> Response {
+    let mut res = next.run(req).await;
+    if res.status() == StatusCode::OK {
+        res.headers_mut().insert(
+            CACHE_CONTROL,
+            HeaderValue::from_static("public, max-age=604800"),
+        );
+    }
+    res
+}
+
+/// The reaction artwork (`<cast dir>/emoji`), mounted by the app under `/api/emoji` like the other server assets.
+pub fn emoji(dir: PathBuf) -> Router {
+    // A route, not a fallback: a nested fallback-only router registers nothing and `/api/{*rest}` wins.
+    Router::new()
+        .route_service(
+            "/{*file}",
+            ServeDir::new(dir).append_index_html_on_directories(false),
+        )
+        .layer(from_fn(long_cache))
+        .layer(from_fn(validators))
+        .layer(from_fn(cannot_404))
+}
+
 /// `/cast` always; the SPA at `/` (with `index.html` fallback) only when a client dir is set.
 pub fn router(client_dir: Option<PathBuf>, cast_dir: PathBuf) -> Router {
     let cast = ServeDir::new(cast_dir).append_index_html_on_directories(false);
-    let mut r = Router::new().nest_service("/cast", cast);
+    // The reaction artwork lives under the cast dir but is served at `/api/emoji` only.
+    let mut r = Router::new()
+        .route(
+            "/cast/emoji/{*file}",
+            get(|| async { StatusCode::NOT_FOUND }),
+        )
+        .nest_service("/cast", cast);
     if let Some(dir) = client_dir {
         r = r
             .fallback_service(ServeDir::new(&dir).fallback(ServeFile::new(dir.join("index.html"))));
@@ -162,7 +194,7 @@ mod tests {
     #[tokio::test]
     async fn serves_files_spa_cast_and_cannot_404() {
         let (c, k) = dirs("serve");
-        let r = router(Some(c), k);
+        let r = router(Some(c), k.clone());
         let file = get(&r, "/app.js", None).await;
         assert_eq!(file.status(), 200);
         assert_eq!(file.headers()[CACHE_CONTROL], "public, max-age=0");
@@ -182,6 +214,12 @@ mod tests {
             text(get(&r, "/cast/receiver.html", None).await).await,
             "cast"
         );
+        std::fs::create_dir_all(k.join("emoji")).unwrap();
+        std::fs::write(k.join("emoji/1f525.webp"), "w").unwrap();
+        let emoji = get(&emoji(k.join("emoji")), "/1f525.webp", None).await;
+        assert_eq!(emoji.headers()[CACHE_CONTROL], "public, max-age=604800");
+        let hidden = get(&r, "/cast/emoji/1f525.webp", None).await;
+        assert_eq!(hidden.status(), 404);
         let missing = get(&r, "/cast/nope.html", None).await;
         assert_eq!(missing.status(), 404);
         assert!(text(missing).await.contains("Cannot GET /cast/nope.html"));

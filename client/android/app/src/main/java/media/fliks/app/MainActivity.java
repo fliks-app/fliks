@@ -29,6 +29,8 @@ public class MainActivity extends BridgeActivity {
     private android.app.PictureInPictureParams pipParams = null;
     private BroadcastReceiver pipActionReceiver;
     private boolean imeVisible = false;
+    private boolean keyboardOverlay = false;
+    private int imeOverlap = 0;
 
     @Override
     protected void onNewIntent(Intent intent) {
@@ -93,7 +95,7 @@ public class MainActivity extends BridgeActivity {
         }
 
         applyEdgeToEdge();
-        watchImeVisibility();
+        watchIme();
 
         // Set initial status bar icon color — post to run after Capacitor setup
         getWindow().getDecorView().post(() -> setLightStatusBar(false));
@@ -248,19 +250,51 @@ public class MainActivity extends BridgeActivity {
         getWindow().getDecorView().post(this::reapplyEdgeToEdge);
     }
 
-    /** Reports the soft keyboard's settled visibility: the Keyboard plugin only reads insets
-     *  animations, and a cancelled back gesture brings the keyboard back without one. */
-    private void watchImeVisibility() {
+    /** Called by ImmersivePlugin: the keyboard covers the WebView instead of shrinking it. */
+    public void setKeyboardOverlay(boolean enabled) {
+        keyboardOverlay = enabled;
+        getWindow().getDecorView().requestApplyInsets();
+    }
+
+    /** Sits above Capacitor's SystemBars listener (on the WebView's parent) and hides the IME from
+     *  it while the overlay is on, so the WebView is never padded; the Keyboard plugin reads root insets. */
+    private void watchIme() {
         android.webkit.WebView webView = getBridge().getWebView();
+        android.view.View above = (android.view.View) webView.getParent().getParent();
+        ViewCompat.setOnApplyWindowInsetsListener(above, (v, insets) -> {
+            // The WebView doesn't relayout while the keyboard overlays it, so report from here too.
+            reportIme(above, insets);
+            if (!keyboardOverlay) return ViewCompat.onApplyWindowInsets(v, insets);
+            return ViewCompat.onApplyWindowInsets(v, new WindowInsetsCompat.Builder(insets)
+                .setInsets(WindowInsetsCompat.Type.ime(), androidx.core.graphics.Insets.NONE)
+                .setVisible(WindowInsetsCompat.Type.ime(), false)
+                .build());
+        });
+        // The settled state: the Keyboard plugin only reads insets animations, and a cancelled back
+        // gesture brings the keyboard back without one.
         webView.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
             WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(v);
-            if (insets == null) return;
-            boolean visible = insets.isVisible(WindowInsetsCompat.Type.ime());
-            if (visible == imeVisible) return;
-            imeVisible = visible;
-            String js = "window.dispatchEvent(new CustomEvent('imeVisibility', { detail: { visible: " + visible + " } }));";
-            webView.evaluateJavascript(js, null);
+            if (insets != null) reportIme(above, insets);
         });
+    }
+
+    /** Dispatches `ime` { visible, height }: height is how far the keyboard reaches into the WebView,
+     *  in CSS px, what overlaid content must stay above. */
+    private void reportIme(android.view.View container, WindowInsetsCompat insets) {
+        android.webkit.WebView webView = getBridge().getWebView();
+        boolean visible = insets.isVisible(WindowInsetsCompat.Type.ime());
+        int[] c = new int[2];
+        int[] w = new int[2];
+        container.getLocationInWindow(c);
+        webView.getLocationInWindow(w);
+        int imeTop = c[1] + container.getHeight() - insets.getInsets(WindowInsetsCompat.Type.ime()).bottom;
+        int overlap = Math.max(0, w[1] + webView.getHeight() - imeTop);
+        int css = Math.round(overlap / getResources().getDisplayMetrics().density);
+        if (visible == imeVisible && css == imeOverlap) return;
+        imeVisible = visible;
+        imeOverlap = css;
+        String js = "window.dispatchEvent(new CustomEvent('ime', { detail: { visible: " + visible + ", height: " + css + " } }));";
+        webView.evaluateJavascript(js, null);
     }
 
     /** True when the device is in television (leanback) UI mode. */

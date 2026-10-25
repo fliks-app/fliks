@@ -19,7 +19,7 @@ Cross-cutting HTTP stack: prefix, validation, serialization, error bodies, CORS,
 9. The server trusts the proxy: `X-Forwarded-*` is honoured for the client IP.
 10. JSON and urlencoded request bodies are limited to 100 kB; no route overrides the limit.
 11. At boot, before listen: `CREATE EXTENSION IF NOT EXISTS pg_trgm` on the database connection.
-12. Static files: `/cast` serves the `public` directory next to the binary, with no index document.
+12. Static files: `/cast` serves the `public` directory next to the binary, with no index document; its `emoji/` subdirectory is served at `/api/emoji` only (`/cast/emoji/*` is a 404).
 13. When `SERVE_STATIC_PATH` is set, serve that directory at `/`, excluding `/api/{*path}` and `/cast/{*path}`. Any other unmatched path falls back to that directory's `index.html` (SPA fallback). There is no `/internal` route: `/internal/**` falls to the SPA fallback like any unknown non-`/api` path, and answers the `Cannot <METHOD>` 404 when no client directory is set.
 14. Database: pending migrations run at boot (`fliks-server migrate` runs them alone); the connection pool holds at most 30 connections.
 15. Listen port: `PORT` when set to a number, else 4849 (the engine fronts the HTTP API on 4848). The desktop bundles write the engine and `fliks-server` output to `logs/server-<date>.log`.

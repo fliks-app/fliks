@@ -76,6 +76,7 @@ public class NativePlayerPlugin extends Plugin {
     private SubtitleOverlay subtitles;
     private boolean fillScreen = false;
     private VideoCropLayout.Crop crop;
+    private int[] viewport;
     // Presented size from onVideoSizeChanged (pixelWidthHeightRatio-corrected); 0 until known.
     private float displayWidth = 0f;
     private float displayHeight = 0f;
@@ -198,6 +199,7 @@ public class NativePlayerPlugin extends Plugin {
                 shutter = null;
             }
             crop = null;
+            viewport = null;
             fillScreen = false;
             displayWidth = 0f;
             displayHeight = 0f;
@@ -206,10 +208,45 @@ public class NativePlayerPlugin extends Plugin {
         });
     }
 
+    /** The player container's rectangle in CSS px; a negative width or height fills the WebView's parent. */
     @PluginMethod()
     public void resize(PluginCall call) {
-        // Wrapper is MATCH_PARENT — no resize needed. Kept for interface compatibility.
-        call.resolve();
+        int x = call.getInt("x", 0);
+        int y = call.getInt("y", 0);
+        int w = call.getInt("width", -1);
+        int h = call.getInt("height", -1);
+        mainHandler.post(() -> {
+            viewport = w < 0 || h < 0 ? null : new int[] {x, y, w, h};
+            applyViewport();
+            call.resolve();
+        });
+    }
+
+    /** Video and text subtitles sit on the viewport, scaled from CSS px to the WebView's pixels. */
+    private void applyViewport() {
+        if (wrapper == null) return;
+        int[] box = {ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT, 0, 0};
+        if (viewport != null) {
+            android.webkit.WebView webView = getBridge().getWebView();
+            float d = getContext().getResources().getDisplayMetrics().density;
+            box = new int[] {
+                    Math.round(viewport[2] * d),
+                    Math.round(viewport[3] * d),
+                    webView.getLeft() + Math.round(viewport[0] * d),
+                    webView.getTop() + Math.round(viewport[1] * d)};
+        }
+        place(wrapper, box);
+        if (subtitles != null) subtitles.setViewport(box);
+    }
+
+    /** Edits the params the host layout generated (a CoordinatorLayout in Capacitor): a fresh FrameLayout one crashes its measure. */
+    static void place(View v, int[] box) {
+        ViewGroup.MarginLayoutParams lp = (ViewGroup.MarginLayoutParams) v.getLayoutParams();
+        lp.width = box[0];
+        lp.height = box[1];
+        lp.leftMargin = box[2];
+        lp.topMargin = box[3];
+        v.setLayoutParams(lp);
     }
 
     /** Screen stays awake while the session is advancing or stalled mid-play;

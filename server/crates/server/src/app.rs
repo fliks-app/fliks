@@ -91,9 +91,11 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         crate::party::voice,
         crate::party::signal,
         crate::party::ice,
+        crate::party::reactions,
         crate::party::kick,
         crate::party::transfer,
         crate::party::invite,
+        crate::party::queue,
         remote::targets,
         remote::register,
         remote::commands,
@@ -360,6 +362,7 @@ pub fn router(
         .route("/api", any(unowned))
         .route("/api/", any(unowned))
         .route("/api/{*rest}", any(unowned))
+        .nest("/api/emoji", static_files::emoji(cast_dir.join("emoji")))
         .method_not_allowed_fallback(unowned)
         .fallback_service(static_files::router(client_dir, cast_dir));
     let exempt = crate::plugins::routes::reads_own_body;

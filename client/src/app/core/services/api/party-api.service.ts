@@ -2,14 +2,19 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpContext } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { SKIP_ERROR_TOAST } from '../../interceptors/error.interceptor';
+import { AuthService } from '../auth.service';
+import { ServerConfigService } from '../server-config.service';
 
 export type PartyStatus = 'scheduled' | 'live' | 'ended';
 export type PartyPolicy = 'everyone' | 'host_only';
 export type PartyPlayState = 'idle' | 'waiting' | 'paused' | 'playing';
 export type PartyMemberStatus = 'ready' | 'buffering' | 'away' | 'waiting';
-export type PartyIntentAction = 'play' | 'pause' | 'seek' | 'setItem' | 'ended';
+export type PartyIntentAction = 'play' | 'pause' | 'seek' | 'setItem' | 'ended' | 'next' | 'previous';
 
-export const PARTY_EMOJIS = ['👍', '😂', '😮', '😢', '😡', '❤️', '🔥', '👏'] as const;
+export interface PartyReactionCatalog {
+  animations: Record<string, string>;
+  defaults: string[];
+}
 
 export interface PartyItem {
   mediaId: number;
@@ -17,6 +22,8 @@ export interface PartyItem {
   episodeId: number | null;
   title: string;
   posterUrl: string | null;
+  fanartUrl: string | null;
+  additionalFanartUrls: string[];
 }
 
 export interface PartyUser {
@@ -58,28 +65,54 @@ export interface PartyLive {
   messages: PartyMessage[];
 }
 
+export interface PartyPlaylistRef {
+  id: number;
+  name: string;
+}
+
 export interface PartySummaryDto {
   id: number;
   name: string;
   status: PartyStatus;
   scheduledAt: string | null;
+  /** When the lobby opens, on the server's clock. */
+  lobbyOpensAt: string | null;
   host: PartyUser;
   item: PartyItem;
+  /** The playlist the party follows; the server picks what plays next from it. */
+  playlist: PartyPlaylistRef | null;
   memberCount: number;
 }
 
-export interface PartyDto extends PartySummaryDto {
+/** The host's party-wide switches. */
+export interface PartySwitches {
   policy: PartyPolicy;
+  reactionsEnabled: boolean;
+  chatEnabled: boolean;
+  linkSharing: boolean;
+}
+
+export type PartyGuestSource = 'invite' | 'link';
+
+export interface PartyGuest extends PartyUser {
+  source: PartyGuestSource;
+}
+
+export interface PartyDto extends PartySummaryDto, PartySwitches {
   inviteToken: string | null;
-  invitees: PartyUser[];
+  guests: PartyGuest[];
   live: PartyLive | null;
 }
 
+/** What a non-member gets for an invite link: the summary alone. */
+export type PartyPreview = PartySummaryDto & Partial<PartyDto>;
+
 export interface CreatePartyBody {
   name: string;
-  mediaId: number;
+  mediaId?: number;
   mediaFileId?: number;
   episodeId?: number;
+  playlistId?: number;
   scheduledAt?: string;
   policy?: PartyPolicy;
   inviteeIds?: number[];
@@ -99,24 +132,30 @@ const QUIET = () => ({ context: new HttpContext().set(SKIP_ERROR_TOAST, true) })
 @Injectable({ providedIn: 'root' })
 export class PartyApiService {
   private readonly http = inject(HttpClient);
+  private readonly serverConfig = inject(ServerConfigService);
+  private readonly auth = inject(AuthService);
 
   create(body: CreatePartyBody) {
     return firstValueFrom(this.http.post<PartyDto>('/api/parties', body));
+  }
+
+  queue(id: number) {
+    return firstValueFrom(this.http.get<PartyItem[]>(`/api/parties/${id}/queue`));
   }
 
   list() {
     return firstValueFrom(this.http.get<PartySummaryDto[]>('/api/parties'));
   }
 
-  get(id: number) {
-    return firstValueFrom(this.http.get<PartyDto>(`/api/parties/${id}`));
+  get(id: number, quiet = false) {
+    return firstValueFrom(this.http.get<PartyDto>(`/api/parties/${id}`, quiet ? QUIET() : {}));
   }
 
   byToken(token: string) {
-    return firstValueFrom(this.http.get<PartyDto>(`/api/parties/by-token/${encodeURIComponent(token)}`));
+    return firstValueFrom(this.http.get<PartyPreview>(`/api/parties/by-token/${encodeURIComponent(token)}`));
   }
 
-  update(id: number, body: { name?: string; policy?: PartyPolicy; scheduledAt?: string | null; regenerateToken?: boolean }) {
+  update(id: number, body: Partial<PartySwitches> & { name?: string; scheduledAt?: string | null; regenerateToken?: boolean }) {
     return firstValueFrom(this.http.patch<PartyDto>(`/api/parties/${id}`, body));
   }
 
@@ -124,8 +163,10 @@ export class PartyApiService {
     return firstValueFrom(this.http.delete<void>(`/api/parties/${id}`));
   }
 
-  join(id: number, deviceId: string, token?: string) {
-    return firstValueFrom(this.http.post<PartyDto>(`/api/parties/${id}/join`, { deviceId, ...(token && { token }) }));
+  join(id: number, deviceId: string, token?: string, quiet = false) {
+    return firstValueFrom(
+      this.http.post<PartyDto>(`/api/parties/${id}/join`, { deviceId, ...(token && { token }) }, quiet ? QUIET() : {}),
+    );
   }
 
   start(id: number) {
@@ -152,8 +193,26 @@ export class PartyApiService {
     return firstValueFrom(this.http.get<{ iceServers: RTCIceServer[] }>('/api/parties/ice', QUIET()));
   }
 
+  reactionCatalog() {
+    return firstValueFrom(this.http.get<PartyReactionCatalog>('/api/parties/reactions', QUIET()));
+  }
+
   voice(id: number, deviceId: string, joined: boolean, muted: boolean) {
     return firstValueFrom(this.http.post<void>(`/api/parties/${id}/voice`, { deviceId, joined, muted }, QUIET()));
+  }
+
+  /** Voice release for a page going away, where an Angular request is dropped. Bypasses HttpClient, so the URL and Bearer header are resolved here. */
+  leaveVoiceOnUnload(id: number, deviceId: string): void {
+    const path = `/api/parties/${id}/voice`;
+    const native = this.serverConfig.isNative;
+    const token = native ? this.auth.accessToken : null;
+    void fetch(native ? this.serverConfig.resolveUrl(path) : path, {
+      method: 'POST',
+      keepalive: true,
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', ...(token && { Authorization: `Bearer ${token}` }) },
+      body: JSON.stringify({ deviceId, joined: false, muted: true }),
+    }).catch(() => {});
   }
 
   signal(id: number, deviceId: string, to: string, kind: PartySignalKind, data: object) {
