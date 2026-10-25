@@ -1626,6 +1626,42 @@ describe('PlayerComponent reloadStream: startAt', () => {
   });
 });
 
+describe('PlayerComponent session refresh: startAt and load window', () => {
+  afterEach(() => {
+    TestBed.resetTestingModule();
+  });
+
+  it('puts the resume position in the play URL and loads at it', async () => {
+    const h = createHarness();
+
+    await (h.component as any).refreshSidAndReload(321, { preservePause: true, unmute: false });
+
+    expect(h.streamingApi.buildPlayUrl).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.objectContaining({ startAt: 321 }),
+    );
+    expect(h.engine.loadCalls.at(-1)?.startTime).toBe(321);
+  });
+
+  it('treats an engine error during the load as expected teardown, then clears the window', async () => {
+    const h = createHarness();
+    const seen: boolean[] = [];
+    h.engine.load = vi.fn(async () => {
+      seen.push((h.component as any).reloadLoadPending);
+    }) as any;
+
+    await (h.component as any).refreshSidAndReload(10, { preservePause: true, unmute: false });
+    expect(seen).toEqual([true]);
+    expect((h.component as any).reloadLoadPending).toBe(false);
+
+    h.engine.load = vi.fn(async () => {
+      throw new Error('boom');
+    }) as any;
+    await expect((h.component as any).reloadAt(10, { preservePause: true, unmute: false, restart: false })).rejects.toThrow();
+    expect((h.component as any).reloadLoadPending).toBe(false);
+  });
+});
+
 describe('PlayerComponent reload QoE event', () => {
   afterEach(() => {
     TestBed.resetTestingModule();

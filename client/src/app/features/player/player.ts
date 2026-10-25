@@ -2527,7 +2527,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }
 
   /** `{url, mimeType}` for the engine's `load()`, from the negotiated `pi`.
-   *  `startTime` is HLS-only; reload paths omit it since the engine seeks after load. */
+   *  `startTime` is HLS-only: the encoder starts there, and every load at a known position passes it. */
   private buildPlayUrl(opts: {
     sid?: string | null;
     startTime?: number;
@@ -3369,7 +3369,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     } finally {
       this.reloadingStream = false;
       this.qoeGraceUntil = Date.now() + 3_000;
-      this.reloadLoadPending = false;
       this.drainPendingReload();
     }
   }
@@ -3386,16 +3385,15 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     await this.reloadAt(currentPos, { preservePause: true, unmute: false, restart: true });
   }
 
-  /** The one re-negotiate-and-load sequence. `restart` is a user-initiated switch: the native surface is
-   *  stopped first, the load window is tracked and the URL carries `startAt`. Otherwise the session is
-   *  refreshed behind a live surface. Throws on failure, after releasing the unreplaced session. */
+  /** The one re-negotiate-and-load sequence. The URL always carries `startAt` and the load window is tracked;
+   *  `restart` (user switch) also stops the native surface first, else the session is refreshed behind a live one. Throws on failure, after releasing the unreplaced session. */
   private async reloadAt(
     pos: number,
     opts: { preservePause: boolean; unmute: boolean; restart: boolean },
   ): Promise<void> {
     const engine = this.engine!;
     const endReload = this.state.beginReload();
-    if (opts.restart) this.reloadLoadPending = true;
+    this.reloadLoadPending = true;
     let replace: { replaces?: string } = {};
     try {
       // Capture the viewer's play/pause intent before the teardown: a switch must not resume a paused player.
@@ -3409,13 +3407,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // Refresh a near-expiry stream token first: it's baked into every segment URL and can't be swapped after
       // load.
       await this.requireStreamToken();
-      const { url, mimeType } = this.buildPlayUrl(opts.restart ? { startTime: pos } : {});
+      const { url, mimeType } = this.buildPlayUrl({ startTime: pos });
       await this.prepareLoad();
       await engine.load(url, opts.restart || pos > 0 ? pos : undefined, mimeType);
-      if (opts.restart) {
-        this.reloadReachedPlayback = true;
-        this.reloadLoadPending = false;
-      }
+      this.reloadReachedPlayback = true;
+      this.reloadLoadPending = false;
       this.qualityManager.applyQualityPreferenceAfterLoad(engine, this.playbackMode());
       this.restorePlaybackRate();
       this.restorePlayState(wasPaused);
@@ -3424,6 +3420,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.stopUnreplaced(replace);
       throw e;
     } finally {
+      this.reloadLoadPending = false;
       endReload();
     }
   }
