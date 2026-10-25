@@ -266,6 +266,11 @@ export class PlayerSession {
     return this.mpv;
   }
 
+  /** The page's contents, for what the main process injects into it or fetches as it. */
+  get uiContents(): Electron.WebContents {
+    return this.uiWin.webContents;
+  }
+
   resize(rect: DesktopRect): void {
     if (!this.frameWin.isDestroyed()) this.frameWin.setBounds(rect);
   }

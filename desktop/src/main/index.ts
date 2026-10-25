@@ -178,7 +178,7 @@ const CURSOR_SHAPES: Record<string, number> = {
 const WHEEL_PIXELS_PER_NOTCH = 100;
 
 let uiWin: BrowserWindow | null = null;
-// Set where the OS has a media session to feed (Linux MPRIS).
+// Set where the OS has a media session to feed (Linux MPRIS, macOS Now Playing).
 let setOsMediaSession: ((meta: DesktopMediaMetadata | null) => Promise<void>) | null = null;
 const inputCounts: Record<string, number> = {};
 
@@ -253,6 +253,38 @@ async function startEmbedSession(haveApp: boolean): Promise<void> {
     preloadPath: path.join(app.getAppPath(), 'dist', 'preload', 'index.cjs'),
     iconPath: windowIcon(),
   });
+  if (process.platform === 'darwin') await startNowPlaying(session);
+}
+
+/** Feeds macOS Now Playing from the player and the page's metadata, and routes its remote commands to the page as media keys. */
+async function startNowPlaying(session: import('./window/player-session').PlayerSession): Promise<void> {
+  const { loadMacAddon } = await import('./mpv/mac-mpv-player');
+  const { NowPlaying } = await import('./now-playing');
+  const addon = loadMacAddon();
+  const nowPlaying = new NowPlaying(addon);
+  const { player, uiContents } = session;
+  let playing = false;
+  player.on('stateChanged', ({ state }) => {
+    playing = state === 'playing';
+    nowPlaying.setState(state);
+  });
+  player.on('timeUpdate', (p) => nowPlaying.setPosition(p));
+  const press = (keyCode: string) => {
+    for (const type of ['keyDown', 'keyUp'] as const) uiContents.sendInputEvent({ type, keyCode } as any);
+  };
+  const KEYS: Record<string, string> = { toggle: 'MediaPlayPause', stop: 'MediaStop', next: 'MediaNextTrack', previous: 'MediaPreviousTrack' };
+  addon.onRemoteCommand((name) => {
+    // Electron has no play-only / pause-only key: a play while playing (or the reverse) is a no-op.
+    if (name === 'play' ? !playing : name === 'pause' ? playing : true) press(KEYS[name] ?? 'MediaPlayPause');
+  });
+  setOsMediaSession = async (meta) => {
+    try {
+      const res = meta?.artworkUrl ? await uiContents.session.fetch(meta.artworkUrl) : null;
+      nowPlaying.setMetadata(meta, res?.ok ? Buffer.from(await res.arrayBuffer()) : undefined);
+    } catch (e) {
+      console.error('[now-playing] unavailable', e);
+    }
+  };
 }
 
 // Fallback for any platform without a playback backend (not Linux/Windows/macOS,

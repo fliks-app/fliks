@@ -29,8 +29,10 @@ import { mapTrackList, parseTracks, type MpvTrack } from './tracks';
 import { QoeReader } from './qoe';
 import { isPrematureEof } from './eof-guard';
 import { TypedEmitter } from './typed-emitter';
+import type { NowPlayingNative } from '../now-playing';
 
-type MacAddon = {
+export type MacAddon = NowPlayingNative & {
+  onRemoteCommand(cb: (name: string) => void): void;
   start(o: { wid: string; scale?: number }): void;
   onEvent(cb: (json: string) => void): void;
   load(o: MpvLoadRequest): void;
@@ -46,7 +48,7 @@ type MacAddon = {
  *  addon and the dlopen'd libmpv are asarUnpack'd, so in a packaged app they
  *  live under app.asar.unpacked. */
 let macAddon: MacAddon | null = null;
-function loadMacAddon(): MacAddon {
+export function loadMacAddon(): MacAddon {
   if (macAddon) return macAddon;
   const base = app.isPackaged
     ? app.getAppPath().replace(/app\.asar$/, 'app.asar.unpacked')
