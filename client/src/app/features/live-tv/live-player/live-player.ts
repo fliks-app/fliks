@@ -480,6 +480,7 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
       });
       this.loading.set(false);
     });
+    engine.on('sessionExpired', () => this.retuneAfterExpiry());
     engine.on('stateChanged', ({ state }) => {
       this.paused.set(state === 'paused');
       this.liveQoe.onState(state);
@@ -514,6 +515,12 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
       engine: this.engineKind,
       url: this.session()?.url,
     });
+  }
+
+  /** A reaped session (sleep, network loss) is replaced by tuning the same channel again. */
+  private retuneAfterExpiry(): void {
+    if (this.destroyed || this.loading()) return;
+    void this.tune(this.currentChannelId());
   }
 
   retryPlayback(): void {
