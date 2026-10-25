@@ -119,7 +119,6 @@ Napi::Value SetNowPlaying(const Napi::CallbackInfo& info) {
   g_smtc.IsStopEnabled(true);
   g_smtc.IsNextEnabled(true);
   g_smtc.IsPreviousEnabled(true);
-  g_smtc.IsPlaybackPositionEnabled(true);
   g_smtc.PlaybackRate(o.Get("rate").ToNumber().DoubleValue());
   g_smtc.PlaybackStatus(playing ? MediaPlaybackStatus::Playing : MediaPlaybackStatus::Paused);
 
