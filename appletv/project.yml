@@ -51,11 +51,26 @@ targets:
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: 85ZC7Y8WQ2
 
+  FliksTVTests:
+    type: bundle.unit-test
+    platform: tvOS
+    sources:
+      - Tests
+    dependencies:
+      - target: FliksTV
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: media.fliks.app.tests
+
 schemes:
   FliksTV:
     build:
       targets:
         FliksTV: all
+    test:
+      targets:
+        - FliksTVTests
     run:
       config: Debug
     archive:

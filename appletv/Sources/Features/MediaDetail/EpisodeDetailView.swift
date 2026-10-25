@@ -20,6 +20,7 @@ struct EpisodeDetailView: View {
     @Environment(Backdrop.self) private var backdrop
     @Environment(WatchedStore.self) private var watched
     @Environment(PlaylistPicker.self) private var playlistPicker
+    @Environment(PartyService.self) private var party
 
     private var isWatched: Bool { watched.isWatched(mediaId: mediaId, episodeId: episodeId) }
 
@@ -108,7 +109,8 @@ struct EpisodeDetailView: View {
                 }
 
                 HStack(spacing: 20) {
-                    if let fileId = media.fileId(episodeId: episode.id) {
+                    let fileId = media.fileId(episodeId: episode.id)
+                    if let fileId {
                         let startAt = resumePosition(episode: episode)
                         Button(action: { onPlay(fileId, episode.id, startAt) }) {
                             Label(startAt > 0 ? tr("common.resume") : tr("common.play"),
@@ -121,14 +123,24 @@ struct EpisodeDetailView: View {
                     Button {
                         Task { await watched.toggle(mediaId: mediaId, episodeId: episode.id) }
                     } label: {
-                        Label(isWatched ? tr("media_card.mark_unwatched") : tr("media_card.mark_watched"),
-                              systemImage: isWatched ? "eye.slash" : "checkmark.circle")
+                        Image(systemName: isWatched ? "checkmark.circle.fill" : "checkmark.circle")
                     }
                     .buttonStyle(.bordered)
+                    .accessibilityLabel(isWatched ? tr("media_card.mark_unwatched") : tr("media_card.mark_watched"))
+                    if let fileId {
+                        Button {
+                            Task {
+                                await party.create(name: media.title, mediaId: mediaId, mediaFileId: fileId, episodeId: episode.id)
+                            }
+                        } label: {
+                            Label(tr("party.watch_together"), systemImage: "person.2.fill")
+                        }
+                        .buttonStyle(.bordered)
+                    }
                     Button {
                         playlistPicker.open(mediaId: mediaId, episodeId: episode.id)
                     } label: {
-                        Label(tr("playlists.add_to_playlist_title"), systemImage: "text.badge.plus")
+                        Label(tr("playlists.add_to_short"), systemImage: "text.badge.plus")
                     }
                     .buttonStyle(.bordered)
                 }

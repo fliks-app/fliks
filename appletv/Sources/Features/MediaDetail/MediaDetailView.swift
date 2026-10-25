@@ -23,6 +23,7 @@ struct MediaDetailView: View {
     @Environment(Backdrop.self) private var backdrop
     @Environment(WatchedStore.self) private var watched
     @Environment(PlaylistPicker.self) private var playlistPicker
+    @Environment(PartyService.self) private var party
 
     private var isWatched: Bool { watched.isWatched(mediaId: mediaId) }
 
@@ -108,29 +109,41 @@ struct MediaDetailView: View {
             }
 
             HStack(spacing: 24) {
-                if let target = playTarget(media) {
+                let target = playTarget(media)
+                if let target {
                     Button(action: { onPlay(target.mediaFileId, target.episodeId, target.startAt) }) {
                         Label(target.resume ? tr("common.resume") : tr("common.play"), systemImage: "play.fill")
                     }
                     .buttonStyle(.borderedProminent)
                 }
+
                 Button(action: { Task { await toggleFavorite() } }) {
-                    Label {
-                        Text(liked ? tr("media_detail.unfavorite") : tr("media_detail.favorite"))
-                    } icon: {
-                        Image(systemName: liked ? "heart.fill" : "heart")
-                            .foregroundStyle(liked ? Color.red : Color.primary)
-                    }
+                    Image(systemName: liked ? "heart.fill" : "heart")
+                        .foregroundStyle(liked ? Color.red : Color.primary)
                 }
                 .buttonStyle(.bordered)
+                .accessibilityLabel(liked ? tr("media_detail.unfavorite") : tr("media_detail.favorite"))
 
                 Button(action: { Task { await toggleWatched(media) } }) {
-                    Label(watchedLabel(media), systemImage: isWatched ? "eye.slash" : "checkmark.circle")
+                    Image(systemName: isWatched ? "checkmark.circle.fill" : "checkmark.circle")
                 }
                 .buttonStyle(.bordered)
+                .accessibilityLabel(watchedLabel(media))
+
+                if let target {
+                    Button(action: {
+                        Task {
+                            await party.create(name: media.title, mediaId: mediaId,
+                                               mediaFileId: target.mediaFileId, episodeId: target.episodeId)
+                        }
+                    }) {
+                        Label(tr("party.watch_together"), systemImage: "person.2.fill")
+                    }
+                    .buttonStyle(.bordered)
+                }
 
                 Button(action: { playlistPicker.open(mediaId: mediaId) }) {
-                    Label(tr("playlists.add_to_playlist_title"), systemImage: "text.badge.plus")
+                    Label(tr("playlists.add_to_short"), systemImage: "text.badge.plus")
                 }
                 .buttonStyle(.bordered)
             }

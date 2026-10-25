@@ -13,6 +13,7 @@ struct RootView: View {
     @State private var homeRefresh = HomeRefresh.shared
     @State private var watched = WatchedStore.shared
     @State private var playlistPicker = PlaylistPicker.shared
+    @State private var party = PartyService.shared
     @State private var path = NavigationPath()
     @Environment(\.scenePhase) private var scenePhase
 
@@ -27,6 +28,7 @@ struct RootView: View {
             .environment(homeRefresh)
             .environment(watched)
             .environment(playlistPicker)
+            .environment(party)
             .id(locale.lang)
             .task {
                 if server.isConfigured { await auth.bootstrap() }
@@ -47,6 +49,21 @@ struct RootView: View {
                     path.append(Route.player(mediaFileId: mediaFileId, mediaId: mediaId,
                                               episodeId: episodeId, startAt: startAt))
                 }
+                party.onOpenLobby = { _ in path.append(Route.partyLobby) }
+                party.onGoHome = { path = NavigationPath() }
+                party.onOpenPlayer = { mediaFileId, mediaId, episodeId in
+                    path.append(Route.player(mediaFileId: mediaFileId, mediaId: mediaId, episodeId: episodeId, startAt: 0))
+                }
+            }
+            .fullScreenCover(item: Binding(get: { party.sheet }, set: { party.sheet = $0 })) { sheet in
+                Group {
+                    switch sheet {
+                    case .invite: PartyInviteView()
+                    case .settings: PartySettingsView()
+                    case .chat: PartyChatView()
+                    }
+                }
+                .environment(party)
             }
             .sheet(item: Binding(get: { playlistPicker.target },
                                  set: { playlistPicker.target = $0 })) { target in
@@ -94,7 +111,8 @@ struct RootView: View {
                         onSelectMedia: { path.append(Route.mediaDetail(id: $0)) },
                         onSelectEpisode: { path.append(Route.episodeDetail(mediaId: $0, episodeId: $1)) },
                         onSelectLibrary: { path.append(Route.library(id: $0)) },
-                        onSelectPlaylist: { path.append(Route.playlistDetail(id: $0)) }
+                        onSelectPlaylist: { path.append(Route.playlistDetail(id: $0)) },
+                        onSelectParty: { path.append(Route.partyDetail(id: $0)) }
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .focusSection()
@@ -111,7 +129,8 @@ struct RootView: View {
                             onSelectMedia: { path.append(Route.mediaDetail(id: $0)) },
                             onSelectEpisode: { path.append(Route.episodeDetail(mediaId: $0, episodeId: $1)) },
                             onSelectLibrary: { path.append(Route.library(id: $0)) },
-                            onSelectPlaylist: { path.append(Route.playlistDetail(id: $0)) }
+                            onSelectPlaylist: { path.append(Route.playlistDetail(id: $0)) },
+                            onSelectParty: { path.append(Route.partyDetail(id: $0)) }
                         )
                     case let .library(id):
                         LibraryView(libraryId: id, onSelectMedia: { path.append(Route.mediaDetail(id: $0)) })
@@ -148,6 +167,10 @@ struct RootView: View {
                             path.append(Route.player(mediaFileId: mediaFileId, mediaId: mediaId,
                                                       episodeId: episodeId, startAt: startAt))
                         })
+                    case .partyLobby:
+                        PartyLobbyView()
+                    case let .partyDetail(id):
+                        PartyDetailView(partyId: id)
                     case .settings:
                         SettingsView()
                     default:

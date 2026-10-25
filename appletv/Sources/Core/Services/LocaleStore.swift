@@ -55,3 +55,8 @@ func tr(_ key: String) -> String { LocaleStore.shared.string(key) }
 func tr(_ key: String, _ args: CVarArg...) -> String {
     String(format: LocaleStore.shared.string(key), arguments: args)
 }
+
+/// Localized lookup for the client's `{{name}}` placeholders.
+func trp(_ key: String, _ args: [String: String]) -> String {
+    args.reduce(tr(key)) { $0.replacingOccurrences(of: "{{\($1.key)}}", with: $1.value) }
+}

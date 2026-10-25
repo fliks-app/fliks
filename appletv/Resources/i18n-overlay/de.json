@@ -86,5 +86,19 @@
   "settings.lang.kor": "Koreanisch",
   "settings.lang.zho": "Chinesisch",
   "settings.lang.rus": "Russisch",
-  "settings.lang.ara": "Arabisch"
+  "settings.lang.ara": "Arabisch",
+  "party.tv_leave": "Watch Party verlassen",
+  "party.tv_chat": "Chat",
+  "party.tv_queue": "Warteschlange",
+  "party.tv_wait_host": "Warten, bis der Gastgeber startet",
+  "party.tv_host_only_hint": "Nur der Gastgeber kann diese Einstellungen ändern",
+  "playlists.add_to_short": "Hinzufügen zu",
+  "party.tv_close": "Schließen",
+  "party.tv_invite_hint": "Wähle die Personen zum Einladen aus",
+  "party.tv_chat_history": "Nachrichten",
+  "party.end": "Watch Party beenden",
+  "party.end_title": "Watch Party beenden",
+  "party.end_message": "\"{{name}}\" für alle beenden?",
+  "party.tv_leave_host_message": "Du bist der Gastgeber: Wenn du gehst, wird \"{{name}}\" für alle beendet.",
+  "party.tv_leave_host_confirm": "Verlassen und beenden"
 }

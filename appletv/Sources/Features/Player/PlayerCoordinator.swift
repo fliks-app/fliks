@@ -14,6 +14,13 @@ import UIKit
     weak var playerViewController: AVPlayerViewController?
     /// Called for a remote `stop` command: mirrors the user backing out of the player.
     var onStopRequested: (() -> Void)?
+    /// Watch-party hooks: the party decides what happens at the end, and follows transport changes.
+    var partyDriven = false
+    var onTimeControlChange: (() -> Void)?
+    var onTimeJump: ((Double) -> Void)?
+    var onItemEnded: (() -> Void)?
+    /// Menus the party adds next to the quality picker.
+    var partyMenus: [UIMenu] = [] { didSet { applyTransportMenus() } }
 
     private var mediaFileId = 0
     private var mediaId = 0
@@ -96,7 +103,7 @@ import UIKit
 
     // MARK: - Load / reload / teardown
 
-    func load(mediaFileId: Int, mediaId: Int, episodeId: Int?, startAt: Double) async throws {
+    func load(mediaFileId: Int, mediaId: Int, episodeId: Int?, startAt: Double, autoplay: Bool = true) async throws {
         self.mediaFileId = mediaFileId
         self.mediaId = mediaId
         self.episodeId = episodeId
@@ -119,12 +126,13 @@ import UIKit
         attachObservers(to: p, item: item, initialSeek: initialSeek, exact: initialSeek != startAt)
         armEdl()
         applyPreferredSubtitle(to: item, player: p)
-        p.play()
+        if autoplay { p.play() }
         RemoteControlService.shared.activeCoordinator = self
     }
 
     /// `keepingSubtitle` carries the viewer's pick over a recovery reload of the same file.
-    private func reload(url: URL, position: Double, keepingSubtitle: Bool = false, forcePlay: Bool = false) {
+    private func reload(url: URL, position: Double, keepingSubtitle: Bool = false, forcePlay: Bool = false,
+                        holdPaused: Bool = false) {
         guard let player else { return }
         let subtitleChoice = keepingSubtitle ? currentLegibleChoice() : nil
         let wasPaused = !forcePlay && (resumeAfterRecovery.map { !$0 } ?? (player.timeControlStatus == .paused))
@@ -144,7 +152,7 @@ import UIKit
         attachItemObservers(item)
         armEdl()
         applyPreferredSubtitle(to: item, player: player, restoring: subtitleChoice)
-        if !wasPaused { player.play() }
+        if !wasPaused, !holdPaused { player.play() }
     }
 
     private static func makeItem(url: URL) -> AVPlayerItem {
@@ -223,6 +231,42 @@ import UIKit
         if RemoteControlService.shared.activeCoordinator === self { RemoteControlService.shared.activeCoordinator = nil }
     }
 
+    // MARK: - Party accessors
+
+    var currentPosition: Double {
+        let t = player?.currentTime().seconds ?? 0
+        return t.isFinite ? t : 0
+    }
+    var itemReady: Bool { player?.currentItem?.status == .readyToPlay }
+    /// Held paused by the viewer: a rebuffer that stopped AVPlayer is not.
+    var userPaused: Bool { heldPaused }
+    var isPlaying: Bool { player?.timeControlStatus != .paused }
+    var isBuffering: Bool { player?.timeControlStatus == .waitingToPlayAtSpecifiedRate }
+    var currentItemIds: (mediaId: Int, episodeId: Int?) { (mediaId, episodeId) }
+
+    /// AVKit keeps its loading indicator up until the player has played once, so a party that starts paused
+    /// plays a moment, muted, to clear it.
+    func partyPrime() async {
+        guard let player else { return }
+        player.isMuted = true
+        player.play()
+        for _ in 0..<60 where player.timeControlStatus != .playing { try? await Task.sleep(for: .milliseconds(50)) }
+        try? await Task.sleep(for: .milliseconds(150))
+        player.pause()
+        applyMuteGate()
+    }
+
+    func partyPlay() { player?.play() }
+    func partyPause() { player?.pause() }
+    func partySetRate(_ rate: Float) { if player?.rate != 0 { player?.rate = rate } }
+    var currentRate: Float { player?.rate ?? 1 }
+
+    /// Moves to `seconds` exactly and waits for the seek to land.
+    func partySeek(to seconds: Double) async {
+        guard let player else { return }
+        _ = await player.seek(to: Self.seekTime(seconds), toleranceBefore: .zero, toleranceAfter: .zero)
+    }
+
     // MARK: - Now-playing metadata
 
     /// Title/subtitle/overview for the transport bar's title view and info panel; artwork follows once fetched.
@@ -293,9 +337,14 @@ import UIKit
     private func advance(to next: (mediaFileId: Int, episodeId: Int)) async {
         let duration = player?.currentItem?.duration.seconds ?? 0
         if duration.isFinite, duration > 0 { playback.markComplete(duration: duration) }
+        _ = await openItem(mediaFileId: next.mediaFileId, mediaId: mediaId, episodeId: next.episodeId, play: true)
+    }
+
+    /// Switches to another file, of another media when a party moves on; false when it cannot start.
+    func openItem(mediaFileId: Int, mediaId newMediaId: Int, episodeId: Int?, play: Bool) async -> Bool {
         playback.stop()
-        mediaFileId = next.mediaFileId
-        episodeId = next.episodeId
+        self.mediaFileId = mediaFileId
+        self.episodeId = episodeId
         autoSkippedIntro = false
         autoAdvancedNext = false
         skipIntroArmed = false
@@ -309,12 +358,18 @@ import UIKit
         skippedCommercials = []
         audibleGroup = nil
         legibleGroup = nil
+        if newMediaId != mediaId {
+            mediaId = newMediaId
+            media = try? await APIClient.shared.get("/api/media/\(newMediaId)")
+            externalSubtitles = (try? await APIClient.shared.get("/api/media/\(newMediaId)/subtitles")) ?? []
+        }
         resolveNextEpisode()
         guard let url = try? await playback.start(
-            mediaFileId: next.mediaFileId, mediaId: mediaId, episodeId: next.episodeId,
+            mediaFileId: mediaFileId, mediaId: newMediaId, episodeId: episodeId,
             startAt: 0, streamInfo: currentFileInfo, subtitleRows: externalSubtitles
-        ) else { return }
-        reload(url: url, position: 0, forcePlay: true)
+        ) else { return false }
+        reload(url: url, position: 0, forcePlay: play, holdPaused: !play)
+        return true
     }
 
     // MARK: - Observers
@@ -340,6 +395,7 @@ import UIKit
             Task { @MainActor in
                 guard let self else { return }
                 self.trackStall(player)
+                self.onTimeControlChange?()
                 if self.edlEnded, self.player?.timeControlStatus != .paused { self.restartAfterEdlEnd() }
                 self.playback.notifyStateChange(
                     position: position.isFinite ? position : 0,
@@ -379,6 +435,7 @@ import UIKit
                 self.stallStart = nil
                 self.lastJumpAt = Date()
                 guard let t = self.player?.currentTime().seconds, t.isFinite else { return }
+                self.onTimeJump?(t)
                 self.enforceEdl(at: t)
             }
         }
@@ -621,6 +678,10 @@ import UIKit
     }
 
     private func onEnded() {
+        if partyDriven {
+            onItemEnded?()
+            return
+        }
         guard AppSettingsStore.shared.autoPlayNext, !autoAdvancedNext, let next = nextEpisode else { return }
         autoAdvancedNext = true
         Task { await advance(to: next) }
@@ -629,7 +690,7 @@ import UIKit
     /// Next-episode as a native contextual action; reassigned only when the visible set changes,
     /// or tvOS re-presents the button every tick.
     private func updateContextualActions(time: Double, duration: Double) {
-        let showNext = nextEpisode != nil && duration > 0 && duration - time < 30
+        let showNext = !partyDriven && nextEpisode != nil && duration > 0 && duration - time < 30
         let key = showNext ? "n" : ""
         guard key != contextualKey else { return }
         contextualKey = key
@@ -647,14 +708,15 @@ import UIKit
     /// Quality picker in the transport bar, next to the system audio/subtitle buttons.
     /// Rebuilt only when the rung list or the active rung changes, like `contextualActions`.
     private func updateQualityMenu() {
-        guard let controller = playerViewController else { return }
+        guard playerViewController != nil else { return }
         let options = playback.qualityOptions
         let active = playback.qualityId
         let key = options.count > 1 ? active + "|" + options.map(\.id).joined(separator: ",") : ""
         guard key != qualityMenuKey else { return }
         qualityMenuKey = key
         guard !key.isEmpty else {
-            controller.transportBarCustomMenuItems = []
+            qualityMenu = nil
+            applyTransportMenus()
             return
         }
         let actions = options.map { option -> UIAction in
@@ -664,9 +726,16 @@ import UIKit
             if option.lowBandwidth == true { action.subtitle = tr("player.low_bandwidth") }
             return action
         }
-        controller.transportBarCustomMenuItems = [
-            UIMenu(title: tr("player.quality"), image: UIImage(systemName: "slider.horizontal.3"), children: actions)
-        ]
+        qualityMenu = UIMenu(title: tr("player.quality"), image: UIImage(systemName: "slider.horizontal.3"), children: actions)
+        applyTransportMenus()
+    }
+
+    private var qualityMenu: UIMenu?
+
+    func applyTransportMenus() {
+        var menus: [UIMenu] = []
+        if let qualityMenu { menus.append(qualityMenu) }
+        playerViewController?.transportBarCustomMenuItems = menus + partyMenus
     }
 
     private func selectQuality(_ id: String) {

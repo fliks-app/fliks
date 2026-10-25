@@ -87,5 +87,19 @@
   "settings.lang.kor": "Coréen",
   "settings.lang.zho": "Chinois",
   "settings.lang.rus": "Russe",
-  "settings.lang.ara": "Arabe"
+  "settings.lang.ara": "Arabe",
+  "party.tv_leave": "Quitter la séance",
+  "party.tv_chat": "Discussion",
+  "party.tv_queue": "File d'attente",
+  "party.tv_wait_host": "En attente du démarrage par l'hôte",
+  "party.tv_host_only_hint": "Seul l'hôte peut modifier ces réglages",
+  "playlists.add_to_short": "Ajouter à",
+  "party.tv_close": "Fermer",
+  "party.tv_invite_hint": "Sélectionnez les personnes à inviter",
+  "party.tv_chat_history": "Messages",
+  "party.end": "Terminer la séance",
+  "party.end_title": "Terminer la séance",
+  "party.end_message": "Terminer \"{{name}}\" pour tout le monde ?",
+  "party.tv_leave_host_message": "Vous êtes l'hôte : quitter mettra fin à \"{{name}}\" pour tout le monde.",
+  "party.tv_leave_host_confirm": "Quitter et terminer"
 }

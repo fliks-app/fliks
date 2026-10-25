@@ -19,6 +19,7 @@ struct PlaylistDetailView: View {
     @State private var items: [PlaylistItem] = []
     @State private var resolving = false
     @Environment(Backdrop.self) private var backdrop
+    @Environment(PartyService.self) private var party
 
     var body: some View {
         ScrollView {
@@ -70,6 +71,13 @@ struct PlaylistDetailView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(resolving)
+
+                Button {
+                    Task { await party.create(name: playlist?.name ?? "", playlistId: playlistId) }
+                } label: {
+                    Label(tr("party.watch_together"), systemImage: "person.2.fill")
+                }
+                .buttonStyle(.bordered)
             }
         }
         .focusSection()
