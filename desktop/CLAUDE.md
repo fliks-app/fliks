@@ -142,6 +142,8 @@ compound command (a bare `cd` between tool calls can prompt for permission).
    ```
    Output: `native/build/Release/fliks_compositor.node` (Linux) or
    `fliks_player_mac.node` (macOS).
+   Windows builds `fliks_smtc_win.node` (System Media Transport Controls, C++/WinRT; CI only, no
+   Windows machine here) the same way with `--arch=x64`; its `binding.gyp` target is `OS=='win'`.
 
 2. **Main + preload bundle** (after editing `src/main/**` or `src/preload/**`):
    ```bash

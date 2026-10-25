@@ -7,7 +7,8 @@
   #   - mac   → fliks_player_mac: in-process libmpv rendering offscreen via GL
   #     into an IOSurface, blit-copied by Metal into a CAMetalLayer on the
   #     Electron videoWin's NSView (Cocoa/QuartzCore/OpenGL/Metal/IOSurface).
-  # Windows ships no addon (it embeds an mpv subprocess via --wid).
+  #   - win   → fliks_smtc_win: System Media Transport Controls (C++/WinRT) for the main window;
+  #     playback itself is an mpv subprocess embedded via --wid.
   "targets": [],
   "conditions": [
     ["OS=='linux'", {
@@ -27,6 +28,22 @@
           ],
           "cflags_cc": [ "-std=c++17", "-fexceptions" ],
           "defines": [ "NAPI_VERSION=8", "NAPI_CPP_EXCEPTIONS" ]
+        }
+      ]
+    }],
+    ["OS=='win'", {
+      "targets": [
+        {
+          "target_name": "fliks_smtc_win",
+          "sources": [ "player_win/smtc.cc" ],
+          "include_dirs": [
+            "<!@(node -p \"require('node-addon-api').include_dir\")"
+          ],
+          "libraries": [ "-lwindowsapp.lib" ],
+          "defines": [ "NAPI_VERSION=8", "NAPI_CPP_EXCEPTIONS", "NOMINMAX", "WIN32_LEAN_AND_MEAN" ],
+          "msvs_settings": {
+            "VCCLCompilerTool": { "ExceptionHandling": 1 }
+          }
         }
       ]
     }],

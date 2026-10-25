@@ -266,6 +266,11 @@ export class PlayerSession {
     return this.mpv;
   }
 
+  /** The framed window's native handle, which the OS media controls bind to. */
+  get windowHandle(): Buffer {
+    return this.frameWin.getNativeWindowHandle();
+  }
+
   /** The page's contents, for what the main process injects into it or fetches as it. */
   get uiContents(): Electron.WebContents {
     return this.uiWin.webContents;
