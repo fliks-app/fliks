@@ -57,6 +57,14 @@ final class NowPlayingController {
     /// `releaseSession` hands the audio session back so the user's music can resume;
     /// left false when another item is about to play on it.
     func deactivate(releaseSession: Bool) {
+        // Released even when never activated: the plugin's own load claimed the session.
+        if releaseSession {
+            // Queued so the player pause that precedes a teardown has settled.
+            DispatchQueue.main.async { [weak self] in
+                if self?.active == true { return }
+                try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+            }
+        }
         guard active else { return }
         active = false
         generation += 1
@@ -76,14 +84,6 @@ final class NowPlayingController {
         }
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
         MPNowPlayingInfoCenter.default().playbackState = .stopped
-
-        if releaseSession {
-            // Queued so the player pause that precedes a teardown has settled.
-            DispatchQueue.main.async { [weak self] in
-                if self?.active == true { return }
-                try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-            }
-        }
     }
 
     /// iOS extrapolates the elapsed time from the rate, so this runs on transitions only.

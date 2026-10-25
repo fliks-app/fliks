@@ -3600,6 +3600,16 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       }
     }
 
+    // The WebView is suspended in PiP and with the screen off: the native side repeats this beat meanwhile.
+    const heartbeatToken = this.authService.accessToken;
+    if (this.engine instanceof NativeEngine && !this.isOfflinePlayback && heartbeatToken) {
+      this.engine.setHeartbeat({
+        url: this.serverConfig.resolveUrl(`/api/playback/media/${this.mediaId}/state`),
+        token: heartbeatToken,
+        body: { ...payload, qoe: undefined },
+      });
+    }
+
     // The offline queue persists position only; heartbeat fields are pointless once the backend session
     // expired.
     const offlinePayload = {

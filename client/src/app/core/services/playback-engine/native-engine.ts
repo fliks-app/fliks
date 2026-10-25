@@ -1,3 +1,4 @@
+import { Capacitor } from '@capacitor/core';
 import { NativePlayer, type NativePlayerCrop, type NativeSidecarSubtitle } from '../../plugins/native-player.plugin';
 import {
   AbstractPlaybackEngine,
@@ -278,9 +279,12 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
   // Volume and muted are local-only: the host OS owns output level, the setters just satisfy the PlaybackEngine contract.
   get volume(): number { return this._volume; }
   readonly supportsVolume = false;
+  /** iOS applies `volume` as a multiplier on the player; the party voice ducking is its only writer. */
+  readonly supportsDucking = Capacitor.getPlatform() === 'ios';
 
   set volume(v: number) {
     this._volume = v;
+    if (this.supportsDucking) NativePlayer.setVolume({ volume: v }).catch(() => {});
     this.emit('volumechange', { volume: this._volume, muted: this._muted });
   }
   get muted(): boolean { return this._muted; }
@@ -418,6 +422,11 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
       // Builds without the method (and iOS) reject: nothing to apply there.
       NativePlayer.configure({ preferredAudioLanguage, defaultBandwidthEstimate }).catch(() => {});
     }
+  }
+
+  /** iOS keeps the heartbeat going natively once the WebView is suspended. */
+  setHeartbeat(target: { url: string; token: string; body: Record<string, unknown> }): void {
+    if (Capacitor.getPlatform() === 'ios') NativePlayer.setHeartbeat(target).catch(() => {});
   }
 
   // ── Window event bridge ──

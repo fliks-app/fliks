@@ -68,3 +68,44 @@ struct DecodedEstimate {
         return decoded > 0 ? Int(decoded.rounded()) : nil
     }
 }
+
+/// Repeats the JS position heartbeat while the app is not active: the WebView is suspended then (PiP, lock
+/// screen, background audio), taking the JS timer and the bridge with it. Main thread only.
+final class PositionHeartbeat {
+    private static let interval: TimeInterval = 10
+    private var url: URL?
+    private var token = ""
+    private var body: [String: Any] = [:]
+    private var lastSent = Date.distantPast
+
+    /// `body` is the last JS heartbeat; it carries the session and file ids the server needs.
+    func set(url: String, token: String, body: [String: Any]) {
+        self.url = URL(string: url)
+        self.token = token
+        self.body = body
+    }
+
+    func clear() {
+        url = nil
+        body = [:]
+    }
+
+    /// `state` is sent only with a session: without one the server takes the beat as a plain position save.
+    func send(position: Double, duration: Double, state: String) {
+        guard let url = url, position.isFinite,
+              UIApplication.shared.applicationState != .active,
+              Date().timeIntervalSince(lastSent) >= Self.interval else { return }
+        var payload = body
+        payload["positionSeconds"] = position
+        if duration.isFinite, duration > 0 { payload["durationSeconds"] = duration }
+        if payload["sessionId"] != nil { payload["state"] = state }
+        guard let data = try? JSONSerialization.data(withJSONObject: payload) else { return }
+        lastSent = Date()
+        var request = URLRequest(url: url)
+        request.httpMethod = "PUT"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.httpBody = data
+        URLSession.shared.dataTask(with: request).resume()
+    }
+}

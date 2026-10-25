@@ -228,6 +228,10 @@ extension NativePlayerPlugin {
         externalPlaybackBeforeMute = nil
         muteRanges = []
         nowPlaying.deactivate(releaseSession: true)
+        heartbeat.clear()
+        voiceActive = false
+        pipPhase = .inactive
+        externalPlaybackActive = false
         playerLayer?.removeFromSuperlayer()
         playerLayer = nil
         playerView?.removeFromSuperview()
@@ -285,6 +289,12 @@ extension NativePlayerPlugin {
         let dur = player?.currentItem?.duration.seconds ?? 0
         let buf = getBufferedPosition()
 
+        switch player?.timeControlStatus {
+        case .playing: heartbeat.send(position: pos, duration: dur, state: "playing")
+        case .waitingToPlayAtSpecifiedRate: heartbeat.send(position: pos, duration: dur, state: "buffering")
+        default: heartbeat.send(position: pos, duration: dur, state: "paused")
+        }
+
         let js = "window.dispatchEvent(new CustomEvent('nativePlayerTimeUpdate', { detail: { position: \(pos.isFinite ? pos : 0), duration: \(dur.isFinite ? dur : 0), buffered: \(buf) } }));"
         DispatchQueue.main.async { [weak self] in
             self?.bridge?.webView?.evaluateJavaScript(js)
@@ -313,6 +323,7 @@ extension NativePlayerPlugin {
             self.audibleGroup = audible
             self.legibleGroup = legible
             if (audible?.options.count ?? 0) > 0 || (legible?.options.count ?? 0) > 0 {
+                self.selectPreferredAudio(in: audible, of: item)
                 self.emitTracksChanged()
                 return
             }
@@ -321,6 +332,15 @@ extension NativePlayerPlugin {
                 self.ensureMediaSelectionPopulated(retries: retries - 1)
             }
         }
+    }
+
+    /// The item opens on the container's default track; a `configure`d language wins over it (JS picks come later).
+    func selectPreferredAudio(in group: AVMediaSelectionGroup?, of item: AVPlayerItem) {
+        guard !preferredAudioLanguage.isEmpty, let group = group else { return }
+        let wanted = Locale(identifier: preferredAudioLanguage)
+        guard let option = AVMediaSelectionGroup.mediaSelectionOptions(from: group.options, with: wanted).first,
+              item.currentMediaSelection.selectedMediaOption(in: group) != option else { return }
+        item.select(option, in: group)
     }
 
     func emitTracksChanged() {
