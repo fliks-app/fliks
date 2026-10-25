@@ -284,6 +284,9 @@ export interface PlaybackEngine {
   // ── Playback ──
   play(): Promise<void>;
   pause(): Promise<void>;
+  /** Release / reacquire the decoder while the app is hidden (Home, input switch, standby). */
+  suspend?(): void;
+  restore?(): void;
   seek(position: number): Promise<void>;
 
   // ── State (sync getters) ──

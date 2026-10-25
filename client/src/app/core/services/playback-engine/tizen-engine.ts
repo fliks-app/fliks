@@ -22,6 +22,8 @@ declare const webapis: {
     play(): void;
     pause(): void;
     resume?(): void;
+    suspend?(): void;
+    restore?(): void;
     stop(): void;
     seekTo(ms: number, success?: () => void, error?: (e: unknown) => void): void;
     getCurrentTime(): number;
@@ -431,6 +433,18 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
     }
     this.emit('stateChanged', { state: 'paused' });
     this.muteGate.sync();
+  }
+
+  suspend(): void {
+    try { webapis.avplay.suspend?.(); } catch { /* ok */ }
+  }
+
+  restore(): void {
+    try {
+      webapis.avplay.restore?.();
+    } catch (e) {
+      this.emit('error', { code: -1, message: 'AVPlay restore failed: ' + String(e), errorKey: 'player.playback_error' });
+    }
   }
 
   async seek(position: number): Promise<void> {

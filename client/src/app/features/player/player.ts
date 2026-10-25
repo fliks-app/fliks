@@ -1242,6 +1242,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // (bfcache, backgrounding), which would leave the ffmpeg session until its idle GC.
     window.addEventListener('beforeunload', this.onBeforeUnload);
     window.addEventListener('pagehide', this.onBeforeUnload);
+    if (this.isTizen || this.isWebOs) document.addEventListener('visibilitychange', this.onTvVisibility);
 
     // PiP mode change listener (native Android)
     if (this.isNative) {
@@ -1296,6 +1297,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     document.removeEventListener('keydown', this.keyboard.onKeyDown);
     window.removeEventListener('beforeunload', this.onBeforeUnload);
     window.removeEventListener('pagehide', this.onBeforeUnload);
+    document.removeEventListener('visibilitychange', this.onTvVisibility);
     window.removeEventListener('app:playerBack', this.onPlayerBackEvent);
     if (this.isNative) {
       screen.orientation?.removeEventListener('change', this.onOrientationChange);
@@ -1728,7 +1730,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     try {
       await this.engine?.seek(target);
     } catch {
-      // Engine rejected the seek: keep the lock; the error surfaces via `state.error`.
+      // The rejection (Tizen's 35 s timeout) emits no error, so lifting the lock here is what frees the bar.
+      if (gen === this.seekGeneration) this.state.seekLocked.set(false);
       return;
     }
     // AVPlay has no getSpeed(), so a rate it drops on its own is invisible:
@@ -3344,6 +3347,19 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.qoe.setStalled(false, { sessionId: this.activeSessionId(), position: this.engine?.currentTime ?? 0 });
     this.qoe.flushKeepalive(this.activeSessionId());
     this.fireAndForgetStopSessions();
+  };
+
+  /** Home, input switch and standby hide the app without unloading it: bank the position, pause, and let the engine
+   *  release / reacquire its decoder. */
+  private onTvVisibility = () => {
+    if (this.castService.isConnected()) return;
+    if (document.visibilityState === 'hidden') {
+      void this.savePosition(true);
+      void this.pausePlayback();
+      this.engine?.suspend?.();
+    } else {
+      this.engine?.restore?.();
+    }
   };
 
   private onPlayerBackEvent = () => {

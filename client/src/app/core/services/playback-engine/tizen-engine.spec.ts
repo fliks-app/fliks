@@ -172,3 +172,29 @@ describe('TizenEngine.getQoeSample', () => {
     });
   });
 });
+
+describe('TizenEngine hide / show', () => {
+  afterEach(() => {
+    delete (globalThis as unknown as { webapis?: unknown }).webapis;
+  });
+
+  it('suspends and restores the AVPlay decoder', () => {
+    const suspend = vi.fn();
+    const restore = vi.fn();
+    stubAvplay({ suspend, restore });
+    const engine = new TizenEngine();
+    engine.suspend();
+    engine.restore();
+    expect(suspend).toHaveBeenCalledOnce();
+    expect(restore).toHaveBeenCalledOnce();
+  });
+
+  it('reports a failed restore as a playback error', () => {
+    stubAvplay({ restore: () => { throw new Error('boom'); } });
+    const engine = new TizenEngine();
+    const onError = vi.fn();
+    engine.on('error', onError);
+    engine.restore();
+    expect(onError).toHaveBeenCalledOnce();
+  });
+});
