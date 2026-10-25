@@ -2538,36 +2538,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     opts: { preservePause: boolean; unmute: boolean },
   ): Promise<boolean> {
     if (!this.engine || !this.mediaFileId) return true;
-    const endReload = this.state.beginReload();
-    let replace: { replaces?: string } = {};
     try {
-      replace = await this.retirePreviousSession(this.playbackInfo?.sessionId);
-      if (opts.unmute) this.engine.muted = false;
-      const wasPaused = opts.preservePause ? this.pauseIntent() : false;
-      this.playbackInfo = await this.negotiatePlayback(this.reloadStartAt(pos), {}, replace);
-      this.adoptPlaybackInfo(this.playbackInfo);
-      // Refresh a near-expiry stream token first: it's baked into every segment URL and can't be swapped after
-      // load.
-      await this.requireStreamToken();
-      const { url, mimeType } = this.buildPlayUrl({
-        sid: this.playbackInfo.sessionId,
-      });
-      await this.prepareLoad();
-      await this.engine.load(url, pos > 0 ? pos : undefined, mimeType);
-      this.qualityManager.applyQualityPreferenceAfterLoad(
-        this.engine,
-        this.playbackMode(),
-      );
-      this.restorePlaybackRate();
-      this.restorePlayState(wasPaused);
-      await this.subs.restoreSubtitle(pos);
+      await this.reloadAt(pos, { ...opts, restart: false });
       return true;
     } catch (e) {
-      this.stopUnreplaced(replace);
       if (!this.fallBackFromRemuxOnLoadError(e, pos)) throw e;
       return false;
-    } finally {
-      endReload();
     }
   }
 
@@ -3607,41 +3583,43 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   private async doReloadStream(currentPos: number) {
     if (!this.engine) return;
+    await this.reloadAt(currentPos, { preservePause: true, unmute: false, restart: true });
+  }
+
+  /** The one re-negotiate-and-load sequence. `restart` is a user-initiated switch: the native surface is
+   *  stopped first, the load window is tracked and the URL carries `startAt`. Otherwise the session is
+   *  refreshed behind a live surface. Throws on failure, after releasing the unreplaced session. */
+  private async reloadAt(
+    pos: number,
+    opts: { preservePause: boolean; unmute: boolean; restart: boolean },
+  ): Promise<void> {
+    const engine = this.engine!;
     const endReload = this.state.beginReload();
-    this.reloadLoadPending = true;
+    if (opts.restart) this.reloadLoadPending = true;
     let replace: { replaces?: string } = {};
     try {
-      // Capture the user's play/pause intent before tearing the stream down — a
-      // quality / audio / subtitle switch must not resume a paused player.
-      const wasPaused = this.pauseIntent();
-
-      // Native: stop the player before reload to avoid freeze
-      if (this.isNativeEngine()) {
-        await NativePlayer.stop().catch(() => {});
-      }
-
+      // Capture the viewer's play/pause intent before the teardown: a switch must not resume a paused player.
+      const wasPaused = opts.preservePause ? this.pauseIntent() : false;
+      if (opts.restart && this.isNativeEngine()) await NativePlayer.stop().catch(() => {});
       // Only this device's session goes; multi-device viewers on the same file stay alive.
       replace = await this.retirePreviousSession(this.playbackInfo?.sessionId);
-
-      this.playbackInfo = await this.negotiatePlayback(this.reloadStartAt(currentPos), {}, replace);
-      const pi = this.playbackInfo;
-      this.adoptPlaybackInfo(pi);
-
-      const mode = this.playbackMode();
+      if (opts.unmute) engine.muted = false;
+      this.playbackInfo = await this.negotiatePlayback(this.reloadStartAt(pos), {}, replace);
+      this.adoptPlaybackInfo(this.playbackInfo);
       // Refresh a near-expiry stream token first: it's baked into every segment URL and can't be swapped after
       // load.
       await this.requireStreamToken();
-      const { url, mimeType } = this.buildPlayUrl({ startTime: currentPos });
+      const { url, mimeType } = this.buildPlayUrl(opts.restart ? { startTime: pos } : {});
       await this.prepareLoad();
-      await this.engine.load(url, currentPos, mimeType);
-      this.reloadReachedPlayback = true;
-      this.reloadLoadPending = false;
-
-      this.qualityManager.applyQualityPreferenceAfterLoad(this.engine, mode);
+      await engine.load(url, opts.restart || pos > 0 ? pos : undefined, mimeType);
+      if (opts.restart) {
+        this.reloadReachedPlayback = true;
+        this.reloadLoadPending = false;
+      }
+      this.qualityManager.applyQualityPreferenceAfterLoad(engine, this.playbackMode());
       this.restorePlaybackRate();
       this.restorePlayState(wasPaused);
-
-      await this.subs.restoreSubtitle(currentPos);
+      await this.subs.restoreSubtitle(pos);
     } catch (e) {
       this.stopUnreplaced(replace);
       throw e;
