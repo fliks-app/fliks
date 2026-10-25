@@ -284,16 +284,17 @@ async fn summaries_with(
 
 /// The snapshot for `viewer`; without `full` (a token holder who has not joined) only the summary
 /// and the switches, no guests, members, messages or anchor.
-async fn dto(st: &AppState, row: &Row, viewer: i32, full: bool) -> sqlx::Result<PartyDto> {
+async fn dto(st: &AppState, row: &Row, viewer: i32, full: bool) -> R<PartyDto> {
     if row.status == "live" {
         st.parties.ensure(row, false);
     }
     let view = st.parties.view(row.id);
     let brief = view.as_ref().map(Brief::of);
-    let summary = summaries_with(st, &[(row, brief)])
+    let mut summary = summaries_with(st, &[(row, brief)])
         .await?
         .pop()
         .expect("one row, one summary");
+    conceal(st, viewer, std::slice::from_mut(&mut summary)).await?;
     let guests = if full {
         db::guests(&st.db, row.id).await?
     } else {
@@ -330,7 +331,7 @@ async fn dto(st: &AppState, row: &Row, viewer: i32, full: bool) -> sqlx::Result<
     })
 }
 
-async fn announce_invited(st: &AppState, row: &Row, users: &[i32]) -> sqlx::Result<()> {
+async fn announce_invited(st: &AppState, row: &Row, users: &[i32]) -> Result<(), AppError> {
     if users.is_empty() {
         return Ok(());
     }
@@ -338,16 +339,42 @@ async fn announce_invited(st: &AppState, row: &Row, users: &[i32]) -> sqlx::Resu
         .await?
         .pop()
         .expect("one row, one summary");
-    st.hub.emit_to_users(
-        users,
-        SseEvent::PartyInvited {
-            party_id: row.id.into(),
-            name: row.name.clone(),
-            scheduled_at: s.scheduled_at.map(fliks_domain::js::iso),
-            host: serde_json::to_value(&s.host).expect("typed dto"),
-            item: serde_json::to_value(&s.item).expect("typed dto"),
-        },
-    );
+    for user in users {
+        let mut s = s.clone();
+        conceal(st, *user, std::slice::from_mut(&mut s)).await?;
+        st.hub.emit_to_users(
+            &[*user],
+            SseEvent::PartyInvited {
+                party_id: row.id.into(),
+                name: row.name.clone(),
+                scheduled_at: s.scheduled_at.map(fliks_domain::js::iso),
+                host: serde_json::to_value(&s.host).expect("typed dto"),
+                item: serde_json::to_value(&s.item).expect("typed dto"),
+            },
+        );
+    }
+    Ok(())
+}
+
+/// Blanks the title and artwork of an item `viewer` cannot open, so a party never tells a user
+/// what their libraries hide.
+async fn conceal(st: &AppState, viewer: i32, sums: &mut [PartySummaryDto]) -> Result<(), AppError> {
+    let mut medias: Vec<i32> = sums.iter().map(|s| s.item.media_id).collect();
+    medias.sort_unstable();
+    medias.dedup();
+    let libraries = db::media_libraries(&st.db, &medias).await?;
+    let allowed = user_libraries(st, viewer).await?.unwrap_or_default();
+    for s in sums {
+        if libraries
+            .get(&s.item.media_id)
+            .is_none_or(|lib| !allowed.contains(lib))
+        {
+            s.item.title = String::new();
+            s.item.poster_url = None;
+            s.item.fanart_url = None;
+            s.item.additional_fanart_urls = vec![];
+        }
+    }
     Ok(())
 }
 
@@ -453,7 +480,9 @@ pub async fn list(
     for row in rows.iter().filter(|r| r.status == "live") {
         st.parties.ensure(row, false);
     }
-    Ok(Json(summaries(&st, &rows).await?))
+    let mut sums = summaries(&st, &rows).await?;
+    conceal(&st, a.user.id, &mut sums).await?;
+    Ok(Json(sums))
 }
 
 #[utoipa::path(get, path = "/api/parties/{id}", responses((status = 200)))]
@@ -545,6 +574,22 @@ pub async fn patch(
     }
     if regenerate {
         db::clear_kicked(&st.db, id).await?;
+        let gone = db::drop_link_guests(&st.db, id, host_of(&st, &row)).await?;
+        mutate(&st, id, |l| {
+            let fx = gone
+                .iter()
+                .filter_map(|u| l.kick(*u, &a.user.username, now_ms()).ok())
+                .flatten()
+                .collect();
+            ((), fx)
+        })
+        .await;
+        st.hub.emit_to_users(
+            &gone,
+            SseEvent::PartyUpdated {
+                party_id: id.into(),
+            },
+        );
     }
     if b.scheduled_at.is_some() && lobby_open(&row) {
         registry::open_lobby(&st, &row).await?;
@@ -942,9 +987,23 @@ pub async fn kick(
 ) -> R<StatusCode> {
     let row = member_row(&st, id, a.user.id).await?;
     require_host(&st, &row, a.user.id)?;
-    run(&st, id, |l| l.kick(user, &a.user.username, now_ms()))
-        .await?
-        .map_err(target_err)?;
+    if user == row.owner_id {
+        return Err(machine_err(PartyErr::Invalid("host")));
+    }
+    let live = mutate(&st, id, |l| {
+        match l.kick(user, &a.user.username, now_ms()) {
+            Ok(e) => (Ok(()), e),
+            Err(e) => (Err(e), vec![]),
+        }
+    })
+    .await;
+    match live {
+        Some(Ok(())) => {}
+        // Not connected right now: a guest still loses access, a stranger is a 404.
+        Some(Err(PartyErr::NotMember)) | None if db::is_invitee(&st.db, id, user).await? => {}
+        Some(Err(e)) => return Err(target_err(e)),
+        None => return Err(not_found()),
+    }
     db::kick_guest(&st.db, id, user).await?;
     notify_updated(&st, &row).await?;
     st.hub.emit_to_users(

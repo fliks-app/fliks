@@ -251,7 +251,7 @@ pub struct PlaylistRef {
     pub name: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct PartySummaryDto {
     pub id: i32,

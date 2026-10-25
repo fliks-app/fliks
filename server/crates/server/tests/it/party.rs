@@ -986,7 +986,7 @@ async fn next_skips_what_a_member_cannot_open_and_the_end_idles_the_party(pool: 
     let path = format!("/api/parties/{id}");
     let get = || c.call("GET", &path, &a, None);
 
-    // Gap is skipped for bob; the episode plays and is named
+    // Gap is skipped for bob and left unnamed; the episode plays and is named
     let (_, now) = get().await;
     let (s, _) = c
         .call(
@@ -1009,7 +1009,7 @@ async fn next_skips_what_a_member_cannot_open_and_the_end_idles_the_party(pool: 
     assert_eq!(
         sys[sys.len() - 2..],
         [
-            ("item_skipped".to_owned(), json!({"title": "Gap"})),
+            ("item_skipped".to_owned(), json!({"title": ""})),
             ("item_changed".to_owned(), json!({"title": "Show S01E01"})),
         ]
     );
@@ -1446,4 +1446,108 @@ async fn an_ended_for_another_item_is_ignored_and_one_for_the_current_item_count
     let rev = p["live"]["rev"].clone();
     assert_eq!(send("ended", json!({"mediaId": 1})).await, 202);
     assert_eq!(c.call("GET", &url, &a, None).await.1["live"]["rev"], rev);
+}
+
+#[sqlx::test(migrations = false)]
+async fn regenerating_the_token_revokes_link_guests_online_or_not(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (alice, a) = c.user("alice", true).await;
+    let (bob, b) = c.user("bob", true).await;
+    let (carol, k) = c.user("carol", true).await;
+    let id = party_with(&c, &a, vec![]).await;
+    let url = format!("/api/parties/{id}");
+    let (_, p) = c.call("GET", &url, &a, None).await;
+    let token = p["inviteToken"].as_str().unwrap().to_owned();
+    let _conns = [
+        c.connect(alice, "da"),
+        c.connect(bob, "db"),
+        c.connect(carol, "dc"),
+    ];
+    c.call(
+        "POST",
+        &format!("{url}/join"),
+        &a,
+        Some(json!({"deviceId": "da"})),
+    )
+    .await;
+    for (t, d) in [(&b, "db"), (&k, "dc")] {
+        let (s, _) = c
+            .call(
+                "POST",
+                &format!("{url}/join"),
+                t,
+                Some(json!({"deviceId": d, "token": token})),
+            )
+            .await;
+        assert_eq!(s, 200);
+    }
+    // bob goes offline, carol stays connected
+    let (s, _) = c
+        .call(
+            "POST",
+            &format!("{url}/leave"),
+            &b,
+            Some(json!({"deviceId": "db"})),
+        )
+        .await;
+    assert_eq!(s, 204);
+    let (s, _) = c
+        .call("PATCH", &url, &a, Some(json!({"regenerateToken": true})))
+        .await;
+    assert_eq!(s, 200);
+    for t in [&b, &k] {
+        let (s, _) = c.call("GET", &url, t, None).await;
+        assert_eq!(s, 404);
+    }
+    let (_, p) = c.call("GET", &url, &a, None).await;
+    assert_eq!(p["guests"], json!([]));
+    assert_eq!(p["live"]["members"].as_array().unwrap().len(), 1);
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_host_can_kick_an_invitee_who_is_not_connected(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (alice, a) = c.user("alice", true).await;
+    let (bob, b) = c.user("bob", true).await;
+    let (carol, _) = c.user("carol", true).await;
+    c.follow(alice, bob).await;
+    let id = party_with(&c, &a, vec![bob]).await;
+    let url = format!("/api/parties/{id}");
+    let _ca = c.connect(alice, "da");
+    let (s, _) = c.call("GET", &url, &b, None).await;
+    assert_eq!(s, 200);
+    let (s, _) = c
+        .call("POST", &format!("{url}/members/{carol}/kick"), &a, None)
+        .await;
+    assert_eq!(s, 404, "a stranger is not a guest");
+    let (s, _) = c
+        .call("POST", &format!("{url}/members/{bob}/kick"), &a, None)
+        .await;
+    assert_eq!(s, 204);
+    let (s, _) = c.call("GET", &url, &b, None).await;
+    assert_eq!(s, 404);
+    let (_, list) = c.call("GET", "/api/parties", &b, None).await;
+    assert_eq!(list.as_array().unwrap().len(), 0);
+}
+
+#[sqlx::test(migrations = false)]
+async fn an_item_a_user_cannot_open_is_not_named_to_them(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (alice, a) = c.user("alice", true).await;
+    let (bob, b) = c.user("bob", true).await;
+    c.follow(alice, bob).await;
+    playlist_setup(&c, alice).await;
+    let id = party_with(&c, &a, vec![bob]).await;
+    let (_, before) = c.call("GET", "/api/parties", &b, None).await;
+    assert_eq!(before[0]["item"]["title"], "Film");
+    sqlx::query(r#"UPDATE watch_parties SET "mediaId" = 2 WHERE id = $1"#)
+        .bind(id as i32)
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    c.st.parties.remove(id as i32);
+    let (_, list) = c.call("GET", "/api/parties", &b, None).await;
+    assert_eq!(list[0]["item"]["title"], "");
+    let (_, p) = c.call("GET", &format!("/api/parties/{id}"), &b, None).await;
+    assert_eq!(p["item"]["title"], "");
 }

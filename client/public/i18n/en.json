@@ -3568,6 +3568,7 @@
       "seeked": "{{by}} jumped to {{position}}",
       "item_changed": "{{by}} switched to {{title}}",
       "item_skipped": "{{title}} skipped, not available to everyone",
+      "item_skipped_hidden": "An item was skipped, not available to everyone",
       "queue_ended": "End of the queue",
       "host_changed": "{{by}} is now the host",
       "kicked": "{{by}} removed a member",

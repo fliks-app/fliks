@@ -32,10 +32,17 @@ pub async fn step(
                     .iter()
                     .all(|a| a.as_ref().is_some_and(|ids| ids.contains(lib)))
             });
-        let label = infos
+        let title = infos
             .get(&(cand.media_id, cand.episode_id))
             .map(|i| i.title.clone())
             .unwrap_or_default();
+        // The message reaches every member: a title someone cannot open stays unnamed.
+        let visible = libraries.get(&cand.media_id).is_some_and(|lib| {
+            allowed
+                .iter()
+                .all(|a| a.as_ref().is_some_and(|ids| ids.contains(lib)))
+        });
+        let label = if visible { title } else { String::new() };
         if open {
             return Ok(Step {
                 forward,
