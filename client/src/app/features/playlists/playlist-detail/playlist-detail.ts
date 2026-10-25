@@ -43,6 +43,7 @@ import { DropdownMenuComponent } from '../../../shared/components/dropdown-menu'
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 import { PartyService } from '../../../core/services/party/party.service';
+import { PartyApiService } from '../../../core/services/api/party-api.service';
 import { StreamingApiService } from '../../../core/services/api/streaming-api.service';
 import { AutoDownloadService } from '../../../core/services/auto-download.service';
 import { NavbarService } from '../../../core/services/navbar.service';
@@ -123,6 +124,7 @@ export class PlaylistDetailComponent {
   private readonly playable = inject(PlayableMediaService);
   private readonly social = inject(SocialApiService);
   private readonly party = inject(PartyService);
+  protected readonly partyApi = inject(PartyApiService);
   private readonly auth = inject(AuthService);
   private readonly destroyRef = inject(DestroyRef);
 

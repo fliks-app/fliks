@@ -9,6 +9,7 @@ import {
 } from '../../../core/services/card-actions.service';
 import { MediaInfoHeaderComponent } from './media-info-header';
 import { AuthService } from '../../../core/services/auth.service';
+import { PartyApiService } from '../../../core/services/api/party-api.service';
 import { OfflinePlaybackSyncService } from '../../../core/services/offline-playback-sync.service';
 import { TvService } from '../../../core/services/tv.service';
 import { DeviceService } from '../../../core/services/device.service';
@@ -152,6 +153,7 @@ async function createFixture(
         provide: PlayerSettingsService,
         useValue: { resolveAudioStreamIndex: () => null, getRememberedSubtitleTrack: () => media.remembered ?? null },
       },
+      { provide: PartyApiService, useValue: { supported: () => true } },
       { provide: OfflinePlaybackSyncService, useValue: { queuedPositionFor: () => null } },
       { provide: TrackManagerService, useValue: { saveAudioSelection: () => {}, saveSubtitleSelection: () => {} } },
       {

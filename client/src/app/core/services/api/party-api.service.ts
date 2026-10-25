@@ -4,6 +4,7 @@ import { firstValueFrom } from 'rxjs';
 import { SKIP_ERROR_TOAST } from '../../interceptors/error.interceptor';
 import { AuthService } from '../auth.service';
 import { ServerConfigService } from '../server-config.service';
+import { ServerVersionService } from '../server-version.service';
 
 export type PartyStatus = 'scheduled' | 'live' | 'ended';
 export type PartyPolicy = 'everyone' | 'host_only';
@@ -126,6 +127,8 @@ export interface PartyIntentBody {
   baseRev: number;
 }
 
+const PARTY_SINCE = '5.2.0';
+
 /** Calls the caller reports itself (a stale seek is expected, a status beacon is noise). */
 const QUIET = () => ({ context: new HttpContext().set(SKIP_ERROR_TOAST, true) });
 
@@ -134,6 +137,11 @@ export class PartyApiService {
   private readonly http = inject(HttpClient);
   private readonly serverConfig = inject(ServerConfigService);
   private readonly auth = inject(AuthService);
+  private readonly serverVersion = inject(ServerVersionService);
+
+  supported(): boolean {
+    return this.serverVersion.supports(PARTY_SINCE);
+  }
 
   create(body: CreatePartyBody) {
     return firstValueFrom(this.http.post<PartyDto>('/api/parties', body));
@@ -143,7 +151,8 @@ export class PartyApiService {
     return firstValueFrom(this.http.get<PartyItem[]>(`/api/parties/${id}/queue`));
   }
 
-  list() {
+  async list(): Promise<PartySummaryDto[]> {
+    if (!(await this.serverVersion.supportsWhenKnown(PARTY_SINCE))) return [];
     return firstValueFrom(this.http.get<PartySummaryDto[]>('/api/parties'));
   }
 
