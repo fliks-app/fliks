@@ -514,7 +514,9 @@ async fn m1787900_turns_level_into_levels(pool: PgPool) {
 }
 
 const V4_VERSIONS: i64 = 81;
-const SQL_FILES: i64 = 104;
+fn sql_files() -> i64 {
+    MIGRATOR.migrations.len() as i64
+}
 const LAST_V4_VERSION: i64 = 1_786_300_000_000;
 
 #[sqlx::test(migrations = false)]
@@ -525,7 +527,7 @@ async fn migrate_builds_a_fresh_database(pool: PgPool) {
         .fetch_one(&pool)
         .await
         .unwrap();
-    assert_eq!(n, SQL_FILES);
+    assert_eq!(n, sql_files());
 }
 
 /// One text line per column, index, constraint and enum value, ledgers excluded.
@@ -556,13 +558,13 @@ async fn adopting_a_v4_database_matches_a_fresh_one(pool: PgPool) {
         "SELECT version, execution_time FROM _sqlx_migrations ORDER BY version",
     )
     .await;
-    assert_eq!(ledger.len() as i64, SQL_FILES);
+    assert_eq!(ledger.len() as i64, sql_files());
     let adopted_rows = || ledger.iter().filter(|r| r.0 <= LAST_V4_VERSION);
     assert_eq!(adopted_rows().count() as i64, V4_VERSIONS);
     assert!(adopted_rows().all(|r| r.1 == 0), "a 4.x migration re-ran");
     let new_rows = ledger.iter().filter(|r| r.0 > LAST_V4_VERSION);
     assert!(
-        new_rows.clone().count() as i64 == SQL_FILES - V4_VERSIONS
+        new_rows.clone().count() as i64 == sql_files() - V4_VERSIONS
             && new_rows.into_iter().all(|r| r.1 > 0)
     );
 
