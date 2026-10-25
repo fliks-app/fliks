@@ -14,7 +14,7 @@
         android:theme="@style/AppTheme">
 
         <activity
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|screenLayout|uiMode|navigation"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|screenLayout|uiMode|navigation|density|fontScale|locale|layoutDirection"
             android:supportsPictureInPicture="true"
             android:name=".MainActivity"
             android:label="@string/title_activity_main"
