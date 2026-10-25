@@ -166,7 +166,6 @@ async function start(req: DesktopDownloadRequest): Promise<void> {
       if (stopped) return;
       active.delete(req.id);
       w.destroy();
-      cleanup(tmpPath);
       broadcast({ id: req.id, state: 'error', message });
     };
     w.on('error', (e) => fail(e.message));
@@ -207,7 +206,6 @@ async function start(req: DesktopDownloadRequest): Promise<void> {
   request.on('error', (e) => {
     if (stopped) return;
     active.delete(req.id);
-    cleanup(tmpPath);
     broadcast({ id: req.id, state: 'error', message: e.message });
   });
   request.end();
@@ -255,7 +253,7 @@ async function startHls(req: DesktopDownloadRequest): Promise<void> {
   } catch (e) {
     if (control.paused) {
       broadcast({ id: req.id, state: 'paused' });
-    } else {
+    } else if (control.cancelled) {
       await fsp.rm(destDir, { recursive: true, force: true }).catch(() => {});
     }
     if (!control.cancelled) {

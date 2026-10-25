@@ -16,6 +16,7 @@ import { mpvLoadRequest, type MpvLoadRequest } from './load-options';
 import { mpvSubtitleProps } from './subtitle-style';
 import { parseTracks } from './tracks';
 import { QoeReader } from './qoe';
+import { isPrematureEof } from './eof-guard';
 import { TypedEmitter } from './typed-emitter';
 
 /** The native compositor addon: one SDL window drawing the mpv video under the UI bitmap. */
@@ -101,6 +102,11 @@ export class LinuxCompositorPlayer extends TypedEmitter<PlayerBackendEvents> imp
         const state = raw.state as PlayerBackendEvents['stateChanged'][0]['state'];
         if (state === 'playing') this.startPositionTimer();
         else this.stopPositionTimer();
+        const at = this.position();
+        if (state === 'ended' && isPrematureEof(at.duration, at.position)) {
+          this.emit('error', { code: -1, message: 'playback stopped before end of stream' });
+          break;
+        }
         this.emit('stateChanged', { state });
         break;
       }
@@ -129,6 +135,7 @@ export class LinuxCompositorPlayer extends TypedEmitter<PlayerBackendEvents> imp
     this.qoe.reset();
     // Global property: always written, or the previous file's rectangle would crop the next one.
     this.addon.setProperty('video-crop', opts.videoCrop ?? '');
+    this.addon.setProperty('speed', '1');
     this.applyMuteRanges();
     this.addon.load(mpvLoadRequest(opts));
     await this.firstFrameGate.wait();
