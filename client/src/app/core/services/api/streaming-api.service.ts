@@ -518,19 +518,27 @@ export class StreamingApiService {
     );
   }
 
-  /** `fetch` init for the events POST on exit: bearer on standalone bundles, the cookie on web. */
-  qoeEventsRequest(sessionId: string): { url: string; init: RequestInit } {
-    const path = `/api/playback/sessions/${encodeURIComponent(sessionId)}/events`;
+  /** `fetch` init for a request on exit: bearer on standalone bundles, the cookie on web. */
+  private keepaliveRequest(path: string, method: 'POST' | 'PUT'): { url: string; init: RequestInit } {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (!this.serverConfig.isNative) {
-      return { url: path, init: { headers, credentials: 'include', keepalive: true, method: 'POST' } };
+      return { url: path, init: { headers, credentials: 'include', keepalive: true, method } };
     }
     const token = this.auth.accessToken;
     if (token) headers['Authorization'] = `Bearer ${token}`;
     return {
       url: this.serverConfig.resolveUrl(path),
-      init: { headers, keepalive: true, method: 'POST' },
+      init: { headers, keepalive: true, method },
     };
+  }
+
+  qoeEventsRequest(sessionId: string) {
+    return this.keepaliveRequest(`/api/playback/sessions/${encodeURIComponent(sessionId)}/events`, 'POST');
+  }
+
+  /** Resume-point write for a page going away; carries no sid so it cannot revive the session the stop ends. */
+  positionRequest(mediaId: number) {
+    return this.keepaliveRequest(`/api/playback/media/${mediaId}/state`, 'PUT');
   }
 
   stopSession(sessionId: string) {

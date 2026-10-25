@@ -3343,6 +3343,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private onBeforeUnload = () => {
     this.qoe.setStalled(false, { sessionId: this.activeSessionId(), position: this.engine?.currentTime ?? 0 });
     this.qoe.flushKeepalive(this.activeSessionId());
+    this.keepalivePositionSave();
     this.fireAndForgetStopSessions();
   };
 
@@ -3569,6 +3570,21 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     } finally {
       endReload();
     }
+  }
+
+  /** The 10 s cadence loses up to 10 s of resume point when the window closes; HttpClient requests die with the page. */
+  private keepalivePositionSave(): void {
+    const pos = this.state.seekLocked() ? this.state.currentTime() : (this.engine?.currentTime ?? 0);
+    if (!this.mediaId || !this.mediaFileId || this.preRollActive() || this.castService.isConnected()) return;
+    if (!Number.isFinite(pos) || pos <= 0) return;
+    const { url, init } = this.streamingApi.positionRequest(this.mediaId);
+    const body = JSON.stringify({
+      positionSeconds: pos,
+      durationSeconds: this.engine?.duration || this.duration() || 0,
+      mediaFileId: this.mediaFileId,
+      episodeId: this.episodeId,
+    });
+    fetch(url, { ...init, body }).catch(() => {});
   }
 
   private fireAndForgetStopSessions() {
