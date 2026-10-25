@@ -359,3 +359,46 @@ async fn logout_is_always_204_and_revokes(pool: PgPool) {
             .unwrap();
     assert_eq!(live, 0);
 }
+
+#[sqlx::test(migrations = false)]
+async fn failed_logins_are_limited_per_address_and_username(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    user(&pool, "bob", Some("[]"), false, true).await;
+    user(&pool, "amy", Some("[]"), false, true).await;
+    let try_login = async |name: &str, pass: &str, ip: &str| {
+        call(
+            &c,
+            "POST",
+            "/api/auth/login",
+            &[("x-forwarded-for", ip)],
+            Some(json!({"username": name, "password": pass})),
+        )
+        .await
+        .0
+    };
+    for _ in 0..5 {
+        assert_eq!(try_login("bob", "wrong", "9.9.9.9").await, 401);
+    }
+    assert_eq!(
+        try_login("bob", "bob-pass", "9.9.9.9").await,
+        429,
+        "even the right password"
+    );
+    assert_eq!(
+        try_login("amy", "amy-pass", "9.9.9.9").await,
+        201,
+        "another username"
+    );
+    assert_eq!(
+        try_login("bob", "bob-pass", "8.8.8.8").await,
+        201,
+        "another address"
+    );
+    assert_eq!(try_login("bob", "wrong", "7.7.7.7").await, 401);
+    assert_eq!(try_login("bob", "bob-pass", "7.7.7.7").await, 201);
+    assert_eq!(
+        try_login("bob", "wrong", "7.7.7.7").await,
+        401,
+        "a success reset the count"
+    );
+}
