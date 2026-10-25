@@ -136,12 +136,14 @@ import Foundation
 
     /// Release the live session server-side. Idempotent — safe even when no
     /// session was ever minted (matches the backend's 204-on-unknown-sid).
-    func stop() {
+    /// `pending` is a final heartbeat the release must follow, so the DELETE cannot overtake it.
+    func stop(after pending: Task<Void, Never>? = nil) {
         destroyed = true
         guard let sid = sessionId else { return }
         sessionId = nil
         let events = takeEvents()
         Task {
+            await pending?.value
             await postEvents(events, sid: sid)
             try? await api.delete("/api/stream/sessions/\(sid)")
         }
@@ -245,14 +247,15 @@ import Foundation
     /// Force an immediate heartbeat on a play/pause transition (or an applied
     /// remote command, via `lastCmdId`) so the backend's LiveSession state
     /// doesn't wait for the next 10s tick.
+    @discardableResult
     func notifyStateChange(position: Double, duration: Double, paused: Bool,
                            audioTrackIndex: Int? = nil, subtitleTrackIndex: Int? = nil, subtitleId: String? = nil,
-                           lastCmdId: String? = nil) {
-        guard !destroyed else { return }
+                           lastCmdId: String? = nil) -> Task<Void, Never>? {
+        guard !destroyed else { return nil }
         if let lastCmdId { self.lastCmdId = lastCmdId }
         if let audioTrackIndex { audioStreamIndex = audioTrackIndex }
-        sendHeartbeat(position: position, duration: duration, paused: paused, audioTrackIndex: audioTrackIndex,
-                      subtitleTrackIndex: subtitleTrackIndex, subtitleId: subtitleId)
+        return sendHeartbeat(position: position, duration: duration, paused: paused, audioTrackIndex: audioTrackIndex,
+                             subtitleTrackIndex: subtitleTrackIndex, subtitleId: subtitleId)
     }
 
     /// Explicit completion heartbeat before a manual "next episode" skip — the
@@ -263,9 +266,11 @@ import Foundation
         sendHeartbeat(position: duration, duration: duration, paused: true)
     }
 
+    @discardableResult
     private func sendHeartbeat(position: Double, duration: Double, paused: Bool,
-                               audioTrackIndex: Int? = nil, subtitleTrackIndex: Int? = nil, subtitleId: String? = nil) {
-        guard let sid = sessionId else { return }
+                               audioTrackIndex: Int? = nil, subtitleTrackIndex: Int? = nil,
+                               subtitleId: String? = nil) -> Task<Void, Never>? {
+        guard let sid = sessionId else { return nil }
         lastHeartbeatAt = Date()
         /// Encodes nil as JSON null: synthesized Encodable omits it, which the backend reads as "unchanged".
         struct Nullable: Encodable {
@@ -309,7 +314,7 @@ import Foundation
             qoe: qoeSample()
         )
         let events = takeEvents()
-        Task {
+        return Task {
             await postEvents(events, sid: sid)
             guard let res: Response = try? await api.put("/api/playback/media/\(mediaId)/state", body: body) else { return }
             if res.sessionLost == true { await recover(position: position, reason: "session_lost") }
