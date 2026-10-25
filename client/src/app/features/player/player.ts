@@ -43,7 +43,7 @@ import { NavigationHistoryService } from '../../core/services/navigation-history
 import { ToastService } from '../../core/services/toast.service';
 import { NavbarService } from '../../core/services/navbar.service';
 import { PlaybackQueueService } from '../../core/services/playback-queue.service';
-import { buildPlayerStats, formatAudioLabel, formatAudioParts, playbackModeOf, readyDownloadFor, SpriteMetadata, widthForProfile, type CropRect, type OfflineCrop } from '../../core/utils/player.utils';
+import { buildPlayerStats, formatAudioLabel, formatAudioParts, playbackModeOf, readyDownloadFor, SpriteMetadata, widthForProfile, type CropRect, type OfflineCrop, type PlaybackMode } from '../../core/utils/player.utils';
 import { formatErrorDiagnostics, type PlaybackError } from '../../core/services/playback-engine/playback-error';
 import { environment } from '../../../environments/environment';
 import { normalizeLangCode } from '../../core/utils/language.utils';
@@ -854,6 +854,176 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   // ── Lifecycle ──
 
+  /** Offline launch on the engine this shell plays local files with. */
+  private async launchOffline(localUrl: string, startTime: number | undefined): Promise<void> {
+    if (this.isDesktopNative) {
+      // Desktop: the original container lives on disk; mpv plays it back
+      // offline (file://) with full codec coverage + embedded tracks.
+      await this.createDesktopEngine();
+      this.applyVideoCrop();
+      await this.prepareLoad();
+      await this.engine!.load(localUrl, startTime);
+      await this.loadOfflineSubtitles();
+    } else if (this.isNative) {
+      // Android: ExoPlayer with CacheDataSource (offline HLS from cache)
+      await this.createNativeEngine();
+      (this.engine as NativeEngine).setOffline(true);
+      this.applyNativeSubtitleStyle();
+      this.applyVideoCrop();
+
+      await this.prepareLoad();
+      await this.engine!.load(localUrl, startTime, 'application/x-mpegURL');
+    } else {
+      // Web: Shaka offline URI ("offline:123") — IndexedDB-backed
+      await this.createShakaEngine();
+      this.applyVideoCrop();
+      await this.prepareLoad();
+      await this.engine!.load(localUrl, startTime);
+    }
+  }
+
+  /** Tizen (AVPlay) and webOS (LG native <video>) share one shape: HW decoder, DOM subtitle overlay,
+   *  streamInfo audio fallback, no Shaka/MSE. Only the engine instance differs. */
+  private async launchTv(startTime: number | undefined): Promise<void> {
+    if (this.isWebOs) {
+      await this.createWebOsEngine();
+    } else {
+      await this.createTizenEngine();
+      this.applyVideoCrop();
+    }
+    this.applyNativeSubtitleStyle();
+
+    // Fetched in parallel with engine load; AVPlay's `setExternalSubtitlePath` needs READY/PLAYING, so
+    // the active subtitle is attached after prepareAsync resolves.
+    const tvSubsPromise = this.itemSubtitles();
+
+    // Auth rides in the URL query (?token=); the Bearer header is for
+    // AVPlay/ExoPlayer only — the webOS <video> ignores it.
+    const token =
+      this.authService.playbackTokenFor(this.mediaFileId);
+    const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+
+    const { url: tizenUrl, mimeType: tizenMimeType } = this.buildPlayUrl({
+      startTime,
+    });
+    await this.prepareLoad();
+    await this.engine!.load(tizenUrl, startTime, tizenMimeType, headers);
+
+    // Expose to the picker only: auto-pick runs once for all engines in `autoSelectSubtitle` below (it
+    // handles visibility and burn-in).
+    const subs = await tvSubsPromise;
+    this.subs.availableSubtitles.set(subs);
+  }
+
+  /** Android ExoPlayer / desktop mpv launch. False when the view was left during setup. */
+  private async launchNative(startTime: number | undefined, mode: PlaybackMode): Promise<boolean> {
+    // Subtitles arrive as HLS SUBTITLES renditions, so load() doesn't depend on this fetch; resolved
+    // after load() like the Shaka path, as awaiting it first delays the first frame.
+    void this.itemSubtitles();
+
+    if (this.isDesktopNative) await this.createDesktopEngine();
+    else await this.createNativeEngine();
+
+    this.applyNativeSubtitleStyle();
+
+    if (this.isDesktopNative) this.applyVideoCrop();
+
+    if (this.engine instanceof NativeEngine) this.applyVideoCrop();
+
+    const token =
+      this.authService.playbackTokenFor(this.mediaFileId);
+    const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+
+    // Pin the quality constraint before load so ExoPlayer can't pick 4K on a phone (A/V desync): `auto`
+    // leaves ABR free, `original` pins source dimensions, a specific rung pins its width/height.
+    if (mode !== 'direct' && this.engine instanceof NativeEngine) {
+      const savedQualityId = this.activeQualityId();
+      if (savedQualityId !== 'auto') {
+        let w: number;
+        let h: number;
+        if (savedQualityId === 'original') {
+          w = this.playbackInfo?.source?.width ?? 3840;
+          h = this.playbackInfo?.source?.height ?? 2160;
+        } else {
+          w = widthForProfile(savedQualityId) ?? 1920;
+          h = this.qualityManager.availableQualities()
+            .find(q => q.id === savedQualityId)?.height ?? 1080;
+        }
+        this.engine.selectVariantTrack({ width: w, height: h });
+      }
+    }
+    await this.prepareLoad();
+    const { url: nativeUrl, mimeType: nativeMimeType } = this.buildPlayUrl({
+      startTime,
+    });
+    // Left the view during setup: stop the engine, don't start playback.
+    if (this.destroyed) {
+      await this.engine?.destroy().catch(() => {});
+      this.engine = null;
+      return false;
+    }
+    await this.engine!.load(nativeUrl, startTime, nativeMimeType, headers);
+    return true;
+  }
+
+  /** Web launch: Shaka with the saved-quality ABR setup and long retry windows for slow segment waits. */
+  private async launchShaka(startTime: number | undefined, mode: PlaybackMode): Promise<void> {
+    await this.createShakaEngine();
+    this.applyVideoCrop();
+
+    // Start subtitle loading in parallel with engine.load (Shaka doesn't need them upfront)
+    void this.itemSubtitles();
+
+    if (mode !== 'direct') {
+      const savedQualityId = this.activeQualityId();
+      if (savedQualityId === 'auto') {
+        this.qualityManager.selectQuality(
+          { id: 'auto', label: 'Auto', height: 0 },
+          this.engine, mode, true,
+        );
+      }
+
+      // A saved quality disables ABR; the backend serves a single-variant master, so there's one track
+      // anyway.
+      this.engine!.configure?.({
+        abr: {
+          enabled: savedQualityId === 'auto',
+          defaultBandwidthEstimate: 100_000_000,
+        },
+        streaming: {
+          // connectionTimeout defaults to 10s, well under a legitimate
+          // segment wait; match it to `timeout` so it isn't cut short.
+          retryParameters: {
+            timeout: 60_000,
+            connectionTimeout: 60_000,
+            maxAttempts: 5,
+            baseDelay: 1000,
+          },
+          // 0 opts out of Shaka's disableStream: never silently switch
+          // language/quality away from what the user picked.
+          maxDisabledTime: 0,
+        },
+        manifest: {
+          retryParameters: {
+            timeout: 30_000,
+            connectionTimeout: 30_000,
+            maxAttempts: 5,
+            baseDelay: 1000,
+          },
+        },
+      });
+    }
+
+    // `buildPlayUrl` threads `startTime` into HLS URLs (backend pre-spawns FFmpeg at the offset); direct
+    // play gets the explicit `video/mp4` mimeType for Shaka.
+    const { url: shakaUrl, mimeType: shakaMimeType } = this.buildPlayUrl({
+      startTime,
+    });
+    await this.prepareLoad();
+    await this.engine!.load(shakaUrl, startTime, shakaMimeType);
+  }
+
+
   async ngAfterViewInit() {
     this.keyboardOverlay.enter();
     this.state.reset();
@@ -1007,30 +1177,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         this.lastStreamUrl = offlineCheck ?? '';
         this.resolveAudioTarget();
 
-        if (this.isDesktopNative) {
-          // Desktop: the original container lives on disk; mpv plays it back
-          // offline (file://) with full codec coverage + embedded tracks.
-          await this.createDesktopEngine();
-          this.applyVideoCrop();
-          await this.prepareLoad();
-          await this.engine!.load(offlineCheck!, startTime);
-          await this.loadOfflineSubtitles();
-        } else if (this.isNative) {
-          // Android: ExoPlayer with CacheDataSource (offline HLS from cache)
-          await this.createNativeEngine();
-          (this.engine as NativeEngine).setOffline(true);
-          this.applyNativeSubtitleStyle();
-          this.applyVideoCrop();
-
-          await this.prepareLoad();
-          await this.engine!.load(offlineCheck!, startTime, 'application/x-mpegURL');
-        } else {
-          // Web: Shaka offline URI ("offline:123") — IndexedDB-backed
-          await this.createShakaEngine();
-          this.applyVideoCrop();
-          await this.prepareLoad();
-          await this.engine!.load(offlineCheck!, startTime);
-        }
+        await this.launchOffline(offlineCheck!, startTime);
       } else {
         // Await playback-info (kicked off in parallel with media load above)
         requestPlaybackInfo();
@@ -1056,137 +1203,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         // Native (Capacitor) uses the platform player, Samsung Tizen uses AVPlay (Shaka's MSE chokes on Tizen
         // 6.5: EAC3 claims support but `addSourceBuffer` throws); web keeps Shaka.
         if (this.isTizen || this.isWebOs) {
-          // Both TV pipelines (AVPlay, LG native <video>) share one shape: HW decoder, DOM subtitle overlay,
-          // streamInfo audio fallback, no Shaka/MSE. Only the engine instance differs.
-          if (this.isWebOs) {
-            await this.createWebOsEngine();
-          } else {
-            await this.createTizenEngine();
-            this.applyVideoCrop();
-          }
-          this.applyNativeSubtitleStyle();
-
-          // Fetched in parallel with engine load; AVPlay's `setExternalSubtitlePath` needs READY/PLAYING, so
-          // the active subtitle is attached after prepareAsync resolves.
-          const tvSubsPromise = this.itemSubtitles();
-
-          // Auth rides in the URL query (?token=); the Bearer header is for
-          // AVPlay/ExoPlayer only — the webOS <video> ignores it.
-          const token =
-            this.authService.playbackTokenFor(this.mediaFileId);
-          const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
-
-          const { url: tizenUrl, mimeType: tizenMimeType } = this.buildPlayUrl({
-            startTime,
-          });
-          await this.prepareLoad();
-          await this.engine!.load(tizenUrl, startTime, tizenMimeType, headers);
-
-          // Expose to the picker only: auto-pick runs once for all engines in `autoSelectSubtitle` below (it
-          // handles visibility and burn-in).
-          const subs = await tvSubsPromise;
-          this.subs.availableSubtitles.set(subs);
+          await this.launchTv(startTime);
         } else if (this.isDesktopNative || this.isNative) {
-          // Subtitles arrive as HLS SUBTITLES renditions, so load() doesn't depend on this fetch; resolved
-          // after load() like the Shaka path, as awaiting it first delays the first frame.
-          void this.itemSubtitles();
-
-          if (this.isDesktopNative) await this.createDesktopEngine();
-          else await this.createNativeEngine();
-
-          this.applyNativeSubtitleStyle();
-
-          if (this.isDesktopNative) this.applyVideoCrop();
-
-          if (this.engine instanceof NativeEngine) this.applyVideoCrop();
-
-          const token =
-            this.authService.playbackTokenFor(this.mediaFileId);
-          const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
-
-          // Pin the quality constraint before load so ExoPlayer can't pick 4K on a phone (A/V desync): `auto`
-          // leaves ABR free, `original` pins source dimensions, a specific rung pins its width/height.
-          if (mode !== 'direct' && this.engine instanceof NativeEngine) {
-            const savedQualityId = this.activeQualityId();
-            if (savedQualityId !== 'auto') {
-              let w: number;
-              let h: number;
-              if (savedQualityId === 'original') {
-                w = this.playbackInfo?.source?.width ?? 3840;
-                h = this.playbackInfo?.source?.height ?? 2160;
-              } else {
-                w = widthForProfile(savedQualityId) ?? 1920;
-                h = this.qualityManager.availableQualities()
-                  .find(q => q.id === savedQualityId)?.height ?? 1080;
-              }
-              this.engine.selectVariantTrack({ width: w, height: h });
-            }
-          }
-          await this.prepareLoad();
-          const { url: nativeUrl, mimeType: nativeMimeType } = this.buildPlayUrl({
-            startTime,
-          });
-          // Left the view during setup: stop the engine, don't start playback.
-          if (this.destroyed) {
-            await this.engine?.destroy().catch(() => {});
-            this.engine = null;
-            return;
-          }
-          await this.engine!.load(nativeUrl, startTime, nativeMimeType, headers);
+          if (!(await this.launchNative(startTime, mode))) return;
         } else {
-          await this.createShakaEngine();
-          this.applyVideoCrop();
-
-          // Start subtitle loading in parallel with engine.load (Shaka doesn't need them upfront)
-          void this.itemSubtitles();
-
-          if (mode !== 'direct') {
-            const savedQualityId = this.activeQualityId();
-            if (savedQualityId === 'auto') {
-              this.qualityManager.selectQuality(
-                { id: 'auto', label: 'Auto', height: 0 },
-                this.engine, mode, true,
-              );
-            }
-
-            // A saved quality disables ABR; the backend serves a single-variant master, so there's one track
-            // anyway.
-            this.engine!.configure?.({
-              abr: {
-                enabled: savedQualityId === 'auto',
-                defaultBandwidthEstimate: 100_000_000,
-              },
-              streaming: {
-                // connectionTimeout defaults to 10s, well under a legitimate
-                // segment wait; match it to `timeout` so it isn't cut short.
-                retryParameters: {
-                  timeout: 60_000,
-                  connectionTimeout: 60_000,
-                  maxAttempts: 5,
-                  baseDelay: 1000,
-                },
-                // 0 opts out of Shaka's disableStream: never silently switch
-                // language/quality away from what the user picked.
-                maxDisabledTime: 0,
-              },
-              manifest: {
-                retryParameters: {
-                  timeout: 30_000,
-                  connectionTimeout: 30_000,
-                  maxAttempts: 5,
-                  baseDelay: 1000,
-                },
-              },
-            });
-          }
-
-          // `buildPlayUrl` threads `startTime` into HLS URLs (backend pre-spawns FFmpeg at the offset); direct
-          // play gets the explicit `video/mp4` mimeType for Shaka.
-          const { url: shakaUrl, mimeType: shakaMimeType } = this.buildPlayUrl({
-            startTime,
-          });
-          await this.prepareLoad();
-          await this.engine!.load(shakaUrl, startTime, shakaMimeType);
+          await this.launchShaka(startTime, mode);
         }
       }
 
