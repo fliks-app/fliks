@@ -248,7 +248,10 @@ async fn enrich(st: &AppState, id: i32) -> Result<(), String> {
 
 /// Per-media timers re-armed by each import of the media (rule 37).
 #[derive(Default)]
-pub struct Settle(Mutex<HashMap<i32, tokio::task::AbortHandle>>);
+pub struct Settle(
+    Mutex<HashMap<i32, tokio::task::AbortHandle>>,
+    tokio::sync::Mutex<()>,
+);
 
 impl Settle {
     pub fn schedule(&self, st: &AppState, media_id: i32) {
@@ -282,6 +285,8 @@ pub async fn scan_sources(st: &AppState, media_id: i32) {
 
 async fn settled(st: &AppState, media_id: i32) {
     let _ = tokio::time::timeout(IDLE_CEILING, st.ingest.queue.when_idle()).await;
+    // One batch at a time, so a season pack does not queue every media's jobs at once.
+    let _turn = st.ingest.settle.1.lock().await;
     scan_sources(st, media_id).await;
     if super::setting_on(&st.db, "sprites_auto_generate_on_import")
         .await
