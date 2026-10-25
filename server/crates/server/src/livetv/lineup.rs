@@ -178,18 +178,19 @@ pub async fn m3u(
     Ok(Some((parse_m3u(&body), etag, last_modified)))
 }
 
-/// The guide url of a source: the panel's for Xtream, the stored `x-tvg-url` for M3U, else the playlist's own.
-pub async fn guide_url(source: &super::model::Source) -> Result<String, String> {
+/// The guide url of a source and whether it needs vetting: the panel's for Xtream, the stored `x-tvg-url`
+/// for M3U, else the playlist's own. A url the provider chose is vetted unless it stays on the source's host.
+pub async fn guide_url(source: &super::model::Source) -> Result<(String, bool), String> {
     if source.kind == "xtream" {
         let creds = Credentials {
             base_url: source.url.clone(),
             username: source.username.clone().unwrap_or_default(),
             password: source.password.clone().unwrap_or_default(),
         };
-        return Ok(xtream::guide_url(&creds));
+        return Ok((xtream::guide_url(&creds), false));
     }
     if let Some(first) = source.guide_urls.0.first() {
-        return Ok(first.clone());
+        return Ok((first.clone(), provider_chosen(&source.url, first)));
     }
     let identity = Identity {
         user_agent: source.user_agent.as_deref(),
@@ -198,12 +199,26 @@ pub async fn guide_url(source: &super::model::Source) -> Result<String, String> 
     let found = m3u(&source.url, &identity, &Validators::default(), false).await?;
     found
         .and_then(|(p, ..)| p.guide_urls.into_iter().next())
+        .map(|u| {
+            let vetted = provider_chosen(&source.url, &u);
+            (u, vetted)
+        })
         .ok_or_else(|| {
             format!(
                 "Source \"{}\" playlist has no x-tvg-url header",
                 source.name
             )
         })
+}
+
+/// `true` when `guide` is not on the host the admin configured as `source_url`.
+fn provider_chosen(source_url: &str, guide: &str) -> bool {
+    let host = |u: &str| {
+        Url::parse(u)
+            .ok()
+            .and_then(|u| u.host_str().map(str::to_ascii_lowercase))
+    };
+    host(guide).is_none_or(|g| host(source_url) != Some(g))
 }
 
 /// `true` for a URL the DTO accepts as a location: http or https with a host.
@@ -216,6 +231,20 @@ pub fn is_fetchable_url(raw: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_guide_url_on_another_host_than_the_source_is_provider_chosen() {
+        assert!(!provider_chosen(
+            "http://tuner.lan/p.m3u",
+            "http://TUNER.lan:8080/g.xml"
+        ));
+        assert!(provider_chosen(
+            "http://tuner.lan/p.m3u",
+            "http://169.254.169.254/g.xml"
+        ));
+        assert!(provider_chosen("http://tuner.lan/p.m3u", "not a url"));
+        assert!(provider_chosen("/media/list.m3u", "http://127.0.0.1/g.xml"));
+    }
 
     #[test]
     fn panel_calls_use_form_encoding_and_the_base_verbatim() {
