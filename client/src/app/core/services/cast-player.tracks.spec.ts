@@ -42,6 +42,7 @@ function setup(over: { autoSelect?: (subs: SubtitleOption[]) => SubtitleOption |
   const cast = {
     isConnected: signal(true),
     resumedState: signal(null),
+    rejoinedMedia: signal<Record<string, unknown> | null>(null),
     receiverQoe: signal(null),
     playbackError$: new Subject<{ position?: number }>(),
     receiverError$: new Subject<object>(),
@@ -178,6 +179,21 @@ describe('cast session start', () => {
       activeSubtitleId: null,
     });
     expect(svc.availableSubtitles()[0]).toMatchObject({ head: 'French', sub: 'SRT' });
+  });
+});
+
+describe('cast rejoin after a tab reload', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('adopts the media the receiver is playing from its LOAD customData', () => {
+    const { svc, cast } = setup();
+    TestBed.tick();
+    expect(svc.hasMedia()).toBe(false);
+    cast.rejoinedMedia.set({ mediaFileId: 7, mediaId: 3, episodeId: 5, sid: 'sid-1', playbackId: 'pb', title: 'T' });
+    TestBed.tick();
+    expect(svc.hasMedia()).toBe(true);
+    expect(svc.mediaFileId()).toBe(7);
+    expect(svc.liveSessionId()).toBe('sid-1');
   });
 });
 

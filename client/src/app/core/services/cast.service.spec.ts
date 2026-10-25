@@ -253,3 +253,23 @@ describe('CastService receiver messages', () => {
     expect(svc.receiverQoe()).toBeNull();
   });
 });
+
+describe('CastService rejoined media', () => {
+  const sync = (self: object) => (CastService.prototype as any).syncRejoinedMedia.call(self);
+
+  it('exposes the receiver customData of a connected web session', () => {
+    const data = { mediaFileId: 7, mediaId: 3 };
+    const self = { remotePlayer: { isConnected: true, mediaInfo: { customData: data } }, rejoinedMedia: { set: vi.fn() } };
+    sync(self);
+    expect(self.rejoinedMedia.set).toHaveBeenCalledWith(data);
+  });
+
+  it('ignores foreign media and a disconnected player', () => {
+    const foreign = { remotePlayer: { isConnected: true, mediaInfo: { customData: {} } }, rejoinedMedia: { set: vi.fn() } };
+    sync(foreign);
+    expect(foreign.rejoinedMedia.set).toHaveBeenCalledWith(null);
+    const off = { remotePlayer: { isConnected: false, mediaInfo: { customData: { mediaFileId: 1, mediaId: 2 } } }, rejoinedMedia: { set: vi.fn() } };
+    sync(off);
+    expect(off.rejoinedMedia.set).toHaveBeenCalledWith(null);
+  });
+});
