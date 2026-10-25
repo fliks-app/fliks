@@ -55,12 +55,13 @@ class Player extends Interface {
     this.CanSeek = false;
     this.CanControl = true;
   }
-  Play(): void { this.key('MediaPlay'); }
-  Pause(): void { this.key('MediaPause'); }
+  // Electron key codes have no play-only or pause-only key: toggle only when the state differs.
+  Play(): void { if (this.PlaybackStatus !== 'Playing') this.key('MediaPlayPause'); }
+  Pause(): void { if (this.PlaybackStatus === 'Playing') this.key('MediaPlayPause'); }
   PlayPause(): void { this.key('MediaPlayPause'); }
   Stop(): void { this.key('MediaStop'); }
-  Next(): void { this.key('MediaTrackNext'); }
-  Previous(): void { this.key('MediaTrackPrevious'); }
+  Next(): void { this.key('MediaNextTrack'); }
+  Previous(): void { this.key('MediaPreviousTrack'); }
 }
 const READ = { access: 'read' };
 configure(Player, {
