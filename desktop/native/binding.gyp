@@ -35,7 +35,8 @@
         {
           "target_name": "fliks_player_mac",
           "sources": [
-            "player_mac/addon.mm"
+            "player_mac/addon.mm",
+            "player_mac/now_playing.mm"
           ],
           "include_dirs": [
             "<!@(node -p \"require('node-addon-api').include_dir\")",
@@ -52,6 +53,7 @@
             "-framework IOSurface",
             "-framework CoreVideo",
             "-framework CoreFoundation",
+            "-framework MediaPlayer",
             "-ldl"
           ],
           "defines": [ "NAPI_VERSION=8", "NAPI_CPP_EXCEPTIONS" ],
