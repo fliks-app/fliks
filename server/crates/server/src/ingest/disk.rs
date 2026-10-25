@@ -36,7 +36,7 @@ use fliks_domain::{
 use serde::Serialize;
 use serde_json::{Value, json};
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     fs,
     path::{Path, PathBuf},
 };
@@ -193,6 +193,7 @@ async fn scan_under(
     progress(st, &key, root, 0, total);
     let root_p = Path::new(root);
     let mut groups: Vec<Group> = vec![];
+    let mut group_at: HashMap<String, usize> = HashMap::new();
     let mut orphan_count = 0;
     for (i, abs) in unlinked.iter().enumerate() {
         if (i + 1) % 25 == 0 {
@@ -221,7 +222,7 @@ async fn scan_under(
         let entry = FileEntry {
             file_path: abs_s.clone(),
             filename: name,
-            size: fs::metadata(abs).map_or(0, |m| m.len()),
+            size: tokio::fs::metadata(abs).await.map_or(0, |m| m.len()),
             quality_name: q.name,
             quality_id: q.id,
             season_number: nums.map(|n| n.season),
@@ -233,18 +234,21 @@ async fn scan_under(
         } else {
             format!("movie:{abs_s}")
         };
-        match groups.iter_mut().find(|g| g.group_key == key) {
-            Some(g) => g.files.push(entry),
-            None => groups.push(Group {
-                group_key: key,
-                media_type,
-                folder_name: folder.clone(),
-                guess_title: folder,
-                guess_year: None,
-                nfo: None,
-                suggested_provider: provider.to_owned(),
-                files: vec![entry],
-            }),
+        match group_at.get(&key) {
+            Some(&i) => groups[i].files.push(entry),
+            None => {
+                group_at.insert(key.clone(), groups.len());
+                groups.push(Group {
+                    group_key: key,
+                    media_type,
+                    folder_name: folder.clone(),
+                    guess_title: folder,
+                    guess_year: None,
+                    nfo: None,
+                    suggested_provider: provider.to_owned(),
+                    files: vec![entry],
+                });
+            }
         }
     }
     for g in &mut groups {

@@ -186,15 +186,19 @@ pub async fn load(env: &Env, id: &str, wasm: &[u8]) -> Result<Loaded, LoadError>
     let bytes = compile(env, wasm).await?;
     let elapsed = t.elapsed();
     let dir = path.parent().expect("cwasm dir").to_path_buf();
-    let write = || -> std::io::Result<()> {
+    let (wpath, wbytes) = (path.clone(), bytes.clone());
+    let write = move || -> std::io::Result<()> {
         std::fs::create_dir_all(&dir)?;
         set_mode(&dir, 0o700);
-        let tmp = path.with_extension("tmp");
-        std::fs::write(&tmp, &bytes)?;
+        let tmp = wpath.with_extension("tmp");
+        std::fs::write(&tmp, &wbytes)?;
         set_mode(&tmp, 0o600);
-        std::fs::rename(&tmp, &path)
+        std::fs::rename(&tmp, &wpath)
     };
-    write().map_err(|e| LoadError::Host(format!("cannot write the component cache: {e}")))?;
+    tokio::task::spawn_blocking(write)
+        .await
+        .map_err(|e| LoadError::Host(e.to_string()))?
+        .map_err(|e| LoadError::Host(format!("cannot write the component cache: {e}")))?;
     sqlx::query(r#"UPDATE plugin_packages SET "cwasmSha256" = $2, "cwasmEngine" = $3 WHERE "pluginId" = $1"#)
         .bind(id)
         .bind(sha256_hex(&bytes))

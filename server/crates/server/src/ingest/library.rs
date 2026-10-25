@@ -116,7 +116,7 @@ pub async fn ingest(
     let allowed = transfer::companion_exts(&st.db)
         .await
         .map_err(|e| e.to_string())?;
-    for f in select(&media, std::mem::take(&mut req.files)) {
+    for f in select(&media, std::mem::take(&mut req.files)).await {
         let ctx = Ctx {
             st,
             media: &media,
@@ -175,14 +175,13 @@ pub async fn ingest(
 }
 
 /// Rule 19 (largest file by its real size; on a tie the later one) unless a series season pack.
-fn select(media: &MediaRow, files: Vec<File>) -> Vec<File> {
+async fn select(media: &MediaRow, files: Vec<File>) -> Vec<File> {
     if media.is_series() && files.len() > 1 {
         return files;
     }
-    let size = |f: &File| fs::metadata(&f.path).map_or(0, |m| m.len());
     let mut best: Option<(u64, File)> = None;
     for f in files {
-        let s = size(&f);
+        let s = tokio::fs::metadata(&f.path).await.map_or(0, |m| m.len());
         if best.as_ref().is_none_or(|(b, _)| s >= *b) {
             best = Some((s, f));
         }
@@ -260,12 +259,20 @@ impl Ctx<'_> {
             Err(e) => return Ok(Placed::Error(format!("{name}: {e}"))),
         };
         // Rule 13: a file already at its layout path is linked where it is.
-        let at_dest = dunce::canonicalize(dir.join(&file)).is_ok_and(|d| d == src);
-        let src_size = fs::metadata(&src).map_or(0, |m| m.len());
+        let (dest_at, src_at) = (dir.join(&file), src.clone());
+        let at_dest = tokio::task::spawn_blocking(move || {
+            dunce::canonicalize(dest_at).is_ok_and(|d| d == src_at)
+        })
+        .await
+        .unwrap_or(false);
+        let src_size = tokio::fs::metadata(&src).await.map_or(0, |m| m.len());
         if !at_dest {
-            let same_size = |p: &Path| fs::metadata(p).is_ok_and(|m| m.len() == src_size);
-            let overwrite =
-                self.req.force || (self.req.replace_existing && !same_size(&dir.join(&file)));
+            let same_size = self.req.replace_existing
+                && !self.req.force
+                && tokio::fs::metadata(dir.join(&file))
+                    .await
+                    .is_ok_and(|m| m.len() == src_size);
+            let overwrite = self.req.force || (self.req.replace_existing && !same_size);
             if !overwrite && self.collides(&dir, &file).await? {
                 if !self.req.uniquify_on_collision {
                     return Ok(Placed::Present);
@@ -281,7 +288,7 @@ impl Ctx<'_> {
                     "{name}: destination outside the library root"
                 )));
             }
-            if let Err(e) = fs::create_dir_all(&dir) {
+            if let Err(e) = tokio::fs::create_dir_all(&dir).await {
                 return Err(format!("{name}: {e}"));
             }
             tracing::info!("Ingesting \"{}\" -> \"{}\"", src.display(), dest.display());
@@ -316,7 +323,9 @@ impl Ctx<'_> {
         }
         let dest = dir.join(&file);
         let rel = fsx::rel_under(self.mdir, &dest).ok_or("computed dest outside media folder")?;
-        let size = fs::metadata(&dest).map_or(src_size, |m| m.len()) as i64;
+        let size = tokio::fs::metadata(&dest)
+            .await
+            .map_or(src_size, |m| m.len()) as i64;
         let file_id = self.row(&rel, ep.as_ref(), size, &quality, &probed).await?;
         Ok(Placed::Imported(Imported {
             file_id,

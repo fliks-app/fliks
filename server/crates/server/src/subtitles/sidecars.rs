@@ -63,11 +63,15 @@ pub async fn discover_external(st: &AppState, media_id: i32) -> usize {
         if !dirs.mc.contains(&dir, true) {
             continue;
         }
-        let Ok(rd) = fs::read_dir(&dir) else { continue };
-        let entries: Vec<String> = rd
-            .flatten()
-            .filter_map(|e| e.file_name().into_string().ok())
-            .collect();
+        let Ok(mut rd) = tokio::fs::read_dir(&dir).await else {
+            continue;
+        };
+        let mut entries: Vec<String> = vec![];
+        while let Ok(Some(e)) = rd.next_entry().await {
+            if let Ok(n) = e.file_name().into_string() {
+                entries.push(n);
+            }
+        }
         for entry in &entries {
             let ext = fliks_domain::subtitle_name::ext(entry);
             if !SUBTITLE_EXTS.contains(&ext.as_str()) {
@@ -85,7 +89,10 @@ pub async fn discover_external(st: &AppState, media_id: i32) -> usize {
             }
             let abs = dir.join(entry);
             // A regular file whose real parent stays under the media directory.
-            if !fs::symlink_metadata(&abs).is_ok_and(|m| m.is_file()) {
+            if !tokio::fs::symlink_metadata(&abs)
+                .await
+                .is_ok_and(|m| m.is_file())
+            {
                 continue;
             }
             let Some(rel) = dirs.rel(&abs) else { continue };
@@ -156,7 +163,7 @@ pub async fn reconcile_after_rescan(st: &AppState, media_id: i32) -> (usize, usi
         let gone = stored.trim().is_empty()
             || match dirs.resolve(stored) {
                 None => true,
-                Some(abs) => match fs::symlink_metadata(abs) {
+                Some(abs) => match tokio::fs::symlink_metadata(abs).await {
                     Ok(m) => !m.is_file(),
                     Err(e) => e.kind() == std::io::ErrorKind::NotFound,
                 },
