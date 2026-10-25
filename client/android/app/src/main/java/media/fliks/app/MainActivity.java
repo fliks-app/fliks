@@ -309,5 +309,9 @@ public class MainActivity extends BridgeActivity {
         // Notify the WebView so the frontend can hide/show controls
         String js = "window.dispatchEvent(new CustomEvent('pipModeChanged', { detail: { isInPipMode: " + isInPipMode + " } }));";
         getBridge().getWebView().evaluateJavascript(js, null);
+        if (!isInPipMode && !getLifecycle().getCurrentState().isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)) {
+            com.getcapacitor.PluginHandle handle = getBridge().getPlugin("NativePlayer");
+            if (handle != null) ((NativePlayerPlugin) handle.getInstance()).onPipClosed();
+        }
     }
 }

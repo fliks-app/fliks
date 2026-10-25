@@ -366,6 +366,7 @@ public class NativePlayerPlugin extends Plugin {
                     .setMediaSourceFactory(mediaSourceFactory)
                     .setLoadControl(loadControl)
                     .setWakeMode(C.WAKE_MODE_NETWORK)
+                    .setHandleAudioBecomingNoisy(true)
                     .setSeekBackIncrementMs(10_000)
                     .setSeekForwardIncrementMs(10_000)
                     .build();
@@ -625,9 +626,16 @@ public class NativePlayerPlugin extends Plugin {
     @Override
     protected void handleOnStop() {
         super.handleOnStop();
-        if (player != null && mediaSession == null && !getActivity().isInPictureInPictureMode()) {
+        boolean inPip = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N
+                && getActivity().isInPictureInPictureMode();
+        if (player != null && mediaSession == null && !inPip) {
             player.pause();
         }
+    }
+
+    /** The PiP window was closed: the activity is stopped yet still reports PiP, so handleOnStop kept playing. */
+    void onPipClosed() {
+        if (player != null && mediaSession == null) player.pause();
     }
 
     private void startMediaSession() {
