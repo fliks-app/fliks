@@ -36,14 +36,6 @@ export type CompositorAddon = {
   stop(): void;
 };
 
-// The addon observes `time-pos` only on seeks, so the seekbar needs this poll while playing.
-const POSITION_POLL_MS = 250;
-
-const num = (v: string | null): number => {
-  const n = v == null ? NaN : parseFloat(v);
-  return Number.isFinite(n) ? n : 0;
-};
-
 /** libmpv inside the Linux compositor addon, as a `PlayerBackend`. `destroy()` stops playback only:
  *  the compositor window is the app's window and outlives it. */
 export class LinuxCompositorPlayer extends TypedEmitter<PlayerBackendEvents> implements PlayerBackend {
@@ -51,7 +43,6 @@ export class LinuxCompositorPlayer extends TypedEmitter<PlayerBackendEvents> imp
   private readonly firstFrameGate = new FirstFrameGate();
   private muteRanges: DesktopMuteRange[] = [];
   private muteFilterCount = 0;
-  private positionTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(
     private readonly addon: CompositorAddon,
@@ -67,46 +58,27 @@ export class LinuxCompositorPlayer extends TypedEmitter<PlayerBackendEvents> imp
     return this;
   }
 
-  /** Last position with a known duration: mpv drops both properties by the time EOF is reported. */
+  /** Last position pushed by the addon's event thread; `lastAt` keeps the last one with a known
+   *  duration, since mpv drops both properties by the time EOF is reported. */
+  private last: DesktopPositionInfo = { position: 0, duration: 0, buffered: 0 };
   private lastAt = { position: 0, duration: 0 };
 
-  private position(): DesktopPositionInfo {
-    const info = {
-      position: num(this.addon.getProperty('time-pos')),
-      duration: num(this.addon.getProperty('duration')),
-      buffered: num(this.addon.getProperty('demuxer-cache-time')),
-    };
-    if (info.duration > 0) this.lastAt = { position: info.position, duration: info.duration };
-    return info;
-  }
-
-  private startPositionTimer(): void {
-    if (this.positionTimer) return;
-    this.emit('timeUpdate', this.position());
-    this.positionTimer = setInterval(() => this.emit('timeUpdate', this.position()), POSITION_POLL_MS);
-  }
-
-  private stopPositionTimer(): void {
-    if (this.positionTimer) clearInterval(this.positionTimer);
-    this.positionTimer = null;
-  }
-
   private onAddonEvent(json: string): void {
-    let raw: { type?: string; state?: string; message?: string };
+    let raw: { type?: string; state?: string; message?: string; position?: number; duration?: number; buffered?: number };
     try {
       raw = JSON.parse(json);
     } catch {
       return;
     }
     switch (raw.type) {
-      case 'timeUpdate':
-        this.emit('timeUpdate', this.position());
+      case 'timeUpdate': {
+        this.last = { position: raw.position ?? 0, duration: raw.duration ?? 0, buffered: raw.buffered ?? 0 };
+        if (this.last.duration > 0) this.lastAt = { position: this.last.position, duration: this.last.duration };
+        this.emit('timeUpdate', this.last);
         break;
+      }
       case 'stateChanged': {
-        // Only a playing session polls; pause, end and idle stop it so a torn-down player can't leak the interval.
         const state = raw.state as PlayerBackendEvents['stateChanged'][0]['state'];
-        if (state === 'playing') this.startPositionTimer();
-        else this.stopPositionTimer();
         if (state === 'ended' && isPrematureEof(this.lastAt.duration, this.lastAt.position)) {
           this.emit('error', { code: -1, message: 'playback stopped before end of stream' });
           break;
@@ -118,14 +90,11 @@ export class LinuxCompositorPlayer extends TypedEmitter<PlayerBackendEvents> imp
         this.emit('tracksChanged', parseTracks(this.addon.getProperty('track-list')));
         break;
       case 'firstFrame':
-        // mpv may not emit a pause change on a fresh load, so the first frame arms the poll too.
-        this.startPositionTimer();
         this.firstFrameGate.release();
         this.emit('firstFrame');
         break;
       case 'error':
         this.firstFrameGate.release();
-        this.stopPositionTimer();
         this.emit('error', { code: -1, message: raw.message ?? 'error' });
         break;
       // The compositor owns the only visible window; the offscreen BrowserWindow never fires window-all-closed.
@@ -137,6 +106,7 @@ export class LinuxCompositorPlayer extends TypedEmitter<PlayerBackendEvents> imp
 
   async load(opts: DesktopLoadOptions): Promise<void> {
     this.qoe.reset();
+    this.last = { position: 0, duration: 0, buffered: 0 };
     this.lastAt = { position: 0, duration: 0 };
     // Global property: always written, or the previous file's rectangle would crop the next one.
     this.addon.setProperty('video-crop', opts.videoCrop ?? '');
@@ -160,7 +130,6 @@ export class LinuxCompositorPlayer extends TypedEmitter<PlayerBackendEvents> imp
 
   async stop(): Promise<void> {
     this.firstFrameGate.release();
-    this.stopPositionTimer();
     this.addon.command(['stop']);
   }
 
@@ -188,7 +157,7 @@ export class LinuxCompositorPlayer extends TypedEmitter<PlayerBackendEvents> imp
   }
 
   async getPosition(): Promise<DesktopPositionInfo> {
-    return this.position();
+    return this.last;
   }
 
   getQoe(): Promise<DesktopQoe | null> {
