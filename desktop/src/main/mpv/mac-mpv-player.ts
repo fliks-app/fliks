@@ -27,6 +27,7 @@ import { mpvLoadRequest, type MpvLoadRequest } from './load-options';
 import { mpvSubtitleProps } from './subtitle-style';
 import { mapTrackList, parseTracks, type MpvTrack } from './tracks';
 import { QoeReader } from './qoe';
+import { isPrematureEof } from './eof-guard';
 import { TypedEmitter } from './typed-emitter';
 
 type MacAddon = {
@@ -134,6 +135,10 @@ export class MacMpvPlayer extends TypedEmitter<PlayerBackendEvents> implements P
       case 'stateChanged': {
         const state = raw.state;
         if (!state) break;
+        if (state === 'ended' && isPrematureEof(this.lastDuration, this.lastPosition)) {
+          this.emit('error', { code: -1, message: 'playback stopped before end of stream' });
+          break;
+        }
         this.emit('stateChanged', { state });
         break;
       }
@@ -166,6 +171,7 @@ export class MacMpvPlayer extends TypedEmitter<PlayerBackendEvents> implements P
     // Global property, so it is always written — otherwise the previous file's
     // rectangle would crop the next one.
     this.addon.setProperty('video-crop', opts.videoCrop ?? '');
+    this.addon.setProperty('speed', '1');
     this.applyMuteRanges();
     this.addon.load(mpvLoadRequest(opts));
     await this.firstFrameGate.wait();

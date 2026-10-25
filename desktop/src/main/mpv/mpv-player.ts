@@ -25,6 +25,7 @@ import { mpvLoadFileOptions } from './load-options';
 import { mpvSubtitleProps } from './subtitle-style';
 import { mapTrackList, type MpvTrack } from './tracks';
 import { QoeReader } from './qoe';
+import { isPrematureEof } from './eof-guard';
 import { TypedEmitter } from './typed-emitter';
 import type { PlayerBackend, PlayerBackendEvents } from './player-backend';
 
@@ -37,11 +38,6 @@ const COMMAND_TIMEOUT_MS = 30_000;
 const QUIT_GRACE_MS = 500;
 /** Ring size for buffered error/fatal log lines attached to an error event. */
 const MAX_ERROR_LOG_LINES = 12;
-/** Playhead-to-duration gap (s) above which an `eof-reached` is read as a
- *  mid-stream failure (ffmpeg surfaces a dead HLS segment as EOF, not an error)
- *  rather than a genuine end, and routed to `error` instead of `ended`. */
-const PREMATURE_EOF_GAP_S = 10;
-
 /** Monotonic per-process counter for the IPC socket/pipe name, so two players
  *  created within the same millisecond can't collide on the path. */
 let instanceSeq = 0;
@@ -354,9 +350,7 @@ export class MpvPlayer extends TypedEmitter<PlayerBackendEvents> implements Play
         if (data === true && !this.sawEof) {
           this.sawEof = true;
           const premature =
-            this.duration > 0
-              ? this.duration - this.lastPosition > PREMATURE_EOF_GAP_S
-              : this.errorLog.length > 0;
+            this.duration > 0 ? isPrematureEof(this.duration, this.lastPosition) : this.errorLog.length > 0;
           if (premature) {
             this.emit('error', this.errorPayload('playback stopped before end of stream'));
           } else {
@@ -500,6 +494,8 @@ export class MpvPlayer extends TypedEmitter<PlayerBackendEvents> implements Play
     // Always written, so a cropped file's rectangle can't survive into the next
     // one (the property is global, not per-file).
     await this.set('video-crop', opts.videoCrop ?? '').catch(() => {});
+    // `speed` is global too: a new title starts at 1x.
+    await this.set('speed', 1).catch(() => {});
     await this.applyMuteRanges();
     if (gen !== this.loadGen) return;
     // mpv >= 0.38 loadfile signature is <url> <flags> <index> <options>; the

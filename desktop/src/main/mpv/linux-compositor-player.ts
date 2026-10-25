@@ -16,6 +16,7 @@ import { mpvLoadRequest, type MpvLoadRequest } from './load-options';
 import { mpvSubtitleProps } from './subtitle-style';
 import { parseTracks } from './tracks';
 import { QoeReader } from './qoe';
+import { isPrematureEof } from './eof-guard';
 import { TypedEmitter } from './typed-emitter';
 
 /** The native compositor addon: one SDL window drawing the mpv video under the UI bitmap. */
@@ -66,12 +67,17 @@ export class LinuxCompositorPlayer extends TypedEmitter<PlayerBackendEvents> imp
     return this;
   }
 
+  /** Last position with a known duration: mpv drops both properties by the time EOF is reported. */
+  private lastAt = { position: 0, duration: 0 };
+
   private position(): DesktopPositionInfo {
-    return {
+    const info = {
       position: num(this.addon.getProperty('time-pos')),
       duration: num(this.addon.getProperty('duration')),
       buffered: num(this.addon.getProperty('demuxer-cache-time')),
     };
+    if (info.duration > 0) this.lastAt = { position: info.position, duration: info.duration };
+    return info;
   }
 
   private startPositionTimer(): void {
@@ -101,6 +107,10 @@ export class LinuxCompositorPlayer extends TypedEmitter<PlayerBackendEvents> imp
         const state = raw.state as PlayerBackendEvents['stateChanged'][0]['state'];
         if (state === 'playing') this.startPositionTimer();
         else this.stopPositionTimer();
+        if (state === 'ended' && isPrematureEof(this.lastAt.duration, this.lastAt.position)) {
+          this.emit('error', { code: -1, message: 'playback stopped before end of stream' });
+          break;
+        }
         this.emit('stateChanged', { state });
         break;
       }
@@ -127,8 +137,10 @@ export class LinuxCompositorPlayer extends TypedEmitter<PlayerBackendEvents> imp
 
   async load(opts: DesktopLoadOptions): Promise<void> {
     this.qoe.reset();
+    this.lastAt = { position: 0, duration: 0 };
     // Global property: always written, or the previous file's rectangle would crop the next one.
     this.addon.setProperty('video-crop', opts.videoCrop ?? '');
+    this.addon.setProperty('speed', '1');
     this.applyMuteRanges();
     this.addon.load(mpvLoadRequest(opts));
     await this.firstFrameGate.wait();

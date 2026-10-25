@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron';
 import { IPC } from '../shared/contract';
 import { redactQuery } from './log-file';
+import { setPlaybackKeepAwake } from './power';
 import type { PlayerBackend } from './mpv/player-backend';
 import type {
   DesktopLoadOptions,
@@ -34,7 +35,10 @@ export function registerPlayerIpc(session: PlayerIpcHost): void {
     console.log('[ipc] seek:', position);
     return session.player.seek(position);
   });
-  ipcMain.handle(IPC.stop, () => session.player.stop());
+  ipcMain.handle(IPC.stop, async () => {
+    await session.player.stop();
+    setPlaybackKeepAwake(false);
+  });
   ipcMain.handle(IPC.setPlaybackRate, (_e, rate: number) => session.player.setPlaybackRate(rate));
   ipcMain.handle(IPC.setVolume, (_e, volume: number) => session.player.setVolume(volume));
   ipcMain.handle(IPC.setMuted, (_e, muted: boolean) => session.player.setMuted(muted));
