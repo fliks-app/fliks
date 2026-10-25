@@ -192,6 +192,7 @@ struct ServerEnvironment {
 
         var env: [String: String] = [
             "PORT": String(port),
+            "FLIKS_BIND": "127.0.0.1",
             "DB_HOST": "localhost",
             "DB_PORT": String(dbPort),
             "DB_USERNAME": "fliks",
