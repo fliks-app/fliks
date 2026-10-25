@@ -39,6 +39,11 @@ export class PartySettingsComponent {
     this.dialog().nativeElement.close();
   }
 
+  protected async leave(): Promise<void> {
+    this.dialog().nativeElement.close();
+    await this.controller.leave();
+  }
+
   protected async end(): Promise<void> {
     const ok = await this.confirm.confirm({
       title: this.translate.instant('party.end_title'),

@@ -18,6 +18,7 @@
       @if (voice.supported) {
         <app-toggle-field [label]="'party.voice_duck' | translate" [value]="voice.duck()" (valueChange)="voice.setDuck($event)" />
       }
+      <button type="button" class="btn btn-outline" (click)="leave()">{{ 'party.leave' | translate }}</button>
       @if (party.isHost()) {
         <button type="button" class="btn btn-error btn-outline" (click)="end()">{{ 'party.end' | translate }}</button>
       }

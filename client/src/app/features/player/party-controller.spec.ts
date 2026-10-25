@@ -2,6 +2,7 @@ import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, Router } from '@angular/router';
 import { TranslateService } from '@ngx-translate/core';
+import { Subject } from 'rxjs';
 import { describe, expect, it, vi } from 'vitest';
 import { CastService } from '../../core/services/cast.service';
 import { CastPlayerService } from '../../core/services/cast-player.service';
@@ -16,6 +17,7 @@ import { PartyController, type PartyHost } from './party-controller';
 import { QueueController } from './queue-controller';
 
 function setup(opts: { canControl?: boolean; urlParty?: string; joined?: number; resumes?: boolean; film?: boolean; opens?: boolean } = {}) {
+  const closed = new Subject<void>();
   const party = {
     active: signal(true),
     party: signal(opts.joined != null ? { id: opts.joined } : null),
@@ -23,7 +25,8 @@ function setup(opts: { canControl?: boolean; urlParty?: string; joined?: number;
     live: signal<unknown>(null),
     canControl: signal(opts.canControl ?? true),
     isHost: signal(false),
-    closed: { subscribe: () => ({ unsubscribe: () => {} }) },
+    closed,
+    leaveOrEnd: vi.fn().mockResolvedValue(true),
     sendIntent: vi.fn().mockResolvedValue(undefined),
     reportStatus: vi.fn(),
     leave: vi.fn(),
@@ -54,7 +57,7 @@ function setup(opts: { canControl?: boolean; urlParty?: string; joined?: number;
   };
   const toast = { info: vi.fn(), error: vi.fn() };
   const route = { snapshot: { queryParams: opts.urlParty ? { party: opts.urlParty } : {} } };
-  const router = { navigate: vi.fn() };
+  const router = { navigate: vi.fn(), navigateByUrl: vi.fn() };
   TestBed.configureTestingModule({
     providers: [
       PartyController,
@@ -87,7 +90,7 @@ function setup(opts: { canControl?: boolean; urlParty?: string; joined?: number;
     onBack: vi.fn(),
   };
   ctl.attach(host);
-  return { ctl, party, state, engine, host, queue, toast, cast, router, route };
+  return { closed, ctl, party, state, engine, host, queue, toast, cast, router, route };
 }
 
 describe('PartyController user actions', () => {
@@ -287,5 +290,26 @@ describe('PartyController on a Cast session', () => {
     expect(engine.playbackRate).toBe(1);
     ctl.dispose();
     vi.useRealTimers();
+  });
+});
+
+describe('PartyController leaving', () => {
+  it('lands on the Home when the host ends the party', () => {
+    const { ctl, closed, router, host } = setup();
+    closed.next();
+    expect(router.navigateByUrl).toHaveBeenCalledWith('/', { replaceUrl: true });
+    expect(host.onBack).not.toHaveBeenCalled();
+    ctl.dispose();
+  });
+
+  it('lands on the Home when a member leaves, and stays put when the host declines', async () => {
+    const { ctl, party, router } = setup();
+    await ctl.leave();
+    expect(router.navigateByUrl).toHaveBeenCalledWith('/', { replaceUrl: true });
+    router.navigateByUrl.mockClear();
+    party.leaveOrEnd.mockResolvedValue(false);
+    await ctl.leave();
+    expect(router.navigateByUrl).not.toHaveBeenCalled();
+    ctl.dispose();
   });
 });
