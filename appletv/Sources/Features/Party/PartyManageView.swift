@@ -26,15 +26,27 @@ private let tileColumns = [GridItem(.adaptive(minimum: 200, maximum: 240), spaci
 
 private struct TileSection<Content: View>: View {
     let title: String
+    /// Shown in place of the grid, which would squeeze a sentence into one tile column.
+    var empty: String? = nil
     @ViewBuilder var content: Content
 
     var body: some View {
         VStack(alignment: .center, spacing: 8) {
             Text(title).font(.headline).foregroundStyle(.secondary)
-            ScrollView {
-                LazyVGrid(columns: tileColumns, alignment: .center, spacing: 30) { content }
-                    .padding(.horizontal, 30)
-                    .padding(.vertical, 30)
+            if let empty {
+                Label(empty, systemImage: "person.2.slash")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+                    .padding(30)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollView {
+                    LazyVGrid(columns: tileColumns, alignment: .center, spacing: 30) { content }
+                        .padding(.horizontal, 30)
+                        .padding(.vertical, 30)
+                }
             }
         }
     }
@@ -62,10 +74,8 @@ struct PartyInviteView: View {
                         }
                     }
                     if service.managedIsHost {
-                        TileSection(title: tr("party.create_invitees")) {
-                            if candidateList.isEmpty {
-                                Text(tr("party.no_followed")).foregroundStyle(.secondary)
-                            }
+                        TileSection(title: tr("party.create_invitees"),
+                                    empty: candidateList.isEmpty ? tr("party.no_followed") : nil) {
                             ForEach(Array(candidateList.enumerated()), id: \.element.id) { index, user in
                                 AvatarTile(name: user.username, selected: picked.contains(user.id)) {
                                     if picked.contains(user.id) { picked.remove(user.id) } else { picked.insert(user.id) }
