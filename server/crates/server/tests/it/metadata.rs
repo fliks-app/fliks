@@ -915,3 +915,23 @@ async fn provider_credits_link_on_type_and_id_for_readable_media(pool: PgPool) {
     );
     c.stub.drop_route("/tmdb/3/person/5/combined_credits");
 }
+
+#[sqlx::test(migrations = false)]
+async fn persisting_credits_does_not_fetch_person_details(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    media(&pool, 1, "movie", Some(603), None, 1).await;
+    let d = fliks_server::metadata::service::Details::from_value(&json!({
+        "provider": "tmdb", "title": "T",
+        "cast": [{"externalId": 5, "name": "A", "character": "X", "order": 0}],
+        "crew": [{"externalId": 6, "name": "B", "job": "Director", "department": "Directing"}],
+    }));
+    fliks_server::metadata::service::persist_credits(&c.st, 1, &d)
+        .await
+        .unwrap();
+    let rows: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM persons")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(rows, 2);
+    assert!(c.stub.seen("/tmdb/3/person/").is_empty());
+}
