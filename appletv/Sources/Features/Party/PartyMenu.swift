@@ -33,11 +33,11 @@ enum PartyMenu {
                 UIAction(title: tr("party.kick"), attributes: .destructive) { _ in Task { await p.kick(m.userId) } },
             ])
         }
-        var rows = rows
+        var all = rows
         if p.isHost {
-            rows.append(UIAction(title: tr("party.invite"), image: UIImage(systemName: "person.badge.plus")) { _ in p.sheet = .invite })
+            all.append(UIAction(title: tr("party.invite"), image: UIImage(systemName: "person.badge.plus")) { _ in p.sheet = .invite })
         }
-        return UIMenu(title: "\(tr("party.tab_members")) (\(p.members.count))", image: UIImage(systemName: "person.3"), children: rows)
+        return UIMenu(title: "\(tr("party.tab_members")) (\(p.members.count))", image: UIImage(systemName: "person.3"), children: all)
     }
 
     private static func chatMenu(_ p: PartyService) -> UIMenu {
