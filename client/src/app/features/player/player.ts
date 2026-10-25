@@ -129,7 +129,7 @@ import { PartyReactionSettingsComponent } from './party/party-reaction-settings'
 import { PartySettingsComponent } from './party/party-settings';
 import { KeyboardController } from './keyboard-controller';
 import { SubtitleController } from './subtitle-controller';
-import { isMutedAt } from '../../core/utils/edl-policy';
+import { isMutedAt, muteRangesOf } from '../../core/utils/edl-policy';
 import { PlayerStatsOverlayComponent, PlayerStats } from './overlay/player-stats-overlay';
 import { SubtitleSyncPanelComponent } from './overlay/subtitle-sync-panel/subtitle-sync-panel';
 import { DefaultFocusDirective } from '../../shared/directives/default-focus.directive';
@@ -733,8 +733,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   /** `deviceProfileService.getProfile()` with `rejectCopy` forced when {@link CopyFallbackController} flagged
    *  the file, and HDR off once an AirPlay receiver refused it. */
-  private deviceProfileFor(mediaFileId: number): DeviceProfile {
-    let profile = this.deviceProfileService.getProfile();
+  private deviceProfileFor(mediaFileId: number, passthrough = true): DeviceProfile {
+    let profile = this.deviceProfileService.getProfile({ passthrough });
     if (this.copyFallback.shouldForceRejectCopy(mediaFileId)) {
       profile = { ...profile, rejectCopy: true };
     }
@@ -2343,14 +2343,14 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   /** The playback-info call for the current track state (burn-in pick, audio index, rung); every request goes
    *  through here. `over` swaps a field: another file (no picks sent) or the Cast profile's burn-in/rung. */
-  private negotiatePlayback(
+  private async negotiatePlayback(
     startAt?: number,
     over: Partial<{ fileId: number; profile: DeviceProfile; burnInId: number | null; quality: string }> = {},
     opts?: { skipErrorToast?: boolean },
   ): Promise<PlaybackInfoResponse> {
     const fileId = over.fileId ?? this.mediaFileId;
     const onScreen = fileId === this.mediaFileId;
-    const own = this.deviceProfileFor(fileId);
+    const own = this.deviceProfileFor(fileId, !(await this.hasMuteRanges(fileId)));
     const request = {
       profile: onScreen && this.subs.needsHlsSubtitles ? { ...own, needsHlsSubtitles: true } : own,
       burnInId: onScreen ? this.subs.activeBurnInId : null,
@@ -2368,6 +2368,20 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       undefined,
       opts,
     );
+  }
+
+  private readonly muteRangesByFile = new Map<number, Promise<boolean>>();
+
+  /** Whether the file's `.edl` mutes anything; a bitstream sink ignores volume, so the muted part must be decoded.
+   *  Only asked where passthrough is on offer; an unreadable EDL counts as muted. */
+  private hasMuteRanges(fileId: number): Promise<boolean> {
+    if (!this.deviceProfileService.offersPassthrough()) return Promise.resolve(false);
+    let known = this.muteRangesByFile.get(fileId);
+    if (!known) {
+      known = this.streamingApi.getEdl(fileId).then((r) => muteRangesOf(r).length > 0, () => true);
+      this.muteRangesByFile.set(fileId, known);
+    }
+    return known;
   }
 
   /** What an engine must be told before every load(): its configuration is read

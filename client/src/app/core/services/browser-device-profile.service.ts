@@ -30,7 +30,10 @@ interface AudioCapabilitiesPlugin {
     maxChannels: number;
     /** Per-codec max decodable channel count (lowercased codec → channels). */
     channelsByCodec?: Record<string, number>;
+    /** Bitstreams the HDMI sink takes untouched; absent on older builds. */
+    passthrough?: { codecs: string[]; maxChannels: number };
   }>;
+  addListener(event: 'audioRouteChanged', cb: () => void): Promise<unknown>;
 }
 const AudioCaps = registerPlugin<AudioCapabilitiesPlugin>('AudioCapabilities');
 
@@ -186,6 +189,7 @@ export class BrowserDeviceProfileService {
     codecs: string[];
     maxChannels: number;
     channelsByCodec?: Record<string, number>;
+    passthrough?: { codecs: string[]; maxChannels: number };
   } | null = null;
   private nativeVideo: NativeVideoCaps | null = null;
   /** Pessimistic until the desktop probe resolves: P7 only, never 5/8 a bridge can't reshape. */
@@ -221,9 +225,12 @@ export class BrowserDeviceProfileService {
           this.cachedProfile = null;
         })
         .catch(() => { this.nativeHdr = false; this.nativeDolbyVision = false; });
-      AudioCaps.getSupported()
+      const loadAudio = () => AudioCaps.getSupported()
         .then((r) => { this.nativeAudio = r; this.cachedProfile = null; })
         .catch(() => { this.nativeAudio = null; });
+      void loadAudio();
+      // HDMI hot-plug: a receiver can come or go mid-session.
+      void AudioCaps.addListener('audioRouteChanged', () => void loadAudio()).catch(() => undefined);
       VideoCaps.getSupported()
         .then((r) => { this.nativeVideo = r; this.cachedProfile = null; })
         .catch(() => { this.nativeVideo = null; });
@@ -247,40 +254,47 @@ export class BrowserDeviceProfileService {
     return Promise.race([this.desktopProbe, new Promise<void>((r) => setTimeout(r, timeoutMs))]);
   }
 
+  /** Whether this device's profile offers bitstream passthrough (Android TV with a capable sink). */
+  offersPassthrough(): boolean {
+    return this.device.tvPlatform() === 'androidtv' && !!this.nativeAudio?.passthrough?.codecs.length;
+  }
+
   /** Build the device profile. Cached after first call. */
-  getProfile(): DeviceProfile {
+  getProfile(opts: { passthrough?: boolean } = {}): DeviceProfile {
     if (!this.cachedProfile) {
       this.cachedProfile = this.buildProfile();
     }
+    // Uncached: only a playback whose bitstream could not be muted asks for it.
+    const base = opts.passthrough === false ? this.buildProfile(false) : this.cachedProfile;
     // Mutable overrides (HDR setting, `fliks.useTs`) are re-read on every call.
     const useTsOverride = readUseTsOverride();
     const forceDisableHdr = this.playerSettings.get().forceDisableHdr;
     const needsOverride =
-      forceDisableHdr || useTsOverride !== !!this.cachedProfile.useTs;
+      forceDisableHdr || useTsOverride !== !!base.useTs;
     // systemName resolves asynchronously, so overlay it on every call instead of caching it.
     const systemName = this.systemInfo.systemName() || undefined;
     // An unadvertised server 400s on an unknown field; an empty list is
     // redundant with the boolean fallback. Omit it in both cases.
     const dolbyVisionProfiles =
       this.auth.hasServerFeature('deviceProfileExtensions') &&
-      this.cachedProfile.dolbyVisionProfiles?.length
-        ? this.cachedProfile.dolbyVisionProfiles
+      base.dolbyVisionProfiles?.length
+        ? base.dolbyVisionProfiles
         : undefined;
     const supportsMuxedAudioRendition = this.auth.hasServerFeature('muxedAudioRendition')
-      ? this.cachedProfile.supportsMuxedAudioRendition
+      ? base.supportsMuxedAudioRendition
       : undefined;
     if (!needsOverride) {
-      return { ...this.cachedProfile, systemName, dolbyVisionProfiles, supportsMuxedAudioRendition };
+      return { ...base, systemName, dolbyVisionProfiles, supportsMuxedAudioRendition };
     }
     return {
-      ...this.cachedProfile,
+      ...base,
       systemName,
       supportsMuxedAudioRendition,
-      supportsHdr: forceDisableHdr ? false : this.cachedProfile.supportsHdr,
+      supportsHdr: forceDisableHdr ? false : base.supportsHdr,
       // Forcing HDR off (user wants SDR) also drops DV passthrough — DV is HDR.
       supportsDolbyVision: forceDisableHdr
         ? false
-        : this.cachedProfile.supportsDolbyVision,
+        : base.supportsDolbyVision,
       dolbyVisionProfiles: forceDisableHdr ? undefined : dolbyVisionProfiles,
       useTs: useTsOverride,
     };
@@ -292,7 +306,7 @@ export class BrowserDeviceProfileService {
     return this.cachedProfile.supportsHdr;
   }
 
-  private buildProfile(): DeviceProfile {
+  private buildProfile(passthrough = true): DeviceProfile {
     const video = document.createElement('video');
     const hasMSE = typeof MediaSource !== 'undefined' && !!MediaSource.isTypeSupported;
 
@@ -455,6 +469,14 @@ export class BrowserDeviceProfileService {
       if (tvPlatform === 'tizen') audioCodecs = applyTizenAudioCodecs(audioCodecs);
     }
 
+    // Android TV: bitstreams the HDMI sink takes reach the receiver untouched, decoder or not.
+    const sink = passthrough && tvPlatform === 'androidtv' ? this.nativeAudio?.passthrough : undefined;
+    if (sink) {
+      for (const c of sink.codecs) {
+        if (!audioCodecs.includes(c)) audioCodecs.push(c);
+      }
+    }
+
     // --- Max audio channels ---
     let maxAudioChannels = 2;
     try {
@@ -468,9 +490,16 @@ export class BrowserDeviceProfileService {
     }
     // A browser decodes 7.1 AAC, Opus and FLAC and downmixes them to its output
     // itself, so their cap is the decoder's, not AudioContext's output count.
-    const audioChannelsByCodec =
+    let audioChannelsByCodec =
       this.nativeAudio?.channelsByCodec ??
       (tvPlatform ? undefined : { aac: 8, opus: 8, flac: 8 });
+    if (sink?.codecs.length) {
+      audioChannelsByCodec = { ...audioChannelsByCodec };
+      for (const c of sink.codecs) {
+        audioChannelsByCodec[c] = Math.max(audioChannelsByCodec[c] ?? 0, sink.maxChannels);
+      }
+      maxAudioChannels = Math.max(maxAudioChannels, sink.maxChannels);
+    }
     // TVs: the WebView's AudioContext caps at 2ch but the pipeline decodes Dolby, so declare 5.1 for AC3/EAC3.
     if (
       (tvPlatform === 'webos' || tvPlatform === 'tizen') &&
