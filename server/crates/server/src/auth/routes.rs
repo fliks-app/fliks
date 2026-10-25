@@ -562,9 +562,17 @@ pub(crate) struct StreamTokenDto {
 pub(crate) async fn stream_token(
     State(st): State<AppState>,
     a: Authed,
-    body: Option<Json<StreamTokenDto>>,
+    body: axum::body::Bytes,
 ) -> Result<Response, AppError> {
-    let token = match body.and_then(|Json(b)| b.media_file_id) {
+    // Released clients post no body, some with a JSON content type: an empty body is an unbound token.
+    let file = if body.is_empty() {
+        None
+    } else {
+        serde_json::from_slice::<StreamTokenDto>(&body)
+            .map_err(|e| AppError::bad_request(format!("Invalid body: {e}")))?
+            .media_file_id
+    };
+    let token = match file {
         Some(file) => st.jwt.sign_stream_for(a.user.id, &a.user.username, file)?,
         None => st.jwt.sign_stream(a.user.id, &a.user.username)?,
     }
