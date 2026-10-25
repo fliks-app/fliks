@@ -300,6 +300,18 @@ describe('BrowserDeviceProfileService: dolbyVisionProfiles gating', () => {
     vi.unstubAllGlobals();
   });
 
+  it('desktop declares what mpv decodes: Hi10P H.264, VC-1, MPEG-2 transport files, PCM and MP2', () => {
+    const desktopDevice = { ...device, isDesktopNative: () => true } as DeviceService;
+    const profile = configure(desktopDevice, { hasServerFeature: () => true }).getProfile();
+    const dp = profile.directPlayProfiles[0];
+    expect(dp.containers).toEqual(expect.arrayContaining(['m2ts', 'mts', 'mpg', 'wmv']));
+    expect(dp.videoCodecs).toEqual(expect.arrayContaining(['vc1', 'wmv3', 'mpeg1video']));
+    expect(dp.audioCodecs).toEqual(expect.arrayContaining(['mp2', 'pcm_s16le', 'pcm_s24le', 'pcm_bluray']));
+    const h264 = profile.codecConditions.find((c) => c.codec === 'h264');
+    expect(h264?.maxBitDepth).toBe(10);
+    expect(h264?.profiles).toContain('high 10');
+  });
+
   it('adds profile 7 for the desktop shell, mpv decodes raw dual-layer P7', () => {
     vi.spyOn(HTMLMediaElement.prototype, 'canPlayType').mockReturnValue('probably');
     vi.stubGlobal('matchMedia', () => ({ matches: true }));

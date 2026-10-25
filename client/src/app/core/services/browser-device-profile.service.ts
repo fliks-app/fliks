@@ -482,19 +482,23 @@ export class BrowserDeviceProfileService {
     // Desktop shell: mpv decodes virtually any codec but the Chromium MSE probe under-reports, so advertise mpv's set.
     if (this.device.isDesktopNative()) {
       containers.length = 0;
-      containers.push('mp4', 'mkv', 'webm', 'mov', 'ts', 'm4v', 'avi', 'flv');
+      containers.push('mp4', 'mkv', 'webm', 'mov', 'ts', 'm4v', 'avi', 'flv', 'm2ts', 'mts', 'mpg', 'mpeg', 'wmv', 'ogm');
       videoCodecs.length = 0;
       videoCodecs.push(
         'h264', 'avc1', 'hevc', 'h265', 'hvc1', 'hev1',
-        'av1', 'vp9', 'vp8', 'mpeg2video', 'mpeg4',
+        'av1', 'vp9', 'vp8', 'mpeg1video', 'mpeg2video', 'mpeg4', 'msmpeg4v3', 'vc1', 'wmv3', 'theora',
       );
       codecConditions.length = 0;
       codecConditions.push(
-        { codec: 'h264', profiles: ['baseline', 'constrained baseline', 'main', 'high'], maxBitDepth: 8 },
+        {
+          codec: 'h264',
+          profiles: ['baseline', 'constrained baseline', 'main', 'high', 'high 10', 'high 10 intra', 'high 4:2:2'],
+          maxBitDepth: 10,
+        },
         { codec: 'hevc', profiles: ['main', 'main 10'], maxBitDepth: 10 },
         { codec: 'av1', profiles: ['main', 'high'], maxBitDepth: 10 },
       );
-      audioCodecs = ['aac', 'ac3', 'eac3', 'opus', 'flac', 'alac', 'mp3', 'dts', 'truehd', 'vorbis'];
+      audioCodecs = ['aac', 'ac3', 'eac3', 'opus', 'flac', 'alac', 'mp3', 'dts', 'truehd', 'vorbis', 'mp2', 'pcm_s16le', 'pcm_s24le', 'pcm_bluray'];
       maxAudioChannels = Math.max(maxAudioChannels, 8);
     }
 
