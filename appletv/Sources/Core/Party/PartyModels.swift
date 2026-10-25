@@ -62,6 +62,18 @@ struct PartyPlaylistRef: Codable, Equatable {
     let name: String
 }
 
+struct PartyGuest: Codable, Equatable {
+    let userId: Int
+    let username: String
+    /// "invite" or "link".
+    let source: String
+}
+
+struct SocialUser: Codable, Equatable, Identifiable {
+    let id: Int
+    let username: String
+}
+
 /// `PartySummaryDto` and `PartyDto` in one: the summary list leaves the trailing fields out.
 struct Party: Codable, Equatable, Identifiable {
     let id: Int
@@ -78,6 +90,7 @@ struct Party: Codable, Equatable, Identifiable {
     var chatEnabled: Bool?
     var linkSharing: Bool?
     var inviteToken: String?
+    var guests: [PartyGuest]?
     var live: PartyLive?
 }
 

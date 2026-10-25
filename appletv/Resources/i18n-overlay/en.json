@@ -100,5 +100,7 @@
   "party.tv_join_code": "Join with a code",
   "party.tv_code_placeholder": "Invite code or link",
   "party.tv_no_parties": "No watch party right now",
-  "party.tv_wait_host": "Waiting for the host to start"
+  "party.tv_wait_host": "Waiting for the host to start",
+  "party.tv_manage": "Invite and settings",
+  "party.tv_host_only_hint": "Only the host can change these settings"
 }

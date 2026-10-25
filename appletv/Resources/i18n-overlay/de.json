@@ -93,5 +93,7 @@
   "party.tv_join_code": "Mit Code beitreten",
   "party.tv_code_placeholder": "Einladungscode oder -link",
   "party.tv_no_parties": "Gerade keine Watch Party",
-  "party.tv_wait_host": "Warten, bis der Gastgeber startet"
+  "party.tv_wait_host": "Warten, bis der Gastgeber startet",
+  "party.tv_manage": "Einladen und Einstellungen",
+  "party.tv_host_only_hint": "Nur der Gastgeber kann diese Einstellungen ändern"
 }

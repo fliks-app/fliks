@@ -95,5 +95,7 @@
   "party.tv_join_code": "Unisciti con un codice",
   "party.tv_code_placeholder": "Codice o link di invito",
   "party.tv_no_parties": "Nessuna sessione al momento",
-  "party.tv_wait_host": "In attesa che l'organizzatore avvii"
+  "party.tv_wait_host": "In attesa che l'organizzatore avvii",
+  "party.tv_manage": "Invita e impostazioni",
+  "party.tv_host_only_hint": "Solo l'organizzatore può modificare queste impostazioni"
 }

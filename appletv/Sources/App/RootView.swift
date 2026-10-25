@@ -54,6 +54,9 @@ struct RootView: View {
                     path.append(Route.player(mediaFileId: mediaFileId, mediaId: mediaId, episodeId: episodeId, startAt: 0))
                 }
             }
+            .sheet(isPresented: Binding(get: { party.manageOpen }, set: { party.manageOpen = $0 })) {
+                PartyManageView().environment(party)
+            }
             .sheet(item: Binding(get: { playlistPicker.target },
                                  set: { playlistPicker.target = $0 })) { target in
                 AddToPlaylistSheet(target: target) { playlistPicker.target = nil }

@@ -12,6 +12,8 @@ import Foundation
     private(set) var messages: [PartyMessage] = []
     private(set) var bubbles: [PartyMessage] = []
     private(set) var queue: [PartyItem] = []
+    /// The invite and settings sheet, shared by the lobby and the player.
+    var manageOpen = false
     /// A short line for the screen in front (errors, refusals), cleared after a few seconds.
     private(set) var notice: String?
 
@@ -181,16 +183,53 @@ import Foundation
     func kick(_ userId: Int) async { await hostAction("members/\(userId)/kick") }
     func makeHost(_ userId: Int) async { await hostAction("members/\(userId)/host") }
 
-    func updateSettings(policy: String? = nil, chatEnabled: Bool? = nil) async {
-        struct Patch: Encodable { let policy: String?; let chatEnabled: Bool? }
+    /// Host only. The answer carries the new switches; `party.settings` reaches the other members.
+    func updateSettings(policy: String? = nil, reactionsEnabled: Bool? = nil, chatEnabled: Bool? = nil,
+                        linkSharing: Bool? = nil) async {
+        struct Patch: Encodable {
+            let policy: String?; let reactionsEnabled: Bool?; let chatEnabled: Bool?; let linkSharing: Bool?
+        }
+        await patch(Patch(policy: policy, reactionsEnabled: reactionsEnabled, chatEnabled: chatEnabled, linkSharing: linkSharing))
+    }
+
+    /// The old invite link stops working.
+    func regenerateLink() async {
+        struct Patch: Encodable { let regenerateToken = true }
+        await patch(Patch())
+    }
+
+    private func patch<B: Encodable>(_ body: B) async {
         guard let id = party?.id else { return }
         do {
-            let _: Party = try await APIClient.shared.patch(
-                "/api/parties/\(id)", body: Patch(policy: policy, chatEnabled: chatEnabled))
+            let dto: Party = try await APIClient.shared.patch("/api/parties/\(id)", body: body)
+            applySnapshot(dto)
         } catch {
             show(describe(error))
         }
     }
+
+    func invite(_ userIds: [Int]) async {
+        struct Body: Encodable { let userIds: [Int] }
+        guard let id = party?.id, !userIds.isEmpty else { return }
+        do {
+            let dto: Party = try await APIClient.shared.post("/api/parties/\(id)/invitees", body: Body(userIds: userIds))
+            applySnapshot(dto)
+        } catch {
+            show(describe(error))
+        }
+    }
+
+    /// Host only: ends the party for everyone, the `party.closed` event then closes it here too.
+    func endParty() async {
+        guard let id = party?.id else { return }
+        do {
+            try await APIClient.shared.delete("/api/parties/\(id)")
+        } catch {
+            show(describe(error))
+        }
+    }
+
+    func reload() async { await refetch() }
 
     private func hostAction(_ path: String) async {
         guard let id = party?.id else { return }
@@ -225,6 +264,7 @@ import Foundation
         messages = []
         bubbles = []
         queue = []
+        manageOpen = false
         lastRev = 0
         queuedFor = nil
     }

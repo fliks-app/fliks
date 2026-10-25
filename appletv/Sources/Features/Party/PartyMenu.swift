@@ -15,7 +15,7 @@ enum PartyMenu {
         if p.chatEnabled { children.append(chatMenu(p)) }
         if p.canControl, !p.queue.isEmpty { children.append(queueMenu(p)) }
         children.append(UIAction(title: tr("party.resync"), image: UIImage(systemName: "arrow.triangle.2.circlepath")) { _ in onResync() })
-        if p.isHost { children.append(settingsMenu(p)) }
+        children.append(UIAction(title: tr("party.tv_manage"), image: UIImage(systemName: "gearshape")) { _ in p.manageOpen = true })
         children.append(UIMenu(options: .displayInline, children: [
             UIAction(title: tr("party.tv_leave"), image: UIImage(systemName: "rectangle.portrait.and.arrow.right"),
                      attributes: .destructive) { _ in onLeave() },
@@ -59,15 +59,5 @@ enum PartyMenu {
             UIMenu(options: .displayInline, children: steps),
             UIMenu(options: .displayInline, children: items),
         ])
-    }
-
-    private static func settingsMenu(_ p: PartyService) -> UIMenu {
-        let hostOnly = UIAction(title: tr("party.policy_host_only"), state: p.policy == "host_only" ? .on : .off) { _ in
-            Task { await p.updateSettings(policy: p.policy == "host_only" ? "everyone" : "host_only") }
-        }
-        let chat = UIAction(title: tr("party.switch_chat"), state: p.chatEnabled ? .on : .off) { _ in
-            Task { await p.updateSettings(chatEnabled: !p.chatEnabled) }
-        }
-        return UIMenu(title: tr("party.settings"), image: UIImage(systemName: "gearshape"), children: [hostOnly, chat])
     }
 }
