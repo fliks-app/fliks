@@ -3369,7 +3369,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     } finally {
       this.reloadingStream = false;
       this.qoeGraceUntil = Date.now() + 3_000;
-      this.reloadLoadPending = false;
       this.drainPendingReload();
     }
   }
