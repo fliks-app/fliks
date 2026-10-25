@@ -991,6 +991,14 @@ describe('PlayerComponent DirectStream URL building', () => {
     expect(h.component.resolveStartQuality()).toBe('720p');
   });
 
+  it('never sends best as a startQuality', () => {
+    const h = createHarness();
+    h.component.playbackInfo = buildPi(MAIN_FILE_ID, { playMethod: 'Transcode' });
+    TestBed.inject(QualityManagerService).activeQualityId.set('best');
+
+    expect(h.component.resolveStartQuality()).toBeUndefined();
+  });
+
   it('picking a rung during a DirectStream session reaches the backend and lands on the transcoded rung', async () => {
     const h = createHarness();
     const qm = TestBed.inject(QualityManagerService);

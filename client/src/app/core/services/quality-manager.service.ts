@@ -18,6 +18,8 @@ export interface QualityOption {
 
 /** Persisted user choice for quality (same key across sessions). */
 const PLAYER_QUALITY_STORAGE_KEY = 'player.qualityId';
+/** Persisted for a pick of the top rung: the best quality of whichever title plays next. Never sent to the server. */
+export const BEST_QUALITY_ID = 'best';
 
 /** ABR: prefer starting at 720p+ and staying there; go below only when no variant meets the restriction. */
 // Seed high so Shaka picks the top variant on the first segment; ABR recalibrates once real bandwidth is observed.
@@ -93,14 +95,17 @@ export class QualityManagerService {
     return highestRungId(this.availableQualities());
   }
 
-  /** Restore the persisted rung BEFORE negotiating playback; applied verbatim since the backend resolves rungs minted on another ladder. */
+  /** Restore the persisted rung BEFORE negotiating playback; sent verbatim since the backend resolves rungs minted on another ladder; `best` is held back and resolved once the ladder is known. */
   restorePreference(): void {
     this.activeQualityId.set(this.readFromStorage() ?? 'auto');
   }
 
-  /** Adopt the rung the backend reports for the negotiated session, so the selector names what is served. */
+  /** Adopt the rung the backend reports for the negotiated session, so the selector names what is served;
+   *  a restored `best` becomes this title's top rung (call after `buildQualityOptions`). */
   adoptNegotiatedQuality(id: string | undefined): void {
-    if (id) this.activeQualityId.set(id);
+    const rung = this.activeQualityId() === BEST_QUALITY_ID ? this.topRungId() : undefined;
+    const adopted = rung ?? id;
+    if (adopted) this.activeQualityId.set(adopted);
   }
 
   /** Select a quality option: configure ABR or lock to a variant. `persist` false for internal restore/fallback calls so they don't overwrite the preference. */
@@ -205,13 +210,14 @@ export class QualityManagerService {
     this.selectQuality(option, engine, playbackMode, true);
   }
 
-  /** Persist the chosen rung id. Re-sent on the next negotiation, where the
+  /** Persist the chosen rung id, or `best` for the top rung. Re-sent on the next negotiation, where the
    *  backend maps it onto the ladder it serves. */
   persistPreference(option: QualityOption): void {
+    const id = option.id !== 'auto' && option.id === this.topRungId() ? BEST_QUALITY_ID : option.id;
     try {
       localStorage.setItem(
         PLAYER_QUALITY_STORAGE_KEY,
-        JSON.stringify({ id: option.id }),
+        JSON.stringify({ id }),
       );
     } catch {
       /* private mode / quota */
