@@ -124,10 +124,10 @@ import UIKit
     }
 
     /// `keepingSubtitle` carries the viewer's pick over a recovery reload of the same file.
-    private func reload(url: URL, position: Double, keepingSubtitle: Bool = false) {
+    private func reload(url: URL, position: Double, keepingSubtitle: Bool = false, forcePlay: Bool = false) {
         guard let player else { return }
         let subtitleChoice = keepingSubtitle ? currentLegibleChoice() : nil
-        let wasPaused = resumeAfterRecovery.map { !$0 } ?? (player.timeControlStatus == .paused)
+        let wasPaused = !forcePlay && (resumeAfterRecovery.map { !$0 } ?? (player.timeControlStatus == .paused))
         resumeAfterRecovery = nil
         let item = Self.makeItem(url: url)
         playback.qoeItem = item
@@ -198,7 +198,11 @@ import UIKit
 
     func teardown() {
         closeStall()
-        playback.stop()
+        let position = player?.currentTime().seconds ?? 0
+        let duration = player?.currentItem?.duration.seconds ?? 0
+        let finalSave = playback.notifyStateChange(
+            position: position.isFinite ? position : 0, duration: duration.isFinite ? duration : 0, paused: true)
+        playback.stop(after: finalSave)
         tickTimer?.invalidate()
         tickTimer = nil
         if let stalledObserver { NotificationCenter.default.removeObserver(stalledObserver) }
@@ -310,7 +314,7 @@ import UIKit
             mediaFileId: next.mediaFileId, mediaId: mediaId, episodeId: next.episodeId,
             startAt: 0, streamInfo: currentFileInfo, subtitleRows: externalSubtitles
         ) else { return }
-        reload(url: url, position: 0)
+        reload(url: url, position: 0, forcePlay: true)
     }
 
     // MARK: - Observers

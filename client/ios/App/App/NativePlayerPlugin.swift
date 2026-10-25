@@ -908,7 +908,11 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     @objc func setPlaybackRate(_ call: CAPPluginCall) {
         let rate = call.getFloat("rate") ?? 1.0
         DispatchQueue.main.async { [weak self] in
-            self?.player?.rate = rate
+            if let player = self?.player {
+                // play() restarts at defaultRate; a rate write while paused would start playback.
+                player.defaultRate = rate
+                if player.timeControlStatus != .paused { player.rate = rate }
+            }
             self?.nowPlaying.refresh()
             call.resolve()
         }
