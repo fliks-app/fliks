@@ -368,7 +368,8 @@ export class MediaService {
     );
   }
 
-  getAll(params: SearchParams = {}, opts: CacheRead = {}) {
+  async getAll(params: SearchParams = {}, opts: CacheRead = {}): Promise<MediaPage> {
+    if (params.view && !(await this.serverVersion.supportsWhenKnown('5.2.0'))) params = { ...params, view: undefined };
     let httpParams = new HttpParams();
     for (const [key, value] of Object.entries(params)) {
       if (value === undefined || value === null || value === '') continue;
