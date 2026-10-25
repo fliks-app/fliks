@@ -30,7 +30,11 @@
           <app-party-invitee-picker [exclude]="excluded()" [(selected)]="newInvitees" />
           <button type="button" class="btn btn-primary self-start" [disabled]="busy() || !newInvitees().length" (click)="invite()">{{ 'party.invite' | translate }}</button>
         }
-        <button type="button" class="btn btn-error btn-outline" [disabled]="busy()" (click)="cancel()">{{ 'party.cancel' | translate }}</button>
+      }
+      @if (v.status !== 'ended') {
+        <button type="button" class="btn btn-error btn-outline" [disabled]="busy()" (click)="cancel()">
+          {{ (v.status === 'live' ? 'party.end' : 'party.cancel') | translate }}
+        </button>
       }
     </div>
   </div>

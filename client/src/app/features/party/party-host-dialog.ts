@@ -106,9 +106,10 @@ export class PartyHostDialogComponent {
   }
 
   protected async cancel(): Promise<void> {
+    const key = this.view().status === 'live' ? 'end' : 'cancel';
     const ok = await this.confirm.confirm({
-      title: this.translate.instant('party.cancel_title'),
-      message: this.translate.instant('party.cancel_message', { name: this.view().name }),
+      title: this.translate.instant(`party.${key}_title`),
+      message: this.translate.instant(`party.${key}_message`, { name: this.view().name }),
       variant: 'danger',
     });
     if (!ok || (await runBusy(this.busy, () => this.api.end(this.view().id))) === null) return;
