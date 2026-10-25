@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { NowPlaying } from './now-playing';
+import { NowPlaying } from './now-playing.ts';
 
 function setup() {
   const calls: any[] = [];

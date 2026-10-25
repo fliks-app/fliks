@@ -27,10 +27,13 @@ export class NowPlaying {
   private pushedAt = 0;
   private pushedPosition = 0;
 
-  constructor(
-    private readonly native: NowPlayingNative,
-    private readonly now: () => number = Date.now,
-  ) {}
+  private readonly native: NowPlayingNative;
+  private readonly now: () => number;
+
+  constructor(native: NowPlayingNative, now: () => number = Date.now) {
+    this.native = native;
+    this.now = now;
+  }
 
   /** Null withdraws the session. `artwork` is the image bytes, fetched by the caller. */
   setMetadata(meta: DesktopMediaMetadata | null, artwork?: Buffer): void {
