@@ -29,10 +29,10 @@ export interface EngineSubtitleTrack {
 export type EngineState = 'idle' | 'playing' | 'paused' | 'buffering' | 'ended' | 'error';
 
 /** The paused flag implied by a transport state, or `undefined` to leave it alone.
- * 'buffering' and 'error' never move it, so a transient buffering doesn't flip the play/pause button. */
+ * 'buffering', 'error' and 'idle' (nothing loaded, e.g. after a failed load) are not a pause the user asked for. */
 export function pausedFlagForState(state: EngineState): boolean | undefined {
   if (state === 'playing') return false;
-  if (state === 'paused' || state === 'idle') return true;
+  if (state === 'paused') return true;
   return undefined;
 }
 
@@ -280,6 +280,8 @@ export interface PlaybackEngine {
   unload(): Promise<void>;
   /** Re-arms the native optimistic-recovery guard; provided by {@link AbstractPlaybackEngine}. */
   resetRecoveryGuard(): void;
+  /** Retries the loaded stream in place after a load error; absent or false means reload instead. */
+  retry?(): Promise<boolean>;
 
   // ── Playback ──
   play(): Promise<void>;

@@ -163,6 +163,21 @@ describe('NativeEngine audio tracks across loads', () => {
   });
 });
 
+describe('NativeEngine paused flag', () => {
+  it('stays playing when the player drops to idle after a failed load', async () => {
+    const engine = new NativeEngine();
+    await engine.init(document.createElement('div'));
+    const state = (s: string) =>
+      window.dispatchEvent(new CustomEvent('nativePlayerStateChanged', { detail: { state: s } }));
+    state('playing');
+    state('idle');
+    expect(engine.paused).toBe(false);
+    state('paused');
+    expect(engine.paused).toBe(true);
+    await engine.destroy();
+  });
+});
+
 describe('NativeEngine.getQoeSample', () => {
   it('returns the plugin sample', async () => {
     expect(await new NativeEngine().getQoeSample()).toEqual({ engine: 'exoplayer' });

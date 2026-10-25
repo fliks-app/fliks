@@ -661,6 +661,26 @@ describe('PlayerComponent wake / resume', () => {
     expect(h.streamingApi.getPlaybackInfo).toHaveBeenCalled();
   });
 
+  it('back online, an engine that retries in place keeps the session; a second failure reloads', async () => {
+    const h = createHarness();
+    let online = false;
+    h.component.network = { isOnline: () => online };
+    (h.engine as any).retry = vi.fn().mockResolvedValue(true);
+
+    await h.component.recoverFromLostSession('session_expired');
+    online = true;
+    h.component.lastTickAt = Date.now();
+    h.component.tickClockWatch();
+    await flush();
+    expect((h.engine as any).retry).toHaveBeenCalledTimes(1);
+    expect(h.streamingApi.getPlaybackInfo).not.toHaveBeenCalled();
+
+    await h.component.recoverFromLostSession('session_expired');
+    await flush();
+    expect((h.engine as any).retry).toHaveBeenCalledTimes(1);
+    expect(h.streamingApi.getPlaybackInfo).toHaveBeenCalled();
+  });
+
   it('a quality pick made during a running reload is replayed once it settles', async () => {
     const h = createHarness();
     h.component.reloadingStream = true;

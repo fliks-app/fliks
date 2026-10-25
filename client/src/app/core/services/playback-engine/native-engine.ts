@@ -1,6 +1,7 @@
 import { NativePlayer, type NativePlayerCrop, type NativeSidecarSubtitle } from '../../plugins/native-player.plugin';
 import {
   AbstractPlaybackEngine,
+  pausedFlagForState,
   type PlaybackEngine,
   type AudioTrack,
   type EngineQoeSample,
@@ -234,6 +235,17 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
     this._paused = true;
   }
 
+  /** False when the platform can't retry in place (iOS), so the caller reloads instead. */
+  async retry(): Promise<boolean> {
+    try {
+      await NativePlayer.retry();
+    } catch {
+      return false;
+    }
+    this.resetRecoveryGuard();
+    return true;
+  }
+
   async seek(position: number): Promise<void> {
     await NativePlayer.seek({ position });
     this._currentTime = position;
@@ -441,7 +453,8 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
     bind('nativePlayerStateChanged', (e: Event) => {
       const detail = (e as CustomEvent).detail;
       this._state = detail.state;
-      this._paused = detail.state === 'paused' || detail.state === 'idle';
+      const paused = pausedFlagForState(detail.state);
+      if (paused !== undefined) this._paused = paused;
       this.emit('stateChanged', { state: detail.state });
       // The bridge reports end-of-stream only via stateChanged; emit 'ended' so the player can advance.
       if (detail.state === 'ended') this.emit('ended', undefined);
