@@ -28,6 +28,7 @@ import { OfflinePlaybackSyncService } from './core/services/offline-playback-syn
 import { RemoteService } from './core/services/remote.service';
 import { remoteOverlayOpen } from './core/services/remote-playback-target';
 import { CastOverlayComponent } from './shared/cast-overlay/cast-overlay';
+import { TIZEN_MEDIA_KEYS } from './features/player/media-keys';
 import { TvKeyboardDeferralService } from './core/services/tv-keyboard-deferral.service';
 import { TranslateService } from '@ngx-translate/core';
 
@@ -186,6 +187,17 @@ export class App implements OnInit, OnDestroy {
       };
       this.tvBackKeyListener = handler;
       window.addEventListener('keydown', handler);
+    }
+    if (platform === 'tizen') {
+      const input = (window as unknown as { tizen?: { tvinputdevice?: { registerKey: (k: string) => void } } }).tizen
+        ?.tvinputdevice;
+      for (const key of TIZEN_MEDIA_KEYS) {
+        try {
+          input?.registerKey(key);
+        } catch {
+          /* key unsupported on this firmware */
+        }
+      }
     }
   }
 
