@@ -28,6 +28,7 @@ pub struct AppState {
     pub subtitles: Arc<crate::subtitles::Shared>,
     pub livetv: Arc<crate::livetv::Shared>,
     pub plugins: Arc<crate::plugins::Plugins>,
+    pub login_throttle: Arc<crate::auth::LoginThrottle>,
 }
 
 impl AppState {
@@ -62,6 +63,7 @@ impl AppState {
             subtitles: Arc::default(),
             livetv: Arc::default(),
             plugins,
+            login_throttle: Arc::default(),
             cfg: Arc::new(cfg),
             db,
         }

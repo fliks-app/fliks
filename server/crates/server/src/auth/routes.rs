@@ -13,7 +13,7 @@ use crate::{
 };
 use axum::{
     Json, Router,
-    extract::{Query, State},
+    extract::{ConnectInfo, Extension, Query, State},
     http::{HeaderMap, StatusCode, header},
     response::{IntoResponse, Response},
     routing::{get, post},
@@ -22,6 +22,7 @@ use chrono::{DateTime, Utc};
 use fliks_domain::acl::{Action, Subject};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use std::net::SocketAddr;
 
 const BCRYPT_COST: u32 = 12;
 const SERVER_TYPES: [&str; 4] = ["local", "jellyfin", "emby", "plex"];
@@ -140,9 +141,25 @@ pub(crate) struct LoginDto {
     server_type: Option<String>,
 }
 
+/// The address the gateway appended to `X-Forwarded-For` (its last entry, the one a client cannot
+/// forge), else the socket peer.
+fn client_ip(headers: &HeaderMap, peer: Option<&SocketAddr>) -> String {
+    headers
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.rsplit(',').next())
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .map_or_else(
+            || peer.map(|a| a.ip().to_string()).unwrap_or_default(),
+            str::to_owned,
+        )
+}
+
 #[utoipa::path(post, path = "/api/auth/login", responses((status = 200)))]
 pub(crate) async fn login(
     State(st): State<AppState>,
+    peer: Option<Extension<ConnectInfo<SocketAddr>>>,
     headers: HeaderMap,
     ValidJson(dto): ValidJson<LoginDto>,
 ) -> Result<Response, AppError> {
@@ -165,7 +182,17 @@ pub(crate) async fn login(
             "Media server login for {t} not yet implemented"
         )));
     }
-    let invalid = || AppError::unauthorized("Invalid credentials");
+    let ip = client_ip(&headers, peer.as_ref().map(|Extension(ConnectInfo(a))| a));
+    if st.login_throttle.blocked(&ip, &dto.username) {
+        return Err(AppError::with_message(
+            StatusCode::TOO_MANY_REQUESTS,
+            "Too many failed login attempts, try again later",
+        ));
+    }
+    let invalid = || {
+        st.login_throttle.fail(&ip, &dto.username);
+        AppError::unauthorized("Invalid credentials")
+    };
     let row = sqlx::query!(
         r#"SELECT id, "passwordHash" AS hash, enabled FROM users WHERE username = $1"#,
         dto.username
@@ -174,7 +201,7 @@ pub(crate) async fn login(
     .await?
     .ok_or_else(invalid)?;
     let stored = row.hash.ok_or_else(invalid)?;
-    let password = dto.password;
+    let password = dto.password.clone();
     let ok = tokio::task::spawn_blocking(move || bcrypt::verify(password, &stored))
         .await
         .map_err(|_| internal())?
@@ -182,6 +209,7 @@ pub(crate) async fn login(
     if !ok {
         return Err(invalid());
     }
+    st.login_throttle.clear(&ip, &dto.username);
     if !row.enabled {
         return Err(AppError::unauthorized("Account disabled"));
     }
