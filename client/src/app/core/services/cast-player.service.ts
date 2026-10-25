@@ -409,6 +409,28 @@ export class CastPlayerService {
     };
   }
 
+  /** What a LOAD's customData carries; the track and quality lists are rebuilt by the next reload. */
+  private stateFromReceiver(d: Record<string, unknown>): CastResumeState {
+    return {
+      mediaFileId: d['mediaFileId'] as number,
+      mediaId: d['mediaId'] as number,
+      episodeId: typeof d['episodeId'] === 'number' ? d['episodeId'] : undefined,
+      mediaTitle: typeof d['title'] === 'string' ? d['title'] : '',
+      episodeTitle: typeof d['subtitle'] === 'string' ? d['subtitle'] : '',
+      fanartUrl: typeof d['posterUrl'] === 'string' ? d['posterUrl'] : null,
+      playbackMode: 'transcode',
+      liveSessionId: typeof d['sid'] === 'string' ? d['sid'] : null,
+      playbackId: typeof d['playbackId'] === 'string' ? d['playbackId'] : null,
+      availableSubtitles: [],
+      availableQualities: [],
+      availableAudioTracks: [],
+      activeQualityId: 'auto',
+      activeSubtitleId: null,
+      activeAudioTrackId: null,
+      activeBurnInId: null,
+    };
+  }
+
   private restore(s: CastResumeState): void {
     this.mediaFileId.set(s.mediaFileId);
     this.mediaId.set(s.mediaId);
@@ -478,6 +500,11 @@ export class CastPlayerService {
     effect(() => {
       const state = this.cast.resumedState() as CastResumeState | null;
       if (state && !untracked(this.hasMedia)) untracked(() => this.restore(state));
+    });
+    // Web auto-join after a tab reload: the receiver still plays, rebuild from its LOAD customData.
+    effect(() => {
+      const data = this.cast.rejoinedMedia();
+      if (data && !untracked(this.hasMedia)) untracked(() => this.restore(this.stateFromReceiver(data)));
     });
     // The native side keeps this across a reload or process restart, so the session can be
     // taken over as it was left without reloading the receiver.

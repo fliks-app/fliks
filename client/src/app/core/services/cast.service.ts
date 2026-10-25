@@ -172,6 +172,8 @@ export class CastService implements OnDestroy {
   /** Set when a session survived a WebView reload or a process restart: the state
    *  the player saved with {@link saveResumeState}. */
   readonly resumedState = signal<unknown>(null);
+  /** Web: the LOAD `customData` of the media already on the receiver, e.g. an auto-joined session after a tab reload. */
+  readonly rejoinedMedia = signal<Record<string, unknown> | null>(null);
   /** Write only via {@link beginConnecting} / {@link endConnecting}: the trigger is disabled while set, so a lost outcome would wedge the picker. */
   readonly connecting = signal(false);
   private connectTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -360,6 +362,10 @@ export class CastService implements OnDestroy {
         () => this.onWebConnectionChanged(),
       );
       this.remotePlayerController.addEventListener(
+        cast.framework.RemotePlayerEventType.MEDIA_INFO_CHANGED,
+        () => this.syncRejoinedMedia(),
+      );
+      this.remotePlayerController.addEventListener(
         cast.framework.RemotePlayerEventType.CURRENT_TIME_CHANGED,
         () => this.mirrorReceiverTime(this.remotePlayer.currentTime ?? 0),
       );
@@ -421,6 +427,13 @@ export class CastService implements OnDestroy {
       this.errorListenerSessionId = null;
       this.receiverQoe.set(null);
     }
+    this.syncRejoinedMedia();
+  }
+
+  private syncRejoinedMedia() {
+    const data = this.remotePlayer?.isConnected ? this.remotePlayer.mediaInfo?.customData : null;
+    const ours = typeof data?.mediaFileId === 'number' && typeof data?.mediaId === 'number';
+    this.rejoinedMedia.set(ours ? data : null);
   }
 
   /** Guards against re-adding on the same session so a reconnect doesn't stack listeners and double-toast. */
