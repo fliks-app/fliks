@@ -1,5 +1,11 @@
 import SwiftUI
 
+private struct RingStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label.opacity(configuration.isPressed ? 0.85 : 1)
+    }
+}
+
 enum PartyBadge {
     struct Badge { let symbol: String; let color: Color }
 
@@ -23,21 +29,28 @@ struct AvatarTile: View {
     /// An SF Symbol in place of the initial (the "add" tile).
     var symbol: String?
     var action: (() -> Void)?
+    @FocusState private var focused: Bool
 
     var body: some View {
         VStack(spacing: 14) {
             if let action {
-                Button(action: action) { circle }.buttonStyle(.borderless)
+                // Ring only, like the profile picker: no system lift or card behind the circle.
+                Button(action: action) {
+                    circle.overlay(Circle().strokeBorder(.white, lineWidth: focused ? 6 : 0))
+                }
+                .buttonStyle(RingStyle())
+                .focused($focused)
             } else {
                 circle
             }
             VStack(spacing: 4) {
-                Text(name).font(.callout.weight(.semibold)).lineLimit(1)
+                Text(name).font(.callout.weight(focused ? .bold : .semibold)).lineLimit(1)
                 if let caption { Text(caption).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
             }
             .frame(width: 160)
         }
         .opacity(dimmed ? 0.5 : 1)
+        .animation(.easeOut(duration: 0.15), value: focused)
     }
 
     private var circle: some View {
@@ -62,10 +75,10 @@ struct AvatarTile: View {
 /// stays legible in both states (the system bordered style renders light red on white).
 struct DestructiveButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
-        Body(configuration: configuration)
+        Content(configuration: configuration)
     }
 
-    private struct Body: View {
+    private struct Content: View {
         let configuration: ButtonStyle.Configuration
         @Environment(\.isFocused) private var focused
 

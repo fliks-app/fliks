@@ -24,6 +24,12 @@ struct PartyInviteView: View {
     @Environment(PartyService.self) private var service
     @State private var following: [SocialUser] = []
     @State private var picked = Set<Int>()
+    @Namespace private var focusScope
+
+    private var candidateList: [SocialUser] {
+        guard let party = service.party, service.isHost else { return [] }
+        return PartyPeople.candidates(following: following, host: party.host, guests: party.guests ?? [])
+    }
 
     var body: some View {
         PartySheetPage(title: tr("party.invite")) {
@@ -42,8 +48,13 @@ struct PartyInviteView: View {
                     .scrollClipDisabled()
                 }
                 if service.isHost { candidates(party) }
+                // Always something to focus, even with nobody to invite.
+                Button(tr("common.ok")) { service.sheet = nil }
+                    .buttonStyle(.bordered)
+                    .prefersDefaultFocus(candidateList.isEmpty, in: focusScope)
             }
         }
+        .focusScope(focusScope)
         .task {
             await service.reload()
             if let me = AuthService.shared.currentUser?.id,
@@ -70,11 +81,12 @@ struct PartyInviteView: View {
             if list.isEmpty { Text(tr("party.no_followed")).foregroundStyle(.secondary) }
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(alignment: .top, spacing: 36) {
-                    ForEach(list) { user in
+                    ForEach(Array(list.enumerated()), id: \.element.id) { index, user in
                         AvatarTile(name: user.username,
                                    badge: picked.contains(user.id) ? PartyBadge.Badge(symbol: "checkmark.circle.fill", color: .green) : nil) {
                             if picked.contains(user.id) { picked.remove(user.id) } else { picked.insert(user.id) }
                         }
+                        .prefersDefaultFocus(index == 0, in: focusScope)
                     }
                 }
                 .padding(.horizontal, 20)
@@ -88,7 +100,6 @@ struct PartyInviteView: View {
                     Task { await service.invite(ids) }
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(picked.isEmpty)
             }
         }
     }
