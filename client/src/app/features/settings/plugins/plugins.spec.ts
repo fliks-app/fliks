@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
@@ -30,7 +31,10 @@ const ROW: PluginSummary = {
   enabled: true,
 };
 
+const confirmation = { confirm: () => Promise.resolve(true), confirmWithToggle: vi.fn() };
+
 async function createComponent(rows: PluginSummary[] = [ROW]) {
+  confirmation.confirmWithToggle.mockResolvedValue({ ok: true, toggle: false });
   TestBed.configureTestingModule({
     providers: [
       provideZonelessChangeDetection(),
@@ -41,7 +45,7 @@ async function createComponent(rows: PluginSummary[] = [ROW]) {
         lang: 'en',
         loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } },
       }),
-      { provide: ConfirmationService, useValue: { confirm: () => Promise.resolve(true) } },
+      { provide: ConfirmationService, useValue: confirmation },
     ],
   });
   const http = TestBed.inject(HttpTestingController);
@@ -112,6 +116,27 @@ describe('PluginsSettingsComponent — enable/disable toggle', () => {
     await settle(fixture);
 
     // Without this the pages stay linked in the admin sidebar until a full page load.
+    http.expectOne({ url: '/api/plugins/ui', method: 'GET' }).flush([]);
+    await settle(fixture);
+  });
+
+  it('a process plugin shows its row counts and deletes its data only when the toggle is on', async () => {
+    const proc: PluginSummary = { ...ROW, kind: 'process' };
+    const { fixture, http } = await createComponent([proc]);
+    confirmation.confirmWithToggle.mockResolvedValue({ ok: true, toggle: true });
+
+    void fixture.componentInstance.uninstall(proc);
+    http
+      .expectOne({ url: '/api/plugins/fliks.acme/data-usage', method: 'GET' })
+      .flush({ tables: [{ name: 'items', rows: 12 }] });
+    await settle(fixture);
+
+    http.expectOne({ url: '/api/plugins/fliks.acme?deleteData=true', method: 'DELETE' }).flush({});
+    await settle(fixture);
+    http.expectOne({ url: '/api/plugins', method: 'GET' }).flush([]);
+    await settle(fixture);
+    http.expectOne({ url: '/api/plugins/metrics', method: 'GET' }).flush([]);
+    await settle(fixture);
     http.expectOne({ url: '/api/plugins/ui', method: 'GET' }).flush([]);
     await settle(fixture);
   });

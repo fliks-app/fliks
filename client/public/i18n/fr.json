@@ -2728,7 +2728,10 @@
         "failed": "La version {{version}} n'a pas pu démarrer, la version précédente a été restaurée : {{detail}}. Installez-la à la main une fois corrigée."
       },
       "uninstall": "Désinstaller",
-      "confirm_uninstall": "Désinstaller « {{name}} » ? Les données associées à ce plugin seront perdues.",
+      "confirm_uninstall": "Désinstaller « {{name}} » ? Ses données sont conservées et retrouvées si vous le réinstallez.",
+      "uninstall_data_summary": "Données stockées : {{list}}.",
+      "uninstall_delete_data": "Supprimer aussi les données du plugin",
+      "uninstall_delete_data_hint": "Efface définitivement ses tables et ses fichiers. Cette action est irréversible.",
       "uninstalled": "Plugin désinstallé.",
       "uninstall_error": "Impossible de désinstaller le plugin.",
       "installed": "Plugin installé.",
