@@ -42,3 +42,16 @@ test('clears when playback stops and republishes artwork afterwards', () => {
   np.setMetadata(null);
   assert.equal(calls[3], 'clear');
 });
+
+test('republishes on a rate change and extrapolates drift at that rate', () => {
+  const { np, calls, tick } = setup();
+  np.setMetadata({ title: 'T' });
+  np.setState('playing');
+  np.setRate(2);
+  assert.equal(calls[1].rate, 2);
+  np.setRate(2);
+  assert.equal(calls.length, 2);
+  tick(10_000);
+  np.setPosition({ position: 20, duration: 100, buffered: 0 });
+  assert.equal(calls.length, 2);
+});

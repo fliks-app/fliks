@@ -1302,10 +1302,17 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // app.ts dispatches 'app:playerBack' on hardware/gesture back while on /watch, so it takes the same
     // onBack() path as the back arrow (replaceUrl to media detail).
     window.addEventListener('app:playerBack', this.onPlayerBackEvent);
+    // The desktop shell's OS media controls ask for a seek here, so a transcode seek renegotiates like a scrub.
+    this.stopDesktopSeekRequests = window.fliksDesktop?.on((e) => {
+      if (e.type === 'seekRequest') this.onSeek(e.payload.position);
+    });
   }
+
+  private stopDesktopSeekRequests: (() => void) | undefined;
 
   ngOnDestroy() {
     this.destroyed = true;
+    this.stopDesktopSeekRequests?.();
     this.keyboardOverlay.leave();
     this.edl.clear();
     this.webCrop.destroy();

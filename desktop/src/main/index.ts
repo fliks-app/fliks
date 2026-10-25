@@ -180,6 +180,9 @@ const WHEEL_PIXELS_PER_NOTCH = 100;
 let uiWin: BrowserWindow | null = null;
 // Set where the OS has a media session to feed (Linux MPRIS, macOS Now Playing, Windows SMTC).
 let setOsMediaSession: ((meta: DesktopMediaMetadata | null) => Promise<void>) | null = null;
+// The rate the page set on the player, for the same OS media session.
+let setOsPlaybackRate: ((rate: number) => void) | null = null;
+const ipcHooks = { onPlaybackRate: (rate: number) => setOsPlaybackRate?.(rate) };
 const inputCounts: Record<string, number> = {};
 
 function send(ev: DesktopEvent): void {
@@ -190,6 +193,11 @@ function send(ev: DesktopEvent): void {
 function startMpris(player: LinuxCompositorPlayer): () => void {
   let mpris: import('./mpris').Mpris | null = null;
   let artwork: string | null = null;
+  let rate = 1;
+  setOsPlaybackRate = (r) => {
+    rate = r;
+    mpris?.setRate(r);
+  };
   const withdraw = () => {
     if (artwork) fs.rm(artwork, { force: true }, () => {});
     artwork = null;
@@ -203,7 +211,9 @@ function startMpris(player: LinuxCompositorPlayer): () => void {
         mpris = new Mpris((keyCode) => {
           for (const type of ['keyDown', 'keyUp'] as const)
             uiWin?.webContents.sendInputEvent({ type, keyCode } as any);
-        });
+        }, (position) => send({ type: 'seekRequest', payload: { position } }));
+        mpris.setRate(rate);
+        player.on('timeUpdate', (p) => mpris?.setPosition(p));
         player.on('stateChanged', ({ state }) => {
           if (state === 'playing') mpris?.setStatus('Playing');
           else if (state === 'paused') mpris?.setStatus('Paused');
@@ -247,7 +257,7 @@ async function startEmbedSession(haveApp: boolean): Promise<void> {
   const session = new PlayerSession();
   // Register the IPC handlers BEFORE start() loads the renderer + emits 'ready',
   // so the renderer can't invoke an unregistered channel.
-  registerPlayerIpc(session);
+  registerPlayerIpc(session, ipcHooks);
   await session.start({
     rendererUrl: rendererUrl(haveApp),
     preloadPath: path.join(app.getAppPath(), 'dist', 'preload', 'index.cjs'),
@@ -275,10 +285,15 @@ async function startNowPlaying(session: import('./window/player-session').Player
     for (const type of ['keyDown', 'keyUp'] as const) uiContents.sendInputEvent({ type, keyCode } as any);
   };
   const KEYS: Record<string, string> = { toggle: 'MediaPlayPause', stop: 'MediaStop', next: 'MediaNextTrack', previous: 'MediaPreviousTrack' };
-  addon.onRemoteCommand((name) => {
+  addon.onRemoteCommand((name, position = 0) => {
+    if (name === 'seek') {
+      uiContents.send(IPC.event, { type: 'seekRequest', payload: { position } } satisfies DesktopEvent);
+      return;
+    }
     // Electron has no play-only / pause-only key: a play while playing (or the reverse) is a no-op.
     if (name === 'play' ? !playing : name === 'pause' ? playing : true) press(KEYS[name] ?? 'MediaPlayPause');
   });
+  setOsPlaybackRate = (rate) => nowPlaying.setRate(rate);
   setOsMediaSession = async (meta) => {
     try {
       const res = meta?.artworkUrl ? await uiContents.session.fetch(meta.artworkUrl) : null;
@@ -491,7 +506,7 @@ app.whenReady().then(async () => {
     resize: () => {},
     destroy: () => player.destroy(),
     onStop: stopOsMediaSession,
-  });
+  }, ipcHooks);
 
   uiWin.loadURL(haveApp ? APP_URL : 'data:text/html,<body style="background:%231d232a"></body>');
   uiWin.webContents.once('did-finish-load', () => send({ type: 'ready' }));

@@ -22,10 +22,12 @@ SystemMediaTransportControls g_smtc{nullptr};
 Napi::ThreadSafeFunction g_commandFn;
 bool g_commandFnReady = false;
 
-void Emit(const char* name) {
+void Emit(const char* name, double position = 0) {
   if (!g_commandFnReady) return;
   std::string s = name;
-  g_commandFn.NonBlockingCall([s](Napi::Env env, Napi::Function fn) { fn.Call({Napi::String::New(env, s)}); });
+  g_commandFn.NonBlockingCall([s, position](Napi::Env env, Napi::Function fn) {
+    fn.Call({Napi::String::New(env, s), Napi::Number::New(env, position)});
+  });
 }
 
 // WinRT errors are not std::exception: hand them to JS, whose wrapper logs them.
@@ -64,11 +66,14 @@ Napi::Value Attach(const Napi::CallbackInfo& info) {
       default: break;
     }
   });
+  g_smtc.PlaybackPositionChangeRequested([](auto&&, PlaybackPositionChangeRequestedEventArgs const& a) {
+    Emit("seek", std::chrono::duration<double>(a.RequestedPlaybackPosition()).count());
+  });
   g_smtc.IsEnabled(false);
   });
 }
 
-// onRemoteCommand(cb): cb receives play | pause | stop | next | previous.
+// onRemoteCommand(cb): cb receives play | pause | stop | next | previous, or seek with the position in seconds.
 Napi::Value OnRemoteCommand(const Napi::CallbackInfo& info) {
   if (g_commandFnReady) {
     g_commandFn.Release();
@@ -99,7 +104,7 @@ void SetArtwork(std::vector<uint8_t> bytes) {
   }).detach();
 }
 
-// setNowPlaying({title, artist?, artwork?: Buffer, duration, elapsed, playing}); artwork is kept until clearNowPlaying.
+// setNowPlaying({title, artist?, artwork?: Buffer, duration, elapsed, rate, playing}); artwork is kept until clearNowPlaying.
 Napi::Value SetNowPlaying(const Napi::CallbackInfo& info) {
   return Guard(info, [&] {
   if (!g_smtc) return;
@@ -114,6 +119,8 @@ Napi::Value SetNowPlaying(const Napi::CallbackInfo& info) {
   g_smtc.IsStopEnabled(true);
   g_smtc.IsNextEnabled(true);
   g_smtc.IsPreviousEnabled(true);
+  g_smtc.IsPlaybackPositionEnabled(true);
+  g_smtc.PlaybackRate(o.Get("rate").ToNumber().DoubleValue());
   g_smtc.PlaybackStatus(playing ? MediaPlaybackStatus::Playing : MediaPlaybackStatus::Paused);
 
   auto updater = g_smtc.DisplayUpdater();

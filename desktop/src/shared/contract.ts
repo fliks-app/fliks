@@ -118,6 +118,8 @@ export type DesktopEvent =
       payload: { audioTracks: DesktopAudioTrack[]; subtitleTracks: DesktopSubtitleTrack[] };
     }
   | { type: 'firstFrame' }
+  /** An OS media control (scrubber) asks the page to seek to `position` seconds. */
+  | { type: 'seekRequest'; payload: { position: number } }
   | {
       type: 'error';
       /** `code` follows MediaError semantics where applicable: 2
