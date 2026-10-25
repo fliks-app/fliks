@@ -178,6 +178,7 @@ function createHarness(opts: {
 
   const streamingApi = {
     getPlaybackInfo,
+    getEdl: vi.fn(async () => [] as unknown[]),
     getPlaybackState,
     stopSession,
     updatePlaybackState,
@@ -214,6 +215,7 @@ function createHarness(opts: {
         provide: BrowserDeviceProfileService,
         useValue: {
           getProfile: () => DEVICE_PROFILE,
+          offersPassthrough: () => false,
           whenDesktopProbed: () => Promise.resolve(),
           engineTraits: () => ENGINE_TRAITS[EngineKind.WEB],
         },
@@ -3265,5 +3267,42 @@ describe('PlayerComponent stall counting', () => {
     expect(body.positionSeconds).toBe(123);
     expect(body.sessionId).toBeUndefined();
     fetchSpy.mockRestore();
+  });
+});
+
+describe('PlayerComponent: passthrough and .edl mute ranges', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  const negotiate = async (edl: unknown[] | 'reject', offers = true) => {
+    const h = createHarness();
+    const profiles = TestBed.inject(BrowserDeviceProfileService) as any;
+    profiles.offersPassthrough = () => offers;
+    profiles.getProfile = vi.fn(() => DEVICE_PROFILE);
+    if (edl === 'reject') h.streamingApi.getEdl.mockRejectedValue(new Error('offline'));
+    else h.streamingApi.getEdl.mockResolvedValue(edl);
+    await (h.component as any).negotiatePlayback();
+    return { h, profiles };
+  };
+  const last = (p: any) => p.getProfile.mock.calls.map((c: unknown[]) => c[0]).filter(Boolean).at(-1);
+
+  it('keeps passthrough when the file has no mute range', async () => {
+    const { profiles } = await negotiate([{ start: 1, end: 2, action: 'cut' }]);
+    expect(last(profiles)).toEqual({ passthrough: true });
+  });
+
+  it('drops passthrough when the file has a mute range', async () => {
+    const { profiles } = await negotiate([{ start: 1, end: 2, action: 'mute' }]);
+    expect(last(profiles)).toEqual({ passthrough: false });
+  });
+
+  it('drops it when the .edl cannot be read', async () => {
+    const { profiles } = await negotiate('reject');
+    expect(last(profiles)).toEqual({ passthrough: false });
+  });
+
+  it('never fetches the .edl where passthrough is not offered', async () => {
+    const { h, profiles } = await negotiate([{ start: 1, end: 2, action: 'mute' }], false);
+    expect(h.streamingApi.getEdl).not.toHaveBeenCalled();
+    expect(last(profiles)).toEqual({ passthrough: true });
   });
 });

@@ -6,7 +6,6 @@ import android.media.MediaCodecList;
 import android.os.Build;
 import android.widget.FrameLayout;
 import androidx.annotation.OptIn;
-import androidx.media3.common.C;
 import androidx.media3.common.MimeTypes;
 import androidx.media3.common.util.UnstableApi;
 import androidx.media3.exoplayer.DefaultRenderersFactory;
@@ -33,23 +32,11 @@ final class NativePlayerUtil {
                 boolean enableAudioTrackPlaybackParams) {
             // A context-less builder is required: with a context, media3 discards these capabilities.
             return new DefaultAudioSink.Builder()
-                    .setAudioCapabilities(pcmPlusUndecodable(AudioCapabilities.getCapabilities(context)))
+                    .setAudioCapabilities(AudioCapabilities.DEFAULT_AUDIO_CAPABILITIES)
                     .setEnableFloatOutput(enableFloatOutput)
                     .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
                     .build();
         }
-    }
-
-    /** PCM so volume works, plus the bitstreams no MediaCodec decodes (a mute gate cannot silence those). */
-    @OptIn(markerClass = UnstableApi.class)
-    static AudioCapabilities pcmPlusUndecodable(AudioCapabilities caps) {
-        int[] wanted = {C.ENCODING_PCM_16BIT, C.ENCODING_DTS, C.ENCODING_DTS_HD, C.ENCODING_DTS_UHD_P2,
-                C.ENCODING_DOLBY_TRUEHD};
-        java.util.ArrayList<Integer> kept = new java.util.ArrayList<>();
-        for (int e : wanted) if (e == C.ENCODING_PCM_16BIT || caps.supportsEncoding(e)) kept.add(e);
-        int[] encodings = new int[kept.size()];
-        for (int i = 0; i < encodings.length; i++) encodings[i] = kept.get(i);
-        return new AudioCapabilities(encodings, caps.getMaxChannelCount());
     }
 
     static int parseColor(String hex, int fallback) {

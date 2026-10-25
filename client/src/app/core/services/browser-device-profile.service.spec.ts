@@ -500,4 +500,19 @@ describe('BrowserDeviceProfileService: Android TV audio passthrough', () => {
     expect(none.directPlayProfiles[0].audioCodecs).toEqual(['aac', 'ac3']);
     expect(none.audioChannelsByCodec).toEqual({ aac: 8, ac3: 6 });
   });
+
+  it('is plain on request, and offersPassthrough tells whether it would differ', () => {
+    vi.spyOn(Capacitor, 'isNativePlatform').mockReturnValue(true);
+    const service = configure(
+      { isTv: () => true, tvPlatform: () => 'androidtv', isDesktopNative: () => false } as DeviceService,
+      undefined,
+      true,
+    );
+    (service as unknown as { nativeAudio: unknown }).nativeAudio = nativeAudio;
+    expect(service.offersPassthrough()).toBe(true);
+    expect(service.getProfile().directPlayProfiles[0].audioCodecs).toContain('dts');
+    const plain = service.getProfile({ passthrough: false });
+    expect(plain.directPlayProfiles[0].audioCodecs).toEqual(['aac', 'ac3']);
+    expect(plain.audioChannelsByCodec).toEqual({ aac: 8, ac3: 6 });
+  });
 });
