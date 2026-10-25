@@ -506,9 +506,12 @@ export class CastPlayerService {
   private lastRecoverAt = 0;
   /** The receiver error and the native IDLE/ERROR poll fire for one failure; the second must not restart the reload. */
   private recovering = false;
+  /** Latest reload wins: an older one aborts after its playback-info; `reloading` mutes the other recoveries. */
+  private reloadGen = 0;
+  private reloading = false;
 
   private async recoverFromCastError(position?: number): Promise<void> {
-    if (!this.hasMedia() || this.recovering) return;
+    if (!this.hasMedia() || this.recovering || this.reloading) return;
     const now = Date.now();
     if (now - this.lastRecoverAt > 30_000) this.recoverAttempts = 0;
     if (this.recoverAttempts >= 3) {
@@ -529,15 +532,24 @@ export class CastPlayerService {
     }
   }
 
-  /** Drops the in-flight ffmpeg session first; transcoding.service only auto-replaces on quality change. */
+  /** Stops the old ffmpeg session once the new LOAD resolves; transcoding.service only auto-replaces on quality change. */
   async reloadCastStream(positionOverride?: number, autoplay = true, snapQualityId?: string) {
+    const gen = ++this.reloadGen;
+    this.reloading = true;
+    try {
+      await this.reload(gen, positionOverride, autoplay, snapQualityId);
+    } finally {
+      if (gen === this.reloadGen) this.reloading = false;
+    }
+  }
+
+  private async reload(gen: number, positionOverride: number | undefined, autoplay: boolean, snapQualityId?: string) {
     const mfId = this.mediaFileId();
     if (!mfId) return;
 
     // Scope the stop to the Cast session's own sid so a concurrent local
     // session on the same file (another profile/device) is not torn down too.
-    const castSid = this.liveSessionId();
-    if (castSid) await this.streamingApi.stopSession(castSid).catch(() => {});
+    const oldSid = this.liveSessionId();
 
     const currentPos = positionOverride ?? this.cast.currentTime();
     const audioIdx = this.activeAudioStreamIndex();
@@ -561,6 +573,11 @@ export class CastPlayerService {
       this.authService.getCastInfo(),
     ]);
 
+    if (gen !== this.reloadGen) {
+      if (pi.sessionId && pi.sessionId !== this.liveSessionId()) this.streamingApi.stopSession(pi.sessionId).catch(() => {});
+      return;
+    }
+
     if (snapQualityId) {
       const qualities = buildCastQualityOptions(pi.qualities, this.castSettings.get().maxQuality);
       transcodeQuality = qualities.find(q => q.id === snapQualityId)?.id ?? qualities[0]?.id ?? '1080p';
@@ -568,7 +585,8 @@ export class CastPlayerService {
       this.activeQualityId.set(transcodeQuality);
     }
 
-    await this.dispatchLoad(mfId, pi, currentPos, transcodeQuality, castInfo, autoplay);
+    const loaded = await this.dispatchLoad(mfId, pi, currentPos, transcodeQuality, castInfo, autoplay);
+    if (loaded && oldSid && oldSid !== pi.sessionId) this.streamingApi.stopSession(oldSid).catch(() => {});
   }
 
   /** Shared by quickStart and reloadCastStream; a refused LOAD is reported here and returns false. */
@@ -827,7 +845,7 @@ export class CastPlayerService {
       });
       // Backend lost the session: reload with a fresh sid, preserving the receiver's pause state.
       if (sid) void this.qoeReporter.flush(sid);
-      if (response?.sessionLost) {
+      if (response?.sessionLost && !this.reloading) {
         await this.reloadCastStream(pos, !this.cast.isPaused());
         this.recordRecovery(pos, 'session_lost');
       }
