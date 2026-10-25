@@ -457,6 +457,72 @@ async fn rescan_refuses_a_missing_folder_and_reconciles(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
+async fn rescan_batches_slots_links_and_removals(pool: PgPool) {
+    let c = ctx(pool).await;
+    let lib = c.dir.join("series");
+    let l = library(&c, "S", &lib, r#"["series"]"#).await;
+    let s = media(&c, l, "Show", "series").await;
+    let gone = file_row(&c, s, "Show - S02E09.mkv").await;
+    let unlinked = file_row(&c, s, "Show - S01E01.mkv").await;
+    for n in [
+        "Show - S01E01.mkv",
+        "Show - S01E02-E03.mkv",
+        "Show - S03E01.mkv",
+    ] {
+        touch(&lib.join("Show").join(n), b"x");
+    }
+    let sp: i32 = sqlx::query_scalar(r#"INSERT INTO seasons ("mediaId", "seasonNumber", monitored) VALUES ($1, 0, false) RETURNING id"#)
+        .bind(s).fetch_one(&c.st.db).await.unwrap();
+    let special: i32 = sqlx::query_scalar(r#"INSERT INTO episodes ("seasonId", "episodeNumber", title, monitored) VALUES ($1, 1, 'Making Of', true) RETURNING id"#)
+        .bind(sp).fetch_one(&c.st.db).await.unwrap();
+    touch(&lib.join("Show/Making Of.mkv"), b"m");
+    let r = rescan(&c, s).await.unwrap();
+    assert_eq!((r.added, r.removed), (3, 1));
+    let has: Vec<(i32, i32, Option<i32>, bool)> = sqlx::query_as(
+        r#"SELECT s."seasonNumber", e."episodeNumber", e."endEpisodeNumber", e."hasFile"
+           FROM episodes e JOIN seasons s ON s.id = e."seasonId" WHERE s."mediaId" = $1
+           ORDER BY 1, 2"#,
+    )
+    .bind(s)
+    .fetch_all(&c.st.db)
+    .await
+    .unwrap();
+    assert_eq!(
+        has,
+        [
+            (0, 1, None, true),
+            (1, 1, None, true),
+            (1, 2, Some(3), true),
+            (3, 1, None, true)
+        ]
+    );
+    assert_eq!(
+        count(
+            &c,
+            &format!("SELECT count(*) FROM media_files WHERE id = {gone}")
+        )
+        .await,
+        0
+    );
+    assert_eq!(
+        count(
+            &c,
+            &format!(r#"SELECT count("episodeId") FROM media_files WHERE id = {unlinked}"#)
+        )
+        .await,
+        1
+    );
+    assert_eq!(
+        count(
+            &c,
+            &format!(r#"SELECT count(*) FROM media_files WHERE "episodeId" = {special}"#)
+        )
+        .await,
+        1
+    );
+}
+
+#[sqlx::test(migrations = false)]
 async fn rescan_probes_only_what_changed(pool: PgPool) {
     let c = ctx(pool).await;
     let lib = c.dir.join("movies");

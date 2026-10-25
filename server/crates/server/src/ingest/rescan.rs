@@ -1,7 +1,7 @@
 //! `MediaRescanService` (`ingest.md` rules 38-54): disk walk, row reconcile, analyze, link in place.
 use super::{
-    MediaRow, clear_has_file, drop_thumbnails, fsx, is_video,
-    library::{Ep, file_name, season_episodes, set_has_file},
+    MediaRow, clear_has_file_many, drop_thumbnails, fsx, is_video,
+    library::{Ep, file_name, season_episodes, set_has_file, set_has_file_many},
     load_media, probe,
 };
 use crate::{http::AppError, state::AppState};
@@ -15,7 +15,7 @@ use fliks_domain::{
 use fliks_engine_core::api::{JobKind, JobPriority, JobRequest, MediaInfo, MediaRef};
 use serde::Deserialize;
 use std::{
-    collections::HashSet,
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     fs,
     path::{Path, PathBuf},
 };
@@ -163,15 +163,24 @@ pub async fn rescan_files(
     let mut c = Counts::default();
     let mut slots_created = false;
     let mut touched: Vec<(i32, Option<i32>)> = vec![];
+    let mut slots = Slots::default();
+    if media.is_series() {
+        slots = Slots::load(&st.db, media_id).await?;
+        let wanted = wanted_numbers(&dir, &rows, &on_disk, &disk, &linked);
+        slots_created = slots.ensure(&st.db, media_id, &wanted).await?;
+    }
 
     if w.complete {
         remove_missing(st, media_id, &rows, &on_disk, &mut c).await?;
     } else {
         tracing::warn!("Rescan[media #{media_id}]: a directory could not be read, no row removed");
     }
-    slots_created |=
-        refresh_existing(st, &media, &dir, &rows, &on_disk, &mut c, &mut touched).await?;
-    slots_created |= add_new(st, &media, &disk, &linked, &mut c, &mut touched).await?;
+    let kept: Vec<&Row> = rows
+        .iter()
+        .filter(|r| on_disk.contains(norm(&r.rel).as_str()))
+        .collect();
+    refresh_existing(st, &media, &dir, &kept, &slots, &mut c, &mut touched).await?;
+    add_new(st, &media, &disk, &linked, &slots, &mut c, &mut touched).await?;
     // An interrupted walk proves nothing about what is on disk.
     if w.complete {
         reconcile_subtitles(st, media_id, &mut c, &touched).await;
@@ -238,32 +247,36 @@ async fn remove_missing(
     on_disk: &HashSet<&str>,
     c: &mut Counts,
 ) -> Result<(), AppError> {
-    for r in rows
+    let gone: Vec<&Row> = rows
         .iter()
         .filter(|r| !on_disk.contains(norm(&r.rel).as_str()))
+        .collect();
+    for r in gone.iter().filter(|r| r.rel.contains("..")) {
+        tracing::error!(
+            "Rescan[media #{media_id}]: row with \"..\" in relativePath \"{}\"",
+            r.rel
+        );
+    }
+    if gone.is_empty() {
+        return Ok(());
+    }
+    let ids: Vec<i32> = gone.iter().map(|r| r.id).collect();
+    match sqlx::query!("DELETE FROM media_files WHERE id = ANY($1)", &ids)
+        .execute(&st.db)
+        .await
     {
-        if r.rel.contains("..") {
-            tracing::error!(
-                "Rescan[media #{media_id}]: row with \"..\" in relativePath \"{}\"",
-                r.rel
-            );
-        }
-        match sqlx::query!("DELETE FROM media_files WHERE id = $1", r.id)
-            .execute(&st.db)
-            .await
-        {
-            Ok(_) => {
-                drop_thumbnails(st, r.id);
-                c.removed += 1;
-                if let Some(ep) = r.episode_id {
-                    clear_has_file(&st.db, ep).await?;
-                }
+        Ok(_) => {
+            for id in ids {
+                drop_thumbnails(st, id);
             }
-            Err(e) => tracing::error!(
-                "Rescan[media #{media_id}]: failed to remove row #{}: {e}",
-                r.id
-            ),
+            c.removed += gone.len() as i64;
+            let eps: Vec<i32> = gone.iter().filter_map(|r| r.episode_id).collect();
+            clear_has_file_many(&st.db, &eps).await?;
         }
+        Err(e) => tracing::error!(
+            "Rescan[media #{media_id}]: failed to remove {} rows: {e}",
+            gone.len()
+        ),
     }
     Ok(())
 }
@@ -272,17 +285,15 @@ async fn refresh_existing(
     st: &AppState,
     media: &MediaRow,
     dir: &Path,
-    rows: &[Row],
-    on_disk: &HashSet<&str>,
+    rows: &[&Row],
+    slots: &Slots,
     c: &mut Counts,
     touched: &mut Vec<(i32, Option<i32>)>,
-) -> Result<bool, AppError> {
+) -> Result<(), AppError> {
     let media_id = media.id;
-    let mut slots_created = false;
-    for r in rows
-        .iter()
-        .filter(|r| on_disk.contains(norm(&r.rel).as_str()))
-    {
+    let mut links: Vec<(i32, i32)> = vec![];
+    let mut ends: Vec<(i32, i32)> = vec![];
+    for r in rows {
         let abs = dir.join(norm(&r.rel));
         let Ok(meta) = tokio::fs::metadata(&abs).await else {
             continue;
@@ -295,27 +306,23 @@ async fn refresh_existing(
             let nums = parse_episode_numbers(&name, Some(&abs.to_string_lossy()));
             match (nums, r.episode_id) {
                 (Some(n), None) => {
-                    let (ep, created) = ensure_season_and_episode(&st.db, media_id, n).await?;
-                    slots_created |= created;
-                    link_row(st, r.id, ep).await?;
-                    episode_id = Some(ep);
-                    c.updated += 1;
+                    if let Some(ep) = slots.episode(n) {
+                        links.push((r.id, ep));
+                        episode_id = Some(ep);
+                        c.updated += 1;
+                    }
                 }
                 (None, None) => {
-                    if let Some(ep) = match_special(&st.db, media_id, &name).await? {
-                        link_row(st, r.id, ep.id).await?;
+                    if let Some(ep) = slots.special(&name) {
+                        links.push((r.id, ep.id));
                         episode_id = Some(ep.id);
                         c.updated += 1;
                     }
                 }
-                (Some(n), Some(ep)) if n.episode_end.is_some() => {
-                    sqlx::query!(
-                        r#"UPDATE episodes SET "endEpisodeNumber" = $2 WHERE id = $1 AND "endEpisodeNumber" IS DISTINCT FROM $2"#,
-                        ep,
-                        n.episode_end.map(|e| e as i32)
-                    )
-                    .execute(&st.db)
-                    .await?;
+                (Some(n), Some(ep)) => {
+                    if let Some(end) = n.episode_end {
+                        ends.push((ep, end as i32));
+                    }
                 }
                 _ => {}
             }
@@ -371,7 +378,9 @@ async fn refresh_existing(
             tokio::spawn(async move { st.engine.invalidate(id).await });
         }
     }
-    Ok(slots_created)
+    link_rows(&st.db, &links).await?;
+    set_ends(&st.db, &ends).await?;
+    Ok(())
 }
 
 async fn add_new(
@@ -379,11 +388,12 @@ async fn add_new(
     media: &MediaRow,
     disk: &[(String, PathBuf)],
     linked: &HashSet<String>,
+    slots: &Slots,
     c: &mut Counts,
     touched: &mut Vec<(i32, Option<i32>)>,
-) -> Result<bool, AppError> {
+) -> Result<(), AppError> {
     let media_id = media.id;
-    let mut slots_created = false;
+    let mut fresh: Vec<NewRow> = vec![];
     for (rel, abs) in disk.iter().filter(|(r, _)| !linked.contains(r)) {
         let Ok(meta) = tokio::fs::metadata(abs).await else {
             continue;
@@ -392,12 +402,8 @@ async fn add_new(
         let mut episode_id = None;
         if media.is_series() {
             match parse_episode_numbers(&name, Some(&abs.to_string_lossy())) {
-                Some(n) => {
-                    let (ep, created) = ensure_season_and_episode(&st.db, media_id, n).await?;
-                    slots_created |= created;
-                    episode_id = Some(ep);
-                }
-                None => match match_special(&st.db, media_id, &name).await? {
+                Some(n) => episode_id = slots.episode(n),
+                None => match slots.special(&name) {
                     Some(ep) => episode_id = Some(ep.id),
                     None => {
                         tracing::warn!(
@@ -417,33 +423,193 @@ async fn add_new(
         let quality = p
             .quality(&name)
             .unwrap_or_else(|| quality_from_resolution(&name, None, None));
-        let inserted = sqlx::query_scalar!(
-            r#"INSERT INTO media_files ("mediaId", "episodeId", "relativePath", size, quality, "streamInfo",
-                 "mtimeMs", "probeVersion")
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id"#,
-            media_id,
+        fresh.push(NewRow {
+            rel: rel.clone(),
             episode_id,
-            rel,
-            meta.len() as i64,
+            size: meta.len() as i64,
             quality,
-            serde_json::to_value(&p.info).map_err(|e| AppError::internal(e.to_string()))?,
-            mtime_ms(&meta),
-            PROBE_VERSION
-        )
-        .fetch_one(&st.db)
-        .await;
-        match inserted {
-            Ok(id) => {
-                touched.push((id, episode_id));
+            info: serde_json::to_value(&p.info).map_err(|e| AppError::internal(e.to_string()))?,
+            mtime: mtime_ms(&meta),
+        });
+    }
+    if fresh.is_empty() {
+        return Ok(());
+    }
+    let by_rel: HashMap<&str, Option<i32>> = fresh
+        .iter()
+        .map(|n| (n.rel.as_str(), n.episode_id))
+        .collect();
+    let inserted = sqlx::query!(
+        r#"INSERT INTO media_files ("mediaId", "episodeId", "relativePath", size, quality, "streamInfo",
+             "mtimeMs", "probeVersion")
+           SELECT $1, v.ep, v.rel, v.size, v.quality, v.info, v.mtime, $8
+           FROM UNNEST($2::int[], $3::text[], $4::bigint[], $5::text[], $6::jsonb[], $7::bigint[])
+             AS v(ep, rel, size, quality, info, mtime)
+           ON CONFLICT ("mediaId", "relativePath") DO NOTHING
+           RETURNING id, "relativePath" AS rel"#,
+        media_id,
+        &fresh.iter().map(|n| n.episode_id).collect::<Vec<_>>() as &[Option<i32>],
+        &fresh.iter().map(|n| n.rel.clone()).collect::<Vec<_>>(),
+        &fresh.iter().map(|n| n.size).collect::<Vec<_>>(),
+        &fresh.iter().map(|n| n.quality.clone()).collect::<Vec<_>>(),
+        &fresh.iter().map(|n| n.info.clone()).collect::<Vec<_>>(),
+        &fresh.iter().map(|n| n.mtime).collect::<Vec<_>>() as &[Option<i64>],
+        PROBE_VERSION
+    )
+    .fetch_all(&st.db)
+    .await;
+    match inserted {
+        Ok(rows) => {
+            let mut eps = vec![];
+            for r in rows {
+                let ep = by_rel.get(r.rel.as_str()).copied().flatten();
+                touched.push((r.id, ep));
                 c.added += 1;
-                if let Some(ep) = episode_id {
-                    set_has_file(&st.db, ep).await?;
+                eps.extend(ep);
+            }
+            set_has_file_many(&st.db, &eps).await?;
+        }
+        Err(e) => tracing::error!(
+            "Rescan[media #{media_id}]: failed to add {} files: {e}",
+            fresh.len()
+        ),
+    }
+    Ok(())
+}
+
+struct NewRow {
+    rel: String,
+    episode_id: Option<i32>,
+    size: i64,
+    quality: String,
+    info: serde_json::Value,
+    mtime: Option<i64>,
+}
+
+/// The media's seasons and episodes, loaded once so a rescan resolves every file in memory.
+#[derive(Default)]
+struct Slots {
+    seasons: HashMap<i32, i32>,
+    episodes: HashMap<(i32, i32), (i32, Option<i32>)>,
+    specials: Vec<Ep>,
+}
+
+impl Slots {
+    async fn load(db: &sqlx::PgPool, media: i32) -> Result<Self, sqlx::Error> {
+        let rows = sqlx::query!(
+            r#"SELECT s.id AS season_id, s."seasonNumber" AS season, e.id AS "ep_id?",
+                      e."episodeNumber" AS "ep?", e."endEpisodeNumber" AS end, e.title,
+                      e."airDate"::text AS air_date
+               FROM seasons s LEFT JOIN episodes e ON e."seasonId" = s.id
+               WHERE s."mediaId" = $1 ORDER BY s.id, e.id"#,
+            media
+        )
+        .fetch_all(db)
+        .await?;
+        let mut me = Self::default();
+        for r in &rows {
+            me.seasons.entry(r.season).or_insert(r.season_id);
+        }
+        for r in rows {
+            let (Some(id), Some(ep)) = (r.ep_id, r.ep) else {
+                continue;
+            };
+            if me.seasons[&r.season] == r.season_id {
+                me.episodes.entry((r.season, ep)).or_insert((id, r.end));
+            }
+            if r.season == 0 {
+                me.specials.push(Ep {
+                    id,
+                    season_number: 0,
+                    episode_number: ep,
+                    end: r.end,
+                    title: r.title,
+                    air_date: r.air_date,
+                });
+            }
+        }
+        me.specials.sort_by_key(|e| e.id);
+        Ok(me)
+    }
+
+    /// Rule 45 in batches: the missing seasons and episodes are inserted, end numbers widened.
+    async fn ensure(
+        &mut self,
+        db: &sqlx::PgPool,
+        media: i32,
+        wanted: &[EpisodeNumbers],
+    ) -> Result<bool, sqlx::Error> {
+        let seasons: BTreeSet<i32> = wanted
+            .iter()
+            .map(|n| n.season as i32)
+            .filter(|s| !self.seasons.contains_key(s))
+            .collect();
+        let mut created = !seasons.is_empty();
+        if created {
+            let nums: Vec<i32> = seasons.into_iter().collect();
+            let rows = sqlx::query!(
+                r#"INSERT INTO seasons ("mediaId", "seasonNumber", monitored)
+                   SELECT $1, n, n > 0 FROM UNNEST($2::int[]) AS n RETURNING id, "seasonNumber" AS n"#,
+                media,
+                &nums
+            )
+            .fetch_all(db)
+            .await?;
+            self.seasons.extend(rows.into_iter().map(|r| (r.n, r.id)));
+        }
+        let mut fresh: BTreeMap<(i32, i32), Option<i32>> = BTreeMap::new();
+        let mut ends: Vec<(i32, i32)> = vec![];
+        for n in wanted {
+            let key = (n.season as i32, n.episode as i32);
+            let end = n.episode_end.map(|e| e as i32);
+            match self.episodes.get(&key) {
+                Some(&(id, cur)) => {
+                    if let Some(e) = end.filter(|e| Some(*e) != cur) {
+                        ends.push((id, e));
+                    }
+                }
+                None => {
+                    let slot = fresh.entry(key).or_insert(end);
+                    *slot = end.or(*slot);
                 }
             }
-            Err(e) => tracing::error!("Rescan[media #{media_id}]: failed to add \"{rel}\": {e}"),
         }
+        if !fresh.is_empty() {
+            created = true;
+            let by_id: HashMap<i32, i32> = self.seasons.iter().map(|(n, id)| (*id, *n)).collect();
+            let sids: Vec<i32> = fresh.keys().map(|k| self.seasons[&k.0]).collect();
+            let nums: Vec<i32> = fresh.keys().map(|k| k.1).collect();
+            let es: Vec<Option<i32>> = fresh.values().copied().collect();
+            let rows = sqlx::query!(
+                r#"INSERT INTO episodes ("seasonId", "episodeNumber", "endEpisodeNumber", monitored)
+                   SELECT v.s, v.n, v.e, true
+                   FROM UNNEST($1::int[], $2::int[], $3::int[]) AS v(s, n, e)
+                   RETURNING id, "seasonId" AS "season_id!", "episodeNumber" AS "n!""#,
+                &sids,
+                &nums,
+                &es as &[Option<i32>]
+            )
+            .fetch_all(db)
+            .await?;
+            for r in rows {
+                let end = fresh.get(&(by_id[&r.season_id], r.n)).copied().flatten();
+                self.episodes
+                    .insert((by_id[&r.season_id], r.n), (r.id, end));
+            }
+        }
+        set_ends(db, &ends).await?;
+        Ok(created)
     }
-    Ok(slots_created)
+
+    fn episode(&self, n: EpisodeNumbers) -> Option<i32> {
+        self.episodes
+            .get(&(n.season as i32, n.episode as i32))
+            .map(|e| e.0)
+    }
+
+    fn special(&self, file_name: &str) -> Option<&Ep> {
+        match_special_by_title(file_name, &self.specials).map(|i| &self.specials[i])
+    }
 }
 
 /// Embedded detection probes again, so it runs only for files this pass added, re-probed or relinked.
@@ -471,15 +637,57 @@ fn mtime_ms(m: &fs::Metadata) -> Option<i64> {
     i64::try_from(d.as_millis()).ok()
 }
 
-async fn link_row(st: &AppState, file: i32, ep: i32) -> Result<(), sqlx::Error> {
+async fn link_rows(db: &sqlx::PgPool, links: &[(i32, i32)]) -> Result<(), sqlx::Error> {
+    if links.is_empty() {
+        return Ok(());
+    }
+    let (files, eps): (Vec<i32>, Vec<i32>) = links.iter().copied().unzip();
     sqlx::query!(
-        r#"UPDATE media_files SET "episodeId" = $2 WHERE id = $1"#,
-        file,
-        ep
+        r#"UPDATE media_files f SET "episodeId" = v.ep
+           FROM UNNEST($1::int[], $2::int[]) AS v(id, ep) WHERE f.id = v.id"#,
+        &files,
+        &eps
     )
-    .execute(&st.db)
+    .execute(db)
     .await?;
-    set_has_file(&st.db, ep).await
+    set_has_file_many(db, &eps).await
+}
+
+async fn set_ends(db: &sqlx::PgPool, ends: &[(i32, i32)]) -> Result<(), sqlx::Error> {
+    if ends.is_empty() {
+        return Ok(());
+    }
+    let (ids, ends): (Vec<i32>, Vec<i32>) = ends.iter().copied().unzip();
+    sqlx::query!(
+        r#"UPDATE episodes e SET "endEpisodeNumber" = v.e
+           FROM UNNEST($1::int[], $2::int[]) AS v(id, e)
+           WHERE e.id = v.id AND e."endEpisodeNumber" IS DISTINCT FROM v.e"#,
+        &ids,
+        &ends
+    )
+    .execute(db)
+    .await
+    .map(drop)
+}
+
+/// Episode numbers of every file the rescan may link, parsed up front so the slots are created in one batch.
+fn wanted_numbers(
+    dir: &Path,
+    rows: &[Row],
+    on_disk: &HashSet<&str>,
+    disk: &[(String, PathBuf)],
+    linked: &HashSet<String>,
+) -> Vec<EpisodeNumbers> {
+    let parse = |abs: &Path| parse_episode_numbers(&file_name(abs), Some(&abs.to_string_lossy()));
+    let rows = rows
+        .iter()
+        .filter(|r| on_disk.contains(norm(&r.rel).as_str()))
+        .filter_map(|r| parse(&dir.join(norm(&r.rel))));
+    let new = disk
+        .iter()
+        .filter(|(r, _)| !linked.contains(r))
+        .filter_map(|(_, abs)| parse(abs));
+    rows.chain(new).collect()
 }
 
 /// Season 0 episode whose title the file name contains.
