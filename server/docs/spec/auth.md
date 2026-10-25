@@ -14,6 +14,8 @@ Covers the auth controllers, services, extractors, `casl/*` and `pairing/*`. Env
 | `POST /api/auth/refresh` | none | body `{refreshToken: string}` (only that key is read, other keys ignored) | 201, `TokenPair` (no `user`) | 401 `Missing refresh token` / `Invalid refresh token` / `Refresh token already rotated` / `Refresh token reuse detected` / `Refresh token expired` / `Account disabled` | `Set-Cookie fliks_access`; rotate `refresh_tokens` |
 | `POST /api/auth/logout` | none (credentials optional) | body `{refreshToken?: string, targetId?: string}` | 204, no body | none (always 204) | clear cookie; revoke refresh token; drop the device's SSE connections |
 | `POST /api/auth/register` | `Authed` + `users.manage` | body `{username: string non-empty, password: string non-empty (no min length), email?: string (no email check)}`; unknown keys 400 | 201, `SafeUser` (rule 37) | 409 `Username already taken`; 401 no/invalid credentials, 403 authenticated without `users.manage` | INSERT `users` |
+| `GET /api/auth/setup` | none | none | 200 `{required: bool}`, `true` while `users` is empty | none | none |
+| `POST /api/auth/setup` | none | body `{username: string non-empty after trim, password: string, length >= 8}`; unknown keys 400 | 201, empty body | 400 validation; 409 `Setup already completed` once any user exists | INSERT `users` (`isAdmin`, `enabled`, no role), serialised by `pg_advisory_xact_lock` |
 | `GET /api/auth/me` | `Authed` | none | `SafeUser` | 401 | throttled `users.lastLogin` update (rule 42) |
 | `GET /api/auth/users-public` | none | none | `[{id: number, username: string, avatar: string\|null}]` enabled users, `ORDER BY username ASC` | none | none |
 | `POST /api/auth/cast-info` | `Authed` | none | 201, `{token: string, streamBaseUrl: string}` | 401 | none |
@@ -95,7 +97,7 @@ No auth route has a policy beyond the extractor.
 35. Rotation is atomic: one transaction over `SELECT … FOR UPDATE` on the token row (insert of the new token included); a concurrent duplicate lands in the 30 s grace branch.
 36. Logout revokes the presented refresh token by the same `revokedAt` column as rotation, so presenting a logged-out refresh token more than 30 s later triggers the family revoke of rule 34 (every live token of that login chain), and within 30 s it is 401 `Refresh token already rotated`.
 37. Register: username taken (exact match) → 409 `Username already taken`; role = the role with `isDefault = true`; user row: `passwordHash = bcrypt12`, `isAdmin = false`, `mediaServerType = 'local'`, `roleId`. Response is the `SafeUser` of the saved user, whose role is not loaded: `role` is `null` and `permissions` is `[]`.
-38. `POST /api/auth/register` requires authentication and `users.manage` (`manage:all` qualifies); otherwise 403. Anonymous or invalid credentials get 401 from the extractor (auth runs before the handler). The table is never empty for an authorised caller, so register has no first-user branch and no role-seeding fallback. The `admin`/`password` seed on an empty `users` table is the only first user (users.md rule 7). The client hides the register screen for non-admins.
+38. `POST /api/auth/register` requires authentication and `users.manage` (`manage:all` qualifies); otherwise 403. Anonymous or invalid credentials get 401 from the extractor (auth runs before the handler). Register has no first-user branch: the first admin comes from `POST /api/auth/setup`.
 39. No login rate limiting or lockout (recorded so reviewers do not add it).
 
 ### F. Response shapes

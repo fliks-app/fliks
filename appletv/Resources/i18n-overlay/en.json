@@ -13,6 +13,7 @@
   "setup.test_success": "Server reachable",
   "setup.test_error": "Couldn't reach this server",
   "setup.known_servers": "Recent servers",
+  "select_user.setup_required": "This server has no account yet. Open it in a web browser to create the administrator, then come back.",
   "select_user.other_user": "Other user",
   "select_user.change_server": "Change server",
   "select_user.quick_connect": "Quick Connect (recommended)",

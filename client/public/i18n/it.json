@@ -723,6 +723,17 @@
     "error": "Errore di connessione",
     "back_to_picker": "Scegli un altro utente"
   },
+  "create_admin": {
+    "title": "Crea l'amministratore",
+    "subtitle": "Questo server non ha ancora alcun account. Crea il primo amministratore.",
+    "username": "Nome utente",
+    "password": "Password",
+    "password_hint": "Almeno 8 caratteri.",
+    "confirm": "Conferma password",
+    "mismatch": "Le password non corrispondono.",
+    "submit": "Crea account",
+    "error": "Impossibile creare l'account."
+  },
   "forced_password_change": {
     "title": "Nuova password richiesta",
     "subtitle": "L'amministratore ha richiesto di impostare una nuova password prima di continuare.",

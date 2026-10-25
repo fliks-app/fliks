@@ -723,6 +723,17 @@
     "error": "Erro de início de sessão",
     "back_to_picker": "Escolher outro utilizador"
   },
+  "create_admin": {
+    "title": "Criar o administrador",
+    "subtitle": "Este servidor ainda não tem nenhuma conta. Crie o primeiro administrador.",
+    "username": "Nome de utilizador",
+    "password": "Palavra-passe",
+    "password_hint": "Pelo menos 8 caracteres.",
+    "confirm": "Confirmar palavra-passe",
+    "mismatch": "As palavras-passe não coincidem.",
+    "submit": "Criar conta",
+    "error": "Não foi possível criar a conta."
+  },
   "forced_password_change": {
     "title": "Nova palavra-passe obrigatória",
     "subtitle": "O administrador solicitou que defina uma nova palavra-passe antes de continuar.",

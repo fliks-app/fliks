@@ -12,6 +12,7 @@
   "setup.test_success": "Servidor acessível",
   "setup.test_error": "Não foi possível aceder a este servidor",
   "setup.known_servers": "Servidores recentes",
+  "select_user.setup_required": "Este servidor ainda não tem nenhuma conta. Abra-o num navegador para criar o administrador e volte depois.",
   "select_user.other_user": "Outro utilizador",
   "select_user.quick_connect": "Ligação rápida (recomendado)",
   "select_user.use_password": "Usar palavra-passe",

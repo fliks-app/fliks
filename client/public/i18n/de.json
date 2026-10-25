@@ -723,6 +723,17 @@
     "error": "Anmeldefehler",
     "back_to_picker": "Anderen Benutzer wählen"
   },
+  "create_admin": {
+    "title": "Administrator anlegen",
+    "subtitle": "Auf diesem Server gibt es noch kein Konto. Legen Sie den ersten Administrator an.",
+    "username": "Benutzername",
+    "password": "Passwort",
+    "password_hint": "Mindestens 8 Zeichen.",
+    "confirm": "Passwort bestätigen",
+    "mismatch": "Die Passwörter stimmen nicht überein.",
+    "submit": "Konto erstellen",
+    "error": "Das Konto konnte nicht erstellt werden."
+  },
   "forced_password_change": {
     "title": "Neues Passwort erforderlich",
     "subtitle": "Der Administrator hat verlangt, dass Sie ein neues Passwort festlegen, bevor Sie fortfahren.",

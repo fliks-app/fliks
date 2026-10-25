@@ -1,5 +1,6 @@
 import { Routes } from '@angular/router';
 import { authGuard } from './core/guards/auth.guard';
+import { setupGuard } from './core/guards/setup.guard';
 import { adminGuard } from './core/guards/admin.guard';
 import { serverConfigGuard } from './core/guards/server-config.guard';
 import { passwordChangeGuard } from './core/guards/password-change.guard';
@@ -16,14 +17,20 @@ export const routes: Routes = [
       import('./features/setup/setup').then((m) => m.SetupComponent),
   },
   {
-    path: 'select-user',
+    path: 'create-admin',
     canActivate: [serverConfigGuard],
+    loadComponent: () =>
+      import('./features/create-admin/create-admin').then((m) => m.CreateAdminComponent),
+  },
+  {
+    path: 'select-user',
+    canActivate: [serverConfigGuard, setupGuard],
     loadComponent: () =>
       import('./features/select-user/select-user').then((m) => m.SelectUserComponent),
   },
   {
     path: 'login',
-    canActivate: [serverConfigGuard],
+    canActivate: [serverConfigGuard, setupGuard],
     loadComponent: () =>
       import('./features/login/login').then((m) => m.LoginComponent),
   },

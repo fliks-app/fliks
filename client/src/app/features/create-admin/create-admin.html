@@ -1,0 +1,71 @@
+<div class="min-h-screen flex items-center justify-center bg-base-200 p-4">
+  <div class="card w-96 bg-base-100 shadow-xl">
+    <div class="card-body">
+      <h2 class="card-title text-2xl justify-center mb-2">
+        {{ 'create_admin.title' | translate }}
+      </h2>
+      <p class="text-sm text-base-content/70 text-center mb-4">
+        {{ 'create_admin.subtitle' | translate }}
+      </p>
+
+      @if (error()) {
+        <div role="alert" class="alert alert-error mb-4">
+          <span>{{ error() }}</span>
+        </div>
+      }
+
+      <form [formGroup]="form" (ngSubmit)="onSubmit()">
+        <fieldset class="fieldset">
+          <label class="fieldset-label" for="admin-username">{{ 'create_admin.username' | translate }}</label>
+          <input
+            id="admin-username"
+            type="text"
+            class="input input-bordered w-full"
+            formControlName="username"
+            autocomplete="username"
+            autofocus
+          />
+        </fieldset>
+
+        <fieldset class="fieldset">
+          <label class="fieldset-label" for="admin-password">{{ 'create_admin.password' | translate }}</label>
+          <input
+            id="admin-password"
+            type="password"
+            class="input input-bordered w-full"
+            formControlName="password"
+            autocomplete="new-password"
+          />
+          <p class="text-xs text-base-content/60 mt-1">{{ 'create_admin.password_hint' | translate }}</p>
+        </fieldset>
+
+        <fieldset class="fieldset">
+          <label class="fieldset-label" for="admin-confirm">{{ 'create_admin.confirm' | translate }}</label>
+          <input
+            id="admin-confirm"
+            type="password"
+            class="input input-bordered w-full"
+            formControlName="confirm"
+            autocomplete="new-password"
+          />
+          @if (mismatch()) {
+            <p class="text-sm text-error mt-1">{{ 'create_admin.mismatch' | translate }}</p>
+          }
+        </fieldset>
+
+        <div class="card-actions mt-6">
+          <button
+            type="submit"
+            class="btn btn-primary w-full"
+            [disabled]="loading() || form.invalid || mismatch()"
+          >
+            @if (loading()) {
+              <span class="loading loading-spinner loading-sm"></span>
+            }
+            {{ 'create_admin.submit' | translate }}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>

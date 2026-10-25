@@ -723,6 +723,17 @@
     "error": "Login error",
     "back_to_picker": "Choose another user"
   },
+  "create_admin": {
+    "title": "Create the administrator",
+    "subtitle": "This server has no account yet. Create the first administrator.",
+    "username": "Username",
+    "password": "Password",
+    "password_hint": "At least 8 characters.",
+    "confirm": "Confirm password",
+    "mismatch": "Passwords do not match.",
+    "submit": "Create account",
+    "error": "Unable to create the account."
+  },
   "forced_password_change": {
     "title": "New password required",
     "subtitle": "The administrator has asked you to set a new password before continuing.",
