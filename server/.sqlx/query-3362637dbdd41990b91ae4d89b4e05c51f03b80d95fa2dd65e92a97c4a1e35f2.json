@@ -1,0 +1,35 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO media_files (\"mediaId\", \"episodeId\", \"relativePath\", size, quality, \"streamInfo\",\n             \"mtimeMs\", \"probeVersion\")\n           SELECT $1, v.ep, v.rel, v.size, v.quality, v.info, v.mtime, $8\n           FROM UNNEST($2::int[], $3::text[], $4::bigint[], $5::text[], $6::jsonb[], $7::bigint[])\n             AS v(ep, rel, size, quality, info, mtime)\n           ON CONFLICT (\"mediaId\", \"relativePath\") DO NOTHING\n           RETURNING id, \"relativePath\" AS rel",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "rel",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4Array",
+        "TextArray",
+        "Int8Array",
+        "TextArray",
+        "JsonbArray",
+        "Int8Array",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "3362637dbdd41990b91ae4d89b4e05c51f03b80d95fa2dd65e92a97c4a1e35f2"
+}

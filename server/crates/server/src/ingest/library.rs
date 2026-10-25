@@ -518,6 +518,16 @@ pub async fn set_has_file(db: &sqlx::PgPool, episode: i32) -> Result<(), sqlx::E
     .map(drop)
 }
 
+pub async fn set_has_file_many(db: &sqlx::PgPool, episodes: &[i32]) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        r#"UPDATE episodes SET "hasFile" = true WHERE id = ANY($1)"#,
+        episodes
+    )
+    .execute(db)
+    .await
+    .map(drop)
+}
+
 /// W6: the replaced video's old sidecar, so it is not applied to the new cut.
 async fn remove_stale_edl(dest: &Path) {
     let edl = crate::stream::edl_sidecar(&dest.to_string_lossy()).await;
