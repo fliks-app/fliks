@@ -2574,6 +2574,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   /** A recovery reload just resolved; counters clear only after the playhead advances for {@link
    *  recoverConfirmMs} (confirmed in checkStall). */
   private recoverConfirmPending = false;
+  /** One in-place retry per outage: if it fails too, the next recovery mints a new session. */
+  private retriedInPlace = false;
   private recoverConfirmAt = 0;
   private readonly recoverConfirmMs = 5_000;
   /** Set in ngOnDestroy: blocks late async reloads (sessionLost, sessionExpired, Cast resume) that would
@@ -2831,7 +2833,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     } else if (this.recoverWhenOnline && this.network.isOnline()) {
       const { reason, frozenSince } = this.recoverWhenOnline;
       this.recoverWhenOnline = null;
-      void this.recoverFromLostSession(reason, frozenSince);
+      void this.recoverFromLostSession(reason, frozenSince, true);
     } else if (
       this.resumeDue &&
       this.network.isOnline() &&
@@ -2920,6 +2922,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       ) {
         this.recoverConfirmPending = false;
         this.recoverAttempts = 0;
+        this.retriedInPlace = false;
         this.engine?.resetRecoveryGuard();
       }
       return;
@@ -2937,7 +2940,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   /** The carried `sid` is unknown to the backend or the playhead wedged: mint a fresh session and reload at the
    *  position, backing off up to {@link maxRecoverAttempts}. Skipped for Cast (receiver owns the session). */
-  private async recoverFromLostSession(reason: QoeRecoveryReason = 'other', frozenSince?: number): Promise<void> {
+  private async recoverFromLostSession(
+    reason: QoeRecoveryReason = 'other',
+    frozenSince?: number,
+    afterOffline = false,
+  ): Promise<void> {
     if (this.destroyed) return;
     if (this.recoveringFromLostSession) return;
     // A user reload (quality/audio switch, episode swap) owns the session, so a 410 or sessionLost inside it is
@@ -2956,9 +2963,23 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (this.castService.isConnected()) return;
     if (!this.engine || !this.mediaFileId) return;
     if (!this.network.isOnline()) {
+      this.retriedInPlace = false;
       this.recoverWhenOnline ??= { reason, frozenSince };
       this.state.setRecovering(true);
       return;
+    }
+    // The server keeps the session through a short outage: re-prepare the loaded stream, keeping the last frame up.
+    if (afterOffline && !this.retriedInPlace && this.engine.retry) {
+      this.recoveringFromLostSession = true;
+      try {
+        if (await this.engine.retry()) {
+          this.retriedInPlace = true;
+          this.awaitRecoveryConfirm();
+          return;
+        }
+      } finally {
+        this.recoveringFromLostSession = false;
+      }
     }
     // The first trigger names the episode. An open stall already counts the freeze on the old sid, so the wait
     // starts now; otherwise at the last progress. A lost sid's open stall moves to the new one.
@@ -2992,12 +3013,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         pos,
         episode ? { reason: episode.reason, durationMs: Date.now() - episode.since } : undefined,
       );
-      this.resetStallWatchdog();
-      this.state.setRecovering(false);
-      // Keep the episode counter until the reload proves it plays (checkStall confirms), so a re-fail keeps
-      // counting.
-      this.recoverConfirmPending = true;
-      this.recoverConfirmAt = Date.now();
+      this.awaitRecoveryConfirm();
     } catch (e) {
       if (!this.network.isOnline()) {
         this.recoverAttempts -= 1;
@@ -3017,6 +3033,15 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.recoveringFromLostSession = false;
       this.qoeGraceUntil = Date.now() + 3_000;
     }
+  }
+
+  /** Keeps the episode counter until the recovered stream proves it plays (checkStall confirms), so a re-fail
+   *  keeps counting. */
+  private awaitRecoveryConfirm(): void {
+    this.resetStallWatchdog();
+    this.state.setRecovering(false);
+    this.recoverConfirmPending = true;
+    this.recoverConfirmAt = Date.now();
   }
 
   /** The terminal card means playback is over: an engine left loaded would keep buffering and play

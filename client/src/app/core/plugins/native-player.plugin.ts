@@ -112,6 +112,8 @@ export interface NativePlayerPlugin {
 
   play(): Promise<void>;
   pause(): Promise<void>;
+  /** Android only: re-prepares the current item after a load error. */
+  retry(): Promise<void>;
   seek(options: { position: number }): Promise<void>;
   stop(): Promise<void>;
 

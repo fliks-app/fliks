@@ -690,6 +690,15 @@ public class NativePlayerPlugin extends Plugin {
         mainHandler.post(() -> { if (player != null) player.pause(); call.resolve(); });
     }
 
+    /** Re-prepares the current item after a load error, at the same position and without clearing the surface. */
+    @PluginMethod()
+    public void retry(PluginCall call) {
+        mainHandler.post(() -> {
+            if (player != null && player.getPlayerError() != null) player.prepare();
+            call.resolve();
+        });
+    }
+
     @PluginMethod()
     public void seek(PluginCall call) {
         double position = call.getDouble("position", 0.0);
