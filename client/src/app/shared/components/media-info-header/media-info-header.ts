@@ -25,6 +25,7 @@ import {
 } from '@lucide/angular';
 import { PlayableMediaService } from '../../../core/services/playable-media.service';
 import { PartyService } from '../../../core/services/party/party.service';
+import { PartyApiService } from '../../../core/services/api/party-api.service';
 import {
   StreamingApiService,
   type PlaybackState,
@@ -684,8 +685,10 @@ export class MediaInfoHeaderComponent {
   }));
 
   /** Visibility the `when` vocabulary can't express (an OR, or non-permission facts); only narrows, for three ids. */
+  private readonly partyApi = inject(PartyApiService);
   private readonly extraGuards: Record<string, () => boolean> = {
     'core.recommend': () => !this.auth.sharingDisabled(),
+    'core.watch_together': () => this.partyApi.supported(),
     'core.download': () => !this.download() || this.download()?.status === 'ready',
     'core.download_series': () => !this.episodeId() && this.files().length > 0,
     'core.auto_download_group': () => this.autoDownload.enabled && !this.episodeId(),
