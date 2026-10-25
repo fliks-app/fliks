@@ -253,6 +253,29 @@ async fn proxy_routes_and_lifecycle() {
     done(s, h).await;
 }
 
+/// A claim released for a key that is still running is not due again at once (no spin).
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_released_call_is_not_due_again_at_once() {
+    use fliks_server::plugins::scheduled;
+    let Some((s, h)) = setup("release", |_| {}).await else {
+        return;
+    };
+    scheduled::schedule(&s.pool, ID, "busy", 0, "\"x\"")
+        .await
+        .unwrap();
+    let lease = Duration::from_secs(60);
+    let c = scheduled::claim(&s.pool, ID, 1, lease).await.unwrap();
+    scheduled::release(&s.pool, ID, "busy", c[0].version)
+        .await
+        .unwrap();
+    let due = scheduled::next_due(&s.pool, &[ID.to_owned()])
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(due > chrono::Utc::now() + chrono::Duration::seconds(3));
+    done(s, h).await;
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn scheduled_calls() {
     let Some((s, h)) = setup("sched", |c| {
@@ -566,7 +589,7 @@ async fn ladder_delay_gates_only_new_instances() {
 async fn health_misses_and_timeouts() {
     let Some((s, h)) = setup("health", |c| {
         c.health_every = Duration::from_millis(200);
-        c.deadlines.short = Duration::from_millis(500);
+        c.deadlines.health = Duration::from_millis(500);
         c.ladder = vec![Duration::from_millis(50)];
     })
     .await
@@ -607,11 +630,16 @@ async fn health_misses_and_timeouts() {
     let before = rt.restarts.load(std::sync::atomic::Ordering::SeqCst);
     h.set("plugin.fliks.fixture.health", "slow").await;
     until(
-        "a timed-out health is a crash at once",
-        Duration::from_secs(5),
-        async || rt.restarts.load(std::sync::atomic::Ordering::SeqCst) == before + 1,
+        "a timed-out health is a miss",
+        Duration::from_secs(10),
+        async || rt.state() == State::Degraded,
     )
     .await;
+    assert_eq!(
+        rt.restarts.load(std::sync::atomic::Ordering::SeqCst),
+        before,
+        "no crash was counted"
+    );
     h.set("plugin.fliks.fixture.health", "ok").await;
     done(s, h).await;
 }

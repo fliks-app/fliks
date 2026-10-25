@@ -73,6 +73,7 @@ pub fn spawn_claimer(st: &AppState) {
             let Ok(host) = st.plugins.host() else { return };
             let env = host.env.clone();
             let mut ids = vec![];
+            let mut claimed = false;
             if !st.jobs.is_restoring() {
                 for rt in st
                     .plugins
@@ -80,15 +81,16 @@ pub fn spawn_claimer(st: &AppState) {
                     .into_iter()
                     .filter(|r| r.state() == State::Ready)
                 {
-                    ids.push(rt.sh.id.to_string());
                     let free = rt.task.free();
                     if free == 0 {
                         continue;
                     }
+                    ids.push(rt.sh.id.to_string());
                     let lease = env.cfg.deadlines.scheduled + env.cfg.lease_extra;
                     let Ok(rows) = scheduled::claim(&st.db, &rt.sh.id, free, lease).await else {
                         continue;
                     };
+                    claimed |= !rows.is_empty();
                     for c in rows {
                         let (rt, st) = (rt.clone(), st.clone());
                         tokio::spawn(async move {
@@ -127,8 +129,12 @@ pub fn spawn_claimer(st: &AppState) {
                     .unwrap_or_default()
                     .min(Duration::from_secs(1))
             });
-            let _ =
-                tokio::time::timeout(wait.max(Duration::from_millis(5)), env.wake.notified()).await;
+            let floor = if claimed {
+                Duration::from_millis(5)
+            } else {
+                Duration::from_secs(1)
+            };
+            let _ = tokio::time::timeout(wait.max(floor), env.wake.notified()).await;
         }
     });
 }

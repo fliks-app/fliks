@@ -3,11 +3,14 @@ use super::*;
 
 impl PluginRt {
     pub async fn health(self: &Arc<Self>) -> Result<HealthReport, CallError> {
-        let d = self.sh.env.cfg.deadlines.short;
+        let d = self.sh.env.cfg.deadlines.health;
         self.core
             .call(
                 self,
-                Budget::of(d),
+                Budget {
+                    soft: true,
+                    ..Budget::of(d)
+                },
                 call_fn(|i| {
                     Box::pin(
                         async move { i.guest.fliks_plugin_guest().call_health(&mut i.store).await },
@@ -78,12 +81,14 @@ impl PluginRt {
                 deadline: d.pre_roll,
                 queue_wait: d.pre_roll,
                 inclusive: true,
+                soft: false,
             }
         } else {
             Budget {
                 deadline: d.http,
                 queue_wait: d.queue_wait,
                 inclusive: false,
+                soft: false,
             }
         };
         self.http

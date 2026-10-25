@@ -38,7 +38,7 @@ Environment variables read by `fliks-server`, with defaults and parsing rules.
 | `FLIKS_DATA_DIR` | none (fallbacks: `FLIKS_IMAGES_DIR`, `cwd/images`, `cwd/data`, temp) | `.trim`, empty = unset |
 | `FLIKS_IMAGES_DIR` | none (alias for the data dir) | `.trim`, empty = unset |
 | `FLIKS_CACHE_DIR` | none (`<dataDir>/cache` or temp) | `.trim`, empty = unset |
-| `FLIKS_RUNTIME_DIR` | none (`<override>/fliks-plugins` or temp) | `.trim`, empty = unset |
+| `FLIKS_RUNTIME_DIR` | none (`<override>/fliks-plugins`, else `<dataDir>/plugins`) | `.trim`, empty = unset |
 
 ## CORS
 
