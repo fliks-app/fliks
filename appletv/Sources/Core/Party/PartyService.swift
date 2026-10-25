@@ -349,6 +349,12 @@ import Foundation
         return handoff && active
     }
 
+    /// Where the group is now, for a player that opens on the party's item.
+    func groupStartPosition() -> Double {
+        guard let live else { return 0 }
+        return PartySync.groupPosition(state: live.state, anchor: live.anchor, serverNowMs: clock.serverNowMs())
+    }
+
     // MARK: - Queue
 
     private func syncQueue(_ item: PartyItem) {
