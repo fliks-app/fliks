@@ -23,6 +23,8 @@ export class LoginComponent {
 
   readonly error = signal('');
   readonly loading = signal(false);
+  /** False when the picker would be empty (roster hidden by the admin): it would bounce back here. */
+  readonly canPickUser = signal(true);
 
   /** `?username=` from the user picker locks the field to the chosen account; else falls back to the active server's last username. */
   private readonly presetUsername = this.route.snapshot.queryParamMap.get('username');
@@ -35,6 +37,13 @@ export class LoginComponent {
     ],
     password: ['', Validators.required],
   });
+
+  constructor() {
+    void this.auth
+      .listUsersPublic()
+      .then((users) => this.canPickUser.set(users.length > 0 || this.auth.resumableSessions().length > 0))
+      .catch(() => undefined);
+  }
 
   async onSubmit() {
     if (this.form.invalid) return;

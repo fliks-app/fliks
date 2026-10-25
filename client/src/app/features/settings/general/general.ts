@@ -32,6 +32,7 @@ export class GeneralSettingsComponent implements OnInit {
   // Server
   readonly serverName = signal('');
   readonly publicUrl = signal('');
+  readonly usersPublicMode = signal('everyone');
   readonly savingServer = signal(false);
 
   // Metadata language + region
@@ -52,6 +53,7 @@ export class GeneralSettingsComponent implements OnInit {
       const map = await this.api.getAll();
       this.serverName.set(map['server_name'] ?? '');
       this.publicUrl.set(map['public_url'] ?? '');
+      this.usersPublicMode.set(map['users_public_mode'] ?? 'everyone');
       this.metadataLanguage.set(map['metadata_language'] ?? 'en');
       this.metadataRegion.set(map['metadata_region'] ?? 'US');
       this.autoDetectMarkersOnImport.set(map['markers_auto_detect_on_import'] ?? 'true');
@@ -73,6 +75,7 @@ export class GeneralSettingsComponent implements OnInit {
       await this.api.setBulk({
         server_name: this.serverName(),
         public_url: this.publicUrl(),
+        users_public_mode: this.usersPublicMode(),
       });
       this.toast.success(this.translate.instant('settings.general.saved'));
     } catch { /* interceptor */ } finally { this.savingServer.set(false); }
