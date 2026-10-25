@@ -34,6 +34,7 @@ export interface PlayerSessionOptions {
 /** Window corner radius matching each OS's native window rounding, so the
  *  overlays' clipped bottom aligns with frameWin's rounded bottom: macOS ~10pt,
  *  Windows 11 DWM ~8px. */
+const UI_CLOSE_GRACE_MS = 1500;
 const OVERLAY_CORNER_RADIUS = 10;
 const WIN_OVERLAY_CORNER_RADIUS = 8;
 
@@ -206,6 +207,14 @@ export class PlayerSession {
         setTimeout(sync, 150);
       }
     });
+    // Close the UI first so its unload handlers (position save, session stop) run before destroy() kills it.
+    this.frameWin.on('close', (e) => {
+      if (this.destroyed || this.uiWin.isDestroyed()) return;
+      e.preventDefault();
+      this.uiWin.once('closed', () => void this.destroy());
+      this.uiWin.close();
+      setTimeout(() => void this.destroy(), UI_CLOSE_GRACE_MS);
+    });
     this.frameWin.on('closed', () => this.destroy());
 
     // Shape + position the overlays BEFORE awaiting the (slow) Angular load, so
@@ -268,6 +277,7 @@ export class PlayerSession {
   }
 
   async destroy(): Promise<void> {
+    if (this.destroyed) return;
     this.destroyed = true;
     setPlaybackKeepAwake(false);
     await this.mpv?.destroy();
