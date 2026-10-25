@@ -272,6 +272,12 @@ export class PartyService {
     await this.api.status(id, { deviceId: this.deviceId(), status: ready ? 'ready' : 'waiting', position }).catch(() => {});
   }
 
+  /** Host: ends the party for everyone; the `party.closed` event then takes the player out. */
+  async end(): Promise<void> {
+    const id = this.party()?.id;
+    if (id != null) await this.api.end(id);
+  }
+
   async leave(): Promise<void> {
     const id = this.party()?.id;
     this.reset();
