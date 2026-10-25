@@ -19,7 +19,7 @@ Covers the auth controllers, services, extractors, `casl/*` and `pairing/*`. Env
 | `GET /api/auth/me` | `Authed` | none | `SafeUser` | 401 | throttled `users.lastLogin` update (rule 42) |
 | `GET /api/auth/users-public` | none | none | `[{id: number, username: string, avatar: string\|null}]` enabled users, `ORDER BY username ASC` | none | none |
 | `POST /api/auth/cast-info` | `Authed` | none | 201, `{token: string, streamBaseUrl: string}` | 401 | none |
-| `POST /api/auth/stream-token` | `Authed` | none | 201, `{streamToken: string, expiresAt: number (unix **ms**)}` | 401 | none |
+| `POST /api/auth/stream-token` | `Authed` | optional `{mediaFileId?: u32}` | 201, `{streamToken: string, expiresAt: number (unix **ms**)}` | 401 | none |
 | `POST /api/auth/pairing/request` | none | header `X-Device-Id` required; body `{userId: int, deviceName: string non-empty max 80, systemName?: string max 60}`; unknown keys 400 | 201, `{pairingId: string (uuid), expiresIn: 600}` | 400 `Missing X-Device-Id header`; 404 `User not found`; 400 `Too many pending requests for this device` | INSERT `pairing_requests`; SSE `pairing.requested` (target user only) |
 | `GET /api/auth/pairing/status` | none | query `pairingId` (required), header `X-Device-Id` (required) | `{status: 'pending'\|'approved'\|'denied'\|'expired'}` and, once, on the issuing device after approval: `+ TokenPair` | 400 `Missing pairingId`; 400 `Missing X-Device-Id header`; 404 `Pairing request not found` | lazy expire; claim: INSERT `refresh_tokens`, null `accessToken`; `Set-Cookie fliks_access` when tokens ship |
 | `GET /api/auth/pairing/pending` | `Authed` | none | `[{pairingId, deviceId, deviceName, systemName: string\|null, requestedAt: ISO, expiresAt: ISO}]` | 401 | none |
@@ -36,7 +36,7 @@ No auth route has a policy beyond the extractor.
 2. `<conf>` = first writable of `[FLIKS_CONF_DIR.trim || '/app/conf', <os.tmpdir>/fliks-conf]`, probed by creating then unlinking `<dir>/.probe` (dir created recursive, mode 0700); none writable: last candidate with a warning.
 3. HMAC key bytes = the secret string's UTF-8 bytes (the 64-char hex is NOT hex-decoded). Header `{"alg":"HS256","typ":"JWT"}`.
 4. Access token claims `{sub: number (user id), username: string, iat, exp}`; no `scope` key (absent, not null). `exp - iat` = `JWT_EXPIRATION` (default `'1h'`, parsed by `ms`, see `config.md`).
-5. Stream/Cast tokens: same claims plus `scope: 'stream'`. Cast: fixed `expiresIn: '4h'`. Stream: `STREAM_TOKEN_TTL` (default `'12h'`, `ms` grammar). No other claim (no `jti`, no media or session binding).
+5. Stream/Cast tokens: same claims plus `scope: 'stream'`. Cast: fixed `expiresIn: '4h'`. Stream: `STREAM_TOKEN_TTL` (default `'6h'`, `ms` grammar). A stream token minted with `{mediaFileId}` carries `mf` and the resolver opens only that file with it (rule 51); a legacy one (no body) has no `mf` and opens any file the user can read, kept for released clients. No other claim (no `jti`, no session binding).
 6. Tokens verify against the same secret file with the same claim names and HS256.
 
 ### B. Request authentication (extractor `Authed`)
@@ -108,6 +108,7 @@ No auth route has a policy beyond the extractor.
 43. `users-public`: enabled users only, fields exactly `id, username, avatar` (`avatar` null when unset), `ORDER BY username ASC` (database collation). No auth.
 44. `cast-info`: `token` = Cast token (rule 5); `streamBaseUrl` = setting `public_url` with trailing `/`s stripped when non-empty; else `<proto>://<Host>` where `proto` is the raw `X-Forwarded-Proto` header (not split on `,`) or `http`, and `Host` the request `Host` header; else `http://localhost:<PORT||4848>`.
 45. `stream-token`: `streamToken` = rule 5; `expiresAt = now + ttlMs` in **milliseconds**, where `ttlMs` is the TTL of the token actually signed, from the one `ms` parser (rule 48; `config.md`).
+51. Resolver and `mf`: a token with `mf` is denied (bare denial) for any file other than `mf` on the `stream`, `download`, `sprite` and `subtitle` purposes; tokens without `mf` (legacy stream tokens, access tokens, cast tokens) are not file-bound.
 
 ### G. Cookies
 

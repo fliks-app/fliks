@@ -98,11 +98,17 @@ pub async fn resolve(
     ValidJson(body): ValidJson<Value>,
 ) -> Result<Json<ResolveResponse>, AppError> {
     let request = parse(&body).map_err(AppError::bad_request)?;
-    let Some((user, perms, raw, bound)) = user_for(&st, &request.credential).await? else {
+    let Some((user, perms, raw, bound, file)) = user_for(&st, &request.credential).await? else {
         return Ok(Json(deny()));
     };
     // A live token opens its own viewer's data plane only; a bare denial ends nobody's viewer.
     if bound.is_some_and(|b| request.media_id != ResolveMediaId::Live(b)) {
+        return Ok(Json(deny()));
+    }
+    // A file-bound stream token opens its own file only (sprites and subtitles are of that file too).
+    if let (Some(mf), ResolveMediaId::File(id)) = (file, &request.media_id)
+        && mf != *id
+    {
         return Ok(Json(deny()));
     }
     match locate(&st, &user, &perms, &raw, &request).await {
@@ -221,11 +227,20 @@ fn token_of(credential: &str) -> Option<String> {
 async fn user_for(
     st: &AppState,
     credential: &str,
-) -> Result<Option<(UserRow, Permissions, Vec<String>, Option<String>)>, AppError> {
+) -> Result<
+    Option<(
+        UserRow,
+        Permissions,
+        Vec<String>,
+        Option<String>,
+        Option<u32>,
+    )>,
+    AppError,
+> {
     let Some(claims) = token_of(credential).and_then(|t| st.jwt.verify(&t)) else {
         return Ok(None);
     };
-    let live = claims.live;
+    let (live, file) = (claims.live, claims.mf);
     Ok(load_enabled(&st.db, claims.sub).await?.map(|(user, role)| {
         let granted = role.map(|r| r.permissions).unwrap_or_default();
         let perms = Permissions::from(&granted, user.is_admin);
@@ -235,7 +250,7 @@ async fn user_for(
         } else {
             granted
         };
-        (user, perms, raw, live)
+        (user, perms, raw, live, file)
     }))
 }
 

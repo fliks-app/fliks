@@ -359,7 +359,7 @@ export class DownloadManagerService {
     }
 
     // Fresh long-lived stream JWT before baking the URL into the daemon: downloads outlast the 1h access token.
-    await this.auth.ensureStreamToken();
+    await this.auth.ensureStreamToken(mediaFileId);
 
     // Desktop original: fetch the untouched container to disk via the raw ?download=1 route and play it with mpv; no HLS session.
     if (this.isDesktop && quality === 'original') {
@@ -408,7 +408,7 @@ export class DownloadManagerService {
       this.updateTaskStatus(taskId, 'downloading', 0);
     } else if (this.isNative) {
       const token =
-        this.auth.streamToken() ?? this.auth.accessToken ?? '';
+        this.auth.playbackTokenFor(mediaFileId) ?? '';
       // Pre-translated copy: the native side never hardcodes text.
       this.syncNotificationCopy();
       const notifTitle = episode ? `${title} · ${episode}` : title;

@@ -8,7 +8,7 @@ use std::path::PathBuf;
 
 const DEFAULT_PORT: u16 = 4849;
 const DEFAULT_JWT_EXPIRATION_SECS: u64 = 3600;
-const DEFAULT_STREAM_TOKEN_TTL_SECS: u64 = 12 * 3600;
+const DEFAULT_STREAM_TOKEN_TTL_SECS: u64 = 6 * 3600;
 const DEFAULT_REFRESH_TOKEN_TTL_DAYS: i64 = 60;
 
 /// A value that must not reach a log through `{:?}`.
@@ -157,7 +157,7 @@ mod tests {
                 c.stream_token_ttl_secs,
                 c.refresh_token_ttl_days
             ),
-            (3600, 43_200, 60)
+            (3600, 21_600, 60)
         );
     }
 

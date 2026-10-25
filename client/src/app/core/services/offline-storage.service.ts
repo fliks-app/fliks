@@ -249,8 +249,9 @@ export class OfflineStorageService {
   async downloadSmallFile(url: string, key: string): Promise<boolean> {
     if (this.isDesktop) return this.downloader!.saveFile(key, url);
     try {
-      // Downloads can finish hours after the 1h access token was minted, so use the long-lived stream token (as in the subtitle URL).
-      const token = this.auth.streamToken() ?? this.auth.accessToken ?? '';
+      // Downloads can finish hours after the 1h access token was minted: send the file-bound stream token the URL carries.
+      const token =
+        new URL(url, location.href).searchParams.get('token') ?? this.auth.accessToken ?? '';
       const response = await fetch(url, {
         headers: { Authorization: `Bearer ${token}` },
       });

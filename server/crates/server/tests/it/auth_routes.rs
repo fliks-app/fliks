@@ -247,6 +247,33 @@ async fn me_stream_scope_is_rejected_and_tokens(pool: PgPool) {
             .scope
             .is_some()
     );
+    let (s, _, t) = call(
+        &c,
+        "POST",
+        "/api/auth/stream-token",
+        &[("authorization", &h)],
+        Some(json!({"mediaFileId": 42})),
+    )
+    .await;
+    assert_eq!(s, 201);
+    let claims = c.st.jwt.verify(t["streamToken"].as_str().unwrap()).unwrap();
+    assert_eq!((claims.mf, claims.sub), (Some(42), id));
+    let (s, _, t) = call(
+        &c,
+        "POST",
+        "/api/auth/stream-token",
+        &[("authorization", &h)],
+        Some(json!({})),
+    )
+    .await;
+    assert_eq!(s, 201);
+    assert_eq!(
+        c.st.jwt
+            .verify(t["streamToken"].as_str().unwrap())
+            .unwrap()
+            .mf,
+        None
+    );
     let (_, _, i) = call(
         &c,
         "POST",

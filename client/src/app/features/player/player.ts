@@ -1044,9 +1044,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
         const mode = this.playbackMode();
 
-        // Cache a fresh 12h stream JWT before building URLs and Bearer headers: ExoPlayer/AVPlay/Shaka bake
-        // auth at load() and the 1h access token would expire mid-film.
-        if (streamTokenPromise) await streamTokenPromise;
+        // Cache the file's stream JWT before building URLs and Bearer headers: ExoPlayer/AVPlay/Shaka bake auth at
+        // load() and the 1h access token would expire mid-film. A pre-roll swapped the file since the mint.
+        if (streamTokenPromise) {
+          await streamTokenPromise;
+          await this.requireStreamToken();
+        }
 
         // Native (Capacitor) uses the platform player, Samsung Tizen uses AVPlay (Shaka's MSE chokes on Tizen
         // 6.5: EAC3 claims support but `addSourceBuffer` throws); web keeps Shaka.
@@ -1068,7 +1071,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           // Auth rides in the URL query (?token=); the Bearer header is for
           // AVPlay/ExoPlayer only — the webOS <video> ignores it.
           const token =
-            this.authService.streamToken() ?? this.authService.accessToken;
+            this.authService.playbackTokenFor(this.mediaFileId);
           const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
 
           const { url: tizenUrl, mimeType: tizenMimeType } = this.buildPlayUrl({
@@ -1096,7 +1099,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           if (this.engine instanceof NativeEngine) this.applyVideoCrop();
 
           const token =
-            this.authService.streamToken() ?? this.authService.accessToken;
+            this.authService.playbackTokenFor(this.mediaFileId);
           const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
 
           // Pin the quality constraint before load so ExoPlayer can't pick 4K on a phone (A/V desync): `auto`
@@ -2686,7 +2689,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   /** Segment URLs bake the token at load: a failed mint must fail the load, not fall back to the 1 h access token. */
   private async requireStreamToken(): Promise<void> {
-    if (!(await this.authService.ensureStreamToken())) throw new Error('stream token unavailable');
+    if (!(await this.authService.ensureStreamToken(this.mediaFileId))) throw new Error('stream token unavailable');
   }
 
   /** Wires the two ways a live session goes bad: `sessionExpired` (a backend
@@ -2855,7 +2858,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.resumeDue = false;
     this.lastResumeAt = Date.now();
     try {
-      await this.authService.ensureStreamToken();
+      await this.authService.ensureStreamToken(this.mediaFileId);
       await this.prewarmCurrentStream();
     } catch {
       // Best effort: the heartbeat below is what actually drives recovery.
@@ -3716,6 +3719,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const now = Date.now();
     if (!force && now - this.lastSaveAt < 2_000) return;
     this.lastSaveAt = now;
+    // Cache hit until 30 min remain; later URLs (sprites, subtitles, reloads) then carry a fresh token.
+    if (!this.isOfflinePlayback) void this.authService.ensureStreamToken(this.mediaFileId);
 
     const payload: {
       positionSeconds: number;

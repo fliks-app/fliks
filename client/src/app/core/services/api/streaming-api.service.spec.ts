@@ -22,7 +22,15 @@ describe('StreamingApiService.buildPlayUrl / buildAbsolutePlayUrl', () => {
       providers: [
         provideHttpClient(),
         provideHttpClientTesting(),
-        { provide: AuthService, useValue: { playbackToken: null } },
+        {
+          provide: AuthService,
+          useValue: {
+            playbackToken: null,
+            playbackTokenFor(this: { playbackToken: string | null }) {
+              return this.playbackToken;
+            },
+          },
+        },
         {
           provide: ServerConfigService,
           useValue: {
@@ -82,6 +90,17 @@ describe('StreamingApiService.buildPlayUrl / buildAbsolutePlayUrl', () => {
     expect(url).toContain('token=fresh-token');
     expect(url.match(/sid=/g)?.length).toBe(1);
     expect(url).toContain('sid=sid1');
+  });
+
+  it('asks for the token of the file in the URL path', () => {
+    const auth = TestBed.inject(AuthService) as unknown as {
+      playbackTokenFor: (id: number) => string | null;
+    };
+    auth.playbackTokenFor = (id) => `tok-${id}`;
+    expect(service.getHlsUrl(5)).toContain('token=tok-5');
+    expect(service.getThumbnailSpriteUrl(6)).toContain('token=tok-6');
+    expect(service.getOriginalDownloadUrl(7)).toContain('token=tok-7');
+    expect(service.buildPlayUrl(pi('DirectPlay', '/api/stream/8?token=x'), {})).toContain('token=tok-8');
   });
 
   it('DirectPlay also rebuilds against the current token', () => {
@@ -148,7 +167,7 @@ describe('StreamingApiService.resolveDownloadUrl', () => {
       providers: [
         provideHttpClient(),
         provideHttpClientTesting(),
-        { provide: AuthService, useValue: { playbackToken: null } },
+        { provide: AuthService, useValue: { playbackToken: null, playbackTokenFor: () => null } },
         {
           provide: ServerConfigService,
           useValue: { isNative: false, resolveUrl: (path: string) => path },

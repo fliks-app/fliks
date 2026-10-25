@@ -231,7 +231,7 @@ function createHarness(opts: {
         provide: AuthService,
         useValue: {
           ensureStreamToken: vi.fn(async () => 'tok'),
-          streamToken: () => 'tok',
+          playbackTokenFor: () => 'tok',
           accessToken: 'tok',
           user: () => ({ id: 1 }),
           hasServerFeature: () => true,
