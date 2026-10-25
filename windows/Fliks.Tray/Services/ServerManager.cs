@@ -17,6 +17,7 @@ internal sealed record ServerEnvironment(ushort Port, ushort DbPort)
         return new Dictionary<string, string>
         {
             ["PORT"] = Port.ToString(),
+            ["FLIKS_BIND"] = "127.0.0.1",
             ["DB_HOST"] = "127.0.0.1",
             ["DB_PORT"] = DbPort.ToString(),
             ["DB_USERNAME"] = "fliks",
