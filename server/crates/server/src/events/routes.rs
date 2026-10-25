@@ -1,8 +1,8 @@
-use super::{Identity, activity::List, sse};
+use super::{Identity, activity::List, sse, ticket::TTL as TICKET_TTL};
 use crate::{
     http::{
         AppError,
-        auth::{Authed, SessionAuthed},
+        auth::{Authed, SessionAuthed, load_enabled},
     },
     state::AppState,
 };
@@ -12,13 +12,15 @@ use axum::{
     extract::{Query, State},
     http::{HeaderMap, StatusCode, header},
     response::{IntoResponse, Response},
-    routing::get,
+    routing::{get, post},
 };
 use fliks_domain::acl::{Action, Subject as Resource};
+use serde_json::json;
 
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/api/system/events", get(events))
+        .route("/api/system/events/ticket", post(event_ticket))
         .route("/api/system/activity", get(activity))
 }
 
@@ -26,14 +28,37 @@ fn param(q: &[(String, String)], key: &str) -> Option<String> {
     q.iter().find(|(k, _)| k == key).map(|(_, v)| v.clone())
 }
 
-// Auth runs once at connect: a later token expiry or disable does not close the stream.
+/// One-time URL credential for the events stream: native clients cannot set a header on `EventSource`.
+#[utoipa::path(post, path = "/api/system/events/ticket", responses((status = 201)))]
+pub async fn event_ticket(State(st): State<AppState>, SessionAuthed(a): SessionAuthed) -> Response {
+    (
+        StatusCode::CREATED,
+        Json(json!({"ticket": st.sse_tickets.mint(a.user.id), "expiresIn": TICKET_TTL.as_secs()})),
+    )
+        .into_response()
+}
+
+// Auth runs once at connect: a later token expiry or disable does not close the stream. `?ticket=` is the
+// credential of native clients; the session token (cookie, Bearer or `?token=`) stays accepted for released ones.
 #[utoipa::path(get, path = "/api/system/events", responses((status = 200)))]
 pub async fn events(
     State(st): State<AppState>,
-    SessionAuthed(a): SessionAuthed,
+    session: Result<SessionAuthed, AppError>,
     headers: HeaderMap,
     Query(q): Query<Vec<(String, String)>>,
-) -> Response {
+) -> Result<Response, AppError> {
+    let user_id = match param(&q, "ticket") {
+        Some(ticket) => {
+            let unauthorized = || AppError::bare(StatusCode::UNAUTHORIZED);
+            let id = st.sse_tickets.redeem(&ticket).ok_or_else(unauthorized)?;
+            load_enabled(&st.db, id)
+                .await?
+                .ok_or_else(unauthorized)?
+                .0
+                .id
+        }
+        None => session?.0.user.id,
+    };
     let identity = Identity {
         target_id: param(&q, "device"),
         form_factor: param(&q, "ff"),
@@ -44,8 +69,8 @@ pub async fn events(
             .and_then(|v| v.to_str().ok())
             .map(str::to_owned),
     };
-    let conn = st.hub.connect(a.user.id, identity);
-    (
+    let conn = st.hub.connect(user_id, identity);
+    Ok((
         StatusCode::OK,
         [
             (header::CONTENT_TYPE, "text/event-stream"),
@@ -60,7 +85,7 @@ pub async fn events(
         ],
         Body::from_stream(sse::stream(conn)),
     )
-        .into_response()
+        .into_response())
 }
 
 // `Number.parseInt(x, 10)` accepted only when finite and positive, else the default.

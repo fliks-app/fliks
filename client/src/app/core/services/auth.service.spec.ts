@@ -47,6 +47,34 @@ describe('AuthService: server features are live-only', () => {
   });
 });
 
+describe('AuthService.mintEventTicket', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  function setup(post: (...args: unknown[]) => unknown) {
+    TestBed.configureTestingModule({
+      providers: [
+        AuthService,
+        { provide: HttpClient, useValue: { get: () => NEVER, post } },
+        { provide: Router, useValue: {} },
+        { provide: ServerConfigService, useValue: { serverUrl: () => 'https://s', isNative: false } },
+        { provide: ServerCacheService, useValue: {} },
+        { provide: SessionStoreService, useValue: { active: () => null } },
+      ],
+    });
+    return TestBed.inject(AuthService);
+  }
+
+  it('returns the ticket the server minted', async () => {
+    const post = vi.fn((..._args: unknown[]) => of({ ticket: 'tk', expiresIn: 30 }));
+    expect(await setup(post).mintEventTicket()).toBe('tk');
+    expect(post.mock.calls[0]![0]).toBe('/api/system/events/ticket');
+  });
+
+  it('returns null when the server has no ticket route', async () => {
+    expect(await setup(() => throwError(() => new Error('404'))).mintEventTicket()).toBeNull();
+  });
+});
+
 describe('AuthService.ensureStreamToken', () => {
   afterEach(() => TestBed.resetTestingModule());
 

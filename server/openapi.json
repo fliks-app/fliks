@@ -4843,6 +4843,20 @@
         }
       }
     },
+    "/api/system/events/ticket": {
+      "post": {
+        "tags": [
+          "events"
+        ],
+        "summary": "One-time URL credential for the events stream: native clients cannot set a header on `EventSource`.",
+        "operationId": "event_ticket",
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/system/health": {
       "get": {
         "tags": [

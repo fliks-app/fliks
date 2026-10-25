@@ -318,9 +318,13 @@ export class SseService implements OnDestroy {
         await this.auth.refreshAccessToken();
         if (generation !== this.generation || this.eventSource) return;
       }
+      // A one-time ticket keeps the session token out of proxy logs; a server without the route still takes `?token=`.
+      const ticket = await this.auth.mintEventTicket();
+      if (generation !== this.generation || this.eventSource) return;
       base = this.serverConfig.resolveUrl(base);
       const token = this.auth.accessToken;
-      if (token) params.set('token', token);
+      if (ticket) params.set('ticket', ticket);
+      else if (token) params.set('token', token);
     }
     const url = `${base}?${params.toString()}`;
 

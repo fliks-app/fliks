@@ -1,5 +1,5 @@
 import { Injectable, signal, computed, inject, untracked } from '@angular/core';
-import { HttpClient, HttpErrorResponse } from '@angular/common/http';
+import { HttpClient, HttpContext, HttpErrorResponse } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { Observable, catchError, firstValueFrom, map, of, tap } from 'rxjs';
 import { ServerConfigService } from './server-config.service';
@@ -13,6 +13,7 @@ import {
 } from './session-store.service';
 import { IS_STANDALONE_BUNDLE, restartApp } from '../utils/standalone-bundle';
 import { grantSatisfies, parsePluginGrant } from '../utils/plugin-grant';
+import { SKIP_ERROR_TOAST } from '../interceptors/error.interceptor';
 
 export interface User {
   id: number;
@@ -592,6 +593,18 @@ export class AuthService {
     })();
     this._streamTokensInFlight.set(mediaFileId, minted);
     return minted;
+  }
+
+  /** A single-use ticket for the events stream (valid 30 s); null when the server cannot mint one. */
+  mintEventTicket(): Promise<string | null> {
+    return firstValueFrom(
+      this.http.post<{ ticket: string }>('/api/system/events/ticket', {}, {
+        context: new HttpContext().set(SKIP_ERROR_TOAST, true),
+      }),
+    ).then(
+      (r) => r.ticket,
+      () => null,
+    );
   }
 
   register(username: string, password: string, email?: string) {
