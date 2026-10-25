@@ -22,7 +22,7 @@
             <p class="font-mono text-xs text-base-content/50">
               {{ formatTime(cue.start) }} → {{ formatTime(cue.end) }}
             </p>
-            <p class="text-sm leading-snug" [innerHTML]="cue.text"></p>
+            <p class="text-sm leading-snug" [appCueText]="cue.text"></p>
           </div>
         }
       </div>

@@ -11,13 +11,14 @@ import { TranslatePipe } from '@ngx-translate/core';
 import { ModalHeaderComponent } from '../modal-header';
 import { VttCue, parseVtt } from '../../../core/services/playback-engine/subtitle-overlay.util';
 import { formatTime } from '../../../core/utils/player.utils';
+import { CueTextDirective } from '../../directives/cue-text.directive';
 import { ModalFooterComponent } from '../modal-footer';
 
 /** Read-only cue list. Reads the player's own WebVTT through the engine's
  *  parser, so it shows what would be rendered, tag sanitisation included. */
 @Component({
   selector: 'app-subtitle-viewer-modal',
-  imports: [ModalFooterComponent, TranslatePipe, ModalHeaderComponent],
+  imports: [CueTextDirective, ModalFooterComponent, TranslatePipe, ModalHeaderComponent],
   templateUrl: './subtitle-viewer-modal.html',
 })
 export class SubtitleViewerModalComponent {

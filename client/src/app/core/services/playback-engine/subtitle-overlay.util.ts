@@ -211,8 +211,33 @@ export class SubtitleOverlay {
     if (!els) return;
     for (const [band, text] of [['top', top], ['bottom', bottom]] as const) {
       this.last[band] = text;
-      els[band].innerHTML = text;
+      renderCueText(els[band], text);
       els[band].style.display = text ? 'block' : 'none';
+    }
+  }
+}
+
+const ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>', nbsp: '\u00a0', lrm: '\u200e', rlm: '\u200f' };
+const decode = (t: string) => t.replace(/&(amp|lt|gt|nbsp|lrm|rlm);/g, (_, n: string) => ENTITIES[n]);
+const STYLE_TOKEN = /(<\/?(?:b|i|u|br)\s*\/?>)/i;
+
+/** Fills `el` from cue text: only b/i/u/br tokens become elements, everything else is a text node. */
+export function renderCueText(el: HTMLElement, text: string): void {
+  el.replaceChildren();
+  const open: HTMLElement[] = [];
+  const parent = () => open[open.length - 1] ?? el;
+  for (const part of text.split(STYLE_TOKEN)) {
+    const tag = /^<(\/?)(b|i|u|br)\s*\/?>$/i.exec(part);
+    if (!tag) {
+      if (part) parent().append(document.createTextNode(decode(part)));
+    } else if (tag[2].toLowerCase() === 'br') {
+      parent().append(document.createElement('br'));
+    } else if (!tag[1]) {
+      const node = document.createElement(tag[2].toLowerCase());
+      parent().append(node);
+      open.push(node);
+    } else if (open.length && open[open.length - 1].localName === tag[2].toLowerCase()) {
+      open.pop();
     }
   }
 }
@@ -229,8 +254,7 @@ export function parseVtt(raw: string): VttCue[] {
     const end = vttTimeToSec(endStr);
     if (isNaN(start) || isNaN(end)) continue;
     const textLines = lines.slice(lines.indexOf(timeLine) + 1);
-    // Allow <b>, <i>, <u>, <br> so `innerHTML` is safe (third-party sub
-    // files; backend just proxies).
+    // Drops non-styling tags; {@link renderCueText} never parses what is left as HTML.
     const text = textLines.join('<br>').replace(/<\/?[^>]*>/g, (tag) => {
       if (/^<\/?(b|i|u|br)\s*\/?>$/i.test(tag)) return tag;
       return '';

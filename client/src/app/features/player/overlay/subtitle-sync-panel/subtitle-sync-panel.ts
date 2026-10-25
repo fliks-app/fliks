@@ -26,6 +26,7 @@ import { SubtitleOverlay, type VttCue } from '../../../../core/services/playback
 import { SseService } from '../../../../core/services/sse.service';
 import { SubtitleActionsService } from '../../../../core/services/subtitle-actions.service';
 import { ToastService } from '../../../../core/services/toast.service';
+import { CueTextDirective } from '../../../../shared/directives/cue-text.directive';
 import { TvSelectDirective } from '../../../../shared/directives/tv-select.directive';
 import { SyncReferenceSelectComponent } from '../../../../shared/components/sync-reference-select/sync-reference-select';
 import {
@@ -57,7 +58,7 @@ import {
 /** Side panel to preview a subtitle track against the playing video and shift its timing. */
 @Component({
   selector: 'app-subtitle-sync-panel',
-  imports: [FormsModule, LucideCheck, LucideChevronLeft, LucideChevronRight, LucideRotateCcw, LucideWandSparkles, TranslatePipe, TvSelectDirective, SyncReferenceSelectComponent],
+  imports: [CueTextDirective, FormsModule, LucideCheck, LucideChevronLeft, LucideChevronRight, LucideRotateCcw, LucideWandSparkles, TranslatePipe, TvSelectDirective, SyncReferenceSelectComponent],
   templateUrl: './subtitle-sync-panel.html',
   styleUrl: './subtitle-sync-panel.scss',
 })

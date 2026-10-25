@@ -1,5 +1,5 @@
 import { afterEach, vi } from 'vitest';
-import { SubtitleOverlay, parseVtt, type VttCue } from './subtitle-overlay.util';
+import { SubtitleOverlay, parseVtt, renderCueText, type VttCue } from './subtitle-overlay.util';
 import { NATIVE_SUBTITLE_SIZE_SCALE, WEBOS_CUE_SIZE_BOOST } from '../../utils/subtitle-presets';
 import { domCueFontSize } from '../player-settings.service';
 
@@ -38,6 +38,52 @@ describe('SubtitleOverlay', () => {
       ['Last line', false],
     ]);
     expect(cues[0].start).toBe(1);
+  });
+
+  describe('renderCueText', () => {
+    const render = (text: string) => {
+      const el = document.createElement('div');
+      renderCueText(el, text);
+      return el;
+    };
+
+    it('keeps b/i/u/br as elements and decodes entities as text', () => {
+      const el = render('a <i>b</i><br><b><u>c</u></b> &lt;x&gt; &amp;');
+      expect(el.innerHTML).toBe('a <i>b</i><br><b><u>c</u></b> &lt;x&gt; &amp;');
+      expect(el.textContent).toBe('a bc <x> &');
+    });
+
+    it('renders hostile text as text, including across joined cues', () => {
+      const joined = ['<img src=x onerror=alert(1)//', 'second', '<script>alert(1)</script>', '<b onclick=x>'].join('<br>');
+      const el = render(joined);
+      expect(el.querySelector('img, script')).toBeNull();
+      expect([...el.querySelectorAll('*')].every((n) => n.localName === 'br')).toBe(true);
+      expect(el.textContent).toContain('<img src=x onerror=alert(1)//');
+    });
+
+    it('ignores a stray closing tag and closes unbalanced openers', () => {
+      expect(render('</b>x<i>y').innerHTML).toBe('x<i>y</i>');
+    });
+  });
+
+  it('never parses overlapping hostile cues as HTML', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        text: async () =>
+          'WEBVTT\n\n00:00:00.000 --> 00:00:09.000\nhi <img src=x onerror=alert(1)//\n\n00:00:01.000 --> 00:00:09.000\nsecond',
+      }),
+    );
+    const o = new SubtitleOverlay();
+    o.select(await o.load('u'));
+    o.setVisible(true);
+    o.updateAt(2);
+    const bottom = document.getElementById('fliks-tv-subtitle');
+    expect(bottom?.querySelector('img')).toBeNull();
+    expect(bottom?.textContent).toContain('<img src=x onerror=alert(1)//');
+    vi.unstubAllGlobals();
+    o.destroy();
   });
 
   it('sorts cues by start time', () => {
