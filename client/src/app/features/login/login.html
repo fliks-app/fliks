@@ -51,9 +51,11 @@
         </div>
       </form>
 
-      <button class="btn btn-ghost btn-sm w-full mt-2" (click)="goToSelectUser()">
-        {{ 'login.back_to_picker' | translate }}
-      </button>
+      @if (canPickUser()) {
+        <button class="btn btn-ghost btn-sm w-full mt-2" (click)="goToSelectUser()">
+          {{ 'login.back_to_picker' | translate }}
+        </button>
+      }
 
       @if (isNative) {
         <button class="btn btn-ghost btn-sm w-full" (click)="changeServer()">

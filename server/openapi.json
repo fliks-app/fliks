@@ -196,6 +196,7 @@
         "tags": [
           "auth"
         ],
+        "summary": "Picker roster visibility: `everyone` (default), `lan` or `hidden` (setting `users_public_mode`).",
         "operationId": "users_public",
         "responses": {
           "200": {

@@ -451,3 +451,55 @@ async fn first_admin_setup_race(pool: PgPool) {
         .unwrap();
     assert_eq!(n, 1);
 }
+
+async fn picker(c: &Ctx, peer: &str, xff: Option<&str>) -> Value {
+    let mut req = Request::builder().uri("/api/auth/users-public");
+    if let Some(x) = xff {
+        req = req.header("x-forwarded-for", x);
+    }
+    let mut req = req.body(Body::empty()).unwrap();
+    let addr: std::net::SocketAddr = format!("{peer}:1234").parse().unwrap();
+    req.extensions_mut()
+        .insert(axum::extract::ConnectInfo(addr));
+    let res = c.app.clone().oneshot(req).await.unwrap();
+    let bytes = axum::body::to_bytes(res.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    serde_json::from_slice(&bytes).unwrap()
+}
+
+#[sqlx::test(migrations = false)]
+async fn users_public_modes(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    let id = user(&pool, "bob", Some("[]"), false, true).await;
+    let roster = json!([{"id": id, "username": "bob", "avatar": null}]);
+    let mode = |m: &'static str| {
+        let pool = pool.clone();
+        async move {
+            sqlx::query(
+                "INSERT INTO app_settings (key, value) VALUES ('users_public_mode', $1)
+                 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
+            )
+            .bind(m)
+            .execute(&pool)
+            .await
+            .unwrap();
+        }
+    };
+    // Unset and "everyone": public callers see the roster.
+    assert_eq!(picker(&c, "203.0.113.9", None).await, roster);
+    mode("everyone").await;
+    assert_eq!(picker(&c, "203.0.113.9", None).await, roster);
+    mode("lan").await;
+    assert_eq!(picker(&c, "192.168.1.20", None).await, roster);
+    assert_eq!(picker(&c, "127.0.0.1", Some("10.0.0.5")).await, roster);
+    assert_eq!(picker(&c, "203.0.113.9", None).await, json!([]));
+    // A forged private entry or a public hop in the chain keeps the caller out.
+    assert_eq!(picker(&c, "10.0.0.2", Some("203.0.113.9")).await, json!([]));
+    assert_eq!(
+        picker(&c, "203.0.113.9", Some("192.168.1.20")).await,
+        json!([])
+    );
+    mode("hidden").await;
+    assert_eq!(picker(&c, "192.168.1.20", None).await, json!([]));
+}

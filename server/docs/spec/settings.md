@@ -79,6 +79,7 @@ This domain stores every key; the semantics belong to consumers. Registry of doc
 | Key(s) | Consumer parsing/default | In-memory cache or listener |
 |---|---|---|
 | `streaming_segment_duration`, `streaming_qsv_preset`, `streaming_tonemap_algo`, `streaming_tonemap_curve`, `streaming_cache_max_gb`, `streaming_cache_ttl_hours`, `streaming_ffmpeg_slots`, `streaming_auto_quality_mode`, `streaming_auto_crop_enabled`, `streaming_gpu_render_node`, `streaming_throttle_enabled`, `streaming_throttle_threshold_seconds` | streaming settings cache load | cache + engine push |
+| `users_public_mode` (`everyone`; write accepts `everyone`, `lan`, `hidden` only) | `GET /api/auth/users-public`, read per request (`auth.md` rule 43) | none |
 | `cleanup_max_per_run` (10; invalid or negative = 10) | `MediaCleanup`, read per run (`cleanup.md` rule 4) | none |
 | `qoe_enabled` (absent = on; only `'false'` disables), `qoe_retention_days` (30) | | enabled flag; retention read on demand |
 | `livetv_segment_seconds`, `livetv_timeshift_minutes`, `livetv_probe_seconds`, `livetv_channel_idle_seconds`, `livetv_fast_zap` | integer with default; fast zap `'true'`/`'false'`/else null | engine push (engine push) |

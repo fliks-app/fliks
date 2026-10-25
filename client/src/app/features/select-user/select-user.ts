@@ -128,6 +128,8 @@ export class SelectUserComponent {
     this.unreachable.set(false);
     try {
       this.serverUsers.set(await this.auth.listUsersPublic());
+      // A hidden roster (admin setting) leaves nothing to pick: go straight to typing a username.
+      if (!this.users().length) void this.router.navigate(['/login'], { replaceUrl: true });
     } catch {
       this.unreachable.set(true);
     } finally {
