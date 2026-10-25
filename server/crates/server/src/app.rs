@@ -59,6 +59,7 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         settings::put_one,
         fs::browse,
         events::events,
+        events::event_ticket,
         events::activity,
         qoe::sessions,
         qoe::session,

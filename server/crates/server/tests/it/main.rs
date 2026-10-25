@@ -4,6 +4,7 @@ mod auth_routes;
 mod backup_restore;
 mod burn_in;
 mod cleanup_bulk;
+mod events_ticket;
 mod heartbeat;
 mod importers;
 mod libraries;

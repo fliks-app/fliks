@@ -9,6 +9,8 @@ import { ToastService } from './toast.service';
 import { ServerConfigService } from './server-config.service';
 import { AuthService } from './auth.service';
 import { NetworkService } from './network.service';
+import { DeviceService } from './device.service';
+import { SystemInfoService } from './system-info.service';
 
 /**
  * The seam between the wire and the store. `download.progress` carries a media's whole set, so
@@ -153,5 +155,72 @@ describe('SseService: session change', () => {
 
     expect(connect).toHaveBeenCalledTimes(1);
     connect.mockRestore();
+  });
+});
+
+describe('SseService: native dial credential', () => {
+  const urls: string[] = [];
+
+  async function dial(ticket: string | null): Promise<string> {
+    vi.restoreAllMocks();
+    urls.length = 0;
+    vi.stubGlobal(
+      'EventSource',
+      class {
+        static CONNECTING = 0;
+        static OPEN = 1;
+        readyState = 0;
+        constructor(url: string) {
+          urls.push(url);
+        }
+        addEventListener() {}
+        close() {}
+      },
+    );
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideTranslateService({
+          lang: 'en',
+          loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } },
+        }),
+        { provide: ToastService, useValue: {} },
+        { provide: ServerConfigService, useValue: { isNative: true, resolveUrl: (p: string) => `https://srv${p}` } },
+        {
+          provide: AuthService,
+          useValue: {
+            accessToken: 'at',
+            refreshToken: null,
+            isAuthenticated: () => false,
+            sessionEpoch: () => 0,
+            mintEventTicket: async () => ticket,
+          },
+        },
+        { provide: NetworkService, useValue: { isOnline: () => true, connectivityDoubt: () => 0 } },
+        { provide: DeviceService, useValue: { formFactor: () => 'phone', tvPlatform: () => null } },
+        { provide: SystemInfoService, useValue: { ready: async () => {}, deviceName: () => null } },
+      ],
+    });
+    const sse = TestBed.inject(SseService);
+    (sse as unknown as { deviceIdPromise: Promise<string> }).deviceIdPromise = Promise.resolve('dev');
+    await sse.connect();
+    sse.close();
+    return urls[0]!;
+  }
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('carries the ticket and never the access token', async () => {
+    const url = await dial('tk1');
+    expect(url).toContain('https://srv/api/system/events?');
+    expect(url).toContain('ticket=tk1');
+    expect(url).not.toContain('token=');
+  });
+
+  it('falls back to the access token when no ticket can be minted', async () => {
+    const url = await dial(null);
+    expect(url).toContain('token=at');
+    expect(url).not.toContain('ticket=');
   });
 });
