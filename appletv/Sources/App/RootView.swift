@@ -19,17 +19,6 @@ struct RootView: View {
 
     var body: some View {
         content
-            .environment(auth)
-            .environment(server)
-            .environment(settings)
-            .environment(locale)
-            .environment(homeSettings)
-            .environment(backdrop)
-            .environment(homeRefresh)
-            .environment(watched)
-            .environment(playlistPicker)
-            .environment(party)
-            .id(locale.lang)
             .task {
                 if server.isConfigured { await auth.bootstrap() }
             }
@@ -63,7 +52,6 @@ struct RootView: View {
                     case .chat: PartyChatView()
                     }
                 }
-                .environment(party)
             }
             .sheet(item: Binding(get: { playlistPicker.target },
                                  set: { playlistPicker.target = $0 })) { target in
@@ -82,6 +70,18 @@ struct RootView: View {
                 // anything that changed behind a pushed screen (e.g. playback).
                 if count == 0 { homeRefresh.bump() }
             }
+            // After the presentations: a cover or sheet only inherits the environment set outside it.
+            .environment(auth)
+            .environment(server)
+            .environment(settings)
+            .environment(locale)
+            .environment(homeSettings)
+            .environment(backdrop)
+            .environment(homeRefresh)
+            .environment(watched)
+            .environment(playlistPicker)
+            .environment(party)
+            .id(locale.lang)
     }
 
     /// Poll only while signed in and foregrounded: no point keeping a target
