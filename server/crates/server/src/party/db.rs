@@ -69,8 +69,45 @@ pub async fn owner_switches(db: &PgPool, owner: i32) -> sqlx::Result<Option<(boo
     .await
 }
 
-pub async fn insert(db: &PgPool, n: &New<'_>, invitees: &[i32]) -> sqlx::Result<Row> {
+/// The party the host already has for this item, else a new one (`true`). A "now" creation matches
+/// an open party (live, or a lobby open by `lobby_cutoff`); a scheduled one matches the same start.
+/// Transaction-scoped advisory lock on host+item: the match is a time window, no unique index fits.
+pub async fn insert(
+    db: &PgPool,
+    n: &New<'_>,
+    invitees: &[i32],
+    immediate: bool,
+    lobby_cutoff: DateTime<Utc>,
+) -> sqlx::Result<(Row, bool)> {
     let mut tx = db.begin().await?;
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
+        .bind(format!(
+            "party:{}:{}:{:?}:{:?}:{:?}",
+            n.owner, n.item.media_id, n.item.media_file_id, n.item.episode_id, n.playlist_id
+        ))
+        .execute(&mut *tx)
+        .await?;
+    let existing = sqlx::query_as::<_, Row>(&format!(
+        r#"SELECT {COLS} FROM watch_parties
+           WHERE "ownerId" = $1 AND "mediaId" = $2 AND "mediaFileId" IS NOT DISTINCT FROM $3
+             AND "episodeId" IS NOT DISTINCT FROM $4 AND "playlistId" IS NOT DISTINCT FROM $5
+             AND CASE WHEN $6 THEN status = 'live' OR (status = 'scheduled' AND "scheduledAt" <= $7)
+                      ELSE status = 'scheduled' AND "scheduledAt" = $8 END
+           ORDER BY id LIMIT 1"#
+    ))
+    .bind(n.owner)
+    .bind(n.item.media_id)
+    .bind(n.item.media_file_id)
+    .bind(n.item.episode_id)
+    .bind(n.playlist_id)
+    .bind(immediate)
+    .bind(lobby_cutoff)
+    .bind(n.scheduled_at)
+    .fetch_optional(&mut *tx)
+    .await?;
+    if let Some(row) = existing {
+        return Ok((row, false));
+    }
     let row = sqlx::query_as::<_, Row>(&format!(
         r#"INSERT INTO watch_parties (name, "ownerId", "mediaId", "mediaFileId", "episodeId",
                "playlistId", "inviteToken", policy, "reactionsEnabled", "chatEnabled", "linkSharing",
@@ -94,7 +131,7 @@ pub async fn insert(db: &PgPool, n: &New<'_>, invitees: &[i32]) -> sqlx::Result<
     .await?;
     add_invitees_in(&mut tx, row.id, invitees).await?;
     tx.commit().await?;
-    Ok(row)
+    Ok((row, true))
 }
 
 async fn add_invitees_in(
