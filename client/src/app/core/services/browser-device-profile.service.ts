@@ -30,7 +30,10 @@ interface AudioCapabilitiesPlugin {
     maxChannels: number;
     /** Per-codec max decodable channel count (lowercased codec → channels). */
     channelsByCodec?: Record<string, number>;
+    /** Bitstreams the HDMI sink takes untouched; absent on older builds. */
+    passthrough?: { codecs: string[]; maxChannels: number };
   }>;
+  addListener(event: 'audioRouteChanged', cb: () => void): Promise<unknown>;
 }
 const AudioCaps = registerPlugin<AudioCapabilitiesPlugin>('AudioCapabilities');
 
@@ -186,6 +189,7 @@ export class BrowserDeviceProfileService {
     codecs: string[];
     maxChannels: number;
     channelsByCodec?: Record<string, number>;
+    passthrough?: { codecs: string[]; maxChannels: number };
   } | null = null;
   private nativeVideo: NativeVideoCaps | null = null;
   /** Pessimistic until the desktop probe resolves: P7 only, never 5/8 a bridge can't reshape. */
@@ -221,9 +225,12 @@ export class BrowserDeviceProfileService {
           this.cachedProfile = null;
         })
         .catch(() => { this.nativeHdr = false; this.nativeDolbyVision = false; });
-      AudioCaps.getSupported()
+      const loadAudio = () => AudioCaps.getSupported()
         .then((r) => { this.nativeAudio = r; this.cachedProfile = null; })
         .catch(() => { this.nativeAudio = null; });
+      void loadAudio();
+      // HDMI hot-plug: a receiver can come or go mid-session.
+      void AudioCaps.addListener('audioRouteChanged', () => void loadAudio()).catch(() => undefined);
       VideoCaps.getSupported()
         .then((r) => { this.nativeVideo = r; this.cachedProfile = null; })
         .catch(() => { this.nativeVideo = null; });
@@ -455,6 +462,14 @@ export class BrowserDeviceProfileService {
       if (tvPlatform === 'tizen') audioCodecs = applyTizenAudioCodecs(audioCodecs);
     }
 
+    // Android TV: bitstreams the HDMI sink takes reach the receiver untouched, decoder or not.
+    const passthrough = tvPlatform === 'androidtv' ? this.nativeAudio?.passthrough : undefined;
+    if (passthrough) {
+      for (const c of passthrough.codecs) {
+        if (!audioCodecs.includes(c)) audioCodecs.push(c);
+      }
+    }
+
     // --- Max audio channels ---
     let maxAudioChannels = 2;
     try {
@@ -468,9 +483,16 @@ export class BrowserDeviceProfileService {
     }
     // A browser decodes 7.1 AAC, Opus and FLAC and downmixes them to its output
     // itself, so their cap is the decoder's, not AudioContext's output count.
-    const audioChannelsByCodec =
+    let audioChannelsByCodec =
       this.nativeAudio?.channelsByCodec ??
       (tvPlatform ? undefined : { aac: 8, opus: 8, flac: 8 });
+    if (passthrough?.codecs.length) {
+      audioChannelsByCodec = { ...audioChannelsByCodec };
+      for (const c of passthrough.codecs) {
+        audioChannelsByCodec[c] = Math.max(audioChannelsByCodec[c] ?? 0, passthrough.maxChannels);
+      }
+      maxAudioChannels = Math.max(maxAudioChannels, passthrough.maxChannels);
+    }
     // TVs: the WebView's AudioContext caps at 2ch but the pipeline decodes Dolby, so declare 5.1 for AC3/EAC3.
     if (
       (tvPlatform === 'webos' || tvPlatform === 'tizen') &&

@@ -1,7 +1,21 @@
 package media.fliks.app;
 
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.media.AudioDeviceCallback;
+import android.media.AudioDeviceInfo;
+import android.media.AudioManager;
 import android.media.MediaCodecInfo;
 import android.media.MediaCodecList;
+import android.os.Handler;
+import android.os.Looper;
+
+import androidx.annotation.OptIn;
+import androidx.media3.common.C;
+import androidx.media3.common.util.UnstableApi;
+import androidx.media3.exoplayer.audio.AudioCapabilities;
 
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
@@ -19,11 +33,62 @@ import java.util.Set;
  * AudioCapabilities passthrough list can falsely include E-AC-3 on
  * devices without a decoder, and ExoPlayer then fails MediaCodec init.
  *
+ * `passthrough` lists what the HDMI sink takes as a bitstream (the same
+ * capabilities ExoPlayer's audio sink uses) and `audioRouteChanged` fires on
+ * hot-plug; the client only advertises it on Android TV.
+ *
  * Output channel max is left to the playback stack to decide; we just
  * report whether there's a decoder, not the route topology.
  */
 @CapacitorPlugin(name = "AudioCapabilities")
+@OptIn(markerClass = UnstableApi.class)
 public class AudioCapabilitiesPlugin extends Plugin {
+    private final BroadcastReceiver hdmiReceiver = new BroadcastReceiver() {
+        @Override public void onReceive(Context context, Intent intent) { notifyRouteChanged(); }
+    };
+    private final AudioDeviceCallback deviceCallback = new AudioDeviceCallback() {
+        @Override public void onAudioDevicesAdded(AudioDeviceInfo[] d) { notifyRouteChanged(); }
+        @Override public void onAudioDevicesRemoved(AudioDeviceInfo[] d) { notifyRouteChanged(); }
+    };
+
+    @Override
+    public void load() {
+        Context ctx = getContext();
+        ctx.registerReceiver(hdmiReceiver, new IntentFilter(AudioManager.ACTION_HDMI_AUDIO_PLUG));
+        ((AudioManager) ctx.getSystemService(Context.AUDIO_SERVICE))
+            .registerAudioDeviceCallback(deviceCallback, new Handler(Looper.getMainLooper()));
+    }
+
+    @Override
+    protected void handleOnDestroy() {
+        Context ctx = getContext();
+        ctx.unregisterReceiver(hdmiReceiver);
+        ((AudioManager) ctx.getSystemService(Context.AUDIO_SERVICE))
+            .unregisterAudioDeviceCallback(deviceCallback);
+    }
+
+    private void notifyRouteChanged() {
+        notifyListeners("audioRouteChanged", new JSObject());
+    }
+
+    /** Bitstream codecs the current output takes untouched, as profile codec keys. */
+    static JSObject passthrough(Context context) {
+        JSArray codecs = new JSArray();
+        int maxChannels = 2;
+        try {
+            AudioCapabilities caps = AudioCapabilities.getCapabilities(context);
+            if (caps.supportsEncoding(C.ENCODING_AC3)) codecs.put("ac3");
+            if (caps.supportsEncoding(C.ENCODING_E_AC3) || caps.supportsEncoding(C.ENCODING_E_AC3_JOC)) codecs.put("eac3");
+            if (caps.supportsEncoding(C.ENCODING_DTS) || caps.supportsEncoding(C.ENCODING_DTS_HD)
+                    || caps.supportsEncoding(C.ENCODING_DTS_UHD_P2)) codecs.put("dts");
+            if (caps.supportsEncoding(C.ENCODING_DOLBY_TRUEHD)) codecs.put("truehd");
+            if (codecs.length() > 0) maxChannels = caps.getMaxChannelCount();
+        } catch (Throwable ignored) { /* best-effort */ }
+        JSObject r = new JSObject();
+        r.put("codecs", codecs);
+        r.put("maxChannels", maxChannels);
+        return r;
+    }
 
     @PluginMethod()
     public void getSupported(PluginCall call) {
@@ -66,6 +131,7 @@ public class AudioCapabilitiesPlugin extends Plugin {
         result.put("codecs", arr);
         result.put("maxChannels", maxChannels);
         result.put("channelsByCodec", channelsByCodec);
+        result.put("passthrough", passthrough(getContext()));
         call.resolve(result);
     }
 
