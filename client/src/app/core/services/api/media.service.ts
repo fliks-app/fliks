@@ -110,6 +110,8 @@ export interface Media {
   digitalRelease?: string | null;
   physicalRelease?: string | null;
   seasons?: Season[];
+  /** Set on the grid view, where `files` is cut to the first file. */
+  fileCount?: number;
   files?: { id: number; quality: string; relativePath: string; size: number; createdAt?: string; episodeId?: number | null; streamInfo?: MediaFileInfo | null }[];
   qualityProfile?: QualityProfileBrief | null;
   languageProfile?: { id: number; name: string } | null;
@@ -264,6 +266,8 @@ export interface SearchParams {
   onlyWatched?: boolean;
   libraryId?: number;
   requestedByMe?: boolean;
+  /** `grid`: `files` keeps only the first file and `fileCount` carries the total. */
+  view?: 'grid';
 }
 
 export interface VideoStreamInfo {

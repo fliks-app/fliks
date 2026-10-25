@@ -838,6 +838,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
       onlyWatched: fw === 'watched' ? true : undefined,
       excludeWatched: fw === 'unwatched' ? true : undefined,
       limit: 0,
+      view: 'grid',
     } as const;
     const gen = ++this.loadGen;
     try {

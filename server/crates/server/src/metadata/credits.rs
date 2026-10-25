@@ -1,11 +1,6 @@
 //! The persons and credits half of `persistMediaMetadata` (`media-write.md` rule 58).
 use super::service::{Details, n, s};
-use crate::{
-    http::AppError,
-    images::paths::Target,
-    persons::service::{Person, ensure_details_loaded},
-    state::AppState,
-};
+use crate::{http::AppError, images::paths::Target, persons::service::Person, state::AppState};
 use futures_util::{StreamExt, stream};
 use serde_json::{Value, json};
 use std::collections::{BTreeSet, HashMap};
@@ -49,14 +44,6 @@ pub async fn persist_credits(st: &AppState, media_id: i32, d: &Details) -> Resul
         return Ok(());
     }
     merge_departments(st, &cast, &crew, &people).await?;
-    let lang = st.metadata.lang.resolve(None).await?;
-    let mut order: Vec<i32> = people.keys().copied().collect();
-    order.sort_unstable();
-    for key in order {
-        if let Some(p) = people.get_mut(&key) {
-            ensure_details_loaded(&st.db, &st.metadata, &st.images, &lang, p).await;
-        }
-    }
     Ok(())
 }
 

@@ -175,6 +175,20 @@ function load(component: LibraryComponent, silent: boolean): Promise<void> {
   );
 }
 
+describe('LibraryComponent — grid request', () => {
+  afterEach(() => {
+    TestBed.resetTestingModule();
+    vi.restoreAllMocks();
+  });
+
+  it('asks the server for the slim grid view', async () => {
+    const { component } = createHarness();
+    await load(component, false);
+    const getAll = TestBed.inject(MediaService).getAll as ReturnType<typeof vi.fn>;
+    expect(getAll.mock.calls[0][0]).toMatchObject({ limit: 0, view: 'grid' });
+  });
+});
+
 describe('LibraryComponent — page scroll', () => {
   afterEach(() => {
     TestBed.resetTestingModule();

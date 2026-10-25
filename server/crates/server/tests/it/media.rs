@@ -207,3 +207,34 @@ async fn moving_a_media_with_files_is_a_409(pool: PgPool) {
     let (s, r) = c.send("PATCH", &c.admin, &u, Some(b)).await;
     assert_eq!((s, r["libraryId"].clone()), (200, json!(2)));
 }
+
+#[sqlx::test(migrations = false)]
+async fn grid_view_keeps_the_first_file_and_counts_the_rest(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    sqlx::query(r#"INSERT INTO media_files ("mediaId", "relativePath", size, quality) VALUES (1, 'g', 1, 'CAM')"#)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (_, grid) = c.get(&c.admin, "/api/media?view=grid&limit=0").await;
+    let first = grid["data"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|m| m["id"] == 1)
+        .unwrap();
+    assert_eq!(
+        (
+            first["files"].as_array().unwrap().len(),
+            first["fileCount"].as_i64()
+        ),
+        (1, Some(2))
+    );
+    assert_eq!(
+        (grid["total"].as_i64(), first["sizeOnDisk"].as_i64()),
+        (Some(4), Some(2))
+    );
+    let (_, full) = c.get(&c.admin, "/api/media/1").await;
+    assert!(full.get("fileCount").is_none() && full["files"].as_array().unwrap().len() == 2);
+    let (s, _) = c.get(&c.admin, "/api/media?view=nope").await;
+    assert_eq!(s, 400);
+}

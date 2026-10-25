@@ -144,11 +144,13 @@ pub struct Search {
     pub exclude_watched: bool,
     pub only_watched: bool,
     pub requested_by_me: bool,
+    /// `view=grid`: slim `files` (rule 14a).
+    pub grid: bool,
 }
 
 impl Search {
     pub fn parse(pairs: &Pairs) -> Result<Self, AppError> {
-        const KEYS: [&str; 25] = [
+        const KEYS: [&str; 26] = [
             "q",
             "type",
             "status",
@@ -174,6 +176,7 @@ impl Search {
             "excludeWatched",
             "onlyWatched",
             "requestedByMe",
+            "view",
         ];
         let mut r = Reader::new(pairs, &KEYS);
         let genres = match r.all("genres").as_slice() {
@@ -216,6 +219,7 @@ impl Search {
             exclude_watched: r.flag("excludeWatched") == Some(true),
             only_watched: r.flag("onlyWatched") == Some(true),
             requested_by_me: r.flag("requestedByMe") == Some(true),
+            grid: r.one_of("view", &["grid"]).is_some(),
         };
         r.finish()?;
         s.paging()?;
