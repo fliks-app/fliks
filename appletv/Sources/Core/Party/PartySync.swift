@@ -33,6 +33,29 @@ enum PartySync {
         return .seek
     }
 
+    /// What the viewer did on the transport, as opposed to what the controller or AVFoundation did.
+    enum TransportChange: Equatable { case paused, played }
+
+    /// Turns observed play/pause states into viewer changes: a change counts only when nothing of ours
+    /// (an apply, a scheduled start, our own play, pause or seek) was going on.
+    struct TransportWatcher {
+        private var last: Bool?
+
+        mutating func observe(playing: Bool, own: Bool) -> TransportChange? {
+            defer { last = playing }
+            guard !own, let last, last != playing else { return nil }
+            return playing ? .played : .paused
+        }
+    }
+
+    /// The intent a viewer change warrants, nil when the party is already where the viewer put it.
+    static func intent(for change: TransportChange, partyState: String, startReached: Bool) -> String? {
+        switch change {
+        case .paused: return partyState == "playing" && startReached ? "pause" : nil
+        case .played: return partyState == "paused" || partyState == "idle" ? "play" : nil
+        }
+    }
+
     struct ClockSample: Equatable {
         let offset: Double
         let delay: Double

@@ -19,12 +19,20 @@ final class PartyController {
     private var lastReported = "ready"
     private var menuKey = ""
     private var itemEnded = false
+    private var primed = false
+    private var watcher = PartySync.TransportWatcher()
+    private var pendingChange: PartySync.TransportChange?
+    /// A scheduled start is waiting for its time: the player is paused by us, not by the viewer.
+    private var scheduledStart = false
+    private var ownUntil = Date.distantPast
 
     /// Close enough to the anchor that a seek would only restart a transcode for nothing.
     private static let seekSlackS = 0.25
     private static let readyTimeoutS = 60.0
     /// A pause or seek of the viewer settles this long before it is sent, so a scrub is one seek.
     private static let transportSettle = Duration.milliseconds(450)
+    /// How long after our own play, pause or seek the player's notifications are still ours.
+    private static let ownWindowS = 1.0
 
     init(player: PlayerCoordinator) {
         self.player = player
@@ -72,6 +80,7 @@ final class PartyController {
         generation += 1
         let gen = generation
         playTask?.cancel()
+        scheduledStart = false
         applying = true
         if live.state == "playing" { itemEnded = false }
         Task { @MainActor in
@@ -79,6 +88,7 @@ final class PartyController {
             guard await untilReady(gen) else { return }
             if itemDiffers(live.item) {
                 itemEnded = false
+                primed = false
                 guard await open(live.item, gen) else { return }
                 guard await untilReady(gen) else { return }
             }
@@ -111,8 +121,14 @@ final class PartyController {
 
     /// idle, paused and waiting all hold the player paused at the anchor; waiting then reports ready once the seek landed.
     private func applyHeld(_ live: PartyLiveState, _ gen: Int, _ force: Bool) async {
-        player.partyPause()
+        ownPause()
         guard await seekIfFar(live.anchor.position, gen, force) else { return }
+        if !primed {
+            primed = true
+            await player.partyPrime()
+            guard gen == generation else { return }
+            await ownSeek(to: live.anchor.position)
+        }
         reportReady(live.anchor.position)
     }
 
@@ -120,21 +136,23 @@ final class PartyController {
         let startAt = live.whenMs ?? live.anchor.serverTimeMs
         let wait = startAt - party.clock.serverNowMs()
         if wait > 0 {
-            player.partyPause()
+            ownPause()
             guard await seekIfFar(live.anchor.position, gen, force) else { return }
             reportReady(live.anchor.position)
             let remaining = startAt - party.clock.serverNowMs()
+            scheduledStart = true
             playTask = Task { @MainActor [weak self] in
                 try? await Task.sleep(for: .milliseconds(max(0, remaining)))
                 guard !Task.isCancelled, let self, gen == self.generation else { return }
-                self.player.partyPlay()
+                self.ownPlay()
+                self.scheduledStart = false
             }
             return
         }
         // Late, or joining mid-play: land on the extrapolated position, then play.
         let target = PartySync.groupPosition(state: "playing", anchor: live.anchor, serverNowMs: party.clock.serverNowMs())
         guard await seekIfFar(target, gen, force || !player.isPlaying) else { return }
-        player.partyPlay()
+        ownPlay()
         reportReady(player.currentPosition)
     }
 
@@ -151,7 +169,21 @@ final class PartyController {
         lastOwnSeek = (Date(), position)
         await player.partySeek(to: position)
         lastOwnSeek = (Date(), position)
+        ownUntil = Date().addingTimeInterval(Self.ownWindowS)
     }
+
+    private func ownPlay() {
+        ownUntil = Date().addingTimeInterval(Self.ownWindowS)
+        player.partyPlay()
+    }
+
+    private func ownPause() {
+        ownUntil = Date().addingTimeInterval(Self.ownWindowS)
+        player.partyPause()
+    }
+
+    /// Anything the controller is doing itself, whose play/pause echoes must not be read as the viewer.
+    private var ownAction: Bool { applying || scheduledStart || Date() < ownUntil }
 
     private func reportReady(_ position: Double) {
         lastReported = "ready"
@@ -170,8 +202,9 @@ final class PartyController {
     // MARK: - Local transport -> intents
 
     private func transportChanged() {
-        guard party.active, !applying else { return }
-        reportBuffering()
+        if party.active, !applying { reportBuffering() }
+        guard let change = watcher.observe(playing: !player.userPaused, own: ownAction), party.active else { return }
+        pendingChange = change
         scheduleSettle()
     }
 
@@ -200,19 +233,19 @@ final class PartyController {
             await party.sendIntent("seek", position: position)
             return
         }
+        guard let change = pendingChange else { return }
+        pendingChange = nil
+        // The viewer may have undone it inside the settle window.
+        guard (change == .paused) == player.userPaused else { return }
         if live.state == "waiting" || itemEnded { return resyncIfPlaying(live) }
-        let wanted = live.state == "playing" && (live.whenMs ?? live.anchor.serverTimeMs) <= party.clock.serverNowMs()
-        if wanted, player.userPaused {
-            guard party.canControl else { return denied(live) }
-            await party.sendIntent("pause")
-        } else if !wanted, player.isPlaying {
-            guard party.canControl else { return denied(live) }
-            await party.sendIntent(live.state == "playing" ? "pause" : "play")
-        }
+        let startReached = (live.whenMs ?? live.anchor.serverTimeMs) <= party.clock.serverNowMs()
+        guard let intent = PartySync.intent(for: change, partyState: live.state, startReached: startReached) else { return }
+        guard party.canControl else { return denied(live) }
+        await party.sendIntent(intent)
     }
 
     private func resyncIfPlaying(_ live: PartyLiveState) {
-        if player.isPlaying { player.partyPause() }
+        if player.isPlaying { ownPause() }
     }
 
     private func denied(_ live: PartyLiveState) {

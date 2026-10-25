@@ -50,4 +50,46 @@ final class PartySyncTests: XCTestCase {
         XCTAssertEqual(PartySync.bestSample(samples)?.offset, 7)
         XCTAssertNil(PartySync.bestSample([]))
     }
+
+    // MARK: - Viewer transport filter
+
+    func testAScheduledStartIsNotTheViewer() {
+        var watcher = PartySync.TransportWatcher()
+        XCTAssertNil(watcher.observe(playing: false, own: true))
+        // The controller's own play at the scheduled time, then its echo.
+        XCTAssertNil(watcher.observe(playing: true, own: true))
+        XCTAssertNil(watcher.observe(playing: true, own: false))
+    }
+
+    func testAPausedPlayerBeforeTheFirstChangeIsNotAViewerPause() {
+        var watcher = PartySync.TransportWatcher()
+        XCTAssertNil(watcher.observe(playing: false, own: false))
+    }
+
+    func testViewerPauseAndPlayAreDetectedOnTheChange() {
+        var watcher = PartySync.TransportWatcher()
+        XCTAssertNil(watcher.observe(playing: true, own: true))
+        XCTAssertEqual(watcher.observe(playing: false, own: false), .paused)
+        XCTAssertNil(watcher.observe(playing: false, own: false))
+        XCTAssertEqual(watcher.observe(playing: true, own: false), .played)
+    }
+
+    func testOurOwnPauseIsNotAViewerPauseEvenOnceItLands() {
+        var watcher = PartySync.TransportWatcher()
+        XCTAssertNil(watcher.observe(playing: true, own: false))
+        XCTAssertNil(watcher.observe(playing: false, own: true))
+    }
+
+    func testViewerPauseIntentNeedsAPlayingPartyPastItsStart() {
+        XCTAssertEqual(PartySync.intent(for: .paused, partyState: "playing", startReached: true), "pause")
+        XCTAssertNil(PartySync.intent(for: .paused, partyState: "playing", startReached: false))
+        XCTAssertNil(PartySync.intent(for: .paused, partyState: "paused", startReached: true))
+    }
+
+    func testViewerPlayIntentOnlyFromAHeldParty() {
+        XCTAssertEqual(PartySync.intent(for: .played, partyState: "paused", startReached: true), "play")
+        XCTAssertEqual(PartySync.intent(for: .played, partyState: "idle", startReached: true), "play")
+        XCTAssertNil(PartySync.intent(for: .played, partyState: "playing", startReached: true))
+        XCTAssertNil(PartySync.intent(for: .played, partyState: "waiting", startReached: true))
+    }
 }
