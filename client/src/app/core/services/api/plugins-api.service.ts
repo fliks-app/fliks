@@ -143,6 +143,15 @@ export class PluginsApiService {
     return firstValueFrom(this.http.delete<void>(`/api/plugins/import/${stagingId}`));
   }
 
+  exportData(pluginId: string, includeSecrets: boolean) {
+    return firstValueFrom(
+      this.http.get(`/api/plugins/${pluginId}/export`, {
+        params: includeSecrets ? { includeSecrets: true } : {},
+        responseType: 'blob',
+      }),
+    );
+  }
+
   uninstall(pluginId: string, deleteData = false) {
     const params: Record<string, string> = deleteData ? { deleteData: 'true' } : {};
     return firstValueFrom(this.http.delete<void>(`/api/plugins/${pluginId}`, { params }));

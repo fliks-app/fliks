@@ -2871,6 +2871,14 @@
         "allow_older_versions_hint": "Ajoute un sélecteur de version à côté des boutons d'installation et de mise à jour du catalogue.",
         "allow_unsigned": "Autoriser les plugins non signés",
         "allow_unsigned_hint": "Permet d'installer un plugin dont le code n'est signé par personne, pour développer le sien. Le désactiver ne supprime pas un plugin déjà installé ainsi."
+      },
+      "export": {
+        "button": "Exporter",
+        "title": "Exporter « {{name}} »",
+        "message": "L'export contient les réglages et les données du plugin.",
+        "include_secrets": "Inclure les secrets",
+        "include_secrets_hint": "Les clés d'API et les mots de passe sont écrits en clair dans le fichier. Gardez-le privé.",
+        "error": "Impossible d'exporter le plugin."
       }
     },
     "cleanup": {
