@@ -2857,6 +2857,14 @@
         "allow_older_versions_hint": "Ergänzt die Installations- und Aktualisierungsknöpfe im Katalog um eine Versionsauswahl.",
         "allow_unsigned": "Unsignierte Plugins zulassen",
         "allow_unsigned_hint": "Erlaubt die Installation eines Plugins, dessen Code niemand signiert hat, für die Entwicklung eigener Plugins. Ein bereits so installiertes Plugin wird beim Ausschalten nicht entfernt."
+      },
+      "export": {
+        "button": "Exportieren",
+        "title": "„{{name}}“ exportieren",
+        "message": "Der Export enthält die Einstellungen und Daten des Plugins.",
+        "include_secrets": "Geheimnisse einschließen",
+        "include_secrets_hint": "API-Schlüssel und Passwörter stehen im Klartext in der Datei. Halte sie privat.",
+        "error": "Das Plugin konnte nicht exportiert werden."
       }
     },
     "cleanup": {

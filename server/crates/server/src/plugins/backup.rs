@@ -3,6 +3,7 @@
 use super::Plugins;
 use super::db::{database_oid, role, schema};
 use super::install::{InstallError, ie};
+use crate::settings::plugin_secret_keys;
 use axum::{body::Body, body::Bytes, http::StatusCode};
 use futures_util::{TryStreamExt, stream};
 use serde_json::{Map, Value, json};
@@ -172,15 +173,24 @@ impl Plugins {
 
     /// The export document as a stream: rows go out as they are read, one snapshot for every table.
     /// The plugin lock and the snapshot are held until the client has read it all.
-    pub async fn export(&self, id: &str) -> Result<Body, InstallError> {
+    /// Secret settings are left out unless `include_secrets`; an import never touches an absent key,
+    /// so restoring a masked export keeps the current secrets.
+    pub async fn export(&self, id: &str, include_secrets: bool) -> Result<Body, InstallError> {
         let lock = self.lock(id).await;
         let pkg = self.find_installed(id).await?;
+        let mut settings = self.owned_settings(id).await.map_err(internal)?;
+        let masked = if include_secrets {
+            vec![]
+        } else {
+            mask_secrets(id, &pkg.manifest, &mut settings)
+        };
         let head = format!(
-            r#"{{"exportedAt":{},"formatVersion":1,"pluginId":{},"pluginVersion":{},"settings":{},"tables":{{"#,
+            r#"{{"exportedAt":{},"formatVersion":1,"pluginId":{},"pluginVersion":{},"maskedSettings":{},"settings":{},"tables":{{"#,
             json!(fliks_domain::js::iso(chrono::Utc::now())),
             json!(id),
             json!(pkg.version),
-            Value::Object(self.owned_settings(id).await.map_err(internal)?),
+            json!(masked),
+            Value::Object(settings),
         );
         let (out, rx) = tokio::sync::mpsc::channel::<Result<Bytes, std::io::Error>>(4);
         if !Self::has_schema(&pkg.manifest) {
@@ -360,6 +370,14 @@ impl Plugins {
     }
 }
 
+/// Removes the manifest's secret settings from `settings`; returns the keys that were present.
+fn mask_secrets(id: &str, manifest: &Value, settings: &mut Map<String, Value>) -> Vec<String> {
+    plugin_secret_keys(id, manifest)
+        .into_iter()
+        .filter(|k| settings.remove(k).is_some())
+        .collect()
+}
+
 fn check_document(id: &str, doc: &Value) -> Result<(), InstallError> {
     let ok = doc["formatVersion"] == json!(1)
         && doc["pluginId"].is_string()
@@ -431,4 +449,36 @@ fn check_setting_scope(
         ));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn masked_export_drops_secrets_and_still_imports_as_a_no_op_for_them() {
+        let manifest = json!({"ui": {"configPages": [{"id": "p", "fields": [
+            {"key": "apiKey", "secret": true}, {"key": "url"}]}]}});
+        let mut settings = Map::new();
+        for (k, v) in [("plugin.p.apiKey", "s3cret"), ("plugin.p.url", "http://x")] {
+            settings.insert(k.into(), json!(v));
+        }
+        let masked = mask_secrets("p", &manifest, &mut settings);
+        assert_eq!(masked, ["plugin.p.apiKey"]);
+        assert_eq!(
+            Value::Object(settings.clone()),
+            json!({"plugin.p.url": "http://x"})
+        );
+        let doc = json!({"formatVersion": 1, "pluginId": "p", "pluginVersion": "1.0.0",
+            "maskedSettings": masked, "settings": settings, "tables": {}});
+        assert!(check_document("p", &doc).is_ok());
+        let ids = ["p".to_owned()];
+        assert!(check_setting_scope("p", doc["settings"].as_object().unwrap(), &ids).is_ok());
+        assert!(
+            !doc["settings"]
+                .as_object()
+                .unwrap()
+                .contains_key("plugin.p.apiKey")
+        );
+    }
 }

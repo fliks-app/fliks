@@ -30,6 +30,9 @@ const ROW: PluginSummary = {
   enabled: true,
 };
 
+let includeSecrets = false;
+const saved: string[] = [];
+
 async function createComponent(rows: PluginSummary[] = [ROW]) {
   TestBed.configureTestingModule({
     providers: [
@@ -41,7 +44,13 @@ async function createComponent(rows: PluginSummary[] = [ROW]) {
         lang: 'en',
         loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } },
       }),
-      { provide: ConfirmationService, useValue: { confirm: () => Promise.resolve(true) } },
+      {
+        provide: ConfirmationService,
+        useValue: {
+          confirm: () => Promise.resolve(true),
+          confirmWithToggle: () => Promise.resolve({ ok: true, toggle: includeSecrets }),
+        },
+      },
     ],
   });
   const http = TestBed.inject(HttpTestingController);
@@ -170,5 +179,29 @@ describe('PluginsSettingsComponent — held update', () => {
   it('shows nothing without one', async () => {
     const { fixture } = await createComponent();
     expect((fixture.nativeElement as HTMLElement).textContent).not.toContain('held_update');
+  });
+});
+
+describe('PluginsSettingsComponent — export', () => {
+  afterEach(() => TestBed.inject(HttpTestingController).verify());
+
+  it.each([
+    [false, '/api/plugins/fliks.acme/export'],
+    [true, '/api/plugins/fliks.acme/export?includeSecrets=true'],
+  ])('include secrets %s asks for %s', async (flag, url) => {
+    includeSecrets = flag;
+    URL.createObjectURL = () => 'blob:x';
+    URL.revokeObjectURL = () => undefined;
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+      saved.push(this.download);
+    });
+    const { fixture, http } = await createComponent();
+
+    void fixture.componentInstance.exportData(ROW);
+    await settle(fixture);
+    http.expectOne((r) => r.urlWithParams === url && r.method === 'GET').flush(new Blob(['{}']));
+    await settle(fixture);
+
+    expect(saved).toContain('fliks.acme.export.json');
   });
 });

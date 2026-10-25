@@ -2857,6 +2857,14 @@
         "allow_older_versions_hint": "Adds a version picker next to the catalogue's install and update buttons.",
         "allow_unsigned": "Allow unsigned plugins",
         "allow_unsigned_hint": "Lets a plugin whose code nobody signed be installed, for developing your own. Turning it back off does not remove a plugin already installed this way."
+      },
+      "export": {
+        "button": "Export",
+        "title": "Export “{{name}}”",
+        "message": "The export holds the plugin's settings and data.",
+        "include_secrets": "Include secrets",
+        "include_secrets_hint": "API keys and passwords are written in clear in the file. Keep it private.",
+        "error": "Unable to export the plugin."
       }
     },
     "cleanup": {

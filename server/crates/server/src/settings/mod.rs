@@ -9,6 +9,7 @@ use axum::{Router, routing::get};
 
 pub use db::value as setting_value;
 pub use routes::*;
+pub use secrets::plugin_secret_keys;
 
 /// A write on behalf of `origin` (a plugin's `config.set`, an import): the row, then the same
 /// change notification as a `PUT`, the writer excluded from its own `config-changed`.

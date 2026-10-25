@@ -9,6 +9,7 @@ import {
 import { RouterLink } from '@angular/router';
 import { LucideEllipsisVertical } from '@lucide/angular';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
+import { saveFile } from '../../../core/plugins/save-file.plugin';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { PluginUiRegistryService } from '../../../core/plugin-ui/plugin-ui-registry.service';
@@ -199,6 +200,21 @@ export class PluginsSettingsComponent implements OnInit {
       this.toast.error(this.translate.instant('settings.plugins.toggle_error'));
     } finally {
       this.togglingId.set(null);
+    }
+  }
+
+  async exportData(row: PluginSummary): Promise<void> {
+    const { ok, toggle } = await this.confirmation.confirmWithToggle({
+      title: this.translate.instant('settings.plugins.export.title', { name: row.name }),
+      message: this.translate.instant('settings.plugins.export.message'),
+      toggleLabel: this.translate.instant('settings.plugins.export.include_secrets'),
+      toggleHint: this.translate.instant('settings.plugins.export.include_secrets_hint'),
+    });
+    if (!ok) return;
+    try {
+      await saveFile(await this.api.exportData(row.pluginId, toggle), `${row.pluginId}.export.json`);
+    } catch {
+      this.toast.error(this.translate.instant('settings.plugins.export.error'));
     }
   }
 

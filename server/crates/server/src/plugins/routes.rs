@@ -9,7 +9,7 @@ use crate::state::AppState;
 use axum::{
     Json, Router,
     body::Bytes,
-    extract::{DefaultBodyLimit, Multipart, Path, Request, State},
+    extract::{DefaultBodyLimit, Multipart, Path, Query, Request, State},
     http::{HeaderMap, HeaderValue, Method, StatusCode, header},
     response::{IntoResponse, Response},
     routing::{MethodRouter, any, delete, get, post, put},
@@ -386,10 +386,33 @@ pub async fn logo(State(st): State<AppState>, a: Authed, Path(id): Path<String>)
         .into_response())
 }
 
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportQuery {
+    #[serde(default)]
+    include_secrets: bool,
+}
+
 #[utoipa::path(get, path = "/api/plugins/{pluginId}/export", responses((status = 200)))]
-pub async fn export(State(st): State<AppState>, a: Authed, Path(id): Path<String>) -> Res {
-    need(&a, Action::Read)?;
-    let body = st.plugins.export(&id).await.map_err(inst)?;
+pub async fn export(
+    State(st): State<AppState>,
+    a: Authed,
+    Path(id): Path<String>,
+    Query(q): Query<ExportQuery>,
+) -> Res {
+    need(
+        &a,
+        if q.include_secrets {
+            Action::Manage
+        } else {
+            Action::Read
+        },
+    )?;
+    let body = st
+        .plugins
+        .export(&id, q.include_secrets)
+        .await
+        .map_err(inst)?;
     Ok(([(header::CONTENT_TYPE, "application/json")], body).into_response())
 }
 
