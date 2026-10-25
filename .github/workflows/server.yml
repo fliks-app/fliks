@@ -31,6 +31,7 @@ jobs:
     # Release PRs only bump versions; main re-runs this after the merge.
     if: ${{ !startsWith(github.head_ref, 'release-please--') }}
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     services:
       postgres:
         image: postgres:18
@@ -110,6 +111,7 @@ jobs:
   windows-clippy:
     if: ${{ !startsWith(github.head_ref, 'release-please--') }}
     runs-on: windows-latest
+    timeout-minutes: 45
     defaults:
       run:
         working-directory: server
