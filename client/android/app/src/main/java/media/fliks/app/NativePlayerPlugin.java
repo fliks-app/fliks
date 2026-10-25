@@ -174,38 +174,48 @@ public class NativePlayerPlugin extends Plugin {
     @PluginMethod()
     public void destroy(PluginCall call) {
         mainHandler.post(() -> {
-            // Restore the opaque BLACK WebView before removing the wrapper, or the transparent WebView exposes the
-            // windowBackground (white in the Light theme) for one frame.
-            android.webkit.WebView webView = getBridge().getWebView();
-            if (webView != null) webView.setBackgroundColor(Color.BLACK);
-            stopPositionUpdates();
-            muteMessages.clear();
-            muteRanges = new double[0][];
-            releaseMediaSession();
-            if (player != null) {
-                player.release();
-                player = null;
-            }
-            if (subtitles != null) {
-                subtitles.detach();
-                subtitles = null;
-            }
-            if (wrapper != null) {
-                ViewGroup parent = (ViewGroup) wrapper.getParent();
-                if (parent != null) parent.removeView(wrapper);
-                wrapper = null;
-                aspectFrame = null;
-                surfaceView = null;
-                shutter = null;
-            }
-            crop = null;
-            viewport = null;
-            fillScreen = false;
-            displayWidth = 0f;
-            displayHeight = 0f;
-            subtitleConfigs.clear();
+            teardown();
             call.resolve();
         });
+    }
+
+    /** Activity recreation (locale, density...) would otherwise leave the old player and session running. */
+    @Override
+    protected void handleOnDestroy() {
+        teardown();
+    }
+
+    private void teardown() {
+        // Restore the opaque BLACK WebView before removing the wrapper, or the transparent WebView exposes the
+        // windowBackground (white in the Light theme) for one frame.
+        android.webkit.WebView webView = getBridge().getWebView();
+        if (webView != null) webView.setBackgroundColor(Color.BLACK);
+        stopPositionUpdates();
+        muteMessages.clear();
+        muteRanges = new double[0][];
+        releaseMediaSession();
+        if (player != null) {
+            player.release();
+            player = null;
+        }
+        if (subtitles != null) {
+            subtitles.detach();
+            subtitles = null;
+        }
+        if (wrapper != null) {
+            ViewGroup parent = (ViewGroup) wrapper.getParent();
+            if (parent != null) parent.removeView(wrapper);
+            wrapper = null;
+            aspectFrame = null;
+            surfaceView = null;
+            shutter = null;
+        }
+        crop = null;
+        viewport = null;
+        fillScreen = false;
+        displayWidth = 0f;
+        displayHeight = 0f;
+        subtitleConfigs.clear();
     }
 
     /** The player container's rectangle in CSS px; a negative width or height fills the WebView's parent. */

@@ -51,6 +51,11 @@ public class DownloadNotificationPlugin extends Plugin {
         }
     }
 
+    @Override
+    protected void handleOnDestroy() {
+        if (instance == this) instance = null;
+    }
+
     /** Emit event to WebView JS (called from FlixDownloadUtil listener) */
     public static void emitEvent(String eventName, JSObject data) {
         if (instance != null) {
