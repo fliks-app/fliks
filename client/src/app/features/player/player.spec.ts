@@ -640,6 +640,24 @@ describe('PlayerComponent wake / resume', () => {
     expect(h.state.error()?.source).toBe('session');
   });
 
+  it('a stall while offline spends no attempt and recovers once back online', async () => {
+    const h = createHarness();
+    let online = false;
+    h.component.network = { isOnline: () => online };
+
+    for (let i = 0; i < 5; i++) await h.component.recoverFromLostSession('stall');
+    expect(h.component.recoverAttempts).toBe(0);
+    expect(h.state.error()).toBeNull();
+    expect(h.streamingApi.getPlaybackInfo).not.toHaveBeenCalled();
+
+    online = true;
+    h.component.lastTickAt = Date.now();
+    h.component.tickClockWatch();
+    await flush();
+
+    expect(h.streamingApi.getPlaybackInfo).toHaveBeenCalled();
+  });
+
   it('direct play has no encoder to warm', async () => {
     const h = createHarness();
     const fetchMock = vi.fn(async () => ({ ok: true }) as any);
