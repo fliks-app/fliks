@@ -57,7 +57,6 @@ import { App as CapApp } from '@capacitor/app';
 
 import type { AudioTrack, PlaybackEngine, QoeSample, VariantTrack } from '../../core/services/playback-engine/playback-engine';
 import { QoeReporter } from '../../core/services/qoe-reporter.service';
-import type { QoeRecoveryReason } from '../../core/services/api/qoe-api.service';
 import { PlayerQoe, PlayheadWatch, frozenAfterMs, type ReloadWhy } from './player-qoe';
 import {
   createEngineSurface,
@@ -113,6 +112,7 @@ import { PlayerControlsComponent } from './controls/player-controls';
 import { PlayerErrorOverlayComponent } from './overlay/player-error-overlay';
 import { ControlsVisibilityService } from './controls/controls-visibility';
 import { CopyFallbackController } from './copy-fallback-controller';
+import { RecoveryController } from './recovery-controller';
 import { WebVideoCropController } from './web-video-crop-controller';
 import { EdlController } from './edl-controller';
 import { CueController } from './cue-controller';
@@ -343,32 +343,16 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private statsInterval: ReturnType<typeof setInterval> | null = null;
   private playheadInterval: ReturnType<typeof setInterval> | null = null;
   private subtitleStyleEl: HTMLStyleElement | null = null;
-  /** Stall watchdog: last playhead position and when seen. No advance for {@link stallTimeoutMs} while playing
-   *  (dead transcode, wedged buffer) reloads at the current position. */
-  private lastProgressPos = 0;
-  private lastProgressAt = 0;
-  private readonly stallTimeoutMs = 15_000;
   // A backward seek can trigger a 10-30s backend respawn (awaitSeekUnlock's
   // ceiling) with a frozen-but-healthy playhead; widen the window right after.
   private lastSeekAt = 0;
   private lastQualitySwitchAt = 0;
   /** Buffering right after a reload or track switch finishes is that switch settling, not a stall. */
   private qoeGraceUntil = 0;
-  private readonly seekStallGraceMs = 32_000;
   // Desktop mpv far-seek thresholds: forward slack above its cache end, and the back-cache window still served;
   // seeks outside the band reload at the offset.
   private readonly desktopSeekCacheSlackS = 1;
   private readonly desktopSeekBackWindowS = 15;
-  /** A 1 s tick this late means the process was frozen (sleep, throttled tab); `visibilitychange` doesn't fire
-   *  for a sleep, so the clock gap is the signal. */
-  private static readonly wakeGapMs = 5_000;
-  private lastTickAt = 0;
-  /** A heartbeat lost on the network (e.g. right after a wake) leaves the session state unknown; retry the
-   *  resume path once online. */
-  private resumeDue = false;
-  private lastResumeAt = 0;
-  private readonly resumeRetryMs = 5_000;
-
   // ── Template-facing signal aliases (delegate to services) ──
   readonly loading = this.state.loading;
   readonly videoStarted = this.state.videoStarted;
@@ -424,6 +408,39 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }), null);
   private readonly copyFallback = inject(CopyFallbackController);
   private readonly _copyFallbackAttach = (this.copyFallback.attach(this), null);
+  protected readonly recovery = new RecoveryController({
+    engine: () => this.engine,
+    isDestroyed: () => this.destroyed,
+    isCasting: () => this.castService.isConnected(),
+    isOnline: () => this.network.isOnline(),
+    hasMedia: () => !!this.mediaFileId,
+    isPaused: () => this.paused(),
+    isLoading: () => this.state.loading(),
+    fatalNoRetry: () => this.state.fatalNoRetry(),
+    reloadInFlight: () => this.reloadingStream,
+    lastSeekAt: () => this.lastSeekAt,
+    resumePosition: () => {
+      // engine.currentTime can read 0 right after an error (e.g. Tizen AVPlay): use the mirrored position.
+      const pos = this.engine?.currentTime ?? 0;
+      return pos > 1 ? pos : this.state.currentTime();
+    },
+    setRecovering: (on) => this.state.setRecovering(on),
+    hasError: () => !!this.state.error(),
+    failWith: (e, opts) => this.state.failWith(e, opts),
+    reloadSession: (pos) => this.refreshSidAndReload(pos, { preservePause: true, unmute: false }),
+    warmSession: async () => {
+      await this.authService.ensureStreamToken(this.mediaFileId);
+      await this.prewarmCurrentStream();
+    },
+    beat: () => this.savePosition(),
+    dropStall: () => this.qoe.dropStall(),
+    closeStall: () => this.qoe.closeStall(this.activeSessionId()),
+    reportRecovery: (pos, wait) => this.qoe.onRecovery(this.activeSessionId(), pos, wait),
+    graceAfterReload: () => {
+      this.qoeGraceUntil = Date.now() + 3_000;
+    },
+  });
+
   protected readonly queueCtl = inject(QueueController);
   private readonly _queueAttach = (this.queueCtl.attach({
     media: () => this.media,
@@ -758,7 +775,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     return this.authService.hasServerFeature(feature);
   }
   isReloadIdle(): boolean {
-    return !this.reloadingStream && !this.firstLoadPending && !this.recoveringFromLostSession;
+    return !this.reloadingStream && !this.firstLoadPending && !this.recovery.active;
   }
   hasError(): boolean {
     return !!this.state.error();
@@ -858,7 +875,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.keyboardOverlay.enter();
     this.state.reset();
     this.qoe.reset();
-    this.recoveryEpisode = null;
+    this.recovery.clearEpisode();
     this.firstLoadSetupDone = false;
 
     // On native: listen to orientation changes (immersive handled by effect)
@@ -1303,7 +1320,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.cues.cancelTimers();
     if (this.statsInterval) clearInterval(this.statsInterval);
     if (this.playheadInterval) clearInterval(this.playheadInterval);
-    if (this.recoverRetryTimer) clearTimeout(this.recoverRetryTimer);
+    this.recovery.dispose();
     document.removeEventListener('keydown', this.keyboard.onKeyDown);
     window.removeEventListener('beforeunload', this.onBeforeUnload);
     window.removeEventListener('pagehide', this.onBeforeUnload);
@@ -1808,7 +1825,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         this.state.seekLocked.set(false);
         return;
       }
-      this.resetStallWatchdog();
+      this.recovery.resetStallWatchdog();
       this.state.loading.set(false);
       await this.pollSeekConverge(target, gen);
     } catch (e) {
@@ -1925,7 +1942,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // over the outgoing frame and rewind the playhead UI to the start.
       this.state.reset();
       this.qoe.reset();
-      this.recoveryEpisode = null;
+      this.recovery.clearEpisode();
       this.edlEnded = false;
       // Drop the outgoing episode's info so an early failure doesn't report its stale playMethod/hwAccel.
       this.playbackInfo = null;
@@ -2137,7 +2154,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.state.seekLocked() ||
       this.reloadingStream ||
       this.reloadLoadPending ||
-      this.recoveringFromLostSession ||
+      this.recovery.active ||
       at < this.qoeGraceUntil ||
       at - Math.max(this.lastSeekAt, this.lastQualitySwitchAt) < 2_000;
     const position = this.engine?.currentTime ?? 0;
@@ -2571,26 +2588,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     else engine.play().catch(settle);
   }
 
-  /** Only one recoverFromLostSession at a time, so a slow recovery can't race the next 10s heartbeat's
-   *  `sessionLost`. */
-  private recoveringFromLostSession = false;
-  /** The recovery in progress: what triggered it and when the picture froze, kept across retries. */
-  private recoveryEpisode: { reason: QoeRecoveryReason; since: number } | null = null;
-  /** Recovery attempts in this loss episode, cleared only once a reload sustains playback ({@link
-   *  recoverConfirmPending}), so a quick re-fail keeps counting toward {@link maxRecoverAttempts}. */
-  private recoverAttempts = 0;
-  private readonly maxRecoverAttempts = 3;
-  /** A recovery that found the network down: re-run on reconnect without spending an attempt. */
-  private recoverWhenOnline: { reason: QoeRecoveryReason; frozenSince?: number } | null = null;
-  /** Pending backoff retry between failed recovery attempts (2s → 4s). */
-  private recoverRetryTimer: ReturnType<typeof setTimeout> | null = null;
-  /** A recovery reload just resolved; counters clear only after the playhead advances for {@link
-   *  recoverConfirmMs} (confirmed in checkStall). */
-  private recoverConfirmPending = false;
-  /** One in-place retry per outage: if it fails too, the next recovery mints a new session. */
-  private retriedInPlace = false;
-  private recoverConfirmAt = 0;
-  private readonly recoverConfirmMs = 5_000;
   /** Set in ngOnDestroy: blocks late async reloads (sessionLost, sessionExpired, Cast resume) that would
    *  relaunch a native player in the background. */
   private destroyed = false;
@@ -2647,7 +2644,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
     // Save position every 10s + immediately on seek
     this.saveInterval = setInterval(() => this.savePosition(), HEARTBEAT_MS);
-    this.resetStallWatchdog();
+    this.recovery.resetStallWatchdog();
     const video = this.videoEl()?.nativeElement;
     if (video) {
       video.addEventListener('seeking', this.onSeeking);
@@ -2659,11 +2656,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.loadSpriteMetadata();
 
     // Update stats every second
-    this.lastTickAt = Date.now();
+    this.recovery.armClock();
     this.playheadInterval = setInterval(() => this.watchPlayhead(), this.isTizen ? 500 : 250);
     this.statsInterval = setInterval(() => {
-      this.tickClockWatch();
-      this.checkStall();
+      this.recovery.tickClockWatch();
+      this.recovery.checkStall();
       const stats = this.engine?.getStats();
       const variant = stats?.activeVariant;
       if (variant?.height) {
@@ -2706,13 +2703,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    *  410) recovers immediately; `error` routes to {@link CopyFallbackController.maybeFallback}. */
   private wireErrorRecovery(engine: PlaybackEngine): void {
     engine.on('sessionExpired', () => {
-      void this.recoverFromLostSession('session_expired');
+      void this.recovery.recoverFromLostSession('session_expired');
     });
     engine.on('externalPlaybackFailed', ({ reason }) => {
       void this.onExternalPlaybackFailed(reason);
     });
     engine.on('error', (e) => {
-      if (this.reloadLoadPending || this.recoveringFromLostSession) {
+      if (this.reloadLoadPending || this.recovery.active) {
         console.warn('[player] engine error dropped, a reload/recovery is already in flight', e);
         return;
       }
@@ -2759,13 +2756,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     e: any, position: number, onRecovered?: () => Promise<void> | void,
   ): boolean {
     return this.copyFallback.fallBackFromLoadError(e, position, onRecovered);
-  }
-
-  /** Re-baseline the stall watchdog so the next {@link stallTimeoutMs} window starts from the current playhead;
-   *  call wherever the playhead legitimately jumps (load, seek, recovery). */
-  private resetStallWatchdog(): void {
-    this.lastProgressPos = this.engine?.currentTime ?? 0;
-    this.lastProgressAt = Date.now();
   }
 
   /** Full technical dump for the error card's details block and "copy diagnostics": Shaka
@@ -2833,49 +2823,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     return (v?.dvProfile ?? 0) > 0;
   }
 
-  /** Ticked once a second before {@link checkStall}; keyed off the wall clock, it detects a frozen-and-back
-   *  process and decides when a long buffer deserves an on-screen explanation. */
-  private tickClockWatch(): void {
-    const now = Date.now();
-    const gap = now - this.lastTickAt;
-    this.lastTickAt = now;
-    if (gap > PlayerComponent.wakeGapMs) {
-      // A frozen interval is not a frozen playhead: skip the stall watchdog's black-screen reload this tick.
-      this.resetStallWatchdog();
-      void this.resumeAfterGap();
-    } else if (this.recoverWhenOnline && this.network.isOnline()) {
-      const { reason, frozenSince } = this.recoverWhenOnline;
-      this.recoverWhenOnline = null;
-      void this.recoverFromLostSession(reason, frozenSince, true);
-    } else if (
-      this.resumeDue &&
-      this.network.isOnline() &&
-      now - this.lastResumeAt >= this.resumeRetryMs
-    ) {
-      void this.resumeAfterGap();
-    }
-  }
-
-  /** The player was frozen (sleep) or cut off and is back; the backend killed our encoder but knows the sid.
-   *  Refresh the token, re-fetch the manifest at the playhead (respawns ffmpeg), beat once; no engine reload. */
-  private async resumeAfterGap(): Promise<void> {
-    if (this.destroyed || !this.mediaFileId) return;
-    if (this.castService.isConnected()) return;
-    if (!this.network.isOnline()) {
-      this.resumeDue = true;
-      return;
-    }
-    this.resumeDue = false;
-    this.lastResumeAt = Date.now();
-    try {
-      await this.authService.ensureStreamToken(this.mediaFileId);
-      await this.prewarmCurrentStream();
-    } catch {
-      // Best effort: the heartbeat below is what actually drives recovery.
-    }
-    await this.savePosition();
-  }
-
   /** GET the HLS manifest on the live sid at the playhead: a keep-alive plus prewarm that revives a GC'd
    *  session and starts ffmpeg at the resume segment (no-op if running). Skipped off HLS and offline. */
   private async prewarmCurrentStream(): Promise<void> {
@@ -2897,174 +2844,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (!res.ok) {
       console.warn(`[player] prewarm fetch failed: ${res.status} ${res.statusText}`);
     }
-  }
-
-  /** Ticked once a second; detects a frozen playhead during intended playback and routes it through the
-   *  lost-session recovery (re-mint sid + reload at position). */
-  private checkStall(): void {
-    if (this.destroyed || !this.engine) return;
-    if (this.castService.isConnected()) return;
-    // Not playing (yet): keep the baseline fresh. A fatal-no-retry error also bails: a fresh sid can't fix a
-    // codec the browser rejects, so show the terminal error instead of flapping the card/spinner.
-    if (
-      this.paused() ||
-      this.state.loading() ||
-      this.state.fatalNoRetry() ||
-      this.recoveringFromLostSession ||
-      this.reloadingStream
-    ) {
-      this.resetStallWatchdog();
-      return;
-    }
-    const pos = this.engine.currentTime;
-    const dur = this.engine.duration;
-    if (dur && pos >= dur - 1) {
-      this.resetStallWatchdog();
-      return;
-    }
-    // Any meaningful move (forward play or a seek in either direction) counts
-    // as progress and rearms the window.
-    if (Math.abs(pos - this.lastProgressPos) > 0.25) {
-      this.lastProgressPos = pos;
-      this.lastProgressAt = Date.now();
-      // Playback sustained for recoverConfirmMs means a clean recovery: clear the counter and re-arm the native
-      // one-shot guard so a later blip gets its own recovery.
-      if (
-        this.recoverConfirmPending &&
-        Date.now() - this.recoverConfirmAt >= this.recoverConfirmMs
-      ) {
-        this.recoverConfirmPending = false;
-        this.recoverAttempts = 0;
-        this.retriedInPlace = false;
-        this.engine?.resetRecoveryGuard();
-      }
-      return;
-    }
-    const timeout =
-      Date.now() - this.lastSeekAt < this.seekStallGraceMs
-        ? this.seekStallGraceMs
-        : this.stallTimeoutMs;
-    if (Date.now() - this.lastProgressAt >= timeout) {
-      const frozenSince = this.lastProgressAt;
-      this.resetStallWatchdog();
-      void this.recoverFromLostSession('stall', frozenSince);
-    }
-  }
-
-  /** The carried `sid` is unknown to the backend or the playhead wedged: mint a fresh session and reload at the
-   *  position, backing off up to {@link maxRecoverAttempts}. Skipped for Cast (receiver owns the session). */
-  private async recoverFromLostSession(
-    reason: QoeRecoveryReason = 'other',
-    frozenSince?: number,
-    afterOffline = false,
-  ): Promise<void> {
-    if (this.destroyed) return;
-    if (this.recoveringFromLostSession) return;
-    // A user reload (quality/audio switch, episode swap) owns the session, so a 410 or sessionLost inside it is
-    // expected and recovering would race a second load; also clear any veil held across a backoff.
-    if (this.reloadingStream) {
-      this.state.setRecovering(false);
-      this.recoveryEpisode = null;
-      return;
-    }
-    if (this.recoverRetryTimer) return; // a backoff retry is already queued
-    if (this.recoverAttempts >= this.maxRecoverAttempts) {
-      // Exhausted: surface a terminal error card rather than leave a stuck spinner or stale overlay.
-      this.giveUpRecovery();
-      return;
-    }
-    if (this.castService.isConnected()) return;
-    if (!this.engine || !this.mediaFileId) return;
-    if (!this.network.isOnline()) {
-      this.retriedInPlace = false;
-      this.recoverWhenOnline ??= { reason, frozenSince };
-      this.state.setRecovering(true);
-      return;
-    }
-    // The server keeps the session through a short outage: re-prepare the loaded stream, keeping the last frame up.
-    if (afterOffline && !this.retriedInPlace && this.engine.retry) {
-      this.recoveringFromLostSession = true;
-      try {
-        if (await this.engine.retry()) {
-          this.retriedInPlace = true;
-          this.awaitRecoveryConfirm();
-          return;
-        }
-      } finally {
-        this.recoveringFromLostSession = false;
-      }
-    }
-    // The first trigger names the episode. An open stall already counts the freeze on the old sid, so the wait
-    // starts now; otherwise at the last progress. A lost sid's open stall moves to the new one.
-    if (!this.recoveryEpisode) {
-      const openSince = reason === 'session_lost' ? this.qoe.dropStall() : null;
-      const counted = openSince == null && this.qoe.closeStall(this.activeSessionId());
-      const since =
-        openSince ??
-        (counted ? Date.now() : Math.min(Date.now(), frozenSince ?? (this.lastProgressAt || Date.now())));
-      this.recoveryEpisode = { reason, since };
-    }
-    this.recoveringFromLostSession = true;
-    // Suppress the fatal-error overlay the engine tears off during the reload: it should read as buffering.
-    this.state.setRecovering(true);
-    // Count up front, not only on failure: Shaka has no per-engine one-shot latch, so a fresh sid that 410s
-    // again would re-enter at 0 and loop. Cleared only after playback sustains for recoverConfirmMs.
-    this.recoverAttempts += 1;
-    // engine.currentTime can read 0 right after an error (e.g. Tizen AVPlay); fall back to the last mirrored
-    // position rather than reload from the start.
-    const enginePos = this.engine.currentTime;
-    const pos = enginePos > 1 ? enginePos : this.state.currentTime();
-    try {
-      await this.refreshSidAndReload(pos, {
-        preservePause: true,
-        unmute: false,
-      });
-      const episode = this.recoveryEpisode;
-      this.recoveryEpisode = null;
-      this.qoe.onRecovery(
-        this.activeSessionId(),
-        pos,
-        episode ? { reason: episode.reason, durationMs: Date.now() - episode.since } : undefined,
-      );
-      this.awaitRecoveryConfirm();
-    } catch (e) {
-      if (!this.network.isOnline()) {
-        this.recoverAttempts -= 1;
-        this.recoverWhenOnline ??= { reason };
-      } else if (this.recoverAttempts >= this.maxRecoverAttempts) {
-        this.giveUpRecovery(e);
-      } else {
-        // Hold the recovering veil up across the backoff so the user sees a
-        // reconnect, not a flash of the fatal overlay between attempts.
-        const backoff = 2_000 * 2 ** (this.recoverAttempts - 1); // 2s, 4s
-        this.recoverRetryTimer = setTimeout(() => {
-          this.recoverRetryTimer = null;
-          void this.recoverFromLostSession(reason);
-        }, backoff);
-      }
-    } finally {
-      this.recoveringFromLostSession = false;
-      this.qoeGraceUntil = Date.now() + 3_000;
-    }
-  }
-
-  /** Keeps the episode counter until the recovered stream proves it plays (checkStall confirms), so a re-fail
-   *  keeps counting. */
-  private awaitRecoveryConfirm(): void {
-    this.resetStallWatchdog();
-    this.state.setRecovering(false);
-    this.recoverConfirmPending = true;
-    this.recoverConfirmAt = Date.now();
-  }
-
-  /** The terminal card means playback is over: an engine left loaded would keep buffering and play
-   *  on behind it once the network comes back. */
-  private giveUpRecovery(e?: unknown): void {
-    this.recoveryEpisode = null;
-    this.state.setRecovering(false);
-    void this.engine?.unload();
-    if (e !== undefined) this.state.failWith(e);
-    else if (!this.state.error()) this.state.failWith(undefined, { source: 'session' });
   }
 
   /** Reload the local engine and resume after Cast disconnect. The pre-cast LiveSession was GC'd, so mint a
@@ -3372,7 +3151,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   };
   private onSeeked = () => {
     this.lastSeekAt = Date.now();
-    this.resetStallWatchdog();
+    this.recovery.resetStallWatchdog();
     // Forced: a jump can't be interpolated by a controller, so waiting for the ten-second cadence left other
     // remotes on a stale position. No loop: a controller only sends on a gesture.
     void this.savePosition(true);
@@ -3820,7 +3599,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         // The backend lost our LiveSession (restart, long idle): re-issue playback-info and reload with the
         // fresh sid at the current position before the buffer drains.
         if (response?.sessionLost) {
-          void this.recoverFromLostSession('session_lost');
+          void this.recovery.recoverFromLostSession('session_lost');
         }
         // Auto-delete-after-watched: the moment the server marks this item
         // completed, drop its auto-managed download (no-op otherwise).
@@ -3834,11 +3613,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         this.offlineSync.queue(offlinePayload);
         // The beat never landed, so the session's fate is unknown: re-run the resume path once online rather
         // than wait for a 410 on the next segment.
-        this.resumeDue = true;
+        this.recovery.markResumeDue();
       }
     } else {
       this.offlineSync.queue(offlinePayload);
-      this.resumeDue = true;
+      this.recovery.markResumeDue();
     }
   }
 
