@@ -102,5 +102,8 @@
   "playlists.add_to_short": "Add to",
   "party.tv_close": "Close",
   "party.tv_invite_hint": "Select people to invite",
-  "party.tv_chat_history": "Messages"
+  "party.tv_chat_history": "Messages",
+  "party.end": "End the party",
+  "party.end_title": "End the party",
+  "party.end_message": "End \"{{name}}\" for everyone?"
 }

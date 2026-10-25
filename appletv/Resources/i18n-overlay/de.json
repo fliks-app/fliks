@@ -95,5 +95,8 @@
   "playlists.add_to_short": "Hinzufügen zu",
   "party.tv_close": "Schließen",
   "party.tv_invite_hint": "Wähle die Personen zum Einladen aus",
-  "party.tv_chat_history": "Nachrichten"
+  "party.tv_chat_history": "Nachrichten",
+  "party.end": "Watch Party beenden",
+  "party.end_title": "Watch Party beenden",
+  "party.end_message": "\"{{name}}\" für alle beenden?"
 }

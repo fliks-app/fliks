@@ -164,12 +164,13 @@ struct PartySettingsView: View {
                             Button(tr("party.regenerate_link")) { Task { await service.regenerateLink() } }
                             Button(tr("common.cancel"), role: .cancel) {}
                         } message: { Text(tr("party.regenerate_message")) }
-                    Button(tr("party.cancel")) { confirmEnd = true }
+                    let key = service.party?.status == "live" ? "party.end" : "party.cancel"
+                    Button(tr(key)) { confirmEnd = true }
                         .buttonStyle(DestructiveButtonStyle())
-                        .confirmationDialog(tr("party.cancel_title"), isPresented: $confirmEnd, titleVisibility: .visible) {
-                            Button(tr("party.cancel"), role: .destructive) { Task { await service.endParty() } }
+                        .confirmationDialog(tr("\(key)_title"), isPresented: $confirmEnd, titleVisibility: .visible) {
+                            Button(tr(key), role: .destructive) { Task { await service.endParty() } }
                             Button(tr("common.cancel"), role: .cancel) {}
-                        } message: { Text(trp("party.cancel_message", ["name": service.party?.name ?? ""])) }
+                        } message: { Text(trp("\(key)_message", ["name": service.party?.name ?? ""])) }
                 }
                 Button(tr("party.tv_close")) { service.sheet = nil }
                     .buttonStyle(.bordered)
