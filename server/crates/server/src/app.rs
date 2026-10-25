@@ -361,6 +361,7 @@ pub fn router(
 ) -> Router {
     let local = system::router()
         .merge(api().with_state(state))
+        .route(crate::http::csp::REPORT_PATH, crate::http::csp::route())
         .route("/api", any(unowned))
         .route("/api/", any(unowned))
         .route("/api/{*rest}", any(unowned))
