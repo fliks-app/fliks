@@ -10,11 +10,27 @@ use fliks_engine_core::{
     api::{BurnInKind, BurnInSpec, SubtitleTrack, SubtitleTrackKind},
     jobs::subtitles::{BurnInSource, burn_in_filter},
 };
+use std::path::Path;
 
-/// What a request burns in; `stream_index` is the image track the engine overlays.
+/// What a request burns in; an image is overlaid from `stream_index` (embedded) or `path` (sidecar).
 pub struct Resolved {
     pub spec: BurnInSpec,
     pub is_text: bool,
+}
+
+/// What the engine opens for a bitmap sidecar: the `.sup`, or the `.idx` next to a VobSub `.sub`.
+fn image_sidecar(real: &Path) -> Option<String> {
+    let is_sub = real
+        .extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("sub"));
+    let file = if is_sub {
+        let stem = real.file_stem()?.to_string_lossy();
+        let idx = dunce::canonicalize(real.with_file_name(format!("{stem}.idx"))).ok()?;
+        (idx.parent() == real.parent()).then_some(idx)?
+    } else {
+        real.to_path_buf()
+    };
+    Some(file.to_string_lossy().into_owned())
 }
 
 fn not_found(msg: &str) -> AppError {
@@ -50,6 +66,7 @@ pub async fn resolve(
         BurnInKind::Text
     };
     let mut stream_index = None;
+    let mut image_path = None;
     let (subtitle_path, ordinal, cue) = if let Some(stored) =
         sub.file_path.as_deref().filter(|p| !p.is_empty())
     {
@@ -60,6 +77,9 @@ pub async fn resolve(
             return Err(missing());
         }
         let real = dunce::canonicalize(&absolute).map_err(|_| missing())?;
+        if image {
+            image_path = Some(image_sidecar(&real).ok_or_else(missing)?);
+        }
         (
             Some(real.to_string_lossy().into_owned()),
             None,
@@ -95,6 +115,7 @@ pub async fn resolve(
             kind,
             filter,
             stream_index,
+            path: image_path,
         },
     })
 }
@@ -150,4 +171,24 @@ pub async fn renditions(st: &AppState, file: &ResolvedFile) -> Vec<SubtitleTrack
             })
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::image_sidecar;
+
+    #[test]
+    fn a_vobsub_sub_resolves_to_its_idx_and_a_sup_to_itself() {
+        let p = std::env::temp_dir().join(format!("burn-in-sidecar-{}", std::process::id()));
+        std::fs::create_dir_all(&p).unwrap();
+        let p = dunce::canonicalize(p).unwrap();
+        for f in ["a.sub", "a.idx", "b.SUB", "c.sup"] {
+            std::fs::write(p.join(f), b"").unwrap();
+        }
+        let s = |f: &str| image_sidecar(&p.join(f));
+        assert_eq!(s("a.sub"), Some(p.join("a.idx").to_string_lossy().into()));
+        assert_eq!(s("c.sup"), Some(p.join("c.sup").to_string_lossy().into()));
+        assert_eq!(s("b.SUB"), None);
+        std::fs::remove_dir_all(&p).unwrap();
+    }
 }
