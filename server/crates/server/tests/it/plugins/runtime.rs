@@ -231,9 +231,14 @@ async fn proxy_routes_and_lifecycle() {
     let oid = s.oid().await;
     let role = format!("fp_{oid}_fliks_fixture");
     assert_eq!(
-        h.call("DELETE", "/api/plugins/fliks.fixture", Some(&h.admin), None)
-            .await
-            .0,
+        h.call(
+            "DELETE",
+            "/api/plugins/fliks.fixture?deleteData=true",
+            Some(&h.admin),
+            None
+        )
+        .await
+        .0,
         204
     );
     let left: (bool, bool) = sqlx::query_as(

@@ -170,6 +170,35 @@ impl Plugins {
             .map(drop)
     }
 
+    /// Row count per table of the plugin's schema, for the uninstall confirmation.
+    pub async fn data_usage(&self, id: &str) -> Result<Vec<(String, i64)>, InstallError> {
+        let pkg = self.find_installed(id).await?;
+        if !Self::has_schema(&pkg.manifest) {
+            return Ok(vec![]);
+        }
+        let mut tx = self.db.begin().await.map_err(internal)?;
+        sqlx::query("SET TRANSACTION READ ONLY")
+            .execute(&mut *tx)
+            .await
+            .map_err(internal)?;
+        sqlx::query("SET LOCAL statement_timeout = 10000")
+            .execute(&mut *tx)
+            .await
+            .map_err(internal)?;
+        self.as_plugin(&mut tx, id).await?;
+        let s = schema(id);
+        let mut out = vec![];
+        for t in tables(&mut tx, &s).await.map_err(internal)? {
+            let n: i64 =
+                sqlx::query_scalar(&format!("SELECT count(*) FROM {}.{}", quote(&s), quote(&t)))
+                    .fetch_one(&mut *tx)
+                    .await
+                    .map_err(internal)?;
+            out.push((t, n));
+        }
+        Ok(out)
+    }
+
     /// The export document as a stream: rows go out as they are read, one snapshot for every table.
     /// The plugin lock and the snapshot are held until the client has read it all.
     pub async fn export(&self, id: &str) -> Result<Body, InstallError> {
@@ -294,7 +323,7 @@ impl Plugins {
                     StatusCode::CONFLICT,
                     "PLUGIN_SCHEMA_NOT_EMPTY",
                     format!(
-                        "plugin \"{id}\" already has rows in its schema — uninstall and reinstall it before importing"
+                        "plugin \"{id}\" already has rows in its schema — uninstall it with its data deleted and reinstall it before importing"
                     ),
                 ));
             }

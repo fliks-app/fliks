@@ -416,12 +416,16 @@ impl Plugins {
             })
     }
 
-    /// Rule 20: idempotent, safe on anything already gone.
-    pub async fn uninstall(&self, id: &str) -> sqlx::Result<()> {
+    /// Rule 20: idempotent, safe on anything already gone. The schema and `data/<id>/` go only with `delete_data`.
+    pub async fn uninstall(&self, id: &str, delete_data: bool) -> sqlx::Result<()> {
         let _l = self.lock(id).await;
         self.forget(id).await;
         packages::delete_registration(&self.db, id).await?;
         let Some(pkg) = packages::find(&self.db, id).await? else {
+            if delete_data && fliks_domain::plugins::legal_plugin_id(id) {
+                super::db::deprovision(&self.db, id).await?;
+                let _ = std::fs::remove_dir_all(self.opts.runtime_dir.join("data").join(id));
+            }
             return Ok(());
         };
         let ids = super::imports::installed_ids(&self.db).await?;
@@ -442,7 +446,11 @@ impl Plugins {
             .execute(&self.db)
             .await?;
         if pkg.is_process() {
-            super::db::deprovision(&self.db, id).await?;
+            if delete_data {
+                super::db::deprovision(&self.db, id).await?;
+            } else {
+                super::db::orphan(&self.db, id).await?;
+            }
         }
         sqlx::query(r#"DELETE FROM plugin_scheduled_calls WHERE "pluginId" = $1"#)
             .bind(id)
@@ -463,7 +471,9 @@ impl Plugins {
             }
         }
         packages::delete(&self.db, id).await?;
-        let _ = std::fs::remove_dir_all(self.opts.runtime_dir.join("data").join(id));
+        if delete_data {
+            let _ = std::fs::remove_dir_all(self.opts.runtime_dir.join("data").join(id));
+        }
         self.fk_warnings.lock_clean().remove(id);
         Ok(())
     }

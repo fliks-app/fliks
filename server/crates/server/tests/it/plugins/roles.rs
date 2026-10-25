@@ -79,6 +79,55 @@ async fn provision_adopt_and_deprovision() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn orphan_keeps_the_data_and_a_reprovision_reuses_it() {
+    let Some(s) = Scratch::create("orphan").await else {
+        return;
+    };
+    let ours = db::role(&s.oid().await, "acme.tool");
+    db::provision(&s.pool, "acme.tool", &[]).await.unwrap();
+    sqlx::raw_sql(&format!(
+        r#"CREATE TABLE "plugin_acme_tool"."items" (id serial PRIMARY KEY);
+           INSERT INTO "plugin_acme_tool"."items" DEFAULT VALUES;
+           ALTER TABLE "plugin_acme_tool"."items" OWNER TO "{ours}";"#
+    ))
+    .execute(&s.pool)
+    .await
+    .unwrap();
+    db::orphan(&s.pool, "acme.tool").await.unwrap();
+    let login: bool = sqlx::query_scalar("SELECT rolcanlogin FROM pg_roles WHERE rolname = $1")
+        .bind(&ours)
+        .fetch_one(&s.pool)
+        .await
+        .unwrap();
+    assert!(!login, "an orphaned role cannot log in");
+    let note: Option<String> = sqlx::query_scalar(
+        "SELECT obj_description('plugin_acme_tool'::regnamespace, 'pg_namespace')",
+    )
+    .fetch_one(&s.pool)
+    .await
+    .unwrap();
+    assert!(note.is_some_and(|n| n.starts_with("orphaned")));
+    db::provision(&s.pool, "acme.tool", &[]).await.unwrap();
+    let rows: i64 = sqlx::query_scalar(r#"SELECT count(*) FROM "plugin_acme_tool"."items""#)
+        .fetch_one(&s.pool)
+        .await
+        .unwrap();
+    assert_eq!(rows, 1, "a reinstall finds the rows");
+    let (login, note): (bool, Option<String>) = sqlx::query_as(
+        "SELECT rolcanlogin, obj_description('plugin_acme_tool'::regnamespace, 'pg_namespace') FROM pg_roles WHERE rolname = $1",
+    )
+    .bind(&ours)
+    .fetch_one(&s.pool)
+    .await
+    .unwrap();
+    assert!(
+        login && note.is_none(),
+        "reprovisioning reactivates the schema"
+    );
+    s.finish().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn template_copy_and_restore_take_their_own_names() {
     let Some(a) = Scratch::create("copya").await else {
         return;

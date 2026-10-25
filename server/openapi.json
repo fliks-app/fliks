@@ -3423,8 +3423,30 @@
       "delete": {
         "tags": [],
         "operationId": "uninstall",
+        "parameters": [
+          {
+            "name": "deleteData",
+            "in": "path",
+            "description": "Drops the plugin's schema and `/data`; by default both are kept for a reinstall.",
+            "required": true,
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
         "responses": {
           "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/plugins/{pluginId}/data-usage": {
+      "get": {
+        "tags": [],
+        "operationId": "data_usage",
+        "responses": {
+          "200": {
             "description": ""
           }
         }

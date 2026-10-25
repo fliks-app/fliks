@@ -143,8 +143,16 @@ export class PluginsApiService {
     return firstValueFrom(this.http.delete<void>(`/api/plugins/import/${stagingId}`));
   }
 
-  uninstall(pluginId: string) {
-    return firstValueFrom(this.http.delete<void>(`/api/plugins/${pluginId}`));
+  uninstall(pluginId: string, deleteData = false) {
+    const params: Record<string, string> = deleteData ? { deleteData: 'true' } : {};
+    return firstValueFrom(this.http.delete<void>(`/api/plugins/${pluginId}`, { params }));
+  }
+
+  /** Row count per table of the plugin's schema. */
+  dataUsage(pluginId: string) {
+    return firstValueFrom(
+      this.http.get<{ tables: { name: string; rows: number }[] }>(`/api/plugins/${pluginId}/data-usage`),
+    );
   }
 
   disable(pluginId: string) {

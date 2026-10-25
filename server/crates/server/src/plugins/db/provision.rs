@@ -253,7 +253,8 @@ pub async fn provision(
         "ALTER ROLE {qr} LOGIN PASSWORD '{password}';
          GRANT USAGE ON SCHEMA public TO {qr};
          REVOKE REFERENCES ON ALL TABLES IN SCHEMA public FROM {qr};
-         GRANT {qr} TO CURRENT_USER;"
+         GRANT {qr} TO CURRENT_USER;
+         COMMENT ON SCHEMA {qs} IS NULL;"
     );
     for t in core_refs {
         sql.push_str(&format!(
@@ -299,6 +300,30 @@ pub async fn deprovision(core: &PgPool, plugin_id: &str) -> sqlx::Result<()> {
         if exists {
             drop_role_tolerant(&mut tx, &r).await?;
         }
+    }
+    tx.commit().await
+}
+
+/// Uninstall without `deleteData`: the schema and its rows stay, the role stops logging in.
+pub async fn orphan(core: &PgPool, plugin_id: &str) -> sqlx::Result<()> {
+    let oid = database_oid(core).await?;
+    let mut tx = core.begin().await?;
+    let r = role(&oid, plugin_id);
+    let exists = role_exists(&mut tx, &r).await?;
+    if exists {
+        sqlx::Executor::execute(
+            &mut *tx,
+            sqlx::raw_sql(&format!("ALTER ROLE {} NOLOGIN", quote(&r))),
+        )
+        .await?;
+        sqlx::Executor::execute(
+            &mut *tx,
+            sqlx::raw_sql(&format!(
+                "COMMENT ON SCHEMA {} IS 'orphaned: plugin uninstalled, data kept'",
+                quote(&schema(plugin_id))
+            )),
+        )
+        .await?;
     }
     tx.commit().await
 }

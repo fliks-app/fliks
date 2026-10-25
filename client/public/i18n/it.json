@@ -2728,7 +2728,10 @@
         "failed": "La versione {{version}} non è partita, quindi è stata ripristinata la versione precedente: {{detail}}. Installala a mano quando sarà corretta."
       },
       "uninstall": "Uninstall",
-      "confirm_uninstall": "Disinstallare «{{name}}»? I dati associati a questo plugin andranno perduti.",
+      "confirm_uninstall": "Disinstallare «{{name}}»? I suoi dati vengono conservati e ritrovati se lo reinstalli.",
+      "uninstall_data_summary": "Dati memorizzati: {{list}}.",
+      "uninstall_delete_data": "Elimina anche i dati del plugin",
+      "uninstall_delete_data_hint": "Rimuove per sempre le sue tabelle e i suoi file. L'azione non è reversibile.",
       "uninstalled": "Plugin uninstalled.",
       "uninstall_error": "Unable to uninstall the plugin.",
       "installed": "Plugin installed.",

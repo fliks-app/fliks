@@ -203,15 +203,22 @@ export class PluginsSettingsComponent implements OnInit {
   }
 
   async uninstall(row: PluginSummary): Promise<void> {
-    const confirmed = await this.confirmation.confirm({
+    const tables =
+      row.kind === 'process' ? await this.api.dataUsage(row.pluginId).then((u) => u.tables, () => []) : [];
+    const summary = tables.map((t) => `${t.name} (${t.rows})`).join(', ');
+    const { ok, toggle: deleteData } = await this.confirmation.confirmWithToggle({
       title: this.translate.instant('common.confirm'),
-      message: this.translate.instant('settings.plugins.confirm_uninstall', { name: row.name }),
+      message:
+        this.translate.instant('settings.plugins.confirm_uninstall', { name: row.name }) +
+        (summary ? ' ' + this.translate.instant('settings.plugins.uninstall_data_summary', { list: summary }) : ''),
       variant: 'danger',
+      toggleLabel: this.translate.instant('settings.plugins.uninstall_delete_data'),
+      toggleHint: this.translate.instant('settings.plugins.uninstall_delete_data_hint'),
     });
-    if (!confirmed) return;
+    if (!ok) return;
 
     try {
-      await this.api.uninstall(row.pluginId);
+      await this.api.uninstall(row.pluginId, deleteData);
       await this.reload();
       await this.registry.load();
       this.toast.success(this.translate.instant('settings.plugins.uninstalled'));

@@ -2728,7 +2728,10 @@
         "failed": "Version {{version}} konnte nicht starten, daher wurde die vorherige Version wiederhergestellt: {{detail}}. Installiere sie von Hand, sobald der Fehler behoben ist."
       },
       "uninstall": "Uninstall",
-      "confirm_uninstall": "„{{name}}“ deinstallieren? Alle zu diesem Plugin gehörenden Daten gehen verloren.",
+      "confirm_uninstall": "„{{name}}“ deinstallieren? Die Daten bleiben erhalten und sind nach einer Neuinstallation wieder da.",
+      "uninstall_data_summary": "Gespeicherte Daten: {{list}}.",
+      "uninstall_delete_data": "Auch die Daten des Plugins löschen",
+      "uninstall_delete_data_hint": "Entfernt die Tabellen und Dateien endgültig. Das lässt sich nicht rückgängig machen.",
       "uninstalled": "Plugin uninstalled.",
       "uninstall_error": "Unable to uninstall the plugin.",
       "installed": "Plugin installed.",

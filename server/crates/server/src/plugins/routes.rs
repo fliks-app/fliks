@@ -9,7 +9,7 @@ use crate::state::AppState;
 use axum::{
     Json, Router,
     body::Bytes,
-    extract::{DefaultBodyLimit, Multipart, Path, Request, State},
+    extract::{DefaultBodyLimit, Multipart, Path, Query, Request, State},
     http::{HeaderMap, HeaderValue, Method, StatusCode, header},
     response::{IntoResponse, Response},
     routing::{MethodRouter, any, delete, get, post, put},
@@ -43,6 +43,7 @@ use utoipa::OpenApi;
     uninstall,
     logo,
     export,
+    data_usage,
     import,
     proxy
 ))]
@@ -105,6 +106,10 @@ pub fn router() -> Router<AppState> {
         )
         .route("/api/plugins/{pluginId}/logo", with_proxy(get(logo)))
         .route("/api/plugins/{pluginId}/export", with_proxy(get(export)))
+        .route(
+            "/api/plugins/{pluginId}/data-usage",
+            with_proxy(get(data_usage)),
+        )
         .route("/api/plugins/{pluginId}/import", with_proxy(post(import)))
         .route("/api/plugins/{pluginId}/{*splat}", any(proxy))
 }
@@ -346,22 +351,51 @@ pub async fn events_test(State(st): State<AppState>, a: Authed, Path(id): Path<S
     Ok((StatusCode::CREATED, Json(r)).into_response())
 }
 
-#[utoipa::path(delete, path = "/api/plugins/{pluginId}", responses((status = 204)))]
-pub async fn uninstall(State(st): State<AppState>, a: Authed, Path(id): Path<String>) -> Res {
+#[derive(serde::Deserialize, utoipa::IntoParams)]
+#[serde(rename_all = "camelCase")]
+pub struct UninstallQuery {
+    /// Drops the plugin's schema and `/data`; by default both are kept for a reinstall.
+    #[serde(default)]
+    delete_data: bool,
+}
+
+#[utoipa::path(delete, path = "/api/plugins/{pluginId}", params(UninstallQuery), responses((status = 204)))]
+pub async fn uninstall(
+    State(st): State<AppState>,
+    a: Authed,
+    Path(id): Path<String>,
+    Query(q): Query<UninstallQuery>,
+) -> Res {
     need(&a, Action::Manage)?;
-    st.plugins.uninstall(&id).await.map_err(db)?;
+    st.plugins.uninstall(&id, q.delete_data).await.map_err(db)?;
     Ok(StatusCode::NO_CONTENT.into_response())
 }
 
+#[utoipa::path(get, path = "/api/plugins/{pluginId}/data-usage", responses((status = 200)))]
+pub async fn data_usage(State(st): State<AppState>, a: Authed, Path(id): Path<String>) -> Res {
+    need(&a, Action::Manage)?;
+    let tables = st.plugins.data_usage(&id).await.map_err(inst)?;
+    let tables: Vec<Value> = tables
+        .into_iter()
+        .map(|(name, rows)| json!({"name": name, "rows": rows}))
+        .collect();
+    Ok(Json(json!({ "tables": tables })).into_response())
+}
+
 /// `DELETE /api/plugins/{ui,metrics,sources}`: 4.x routed these to `:pluginId`.
-async fn uninstall_literal(State(st): State<AppState>, a: Authed, req: Request) -> Res {
+async fn uninstall_literal(
+    State(st): State<AppState>,
+    a: Authed,
+    Query(q): Query<UninstallQuery>,
+    req: Request,
+) -> Res {
     need(&a, Action::Manage)?;
     let id = req
         .uri()
         .path()
         .trim_start_matches("/api/plugins/")
         .to_owned();
-    st.plugins.uninstall(&id).await.map_err(db)?;
+    st.plugins.uninstall(&id, q.delete_data).await.map_err(db)?;
     Ok(StatusCode::NO_CONTENT.into_response())
 }
 
