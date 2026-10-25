@@ -99,5 +99,6 @@
   "party.tv_host_only_hint": "Solo el anfitrión puede cambiar estos ajustes",
   "playlists.add_to_short": "Añadir a",
   "party.tv_close": "Cerrar",
-  "party.tv_invite_hint": "Selecciona a quién invitar"
+  "party.tv_invite_hint": "Selecciona a quién invitar",
+  "party.tv_chat_history": "Mensajes"
 }

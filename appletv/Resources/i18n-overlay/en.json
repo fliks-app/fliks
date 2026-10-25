@@ -101,5 +101,6 @@
   "party.tv_host_only_hint": "Only the host can change these settings",
   "playlists.add_to_short": "Add to",
   "party.tv_close": "Close",
-  "party.tv_invite_hint": "Select people to invite"
+  "party.tv_invite_hint": "Select people to invite",
+  "party.tv_chat_history": "Messages"
 }

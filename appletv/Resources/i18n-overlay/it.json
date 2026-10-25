@@ -96,5 +96,6 @@
   "party.tv_host_only_hint": "Solo l'organizzatore può modificare queste impostazioni",
   "playlists.add_to_short": "Aggiungi a",
   "party.tv_close": "Chiudi",
-  "party.tv_invite_hint": "Seleziona le persone da invitare"
+  "party.tv_invite_hint": "Seleziona le persone da invitare",
+  "party.tv_chat_history": "Messaggi"
 }

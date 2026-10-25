@@ -117,6 +117,7 @@ enum PartyEvent {
     case members(partyId: Int, rev: Int, members: [PartyMember])
     case settings(partyId: Int, rev: Int, name: String, policy: String, reactionsEnabled: Bool, chatEnabled: Bool, linkSharing: Bool)
     case message(partyId: Int, message: PartyMessage)
+    case reaction(partyId: Int, username: String, emoji: String)
     case closed(partyId: Int, reason: String)
     case invited(partyId: Int, name: String)
     case starting(partyId: Int, name: String)
@@ -129,6 +130,7 @@ enum PartyEvent {
         let reactionsEnabled: Bool; let chatEnabled: Bool; let linkSharing: Bool
     }
     private struct Message: Decodable { let partyId: Int; let message: PartyMessage }
+    private struct Reaction: Decodable { let partyId: Int; let username: String; let emoji: String }
     private struct Closed: Decodable { let partyId: Int; let reason: String }
     private struct Named: Decodable { let partyId: Int; let name: String? }
 
@@ -148,6 +150,8 @@ enum PartyEvent {
             }
         case "party.message":
             return (try? d.decode(Message.self, from: data)).map { .message(partyId: $0.partyId, message: $0.message) }
+        case "party.reaction":
+            return (try? d.decode(Reaction.self, from: data)).map { .reaction(partyId: $0.partyId, username: $0.username, emoji: $0.emoji) }
         case "party.closed":
             return (try? d.decode(Closed.self, from: data)).map { .closed(partyId: $0.partyId, reason: $0.reason) }
         case "party.invited":

@@ -59,6 +59,7 @@ struct RootView: View {
                     switch sheet {
                     case .invite: PartyInviteView()
                     case .settings: PartySettingsView()
+                    case .chat: PartyChatView()
                     }
                 }
                 .environment(party)

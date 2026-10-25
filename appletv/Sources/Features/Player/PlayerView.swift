@@ -54,6 +54,7 @@ struct PlayerView: View {
             }
 
             if partyController != nil {
+                PartyReactionsOverlay()
                 PartyBubbles()
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
                     .padding(60)

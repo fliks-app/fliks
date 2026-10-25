@@ -12,7 +12,9 @@ import Foundation
     private(set) var messages: [PartyMessage] = []
     private(set) var bubbles: [PartyMessage] = []
     private(set) var queue: [PartyItem] = []
-    enum Sheet: String, Identifiable { case invite, settings; var id: String { rawValue } }
+    private(set) var reactions: [FloatingReaction] = []
+    private(set) var reactionBar = PartyReactions.fallbackBar
+    enum Sheet: String, Identifiable { case invite, settings, chat; var id: String { rawValue } }
     /// Live and scheduled parties of the viewer, for the Home rail.
     private(set) var homeParties: [Party] = []
     /// The invite or settings sheet, shared by the lobby and the player.
@@ -28,6 +30,7 @@ import Foundation
     @ObservationIgnored private var noticeTask: Task<Void, Never>?
     @ObservationIgnored private var queuedFor: PartyItem?
     @ObservationIgnored private var handoff = false
+    @ObservationIgnored private var nextReactionId = 0
 
     /// File to play, media, episode: pushes the player for the party's current item.
     @ObservationIgnored var onOpenPlayer: ((Int, Int, Int?) -> Void)?
@@ -60,6 +63,7 @@ import Foundation
     var isHost: Bool { me?.isHost == true }
     var policy: String { party?.policy ?? "everyone" }
     var chatEnabled: Bool { party?.chatEnabled ?? true }
+    var reactionsEnabled: Bool { party?.reactionsEnabled ?? true }
     var canControl: Bool { isHost || policy == "everyone" }
     var item: PartyItem? { live?.item ?? party?.item }
 
@@ -171,6 +175,16 @@ import Foundation
         }
     }
 
+    func react(_ emoji: String) async {
+        struct Body: Encodable { let deviceId: String; let emoji: String }
+        guard let id = party?.id, reactionsEnabled else { return }
+        do {
+            try await APIClient.shared.post("/api/parties/\(id)/reactions", body: Body(deviceId: deviceId, emoji: emoji))
+        } catch {
+            show(describe(error))
+        }
+    }
+
     func kick(_ userId: Int) async { await hostAction("members/\(userId)/kick") }
     func makeHost(_ userId: Int) async { await hostAction("members/\(userId)/host") }
 
@@ -253,6 +267,12 @@ import Foundation
         reset()
         applySnapshot(dto)
         clock.start()
+        Task {
+            struct Catalog: Decodable { let defaults: [String] }
+            if let catalog: Catalog = try? await APIClient.shared.get("/api/parties/reactions"), !catalog.defaults.isEmpty {
+                reactionBar = catalog.defaults
+            }
+        }
     }
 
     private func reset() {
@@ -262,6 +282,7 @@ import Foundation
         members = []
         messages = []
         bubbles = []
+        reactions = []
         queue = []
         sheet = nil
         lastRev = 0
@@ -403,6 +424,9 @@ import Foundation
         case let .message(partyId, message):
             guard partyId == party?.id else { return }
             onMessage(message)
+        case let .reaction(partyId, username, emoji):
+            guard partyId == party?.id, reactionsEnabled else { return }
+            onReaction(emoji, username)
         case let .closed(partyId, reason):
             guard partyId == party?.id else { return }
             closed(reason: reason)
@@ -426,6 +450,16 @@ import Foundation
         Task {
             try? await Task.sleep(for: .seconds(Self.bubbleSeconds))
             bubbles.removeAll { $0.id == m.id }
+        }
+    }
+
+    private func onReaction(_ emoji: String, _ username: String) {
+        let id = nextReactionId
+        nextReactionId += 1
+        reactions = PartyReactions.appending(reactions, FloatingReaction(id: id, emoji: emoji, username: username, left: .random(in: 0.1...0.9)))
+        Task {
+            try? await Task.sleep(for: .seconds(PartyReactions.riseSeconds))
+            reactions.removeAll { $0.id == id }
         }
     }
 

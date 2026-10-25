@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Full-screen page: title, content that scrolls, one action bar at the bottom. Over the shell backdrop,
 /// like the lobby, with the safe-area padding of a tvOS screen.
-private struct PartySheetPage<Content: View, Bar: View>: View {
+struct PartySheetPage<Content: View, Bar: View>: View {
     let title: String
     @ViewBuilder var content: Content
     @ViewBuilder var bar: Bar

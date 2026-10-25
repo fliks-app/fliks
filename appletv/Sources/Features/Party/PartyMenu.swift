@@ -8,12 +8,13 @@ enum PartyMenu {
         let queue = p.queue.map { "\($0.mediaId).\($0.episodeId ?? 0)" }.joined(separator: ",")
         let pend = pending(p).map { "\($0.userId)" }.joined(separator: ",")
         let cur = p.item.map { "\($0.mediaId).\($0.episodeId ?? 0)" } ?? ""
-        return [members, pend, p.policy, String(p.chatEnabled), String(p.isHost), queue, cur].joined(separator: "|")
+        return [members, pend, p.policy, String(p.chatEnabled), String(p.reactionsEnabled), p.reactionBar.joined(), String(p.isHost), queue, cur].joined(separator: "|")
     }
 
     static func build(_ p: PartyService, onResync: @escaping () -> Void, onLeave: @escaping () -> Void) -> UIMenu {
         var children: [UIMenuElement] = [membersMenu(p)]
         if p.chatEnabled { children.append(chatMenu(p)) }
+        if p.reactionsEnabled { children.append(reactionsMenu(p)) }
         if p.canControl, !p.queue.isEmpty { children.append(queueMenu(p)) }
         children.append(UIAction(title: tr("party.resync"), image: UIImage(systemName: "arrow.triangle.2.circlepath")) { _ in onResync() })
         children.append(UIAction(title: tr("party.settings"), image: UIImage(systemName: "gearshape")) { _ in p.sheet = .settings })
@@ -56,7 +57,14 @@ enum PartyMenu {
         let phrases = ["party.tv_phrase_pause", "party.tv_phrase_5min", "party.tv_phrase_wait"].map { key in
             UIAction(title: tr(key)) { _ in Task { await p.sendMessage(tr(key)) } }
         }
-        return UIMenu(title: tr("party.tv_chat"), image: UIImage(systemName: "bubble.left"), children: phrases)
+        let open = UIAction(title: tr("party.tv_chat_history"), image: UIImage(systemName: "text.bubble")) { _ in p.sheet = .chat }
+        return UIMenu(title: tr("party.tv_chat"), image: UIImage(systemName: "bubble.left"),
+                      children: [open, UIMenu(options: .displayInline, children: phrases)])
+    }
+
+    private static func reactionsMenu(_ p: PartyService) -> UIMenu {
+        let bar = p.reactionBar.map { emoji in UIAction(title: emoji) { _ in Task { await p.react(emoji) } } }
+        return UIMenu(title: tr("party.reaction_settings"), image: UIImage(systemName: "face.smiling"), children: bar)
     }
 
     private static func queueMenu(_ p: PartyService) -> UIMenu {

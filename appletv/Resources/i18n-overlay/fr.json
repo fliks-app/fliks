@@ -95,5 +95,6 @@
   "party.tv_host_only_hint": "Seul l'hôte peut modifier ces réglages",
   "playlists.add_to_short": "Ajouter à",
   "party.tv_close": "Fermer",
-  "party.tv_invite_hint": "Sélectionnez les personnes à inviter"
+  "party.tv_invite_hint": "Sélectionnez les personnes à inviter",
+  "party.tv_chat_history": "Messages"
 }
