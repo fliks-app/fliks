@@ -1617,6 +1617,41 @@ describe('PlayerComponent: refreshSidAndReload adopts the fresh decision', () =>
   });
 });
 
+describe('PlayerComponent: the previous session on a reload', () => {
+  afterEach(() => {
+    TestBed.resetTestingModule();
+  });
+
+  const reloadWith = async (feature: boolean) => {
+    const h = createHarness();
+    (TestBed.inject(AuthService) as any).hasServerFeature = (f: string) => feature && f === 'sessionReplaces';
+    h.component.playbackInfo = buildPi(MAIN_FILE_ID, {});
+    await h.component.refreshSidAndReload(30, { preservePause: false, unmute: false });
+    return h;
+  };
+
+  it('is retired by playback-info when the server supports it, with no serial stop', async () => {
+    const h = await reloadWith(true);
+    expect(h.streamingApi.stopSession).not.toHaveBeenCalled();
+    expect((h.streamingApi.getPlaybackInfo.mock.calls as unknown as any[][])[0][7]).toMatchObject({ replaces: `sid-${MAIN_FILE_ID}` });
+  });
+
+  it('is stopped after all when the reload fails before the new session exists', async () => {
+    const h = createHarness();
+    (TestBed.inject(AuthService) as any).hasServerFeature = (f: string) => f === 'sessionReplaces';
+    h.component.playbackInfo = buildPi(MAIN_FILE_ID, {});
+    h.streamingApi.getPlaybackInfo.mockRejectedValueOnce(new Error('boom'));
+    await expect(h.component.refreshSidAndReload(30, { preservePause: false, unmute: false })).rejects.toThrow();
+    expect(h.streamingApi.stopSession).toHaveBeenCalledWith(`sid-${MAIN_FILE_ID}`);
+  });
+
+  it('is stopped first otherwise, and no replaces is sent', async () => {
+    const h = await reloadWith(false);
+    expect(h.streamingApi.stopSession).toHaveBeenCalledWith(`sid-${MAIN_FILE_ID}`);
+    expect((h.streamingApi.getPlaybackInfo.mock.calls as unknown as any[][])[0][7]?.replaces).toBeUndefined();
+  });
+});
+
 describe('PlayerComponent reloadStream: startAt', () => {
   afterEach(() => {
     TestBed.resetTestingModule();

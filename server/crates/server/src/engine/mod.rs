@@ -40,10 +40,11 @@ const REQUIRED_FEATURES: [&str; 2] = ["probe", "capabilities"];
 const RUNTIME_FEATURES: [&str; 3] = ["sessions", "serve", "events"];
 
 /// What this build advertises, and the engine feature each needs (`server-features.ts`).
-const SERVER_FEATURES: [(&str, &str); 3] = [
+const SERVER_FEATURES: [(&str, &str); 4] = [
     ("deviceProfileExtensions", "decide"),
     ("hlsSubtitleRequest", "serve"),
     ("muxedAudioRendition", "serve"),
+    ("sessionReplaces", "session-replaces"),
 ];
 
 /// Deadlines and intervals; tests shrink them, the real ones are the contract.

@@ -51,9 +51,13 @@ fn stream_info() -> Value {
 }
 
 async fn ctx(pool: PgPool, engine: bool) -> Ctx {
+    ctx_with(pool, engine, &RUNTIME).await
+}
+
+async fn ctx_with(pool: PgPool, engine: bool, features: &[&str]) -> Ctx {
     crate::db::migrate(&pool).await.unwrap();
     let fake = Fake::start().await;
-    fake.hello(Some(hello_body(&RUNTIME, "x")));
+    fake.hello(Some(hello_body(features, "x")));
     let (open, _) = golden();
     fake.script("POST", "/v1/sessions", vec![ok(open)]);
     fake.script(
@@ -758,4 +762,31 @@ async fn get_uri(c: &Ctx, u: &str) -> Value {
 #[test]
 fn the_golden_decision_reads_as_an_engine_answer() {
     serde_json::from_value::<OpenSessionResponse>(golden().0).unwrap();
+}
+
+#[sqlx::test(migrations = false)]
+async fn replaces_is_withheld_from_an_engine_without_the_feature(pool: PgPool) {
+    let c = ctx(pool, true).await;
+    info(&c, "?token=tok&replaces=abc").await;
+    assert!(
+        c.fake.seen("POST", "/v1/sessions")[0]
+            .body
+            .get("replaces")
+            .is_none()
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn replaces_reaches_an_engine_that_lists_it(pool: PgPool) {
+    let features: Vec<&str> = RUNTIME
+        .iter()
+        .copied()
+        .chain(["session-replaces"])
+        .collect();
+    let c = ctx_with(pool, true, &features).await;
+    info(&c, "?token=tok&replaces=abc").await;
+    assert_eq!(
+        c.fake.seen("POST", "/v1/sessions")[0].body["replaces"],
+        "abc"
+    );
 }
