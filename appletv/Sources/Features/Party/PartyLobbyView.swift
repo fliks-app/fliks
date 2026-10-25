@@ -33,7 +33,8 @@ struct PartyLobbyView: View {
                     } else {
                         Text(tr("party.tv_wait_host")).foregroundStyle(.secondary)
                     }
-                    Button(tr("party.tv_manage")) { service.manageOpen = true }
+                    Button(tr("party.invite")) { service.sheet = .invite }
+                    Button(tr("party.settings")) { service.sheet = .settings }
                     Button(tr("party.tv_leave"), role: .destructive) { Task { await service.leave() } }
                 }
             }

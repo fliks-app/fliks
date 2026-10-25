@@ -12,8 +12,9 @@ import Foundation
     private(set) var messages: [PartyMessage] = []
     private(set) var bubbles: [PartyMessage] = []
     private(set) var queue: [PartyItem] = []
-    /// The invite and settings sheet, shared by the lobby and the player.
-    var manageOpen = false
+    enum Sheet: String, Identifiable { case invite, settings; var id: String { rawValue } }
+    /// The invite or settings sheet, shared by the lobby and the player.
+    var sheet: Sheet?
     /// A short line for the screen in front (errors, refusals), cleared after a few seconds.
     private(set) var notice: String?
 
@@ -264,7 +265,7 @@ import Foundation
         messages = []
         bubbles = []
         queue = []
-        manageOpen = false
+        sheet = nil
         lastRev = 0
         queuedFor = nil
     }

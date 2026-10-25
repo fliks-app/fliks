@@ -54,8 +54,14 @@ struct RootView: View {
                     path.append(Route.player(mediaFileId: mediaFileId, mediaId: mediaId, episodeId: episodeId, startAt: 0))
                 }
             }
-            .sheet(isPresented: Binding(get: { party.manageOpen }, set: { party.manageOpen = $0 })) {
-                PartyManageView().environment(party)
+            .sheet(item: Binding(get: { party.sheet }, set: { party.sheet = $0 })) { sheet in
+                Group {
+                    switch sheet {
+                    case .invite: PartyInviteView()
+                    case .settings: PartySettingsView()
+                    }
+                }
+                .environment(party)
             }
             .sheet(item: Binding(get: { playlistPicker.target },
                                  set: { playlistPicker.target = $0 })) { target in
