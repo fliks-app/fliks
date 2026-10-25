@@ -30,10 +30,15 @@ pub struct Counts {
     pub subtitle_removed_duplicates: i64,
 }
 
+/// Bumped when a probe stores something new, so unchanged files are probed again once.
+const PROBE_VERSION: i32 = 1;
+
 struct Row {
     id: i32,
     rel: String,
     size: i64,
+    mtime_ms: Option<i64>,
+    probe_version: Option<i32>,
     episode_id: Option<i32>,
     info: Option<serde_json::Value>,
 }
@@ -126,7 +131,8 @@ pub async fn rescan_files(
     }
     let rows = sqlx::query_as!(
         Row,
-        r#"SELECT id, "relativePath" AS rel, size, "episodeId" AS episode_id, "streamInfo" AS info
+        r#"SELECT id, "relativePath" AS rel, size, "mtimeMs" AS mtime_ms, "probeVersion" AS probe_version,
+                  "episodeId" AS episode_id, "streamInfo" AS info
            FROM media_files WHERE "mediaId" = $1 ORDER BY id"#,
         media_id
     )
@@ -156,17 +162,19 @@ pub async fn rescan_files(
     let on_disk: HashSet<&str> = disk.iter().map(|(r, _)| r.as_str()).collect();
     let mut c = Counts::default();
     let mut slots_created = false;
+    let mut touched: Vec<(i32, Option<i32>)> = vec![];
 
     if w.complete {
         remove_missing(st, media_id, &rows, &on_disk, &mut c).await?;
     } else {
         tracing::warn!("Rescan[media #{media_id}]: a directory could not be read, no row removed");
     }
-    slots_created |= refresh_existing(st, &media, &dir, &rows, &on_disk, &mut c).await?;
-    slots_created |= add_new(st, &media, &disk, &linked, &mut c).await?;
+    slots_created |=
+        refresh_existing(st, &media, &dir, &rows, &on_disk, &mut c, &mut touched).await?;
+    slots_created |= add_new(st, &media, &disk, &linked, &mut c, &mut touched).await?;
     // An interrupted walk proves nothing about what is on disk.
     if w.complete {
-        reconcile_subtitles(st, media_id, &mut c).await;
+        reconcile_subtitles(st, media_id, &mut c, &touched).await;
     }
     tracing::info!(
         "Rescan: media #{media_id} done (added {}, removed {}, updated {})",
@@ -267,6 +275,7 @@ async fn refresh_existing(
     rows: &[Row],
     on_disk: &HashSet<&str>,
     c: &mut Counts,
+    touched: &mut Vec<(i32, Option<i32>)>,
 ) -> Result<bool, AppError> {
     let media_id = media.id;
     let mut slots_created = false;
@@ -279,7 +288,9 @@ async fn refresh_existing(
             continue;
         };
         let disk_size = meta.len() as i64;
+        let mtime = mtime_ms(&meta);
         let name = file_name(&abs);
+        let mut episode_id = r.episode_id;
         if media.is_series() {
             let nums = parse_episode_numbers(&name, Some(&abs.to_string_lossy()));
             match (nums, r.episode_id) {
@@ -287,11 +298,13 @@ async fn refresh_existing(
                     let (ep, created) = ensure_season_and_episode(&st.db, media_id, n).await?;
                     slots_created |= created;
                     link_row(st, r.id, ep).await?;
+                    episode_id = Some(ep);
                     c.updated += 1;
                 }
                 (None, None) => {
                     if let Some(ep) = match_special(&st.db, media_id, &name).await? {
                         link_row(st, r.id, ep.id).await?;
+                        episode_id = Some(ep.id);
                         c.updated += 1;
                     }
                 }
@@ -308,6 +321,16 @@ async fn refresh_existing(
             }
         }
         let unchanged = r.size == disk_size;
+        if unchanged
+            && mtime.is_some()
+            && r.mtime_ms == mtime
+            && r.probe_version == Some(PROBE_VERSION)
+        {
+            if episode_id != r.episode_id {
+                touched.push((r.id, episode_id));
+            }
+            continue;
+        }
         let Ok(mut p) = probe(st, &abs, !unchanged).await.inspect_err(|e| {
             tracing::error!("Rescan[media #{media_id}] refresh \"{}\": {e}", r.rel)
         }) else {
@@ -329,15 +352,19 @@ async fn refresh_existing(
         }
         let quality = p.quality(&name);
         sqlx::query!(
-            r#"UPDATE media_files SET size = $2, quality = COALESCE($3, quality), "streamInfo" = $4 WHERE id = $1"#,
+            r#"UPDATE media_files SET size = $2, quality = COALESCE($3, quality), "streamInfo" = $4,
+                 "mtimeMs" = $5, "probeVersion" = $6 WHERE id = $1"#,
             r.id,
             disk_size,
             quality,
-            serde_json::to_value(&p.info).map_err(|e| AppError::internal(e.to_string()))?
+            serde_json::to_value(&p.info).map_err(|e| AppError::internal(e.to_string()))?,
+            mtime,
+            PROBE_VERSION
         )
         .execute(&st.db)
         .await?;
         c.updated += 1;
+        touched.push((r.id, episode_id));
         if !unchanged {
             let st = st.clone();
             let id = r.id as u32;
@@ -353,6 +380,7 @@ async fn add_new(
     disk: &[(String, PathBuf)],
     linked: &HashSet<String>,
     c: &mut Counts,
+    touched: &mut Vec<(i32, Option<i32>)>,
 ) -> Result<bool, AppError> {
     let media_id = media.id;
     let mut slots_created = false;
@@ -389,20 +417,24 @@ async fn add_new(
         let quality = p
             .quality(&name)
             .unwrap_or_else(|| quality_from_resolution(&name, None, None));
-        let inserted = sqlx::query!(
-            r#"INSERT INTO media_files ("mediaId", "episodeId", "relativePath", size, quality, "streamInfo")
-               VALUES ($1, $2, $3, $4, $5, $6)"#,
+        let inserted = sqlx::query_scalar!(
+            r#"INSERT INTO media_files ("mediaId", "episodeId", "relativePath", size, quality, "streamInfo",
+                 "mtimeMs", "probeVersion")
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id"#,
             media_id,
             episode_id,
             rel,
             meta.len() as i64,
             quality,
-            serde_json::to_value(&p.info).map_err(|e| AppError::internal(e.to_string()))?
+            serde_json::to_value(&p.info).map_err(|e| AppError::internal(e.to_string()))?,
+            mtime_ms(&meta),
+            PROBE_VERSION
         )
-        .execute(&st.db)
+        .fetch_one(&st.db)
         .await;
         match inserted {
-            Ok(_) => {
+            Ok(id) => {
+                touched.push((id, episode_id));
                 c.added += 1;
                 if let Some(ep) = episode_id {
                     set_has_file(&st.db, ep).await?;
@@ -414,21 +446,29 @@ async fn add_new(
     Ok(slots_created)
 }
 
-async fn reconcile_subtitles(st: &AppState, media_id: i32, c: &mut Counts) {
+/// Embedded detection probes again, so it runs only for files this pass added, re-probed or relinked.
+async fn reconcile_subtitles(
+    st: &AppState,
+    media_id: i32,
+    c: &mut Counts,
+    touched: &[(i32, Option<i32>)],
+) {
     let (missing, dupes) = crate::subtitles::sidecars::reconcile_after_rescan(st, media_id).await;
     c.subtitle_removed_missing = missing as i64;
     c.subtitle_removed_duplicates = dupes as i64;
     crate::subtitles::sidecars::discover_external(st, media_id).await;
-    for (file, episode) in sqlx::query_as::<_, (i32, Option<i32>)>(
-        r#"SELECT id, "episodeId" FROM media_files WHERE "mediaId" = $1 ORDER BY id"#,
-    )
-    .bind(media_id)
-    .fetch_all(&st.db)
-    .await
-    .unwrap_or_default()
-    {
+    for &(file, episode) in touched {
         crate::subtitles::embedded::detect_and_store(st, media_id, file, episode).await;
     }
+}
+
+fn mtime_ms(m: &fs::Metadata) -> Option<i64> {
+    let d = m
+        .modified()
+        .ok()?
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()?;
+    i64::try_from(d.as_millis()).ok()
 }
 
 async fn link_row(st: &AppState, file: i32, ep: i32) -> Result<(), sqlx::Error> {

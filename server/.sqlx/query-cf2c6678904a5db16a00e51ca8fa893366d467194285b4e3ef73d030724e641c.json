@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, \"relativePath\" AS rel, size, \"episodeId\" AS episode_id, \"streamInfo\" AS info\n           FROM media_files WHERE \"mediaId\" = $1 ORDER BY id",
+  "query": "SELECT id, \"relativePath\" AS rel, size, \"mtimeMs\" AS mtime_ms, \"probeVersion\" AS probe_version,\n                  \"episodeId\" AS episode_id, \"streamInfo\" AS info\n           FROM media_files WHERE \"mediaId\" = $1 ORDER BY id",
   "describe": {
     "columns": [
       {
@@ -20,11 +20,21 @@
       },
       {
         "ordinal": 3,
+        "name": "mtime_ms",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 4,
+        "name": "probe_version",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 5,
         "name": "episode_id",
         "type_info": "Int4"
       },
       {
-        "ordinal": 4,
+        "ordinal": 6,
         "name": "info",
         "type_info": "Jsonb"
       }
@@ -39,8 +49,10 @@
       false,
       false,
       true,
+      true,
+      true,
       true
     ]
   },
-  "hash": "a4ee51d9342ca73fb677d292755d36bf1fb47cc200c48517629c06746f01e2ba"
+  "hash": "cf2c6678904a5db16a00e51ca8fa893366d467194285b4e3ef73d030724e641c"
 }
