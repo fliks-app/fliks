@@ -3190,4 +3190,31 @@ describe('PlayerComponent stall counting', () => {
     expect(c.frozenSince()).toBe(0);
     vi.restoreAllMocks();
   });
+
+  it('awaitSeekUnlock: a rejected seek releases the seekbar lock', async () => {
+    const h = createHarness();
+    h.state.seekLocked.set(true);
+    (h.engine as any).seek = vi.fn().mockRejectedValue(new Error('seek timeout'));
+    await (h.component as any).awaitSeekUnlock(100);
+    expect(h.state.seekLocked()).toBe(false);
+  });
+
+  it('TV hide banks the position, pauses and suspends the engine; show restores it', async () => {
+    const h = createHarness();
+    const c = h.component as any;
+    const engine = h.engine as any;
+    engine.suspend = vi.fn();
+    engine.restore = vi.fn();
+    const save = vi.spyOn(c, 'savePosition').mockResolvedValue(undefined);
+    const vis = vi.spyOn(document, 'visibilityState', 'get');
+    vis.mockReturnValue('hidden');
+    c.onTvVisibility();
+    expect(save).toHaveBeenCalledWith(true);
+    expect(h.engine.pause).toHaveBeenCalled();
+    expect(engine.suspend).toHaveBeenCalled();
+    vis.mockReturnValue('visible');
+    c.onTvVisibility();
+    expect(engine.restore).toHaveBeenCalled();
+    vis.mockRestore();
+  });
 });
