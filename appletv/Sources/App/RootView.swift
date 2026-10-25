@@ -54,7 +54,7 @@ struct RootView: View {
                     path.append(Route.player(mediaFileId: mediaFileId, mediaId: mediaId, episodeId: episodeId, startAt: 0))
                 }
             }
-            .sheet(item: Binding(get: { party.sheet }, set: { party.sheet = $0 })) { sheet in
+            .fullScreenCover(item: Binding(get: { party.sheet }, set: { party.sheet = $0 })) { sheet in
                 Group {
                     switch sheet {
                     case .invite: PartyInviteView()

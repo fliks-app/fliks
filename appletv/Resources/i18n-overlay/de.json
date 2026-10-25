@@ -95,5 +95,7 @@
   "party.tv_no_parties": "Gerade keine Watch Party",
   "party.tv_wait_host": "Warten, bis der Gastgeber startet",
   "party.tv_host_only_hint": "Nur der Gastgeber kann diese Einstellungen ändern",
-  "playlists.add_to_short": "Hinzufügen zu"
+  "playlists.add_to_short": "Hinzufügen zu",
+  "party.tv_close": "Schließen",
+  "party.tv_invite_hint": "Wähle die Personen zum Einladen aus"
 }

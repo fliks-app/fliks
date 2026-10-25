@@ -97,5 +97,7 @@
   "party.tv_no_parties": "Nessuna sessione al momento",
   "party.tv_wait_host": "In attesa che l'organizzatore avvii",
   "party.tv_host_only_hint": "Solo l'organizzatore può modificare queste impostazioni",
-  "playlists.add_to_short": "Aggiungi a"
+  "playlists.add_to_short": "Aggiungi a",
+  "party.tv_close": "Chiudi",
+  "party.tv_invite_hint": "Seleziona le persone da invitare"
 }

@@ -1,25 +1,46 @@
 import SwiftUI
 
-/// Scrolling, padded container: the focus lift and shadow of a row never reach the edge of the sheet.
-private struct PartySheetPage<Content: View>: View {
+/// Full-screen page: title, content that scrolls, one action bar at the bottom. Over the shell backdrop,
+/// like the lobby, with the safe-area padding of a tvOS screen.
+private struct PartySheetPage<Content: View, Bar: View>: View {
+    let title: String
+    @ViewBuilder var content: Content
+    @ViewBuilder var bar: Bar
+
+    var body: some View {
+        VStack(spacing: 36) {
+            Text(title).font(.largeTitle.bold())
+            content.frame(maxWidth: .infinity, maxHeight: .infinity)
+            bar
+        }
+        .padding(.horizontal, 100)
+        .padding(.top, 70)
+        .padding(.bottom, 60)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.black.opacity(0.6))
+        .shellBackdrop()
+    }
+}
+
+private let tileColumns = [GridItem(.adaptive(minimum: 200, maximum: 240), spacing: 30, alignment: .top)]
+
+private struct TileSection<Content: View>: View {
     let title: String
     @ViewBuilder var content: Content
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 32) {
-                Text(title).font(.title2.bold())
-                content
+        VStack(alignment: .center, spacing: 8) {
+            Text(title).font(.headline).foregroundStyle(.secondary)
+            ScrollView {
+                LazyVGrid(columns: tileColumns, alignment: .center, spacing: 30) { content }
+                    .padding(.horizontal, 30)
+                    .padding(.vertical, 30)
             }
-            .frame(maxWidth: 1100, alignment: .leading)
-            .padding(.horizontal, 90)
-            .padding(.vertical, 70)
-            .frame(maxWidth: .infinity)
         }
     }
 }
 
-/// Who is in the party and who can still be invited. The host picks from the users they follow.
+/// Who is in the party (left) and who can still be invited (right, host only).
 struct PartyInviteView: View {
     @Environment(PartyService.self) private var service
     @State private var following: [SocialUser] = []
@@ -34,25 +55,47 @@ struct PartyInviteView: View {
     var body: some View {
         PartySheetPage(title: tr("party.invite")) {
             if let party = service.party {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text(tr("party.people")).font(.headline).foregroundStyle(.secondary)
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(alignment: .top, spacing: 36) {
-                            ForEach(PartyPeople.people(host: party.host, guests: party.guests ?? [], members: service.members)) { person in
-                                AvatarTile(name: person.username, caption: label(person), dimmed: !person.present)
+                HStack(alignment: .top, spacing: 60) {
+                    TileSection(title: tr("party.people")) {
+                        ForEach(PartyPeople.people(host: party.host, guests: party.guests ?? [], members: service.members)) { person in
+                            AvatarTile(name: person.username, caption: label(person), dimmed: !person.present)
+                        }
+                    }
+                    if service.isHost {
+                        TileSection(title: tr("party.create_invitees")) {
+                            if candidateList.isEmpty {
+                                Text(tr("party.no_followed")).foregroundStyle(.secondary)
+                            }
+                            ForEach(Array(candidateList.enumerated()), id: \.element.id) { index, user in
+                                AvatarTile(name: user.username, selected: picked.contains(user.id)) {
+                                    if picked.contains(user.id) { picked.remove(user.id) } else { picked.insert(user.id) }
+                                }
+                                .prefersDefaultFocus(index == 0, in: focusScope)
                             }
                         }
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 24)
+                        .focusSection()
                     }
-                    .scrollClipDisabled()
                 }
-                if service.isHost { candidates(party) }
-                // Always something to focus, even with nobody to invite.
-                Button(tr("common.ok")) { service.sheet = nil }
-                    .buttonStyle(.bordered)
-                    .prefersDefaultFocus(candidateList.isEmpty, in: focusScope)
             }
+        } bar: {
+            VStack(spacing: 14) {
+                HStack(spacing: 30) {
+                    if service.isHost, !candidateList.isEmpty {
+                        Button(action: send) {
+                            Text(picked.isEmpty ? tr("party.invite") : "\(tr("party.invite")) (\(picked.count))")
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .opacity(picked.isEmpty ? 0.5 : 1)
+                    }
+                    Button(tr("party.tv_close")) { service.sheet = nil }
+                        .buttonStyle(.bordered)
+                        .prefersDefaultFocus(candidateList.isEmpty, in: focusScope)
+                }
+                if service.isHost, !candidateList.isEmpty, picked.isEmpty {
+                    Text(tr("party.tv_invite_hint")).font(.callout).foregroundStyle(.secondary)
+                }
+            }
+            .focusSection()
         }
         .focusScope(focusScope)
         .task {
@@ -64,6 +107,13 @@ struct PartyInviteView: View {
         }
     }
 
+    private func send() {
+        guard !picked.isEmpty else { return service.show(tr("party.tv_invite_hint")) }
+        let ids = Array(picked)
+        picked = []
+        Task { await service.invite(ids) }
+    }
+
     private func label(_ person: PartyPeople.Person) -> String {
         let base: String
         switch person.kind {
@@ -72,36 +122,6 @@ struct PartyInviteView: View {
         case .link: base = tr("party.person_link")
         }
         return person.present ? base : "\(base) · \(tr("party.person_absent"))"
-    }
-
-    @ViewBuilder private func candidates(_ party: Party) -> some View {
-        let list = PartyPeople.candidates(following: following, host: party.host, guests: party.guests ?? [])
-        VStack(alignment: .leading, spacing: 20) {
-            Text(tr("party.create_invitees")).font(.headline).foregroundStyle(.secondary)
-            if list.isEmpty { Text(tr("party.no_followed")).foregroundStyle(.secondary) }
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(alignment: .top, spacing: 36) {
-                    ForEach(Array(list.enumerated()), id: \.element.id) { index, user in
-                        AvatarTile(name: user.username,
-                                   badge: picked.contains(user.id) ? PartyBadge.Badge(symbol: "checkmark.circle.fill", color: .green) : nil) {
-                            if picked.contains(user.id) { picked.remove(user.id) } else { picked.insert(user.id) }
-                        }
-                        .prefersDefaultFocus(index == 0, in: focusScope)
-                    }
-                }
-                .padding(.horizontal, 20)
-                .padding(.vertical, 24)
-            }
-            .scrollClipDisabled()
-            if !list.isEmpty {
-                Button(tr("party.invite")) {
-                    let ids = Array(picked)
-                    picked = []
-                    Task { await service.invite(ids) }
-                }
-                .buttonStyle(.borderedProminent)
-            }
-        }
     }
 }
 
@@ -113,46 +133,53 @@ struct PartySettingsView: View {
 
     var body: some View {
         PartySheetPage(title: tr("party.settings")) {
-            if let party = service.party {
-                VStack(alignment: .leading, spacing: 24) {
-                    toggle(tr("party.switch_playback_control"), party.policy != "host_only") {
-                        await service.updateSettings(policy: $0 ? "everyone" : "host_only")
+            ScrollView {
+                if let party = service.party {
+                    VStack(alignment: .leading, spacing: 28) {
+                        toggle(tr("party.switch_playback_control"), party.policy != "host_only") {
+                            await service.updateSettings(policy: $0 ? "everyone" : "host_only")
+                        }
+                        toggle(tr("party.switch_reactions"), party.reactionsEnabled ?? true) {
+                            await service.updateSettings(reactionsEnabled: $0)
+                        }
+                        toggle(tr("party.switch_chat"), party.chatEnabled ?? true) { await service.updateSettings(chatEnabled: $0) }
+                        toggle(tr("party.switch_link_sharing"), party.linkSharing ?? true) {
+                            await service.updateSettings(linkSharing: $0)
+                        }
+                        if !service.isHost {
+                            Text(tr("party.tv_host_only_hint")).font(.callout).foregroundStyle(.secondary)
+                        }
                     }
-                    toggle(tr("party.switch_reactions"), party.reactionsEnabled ?? true) {
-                        await service.updateSettings(reactionsEnabled: $0)
-                    }
-                    toggle(tr("party.switch_chat"), party.chatEnabled ?? true) { await service.updateSettings(chatEnabled: $0) }
-                    toggle(tr("party.switch_link_sharing"), party.linkSharing ?? true) {
-                        await service.updateSettings(linkSharing: $0)
-                    }
-                }
-                if service.isHost { hostActions(party) } else {
-                    Text(tr("party.tv_host_only_hint")).font(.callout).foregroundStyle(.secondary)
+                    .frame(maxWidth: 1000)
+                    .padding(30)
+                    .frame(maxWidth: .infinity)
                 }
             }
+        } bar: {
+            HStack(spacing: 30) {
+                if service.isHost {
+                    Button(tr("party.regenerate_link")) { confirmRegenerate = true }
+                        .buttonStyle(.bordered)
+                        .confirmationDialog(tr("party.regenerate_title"), isPresented: $confirmRegenerate, titleVisibility: .visible) {
+                            Button(tr("party.regenerate_link")) { Task { await service.regenerateLink() } }
+                            Button(tr("common.cancel"), role: .cancel) {}
+                        } message: { Text(tr("party.regenerate_message")) }
+                    Button(tr("party.cancel")) { confirmEnd = true }
+                        .buttonStyle(DestructiveButtonStyle())
+                        .confirmationDialog(tr("party.cancel_title"), isPresented: $confirmEnd, titleVisibility: .visible) {
+                            Button(tr("party.cancel"), role: .destructive) { Task { await service.endParty() } }
+                            Button(tr("common.cancel"), role: .cancel) {}
+                        } message: { Text(trp("party.cancel_message", ["name": service.party?.name ?? ""])) }
+                }
+                Button(tr("party.tv_close")) { service.sheet = nil }
+                    .buttonStyle(.bordered)
+            }
+            .focusSection()
         }
     }
 
     private func toggle(_ label: String, _ value: Bool, _ set: @escaping (Bool) async -> Void) -> some View {
         Toggle(label, isOn: Binding(get: { value }, set: { v in Task { await set(v) } }))
             .disabled(!service.isHost)
-    }
-
-    @ViewBuilder private func hostActions(_ party: Party) -> some View {
-        HStack(spacing: 24) {
-            Button(tr("party.regenerate_link")) { confirmRegenerate = true }
-                .buttonStyle(.bordered)
-                .confirmationDialog(tr("party.regenerate_title"), isPresented: $confirmRegenerate, titleVisibility: .visible) {
-                    Button(tr("party.regenerate_link")) { Task { await service.regenerateLink() } }
-                    Button(tr("common.cancel"), role: .cancel) {}
-                } message: { Text(tr("party.regenerate_message")) }
-            Spacer(minLength: 80)
-            Button(tr("party.cancel")) { confirmEnd = true }
-                .buttonStyle(DestructiveButtonStyle())
-                .confirmationDialog(tr("party.cancel_title"), isPresented: $confirmEnd, titleVisibility: .visible) {
-                    Button(tr("party.cancel"), role: .destructive) { Task { await service.endParty() } }
-                    Button(tr("common.cancel"), role: .cancel) {}
-                } message: { Text(trp("party.cancel_message", ["name": party.name])) }
-        }
     }
 }

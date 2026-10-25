@@ -28,6 +28,8 @@ struct AvatarTile: View {
     var dimmed = false
     /// An SF Symbol in place of the initial (the "add" tile).
     var symbol: String?
+    /// Picked (invite list): the circle fills and shows a check instead of the initial, clear of the focus ring.
+    var selected = false
     var action: (() -> Void)?
     @FocusState private var focused: Bool
 
@@ -55,11 +57,12 @@ struct AvatarTile: View {
 
     private var circle: some View {
         Group {
-            if let symbol { Image(systemName: symbol) } else { Text(String(name.prefix(1)).uppercased()) }
+            if selected { Image(systemName: "checkmark") }
+            else if let symbol { Image(systemName: symbol) } else { Text(String(name.prefix(1)).uppercased()) }
         }
             .font(.system(size: 52, weight: .bold))
             .frame(width: 140, height: 140)
-            .background(Circle().fill(.white.opacity(0.18)))
+            .background(Circle().fill(selected ? Color.green.opacity(0.75) : .white.opacity(0.18)))
             .overlay(alignment: .bottomTrailing) {
                 if let badge {
                     Image(systemName: badge.symbol)

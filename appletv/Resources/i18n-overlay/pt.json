@@ -101,5 +101,7 @@
   "party.tv_no_parties": "Nenhuma sessão no momento",
   "party.tv_wait_host": "Aguardando o anfitrião iniciar",
   "party.tv_host_only_hint": "Apenas o anfitrião pode alterar estes ajustes",
-  "playlists.add_to_short": "Adicionar a"
+  "playlists.add_to_short": "Adicionar a",
+  "party.tv_close": "Fechar",
+  "party.tv_invite_hint": "Selecione quem convidar"
 }
