@@ -26,6 +26,8 @@ The sections below describe the pieces `run-all.sh` scripts, for debugging a sin
 ./seed/build.sh     # rebuilds template DB fliks_parity_tpl + seed/base.sql (drop the DBs freely)
 # template from the committed dump only (no fixtures needed):
 docker exec -i fliks-postgres-1 sh -c 'psql -U "$POSTGRES_USER" -qd postgres -c "DROP DATABASE IF EXISTS fliks_parity_tpl WITH (FORCE)" -c "CREATE DATABASE fliks_parity_tpl" && psql -U "$POSTGRES_USER" -qd fliks_parity_tpl' < seed/base.sql
+# then bring it to the current schema (base.sql is only rebuilt by seed/build.sh):
+DB_HOST=<postgres ip> DB_USERNAME=... DB_PASSWORD=... DB_NAME=fliks_parity_tpl cargo run -p fliks-server -- migrate
 python3 external/stub.py 4964 &              # every run: the idle wait probes it (PARITY_STUB)
 python3 external/livetv/server.py 4961 &     # livetv scenarios: PARITY_LIVETV=http://127.0.0.1:4961
 ```

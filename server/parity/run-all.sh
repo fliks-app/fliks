@@ -92,10 +92,11 @@ TPL=${DBPFX}tpl
 DB=${DBPFX}run
 psql_admin -d postgres -c "DROP DATABASE IF EXISTS $TPL WITH (FORCE)" -c "DROP DATABASE IF EXISTS $DB WITH (FORCE)" -c "CREATE DATABASE $TPL" || die "template db"
 sed "s|/tmp/fliks-parity|$FLIKS_PARITY_ROOT|g" "$SERVER/parity/seed/base.sql" | psql_admin -d "$TPL" >/dev/null || die "base.sql"
-
 DBHOST=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' fliks-postgres-1)
 DBUSER=$(docker exec fliks-postgres-1 sh -c 'printf %s "$POSTGRES_USER"')
 DBPASS=$(docker exec fliks-postgres-1 sh -c 'printf %s "$POSTGRES_PASSWORD"')
+# scenario databases are copies of the template: bring it to the current schema once
+env -u DATABASE_URL DB_HOST=$DBHOST DB_PORT=5432 DB_USERNAME=$DBUSER DB_PASSWORD=$DBPASS DB_NAME=$TPL "$BIN" migrate || die "migrating the template"
 
 # ---- stubs that live for the whole run ----
 start arr-stub "$SERVER/parity/stubs" env ARR_STUB_PORT=$P_ARR node arr-stub.mjs
