@@ -2721,6 +2721,12 @@
       "tier_process": "Process",
       "status_active": "Active",
       "status_failed": "Failed",
+      "held_update": {
+        "badge": "Update {{version}} held",
+        "title": "Held update",
+        "new_scopes": "Version {{version}} asks for new permissions ({{detail}}). Install it from the catalogue to review and grant them.",
+        "failed": "Version {{version}} could not start, so the previous version was restored: {{detail}}. Install it by hand once it is fixed."
+      },
       "uninstall": "Uninstall",
       "confirm_uninstall": "Uninstall “{{name}}”? Any data associated with this plugin will be lost.",
       "uninstalled": "Plugin uninstalled.",

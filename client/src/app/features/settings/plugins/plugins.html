@@ -88,6 +88,16 @@
                   [badgeClass]="statusBadgeFor(row).cssClass"
                   titleKey="settings.plugins.col_status"
                 />
+                @if (row.heldUpdate; as held) {
+                  <div class="mt-1">
+                    <app-error-badge
+                      [error]="heldDetail(row)"
+                      [label]="'settings.plugins.held_update.badge' | translate: { version: held.version }"
+                      badgeClass="badge-warning"
+                      titleKey="settings.plugins.held_update.title"
+                    />
+                  </div>
+                }
               </td>
               <td>
                 <app-toggle-field

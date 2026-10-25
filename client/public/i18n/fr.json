@@ -2721,6 +2721,12 @@
       "tier_process": "Processus",
       "status_active": "Actif",
       "status_failed": "Échec",
+      "held_update": {
+        "badge": "Mise à jour {{version}} en attente",
+        "title": "Mise à jour en attente",
+        "new_scopes": "La version {{version}} demande de nouvelles permissions ({{detail}}). Installez-la depuis le catalogue pour les examiner et les accorder.",
+        "failed": "La version {{version}} n'a pas pu démarrer, la version précédente a été restaurée : {{detail}}. Installez-la à la main une fois corrigée."
+      },
       "uninstall": "Désinstaller",
       "confirm_uninstall": "Désinstaller « {{name}} » ? Les données associées à ce plugin seront perdues.",
       "uninstalled": "Plugin désinstallé.",

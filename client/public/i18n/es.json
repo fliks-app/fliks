@@ -2721,6 +2721,12 @@
       "tier_process": "Process",
       "status_active": "Active",
       "status_failed": "Failed",
+      "held_update": {
+        "badge": "Actualización {{version}} retenida",
+        "title": "Actualización retenida",
+        "new_scopes": "La versión {{version}} pide nuevos permisos ({{detail}}). Instálala desde el catálogo para revisarlos y concederlos.",
+        "failed": "La versión {{version}} no pudo iniciarse y se restauró la versión anterior: {{detail}}. Instálala a mano cuando esté corregida."
+      },
       "uninstall": "Uninstall",
       "confirm_uninstall": "¿Desinstalar «{{name}}»? Se perderán los datos asociados a este plugin.",
       "uninstalled": "Plugin uninstalled.",

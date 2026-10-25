@@ -110,6 +110,8 @@ pub struct Summary {
     enabled: bool,
     process_state: Option<&'static str>,
     status_message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    held_update: Option<Value>,
 }
 
 /// An upgrade from a `pluginApi` 1 package by the same key carries the grant forward.
@@ -143,6 +145,7 @@ impl Plugins {
             } else {
                 String::new()
             },
+            held_update: p.held_update.clone(),
         }
     }
 
@@ -342,6 +345,9 @@ impl Plugins {
             )
             .await
             .map_err(internal)?;
+            packages::grant_scopes(&self.db, id, m)
+                .await
+                .map_err(internal)?;
             if !enabled {
                 tracing::info!("plugin \"{id}\" upgraded while disabled — not activated");
                 return Ok(InstallResult {
