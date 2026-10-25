@@ -1158,7 +1158,7 @@ mod guide_import {
         let c = ctx(pool).await;
         lineup(&c).await;
         c.prov.lock_clean().guide = feed();
-        let parent = source(&c, "P", "m3u", "http://h/x", 0).await;
+        let parent = source(&c, "P", "m3u", &format!("{}/x", c.base), 0).await;
         sqlx::query(r#"UPDATE livetv_sources SET "guideUrls" = $2, "userAgent" = 'ParentAgent/1' WHERE id = $1"#)
             .bind(parent)
             .bind(json!([format!("{}/guide.xml", c.base)]))
@@ -1186,6 +1186,30 @@ mod guide_import {
         assert_eq!(
             r.error.as_deref(),
             Some("Guide source has no parent Live TV source")
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_guide_url_off_the_source_host_is_vetted(pool: PgPool) {
+        let c = ctx(pool).await;
+        lineup(&c).await;
+        c.prov.lock_clean().guide = feed();
+        let parent = source(&c, "P", "m3u", "http://h/x", 0).await;
+        sqlx::query(r#"UPDATE livetv_sources SET "guideUrls" = $2 WHERE id = $1"#)
+            .bind(parent)
+            .bind(json!([format!("{}/guide.xml", c.base)]))
+            .execute(&c.pool)
+            .await
+            .unwrap();
+        let g: i32 = sqlx::query_scalar(r#"INSERT INTO livetv_guide_sources (name, kind, "sourceId") VALUES ('K', 'source', $1) RETURNING id"#)
+            .bind(parent)
+            .fetch_one(&c.pool)
+            .await
+            .unwrap();
+        let r = guide::sync(&c.st, g).await.unwrap();
+        assert!(
+            !r.ok && r.error.unwrap().contains("internal address"),
+            "refused"
         );
     }
 

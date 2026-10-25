@@ -454,14 +454,14 @@ pub async fn sync_route(
 }
 
 /// The feed url of a guide source: its own, or its parent source's guide (rule 9).
-async fn feed_url(db: &PgPool, g: &GuideSource) -> Result<(String, Option<Source>), String> {
+async fn feed_url(db: &PgPool, g: &GuideSource) -> Result<(String, bool, Option<Source>), String> {
     if g.kind == "xmltv" {
         let url = g
             .url
             .clone()
             .filter(|u| !u.is_empty())
             .ok_or("Guide source has no URL")?;
-        return Ok((url, None));
+        return Ok((url, false, None));
     }
     let sid = g
         .source_id
@@ -470,7 +470,8 @@ async fn feed_url(db: &PgPool, g: &GuideSource) -> Result<(String, Option<Source
         .await
         .map_err(|e| e.to_string())?
         .ok_or_else(|| format!("Live TV source #{sid} not found"))?;
-    Ok((lineup::guide_url(&parent).await?, Some(parent)))
+    let (url, vetted) = lineup::guide_url(&parent).await?;
+    Ok((url, vetted, Some(parent)))
 }
 
 #[derive(sqlx::FromRow)]
@@ -610,7 +611,7 @@ async fn insert_chunk(
 async fn run(st: &AppState, g: &GuideSource) -> Result<GuideSyncResult, String> {
     let db = &st.db;
     let dberr = |e: sqlx::Error| e.to_string();
-    let (url, parent) = feed_url(db, g).await?;
+    let (url, vetted, parent) = feed_url(db, g).await?;
     let past = setting_int(db, "livetv_guide_days_past", 2)
         .await
         .map_err(dberr)?;
@@ -627,7 +628,7 @@ async fn run(st: &AppState, g: &GuideSource) -> Result<GuideSyncResult, String> 
         etag: g.etag.as_deref(),
         last_modified: g.last_modified.as_deref(),
     };
-    let reply = net::get(&url, &identity, &validators, Opts::GUIDE).await?;
+    let reply = net::get(&url, &identity, &validators, Opts::GUIDE.vetted(vetted)).await?;
     if reply.not_modified() {
         sqlx::query(r#"UPDATE livetv_guide_sources SET "lastSyncAt" = now(), "lastSyncStatus" = 'ok', "lastSyncError" = NULL WHERE id = $1"#)
             .bind(g.id)
