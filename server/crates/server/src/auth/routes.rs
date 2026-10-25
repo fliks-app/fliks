@@ -22,7 +22,7 @@ use chrono::{DateTime, Utc};
 use fliks_domain::acl::{Action, Subject};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 
 const BCRYPT_COST: u32 = 12;
 const SERVER_TYPES: [&str; 4] = ["local", "jellyfin", "emby", "plex"];
@@ -154,6 +154,24 @@ fn client_ip(headers: &HeaderMap, peer: Option<&SocketAddr>) -> String {
             || peer.map(|a| a.ip().to_string()).unwrap_or_default(),
             str::to_owned,
         )
+}
+
+/// True when the peer and every address in `X-Forwarded-For` are private or loopback, so a
+/// forged header or a public hop anywhere in the chain keeps the request out.
+fn is_lan(headers: &HeaderMap, peer: Option<&SocketAddr>) -> bool {
+    let local = |ip: IpAddr| match ip.to_canonical() {
+        IpAddr::V4(v) => v.is_private() || v.is_loopback() || v.is_link_local(),
+        IpAddr::V6(v) => v.is_loopback() || v.is_unique_local() || v.is_unicast_link_local(),
+    };
+    let hops = headers
+        .get_all("x-forwarded-for")
+        .iter()
+        .filter_map(|v| v.to_str().ok())
+        .flat_map(|v| v.split(','))
+        .map(str::trim)
+        .filter(|v| !v.is_empty());
+    let hops_ok = hops.into_iter().all(|h| h.parse().is_ok_and(local));
+    hops_ok && peer.is_some_and(|a| local(a.ip()))
 }
 
 #[utoipa::path(post, path = "/api/auth/login", responses((status = 200)))]
@@ -407,8 +425,26 @@ pub(crate) async fn me(State(st): State<AppState>, a: Authed) -> Result<Json<Saf
     Ok(Json(safe_user(&st, a.user, a.role).await))
 }
 
+/// Picker roster visibility: `everyone` (default), `lan` or `hidden` (setting `users_public_mode`).
 #[utoipa::path(get, path = "/api/auth/users-public", responses((status = 200)))]
-pub(crate) async fn users_public(State(st): State<AppState>) -> Result<Json<Value>, AppError> {
+pub(crate) async fn users_public(
+    State(st): State<AppState>,
+    peer: Option<Extension<ConnectInfo<SocketAddr>>>,
+    headers: HeaderMap,
+) -> Result<Json<Value>, AppError> {
+    let mode =
+        sqlx::query_scalar!(r#"SELECT value FROM app_settings WHERE key = 'users_public_mode'"#)
+            .fetch_optional(&st.db)
+            .await?
+            .flatten();
+    let shown = match mode.as_deref() {
+        Some("hidden") => false,
+        Some("lan") => is_lan(&headers, peer.as_ref().map(|Extension(ConnectInfo(a))| a)),
+        _ => true,
+    };
+    if !shown {
+        return Ok(Json(json!([])));
+    }
     let rows = sqlx::query!(
         r#"SELECT id, username, avatar FROM users WHERE enabled = true ORDER BY username ASC"#
     )

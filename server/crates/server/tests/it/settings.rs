@@ -505,3 +505,24 @@ async fn sidebar_counts(pool: PgPool) {
         401
     );
 }
+
+#[sqlx::test(migrations = false)]
+async fn users_public_mode_accepts_only_known_values(pool: PgPool) {
+    let c = ctx(pool).await;
+    for (v, want) in [
+        ("lan", 200),
+        ("hidden", 200),
+        ("everyone", 200),
+        ("nobody", 400),
+    ] {
+        let (s, _) = call(
+            &c.app,
+            "PUT",
+            "/api/settings/users_public_mode",
+            Some(&c.admin),
+            json!({"value": v}),
+        )
+        .await;
+        assert_eq!(s, want, "{v}");
+    }
+}

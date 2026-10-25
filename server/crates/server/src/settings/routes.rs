@@ -89,6 +89,11 @@ pub(crate) async fn notify(st: &AppState, keys: &[String], origin: Option<&str>)
 
 /// Values the engine would reject with its whole config.
 fn validate(key: &str, value: &str) -> Result<(), AppError> {
+    if key == "users_public_mode" && !["everyone", "lan", "hidden"].contains(&value) {
+        return Err(AppError::bad_request(vec![
+            "users_public_mode must be one of the following values: everyone, lan, hidden",
+        ]));
+    }
     crate::engine::validate_streaming_setting(key, Some(value))
         .map_err(|m| AppError::bad_request(vec![m]))
 }
