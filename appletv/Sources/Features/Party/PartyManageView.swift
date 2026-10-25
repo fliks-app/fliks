@@ -34,13 +34,13 @@ private struct TileSection<Content: View>: View {
         VStack(alignment: .center, spacing: 8) {
             Text(title).font(.headline).foregroundStyle(.secondary)
             if let empty {
-                Label(empty, systemImage: "person.2.slash")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.center)
-                    .padding(30)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                VStack(spacing: 16) {
+                    Image(systemName: "person.2.slash").font(.largeTitle)
+                    Text(empty).font(.callout).lineLimit(2).multilineTextAlignment(.center)
+                }
+                .foregroundStyle(.secondary)
+                .padding(30)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView {
                     LazyVGrid(columns: tileColumns, alignment: .center, spacing: 30) { content }
