@@ -313,6 +313,7 @@ function createHarness(opts: {
           formFactor: () => 'desktop',
           tvPlatform: () => null,
           desktopPlatform: () => null,
+          isDesktopNative: () => false,
         },
       },
       { provide: OfflineStorageService, useValue: { getLocalUrl: vi.fn(), getSmallFileNativeUri: vi.fn() } },
