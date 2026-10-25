@@ -41,6 +41,7 @@ import androidx.media3.exoplayer.PlayerMessage;
 import androidx.media3.exoplayer.analytics.AnalyticsListener;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
 import androidx.media3.exoplayer.upstream.CmcdConfiguration;
+import androidx.media3.exoplayer.upstream.DefaultBandwidthMeter;
 import androidx.media3.session.MediaSession;
 import java.util.ArrayList;
 import java.util.List;
@@ -95,6 +96,9 @@ public class NativePlayerPlugin extends Plugin {
     // QoE counters, cumulative since the last load().
     private boolean qoeCmcd = false;
     private long qoeBandwidthBps = -1;
+    // From configure(), before load(): a fresh player is built per load, so these are re-applied each time.
+    private String preferredAudioLanguage = "";
+    private long initialBandwidthBps = -1;
     private String qoeDecoderName = null;
     private Boolean qoeHwDecoder = null;
     // Only exists while background audio is on: it is what keeps playback alive off-screen.
@@ -371,15 +375,19 @@ public class NativePlayerPlugin extends Plugin {
                         new CmcdConfiguration(cmcdSid, null, new CmcdConfiguration.RequestConfig() {},
                                 CmcdConfiguration.MODE_QUERY_PARAMETER));
             }
-            player = new ExoPlayer.Builder(getContext())
+            ExoPlayer.Builder playerBuilder = new ExoPlayer.Builder(getContext())
                     .setRenderersFactory(renderersFactory)
                     .setMediaSourceFactory(mediaSourceFactory)
                     .setLoadControl(loadControl)
                     .setWakeMode(C.WAKE_MODE_NETWORK)
                     .setHandleAudioBecomingNoisy(true)
                     .setSeekBackIncrementMs(10_000)
-                    .setSeekForwardIncrementMs(10_000)
-                    .build();
+                    .setSeekForwardIncrementMs(10_000);
+            if (initialBandwidthBps > 0) {
+                playerBuilder.setBandwidthMeter(new DefaultBandwidthMeter.Builder(getContext())
+                        .setInitialBitrateEstimate(initialBandwidthBps).build());
+            }
+            player = playerBuilder.build();
             // CONTENT_TYPE_MOVIE routes through the surround-capable HDMI path; the default UNKNOWN can negotiate stereo-only PCM.
             player.setAudioAttributes(
                     new AudioAttributes.Builder()
@@ -550,6 +558,7 @@ public class NativePlayerPlugin extends Plugin {
             player.setTrackSelectionParameters(
                     player.getTrackSelectionParameters().buildUpon()
                             .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+                            .setPreferredAudioLanguages(audioLanguages())
                             .build());
             // seekTo before prepare: after it, the seek can race ProgressiveMediaPeriod mid-preparation and trip `isPendingReset`
             // (an intermittent IllegalStateException, about 1 in 6 plays).
@@ -954,6 +963,31 @@ public class NativePlayerPlugin extends Plugin {
                 subtitles.setTextAlpha(brightness >= 1.0f ? 0.5f : 1.0f);
             }
 
+            call.resolve();
+        });
+    }
+
+    // ── Configuration ──
+
+    private String[] audioLanguages() {
+        return preferredAudioLanguage.isEmpty() ? new String[0] : new String[] {preferredAudioLanguage};
+    }
+
+    /** Engine knobs sent ahead of load(): the audio the player opens on and the bandwidth its ABR starts from. */
+    @PluginMethod()
+    public void configure(PluginCall call) {
+        String language = call.getString("preferredAudioLanguage");
+        Double bandwidth = call.getDouble("defaultBandwidthEstimate");
+        mainHandler.post(() -> {
+            if (language != null) {
+                preferredAudioLanguage = language;
+                if (player != null) {
+                    player.setTrackSelectionParameters(
+                            player.getTrackSelectionParameters().buildUpon()
+                                    .setPreferredAudioLanguages(audioLanguages()).build());
+                }
+            }
+            if (bandwidth != null && bandwidth > 0) initialBandwidthBps = Math.round(bandwidth);
             call.resolve();
         });
     }
