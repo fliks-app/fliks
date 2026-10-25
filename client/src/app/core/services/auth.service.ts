@@ -547,12 +547,18 @@ export class AuthService {
     if (this._streamTokenInFlight) return this._streamTokenInFlight;
     this._streamTokenInFlight = (async () => {
       try {
-        const res = await firstValueFrom(
-          this.http.post<{ streamToken: string; expiresAt: number }>(
-            '/api/auth/stream-token',
-            {},
-          ),
-        );
+        const mint = () =>
+          firstValueFrom(
+            this.http.post<{ streamToken: string; expiresAt: number }>(
+              '/api/auth/stream-token',
+              {},
+            ),
+          );
+        // One retry rides out a server blip; a second failure returns null.
+        const res = await mint().catch(async () => {
+          await new Promise((r) => setTimeout(r, 500));
+          return mint();
+        });
         this._streamToken.set(res.streamToken);
         this._streamTokenExpiresAt = res.expiresAt;
         return res.streamToken;
