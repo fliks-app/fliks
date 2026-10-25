@@ -104,7 +104,6 @@ struct PlayerView: View {
                     controller.attach()
                 }
             } catch {
-                print("player: load failed: \(error)")
                 loadErrorText = tr("player.load_error")
                 if inParty { await party.leave() }
             }
