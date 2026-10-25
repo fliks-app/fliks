@@ -208,9 +208,13 @@ async fn the_recorded_engine_answer_gives_the_recorded_body(pool: PgPool) {
     let c = ctx(pool, true).await;
     let (status, mut body) = info(&c, "?token=tok&startQuality=360p").await;
     assert_eq!(status, 201);
-    // `trackMarkers` is additive: the recorded body predates it.
+    // `trackMarkers` and `startAtSeconds` are additive: the recorded body predates them.
     let track = body["audioTracks"][0].as_object_mut().unwrap();
     assert_eq!(track.remove("trackMarkers"), Some(json!([])));
+    assert_eq!(
+        body.as_object_mut().unwrap().remove("startAtSeconds"),
+        Some(json!(0.0))
+    );
     assert_eq!(body, golden().1);
     let req = &c.fake.seen("POST", "/v1/sessions")[0].body;
     assert_eq!(req["decide"]["media"]["ext"], ".mkv");
