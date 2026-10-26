@@ -6,52 +6,107 @@
       {
         "ordinal": 0,
         "name": "id",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "playlists",
+            "name": "id"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "created_at",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "playlists",
+            "name": "createdAt"
+          }
+        }
       },
       {
         "ordinal": 2,
         "name": "updated_at",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "playlists",
+            "name": "updatedAt"
+          }
+        }
       },
       {
         "ordinal": 3,
         "name": "name",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "playlists",
+            "name": "name"
+          }
+        }
       },
       {
         "ordinal": 4,
         "name": "owner_id",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "playlists",
+            "name": "ownerId"
+          }
+        }
       },
       {
         "ordinal": 5,
         "name": "auto_remove_watched",
-        "type_info": "Bool"
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "playlists",
+            "name": "autoRemoveWatched"
+          }
+        }
       },
       {
         "ordinal": 6,
         "name": "auto_download",
-        "type_info": "Bool"
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "playlists",
+            "name": "autoDownload"
+          }
+        }
       },
       {
         "ordinal": 7,
         "name": "auto_play",
-        "type_info": "Bool"
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "playlists",
+            "name": "autoPlay"
+          }
+        }
       },
       {
         "ordinal": 8,
         "name": "visibility!",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": "Expression"
       },
       {
         "ordinal": 9,
         "name": "cover_image_url",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "playlists",
+            "name": "coverImageUrl"
+          }
+        }
       }
     ],
     "parameters": {

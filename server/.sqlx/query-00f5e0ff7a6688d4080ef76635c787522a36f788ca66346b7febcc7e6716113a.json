@@ -6,37 +6,79 @@
       {
         "ordinal": 0,
         "name": "id",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "remote_control_grants",
+            "name": "id"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "created_at",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "remote_control_grants",
+            "name": "createdAt"
+          }
+        }
       },
       {
         "ordinal": 2,
         "name": "device_id",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "remote_control_grants",
+            "name": "deviceId"
+          }
+        }
       },
       {
         "ordinal": 3,
         "name": "owner_user_id",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "remote_control_grants",
+            "name": "ownerUserId"
+          }
+        }
       },
       {
         "ordinal": 4,
         "name": "grantee_user_id",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "remote_control_grants",
+            "name": "granteeUserId"
+          }
+        }
       },
       {
         "ordinal": 5,
         "name": "device_name",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "remote_control_grants",
+            "name": "deviceName"
+          }
+        }
       },
       {
         "ordinal": 6,
         "name": "code_expires_at",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "remote_control_grants",
+            "name": "codeExpiresAt"
+          }
+        }
       }
     ],
     "parameters": {

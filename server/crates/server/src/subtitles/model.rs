@@ -218,10 +218,12 @@ impl New {
 }
 
 pub async fn by_id(db: impl PgExecutor<'_>, id: i32) -> sqlx::Result<Option<Row>> {
-    sqlx::query_as(sqlx::AssertSqlSafe(format!("SELECT {COLS} FROM subtitle_files WHERE id = $1")))
-        .bind(id)
-        .fetch_optional(db)
-        .await
+    sqlx::query_as(sqlx::AssertSqlSafe(format!(
+        "SELECT {COLS} FROM subtitle_files WHERE id = $1"
+    )))
+    .bind(id)
+    .fetch_optional(db)
+    .await
 }
 
 pub async fn of_media(db: impl PgExecutor<'_>, media_id: i32) -> sqlx::Result<Vec<Row>> {

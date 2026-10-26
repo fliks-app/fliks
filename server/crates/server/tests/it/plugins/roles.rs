@@ -85,11 +85,11 @@ async fn orphan_keeps_the_data_and_a_reprovision_reuses_it() {
     };
     let ours = db::role(&s.oid().await, "acme.tool");
     db::provision(&s.pool, "acme.tool", &[]).await.unwrap();
-    sqlx::raw_sql(&format!(
+    sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
         r#"CREATE TABLE "plugin_acme_tool"."items" (id serial PRIMARY KEY);
            INSERT INTO "plugin_acme_tool"."items" DEFAULT VALUES;
            ALTER TABLE "plugin_acme_tool"."items" OWNER TO "{ours}";"#
-    ))
+    )))
     .execute(&s.pool)
     .await
     .unwrap();
@@ -140,9 +140,12 @@ async fn template_copy_and_restore_take_their_own_names() {
     let mut c = PgConnection::connect(&admin).await.unwrap();
     // A template needs every session on its source gone (55006).
     for attempt in 0.. {
-        match sqlx::raw_sql(&format!("CREATE DATABASE {copy} TEMPLATE {}", a.name))
-            .execute(&mut c)
-            .await
+        match sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+            "CREATE DATABASE {copy} TEMPLATE {}",
+            a.name
+        )))
+        .execute(&mut c)
+        .await
         {
             Err(sqlx::Error::Database(e))
                 if e.code().as_deref() == Some("55006") && attempt < 50 =>
@@ -193,13 +196,17 @@ async fn template_copy_and_restore_take_their_own_names() {
     assert!(!exists(&b, "fp_deadbeef_acme_tool").await);
     assert!(exists(&b, &b_role).await, "this database's own role stays");
     b.close().await;
-    sqlx::raw_sql(&format!("DROP DATABASE {copy} WITH (FORCE)"))
-        .execute(&mut c)
-        .await
-        .unwrap();
-    let _ = sqlx::raw_sql(&format!("DROP ROLE IF EXISTS \"{b_role}\""))
-        .execute(&mut c)
-        .await;
+    sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+        "DROP DATABASE {copy} WITH (FORCE)"
+    )))
+    .execute(&mut c)
+    .await
+    .unwrap();
+    let _ = sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+        "DROP ROLE IF EXISTS \"{b_role}\""
+    )))
+    .execute(&mut c)
+    .await;
     let reopened = Scratch::reopen(a).await;
     reopened.finish().await;
 }

@@ -6,37 +6,74 @@
       {
         "ordinal": 0,
         "name": "title",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "title"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "kind!",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": "Expression"
       },
       {
         "ordinal": 2,
         "name": "tmdb",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "tmdbId"
+          }
+        }
       },
       {
         "ordinal": 3,
         "name": "tvdb",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "tvdbId"
+          }
+        }
       },
       {
         "ordinal": 4,
         "name": "imdb",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "imdbId"
+          }
+        }
       },
       {
         "ordinal": 5,
         "name": "pref",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "preferredProvider"
+          }
+        }
       },
       {
         "ordinal": 6,
         "name": "lib",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "libraryId"
+          }
+        }
       }
     ],
     "parameters": {

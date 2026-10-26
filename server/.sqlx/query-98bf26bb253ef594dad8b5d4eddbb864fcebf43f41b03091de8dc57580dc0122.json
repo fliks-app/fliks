@@ -6,12 +6,24 @@
       {
         "ordinal": 0,
         "name": "media_pref",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "preferredProvider"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "library_pref",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "libraries",
+            "name": "preferredProvider"
+          }
+        }
       }
     ],
     "parameters": {

@@ -104,10 +104,12 @@ pub async fn context(
     }
     let (mut season, mut episode) = (None, None);
     if let Some(eid) = episode_id {
-        let e: Option<EpisodeRow> = sqlx::query_as(sqlx::AssertSqlSafe(format!("{EPISODE_SELECT} WHERE id = $1")))
-            .bind(eid as i32)
-            .fetch_optional(db)
-            .await?;
+        let e: Option<EpisodeRow> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
+            "{EPISODE_SELECT} WHERE id = $1"
+        )))
+        .bind(eid as i32)
+        .fetch_optional(db)
+        .await?;
         let Some(e) = e else { return Ok(None) };
         let s = season_row(db, "id = $1", e.season_id, None).await?;
         let Some(s) = s.filter(|s| s.1 == m.id) else {
@@ -225,22 +227,24 @@ pub(super) async fn episode_targets(
     let mut mids: Vec<i32> = rows.iter().map(|r| r.3).collect();
     mids.sort_unstable();
     mids.dedup();
-    let mut episodes: HashMap<i32, EpisodeRow> =
-        sqlx::query_as::<_, EpisodeRow>(sqlx::AssertSqlSafe(format!("{EPISODE_SELECT} WHERE id = ANY($1)")))
-            .bind(&eids)
-            .fetch_all(db)
-            .await?
-            .into_iter()
-            .map(|e| (e.id, e))
-            .collect();
-    let medias: HashMap<i32, MediaRow> =
-        sqlx::query_as::<_, MediaRow>(sqlx::AssertSqlSafe(format!("{MEDIA_SELECT} WHERE m.id = ANY($1)")))
-            .bind(&mids)
-            .fetch_all(db)
-            .await?
-            .into_iter()
-            .map(|m| (m.id, m))
-            .collect();
+    let mut episodes: HashMap<i32, EpisodeRow> = sqlx::query_as::<_, EpisodeRow>(
+        sqlx::AssertSqlSafe(format!("{EPISODE_SELECT} WHERE id = ANY($1)")),
+    )
+    .bind(&eids)
+    .fetch_all(db)
+    .await?
+    .into_iter()
+    .map(|e| (e.id, e))
+    .collect();
+    let medias: HashMap<i32, MediaRow> = sqlx::query_as::<_, MediaRow>(sqlx::AssertSqlSafe(
+        format!("{MEDIA_SELECT} WHERE m.id = ANY($1)"),
+    ))
+    .bind(&mids)
+    .fetch_all(db)
+    .await?
+    .into_iter()
+    .map(|m| (m.id, m))
+    .collect();
     let with_file: Vec<i32> = episodes
         .values()
         .filter(|e| e.has_file)

@@ -6,37 +6,79 @@
       {
         "ordinal": 0,
         "name": "id",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media_files",
+            "name": "id"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "rel",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "media_files",
+            "name": "relativePath"
+          }
+        }
       },
       {
         "ordinal": 2,
         "name": "size",
-        "type_info": "Int8"
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "media_files",
+            "name": "size"
+          }
+        }
       },
       {
         "ordinal": 3,
         "name": "mtime_ms",
-        "type_info": "Int8"
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "media_files",
+            "name": "mtimeMs"
+          }
+        }
       },
       {
         "ordinal": 4,
         "name": "probe_version",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media_files",
+            "name": "probeVersion"
+          }
+        }
       },
       {
         "ordinal": 5,
         "name": "episode_id",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media_files",
+            "name": "episodeId"
+          }
+        }
       },
       {
         "ordinal": 6,
         "name": "info",
-        "type_info": "Jsonb"
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "media_files",
+            "name": "streamInfo"
+          }
+        }
       }
     ],
     "parameters": {

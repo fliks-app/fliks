@@ -1013,7 +1013,7 @@ async fn a_link_joiner_is_remembered_upgraded_by_an_invite_and_forgotten_on_kick
 /// Library 2 (nobody is granted it) with media 2, a series (media 3) with two episodes, only the
 /// first one with a file, and the playlist 1 owned by `owner`: Film, Gap, S01E01, S01E02.
 async fn playlist_setup(c: &Ctx, owner: i32) {
-    sqlx::raw_sql(&format!(
+    sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
         r#"INSERT INTO libraries (name) VALUES ('l2');
            INSERT INTO media (title, type, "libraryId") VALUES ('Gap', 'movie', 2), ('Show', 'series', 1);
            INSERT INTO seasons ("seasonNumber", "mediaId") VALUES (1, 3);
@@ -1023,7 +1023,7 @@ async fn playlist_setup(c: &Ctx, owner: i32) {
            INSERT INTO playlists (id, name, "ownerId") VALUES (1, 'Night', {owner});
            INSERT INTO playlist_items ("playlistId", "mediaId", "episodeId", position) VALUES
              (1, 1, NULL, 0), (1, 2, NULL, 1), (1, 3, 1, 2), (1, 3, 2, 3);"#
-    ))
+    )))
     .execute(&c.pool)
     .await
     .unwrap();
@@ -2471,12 +2471,12 @@ async fn the_start_takes_the_top_vote_then_the_oldest_and_the_hosts_choice_wins(
 
 /// A second library with a film in it, which alice opens and nobody else does.
 async fn hidden_film(c: &Ctx, alice: i32) {
-    sqlx::raw_sql(&format!(
+    sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
         r#"INSERT INTO libraries (name) VALUES ('l2');
            INSERT INTO media (title, type, "libraryId") VALUES ('Hidden', 'movie', 2);
            INSERT INTO library_user_access ("userId", "libraryId") VALUES ({alice}, 2);
            INSERT INTO media_files ("mediaId", "relativePath", size, quality) VALUES (2, 'hidden', 1, 'q');"#
-    ))
+    )))
     .execute(&c.pool)
     .await
     .unwrap();

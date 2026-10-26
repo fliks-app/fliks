@@ -103,7 +103,7 @@ impl Scratch {
         let admin = admin_url()?;
         let name = format!("s8_{tag}_{}", fliks_server::config::random_hex(4));
         let mut c = PgConnection::connect(&admin).await.unwrap();
-        sqlx::raw_sql(&format!("CREATE DATABASE {name}"))
+        sqlx::raw_sql(sqlx::AssertSqlSafe(format!("CREATE DATABASE {name}")))
             .execute(&mut c)
             .await
             .unwrap();
@@ -142,10 +142,10 @@ impl Scratch {
         let oid = self.oid().await;
         self.pool.close().await;
         let mut c = PgConnection::connect(&self.admin).await.unwrap();
-        sqlx::raw_sql(&format!(
+        sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
             "DROP DATABASE IF EXISTS {} WITH (FORCE)",
             self.name
-        ))
+        )))
         .execute(&mut c)
         .await
         .unwrap();
@@ -156,7 +156,7 @@ impl Scratch {
                 .await
                 .unwrap();
         for r in roles {
-            let _ = sqlx::raw_sql(&format!("DROP ROLE IF EXISTS \"{r}\""))
+            let _ = sqlx::raw_sql(sqlx::AssertSqlSafe(format!("DROP ROLE IF EXISTS \"{r}\"")))
                 .execute(&mut c)
                 .await;
         }

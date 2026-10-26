@@ -51,10 +51,12 @@ pub async fn rule_list(db: &PgPool) -> sqlx::Result<Vec<Value>> {
 }
 
 pub async fn rule_find(db: &PgPool, id: i32) -> sqlx::Result<Option<Value>> {
-    sqlx::query_scalar(sqlx::AssertSqlSafe(format!("SELECT {RULE} FROM cleanup_rules WHERE id = $1")))
-        .bind(id)
-        .fetch_optional(db)
-        .await
+    sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
+        "SELECT {RULE} FROM cleanup_rules WHERE id = $1"
+    )))
+    .bind(id)
+    .fetch_optional(db)
+    .await
 }
 
 pub async fn rule_insert(db: &PgPool, r: &Rule) -> sqlx::Result<Value> {

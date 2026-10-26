@@ -6,47 +6,101 @@
       {
         "ordinal": 0,
         "name": "id",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "episode_markers",
+            "name": "id"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "created_at",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "episode_markers",
+            "name": "createdAt"
+          }
+        }
       },
       {
         "ordinal": 2,
         "name": "updated_at",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "episode_markers",
+            "name": "updatedAt"
+          }
+        }
       },
       {
         "ordinal": 3,
         "name": "type!",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "episode_markers",
+            "name": "type"
+          }
+        }
       },
       {
         "ordinal": 4,
         "name": "start_seconds",
-        "type_info": "Float8"
+        "type_info": "Float8",
+        "origin": {
+          "Table": {
+            "table": "episode_markers",
+            "name": "startSeconds"
+          }
+        }
       },
       {
         "ordinal": 5,
         "name": "end_seconds",
-        "type_info": "Float8"
+        "type_info": "Float8",
+        "origin": {
+          "Table": {
+            "table": "episode_markers",
+            "name": "endSeconds"
+          }
+        }
       },
       {
         "ordinal": 6,
         "name": "confidence",
-        "type_info": "Float8"
+        "type_info": "Float8",
+        "origin": {
+          "Table": {
+            "table": "episode_markers",
+            "name": "confidence"
+          }
+        }
       },
       {
         "ordinal": 7,
         "name": "manual",
-        "type_info": "Bool"
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "episode_markers",
+            "name": "manual"
+          }
+        }
       },
       {
         "ordinal": 8,
         "name": "episode_id",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "episode_markers",
+            "name": "episodeId"
+          }
+        }
       }
     ],
     "parameters": {

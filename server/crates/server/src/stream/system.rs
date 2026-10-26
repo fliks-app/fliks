@@ -294,7 +294,7 @@ fn row_of(
 
 async fn episode_labels(st: &AppState, ids: &[i32]) -> sqlx::Result<HashMap<i32, String>> {
     let rows = sqlx::query!(
-        r#"SELECT e.id, e."episodeNumber" AS number, e.title, s."seasonNumber" AS "season?"
+        r#"SELECT e.id AS "id!", e."episodeNumber" AS "number!", e.title, s."seasonNumber" AS "season?"
            FROM episodes e LEFT JOIN seasons s ON s.id = e."seasonId" WHERE e.id = ANY($1)"#,
         ids
     )

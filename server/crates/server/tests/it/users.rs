@@ -83,11 +83,13 @@ impl Ctx {
     where
         T: for<'r> sqlx::Decode<'r, sqlx::Postgres> + sqlx::Type<sqlx::Postgres> + Send + Unpin,
     {
-        sqlx::query_scalar(&format!(r#"SELECT "{col}" FROM users WHERE id = $1"#))
-            .bind(id)
-            .fetch_one(&self.pool)
-            .await
-            .unwrap()
+        sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
+            r#"SELECT "{col}" FROM users WHERE id = $1"#
+        )))
+        .bind(id)
+        .fetch_one(&self.pool)
+        .await
+        .unwrap()
     }
 }
 

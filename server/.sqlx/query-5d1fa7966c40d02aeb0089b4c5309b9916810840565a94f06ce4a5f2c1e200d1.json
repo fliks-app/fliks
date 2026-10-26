@@ -6,187 +6,399 @@
       {
         "ordinal": 0,
         "name": "id",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "id"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "created_at",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "createdAt"
+          }
+        }
       },
       {
         "ordinal": 2,
         "name": "updated_at",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "updatedAt"
+          }
+        }
       },
       {
         "ordinal": 3,
         "name": "username",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "username"
+          }
+        }
       },
       {
         "ordinal": 4,
         "name": "email",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "email"
+          }
+        }
       },
       {
         "ordinal": 5,
         "name": "role_id",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "roleId"
+          }
+        }
       },
       {
         "ordinal": 6,
         "name": "media_server_type!",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": "Expression"
       },
       {
         "ordinal": 7,
         "name": "media_server_id",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "mediaServerId"
+          }
+        }
       },
       {
         "ordinal": 8,
         "name": "avatar",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "avatar"
+          }
+        }
       },
       {
         "ordinal": 9,
         "name": "last_login",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "lastLogin"
+          }
+        }
       },
       {
         "ordinal": 10,
         "name": "is_admin",
-        "type_info": "Bool"
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "isAdmin"
+          }
+        }
       },
       {
         "ordinal": 11,
         "name": "enabled",
-        "type_info": "Bool"
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "enabled"
+          }
+        }
       },
       {
         "ordinal": 12,
         "name": "require_password_change",
-        "type_info": "Bool"
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "requirePasswordChange"
+          }
+        }
       },
       {
         "ordinal": 13,
         "name": "movie_quota_limit",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "movieQuotaLimit"
+          }
+        }
       },
       {
         "ordinal": 14,
         "name": "series_quota_limit",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "seriesQuotaLimit"
+          }
+        }
       },
       {
         "ordinal": 15,
         "name": "quota_period_days",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "quotaPeriodDays"
+          }
+        }
       },
       {
         "ordinal": 16,
         "name": "library_order: Json<Vec<i32>>",
-        "type_info": "Jsonb"
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "libraryOrder"
+          }
+        }
       },
       {
         "ordinal": 17,
         "name": "hidden_library_ids: Json<Vec<i32>>",
-        "type_info": "Jsonb"
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "hiddenLibraryIds"
+          }
+        }
       },
       {
         "ordinal": 18,
         "name": "profile_visibility!",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": "Expression"
       },
       {
         "ordinal": 19,
         "name": "share_tastes",
-        "type_info": "Bool"
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "shareTastes"
+          }
+        }
       },
       {
         "ordinal": 20,
         "name": "share_recommendations",
-        "type_info": "Bool"
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "shareRecommendations"
+          }
+        }
       },
       {
         "ordinal": 21,
         "name": "share_watch_history",
-        "type_info": "Bool"
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "shareWatchHistory"
+          }
+        }
       },
       {
         "ordinal": 22,
         "name": "share_likes",
-        "type_info": "Bool"
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "shareLikes"
+          }
+        }
       },
       {
         "ordinal": 23,
         "name": "share_stats",
-        "type_info": "Bool"
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "shareStats"
+          }
+        }
       },
       {
         "ordinal": 24,
         "name": "share_disabled",
-        "type_info": "Bool"
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "shareDisabled"
+          }
+        }
       },
       {
         "ordinal": 25,
         "name": "hide_spoilers",
-        "type_info": "Bool"
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "hideSpoilers"
+          }
+        }
       },
       {
         "ordinal": 26,
         "name": "edl_enabled",
-        "type_info": "Bool"
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "edlEnabled"
+          }
+        }
       },
       {
         "ordinal": 27,
         "name": "edl_auto_skip_commercials",
-        "type_info": "Bool"
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "edlAutoSkipCommercials"
+          }
+        }
       },
       {
         "ordinal": 28,
         "name": "spoiler_hide_stills",
-        "type_info": "Bool"
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "spoilerHideStills"
+          }
+        }
       },
       {
         "ordinal": 29,
         "name": "spoiler_hide_overviews",
-        "type_info": "Bool"
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "spoilerHideOverviews"
+          }
+        }
       },
       {
         "ordinal": 30,
         "name": "spoiler_hide_titles",
-        "type_info": "Bool"
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "spoilerHideTitles"
+          }
+        }
       },
       {
         "ordinal": 31,
         "name": "role_row_id?",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "roles",
+            "name": "id"
+          }
+        }
       },
       {
         "ordinal": 32,
         "name": "role_created_at?",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "roles",
+            "name": "createdAt"
+          }
+        }
       },
       {
         "ordinal": 33,
         "name": "role_updated_at?",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "roles",
+            "name": "updatedAt"
+          }
+        }
       },
       {
         "ordinal": 34,
         "name": "role_name?",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "roles",
+            "name": "name"
+          }
+        }
       },
       {
         "ordinal": 35,
         "name": "role_permissions?",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "roles",
+            "name": "permissions"
+          }
+        }
       },
       {
         "ordinal": 36,
         "name": "role_is_default?",
-        "type_info": "Bool"
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "roles",
+            "name": "isDefault"
+          }
+        }
       }
     ],
     "parameters": {

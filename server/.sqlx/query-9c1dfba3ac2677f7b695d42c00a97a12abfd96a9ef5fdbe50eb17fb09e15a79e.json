@@ -6,72 +6,111 @@
       {
         "ordinal": 0,
         "name": "id!",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": "Expression"
       },
       {
         "ordinal": 1,
         "name": "media_id!",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": "Expression"
       },
       {
         "ordinal": 2,
         "name": "media_file_id",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": "Expression"
       },
       {
         "ordinal": 3,
         "name": "episode_id",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": "Expression"
       },
       {
         "ordinal": 4,
         "name": "position_seconds!",
-        "type_info": "Float8"
+        "type_info": "Float8",
+        "origin": "Expression"
       },
       {
         "ordinal": 5,
         "name": "duration_seconds",
-        "type_info": "Float8"
+        "type_info": "Float8",
+        "origin": "Expression"
       },
       {
         "ordinal": 6,
         "name": "last_played_at!",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "playback_states",
+            "name": "lastPlayedAt"
+          }
+        }
       },
       {
         "ordinal": 7,
         "name": "media_title",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "title"
+          }
+        }
       },
       {
         "ordinal": 8,
         "name": "poster_url",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "posterUrl"
+          }
+        }
       },
       {
         "ordinal": 9,
         "name": "fanart_url",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "fanartUrl"
+          }
+        }
       },
       {
         "ordinal": 10,
         "name": "media_type!",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": "Expression"
       },
       {
         "ordinal": 11,
         "name": "still_url",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "episodes",
+            "name": "stillUrl"
+          }
+        }
       },
       {
         "ordinal": 12,
         "name": "episode_label",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": "Expression"
       },
       {
         "ordinal": 13,
         "name": "progress_percent!",
-        "type_info": "Float8"
+        "type_info": "Float8",
+        "origin": "Expression"
       }
     ],
     "parameters": {

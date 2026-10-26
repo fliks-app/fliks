@@ -6,17 +6,30 @@
       {
         "ordinal": 0,
         "name": "incoming!",
-        "type_info": "Bool"
+        "type_info": "Bool",
+        "origin": "Expression"
       },
       {
         "ordinal": 1,
         "name": "enabled",
-        "type_info": "Bool"
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "enabled"
+          }
+        }
       },
       {
         "ordinal": 2,
         "name": "share_disabled",
-        "type_info": "Bool"
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "shareDisabled"
+          }
+        }
       }
     ],
     "parameters": {

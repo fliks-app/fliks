@@ -6,17 +6,35 @@
       {
         "ordinal": 0,
         "name": "size",
-        "type_info": "Int8"
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "media_file_scans",
+            "name": "size"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "mtime_ms",
-        "type_info": "Float8"
+        "type_info": "Float8",
+        "origin": {
+          "Table": {
+            "table": "media_file_scans",
+            "name": "mtimeMs"
+          }
+        }
       },
       {
         "ordinal": 2,
         "name": "scan",
-        "type_info": "Jsonb"
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "media_file_scans",
+            "name": "scan"
+          }
+        }
       }
     ],
     "parameters": {

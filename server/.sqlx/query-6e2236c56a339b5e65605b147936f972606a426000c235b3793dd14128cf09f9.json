@@ -6,57 +6,118 @@
       {
         "ordinal": 0,
         "name": "relative_path!",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "media_files",
+            "name": "relativePath"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "stream_info",
-        "type_info": "Jsonb"
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "media_files",
+            "name": "streamInfo"
+          }
+        }
       },
       {
         "ordinal": 2,
         "name": "media_id",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media_files",
+            "name": "mediaId"
+          }
+        }
       },
       {
         "ordinal": 3,
         "name": "episode_id",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media_files",
+            "name": "episodeId"
+          }
+        }
       },
       {
         "ordinal": 4,
         "name": "title?",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "title"
+          }
+        }
       },
       {
         "ordinal": 5,
         "name": "media_type",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": "Expression"
       },
       {
         "ordinal": 6,
         "name": "poster_url",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "posterUrl"
+          }
+        }
       },
       {
         "ordinal": 7,
         "name": "fanart_url",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "fanartUrl"
+          }
+        }
       },
       {
         "ordinal": 8,
         "name": "library_id",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "libraryId"
+          }
+        }
       },
       {
         "ordinal": 9,
         "name": "folder",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "folderName"
+          }
+        }
       },
       {
         "ordinal": 10,
         "name": "library_path",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "libraries",
+            "name": "path"
+          }
+        }
       }
     ],
     "parameters": {
@@ -69,7 +130,7 @@
       true,
       true,
       true,
-      false,
+      true,
       null,
       true,
       true,

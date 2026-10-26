@@ -6,32 +6,68 @@
       {
         "ordinal": 0,
         "name": "id",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "pairing_requests",
+            "name": "id"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "device_id",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "pairing_requests",
+            "name": "deviceId"
+          }
+        }
       },
       {
         "ordinal": 2,
         "name": "status",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "pairing_requests",
+            "name": "status"
+          }
+        }
       },
       {
         "ordinal": 3,
         "name": "approved_by",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "pairing_requests",
+            "name": "approvedByUserId"
+          }
+        }
       },
       {
         "ordinal": 4,
         "name": "access_token",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "pairing_requests",
+            "name": "accessToken"
+          }
+        }
       },
       {
         "ordinal": 5,
         "name": "expires_at",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "pairing_requests",
+            "name": "expiresAt"
+          }
+        }
       }
     ],
     "parameters": {

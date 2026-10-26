@@ -6,32 +6,68 @@
       {
         "ordinal": 0,
         "name": "media_file_id",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "playback_states",
+            "name": "mediaFileId"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "episode_id",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "playback_states",
+            "name": "episodeId"
+          }
+        }
       },
       {
         "ordinal": 2,
         "name": "position_seconds",
-        "type_info": "Float8"
+        "type_info": "Float8",
+        "origin": {
+          "Table": {
+            "table": "playback_states",
+            "name": "positionSeconds"
+          }
+        }
       },
       {
         "ordinal": 3,
         "name": "duration_seconds",
-        "type_info": "Float8"
+        "type_info": "Float8",
+        "origin": {
+          "Table": {
+            "table": "playback_states",
+            "name": "durationSeconds"
+          }
+        }
       },
       {
         "ordinal": 4,
         "name": "season_number?",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "seasons",
+            "name": "seasonNumber"
+          }
+        }
       },
       {
         "ordinal": 5,
         "name": "episode_number?",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "episodes",
+            "name": "episodeNumber"
+          }
+        }
       }
     ],
     "parameters": {

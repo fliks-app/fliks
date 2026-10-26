@@ -6,67 +6,140 @@
       {
         "ordinal": 0,
         "name": "season_id",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "likes",
+            "name": "seasonId"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "episode_id",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "likes",
+            "name": "episodeId"
+          }
+        }
       },
       {
         "ordinal": 2,
         "name": "media_id?",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "id"
+          }
+        }
       },
       {
         "ordinal": 3,
         "name": "media_type",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": "Expression"
       },
       {
         "ordinal": 4,
         "name": "title?",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "title"
+          }
+        }
       },
       {
         "ordinal": 5,
         "name": "poster_url",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "posterUrl"
+          }
+        }
       },
       {
         "ordinal": 6,
         "name": "fanart_url",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "fanartUrl"
+          }
+        }
       },
       {
         "ordinal": 7,
         "name": "library_id",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "libraryId"
+          }
+        }
       },
       {
         "ordinal": 8,
         "name": "season_number?",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "seasons",
+            "name": "seasonNumber"
+          }
+        }
       },
       {
         "ordinal": 9,
         "name": "episode_number?",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "episodes",
+            "name": "episodeNumber"
+          }
+        }
       },
       {
         "ordinal": 10,
         "name": "episode_title",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "episodes",
+            "name": "title"
+          }
+        }
       },
       {
         "ordinal": 11,
         "name": "still_url",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "episodes",
+            "name": "stillUrl"
+          }
+        }
       },
       {
         "ordinal": 12,
         "name": "episode_season_number?",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "seasons",
+            "name": "seasonNumber"
+          }
+        }
       }
     ],
     "parameters": {

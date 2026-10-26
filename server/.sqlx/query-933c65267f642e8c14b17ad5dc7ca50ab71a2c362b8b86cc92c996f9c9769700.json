@@ -6,77 +6,152 @@
       {
         "ordinal": 0,
         "name": "id",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "playback_states",
+            "name": "id"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "media_id!",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "playback_states",
+            "name": "mediaId"
+          }
+        }
       },
       {
         "ordinal": 2,
         "name": "media_file_id",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "playback_states",
+            "name": "mediaFileId"
+          }
+        }
       },
       {
         "ordinal": 3,
         "name": "episode_id",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "playback_states",
+            "name": "episodeId"
+          }
+        }
       },
       {
         "ordinal": 4,
         "name": "position_seconds",
-        "type_info": "Float8"
+        "type_info": "Float8",
+        "origin": {
+          "Table": {
+            "table": "playback_states",
+            "name": "positionSeconds"
+          }
+        }
       },
       {
         "ordinal": 5,
         "name": "duration_seconds",
-        "type_info": "Float8"
+        "type_info": "Float8",
+        "origin": {
+          "Table": {
+            "table": "playback_states",
+            "name": "durationSeconds"
+          }
+        }
       },
       {
         "ordinal": 6,
         "name": "completed",
-        "type_info": "Bool"
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "playback_states",
+            "name": "completed"
+          }
+        }
       },
       {
         "ordinal": 7,
         "name": "last_played_at",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "playback_states",
+            "name": "lastPlayedAt"
+          }
+        }
       },
       {
         "ordinal": 8,
         "name": "media_title",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "title"
+          }
+        }
       },
       {
         "ordinal": 9,
         "name": "media_type!",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": "Expression"
       },
       {
         "ordinal": 10,
         "name": "poster_url",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "posterUrl"
+          }
+        }
       },
       {
         "ordinal": 11,
         "name": "fanart_url",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "fanartUrl"
+          }
+        }
       },
       {
         "ordinal": 12,
         "name": "still_url",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "episodes",
+            "name": "stillUrl"
+          }
+        }
       },
       {
         "ordinal": 13,
         "name": "progress_percent!",
-        "type_info": "Float8"
+        "type_info": "Float8",
+        "origin": "Expression"
       },
       {
         "ordinal": 14,
         "name": "episode_label",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": "Expression"
       }
     ],
     "parameters": {

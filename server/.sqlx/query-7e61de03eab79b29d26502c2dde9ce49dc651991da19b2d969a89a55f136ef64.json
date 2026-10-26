@@ -6,32 +6,68 @@
       {
         "ordinal": 0,
         "name": "id",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "id"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "year",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "year"
+          }
+        }
       },
       {
         "ordinal": 2,
         "name": "monitored",
-        "type_info": "Bool"
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "monitored"
+          }
+        }
       },
       {
         "ordinal": 3,
         "name": "imdb_id",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "imdbId"
+          }
+        }
       },
       {
         "ordinal": 4,
         "name": "overview",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "overview"
+          }
+        }
       },
       {
         "ordinal": 5,
         "name": "quality_profile_id",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "qualityProfileId"
+          }
+        }
       }
     ],
     "parameters": {

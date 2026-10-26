@@ -6,17 +6,35 @@
       {
         "ordinal": 0,
         "name": "kind",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "episode_markers",
+            "name": "type"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "start",
-        "type_info": "Float8"
+        "type_info": "Float8",
+        "origin": {
+          "Table": {
+            "table": "episode_markers",
+            "name": "startSeconds"
+          }
+        }
       },
       {
         "ordinal": 2,
         "name": "end",
-        "type_info": "Float8"
+        "type_info": "Float8",
+        "origin": {
+          "Table": {
+            "table": "episode_markers",
+            "name": "endSeconds"
+          }
+        }
       }
     ],
     "parameters": {

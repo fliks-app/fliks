@@ -6,12 +6,24 @@
       {
         "ordinal": 0,
         "name": "quality",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "media_files",
+            "name": "quality"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "episode_id",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media_files",
+            "name": "episodeId"
+          }
+        }
       }
     ],
     "parameters": {

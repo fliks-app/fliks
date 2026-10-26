@@ -44,7 +44,7 @@ impl Scratch {
         assert_ne!(name, "fliks");
         let admin = url.rsplit_once('/').unwrap().0.to_owned() + "/postgres";
         let mut c = PgConnection::connect(&admin).await.unwrap();
-        sqlx::query(&format!("CREATE DATABASE {name}"))
+        sqlx::query(sqlx::AssertSqlSafe(format!("CREATE DATABASE {name}")))
             .execute(&mut c)
             .await
             .unwrap();
@@ -72,10 +72,10 @@ impl Scratch {
         self.pool.close().await;
         let admin = self.url.rsplit_once('/').unwrap().0.to_owned() + "/postgres";
         let mut c = PgConnection::connect(&admin).await.unwrap();
-        sqlx::query(&format!(
+        sqlx::query(sqlx::AssertSqlSafe(format!(
             "DROP DATABASE IF EXISTS {} WITH (FORCE)",
             self.name
-        ))
+        )))
         .execute(&mut c)
         .await
         .unwrap();
@@ -218,7 +218,7 @@ async fn backup_and_restore_on_a_scratch_database() {
         PgConnection::connect(&(url.rsplit_once('/').unwrap().0.to_owned() + "/postgres"))
             .await
             .unwrap();
-    sqlx::query(&format!("DROP ROLE IF EXISTS {role}"))
+    sqlx::query(sqlx::AssertSqlSafe(format!("DROP ROLE IF EXISTS {role}")))
         .execute(&mut admin)
         .await
         .unwrap();

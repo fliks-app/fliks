@@ -10,11 +10,17 @@ use std::{fs, path::PathBuf};
 const SECRET: &str = "0123456789abcdef0123456789abcdef";
 
 async fn exec(pool: &PgPool, sql: &str) {
-    sqlx::query(sql).execute(pool).await.unwrap();
+    sqlx::query(sqlx::AssertSqlSafe(sql))
+        .execute(pool)
+        .await
+        .unwrap();
 }
 
 async fn scalar(pool: &PgPool, sql: &str) -> i32 {
-    sqlx::query_scalar(sql).fetch_one(pool).await.unwrap()
+    sqlx::query_scalar(sqlx::AssertSqlSafe(sql))
+        .fetch_one(pool)
+        .await
+        .unwrap()
 }
 
 async fn ids(pool: &PgPool, c: Value) -> Vec<i32> {
@@ -842,7 +848,7 @@ async fn candidates_of_one_media_are_unique_per_scope(pool: PgPool) {
     };
     exec(&pool, &insert("NULL".into(), "NULL".into())).await;
     assert!(
-        sqlx::query(&insert("NULL".into(), "NULL".into()))
+        sqlx::query(sqlx::AssertSqlSafe(insert("NULL".into(), "NULL".into())))
             .execute(&pool)
             .await
             .is_err()

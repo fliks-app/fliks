@@ -6,32 +6,68 @@
       {
         "ordinal": 0,
         "name": "id",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "episodes",
+            "name": "id"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "season_id!",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "episodes",
+            "name": "seasonId"
+          }
+        }
       },
       {
         "ordinal": 2,
         "name": "episode_number",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "episodes",
+            "name": "episodeNumber"
+          }
+        }
       },
       {
         "ordinal": 3,
         "name": "end_episode_number",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "episodes",
+            "name": "endEpisodeNumber"
+          }
+        }
       },
       {
         "ordinal": 4,
         "name": "title",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "episodes",
+            "name": "title"
+          }
+        }
       },
       {
         "ordinal": 5,
         "name": "monitored",
-        "type_info": "Bool"
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "episodes",
+            "name": "monitored"
+          }
+        }
       }
     ],
     "parameters": {

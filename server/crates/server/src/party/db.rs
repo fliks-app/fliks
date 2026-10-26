@@ -101,14 +101,14 @@ pub async fn insert(
                 .await?;
             // Read after the lock: a create queued behind another must see the party it just made.
             let now = Utc::now();
-            sqlx::query_as::<_, Row>(&format!(
+            sqlx::query_as::<_, Row>(sqlx::AssertSqlSafe(format!(
                 r#"SELECT * FROM (SELECT {COLS} FROM {FROM}) r
            WHERE r.owner_id = $1 AND r.media_id = $2 AND r.media_file_id IS NOT DISTINCT FROM $3
              AND r.episode_id IS NOT DISTINCT FROM $4 AND r.playlist_id IS NOT DISTINCT FROM $5
              AND CASE WHEN $6 THEN r.status = 'live' OR (r.status = 'scheduled' AND r.scheduled_at <= $7)
                       ELSE r.status = 'scheduled' AND r.scheduled_at = $8 END
            ORDER BY r.id LIMIT 1"#
-            ))
+            )))
             .bind(n.owner)
             .bind(item.media_id)
             .bind(item.media_file_id)
@@ -149,10 +149,12 @@ pub async fn insert(
     .await?;
     insert_items(&mut tx, id, n.programme).await?;
     add_invitees_in(&mut tx, id, invitees).await?;
-    let row = sqlx::query_as(&format!("SELECT {COLS} FROM {FROM} WHERE p.id = $1"))
-        .bind(id)
-        .fetch_one(&mut *tx)
-        .await?;
+    let row = sqlx::query_as(sqlx::AssertSqlSafe(format!(
+        "SELECT {COLS} FROM {FROM} WHERE p.id = $1"
+    )))
+    .bind(id)
+    .fetch_one(&mut *tx)
+    .await?;
     tx.commit().await?;
     Ok((row, true))
 }
@@ -214,16 +216,18 @@ pub async fn add_invitees(db: &PgPool, party: i32, users: &[i32]) -> sqlx::Resul
 }
 
 pub async fn get(db: &PgPool, id: i32) -> sqlx::Result<Option<Row>> {
-    sqlx::query_as(&format!("SELECT {COLS} FROM {FROM} WHERE p.id = $1"))
-        .bind(id)
-        .fetch_optional(db)
-        .await
+    sqlx::query_as(sqlx::AssertSqlSafe(format!(
+        "SELECT {COLS} FROM {FROM} WHERE p.id = $1"
+    )))
+    .bind(id)
+    .fetch_optional(db)
+    .await
 }
 
 pub async fn by_token(db: &PgPool, token: &str) -> sqlx::Result<Option<Row>> {
-    sqlx::query_as(&format!(
+    sqlx::query_as(sqlx::AssertSqlSafe(format!(
         r#"SELECT {COLS} FROM {FROM} WHERE p."inviteToken" = $1"#
-    ))
+    )))
     .bind(token)
     .fetch_optional(db)
     .await
@@ -335,31 +339,31 @@ pub async fn is_kicked(db: &PgPool, party: i32, user: i32) -> sqlx::Result<bool>
 
 /// `live` first, then `scheduledAt` ascending.
 pub async fn listed(db: &PgPool, user: i32) -> sqlx::Result<Vec<Row>> {
-    sqlx::query_as(&format!(
+    sqlx::query_as(sqlx::AssertSqlSafe(format!(
         r#"SELECT {COLS} FROM {FROM}
            WHERE p.status IN ('scheduled', 'live')
              AND (p."ownerId" = $1 OR EXISTS (SELECT 1 FROM watch_party_invitees i
                                             WHERE i."partyId" = p.id AND i."userId" = $1
                                               AND i."source" <> 'kicked'))
            ORDER BY (p.status = 'live') DESC, p."scheduledAt" ASC NULLS LAST, p.id"#
-    ))
+    )))
     .bind(user)
     .fetch_all(db)
     .await
 }
 
 pub async fn live_rows(db: &PgPool) -> sqlx::Result<Vec<Row>> {
-    sqlx::query_as(&format!(
+    sqlx::query_as(sqlx::AssertSqlSafe(format!(
         "SELECT {COLS} FROM {FROM} WHERE p.status = 'live'"
-    ))
+    )))
     .fetch_all(db)
     .await
 }
 
 pub async fn scheduled_rows(db: &PgPool) -> sqlx::Result<Vec<Row>> {
-    sqlx::query_as(&format!(
+    sqlx::query_as(sqlx::AssertSqlSafe(format!(
         r#"SELECT {COLS} FROM {FROM} WHERE p.status = 'scheduled' AND p."scheduledAt" IS NOT NULL"#
-    ))
+    )))
     .fetch_all(db)
     .await
 }

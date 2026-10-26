@@ -6,32 +6,68 @@
       {
         "ordinal": 0,
         "name": "public_id",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "pairing_requests",
+            "name": "publicId"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "device_id",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "pairing_requests",
+            "name": "deviceId"
+          }
+        }
       },
       {
         "ordinal": 2,
         "name": "device_name",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "pairing_requests",
+            "name": "deviceName"
+          }
+        }
       },
       {
         "ordinal": 3,
         "name": "system_name",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "pairing_requests",
+            "name": "systemName"
+          }
+        }
       },
       {
         "ordinal": 4,
         "name": "created_at",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "pairing_requests",
+            "name": "createdAt"
+          }
+        }
       },
       {
         "ordinal": 5,
         "name": "expires_at",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "pairing_requests",
+            "name": "expiresAt"
+          }
+        }
       }
     ],
     "parameters": {

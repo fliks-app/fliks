@@ -224,10 +224,11 @@ pub async fn stats(State(st): State<AppState>, a: Authed) -> Res<Json<Value>> {
         .bind(&visible)
         .fetch_all(&st.db)
         .await?;
-    let by_provider: Vec<(String, i32)> = sqlx::query_as(sqlx::AssertSqlSafe(group("sf.\"providerType\"")))
-        .bind(&visible)
-        .fetch_all(&st.db)
-        .await?;
+    let by_provider: Vec<(String, i32)> =
+        sqlx::query_as(sqlx::AssertSqlSafe(group("sf.\"providerType\"")))
+            .bind(&visible)
+            .fetch_all(&st.db)
+            .await?;
     let recent: Vec<ItemRow> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         r#"{ITEM_SELECT} WHERE sf."providerType"::text <> 'embedded' AND ($1::int[] IS NULL OR m."libraryId" = ANY($1))
            ORDER BY sf."createdAt" DESC, sf.id ASC LIMIT 10"#

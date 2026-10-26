@@ -6,12 +6,24 @@
       {
         "ordinal": 0,
         "name": "rel",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "media_files",
+            "name": "relativePath"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "folder",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "folderName"
+          }
+        }
       }
     ],
     "parameters": {

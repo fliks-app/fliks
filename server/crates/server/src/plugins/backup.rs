@@ -164,11 +164,14 @@ impl Plugins {
     /// From here to the end of the transaction every statement runs as the plugin's role.
     async fn as_plugin(&self, c: &mut PgConnection, id: &str) -> Result<(), InstallError> {
         let oid = database_oid(&self.db).await.map_err(internal)?;
-        sqlx::query(sqlx::AssertSqlSafe(format!("SET LOCAL ROLE {}", quote(&role(&oid, id)))))
-            .execute(c)
-            .await
-            .map_err(internal)
-            .map(drop)
+        sqlx::query(sqlx::AssertSqlSafe(format!(
+            "SET LOCAL ROLE {}",
+            quote(&role(&oid, id))
+        )))
+        .execute(c)
+        .await
+        .map_err(internal)
+        .map(drop)
     }
 
     /// Row count per table of the plugin's schema, for the uninstall confirmation.
@@ -190,11 +193,14 @@ impl Plugins {
         let s = schema(id);
         let mut out = vec![];
         for t in tables(&mut tx, &s).await.map_err(internal)? {
-            let n: i64 =
-                sqlx::query_scalar(sqlx::AssertSqlSafe(format!("SELECT count(*) FROM {}.{}", quote(&s), quote(&t))))
-                    .fetch_one(&mut *tx)
-                    .await
-                    .map_err(internal)?;
+            let n: i64 = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
+                "SELECT count(*) FROM {}.{}",
+                quote(&s),
+                quote(&t)
+            )))
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(internal)?;
             out.push((t, n));
         }
         Ok(out)
@@ -323,11 +329,14 @@ impl Plugins {
             .execute(&mut *tx)
             .await
             .map_err(internal)?;
-            let any: Option<i32> =
-                sqlx::query_scalar(sqlx::AssertSqlSafe(format!("SELECT 1 FROM {}.{} LIMIT 1", quote(&s), quote(t))))
-                    .fetch_optional(&mut *tx)
-                    .await
-                    .map_err(internal)?;
+            let any: Option<i32> = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
+                "SELECT 1 FROM {}.{} LIMIT 1",
+                quote(&s),
+                quote(t)
+            )))
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(internal)?;
             if any.is_some() {
                 return Err(ie(
                     StatusCode::CONFLICT,

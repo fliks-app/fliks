@@ -6,17 +6,35 @@
       {
         "ordinal": 0,
         "name": "relative_path",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "media_files",
+            "name": "relativePath"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "lib_path",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "libraries",
+            "name": "path"
+          }
+        }
       },
       {
         "ordinal": 2,
         "name": "folder_name",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "folderName"
+          }
+        }
       }
     ],
     "parameters": {

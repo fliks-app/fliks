@@ -99,10 +99,12 @@ impl MediaRow {
 }
 
 async fn media(db: &PgPool, id: i32) -> sqlx::Result<Option<MediaRow>> {
-    sqlx::query_as(sqlx::AssertSqlSafe(format!("{MEDIA_SELECT} WHERE m.id = $1")))
-        .bind(id)
-        .fetch_optional(db)
-        .await
+    sqlx::query_as(sqlx::AssertSqlSafe(format!(
+        "{MEDIA_SELECT} WHERE m.id = $1"
+    )))
+    .bind(id)
+    .fetch_optional(db)
+    .await
 }
 
 #[derive(Clone, Copy, PartialEq, Debug)]

@@ -6,32 +6,68 @@
       {
         "ordinal": 0,
         "name": "id",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "language_profiles",
+            "name": "id"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "created_at",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "language_profiles",
+            "name": "createdAt"
+          }
+        }
       },
       {
         "ordinal": 2,
         "name": "updated_at",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "language_profiles",
+            "name": "updatedAt"
+          }
+        }
       },
       {
         "ordinal": 3,
         "name": "name",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "language_profiles",
+            "name": "name"
+          }
+        }
       },
       {
         "ordinal": 4,
         "name": "audio_languages: Json<Value>",
-        "type_info": "Jsonb"
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "language_profiles",
+            "name": "audioLanguages"
+          }
+        }
       },
       {
         "ordinal": 5,
         "name": "subtitle_languages: Json<Value>",
-        "type_info": "Jsonb"
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "language_profiles",
+            "name": "subtitleLanguages"
+          }
+        }
       }
     ],
     "parameters": {

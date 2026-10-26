@@ -6,32 +6,63 @@
       {
         "ordinal": 0,
         "name": "kind!",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": "Expression"
       },
       {
         "ordinal": 1,
         "name": "library_id",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "libraryId"
+          }
+        }
       },
       {
         "ordinal": 2,
         "name": "genres",
-        "type_info": "Jsonb"
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "genres"
+          }
+        }
       },
       {
         "ordinal": 3,
         "name": "year",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "year"
+          }
+        }
       },
       {
         "ordinal": 4,
         "name": "collection_id",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "tmdbCollectionId"
+          }
+        }
       },
       {
         "ordinal": 5,
         "name": "keywords?",
-        "type_info": "Jsonb"
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "media_metadata",
+            "name": "keywords"
+          }
+        }
       }
     ],
     "parameters": {

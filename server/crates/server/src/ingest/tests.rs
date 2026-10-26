@@ -280,7 +280,10 @@ async fn file_row(c: &Ctx, m: i32, rel: &str) -> i32 {
 }
 
 async fn count(c: &Ctx, sql: &str) -> i64 {
-    sqlx::query_scalar(sql).fetch_one(&c.st.db).await.unwrap()
+    sqlx::query_scalar(sqlx::AssertSqlSafe(sql))
+        .fetch_one(&c.st.db)
+        .await
+        .unwrap()
 }
 
 async fn eventually(f: impl Fn() -> bool) -> bool {

@@ -6,22 +6,41 @@
       {
         "ordinal": 0,
         "name": "kind!",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": "Expression"
       },
       {
         "ordinal": 1,
         "name": "monitored",
-        "type_info": "Bool"
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "monitored"
+          }
+        }
       },
       {
         "ordinal": 2,
         "name": "profile_id?",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "quality_profiles",
+            "name": "id"
+          }
+        }
       },
       {
         "ordinal": 3,
         "name": "cutoff?",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "quality_profiles",
+            "name": "cutoff"
+          }
+        }
       }
     ],
     "parameters": {
@@ -32,8 +51,8 @@
     "nullable": [
       null,
       false,
-      false,
-      false
+      true,
+      true
     ]
   },
   "hash": "a40cb30c6fc55835df8f260d75f9ee8afe0176a2694899b36c5620e367edf013"

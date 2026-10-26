@@ -21,10 +21,11 @@ pub async fn matches(
     min_age: Option<u32>,
 ) -> sqlx::Result<Vec<t::ReleaseMatch>> {
     let db = &st.db;
-    let library: Vec<MediaRow> =
-        sqlx::query_as(sqlx::AssertSqlSafe(format!("{MEDIA_SELECT} WHERE m.monitored ORDER BY m.id")))
-            .fetch_all(db)
-            .await?;
+    let library: Vec<MediaRow> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
+        "{MEDIA_SELECT} WHERE m.monitored ORDER BY m.id"
+    )))
+    .fetch_all(db)
+    .await?;
     let (library, identified) = identify(library, titles).await;
     let mut out = vec![];
     for (entry, se, coverage, hit) in identified {
