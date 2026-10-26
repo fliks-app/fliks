@@ -310,6 +310,7 @@ function createHarness(opts: {
           isTouch: () => false,
           isDpad: () => false,
           isDesktop: () => true,
+          isDesktopNative: () => false,
           formFactor: () => 'desktop',
           tvPlatform: () => null,
           desktopPlatform: () => null,
@@ -2063,6 +2064,64 @@ describe('PlayerComponent startup', () => {
 
     expect(h.streamingApi.getPlaybackInfo).toHaveBeenCalledTimes(1);
     expect((h.streamingApi.getPlaybackInfo.mock.calls[0] as any[])[3]).toBe(1);
+  });
+
+  describe('pre-roll first', () => {
+    const launch = (h: ReturnType<typeof createHarness>, query: Record<string, string> = {}) => {
+      (TestBed.inject(ActivatedRoute).snapshot.queryParams as any) = { mediaId: String(MEDIA_ID), ...query };
+      h.component.createShakaEngine = async () => { h.component.engine = h.engine; };
+      return h.component.ngAfterViewInit();
+    };
+    const deferred = (): PlaybackInfoResponse =>
+      ({ deferred: true, preRoll: [{ mediaFileId: TRAILER_FILE_ID }] }) as unknown as PlaybackInfoResponse;
+    const asked = (h: ReturnType<typeof createHarness>) =>
+      (h.streamingApi.getPlaybackInfo.mock.calls as any[][]).map((c) => [c[0], c[7]?.preRollFirst]);
+
+    it('asks for the pre-roll first on a plain launch', async () => {
+      const h = createHarness();
+      await launch(h);
+      expect(asked(h)).toEqual([[MAIN_FILE_ID, true]]);
+    });
+
+    it.each<Record<string, string>>([{ t: '30' }, { noPreRoll: '1' }])('does not ask when %o', async (query) => {
+      const h = createHarness();
+      await launch(h, query);
+      expect(asked(h)).toEqual([[MAIN_FILE_ID, false]]);
+    });
+
+    it('plays the pre-roll without ever opening the film, which opens after the last item', async () => {
+      const h = createHarness();
+      h.streamingApi.getPlaybackInfo.mockResolvedValueOnce(deferred());
+      await launch(h);
+
+      expect(asked(h)).toEqual([[MAIN_FILE_ID, true], [TRAILER_FILE_ID, undefined]]);
+      expect(h.streamingApi.stopSession).not.toHaveBeenCalled();
+      expect(h.component.preRollActive()).toBe(true);
+      expect(h.component.mediaFileId).toBe(TRAILER_FILE_ID);
+
+      h.state.ended.set(true);
+      await h.component.advancePreRoll();
+      await flush();
+      expect(asked(h).at(-1)).toEqual([MAIN_FILE_ID, undefined]);
+      expect(h.component.mediaFileId).toBe(MAIN_FILE_ID);
+    });
+
+    it('opens the film at once when every pre-roll item fails to negotiate', async () => {
+      const h = createHarness({ trailerPlaybackInfo: 'reject' });
+      h.streamingApi.getPlaybackInfo.mockResolvedValueOnce(deferred());
+      await launch(h);
+
+      expect(asked(h)).toEqual([[MAIN_FILE_ID, true], [TRAILER_FILE_ID, undefined], [MAIN_FILE_ID, undefined]]);
+      expect(h.component.preRollActive()).toBe(false);
+      expect(h.component.playbackInfo.sessionId).toBe(`sid-${MAIN_FILE_ID}`);
+    });
+
+    it('still stops the film session a server older than this opened for it', async () => {
+      const h = createHarness({ preRoll: [{ mediaFileId: TRAILER_FILE_ID }] });
+      await launch(h);
+      expect(h.streamingApi.stopSession).toHaveBeenCalledWith(`sid-${MAIN_FILE_ID}`);
+      expect(h.component.mediaFileId).toBe(TRAILER_FILE_ID);
+    });
   });
 
   it('crops on the Tizen engine before its first load', async () => {

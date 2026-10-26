@@ -1122,7 +1122,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       const requestPlaybackInfo = () => {
         if (this.isOfflinePlayback || playbackInfoPromise) return;
         // The launch failure path shows the server's reason in its own toast and card.
-        playbackInfoPromise = this.negotiatePlayback(resumeTime, {}, { skipErrorToast: true });
+        playbackInfoPromise = this.negotiatePlayback(resumeTime, {}, {
+          skipErrorToast: true,
+          preRollFirst: this.preRollMayRun(resumeTime),
+        });
       };
       // Minted in parallel with the other loads (time-to-first-frame critical path); awaited before headers are
       // built.
@@ -1202,6 +1205,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         startTime ??= this.playbackInfo.startAtSeconds || undefined;
         this.pendingStartTime = startTime ?? 0;
         await this.maybeStartPreRoll(startTime);
+        // No item played (every one failed to negotiate): the film opens now, the way a plugin-free launch does.
+        if (this.playbackInfo.deferred && !this.preRollActive()) {
+          this.playbackInfo = await this.negotiatePlayback(resumeTime, {}, { skipErrorToast: true });
+        }
         const pi = this.playbackInfo!;
 
         // Mode, options + the rung the backend locked in, BEFORE load
@@ -1370,15 +1377,19 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     return resolved;
   }
 
+  /** Whether a pre-roll may take over this launch, so the server can leave the film's session closed. */
+  private preRollMayRun(startTime: number | undefined): boolean {
+    return !startTime && !this.isOfflinePlayback && !this.castService.isConnected()
+      && this.route.snapshot.queryParams['noPreRoll'] !== '1';
+  }
+
   /** Take over the launch with the plugin's pre-roll list when the response
    *  carries one. No-op on resume, offline, Cast, or when nothing negotiates. */
   private async maybeStartPreRoll(
     startTime: number | undefined,
   ): Promise<void> {
     const items = this.playbackInfo?.preRoll ?? [];
-    if (!items.length) return;
-    if (startTime || this.isOfflinePlayback || this.castService.isConnected()) return;
-    if (this.route.snapshot.queryParams['noPreRoll'] === '1') return;
+    if (!items.length || !this.preRollMayRun(startTime)) return;
 
     const mainFileId = this.mediaFileId;
     const mainSid = this.playbackInfo!.sessionId;
@@ -2385,7 +2396,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private async negotiatePlayback(
     startAt?: number,
     over: Partial<{ fileId: number; profile: DeviceProfile; burnInId: number | null; quality: string }> = {},
-    opts?: { skipErrorToast?: boolean; replaces?: string },
+    opts?: { skipErrorToast?: boolean; replaces?: string; preRollFirst?: boolean },
   ): Promise<PlaybackInfoResponse> {
     const fileId = over.fileId ?? this.mediaFileId;
     const onScreen = fileId === this.mediaFileId;

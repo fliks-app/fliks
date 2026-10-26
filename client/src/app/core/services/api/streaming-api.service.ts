@@ -22,6 +22,8 @@ const SSE_CONNECTION_HEADER = 'X-Fliks-Sse-Connection';
 export type PlayMethod = 'DirectPlay' | 'DirectStream' | 'Transcode';
 
 export interface PlaybackInfoResponse {
+  /** Answer to `preRollFirst` when pre-roll items come first: only `preRoll` is set, no session is open. */
+  deferred?: boolean;
   /** Where playback starts: the `startAt` sent, else the saved resume point, else 0. */
   startAtSeconds: number;
   mediaFileId: number;
@@ -478,7 +480,7 @@ export class StreamingApiService {
     startQuality?: string,
     startAt?: number,
     download?: boolean,
-    opts?: { skipErrorToast?: boolean; replaces?: string },
+    opts?: { skipErrorToast?: boolean; replaces?: string; preRollFirst?: boolean },
   ): Promise<PlaybackInfoResponse> {
     const query = this.buildQuery({
       token: this.playbackToken ?? undefined,
@@ -488,6 +490,7 @@ export class StreamingApiService {
       startAt: startAt ?? undefined,
       download: download ? true : undefined,
       replaces: opts?.replaces,
+      preRollFirst: opts?.preRollFirst ? true : undefined,
     });
     return firstValueFrom(
       this.http.post<PlaybackInfoResponse>(
