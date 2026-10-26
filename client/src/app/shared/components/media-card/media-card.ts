@@ -1,4 +1,4 @@
-import { Component, ElementRef, InjectionToken, input, output, computed, inject, linkedSignal, viewChild } from '@angular/core';
+import { Component, booleanAttribute, ElementRef, InjectionToken, input, output, computed, inject, linkedSignal, viewChild } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { NgClass, DecimalPipe } from '@angular/common';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
@@ -87,7 +87,7 @@ export class MediaCardComponent {
   private readonly displaySettings = inject(DisplaySettingsService);
   private readonly inSearch = inject(SEARCH_CARD_CONTEXT, { optional: true }) ?? false;
   /** Hover overlay (play button) only makes sense on a real pointer device. */
-  protected readonly showHoverOverlay = computed(() => this.device.input() === 'mouse');
+  protected readonly showHoverOverlay = computed(() => !this.selectOnly() && this.device.input() === 'mouse');
   /** The figure is the single focus target; child links stay clickable but never steal spatial-nav focus. */
   protected readonly innerTabindex = -1;
 
@@ -173,6 +173,8 @@ export class MediaCardComponent {
   readonly playlistEpisodeId = input<number | null>(null);
 
   // Events
+  /** A picker's poster: no links, hover overlay or actions panel, just `clicked`. */
+  readonly selectOnly = input(false, { transform: booleanAttribute });
   readonly clicked = output<void>();
   readonly played = output<void>();
   readonly dismissed = output<void>();
@@ -195,6 +197,7 @@ export class MediaCardComponent {
   protected readonly _title = computed(() => this.title() || this.media()?.title || '');
   protected readonly _rating = computed(() => this.rating() || this.media()?.rating || 0);
   protected readonly _link = computed(() => {
+    if (this.selectOnly()) return null;
     if (this.link()) return this.link();
     const m = this.media();
     return m ? ['/' + (m.type === 'movie' ? 'movies' : 'series'), '' + m.id] : null;
@@ -415,6 +418,10 @@ export class MediaCardComponent {
   });
 
   protected onCardClick() {
+    if (this.selectOnly()) {
+      this.clicked.emit();
+      return;
+    }
     this.prefetchHeroArtwork();
     this.flagPosterForTransition();
     // 'play' intent: the parent's (clicked) handler routes to /watch, so don't navigate to detail here.
@@ -558,6 +565,7 @@ export class MediaCardComponent {
   /** Core list merged with registry contributions, sorted by weight then id and filtered; unknown ids/kinds drop the row.
    * `extraActions` splices in after the watched toggle, before Remove. */
   protected readonly cardActions = computed((): CardAction[] => {
+    if (this.selectOnly()) return [];
     const ctx = this.cardActionsContext();
     const watched = this.status() === 'watched';
     const rows = resolveMenuContributions({

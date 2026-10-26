@@ -3707,5 +3707,24 @@
     "reschedule_message": "Neuer Termin für \"{{name}}\": {{when}}. Bestätigen?",
     "regenerate_title": "Neuen Link erstellen",
     "regenerate_message": "Der aktuelle Einladungslink funktioniert nicht mehr. Wer nur diesen Link hat, verliert den Zugang."
+  },
+  "media_picker": {
+    "title": "Titel auswählen",
+    "search_placeholder": "Mediathek durchsuchen…",
+    "hint": "Gib einen Titel ein, um deine Mediathek zu durchsuchen.",
+    "no_results": "In der Mediathek nichts gefunden.",
+    "back": "Zurück",
+    "mode_label": "Was hinzugefügt wird",
+    "mode_this": "Diese Folge",
+    "mode_until_end": "Bis zum Ende der Staffel",
+    "mode_season": "Ganze Staffel",
+    "mode_multiple": "Mehrere Folgen",
+    "hint_this": "Wähle die Folge, die hinzugefügt werden soll.",
+    "hint_until_end": "Wähle die erste Folge, der Rest der Staffel folgt.",
+    "hint_multiple": "Hake die Folgen an, in beliebigen Staffeln.",
+    "no_episodes": "In dieser Staffel ist keine Folge verfügbar.",
+    "episode_number": "Folge {{number}}",
+    "add_count_one": "{{count}} Folge hinzufügen",
+    "add_count_other": "{{count}} Folgen hinzufügen"
   }
 }

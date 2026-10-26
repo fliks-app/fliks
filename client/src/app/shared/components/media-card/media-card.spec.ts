@@ -784,3 +784,21 @@ describe('MediaCardComponent download indicator', () => {
     expect(host(h).querySelector('[title="downloads.on_device"]')).toBeNull();
   });
 });
+
+describe('MediaCardComponent: selectOnly', () => {
+  it('a mouse click only emits clicked: no link, play button, actions or navigation', async () => {
+    const h = await createFixture(FULL_MEMBER, { media: makeMedia({ files: [{ id: 1 } as never] }), selectOnly: true });
+    const host = h.fixture.nativeElement as HTMLElement;
+    const navigate = vi.spyOn(h.router, 'navigate');
+    let clicks = 0;
+    h.fixture.componentInstance.clicked.subscribe(() => clicks++);
+    h.fixture.detectChanges();
+    expect(host.querySelector('a')).toBeNull();
+    expect(host.querySelector('button')).toBeNull();
+    expect(actions(h)).toEqual([]);
+    host.querySelector<HTMLElement>('figure')!.click();
+    expect(clicks).toBe(1);
+    expect(navigate).not.toHaveBeenCalled();
+    expect(h.playableMedia.play).not.toHaveBeenCalled();
+  });
+});
