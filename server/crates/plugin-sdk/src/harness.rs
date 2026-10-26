@@ -186,9 +186,11 @@ async fn drop_database(admin: &PgConnectOptions, db: &str) -> sqlx::Result<()> {
     .bind(db)
     .fetch_optional(&mut c)
     .await?;
-    sqlx::raw_sql(&format!("DROP DATABASE IF EXISTS \"{db}\" WITH (FORCE)"))
-        .execute(&mut c)
-        .await?;
+    sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+        "DROP DATABASE IF EXISTS \"{db}\" WITH (FORCE)"
+    )))
+    .execute(&mut c)
+    .await?;
     let Some(oid) = oid else { return Ok(()) };
     let roles: Vec<String> =
         sqlx::query_scalar("SELECT rolname::text FROM pg_roles WHERE rolname LIKE $1")
@@ -196,7 +198,7 @@ async fn drop_database(admin: &PgConnectOptions, db: &str) -> sqlx::Result<()> {
             .fetch_all(&mut c)
             .await?;
     for r in roles {
-        sqlx::raw_sql(&format!("DROP ROLE IF EXISTS \"{r}\""))
+        sqlx::raw_sql(sqlx::AssertSqlSafe(format!("DROP ROLE IF EXISTS \"{r}\"")))
             .execute(&mut c)
             .await?;
     }
@@ -251,7 +253,7 @@ impl Harness {
         let mut c = PgConnection::connect_with(&admin)
             .await
             .expect("the admin URL");
-        sqlx::raw_sql(&format!("CREATE DATABASE \"{db}\""))
+        sqlx::raw_sql(sqlx::AssertSqlSafe(format!("CREATE DATABASE \"{db}\"")))
             .execute(&mut c)
             .await
             .expect("CREATE DATABASE");

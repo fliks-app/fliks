@@ -6,17 +6,35 @@
       {
         "ordinal": 0,
         "name": "id",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "auto_approval_rules",
+            "name": "id"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "name",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "auto_approval_rules",
+            "name": "name"
+          }
+        }
       },
       {
         "ordinal": 2,
         "name": "criteria: Json<Value>",
-        "type_info": "Jsonb"
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "auto_approval_rules",
+            "name": "criteria"
+          }
+        }
       }
     ],
     "parameters": {

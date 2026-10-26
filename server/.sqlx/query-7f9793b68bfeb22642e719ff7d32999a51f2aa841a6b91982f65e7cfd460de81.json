@@ -6,17 +6,35 @@
       {
         "ordinal": 0,
         "name": "collection_id",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "tmdbCollectionId"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "collection_name",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "tmdbCollectionName"
+          }
+        }
       },
       {
         "ordinal": 2,
         "name": "library_id",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "libraryId"
+          }
+        }
       }
     ],
     "parameters": {

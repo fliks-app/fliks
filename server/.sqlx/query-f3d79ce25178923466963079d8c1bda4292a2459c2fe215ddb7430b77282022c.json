@@ -6,12 +6,24 @@
       {
         "ordinal": 0,
         "name": "lastLogin",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "lastLogin"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "createdAt",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "createdAt"
+          }
+        }
       }
     ],
     "parameters": {

@@ -298,7 +298,10 @@ fn domain(c: &mut Ctx) -> Vec<DomainEvent> {
 }
 
 async fn q(pool: &PgPool, sql: &str) {
-    sqlx::query(sql).execute(pool).await.unwrap();
+    sqlx::query(sqlx::AssertSqlSafe(sql))
+        .execute(pool)
+        .await
+        .unwrap();
 }
 
 async fn rule(c: &Ctx, criteria: Value) {

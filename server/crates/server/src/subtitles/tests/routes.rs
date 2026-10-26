@@ -31,7 +31,10 @@ pub struct Ctx {
 }
 
 pub async fn one(pool: &PgPool, sql: &str) -> i32 {
-    sqlx::query_scalar(sql).fetch_one(pool).await.unwrap()
+    sqlx::query_scalar(sqlx::AssertSqlSafe(sql))
+        .fetch_one(pool)
+        .await
+        .unwrap()
 }
 
 static N: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
@@ -182,9 +185,9 @@ pub async fn call(
 
 /// An enabled OpenSubtitles row pointed at the stub, with a search hit and a downloadable file.
 pub async fn provider(c: &Ctx, ptype: &str) -> i32 {
-    sqlx::query_scalar(&format!(
+    sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
         r#"INSERT INTO subtitle_providers (name, "type", settings, priority) VALUES ('P', '{ptype}', '{{"apiKey":"K"}}', 1) RETURNING id"#
-    ))
+    )))
     .fetch_one(&c.pool)
     .await
     .unwrap()

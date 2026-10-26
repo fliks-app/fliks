@@ -6,232 +6,508 @@
       {
         "ordinal": 0,
         "name": "sessionId",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "playback_qoe_sessions",
+            "name": "sessionId"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "playbackId",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "playback_qoe_sessions",
+            "name": "playbackId"
+          }
+        }
       },
       {
         "ordinal": 2,
         "name": "userId",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "playback_qoe_sessions",
+            "name": "userId"
+          }
+        }
       },
       {
         "ordinal": 3,
         "name": "mediaFileId",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "playback_qoe_sessions",
+            "name": "mediaFileId"
+          }
+        }
       },
       {
         "ordinal": 4,
         "name": "mediaTitle",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "playback_qoe_sessions",
+            "name": "mediaTitle"
+          }
+        }
       },
       {
         "ordinal": 5,
         "name": "startedAt",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "playback_qoe_sessions",
+            "name": "startedAt"
+          }
+        }
       },
       {
         "ordinal": 6,
         "name": "lastSeenAt",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "playback_qoe_sessions",
+            "name": "lastSeenAt"
+          }
+        }
       },
       {
         "ordinal": 7,
         "name": "endedAt",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "playback_qoe_sessions",
+            "name": "endedAt"
+          }
+        }
       },
       {
         "ordinal": 8,
         "name": "deviceLabel",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "playback_qoe_sessions",
+            "name": "deviceLabel"
+          }
+        }
       },
       {
         "ordinal": 9,
         "name": "systemName",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "playback_qoe_sessions",
+            "name": "systemName"
+          }
+        }
       },
       {
         "ordinal": 10,
         "name": "appVersion",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "playback_qoe_sessions",
+            "name": "appVersion"
+          }
+        }
       },
       {
         "ordinal": 11,
         "name": "engine",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "playback_qoe_sessions",
+            "name": "engine"
+          }
+        }
       },
       {
         "ordinal": 12,
         "name": "cmcd",
-        "type_info": "Bool"
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "playback_qoe_sessions",
+            "name": "cmcd"
+          }
+        }
       },
       {
         "ordinal": 13,
         "name": "cmcdClaimed",
-        "type_info": "Bool"
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "playback_qoe_sessions",
+            "name": "cmcdClaimed"
+          }
+        }
       },
       {
         "ordinal": 14,
         "name": "playMethod",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "playback_qoe_sessions",
+            "name": "playMethod"
+          }
+        }
       },
       {
         "ordinal": 15,
         "name": "quality",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "playback_qoe_sessions",
+            "name": "quality"
+          }
+        }
       },
       {
         "ordinal": 16,
         "name": "transcodeReasons",
-        "type_info": "Jsonb"
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "playback_qoe_sessions",
+            "name": "transcodeReasons"
+          }
+        }
       },
       {
         "ordinal": 17,
         "name": "videoCodec",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "playback_qoe_sessions",
+            "name": "videoCodec"
+          }
+        }
       },
       {
         "ordinal": 18,
         "name": "width",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "playback_qoe_sessions",
+            "name": "width"
+          }
+        }
       },
       {
         "ordinal": 19,
         "name": "height",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "playback_qoe_sessions",
+            "name": "height"
+          }
+        }
       },
       {
         "ordinal": 20,
         "name": "decoderName",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "playback_qoe_sessions",
+            "name": "decoderName"
+          }
+        }
       },
       {
         "ordinal": 21,
         "name": "hwDecoder",
-        "type_info": "Bool"
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "playback_qoe_sessions",
+            "name": "hwDecoder"
+          }
+        }
       },
       {
         "ordinal": 22,
         "name": "watchedMs",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "playback_qoe_sessions",
+            "name": "watchedMs"
+          }
+        }
       },
       {
         "ordinal": 23,
         "name": "stallCount",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "playback_qoe_sessions",
+            "name": "stallCount"
+          }
+        }
       },
       {
         "ordinal": 24,
         "name": "stallMs",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "playback_qoe_sessions",
+            "name": "stallMs"
+          }
+        }
       },
       {
         "ordinal": 25,
         "name": "droppedFrames",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "playback_qoe_sessions",
+            "name": "droppedFrames"
+          }
+        }
       },
       {
         "ordinal": 26,
         "name": "decodedFrames",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "playback_qoe_sessions",
+            "name": "decodedFrames"
+          }
+        }
       },
       {
         "ordinal": 27,
         "name": "avgBandwidthBps",
-        "type_info": "Float8"
+        "type_info": "Float8",
+        "origin": {
+          "Table": {
+            "table": "playback_qoe_sessions",
+            "name": "avgBandwidthBps"
+          }
+        }
       },
       {
         "ordinal": 28,
         "name": "minBandwidthBps",
-        "type_info": "Float8"
+        "type_info": "Float8",
+        "origin": {
+          "Table": {
+            "table": "playback_qoe_sessions",
+            "name": "minBandwidthBps"
+          }
+        }
       },
       {
         "ordinal": 29,
         "name": "avgVariantBitrate",
-        "type_info": "Float8"
+        "type_info": "Float8",
+        "origin": {
+          "Table": {
+            "table": "playback_qoe_sessions",
+            "name": "avgVariantBitrate"
+          }
+        }
       },
       {
         "ordinal": 30,
         "name": "recoveryReloads",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "playback_qoe_sessions",
+            "name": "recoveryReloads"
+          }
+        }
       },
       {
         "ordinal": 31,
         "name": "errorCount",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "playback_qoe_sessions",
+            "name": "errorCount"
+          }
+        }
       },
       {
         "ordinal": 32,
         "name": "medianTranscodeSpeed",
-        "type_info": "Float8"
+        "type_info": "Float8",
+        "origin": {
+          "Table": {
+            "table": "playback_qoe_sessions",
+            "name": "medianTranscodeSpeed"
+          }
+        }
       },
       {
         "ordinal": 33,
         "name": "stallBufferAheadS",
-        "type_info": "Float8"
+        "type_info": "Float8",
+        "origin": {
+          "Table": {
+            "table": "playback_qoe_sessions",
+            "name": "stallBufferAheadS"
+          }
+        }
       },
       {
         "ordinal": 34,
         "name": "stallBandwidthBps",
-        "type_info": "Float8"
+        "type_info": "Float8",
+        "origin": {
+          "Table": {
+            "table": "playback_qoe_sessions",
+            "name": "stallBandwidthBps"
+          }
+        }
       },
       {
         "ordinal": 35,
         "name": "cmcdThroughputBps",
-        "type_info": "Float8"
+        "type_info": "Float8",
+        "origin": {
+          "Table": {
+            "table": "playback_qoe_sessions",
+            "name": "cmcdThroughputBps"
+          }
+        }
       },
       {
         "ordinal": 36,
         "name": "unrecoveredError",
-        "type_info": "Bool"
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "playback_qoe_sessions",
+            "name": "unrecoveredError"
+          }
+        }
       },
       {
         "ordinal": 37,
         "name": "sampleCount",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "playback_qoe_sessions",
+            "name": "sampleCount"
+          }
+        }
       },
       {
         "ordinal": 38,
         "name": "stallCauseMs",
-        "type_info": "Jsonb"
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "playback_qoe_sessions",
+            "name": "stallCauseMs"
+          }
+        }
       },
       {
         "ordinal": 39,
         "name": "stallReasonMs",
-        "type_info": "Jsonb"
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "playback_qoe_sessions",
+            "name": "stallReasonMs"
+          }
+        }
       },
       {
         "ordinal": 40,
         "name": "pipeline",
-        "type_info": "Jsonb"
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "playback_qoe_sessions",
+            "name": "pipeline"
+          }
+        }
       },
       {
         "ordinal": 41,
         "name": "verdict",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "playback_qoe_sessions",
+            "name": "verdict"
+          }
+        }
       },
       {
         "ordinal": 42,
         "name": "confidence",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "playback_qoe_sessions",
+            "name": "confidence"
+          }
+        }
       },
       {
         "ordinal": 43,
         "name": "reasons",
-        "type_info": "Jsonb"
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "playback_qoe_sessions",
+            "name": "reasons"
+          }
+        }
       },
       {
         "ordinal": 44,
         "name": "playbackVerdict",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "playback_qoe_sessions",
+            "name": "playbackVerdict"
+          }
+        }
       },
       {
         "ordinal": 45,
         "name": "playbackConfidence",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "playback_qoe_sessions",
+            "name": "playbackConfidence"
+          }
+        }
       }
     ],
     "parameters": {

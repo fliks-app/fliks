@@ -46,9 +46,9 @@ fn view(r: &Row) -> Value {
 }
 
 pub async fn find(st: &AppState, id: i32) -> Res<Row> {
-    sqlx::query_as::<_, Row>(&format!(
+    sqlx::query_as::<_, Row>(sqlx::AssertSqlSafe(format!(
         "SELECT {COLS} FROM translation_providers WHERE id = $1"
-    ))
+    )))
     .bind(id)
     .fetch_optional(&st.db)
     .await?
@@ -57,9 +57,9 @@ pub async fn find(st: &AppState, id: i32) -> Res<Row> {
 
 /// The enabled default, else the first enabled one (`findDefault`).
 pub async fn find_default(st: &AppState) -> Res<Option<Row>> {
-    Ok(sqlx::query_as::<_, Row>(&format!(
+    Ok(sqlx::query_as::<_, Row>(sqlx::AssertSqlSafe(format!(
         r#"SELECT {COLS} FROM translation_providers WHERE enabled = true ORDER BY "isDefault" DESC, id ASC LIMIT 1"#
-    ))
+    )))
     .fetch_optional(&st.db)
     .await?)
 }
@@ -162,9 +162,9 @@ async fn clear_other_defaults(tx: &mut PgConnection, keep: i32) -> sqlx::Result<
 #[utoipa::path(get, path = "/api/subtitles/translation-providers/available", responses((status = 200)))]
 pub async fn available(State(st): State<AppState>, a: Authed) -> Res<Json<Vec<Value>>> {
     a.require(Action::Create, Subject::SubtitleFile)?;
-    let rows: Vec<Row> = sqlx::query_as(&format!(
+    let rows: Vec<Row> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         r#"SELECT {COLS} FROM translation_providers WHERE enabled = true ORDER BY "isDefault" DESC, id ASC"#
-    ))
+    )))
     .fetch_all(&st.db)
     .await?;
     Ok(Json(rows.iter().map(|r| json!({"id": r.id, "name": r.name, "engine": r.engine, "isDefault": r.is_default})).collect()))
@@ -213,9 +213,9 @@ async fn probe_body(st: &AppState, v: Value) -> Res<Probe> {
     };
     let stored = match id {
         Some(i) => {
-            sqlx::query_as::<_, Row>(&format!(
+            sqlx::query_as::<_, Row>(sqlx::AssertSqlSafe(format!(
                 "SELECT {COLS} FROM translation_providers WHERE id = $1"
-            ))
+            )))
             .bind(i)
             .fetch_optional(&st.db)
             .await?
@@ -297,10 +297,10 @@ pub async fn create(
     sqlx::query("SELECT pg_advisory_xact_lock(hashtext('translation_providers_default'))")
         .execute(&mut *tx)
         .await?;
-    let row: Row = sqlx::query_as(&format!(
+    let row: Row = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         r#"INSERT INTO translation_providers (name, engine, enabled, "isDefault", settings)
            VALUES ($1, $2::text::translation_providers_engine_enum, $3, $4, $5) RETURNING {COLS}"#
-    ))
+    )))
     .bind(b.name.unwrap_or_default())
     .bind(&engine)
     .bind(b.enabled.unwrap_or(true))
@@ -318,9 +318,9 @@ pub async fn create(
 #[utoipa::path(get, path = "/api/subtitles/translation-providers", responses((status = 200)))]
 pub async fn list(State(st): State<AppState>, a: Authed) -> Res<Json<Vec<Value>>> {
     policy(&a, Action::Read)?;
-    let rows: Vec<Row> = sqlx::query_as(&format!(
+    let rows: Vec<Row> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         r#"SELECT {COLS} FROM translation_providers ORDER BY "isDefault" DESC, name ASC, id ASC"#
-    ))
+    )))
     .fetch_all(&st.db)
     .await?;
     Ok(Json(rows.iter().map(view).collect()))
@@ -347,9 +347,9 @@ pub async fn update(
     sqlx::query("SELECT pg_advisory_xact_lock(hashtext('translation_providers_default'))")
         .execute(&mut *tx)
         .await?;
-    let cur: Row = sqlx::query_as(&format!(
+    let cur: Row = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         "SELECT {COLS} FROM translation_providers WHERE id = $1 FOR UPDATE"
-    ))
+    )))
     .bind(id)
     .fetch_optional(&mut *tx)
     .await?
@@ -374,10 +374,10 @@ pub async fn update(
         None => cur.settings.clone(),
     };
     engines::validate_url_fields(&engine, &settings)?;
-    let row: Row = sqlx::query_as(&format!(
+    let row: Row = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         r#"UPDATE translation_providers SET name = $2, engine = $3::text::translation_providers_engine_enum, enabled = $4,
              "isDefault" = $5, settings = $6, "updatedAt" = now() WHERE id = $1 RETURNING {COLS}"#
-    ))
+    )))
     .bind(id)
     .bind(b.name.unwrap_or(cur.name))
     .bind(&engine)
@@ -401,9 +401,9 @@ pub async fn remove(State(st): State<AppState>, a: Authed, id: Id) -> Res<Status
     sqlx::query("SELECT pg_advisory_xact_lock(hashtext('translation_providers_default'))")
         .execute(&mut *tx)
         .await?;
-    let cur: Row = sqlx::query_as(&format!(
+    let cur: Row = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         "SELECT {COLS} FROM translation_providers WHERE id = $1 FOR UPDATE"
-    ))
+    )))
     .bind(id)
     .fetch_optional(&mut *tx)
     .await?

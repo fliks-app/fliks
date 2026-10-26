@@ -6,17 +6,35 @@
       {
         "ordinal": 0,
         "name": "media_id",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "likes",
+            "name": "mediaId"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "season_id",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "likes",
+            "name": "seasonId"
+          }
+        }
       },
       {
         "ordinal": 2,
         "name": "episode_id",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "likes",
+            "name": "episodeId"
+          }
+        }
       }
     ],
     "parameters": {

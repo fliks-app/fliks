@@ -66,7 +66,10 @@ impl Ctx {
     }
 
     async fn sql(&self, q: &str) {
-        sqlx::raw_sql(q).execute(&self.pool).await.unwrap();
+        sqlx::raw_sql(sqlx::AssertSqlSafe(q))
+            .execute(&self.pool)
+            .await
+            .unwrap();
     }
 
     async fn positions(&self) -> Vec<(i32, i32)> {

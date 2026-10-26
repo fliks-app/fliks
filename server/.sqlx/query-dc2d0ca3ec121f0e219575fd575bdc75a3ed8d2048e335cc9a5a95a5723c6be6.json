@@ -6,17 +6,35 @@
       {
         "ordinal": 0,
         "name": "title?",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "episodes",
+            "name": "title"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "number?",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "episodes",
+            "name": "episodeNumber"
+          }
+        }
       },
       {
         "ordinal": 2,
         "name": "season?",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "seasons",
+            "name": "seasonNumber"
+          }
+        }
       }
     ],
     "parameters": {
@@ -27,7 +45,7 @@
     "nullable": [
       true,
       false,
-      false
+      true
     ]
   },
   "hash": "dc2d0ca3ec121f0e219575fd575bdc75a3ed8d2048e335cc9a5a95a5723c6be6"

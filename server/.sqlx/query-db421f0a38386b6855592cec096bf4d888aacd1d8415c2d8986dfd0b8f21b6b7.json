@@ -6,12 +6,19 @@
       {
         "ordinal": 0,
         "name": "library_id!",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "libraryId"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "count!",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": "Expression"
       }
     ],
     "parameters": {

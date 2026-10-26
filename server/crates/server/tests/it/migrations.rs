@@ -22,14 +22,20 @@ async fn apply_only(pool: &PgPool, version: i64) {
 }
 
 async fn sql(pool: &PgPool, q: &str) {
-    sqlx::raw_sql(q).execute(pool).await.unwrap();
+    sqlx::raw_sql(sqlx::AssertSqlSafe(q))
+        .execute(pool)
+        .await
+        .unwrap();
 }
 
 async fn rows<T>(pool: &PgPool, q: &str) -> Vec<T>
 where
     T: for<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> + Send + Unpin,
 {
-    sqlx::query_as(q).fetch_all(pool).await.unwrap()
+    sqlx::query_as(sqlx::AssertSqlSafe(q))
+        .fetch_all(pool)
+        .await
+        .unwrap()
 }
 
 fn s(v: &[&str]) -> Vec<String> {
@@ -573,7 +579,10 @@ async fn adopting_a_v4_database_matches_a_fresh_one(pool: PgPool) {
         format!("DROP DATABASE IF EXISTS {fresh_db}"),
         format!("CREATE DATABASE {fresh_db}"),
     ] {
-        sqlx::query(&stmt).execute(&pool).await.unwrap();
+        sqlx::query(sqlx::AssertSqlSafe(stmt))
+            .execute(&pool)
+            .await
+            .unwrap();
     }
     let fresh = PgPool::connect_with(pool.connect_options().as_ref().clone().database(fresh_db))
         .await
@@ -583,7 +592,7 @@ async fn adopting_a_v4_database_matches_a_fresh_one(pool: PgPool) {
     let adopted: Vec<(String,)> = rows(&pool, SCHEMA).await;
     let built: Vec<(String,)> = rows(&fresh, SCHEMA).await;
     fresh.close().await;
-    sqlx::query(&format!("DROP DATABASE {fresh_db}"))
+    sqlx::query(sqlx::AssertSqlSafe(format!("DROP DATABASE {fresh_db}")))
         .execute(&pool)
         .await
         .unwrap();

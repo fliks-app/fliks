@@ -31,7 +31,10 @@ struct Ctx {
 }
 
 async fn one(pool: &PgPool, sql: &str) -> i32 {
-    sqlx::query_scalar(sql).fetch_one(pool).await.unwrap()
+    sqlx::query_scalar(sqlx::AssertSqlSafe(sql))
+        .fetch_one(pool)
+        .await
+        .unwrap()
 }
 
 async fn episode(pool: &PgPool, season: i32, n: i32, file: &str) -> i32 {

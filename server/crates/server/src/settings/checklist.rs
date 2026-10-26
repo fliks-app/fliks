@@ -87,7 +87,7 @@ pub async fn list(State(st): State<AppState>, a: Authed) -> Result<Json<Value>, 
     let checks = ITEMS.iter().map(|(key, _, _, sql)| {
         let db = st.db.clone();
         async move {
-            sqlx::query_scalar::<_, bool>(sql)
+            sqlx::query_scalar::<_, bool>(*sql)
                 .fetch_one(&db)
                 .await
                 .unwrap_or_else(|e| {

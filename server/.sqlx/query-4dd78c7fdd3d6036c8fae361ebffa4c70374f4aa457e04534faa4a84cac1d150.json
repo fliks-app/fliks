@@ -6,17 +6,35 @@
       {
         "ordinal": 0,
         "name": "pref",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "libraries",
+            "name": "preferredProvider"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "lang",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "libraries",
+            "name": "metadataLanguage"
+          }
+        }
       },
       {
         "ordinal": 2,
         "name": "region",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "libraries",
+            "name": "metadataRegion"
+          }
+        }
       }
     ],
     "parameters": {

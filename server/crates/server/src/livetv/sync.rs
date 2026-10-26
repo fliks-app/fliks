@@ -151,9 +151,9 @@ pub fn accepted(cmd: Command) -> Response {
 }
 
 pub async fn find_source(db: &PgPool, id: i32) -> sqlx::Result<Option<Source>> {
-    sqlx::query_as(&format!(
+    sqlx::query_as(sqlx::AssertSqlSafe(format!(
         "SELECT {SOURCE_COLS}, password FROM livetv_sources WHERE id = $1"
-    ))
+    )))
     .bind(id)
     .fetch_optional(db)
     .await

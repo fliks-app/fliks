@@ -144,9 +144,9 @@ pub(super) fn int32(n: &serde_json::Number) -> Option<i32> {
 }
 
 async fn find(st: &AppState, id: i32) -> Res<ProviderRow> {
-    sqlx::query_as::<_, ProviderRow>(&format!(
+    sqlx::query_as::<_, ProviderRow>(sqlx::AssertSqlSafe(format!(
         "SELECT {PROVIDER_COLS} FROM subtitle_providers WHERE id = $1"
-    ))
+    )))
     .bind(id)
     .fetch_optional(&st.db)
     .await?
@@ -211,9 +211,9 @@ pub async fn test_connection(
     };
     let stored = match id {
         Some(i) => {
-            sqlx::query_as::<_, ProviderRow>(&format!(
+            sqlx::query_as::<_, ProviderRow>(sqlx::AssertSqlSafe(format!(
                 "SELECT {PROVIDER_COLS} FROM subtitle_providers WHERE id = $1"
-            ))
+            )))
             .bind(i)
             .fetch_optional(&st.db)
             .await?
@@ -238,10 +238,10 @@ pub async fn create(
     policy(&a, Action::Create)?;
     let b = validate(body.0, true)?;
     let settings = secrets::merge(None, &b.settings.unwrap_or_else(|| json!({})), &SECRET_KEYS);
-    let row: ProviderRow = sqlx::query_as(&format!(
+    let row: ProviderRow = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         r#"INSERT INTO subtitle_providers (name, "type", enabled, settings, priority)
            VALUES ($1, $2::text::subtitle_providers_type_enum, $3, $4, $5) RETURNING {PROVIDER_COLS}"#
-    ))
+    )))
     .bind(b.name.unwrap_or_default())
     .bind(b.kind.unwrap_or_default())
     .bind(b.enabled.unwrap_or(true))
@@ -255,9 +255,9 @@ pub async fn create(
 #[utoipa::path(get, path = "/api/subtitles/providers", responses((status = 200)))]
 pub async fn list(State(st): State<AppState>, a: Authed) -> Res<Json<Vec<Value>>> {
     policy(&a, Action::Read)?;
-    let rows: Vec<ProviderRow> = sqlx::query_as(&format!(
+    let rows: Vec<ProviderRow> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         "SELECT {PROVIDER_COLS} FROM subtitle_providers ORDER BY priority ASC, name ASC, id ASC"
-    ))
+    )))
     .fetch_all(&st.db)
     .await?;
     Ok(Json(rows.iter().map(view).collect()))
@@ -297,10 +297,10 @@ pub async fn update(
         ),
         None => cur.settings.clone(),
     };
-    let row: ProviderRow = sqlx::query_as(&format!(
+    let row: ProviderRow = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         r#"UPDATE subtitle_providers SET name = $2, "type" = $3::text::subtitle_providers_type_enum, enabled = $4,
              settings = $5, priority = $6, "updatedAt" = now() WHERE id = $1 RETURNING {PROVIDER_COLS}"#
-    ))
+    )))
     .bind(id)
     .bind(b.name.unwrap_or(cur.name))
     .bind(&kind)

@@ -50,8 +50,11 @@ pub(super) async fn role_exists(tx: &mut Tx, r: &str) -> sqlx::Result<bool> {
 /// `DROP ROLE` in a savepoint: a role another database still uses stays (`2BP01`).
 pub(super) async fn drop_role_tolerant(tx: &mut Tx, r: &str) -> sqlx::Result<()> {
     sqlx::Executor::execute(&mut **tx, sqlx::raw_sql("SAVEPOINT fp_drop")).await?;
-    match sqlx::Executor::execute(&mut **tx, sqlx::raw_sql(&format!("DROP ROLE {}", quote(r))))
-        .await
+    match sqlx::Executor::execute(
+        &mut **tx,
+        sqlx::raw_sql(sqlx::AssertSqlSafe(format!("DROP ROLE {}", quote(r)))),
+    )
+    .await
     {
         Ok(_) => sqlx::Executor::execute(&mut **tx, sqlx::raw_sql("RELEASE SAVEPOINT fp_drop"))
             .await
@@ -70,7 +73,9 @@ pub(super) async fn adopt(tx: &mut Tx, former: &str, to: &str) -> sqlx::Result<(
     let (f, t) = (quote(former), quote(to));
     sqlx::Executor::execute(
         &mut **tx,
-        sqlx::raw_sql(&format!("REASSIGN OWNED BY {f} TO {t}; DROP OWNED BY {f}")),
+        sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+            "REASSIGN OWNED BY {f} TO {t}; DROP OWNED BY {f}"
+        ))),
     )
     .await?;
     drop_role_tolerant(tx, former).await
@@ -178,7 +183,9 @@ pub async fn provision(
     if !exists {
         sqlx::Executor::execute(
             &mut *tx,
-            sqlx::raw_sql(&format!("CREATE ROLE {qr} LOGIN PASSWORD '{password}'")),
+            sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+                "CREATE ROLE {qr} LOGIN PASSWORD '{password}'"
+            ))),
         )
         .await?;
     }
@@ -210,9 +217,9 @@ pub async fn provision(
     }
     sqlx::Executor::execute(
         &mut *tx,
-        sqlx::raw_sql(&format!(
+        sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
             "CREATE SCHEMA IF NOT EXISTS {qs} AUTHORIZATION {qr}"
-        )),
+        ))),
     )
     .await?;
     let (owner, me): (String, String) = sqlx::query_as(
@@ -224,7 +231,9 @@ pub async fn provision(
     if owner == me {
         sqlx::Executor::execute(
             &mut *tx,
-            sqlx::raw_sql(&format!("ALTER SCHEMA {qs} OWNER TO {qr}")),
+            sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+                "ALTER SCHEMA {qs} OWNER TO {qr}"
+            ))),
         )
         .await?;
     } else if owner != role {
@@ -244,7 +253,10 @@ pub async fn provision(
     for r in rels {
         sqlx::Executor::execute(
             &mut *tx,
-            sqlx::raw_sql(&format!("ALTER TABLE {qs}.{} OWNER TO {qr}", quote(&r))),
+            sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+                "ALTER TABLE {qs}.{} OWNER TO {qr}",
+                quote(&r)
+            ))),
         )
         .await?;
     }
@@ -262,7 +274,7 @@ pub async fn provision(
             quote(t)
         ));
     }
-    sqlx::Executor::execute(&mut *tx, sqlx::raw_sql(&sql)).await?;
+    sqlx::Executor::execute(&mut *tx, sqlx::raw_sql(sqlx::AssertSqlSafe(sql))).await?;
     tx.commit().await?;
     Ok(password)
 }
@@ -279,17 +291,17 @@ pub async fn deprovision(core: &PgPool, plugin_id: &str) -> sqlx::Result<()> {
         if exists {
             sqlx::Executor::execute(
                 &mut *tx,
-                sqlx::raw_sql(&format!("DROP OWNED BY {}", quote(&r))),
+                sqlx::raw_sql(sqlx::AssertSqlSafe(format!("DROP OWNED BY {}", quote(&r)))),
             )
             .await?;
         }
     }
     sqlx::Executor::execute(
         &mut *tx,
-        sqlx::raw_sql(&format!(
+        sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
             "DROP SCHEMA IF EXISTS {} CASCADE",
             quote(&schema(plugin_id))
-        )),
+        ))),
     )
     .await?;
     for r in [
@@ -313,15 +325,18 @@ pub async fn orphan(core: &PgPool, plugin_id: &str) -> sqlx::Result<()> {
     if exists {
         sqlx::Executor::execute(
             &mut *tx,
-            sqlx::raw_sql(&format!("ALTER ROLE {} NOLOGIN", quote(&r))),
+            sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+                "ALTER ROLE {} NOLOGIN",
+                quote(&r)
+            ))),
         )
         .await?;
         sqlx::Executor::execute(
             &mut *tx,
-            sqlx::raw_sql(&format!(
+            sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
                 "COMMENT ON SCHEMA {} IS 'orphaned: plugin uninstalled, data kept'",
                 quote(&schema(plugin_id))
-            )),
+            ))),
         )
         .await?;
     }
@@ -342,7 +357,7 @@ pub async fn drop_foreign_roles(core: &PgPool, roles: &[String]) -> sqlx::Result
         if exists {
             sqlx::Executor::execute(
                 &mut *tx,
-                sqlx::raw_sql(&format!("DROP OWNED BY {}", quote(&r))),
+                sqlx::raw_sql(sqlx::AssertSqlSafe(format!("DROP OWNED BY {}", quote(&r)))),
             )
             .await?;
             drop_role_tolerant(&mut tx, &r).await?;

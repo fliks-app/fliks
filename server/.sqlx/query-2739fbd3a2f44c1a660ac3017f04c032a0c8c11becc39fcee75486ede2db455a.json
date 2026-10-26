@@ -6,17 +6,35 @@
       {
         "ordinal": 0,
         "name": "id?",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "id"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "title?",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "title"
+          }
+        }
       },
       {
         "ordinal": 2,
         "name": "genres?: Json<Vec<String>>",
-        "type_info": "Jsonb"
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "genres"
+          }
+        }
       }
     ],
     "parameters": {

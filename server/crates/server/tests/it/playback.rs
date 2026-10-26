@@ -57,7 +57,10 @@ impl Ctx {
     }
 
     async fn id(&self, sql: &str) -> i32 {
-        sqlx::query_scalar(sql).fetch_one(&self.pool).await.unwrap()
+        sqlx::query_scalar(sqlx::AssertSqlSafe(sql))
+            .fetch_one(&self.pool)
+            .await
+            .unwrap()
     }
 }
 

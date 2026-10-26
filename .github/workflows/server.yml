@@ -94,9 +94,9 @@ jobs:
       - name: sqlx offline cache is current
         run: |
           if [ -d .sqlx ]; then
-            cargo install sqlx-cli@0.8.6 --locked --no-default-features --features postgres,rustls
+            cargo install sqlx-cli@0.9.0 --no-default-features --features postgres,rustls
             target/debug/fliks-server migrate
-            cargo sqlx prepare --check --workspace
+            cargo sqlx prepare --check --workspace -- --all-targets
           else
             echo "::notice::no .sqlx directory, sqlx prepare check skipped"
           fi

@@ -127,7 +127,7 @@ fn columns(b: &Body) -> Result<Vec<(&'static str, Col)>, AppError> {
     Ok(out)
 }
 
-fn push_value(q: &mut QueryBuilder<'_, Postgres>, c: &Col) {
+fn push_value(q: &mut QueryBuilder<Postgres>, c: &Col) {
     match c {
         Col::Text(v) => q.push_bind(v.clone()),
         Col::Int(v) => q.push_bind(*v),
