@@ -19,6 +19,7 @@ import { TvSectionDirective } from '../../shared/directives/tv-section.directive
 import { connectedCount, missingCount, partyPeople, type PartyPerson } from '../player/party/party-people';
 import { runBusy } from './party-busy';
 import { PartyHostDialogComponent } from './party-host-dialog';
+import { PartyProposalsComponent } from './party-proposals';
 import { PartyPersonRowComponent } from '../player/party/party-person-row';
 import { PartyChatComponent } from '../player/party/party-chat';
 import { PartyVoiceBarComponent } from '../player/party/party-voice-bar';
@@ -55,7 +56,7 @@ function findEpisode(media: Media | null, id: number | null | undefined) {
 @Component({
   selector: 'app-party-page',
   imports: [
-    NgTemplateOutlet, RouterLink, SynopsisComponent, TranslatePipe, ResolveUrlPipe, TranslatePluralPipe, TvSectionDirective, TvRowDirective, PartyHostDialogComponent, PartyPersonRowComponent, PartyChatComponent, PartyVoiceBarComponent, MediaPickerComponent,
+    NgTemplateOutlet, RouterLink, SynopsisComponent, TranslatePipe, ResolveUrlPipe, TranslatePluralPipe, TvSectionDirective, TvRowDirective, PartyHostDialogComponent, PartyProposalsComponent, PartyPersonRowComponent, PartyChatComponent, PartyVoiceBarComponent, MediaPickerComponent,
     MobileFanartHeroComponent, UserAvatarComponent,
     LucideCalendarPlus, LucideCheck, LucidePlay, LucideSettings, LucideShare2,
   ],
@@ -161,6 +162,8 @@ export class PartyPageComponent implements OnInit, OnDestroy {
     this.joined() ? this.party.isHost() : this.view()?.host.userId === this.auth.user()?.id,
   );
   protected readonly link = computed(() => this.party.inviteLink(this.view()?.inviteToken ?? null));
+  /** A film is chosen, or a proposal exists for the server to take the top vote from. */
+  protected readonly canStart = computed(() => !!this.head()?.item || this.party.proposals().length > 0);
   protected readonly ready = computed(() => this.party.me()?.status === 'ready');
 
   constructor() {
