@@ -9,7 +9,7 @@
 #
 # Build = three units assembled by electron-builder:
 #   1. native C++ compositor addon (desktop/native) — node-gyp rebuild against
-#      the Electron 42 ABI, linked to libmpv + SDL2 + GLES/EGL.
+#      the Electron 45 ABI, linked to libmpv + SDL2 + GLES/EGL.
 #   2. esbuild main/preload bundle  (cd desktop && npm run build).
 #   3. the Angular client           (cd client && npx ng build), staged into
 #      desktop/web so electron-builder ships it at resources/web.
@@ -110,7 +110,7 @@ jobs:
 
       # desktop/package.json declares Node >= 20, but electron-builder 26's
       # transitive deps (@electron/rebuild, node-abi, app-builder-lib) require
-      # Node >= 22.12, so the runner uses 22. The addon's Electron 42 ABI is
+      # Node >= 22.12, so the runner uses 22. The addon's Electron 45 ABI is
       # pinned via node-gyp --target/--dist-url and is independent of host Node.
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -137,9 +137,9 @@ jobs:
             ~/AppData/Local/electron-builder/Cache
             ~/.electron-gyp
             ~/.node-gyp
-          key: ${{ runner.os }}-electron42-${{ hashFiles('desktop/package-lock.json') }}
+          key: ${{ runner.os }}-electron45-${{ hashFiles('desktop/package-lock.json') }}
           restore-keys: |
-            ${{ runner.os }}-electron42-
+            ${{ runner.os }}-electron45-
 
       # Linux-only: build deps for the native compositor addon (SDL2 + GL/EGL
       # + libmpv headers). macOS/Windows don't build the compositor (they embed mpv
@@ -213,7 +213,7 @@ jobs:
         shell: bash
         run: bash desktop/scripts/verify-libmpv-mac.sh
 
-      # ── Build the native compositor addon against the Electron 42 ABI ──
+      # ── Build the native compositor addon against the Electron 45 ABI ──
       # Linux-only: SDL2 + GLES/EGL OSR compositor (the Mutter/X11 model). macOS
       # and Windows embed mpv natively (--wid) and have their own addons below.
       - name: Build native addon
@@ -222,7 +222,7 @@ jobs:
         shell: bash
         run: |
           ../node_modules/.bin/node-gyp rebuild \
-            --target=42.4.0 \
+            --target=45.0.0 \
             --dist-url=https://electronjs.org/headers \
             --arch=x64
 
@@ -235,7 +235,7 @@ jobs:
         shell: bash
         run: |
           ../node_modules/.bin/node-gyp rebuild \
-            --target=42.4.0 \
+            --target=45.0.0 \
             --dist-url=https://electronjs.org/headers \
             --arch=arm64
 
@@ -246,7 +246,7 @@ jobs:
         shell: bash
         run: |
           ../node_modules/.bin/node-gyp rebuild \
-            --target=42.4.0 \
+            --target=45.0.0 \
             --dist-url=https://electronjs.org/headers \
             --arch=x64
 
