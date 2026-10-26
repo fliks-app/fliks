@@ -107,6 +107,10 @@ import UIKit
         self.mediaFileId = mediaFileId
         self.mediaId = mediaId
         self.episodeId = episodeId
+        // Before the profile is built: the output channel count is only reported under an active session.
+        let session = AVAudioSession.sharedInstance()
+        try? session.setCategory(.playback, mode: .moviePlayback)
+        try? session.setActive(true)
         let fetchedMedia: Media? = try? await APIClient.shared.get("/api/media/\(mediaId)")
         media = fetchedMedia
         let subtitleRows: [SubtitleFileRow]? = try? await APIClient.shared.get("/api/media/\(mediaId)/subtitles")
@@ -228,6 +232,7 @@ import UIKit
         rateObservation = nil
         player?.pause()
         player = nil
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
         if RemoteControlService.shared.activeCoordinator === self { RemoteControlService.shared.activeCoordinator = nil }
     }
 

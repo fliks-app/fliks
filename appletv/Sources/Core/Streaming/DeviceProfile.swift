@@ -53,7 +53,8 @@ enum DeviceProfileBuilder {
     private static let videoCodecs = probeVideoCodecs()
     private static let audioCodecs = probeAudioCodecs()
     private static let hdrModes = AVPlayer.availableHDRModes
-    private static let audioChannels = max(2, AVAudioSession.sharedInstance().maximumOutputNumberOfChannels)
+    /// Read per build: the receiver can be switched on after launch.
+    private static var audioChannels: Int { max(2, AVAudioSession.sharedInstance().maximumOutputNumberOfChannels) }
 
     static func build(needsHlsSubtitles: Bool = false, supportsMuxedAudioRendition: Bool = false) -> DeviceProfile {
         let hevc10 = videoCodecs.contains("hevc") && !hdrModes.isEmpty
