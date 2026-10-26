@@ -98,6 +98,7 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         crate::party::kick,
         crate::party::transfer,
         crate::party::invite,
+        crate::party::decline,
         crate::party::queue,
         remote::targets,
         remote::register,

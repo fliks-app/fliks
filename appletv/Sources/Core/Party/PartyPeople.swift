@@ -12,6 +12,11 @@ enum PartyPeople {
         var id: Int { userId }
     }
 
+    /// An explicit invitation of `userId` that can be declined (a link joiner has none).
+    static func isInvited(_ userId: Int?, host: PartyUser, guests: [PartyGuest]) -> Bool {
+        userId != nil && userId != host.userId && guests.contains { $0.userId == userId && $0.source == "invite" }
+    }
+
     /// Who can still be invited: the users the caller follows, minus the host and every guest.
     static func candidates(following: [SocialUser], host: PartyUser, guests: [PartyGuest]) -> [SocialUser] {
         let taken = Set([host.userId] + guests.map(\.userId))

@@ -80,6 +80,9 @@
         @if (h.status === 'scheduled' && canHost() && !joined()) {
           <button type="button" class="btn btn-primary" [disabled]="busy()" (click)="startNow()">{{ 'party.start_now' | translate }}</button>
         }
+        @if (invited()) {
+          <button type="button" class="btn btn-ghost" [disabled]="busy()" (click)="decline()">{{ 'party.decline' | translate }}</button>
+        }
         @if (view()?.inviteToken) {
           <button type="button" class="btn btn-ghost gap-2" (click)="copy()">
             <svg lucideShare2 class="h-4 w-4"></svg>

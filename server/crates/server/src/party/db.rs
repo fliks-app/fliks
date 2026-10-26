@@ -243,6 +243,19 @@ pub async fn drop_link_guests(db: &PgPool, party: i32, keep: i32) -> sqlx::Resul
     .await
 }
 
+/// Removes the user's own invitation; false when they have none.
+pub async fn drop_invitation(db: &PgPool, party: i32, user: i32) -> sqlx::Result<bool> {
+    let r = sqlx::query(
+        r#"DELETE FROM watch_party_invitees
+           WHERE "partyId" = $1 AND "userId" = $2 AND "source" = 'invite'"#,
+    )
+    .bind(party)
+    .bind(user)
+    .execute(db)
+    .await?;
+    Ok(r.rows_affected() > 0)
+}
+
 pub async fn clear_kicked(db: &PgPool, party: i32) -> sqlx::Result<()> {
     sqlx::query(r#"DELETE FROM watch_party_invitees WHERE "partyId" = $1 AND "source" = 'kicked'"#)
         .bind(party)

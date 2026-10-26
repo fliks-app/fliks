@@ -20,6 +20,14 @@ final class PartyPeopleTests: XCTestCase {
         XCTAssertEqual(people.map(\.present), [true, false, true])
     }
 
+    func testOnlyAnExplicitInviteeCanDecline() {
+        let guests = [PartyGuest(userId: 2, username: "a", source: "invite"), .init(userId: 3, username: "b", source: "link")]
+        XCTAssertTrue(PartyPeople.isInvited(2, host: host, guests: guests))
+        XCTAssertFalse(PartyPeople.isInvited(3, host: host, guests: guests))
+        XCTAssertFalse(PartyPeople.isInvited(1, host: host, guests: [PartyGuest(userId: 1, username: "host", source: "invite")]))
+        XCTAssertFalse(PartyPeople.isInvited(nil, host: host, guests: guests))
+    }
+
     func testTheHostIsNotListedTwiceWhenAlsoAGuest() {
         let guests = [PartyGuest(userId: 1, username: "host", source: "invite")]
         XCTAssertEqual(PartyPeople.people(host: host, guests: guests, members: []).count, 1)

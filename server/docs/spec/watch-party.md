@@ -62,6 +62,7 @@ Module `server/crates/server/src/party/`. Error messages are translation keys.
 | `POST /api/parties/{id}/members/{userId}/kick` | none | 204 | host only; removes every member of that user and replaces the user's guest row (any source) by a `kicked` row, which refuses `join` and `by-token` with 403 `party.error_kicked` until the token is regenerated or the host invites the user again; it survives a restart. A guest who is not connected is kicked too (only a user who is neither a member nor a guest is a 404); the owner cannot be kicked. |
 | `POST /api/parties/{id}/members/{userId}/host` | none | 204 | host only; transfers the host role. |
 | `POST /api/parties/{id}/invitees` | `{ userIds: int[] }` | `PartyDto` | host only; followed users only; emits `party.invited`; a link joiner invited this way becomes an `invite` row. |
+| `POST /api/parties/{id}/decline` | none | 204 | an `invite` guest drops their own invitation: the row is deleted, so the party leaves their `GET /api/parties` and every route answers them 404 until invited again. The host gets 400 `party.error_invalid`; a caller without an invitation (never invited, link joiner, kicked, or already declined) gets 404 `party.error_not_found`, so a second call is a 404 too. Emits `party.updated` to the owner, the remaining guests and the decliner (their other devices). |
 
 DTOs (camelCase, every key present, `null` not absent):
 - `PartyItem { mediaId, mediaFileId: int|null, episodeId: int|null, title: string, posterUrl: string|null, fanartUrl: string|null, additionalFanartUrls: string[] }` (the media DTO's artwork fields, so the client picks the same backdrop)
@@ -84,7 +85,7 @@ To each member connection (`emit_to_connection`):
 To users (`emit_to_users`):
 - `party.invited { partyId, name, scheduledAt, host: { userId, username }, item: PartyItem }` to explicit invitees only (a link joiner upgraded by an invitation included, never a plain link join).
 - `party.starting { partyId, name }` to every guest when the lobby opens (15 min before, or at once for a party for now) and when a party goes live; also to an invitee added while the lobby is open or the party is live.
-- `party.updated { partyId }` to owner + every guest on reschedule, cancel, start, end, and when a guest row is added by a link join or removed by a kick (the kicked user included): the home rail refetches `GET /api/parties`.
+- `party.updated { partyId }` to owner + every guest on reschedule, cancel, start, end, and when a guest row is added by a link join or removed by a kick (the kicked user included) or a decline: the home rail refetches `GET /api/parties`.
 
 Clients drop any `party.state|members|settings` whose `rev` is ≤ the last applied one, and refetch `GET /api/parties/{id}` after an SSE reconnect or a `rev` gap.
 

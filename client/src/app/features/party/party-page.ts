@@ -151,6 +151,11 @@ export class PartyPageComponent implements OnInit, OnDestroy {
     const members = this.joined() ? this.party.members() : (v?.live?.members ?? []);
     return v ? withoutVoice(partyPeople(v.host, v.guests ?? [], members, new Set())) : [];
   });
+  /** Invited by the host and not in the lobby: the one case where the party can be declined. */
+  protected readonly invited = computed(() => {
+    const me = this.auth.user()?.id;
+    return !this.joined() && !!this.hostView()?.guests.some((g) => g.userId === me && g.source === 'invite');
+  });
   protected readonly connectedCount = computed(() => connectedCount(this.people()));
   protected readonly missingCount = computed(() => missingCount(this.people()));
   protected readonly canHost = computed(() =>
@@ -287,6 +292,12 @@ export class PartyPageComponent implements OnInit, OnDestroy {
     if (!ok) return;
     const dto = await runBusy(this.busy, () => this.api.update(this.id, { scheduledAt: new Date().toISOString() }));
     if (dto) this.apply(dto);
+  }
+
+  protected async decline(): Promise<void> {
+    const ok = await runBusy(this.busy, () => this.api.decline(this.id).then(() => true));
+    if (ok) this.home();
+    else this.toast.error(this.translate.instant('party.error_generic'));
   }
 
   protected home(): void {
