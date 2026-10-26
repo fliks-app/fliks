@@ -29,6 +29,7 @@ import { DeviceService } from '../../core/services/device.service';
 import { NavbarService } from '../../core/services/navbar.service';
 import { TvService } from '../../core/services/tv.service';
 import { MD_BREAKPOINT_QUERY, mediaQuerySignal } from '../../core/utils/viewport';
+import { MediaPickerComponent, type MediaPick } from '../../shared/components/media-picker/media-picker';
 import { MobileFanartHeroComponent } from '../../shared/components/mobile-fanart-hero';
 import { SynopsisComponent } from '../../shared/components/synopsis/synopsis';
 import { UserAvatarComponent } from '../../shared/components/user-avatar/user-avatar';
@@ -54,7 +55,7 @@ function findEpisode(media: Media | null, id: number | null | undefined) {
 @Component({
   selector: 'app-party-page',
   imports: [
-    NgTemplateOutlet, RouterLink, SynopsisComponent, TranslatePipe, ResolveUrlPipe, TranslatePluralPipe, TvSectionDirective, TvRowDirective, PartyHostDialogComponent, PartyPersonRowComponent, PartyChatComponent, PartyVoiceBarComponent,
+    NgTemplateOutlet, RouterLink, SynopsisComponent, TranslatePipe, ResolveUrlPipe, TranslatePluralPipe, TvSectionDirective, TvRowDirective, PartyHostDialogComponent, PartyPersonRowComponent, PartyChatComponent, PartyVoiceBarComponent, MediaPickerComponent,
     MobileFanartHeroComponent, UserAvatarComponent,
     LucideCalendarPlus, LucideCheck, LucidePlay, LucideSettings, LucideShare2,
   ],
@@ -81,6 +82,7 @@ export class PartyPageComponent implements OnInit, OnDestroy {
   private readonly mdUp = mediaQuerySignal(MD_BREAKPOINT_QUERY);
 
   protected readonly hostDialog = viewChild(PartyHostDialogComponent);
+  protected readonly picker = viewChild(MediaPickerComponent);
 
   private readonly id = Number(this.route.snapshot.params['id']);
   private readonly token: string | undefined = this.route.snapshot.queryParams['token'];
@@ -180,6 +182,11 @@ export class PartyPageComponent implements OnInit, OnDestroy {
       else this.navbar.leaveHeroPage();
     });
     effect(() => this.background.set(this, this.fanart()));
+    // The film can change under the page (the host's pick, a snapshot): its details follow.
+    effect(() => {
+      const id = this.head()?.item?.mediaId ?? null;
+      untracked(() => void this.loadMedia(id));
+    });
     // The lobby is open from creation: the page joins it as soon as it shows.
     effect(() => {
       if (this.view()?.status !== 'scheduled' || this.joined() || this.joining()) return;
@@ -219,10 +226,26 @@ export class PartyPageComponent implements OnInit, OnDestroy {
       const dto = await this.fetch();
       this.gone.set(dto.status === 'ended');
       this.loaded.set(dto);
-      if (!this.media() && dto.item) void this.mediaService.getOne(dto.item.mediaId).then((m) => this.media.set(m), () => undefined);
     } catch {
       this.gone.set(true);
     }
+  }
+
+  private async loadMedia(id: number | null): Promise<void> {
+    if (this.media()?.id === id) return;
+    this.media.set(null);
+    if (id == null) return;
+    const m = await this.mediaService.getOne(id).catch(() => null);
+    if (m && this.head()?.item?.mediaId === id) this.media.set(m);
+  }
+
+  protected async select(picks: MediaPick[]): Promise<void> {
+    const [pick] = picks;
+    if (!pick) return;
+    const dto = await runBusy(this.busy, () =>
+      this.api.select(this.id, { mediaId: pick.mediaId, ...(pick.episodeId != null && { episodeId: pick.episodeId }) }),
+    );
+    if (dto) this.apply(dto);
   }
 
   private async joinLobby(): Promise<void> {

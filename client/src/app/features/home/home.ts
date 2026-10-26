@@ -13,6 +13,8 @@ import { PlaylistsApiService, Playlist } from '../../core/services/api/playlists
 import { LikesApiService, LikedItem, LikeTarget } from '../../core/services/api/likes-api.service';
 import { RequestsService, FliksRequestRow } from '../../core/services/api/requests.service';
 import { PartyApiService, type PartySummaryDto } from '../../core/services/api/party-api.service';
+import { TvRowDirective } from '../../shared/directives/tv-row.directive';
+import { PartyService } from '../../core/services/party/party.service';
 import { partyWhen } from '../party/party-time';
 import { pickFanart } from '../../shared/utils/media-artwork.util';
 import { translatePlural } from '../../core/pipes/translate-plural.pipe';
@@ -64,6 +66,7 @@ import { CacheRead } from '../../core/interceptors/cache.interceptor';
     FollowRequestsCardComponent,
     ReceivedRecommendationsCardComponent,
     TvSectionDirective,
+    TvRowDirective,
     RequestCardComponent,
     RequestDeclineModalComponent,
     DownloadDetailModalComponent,
@@ -83,7 +86,8 @@ export class HomeComponent implements OnInit, OnDestroy {
   private readonly likesApi = inject(LikesApiService);
   private readonly requestsService = inject(RequestsService);
   private readonly sse = inject(SseService);
-  private readonly partyApi = inject(PartyApiService);
+  protected readonly partyApi = inject(PartyApiService);
+  private readonly party = inject(PartyService);
   private readonly downloadProgress = inject(DownloadProgressService);
   private readonly profilesApi = inject(ProfilesService);
   private readonly scrollMemory = inject(ScrollMemoryService);
@@ -133,6 +137,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   readonly leavingSoon = signal<Media[]>([]);
   /** Live and scheduled watch parties of the viewer, live first (server order). */
   readonly parties = signal<PartySummaryDto[]>([]);
+  protected readonly partiesLoaded = signal(false);
   protected partyUrl(p: PartySummaryDto): string[] {
     return ['/parties', '' + p.id];
   }
@@ -235,9 +240,16 @@ export class HomeComponent implements OnInit, OnDestroy {
 
   private loadParties(): void {
     void this.partyApi.list().then(
-      (l) => this.parties.set(l),
+      (l) => {
+        this.parties.set(l);
+        this.partiesLoaded.set(true);
+      },
       () => undefined,
     );
+  }
+
+  protected newParty(): void {
+    this.party.createRequest.set({ title: '' });
   }
 
   private readonly partyEvents = this.sse.partyEvents.subscribe((e) => {

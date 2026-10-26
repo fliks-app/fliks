@@ -83,6 +83,11 @@
             <span class="loading loading-spinner loading-md"></span>
           }
         }
+        @if (h.status === 'scheduled' && canHost() && !h.playlist) {
+          <button type="button" class="btn gap-2" [class.btn-primary]="!h.item" [class.btn-ghost]="!!h.item" [disabled]="busy()" (click)="picker()?.show()">
+            {{ (h.item ? 'party.change_item' : 'party.pick_item') | translate }}
+          </button>
+        }
         @if (h.status === 'scheduled' && canHost() && !joined()) {
           <button type="button" class="btn btn-primary" [disabled]="busy()" (click)="startNow()">{{ 'party.start_now' | translate }}</button>
         }
@@ -178,6 +183,7 @@
       </div>
       @if (canHost() && hostView(); as hv) {
         <app-party-host-dialog [view]="hv" [joined]="joined()" [link]="link()" (updated)="apply($event)" />
+        <app-media-picker (picked)="select($event)" />
       }
     } @else {
       <div class="flex justify-center py-8"><span class="loading loading-spinner loading-lg"></span></div>
