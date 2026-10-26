@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DismissableStackService } from '../../../core/services/dismissable-stack.service';
 import { PartyService } from '../../../core/services/party/party.service';
 import { ReactionsService } from '../../../core/services/party/reactions.service';
+import { VoiceService } from '../../../core/services/party/voice.service';
 import { PartyReactionDockComponent } from './party-reaction-dock';
 
 function setup() {
@@ -17,10 +18,19 @@ function setup() {
     setRowOpen: (v: boolean) => rowOpen.set(v),
   };
   const party = { react: vi.fn() };
+  const muted = signal(true);
+  const voice = {
+    joined: () => true,
+    listenOnly: () => false,
+    muted,
+    setMuted: vi.fn(async (m: boolean) => muted.set(m)),
+    toggleMute: vi.fn(async () => muted.set(!muted())),
+  };
   TestBed.configureTestingModule({
     providers: [
       { provide: ReactionsService, useValue: reactions },
       { provide: PartyService, useValue: party },
+      { provide: VoiceService, useValue: voice },
       { provide: DismissableStackService, useValue: { push: vi.fn(), remove: vi.fn() } },
       provideTranslateService({ loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } } }),
     ],
@@ -34,7 +44,7 @@ function setup() {
   for (const t of ['click', 'mousemove']) outer.addEventListener(t, wake);
   outer.append(host);
   document.body.append(outer);
-  return { fixture, host, party, wake, rowOpen };
+  return { fixture, host, party, wake, rowOpen, voice };
 }
 
 describe('PartyReactionDockComponent', () => {
@@ -94,5 +104,27 @@ describe('PartyReactionDockComponent', () => {
     const absorb = host.querySelector<HTMLElement>('.absorb')!;
     fire(absorb, ['pointerdown', 'touchstart', 'pointerup', 'touchend', 'mousemove', 'mousedown', 'mouseup', 'click']);
     expect(wake).not.toHaveBeenCalled();
+  });
+
+  it('a tap on the mic toggles it, a hold talks only while pressed, a key press toggles', async () => {
+    const { fixture, host, voice } = setup();
+    const mic = host.querySelector<HTMLElement>('.mic')!;
+    fire(mic, ['pointerdown', 'pointerup', 'click']);
+    expect(voice.muted()).toBe(false);
+    fire(mic, ['pointerdown', 'pointerup', 'click']);
+    expect(voice.muted()).toBe(true);
+
+    // Android sends no click after a long press; the next tap must still toggle.
+    fire(mic, ['pointerdown']);
+    await vi.advanceTimersByTimeAsync(300);
+    fixture.detectChanges();
+    expect(voice.muted()).toBe(false);
+    fire(mic, ['pointerup', 'pointerleave']);
+    expect(voice.muted()).toBe(true);
+    fire(mic, ['pointerdown', 'pointerup', 'click']);
+    expect(voice.muted()).toBe(false);
+
+    mic.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 0 }));
+    expect(voice.muted()).toBe(true);
   });
 });

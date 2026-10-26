@@ -132,12 +132,15 @@ export class VoiceService {
     if (id != null && me) await this.api.voice(id, me, false, true).catch(() => {});
   }
 
-  async toggleMute(): Promise<void> {
+  toggleMute(): Promise<void> {
+    return this.setMuted(!this.muted());
+  }
+
+  async setMuted(muted: boolean): Promise<void> {
     const id = this.party.party()?.id;
     const me = this.sse.targetId();
     const track = this.mic?.getAudioTracks()[0];
-    if (!this.joined() || !track || id == null || !me) return;
-    const muted = !this.muted();
+    if (!this.joined() || !track || id == null || !me || muted === this.muted()) return;
     track.enabled = !muted;
     this.muted.set(muted);
     await this.api.voice(id, me, true, muted).catch((err) => this.party.onActionError(err));

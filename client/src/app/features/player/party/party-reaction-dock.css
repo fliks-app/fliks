@@ -105,3 +105,17 @@
   inset: 0;
   pointer-events: auto;
 }
+.mic {
+  margin-left: 0.5rem;
+  /* A hold must not scroll, select or open the long-press menu. */
+  touch-action: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+.mic.active {
+  background: rgb(220 38 38 / 0.3);
+}
+.mic:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
