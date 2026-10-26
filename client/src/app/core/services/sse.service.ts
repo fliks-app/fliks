@@ -99,7 +99,7 @@ export interface PartyStateEvent {
 
 export type PartyEvent =
   | PartyStateEvent
-  | { type: 'party.selection'; partyId: number; rev: number; item: PartyItem | null }
+  | { type: 'party.selection'; partyId: number; rev: number; item: PartyItem }
   | { type: 'party.members'; partyId: number; rev: number; members: PartyMember[] }
   | ({ type: 'party.settings'; partyId: number; rev: number; name: string } & PartySwitches)
   | { type: 'party.message'; partyId: number; message: PartyMessage }

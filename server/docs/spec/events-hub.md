@@ -159,9 +159,9 @@ Audience legend: B = broadcast to every connection; U(x) = connections of user x
 | 48 | `party.starting` | Us(invitees) | `{partyId, name}` |
 | 49 | `party.updated` | Us(owner + invitees) | `{partyId}` |
 | 50 | `party.signal` | C (one member: the target) | `{partyId, from: {userId, deviceId}, kind: 'offer'|'answer'|'ice'|'bye', data: object}` (`watch-party.md`, Voice) |
-| 51 | `party.selection` | C (members) | `{partyId, rev, item: PartyItem|null}` (`watch-party.md`) |
+| 51 | `party.selection` | C (members) | `{partyId, rev, item: PartyItem}` (`watch-party.md`) |
 
-Row 37 is two wire types and row 2 (`ping`) and row 40 are not in the `SseEvent` union, so the table lists 39 `SseEvent` types (the union writes the three `social.followed|follow_request|follow_accepted` as one member at). All `*.started/completed/failed/progress` rows are fire-and-forget; none is retried.
+Row 37 is two wire types and row 2 (`ping`) and row 40 are not in the `SseEvent` union, so the table lists 40 `SseEvent` types (the union writes the three `social.followed|follow_request|follow_accepted` as one member at). All `*.started/completed/failed/progress` rows are fire-and-forget; none is retried.
 
 `RemoteCommandAction` = `'load'|'play'|'pause'|'playpause'|'stop'|'seek'|'volume'|'mute'|'next'|'audio'|'subtitle'|'quality'|'browse'`; all absolute except `playpause`.
 

@@ -3684,6 +3684,8 @@
     "error_not_member": "No estás en esta sesión",
     "error_kicked": "Te han quitado de esta sesión",
     "error_not_live": "Esta sesión no está en curso",
+    "error_no_item": "Aún no se ha elegido ninguna película",
+    "error_not_scheduled": "Esta sesión ya ha comenzado",
     "error_ended": "Esta sesión ha terminado",
     "error_invalid": "Solicitud no válida",
     "error_invalid_name": "Nombre no válido",

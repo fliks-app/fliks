@@ -489,7 +489,7 @@ pub enum SseEvent {
     PartySelection {
         party_id: i64,
         rev: i64,
-        item: Option<Value>,
+        item: Value,
     },
 }
 

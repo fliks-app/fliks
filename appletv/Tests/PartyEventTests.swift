@@ -80,6 +80,6 @@ final class PartyEventTests: XCTestCase {
             return XCTFail("not a selection event")
         }
         XCTAssertEqual([partyId, rev], [5, 6])
-        XCTAssertEqual(item?.mediaId, 7)
+        XCTAssertEqual(item.mediaId, 7)
     }
 }

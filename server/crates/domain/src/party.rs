@@ -238,10 +238,10 @@ pub enum Effect {
         reason: CloseReason,
         to: Vec<(i32, String)>,
     },
-    /// The film the start will play changed (`None`: cleared).
+    /// The film the start will play changed.
     Selection {
         rev: u64,
-        item: Option<Item>,
+        item: Item,
     },
     /// Rule 8: the row's position and item follow every transition.
     Persist {
@@ -261,7 +261,7 @@ pub enum Error {
     RateLimited,
     VoiceFull,
     VoiceNotJoined,
-    /// `go_live` without a selection.
+    /// A start with no film chosen.
     NoItem,
     /// A playback intent before the start.
     NotStarted,
@@ -525,9 +525,9 @@ impl Room {
         out
     }
 
-    /// Fixes (or clears) the film the start will play; the host's choice, announced to the room.
-    pub fn select(&mut self, item: Option<Item>) -> Vec<Effect> {
-        self.selection = item.clone();
+    /// Fixes the film the start will play; the host's choice, announced to the room.
+    pub fn select(&mut self, item: Item) -> Vec<Effect> {
+        self.selection = Some(item.clone());
         let rev = self.bump();
         vec![Effect::Selection { rev, item }]
     }
@@ -1049,10 +1049,10 @@ impl Live {
             .is_some_and(|p| p.can_end(&self.room, user_id, device_id, item))
     }
 
-    /// `POST /start`: plays the selection. Every member, invited or not, gets the new state; with
-    /// the host in, it plays once everyone has loaded. No selection: `Error::NoItem`.
-    pub fn go_live(&mut self, now: i64) -> Result<Vec<Effect>, Error> {
-        let item = self.room.selection.take().ok_or(Error::NoItem)?;
+    /// `POST /start`: plays `item`, the row's chosen film. Every member, invited or not, gets the
+    /// new state; with the host in, it plays once everyone has loaded.
+    pub fn go_live(&mut self, item: Item, now: i64) -> Vec<Effect> {
+        self.room.selection = None;
         let mut pb = Playback::new(item, 0.0, now);
         let room = &mut self.room;
         room.reset_empty(now);
@@ -1067,7 +1067,7 @@ impl Live {
             None => pb.state_effect(room, &mut out, now, None, None, None),
         }
         self.playback = Some(pb);
-        Ok(out)
+        out
     }
 
     /// A rejoin of the same `(user, device)` replaces the connection and resets the status.
@@ -1522,7 +1522,7 @@ mod tests {
             .unwrap();
         assert_eq!(l.room.members[0].status, MemberStatus::Waiting);
         assert!(l.playback.is_none());
-        let out = l.go_live(3).unwrap();
+        let out = l.go_live(item(), 3);
         assert!(out.iter().any(|e| matches!(e, Effect::State { .. })));
         assert_eq!(l.pb().state, State::Idle);
         assert_eq!(l.pb().item, item());
@@ -1530,7 +1530,7 @@ mod tests {
     }
 
     #[test]
-    fn a_room_without_playback_refuses_playback_intents_and_the_start_needs_a_selection() {
+    fn a_room_without_playback_refuses_playback_intents_and_a_selection_is_announced() {
         let mut l = Live::new("p".into(), Policy::Everyone, 1, None, 0);
         l.join(1, "alice", "d1", "c1", 0);
         let intent = Intent {
@@ -1541,14 +1541,10 @@ mod tests {
             base_rev: 0,
         };
         assert_eq!(l.intent(1, "d1", intent, 1).err(), Some(Error::NotStarted));
-        assert_eq!(l.go_live(2).err(), Some(Error::NoItem));
         assert!(l.playback.is_none());
-        let out = l.room.select(Some(item()));
-        assert!(matches!(
-            &out[..],
-            [Effect::Selection { item: Some(_), .. }]
-        ));
-        l.go_live(3).unwrap();
+        let out = l.room.select(item());
+        assert!(matches!(&out[..], [Effect::Selection { .. }]));
+        l.go_live(item(), 3);
         assert_eq!(l.pb().state, State::Waiting);
     }
 
@@ -1557,7 +1553,7 @@ mod tests {
         let mut l = Live::new("p".into(), Policy::Everyone, 1, Some(item()), 0);
         l.join(1, "alice", "d1", "c1", 0);
         l.join(2, "bob", "d2", "c2", 0);
-        l.go_live(1).unwrap();
+        l.go_live(item(), 1);
         assert_eq!(l.pb().state, State::Waiting);
         ready(&mut l, 1, "d1", 0.0, 2);
         assert_eq!(l.pb().state, State::Waiting);

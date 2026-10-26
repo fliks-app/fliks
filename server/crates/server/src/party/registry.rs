@@ -313,18 +313,13 @@ pub async fn deliver(st: &AppState, party: i32, d: Delivery) {
                 });
             }
             Effect::Selection { rev, item } => {
-                let dto = match item {
-                    Some(item) => Some(
-                        item_dto(st, &item)
-                            .await
-                            .unwrap_or_else(|_| item_dto_of(None, &item)),
-                    ),
-                    None => None,
-                };
+                let dto = item_dto(st, &item)
+                    .await
+                    .unwrap_or_else(|_| item_dto_of(None, &item));
                 emit(SseEvent::PartySelection {
                     party_id: pid,
                     rev: rev as i64,
-                    item: dto.map(json),
+                    item: json(dto),
                 });
             }
             Effect::Members {

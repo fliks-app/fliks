@@ -358,10 +358,12 @@ pub async fn update_settings(
     Ok(())
 }
 
-/// The film the start will play, in the item columns; `None` clears it.
-pub async fn set_selection(db: &PgPool, id: i32, item: &Item) -> sqlx::Result<()> {
-    sqlx::query(
-        r#"UPDATE watch_parties SET "mediaId" = $2, "mediaFileId" = $3, "episodeId" = $4 WHERE id = $1"#,
+/// The film the start will play, in the item columns; false when the party is no longer
+/// `scheduled`.
+pub async fn set_selection(db: &PgPool, id: i32, item: &Item) -> sqlx::Result<bool> {
+    let r = sqlx::query(
+        r#"UPDATE watch_parties SET "mediaId" = $2, "mediaFileId" = $3, "episodeId" = $4
+           WHERE id = $1 AND status = 'scheduled'"#,
     )
     .bind(id)
     .bind(item.media_id)
@@ -369,7 +371,7 @@ pub async fn set_selection(db: &PgPool, id: i32, item: &Item) -> sqlx::Result<()
     .bind(item.episode_id)
     .execute(db)
     .await?;
-    Ok(())
+    Ok(r.rows_affected() > 0)
 }
 
 pub async fn set_live(db: &PgPool, id: i32) -> sqlx::Result<()> {

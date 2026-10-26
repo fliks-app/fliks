@@ -412,22 +412,24 @@ async fn check_item(st: &AppState, item: &Item) -> R<()> {
 /// The item a party opens on: the requested one, else the playlist's first the owner can play;
 /// `None` for a party with neither.
 async fn first_item(st: &AppState, a: &Authed, b: &Create) -> R<Option<Item>> {
-    let requested = match (b.media_id, b.playlist_id) {
-        (Some(media_id), _) => Some(Item {
-            media_id,
-            media_file_id: b.media_file_id,
-            episode_id: b.episode_id,
-        }),
+    let requested = |media_id| Item {
+        media_id,
+        media_file_id: b.media_file_id,
+        episode_id: b.episode_id,
+    };
+    let invalid_item = || fail(StatusCode::BAD_REQUEST, "party.error_invalid_item");
+    let (media_id, playlist) = match (b.media_id, b.playlist_id) {
         (None, None) if b.media_file_id.is_none() && b.episode_id.is_none() => return Ok(None),
-        (None, None) => return Err(fail(StatusCode::BAD_REQUEST, "party.error_invalid_item")),
-        (None, Some(_)) => None,
+        (None, None) => return Err(invalid_item()),
+        (Some(media_id), None) => {
+            let item = requested(media_id);
+            let ids = accessible_library_ids(&st.db, a).await?;
+            assert_media_accessible(&st.db, media_id, &ids).await?;
+            return Ok(Some(item));
+        }
+        (media_id, Some(playlist)) => (media_id, playlist),
     };
-    let Some(playlist) = b.playlist_id else {
-        let item = requested.expect("a media id without a playlist");
-        let ids = accessible_library_ids(&st.db, a).await?;
-        assert_media_accessible(&st.db, item.media_id, &ids).await?;
-        return Ok(Some(item));
-    };
+    let requested = media_id.map(requested);
     playlists::assert_role(&st.db, a.user.id, playlist, Role::Viewer).await?;
     let rows = db::playlist_rows(&st.db, playlist).await?;
     for row in rows {
@@ -441,7 +443,7 @@ async fn first_item(st: &AppState, a: &Authed, b: &Create) -> R<Option<Item>> {
             }));
         }
     }
-    Err(fail(StatusCode::BAD_REQUEST, "party.error_invalid_item"))
+    Err(invalid_item())
 }
 
 #[utoipa::path(post, path = "/api/parties", responses((status = 201)))]
@@ -694,17 +696,25 @@ pub async fn select(
         return Err(fail(StatusCode::CONFLICT, "party.error_not_scheduled"));
     }
     let item = Item::from(b);
-    check_item(&st, &item).await?;
     let ids = accessible_library_ids(&st.db, &a).await?;
     assert_media_accessible(&st.db, item.media_id, &ids).await?;
-    if st.parties.brief(id).is_some() {
-        vet_item(&st, id, &item).await?;
+    if let Some(playlist) = row.playlist_id {
+        let rows = db::playlist_rows(&st.db, playlist).await?;
+        let listed = rows.iter().any(|r| {
+            r.playable && r.item.media_id == item.media_id && r.item.episode_id == item.episode_id
+        });
+        if !listed {
+            return Err(fail(StatusCode::BAD_REQUEST, "party.error_invalid_item"));
+        }
     }
-    db::set_selection(&st.db, id, &item).await?;
+    vet_item(&st, id, &item).await?;
+    if !db::set_selection(&st.db, id, &item).await? {
+        return Err(fail(StatusCode::CONFLICT, "party.error_not_scheduled"));
+    }
     row.media_id = Some(item.media_id);
     row.media_file_id = item.media_file_id;
     row.episode_id = item.episode_id;
-    mutate(&st, id, |l| ((), l.room.select(Some(item.clone())))).await;
+    mutate(&st, id, |l| ((), l.room.select(item.clone()))).await;
     notify_updated(&st, &row).await?;
     Ok(Json(dto(&st, &row, me, true).await?))
 }
@@ -727,9 +737,10 @@ pub async fn start(
         db::set_live(&st.db, id).await?;
         row.status = "live".into();
         st.parties.ensure(&row, true);
-        run(&st, id, |l| l.go_live(now_ms()))
-            .await?
-            .map_err(machine_err)?;
+        let item = row.item().ok_or_else(|| machine_err(PartyErr::NoItem))?;
+        mutate(&st, id, |l| ((), l.go_live(item, now_ms())))
+            .await
+            .ok_or_else(not_live)?;
         let guests = db::guest_ids(&st.db, id).await?;
         st.hub.emit_to_users(
             &guests,
@@ -773,11 +784,11 @@ async fn member_row(st: &AppState, id: i32, me: i32) -> R<Row> {
 /// current member can open it, else 409 `party.error_member_no_access` naming those who cannot.
 async fn vet_item(st: &AppState, id: i32, it: &Item) -> R<()> {
     check_item(st, it).await?;
-    let view = st.parties.view(id).ok_or_else(not_live)?;
+    let members = st.parties.view(id).map_or_else(Vec::new, |v| v.members);
     let library = db::media_libraries(&st.db, &[it.media_id]).await?;
     let mut denied = vec![];
     let mut checked = vec![];
-    for m in &view.members {
+    for m in &members {
         if checked.contains(&m.user_id) {
             continue;
         }

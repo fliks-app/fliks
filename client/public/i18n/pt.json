@@ -3684,6 +3684,8 @@
     "error_not_member": "Você não está nesta sessão",
     "error_kicked": "Você foi removido desta sessão",
     "error_not_live": "Esta sessão não está em andamento",
+    "error_no_item": "Nenhum filme foi escolhido ainda",
+    "error_not_scheduled": "Esta sessão já começou",
     "error_ended": "Esta sessão terminou",
     "error_invalid": "Solicitação inválida",
     "error_invalid_name": "Nome inválido",

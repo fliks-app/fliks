@@ -3684,6 +3684,8 @@
     "error_not_member": "Vous n'êtes pas dans cette séance",
     "error_kicked": "Vous avez été retiré de cette séance",
     "error_not_live": "Cette séance n'est pas en cours",
+    "error_no_item": "Aucun film n'a encore été choisi",
+    "error_not_scheduled": "Cette séance a déjà commencé",
     "error_ended": "Cette séance est terminée",
     "error_invalid": "Requête invalide",
     "error_invalid_name": "Nom de séance invalide",

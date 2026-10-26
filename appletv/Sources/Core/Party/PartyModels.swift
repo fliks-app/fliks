@@ -120,7 +120,7 @@ struct PartyStateEvent: Codable {
 
 enum PartyEvent {
     case state(PartyStateEvent)
-    case selection(partyId: Int, rev: Int, item: PartyItem?)
+    case selection(partyId: Int, rev: Int, item: PartyItem)
     case members(partyId: Int, rev: Int, members: [PartyMember])
     case settings(partyId: Int, rev: Int, name: String, policy: String, reactionsEnabled: Bool, chatEnabled: Bool, linkSharing: Bool)
     case message(partyId: Int, message: PartyMessage)
@@ -131,7 +131,7 @@ enum PartyEvent {
     case updated(partyId: Int)
 
     private struct Head: Decodable { let type: String }
-    private struct Selection: Decodable { let partyId: Int; let rev: Int; let item: PartyItem? }
+    private struct Selection: Decodable { let partyId: Int; let rev: Int; let item: PartyItem }
     private struct Members: Decodable { let partyId: Int; let rev: Int; let members: [PartyMember] }
     private struct Settings: Decodable {
         let partyId: Int; let rev: Int; let name: String; let policy: String

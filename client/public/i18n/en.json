@@ -3684,6 +3684,8 @@
     "error_not_member": "You are not in this party",
     "error_kicked": "You were removed from this party",
     "error_not_live": "This party is not live",
+    "error_no_item": "No film has been chosen yet",
+    "error_not_scheduled": "This party has already started",
     "error_ended": "This party has ended",
     "error_invalid": "Invalid party request",
     "error_invalid_name": "Invalid party name",

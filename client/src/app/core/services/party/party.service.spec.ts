@@ -152,7 +152,7 @@ describe('PartyService room before the start', () => {
     svc.applySnapshot(lobby());
     events.next({ type: 'party.selection', partyId: 7, rev: 2, item: item(3) });
     expect(svc.item()?.mediaId).toBe(3);
-    events.next({ type: 'party.selection', partyId: 7, rev: 2, item: null });
+    events.next({ type: 'party.selection', partyId: 7, rev: 2, item: item(4) });
     expect(svc.item()?.mediaId).toBe(3);
   });
 
