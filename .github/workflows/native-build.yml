@@ -13,10 +13,7 @@
 name: Native build
 
 on:
-  pull_request:
-    paths:
-      - 'client/**'
-      - '.github/workflows/native-build.yml'
+  workflow_call:
   push:
     branches: [main]
     paths:

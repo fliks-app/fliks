@@ -3,15 +3,13 @@
 name: Server
 
 on:
-  pull_request:
+  workflow_call:
+  push:
     branches: [main]
-    paths: &paths
+    paths:
       - 'server/**'
       - '!server/**/*.md'
       - '.github/workflows/server.yml'
-  push:
-    branches: [main]
-    paths: *paths
 
 # A newer PR push supersedes a running one; a main run must finish to save the caches.
 concurrency:

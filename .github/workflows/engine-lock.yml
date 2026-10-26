@@ -3,17 +3,7 @@
 name: Engine lock
 
 on:
-  pull_request:
-    branches: [main]
-    paths:
-      - 'engine.lock'
-      - 'Dockerfile'
-      - 'server/crates/server/Cargo.toml'
-      - 'server/Cargo.lock'
-      - 'server/crates/plugin-sdk/Cargo.lock'
-      - '.github/scripts/check-engine-lock.sh'
-      - 'scripts/bump-engine.sh'
-      - '.github/workflows/engine-lock.yml'
+  workflow_call:
 
 permissions:
   contents: read
