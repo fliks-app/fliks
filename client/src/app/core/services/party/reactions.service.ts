@@ -40,7 +40,7 @@ export class ReactionsService {
   /** The floating reaction button over the video. */
   readonly dock = signal(readFlag(DOCK_KEY, true));
   /** The row stays open after a reaction is sent. */
-  readonly keepOpen = signal(readFlag(KEEP_OPEN_KEY, false));
+  readonly keepOpen = signal(readFlag(KEEP_OPEN_KEY, true));
   /** The row is unfolded; restored at the next party. */
   readonly rowOpen = signal(readFlag(ROW_OPEN_KEY, false));
 

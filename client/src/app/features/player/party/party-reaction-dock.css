@@ -19,6 +19,13 @@
   pointer-events: none;
   transition: clip-path 220ms ease-out, opacity 150ms ease-out;
 }
+.absorb {
+  position: absolute;
+  inset-block: 0;
+  right: calc(100% + 0.25rem);
+  width: min(18rem, calc(100vw - 6rem));
+  pointer-events: auto;
+}
 .emojis.open {
   clip-path: inset(0 0 0 0 round 9999px);
   opacity: 1;
