@@ -58,6 +58,12 @@ struct PartyDetailView: View {
                 Label(tr("party.join"), systemImage: "play.fill")
             }
             .buttonStyle(.borderedProminent)
+            if !joined, PartyPeople.isInvited(AuthService.shared.currentUser?.id, host: party.host, guests: party.guests ?? []) {
+                Button { Task { await service.decline(id: party.id) } } label: {
+                    Label(tr("party.decline"), systemImage: "xmark")
+                }
+                .buttonStyle(.bordered)
+            }
             if isHost {
                 Button { service.sheet = .settings } label: {
                     Label(tr("party.settings"), systemImage: "gearshape")

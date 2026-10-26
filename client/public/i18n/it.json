@@ -3671,6 +3671,7 @@
     "end_title": "Termina la sessione",
     "end_message": "Terminare \"{{name}}\" per tutti?",
     "leave": "Esci dalla sessione",
+    "decline": "Rifiuta",
     "leave_host_title": "Esci dalla sessione",
     "leave_host_message": "Sei l'host: uscendo terminerai \"{{name}}\" per tutti.",
     "leave_host_confirm": "Esci e termina",

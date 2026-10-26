@@ -168,6 +168,13 @@ export class PartyApiService {
     return firstValueFrom(this.http.patch<PartyDto>(`/api/parties/${id}`, body));
   }
 
+  /** An invited user drops their own invitation; a 404 means it is already gone. */
+  decline(id: number) {
+    return firstValueFrom(this.http.post<void>(`/api/parties/${id}/decline`, {}, QUIET())).catch((e) => {
+      if (e?.status !== 404) throw e;
+    });
+  }
+
   end(id: number) {
     return firstValueFrom(this.http.delete<void>(`/api/parties/${id}`));
   }

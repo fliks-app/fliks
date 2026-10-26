@@ -2676,6 +2676,20 @@
         }
       }
     },
+    "/api/parties/{id}/decline": {
+      "post": {
+        "tags": [
+          "crate::party"
+        ],
+        "summary": "An invited user drops their own invitation; the host cannot, and anyone without one gets the 404.",
+        "operationId": "decline",
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/parties/{id}/intent": {
       "post": {
         "tags": [

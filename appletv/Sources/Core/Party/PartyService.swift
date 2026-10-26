@@ -257,6 +257,19 @@ import Foundation
         }
     }
 
+    /// Drops the viewer's invitation and returns to the Home; a 404 means it is already gone.
+    func decline(id: Int) async {
+        do {
+            try await APIClient.shared.post("/api/parties/\(id)/decline")
+        } catch APIError.badStatus(404, _) {
+        } catch {
+            return show(describe(error))
+        }
+        preview = nil
+        sheet = nil
+        onGoHome?()
+    }
+
     func reload() async {
         if party != nil { return await refetch() }
         if let id = preview?.id, let dto: Party = try? await APIClient.shared.get("/api/parties/\(id)") { preview = dto }

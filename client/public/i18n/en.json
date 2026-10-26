@@ -3671,6 +3671,7 @@
     "end_title": "End the party",
     "end_message": "End \"{{name}}\" for everyone?",
     "leave": "Leave the party",
+    "decline": "Decline",
     "leave_host_title": "Leave the party",
     "leave_host_message": "You are the host: leaving will end \"{{name}}\" for everyone.",
     "leave_host_confirm": "Leave and end",

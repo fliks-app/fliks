@@ -3671,6 +3671,7 @@
     "end_title": "Party beenden",
     "end_message": "\"{{name}}\" für alle beenden?",
     "leave": "Die Session verlassen",
+    "decline": "Ablehnen",
     "leave_host_title": "Die Session verlassen",
     "leave_host_message": "Du bist der Host: Wenn du gehst, wird \"{{name}}\" für alle beendet.",
     "leave_host_confirm": "Verlassen und beenden",

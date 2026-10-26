@@ -3671,6 +3671,7 @@
     "end_title": "Terminer la séance",
     "end_message": "Terminer \"{{name}}\" pour tout le monde ?",
     "leave": "Quitter la séance",
+    "decline": "Refuser",
     "leave_host_title": "Quitter la séance",
     "leave_host_message": "Vous êtes l'hôte : quitter mettra fin à \"{{name}}\" pour tout le monde.",
     "leave_host_confirm": "Quitter et terminer",

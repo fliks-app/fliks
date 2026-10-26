@@ -1625,3 +1625,30 @@ async fn simultaneous_creates_yield_one_party(pool: PgPool) {
         .unwrap();
     assert_eq!(n, 1);
 }
+
+#[sqlx::test(migrations = false)]
+async fn an_invitee_declines_and_the_party_leaves_their_list(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (alice, a) = c.user("alice", true).await;
+    let (bob, b) = c.user("bob", true).await;
+    let (_, d) = c.user("dave", true).await;
+    c.follow(alice, bob).await;
+    let id = party_with(&c, &a, vec![bob]).await;
+    let url = format!("/api/parties/{id}");
+    let (_, list) = c.call("GET", "/api/parties", &b, None).await;
+    assert_eq!(list.as_array().unwrap().len(), 1);
+    let (s, _) = c.call("POST", &format!("{url}/decline"), &a, None).await;
+    assert_eq!(s, 400, "the host cannot decline");
+    let (s, e) = c.call("POST", &format!("{url}/decline"), &d, None).await;
+    assert_eq!((s, msg(&e)), (404, Some("party.error_not_found")));
+    let (s, _) = c.call("POST", &format!("{url}/decline"), &b, None).await;
+    assert_eq!(s, 204);
+    let (_, list) = c.call("GET", "/api/parties", &b, None).await;
+    assert_eq!(list.as_array().unwrap().len(), 0);
+    let (s, _) = c.call("GET", &url, &b, None).await;
+    assert_eq!(s, 404);
+    let (_, p) = c.call("GET", &url, &a, None).await;
+    assert_eq!(p["guests"].as_array().unwrap().len(), 0);
+    let (s, _) = c.call("POST", &format!("{url}/decline"), &b, None).await;
+    assert_eq!(s, 404, "a second decline finds no invitation");
+}

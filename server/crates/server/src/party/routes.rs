@@ -54,6 +54,7 @@ pub fn router() -> Router<AppState> {
         .route("/api/parties/{id}/members/{userId}/kick", post(kick))
         .route("/api/parties/{id}/members/{userId}/host", post(transfer))
         .route("/api/parties/{id}/invitees", post(invite))
+        .route("/api/parties/{id}/decline", post(decline))
         .route("/api/parties/{id}/queue", get(queue))
 }
 
@@ -1072,6 +1073,31 @@ pub async fn invite(
         );
     }
     Ok(Json(dto(&st, &row, me, true).await?))
+}
+
+/// An invited user drops their own invitation; the host cannot, and anyone without one gets the 404.
+#[utoipa::path(post, path = "/api/parties/{id}/decline", responses((status = 204)))]
+pub async fn decline(
+    State(st): State<AppState>,
+    SessionAuthed(a): SessionAuthed,
+    PathParams(id): PathParams<i32>,
+) -> R<StatusCode> {
+    let me = a.user.id;
+    let row = row_of(&st, id).await?;
+    if host_of(&st, &row) == me || row.owner_id == me {
+        return Err(machine_err(PartyErr::Invalid("host")));
+    }
+    if !db::drop_invitation(&st.db, id, me).await? {
+        return Err(not_found());
+    }
+    notify_updated(&st, &row).await?;
+    st.hub.emit_to_users(
+        &[me],
+        SseEvent::PartyUpdated {
+            party_id: id.into(),
+        },
+    );
+    Ok(StatusCode::NO_CONTENT)
 }
 
 #[utoipa::path(get, path = "/api/parties/{id}/queue", responses((status = 200)))]

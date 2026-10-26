@@ -3671,6 +3671,7 @@
     "end_title": "Terminar la sesión",
     "end_message": "¿Terminar \"{{name}}\" para todos?",
     "leave": "Salir de la sesión",
+    "decline": "Rechazar",
     "leave_host_title": "Salir de la sesión",
     "leave_host_message": "Eres el anfitrión: salir terminará \"{{name}}\" para todos.",
     "leave_host_confirm": "Salir y terminar",
