@@ -65,6 +65,8 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     var preferredAudioLanguage = ""
     /// The party voice chat holds the microphone: the session must record and play.
     var voiceActive = false
+    /// The last play or pause the app or the user asked for; an audio session interruption does not change it.
+    var intendedPlaying = false
     let heartbeat = PositionHeartbeat()
     var subtitleSelectionGeneration = 0
     var firstFrameEmitted = false

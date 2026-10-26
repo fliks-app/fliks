@@ -122,6 +122,13 @@ extension NativePlayerPlugin {
             object: player
         )
 
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleSessionInterruption(_:)),
+            name: AVAudioSession.interruptionNotification,
+            object: nil
+        )
+
         // Ended detection
         NotificationCenter.default.addObserver(
             self,
@@ -178,11 +185,29 @@ extension NativePlayerPlugin {
         let reason = notification.userInfo?[AVPlayer.rateDidChangeReasonKey] as? AVPlayer.RateDidChangeReason
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
+            if reason != .audioSessionInterrupted, let player = self.player { self.intendedPlaying = player.rate != 0 }
+            NSLog("[VoiceDbg] rate change rate=%f reason=%@ intent=%d", self.player?.rate ?? -1, reason?.rawValue ?? "none", self.intendedPlaying ? 1 : 0)
             guard self.externalPlaybackActive,
                   let player = self.player, player.rate == 0,
                   reason == nil || reason == .setRateFailed,
                   !self.atEnd(player) else { return }
             self.emitExternalPlaybackFailed(reason: "rate dropped to 0 (\(reason?.rawValue ?? "no reason"))")
+        }
+    }
+
+    /// WebKit's GPU process opens its own session for the mic and the system interrupts ours, pausing AVPlayer
+    /// with no end the player acts on: resume once it ends when the last app or user command was play.
+    @objc private func handleSessionInterruption(_ note: Notification) {
+        let raw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt ?? 0
+        let reason = note.userInfo?[AVAudioSessionInterruptionReasonKey] as? UInt ?? 99
+        let options = note.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt ?? 0
+        NSLog("[VoiceDbg] interruption type=%lu reason=%lu options=%lu intent=%d", raw, reason, options, intendedPlaying ? 1 : 0)
+        guard AVAudioSession.InterruptionType(rawValue: raw) == .ended, intendedPlaying else { return }
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self, self.intendedPlaying, let player = self.player else { return }
+            do { try AVAudioSession.sharedInstance().setActive(true) } catch { NSLog("[VoiceDbg] reactivate failed: %@", "\(error)") }
+            player.play()
+            NSLog("[VoiceDbg] resume attempted")
         }
     }
 
