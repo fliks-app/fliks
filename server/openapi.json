@@ -2921,6 +2921,7 @@
         "tags": [
           "crate::party"
         ],
+        "summary": "Takes a `scheduled` party live on the head of its programme. The gate makes it the only start:\na second one, or one that lost to an end, finds the row already moved.",
         "operationId": "start",
         "responses": {
           "200": {
