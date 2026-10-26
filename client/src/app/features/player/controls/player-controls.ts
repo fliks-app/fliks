@@ -598,7 +598,6 @@ export class PlayerControlsComponent {
   }
 
   onSurfaceDblClick() {
-    if (this.isMobileTouch()) return;
     clearTimeout(this.surfaceClickTimer);
     this.toggleFullscreen.emit();
   }

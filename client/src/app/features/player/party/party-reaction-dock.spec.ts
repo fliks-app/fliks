@@ -31,7 +31,7 @@ function setup() {
   // The player container, listening where the real one does.
   const wake = vi.fn();
   const outer = document.createElement('div');
-  for (const t of ['click', 'dblclick', 'mousemove']) outer.addEventListener(t, wake);
+  for (const t of ['click', 'mousemove']) outer.addEventListener(t, wake);
   outer.append(host);
   document.body.append(outer);
   return { fixture, host, party, wake, rowOpen };
@@ -44,10 +44,10 @@ describe('PartyReactionDockComponent', () => {
   });
   afterEach(() => vi.useRealTimers());
 
-  it('keeps click, dblclick and mousemove from reaching the player', () => {
+  it('keeps click and mousemove from reaching the player', () => {
     const { host, wake } = setup();
     const emoji = host.querySelector<HTMLElement>('.emoji')!;
-    for (const t of ['click', 'dblclick', 'mousemove']) emoji.dispatchEvent(new Event(t, { bubbles: true }));
+    for (const t of ['click', 'mousemove']) emoji.dispatchEvent(new Event(t, { bubbles: true }));
     expect(wake).not.toHaveBeenCalled();
   });
 
@@ -74,14 +74,14 @@ describe('PartyReactionDockComponent', () => {
     for (const t of types) el.dispatchEvent(new MouseEvent(t, { bubbles: true, detail: t === 'dblclick' ? 2 : 1 }));
   };
 
-  it('desktop mouse double click (mpv UI window): no click or dblclick reaches the player', async () => {
+  it('desktop mouse double click (mpv UI window): no click reaches the player', async () => {
     const { fixture, host, wake } = setup();
     const emoji = host.querySelector<HTMLElement>('.emoji')!;
     fire(emoji, ['mousedown', 'mouseup', 'click']);
     await vi.advanceTimersByTimeAsync(0);
     fixture.detectChanges();
     const absorb = host.querySelector<HTMLElement>('.absorb')!;
-    fire(absorb, ['mousedown', 'mouseup', 'click', 'dblclick']);
+    fire(absorb, ['mousedown', 'mouseup', 'click']);
     expect(wake).not.toHaveBeenCalled();
   });
 
@@ -92,7 +92,7 @@ describe('PartyReactionDockComponent', () => {
     await vi.advanceTimersByTimeAsync(0);
     fixture.detectChanges();
     const absorb = host.querySelector<HTMLElement>('.absorb')!;
-    fire(absorb, ['pointerdown', 'touchstart', 'pointerup', 'touchend', 'mousemove', 'mousedown', 'mouseup', 'click', 'dblclick']);
+    fire(absorb, ['pointerdown', 'touchstart', 'pointerup', 'touchend', 'mousemove', 'mousedown', 'mouseup', 'click']);
     expect(wake).not.toHaveBeenCalled();
   });
 });

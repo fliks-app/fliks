@@ -96,11 +96,16 @@
 
 <!-- ===== CENTER OVERLAY (tap zone) =====
      z-30 keeps the bottom bar (z-40) clickable; mobile big buttons sit in a separate z-50 layer, as a tall bar can grow into this area. -->
-<div
-  class="absolute inset-0 z-30 flex items-center justify-center"
-  (click)="onSurfaceClick($event)"
-  (dblclick)="onSurfaceDblClick()"
-></div>
+@if (isMobileTouch()) {
+  <!-- No dblclick listener here: WebKit redirects a double tap to the nearest dblclick listener, taking the dock's second tap. -->
+  <div class="absolute inset-0 z-30 flex items-center justify-center" (click)="onSurfaceClick($event)"></div>
+} @else {
+  <div
+    class="absolute inset-0 z-30 flex items-center justify-center"
+    (click)="onSurfaceClick($event)"
+    (dblclick)="onSurfaceDblClick()"
+  ></div>
+}
 
 <!-- Mobile: big center controls (rewind / play / forward).
      Play/pause gives its spot to the centered spinner; the seek arrows stay usable. -->

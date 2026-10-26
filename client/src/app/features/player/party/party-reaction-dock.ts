@@ -17,12 +17,8 @@ const SETTLE_MS = 400;
   templateUrl: './party-reaction-dock.html',
   styleUrl: './party-reaction-dock.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  // The player wakes its controls on click, pointer move and double click (fullscreen); the dock is used without them.
-  host: {
-    '(click)': '$event.stopPropagation()',
-    '(dblclick)': '$event.stopPropagation()',
-    '(mousemove)': '$event.stopPropagation()',
-  },
+  // The player wakes its controls on any click or pointer move; the dock is used without them.
+  host: { '(click)': '$event.stopPropagation()', '(mousemove)': '$event.stopPropagation()' },
 })
 export class PartyReactionDockComponent {
   private readonly party = inject(PartyService);
