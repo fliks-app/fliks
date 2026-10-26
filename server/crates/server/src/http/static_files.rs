@@ -234,10 +234,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn csp_report_only_on_the_spa_document_alone() {
+    async fn csp_on_the_spa_document_alone() {
         let (c, k) = dirs("csp");
         let r = router(Some(c), k);
-        const H: &str = "content-security-policy-report-only";
+        const H: &str = "content-security-policy";
         assert!(get(&r, "/", None).await.headers().contains_key(H));
         assert!(get(&r, "/some/route", None).await.headers().contains_key(H));
         assert!(!get(&r, "/app.js", None).await.headers().contains_key(H));
