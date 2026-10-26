@@ -34,7 +34,7 @@ final class PartyPeopleTests: XCTestCase {
     }
 
     func testSnapshotGuestsDecode() throws {
-        let json = #"{"id":5,"name":"N","status":"live","scheduledAt":null,"lobbyOpensAt":null,"host":{"userId":1,"username":"a"},"item":{"mediaId":7,"mediaFileId":null,"episodeId":null,"title":"T","posterUrl":null,"fanartUrl":null},"playlist":null,"memberCount":1,"guests":[{"userId":2,"username":"b","source":"invite"}]}"#
+        let json = #"{"id":5,"name":"N","status":"live","scheduledAt":null,"host":{"userId":1,"username":"a"},"item":{"mediaId":7,"mediaFileId":null,"episodeId":null,"title":"T","posterUrl":null,"fanartUrl":null},"playlist":null,"memberCount":1,"guests":[{"userId":2,"username":"b","source":"invite"}]}"#
         let party = try JSONDecoder.fliks.decode(Party.self, from: Data(json.utf8))
         XCTAssertEqual(party.guests?.first?.source, "invite")
     }

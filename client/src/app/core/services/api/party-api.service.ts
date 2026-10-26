@@ -82,7 +82,6 @@ export interface PartySummaryDto {
   status: PartyStatus;
   scheduledAt: string | null;
   /** When the lobby opens, on the server's clock. */
-  lobbyOpensAt: string | null;
   host: PartyUser;
   /** The playing item, else the film chosen for the start; null while none is chosen. */
   item: PartyItem | null;

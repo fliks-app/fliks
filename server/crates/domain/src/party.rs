@@ -178,7 +178,7 @@ pub struct Member {
     joined: u64,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct System {
     pub kind: String,
     pub by: Option<String>,
@@ -335,7 +335,7 @@ fn by_of(m: &Member) -> By {
 }
 
 impl Room {
-    /// `rev` and message ids start at `now` so a recreated room never reuses what a client holds.
+    /// `rev` and message ids start at `now`; a reload of the chat raises the ids above what it holds.
     fn new(name: String, policy: Policy, host_id: i32, now: i64) -> Self {
         Self {
             name,
@@ -373,6 +373,15 @@ impl Room {
             .filter(|m| m.status != MemberStatus::Away)
             .map(|m| (m.user_id, m.connection_id.clone()))
             .collect()
+    }
+
+    /// Reloads the chat kept in the database; later ids stay above it, whatever the clock says.
+    pub fn restore_chat(&mut self, mut chat: Vec<Message>) {
+        chat.drain(..chat.len().saturating_sub(CHAT_CAP));
+        if let Some(last) = chat.last() {
+            self.next_msg = self.next_msg.max(last.id + 1);
+        }
+        self.chat = chat.into();
     }
 
     pub fn recent_messages(&self) -> Vec<Message> {
@@ -1933,6 +1942,25 @@ mod tests {
                 .is_ok()
         );
         assert_eq!(l.room.rev, rev);
+    }
+
+    #[test]
+    fn a_restored_chat_keeps_later_ids_above_it() {
+        let msg = |id| Message {
+            id,
+            user_id: None,
+            username: None,
+            text: String::new(),
+            system: None,
+            sent_at_ms: 0,
+        };
+        let mut l = party();
+        let top = l.room.next_msg + 400;
+        l.room.restore_chat((top - 300..=top).map(msg).collect());
+        assert_eq!(l.room.chat.len(), CHAT_CAP);
+        assert_eq!(l.room.chat.back().unwrap().id, top);
+        l.room.post_message(1, "d1", "m", 0).unwrap();
+        assert_eq!(l.room.chat.back().unwrap().id, top + 1);
     }
 
     #[test]

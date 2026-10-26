@@ -85,7 +85,6 @@ struct Party: Codable, Equatable, Identifiable {
     var name: String
     let status: String
     let scheduledAt: Date?
-    let lobbyOpensAt: Date?
     let host: PartyUser
     /// The playing item, else the film chosen for the start; nil while none is chosen.
     var item: PartyItem?

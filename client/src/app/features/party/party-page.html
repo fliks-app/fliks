@@ -29,8 +29,7 @@
       <div class="flex flex-wrap items-center gap-x-3 lg:gap-x-4 gap-y-1 mt-2 lg:mt-3 text-base-content/60">
         @switch (phase()) {
           @case ('live') { <span class="badge badge-error">{{ 'party.live' | translate }}</span> }
-          @case ('lobby') { <span class="badge badge-warning">{{ 'party.status_lobby' | translate }}</span> }
-          @default { <span class="badge badge-primary badge-outline">{{ 'party.status_scheduled' | translate }}</span> }
+          @default { <span class="badge badge-warning">{{ 'party.status_lobby' | translate }}</span> }
         }
         @if (h.status !== 'live' && h.scheduledAt) {
           <span>{{ when() }}</span>

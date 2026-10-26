@@ -134,11 +134,6 @@ export class PartyPageComponent implements OnInit, OnDestroy {
     const at = this.view()?.scheduledAt;
     return at ? Date.parse(at) - this.now() : null;
   });
-  protected readonly lobbyOpen = computed(() => {
-    const v = this.view();
-    if (v?.status !== 'scheduled') return false;
-    return !!v.live || (v.lobbyOpensAt != null && Date.parse(v.lobbyOpensAt) <= this.now());
-  });
   protected readonly countdown = computed(() => {
     const left = this.msLeft();
     return left != null && left > 0 ? formatTime(left / 1000) : null;
@@ -147,9 +142,7 @@ export class PartyPageComponent implements OnInit, OnDestroy {
     const at = this.view()?.scheduledAt;
     return at ? partyWhen(at, this.translate, this.now()) : '';
   });
-  protected readonly phase = computed<'live' | 'lobby' | 'scheduled'>(() =>
-    this.view()?.status === 'live' ? 'live' : this.lobbyOpen() ? 'lobby' : 'scheduled',
-  );
+  protected readonly phase = computed<'live' | 'lobby'>(() => (this.view()?.status === 'live' ? 'live' : 'lobby'));
   protected readonly people = computed<PartyPerson[]>(() => {
     const v = this.view();
     const members = this.joined() ? this.party.members() : (v?.live?.members ?? []);
@@ -187,9 +180,9 @@ export class PartyPageComponent implements OnInit, OnDestroy {
       else this.navbar.leaveHeroPage();
     });
     effect(() => this.background.set(this, this.fanart()));
-    // The lobby opens by itself while the page is on screen.
+    // The lobby is open from creation: the page joins it as soon as it shows.
     effect(() => {
-      if (!this.lobbyOpen() || this.joined() || this.joining()) return;
+      if (this.view()?.status !== 'scheduled' || this.joined() || this.joining()) return;
       untracked(() => void this.joinLobby());
     });
   }
@@ -237,7 +230,7 @@ export class PartyPageComponent implements OnInit, OnDestroy {
     try {
       await this.party.enter(this.id, this.token);
     } catch {
-      /* not open yet or no access: the interceptor toasted it, the page stays informative */
+      /* no access: the interceptor toasted it, the page stays informative */
     } finally {
       setTimeout(() => this.joining.set(false), JOIN_RETRY_MS);
     }

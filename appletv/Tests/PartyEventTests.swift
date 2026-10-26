@@ -52,7 +52,7 @@ final class PartyEventTests: XCTestCase {
     }
 
     func testSnapshotDecodesWithItsLiveState() throws {
-        let json = #"{"id":5,"name":"Night","status":"scheduled","scheduledAt":"2026-10-25T20:00:00.000Z","lobbyOpensAt":null,"host":{"userId":1,"username":"a"},"item":\#(item),"playlist":null,"memberCount":1,"policy":"everyone","reactionsEnabled":true,"chatEnabled":true,"linkSharing":true,"inviteToken":"tok","guests":[],"live":{"rev":4,"playback":{"state":"paused","anchor":{"position":0,"serverTimeMs":0}},"members":[],"messages":[]}}"#
+        let json = #"{"id":5,"name":"Night","status":"scheduled","scheduledAt":"2026-10-25T20:00:00.000Z","host":{"userId":1,"username":"a"},"item":\#(item),"playlist":null,"memberCount":1,"policy":"everyone","reactionsEnabled":true,"chatEnabled":true,"linkSharing":true,"inviteToken":"tok","guests":[],"live":{"rev":4,"playback":{"state":"paused","anchor":{"position":0,"serverTimeMs":0}},"members":[],"messages":[]}}"#
         let party = try JSONDecoder.fliks.decode(Party.self, from: Data(json.utf8))
         XCTAssertEqual(party.live?.rev, 4)
         XCTAssertEqual(party.live?.playback?.state, "paused")
@@ -61,14 +61,14 @@ final class PartyEventTests: XCTestCase {
     }
 
     func testSummaryWithoutTheTrailingFieldsDecodes() throws {
-        let json = #"{"id":5,"name":"Night","status":"live","scheduledAt":null,"lobbyOpensAt":null,"host":{"userId":1,"username":"a"},"item":\#(item),"playlist":{"id":2,"name":"P"},"memberCount":3}"#
+        let json = #"{"id":5,"name":"Night","status":"live","scheduledAt":null,"host":{"userId":1,"username":"a"},"item":\#(item),"playlist":{"id":2,"name":"P"},"memberCount":3}"#
         let party = try JSONDecoder.fliks.decode(Party.self, from: Data(json.utf8))
         XCTAssertNil(party.live)
         XCTAssertEqual(party.playlist?.id, 2)
     }
 
     func testRoomWithoutAFilmDecodesWithNoItemAndNoPlayback() throws {
-        let json = #"{"id":5,"name":"Night","status":"scheduled","scheduledAt":null,"lobbyOpensAt":null,"host":{"userId":1,"username":"a"},"item":null,"playlist":null,"memberCount":1,"live":{"rev":4,"playback":null,"members":[],"messages":[]}}"#
+        let json = #"{"id":5,"name":"Night","status":"scheduled","scheduledAt":null,"host":{"userId":1,"username":"a"},"item":null,"playlist":null,"memberCount":1,"live":{"rev":4,"playback":null,"members":[],"messages":[]}}"#
         let party = try JSONDecoder.fliks.decode(Party.self, from: Data(json.utf8))
         XCTAssertNil(party.item)
         XCTAssertNotNil(party.live)

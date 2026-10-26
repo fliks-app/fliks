@@ -25,7 +25,7 @@ const item = (mediaId: number, episodeId: number | null = null): PartyItem => ({
 
 function dto(rev: number, over: Partial<PartyDto> = {}): PartyDto {
   return {
-    id: 7, name: 'p', status: 'live', scheduledAt: null, lobbyOpensAt: null, host: { userId: 1, username: 'a' },
+    id: 7, name: 'p', status: 'live', scheduledAt: null, host: { userId: 1, username: 'a' },
     item: item(1, 100), playlist: null, memberCount: 1, policy: 'everyone', reactionsEnabled: true, chatEnabled: true,
     linkSharing: false, inviteToken: null, guests: [],
     live: { rev, playback: { state: 'paused', anchor: { position: 0, serverTimeMs: 0 } }, members: [], messages: [{ id: rev, userId: null, username: null, text: '', system: null, sentAtMs: 0 }] },

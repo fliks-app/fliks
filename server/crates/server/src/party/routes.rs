@@ -186,7 +186,8 @@ fn connection_for(st: &AppState, user: i32, device: &str) -> Option<String> {
         .map(|t| t.connection_id.clone())
 }
 
-fn lobby_open(row: &Row) -> bool {
+/// Whether `party.starting` is due: the party is within `LOBBY_OPEN_BEFORE_MS` of its start.
+fn starting_due(row: &Row) -> bool {
     let at = row.scheduled_at.map_or(i64::MAX, |t| t.timestamp_millis());
     now_ms() >= at - LOBBY_OPEN_BEFORE_MS
 }
@@ -268,10 +269,6 @@ async fn summaries_with(
             name: row.name.clone(),
             status: row.status.clone(),
             scheduled_at: row.scheduled_at,
-            lobby_opens_at: row
-                .scheduled_at
-                .filter(|_| row.status == "scheduled")
-                .map(|t| t - chrono::Duration::milliseconds(LOBBY_OPEN_BEFORE_MS)),
             host: UserRef {
                 user_id: host,
                 username: names.get(&host).cloned().unwrap_or_default(),
@@ -291,8 +288,8 @@ async fn summaries_with(
 /// The snapshot for `viewer`; without `full` (a token holder who has not joined) only the summary
 /// and the switches, no guests, members, messages or anchor.
 async fn dto(st: &AppState, row: &Row, viewer: i32, full: bool) -> R<PartyDto> {
-    if row.status == "live" {
-        st.parties.ensure(row, false);
+    if row.status != "ended" {
+        registry::ensure(st, row, false).await?;
     }
     let view = st.parties.view(row.id);
     let brief = view.as_ref().map(Brief::of);
@@ -484,13 +481,9 @@ pub async fn create(
         now + chrono::Duration::milliseconds(LOBBY_OPEN_BEFORE_MS),
     )
     .await?;
-    if !created {
-        if row.status == "live" || lobby_open(&row) {
-            st.parties.ensure(&row, false);
-        }
-    } else {
+    if created {
         announce_invited(&st, &row, &invitees).await?;
-        if lobby_open(&row) {
+        if starting_due(&row) {
             registry::open_lobby(&st, &row).await?;
         }
     }
@@ -504,7 +497,7 @@ pub async fn list(
 ) -> R<Json<Vec<PartySummaryDto>>> {
     let rows = db::listed(&st.db, a.user.id).await?;
     for row in rows.iter().filter(|r| r.status == "live") {
-        st.parties.ensure(row, false);
+        registry::ensure(&st, row, false).await?;
     }
     let mut sums = summaries(&st, &rows).await?;
     conceal(&st, a.user.id, &mut sums).await?;
@@ -617,7 +610,7 @@ pub async fn patch(
             },
         );
     }
-    if b.scheduled_at.is_some() && lobby_open(&row) {
+    if b.scheduled_at.is_some() && starting_due(&row) {
         registry::open_lobby(&st, &row).await?;
     }
     if b.scheduled_at.is_some() || renamed {
@@ -652,10 +645,7 @@ pub async fn join(
     let row = row_of(&st, id).await?;
     let how = access(&st, &row, me, b.token.as_deref()).await?;
     require_open(&row)?;
-    if row.status == "scheduled" && !lobby_open(&row) {
-        return Err(fail(StatusCode::CONFLICT, "party.error_not_open"));
-    }
-    st.parties.ensure(&row, false);
+    registry::ensure(&st, &row, false).await?;
     let item = st.parties.brief(id).ok_or_else(not_live)?.item;
     if how == Access::TokenOnly && db::is_kicked(&st.db, id, me).await? {
         return Err(fail(StatusCode::FORBIDDEN, "party.error_kicked"));
@@ -736,7 +726,7 @@ pub async fn start(
         }
         db::set_live(&st.db, id).await?;
         row.status = "live".into();
-        st.parties.ensure(&row, true);
+        registry::ensure(&st, &row, true).await?;
         let item = row.item().ok_or_else(|| machine_err(PartyErr::NoItem))?;
         mutate(&st, id, |l| ((), l.go_live(item, now_ms())))
             .await
@@ -823,7 +813,7 @@ pub async fn intent(
     if row.status != "live" {
         return Err(not_live());
     }
-    st.parties.ensure(&row, false);
+    registry::ensure(&st, &row, false).await?;
     let item: Option<Item> = b.item.map(Into::into);
     let mut title = None;
     if let (IntentAction::SetItem, Some(it)) = (b.action, item.as_ref()) {
@@ -1139,7 +1129,7 @@ pub async fn invite(
     let users = check_followed(&st, row.owner_id, &b.user_ids).await?;
     let added = db::add_invitees(&st.db, id, &users).await?;
     announce_invited(&st, &row, &added).await?;
-    if row.status == "live" || lobby_open(&row) {
+    if row.status == "live" || starting_due(&row) {
         st.hub.emit_to_users(
             &added,
             SseEvent::PartyStarting {

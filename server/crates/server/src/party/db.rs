@@ -1,7 +1,7 @@
 //! Queries on `watch_parties` and `watch_party_invitees` (`docs/spec/watch-party.md`, Model).
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, Utc};
-use fliks_domain::party::{Item, Policy};
+use fliks_domain::party::{CHAT_CAP, Item, Message, Policy};
 use sqlx::PgPool;
 use std::collections::HashMap;
 
@@ -403,6 +403,56 @@ pub async fn persist(db: &PgPool, id: i32, position: f64, item: &Item) -> sqlx::
     .execute(db)
     .await?;
     Ok(())
+}
+
+/// Appends a chat message; a repeat of the same id is ignored.
+pub async fn save_message(db: &PgPool, party: i32, m: &Message) -> sqlx::Result<()> {
+    sqlx::query(
+        r#"INSERT INTO watch_party_messages ("partyId", id, "userId", username, text, system, "sentAt")
+           VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT DO NOTHING"#,
+    )
+    .bind(party)
+    .bind(m.id as i64)
+    .bind(m.user_id)
+    .bind(&m.username)
+    .bind(&m.text)
+    .bind(m.system.as_ref().map(|s| serde_json::to_value(s).expect("typed")))
+    .bind(DateTime::from_timestamp_millis(m.sent_at_ms).unwrap_or_default())
+    .execute(db)
+    .await?;
+    Ok(())
+}
+
+/// The last `CHAT_CAP` messages, oldest first.
+pub async fn load_chat(db: &PgPool, party: i32) -> sqlx::Result<Vec<Message>> {
+    type R = (
+        i64,
+        Option<i32>,
+        Option<String>,
+        String,
+        Option<serde_json::Value>,
+        DateTime<Utc>,
+    );
+    let rows: Vec<R> = sqlx::query_as(
+        r#"SELECT id, "userId", username, text, system, "sentAt" FROM watch_party_messages
+           WHERE "partyId" = $1 ORDER BY id DESC LIMIT $2"#,
+    )
+    .bind(party)
+    .bind(CHAT_CAP as i64)
+    .fetch_all(db)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .rev()
+        .map(|(id, user_id, username, text, system, at)| Message {
+            id: id as u64,
+            user_id,
+            username,
+            text,
+            system: system.and_then(|v| serde_json::from_value(v).ok()),
+            sent_at_ms: at.timestamp_millis(),
+        })
+        .collect())
 }
 
 pub async fn usernames(db: &PgPool, ids: &[i32]) -> sqlx::Result<HashMap<i32, String>> {

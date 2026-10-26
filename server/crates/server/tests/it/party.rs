@@ -354,7 +354,8 @@ async fn a_party_created_now_or_rescheduled_to_the_past_opens_its_lobby_at_once(
         )
         .await;
     let id = p["id"].as_i64().unwrap();
-    assert_eq!(p["live"], Value::Null);
+    assert_eq!(p["live"]["playback"], Value::Null);
+    assert!(events_of(&mut sb, "party.starting").await.is_empty());
     let (s, p) = c
         .call(
             "PATCH",
@@ -526,24 +527,25 @@ async fn a_party_without_link_sharing_hides_the_token_from_members(pool: PgPool)
 }
 
 #[sqlx::test(migrations = false)]
-async fn a_scheduled_party_opens_its_lobby_late_and_expires(pool: PgPool) {
+async fn a_scheduled_party_is_joinable_from_creation_and_expires(pool: PgPool) {
     let c = ctx(pool).await;
-    let (_, a) = c.user("alice", true).await;
+    let (alice, a) = c.user("alice", true).await;
+    let _ca = c.connect(alice, "d");
     let at = |mins: i64| (chrono::Utc::now() + chrono::Duration::minutes(mins)).to_rfc3339();
     let (s, p) = c
         .call(
             "POST",
             "/api/parties",
             &a,
-            Some(json!({"name": "later", "mediaId": 1, "scheduledAt": at(60)})),
+            Some(json!({"name": "later", "mediaId": 1, "scheduledAt": at(3 * 24 * 60)})),
         )
         .await;
     assert_eq!(
-        (s, p["status"].clone(), p["live"].clone()),
+        (s, p["status"].clone(), p["live"]["playback"].clone()),
         (201, json!("scheduled"), Value::Null)
     );
     let id = p["id"].as_i64().unwrap();
-    let (s, e) = c
+    let (s, p) = c
         .call(
             "POST",
             &format!("/api/parties/{id}/join"),
@@ -551,7 +553,7 @@ async fn a_scheduled_party_opens_its_lobby_late_and_expires(pool: PgPool) {
             Some(json!({"deviceId": "d"})),
         )
         .await;
-    assert_eq!((s, msg(&e)), (409, Some("party.error_not_open")));
+    assert_eq!((s, p["status"].clone()), (200, json!("scheduled")));
 
     sqlx::query(
         r#"UPDATE watch_parties SET "scheduledAt" = now() - interval '121 minutes' WHERE id = $1"#,
@@ -563,6 +565,151 @@ async fn a_scheduled_party_opens_its_lobby_late_and_expires(pool: PgPool) {
     party::sweep(&c.st, chrono::Utc::now()).await.unwrap();
     let (s, p) = c.call("GET", &format!("/api/parties/{id}"), &a, None).await;
     assert_eq!((s, p["status"].clone()), (200, json!("ended")));
+}
+
+fn texts(p: &Value) -> Vec<&str> {
+    let all = p["live"]["messages"].as_array().unwrap();
+    all.iter()
+        .filter(|m| m["system"].is_null())
+        .map(|m| m["text"].as_str().unwrap())
+        .collect()
+}
+
+fn ids(p: &Value) -> Vec<u64> {
+    let all = p["live"]["messages"].as_array().unwrap();
+    all.iter().map(|m| m["id"].as_u64().unwrap()).collect()
+}
+
+#[sqlx::test(migrations = false)]
+async fn the_chat_of_a_party_scheduled_days_ahead_survives_a_freed_room_and_a_restart(
+    pool: PgPool,
+) {
+    let c = ctx(pool).await;
+    let (alice, a) = c.user("alice", true).await;
+    let _ca = c.connect(alice, "da");
+    let when = (chrono::Utc::now() + chrono::Duration::days(3)).to_rfc3339();
+    let (_, p) = c
+        .call(
+            "POST",
+            "/api/parties",
+            &a,
+            Some(json!({"name": "later", "mediaId": 1, "scheduledAt": when})),
+        )
+        .await;
+    let id = p["id"].as_i64().unwrap();
+    let url = format!("/api/parties/{id}");
+    let join = Some(json!({"deviceId": "da"}));
+    let (s, _) = c
+        .call("POST", &format!("{url}/join"), &a, join.clone())
+        .await;
+    assert_eq!(s, 200);
+    for t in ["one", "two"] {
+        let (s, _) = c
+            .call(
+                "POST",
+                &format!("{url}/messages"),
+                &a,
+                Some(json!({"deviceId": "da", "text": t})),
+            )
+            .await;
+        assert_eq!(s, 201);
+    }
+    let (_, before) = c.call("GET", &url, &a, None).await;
+    assert_eq!(texts(&before), ["one", "two"]);
+
+    // the empty room is freed from memory; the chat comes back with the next read
+    c.st.parties.remove(id as i32);
+    assert!(c.st.parties.view(id as i32).is_none());
+    let (_, p) = c.call("GET", &url, &a, None).await;
+    assert_eq!(ids(&p), ids(&before));
+    assert_eq!(texts(&p), ["one", "two"]);
+
+    let (s, _) = c
+        .call("POST", &format!("{url}/join"), &a, join.clone())
+        .await;
+    assert_eq!(s, 200);
+    let (_, m) = c
+        .call(
+            "POST",
+            &format!("{url}/messages"),
+            &a,
+            Some(json!({"deviceId": "da", "text": "three"})),
+        )
+        .await;
+    assert!(m["id"].as_u64().unwrap() > *ids(&before).iter().max().unwrap());
+
+    // a restart: a fresh registry over the same database
+    let mut st = c.st.clone();
+    st.parties = party::Parties::default();
+    let c2 = Ctx {
+        app: party::router().with_state(st.clone()),
+        events: events::router().with_state(st.clone()),
+        st,
+        pool: c.pool.clone(),
+    };
+    let (_, p) = c2.call("GET", &url, &a, None).await;
+    assert_eq!(texts(&p), ["one", "two", "three"]);
+    assert!(ids(&p).windows(2).all(|w| w[0] < w[1]));
+}
+
+#[sqlx::test(migrations = false)]
+async fn the_chat_of_a_live_party_is_reloaded_at_boot(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (alice, a) = c.user("alice", true).await;
+    let _ca = c.connect(alice, "da");
+    let id = party_with(&c, &a, vec![]).await;
+    let url = format!("/api/parties/{id}");
+    c.call(
+        "POST",
+        &format!("{url}/join"),
+        &a,
+        Some(json!({"deviceId": "da"})),
+    )
+    .await;
+    c.call(
+        "POST",
+        &format!("{url}/messages"),
+        &a,
+        Some(json!({"deviceId": "da", "text": "hi"})),
+    )
+    .await;
+    let mut st = c.st.clone();
+    st.parties = party::Parties::default();
+    party::boot(&st).await.unwrap();
+    let view = st.parties.view(id as i32).unwrap();
+    assert!(view.messages.iter().any(|m| m.text == "hi"));
+}
+
+#[sqlx::test(migrations = false)]
+async fn party_starting_is_sent_once_when_the_start_comes_within_fifteen_minutes(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (alice, a) = c.user("alice", true).await;
+    let (bob, b) = c.user("bob", true).await;
+    c.follow(alice, bob).await;
+    let mut sb = c.stream(&b, "db").await;
+    let when = (chrono::Utc::now() + chrono::Duration::minutes(40)).to_rfc3339();
+    let (_, p) = c
+        .call(
+            "POST",
+            "/api/parties",
+            &a,
+            Some(json!({"name": "n", "mediaId": 1, "inviteeIds": [bob], "scheduledAt": when})),
+        )
+        .await;
+    let id = p["id"].as_i64().unwrap() as i32;
+    party::sweep(&c.st, chrono::Utc::now()).await.unwrap();
+    assert!(events_of(&mut sb, "party.starting").await.is_empty());
+    sqlx::query(
+        r#"UPDATE watch_parties SET "scheduledAt" = now() + interval '10 minutes' WHERE id = $1"#,
+    )
+    .bind(id)
+    .execute(&c.pool)
+    .await
+    .unwrap();
+    for _ in 0..2 {
+        party::sweep(&c.st, chrono::Utc::now()).await.unwrap();
+    }
+    assert_eq!(events_of(&mut sb, "party.starting").await.len(), 1);
 }
 
 /// Every `kind` event queued on the stream, read until it stays quiet.
@@ -1382,9 +1529,7 @@ async fn a_token_holder_who_has_not_joined_gets_the_summary_only(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
-async fn a_recreated_machine_keeps_its_revision_above_the_old_one_and_a_lobby_has_an_open_time(
-    pool: PgPool,
-) {
+async fn a_recreated_machine_keeps_its_revision_above_the_old_one(pool: PgPool) {
     let c = ctx(pool).await;
     let (alice, a) = c.user("alice", true).await;
     let id = party_with(&c, &a, vec![]).await;
@@ -1409,11 +1554,7 @@ async fn a_recreated_machine_keeps_its_revision_above_the_old_one_and_a_lobby_ha
             Some(json!({"name": "n", "mediaId": 1, "scheduledAt": "2999-01-01T01:00:00.000Z"})),
         )
         .await;
-    assert_eq!(p["lobbyOpensAt"], "2999-01-01T00:45:00.000Z");
-    assert_eq!(
-        c.call("GET", &url, &a, None).await.1["lobbyOpensAt"],
-        Value::Null
-    );
+    assert!(p.get("lobbyOpensAt").is_none());
 }
 
 #[sqlx::test(migrations = false)]
