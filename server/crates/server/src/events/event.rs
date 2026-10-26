@@ -491,6 +491,8 @@ pub enum SseEvent {
         rev: i64,
         item: Value,
     },
+    #[serde(rename = "party.proposals")]
+    PartyProposals { party_id: i64, proposals: Value },
 }
 
 impl SseEvent {
@@ -667,13 +669,14 @@ mod tests {
             json!({"type":"party.updated","partyId":1}),
             json!({"type":"party.signal","partyId":1,"from":{"userId":2,"deviceId":"d"},"kind":"offer","data":{"sdp":"x"}}),
             json!({"type":"party.selection","partyId":1,"rev":3,"item":{"mediaId":1}}),
+            json!({"type":"party.proposals","partyId":1,"proposals":[{"id":1,"voterIds":[2]}]}),
         ]
     }
 
     #[test]
     fn every_type_round_trips_to_the_same_json() {
         let all = samples();
-        assert_eq!(all.len(), 51);
+        assert_eq!(all.len(), 52);
         for want in all {
             let ev: SseEvent = serde_json::from_value(want.clone()).unwrap();
             assert_eq!(serde_json::to_value(&ev).unwrap(), want);

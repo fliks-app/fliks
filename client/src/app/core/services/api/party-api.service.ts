@@ -104,9 +104,18 @@ export interface PartyGuest extends PartyUser {
   source: PartyGuestSource;
 }
 
+/** A film put forward by a member; `item.title` is empty when the viewer cannot open it. */
+export interface PartyProposal {
+  id: number;
+  item: PartyItem;
+  proposedBy: number;
+  voterIds: number[];
+}
+
 export interface PartyDto extends PartySummaryDto, PartySwitches {
   inviteToken: string | null;
   guests: PartyGuest[];
+  proposals: PartyProposal[];
   live: PartyLive | null;
 }
 
@@ -192,6 +201,23 @@ export class PartyApiService {
     return firstValueFrom(
       this.http.post<PartyDto>(`/api/parties/${id}/join`, { deviceId, ...(token && { token }) }, quiet ? QUIET() : {}),
     );
+  }
+
+  propose(id: number, mediaId: number, episodeId?: number) {
+    return firstValueFrom(this.http.post<PartyProposal[]>(`/api/parties/${id}/proposals`, { mediaId, ...(episodeId != null && { episodeId }) }));
+  }
+
+  unpropose(id: number, proposalId: number) {
+    return firstValueFrom(this.http.delete<void>(`/api/parties/${id}/proposals/${proposalId}`));
+  }
+
+  vote(id: number, proposalId: number, on: boolean) {
+    const url = `/api/parties/${id}/proposals/${proposalId}/vote`;
+    return firstValueFrom(on ? this.http.put<void>(url, {}) : this.http.delete<void>(url));
+  }
+
+  choose(id: number, proposalId: number) {
+    return firstValueFrom(this.http.post<PartyDto>(`/api/parties/${id}/proposals/${proposalId}/choose`, {}));
   }
 
   start(id: number) {

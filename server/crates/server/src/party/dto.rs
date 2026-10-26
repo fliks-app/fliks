@@ -293,6 +293,23 @@ pub struct PartyLive {
     pub messages: Vec<Message>,
 }
 
+/// A film put forward by a member; `item` is masked for a viewer who cannot open it.
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ProposalDto {
+    pub id: i32,
+    pub item: PartyItem,
+    pub proposed_by: i32,
+    pub voter_ids: Vec<i32>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct ProposalIn {
+    pub media_id: i32,
+    pub episode_id: Option<i32>,
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PartyDto {
@@ -304,6 +321,7 @@ pub struct PartyDto {
     pub link_sharing: bool,
     pub invite_token: Option<String>,
     pub guests: Vec<GuestDto>,
+    pub proposals: Vec<ProposalDto>,
     pub live: Option<PartyLive>,
 }
 

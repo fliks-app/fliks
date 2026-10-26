@@ -59,6 +59,7 @@ pub fn router() -> Router<AppState> {
         .route("/api/parties/{id}/invitees", post(invite))
         .route("/api/parties/{id}/decline", post(decline))
         .route("/api/parties/{id}/queue", get(queue))
+        .merge(super::proposals::proposal_router())
 }
 
 /// An `AppError`, or one that also carries a body field (`party` on 409 stale, `usernames`).
@@ -100,13 +101,13 @@ impl IntoResponse for PartyError {
     }
 }
 
-type R<T> = Result<T, PartyError>;
+pub(super) type R<T> = Result<T, PartyError>;
 
-fn fail(status: StatusCode, key: &'static str) -> PartyError {
+pub(super) fn fail(status: StatusCode, key: &'static str) -> PartyError {
     AppError::with_message(status, key).into()
 }
 
-fn not_found() -> PartyError {
+pub(super) fn not_found() -> PartyError {
     fail(StatusCode::NOT_FOUND, "party.error_not_found")
 }
 
@@ -212,11 +213,11 @@ async fn access(st: &AppState, row: &Row, me: i32, token: Option<&str>) -> R<Acc
     Err(not_found())
 }
 
-fn host_of(st: &AppState, row: &Row) -> i32 {
+pub(super) fn host_of(st: &AppState, row: &Row) -> i32 {
     st.parties.brief(row.id).map_or(row.owner_id, |b| b.host_id)
 }
 
-fn require_host(st: &AppState, row: &Row, me: i32) -> R<()> {
+pub(super) fn require_host(st: &AppState, row: &Row, me: i32) -> R<()> {
     if host_of(st, row) == me {
         Ok(())
     } else {
@@ -224,7 +225,7 @@ fn require_host(st: &AppState, row: &Row, me: i32) -> R<()> {
     }
 }
 
-fn require_open(row: &Row) -> R<()> {
+pub(super) fn require_open(row: &Row) -> R<()> {
     if row.status == "ended" {
         return Err(fail(StatusCode::CONFLICT, "party.error_ended"));
     }
@@ -287,7 +288,7 @@ async fn summaries_with(
 
 /// The snapshot for `viewer`; without `full` (a token holder who has not joined) only the summary
 /// and the switches, no guests, members, messages or anchor.
-async fn dto(st: &AppState, row: &Row, viewer: i32, full: bool) -> R<PartyDto> {
+pub(super) async fn dto(st: &AppState, row: &Row, viewer: i32, full: bool) -> R<PartyDto> {
     if row.status != "ended" {
         registry::ensure(st, row, false).await?;
     }
@@ -308,6 +309,11 @@ async fn dto(st: &AppState, row: &Row, viewer: i32, full: bool) -> R<PartyDto> {
             && view
                 .as_ref()
                 .is_some_and(|v| v.members.iter().any(|m| m.user_id == viewer)));
+    let proposals = if full {
+        super::proposals::snapshot(st, row.id, viewer).await?
+    } else {
+        vec![]
+    };
     let live = view.filter(|_| full).map(|v: View| PartyLive {
         rev: v.rev,
         playback: v.playback,
@@ -329,6 +335,7 @@ async fn dto(st: &AppState, row: &Row, viewer: i32, full: bool) -> R<PartyDto> {
                 source,
             })
             .collect(),
+        proposals,
         live,
     })
 }
@@ -361,15 +368,21 @@ async fn announce_invited(st: &AppState, row: &Row, users: &[i32]) -> Result<(),
 /// Blanks the title and artwork of an item `viewer` cannot open, so a party never tells a user
 /// what their libraries hide.
 async fn conceal(st: &AppState, viewer: i32, sums: &mut [PartySummaryDto]) -> Result<(), AppError> {
-    let mut medias: Vec<i32> = sums
-        .iter()
-        .filter_map(|s| s.item.as_ref().map(|i| i.media_id))
-        .collect();
+    let mut items: Vec<&mut PartyItem> = sums.iter_mut().filter_map(|s| s.item.as_mut()).collect();
+    conceal_items(st, viewer, &mut items).await
+}
+
+pub(super) async fn conceal_items(
+    st: &AppState,
+    viewer: i32,
+    items: &mut [&mut PartyItem],
+) -> Result<(), AppError> {
+    let mut medias: Vec<i32> = items.iter().map(|i| i.media_id).collect();
     medias.sort_unstable();
     medias.dedup();
     let libraries = db::media_libraries(&st.db, &medias).await?;
     let allowed = user_libraries(st, viewer).await?.unwrap_or_default();
-    for item in sums.iter_mut().filter_map(|s| s.item.as_mut()) {
+    for item in items.iter_mut() {
         if libraries
             .get(&item.media_id)
             .is_none_or(|lib| !allowed.contains(lib))
@@ -685,8 +698,15 @@ pub async fn select(
     if row.status != "scheduled" {
         return Err(fail(StatusCode::CONFLICT, "party.error_not_scheduled"));
     }
-    let item = Item::from(b);
-    let ids = accessible_library_ids(&st.db, &a).await?;
+    select_item(&st, &a, &mut row, Item::from(b)).await?;
+    Ok(Json(dto(&st, &row, me, true).await?))
+}
+
+/// Fixes what the start plays: the one path for a host `select`, a chosen proposal and a start
+/// that takes the top vote.
+pub(super) async fn select_item(st: &AppState, a: &Authed, row: &mut Row, item: Item) -> R<()> {
+    let id = row.id;
+    let ids = accessible_library_ids(&st.db, a).await?;
     assert_media_accessible(&st.db, item.media_id, &ids).await?;
     if let Some(playlist) = row.playlist_id {
         let rows = db::playlist_rows(&st.db, playlist).await?;
@@ -697,16 +717,16 @@ pub async fn select(
             return Err(fail(StatusCode::BAD_REQUEST, "party.error_invalid_item"));
         }
     }
-    vet_item(&st, id, &item).await?;
+    vet_item(st, id, &item).await?;
     if !db::set_selection(&st.db, id, &item).await? {
         return Err(fail(StatusCode::CONFLICT, "party.error_not_scheduled"));
     }
     row.media_id = Some(item.media_id);
     row.media_file_id = item.media_file_id;
     row.episode_id = item.episode_id;
-    mutate(&st, id, |l| ((), l.room.select(item.clone()))).await;
-    notify_updated(&st, &row).await?;
-    Ok(Json(dto(&st, &row, me, true).await?))
+    mutate(st, id, |l| ((), l.room.select(item.clone()))).await;
+    notify_updated(st, row).await?;
+    Ok(())
 }
 
 #[utoipa::path(post, path = "/api/parties/{id}/start", responses((status = 200)))]
@@ -722,7 +742,9 @@ pub async fn start(
     require_open(&row)?;
     if row.status == "scheduled" {
         if row.item().is_none() {
-            return Err(machine_err(PartyErr::NoItem));
+            let top = super::proposals::top(&st.db, id).await?;
+            let item = top.ok_or_else(|| machine_err(PartyErr::NoItem))?;
+            select_item(&st, &a, &mut row, item).await?;
         }
         db::set_live(&st.db, id).await?;
         row.status = "live".into();
@@ -762,7 +784,7 @@ pub async fn leave(
 }
 
 /// The row for a member, owner or invitee; anyone else gets the 404 of an unknown party.
-async fn member_row(st: &AppState, id: i32, me: i32) -> R<Row> {
+pub(super) async fn member_row(st: &AppState, id: i32, me: i32) -> R<Row> {
     let row = row_of(st, id).await?;
     if !st.parties.has_user(id, me) {
         access(st, &row, me, None).await?;

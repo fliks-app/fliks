@@ -15,6 +15,7 @@ import {
   type PartyMember,
   type PartyMessage,
   type PartyPlayState,
+  type PartyProposal,
   type PartySwitches,
   type PartyUser,
 } from '../api/party-api.service';
@@ -101,6 +102,7 @@ export class PartyService {
   /** In the party's room, whether or not a film plays yet. */
   private readonly joined = signal(false);
   readonly members = signal<PartyMember[]>([]);
+  readonly proposals = signal<PartyProposal[]>([]);
   readonly messages = signal<PartyMessage[]>([]);
   readonly unread = signal(0);
   readonly panelOpen = signal(false);
@@ -315,6 +317,7 @@ export class PartyService {
     this.live.set(null);
     this.joined.set(false);
     this.members.set([]);
+    this.proposals.set([]);
     this.messages.set([]);
     this.bubbles.set([]);
     this.reactions.set([]);
@@ -379,6 +382,7 @@ export class PartyService {
   applySnapshot(dto: PartyDto): void {
     this.party.set(dto);
     void this.reactionCatalog.load();
+    this.proposals.set(dto.proposals);
     const live = dto.live;
     if (!live) return;
     // A snapshot older than what events already applied would roll the party back.
@@ -478,6 +482,9 @@ export class PartyService {
       case 'party.selection':
         if (!this.acceptRev(e.rev)) return;
         this.party.update((p) => (p ? { ...p, item: e.item } : p));
+        break;
+      case 'party.proposals':
+        this.proposals.set(e.proposals);
         break;
       case 'party.members':
         if (!this.acceptRev(e.rev)) return;
