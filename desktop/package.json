@@ -29,7 +29,7 @@
     "velopack": "1.2.161"
   },
   "devDependencies": {
-    "@types/node": "^25.9.3",
+    "@types/node": "^26.6.5",
     "electron": "^42.4.0",
     "electron-builder": "^26.15.3",
     "esbuild": "^0.28.2",
