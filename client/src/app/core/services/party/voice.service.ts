@@ -1,6 +1,8 @@
 import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
+import { Capacitor } from '@capacitor/core';
 import { TranslateService } from '@ngx-translate/core';
 import { PartyApiService, type PartyMember, type PartySignalKind } from '../api/party-api.service';
+import { NativePlayer } from '../../plugins/native-player.plugin';
 import { DeviceService } from '../device.service';
 import { SseService } from '../sse.service';
 import { ToastService } from '../toast.service';
@@ -97,6 +99,8 @@ export class VoiceService {
     this.busy.set(true);
     try {
       this.iceServers = (await this.api.iceServers().catch(() => ({ iceServers: [] as RTCIceServer[] }))).iceServers;
+      // The audio session must record before WebKit opens the mic, or capture starts on `.playback` and stalls the player.
+      if (Capacitor.getPlatform() === 'ios') await NativePlayer.setVoiceActive({ active: true }).catch(() => {});
       await this.openMic();
       // Peers offer as soon as the server flags us: an offer that lands before this is set is dropped.
       this.joined.set(true);
@@ -108,6 +112,7 @@ export class VoiceService {
       for (const peer of [...this.peers.keys()]) this.closePeer(peer);
       this.joined.set(false);
       this.releaseMic();
+      if (Capacitor.getPlatform() === 'ios') void NativePlayer.setVoiceActive({ active: false }).catch(() => {});
       this.party.onActionError(err);
     } finally {
       this.busy.set(false);
