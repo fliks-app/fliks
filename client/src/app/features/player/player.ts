@@ -3619,7 +3619,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     }
 
     // The WebView is suspended in PiP and with the screen off: the native side repeats this beat meanwhile.
-    const heartbeatToken = this.authService.accessToken;
+    const heartbeatToken =
+      this.engine instanceof NativeEngine && !this.isOfflinePlayback
+        ? ((await this.authService.ensureStreamToken(this.mediaFileId)) ?? this.authService.accessToken)
+        : null;
     if (this.engine instanceof NativeEngine && !this.isOfflinePlayback && heartbeatToken) {
       this.engine.setHeartbeat({
         url: this.serverConfig.resolveUrl(`/api/playback/media/${this.mediaId}/state`),

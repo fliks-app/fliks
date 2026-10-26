@@ -443,3 +443,68 @@ async fn engine_answers_decide_the_session_and_the_ownership(pool: PgPool) {
         .await;
     assert_eq!(c.st.presence.peek("boom").unwrap().position, 900.0);
 }
+
+#[sqlx::test(migrations = false)]
+async fn a_file_bound_stream_token_beats_only_for_its_own_file(pool: PgPool) {
+    let mut c = ctx(pool).await;
+    let other_media: i32 =
+        sqlx::query_scalar(r#"INSERT INTO media (title, type) VALUES ('o', 'movie') RETURNING id"#)
+            .fetch_one(&c.pool)
+            .await
+            .unwrap();
+    let other_file: i32 = sqlx::query_scalar(
+        r#"INSERT INTO media_files ("relativePath", size, quality, "mediaId") VALUES ('y', 1, 'q', $1) RETURNING id"#,
+    )
+    .bind(other_media)
+    .fetch_one(&c.pool)
+    .await
+    .unwrap();
+    let bound = |f: i32| {
+        c.st.jwt
+            .sign_stream_for(c.user, "u", f as u32)
+            .unwrap()
+            .token
+    };
+    let (own, foreign) = (bound(c.file), bound(other_file));
+    let unbound = c.st.jwt.sign_stream(c.user, "u").unwrap().token;
+    let body = |m: i32, f: i32| json!({"positionSeconds": 5, "mediaFileId": f, "mediaId": m});
+
+    c.token = own.clone();
+    assert_eq!(c.put(c.media, body(c.media, c.file)).await.0, 200);
+    assert_eq!(
+        c.put(other_media, body(other_media, other_file)).await.0,
+        403,
+        "other media"
+    );
+    assert_eq!(
+        c.put(c.media, body(c.media, other_file)).await.0,
+        403,
+        "other file in body"
+    );
+    c.token = foreign;
+    assert_eq!(
+        c.put(c.media, body(c.media, c.file)).await.0,
+        403,
+        "token of another file"
+    );
+    c.token = unbound;
+    assert_eq!(
+        c.put(c.media, body(c.media, c.file)).await.0,
+        401,
+        "unbound stream token"
+    );
+
+    c.token = own;
+    let req = |method: &str| {
+        Request::builder()
+            .method(method)
+            .uri(format!("/api/playback/media/{}/state", c.media))
+            .header("authorization", format!("Bearer {}", c.token))
+            .body(Body::empty())
+            .unwrap()
+    };
+    for m in ["GET", "DELETE"] {
+        let res = c.app.clone().oneshot(req(m)).await.unwrap();
+        assert!(matches!(res.status().as_u16(), 401 | 403), "{m}");
+    }
+}

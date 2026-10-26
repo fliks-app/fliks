@@ -907,7 +907,7 @@ export class CastPlayerService {
         episodeId: this.episodeId(),
         ...heartbeat,
       };
-      const token = this.authService.accessToken;
+      const token = (await this.authService.ensureStreamToken(mfId)) ?? this.authService.accessToken;
       if (token) {
         this.cast.saveHeartbeat({ url: this.serverConfig.resolveUrl(`/api/playback/media/${mId}/state`), token, body });
       }
