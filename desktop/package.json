@@ -24,7 +24,7 @@
     "node": ">=20"
   },
   "dependencies": {
-    "dbus-next": "^0.10.2",
+    "dbus-native": "^0.16.2",
     "electron-updater": "^6.8.9",
     "velopack": "1.2.161"
   },
