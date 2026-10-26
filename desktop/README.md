@@ -47,9 +47,9 @@ gitignored — see `CLAUDE.md`).
 ### Build & run
 
 ```bash
-# 1. native addon (Electron 42 ABI)
+# 1. native addon (Electron 45 ABI)
 cd native && ../node_modules/.bin/node-gyp rebuild \
-  --target=42.4.0 --dist-url=https://electronjs.org/headers --arch=x64 && cd ..
+  --target=45.0.0 --dist-url=https://electronjs.org/headers --arch=x64 && cd ..
 
 # 2. main + preload bundle
 npm run build            # → dist/main/index.cjs, dist/preload/index.cjs

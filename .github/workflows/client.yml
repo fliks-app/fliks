@@ -77,7 +77,7 @@ jobs:
           cache: npm
           cache-dependency-path: desktop/package-lock.json
       - run: npm ci --ignore-scripts
-      - name: Build the SMTC addon against the Electron 42 ABI
+      - name: Build the SMTC addon against the Electron 45 ABI
         working-directory: desktop/native
-        run: ../node_modules/.bin/node-gyp rebuild --target=42.4.0 --dist-url=https://electronjs.org/headers --arch=x64
+        run: ../node_modules/.bin/node-gyp rebuild --target=45.0.0 --dist-url=https://electronjs.org/headers --arch=x64
       - run: test -f native/build/Release/fliks_smtc_win.node
