@@ -11,12 +11,12 @@
         <li appTvRow class="flex items-center gap-3 rounded-box bg-base-200 p-2" [class.ring-2]="r.playing" [class.ring-primary]="r.playing" [attr.aria-current]="r.playing ? 'true' : null">
           <span class="w-5 shrink-0 text-center text-sm text-base-content/60">{{ i + 1 }}</span>
           @if (r.item.posterUrl) {
-            <img [src]="r.item.posterUrl | resolveUrl: 'thumb'" [alt]="r.item.title" loading="lazy" class="h-16 w-11 shrink-0 rounded-md bg-base-300 object-cover" />
+            <img [src]="r.item.posterUrl | resolveUrl: 'thumb'" [alt]="r.title" loading="lazy" class="h-16 w-11 shrink-0 rounded-md bg-base-300 object-cover" />
           } @else {
             <div class="h-16 w-11 shrink-0 rounded-md bg-base-300"></div>
           }
           <div class="min-w-0 flex-1">
-            <p class="truncate font-medium">{{ r.item.title }}</p>
+            <p class="truncate font-medium">{{ r.title }}</p>
             @if (r.label) {
               <p class="truncate text-sm text-base-content/60">{{ r.label }}</p>
             }

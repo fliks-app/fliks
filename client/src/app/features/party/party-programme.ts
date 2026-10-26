@@ -52,12 +52,13 @@ export class PartyProgrammeComponent {
 
   protected readonly rows = computed(() =>
     this.items().map((item) => {
-      const found = findEpisode(this.series().get(item.mediaId), item.episodeId);
+      const media = this.series().get(item.mediaId);
+      const found = findEpisode(media, item.episodeId);
       const label = found
         ? episodeLabel({ seasonNumber: found.season.seasonNumber, episodeNumber: found.episode.episodeNumber, episodeTitle: found.episode.title })
         : '';
       const cur = this.current();
-      return { item, label, playing: this.live() && !!cur && sameItem(cur, item) };
+      return { item, title: found ? media!.title : item.title, label, playing: this.live() && !!cur && sameItem(cur, item) };
     }),
   );
 
