@@ -6,13 +6,13 @@
   @if (rows().length) {
     <ul class="flex flex-col gap-2">
       @for (p of rows(); track p.id) {
-        <li appTvRow class="flex items-center gap-3 rounded-box bg-base-200 p-2">
+        <li appTvRow class="grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-1 rounded-box bg-base-200 p-2 sm:grid-cols-[auto_1fr_auto]">
           @if (!p.item.hidden && p.item.posterUrl) {
-            <img [src]="p.item.posterUrl | resolveUrl: 'thumb'" [alt]="p.item.title" loading="lazy" class="h-16 w-11 shrink-0 rounded-md bg-base-300 object-cover" />
+            <img [src]="p.item.posterUrl | resolveUrl: 'thumb'" [alt]="p.item.title" loading="lazy" class="row-span-2 h-16 w-11 shrink-0 rounded-md bg-base-300 object-cover sm:row-span-1" />
           } @else {
-            <div class="h-16 w-11 shrink-0 rounded-md bg-base-300"></div>
+            <div class="row-span-2 h-16 w-11 shrink-0 rounded-md bg-base-300 sm:row-span-1"></div>
           }
-          <div class="min-w-0 flex-1">
+          <div class="min-w-0">
             @if (!p.item.hidden) {
               <p class="truncate font-medium">{{ p.item.title }}</p>
             } @else {
@@ -20,31 +20,47 @@
             }
             <p class="truncate text-sm text-base-content/60">{{ 'party.proposed_by' | translate: { name: name(p.proposedBy) } }}</p>
             <div class="mt-1 flex -space-x-2">
-              @for (id of p.voterIds; track id) {
+              @for (id of p.upvoterIds; track id) {
                 <app-user-avatar class="rounded-full ring-2 ring-base-200" [username]="name(id)" size="w-6 h-6 text-xs" />
               }
             </div>
           </div>
-          <button
-            type="button"
-            class="btn btn-sm gap-1"
-            [class.btn-primary]="voted(p)"
-            [class.btn-outline]="!voted(p)"
-            [attr.aria-pressed]="voted(p)"
-            [attr.data-vote]="p.id"
-            (click)="vote(p)"
-          >
-            <svg lucideThumbsUp class="h-4 w-4"></svg>
-            {{ 'party.vote' | translate }} · {{ p.voterIds.length }}
-          </button>
-          @if (isHost() && !p.item.hidden) {
-            <button type="button" class="btn btn-sm btn-primary" (click)="choose(p)">{{ 'party.choose' | translate }}</button>
-          }
-          @if (canRemove(p)) {
-            <button type="button" class="btn btn-sm btn-ghost btn-square text-error" [attr.aria-label]="'party.proposal_remove' | translate" (click)="remove(p)">
-              <svg lucideTrash2 class="h-4 w-4"></svg>
+          <div class="col-start-2 flex flex-wrap items-center gap-1 sm:col-start-3">
+            <button
+              type="button"
+              class="btn btn-ghost btn-sm gap-1 px-2"
+              [class.text-primary]="myVote(p) === 1"
+              [attr.aria-pressed]="myVote(p) === 1"
+              [attr.aria-label]="'party.vote_up' | translate"
+              [attr.data-vote]="p.id"
+              data-value="1"
+              (click)="vote(p, 1)"
+            >
+              <svg lucideThumbsUp class="h-5 w-5"></svg>
+              {{ p.upvoterIds.length }}
             </button>
-          }
+            <button
+              type="button"
+              class="btn btn-ghost btn-sm gap-1 px-2"
+              [class.text-primary]="myVote(p) === -1"
+              [attr.aria-pressed]="myVote(p) === -1"
+              [attr.aria-label]="'party.vote_down' | translate"
+              [attr.data-vote]="p.id"
+              data-value="-1"
+              (click)="vote(p, -1)"
+            >
+              <svg lucideThumbsDown class="h-5 w-5"></svg>
+              {{ p.downvoterIds.length }}
+            </button>
+            @if (isHost() && !p.item.hidden) {
+              <button type="button" class="btn btn-sm btn-primary" (click)="choose(p)">{{ 'party.choose' | translate }}</button>
+            }
+            @if (canRemove(p)) {
+              <button type="button" class="btn btn-sm btn-ghost btn-square text-error" [attr.aria-label]="'party.proposal_remove' | translate" (click)="remove(p)">
+                <svg lucideTrash2 class="h-4 w-4"></svg>
+              </button>
+            }
+          </div>
         </li>
       }
     </ul>

@@ -36,8 +36,8 @@
             <svg lucideChevronLeft class="h-5 w-5 md:h-6 md:w-6"></svg>
           </button>
         }
-        @if ((!isNative || device.isTablet()) && !tv.isTv()) {
-          <!-- Hamburger wherever the drawer can open: every form factor except native phone (bottom dock) and TV (D-pad nav). -->
+        @if (!navbar.phoneDock() && !tv.isTv()) {
+          <!-- Hamburger wherever the drawer can open: everywhere but the phone dock and TV (D-pad nav). -->
           <label for="sidebar" class="btn btn-square btn-ghost" [attr.aria-label]="'nav.open_menu' | translate">
             <svg lucideMenu class="h-5 w-5 md:h-6 md:w-6"></svg>
           </label>
@@ -198,7 +198,7 @@
     </main>
     <!-- Native bottom navigation bar — phones only.
          Tablets and TV use the drawer/sidebar instead. -->
-    @if (isNative && device.isPhone() && !keyboardOpen()) {
+    @if (navbar.phoneDock() && !keyboardOpen()) {
       <div class="dock z-40 dock-with-fab-cradle bg-base-100/70 backdrop-blur-sm">
         @if (dockHome(); as item) {
           <a [routerLink]="item.route" routerLinkActive="dock-active" [routerLinkActiveOptions]="{ exact: item.exact }"
@@ -303,7 +303,7 @@
   <!-- Identify dialog — single instance, opened via IdentifyModalService -->
   <app-identify-modal-host />
 
-  <div class="drawer-side z-40" [class.hidden]="isNative && device.isPhone()">
+  <div class="drawer-side z-40" [class.hidden]="navbar.phoneDock()">
     <label for="sidebar" [attr.aria-label]="'nav.close_menu' | translate" class="drawer-overlay"></label>
     <aside class="app-chrome-side w-64 min-h-full flex flex-col"
            [class.bg-base-100]="!background.url()"

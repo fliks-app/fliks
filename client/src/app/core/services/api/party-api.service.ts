@@ -111,7 +111,8 @@ export interface PartyProposal {
   id: number;
   item: PartyItem;
   proposedBy: number;
-  voterIds: number[];
+  upvoterIds: number[];
+  downvoterIds: number[];
 }
 
 export interface PartyDto extends PartySummaryDto, PartySwitches {
@@ -217,9 +218,10 @@ export class PartyApiService {
     return firstValueFrom(this.http.delete<void>(`/api/parties/${id}/proposals/${proposalId}`));
   }
 
-  vote(id: number, proposalId: number, on: boolean) {
+  /** `null` clears the caller's vote. */
+  vote(id: number, proposalId: number, value: 1 | -1 | null) {
     const url = `/api/parties/${id}/proposals/${proposalId}/vote`;
-    return firstValueFrom(on ? this.http.put<void>(url, {}) : this.http.delete<void>(url));
+    return firstValueFrom(value === null ? this.http.delete<void>(url) : this.http.put<void>(url, { value }));
   }
 
   choose(id: number, proposalId: number) {

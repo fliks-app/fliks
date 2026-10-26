@@ -985,10 +985,11 @@ Napi::Value Load(const Napi::CallbackInfo& info) {
     const char* cmd[] = {"loadfile", url.c_str(), "replace", "-1", optstr.c_str(), nullptr};
     M::command(g_state.mpv, cmd);
   }
-  M::set_property_string(g_state.mpv, "pause", "no");
-  // mpv autoplays on load but may not emit a pause change, so mark playing here
-  // directly — the event thread's position heartbeat gates on this flag.
-  g_state.paused.store(false);
+  const bool startPaused = o.Has("startPaused") && o.Get("startPaused").ToBoolean().Value();
+  M::set_property_string(g_state.mpv, "pause", startPaused ? "yes" : "no");
+  // A load may not emit a pause change, so mark the state here directly: the event
+  // thread's position heartbeat gates on this flag.
+  g_state.paused.store(startPaused);
   // Force the next video-params event to re-apply the color config once for the
   // new stream (its class may match the previous file's).
   g_lastReconfigKey.store(~0ull);

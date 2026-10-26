@@ -277,6 +277,8 @@ export interface PlaybackEngine {
   init(container: HTMLElement): Promise<void>;
   destroy(): Promise<void>;
   load(url: string, startTime?: number, mimeType?: string, headers?: Record<string, string>): Promise<void>;
+  /** Present only on engines that can open paused: the next load() does, then reports `firstFrame` for the paused picture. */
+  startPaused?: boolean;
   unload(): Promise<void>;
   /** Re-arms the native optimistic-recovery guard; provided by {@link AbstractPlaybackEngine}. */
   resetRecoveryGuard(): void;

@@ -14,12 +14,17 @@ class StubPicker {
 }
 
 const item = (title: string) => ({ mediaId: 1, episodeId: null, mediaFileId: null, title, hidden: title === '', posterUrl: null }) as PartyItem;
-const prop = (id: number, voterIds: number[], proposedBy = 2, title = `T${id}`): PartyProposal => ({ id, item: item(title), proposedBy, voterIds });
+const prop = (id: number, voterIds: number[], proposedBy = 2, title = `T${id}`, downvoterIds: number[] = []): PartyProposal => ({ id, item: item(title), proposedBy, upvoterIds: voterIds, downvoterIds });
 
 describe('sortProposals', () => {
   it('puts the most voted first, then the oldest', () => {
     const sorted = sortProposals([prop(3, [1]), prop(1, [1]), prop(2, [1, 2]), prop(4, [])]);
     expect(sorted.map((p) => p.id)).toEqual([2, 1, 3, 4]);
+  });
+
+  it('ranks by ups minus downs', () => {
+    const sorted = sortProposals([prop(1, [1, 2], 2, 'a', [3, 4, 5]), prop(2, []), prop(3, [1], 2, 'c', [])]);
+    expect(sorted.map((p) => p.id)).toEqual([3, 2, 1]);
   });
 });
 
@@ -55,8 +60,8 @@ describe('PartyProposalsComponent', () => {
     mine.click();
     await vi.waitFor(() => expect(api.vote).toHaveBeenCalledTimes(1));
     other.click();
-    expect(api.vote).toHaveBeenNthCalledWith(1, 9, 5, false);
-    expect(api.vote).toHaveBeenNthCalledWith(2, 9, 6, true);
+    expect(api.vote).toHaveBeenNthCalledWith(1, 9, 5, null);
+    expect(api.vote).toHaveBeenNthCalledWith(2, 9, 6, 1);
   });
 
   it('offers delete to the author or the host only', () => {

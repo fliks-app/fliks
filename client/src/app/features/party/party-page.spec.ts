@@ -102,7 +102,7 @@ describe('PartyPageComponent film selection', () => {
     const page = fixture.componentInstance as unknown as { canStart(): boolean };
     const svc = TestBed.inject(PartyService) as unknown as typeof service;
     expect(page.canStart()).toBe(false);
-    svc.proposals.set([{ id: 1, item: item(1), proposedBy: 1, voterIds: [1] }]);
+    svc.proposals.set([{ id: 1, item: item(1), proposedBy: 1, upvoterIds: [1], downvoterIds: [] }]);
     expect(page.canStart()).toBe(true);
     svc.proposals.set([]);
     svc.party.set(dto(item(2)));

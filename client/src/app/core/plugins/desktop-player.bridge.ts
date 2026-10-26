@@ -41,6 +41,8 @@ export interface DesktopQoe {
 export interface DesktopLoadOptions {
   url: string;
   startTime?: number;
+  /** Open paused on the first frame instead of autoplaying. */
+  startPaused?: boolean;
   headers?: Record<string, string>;
   /** Preferred audio language (mpv `alang`) so the player keeps the chosen
    *  language across seeks/reloads instead of reverting to the manifest default. */

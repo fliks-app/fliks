@@ -29,6 +29,8 @@ export interface DesktopSubtitleTrack {
 export interface DesktopLoadOptions {
   url: string;
   startTime?: number;
+  /** Open paused on the first frame instead of autoplaying. */
+  startPaused?: boolean;
   headers?: Record<string, string>;
   /** Preferred audio language (mpv `alang`). Applied as a file-local loadfile
    *  option so mpv auto-selects the matching audio rendition on the initial load

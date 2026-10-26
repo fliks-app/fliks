@@ -89,6 +89,8 @@ export interface NativePlayerPlugin {
   load(options: {
     url: string;
     startTime?: number;
+    /** Open paused on the first frame instead of autoplaying. */
+    startPaused?: boolean;
     headers?: Record<string, string>;
     subtitles?: NativeSidecarSubtitle[];
     /** Use CacheDataSource for offline playback (Android). */

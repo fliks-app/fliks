@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, ElementRef, Injector, computed, effect, inject, input, output, signal, untracked, viewChild } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
-import { LucideThumbsUp, LucideTrash2 } from '@lucide/angular';
+import { LucideThumbsDown, LucideThumbsUp, LucideTrash2 } from '@lucide/angular';
 import { PartyApiService, type PartyDto, type PartyProposal } from '../../core/services/api/party-api.service';
 import { AuthService } from '../../core/services/auth.service';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
@@ -10,15 +10,17 @@ import { TvRowDirective } from '../../shared/directives/tv-row.directive';
 import { type PartyPerson } from '../player/party/party-people';
 import { keepFocus, runBusy } from './party-busy';
 
-/** Most votes first, the oldest (lowest id) among equals; the server resolves a start the same way. */
+const score = (p: PartyProposal): number => p.upvoterIds.length - p.downvoterIds.length;
+
+/** Best score (ups minus downs) first, the oldest (lowest id) among equals; the server resolves a start the same way. */
 export function sortProposals(list: readonly PartyProposal[]): PartyProposal[] {
-  return [...list].sort((a, b) => b.voterIds.length - a.voterIds.length || a.id - b.id);
+  return [...list].sort((a, b) => score(b) - score(a) || a.id - b.id);
 }
 
 /** The party's film proposals: propose, vote, remove, and for the host pick one. */
 @Component({
   selector: 'app-party-proposals',
-  imports: [TranslatePipe, ResolveUrlPipe, TvRowDirective, UserAvatarComponent, MediaPickerComponent, LucideThumbsUp, LucideTrash2],
+  imports: [TranslatePipe, ResolveUrlPipe, TvRowDirective, UserAvatarComponent, MediaPickerComponent, LucideThumbsDown, LucideThumbsUp, LucideTrash2],
   templateUrl: './party-proposals.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -41,7 +43,7 @@ export class PartyProposalsComponent {
   protected readonly rows = computed(() => sortProposals(this.proposals()));
 
   /** The proposal whose vote button holds the focus: a re-sort moves its row and drops it. */
-  private focused: number | null = null;
+  private focused: { id: number; value: 1 | -1 } | null = null;
 
   constructor() {
     effect(() => {
@@ -51,17 +53,18 @@ export class PartyProposalsComponent {
   }
 
   private restoreFocus(): void {
-    const id = this.focused;
-    if (id == null) return;
-    keepFocus(this.injector, () => this.host.nativeElement.querySelector<HTMLElement>(`[data-vote="${id}"]`));
+    const f = this.focused;
+    if (!f) return;
+    keepFocus(this.injector, () => this.host.nativeElement.querySelector<HTMLElement>(`[data-vote="${f.id}"][data-value="${f.value}"]`));
   }
 
   protected name(userId: number): string {
     return this.people().find((p) => p.userId === userId)?.username ?? '?';
   }
 
-  protected voted(p: PartyProposal): boolean {
-    return p.voterIds.includes(this.me() ?? -1);
+  protected myVote(p: PartyProposal): 1 | -1 | null {
+    const me = this.me() ?? -1;
+    return p.upvoterIds.includes(me) ? 1 : p.downvoterIds.includes(me) ? -1 : null;
   }
 
   protected canRemove(p: PartyProposal): boolean {
@@ -73,9 +76,10 @@ export class PartyProposalsComponent {
     if (pick) void runBusy(this.busy, () => this.api.propose(this.partyId(), pick.mediaId, pick.episodeId ?? undefined));
   }
 
-  protected async vote(p: PartyProposal): Promise<void> {
-    this.focused = p.id;
-    await runBusy(this.busy, () => this.api.vote(this.partyId(), p.id, !this.voted(p)));
+  protected async vote(p: PartyProposal, value: 1 | -1): Promise<void> {
+    this.focused = { id: p.id, value };
+    const next = this.myVote(p) === value ? null : value;
+    await runBusy(this.busy, () => this.api.vote(this.partyId(), p.id, next));
     this.restoreFocus();
   }
 
