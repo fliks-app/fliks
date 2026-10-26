@@ -75,9 +75,9 @@ final class PartyEventTests: XCTestCase {
         XCTAssertNil(party.live?.playback)
     }
 
-    func testSelectionEvent() {
-        guard case let .selection(partyId, rev, item)? = decode(#"{"type":"party.selection","partyId":5,"rev":6,"item":\#(item)}"#) else {
-            return XCTFail("not a selection event")
+    func testProgrammeEvent() {
+        guard case let .programme(partyId, rev, item)? = decode(#"{"type":"party.programme","partyId":5,"rev":6,"item":\#(item)}"#) else {
+            return XCTFail("not a programme event")
         }
         XCTAssertEqual([partyId, rev], [5, 6])
         XCTAssertEqual(item.mediaId, 7)

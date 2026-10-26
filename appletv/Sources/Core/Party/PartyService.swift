@@ -452,9 +452,9 @@ import Foundation
             if lobby { Task { await refetch() } }
             guard acceptRev(e.rev) else { return }
             setLive(PartyLiveState(rev: e.rev, state: e.state, item: e.item, anchor: e.anchor, whenMs: e.whenMs))
-        case let .selection(partyId, rev, item):
+        case let .programme(partyId, rev, item):
             guard partyId == party?.id, acceptRev(rev) else { return }
-            party?.item = item
+            if lobby { party?.item = item }
         case let .members(partyId, rev, list):
             guard partyId == party?.id, acceptRev(rev) else { return }
             members = list

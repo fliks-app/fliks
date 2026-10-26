@@ -119,7 +119,7 @@ struct PartyStateEvent: Codable {
 
 enum PartyEvent {
     case state(PartyStateEvent)
-    case selection(partyId: Int, rev: Int, item: PartyItem)
+    case programme(partyId: Int, rev: Int, item: PartyItem?)
     case members(partyId: Int, rev: Int, members: [PartyMember])
     case settings(partyId: Int, rev: Int, name: String, policy: String, reactionsEnabled: Bool, chatEnabled: Bool, linkSharing: Bool)
     case message(partyId: Int, message: PartyMessage)
@@ -130,7 +130,7 @@ enum PartyEvent {
     case updated(partyId: Int)
 
     private struct Head: Decodable { let type: String }
-    private struct Selection: Decodable { let partyId: Int; let rev: Int; let item: PartyItem }
+    private struct Programme: Decodable { let partyId: Int; let rev: Int; let item: PartyItem? }
     private struct Members: Decodable { let partyId: Int; let rev: Int; let members: [PartyMember] }
     private struct Settings: Decodable {
         let partyId: Int; let rev: Int; let name: String; let policy: String
@@ -148,8 +148,8 @@ enum PartyEvent {
         switch head.type {
         case "party.state":
             return (try? d.decode(PartyStateEvent.self, from: data)).map { .state($0) }
-        case "party.selection":
-            return (try? d.decode(Selection.self, from: data)).map { .selection(partyId: $0.partyId, rev: $0.rev, item: $0.item) }
+        case "party.programme":
+            return (try? d.decode(Programme.self, from: data)).map { .programme(partyId: $0.partyId, rev: $0.rev, item: $0.item) }
         case "party.members":
             return (try? d.decode(Members.self, from: data)).map { .members(partyId: $0.partyId, rev: $0.rev, members: $0.members) }
         case "party.settings":

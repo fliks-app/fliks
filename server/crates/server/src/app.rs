@@ -86,6 +86,7 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         crate::party::end,
         crate::party::join,
         crate::party::select,
+        crate::party::programme,
         crate::party::start,
         crate::party::leave,
         crate::party::intent,

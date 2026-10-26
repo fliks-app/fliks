@@ -1,4 +1,4 @@
-//! Queries on `watch_parties` and `watch_party_invitees` (`docs/spec/watch-party.md`, Model).
+//! Queries on `watch_parties`, `watch_party_items` and `watch_party_invitees` (`docs/spec/watch-party.md`, Model).
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, Utc};
 use fliks_domain::party::{CHAT_CAP, Item, Message, Policy};
@@ -26,7 +26,7 @@ pub struct Row {
 }
 
 impl Row {
-    /// The playing item, or the film chosen for the start; `None` while nothing is chosen.
+    /// The playing item, or the programme's head before the start; `None` while it is empty.
     pub fn item(&self) -> Option<Item> {
         Some(Item {
             media_id: self.media_id?,
@@ -36,10 +36,18 @@ impl Row {
     }
 }
 
-const COLS: &str = r#"id, name, "ownerId" AS owner_id, "mediaId" AS media_id,
-    "mediaFileId" AS media_file_id, "episodeId" AS episode_id, "playlistId" AS playlist_id, "inviteToken" AS invite_token,
-    policy, "reactionsEnabled" AS reactions_enabled, "chatEnabled" AS chat_enabled,
-    "linkSharing" AS link_sharing, "scheduledAt" AS scheduled_at, status, position"#;
+/// The item columns of a row: the playing item once started, else the head of the programme.
+const COLS: &str = r#"p.id, p.name, p."ownerId" AS owner_id,
+    CASE WHEN p.status = 'scheduled' THEN h."mediaId" ELSE p."mediaId" END AS media_id,
+    CASE WHEN p.status = 'scheduled' THEN h."mediaFileId" ELSE p."mediaFileId" END AS media_file_id,
+    CASE WHEN p.status = 'scheduled' THEN h."episodeId" ELSE p."episodeId" END AS episode_id,
+    p."playlistId" AS playlist_id, p."inviteToken" AS invite_token,
+    p.policy, p."reactionsEnabled" AS reactions_enabled, p."chatEnabled" AS chat_enabled,
+    p."linkSharing" AS link_sharing, p."scheduledAt" AS scheduled_at, p.status, p.position"#;
+
+const FROM: &str = r#"watch_parties p LEFT JOIN LATERAL (
+    SELECT "mediaId", "mediaFileId", "episodeId" FROM watch_party_items
+    WHERE "partyId" = p.id ORDER BY position LIMIT 1) h ON true"#;
 
 pub fn new_token() -> String {
     let mut b = [0u8; 16];
@@ -50,7 +58,7 @@ pub fn new_token() -> String {
 pub struct New<'a> {
     pub name: &'a str,
     pub owner: i32,
-    pub item: Option<&'a Item>,
+    pub programme: &'a [Item],
     pub playlist_id: Option<i32>,
     pub policy: Policy,
     pub reactions_enabled: bool,
@@ -81,7 +89,8 @@ pub async fn insert(
     lobby_cutoff: DateTime<Utc>,
 ) -> sqlx::Result<(Row, bool)> {
     let mut tx = db.begin().await?;
-    let existing = match n.item {
+    let item = n.programme.first();
+    let existing = match item {
         Some(item) => {
             sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
                 .bind(format!(
@@ -91,12 +100,12 @@ pub async fn insert(
                 .execute(&mut *tx)
                 .await?;
             sqlx::query_as::<_, Row>(&format!(
-                r#"SELECT {COLS} FROM watch_parties
-           WHERE "ownerId" = $1 AND "mediaId" = $2 AND "mediaFileId" IS NOT DISTINCT FROM $3
-             AND "episodeId" IS NOT DISTINCT FROM $4 AND "playlistId" IS NOT DISTINCT FROM $5
-             AND CASE WHEN $6 THEN status = 'live' OR (status = 'scheduled' AND "scheduledAt" <= $7)
-                      ELSE status = 'scheduled' AND "scheduledAt" = $8 END
-           ORDER BY id LIMIT 1"#
+                r#"SELECT * FROM (SELECT {COLS} FROM {FROM}) r
+           WHERE r.owner_id = $1 AND r.media_id = $2 AND r.media_file_id IS NOT DISTINCT FROM $3
+             AND r.episode_id IS NOT DISTINCT FROM $4 AND r.playlist_id IS NOT DISTINCT FROM $5
+             AND CASE WHEN $6 THEN r.status = 'live' OR (r.status = 'scheduled' AND r.scheduled_at <= $7)
+                      ELSE r.status = 'scheduled' AND r.scheduled_at = $8 END
+           ORDER BY r.id LIMIT 1"#
             ))
             .bind(n.owner)
             .bind(item.media_id)
@@ -114,18 +123,14 @@ pub async fn insert(
     if let Some(row) = existing {
         return Ok((row, false));
     }
-    let row = sqlx::query_as::<_, Row>(&format!(
-        r#"INSERT INTO watch_parties (name, "ownerId", "mediaId", "mediaFileId", "episodeId",
-               "playlistId", "inviteToken", policy, "reactionsEnabled", "chatEnabled", "linkSharing",
-               "scheduledAt", status)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'scheduled')
-           RETURNING {COLS}"#
-    ))
+    let id: i32 = sqlx::query_scalar(
+        r#"INSERT INTO watch_parties (name, "ownerId", "playlistId", "inviteToken", policy,
+               "reactionsEnabled", "chatEnabled", "linkSharing", "scheduledAt", status)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'scheduled')
+           RETURNING id"#,
+    )
     .bind(n.name)
     .bind(n.owner)
-    .bind(n.item.map(|i| i.media_id))
-    .bind(n.item.and_then(|i| i.media_file_id))
-    .bind(n.item.and_then(|i| i.episode_id))
     .bind(n.playlist_id)
     .bind(new_token())
     .bind(n.policy.as_str())
@@ -135,9 +140,40 @@ pub async fn insert(
     .bind(n.scheduled_at)
     .fetch_one(&mut *tx)
     .await?;
-    add_invitees_in(&mut tx, row.id, invitees).await?;
+    insert_items(&mut tx, id, n.programme).await?;
+    add_invitees_in(&mut tx, id, invitees).await?;
+    let row = sqlx::query_as(&format!("SELECT {COLS} FROM {FROM} WHERE p.id = $1"))
+        .bind(id)
+        .fetch_one(&mut *tx)
+        .await?;
     tx.commit().await?;
     Ok((row, true))
+}
+
+async fn insert_items(tx: &mut sqlx::PgConnection, party: i32, items: &[Item]) -> sqlx::Result<()> {
+    sqlx::query(
+        r#"INSERT INTO watch_party_items ("partyId", position, "mediaId", "mediaFileId", "episodeId")
+           SELECT $1, (n - 1)::int, m, f, e
+           FROM unnest($2::int[], $3::int[], $4::int[]) WITH ORDINALITY AS t(m, f, e, n)"#,
+    )
+    .bind(party)
+    .bind(items.iter().map(|i| i.media_id).collect::<Vec<_>>())
+    .bind(items.iter().map(|i| i.media_file_id).collect::<Vec<_>>())
+    .bind(items.iter().map(|i| i.episode_id).collect::<Vec<_>>())
+    .execute(tx)
+    .await?;
+    Ok(())
+}
+
+/// Replaces the programme in one transaction.
+pub async fn set_programme(db: &PgPool, party: i32, items: &[Item]) -> sqlx::Result<()> {
+    let mut tx = db.begin().await?;
+    sqlx::query(r#"DELETE FROM watch_party_items WHERE "partyId" = $1"#)
+        .bind(party)
+        .execute(&mut *tx)
+        .await?;
+    insert_items(&mut tx, party, items).await?;
+    tx.commit().await
 }
 
 async fn add_invitees_in(
@@ -171,7 +207,7 @@ pub async fn add_invitees(db: &PgPool, party: i32, users: &[i32]) -> sqlx::Resul
 }
 
 pub async fn get(db: &PgPool, id: i32) -> sqlx::Result<Option<Row>> {
-    sqlx::query_as(&format!("SELECT {COLS} FROM watch_parties WHERE id = $1"))
+    sqlx::query_as(&format!("SELECT {COLS} FROM {FROM} WHERE p.id = $1"))
         .bind(id)
         .fetch_optional(db)
         .await
@@ -179,7 +215,7 @@ pub async fn get(db: &PgPool, id: i32) -> sqlx::Result<Option<Row>> {
 
 pub async fn by_token(db: &PgPool, token: &str) -> sqlx::Result<Option<Row>> {
     sqlx::query_as(&format!(
-        r#"SELECT {COLS} FROM watch_parties WHERE "inviteToken" = $1"#
+        r#"SELECT {COLS} FROM {FROM} WHERE p."inviteToken" = $1"#
     ))
     .bind(token)
     .fetch_optional(db)
@@ -293,12 +329,12 @@ pub async fn is_kicked(db: &PgPool, party: i32, user: i32) -> sqlx::Result<bool>
 /// `live` first, then `scheduledAt` ascending.
 pub async fn listed(db: &PgPool, user: i32) -> sqlx::Result<Vec<Row>> {
     sqlx::query_as(&format!(
-        r#"SELECT {COLS} FROM watch_parties p
-           WHERE status IN ('scheduled', 'live')
-             AND ("ownerId" = $1 OR EXISTS (SELECT 1 FROM watch_party_invitees i
+        r#"SELECT {COLS} FROM {FROM}
+           WHERE p.status IN ('scheduled', 'live')
+             AND (p."ownerId" = $1 OR EXISTS (SELECT 1 FROM watch_party_invitees i
                                             WHERE i."partyId" = p.id AND i."userId" = $1
                                               AND i."source" <> 'kicked'))
-           ORDER BY (status = 'live') DESC, "scheduledAt" ASC NULLS LAST, id"#
+           ORDER BY (p.status = 'live') DESC, p."scheduledAt" ASC NULLS LAST, p.id"#
     ))
     .bind(user)
     .fetch_all(db)
@@ -307,7 +343,7 @@ pub async fn listed(db: &PgPool, user: i32) -> sqlx::Result<Vec<Row>> {
 
 pub async fn live_rows(db: &PgPool) -> sqlx::Result<Vec<Row>> {
     sqlx::query_as(&format!(
-        "SELECT {COLS} FROM watch_parties WHERE status = 'live'"
+        "SELECT {COLS} FROM {FROM} WHERE p.status = 'live'"
     ))
     .fetch_all(db)
     .await
@@ -315,7 +351,7 @@ pub async fn live_rows(db: &PgPool) -> sqlx::Result<Vec<Row>> {
 
 pub async fn scheduled_rows(db: &PgPool) -> sqlx::Result<Vec<Row>> {
     sqlx::query_as(&format!(
-        r#"SELECT {COLS} FROM watch_parties WHERE status = 'scheduled' AND "scheduledAt" IS NOT NULL"#
+        r#"SELECT {COLS} FROM {FROM} WHERE p.status = 'scheduled' AND p."scheduledAt" IS NOT NULL"#
     ))
     .fetch_all(db)
     .await
@@ -358,27 +394,18 @@ pub async fn update_settings(
     Ok(())
 }
 
-/// The film the start will play, in the item columns; false when the party is no longer
-/// `scheduled`.
-pub async fn set_selection(db: &PgPool, id: i32, item: &Item) -> sqlx::Result<bool> {
-    let r = sqlx::query(
-        r#"UPDATE watch_parties SET "mediaId" = $2, "mediaFileId" = $3, "episodeId" = $4
-           WHERE id = $1 AND status = 'scheduled'"#,
+/// Goes live on the head of the programme, which becomes the playing item.
+pub async fn set_live(db: &PgPool, id: i32) -> sqlx::Result<()> {
+    sqlx::query(
+        r#"UPDATE watch_parties p SET status = 'live', "startedAt" = now(),
+               "mediaId" = h."mediaId", "mediaFileId" = h."mediaFileId", "episodeId" = h."episodeId"
+           FROM (SELECT "mediaId", "mediaFileId", "episodeId" FROM watch_party_items
+                 WHERE "partyId" = $1 ORDER BY position LIMIT 1) h
+           WHERE p.id = $1"#,
     )
     .bind(id)
-    .bind(item.media_id)
-    .bind(item.media_file_id)
-    .bind(item.episode_id)
     .execute(db)
     .await?;
-    Ok(r.rows_affected() > 0)
-}
-
-pub async fn set_live(db: &PgPool, id: i32) -> sqlx::Result<()> {
-    sqlx::query(r#"UPDATE watch_parties SET status = 'live', "startedAt" = now() WHERE id = $1"#)
-        .bind(id)
-        .execute(db)
-        .await?;
     Ok(())
 }
 
@@ -573,53 +600,32 @@ pub async fn playlist_names(db: &PgPool, ids: &[i32]) -> sqlx::Result<HashMap<i3
     Ok(rows.into_iter().collect())
 }
 
-/// A playlist row as a party item; `playable` when the media has a file for it.
+/// A programme or playlist row as a party item; `playable` when the media has a file for it.
 pub struct QueueRow {
     pub item: Item,
     pub playable: bool,
 }
 
-/// What a party steps through: its playlist, else the series of an episode it is on, else nothing.
-pub async fn queue_rows(
-    db: &PgPool,
-    playlist: Option<i32>,
-    current: Option<&Item>,
-) -> sqlx::Result<Vec<QueueRow>> {
-    match (playlist, current) {
-        (Some(p), _) => playlist_rows(db, p).await,
-        (
-            None,
-            Some(Item {
-                media_id,
-                episode_id: Some(_),
-                ..
-            }),
-        ) => series_rows(db, *media_id).await,
-        (None, _) => Ok(vec![]),
-    }
-}
-
-/// The episodes of a series that have a file, in the order the player lists them: specials out, then
-/// season, episode, ids.
-async fn series_rows(db: &PgPool, media: i32) -> sqlx::Result<Vec<QueueRow>> {
-    let ids: Vec<i32> = sqlx::query_scalar(
-        r#"SELECT e.id FROM episodes e JOIN seasons s ON s.id = e."seasonId"
-           WHERE s."mediaId" = $1 AND s."seasonNumber" > 0
-             AND EXISTS (SELECT 1 FROM media_files f WHERE f."mediaId" = $1 AND f."episodeId" = e.id)
-           ORDER BY s."seasonNumber", e."episodeNumber", s.id, e.id"#,
+/// The programme in its order.
+pub async fn programme_rows(db: &PgPool, party: i32) -> sqlx::Result<Vec<QueueRow>> {
+    let rows: Vec<(i32, Option<i32>, Option<i32>, bool)> = sqlx::query_as(
+        r#"SELECT i."mediaId", i."mediaFileId", i."episodeId",
+                  EXISTS (SELECT 1 FROM media_files f WHERE f."mediaId" = i."mediaId"
+                          AND (i."episodeId" IS NULL OR f."episodeId" = i."episodeId"))
+           FROM watch_party_items i WHERE i."partyId" = $1 ORDER BY i.position"#,
     )
-    .bind(media)
+    .bind(party)
     .fetch_all(db)
     .await?;
-    Ok(ids
+    Ok(rows
         .into_iter()
-        .map(|id| QueueRow {
+        .map(|(media_id, media_file_id, episode_id, playable)| QueueRow {
             item: Item {
-                media_id: media,
-                media_file_id: None,
-                episode_id: Some(id),
+                media_id,
+                media_file_id,
+                episode_id,
             },
-            playable: true,
+            playable,
         })
         .collect())
 }

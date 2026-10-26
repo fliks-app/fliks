@@ -479,9 +479,10 @@ export class PartyService {
         this.party.update((p) => (p ? { ...p, item: e.item } : p));
         this.syncQueue(e.item);
         break;
-      case 'party.selection':
+      case 'party.programme':
         if (!this.acceptRev(e.rev)) return;
-        this.party.update((p) => (p ? { ...p, item: e.item } : p));
+        if (!this.live()) this.party.update((p) => (p ? { ...p, item: e.item } : p));
+        else void this.loadQueue();
         break;
       case 'party.proposals':
         this.proposals.set(e.proposals);

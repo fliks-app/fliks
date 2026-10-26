@@ -139,7 +139,7 @@ pub fn candidates(queue: &[Item], current: &Item, forward: bool) -> Vec<Item> {
     }
 }
 
-fn same_row(a: &Item, b: &Item) -> bool {
+pub fn same_row(a: &Item, b: &Item) -> bool {
     a.media_id == b.media_id && a.episode_id == b.episode_id
 }
 
@@ -238,10 +238,10 @@ pub enum Effect {
         reason: CloseReason,
         to: Vec<(i32, String)>,
     },
-    /// The film the start will play changed.
-    Selection {
+    /// The programme was edited; `item` is its head while it is still what the start plays.
+    Programme {
         rev: u64,
-        item: Item,
+        item: Option<Item>,
     },
     /// Rule 8: the row's position and item follow every transition.
     Persist {
@@ -295,8 +295,6 @@ pub struct Room {
     /// Whether members, not only the host, receive the invite token.
     pub link_sharing: bool,
     pub host_id: i32,
-    /// The film the start plays, set by the host before it.
-    pub selection: Option<Item>,
     pub rev: u64,
     pub members: Vec<Member>,
     pub chat: VecDeque<Message>,
@@ -344,7 +342,6 @@ impl Room {
             chat_enabled: true,
             link_sharing: true,
             host_id,
-            selection: None,
             rev: now.max(1) as u64,
             members: vec![],
             chat: VecDeque::new(),
@@ -532,13 +529,6 @@ impl Room {
             self.sys(&mut out, "joined", Some(username), json!({}), now);
         }
         out
-    }
-
-    /// Fixes the film the start will play; the host's choice, announced to the room.
-    pub fn select(&mut self, item: Item) -> Vec<Effect> {
-        self.selection = Some(item.clone());
-        let rev = self.bump();
-        vec![Effect::Selection { rev, item }]
     }
 
     pub fn set_settings(
@@ -1013,19 +1003,10 @@ impl Playback {
 }
 
 impl Live {
-    /// A party that has just opened: a room with the host and, maybe, a film already chosen.
-    /// Nothing plays until `go_live`.
-    pub fn new(
-        name: String,
-        policy: Policy,
-        host_id: i32,
-        selection: Option<Item>,
-        now: i64,
-    ) -> Self {
-        let mut room = Room::new(name, policy, host_id, now);
-        room.selection = selection;
+    /// A party that has just opened: a room with the host. Nothing plays until `go_live`.
+    pub fn new(name: String, policy: Policy, host_id: i32, now: i64) -> Self {
         Self {
-            room,
+            room: Room::new(name, policy, host_id, now),
             playback: None,
         }
     }
@@ -1039,7 +1020,7 @@ impl Live {
         position: f64,
         now: i64,
     ) -> Self {
-        let mut l = Self::new(name, policy, host_id, None, now);
+        let mut l = Self::new(name, policy, host_id, now);
         let mut pb = Playback::new(item, position, now);
         pb.state = State::Paused;
         l.playback = Some(pb);
@@ -1058,10 +1039,17 @@ impl Live {
             .is_some_and(|p| p.can_end(&self.room, user_id, device_id, item))
     }
 
+    /// The host edited the programme: `head` is its first item, which the start plays. Once
+    /// started, only the queue changes.
+    pub fn programme(&mut self, head: Option<Item>) -> Vec<Effect> {
+        let item = self.playback.is_none().then_some(head).flatten();
+        let rev = self.room.bump();
+        vec![Effect::Programme { rev, item }]
+    }
+
     /// `POST /start`: plays `item`, the row's chosen film. Every member, invited or not, gets the
     /// new state; with the host in, it plays once everyone has loaded.
     pub fn go_live(&mut self, item: Item, now: i64) -> Vec<Effect> {
-        self.room.selection = None;
         let mut pb = Playback::new(item, 0.0, now);
         let room = &mut self.room;
         room.reset_empty(now);
@@ -1321,7 +1309,7 @@ mod tests {
     }
 
     fn started(now: i64) -> Live {
-        let mut l = Live::new("p".into(), Policy::Everyone, 1, None, now);
+        let mut l = Live::new("p".into(), Policy::Everyone, 1, now);
         l.playback = Some(Playback::new(item(), 0.0, now));
         l
     }
@@ -1521,7 +1509,7 @@ mod tests {
 
     #[test]
     fn lobby_members_start_waiting_and_toggle_ready() {
-        let mut l = Live::new("p".into(), Policy::Everyone, 1, Some(item()), 0);
+        let mut l = Live::new("p".into(), Policy::Everyone, 1, 0);
         l.join(2, "bob", "d2", "c2", 0);
         assert_eq!(l.room.members[0].status, MemberStatus::Waiting);
         let out = ready(&mut l, 2, "d2", 0.0, 1);
@@ -1535,12 +1523,11 @@ mod tests {
         assert!(out.iter().any(|e| matches!(e, Effect::State { .. })));
         assert_eq!(l.pb().state, State::Idle);
         assert_eq!(l.pb().item, item());
-        assert_eq!(l.room.selection, None);
     }
 
     #[test]
-    fn a_room_without_playback_refuses_playback_intents_and_a_selection_is_announced() {
-        let mut l = Live::new("p".into(), Policy::Everyone, 1, None, 0);
+    fn a_room_without_playback_refuses_playback_intents_and_a_programme_edit_is_announced() {
+        let mut l = Live::new("p".into(), Policy::Everyone, 1, 0);
         l.join(1, "alice", "d1", "c1", 0);
         let intent = Intent {
             action: Action::Play,
@@ -1551,15 +1538,34 @@ mod tests {
         };
         assert_eq!(l.intent(1, "d1", intent, 1).err(), Some(Error::NotStarted));
         assert!(l.playback.is_none());
-        let out = l.room.select(item());
-        assert!(matches!(&out[..], [Effect::Selection { .. }]));
+        let out = l.programme(Some(item()));
+        assert!(matches!(
+            &out[..],
+            [Effect::Programme { item: Some(_), .. }]
+        ));
         l.go_live(item(), 3);
         assert_eq!(l.pb().state, State::Waiting);
     }
 
     #[test]
+    fn a_programme_edit_announces_its_head_until_the_start_then_only_the_queue() {
+        let mut l = Live::new("p".into(), Policy::Everyone, 1, 0);
+        let rev = l.room.rev;
+        let out = l.programme(Some(item()));
+        assert!(matches!(&out[..], [Effect::Programme { rev: r, item: Some(_) }] if *r == rev + 1));
+        l.go_live(item(), 1);
+        let out = l.programme(Some(Item {
+            media_id: 9,
+            media_file_id: None,
+            episode_id: None,
+        }));
+        assert_eq!(l.pb().item, item());
+        assert!(matches!(&out[..], [Effect::Programme { item: None, .. }]));
+    }
+
+    #[test]
     fn go_live_with_the_host_in_plays_once_everyone_is_ready() {
-        let mut l = Live::new("p".into(), Policy::Everyone, 1, Some(item()), 0);
+        let mut l = Live::new("p".into(), Policy::Everyone, 1, 0);
         l.join(1, "alice", "d1", "c1", 0);
         l.join(2, "bob", "d2", "c2", 0);
         l.go_live(item(), 1);

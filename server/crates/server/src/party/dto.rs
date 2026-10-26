@@ -6,6 +6,7 @@ use fliks_domain::party::{
 };
 use serde::{Deserialize, Serialize};
 
+const MAX_PROGRAMME: usize = 500;
 const MAX_INVITEES: usize = 50;
 const MAX_TEXT: usize = 500;
 const MAX_SIGNAL_BYTES: usize = 16 * 1024;
@@ -94,6 +95,21 @@ impl From<ItemIn> for Item {
             media_file_id: i.media_file_id,
             episode_id: i.episode_id,
         }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct ProgrammeIn {
+    pub items: Vec<ItemIn>,
+}
+
+impl ProgrammeIn {
+    pub fn validate(&self) -> Result<(), AppError> {
+        if self.items.len() > MAX_PROGRAMME {
+            return Err(invalid("item"));
+        }
+        Ok(())
     }
 }
 

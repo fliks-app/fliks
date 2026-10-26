@@ -1,4 +1,4 @@
-//! The queue side of a party (`docs/spec/watch-party.md`, Followed queue): which row plays next.
+//! The queue side of a party (`docs/spec/watch-party.md`, Programme): which row plays next.
 use super::{db, routes::user_libraries};
 use crate::{http::AppError, state::AppState};
 use fliks_domain::party::{Item, Step, candidates};
