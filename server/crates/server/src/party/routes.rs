@@ -511,7 +511,6 @@ pub async fn create(
         },
         &invitees,
         scheduled.is_none(),
-        now,
     )
     .await?;
     if created {

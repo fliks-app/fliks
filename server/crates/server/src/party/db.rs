@@ -87,7 +87,6 @@ pub async fn insert(
     n: &New<'_>,
     invitees: &[i32],
     immediate: bool,
-    now: DateTime<Utc>,
 ) -> sqlx::Result<(Row, bool)> {
     let mut tx = db.begin().await?;
     let item = n.programme.first();
@@ -100,6 +99,8 @@ pub async fn insert(
                 ))
                 .execute(&mut *tx)
                 .await?;
+            // Read after the lock: a create queued behind another must see the party it just made.
+            let now = Utc::now();
             sqlx::query_as::<_, Row>(&format!(
                 r#"SELECT * FROM (SELECT {COLS} FROM {FROM}) r
            WHERE r.owner_id = $1 AND r.media_id = $2 AND r.media_file_id IS NOT DISTINCT FROM $3
@@ -124,6 +125,11 @@ pub async fn insert(
     if let Some(row) = existing {
         return Ok((row, false));
     }
+    let scheduled_at = if immediate {
+        Utc::now()
+    } else {
+        n.scheduled_at
+    };
     let id: i32 = sqlx::query_scalar(
         r#"INSERT INTO watch_parties (name, "ownerId", "playlistId", "inviteToken", policy,
                "reactionsEnabled", "chatEnabled", "linkSharing", "scheduledAt", status)
@@ -138,7 +144,7 @@ pub async fn insert(
     .bind(n.reactions_enabled)
     .bind(n.chat_enabled)
     .bind(n.link_sharing)
-    .bind(n.scheduled_at)
+    .bind(scheduled_at)
     .fetch_one(&mut *tx)
     .await?;
     insert_items(&mut tx, id, n.programme).await?;
