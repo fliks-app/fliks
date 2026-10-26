@@ -11,7 +11,7 @@ import { LucideX } from '@lucide/angular';
   host: {
     class:
       'flex items-start justify-between gap-4 border-b border-base-200 bg-base-100',
-    '[class]': `flush() ? 'shrink-0 px-5 sm:px-6 pt-4 pb-3' : 'modal-header-bar'`,
+    '[class]': `flush() ? 'shrink-0 px-5 sm:px-6 pt-5 pb-3' : 'modal-header-bar'`,
   },
 })
 export class ModalHeaderComponent {
