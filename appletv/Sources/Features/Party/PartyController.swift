@@ -125,9 +125,8 @@ final class PartyController {
         guard await seekIfFar(live.anchor.position, gen, force) else { return }
         if !primed {
             primed = true
-            await player.partyPrime()
+            await player.partyPreroll()
             guard gen == generation else { return }
-            await ownSeek(to: live.anchor.position)
         }
         reportReady(live.anchor.position)
     }

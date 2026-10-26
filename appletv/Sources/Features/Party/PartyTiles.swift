@@ -56,7 +56,7 @@ enum PartyBadge {
 }
 
 /// Round avatar with its name and a caption below it, outside the focusable circle so the focus lift never
-/// clips the text. Focusable only when it has an `action`.
+/// clips the text.
 struct AvatarTile: View {
     let name: String
     var caption: String?
@@ -71,16 +71,12 @@ struct AvatarTile: View {
 
     var body: some View {
         VStack(spacing: 14) {
-            if let action {
-                // Ring only, like the profile picker: no system lift or card behind the circle.
-                Button(action: action) {
-                    circle.overlay(Circle().strokeBorder(.white, lineWidth: focused ? 6 : 0))
-                }
-                .buttonStyle(RingStyle())
-                .focused($focused)
-            } else {
-                circle
+            // Ring only, like the profile picker. Focusable without an action so the remote reaches the row.
+            Button(action: action ?? {}) {
+                circle.overlay(Circle().strokeBorder(.white, lineWidth: focused ? 6 : 0))
             }
+            .buttonStyle(RingStyle())
+            .focused($focused)
             VStack(spacing: 4) {
                 Text(name).font(.callout.weight(focused ? .bold : .semibold)).lineLimit(1)
                 if let caption { Text(caption).font(.caption).foregroundStyle(.secondary).lineLimit(1) }

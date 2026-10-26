@@ -50,6 +50,9 @@ struct RootView: View {
                     case .invite: PartyInviteView()
                     case .settings: PartySettingsView()
                     case .chat: PartyChatView()
+                    case .propose: PartyProposeView()
+                    case .create: PartyCreateView()
+                    case .programme: PartyProgrammeView()
                     }
                 }
             }

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// A scheduled party's lobby, open from its creation: header, actions, who is here, the programme and the proposals.
+/// A scheduled party's lobby, open from its creation: header, actions, the programme, who is here and the proposals.
 struct PartyLobbyView: View {
     @Environment(PartyService.self) private var service
     @Environment(Backdrop.self) private var backdrop
@@ -8,7 +8,6 @@ struct PartyLobbyView: View {
     @State private var visible = false
     @State private var selected: PartyMember?
     @State private var selectedGuest: PartyGuest?
-    @State private var confirmLeave = false
 
     var body: some View {
         ScrollView {
@@ -16,8 +15,8 @@ struct PartyLobbyView: View {
                 VStack(alignment: .leading, spacing: 44) {
                     PartyHeaderView(party: party)
                     actions
+                    PartyProgrammeRail(items: service.queue, canEdit: service.isHost)
                     members
-                    programme
                     proposals
                 }
                 .padding(.horizontal, 60)
@@ -45,10 +44,6 @@ struct PartyLobbyView: View {
             Button(tr("party.kick"), role: .destructive) { Task { await service.kick(member.userId) } }
             Button(tr("common.cancel"), role: .cancel) {}
         }
-        .confirmationDialog(tr("party.tv_leave"), isPresented: $confirmLeave, titleVisibility: .visible) {
-            Button(tr("party.tv_leave_host_confirm"), role: .destructive) { Task { await service.endParty() } }
-            Button(tr("common.cancel"), role: .cancel) {}
-        } message: { Text(trp("party.tv_leave_host_message", ["name": service.party?.name ?? ""])) }
         .confirmationDialog(selectedGuest?.username ?? "", isPresented: Binding(get: { selectedGuest != nil }, set: { if !$0 { selectedGuest = nil } }),
                             titleVisibility: .visible, presenting: selectedGuest) { guest in
             Button(tr("party.kick"), role: .destructive) { Task { await service.kick(guest.userId) } }
@@ -88,10 +83,15 @@ struct PartyLobbyView: View {
                 }
                 .buttonStyle(.bordered)
                 Spacer(minLength: 80)
-                Button { if service.isHost { confirmLeave = true } else { Task { await service.leaveToHome() } } } label: {
-                    Label(tr("party.tv_leave"), systemImage: "rectangle.portrait.and.arrow.right")
+                // The host does not leave a party: ending or cancelling it is the way out.
+                if service.isHost {
+                    EndPartyButton()
+                } else {
+                    Button { Task { await service.leaveToHome() } } label: {
+                        Label(tr("party.tv_leave"), systemImage: "rectangle.portrait.and.arrow.right")
+                    }
+                    .buttonStyle(DestructiveButtonStyle())
                 }
-                .buttonStyle(DestructiveButtonStyle())
             }
             if !service.isHost {
                 Text(tr("party.tv_wait_host")).font(.callout).foregroundStyle(.secondary)
@@ -133,38 +133,20 @@ struct PartyLobbyView: View {
 }
 
 private extension PartyLobbyView {
-    struct ProgrammeRow: Identifiable {
-        let id: Int
-        let item: PartyItem
-    }
-
-    var programme: some View {
-        let rows = service.queue.enumerated().map { ProgrammeRow(id: $0.offset, item: $0.element) }
-        return section(tr("party.programme"), empty: tr("party.programme_empty"), isEmpty: rows.isEmpty) {
-            Rail(title: nil, items: rows) { row in
-                PosterCard(imagePath: row.item.hidden ? nil : row.item.posterUrl, title: row.item.shownTitle,
-                           caption: String(row.id + 1)) {}
-            }
-        }
-    }
-
     var proposals: some View {
         let rows = PartyProposal.sorted(service.proposals)
-        return section(tr("party.proposals"), empty: tr("party.tv_proposals_empty"), isEmpty: rows.isEmpty) {
-            Rail(title: nil, items: rows) { proposal in
-                let count = proposal.voterIds.count
-                PosterCard(imagePath: proposal.item.hidden ? nil : proposal.item.posterUrl, title: proposal.item.shownTitle,
-                           caption: trp(count == 1 ? "party.tv_votes_one" : "party.tv_votes_other", ["count": String(count)])) {}
+        let myId = AuthService.shared.currentUser?.id
+        return VStack(alignment: .leading, spacing: 10) {
+            Text(tr("party.proposals")).font(.headline).foregroundStyle(.secondary)
+            Button { service.sheet = .propose } label: { Label(tr("party.propose"), systemImage: "plus") }
+                .buttonStyle(.bordered)
+            if rows.isEmpty {
+                Text(tr("party.tv_proposals_empty")).font(.callout).foregroundStyle(.secondary)
+            } else {
+                Rail(title: nil, items: rows) { proposal in
+                    ProposalCard(proposal: proposal, myId: myId)
+                }
             }
-        }
-    }
-
-    /// Read-only: the cards only let the remote scroll the page down to them.
-    func section<Content: View>(_ title: String, empty: String, isEmpty: Bool,
-                                @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(title).font(.headline).foregroundStyle(.secondary)
-            if isEmpty { Text(empty).font(.callout).foregroundStyle(.secondary) } else { content() }
         }
     }
 }
@@ -185,5 +167,48 @@ struct PartyBubbles: View {
         }
         .animation(.easeOut(duration: 0.2), value: service.bubbles)
         .allowsHitTesting(false)
+    }
+}
+
+/// A proposal: the poster, then the vote buttons (and the host's pick) below it, outside the card.
+private struct ProposalCard: View {
+    @Environment(PartyService.self) private var service
+    let proposal: PartyProposal
+    let myId: Int?
+    @State private var confirmRemove = false
+
+    var body: some View {
+        let up = myId.map(proposal.upvoterIds.contains) ?? false
+        let down = myId.map(proposal.downvoterIds.contains) ?? false
+        VStack(spacing: 12) {
+            PosterCard(imagePath: proposal.item.hidden ? nil : proposal.item.posterUrl, title: proposal.item.shownTitle) {}
+            HStack(spacing: 12) {
+                voteButton(tr("party.vote_up"), symbol: up ? "hand.thumbsup.fill" : "hand.thumbsup",
+                           count: proposal.upvoterIds.count) { Task { await service.vote(proposal.id, up ? nil : 1) } }
+                voteButton(tr("party.vote_down"), symbol: down ? "hand.thumbsdown.fill" : "hand.thumbsdown",
+                           count: proposal.downvoterIds.count) { Task { await service.vote(proposal.id, down ? nil : -1) } }
+                if service.isHost || proposal.proposedBy == myId {
+                    Button { confirmRemove = true } label: { Image(systemName: "trash") }
+                        .buttonStyle(.bordered)
+                        .accessibilityLabel(tr("party.proposal_remove"))
+                        .confirmationDialog(tr("party.proposal_remove"), isPresented: $confirmRemove, titleVisibility: .visible) {
+                            Button(tr("party.proposal_remove"), role: .destructive) { Task { await service.removeProposal(proposal.id) } }
+                            Button(tr("common.cancel"), role: .cancel) {}
+                        } message: { Text(trp("party.proposal_remove_message", ["title": proposal.item.itemName])) }
+                }
+            }
+            if service.isHost {
+                Button(tr("party.choose")) { Task { await service.choose(proposal.id) } }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(proposal.item.hidden)
+            }
+        }
+        .frame(width: 280)
+    }
+
+    private func voteButton(_ label: String, symbol: String, count: Int, action: @escaping () -> Void) -> some View {
+        Button(action: action) { Label("\(count)", systemImage: symbol) }
+            .buttonStyle(.bordered)
+            .accessibilityLabel(label)
     }
 }

@@ -19,7 +19,9 @@ import Foundation
     private(set) var proposals: [PartyProposal] = []
     private(set) var reactions: [FloatingReaction] = []
     private(set) var reactionBar = PartyReactions.fallbackBar
-    enum Sheet: String, Identifiable { case invite, settings, chat; var id: String { rawValue } }
+    enum Sheet: String, Identifiable { case invite, settings, chat, propose, create, programme; var id: String { rawValue } }
+    /// What the create sheet opens with: the film or playlist it was launched from, or nothing from the Home.
+    private(set) var createTarget = PartyCreateTarget()
     /// Live and scheduled parties of the viewer, for the Home rail.
     private(set) var homeParties: [Party] = []
     /// The invite or settings sheet, shared by the lobby and the player.
@@ -93,20 +95,54 @@ import Foundation
 
     // MARK: - Entry points
 
-    /// A party for now opens its lobby straight away, so creating is joining.
-    func create(name: String, mediaId: Int? = nil, mediaFileId: Int? = nil, episodeId: Int? = nil,
-                playlistId: Int? = nil) async {
-        struct Body: Encodable {
-            let name: String; let mediaId: Int?; let mediaFileId: Int?; let episodeId: Int?; let playlistId: Int?
-        }
+    func openCreate(_ target: PartyCreateTarget = PartyCreateTarget()) {
+        createTarget = target
+        sheet = .create
+    }
+
+    /// A party for now opens its lobby straight away, so creating is joining; a scheduled one lands in the Home rail.
+    func create(_ request: PartyCreateRequest) async {
         do {
-            let dto: Party = try await APIClient.shared.post(
-                "/api/parties",
-                body: Body(name: name, mediaId: mediaId, mediaFileId: mediaFileId, episodeId: episodeId, playlistId: playlistId))
-            await enter(id: dto.id)
+            let dto: Party = try await APIClient.shared.post("/api/parties", body: request)
+            sheet = nil
+            if request.scheduledAt == nil { await enter(id: dto.id) } else { await refreshHomeParties() }
         } catch {
             show(describe(error))
         }
+    }
+
+    /// Host only, while scheduled.
+    func reschedule(_ date: Date) async {
+        struct Patch: Encodable { let scheduledAt: String }
+        await patch(Patch(scheduledAt: PartyCreateRequest.iso(date)))
+    }
+
+    /// Host only: the whole programme in its new order (reorder, remove and add are one list).
+    func setProgramme(_ items: [PartyItem]) async -> Bool {
+        struct Row: Encodable { let mediaId: Int; let mediaFileId: Int?; let episodeId: Int? }
+        struct Body: Encodable { let items: [Row] }
+        guard let id = managed?.id else { return false }
+        do {
+            let dto: Party = try await APIClient.shared.put(
+                "/api/parties/\(id)/programme",
+                body: Body(items: items.map { Row(mediaId: $0.mediaId, mediaFileId: $0.mediaFileId, episodeId: $0.episodeId) }))
+            applyManaged(dto)
+            return true
+        } catch {
+            show(describe(error))
+            return false
+        }
+    }
+
+    /// The programme in its order, for a party that is not joined.
+    func fetchQueue() async -> [PartyItem] {
+        guard let id = managed?.id else { return [] }
+        return (try? await APIClient.shared.get("/api/parties/\(id)/queue")) ?? []
+    }
+
+    func removeProposal(_ proposalId: Int) async {
+        guard let id = party?.id else { return }
+        do { try await APIClient.shared.delete("/api/parties/\(id)/proposals/\(proposalId)") } catch { show(describe(error)) }
     }
 
     /// The player for a live party, the lobby for a scheduled one: its room is open from creation.
@@ -188,6 +224,35 @@ import Foundation
             "/api/parties/\(id)/status",
             body: Body(deviceId: deviceId, status: status, position: position, rttMs: clock.rttMs))
     }
+
+    /// `value` nil clears the caller's vote.
+    func vote(_ proposalId: Int, _ value: Int?) async {
+        struct Body: Encodable { let value: Int }
+        guard let id = party?.id else { return }
+        do {
+            if let value {
+                try await APIClient.shared.put("/api/parties/\(id)/proposals/\(proposalId)/vote", body: Body(value: value))
+            } else {
+                try await APIClient.shared.delete("/api/parties/\(id)/proposals/\(proposalId)/vote")
+            }
+        } catch {
+            show(describe(error))
+        }
+    }
+
+    func propose(mediaId: Int, episodeId: Int?) async -> Bool {
+        struct Body: Encodable { let mediaId: Int; let episodeId: Int? }
+        guard let id = party?.id else { return false }
+        do {
+            try await APIClient.shared.post("/api/parties/\(id)/proposals", body: Body(mediaId: mediaId, episodeId: episodeId))
+            return true
+        } catch {
+            show(describe(error))
+            return false
+        }
+    }
+
+    func choose(_ proposalId: Int) async { await hostAction("proposals/\(proposalId)/choose") }
 
     func sendMessage(_ text: String) async {
         struct Body: Encodable { let deviceId: String; let text: String }
@@ -397,10 +462,12 @@ import Foundation
             messages = []
             applySnapshot(dto)
             onRejoined?()
-        } catch APIError.badStatus(let code, _) where [403, 404, 409].contains(code) {
+        } catch APIError.badStatus(let code, let message) where [403, 404, 409].contains(code) && message != "party.error_no_connection" {
             closed(reason: code == 403 ? "kicked" : "host_ended")
         } catch {
-            // The next reconnect retries.
+            // A restarting server may not register the stream yet: retry while it stays up.
+            try? await Task.sleep(for: .seconds(2))
+            if party?.id == id, stream.connected { await rejoin() }
         }
     }
 

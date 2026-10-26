@@ -73,7 +73,7 @@ struct PlaylistDetailView: View {
                 .disabled(resolving)
 
                 Button {
-                    Task { await party.create(name: playlist?.name ?? "", playlistId: playlistId) }
+                    party.openCreate(PartyCreateTarget(name: playlist?.name ?? "", playlistId: playlistId))
                 } label: {
                     Label(tr("party.watch_together"), systemImage: "person.2.fill")
                 }

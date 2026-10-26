@@ -24,7 +24,7 @@ struct PartySheetPage<Content: View, Bar: View>: View {
 
 private let tileColumns = [GridItem(.adaptive(minimum: 200, maximum: 240), spacing: 30, alignment: .top)]
 
-private struct TileSection<Content: View>: View {
+struct TileSection<Content: View>: View {
     let title: String
     /// Shown in place of the grid, which would squeeze a sentence into one tile column.
     var empty: String? = nil
@@ -130,6 +130,11 @@ struct PartyInviteView: View {
 struct PartySettingsView: View {
     @Environment(PartyService.self) private var service
     @State private var confirmRegenerate = false
+    @State private var rescheduling = false
+    @State private var when = Date()
+    @State private var confirmReschedule = false
+
+    private var canReschedule: Bool { service.managedIsHost && service.managed?.status == "scheduled" }
 
     var body: some View {
         PartySheetPage(title: tr("party.settings")) {
@@ -145,6 +150,22 @@ struct PartySettingsView: View {
                         toggle(tr("party.switch_chat"), party.chatEnabled ?? true) { await service.updateSettings(chatEnabled: $0) }
                         toggle(tr("party.switch_link_sharing"), party.linkSharing ?? true) {
                             await service.updateSettings(linkSharing: $0)
+                        }
+                        if rescheduling {
+                            VStack(alignment: .leading, spacing: 16) {
+                                PartySchedulePicker(date: $when)
+                                Button(tr("common.save")) { confirmReschedule = true }
+                                    .buttonStyle(.borderedProminent)
+                                    .confirmationDialog(tr("party.reschedule_title"), isPresented: $confirmReschedule, titleVisibility: .visible) {
+                                        Button(tr("party.reschedule")) {
+                                            rescheduling = false
+                                            Task { await service.reschedule(when) }
+                                        }
+                                        Button(tr("common.cancel"), role: .cancel) {}
+                                    } message: {
+                                        Text(trp("party.reschedule_message", ["name": party.name, "when": PartyDate.text(when)]))
+                                    }
+                            }
                         }
                         if !service.managedIsHost {
                             Text(tr("party.tv_host_only_hint")).font(.callout).foregroundStyle(.secondary)
@@ -164,6 +185,14 @@ struct PartySettingsView: View {
                             Button(tr("party.regenerate_link")) { Task { await service.regenerateLink() } }
                             Button(tr("common.cancel"), role: .cancel) {}
                         } message: { Text(tr("party.regenerate_message")) }
+                    if canReschedule {
+                        Button(tr("party.reschedule")) {
+                            when = service.managed?.scheduledAt ?? PartySchedulePicker.nextHour
+                            rescheduling.toggle()
+                        }
+                        .buttonStyle(.bordered)
+                        Button(tr("party.invite_more")) { service.sheet = .invite }.buttonStyle(.bordered)
+                    }
                     EndPartyButton()
                 }
                 Button(tr("party.tv_close")) { service.sheet = nil }

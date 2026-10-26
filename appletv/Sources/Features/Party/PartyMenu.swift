@@ -12,7 +12,7 @@ enum PartyMenu {
     }
 
     static func build(_ p: PartyService, onResync: @escaping () -> Void, onLeave: @escaping () -> Void) -> UIMenu {
-        // The host leaving ends the party, so it asks first; a member just leaves.
+        // The host ends the party (it asks first) instead of leaving; a member just leaves.
         var children: [UIMenuElement] = [membersMenu(p)]
         if p.chatEnabled { children.append(chatMenu(p)) }
         if p.reactionsEnabled { children.append(reactionsMenu(p)) }
@@ -20,8 +20,11 @@ enum PartyMenu {
         children.append(UIAction(title: tr("party.resync"), image: UIImage(systemName: "arrow.triangle.2.circlepath")) { _ in onResync() })
         children.append(UIAction(title: tr("party.settings"), image: UIImage(systemName: "gearshape")) { _ in p.sheet = .settings })
         children.append(UIMenu(options: .displayInline, children: [
-            UIAction(title: tr("party.tv_leave"), image: UIImage(systemName: "rectangle.portrait.and.arrow.right"),
-                     attributes: .destructive) { _ in if p.isHost { p.leaveConfirm = true } else { onLeave() } },
+            p.isHost
+                ? UIAction(title: tr(p.party?.status == "live" ? "party.end" : "party.cancel"), image: UIImage(systemName: "xmark.circle"),
+                           attributes: .destructive) { _ in p.leaveConfirm = true }
+                : UIAction(title: tr("party.tv_leave"), image: UIImage(systemName: "rectangle.portrait.and.arrow.right"),
+                           attributes: .destructive) { _ in onLeave() },
         ]))
         return UIMenu(title: tr("party.panel_toggle"), image: UIImage(systemName: "person.2.fill"), children: children)
     }
@@ -80,7 +83,12 @@ enum PartyMenu {
                 if !isCurrent { Task { await p.sendIntent("setItem", item: item) } }
             }
         }
+        var edit: [UIMenuElement] = []
+        if p.isHost {
+            edit.append(UIAction(title: tr("party.programme"), image: UIImage(systemName: "list.number")) { _ in p.sheet = .programme })
+        }
         return UIMenu(title: tr("party.tv_queue"), image: UIImage(systemName: "list.bullet"), children: [
+            UIMenu(options: .displayInline, children: edit),
             UIMenu(options: .displayInline, children: steps),
             UIMenu(options: .displayInline, children: items),
         ])

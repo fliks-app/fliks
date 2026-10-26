@@ -7,7 +7,7 @@ struct PartyDetailView: View {
     @Environment(Backdrop.self) private var backdrop
     @State private var party: Party?
     @State private var gone = false
-    @State private var confirmLeave = false
+    @State private var programme: [PartyItem] = []
 
     private var isHost: Bool { party?.host.userId == AuthService.shared.currentUser?.id }
     private var joined: Bool { service.party?.id == partyId }
@@ -18,6 +18,7 @@ struct PartyDetailView: View {
                 VStack(alignment: .leading, spacing: 44) {
                     PartyHeaderView(party: party)
                     actions(party)
+                    PartyProgrammeRail(items: programme, canEdit: isHost)
                     members(party)
                 }
                 .padding(.horizontal, 60)
@@ -36,6 +37,7 @@ struct PartyDetailView: View {
             while !Task.isCancelled {
                 do {
                     let dto: Party = try await APIClient.shared.get("/api/parties/\(partyId)")
+                    programme = (try? await APIClient.shared.get("/api/parties/\(partyId)/queue")) ?? programme
                     if dto.status == "ended" { throw APIError.badStatus(404) }
                     party = dto
                     service.setPreview(dto)
@@ -71,16 +73,13 @@ struct PartyDetailView: View {
                 .buttonStyle(.bordered)
                 EndPartyButton()
             }
-            if joined {
+            // The host ends the party with the button above; leaving is for members.
+            if joined, !isHost {
                 Spacer(minLength: 80)
-                Button { if isHost { confirmLeave = true } else { Task { await service.leaveToHome() } } } label: {
+                Button { Task { await service.leaveToHome() } } label: {
                     Label(tr("party.tv_leave"), systemImage: "rectangle.portrait.and.arrow.right")
                 }
                 .buttonStyle(DestructiveButtonStyle())
-                .confirmationDialog(tr("party.tv_leave"), isPresented: $confirmLeave, titleVisibility: .visible) {
-                    Button(tr("party.tv_leave_host_confirm"), role: .destructive) { Task { await service.endParty() } }
-                    Button(tr("common.cancel"), role: .cancel) {}
-                } message: { Text(trp("party.tv_leave_host_message", ["name": party.name])) }
             }
         }
         .focusSection()
@@ -102,5 +101,6 @@ struct PartyDetailView: View {
             }
             .scrollClipDisabled()
         }
+        .focusSection()
     }
 }
