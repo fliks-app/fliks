@@ -309,7 +309,12 @@ async function startUiOnly(haveApp: boolean): Promise<void> {
 }
 
 app.whenReady().then(async () => {
-  Menu.setApplicationMenu(null);
+  // macOS needs the menu for Cmd+C/V/A/Z/Q; Windows and Linux have none.
+  Menu.setApplicationMenu(
+    process.platform === 'darwin'
+      ? Menu.buildFromTemplate([{ role: 'appMenu' }, { role: 'editMenu' }, { role: 'windowMenu' }])
+      : null,
+  );
 
   // macOS ignores a BrowserWindow's `icon`; the dock icon comes from the app
   // bundle when packaged, but a dev `electron .` run shows Electron's default.
