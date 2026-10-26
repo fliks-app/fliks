@@ -310,7 +310,6 @@ function createHarness(opts: {
           isTouch: () => false,
           isDpad: () => false,
           isDesktop: () => true,
-          isDesktopNative: () => false,
           formFactor: () => 'desktop',
           tvPlatform: () => null,
           desktopPlatform: () => null,
