@@ -30,6 +30,7 @@ export interface PartyHost {
   playLocal(): void;
   position(): number;
   onBack(): void;
+  showControls(): void;
 }
 
 const READY_TIMEOUT_MS = 60_000;
@@ -235,9 +236,13 @@ export class PartyController {
     });
   });
 
+  private lastLiveState: PartyLiveState['state'] | null = null;
   private readonly liveEffect = effect(() => {
     const live = this.party.live();
     if (!live || !this.host) return;
+    // Whoever paused, everyone gets the bar, as after their own pause.
+    if (live.state === 'paused' && this.lastLiveState === 'playing') untracked(() => this.host!.showControls());
+    this.lastLiveState = live.state;
     untracked(() => void this.apply(live, false));
   });
 
