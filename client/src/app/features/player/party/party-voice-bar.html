@@ -28,17 +28,9 @@
           </button>
         }
         @if (variant() === 'full') {
-          <button
-            type="button"
-            class="btn btn-ghost btn-sm btn-square ml-auto"
-            [class.text-primary]="voice.duck()"
-            [attr.aria-label]="'party.voice_duck' | translate"
-            [attr.title]="'party.voice_duck' | translate"
-            [attr.aria-pressed]="voice.duck()"
-            (click)="voice.setDuck(!voice.duck())"
-          >
-            <svg lucideVolume1 class="h-4 w-4"></svg>
-          </button>
+          <span class="ml-auto flex items-center gap-1 text-sm opacity-70" [attr.aria-label]="'party.voice_count' | translatePlural: inVoice()">
+            <svg lucideUser class="h-4 w-4"></svg>{{ inVoice() }}
+          </span>
         }
       </div>
     }
@@ -52,8 +44,6 @@
         <p class="text-sm opacity-70">{{ 'party.voice_blocked' | translate }}</p>
       } @else if (voice.joined() && voice.listenOnly()) {
         <p class="text-sm opacity-70">{{ 'party.voice_listen_only_' + voice.listenOnlyReason() | translate }}</p>
-      } @else if (voice.joined()) {
-        <p class="flex items-center gap-1 text-sm opacity-60"><svg lucideHeadphones class="h-3 w-3 shrink-0"></svg>{{ 'party.voice_headphones' | translate }}</p>
       }
     }
   </div>

@@ -45,7 +45,7 @@ export class VoiceService {
   readonly micIssue = signal<'unavailable' | 'denied' | null>(null);
   readonly listenOnly = computed(() => !this.micAvailable || this.micIssue() !== null);
   readonly listenOnlyReason = computed(() =>
-    this.device.isTv() ? 'tv' : this.micIssue() === 'denied' ? 'denied' : !this.micAvailable ? 'unavailable' : null,
+    this.device.isTv() ? 'tv' : (this.micIssue() ?? (this.micAvailable ? null : 'unavailable')),
   );
   readonly busy = signal(false);
   /** The browser refused to start a remote voice: the user has to tap to hear it. */

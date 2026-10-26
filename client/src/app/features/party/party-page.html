@@ -181,13 +181,17 @@
               }
             </ul>
           </section>
-          @if (phase() === 'lobby' && joined()) {
-            <app-party-voice-bar variant="full" />
-          }
         </div>
         @if (chatShown()) {
-          <div class="flex h-80 flex-col rounded-box bg-base-200">
-            <app-party-chat />
+          <div class="flex min-w-0 flex-col gap-6">
+            <section class="flex flex-col gap-3">
+              <h2 class="text-lg font-bold">{{ 'party.voice_title' | translate }}</h2>
+              <div class="rounded-box bg-base-200"><app-party-voice-bar variant="full" /></div>
+            </section>
+            <section class="flex flex-col gap-3">
+              <h2 class="text-lg font-bold">{{ 'party.chat_title' | translate }}</h2>
+              <div class="flex h-80 flex-col rounded-box bg-base-200 pt-4"><app-party-chat /></div>
+            </section>
           </div>
         }
       </div>

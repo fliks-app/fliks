@@ -193,9 +193,9 @@ export class LayoutComponent implements OnInit, OnDestroy {
   );
   /** Published as a CSS var so content still scrolls under the fixed navbar. */
   readonly chromeTop = computed(() => `calc(${this.navbarSpacerHeight()} + ${this.contentGapTop()})`);
-  /** The 6rem term is the native phone dock's height. */
+  /** The native phone dock is daisyUI's 4rem plus the bottom safe area it pads itself with. */
   readonly chromeBottom = computed(() => {
-    const dock = this.navbar.phoneDock() ? '6rem' : '0px';
+    const dock = this.navbar.phoneDock() ? '4rem + env(safe-area-inset-bottom, 0px)' : '0px';
     return `calc(${dock} + 1rem)`;
   });
 

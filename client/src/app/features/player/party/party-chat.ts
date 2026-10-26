@@ -21,7 +21,9 @@ const MAX_LENGTH = 500;
 export class PartyChatComponent {
   protected readonly party = inject(PartyService);
   private readonly translate = inject(TranslateService);
-  protected readonly isTv = inject(DeviceService).isTv;
+  private readonly device = inject(DeviceService);
+  protected readonly isTv = this.device.isTv;
+  private readonly isPhone = this.device.isPhone;
   private readonly keyboard = inject(KeyboardOverlayService);
   protected readonly typing = computed(() => this.keyboard.height() > 0);
   /** Phrases stand in for the keyboard on the TV and on a phone in landscape, where it fills the screen;
@@ -66,11 +68,25 @@ export class PartyChatComponent {
     const el = this.input()?.nativeElement;
     if (el) el.value = '';
     void this.party.sendMessage(text);
+    // A phone keyboard has no dismiss key: sending closes it and leaves the new message in view.
     if (this.isTv()) this.writing.set(false);
+    else if (this.isPhone()) el?.blur();
+    else el?.focus();
   }
 
   protected sendPhrase(key: string): void {
     void this.party.sendMessage(this.translate.instant(key));
+  }
+
+  /** Native WebViews don't scroll a focused field above the soft keyboard: keep the input in view while it opens. */
+  protected keepInView(): void {
+    const form = this.input()?.nativeElement.form;
+    const vv = window.visualViewport;
+    if (!form || !vv) return;
+    const reveal = () => form.scrollIntoView({ block: 'end', behavior: 'smooth' });
+    vv.addEventListener('resize', reveal);
+    this.input()!.nativeElement.addEventListener('blur', () => vv.removeEventListener('resize', reveal), { once: true });
+    reveal();
   }
 
   protected startWriting(): void {
