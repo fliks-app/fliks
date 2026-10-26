@@ -20,7 +20,7 @@ import { VoiceService } from './voice.service';
 import { ReactionsService } from './reactions.service';
 
 const item = (mediaId: number, episodeId: number | null = null): PartyItem => ({
-  mediaId, mediaFileId: 10, episodeId, title: 't', posterUrl: null, fanartUrl: null, additionalFanartUrls: [],
+  mediaId, mediaFileId: 10, episodeId, title: 't', posterUrl: null, fanartUrl: null, additionalFanartUrls: [], hidden: false,
 });
 
 function dto(rev: number, over: Partial<PartyDto> = {}): PartyDto {
@@ -36,7 +36,7 @@ function dto(rev: number, over: Partial<PartyDto> = {}): PartyDto {
 function setup(connected = false, confirmed = true) {
   const events = new Subject<PartyEvent>();
   const api = {
-    join: vi.fn(), get: vi.fn(), queue: vi.fn().mockResolvedValue([item(1, 100), item(1, 101)]),
+    join: vi.fn(), get: vi.fn(), create: vi.fn(), queue: vi.fn().mockResolvedValue([item(1, 100), item(1, 101)]),
     leave: vi.fn().mockResolvedValue(undefined), start: vi.fn(), voice: vi.fn().mockResolvedValue(undefined), end: vi.fn().mockResolvedValue(undefined),
   };
   const confirm = vi.fn().mockResolvedValue(confirmed);
@@ -124,6 +124,71 @@ describe('PartyService queue', () => {
   });
 });
 
+describe('PartyService queue cursor', () => {
+  it('sits before the first row when the playing item is not in the programme', async () => {
+    const { svc, api, queue } = setup(true);
+    api.join.mockResolvedValue(dto(1, { item: item(9) }));
+    await svc.resume(7);
+    expect(queue.index()).toBe(-1);
+    expect(queue.current()).toBeNull();
+    expect(queue.peekNext()?.mediaId).toBe(1);
+    expect(queue.peekNext()?.episodeId).toBe(100);
+  });
+
+  it('follows the playing item when the programme holds it', async () => {
+    const { svc, api, queue } = setup(true);
+    api.join.mockResolvedValue(dto(1, { item: item(1, 101) }));
+    await svc.resume(7);
+    expect(queue.index()).toBe(1);
+  });
+});
+
+describe('PartyService stale snapshots', () => {
+  const proposal = { id: 4, item: item(2), proposedBy: 1, voterIds: [1] };
+  const lobby = (rev: number, over: Partial<PartyDto> = {}) =>
+    dto(rev, { status: 'scheduled', item: item(1), live: { ...dto(rev).live!, playback: null }, ...over });
+
+  it('drops a snapshot older than the programme head an event applied, touching nothing', () => {
+    const { svc, events } = setup();
+    svc.applySnapshot(lobby(1));
+    events.next({ type: 'party.programme', partyId: 7, rev: 5, item: item(3) });
+    svc.applySnapshot(lobby(2, { item: item(1), proposals: [proposal] }));
+    expect(svc.party()?.item?.mediaId).toBe(3);
+    expect(svc.proposals()).toEqual([]);
+  });
+
+  it('keeps the proposals of an event that arrived while the refetch was in flight', async () => {
+    const { svc, api, events } = setup();
+    svc.applySnapshot(lobby(1));
+    let answer!: (d: PartyDto) => void;
+    api.get.mockReturnValue(new Promise<PartyDto>((r) => (answer = r)));
+    const refetch = svc.refetch();
+    events.next({ type: 'party.proposals', partyId: 7, proposals: [proposal] });
+    answer(lobby(1, { proposals: [] }));
+    await refetch;
+    expect(svc.proposals()).toEqual([proposal]);
+  });
+
+  it('takes the proposals of a refetch no event overtook', async () => {
+    const { svc, api } = setup();
+    svc.applySnapshot(lobby(1));
+    api.get.mockResolvedValue(lobby(1, { proposals: [proposal] }));
+    await svc.refetch();
+    expect(svc.proposals()).toEqual([proposal]);
+  });
+});
+
+describe('PartyService created parties', () => {
+  it('announces a scheduled party so the home rail reloads', async () => {
+    const { svc, api } = setup();
+    api.create.mockResolvedValue(dto(1, { status: 'scheduled', inviteToken: 't', live: null }));
+    const created = vi.fn();
+    svc.created.subscribe(created);
+    await svc.create({ name: 'p', scheduledAt: '2099-01-01T00:00:00Z' });
+    expect(created).toHaveBeenCalledOnce();
+  });
+});
+
 describe('PartyService refetch', () => {
   it('coalesces the start fan-out and opens the player once', async () => {
     const { svc, api, router } = setup();
@@ -133,6 +198,16 @@ describe('PartyService refetch', () => {
     expect(api.get).toHaveBeenCalledTimes(2);
     expect(router.navigate).toHaveBeenCalledTimes(1);
     expect(api.queue).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('PartyService rejoin into a started party', () => {
+  it('opens the player when the party went live while the stream was down', async () => {
+    const { svc, api, sse, router } = setup();
+    svc.applySnapshot(dto(1, { status: 'scheduled', item: null, live: { ...dto(1).live!, playback: null } }));
+    api.join.mockResolvedValue(dto(4));
+    await reconnect(sse);
+    await vi.waitFor(() => expect(router.navigate).toHaveBeenCalledOnce());
   });
 });
 

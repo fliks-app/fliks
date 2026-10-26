@@ -18,12 +18,15 @@
       }
       @if (!h.item) {
         <p class="text-base-content/70 mt-0.5 lg:mt-1 lg:text-lg">{{ 'party.no_item' | translate }}</p>
-      } @else if (h.name !== h.item.title || episode()) {
-        <p class="text-base-content/70 mt-0.5 lg:mt-1 lg:text-lg">
-          @if (h.name !== h.item.title) { {{ h.item.title }} }
-          @if (h.name !== h.item.title && episode()) { · }
-          {{ episode() }}
-        </p>
+      } @else {
+        @let title = h.item.hidden ? ('party.proposal_hidden' | translate) : h.item.title;
+        @if (h.name !== title || episode()) {
+          <p class="text-base-content/70 mt-0.5 lg:mt-1 lg:text-lg">
+            @if (h.name !== title) { {{ title }} }
+            @if (h.name !== title && episode()) { · }
+            {{ episode() }}
+          </p>
+        }
       }
 
       <div class="flex flex-wrap items-center gap-x-3 lg:gap-x-4 gap-y-1 mt-2 lg:mt-3 text-base-content/60">
@@ -60,7 +63,7 @@
         } @else if (phase() === 'lobby') {
           @if (joined()) {
             @if (party.isHost()) {
-              <button type="button" class="btn btn-primary gap-2" [class.flex-1]="!desktopLayout()" autofocus [disabled]="!canStart()" (click)="start()">
+              <button type="button" class="btn btn-primary gap-2" [class.flex-1]="!desktopLayout()" [attr.autofocus]="canStart() ? '' : null" [disabled]="!canStart()" (click)="start()">
                 <svg lucidePlay class="h-5 w-5" fill="currentColor"></svg>
                 {{ 'party.start' | translate }}
               </button>
@@ -72,7 +75,7 @@
               [class.btn-primary]="!ready() && !party.isHost()"
               [class.btn-success]="ready()"
               [class.btn-outline]="!ready() && party.isHost()"
-              [attr.autofocus]="party.isHost() ? null : ''"
+              [attr.autofocus]="party.isHost() && canStart() ? null : ''"
               (click)="toggleReady()"
             >
               <svg lucideCheck class="h-5 w-5"></svg>
@@ -82,9 +85,6 @@
           } @else {
             <span class="loading loading-spinner loading-md"></span>
           }
-        }
-        @if (h.status === 'scheduled' && canHost() && !joined()) {
-          <button type="button" class="btn btn-primary" [disabled]="busy()" (click)="startNow()">{{ 'party.start_now' | translate }}</button>
         }
         @if (invited()) {
           <button type="button" class="btn btn-ghost" [disabled]="busy()" (click)="decline()">{{ 'party.decline' | translate }}</button>
@@ -139,7 +139,7 @@
           @if (h.item?.posterUrl; as poster) {
             <img
               [src]="poster | resolveUrl: 'medium'"
-              [alt]="h.item?.title"
+              [alt]="h.item.title"
               loading="eager"
               fetchpriority="high"
               decoding="async"
@@ -157,7 +157,7 @@
     }
 
     @if (view(); as v) {
-      <div class="grid items-start gap-6 lg:grid-cols-2">
+      <div class="grid items-start gap-6" [class]="chatShown() ? 'lg:grid-cols-2' : ''">
         <div class="flex min-w-0 flex-col gap-6">
           @if (v.status !== 'ended' && hostView()) {
             <app-party-programme [partyId]="v.id" [isHost]="canHost()" [current]="head()?.item ?? null" [live]="v.status === 'live'" (changed)="apply($event)" />
@@ -180,7 +180,7 @@
             <app-party-voice-bar variant="full" />
           }
         </div>
-        @if (phase() === 'lobby' && joined()) {
+        @if (chatShown()) {
           <div class="flex h-80 flex-col rounded-box bg-base-200">
             <app-party-chat />
           </div>

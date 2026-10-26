@@ -13,11 +13,16 @@ import { ModalHeaderComponent } from '../modal-header';
 export interface MediaPick {
   mediaId: number;
   episodeId: number | null;
+  /** The movie's or the series' title. */
+  title: string;
 }
 
 export type EpisodePickMode = 'this' | 'untilEnd' | 'season' | 'multiple';
 
 export const SEARCH_DEBOUNCE_MS = 300;
+
+/** A series opens to its playable episodes; a movie needs a file, which a missing or monitored one lacks. */
+const pickable = (m: Media) => m.type !== 'movie' || (m.files?.length ?? m.fileCount ?? 0) > 0;
 
 const MODE_KEY: Record<EpisodePickMode, string> = {
   this: 'this',
@@ -179,7 +184,7 @@ export class MediaPickerComponent implements OnDestroy {
     this.loading.set(true);
     try {
       const page = await this.media.getAll({ q, limit: 24 });
-      if (seq === this.searchSeq) this.results.set(page.data);
+      if (seq === this.searchSeq) this.results.set(page.data.filter(pickable));
     } catch {
       if (seq === this.searchSeq) this.results.set([]);
     } finally {
@@ -192,7 +197,7 @@ export class MediaPickerComponent implements OnDestroy {
 
   protected async choose(m: Media): Promise<void> {
     if (m.type !== 'series') {
-      this.emit([{ mediaId: m.id, episodeId: null }]);
+      this.emit([{ mediaId: m.id, episodeId: null, title: m.title }]);
       return;
     }
     const seq = ++this.chooseSeq;
@@ -250,9 +255,9 @@ export class MediaPickerComponent implements OnDestroy {
   }
 
   private emitEpisodes(eps: Episode[]): void {
-    const id = this.series()?.id;
-    if (id == null || !eps.length) return;
-    this.emit(eps.map((e) => ({ mediaId: id, episodeId: e.id })));
+    const series = this.series();
+    if (!series || !eps.length) return;
+    this.emit(eps.map((e) => ({ mediaId: series.id, episodeId: e.id, title: series.title })));
   }
 
   private emit(picks: MediaPick[]): void {

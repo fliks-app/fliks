@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal, untracked, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, Injector, computed, effect, inject, input, output, signal, untracked, viewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { TranslatePipe } from '@ngx-translate/core';
 import { LucideChevronDown, LucideChevronUp, LucideTrash2 } from '@lucide/angular';
@@ -9,7 +9,7 @@ import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { MediaPickerComponent, type MediaPick } from '../../shared/components/media-picker/media-picker';
 import { TvRowDirective } from '../../shared/directives/tv-row.directive';
 import { episodeLabel } from '../../shared/utils/episode-label';
-import { runBusy } from './party-busy';
+import { keepFocus, runBusy } from './party-busy';
 
 export function findEpisode(media: Media | null | undefined, id: number | null | undefined) {
   if (id == null) return null;
@@ -34,6 +34,8 @@ export class PartyProgrammeComponent {
   private readonly api = inject(PartyApiService);
   private readonly mediaService = inject(MediaService);
   private readonly sse = inject(SseService);
+  private readonly injector = inject(Injector);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
 
   readonly partyId = input.required<number>();
   readonly isHost = input(false);
@@ -58,7 +60,7 @@ export class PartyProgrammeComponent {
         ? episodeLabel({ seasonNumber: found.season.seasonNumber, episodeNumber: found.episode.episodeNumber, episodeTitle: found.episode.title })
         : '';
       const cur = this.current();
-      return { item, title: found ? media!.title : item.title, label, playing: this.live() && !!cur && sameItem(cur, item) };
+      return { item, hidden: !!item.hidden, title: found ? media!.title : item.title, label, playing: this.live() && !!cur && sameItem(cur, item) };
     }),
   );
 
@@ -68,8 +70,8 @@ export class PartyProgrammeComponent {
       untracked(() => void this.load());
     });
     effect(() => {
-      for (const { mediaId, episodeId } of this.items()) {
-        if (episodeId != null && !this.asked.has(mediaId)) untracked(() => void this.loadSeries(mediaId));
+      for (const { mediaId, episodeId, hidden } of this.items()) {
+        if (episodeId != null && !hidden && !this.asked.has(mediaId)) untracked(() => void this.loadSeries(mediaId));
       }
     });
     this.sse.partyEvents.pipe(takeUntilDestroyed()).subscribe((e) => {
@@ -91,6 +93,7 @@ export class PartyProgrammeComponent {
 
   /** Sends the full list; the screen follows at once and goes back to the previous list on failure. */
   private async save(next: PartyItem[], optimistic: boolean): Promise<void> {
+    if (this.busy()) return;
     const prev = this.items();
     this.seq++;
     if (optimistic) this.items.set(next);
@@ -114,10 +117,21 @@ export class PartyProgrammeComponent {
     if (to < 0 || to >= next.length) return;
     [next[index], next[to]] = [next[to], next[index]];
     void this.save(next, true);
+    this.focusRow(to, by < 0 ? 'up' : 'down');
   }
 
   protected remove(index: number): void {
-    void this.save(this.items().filter((_, i) => i !== index), true);
+    const next = this.items().filter((_, i) => i !== index);
+    void this.save(next, true);
+    this.focusRow(Math.min(index, next.length - 1), 'remove');
+  }
+
+  /** The row's button, else any of its buttons, else Add: a re-render must not leave the host on the page body. */
+  private focusRow(row: number, act: 'up' | 'down' | 'remove'): void {
+    keepFocus(this.injector, () => {
+      const li = this.host.nativeElement.querySelectorAll('li')[row];
+      return li?.querySelector<HTMLElement>(`[data-act=${act}]:not(:disabled)`) ?? li?.querySelector<HTMLElement>('button:not(:disabled)') ?? this.host.nativeElement.querySelector<HTMLElement>('[data-act=add]');
+    });
   }
 
   protected append(picks: MediaPick[]): void {

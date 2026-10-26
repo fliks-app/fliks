@@ -37,14 +37,14 @@ export class PlaybackQueueService {
   /** Whether the source wants back-to-back playback. */
   readonly autoplay = computed(() => this._autoplay());
 
-  /** Begin a queue. `startIndex` is the item being launched. */
+  /** Begin a queue. `startIndex` is the item being launched; -1 puts the cursor before the first item. */
   start(
     items: QueueItem[],
     startIndex: number,
     opts: { source: QueueSource; sourceId: number; autoplay: boolean },
   ): void {
     this._items.set(items);
-    this._index.set(Math.max(0, Math.min(startIndex, items.length - 1)));
+    this._index.set(Math.max(-1, Math.min(startIndex, items.length - 1)));
     this._source.set(opts.source);
     this._sourceId.set(opts.sourceId);
     this._autoplay.set(opts.autoplay);

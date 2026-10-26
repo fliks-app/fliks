@@ -35,7 +35,8 @@ const series: Media = {
     season(2, [ep(21, 1), ep(22, 2)]),
   ],
 } as Media;
-const movie = { id: 3, title: 'Film', type: 'movie' } as Media;
+const movie = { id: 3, title: 'Film', type: 'movie', files: [{ id: 30 }] } as Media;
+const missingMovie = { id: 4, title: 'Missing', type: 'movie', files: [] } as unknown as Media;
 
 @Component({
   imports: [MediaPickerComponent],
@@ -159,7 +160,13 @@ describe('MediaPickerComponent', () => {
   it('emits one entry for a movie', async () => {
     await type('film');
     await click(root.querySelector('.stub-card'));
-    expect(host.out).toEqual([[{ mediaId: 3, episodeId: null }]]);
+    expect(host.out).toEqual([[{ mediaId: 3, episodeId: null, title: 'Film' }]]);
+  });
+
+  it('leaves out a movie with no file and keeps a series', async () => {
+    getAll.mockResolvedValue({ data: [missingMovie, movie, series], total: 3 });
+    await type('film');
+    expect(Array.from(root.querySelectorAll('.stub-card')).map((b) => b.textContent)).toEqual(['Film', 'Show']);
   });
 
   it('pairs keyboard enter and leave', async () => {

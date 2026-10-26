@@ -161,7 +161,8 @@ export class PartyController {
   togglePlay(): boolean {
     if (!this.party.active()) return false;
     if (!this.gate()) return true;
-    const live = this.party.live()!;
+    const live = this.party.live();
+    if (!live) return true;
     // A tap during a wait would race the phase it is already in.
     if (live.state === 'waiting') return true;
     if (live.state === 'idle' && this.out().ended()) void this.replay();

@@ -3,6 +3,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { NgTemplateOutlet } from '@angular/common';
+import { HttpErrorResponse } from '@angular/common/http';
 import { PartyApiService, type PartyDto, type PartyPreview, type PartySummaryDto } from '../../core/services/api/party-api.service';
 import { MediaService, type Media } from '../../core/services/api/media.service';
 import { saveFile } from '../../core/plugins/save-file.plugin';
@@ -43,7 +44,10 @@ import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 
 const JOIN_RETRY_MS = 10_000;
 
-/** `/parties/:id`: a party's page. Scheduled: info and host actions; lobby open: members, ready and start; live: join. */
+/** The server has no live stream for this device yet: the one join refusal worth retrying. */
+const isNoConnection = (e: unknown) => e instanceof HttpErrorResponse && (e.error as { message?: unknown } | null)?.message === 'party.error_no_connection';
+
+/** `/parties/:id`: a party's page. Scheduled: the lobby (members, chat, voice, ready, start); live: join. */
 @Component({
   selector: 'app-party-page',
   imports: [
@@ -80,7 +84,7 @@ export class PartyPageComponent implements OnInit, OnDestroy {
 
   private readonly loaded = signal<PartyPreview | null>(null);
   protected readonly gone = signal(false);
-  /** The server's clock, so a device that runs fast does not open the lobby early. */
+  /** The server's clock, so a device that runs fast does not skew the countdown. */
   protected readonly now = signal(this.clock.serverNow());
   protected readonly busy = signal(false);
   private readonly joining = signal(false);
@@ -141,10 +145,10 @@ export class PartyPageComponent implements OnInit, OnDestroy {
     const members = this.joined() ? this.party.members() : (v?.live?.members ?? []);
     return v ? partyPeople(v.host, v.guests ?? [], members, this.voice.speaking()) : [];
   });
-  /** Invited by the host and not in the lobby: the one case where the party can be declined. */
+  /** Invited by the host: the invitation can be declined, in the lobby or not. */
   protected readonly invited = computed(() => {
     const me = this.auth.user()?.id;
-    return !this.joined() && !!this.hostView()?.guests.some((g) => g.userId === me && g.source === 'invite');
+    return !!this.hostView()?.guests.some((g) => g.userId === me && g.source === 'invite');
   });
   protected readonly connectedCount = computed(() => connectedCount(this.people()));
   protected readonly missingCount = computed(() => missingCount(this.people()));
@@ -152,8 +156,10 @@ export class PartyPageComponent implements OnInit, OnDestroy {
     this.joined() ? this.party.isHost() : this.view()?.host.userId === this.auth.user()?.id,
   );
   protected readonly link = computed(() => this.party.inviteLink(this.view()?.inviteToken ?? null));
-  /** A film is chosen, or a proposal exists for the server to take the top vote from. */
-  protected readonly canStart = computed(() => !!this.head()?.item || this.party.proposals().length > 0);
+  /** A film is chosen, or a proposal the host can open exists for the server to take the top vote from. */
+  protected readonly canStart = computed(() => !!this.head()?.item || this.party.proposals().some((p) => !p.item.hidden));
+  /** The chat column exists in the lobby only; the live phase gives the page its full width. */
+  protected readonly chatShown = computed(() => this.phase() === 'lobby' && this.joined());
   protected readonly ready = computed(() => this.party.me()?.status === 'ready');
 
   constructor() {
@@ -180,9 +186,9 @@ export class PartyPageComponent implements OnInit, OnDestroy {
       const id = this.head()?.item?.mediaId ?? null;
       untracked(() => void this.loadMedia(id));
     });
-    // The lobby is open from creation: the page joins it as soon as it shows.
+    // The lobby is open from creation: the page joins it once the live stream is up.
     effect(() => {
-      if (this.view()?.status !== 'scheduled' || this.joined() || this.joining()) return;
+      if (!this.sse.connected() || this.view()?.status !== 'scheduled' || this.joined() || this.joining() || this.gone()) return;
       untracked(() => void this.joinLobby());
     });
   }
@@ -235,12 +241,14 @@ export class PartyPageComponent implements OnInit, OnDestroy {
   private async joinLobby(): Promise<void> {
     this.joining.set(true);
     try {
-      await this.party.enter(this.id, this.token);
-    } catch {
-      /* no access: the interceptor toasted it, the page stays informative */
-    } finally {
-      setTimeout(() => this.joining.set(false), JOIN_RETRY_MS);
+      await this.party.enter(this.id, this.token, true);
+    } catch (err) {
+      // A refusal is final and shows the gone page once; only a missing stream is retried.
+      if (isNoConnection(err)) setTimeout(() => this.joining.set(false), JOIN_RETRY_MS);
+      else this.gone.set(true);
+      return;
     }
+    this.joining.set(false);
   }
 
   protected join(): void {
@@ -285,18 +293,6 @@ export class PartyPageComponent implements OnInit, OnDestroy {
   protected apply(dto: PartyDto): void {
     this.loaded.set(dto);
     if (this.joined()) this.party.applySnapshot(dto);
-  }
-
-  /** Host: moves the schedule to now, which opens the lobby; the page then joins it. */
-  protected async startNow(): Promise<void> {
-    const ok = await this.confirm.confirm({
-      title: this.translate.instant('party.start_now_title'),
-      message: this.translate.instant('party.start_now_message'),
-      confirmLabel: this.translate.instant('party.start_now'),
-    });
-    if (!ok) return;
-    const dto = await runBusy(this.busy, () => this.api.update(this.id, { scheduledAt: new Date().toISOString() }));
-    if (dto) this.apply(dto);
   }
 
   protected async end(): Promise<void> {

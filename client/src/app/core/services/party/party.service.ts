@@ -110,6 +110,8 @@ export class PartyService {
   readonly reactions = signal<FloatingReaction[]>([]);
   /** The party ended under us (host ended, expired, kicked): the player leaves. */
   readonly closed = new Subject<PartyCloseReason>();
+  /** A party was created (a scheduled one stays off this client's pages, so lists reload). */
+  readonly created = new Subject<void>();
   /** A rejoin after a dropped stream or a server restart landed: what the server held about this device is fresh again. */
   readonly rejoined = new Subject<void>();
 
@@ -143,6 +145,8 @@ export class PartyService {
   private wasConnected = false;
   private refetching: Promise<void> | null = null;
   private refetchAgain = false;
+  /** Counts `party.proposals` events: proposals carry no revision, so arrival order is the only ordering. */
+  private proposalEvents = 0;
   /** The item the queue was last loaded for; null until this party session loads one. */
   private queuedFor: PartyItem | null = null;
 
@@ -175,6 +179,7 @@ export class PartyService {
   /** A party for now opens its lobby page; a scheduled one is announced with its link. */
   async create(body: CreatePartyBody): Promise<void> {
     const dto = await this.api.create(body);
+    this.created.next();
     if (!body.scheduledAt) {
       await this.enter(dto.id);
       return;
@@ -225,14 +230,9 @@ export class PartyService {
     else void this.router.navigate(['/parties', dto.id], { queryParams: { token }, replaceUrl: true });
   }
 
-  /** Join: the player for a live party, the page (lobby) for a scheduled one whose lobby is open. */
-  async enter(id: number, token?: string): Promise<void> {
-    const dto = await this.api.join(id, this.deviceId(), token);
-    if (!dto.live) {
-      await this.api.leave(id, this.deviceId()).catch(() => {});
-      this.toast.info(this.translate.instant('party.toast_not_started'));
-      return;
-    }
+  /** Join: the player for a live party, the page (lobby) for a scheduled one. `quiet` leaves a refusal to the caller. */
+  async enter(id: number, token?: string, quiet = false): Promise<void> {
+    const dto = await this.api.join(id, this.deviceId(), token, quiet);
     this.adopt(dto);
     if (dto.status === 'live' && dto.item) await this.openPlayer(dto.item);
     else this.openPage(id, token);
@@ -338,18 +338,19 @@ export class PartyService {
       if (this.queue.source() === 'party') this.queue.clear();
       return;
     }
+    const cur = this.item();
+    // Off the programme, the cursor sits before row 0, where the server's `next` lands.
+    const at = cur ? items.findIndex((i) => i.mediaId === cur.mediaId && i.episodeId === cur.episodeId) : 0;
     this.queue.start(
       items.map((i) => ({
         mediaId: i.mediaId,
         ...(i.episodeId != null && { episodeId: i.episodeId }),
-        title: i.title,
+        title: i.hidden ? this.translate.instant('party.proposal_hidden') : i.title,
         fanartUrl: i.fanartUrl,
       })),
-      0,
+      at,
       { source: 'party', sourceId: party.id, autoplay: false },
     );
-    const cur = this.item();
-    if (cur) this.queue.syncTo(cur.mediaId, cur.episodeId ?? undefined);
   }
 
   /** The server derives the queue from the current item, so another show, a movie or an edited playlist needs a reload. */
@@ -379,14 +380,15 @@ export class PartyService {
 
   // ── Snapshots ──
 
-  applySnapshot(dto: PartyDto): void {
+  /** `proposals: false` keeps the proposals this client holds, for a snapshot that predates a `party.proposals` event. */
+  applySnapshot(dto: PartyDto, { proposals = true } = {}): void {
+    const live = dto.live;
+    // A snapshot older than what events already applied would roll the party back.
+    if (live && live.rev < this.lastRev) return;
     this.party.set(dto);
     void this.reactionCatalog.load();
-    this.proposals.set(dto.proposals);
-    const live = dto.live;
+    if (proposals) this.proposals.set(dto.proposals);
     if (!live) return;
-    // A snapshot older than what events already applied would roll the party back.
-    if (live.rev < this.lastRev) return;
     this.lastRev = live.rev;
     this.members.set(live.members);
     if (!this.messages().length) this.messages.set(live.messages);
@@ -420,9 +422,10 @@ export class PartyService {
     const id = this.party()?.id;
     if (id == null) return;
     const wasLobby = this.lobby();
+    const seen = this.proposalEvents;
     try {
       const dto = await this.api.get(id);
-      this.applySnapshot(dto);
+      this.applySnapshot(dto, { proposals: seen === this.proposalEvents });
       if (wasLobby && dto.status === 'live' && dto.item) await this.openPlayer(dto.item);
     } catch {
       /* the next event or reconnect retries */
@@ -433,12 +436,14 @@ export class PartyService {
     const id = this.party()?.id;
     if (id == null) return;
     try {
+      const wasLobby = this.lobby();
       const dto = await this.api.join(id, this.deviceId(), undefined, true);
       // A restarted server counts revisions and messages from scratch.
       this.lastRev = 0;
       this.messages.set([]);
       this.applySnapshot(dto);
       this.rejoined.next();
+      if (wasLobby && dto.status === 'live' && dto.item) await this.openPlayer(dto.item);
     } catch (err) {
       const reason = closeReason(err);
       if (reason) this.onClosed(reason);
@@ -485,6 +490,7 @@ export class PartyService {
         else void this.loadQueue();
         break;
       case 'party.proposals':
+        this.proposalEvents++;
         this.proposals.set(e.proposals);
         break;
       case 'party.members':

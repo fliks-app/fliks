@@ -25,6 +25,8 @@ export interface PartyItem {
   posterUrl: string | null;
   fanartUrl: string | null;
   additionalFanartUrls: string[];
+  /** A programme row the viewer cannot open: masked, but still part of the list the host sends back. */
+  hidden: boolean;
 }
 
 export interface PartyUser {
@@ -83,7 +85,7 @@ export interface PartySummaryDto {
   scheduledAt: string | null;
   /** When the lobby opens, on the server's clock. */
   host: PartyUser;
-  /** The playing item, else the film chosen for the start; null while none is chosen. */
+  /** The playing item, else the programme head; null while the programme is empty. masked (`hidden`) when the viewer cannot open it. */
   item: PartyItem | null;
   /** The playlist the party follows; the server picks what plays next from it. */
   playlist: PartyPlaylistRef | null;
@@ -104,7 +106,7 @@ export interface PartyGuest extends PartyUser {
   source: PartyGuestSource;
 }
 
-/** A film put forward by a member; `item.title` is empty when the viewer cannot open it. */
+/** A film put forward by a member; `item.hidden` when the viewer cannot open it. */
 export interface PartyProposal {
   id: number;
   item: PartyItem;
