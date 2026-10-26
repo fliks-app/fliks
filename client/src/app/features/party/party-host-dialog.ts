@@ -1,12 +1,10 @@
 import { ChangeDetectionStrategy, Component, ElementRef, computed, inject, input, output, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { PartyApiService, type PartyDto, type PartySwitches } from '../../core/services/api/party-api.service';
 import { ConfirmationService } from '../../core/services/confirmation.service';
 import { KeyboardOverlayService } from '../../core/services/keyboard-overlay.service';
 import { PartyService } from '../../core/services/party/party.service';
-import { ToastService } from '../../core/services/toast.service';
 import { ModalHeaderComponent } from '../../shared/components/modal-header';
 import { TvRowDirective } from '../../shared/directives/tv-row.directive';
 import { PartyHostSwitchesComponent } from '../player/party/party-host-switches';
@@ -25,9 +23,7 @@ import { partyWhen } from './party-time';
 export class PartyHostDialogComponent {
   private readonly api = inject(PartyApiService);
   private readonly confirm = inject(ConfirmationService);
-  private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
-  private readonly router = inject(Router);
   private readonly party = inject(PartyService);
   protected readonly keyboard = inject(KeyboardOverlayService);
   private readonly dialog = viewChild.required<ElementRef<HTMLDialogElement>>('dialog');
@@ -103,18 +99,5 @@ export class PartyHostDialogComponent {
     this.updated.emit(dto);
     this.newInvitees.set([]);
     this.inviting.set(false);
-  }
-
-  protected async cancel(): Promise<void> {
-    const key = this.view().status === 'live' ? 'end' : 'cancel';
-    const ok = await this.confirm.confirm({
-      title: this.translate.instant(`party.${key}_title`),
-      message: this.translate.instant(`party.${key}_message`, { name: this.view().name }),
-      variant: 'danger',
-    });
-    if (!ok || (await runBusy(this.busy, () => this.api.end(this.view().id))) === null) return;
-    this.dialog().nativeElement.close();
-    this.toast.info(this.translate.instant('party.closed_host_ended'));
-    void this.router.navigateByUrl('/');
   }
 }

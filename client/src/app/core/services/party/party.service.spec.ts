@@ -148,6 +148,16 @@ describe('PartyService leaveOrEnd', () => {
     expect(api.leave).not.toHaveBeenCalled();
   });
 
+  it('closes the ended party without waiting for its event', async () => {
+    const { svc } = setup();
+    svc.applySnapshot(withMe('host'));
+    const closed = vi.fn();
+    svc.closed.subscribe(closed);
+    await svc.end();
+    expect(closed).toHaveBeenCalledWith('host_ended');
+    expect(svc.party()).toBeNull();
+  });
+
   it('does nothing when the host declines', async () => {
     const { svc, api } = setup(false, false);
     svc.applySnapshot(withMe('host'));

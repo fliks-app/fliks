@@ -295,6 +295,22 @@ export class PartyPageComponent implements OnInit, OnDestroy {
     if (dto) this.apply(dto);
   }
 
+  protected async end(): Promise<void> {
+    const h = this.head()!;
+    const key = h.status === 'live' ? 'end' : 'cancel';
+    const ok = await this.confirm.confirm({
+      title: this.translate.instant(`party.${key}_title`),
+      message: this.translate.instant(`party.${key}_message`, { name: h.name }),
+      variant: 'danger',
+    });
+    if (!ok) return;
+    // Joined, the service closes the party and its `closed` takes the page home.
+    if (this.joined()) return void runBusy(this.busy, () => this.party.end());
+    if ((await runBusy(this.busy, () => this.api.end(this.id))) === null) return;
+    this.toast.info(this.translate.instant('party.closed_host_ended'));
+    this.home();
+  }
+
   protected async decline(): Promise<void> {
     const ok = await runBusy(this.busy, () => this.api.decline(this.id).then(() => true));
     if (ok) this.home();
