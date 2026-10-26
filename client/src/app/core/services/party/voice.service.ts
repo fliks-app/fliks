@@ -108,6 +108,10 @@ export class VoiceService {
       this.muted.set(true);
       this.startPoll();
       this.sync(this.party.members());
+      // A peer that saw us vanish without a bye (app killed) holds a dead connection: ask it to offer again.
+      for (const to of diffPeers([], this.party.members(), me).add) {
+        if (!offersTo(me, to)) void this.send(to, 'bye', { retry: true });
+      }
     } catch (err) {
       for (const peer of [...this.peers.keys()]) this.closePeer(peer);
       this.joined.set(false);
