@@ -178,6 +178,19 @@ extension NativePlayerPlugin {
         let reason = notification.userInfo?[AVPlayer.rateDidChangeReasonKey] as? AVPlayer.RateDidChangeReason
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
+            if reason != .audioSessionInterrupted, reason != .setRateFailed, let player = self.player { self.intendedPlaying = player.rate != 0 }
+            // WebKit's GPU process opens its own session for the mic and the system interrupts ours, dropping the
+            // rate to 0 with no interruption notification the app receives: play again when that was not the intent.
+            if reason == .audioSessionInterrupted, self.intendedPlaying, let player = self.player, player.rate == 0 {
+                self.resumeRetry = true
+                player.play()
+            } else if reason == .setRateFailed, self.resumeRetry, self.intendedPlaying {
+                // The session is still inactive: one more try once the system has handed it back.
+                self.resumeRetry = false
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                    if self?.intendedPlaying == true { self?.player?.play() }
+                }
+            }
             guard self.externalPlaybackActive,
                   let player = self.player, player.rate == 0,
                   reason == nil || reason == .setRateFailed,
@@ -228,6 +241,9 @@ extension NativePlayerPlugin {
         externalPlaybackBeforeMute = nil
         muteRanges = []
         nowPlaying.deactivate(releaseSession: true)
+        heartbeat.clear()
+        pipPhase = .inactive
+        externalPlaybackActive = false
         playerLayer?.removeFromSuperlayer()
         playerLayer = nil
         playerView?.removeFromSuperview()
@@ -285,6 +301,12 @@ extension NativePlayerPlugin {
         let dur = player?.currentItem?.duration.seconds ?? 0
         let buf = getBufferedPosition()
 
+        switch player?.timeControlStatus {
+        case .playing: heartbeat.send(position: pos, duration: dur, state: "playing")
+        case .waitingToPlayAtSpecifiedRate: heartbeat.send(position: pos, duration: dur, state: "buffering")
+        default: heartbeat.send(position: pos, duration: dur, state: "paused")
+        }
+
         let js = "window.dispatchEvent(new CustomEvent('nativePlayerTimeUpdate', { detail: { position: \(pos.isFinite ? pos : 0), duration: \(dur.isFinite ? dur : 0), buffered: \(buf) } }));"
         DispatchQueue.main.async { [weak self] in
             self?.bridge?.webView?.evaluateJavaScript(js)
@@ -313,6 +335,7 @@ extension NativePlayerPlugin {
             self.audibleGroup = audible
             self.legibleGroup = legible
             if (audible?.options.count ?? 0) > 0 || (legible?.options.count ?? 0) > 0 {
+                self.selectPreferredAudio(in: audible, of: item)
                 self.emitTracksChanged()
                 return
             }
@@ -321,6 +344,15 @@ extension NativePlayerPlugin {
                 self.ensureMediaSelectionPopulated(retries: retries - 1)
             }
         }
+    }
+
+    /// The item opens on the container's default track; a `configure`d language wins over it (JS picks come later).
+    func selectPreferredAudio(in group: AVMediaSelectionGroup?, of item: AVPlayerItem) {
+        guard !preferredAudioLanguage.isEmpty, let group = group else { return }
+        let wanted = Locale(identifier: preferredAudioLanguage)
+        guard let option = AVMediaSelectionGroup.mediaSelectionOptions(from: group.options, with: wanted).first,
+              item.currentMediaSelection.selectedMediaOption(in: group) != option else { return }
+        item.select(option, in: group)
     }
 
     func emitTracksChanged() {

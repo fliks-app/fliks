@@ -19,18 +19,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
     }
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        // Configure audio session for background playback and PiP
-        do {
-            try AVAudioSession.sharedInstance().setCategory(
-                .playback,
-                mode: .moviePlayback,
-                options: []
-            )
-            try AVAudioSession.sharedInstance().setActive(true)
-        } catch {
-            print("Audio session configuration failed: \(error)")
-        }
-
         // Present download completion banners even while the app is foregrounded
         // (default iOS behaviour suppresses them when the app is active).
         UNUserNotificationCenter.current().delegate = self

@@ -89,7 +89,9 @@ describe('CastPlayerService reporting without the player page', () => {
       episodeId: () => undefined,
       liveSessionId: () => 's',
       qoeSample: () => null,
-      cast: { currentTime: () => 30, duration: () => 100, isPaused: () => false },
+      cast: { currentTime: () => 30, duration: () => 100, isPaused: () => false, saveHeartbeat: vi.fn() },
+      authService: { accessToken: 'tok' },
+      serverConfig: { resolveUrl: (p: string) => p },
       streamingApi: { updatePlaybackState: vi.fn(async () => response) },
       reloadCastStream: vi.fn(async () => {}),
       recordRecovery: proto.recordRecovery,
@@ -104,6 +106,16 @@ describe('CastPlayerService reporting without the player page', () => {
     const { self, qoeReporter } = saver({});
     await proto.saveCastPosition.call(self);
     expect(qoeReporter.flush).toHaveBeenCalledWith('s');
+  });
+
+  it('hands the native side the heartbeat to repeat while the phone is locked', async () => {
+    const { self } = saver({});
+    await proto.saveCastPosition.call(self);
+    expect(self.cast.saveHeartbeat).toHaveBeenCalledWith({
+      url: '/api/playback/media/2/state',
+      token: 'tok',
+      body: expect.objectContaining({ positionSeconds: 30, mediaFileId: 1, sessionId: 's' }),
+    });
   });
 
   it('records a session_lost recovery when the heartbeat reloads the stream', async () => {

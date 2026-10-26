@@ -108,6 +108,8 @@ interface NativeCastPlugin {
   }>;
   /** Persisted per Cast session id, dropped when the session ends. */
   setResumeState?(opts: { state: unknown }): Promise<void>;
+  /** iOS: the heartbeat PUT the plugin repeats while the WebView is suspended (locked phone); the receiver's position replaces the body's. */
+  setHeartbeat?(opts: { url: string; token: string; body: Record<string, unknown> }): Promise<void>;
   isConnected(): Promise<{ connected: boolean }>;
   requestSession(): Promise<void>;
   /** Native-only device enumeration + selection backing the unified picker
@@ -259,6 +261,10 @@ export class CastService implements OnDestroy {
 
   saveResumeState(state: unknown): void {
     if (this.hasCastBridge) void this.bridge.setResumeState?.({ state }).catch(() => {});
+  }
+
+  saveHeartbeat(opts: { url: string; token: string; body: Record<string, unknown> }): void {
+    if (this.hasCastBridge) void this.bridge.setHeartbeat?.(opts).catch(() => {});
   }
 
   private async initNative() {

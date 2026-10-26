@@ -900,12 +900,19 @@ export class CastPlayerService {
               | 'playing',
           }
         : {};
-      const response = await this.streamingApi.updatePlaybackState(mId, {
+      const body = {
         positionSeconds: pos,
         durationSeconds: dur || 0,
         mediaFileId: mfId,
         episodeId: this.episodeId(),
         ...heartbeat,
+      };
+      const token = this.authService.accessToken;
+      if (token) {
+        this.cast.saveHeartbeat({ url: this.serverConfig.resolveUrl(`/api/playback/media/${mId}/state`), token, body });
+      }
+      const response = await this.streamingApi.updatePlaybackState(mId, {
+        ...body,
         ...(sid ? { qoe: this.qoeSample() ?? undefined } : {}),
       });
       // Backend lost the session: reload with a fresh sid, preserving the receiver's pause state.

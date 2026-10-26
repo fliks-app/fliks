@@ -59,4 +59,12 @@ describe('VoiceDucker', () => {
     ducker.stop();
     expect(engine.volume).toBe(0.8);
   });
+
+  it('ducks an engine that accepts the level for ducking only', () => {
+    const engine = { volume: 0.8, supportsVolume: false, supportsDucking: true };
+    const ducker = new VoiceDucker(() => engine, () => 0.8, () => {});
+    ducker.set(true);
+    vi.advanceTimersByTime(400);
+    expect(engine.volume).toBeCloseTo(0.8 * DUCK_FACTOR);
+  });
 });
