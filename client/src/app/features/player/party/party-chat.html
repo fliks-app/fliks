@@ -33,6 +33,7 @@
       [attr.placeholder]="'party.chat_placeholder' | translate"
       [attr.aria-label]="'party.chat_placeholder' | translate"
       (input)="onInput($event)"
+      (focus)="keepInView()"
       autocomplete="off"
     />
     <button type="submit" class="btn btn-primary btn-sm btn-square" [attr.aria-label]="'party.chat_send' | translate" [disabled]="!draft().trim()">

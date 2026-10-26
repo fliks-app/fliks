@@ -179,11 +179,11 @@
           <div class="pointer-events-auto flex items-center gap-1 rounded-full bg-warning text-warning-content shadow-lg pl-4 pr-1 py-1">
             <svg lucideCloudOff class="h-4 w-4 shrink-0"></svg>
             <span class="text-sm font-medium px-1 whitespace-nowrap">{{ 'connectivity.server_unreachable' | translate }}</span>
-            <a routerLink="/downloads" [state]="{ rootEntry: true }" class="btn btn-ghost btn-sm btn-circle"
+            <a routerLink="/downloads" [state]="{ rootEntry: true }" class="btn btn-ghost btn-sm btn-circle text-warning-content"
                [attr.aria-label]="'downloads.title' | translate">
               <svg lucideDownload class="h-4 w-4"></svg>
             </a>
-            <button class="btn btn-ghost btn-sm btn-circle" [disabled]="retrying()" (click)="retryConnection()"
+            <button class="btn btn-ghost btn-sm btn-circle text-warning-content" [disabled]="retrying()" (click)="retryConnection()"
                     [attr.aria-label]="'common.retry' | translate">
               @if (retrying()) {
                 <span class="loading loading-spinner loading-xs text-warning-content"></span>

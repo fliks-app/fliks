@@ -123,6 +123,10 @@ app-layout main {
 body.hero-page app-layout main {
   padding-top: 1rem;
 }
+/* The keyboard covers the bottom navbar: its reserved space would hold a field off the keyboard's edge. */
+html.keyboard-open app-layout main {
+  padding-bottom: 0;
+}
 
 /* Smooth is for D-pad focus-into-view; the router's own jump to the top of a
    page being entered must not animate. */
