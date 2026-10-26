@@ -9,7 +9,7 @@ updates:
 
   # Minor and patch bumps land as one PR per directory; majors stay separate.
   - package-ecosystem: npm
-    directories: [/client, /desktop, /tools]
+    directories: [/desktop, /tools]
     schedule:
       interval: weekly
     groups:
@@ -18,6 +18,21 @@ updates:
     commit-message:
       prefix: "chore"
       include: scope
+
+  - package-ecosystem: npm
+    directory: /client
+    schedule:
+      interval: weekly
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+    commit-message:
+      prefix: "chore"
+      include: scope
+    ignore:
+      # Angular's compiler and typescript-eslint need the TS 6 JS API, which TS 7 does not ship.
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: cargo
     directories: [/server, /server/crates/plugin-sdk]
