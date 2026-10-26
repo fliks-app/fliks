@@ -70,7 +70,7 @@ export class PartyCreateModalComponent {
         name: this.name().trim(),
         ...(t.playlistId != null
           ? { playlistId: t.playlistId }
-          : { mediaId: t.mediaId, mediaFileId: t.mediaFileId, ...(t.episodeId != null && { episodeId: t.episodeId }) }),
+          : t.mediaId != null && { mediaId: t.mediaId, mediaFileId: t.mediaFileId, ...(t.episodeId != null && { episodeId: t.episodeId }) }),
         ...(this.later() && { scheduledAt: new Date(this.when()).toISOString() }),
         inviteeIds: this.invitees(),
       });

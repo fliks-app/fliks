@@ -50,10 +50,11 @@ export interface FloatingReaction {
   left: number;
 }
 
-/** What the create dialog needs to know about what to watch: one item, or a playlist the party follows. */
+/** What the create dialog needs to know about what to watch: one item, a playlist the party follows, or nothing yet. */
 export type PartyCreateTarget = { title: string } & (
   | { mediaId: number; mediaFileId: number; episodeId?: number; playlistId?: undefined }
-  | { playlistId: number }
+  | { playlistId: number; mediaId?: undefined }
+  | { mediaId?: undefined; playlistId?: undefined }
 );
 
 export type PartyCloseReason = 'host_ended' | 'expired' | 'kicked';
