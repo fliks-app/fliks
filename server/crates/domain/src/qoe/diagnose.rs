@@ -168,10 +168,7 @@ fn decide(s: &QoeSessionSummary, live: bool) -> QoeDiagnosis {
     {
         return device(s, Confidence::High, "dropped_frames");
     }
-    if s.watched_ms < MIN_WATCHED_MS {
-        return result(Verdict::Unknown, Confidence::Low, &["too_little_data"]);
-    }
-    let conf = if s.sample_count > 0.0 || s.cmcd {
+    let conf = if s.watched_ms >= MIN_WATCHED_MS && (s.sample_count > 0.0 || s.cmcd) {
         Confidence::High
     } else {
         Confidence::Low

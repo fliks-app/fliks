@@ -58,7 +58,6 @@ describe('one palette', () => {
     expect(v('network')).toBe('bg-warning');
     expect(v('server')).toBe('bg-error');
     expect(v('device')).toBe('bg-info');
-    expect(v('unknown')).toBe('bg-base-content/30');
   });
 });
 

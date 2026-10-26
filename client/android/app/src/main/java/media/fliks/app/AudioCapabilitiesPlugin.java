@@ -135,7 +135,7 @@ public class AudioCapabilitiesPlugin extends Plugin {
         call.resolve(result);
     }
 
-    private static String mimeToCodecKey(String mime) {
+    static String mimeToCodecKey(String mime) {
         switch (mime.toLowerCase()) {
             case "audio/mp4a-latm": return "aac";
             case "audio/mpeg":      return "mp3";

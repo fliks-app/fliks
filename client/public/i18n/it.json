@@ -1573,8 +1573,7 @@
       "network": "Rete",
       "device": "Dispositivo",
       "server": "Server",
-      "error": "Errore",
-      "unknown": "Dati insufficienti"
+      "error": "Errore"
     },
     "reason": {
       "fatal_error": "La riproduzione è fallita con un errore e non si è ripresa.",
@@ -1585,7 +1584,6 @@
       "stalls_buffer_ahead": "Blocchi con dati in buffer: il dispositivo non è riuscito a stare al passo.",
       "dropped_frames": "Il decoder ha scartato una quota elevata di fotogrammi.",
       "software_decoder": "Decodifica software.",
-      "too_little_data": "Tempo di riproduzione insufficiente per giudicare.",
       "healthy": "Nessun problema rilevato.",
       "cmcd_missing": "Il client dichiara CMCD ma il server non ne ha ricevuto.",
       "session_lost": "Interruzioni: il server non conosceva più la sessione e il lettore ha dovuto ricrearla.",
@@ -1680,6 +1678,7 @@
       "reload_subtitles_off": "Sottotitoli incorporati disattivati",
       "reload_subtitles_hls": "Sottotitoli caricati via HLS ({{lang}})",
       "reload_remux_fallback": "Il remux è passato alla transcodifica",
+      "reload_audio_fallback": "Ripiego audio: {{codec}} non decodificato dal dispositivo, transcodificato",
       "reload_other": "Ricarica del flusso",
       "recovery_after": "Ripresa dopo {{duration}}"
     },

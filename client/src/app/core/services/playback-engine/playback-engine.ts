@@ -164,6 +164,8 @@ export type EngineEventMap = {
     severity?: number;
     data?: unknown[];
     variant?: string;
+    /** Native engines: profile codec key of the audio decoder that failed. */
+    audioCodec?: string;
   };
   audioTracksChanged: { tracks: AudioTrack[] };
   /** Single source of truth for the UI volume slider; `volume` is the raw 0..1 level, independent of `muted`. */

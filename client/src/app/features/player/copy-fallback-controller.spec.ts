@@ -216,3 +216,21 @@ describe('CopyFallbackController: shouldForceRejectCopy', () => {
     expect(controller.shouldForceRejectCopy(1)).toBe(false);
   });
 });
+
+describe('CopyFallbackController: audio decoder failure', () => {
+  const AUDIO = { source: 'native' as const, code: 4003, audioCodec: 'EAC3' };
+
+  it('drops the failed codec in any mode and reloads once per codec', async () => {
+    let sid = 'sid-1';
+    const host = createHost({ playbackMode: () => 'transcode', currentSid: () => sid });
+    const controller = createController(host);
+    expect(controller.maybeFallback(AUDIO, 12)).toBe(true);
+    await flush();
+    expect(host.reloadStream).toHaveBeenCalledWith(12, { reason: 'audio_fallback', from: 'eac3' });
+    expect([...controller.rejectedAudioCodecs(1)]).toEqual(['eac3']);
+    expect(controller.shouldForceRejectCopy(1)).toBe(false);
+    sid = 'sid-2';
+    expect(controller.maybeFallback(AUDIO, 12)).toBe(false);
+    expect(controller.maybeFallback({ ...AUDIO, audioCodec: 'ac3' }, 12)).toBe(true);
+  });
+});

@@ -36,7 +36,7 @@ const MERGED_KEYS: [&str; 19] = [
     "errorCount",
     "medianTranscodeSpeed",
 ];
-const VERDICTS: [&str; 6] = ["ok", "network", "device", "server", "error", "unknown"];
+const VERDICTS: [&str; 5] = ["ok", "network", "device", "server", "error"];
 
 pub fn is_verdict(v: &str) -> bool {
     VERDICTS.contains(&v)
@@ -210,12 +210,7 @@ pub fn summary(rows: &[SummaryRow]) -> Value {
                 }
             }
             counts.sort_by_key(|(_, c)| std::cmp::Reverse(*c));
-            // "Not enough data" only wins when the device never got a real verdict.
-            let top = counts
-                .iter()
-                .find(|(v, _)| v != "unknown")
-                .or(counts.first())
-                .map(|(v, _)| v.clone());
+            let top = counts.first().map(|(v, _)| v.clone());
             let first = g[0];
             (
                 g.len(),

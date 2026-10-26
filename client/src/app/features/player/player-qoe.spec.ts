@@ -191,7 +191,7 @@ describe('PlayerQoe', () => {
 
   it('caps an error message so the keepalive payload stays small', () => {
     qoe.onError('a', 1, { message: 'x'.repeat(500) });
-    expect(reporter.record.mock.calls[0][1].message).toHaveLength(200);
+    expect(reporter.record.mock.calls[0][1].message).toHaveLength(300);
   });
 
   it('restarts the counters when a recovery mints a new session id', async () => {

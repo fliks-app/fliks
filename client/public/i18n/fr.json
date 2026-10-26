@@ -1573,8 +1573,7 @@
       "network": "Réseau",
       "device": "Appareil",
       "server": "Serveur",
-      "error": "Erreur",
-      "unknown": "Pas assez de données"
+      "error": "Erreur"
     },
     "reason": {
       "fatal_error": "La lecture a échoué sur une erreur sans reprise.",
@@ -1585,7 +1584,6 @@
       "stalls_buffer_ahead": "Coupures avec des données en tampon : l'appareil n'a pas suivi.",
       "dropped_frames": "Le décodeur a perdu une part élevée des images.",
       "software_decoder": "Décodage logiciel.",
-      "too_little_data": "Temps de lecture insuffisant pour juger.",
       "healthy": "Aucun problème détecté.",
       "cmcd_missing": "Le client déclare CMCD mais le serveur n'en a reçu aucun.",
       "session_lost": "Coupures : le serveur ne connaissait plus la session et le lecteur a dû la recréer.",
@@ -1680,6 +1678,7 @@
       "reload_subtitles_off": "Sous-titres incrustés désactivés",
       "reload_subtitles_hls": "Sous-titres chargés via HLS ({{lang}})",
       "reload_remux_fallback": "Repli du remux vers le transcodage",
+      "reload_audio_fallback": "Repli audio : {{codec}} non décodé par l'appareil, transcodé",
       "reload_other": "Rechargement du flux",
       "recovery_after": "Reprise après {{duration}}"
     },

@@ -237,7 +237,7 @@ export class PlayerQoe {
     if (!sessionId) return;
     this.record(
       sessionId,
-      { type: 'error', position, code: err.code, message: err.message?.slice(0, 200), category: err.category },
+      { type: 'error', position, code: err.code, message: err.message?.slice(0, 300), category: err.category },
       true,
     );
   }

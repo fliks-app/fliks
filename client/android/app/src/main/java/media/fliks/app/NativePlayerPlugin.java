@@ -16,6 +16,7 @@ import android.view.WindowManager;
 import android.widget.FrameLayout;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.annotation.OptIn;
 import androidx.media3.common.AudioAttributes;
 import androidx.media3.common.C;
@@ -35,6 +36,7 @@ import androidx.media3.datasource.DefaultHttpDataSource;
 import androidx.media3.exoplayer.DecoderCounters;
 import androidx.media3.exoplayer.DefaultLoadControl;
 import androidx.media3.exoplayer.DefaultRenderersFactory;
+import androidx.media3.exoplayer.ExoPlaybackException;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.LoadControl;
 import androidx.media3.exoplayer.PlayerMessage;
@@ -437,7 +439,15 @@ public class NativePlayerPlugin extends Plugin {
                 }
 
                 @Override public void onPlayerError(@NonNull PlaybackException error) {
-                    emitError(error.errorCode, error.getMessage());
+                    String audioCodec = null;
+                    if (error instanceof ExoPlaybackException) {
+                        ExoPlaybackException e = (ExoPlaybackException) error;
+                        if (e.type == ExoPlaybackException.TYPE_RENDERER && e.rendererFormat != null
+                                && MimeTypes.isAudio(e.rendererFormat.sampleMimeType)) {
+                            audioCodec = AudioCapabilitiesPlugin.mimeToCodecKey(e.rendererFormat.sampleMimeType);
+                        }
+                    }
+                    emitError(error.errorCode, describe(error), audioCodec);
                 }
 
                 @Override public void onTracksChanged(@NonNull Tracks tracks) {
@@ -1219,10 +1229,24 @@ public class NativePlayerPlugin extends Plugin {
                 "window.dispatchEvent(new CustomEvent('nativePlayerStateChanged',{detail:{state:'" + state + "'}}));", null);
     }
 
-    private void emitError(int code, String message) {
-        String safe = message != null ? message.replace("'", "\\'") : "Unknown error";
+    /** The message plus its causes: the decoder name and MediaCodec diagnostics live there. */
+    private static String describe(Throwable error) {
+        StringBuilder sb = new StringBuilder(String.valueOf(error.getMessage()));
+        Throwable c = error.getCause();
+        for (int i = 0; c != null && i < 3; i++, c = c.getCause()) {
+            sb.append(" <- ").append(c.getClass().getSimpleName()).append(": ").append(c.getMessage());
+        }
+        return sb.toString();
+    }
+
+    /** `audioCodec`: the profile codec key of the audio renderer that failed, when it was one. */
+    private void emitError(int code, String message, @Nullable String audioCodec) {
+        JSObject detail = new JSObject();
+        detail.put("code", code);
+        detail.put("message", message != null ? message : "Unknown error");
+        if (audioCodec != null) detail.put("audioCodec", audioCodec);
         getBridge().getWebView().evaluateJavascript(
-                "window.dispatchEvent(new CustomEvent('nativePlayerError',{detail:{code:" + code + ",message:'" + safe + "'}}));", null);
+                "window.dispatchEvent(new CustomEvent('nativePlayerError',{detail:" + detail + "}));", null);
     }
 
     private void emitFirstFrame() {
