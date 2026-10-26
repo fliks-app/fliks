@@ -310,6 +310,7 @@ function createHarness(opts: {
           isTouch: () => false,
           isDpad: () => false,
           isDesktop: () => true,
+          isDesktopNative: () => false,
           formFactor: () => 'desktop',
           tvPlatform: () => null,
           desktopPlatform: () => null,
@@ -2061,6 +2062,63 @@ describe('PlayerComponent startup', () => {
 
     await h.component.ngAfterViewInit();
 
+    expect(h.streamingApi.getPlaybackInfo).toHaveBeenCalledTimes(1);
+    expect((h.streamingApi.getPlaybackInfo.mock.calls[0] as any[])[3]).toBe(1);
+  });
+
+  /** A getOne that stays pending until `release()`, to see what is sent meanwhile. */
+  function slowMedia(h: ReturnType<typeof createHarness>, media: Media) {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    TestBed.inject(MediaService).getOne = vi.fn(async () => { await gate; return media; }) as any;
+    (TestBed.inject(ActivatedRoute).snapshot.queryParams as any) = { mediaId: String(MEDIA_ID) };
+    h.component.createShakaEngine = async () => { h.component.engine = h.engine; };
+    return release;
+  }
+  const withAudio = (audio: unknown[]): Media => ({
+    ...MOVIE,
+    files: [{ ...MOVIE.files![0], streamInfo: { durationSeconds: 100, audio } as any }],
+  });
+
+  it('negotiates before the media payload arrives when the default audio applies', async () => {
+    const h = createHarness();
+    const release = slowMedia(h, withAudio([{ language: 'eng', isDefault: true }, { language: 'fra' }]));
+
+    const launch = h.component.ngAfterViewInit();
+    await flush();
+    expect(h.streamingApi.getPlaybackInfo).toHaveBeenCalledTimes(1);
+
+    release();
+    await launch;
+    expect(h.streamingApi.getPlaybackInfo).toHaveBeenCalledTimes(1);
+  });
+
+  it('retires the early session when the default flag lands on another stream', async () => {
+    const h = createHarness();
+    const release = slowMedia(h, withAudio([{ language: 'eng' }, { language: 'fra', isDefault: true }]));
+
+    const launch = h.component.ngAfterViewInit();
+    await flush();
+    release();
+    await launch;
+
+    const calls = h.streamingApi.getPlaybackInfo.mock.calls as any[][];
+    expect(calls).toHaveLength(2);
+    expect(calls[1][3]).toBe(1);
+    expect(calls[1][7]).toMatchObject({ replaces: `sid-${MAIN_FILE_ID}` });
+  });
+
+  it('waits for the media payload when a remembered pick names the audio', async () => {
+    const h = createHarness();
+    const release = slowMedia(h, withAudio([{ language: 'eng' }, { language: 'fra' }]));
+    TestBed.inject(PlayerSettingsService).saveRememberedAudioTrack(MEDIA_ID, 'fra');
+
+    const launch = h.component.ngAfterViewInit();
+    await flush();
+    expect(h.streamingApi.getPlaybackInfo).not.toHaveBeenCalled();
+
+    release();
+    await launch;
     expect(h.streamingApi.getPlaybackInfo).toHaveBeenCalledTimes(1);
     expect((h.streamingApi.getPlaybackInfo.mock.calls[0] as any[])[3]).toBe(1);
   });

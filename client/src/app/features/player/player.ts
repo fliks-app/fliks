@@ -1119,10 +1119,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // previous media's rung instead of the user's saved one.
       this.qualityManager.restorePreference();
       let playbackInfoPromise: ReturnType<StreamingApiService['getPlaybackInfo']> | null = null;
+      let beforeMedia = false;
       const requestPlaybackInfo = () => {
         if (this.isOfflinePlayback || playbackInfoPromise) return;
         // The launch failure path shows the server's reason in its own toast and card.
         playbackInfoPromise = this.negotiatePlayback(resumeTime, {}, { skipErrorToast: true });
+        playbackInfoPromise.catch(() => {});
       };
       // Minted in parallel with the other loads (time-to-first-frame critical path); awaited before headers are
       // built.
@@ -1134,6 +1136,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // Load media info + playback state in parallel
       // No stopSessions here — getOrCreateSession handles stale sessions naturally
       if (this.mediaId && !this.isOfflinePlayback) {
+        // The server opens on the first audio; a pick that needs the media payload waits for it.
+        if (this.audioTargetKnownWithoutMedia()) {
+          beforeMedia = true;
+          requestPlaybackInfo();
+        }
         const mediaPromise = this.mediaService.getOne(this.mediaId);
         const media = await mediaPromise;
         this.media = media;
@@ -1199,6 +1206,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         // Await playback-info (kicked off in parallel with media load above)
         requestPlaybackInfo();
         this.playbackInfo = await playbackInfoPromise!;
+        if (beforeMedia && (this.activeAudioStreamIndex ?? 0) !== 0) {
+          this.playbackInfo = await this.negotiatePlayback(resumeTime, {}, {
+            skipErrorToast: true,
+            replaces: this.playbackInfo.sessionId,
+          });
+        }
         startTime ??= this.playbackInfo.startAtSeconds || undefined;
         this.pendingStartTime = startTime ?? 0;
         await this.maybeStartPreRoll(startTime);
@@ -1588,6 +1601,15 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   /** The launch pick, for the file it was made on only: not an episode switch, nor a pre-roll item. */
   private launchPick(): LaunchTracks | null {
     return launchPickFor(this.launchTracks, this.mediaFileId);
+  }
+
+  /** Whether the audio and subtitle plan can't depend on the media payload, so playback-info may go
+   *  out before it: no pick for the launch, none remembered, and a mode that doesn't read the languages. */
+  private audioTargetKnownWithoutMedia(): boolean {
+    const s = this.playerSettings.get();
+    if (this.subs.textNeedsHls() || this.launchPick()?.audioStreamIndex != null) return false;
+    if (s.audioSelectionMode !== 'default' && s.audioSelectionMode !== 'first') return false;
+    return !(s.rememberAudioSelections && this.playerSettings.getRememberedAudioTrack(this.mediaId));
   }
 
   /** The audio the item opens on, known before any engine reports a track: the
