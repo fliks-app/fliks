@@ -19,6 +19,7 @@ import type { TimeRange } from '../../utils/edl-policy';
 import {
   desktopBridge,
   type DesktopEvent,
+  type DesktopLoadOptions,
   type DesktopSubtitleTrack,
   type FliksDesktopApi,
 } from '../../plugins/desktop-player.bridge';
@@ -73,6 +74,11 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
   private _subtitleStyle: NativeSubtitleStyle | null = null;
   private _fillScreen = false;
 
+  /** mpv drops a connection that dies before the response headers without retrying; reopen it this many times. */
+  private static readonly OPEN_RETRIES = 2;
+  private currentLoad: DesktopLoadOptions | null = null;
+  private openRetries = 0;
+
   // ── Lifecycle ──
 
   async init(_container: HTMLElement): Promise<void> {
@@ -110,13 +116,19 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
     this._audioTracks = [];
     this._mpvAudioIds = [];
     this._nativeSubtitleTracks = [];
-    await this.bridge.load({
+    this.openRetries = 0;
+    await this.open({
       url,
       startTime,
       headers,
       audioLanguage: this._preferredAudioLanguage,
       videoCrop: this._videoCrop,
     });
+  }
+
+  private async open(opts: DesktopLoadOptions): Promise<void> {
+    this.currentLoad = opts;
+    await this.bridge.load(opts);
     if (this._subtitleStyle) {
       await this.bridge.setSubtitleStyle(this._subtitleStyle);
     }
@@ -126,6 +138,7 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
   }
 
   async unload(): Promise<void> {
+    this.currentLoad = null;
     await this.bridge.stop();
     this._currentTime = 0;
     this._duration = 0;
@@ -407,6 +420,7 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
         // mpv can't expose the segment's HTTP status: first error after a frame played tries one session-expired recovery.
         const { code, message, detail } = event.payload;
         if (this.maybeEmitSessionExpired({ code, message })) return;
+        if (this.retryOpen(code)) return;
         // Append the concrete cause mpv logged (TLS, HTTP status, codec) so the error card shows why.
         const composed = detail ? `${message} - ${detail}` : message;
         // code 2 is mpv's TLS/libcurl transport error; source:'media' routes it via the network classifier, not a decode label.
@@ -419,5 +433,20 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
       default:
         break;
     }
+  }
+
+  /** A transport failure before the first frame reopens the same load after a short backoff. */
+  private retryOpen(code: number): boolean {
+    const opts = this.currentLoad;
+    if (code !== 2 || this.firstFrameEmitted || !opts || this.openRetries >= DesktopEngine.OPEN_RETRIES) {
+      return false;
+    }
+    const attempt = ++this.openRetries;
+    console.warn(`[desktop-engine] open failed, retry ${attempt}/${DesktopEngine.OPEN_RETRIES}`);
+    setTimeout(() => {
+      if (this.dead || this.currentLoad !== opts) return;
+      this.open(opts).catch((e) => this.emit('error', { code: -1, message: String(e) }));
+    }, attempt * 1000);
+    return true;
   }
 }
