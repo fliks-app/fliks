@@ -1,4 +1,4 @@
-//! Report-only Content-Security-Policy on the SPA document, and the endpoint that logs violations.
+//! Content-Security-Policy on the SPA document, and the endpoint that logs violations.
 use axum::body::Bytes;
 use axum::extract::{DefaultBodyLimit, Request};
 use axum::http::header::CONTENT_TYPE;
@@ -9,12 +9,13 @@ use axum::routing::{MethodRouter, post};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-const HEADER: HeaderName = HeaderName::from_static("content-security-policy-report-only");
+const HEADER: HeaderName = HeaderName::from_static("content-security-policy");
 pub const REPORT_PATH: &str = "/api/csp-report";
 
-/// What the client loads: the Cast sender (gstatic), the TMDB art fallback, the YouTube trailer frame.
+/// What the client loads: the Cast sender (gstatic, over the page's own scheme: it loads its
+/// framework with a protocol-relative URL), the TMDB art fallback, the YouTube trailer frame.
 const POLICY: &str = "default-src 'self'; \
-script-src 'self' https://www.gstatic.com chrome-extension://pkedcjkdefgpdelpbcmbmeomcjbeemfm; \
+script-src 'self' www.gstatic.com chrome-extension://pkedcjkdefgpdelpbcmbmeomcjbeemfm; \
 style-src 'self' 'unsafe-inline'; \
 img-src 'self' data: blob: https://image.tmdb.org; \
 media-src 'self' blob:; \
