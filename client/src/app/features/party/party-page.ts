@@ -212,7 +212,8 @@ export class PartyPageComponent implements OnInit, OnDestroy {
   /** A member's own copy first (a regenerated token no longer resolves for them), the invite link's preview otherwise. */
   private fetch(): Promise<PartyPreview> {
     const token = this.token;
-    if (!token) return this.api.get(this.id);
+    // Quiet: a party out of reach (declined, ended, kicked) shows the gone page, not a toast.
+    if (!token) return this.api.get(this.id, true);
     return this.api.get(this.id, true).catch(() => this.api.byToken(token));
   }
 
