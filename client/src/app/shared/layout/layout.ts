@@ -23,7 +23,8 @@ import { LibraryPrefsService } from '../../core/services/library-prefs.service';
 import { LibrariesApiService, LibrarySummary } from '../../core/services/api/libraries-api.service';
 import { CountsApiService } from '../../core/services/api/counts-api.service';
 import { ServerConfigService } from '../../core/services/server-config.service';
-import { SseService } from '../../core/services/sse.service';
+import { SseEvent, SseService } from '../../core/services/sse.service';
+import { ToastService } from '../../core/services/toast.service';
 import { CastService } from '../../core/services/cast.service';
 import { AirPlayService } from '../../core/services/airplay.service';
 import { RemoteService } from '../../core/services/remote.service';
@@ -74,6 +75,8 @@ import {
 
 /** Coalesces a burst of count-bearing SSE events (e.g. a season-pack import) into one request. */
 const SIDEBAR_COUNTS_DEBOUNCE_MS = 400;
+/** Server-side pairing TTL (`PAIRING_TTL_SECS`). */
+const PAIRING_TTL_MS = 600_000;
 
 @Component({
   selector: 'app-layout',
@@ -151,6 +154,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
     this.updateModal()?.open();
   }
   private readonly translate = inject(TranslateService);
+  private readonly toast = inject(ToastService);
   private readonly destroyRef = inject(DestroyRef);
   /** Bumps when language changes so the document title effect re-reads `app.name`. */
   private readonly langTick = signal(0);
@@ -305,8 +309,35 @@ export class LayoutComponent implements OnInit, OnDestroy {
       case 'request.declined':
         this.debouncedRefreshSidebarCounts();
         break;
+      // The SSE channel isn't per-user: a foreign request would 403 on approve.
+      case 'pairing.requested':
+        if (event['userId'] === this.auth.user()?.id) untracked(() => this.promptPairing(event));
+        break;
+      case 'pairing.cancelled': {
+        const toastId = this.pairingToasts.get(event['pairingId'] as string);
+        if (toastId !== undefined) this.toast.dismiss(toastId);
+        break;
+      }
     }
   });
+
+  private readonly pairingToasts = new Map<string, number>();
+
+  private promptPairing(event: SseEvent) {
+    const id = event['pairingId'] as string;
+    const settle = (call: (id: string) => Promise<void>, doneKey: string) => () =>
+      void call(id).then(
+        () => this.toast.success(this.translate.instant(doneKey)),
+        () => this.toast.error(this.translate.instant('pending_requests.action_error')),
+      );
+    const toastId = this.toast.info(
+      this.translate.instant('pending_requests.requested_toast', { device: event['deviceName'] }),
+      PAIRING_TTL_MS,
+      { label: this.translate.instant('pending_requests.accept'), run: settle((i) => this.auth.pairingApprove(i), 'pending_requests.approved_toast') },
+      { label: this.translate.instant('pending_requests.deny'), run: settle((i) => this.auth.pairingDeny(i), 'pending_requests.denied_toast') },
+    );
+    this.pairingToasts.set(id, toastId);
+  }
 
   // The shell is instantiated once, so ngOnInit's boot fetch never repeats: a
   // reconnect after backgrounding is the only later signal that counts may be stale.

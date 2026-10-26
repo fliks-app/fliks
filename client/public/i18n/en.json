@@ -773,6 +773,8 @@
     "approve": "Approve",
     "deny": "Deny",
     "approved_toast": "Login accepted",
+    "requested_toast": "{{device}} wants to sign in",
+    "accept": "Accept",
     "denied_toast": "Request denied.",
     "load_error": "Unable to load pending requests.",
     "action_error": "The action could not be completed."

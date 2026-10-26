@@ -773,6 +773,8 @@
     "approve": "Aprovar",
     "deny": "Recusar",
     "approved_toast": "Ligação aceite",
+    "requested_toast": "{{device}} pede para ligar-se",
+    "accept": "Aceitar",
     "denied_toast": "Pedido recusado.",
     "load_error": "Não foi possível carregar os pedidos pendentes.",
     "action_error": "A ação não pôde ser concluída."

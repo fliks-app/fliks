@@ -773,6 +773,8 @@
     "approve": "Approva",
     "deny": "Rifiuta",
     "approved_toast": "Connessione accettata",
+    "requested_toast": "{{device}} chiede di connettersi",
+    "accept": "Accetta",
     "denied_toast": "Richiesta rifiutata.",
     "load_error": "Impossibile caricare le richieste in attesa.",
     "action_error": "L'azione non è andata a buon fine."

@@ -773,6 +773,8 @@
     "approve": "Genehmigen",
     "deny": "Ablehnen",
     "approved_toast": "Verbindung akzeptiert",
+    "requested_toast": "{{device}} möchte sich anmelden",
+    "accept": "Annehmen",
     "denied_toast": "Anfrage abgelehnt.",
     "load_error": "Die ausstehenden Anfragen konnten nicht geladen werden.",
     "action_error": "Die Aktion konnte nicht abgeschlossen werden."

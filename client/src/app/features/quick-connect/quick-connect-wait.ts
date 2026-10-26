@@ -58,6 +58,9 @@ export class QuickConnectWaitComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.stopTimers();
+    if (this.view() === 'waiting' && this.pairingId && this.deviceId) {
+      void this.auth.pairingCancel(this.pairingId, this.deviceId).catch(() => undefined);
+    }
   }
 
   async start() {
@@ -92,6 +95,7 @@ export class QuickConnectWaitComponent implements OnInit, OnDestroy {
     try {
       const res = await this.auth.pairingStatus(this.pairingId, this.deviceId);
       if (res.status === 'approved' && res.accessToken) {
+        this.view.set('starting');
         await this.auth.loginWithToken(
           res.accessToken,
           res.refreshToken,

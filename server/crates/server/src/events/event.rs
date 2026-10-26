@@ -339,6 +339,8 @@ pub enum SseEvent {
         device_name: String,
         device_id: String,
     },
+    #[serde(rename = "pairing.cancelled")]
+    PairingCancelled { user_id: i64, pairing_id: String },
     #[serde(rename = "remote.command")]
     RemoteCommand {
         cmd_id: String,
@@ -645,6 +647,7 @@ mod tests {
             json!({"type":"seerr.import.completed","users":1,"usersCreated":0,"imported":2,"updated":3,"skipped":4}),
             json!({"type":"seerr.import.failed","error":"e"}),
             json!({"type":"pairing.requested","userId":1,"pairingId":"p","deviceName":"n","deviceId":"d"}),
+            json!({"type":"pairing.cancelled","userId":1,"pairingId":"p"}),
             json!({"type":"remote.command","cmdId":"c","expiresAt":10,"byTargetId":null,"action":"seek","positionSeconds":12.5,"subtitleId":null,"qualityId":"q"}),
             json!({"type":"remote.state","targetId":"t","sessionId":"s","mediaId":null,"mediaFileId":1,"episodeId":null,
                 "mediaTitle":null,"episodeLabel":null,"posterUrl":null,"fanartUrl":null,"positionSeconds":1,"durationSeconds":2,
@@ -676,7 +679,7 @@ mod tests {
     #[test]
     fn every_type_round_trips_to_the_same_json() {
         let all = samples();
-        assert_eq!(all.len(), 52);
+        assert_eq!(all.len(), 53);
         for want in all {
             let ev: SseEvent = serde_json::from_value(want.clone()).unwrap();
             assert_eq!(serde_json::to_value(&ev).unwrap(), want);

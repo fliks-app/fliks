@@ -25,6 +25,7 @@ Covers the auth controllers, services, extractors, `casl/*` and `pairing/*`. Env
 | `GET /api/auth/pairing/pending` | `Authed` | none | `[{pairingId, deviceId, deviceName, systemName: string\|null, requestedAt: ISO, expiresAt: ISO}]` | 401 | none |
 | `POST /api/auth/pairing/:pairingId/approve` | `Authed` | path `pairingId` (string, no format check) | 204, no body | 404 `Pairing request not found` (also another user's); 400 `Cannot approve a <status> request`; 400 `Pairing request expired` | `status='approved'` |
 | `POST /api/auth/pairing/:pairingId/deny` | `Authed` | path `pairingId` | 204, no body | 404 `Pairing request not found` | `status='denied'` |
+| `POST /api/auth/pairing/:pairingId/cancel` | none | path `pairingId`, header `X-Device-Id` (required) | 204, no body | 400 `Missing X-Device-Id header`; 404 `Pairing request not found` (also another device's or a settled one) | DELETE the pending row; SSE `pairing.cancelled` (target user only) |
 
 No auth route has a policy beyond the extractor.
 

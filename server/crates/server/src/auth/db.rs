@@ -464,6 +464,23 @@ pub async fn deny(db: &PgPool, public_id: &str, user_id: i32) -> Result<bool, sq
     Ok(true)
 }
 
+/// The requesting device withdraws its own pending request; returns the target user.
+pub async fn cancel(
+    db: &PgPool,
+    public_id: &str,
+    device_id: &str,
+) -> Result<Option<i32>, sqlx::Error> {
+    sqlx::query_scalar(
+        r#"DELETE FROM pairing_requests
+           WHERE "publicId" = $1 AND "deviceId" = $2 AND status = 'pending'
+           RETURNING "userId""#,
+    )
+    .bind(public_id)
+    .bind(device_id)
+    .fetch_optional(db)
+    .await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -326,6 +326,14 @@ export class AuthService {
     );
   }
 
+  pairingCancel(pairingId: string, deviceId: string): Promise<void> {
+    return firstValueFrom(
+      this.http.post<void>(`/api/auth/pairing/${pairingId}/cancel`, {}, {
+        headers: { 'X-Device-Id': deviceId },
+      }),
+    );
+  }
+
   pairingPending(): Promise<PendingRequest[]> {
     return firstValueFrom(this.http.get<PendingRequest[]>('/api/auth/pairing/pending'));
   }
