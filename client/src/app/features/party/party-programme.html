@@ -1,0 +1,47 @@
+<section class="flex flex-col gap-3">
+  <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+    <h2 class="text-lg font-bold">{{ 'party.programme' | translate }}</h2>
+    @if (isHost()) {
+      <button type="button" class="btn btn-sm btn-outline" [disabled]="busy()" (click)="picker().show()">{{ 'party.programme_add' | translate }}</button>
+    }
+  </div>
+  @if (rows().length) {
+    <ol class="flex flex-col gap-2">
+      @for (r of rows(); track r.item.mediaId + ':' + r.item.episodeId; let i = $index; let first = $first; let last = $last) {
+        <li appTvRow class="flex items-center gap-3 rounded-box bg-base-200 p-2" [class.ring-2]="r.playing" [class.ring-primary]="r.playing" [attr.aria-current]="r.playing ? 'true' : null">
+          <span class="w-5 shrink-0 text-center text-sm text-base-content/60">{{ i + 1 }}</span>
+          @if (r.item.posterUrl) {
+            <img [src]="r.item.posterUrl | resolveUrl: 'thumb'" [alt]="r.title" loading="lazy" class="h-16 w-11 shrink-0 rounded-md bg-base-300 object-cover" />
+          } @else {
+            <div class="h-16 w-11 shrink-0 rounded-md bg-base-300"></div>
+          }
+          <div class="min-w-0 flex-1">
+            <p class="truncate font-medium">{{ r.title }}</p>
+            @if (r.label) {
+              <p class="truncate text-sm text-base-content/60">{{ r.label }}</p>
+            }
+            @if (r.playing) {
+              <span class="badge badge-primary badge-sm">{{ 'party.programme_now' | translate }}</span>
+            }
+          </div>
+          @if (isHost()) {
+            <button type="button" class="btn btn-sm btn-ghost btn-square" [attr.aria-label]="'party.programme_up' | translate" [disabled]="busy() || first" (click)="move(i, -1)">
+              <svg lucideChevronUp class="h-4 w-4"></svg>
+            </button>
+            <button type="button" class="btn btn-sm btn-ghost btn-square" [attr.aria-label]="'party.programme_down' | translate" [disabled]="busy() || last" (click)="move(i, 1)">
+              <svg lucideChevronDown class="h-4 w-4"></svg>
+            </button>
+            <button type="button" class="btn btn-sm btn-ghost btn-square text-error" [attr.aria-label]="'party.programme_remove' | translate" [disabled]="busy()" (click)="remove(i)">
+              <svg lucideTrash2 class="h-4 w-4"></svg>
+            </button>
+          }
+        </li>
+      }
+    </ol>
+  } @else {
+    <p class="text-base-content/60">{{ (isHost() ? 'party.programme_empty_host' : 'party.programme_empty') | translate }}</p>
+  }
+  @if (isHost()) {
+    <app-media-picker multiple (picked)="append($event)" />
+  }
+</section>

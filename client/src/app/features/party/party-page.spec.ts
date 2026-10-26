@@ -25,7 +25,7 @@ const dto = (it: PartyItem | null) =>
   ({ id: 9, name: 'P', status: 'scheduled', scheduledAt: null, host: { userId: 1, username: 'h' }, item: it, playlist: null, memberCount: 1, guests: [], live: null }) as unknown as PartyDto;
 
 describe('PartyPageComponent film selection', () => {
-  let api: { get: ReturnType<typeof vi.fn>; select: ReturnType<typeof vi.fn> };
+  let api: { get: ReturnType<typeof vi.fn> };
   let getOne: ReturnType<typeof vi.fn>;
   let service: { party: ReturnType<typeof signal<PartyDto | null>>; proposals: ReturnType<typeof signal<PartyProposal[]>> };
   const flush = async () => {
@@ -34,7 +34,7 @@ describe('PartyPageComponent film selection', () => {
   };
 
   beforeEach(() => {
-    api = { get: vi.fn().mockResolvedValue(dto(null)), select: vi.fn() };
+    api = { get: vi.fn().mockResolvedValue(dto(null)) };
     getOne = vi.fn((id: number) => Promise.resolve({ id, title: `T${id}` }));
     service = { party: signal<PartyDto | null>(null), proposals: signal<PartyProposal[]>([]) };
     const stub = (v: object) => v as never;
@@ -66,14 +66,12 @@ describe('PartyPageComponent film selection', () => {
     });
   });
 
-  it('sends the picked item to the server and shows the returned party', async () => {
-    api.select.mockResolvedValue(dto(item(3, 5)));
+  it('shows the snapshot a programme edit returns', () => {
     const page = TestBed.createComponent(PartyPageComponent).componentInstance as unknown as {
-      select(p: { mediaId: number; episodeId: number | null }[]): Promise<void>;
+      apply(d: PartyDto): void;
       head(): { item: PartyItem | null } | null;
     };
-    await page.select([{ mediaId: 3, episodeId: 5 }]);
-    expect(api.select).toHaveBeenCalledWith(9, { mediaId: 3, episodeId: 5 });
+    page.apply(dto(item(3, 5)));
     expect(page.head()?.item?.mediaId).toBe(3);
   });
 
