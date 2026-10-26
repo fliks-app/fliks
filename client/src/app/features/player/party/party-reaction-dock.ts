@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, ElementRef, effect, inject, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, effect, inject, signal, viewChild } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
 import { LucideSmilePlus, LucideX } from '@lucide/angular';
 import { DismissableStackService } from '../../../core/services/dismissable-stack.service';
@@ -7,6 +7,8 @@ import { PartyService } from '../../../core/services/party/party.service';
 import { TvRowDirective } from '../../../shared/directives/tv-row.directive';
 
 const POP_MS = 220;
+// A second tap of a fast double tap lands on the folded row's spot this long after it folds.
+const SETTLE_MS = 400;
 
 /** Reaction button of the player's action strip: opens a row of emojis to its left, one tap sends (and folds it back, per the reaction settings). */
 @Component({
@@ -24,6 +26,7 @@ export class PartyReactionDockComponent {
   private readonly dismissStack = inject(DismissableStackService);
   private readonly toggleBtn = viewChild.required<ElementRef<HTMLButtonElement>>('toggle');
   readonly open = this.reactions.rowOpen.asReadonly();
+  protected readonly settling = signal(false);
 
   constructor() {
     // Back folds the row before anything else, like the player's other menus.
@@ -36,13 +39,20 @@ export class PartyReactionDockComponent {
   }
 
   protected send(emoji: string, event: Event): void {
+    if (!this.open()) return;
     this.party.react(emoji);
     const pop = (event.currentTarget as HTMLElement).animate(
       [{ transform: 'scale(1)' }, { transform: 'scale(1.2)' }, { transform: 'scale(1)' }],
       { duration: POP_MS, easing: 'ease-out' },
     );
     // The row folds once the tapped emoji has finished its pop, or the feedback is never seen.
-    if (!this.reactions.keepOpen()) pop.finished.then(() => this.fold(), () => this.fold());
+    if (!this.reactions.keepOpen()) pop.finished.then(() => this.foldAfterSend(), () => this.foldAfterSend());
+  }
+
+  private foldAfterSend(): void {
+    this.fold();
+    this.settling.set(true);
+    setTimeout(() => this.settling.set(false), SETTLE_MS);
   }
 
   /** Focus returns to the button when it sat on an emoji, which leaves the D-pad order as the row folds. */
