@@ -56,22 +56,22 @@
 
       <div appTvRow class="flex flex-wrap items-center gap-2 mt-6 mb-2">
         @if (phase() === 'live') {
-          <button type="button" class="btn btn-primary gap-2" [class.flex-1]="!desktopLayout()" autofocus (click)="join()">
+          <button type="button" class="btn btn-primary gap-2 whitespace-nowrap" [class.flex-auto]="!desktopLayout()" autofocus (click)="join()">
             <svg lucidePlay class="h-5 w-5" fill="currentColor"></svg>
             {{ 'party.join' | translate }}
           </button>
         } @else if (phase() === 'lobby') {
           @if (joined()) {
             @if (party.isHost()) {
-              <button type="button" class="btn btn-primary gap-2" [class.flex-1]="!desktopLayout()" [attr.autofocus]="canStart() ? '' : null" [disabled]="!canStart()" (click)="start()">
+              <button type="button" class="btn btn-primary gap-2 whitespace-nowrap" [class.flex-auto]="!desktopLayout()" [attr.autofocus]="canStart() ? '' : null" [disabled]="!canStart()" (click)="start()">
                 <svg lucidePlay class="h-5 w-5" fill="currentColor"></svg>
                 {{ 'party.start' | translate }}
               </button>
             }
             <button
               type="button"
-              class="btn gap-2"
-              [class.flex-1]="!desktopLayout()"
+              class="btn gap-2 whitespace-nowrap"
+              [class.flex-auto]="!desktopLayout()"
               [class.btn-primary]="!ready() && !party.isHost()"
               [class.btn-success]="ready()"
               [class.btn-outline]="!ready() && party.isHost()"
