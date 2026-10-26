@@ -12,7 +12,7 @@ export interface Toast {
   message: string;
   type: ToastType;
   duration: number;
-  action?: ToastAction;
+  actions: ToastAction[];
 }
 
 @Injectable({ providedIn: 'root' })
@@ -20,8 +20,8 @@ export class ToastService {
   private nextId = 0;
   readonly toasts = signal<Toast[]>([]);
 
-  success(message: string, duration = 4000, action?: ToastAction) {
-    this.add(message, 'success', duration, action);
+  success(message: string, duration = 4000, ...actions: ToastAction[]) {
+    this.add(message, 'success', duration, actions);
   }
 
   error(message: string, duration = 6000) {
@@ -32,20 +32,21 @@ export class ToastService {
     this.add(message, 'warning', duration);
   }
 
-  info(message: string, duration = 4000, action?: ToastAction) {
-    this.add(message, 'info', duration, action);
+  info(message: string, duration = 4000, ...actions: ToastAction[]) {
+    return this.add(message, 'info', duration, actions);
   }
 
   dismiss(id: number) {
     this.toasts.update((list) => list.filter((t) => t.id !== id));
   }
 
-  private add(message: string, type: ToastType, duration: number, action?: ToastAction) {
+  private add(message: string, type: ToastType, duration: number, actions: ToastAction[] = []) {
     const id = this.nextId++;
-    this.toasts.update((list) => [...list, { id, message, type, duration, action }]);
+    this.toasts.update((list) => [...list, { id, message, type, duration, actions }]);
 
     if (duration > 0) {
       setTimeout(() => this.dismiss(id), duration);
     }
+    return id;
   }
 }

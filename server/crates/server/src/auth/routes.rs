@@ -43,6 +43,7 @@ pub fn router() -> Router<AppState> {
         .route("/api/auth/pairing/pending", get(pairing_pending))
         .route("/api/auth/pairing/{id}/approve", post(pairing_approve))
         .route("/api/auth/pairing/{id}/deny", post(pairing_deny))
+        .route("/api/auth/pairing/{id}/cancel", post(pairing_cancel))
 }
 
 #[derive(Serialize)]
@@ -752,4 +753,24 @@ pub(crate) async fn pairing_deny(
     } else {
         Err(AppError::not_found("Pairing request not found"))
     }
+}
+
+#[utoipa::path(post, path = "/api/auth/pairing/{id}/cancel", responses((status = 200)))]
+pub(crate) async fn pairing_cancel(
+    State(st): State<AppState>,
+    headers: HeaderMap,
+    PathParams(id): PathParams<String>,
+) -> Result<StatusCode, AppError> {
+    let device = device_id(&headers)?;
+    let user_id = db::cancel(&st.db, &id, device)
+        .await?
+        .ok_or_else(|| AppError::not_found("Pairing request not found"))?;
+    st.hub.emit_to_user(
+        user_id,
+        SseEvent::PairingCancelled {
+            user_id: user_id.into(),
+            pairing_id: id,
+        },
+    );
+    Ok(StatusCode::NO_CONTENT)
 }

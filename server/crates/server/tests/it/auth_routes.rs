@@ -367,6 +367,35 @@ async fn pairing_flow(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
+async fn pairing_cancel_by_requesting_device(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    let id = user(&pool, "bob", Some("[]"), false, true).await;
+    let dev = [("x-device-id", "tv")];
+    let req = json!({"userId": id, "deviceName": "TV"});
+    let (_, _, r) = call(&c, "POST", "/api/auth/pairing/request", &dev, Some(req)).await;
+    let cancel = format!(
+        "/api/auth/pairing/{}/cancel",
+        r["pairingId"].as_str().unwrap()
+    );
+    let (s, _, _) = call(&c, "POST", &cancel, &[("x-device-id", "other")], None).await;
+    assert_eq!(s, 404, "another device's request");
+    let (s, _, _) = call(&c, "POST", &cancel, &dev, None).await;
+    assert_eq!(s, 204);
+    let bob = bearer(&c, id, "bob");
+    let (_, _, l) = call(
+        &c,
+        "GET",
+        "/api/auth/pairing/pending",
+        &[("authorization", &bob)],
+        None,
+    )
+    .await;
+    assert_eq!(l, json!([]));
+    let (s, _, _) = call(&c, "POST", &cancel, &dev, None).await;
+    assert_eq!(s, 404);
+}
+
+#[sqlx::test(migrations = false)]
 async fn logout_is_always_204_and_revokes(pool: PgPool) {
     let c = ctx(pool.clone()).await;
     user(&pool, "bob", None, false, true).await;

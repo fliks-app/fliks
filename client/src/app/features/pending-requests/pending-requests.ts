@@ -40,7 +40,7 @@ export class PendingRequestsComponent implements OnInit {
   /** Refreshes on `pairing.requested` for the current user; filtered client-side since the SSE channel isn't per-user (a foreign row would 403 on approve). */
   private readonly sseEffect = effect(() => {
     const ev = this.sse.lastEvent();
-    if (!ev || ev.type !== 'pairing.requested') return;
+    if (ev?.type !== 'pairing.requested' && ev?.type !== 'pairing.cancelled') return;
     const me = this.auth.user();
     if (!me) return;
     if (ev['userId'] === me.id) {

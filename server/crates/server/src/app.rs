@@ -47,6 +47,7 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         auth::pairing_pending,
         auth::pairing_approve,
         auth::pairing_deny,
+        auth::pairing_cancel,
         roles::list,
         roles::create,
         roles::permissions,

@@ -114,6 +114,19 @@
         }
       }
     },
+    "/api/auth/pairing/{id}/cancel": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "pairing_cancel",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/auth/pairing/{id}/deny": {
       "post": {
         "tags": [

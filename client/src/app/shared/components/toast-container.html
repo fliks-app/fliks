@@ -22,13 +22,19 @@
           <svg lucideInfo class="h-5 w-5 shrink-0"></svg>
         }
       }
-      <span class="text-sm flex-1">{{ toast.message }}</span>
-      @if (toast.action; as action) {
-        <button
-          class="btn btn-sm shrink-0"
-          (click)="action.run(); toastService.dismiss(toast.id)"
-        >{{ action.label }}</button>
-      }
+      <div class="flex flex-1 flex-col gap-2">
+        <span class="text-sm">{{ toast.message }}</span>
+        @if (toast.actions.length) {
+          <div class="flex gap-2">
+            @for (action of toast.actions; track $index) {
+              <button
+                class="btn btn-sm"
+                (click)="action.run(); toastService.dismiss(toast.id)"
+              >{{ action.label }}</button>
+            }
+          </div>
+        }
+      </div>
       <button
         class="btn btn-ghost btn-xs btn-square shrink-0"
         (click)="toastService.dismiss(toast.id)"
