@@ -7,7 +7,8 @@ import type { PlayerBackend } from '../mpv/player-backend';
 import { createEmbedBackend } from './backends';
 import { setPlaybackKeepAwake } from '../power';
 import { forwardPlayerEvents } from './forward-events';
-import { echoRendererConsole } from '../log-file';
+import { appendLog, echoRendererConsole } from '../log-file';
+import { watchRendererCrash } from '../renderer-recovery';
 import { IPC, type DesktopEvent, type DesktopRect } from '../../shared/contract';
 
 /**
@@ -142,9 +143,14 @@ export class PlayerSession {
     });
 
     echoRendererConsole(this.uiWin.webContents);
-    this.uiWin.webContents.on('render-process-gone', (_e, details) =>
-      console.error('[uiWin render-process-gone]', JSON.stringify(details)),
-    );
+    watchRendererCrash(this.uiWin.webContents, {
+      appUrl: rendererUrl,
+      stopPlayback: async () => {
+        setPlaybackKeepAwake(false);
+        await this.mpv?.stop();
+      },
+      log: appendLog,
+    });
     this.uiWin.webContents.on('unresponsive', () =>
       console.error('[uiWin] unresponsive'),
     );

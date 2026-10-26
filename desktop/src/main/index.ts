@@ -17,6 +17,7 @@ import { LinuxCompositorPlayer, type CompositorAddon } from './mpv/linux-composi
 import { forwardPlayerEvents } from './window/forward-events';
 import { registerPlayerIpc } from './ipc';
 import { toElectronKey } from './keymap';
+import { watchRendererCrash } from './renderer-recovery';
 
 // Velopack's install/update/uninstall hooks run and exit here, before any Electron startup.
 if (process.platform === 'win32') {
@@ -408,14 +409,20 @@ app.whenReady().then(async () => {
   // The window is never shown, so Electron's focus() is a no-op on it and
   // Chromium keeps the widget unfocused: no blinking caret in any text field.
   // Focus emulation is the one switch that sets it without a visible window.
-  try {
-    uiWin.webContents.debugger.attach('1.3');
-    void uiWin.webContents.debugger.sendCommand('Emulation.setFocusEmulationEnabled', {
-      enabled: true,
-    });
-  } catch (e) {
-    console.error('[main] focus emulation unavailable, the caret will not blink', e);
-  }
+  const wcUi = uiWin.webContents;
+  const enableFocusEmulation = () => {
+    try {
+      if (!wcUi.debugger.isAttached()) wcUi.debugger.attach('1.3');
+      void wcUi.debugger.sendCommand('Emulation.setFocusEmulationEnabled', {
+        enabled: true,
+      });
+    } catch (e) {
+      console.error('[main] focus emulation unavailable, the caret will not blink', e);
+    }
+  };
+  enableFocusEmulation();
+  // The crash detaches the debugger session: re-arm it for the reloaded page.
+  uiWin.webContents.on('did-finish-load', enableFocusEmulation);
   // Chromium resolves the CSS cursor for the offscreen page and reports it
   // here; the pointer it applies to belongs to the compositor's window.
   uiWin.webContents.on('cursor-changed', (_e, type) => addon.setCursorShape(CURSOR_SHAPES[type] ?? 0));
@@ -436,6 +443,14 @@ app.whenReady().then(async () => {
   forwardPlayerEvents(player, send);
   await player.start();
   const stopOsMediaSession = startMpris(player);
+  watchRendererCrash(uiWin.webContents, {
+    appUrl: rendererUrl(haveApp),
+    stopPlayback: async () => {
+      stopOsMediaSession();
+      await player.stop();
+    },
+    log: appendLog,
+  });
 
   // SDL input (the addon owns the visible window) → the offscreen webContents.
   addon.onInput((json) => {
