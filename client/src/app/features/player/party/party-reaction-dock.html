@@ -29,12 +29,11 @@
     <svg lucideSmilePlus class="icon icon-closed h-5 w-5"></svg>
     <svg lucideX class="icon icon-open h-5 w-5"></svg>
   </button>
-  @if (voice.joined()) {
+  @if (voice.joined() && !voice.listenOnly()) {
     <button
       type="button"
       class="dock-toggle mic"
       [class.active]="!voice.muted()"
-      [disabled]="voice.listenOnly()"
       [attr.aria-label]="(voice.muted() ? 'party.voice_unmute' : 'party.voice_mute') | translate"
       [attr.aria-pressed]="!voice.muted()"
       (pointerdown)="micDown()"

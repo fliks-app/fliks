@@ -3612,6 +3612,7 @@
     "voice_leave": "Leave voice",
     "voice_mute": "Mute microphone",
     "voice_unmute": "Unmute microphone",
+    "voice_enable_sound": "Enable sound",
     "voice_duck": "Lower the volume when someone talks",
     "voice_headphones": "Headphones avoid echo.",
     "voice_mic_denied": "Microphone access was denied",

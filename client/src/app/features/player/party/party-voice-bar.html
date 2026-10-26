@@ -3,21 +3,28 @@
     @if (variant() !== 'hint') {
       <div class="flex items-center gap-2">
         @if (voice.joined()) {
-          <button
-            type="button"
-            class="btn btn-sm btn-square"
-            [class.btn-error]="!voice.muted()"
-            [disabled]="voice.listenOnly()"
-            [attr.aria-label]="(voice.muted() ? 'party.voice_unmute' : 'party.voice_mute') | translate"
-            [attr.aria-pressed]="!voice.muted()"
-            (click)="voice.toggleMute()"
-          >
-            @if (voice.muted()) { <svg lucideMicOff class="h-4 w-4"></svg> } @else { <svg lucideMic class="h-4 w-4"></svg> }
-          </button>
+          @if (!voice.listenOnly()) {
+            <button
+              type="button"
+              class="btn btn-sm btn-square"
+              [class.btn-error]="!voice.muted()"
+              [attr.aria-label]="(voice.muted() ? 'party.voice_unmute' : 'party.voice_mute') | translate"
+              [attr.aria-pressed]="!voice.muted()"
+              (click)="voice.toggleMute()"
+            >
+              @if (voice.muted()) { <svg lucideMicOff class="h-4 w-4"></svg> } @else { <svg lucideMic class="h-4 w-4"></svg> }
+            </button>
+          }
           <button type="button" class="btn btn-sm" (click)="voice.leave()">{{ 'party.voice_leave' | translate }}</button>
         } @else {
-          <button type="button" class="btn btn-sm btn-primary gap-1" [disabled]="voice.busy()" (click)="voice.join()">
-            <svg lucideMic class="h-4 w-4"></svg>{{ 'party.voice_join' | translate }}
+          <button
+            type="button"
+            class="btn btn-sm btn-primary gap-1"
+            [disabled]="voice.busy()"
+            [attr.aria-label]="'party.voice_join' | translate"
+            (click)="voice.join()"
+          >
+            <svg lucideMic class="h-4 w-4"></svg><span [class]="variant() === 'controls' ? 'hidden @min-[18rem]:inline' : ''">{{ 'party.voice_join' | translate }}</span>
           </button>
         }
         @if (variant() === 'full') {
@@ -34,6 +41,11 @@
           </button>
         }
       </div>
+    }
+    @if (voice.joined() && voice.audioBlocked()) {
+      <button type="button" class="btn btn-sm btn-warning gap-1" (click)="voice.enableAudio()">
+        <svg lucideVolume2 class="h-4 w-4"></svg>{{ 'party.voice_enable_sound' | translate }}
+      </button>
     }
     @if (variant() !== 'controls') {
       @if (voice.joined() && voice.listenOnly()) {

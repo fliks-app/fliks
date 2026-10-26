@@ -3612,6 +3612,7 @@
     "voice_leave": "Quitter le vocal",
     "voice_mute": "Couper le micro",
     "voice_unmute": "Activer le micro",
+    "voice_enable_sound": "Activer le son",
     "voice_duck": "Baisser le volume quand quelqu'un parle",
     "voice_headphones": "Un casque évite l'écho.",
     "voice_mic_denied": "L'accès au micro a été refusé",

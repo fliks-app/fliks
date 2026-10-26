@@ -10,10 +10,28 @@ import { ToastService } from '../toast.service';
 import { PartyService } from './party.service';
 import { VoiceService } from './voice.service';
 
+class FakePc {
+  static all: FakePc[] = [];
+  ontrack: ((e: unknown) => void) | null = null;
+  oniceconnectionstatechange = null;
+  iceGatheringState = 'complete';
+  localDescription = { toJSON: () => ({ type: 'answer', sdp: 'x' }) };
+  setRemoteDescription = vi.fn().mockResolvedValue(undefined);
+  setLocalDescription = vi.fn().mockResolvedValue(undefined);
+  createAnswer = vi.fn().mockResolvedValue({});
+  addTransceiver = vi.fn();
+  close = vi.fn();
+  constructor() {
+    FakePc.all.push(this);
+  }
+}
+
 function setup() {
-  vi.stubGlobal('RTCPeerConnection', class {});
+  FakePc.all = [];
+  vi.stubGlobal('RTCPeerConnection', FakePc);
+  vi.stubGlobal('MediaStream', class {});
   const rejoined = new Subject<void>();
-  const api = { voice: vi.fn().mockResolvedValue(undefined), iceServers: vi.fn().mockResolvedValue({ iceServers: [] }) };
+  const api = { voice: vi.fn().mockResolvedValue(undefined), signal: vi.fn().mockResolvedValue(undefined), iceServers: vi.fn().mockResolvedValue({ iceServers: [] }) };
   TestBed.configureTestingModule({
     providers: [
       VoiceService,
@@ -25,7 +43,7 @@ function setup() {
       { provide: DeviceService, useValue: { isTv: () => false } },
     ],
   });
-  return { voice: TestBed.inject(VoiceService), api, rejoined };
+  return { voice: TestBed.inject(VoiceService), api, rejoined, sse: TestBed.inject(SseService) as unknown as { partyEvents: Subject<unknown> } };
 }
 
 describe('VoiceService rejoin', () => {
@@ -63,5 +81,29 @@ describe('VoiceService join', () => {
     api.voice.mockRejectedValue(new Error('full'));
     await voice.join();
     expect(voice.joined()).toBe(false);
+  });
+});
+
+describe('VoiceService negotiation', () => {
+  const signal = (sse: { partyEvents: Subject<unknown> }, from: string, kind: string, data: object) =>
+    sse.partyEvents.next({ type: 'party.signal', partyId: 7, from: { deviceId: from }, kind, data });
+
+  it('echoes the offer sid in its answer', async () => {
+    const { voice, api, sse } = setup();
+    voice.joined.set(true);
+    signal(sse, 'peer', 'offer', { type: 'offer', sdp: 'o', sid: 'abc' });
+    await vi.waitFor(() => expect(api.signal).toHaveBeenCalledWith(7, 'dev', 'peer', 'answer', expect.objectContaining({ sid: 'abc' })));
+  });
+
+  it('drops an answer that belongs to a replaced offer', async () => {
+    const { voice, api, sse } = setup();
+    voice.joined.set(true);
+    signal(sse, 'peer', 'offer', { type: 'offer', sdp: 'o', sid: 'abc' });
+    await vi.waitFor(() => expect(api.signal).toHaveBeenCalled());
+    const pc = FakePc.all[0];
+    pc.setRemoteDescription.mockClear();
+    signal(sse, 'peer', 'answer', { type: 'answer', sdp: 'a', sid: 'stale' });
+    await Promise.resolve();
+    expect(pc.setRemoteDescription).not.toHaveBeenCalled();
   });
 });

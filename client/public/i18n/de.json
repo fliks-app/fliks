@@ -3612,6 +3612,7 @@
     "voice_leave": "Sprachchat verlassen",
     "voice_mute": "Mikrofon stummschalten",
     "voice_unmute": "Mikrofon aktivieren",
+    "voice_enable_sound": "Ton aktivieren",
     "voice_duck": "Lautstärke senken, wenn jemand spricht",
     "voice_headphones": "Kopfhörer vermeiden Echo.",
     "voice_mic_denied": "Der Mikrofonzugriff wurde verweigert",

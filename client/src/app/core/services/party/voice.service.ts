@@ -22,6 +22,8 @@ interface Peer {
   analyser: AnalyserNode | null;
   lastLoud: number;
   retries: number;
+  /** Negotiation id the offerer stamps on its offer and the answerer echoes, so a stale answer is dropped. */
+  sid: string;
 }
 
 /** Voice channel of the current party: a WebRTC audio mesh, signaled through the server. */
@@ -46,6 +48,8 @@ export class VoiceService {
     this.device.isTv() ? 'tv' : this.micIssue() === 'denied' ? 'denied' : !this.micAvailable ? 'unavailable' : null,
   );
   readonly busy = signal(false);
+  /** The browser refused to start a remote voice: the user has to tap to hear it. */
+  readonly audioBlocked = signal(false);
   readonly speaking = signal<ReadonlySet<string>>(new Set());
   readonly duck = signal(readFlag(DUCK_KEY, true));
   /** Someone else is audible: the player lowers the movie. */
@@ -166,14 +170,14 @@ export class VoiceService {
     const pc = new RTCPeerConnection({ iceServers: this.iceServers });
     const audio = new Audio();
     audio.autoplay = true;
-    const peer: Peer = { pc, audio, analyser: null, lastLoud: 0, retries: 0 };
+    const peer: Peer = { pc, audio, analyser: null, lastLoud: 0, retries: 0, sid: Math.random().toString(36).slice(2) };
     const track = this.mic?.getAudioTracks()[0];
     if (track && this.mic) pc.addTrack(track, this.mic);
     else pc.addTransceiver('audio', { direction: 'recvonly' });
     pc.ontrack = (ev) => {
       const stream = ev.streams[0] ?? new MediaStream([ev.track]);
       audio.srcObject = stream;
-      void audio.play().catch(() => {});
+      this.play(audio);
       peer.analyser = this.analyse(stream);
     };
     pc.oniceconnectionstatechange = () => {
@@ -182,6 +186,18 @@ export class VoiceService {
     };
     this.peers.set(to, peer);
     return peer;
+  }
+
+  /** Resume every remote voice from a tap, once the browser has blocked autoplay. */
+  enableAudio(): void {
+    this.audioBlocked.set(false);
+    for (const { audio } of this.peers.values()) this.play(audio);
+  }
+
+  private play(audio: HTMLAudioElement): void {
+    audio.play().catch((err) => {
+      if (err instanceof DOMException && err.name === 'NotAllowedError') this.audioBlocked.set(true);
+    });
   }
 
   private onIceFailed(to: string, pc: RTCPeerConnection): void {
@@ -206,7 +222,7 @@ export class VoiceService {
     try {
       await peer.pc.setLocalDescription(await peer.pc.createOffer());
       await this.gathered(peer.pc);
-      await this.send(to, 'offer', peer.pc.localDescription!.toJSON());
+      await this.send(to, 'offer', { ...peer.pc.localDescription!.toJSON(), sid: peer.sid });
     } catch {
       this.closePeer(to);
     }
@@ -220,13 +236,15 @@ export class VoiceService {
       switch (action) {
         case 'accept-offer': {
           const next = this.createPeer(from);
+          next.sid = String(data['sid'] ?? next.sid);
           await next.pc.setRemoteDescription(data as unknown as RTCSessionDescriptionInit);
           await next.pc.setLocalDescription(await next.pc.createAnswer());
           await this.gathered(next.pc);
-          await this.send(from, 'answer', next.pc.localDescription!.toJSON());
+          await this.send(from, 'answer', { ...next.pc.localDescription!.toJSON(), sid: next.sid });
           return;
         }
         case 'apply-answer':
+          if (data['sid'] !== undefined && data['sid'] !== peer!.sid) return;
           await peer!.pc.setRemoteDescription(data as unknown as RTCSessionDescriptionInit);
           return;
         case 'add-ice':
@@ -356,6 +374,7 @@ export class VoiceService {
     void this.ctx?.close().catch(() => {});
     this.ctx = null;
     this.speaking.set(new Set());
+    this.audioBlocked.set(false);
     this.joined.set(false);
     this.muted.set(true);
     this.micIssue.set(null);

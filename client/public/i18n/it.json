@@ -3612,6 +3612,7 @@
     "voice_leave": "Esci dalla voce",
     "voice_mute": "Disattiva il microfono",
     "voice_unmute": "Attiva il microfono",
+    "voice_enable_sound": "Attiva l'audio",
     "voice_duck": "Abbassa il volume quando qualcuno parla",
     "voice_headphones": "Le cuffie evitano l'eco.",
     "voice_mic_denied": "L'accesso al microfono è stato negato",
