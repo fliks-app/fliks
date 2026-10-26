@@ -162,11 +162,25 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
   async load(url: string, startTime?: number, mimeType?: string, _headers?: Record<string, string>): Promise<void> {
     if (!this.player) throw new Error('ShakaEngine not initialised');
     this.resetFirstFrame();
+    this.presentPausedFrame = this.startPaused;
+    this.startPaused = false;
     this.shakaBuffering = false;
     this.sessionExpiredInFlight = false;
     this.sideloadedTextTracks.clear();
     this.loading = this.player.load(url, startTime, mimeType);
     await this.loading;
+  }
+
+  startPaused = false;
+  private presentPausedFrame = false;
+
+  /** `firstFrame` once the compositor has painted the current frame. */
+  private emitFirstFrameWhenPainted(): void {
+    const video = this.video;
+    if (this.firstFrameEmitted || !video) return;
+    const rvfc = video.requestVideoFrameCallback;
+    if (typeof rvfc === 'function') rvfc.call(video, () => this.emitFirstFrameOnce());
+    else this.emitFirstFrameOnce();
   }
 
   /** The load in flight or last made: an audio switch waits for it. */
@@ -479,13 +493,16 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
     this.addVideoListener('playing', () => {
       this.emitPlayingUnlessStarved();
       // Gated on requestVideoFrameCallback: the DOM 'playing' event can precede the first paint.
-      if (!this.firstFrameEmitted) {
-        const rvfc = video.requestVideoFrameCallback;
-        const fire = () => this.emitFirstFrameOnce();
-        if (typeof rvfc === 'function') rvfc.call(video, fire);
-        else fire();
-      }
+      this.emitFirstFrameWhenPainted();
     });
+
+    // A paused video has its current frame once readyState reaches HAVE_CURRENT_DATA; rVFC would wait for
+    // a frame that never comes on Safari, which only fires it while playing.
+    for (const event of ['loadeddata', 'seeked']) {
+      this.addVideoListener(event, () => {
+        if (this.presentPausedFrame && video.paused && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) this.emitFirstFrameOnce();
+      });
+    }
 
     this.addVideoListener('canplay', () => {
       // Resolve buffering state when enough data is available

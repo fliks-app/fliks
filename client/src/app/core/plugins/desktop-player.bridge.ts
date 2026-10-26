@@ -41,6 +41,8 @@ export interface DesktopQoe {
 export interface DesktopLoadOptions {
   url: string;
   startTime?: number;
+  /** Open paused on the first frame instead of autoplaying. */
+  startPaused?: boolean;
   headers?: Record<string, string>;
   /** Preferred audio language (mpv `alang`) so the player keeps the chosen
    *  language across seeks/reloads instead of reverting to the manifest default. */
@@ -136,6 +138,8 @@ export interface FliksDesktopApi {
   destroy(): Promise<void>;
   /** Native host OS identity (e.g. { systemName: "macOS 26" }). */
   getSystemInfo(): Promise<DesktopSystemInfo>;
+  /** Opens an ICS in the OS default calendar app. Absent on older shells. */
+  openCalendarEvent?(ics: string, fileName: string): Promise<void>;
   getPlayerCapabilities(): Promise<DesktopPlayerCapabilities>;
   on(handler: (event: DesktopEvent) => void): () => void;
 }

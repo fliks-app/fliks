@@ -1,10 +1,13 @@
-import { ChangeDetectionStrategy, Component, ElementRef, Injector, computed, effect, inject, input, output, signal, untracked, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, Injector, afterNextRender, computed, effect, inject, input, output, signal, untracked, viewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { TranslatePipe } from '@ngx-translate/core';
-import { LucideChevronDown, LucideChevronUp, LucideTrash2 } from '@lucide/angular';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
+import { CdkDrag, CdkDragDrop, CdkDragHandle, CdkDragPlaceholder, CdkDropList, moveItemInArray } from '@angular/cdk/drag-drop';
+import { LucideChevronDown, LucideChevronUp, LucideGripVertical, LucideTrash2 } from '@lucide/angular';
 import { PartyApiService, type PartyDto, type PartyItem } from '../../core/services/api/party-api.service';
-import { MediaService, type Media } from '../../core/services/api/media.service';
+import { type Media } from '../../core/services/api/media.service';
 import { SseService } from '../../core/services/sse.service';
+import { DeviceService } from '../../core/services/device.service';
+import { ConfirmationService } from '../../core/services/confirmation.service';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { MediaPickerComponent, type MediaPick } from '../../shared/components/media-picker/media-picker';
 import { TvRowDirective } from '../../shared/directives/tv-row.directive';
@@ -26,15 +29,17 @@ const sameItem = (a: { mediaId: number; episodeId: number | null }, b: { mediaId
 /** The party's ordered programme: everyone sees it, the host reorders, removes and appends. */
 @Component({
   selector: 'app-party-programme',
-  imports: [TranslatePipe, ResolveUrlPipe, TvRowDirective, MediaPickerComponent, LucideChevronDown, LucideChevronUp, LucideTrash2],
+  imports: [TranslatePipe, ResolveUrlPipe, TvRowDirective, MediaPickerComponent, CdkDropList, CdkDrag, CdkDragHandle, CdkDragPlaceholder, LucideChevronDown, LucideChevronUp, LucideGripVertical, LucideTrash2],
   templateUrl: './party-programme.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class PartyProgrammeComponent {
   private readonly api = inject(PartyApiService);
-  private readonly mediaService = inject(MediaService);
   private readonly sse = inject(SseService);
+  protected readonly device = inject(DeviceService);
   private readonly injector = inject(Injector);
+  private readonly confirm = inject(ConfirmationService);
+  private readonly translate = inject(TranslateService);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
 
   readonly partyId = input.required<number>();
@@ -48,19 +53,20 @@ export class PartyProgrammeComponent {
   protected readonly picker = viewChild.required(MediaPickerComponent);
   protected readonly items = signal<PartyItem[]>([]);
   protected readonly busy = signal(false);
-  private readonly series = signal<ReadonlyMap<number, Media>>(new Map());
-  private readonly asked = new Set<number>();
   private seq = 0;
 
   protected readonly rows = computed(() =>
     this.items().map((item) => {
-      const media = this.series().get(item.mediaId);
-      const found = findEpisode(media, item.episodeId);
-      const label = found
-        ? episodeLabel({ seasonNumber: found.season.seasonNumber, episodeNumber: found.episode.episodeNumber, episodeTitle: found.episode.title })
-        : '';
+      const label = episodeLabel({ seasonNumber: item.seasonNumber, episodeNumber: item.episodeNumber, episodeTitle: item.episodeTitle });
       const cur = this.current();
-      return { item, hidden: !!item.hidden, title: found ? media!.title : item.title, label, playing: this.live() && !!cur && sameItem(cur, item) };
+      return {
+        item,
+        hidden: !!item.hidden,
+        title: item.seriesTitle ?? item.title,
+        label,
+        image: item.stillUrl ?? item.fanartUrl ?? item.posterUrl,
+        playing: this.live() && !!cur && sameItem(cur, item),
+      };
     }),
   );
 
@@ -69,26 +75,36 @@ export class PartyProgrammeComponent {
       this.partyId();
       untracked(() => void this.load());
     });
-    effect(() => {
-      for (const { mediaId, episodeId, hidden } of this.items()) {
-        if (episodeId != null && !hidden && !this.asked.has(mediaId)) untracked(() => void this.loadSeries(mediaId));
-      }
-    });
     this.sse.partyEvents.pipe(takeUntilDestroyed()).subscribe((e) => {
-      if (e.type === 'party.programme' && e.partyId === this.partyId()) void this.load();
+      if ((e.type === 'party.programme' || e.type === 'party.updated') && e.partyId === this.partyId()) void this.load();
     });
   }
 
   private async load(): Promise<void> {
     const seq = ++this.seq;
     const items = await this.api.queue(this.partyId()).catch(() => null);
-    if (items && seq === this.seq) this.items.set(items);
+    if (!items || seq !== this.seq) return;
+    const before = this.rowTops();
+    this.items.set(items);
+    afterNextRender(() => this.slideFrom(before), { injector: this.injector });
   }
 
-  private async loadSeries(id: number): Promise<void> {
-    this.asked.add(id);
-    const media = await this.mediaService.getOne(id).catch(() => null);
-    if (media) this.series.update((m) => new Map(m).set(id, media));
+  private rowTops(): Map<string, number> {
+    const tops = new Map<string, number>();
+    for (const el of this.host.nativeElement.querySelectorAll<HTMLElement>('[data-row]')) {
+      tops.set(el.dataset['row']!, el.getBoundingClientRect().top);
+    }
+    return tops;
+  }
+
+  /** FLIP: a row another client moved slides from its old place instead of jumping. */
+  private slideFrom(before: Map<string, number>): void {
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    for (const el of this.host.nativeElement.querySelectorAll<HTMLElement>('[data-row]')) {
+      const old = before.get(el.dataset['row']!);
+      const dy = old === undefined ? 0 : old - el.getBoundingClientRect().top;
+      if (dy) el.animate([{ transform: `translateY(${dy}px)` }, { transform: 'none' }], { duration: 250, easing: 'ease-out' });
+    }
   }
 
   /** Sends the full list; the screen follows at once and goes back to the previous list on failure. */
@@ -111,6 +127,13 @@ export class PartyProgrammeComponent {
     if (!optimistic) await this.load();
   }
 
+  protected drop(e: CdkDragDrop<unknown>): void {
+    if (e.previousIndex === e.currentIndex) return;
+    const next = [...this.items()];
+    moveItemInArray(next, e.previousIndex, e.currentIndex);
+    void this.save(next, true);
+  }
+
   protected move(index: number, by: -1 | 1): void {
     const next = [...this.items()];
     const to = index + by;
@@ -120,7 +143,17 @@ export class PartyProgrammeComponent {
     this.focusRow(to, by < 0 ? 'up' : 'down');
   }
 
-  protected remove(index: number): void {
+  protected async remove(index: number): Promise<void> {
+    const item = this.items()[index];
+    const ok = await this.confirm.confirm({
+      title: this.translate.instant('party.programme_remove'),
+      message: this.translate.instant('party.programme_remove_message', {
+        title: item.hidden ? this.translate.instant('party.proposal_hidden') : episodeLabel(item) || item.title,
+      }),
+      confirmLabel: this.translate.instant('party.programme_remove'),
+      variant: 'danger',
+    });
+    if (!ok) return;
     const next = this.items().filter((_, i) => i !== index);
     void this.save(next, true);
     this.focusRow(Math.min(index, next.length - 1), 'remove');

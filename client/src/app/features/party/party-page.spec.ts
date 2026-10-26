@@ -21,7 +21,7 @@ import { TvService } from '../../core/services/tv.service';
 import { PartyPageComponent } from './party-page';
 
 const item = (mediaId: number, episodeId: number | null = null) =>
-  ({ mediaId, episodeId, mediaFileId: null, title: `T${mediaId}`, posterUrl: null, fanartUrl: null, hidden: false, additionalFanartUrls: [] }) as PartyItem;
+  ({ mediaId, episodeId, mediaFileId: null, title: `T${mediaId}`, posterUrl: null, fanartUrl: null, stillUrl: null, seriesTitle: null, seasonNumber: null, episodeNumber: null, episodeTitle: null, hidden: false, additionalFanartUrls: [] }) as PartyItem;
 const dto = (it: PartyItem | null) =>
   ({ id: 9, name: 'P', status: 'scheduled', scheduledAt: null, host: { userId: 1, username: 'h' }, item: it, playlist: null, memberCount: 1, guests: [], live: null }) as unknown as PartyDto;
 
@@ -102,7 +102,7 @@ describe('PartyPageComponent film selection', () => {
     const page = fixture.componentInstance as unknown as { canStart(): boolean };
     const svc = TestBed.inject(PartyService) as unknown as typeof service;
     expect(page.canStart()).toBe(false);
-    svc.proposals.set([{ id: 1, item: item(1), proposedBy: 1, voterIds: [1] }]);
+    svc.proposals.set([{ id: 1, item: item(1), proposedBy: 1, upvoterIds: [1], downvoterIds: [] }]);
     expect(page.canStart()).toBe(true);
     svc.proposals.set([]);
     svc.party.set(dto(item(2)));

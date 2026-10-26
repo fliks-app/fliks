@@ -87,6 +87,7 @@ function setup(opts: { canControl?: boolean; urlParty?: string; joined?: number;
     pausePlayback: vi.fn().mockResolvedValue(undefined),
     showControls: vi.fn(),
     playLocal: vi.fn(),
+    releasePlayback: vi.fn(),
     position: () => 0,
     onBack: vi.fn(),
   };

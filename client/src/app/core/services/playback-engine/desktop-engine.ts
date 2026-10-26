@@ -47,6 +47,7 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
   private _currentTime = 0;
   private _duration = 0;
   private _buffered = 0;
+  startPaused = false;
   private _paused = true;
   private _playbackRate = 1;
   private _volume = 1;
@@ -117,9 +118,12 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
     this._mpvAudioIds = [];
     this._nativeSubtitleTracks = [];
     this.openRetries = 0;
+    const startPaused = this.startPaused;
+    this.startPaused = false;
     await this.open({
       url,
       startTime,
+      startPaused,
       headers,
       audioLanguage: this._preferredAudioLanguage,
       videoCrop: this._videoCrop,
@@ -411,9 +415,9 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
       case 'firstFrame': {
         if (this.firstFrameEmitted) break;
         this.emitFirstFrameOnce();
-        // A persistent mpv may fire no pause change on a fresh load: assert playing so controls show pause.
-        this._paused = false;
-        this.emit('stateChanged', { state: 'playing' });
+        // A persistent mpv may fire no pause change on a fresh load: assert the state so controls match.
+        this._paused = !!this.currentLoad?.startPaused;
+        this.emit('stateChanged', { state: this._paused ? 'paused' : 'playing' });
         break;
       }
       case 'error': {

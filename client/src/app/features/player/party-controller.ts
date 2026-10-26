@@ -1,4 +1,4 @@
-import { Injectable, effect, inject, untracked } from '@angular/core';
+import { Injectable, effect, inject, signal, untracked } from '@angular/core';
 import type { Subscription } from 'rxjs';
 import { ActivatedRoute, Router } from '@angular/router';
 import { TranslateService } from '@ngx-translate/core';
@@ -28,6 +28,8 @@ export interface PartyHost {
   seekTo(time: number): void;
   pausePlayback(): Promise<void>;
   playLocal(): void;
+  /** The party no longer drives playback (its rejoin failed): play as a solo player would. */
+  releasePlayback(): void;
   position(): number;
   onBack(): void;
   showControls(): void;
@@ -73,6 +75,14 @@ export class PartyController {
   private closedSub: Subscription | null = null;
 
   readonly active = this.party.active;
+
+  /** A reload's `party=` being rejoined: the party already drives playback. */
+  private readonly resuming = signal(false);
+
+  /** A party drives playback: its player always opens paused and plays when the group does. */
+  startsPaused(): boolean {
+    return this.party.active() || this.resuming();
+  }
 
   private readonly localOutput: PartyOutput = {
     ready: () => !!this.host.engine() && this.state.videoStarted(),
@@ -127,8 +137,11 @@ export class PartyController {
   private async resumeFromUrl(): Promise<void> {
     const id = Number(this.route.snapshot.queryParams['party']);
     if (!id || this.party.party()?.id === id) return;
-    if (await this.party.resume(id) || this.destroyed) return;
+    this.resuming.set(true);
+    const ok = await this.party.resume(id).finally(() => this.resuming.set(false));
+    if (ok || this.destroyed) return;
     this.toast.error(this.translate.instant('party.error_resume'));
+    this.host.releasePlayback();
     void this.router.navigate([], { relativeTo: this.route, queryParams: { party: null }, queryParamsHandling: 'merge', replaceUrl: true });
   }
 

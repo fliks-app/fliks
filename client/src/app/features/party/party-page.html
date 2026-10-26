@@ -32,7 +32,8 @@
       <div class="flex flex-wrap items-center gap-x-3 lg:gap-x-4 gap-y-1 mt-2 lg:mt-3 text-base-content/60">
         @switch (phase()) {
           @case ('live') { <span class="badge badge-error">{{ 'party.live' | translate }}</span> }
-          @default { <span class="badge badge-warning">{{ 'party.status_lobby' | translate }}</span> }
+          @case ('lobby') { <span class="badge badge-warning">{{ 'party.status_lobby' | translate }}</span> }
+          @default { <span class="skeleton h-5 w-20 rounded-full"></span> }
         }
         @if (h.status !== 'live' && h.scheduledAt) {
           <span>{{ when() }}</span>
@@ -56,22 +57,22 @@
 
       <div appTvRow class="flex flex-wrap items-center gap-2 mt-6 mb-2">
         @if (phase() === 'live') {
-          <button type="button" class="btn btn-primary gap-2" [class.flex-1]="!desktopLayout()" autofocus (click)="join()">
+          <button type="button" class="btn btn-primary gap-2 whitespace-nowrap" [class.flex-auto]="!desktopLayout()" autofocus (click)="join()">
             <svg lucidePlay class="h-5 w-5" fill="currentColor"></svg>
             {{ 'party.join' | translate }}
           </button>
         } @else if (phase() === 'lobby') {
           @if (joined()) {
             @if (party.isHost()) {
-              <button type="button" class="btn btn-primary gap-2" [class.flex-1]="!desktopLayout()" [attr.autofocus]="canStart() ? '' : null" [disabled]="!canStart()" (click)="start()">
+              <button type="button" class="btn btn-primary gap-2 whitespace-nowrap" [class.flex-auto]="!desktopLayout()" [attr.autofocus]="canStart() ? '' : null" [disabled]="!canStart()" (click)="start()">
                 <svg lucidePlay class="h-5 w-5" fill="currentColor"></svg>
                 {{ 'party.start' | translate }}
               </button>
             }
             <button
               type="button"
-              class="btn gap-2"
-              [class.flex-1]="!desktopLayout()"
+              class="btn gap-2 whitespace-nowrap"
+              [class.flex-auto]="!desktopLayout()"
               [class.btn-primary]="!ready() && !party.isHost()"
               [class.btn-success]="ready()"
               [class.btn-outline]="!ready() && party.isHost()"
@@ -81,7 +82,9 @@
               <svg lucideCheck class="h-5 w-5"></svg>
               {{ (ready() ? 'party.not_ready' : 'party.ready') | translate }}
             </button>
-            <button type="button" class="btn btn-ghost" (click)="leave()">{{ 'party.leave' | translate }}</button>
+            @if (!party.isHost()) {
+              <button type="button" class="btn btn-ghost" (click)="leave()">{{ 'party.leave' | translate }}</button>
+            }
           } @else if (sse.serverUnreachable()) {
             <span class="text-base-content/60">{{ 'connectivity.server_unreachable' | translate }}</span>
           } @else {
