@@ -16,20 +16,29 @@ permissions:
 jobs:
   changes:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
       client: ${{ steps.f.outputs.client }}
+      native: ${{ steps.f.outputs.native }}
       server: ${{ steps.f.outputs.server }}
       engine: ${{ steps.f.outputs.engine }}
     steps:
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         id: f
         with:
+          # A negated pattern excludes for good, as `paths:` did; the default `some` would match it.
+          predicate-quantifier: some-with-excludes
           filters: |
             client:
               - 'client/**'
               - 'desktop/**'
               - '!**/*.md'
               - '.github/workflows/client.yml'
+              - '.github/workflows/ci.yml'
+            native:
+              - 'client/**'
               - '.github/workflows/native-build.yml'
               - '.github/workflows/ci.yml'
             server:
@@ -54,7 +63,7 @@ jobs:
 
   native:
     needs: changes
-    if: needs.changes.outputs.client == 'true'
+    if: needs.changes.outputs.native == 'true'
     uses: ./.github/workflows/native-build.yml
 
   server:
