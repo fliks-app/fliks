@@ -97,6 +97,8 @@ export type DesktopEvent =
       payload: { audioTracks: DesktopAudioTrack[]; subtitleTracks: DesktopSubtitleTrack[] };
     }
   | { type: 'firstFrame' }
+  /** An OS media control (scrubber) asks the page to seek to `position` seconds. */
+  | { type: 'seekRequest'; payload: { position: number } }
   | { type: 'error'; payload: { code: number; message: string; detail?: string } };
 
 export interface FliksDesktopApi {
