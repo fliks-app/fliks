@@ -177,9 +177,11 @@ export class PlayerControlsComponent {
       const wasVisible = this.lastVisible;
       this.lastVisible = visible;
       // Focus play/pause on keyboard / D-pad reveal only; the seek OSD has no play/pause, so arrow-seek keeps focus on the seekbar.
-      if (visible && !wasVisible && this.autoFocusModality()) {
+      const btn = this.playPauseBtn()?.nativeElement;
+      // A button focused before the hide keeps the focus.
+      if (visible && !wasVisible && this.autoFocusModality() && !btn?.closest('app-player-controls')?.contains(document.activeElement)) {
         this.closeDropdown();
-        this.playPauseBtn()?.nativeElement.focus({ preventScroll: true });
+        btn?.focus({ preventScroll: true });
       }
     });
     // Propagate any-panel-open state to the parent player so it can suspend
