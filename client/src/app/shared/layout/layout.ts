@@ -191,7 +191,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
   readonly chromeTop = computed(() => `calc(${this.navbarSpacerHeight()} + ${this.contentGapTop()})`);
   /** The 6rem term is the native phone dock's height. */
   readonly chromeBottom = computed(() => {
-    const dock = this.isNative && this.device.isPhone() ? '6rem' : '0px';
+    const dock = this.navbar.phoneDock() ? '6rem' : '0px';
     return `calc(${dock} + 1rem)`;
   });
 

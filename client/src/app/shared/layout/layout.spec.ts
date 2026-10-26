@@ -159,6 +159,7 @@ async function createFixture(f: Fixture): Promise<ComponentFixture<LayoutCompone
           effectiveSidebarPinned: () => false,
           sidebarPinned: () => false,
           sidebarDocked: () => false,
+          phoneDock: () => f.isNative && !!f.device.isPhone,
           toggleSidebarPinned: () => {},
           scrollAtTop: { set: () => {} },
           setPageTitle: () => {},
