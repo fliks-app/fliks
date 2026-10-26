@@ -184,16 +184,13 @@ extension NativePlayerPlugin {
             if reason == .audioSessionInterrupted, self.intendedPlaying, let player = self.player, player.rate == 0 {
                 self.resumeRetry = true
                 player.play()
-                NSLog("[VoiceDbg] resume attempted")
             } else if reason == .setRateFailed, self.resumeRetry, self.intendedPlaying {
                 // The session is still inactive: one more try once the system has handed it back.
                 self.resumeRetry = false
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
                     if self?.intendedPlaying == true { self?.player?.play() }
-                    NSLog("[VoiceDbg] resume retried")
                 }
             }
-            NSLog("[VoiceDbg] rate change rate=%f reason=%@ intent=%d", self.player?.rate ?? -1, reason?.rawValue ?? "none", self.intendedPlaying ? 1 : 0)
             guard self.externalPlaybackActive,
                   let player = self.player, player.rate == 0,
                   reason == nil || reason == .setRateFailed,
@@ -245,7 +242,6 @@ extension NativePlayerPlugin {
         muteRanges = []
         nowPlaying.deactivate(releaseSession: true)
         heartbeat.clear()
-        voiceActive = false
         pipPhase = .inactive
         externalPlaybackActive = false
         playerLayer?.removeFromSuperlayer()

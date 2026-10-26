@@ -163,9 +163,6 @@ export interface NativePlayerPlugin {
 
   // ── iOS audio and background ──
 
-  /** iOS: the party voice chat holds the microphone, so the audio session must record and play. */
-  setVoiceActive(options: { active: boolean }): Promise<void>;
-
   /** iOS: output multiplier (0..1) on top of the system volume; the party voice ducking drives it. */
   setVolume(options: { volume: number }): Promise<void>;
 
