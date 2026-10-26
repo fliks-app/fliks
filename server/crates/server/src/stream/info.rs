@@ -41,6 +41,7 @@ pub struct Params {
     pub start_at: Option<f64>,
     pub download: bool,
     pub replaces: Option<String>,
+    pub pre_roll_first: bool,
 }
 
 /// JS `parseInt(v, 10)`: the leading integer, `None` for NaN.
@@ -97,6 +98,7 @@ pub(super) fn parse_query(pairs: &[(String, String)]) -> Result<Params, AppError
         replaces: first("replaces")
             .filter(|v| !v.is_empty())
             .map(str::to_owned),
+        pre_roll_first: first("preRollFirst") == Some("1"),
     })
 }
 
@@ -197,13 +199,22 @@ async fn run(
         },
     };
     let mut info = file.info.take();
-    let (settings, held, position) = tokio::join!(
+    let (settings, held, position, early_pre_roll) = tokio::join!(
         crate::engine::load_streaming(&st.db),
         scan::lookup(st, file.id, &file.absolute, info.as_mut()),
         start_position(st, a, &q, &file),
+        async {
+            match q.pre_roll_first {
+                true => Some(ask_pre_roll(st, a, &file).await),
+                false => None,
+            }
+        },
     );
     hardware::apply(st, &settings?, false);
     let position = position?;
+    if let Some(items) = defers_open(early_pre_roll.as_ref(), position) {
+        return Ok(json!({"deferred": true, "preRoll": items}));
+    }
     file.info = info;
     let renditions = if device.supports_hls_subtitles == Some(true) {
         Some(burn_in::renditions(st, &file).await)
@@ -270,7 +281,7 @@ async fn run(
         .and_then(parse_source_fps);
     let (open, (markers, pre_roll, edl)) = tokio::join!(
         st.engine.open_session(&request, q.replaces.as_deref()),
-        side_reads(st, a, &file, fps)
+        side_reads(st, a, &file, fps, early_pre_roll)
     );
     let open = match open {
         Ok(o) => o,
@@ -383,12 +394,36 @@ fn register_live(
     }
 }
 
-/// The markers, the pre-roll and the EDL of a file.
+async fn ask_pre_roll(
+    st: &AppState,
+    a: &crate::http::auth::Authed,
+    file: &ResolvedFile,
+) -> Option<Vec<preroll::Item>> {
+    preroll::pre_roll(
+        st,
+        a,
+        file.id,
+        file.media_id,
+        file.episode_id.filter(|e| *e != 0),
+    )
+    .await
+}
+
+/// The pre-roll items when the client asked for them first and the launch starts at 0: the main session stays closed.
+pub(super) fn defers_open(
+    asked: Option<&Option<Vec<preroll::Item>>>,
+    position: f64,
+) -> Option<&Vec<preroll::Item>> {
+    asked?.as_ref().filter(|_| position == 0.0)
+}
+
+/// The markers, the pre-roll (`asked` when already read) and the EDL of a file.
 async fn side_reads(
     st: &AppState,
     a: &crate::http::auth::Authed,
     file: &ResolvedFile,
     fps: Option<f64>,
+    asked: Option<Option<Vec<preroll::Item>>>,
 ) -> (
     Option<db::Markers>,
     Option<Vec<preroll::Item>>,
@@ -403,13 +438,12 @@ async fn side_reads(
                 .ok()
                 .flatten()
         },
-        preroll::pre_roll(
-            st,
-            a,
-            file.id,
-            file.media_id,
-            file.episode_id.filter(|e| *e != 0)
-        ),
+        async {
+            match asked {
+                Some(known) => known,
+                None => ask_pre_roll(st, a, file).await,
+            }
+        },
         async {
             if a.user.edl_enabled {
                 edl::read(st, &file.absolute, fps).await

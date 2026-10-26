@@ -1,5 +1,9 @@
 //! Playback-info and the control plane through the real router, a fake engine and a throwaway DB.
-use super::{info::parse_query, *};
+use super::{
+    info::{defers_open, parse_query},
+    preroll::Item,
+    *,
+};
 use crate::{
     app,
     config::Config,
@@ -205,6 +209,38 @@ fn the_query_follows_the_controller() {
     for bad in ["abc", "", "Infinity"] {
         assert!(p(&[("startAt", bad)]).is_err(), "{bad:?}");
     }
+}
+
+#[test]
+fn pre_roll_first_defers_only_a_start_from_zero() {
+    let query = |v: &str| parse_query(&[("preRollFirst".into(), v.into())]).unwrap();
+    assert!(query("1").pre_roll_first);
+    assert!(!query("true").pre_roll_first);
+    assert!(!parse_query(&[]).unwrap().pre_roll_first);
+    let item = Item {
+        media_file_id: 9,
+        label_key: None,
+        skippable: None,
+    };
+    let items = Some(vec![item]);
+    assert_eq!(defers_open(Some(&items), 0.0), items.as_ref());
+    assert_eq!(
+        defers_open(Some(&items), 120.0),
+        None,
+        "a resume plays no pre-roll"
+    );
+    assert_eq!(defers_open(Some(&None), 0.0), None, "nothing to play first");
+    assert_eq!(defers_open(None, 0.0), None, "not asked for");
+}
+
+#[sqlx::test(migrations = false)]
+async fn pre_roll_first_without_a_pre_roll_opens_the_session_once(pool: PgPool) {
+    let c = ctx(pool, true).await;
+    let (status, body) = info(&c, "?preRollFirst=1").await;
+    assert_eq!(status, 201);
+    assert!(body.get("deferred").is_none());
+    assert_eq!(body["sessionId"], golden().0["sessionId"]);
+    assert_eq!(c.fake.seen("POST", "/v1/sessions").len(), 1);
 }
 
 #[sqlx::test(migrations = false)]
