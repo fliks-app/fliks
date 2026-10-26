@@ -62,9 +62,9 @@ if [ "$build_addon" = 0 ] && [ "$ROOT/desktop/native/compositor/addon.cc" -nt "$
 fi
 
 if [ "$build_addon" = 1 ]; then
-  echo "==> native compositor addon (Electron 42 ABI)"
+  echo "==> native compositor addon (Electron 45 ABI)"
   ( cd "$ROOT/desktop/native" && ../node_modules/.bin/node-gyp rebuild \
-      --target=42.4.0 --dist-url=https://electronjs.org/headers --arch=x64 )
+      --target=45.0.0 --dist-url=https://electronjs.org/headers --arch=x64 )
 fi
 
 # ALWAYS the full build (main AND preload). Building only `build:main` leaves a

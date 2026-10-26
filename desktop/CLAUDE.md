@@ -129,16 +129,16 @@ Run from the repo root unless noted. Use **absolute paths** or `cd` inside one
 compound command (a bare `cd` between tool calls can prompt for permission).
 
 1. **Native addon** (after editing `native/compositor/addon.cc`,
-   `native/player_mac/addon.mm`, or `binding.gyp`). Targets the Electron 42 ABI.
+   `native/player_mac/addon.mm`, or `binding.gyp`). Targets the Electron 45 ABI.
    `binding.gyp` builds only the current OS's target (`fliks_compositor` on
    Linux, `fliks_player_mac` on macOS):
    ```bash
    # Linux:
    cd desktop/native && ../node_modules/.bin/node-gyp rebuild \
-     --target=42.4.0 --dist-url=https://electronjs.org/headers --arch=x64
+     --target=45.0.0 --dist-url=https://electronjs.org/headers --arch=x64
    # macOS (Apple Silicon):
    cd desktop/native && ../node_modules/.bin/node-gyp rebuild \
-     --target=42.4.0 --dist-url=https://electronjs.org/headers --arch=arm64
+     --target=45.0.0 --dist-url=https://electronjs.org/headers --arch=arm64
    ```
    Output: `native/build/Release/fliks_compositor.node` (Linux) or
    `fliks_player_mac.node` (macOS).
