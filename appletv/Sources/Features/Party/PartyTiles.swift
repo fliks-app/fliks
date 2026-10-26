@@ -14,7 +14,7 @@ struct PartyHeaderView: View {
         VStack(alignment: .leading, spacing: 14) {
             Text(party.name).font(.system(size: 48, weight: .bold))
             if let item = party.item {
-                if item.title != party.name { Text(item.title).font(.title3) }
+                if item.shownTitle != party.name { Text(item.shownTitle).font(.title3) }
             } else {
                 Text(tr("party.no_item")).font(.title3)
             }

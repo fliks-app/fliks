@@ -100,5 +100,8 @@
   "party.end_title": "Watch Party beenden",
   "party.end_message": "\"{{name}}\" für alle beenden?",
   "party.tv_leave_host_message": "Du bist der Gastgeber: Wenn du gehst, wird \"{{name}}\" für alle beendet.",
-  "party.tv_leave_host_confirm": "Verlassen und beenden"
+  "party.tv_leave_host_confirm": "Verlassen und beenden",
+  "party.tv_votes_one": "{{count}} Stimme",
+  "party.tv_votes_other": "{{count}} Stimmen",
+  "party.tv_proposals_empty": "Noch keine Vorschläge. Gäste schlagen Filme im Web oder in der mobilen App vor."
 }

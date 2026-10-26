@@ -204,6 +204,8 @@ extension View {
 struct PosterCard: View {
     let imagePath: String?
     let title: String?
+    /// A second line under the title.
+    var caption: String? = nil
     var portrait: Bool = true
     var progressPercent: Double? = nil
     var mediaId: Int? = nil
@@ -246,6 +248,11 @@ struct PosterCard: View {
             if let title, !title.isEmpty {
                 Text(title).font(.callout).lineLimit(1)
                     .foregroundStyle(focused ? .primary : .secondary)
+                    .offset(y: focused ? 16 : 0)
+                    .animation(.easeOut(duration: 0.15), value: focused)
+            }
+            if let caption {
+                Text(caption).font(.caption).lineLimit(1).foregroundStyle(.secondary)
                     .offset(y: focused ? 16 : 0)
                     .animation(.easeOut(duration: 0.15), value: focused)
             }

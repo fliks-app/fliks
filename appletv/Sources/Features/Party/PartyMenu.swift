@@ -76,7 +76,7 @@ enum PartyMenu {
         ]
         let items = p.queue.map { item -> UIAction in
             let isCurrent = item.mediaId == cur?.mediaId && item.episodeId == cur?.episodeId
-            return UIAction(title: item.title, state: isCurrent ? .on : .off) { _ in
+            return UIAction(title: item.shownTitle, state: isCurrent ? .on : .off) { _ in
                 if !isCurrent { Task { await p.sendIntent("setItem", item: item) } }
             }
         }

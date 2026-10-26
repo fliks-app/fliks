@@ -101,5 +101,8 @@
   "party.end_title": "Terminer la séance",
   "party.end_message": "Terminer \"{{name}}\" pour tout le monde ?",
   "party.tv_leave_host_message": "Vous êtes l'hôte : quitter mettra fin à \"{{name}}\" pour tout le monde.",
-  "party.tv_leave_host_confirm": "Quitter et terminer"
+  "party.tv_leave_host_confirm": "Quitter et terminer",
+  "party.tv_votes_one": "{{count}} vote",
+  "party.tv_votes_other": "{{count}} votes",
+  "party.tv_proposals_empty": "Aucune proposition. Les invités proposent des films depuis le web ou l'application mobile."
 }

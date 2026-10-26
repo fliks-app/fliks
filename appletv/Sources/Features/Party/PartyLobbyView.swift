@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// A scheduled party whose lobby is open: header, actions, then who is here.
+/// A scheduled party's lobby, open from its creation: header, actions, who is here, the programme and the proposals.
 struct PartyLobbyView: View {
     @Environment(PartyService.self) private var service
     @Environment(Backdrop.self) private var backdrop
@@ -17,6 +17,8 @@ struct PartyLobbyView: View {
                     PartyHeaderView(party: party)
                     actions
                     members
+                    programme
+                    proposals
                 }
                 .padding(.horizontal, 60)
                 .padding(.vertical, 48)
@@ -68,13 +70,19 @@ struct PartyLobbyView: View {
                         Label(tr("party.start"), systemImage: "play.fill")
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(service.party?.item == nil)
+                    .disabled(!service.canStart)
                 }
                 Button { Task { await service.setReady(!ready) } } label: {
                     Label(ready ? tr("party.not_ready") : tr("party.ready"),
                           systemImage: ready ? "checkmark.circle.fill" : "circle")
                 }
                 .buttonStyle(.bordered)
+                if service.chatEnabled {
+                    Button { service.sheet = .chat } label: {
+                        Label(tr("party.tv_chat"), systemImage: "bubble.left")
+                    }
+                    .buttonStyle(.bordered)
+                }
                 Button { service.sheet = .settings } label: {
                     Label(tr("party.settings"), systemImage: "gearshape")
                 }
@@ -87,6 +95,8 @@ struct PartyLobbyView: View {
             }
             if !service.isHost {
                 Text(tr("party.tv_wait_host")).font(.callout).foregroundStyle(.secondary)
+            } else if service.party?.item == nil, !service.proposals.isEmpty {
+                Text(tr("party.start_top_vote")).font(.callout).foregroundStyle(.secondary)
             }
         }
         .focusSection()
@@ -119,6 +129,43 @@ struct PartyLobbyView: View {
             .scrollClipDisabled()
         }
         .focusSection()
+    }
+}
+
+private extension PartyLobbyView {
+    struct ProgrammeRow: Identifiable {
+        let id: Int
+        let item: PartyItem
+    }
+
+    var programme: some View {
+        let rows = service.queue.enumerated().map { ProgrammeRow(id: $0.offset, item: $0.element) }
+        return section(tr("party.programme"), empty: tr("party.programme_empty"), isEmpty: rows.isEmpty) {
+            Rail(title: nil, items: rows) { row in
+                PosterCard(imagePath: row.item.hidden ? nil : row.item.posterUrl, title: row.item.shownTitle,
+                           caption: String(row.id + 1)) {}
+            }
+        }
+    }
+
+    var proposals: some View {
+        let rows = PartyProposal.sorted(service.proposals)
+        return section(tr("party.proposals"), empty: tr("party.tv_proposals_empty"), isEmpty: rows.isEmpty) {
+            Rail(title: nil, items: rows) { proposal in
+                let count = proposal.voterIds.count
+                PosterCard(imagePath: proposal.item.hidden ? nil : proposal.item.posterUrl, title: proposal.item.shownTitle,
+                           caption: trp(count == 1 ? "party.tv_votes_one" : "party.tv_votes_other", ["count": String(count)])) {}
+            }
+        }
+    }
+
+    /// Read-only: the cards only let the remote scroll the page down to them.
+    func section<Content: View>(_ title: String, empty: String, isEmpty: Bool,
+                                @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title).font(.headline).foregroundStyle(.secondary)
+            if isEmpty { Text(empty).font(.callout).foregroundStyle(.secondary) } else { content() }
+        }
     }
 }
 

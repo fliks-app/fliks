@@ -4,7 +4,7 @@ import XCTest
 final class PartyEventTests: XCTestCase {
     private func decode(_ json: String) -> PartyEvent? { PartyEvent.decode(Data(json.utf8)) }
 
-    private let item = #"{"mediaId":7,"mediaFileId":null,"episodeId":3,"title":"Show S01E03","posterUrl":null,"fanartUrl":null,"additionalFanartUrls":[]}"#
+    private let item = #"{"mediaId":7,"mediaFileId":null,"episodeId":3,"title":"Show S01E03","posterUrl":null,"fanartUrl":null,"additionalFanartUrls":[],"hidden":false}"#
 
     func testStateEventWithAScheduledStart() {
         let json = #"{"type":"party.state","partyId":5,"rev":12,"state":"playing","item":\#(item),"anchor":{"position":42.5,"serverTimeMs":1700000000123},"whenMs":1700000000123,"by":{"userId":1,"username":"a"},"action":"play"}"#
@@ -80,6 +80,39 @@ final class PartyEventTests: XCTestCase {
             return XCTFail("not a programme event")
         }
         XCTAssertEqual([partyId, rev], [5, 6])
-        XCTAssertEqual(item.mediaId, 7)
+        XCTAssertEqual(item?.mediaId, 7)
+    }
+
+    func testProgrammeEventAfterTheStartHasNoItem() {
+        guard case let .programme(_, _, item)? = decode(#"{"type":"party.programme","partyId":5,"rev":7,"item":null}"#) else {
+            return XCTFail("not a programme event")
+        }
+        XCTAssertNil(item)
+    }
+
+    private let hiddenItem = #"{"mediaId":8,"mediaFileId":null,"episodeId":null,"title":"","posterUrl":null,"fanartUrl":null,"additionalFanartUrls":[],"hidden":true}"#
+
+    func testProposalsEventKeepsAMaskedRowNeutral() {
+        let json = #"{"type":"party.proposals","partyId":5,"proposals":[{"id":2,"item":\#(item),"proposedBy":1,"voterIds":[1,3]},{"id":3,"item":\#(hiddenItem),"proposedBy":3,"voterIds":[3]}]}"#
+        guard case let .proposals(partyId, list)? = decode(json) else { return XCTFail("not a proposals event") }
+        XCTAssertEqual(partyId, 5)
+        XCTAssertEqual(list.map(\.voterIds.count), [2, 1])
+        XCTAssertFalse(list[0].item.hidden)
+        XCTAssertTrue(list[1].item.hidden)
+        XCTAssertEqual(list[1].item.shownTitle, tr("party.proposal_hidden"))
+    }
+
+    func testProposalsSortByVotesThenOldest() {
+        func proposal(_ id: Int, _ votes: Int) -> PartyProposal {
+            let item = try! JSONDecoder.fliks.decode(PartyItem.self, from: Data(hiddenItem.utf8))
+            return PartyProposal(id: id, item: item, proposedBy: 1, voterIds: Array(0..<votes))
+        }
+        XCTAssertEqual(PartyProposal.sorted([proposal(1, 1), proposal(2, 3), proposal(3, 3), proposal(4, 0)]).map(\.id), [2, 3, 1, 4])
+    }
+
+    func testSnapshotCarriesItsProposals() throws {
+        let json = #"{"id":5,"name":"Night","status":"scheduled","scheduledAt":null,"host":{"userId":1,"username":"a"},"item":null,"playlist":null,"memberCount":1,"proposals":[{"id":2,"item":\#(item),"proposedBy":1,"voterIds":[1]}],"live":{"rev":4,"playback":null,"members":[],"messages":[]}}"#
+        let party = try JSONDecoder.fliks.decode(Party.self, from: Data(json.utf8))
+        XCTAssertEqual(party.proposals?.count, 1)
     }
 }

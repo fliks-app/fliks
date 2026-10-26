@@ -15,6 +15,8 @@ import Foundation
     private(set) var messages: [PartyMessage] = []
     private(set) var bubbles: [PartyMessage] = []
     private(set) var queue: [PartyItem] = []
+    /// What the guests suggested for the start (lobby only).
+    private(set) var proposals: [PartyProposal] = []
     private(set) var reactions: [FloatingReaction] = []
     private(set) var reactionBar = PartyReactions.fallbackBar
     enum Sheet: String, Identifiable { case invite, settings, chat; var id: String { rawValue } }
@@ -38,6 +40,8 @@ import Foundation
     @ObservationIgnored private var queuedFor: PartyItem?
     @ObservationIgnored private var handoff = false
     @ObservationIgnored private var nextReactionId = 0
+    /// Proposals carry no revision: a snapshot fetched before a `party.proposals` event must not overwrite it.
+    @ObservationIgnored private var proposalEvents = 0
 
     /// File to play, media, episode: pushes the player for the party's current item.
     @ObservationIgnored var onOpenPlayer: ((Int, Int, Int?) -> Void)?
@@ -84,6 +88,8 @@ import Foundation
     func setPreview(_ dto: Party?) { preview = dto }
 
     var item: PartyItem? { live?.item ?? party?.item }
+    /// The programme has a head, or a suggestion the start can take (a masked one cannot be played).
+    var canStart: Bool { party?.item != nil || proposals.contains { !$0.item.hidden } }
 
     // MARK: - Entry points
 
@@ -103,19 +109,13 @@ import Foundation
         }
     }
 
-    /// The player for a live party, the lobby for a scheduled one whose lobby is open.
+    /// The player for a live party, the lobby for a scheduled one: its room is open from creation.
     func enter(id: Int, token: String? = nil) async {
         struct Body: Encodable { let deviceId: String; let token: String? }
         if let current = party?.id, current != id { await leave() }
         do {
             try await connectStream()
             let dto: Party = try await APIClient.shared.post("/api/parties/\(id)/join", body: Body(deviceId: deviceId, token: token))
-            guard dto.live != nil else {
-                try? await APIClient.shared.post("/api/parties/\(id)/leave", body: ["deviceId": deviceId])
-                stream.stop()
-                show(tr("party.toast_not_started"))
-                return
-            }
             adopt(dto)
             if dto.status == "live", let item = dto.item { await openPlayer(item) } else { onOpenLobby?(id) }
         } catch {
@@ -330,6 +330,7 @@ import Foundation
         bubbles = []
         reactions = []
         queue = []
+        proposals = []
         sheet = nil
         leaveConfirm = false
         lastRev = 0
@@ -337,8 +338,11 @@ import Foundation
         joined = false
     }
 
-    func applySnapshot(_ dto: Party) {
+    /// `proposals: false` keeps the ones held, for a snapshot that predates a `party.proposals` event.
+    func applySnapshot(_ dto: Party, proposals fresh: Bool = true) {
         party = dto
+        if fresh, let list = dto.proposals { proposals = list }
+        if dto.status == "scheduled" { Task { await loadQueue(dto.id) } }
         guard let snap = dto.live else { return }
         // A snapshot older than what events already applied would roll the party back.
         guard snap.rev >= lastRev else { return }
@@ -376,8 +380,9 @@ import Foundation
     private func refetchOnce() async {
         guard let id = party?.id else { return }
         let wasLobby = lobby
+        let seen = proposalEvents
         guard let dto: Party = try? await APIClient.shared.get("/api/parties/\(id)") else { return }
-        applySnapshot(dto)
+        applySnapshot(dto, proposals: seen == proposalEvents)
         if wasLobby, dto.status == "live", let item = dto.item { await openPlayer(item) }
     }
 
@@ -430,10 +435,12 @@ import Foundation
         }
         queuedFor = item
         guard let id = party?.id else { return }
-        Task {
-            let items: [PartyItem]? = try? await APIClient.shared.get("/api/parties/\(id)/queue")
-            if party?.id == id { queue = items ?? [] }
-        }
+        Task { await loadQueue(id) }
+    }
+
+    private func loadQueue(_ id: Int) async {
+        let items: [PartyItem]? = try? await APIClient.shared.get("/api/parties/\(id)/queue")
+        if party?.id == id { queue = items ?? [] }
     }
 
     // MARK: - Events
@@ -455,6 +462,11 @@ import Foundation
         case let .programme(partyId, rev, item):
             guard partyId == party?.id, acceptRev(rev) else { return }
             if lobby { party?.item = item }
+            Task { await loadQueue(partyId) }
+        case let .proposals(partyId, list):
+            guard partyId == party?.id else { return }
+            proposalEvents += 1
+            proposals = list
         case let .members(partyId, rev, list):
             guard partyId == party?.id, acceptRev(rev) else { return }
             members = list

@@ -12,6 +12,26 @@ struct PartyItem: Codable, Equatable {
     let title: String
     let posterUrl: String?
     let fanartUrl: String?
+    /// The viewer cannot open the media: title and artwork are blank, the ids stay.
+    let hidden: Bool
+}
+
+extension PartyItem {
+    /// The title (`Title S01E02` for an episode), or the neutral line of a masked row.
+    var shownTitle: String { hidden ? tr("party.proposal_hidden") : title }
+}
+
+/// A film suggested for the start; read-only on the TV.
+struct PartyProposal: Codable, Equatable, Identifiable {
+    let id: Int
+    let item: PartyItem
+    let proposedBy: Int
+    let voterIds: [Int]
+
+    /// Most votes first, the oldest (lowest id) among equals: how the server picks the start.
+    static func sorted(_ list: [PartyProposal]) -> [PartyProposal] {
+        list.sorted { $0.voterIds.count != $1.voterIds.count ? $0.voterIds.count > $1.voterIds.count : $0.id < $1.id }
+    }
 }
 
 struct PartyAnchor: Codable, Equatable {
@@ -96,6 +116,7 @@ struct Party: Codable, Equatable, Identifiable {
     var linkSharing: Bool?
     var inviteToken: String?
     var guests: [PartyGuest]?
+    var proposals: [PartyProposal]?
     var live: PartyLive?
 }
 
@@ -128,6 +149,7 @@ enum PartyEvent {
     case invited(partyId: Int, name: String)
     case starting(partyId: Int, name: String)
     case updated(partyId: Int)
+    case proposals(partyId: Int, proposals: [PartyProposal])
 
     private struct Head: Decodable { let type: String }
     private struct Programme: Decodable { let partyId: Int; let rev: Int; let item: PartyItem? }
@@ -139,6 +161,7 @@ enum PartyEvent {
     private struct Message: Decodable { let partyId: Int; let message: PartyMessage }
     private struct Reaction: Decodable { let partyId: Int; let username: String; let emoji: String }
     private struct Closed: Decodable { let partyId: Int; let reason: String }
+    private struct Proposals: Decodable { let partyId: Int; let proposals: [PartyProposal] }
     private struct Named: Decodable { let partyId: Int; let name: String? }
 
     /// Nil for any event that is not a party one, or that does not parse.
@@ -169,6 +192,8 @@ enum PartyEvent {
             return (try? d.decode(Named.self, from: data)).map { .starting(partyId: $0.partyId, name: $0.name ?? "") }
         case "party.updated":
             return (try? d.decode(Named.self, from: data)).map { .updated(partyId: $0.partyId) }
+        case "party.proposals":
+            return (try? d.decode(Proposals.self, from: data)).map { .proposals(partyId: $0.partyId, proposals: $0.proposals) }
         default:
             return nil
         }
