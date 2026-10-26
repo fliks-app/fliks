@@ -10,7 +10,7 @@ pub struct Row {
     pub id: i32,
     pub name: String,
     pub owner_id: i32,
-    pub media_id: i32,
+    pub media_id: Option<i32>,
     pub media_file_id: Option<i32>,
     pub episode_id: Option<i32>,
     pub playlist_id: Option<i32>,
@@ -26,12 +26,13 @@ pub struct Row {
 }
 
 impl Row {
-    pub fn item(&self) -> Item {
-        Item {
-            media_id: self.media_id,
+    /// The playing item, or the film chosen for the start; `None` while nothing is chosen.
+    pub fn item(&self) -> Option<Item> {
+        Some(Item {
+            media_id: self.media_id?,
             media_file_id: self.media_file_id,
             episode_id: self.episode_id,
-        }
+        })
     }
 }
 
@@ -49,7 +50,7 @@ pub fn new_token() -> String {
 pub struct New<'a> {
     pub name: &'a str,
     pub owner: i32,
-    pub item: &'a Item,
+    pub item: Option<&'a Item>,
     pub playlist_id: Option<i32>,
     pub policy: Policy,
     pub reactions_enabled: bool,
@@ -80,31 +81,36 @@ pub async fn insert(
     lobby_cutoff: DateTime<Utc>,
 ) -> sqlx::Result<(Row, bool)> {
     let mut tx = db.begin().await?;
-    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
-        .bind(format!(
-            "party:{}:{}:{:?}:{:?}:{:?}",
-            n.owner, n.item.media_id, n.item.media_file_id, n.item.episode_id, n.playlist_id
-        ))
-        .execute(&mut *tx)
-        .await?;
-    let existing = sqlx::query_as::<_, Row>(&format!(
-        r#"SELECT {COLS} FROM watch_parties
+    let existing = match n.item {
+        Some(item) => {
+            sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
+                .bind(format!(
+                    "party:{}:{}:{:?}:{:?}:{:?}",
+                    n.owner, item.media_id, item.media_file_id, item.episode_id, n.playlist_id
+                ))
+                .execute(&mut *tx)
+                .await?;
+            sqlx::query_as::<_, Row>(&format!(
+                r#"SELECT {COLS} FROM watch_parties
            WHERE "ownerId" = $1 AND "mediaId" = $2 AND "mediaFileId" IS NOT DISTINCT FROM $3
              AND "episodeId" IS NOT DISTINCT FROM $4 AND "playlistId" IS NOT DISTINCT FROM $5
              AND CASE WHEN $6 THEN status = 'live' OR (status = 'scheduled' AND "scheduledAt" <= $7)
                       ELSE status = 'scheduled' AND "scheduledAt" = $8 END
            ORDER BY id LIMIT 1"#
-    ))
-    .bind(n.owner)
-    .bind(n.item.media_id)
-    .bind(n.item.media_file_id)
-    .bind(n.item.episode_id)
-    .bind(n.playlist_id)
-    .bind(immediate)
-    .bind(lobby_cutoff)
-    .bind(n.scheduled_at)
-    .fetch_optional(&mut *tx)
-    .await?;
+            ))
+            .bind(n.owner)
+            .bind(item.media_id)
+            .bind(item.media_file_id)
+            .bind(item.episode_id)
+            .bind(n.playlist_id)
+            .bind(immediate)
+            .bind(lobby_cutoff)
+            .bind(n.scheduled_at)
+            .fetch_optional(&mut *tx)
+            .await?
+        }
+        None => None,
+    };
     if let Some(row) = existing {
         return Ok((row, false));
     }
@@ -117,9 +123,9 @@ pub async fn insert(
     ))
     .bind(n.name)
     .bind(n.owner)
-    .bind(n.item.media_id)
-    .bind(n.item.media_file_id)
-    .bind(n.item.episode_id)
+    .bind(n.item.map(|i| i.media_id))
+    .bind(n.item.and_then(|i| i.media_file_id))
+    .bind(n.item.and_then(|i| i.episode_id))
     .bind(n.playlist_id)
     .bind(new_token())
     .bind(n.policy.as_str())
@@ -352,6 +358,20 @@ pub async fn update_settings(
     Ok(())
 }
 
+/// The film the start will play, in the item columns; `None` clears it.
+pub async fn set_selection(db: &PgPool, id: i32, item: &Item) -> sqlx::Result<()> {
+    sqlx::query(
+        r#"UPDATE watch_parties SET "mediaId" = $2, "mediaFileId" = $3, "episodeId" = $4 WHERE id = $1"#,
+    )
+    .bind(id)
+    .bind(item.media_id)
+    .bind(item.media_file_id)
+    .bind(item.episode_id)
+    .execute(db)
+    .await?;
+    Ok(())
+}
+
 pub async fn set_live(db: &PgPool, id: i32) -> sqlx::Result<()> {
     sqlx::query(r#"UPDATE watch_parties SET status = 'live', "startedAt" = now() WHERE id = $1"#)
         .bind(id)
@@ -511,12 +531,19 @@ pub struct QueueRow {
 pub async fn queue_rows(
     db: &PgPool,
     playlist: Option<i32>,
-    current: &Item,
+    current: Option<&Item>,
 ) -> sqlx::Result<Vec<QueueRow>> {
-    match (playlist, current.episode_id) {
+    match (playlist, current) {
         (Some(p), _) => playlist_rows(db, p).await,
-        (None, Some(_)) => series_rows(db, current.media_id).await,
-        (None, None) => Ok(vec![]),
+        (
+            None,
+            Some(Item {
+                media_id,
+                episode_id: Some(_),
+                ..
+            }),
+        ) => series_rows(db, *media_id).await,
+        (None, _) => Ok(vec![]),
     }
 }
 

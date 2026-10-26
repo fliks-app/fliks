@@ -238,6 +238,11 @@ pub enum Effect {
         reason: CloseReason,
         to: Vec<(i32, String)>,
     },
+    /// The film the start will play changed (`None`: cleared).
+    Selection {
+        rev: u64,
+        item: Option<Item>,
+    },
     /// Rule 8: the row's position and item follow every transition.
     Persist {
         position: f64,
@@ -256,6 +261,10 @@ pub enum Error {
     RateLimited,
     VoiceFull,
     VoiceNotJoined,
+    /// `go_live` without a selection.
+    NoItem,
+    /// A playback intent before the start.
+    NotStarted,
 }
 
 /// A client intent (`play|pause|seek|setItem|ended`) with the revision it was made on;
@@ -276,7 +285,8 @@ struct Phase {
     action: &'static str,
 }
 
-pub struct Live {
+/// Who is in the party and how it is set up, whether or not a film plays.
+pub struct Room {
     pub name: String,
     pub policy: Policy,
     /// Host switches for the whole party: reactions and chat messages are refused while off.
@@ -285,19 +295,29 @@ pub struct Live {
     /// Whether members, not only the host, receive the invite token.
     pub link_sharing: bool,
     pub host_id: i32,
-    pub item: Item,
-    pub state: State,
-    pub anchor: Anchor,
+    /// The film the start plays, set by the host before it.
+    pub selection: Option<Item>,
     pub rev: u64,
     pub members: Vec<Member>,
     pub chat: VecDeque<Message>,
-    /// A scheduled party's open lobby: members start `waiting` until they say ready.
-    pub lobby: bool,
-    phase: Option<Phase>,
     empty_since: Option<i64>,
     next_msg: u64,
     next_join: u64,
     limits: HashMap<(i32, String, Limit), VecDeque<i64>>,
+}
+
+/// What plays: one item, its state and its anchor.
+pub struct Playback {
+    pub item: Item,
+    pub state: State,
+    pub anchor: Anchor,
+    phase: Option<Phase>,
+}
+
+/// A party: its room, and the playback once the host has started it.
+pub struct Live {
+    pub room: Room,
+    pub playback: Option<Playback>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -314,17 +334,9 @@ fn by_of(m: &Member) -> By {
     }
 }
 
-impl Live {
-    /// A party that has just opened: idle at `position`, host = the owner. `rev` and message ids
-    /// start at `now` so a recreated machine never reuses what a client already holds.
-    pub fn new(
-        name: String,
-        policy: Policy,
-        host_id: i32,
-        item: Item,
-        position: f64,
-        now: i64,
-    ) -> Self {
+impl Room {
+    /// `rev` and message ids start at `now` so a recreated room never reuses what a client holds.
+    fn new(name: String, policy: Policy, host_id: i32, now: i64) -> Self {
         Self {
             name,
             policy,
@@ -332,45 +344,14 @@ impl Live {
             chat_enabled: true,
             link_sharing: true,
             host_id,
-            item,
-            state: State::Idle,
-            anchor: Anchor {
-                position,
-                server_time_ms: now,
-            },
+            selection: None,
             rev: now.max(1) as u64,
             members: vec![],
             chat: VecDeque::new(),
-            lobby: false,
-            phase: None,
             empty_since: Some(now),
             next_msg: now.max(1) as u64,
             next_join: 0,
             limits: HashMap::new(),
-        }
-    }
-
-    /// Rule 10: after a restart, paused at the stored position with nobody in.
-    pub fn boot(
-        name: String,
-        policy: Policy,
-        host_id: i32,
-        item: Item,
-        position: f64,
-        now: i64,
-    ) -> Self {
-        let mut l = Self::new(name, policy, host_id, item, position, now);
-        l.state = State::Paused;
-        l
-    }
-
-    /// Never before the anchor: a pause during the start delay keeps the anchor position.
-    pub fn position_at(&self, now: i64) -> f64 {
-        match self.state {
-            State::Playing => {
-                self.anchor.position + (now - self.anchor.server_time_ms).max(0) as f64 / 1000.0
-            }
-            _ => self.anchor.position,
         }
     }
 
@@ -399,31 +380,10 @@ impl Live {
         self.chat.iter().skip(skip).cloned().collect()
     }
 
-    /// The party reopens its countdown when it goes live with the lobby possibly long empty.
+    /// The party reopens its countdown when it goes live with the room possibly long empty.
     pub fn reset_empty(&mut self, now: i64) {
         self.empty_since =
             (!self.members.iter().any(|m| m.status != MemberStatus::Away)).then_some(now);
-    }
-
-    /// `POST /start`: the lobby goes live and every member, invited or not, gets the new state. With
-    /// the host in, it plays once everyone has loaded.
-    pub fn go_live(&mut self, now: i64) -> Vec<Effect> {
-        let mut out = Vec::new();
-        self.lobby = false;
-        self.reset_empty(now);
-        let host = self
-            .members
-            .iter()
-            .find(|m| m.user_id == self.host_id && m.status != MemberStatus::Away)
-            .cloned();
-        match host {
-            Some(h) => {
-                let p = self.anchor.position;
-                self.enter_waiting(&mut out, p, true, &h, Action::Play, now);
-            }
-            None => self.state_effect(&mut out, now, None, None, None),
-        }
-        out
     }
 
     fn bump(&mut self) -> u64 {
@@ -471,102 +431,11 @@ impl Live {
         });
     }
 
-    fn state_effect(
-        &mut self,
-        out: &mut Vec<Effect>,
-        now: i64,
-        when_ms: Option<i64>,
-        by: Option<By>,
-        action: Option<&'static str>,
-    ) {
-        let rev = self.bump();
-        out.push(Effect::Persist {
-            position: self.position_at(now),
-            item: self.item.clone(),
-        });
-        out.push(Effect::State {
-            rev,
-            state: self.state,
-            item: self.item.clone(),
-            anchor: self.anchor,
-            when_ms,
-            by,
-            action,
-        });
-    }
-
     fn all_ready(&self) -> bool {
         self.members
             .iter()
             .filter(|m| m.status != MemberStatus::Away)
             .all(|m| m.status == MemberStatus::Ready)
-    }
-
-    fn enter_waiting(
-        &mut self,
-        out: &mut Vec<Effect>,
-        position: f64,
-        target_playing: bool,
-        by: &Member,
-        action: Action,
-        now: i64,
-    ) {
-        let keep = self.state == State::Waiting && action != Action::Play;
-        let target = if keep {
-            self.phase.as_ref().is_some_and(|p| p.target_playing)
-        } else {
-            target_playing
-        };
-        self.state = State::Waiting;
-        self.anchor = Anchor {
-            position,
-            server_time_ms: now,
-        };
-        for m in &mut self.members {
-            if m.status != MemberStatus::Away {
-                m.status = MemberStatus::Waiting;
-            }
-        }
-        let by = Some(by_of(by));
-        self.phase = Some(Phase {
-            target_playing: target,
-            since: now,
-            by: by.clone(),
-            action: action.wire(),
-        });
-        self.state_effect(out, now, None, by, Some(action.wire()));
-    }
-
-    /// Rule 3. Members still not ready are left as they are and catch up alone.
-    fn complete(&mut self, out: &mut Vec<Effect>, now: i64) {
-        let Some(phase) = self.phase.take() else {
-            return;
-        };
-        let position = self.anchor.position;
-        let when = if phase.target_playing {
-            let rtt = self.members.iter().map(|m| m.rtt_ms).max().unwrap_or(0);
-            let when = now + (2 * rtt).max(MIN_START_DELAY_MS);
-            self.state = State::Playing;
-            self.anchor = Anchor {
-                position,
-                server_time_ms: when,
-            };
-            Some(when)
-        } else {
-            self.state = State::Paused;
-            self.anchor = Anchor {
-                position,
-                server_time_ms: now,
-            };
-            None
-        };
-        self.state_effect(out, now, when, phase.by, Some(phase.action));
-    }
-
-    fn settle(&mut self, out: &mut Vec<Effect>, now: i64) {
-        if self.state == State::Waiting && self.all_ready() {
-            self.complete(out, now);
-        }
     }
 
     /// Moves the host role to the oldest present member when the host has no member left; returns
@@ -608,17 +477,16 @@ impl Live {
         });
     }
 
-    /// A rejoin of the same `(user, device)` replaces the connection and resets the status.
-    pub fn join(
+    /// A rejoin of the same `(user, device)` replaces the connection and resets the status;
+    /// `waiting` starts a new member not ready.
+    fn join(
         &mut self,
-        user_id: i32,
-        username: &str,
-        device_id: &str,
-        connection_id: &str,
+        (user_id, username, device_id, connection_id): (i32, &str, &str, &str),
+        waiting: bool,
         now: i64,
     ) -> Vec<Effect> {
         let mut out = vec![];
-        let status = if self.state == State::Waiting || self.lobby {
+        let status = if waiting {
             MemberStatus::Waiting
         } else {
             MemberStatus::Ready
@@ -657,309 +525,11 @@ impl Live {
         out
     }
 
-    pub fn leave(&mut self, user_id: i32, device_id: &str, now: i64) -> Result<Vec<Effect>, Error> {
-        let i = self.find(user_id, device_id).ok_or(Error::NotMember)?;
-        let m = self.members.remove(i);
-        self.prune_limits(now);
-        let host = self.hand_over();
-        let mut out = vec![];
-        self.members_effect(&mut out);
-        self.sys(&mut out, "left", Some(&m.username), json!({}), now);
-        self.announce_host(&mut out, host, now);
-        self.settle(&mut out, now);
-        Ok(out)
-    }
-
-    pub fn intent(
-        &mut self,
-        user_id: i32,
-        device_id: &str,
-        req: Intent,
-        now: i64,
-    ) -> Result<(u64, Vec<Effect>), Error> {
-        let Intent {
-            action,
-            position,
-            item,
-            item_title,
-            base_rev,
-        } = req;
-        let i = self.find(user_id, device_id).ok_or(Error::NotMember)?;
-        let actor = self.members[i].clone();
-        let host = user_id == self.host_id;
-        let mut out = vec![];
-        if action == Action::Ended {
-            if self.can_end(user_id, device_id, item.as_ref()) {
-                self.idle(&mut out, now, &actor);
-            }
-            return Ok((self.rev, out));
-        }
-        if self.policy == Policy::HostOnly && !host {
-            return Err(Error::HostOnly);
-        }
-        let moves = matches!(action, Action::Seek | Action::SetItem);
-        if moves && base_rev < self.rev {
-            return Err(Error::Stale);
-        }
-        let playing_ctx = self.state == State::Playing;
-        let name = actor.username.clone();
-        match action {
-            Action::Play => {
-                if matches!(self.state, State::Idle | State::Paused) {
-                    let p = self.anchor.position;
-                    self.enter_waiting(&mut out, p, true, &actor, action, now);
-                    self.sys(
-                        &mut out,
-                        "resumed",
-                        Some(&name),
-                        json!({ "position": p }),
-                        now,
-                    );
-                } else if self.state == State::Waiting
-                    && let Some(p) = &mut self.phase
-                {
-                    p.target_playing = true;
-                }
-            }
-            Action::Pause => match self.state {
-                State::Playing => {
-                    let p = self.position_at(now);
-                    self.state = State::Paused;
-                    self.anchor = Anchor {
-                        position: p,
-                        server_time_ms: now,
-                    };
-                    self.state_effect(&mut out, now, None, Some(by_of(&actor)), Some("pause"));
-                    self.sys(
-                        &mut out,
-                        "paused",
-                        Some(&name),
-                        json!({ "position": p }),
-                        now,
-                    );
-                }
-                State::Waiting => {
-                    if let Some(p) = &mut self.phase {
-                        p.target_playing = false;
-                    }
-                    self.sys(&mut out, "paused", Some(&name), json!({}), now);
-                }
-                _ => {}
-            },
-            Action::Seek => {
-                let p = position
-                    .filter(|p| p.is_finite() && *p >= 0.0)
-                    .ok_or(Error::Invalid("position"))?;
-                self.enter_waiting(&mut out, p, playing_ctx, &actor, action, now);
-                self.sys(
-                    &mut out,
-                    "seeked",
-                    Some(&name),
-                    json!({ "position": p }),
-                    now,
-                );
-            }
-            Action::SetItem => {
-                let it = item.ok_or(Error::Invalid("item"))?;
-                self.change_item(&mut out, &actor, it, item_title, now);
-            }
-            Action::Ended => {}
-        }
-        Ok((self.rev, out))
-    }
-
-    /// `setItem` once its gates passed: the item changes, everyone waits at 0.
-    fn change_item(
-        &mut self,
-        out: &mut Vec<Effect>,
-        actor: &Member,
-        item: Item,
-        title: Option<String>,
-        now: i64,
-    ) {
-        let playing = self.state == State::Playing;
-        self.item = item;
-        self.enter_waiting(out, 0.0, playing, actor, Action::SetItem, now);
-        self.sys(
-            out,
-            "item_changed",
-            Some(&actor.username),
-            json!({ "title": title }),
-            now,
-        );
-    }
-
-    fn idle(&mut self, out: &mut Vec<Effect>, now: i64, by: &Member) {
-        self.anchor = Anchor {
-            position: self.position_at(now),
-            server_time_ms: now,
-        };
-        self.state = State::Idle;
-        self.phase = None;
-        self.state_effect(out, now, None, Some(by_of(by)), Some("ended"));
-    }
-
-    /// Whether an `ended` takes effect: the party plays or is paused on `item` (any item when the
-    /// client sent none) and the sender is the host, or any member naming `item` while the host is away.
-    pub fn can_end(&self, user_id: i32, device_id: &str, item: Option<&Item>) -> bool {
-        let host_away = !self
-            .members
-            .iter()
-            .any(|m| m.user_id == self.host_id && m.status != MemberStatus::Away);
-        self.find(user_id, device_id).is_some()
-            && matches!(self.state, State::Playing | State::Paused)
-            && item.is_none_or(|i| same_row(i, &self.item))
-            && (user_id == self.host_id || (item.is_some() && host_away))
-    }
-
-    /// A queue step chosen by the server: one `item_skipped` message per passed-over title, then
-    /// `step.next` as a `setItem` would (`None`: nothing playable is left). The gates of `setItem`
-    /// run first, so a refused call leaves no message behind. Only a forward step that finds
-    /// nothing idles the party and appends `queue_ended`, once; a backward one, or a forward one on
-    /// an already idle party, changes nothing.
-    pub fn advance(
-        &mut self,
-        user_id: i32,
-        device_id: &str,
-        base_rev: u64,
-        step: Step,
-        now: i64,
-    ) -> Result<(u64, Vec<Effect>), Error> {
-        let i = self.find(user_id, device_id).ok_or(Error::NotMember)?;
-        let actor = self.members[i].clone();
-        if self.policy == Policy::HostOnly && user_id != self.host_id {
-            return Err(Error::HostOnly);
-        }
-        if base_rev < self.rev {
-            return Err(Error::Stale);
-        }
-        let mut out = vec![];
-        self.walk(&mut out, &actor, step, false, now);
-        Ok((self.rev, out))
-    }
-
-    /// A host `ended` (or a member's while the host is away) that moves the queue on, in one step
-    /// under one lock. Nothing happens unless the party is still on `from`, the item `step` was
-    /// computed for.
-    pub fn advance_after_ended(
-        &mut self,
-        user_id: i32,
-        device_id: &str,
-        item: Option<&Item>,
-        from: &Item,
-        step: Step,
-        now: i64,
-    ) -> Result<(u64, Vec<Effect>), Error> {
-        let i = self.find(user_id, device_id).ok_or(Error::NotMember)?;
-        let actor = self.members[i].clone();
-        let mut out = vec![];
-        if self.can_end(user_id, device_id, item) && same_row(from, &self.item) {
-            self.idle(&mut out, now, &actor);
-            self.walk(&mut out, &actor, step, true, now);
-        }
-        Ok((self.rev, out))
-    }
-
-    fn walk(&mut self, out: &mut Vec<Effect>, actor: &Member, step: Step, ended: bool, now: i64) {
-        let Some((item, title)) = step.next else {
-            if !step.forward || (self.state == State::Idle && !ended) {
-                return;
-            }
-            self.skipped(out, &step.skipped, now);
-            if self.state != State::Idle {
-                self.idle(out, now, actor);
-            }
-            self.sys(out, "queue_ended", None, json!({}), now);
-            return;
-        };
-        self.skipped(out, &step.skipped, now);
-        self.change_item(out, actor, item, Some(title), now);
-    }
-
-    fn skipped(&mut self, out: &mut Vec<Effect>, titles: &[String], now: i64) {
-        for title in titles {
-            self.sys(out, "item_skipped", None, json!({ "title": title }), now);
-        }
-    }
-
-    /// Rules 2 and 5: only an `ready` near the anchor counts during `waiting`.
-    pub fn status(
-        &mut self,
-        user_id: i32,
-        device_id: &str,
-        status: MemberStatus,
-        position: f64,
-        rtt_ms: Option<i64>,
-        now: i64,
-    ) -> Result<Vec<Effect>, Error> {
-        let i = self.find(user_id, device_id).ok_or(Error::NotMember)?;
-        let near = (position - self.anchor.position).abs() <= READY_TOLERANCE_S;
-        let waiting = self.state == State::Waiting;
-        let m = &mut self.members[i];
-        m.last_seen_ms = now;
-        if let Some(r) = rtt_ms {
-            m.rtt_ms = r.max(0);
-        }
-        let new = match status {
-            MemberStatus::Ready if waiting && !near => m.status,
-            MemberStatus::Ready | MemberStatus::Buffering | MemberStatus::Waiting => status,
-            MemberStatus::Away => return Err(Error::Invalid("status")),
-        };
-        let mut out = vec![];
-        if new != m.status {
-            m.status = new;
-            m.away_since = None;
-            self.members_effect(&mut out);
-        }
-        self.settle(&mut out, now);
-        Ok(out)
-    }
-
-    /// Rules 3, 9: the 1 s tick. `alive` says whether a connection id is still open.
-    pub fn tick(&mut self, now: i64, alive: impl Fn(&str) -> bool) -> Vec<Effect> {
-        let mut out = vec![];
-        let mut changed = false;
-        for m in &mut self.members {
-            if m.status != MemberStatus::Away && !alive(&m.connection_id) {
-                m.status = MemberStatus::Away;
-                m.away_since = Some(now);
-                changed = true;
-            }
-        }
-        let gone: Vec<Member> = self
-            .members
-            .iter()
-            .filter(|m| m.away_since.is_some_and(|s| now - s >= AWAY_GRACE_MS))
-            .cloned()
-            .collect();
-        self.members.retain(|m| !gone.contains(m));
-        self.prune_limits(now);
-        let host = self.hand_over();
-        if changed || !gone.is_empty() {
-            self.members_effect(&mut out);
-        }
-        for m in &gone {
-            self.sys(&mut out, "left", Some(&m.username), json!({}), now);
-        }
-        self.announce_host(&mut out, host, now);
-        if self.state == State::Waiting
-            && (self.all_ready()
-                || self
-                    .phase
-                    .as_ref()
-                    .is_some_and(|p| now - p.since >= WAIT_TIMEOUT_MS))
-        {
-            self.complete(&mut out, now);
-        }
-        if self.members.iter().any(|m| m.status != MemberStatus::Away) {
-            self.empty_since = None;
-        } else if now - *self.empty_since.get_or_insert(now) >= EMPTY_TTL_MS {
-            out.push(Effect::Closed {
-                reason: CloseReason::Expired,
-                to: vec![],
-            });
-        }
-        out
+    /// Fixes (or clears) the film the start will play; the host's choice, announced to the room.
+    pub fn select(&mut self, item: Option<Item>) -> Vec<Effect> {
+        self.selection = item.clone();
+        let rev = self.bump();
+        vec![Effect::Selection { rev, item }]
     }
 
     pub fn set_settings(
@@ -1008,36 +578,6 @@ impl Live {
             json!({ "username": username }),
             now,
         );
-        Ok(out)
-    }
-
-    /// Removes every member of the user; the caller records the kick so the token stops working.
-    pub fn kick(&mut self, user_id: i32, by: &str, now: i64) -> Result<Vec<Effect>, Error> {
-        if user_id == self.host_id {
-            return Err(Error::Invalid("host"));
-        }
-        let (gone, keep): (Vec<_>, Vec<_>) =
-            self.members.drain(..).partition(|m| m.user_id == user_id);
-        self.members = keep;
-        let first = gone.first().ok_or(Error::NotMember)?;
-        let username = first.username.clone();
-        self.prune_limits(now);
-        let mut out = vec![Effect::Closed {
-            reason: CloseReason::Kicked,
-            to: gone
-                .iter()
-                .map(|m| (m.user_id, m.connection_id.clone()))
-                .collect(),
-        }];
-        self.members_effect(&mut out);
-        self.sys(
-            &mut out,
-            "kicked",
-            Some(by),
-            json!({ "username": username }),
-            now,
-        );
-        self.settle(&mut out, now);
         Ok(out)
     }
 
@@ -1165,6 +705,590 @@ impl Live {
     }
 }
 
+impl Playback {
+    /// Idle on `item` at `position`.
+    pub fn new(item: Item, position: f64, now: i64) -> Self {
+        Self {
+            item,
+            state: State::Idle,
+            anchor: Anchor {
+                position,
+                server_time_ms: now,
+            },
+            phase: None,
+        }
+    }
+
+    /// Never before the anchor: a pause during the start delay keeps the anchor position.
+    pub fn position_at(&self, now: i64) -> f64 {
+        match self.state {
+            State::Playing => {
+                self.anchor.position + (now - self.anchor.server_time_ms).max(0) as f64 / 1000.0
+            }
+            _ => self.anchor.position,
+        }
+    }
+
+    fn state_effect(
+        &mut self,
+        room: &mut Room,
+        out: &mut Vec<Effect>,
+        now: i64,
+        when_ms: Option<i64>,
+        by: Option<By>,
+        action: Option<&'static str>,
+    ) {
+        let rev = room.bump();
+        out.push(Effect::Persist {
+            position: self.position_at(now),
+            item: self.item.clone(),
+        });
+        out.push(Effect::State {
+            rev,
+            state: self.state,
+            item: self.item.clone(),
+            anchor: self.anchor,
+            when_ms,
+            by,
+            action,
+        });
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn enter_waiting(
+        &mut self,
+        room: &mut Room,
+        out: &mut Vec<Effect>,
+        position: f64,
+        target_playing: bool,
+        by: &Member,
+        action: Action,
+        now: i64,
+    ) {
+        let keep = self.state == State::Waiting && action != Action::Play;
+        let target = if keep {
+            self.phase.as_ref().is_some_and(|p| p.target_playing)
+        } else {
+            target_playing
+        };
+        self.state = State::Waiting;
+        self.anchor = Anchor {
+            position,
+            server_time_ms: now,
+        };
+        for m in &mut room.members {
+            if m.status != MemberStatus::Away {
+                m.status = MemberStatus::Waiting;
+            }
+        }
+        let by = Some(by_of(by));
+        self.phase = Some(Phase {
+            target_playing: target,
+            since: now,
+            by: by.clone(),
+            action: action.wire(),
+        });
+        self.state_effect(room, out, now, None, by, Some(action.wire()));
+    }
+
+    /// Rule 3. Members still not ready are left as they are and catch up alone.
+    fn complete(&mut self, room: &mut Room, out: &mut Vec<Effect>, now: i64) {
+        let Some(phase) = self.phase.take() else {
+            return;
+        };
+        let position = self.anchor.position;
+        let when = if phase.target_playing {
+            let rtt = room.members.iter().map(|m| m.rtt_ms).max().unwrap_or(0);
+            let when = now + (2 * rtt).max(MIN_START_DELAY_MS);
+            self.state = State::Playing;
+            self.anchor = Anchor {
+                position,
+                server_time_ms: when,
+            };
+            Some(when)
+        } else {
+            self.state = State::Paused;
+            self.anchor = Anchor {
+                position,
+                server_time_ms: now,
+            };
+            None
+        };
+        self.state_effect(room, out, now, when, phase.by, Some(phase.action));
+    }
+
+    fn settle(&mut self, room: &mut Room, out: &mut Vec<Effect>, now: i64) {
+        if self.state == State::Waiting && room.all_ready() {
+            self.complete(room, out, now);
+        }
+    }
+
+    fn intent(
+        &mut self,
+        room: &mut Room,
+        user_id: i32,
+        device_id: &str,
+        req: Intent,
+        now: i64,
+    ) -> Result<(u64, Vec<Effect>), Error> {
+        let Intent {
+            action,
+            position,
+            item,
+            item_title,
+            base_rev,
+        } = req;
+        let i = room.find(user_id, device_id).ok_or(Error::NotMember)?;
+        let actor = room.members[i].clone();
+        let host = user_id == room.host_id;
+        let mut out = vec![];
+        if action == Action::Ended {
+            if self.can_end(room, user_id, device_id, item.as_ref()) {
+                self.idle(room, &mut out, now, &actor);
+            }
+            return Ok((room.rev, out));
+        }
+        if room.policy == Policy::HostOnly && !host {
+            return Err(Error::HostOnly);
+        }
+        let moves = matches!(action, Action::Seek | Action::SetItem);
+        if moves && base_rev < room.rev {
+            return Err(Error::Stale);
+        }
+        let playing_ctx = self.state == State::Playing;
+        let name = actor.username.clone();
+        match action {
+            Action::Play => {
+                if matches!(self.state, State::Idle | State::Paused) {
+                    let p = self.anchor.position;
+                    self.enter_waiting(room, &mut out, p, true, &actor, action, now);
+                    room.sys(
+                        &mut out,
+                        "resumed",
+                        Some(&name),
+                        json!({ "position": p }),
+                        now,
+                    );
+                } else if self.state == State::Waiting
+                    && let Some(p) = &mut self.phase
+                {
+                    p.target_playing = true;
+                }
+            }
+            Action::Pause => match self.state {
+                State::Playing => {
+                    let p = self.position_at(now);
+                    self.state = State::Paused;
+                    self.anchor = Anchor {
+                        position: p,
+                        server_time_ms: now,
+                    };
+                    self.state_effect(
+                        room,
+                        &mut out,
+                        now,
+                        None,
+                        Some(by_of(&actor)),
+                        Some("pause"),
+                    );
+                    room.sys(
+                        &mut out,
+                        "paused",
+                        Some(&name),
+                        json!({ "position": p }),
+                        now,
+                    );
+                }
+                State::Waiting => {
+                    if let Some(p) = &mut self.phase {
+                        p.target_playing = false;
+                    }
+                    room.sys(&mut out, "paused", Some(&name), json!({}), now);
+                }
+                _ => {}
+            },
+            Action::Seek => {
+                let p = position
+                    .filter(|p| p.is_finite() && *p >= 0.0)
+                    .ok_or(Error::Invalid("position"))?;
+                self.enter_waiting(room, &mut out, p, playing_ctx, &actor, action, now);
+                room.sys(
+                    &mut out,
+                    "seeked",
+                    Some(&name),
+                    json!({ "position": p }),
+                    now,
+                );
+            }
+            Action::SetItem => {
+                let it = item.ok_or(Error::Invalid("item"))?;
+                self.change_item(room, &mut out, &actor, it, item_title, now);
+            }
+            Action::Ended => {}
+        }
+        Ok((room.rev, out))
+    }
+
+    /// `setItem` once its gates passed: the item changes, everyone waits at 0.
+    fn change_item(
+        &mut self,
+        room: &mut Room,
+        out: &mut Vec<Effect>,
+        actor: &Member,
+        item: Item,
+        title: Option<String>,
+        now: i64,
+    ) {
+        let playing = self.state == State::Playing;
+        self.item = item;
+        self.enter_waiting(room, out, 0.0, playing, actor, Action::SetItem, now);
+        room.sys(
+            out,
+            "item_changed",
+            Some(&actor.username),
+            json!({ "title": title }),
+            now,
+        );
+    }
+
+    fn idle(&mut self, room: &mut Room, out: &mut Vec<Effect>, now: i64, by: &Member) {
+        self.anchor = Anchor {
+            position: self.position_at(now),
+            server_time_ms: now,
+        };
+        self.state = State::Idle;
+        self.phase = None;
+        self.state_effect(room, out, now, None, Some(by_of(by)), Some("ended"));
+    }
+
+    fn can_end(&self, room: &Room, user_id: i32, device_id: &str, item: Option<&Item>) -> bool {
+        let host_away = !room
+            .members
+            .iter()
+            .any(|m| m.user_id == room.host_id && m.status != MemberStatus::Away);
+        room.find(user_id, device_id).is_some()
+            && matches!(self.state, State::Playing | State::Paused)
+            && item.is_none_or(|i| same_row(i, &self.item))
+            && (user_id == room.host_id || (item.is_some() && host_away))
+    }
+
+    fn walk(
+        &mut self,
+        room: &mut Room,
+        out: &mut Vec<Effect>,
+        actor: &Member,
+        step: Step,
+        ended: bool,
+        now: i64,
+    ) {
+        let Some((item, title)) = step.next else {
+            if !step.forward || (self.state == State::Idle && !ended) {
+                return;
+            }
+            Self::skipped(room, out, &step.skipped, now);
+            if self.state != State::Idle {
+                self.idle(room, out, now, actor);
+            }
+            room.sys(out, "queue_ended", None, json!({}), now);
+            return;
+        };
+        Self::skipped(room, out, &step.skipped, now);
+        self.change_item(room, out, actor, item, Some(title), now);
+    }
+
+    fn skipped(room: &mut Room, out: &mut Vec<Effect>, titles: &[String], now: i64) {
+        for title in titles {
+            room.sys(out, "item_skipped", None, json!({ "title": title }), now);
+        }
+    }
+}
+
+impl Live {
+    /// A party that has just opened: a room with the host and, maybe, a film already chosen.
+    /// Nothing plays until `go_live`.
+    pub fn new(
+        name: String,
+        policy: Policy,
+        host_id: i32,
+        selection: Option<Item>,
+        now: i64,
+    ) -> Self {
+        let mut room = Room::new(name, policy, host_id, now);
+        room.selection = selection;
+        Self {
+            room,
+            playback: None,
+        }
+    }
+
+    /// Rule 10: after a restart, paused at the stored position with nobody in.
+    pub fn boot(
+        name: String,
+        policy: Policy,
+        host_id: i32,
+        item: Item,
+        position: f64,
+        now: i64,
+    ) -> Self {
+        let mut l = Self::new(name, policy, host_id, None, now);
+        let mut pb = Playback::new(item, position, now);
+        pb.state = State::Paused;
+        l.playback = Some(pb);
+        l
+    }
+
+    pub fn position_at(&self, now: i64) -> f64 {
+        self.playback.as_ref().map_or(0.0, |p| p.position_at(now))
+    }
+
+    /// Whether an `ended` takes effect: the party plays or is paused on `item` (any item when the
+    /// client sent none) and the sender is the host, or any member naming `item` while the host is away.
+    pub fn can_end(&self, user_id: i32, device_id: &str, item: Option<&Item>) -> bool {
+        self.playback
+            .as_ref()
+            .is_some_and(|p| p.can_end(&self.room, user_id, device_id, item))
+    }
+
+    /// `POST /start`: plays the selection. Every member, invited or not, gets the new state; with
+    /// the host in, it plays once everyone has loaded. No selection: `Error::NoItem`.
+    pub fn go_live(&mut self, now: i64) -> Result<Vec<Effect>, Error> {
+        let item = self.room.selection.take().ok_or(Error::NoItem)?;
+        let mut pb = Playback::new(item, 0.0, now);
+        let room = &mut self.room;
+        room.reset_empty(now);
+        let host = room
+            .members
+            .iter()
+            .find(|m| m.user_id == room.host_id && m.status != MemberStatus::Away)
+            .cloned();
+        let mut out = Vec::new();
+        match host {
+            Some(h) => pb.enter_waiting(room, &mut out, 0.0, true, &h, Action::Play, now),
+            None => pb.state_effect(room, &mut out, now, None, None, None),
+        }
+        self.playback = Some(pb);
+        Ok(out)
+    }
+
+    /// A rejoin of the same `(user, device)` replaces the connection and resets the status.
+    pub fn join(
+        &mut self,
+        user_id: i32,
+        username: &str,
+        device_id: &str,
+        connection_id: &str,
+        now: i64,
+    ) -> Vec<Effect> {
+        let waiting = self
+            .playback
+            .as_ref()
+            .is_none_or(|p| p.state == State::Waiting);
+        self.room
+            .join((user_id, username, device_id, connection_id), waiting, now)
+    }
+
+    fn settle(&mut self, out: &mut Vec<Effect>, now: i64) {
+        if let Some(p) = &mut self.playback {
+            p.settle(&mut self.room, out, now);
+        }
+    }
+
+    pub fn leave(&mut self, user_id: i32, device_id: &str, now: i64) -> Result<Vec<Effect>, Error> {
+        let room = &mut self.room;
+        let i = room.find(user_id, device_id).ok_or(Error::NotMember)?;
+        let m = room.members.remove(i);
+        room.prune_limits(now);
+        let host = room.hand_over();
+        let mut out = vec![];
+        room.members_effect(&mut out);
+        room.sys(&mut out, "left", Some(&m.username), json!({}), now);
+        room.announce_host(&mut out, host, now);
+        self.settle(&mut out, now);
+        Ok(out)
+    }
+
+    pub fn intent(
+        &mut self,
+        user_id: i32,
+        device_id: &str,
+        req: Intent,
+        now: i64,
+    ) -> Result<(u64, Vec<Effect>), Error> {
+        let pb = self.playback.as_mut().ok_or(Error::NotStarted)?;
+        pb.intent(&mut self.room, user_id, device_id, req, now)
+    }
+
+    /// A queue step chosen by the server: one `item_skipped` message per passed-over title, then
+    /// `step.next` as a `setItem` would (`None`: nothing playable is left). The gates of `setItem`
+    /// run first, so a refused call leaves no message behind. Only a forward step that finds
+    /// nothing idles the party and appends `queue_ended`, once; a backward one, or a forward one on
+    /// an already idle party, changes nothing.
+    pub fn advance(
+        &mut self,
+        user_id: i32,
+        device_id: &str,
+        base_rev: u64,
+        step: Step,
+        now: i64,
+    ) -> Result<(u64, Vec<Effect>), Error> {
+        let pb = self.playback.as_mut().ok_or(Error::NotStarted)?;
+        let room = &mut self.room;
+        let i = room.find(user_id, device_id).ok_or(Error::NotMember)?;
+        let actor = room.members[i].clone();
+        if room.policy == Policy::HostOnly && user_id != room.host_id {
+            return Err(Error::HostOnly);
+        }
+        if base_rev < room.rev {
+            return Err(Error::Stale);
+        }
+        let mut out = vec![];
+        pb.walk(room, &mut out, &actor, step, false, now);
+        Ok((room.rev, out))
+    }
+
+    /// A host `ended` (or a member's while the host is away) that moves the queue on, in one step
+    /// under one lock. Nothing happens unless the party is still on `from`, the item `step` was
+    /// computed for.
+    pub fn advance_after_ended(
+        &mut self,
+        user_id: i32,
+        device_id: &str,
+        item: Option<&Item>,
+        from: &Item,
+        step: Step,
+        now: i64,
+    ) -> Result<(u64, Vec<Effect>), Error> {
+        let pb = self.playback.as_mut().ok_or(Error::NotStarted)?;
+        let room = &mut self.room;
+        let i = room.find(user_id, device_id).ok_or(Error::NotMember)?;
+        let actor = room.members[i].clone();
+        let mut out = vec![];
+        if pb.can_end(room, user_id, device_id, item) && same_row(from, &pb.item) {
+            pb.idle(room, &mut out, now, &actor);
+            pb.walk(room, &mut out, &actor, step, true, now);
+        }
+        Ok((room.rev, out))
+    }
+
+    /// Rules 2 and 5: only an `ready` near the anchor counts during `waiting`.
+    pub fn status(
+        &mut self,
+        user_id: i32,
+        device_id: &str,
+        status: MemberStatus,
+        position: f64,
+        rtt_ms: Option<i64>,
+        now: i64,
+    ) -> Result<Vec<Effect>, Error> {
+        let room = &mut self.room;
+        let i = room.find(user_id, device_id).ok_or(Error::NotMember)?;
+        let waiting = self
+            .playback
+            .as_ref()
+            .filter(|p| p.state == State::Waiting)
+            .map(|p| p.anchor.position);
+        let near = waiting.is_none_or(|a| (position - a).abs() <= READY_TOLERANCE_S);
+        let m = &mut room.members[i];
+        m.last_seen_ms = now;
+        if let Some(r) = rtt_ms {
+            m.rtt_ms = r.max(0);
+        }
+        let new = match status {
+            MemberStatus::Ready if waiting.is_some() && !near => m.status,
+            MemberStatus::Ready | MemberStatus::Buffering | MemberStatus::Waiting => status,
+            MemberStatus::Away => return Err(Error::Invalid("status")),
+        };
+        let mut out = vec![];
+        if new != m.status {
+            m.status = new;
+            m.away_since = None;
+            room.members_effect(&mut out);
+        }
+        self.settle(&mut out, now);
+        Ok(out)
+    }
+
+    /// Rules 3, 9: the 1 s tick. `alive` says whether a connection id is still open.
+    pub fn tick(&mut self, now: i64, alive: impl Fn(&str) -> bool) -> Vec<Effect> {
+        let room = &mut self.room;
+        let mut out = vec![];
+        let mut changed = false;
+        for m in &mut room.members {
+            if m.status != MemberStatus::Away && !alive(&m.connection_id) {
+                m.status = MemberStatus::Away;
+                m.away_since = Some(now);
+                changed = true;
+            }
+        }
+        let gone: Vec<Member> = room
+            .members
+            .iter()
+            .filter(|m| m.away_since.is_some_and(|s| now - s >= AWAY_GRACE_MS))
+            .cloned()
+            .collect();
+        room.members.retain(|m| !gone.contains(m));
+        room.prune_limits(now);
+        let host = room.hand_over();
+        if changed || !gone.is_empty() {
+            room.members_effect(&mut out);
+        }
+        for m in &gone {
+            room.sys(&mut out, "left", Some(&m.username), json!({}), now);
+        }
+        room.announce_host(&mut out, host, now);
+        if let Some(pb) = &mut self.playback
+            && pb.state == State::Waiting
+            && (room.all_ready()
+                || pb
+                    .phase
+                    .as_ref()
+                    .is_some_and(|p| now - p.since >= WAIT_TIMEOUT_MS))
+        {
+            pb.complete(room, &mut out, now);
+        }
+        if room.members.iter().any(|m| m.status != MemberStatus::Away) {
+            room.empty_since = None;
+        } else if now - *room.empty_since.get_or_insert(now) >= EMPTY_TTL_MS {
+            out.push(Effect::Closed {
+                reason: CloseReason::Expired,
+                to: vec![],
+            });
+        }
+        out
+    }
+
+    /// Removes every member of the user; the caller records the kick so the token stops working.
+    pub fn kick(&mut self, user_id: i32, by: &str, now: i64) -> Result<Vec<Effect>, Error> {
+        let room = &mut self.room;
+        if user_id == room.host_id {
+            return Err(Error::Invalid("host"));
+        }
+        let (gone, keep): (Vec<_>, Vec<_>) =
+            room.members.drain(..).partition(|m| m.user_id == user_id);
+        room.members = keep;
+        let first = gone.first().ok_or(Error::NotMember)?;
+        let username = first.username.clone();
+        room.prune_limits(now);
+        let mut out = vec![Effect::Closed {
+            reason: CloseReason::Kicked,
+            to: gone
+                .iter()
+                .map(|m| (m.user_id, m.connection_id.clone()))
+                .collect(),
+        }];
+        room.members_effect(&mut out);
+        room.sys(
+            &mut out,
+            "kicked",
+            Some(by),
+            json!({ "username": username }),
+            now,
+        );
+        self.settle(&mut out, now);
+        Ok(out)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1187,9 +1311,25 @@ mod tests {
         }
     }
 
+    fn started(now: i64) -> Live {
+        let mut l = Live::new("p".into(), Policy::Everyone, 1, None, now);
+        l.playback = Some(Playback::new(item(), 0.0, now));
+        l
+    }
+
+    impl Live {
+        fn pb(&self) -> &Playback {
+            self.playback.as_ref().unwrap()
+        }
+
+        fn pb_mut(&mut self) -> &mut Playback {
+            self.playback.as_mut().unwrap()
+        }
+    }
+
     /// Host 1 and member 2, both ready, party idle.
     fn party() -> Live {
-        let mut l = Live::new("p".into(), Policy::Everyone, 1, item(), 0.0, 0);
+        let mut l = started(0);
         l.join(1, "alice", "d1", "c1", 0);
         l.join(2, "bob", "d2", "c2", 0);
         l
@@ -1204,7 +1344,7 @@ mod tests {
                 position: None,
                 item: None,
                 item_title: None,
-                base_rev: l.rev,
+                base_rev: l.room.rev,
             },
             now,
         )
@@ -1229,17 +1369,22 @@ mod tests {
         let mut l = party();
         let out = play(&mut l, 2, "d2", 1000);
         assert_eq!(state_of(&out), Some((State::Waiting, None)));
-        assert!(l.members.iter().all(|m| m.status == MemberStatus::Waiting));
+        assert!(
+            l.room
+                .members
+                .iter()
+                .all(|m| m.status == MemberStatus::Waiting)
+        );
         assert!(
             ready(&mut l, 1, "d1", 0.0, 1100)
                 .iter()
                 .all(|e| state_of(std::slice::from_ref(e)).is_none())
         );
-        l.members[1].rtt_ms = 400;
+        l.room.members[1].rtt_ms = 400;
         let out = ready(&mut l, 2, "d2", 0.5, 1200);
         assert_eq!(state_of(&out), Some((State::Playing, Some(2000))));
         assert_eq!(
-            l.anchor,
+            l.pb().anchor,
             Anchor {
                 position: 0.0,
                 server_time_ms: 2000
@@ -1254,17 +1399,17 @@ mod tests {
         play(&mut l, 1, "d1", 0);
         ready(&mut l, 1, "d1", 0.0, 10);
         ready(&mut l, 2, "d2", 30.0, 20);
-        assert_eq!(l.members[1].status, MemberStatus::Waiting);
+        assert_eq!(l.room.members[1].status, MemberStatus::Waiting);
         assert!(state_of(&l.tick(9_999, |_| true)).is_none());
         let out = l.tick(10_000, |_| true);
         assert_eq!(state_of(&out), Some((State::Playing, Some(10_500))));
-        assert_eq!(l.members[1].status, MemberStatus::Waiting);
+        assert_eq!(l.room.members[1].status, MemberStatus::Waiting);
     }
 
     #[test]
     fn seek_while_paused_ends_paused_and_while_playing_ends_playing() {
         let mut l = party();
-        l.state = State::Paused;
+        l.pb_mut().state = State::Paused;
         l.intent(
             1,
             "d1",
@@ -1273,7 +1418,7 @@ mod tests {
                 position: Some(50.0),
                 item: None,
                 item_title: None,
-                base_rev: l.rev,
+                base_rev: l.room.rev,
             },
             0,
         )
@@ -1284,7 +1429,7 @@ mod tests {
         play(&mut l, 1, "d1", 3);
         ready(&mut l, 1, "d1", 50.0, 4);
         ready(&mut l, 2, "d2", 50.0, 5);
-        assert_eq!(l.state, State::Playing);
+        assert_eq!(l.pb().state, State::Playing);
         l.intent(
             2,
             "d2",
@@ -1293,7 +1438,7 @@ mod tests {
                 position: Some(80.0),
                 item: None,
                 item_title: None,
-                base_rev: l.rev,
+                base_rev: l.room.rev,
             },
             6000,
         )
@@ -1326,8 +1471,8 @@ mod tests {
         play(&mut l, 1, "d1", 8);
         ready(&mut l, 1, "d1", 0.0, 9);
         ready(&mut l, 2, "d2", 0.0, 10);
-        assert_eq!(l.state, State::Playing);
-        let start = l.anchor.server_time_ms;
+        assert_eq!(l.pb().state, State::Playing);
+        let start = l.pb().anchor.server_time_ms;
         let out = l
             .intent(
                 1,
@@ -1344,7 +1489,7 @@ mod tests {
             .unwrap()
             .1;
         assert_eq!(state_of(&out), Some((State::Paused, None)));
-        assert_eq!(l.anchor.position, 4.0);
+        assert_eq!(l.pb().anchor.position, 4.0);
     }
 
     #[test]
@@ -1353,47 +1498,69 @@ mod tests {
         play(&mut l, 1, "d1", 0);
         ready(&mut l, 1, "d1", 0.0, 1);
         ready(&mut l, 2, "d2", 0.0, 2);
-        let rev = l.rev;
+        let rev = l.room.rev;
         l.status(2, "d2", MemberStatus::Buffering, 3.0, None, 3000)
             .unwrap();
-        assert_eq!(l.state, State::Playing);
-        assert_eq!(l.members[1].status, MemberStatus::Buffering);
-        assert!(l.rev > rev);
+        assert_eq!(l.pb().state, State::Playing);
+        assert_eq!(l.room.members[1].status, MemberStatus::Buffering);
+        assert!(l.room.rev > rev);
         let out = l.join(3, "carol", "d3", "c3", 4000);
         assert!(state_of(&out).is_none());
-        assert_eq!(l.state, State::Playing);
-        assert_eq!(l.members[2].status, MemberStatus::Ready);
+        assert_eq!(l.pb().state, State::Playing);
+        assert_eq!(l.room.members[2].status, MemberStatus::Ready);
     }
 
     #[test]
     fn lobby_members_start_waiting_and_toggle_ready() {
-        let mut l = Live::new("p".into(), Policy::Everyone, 1, item(), 0.0, 0);
-        l.lobby = true;
+        let mut l = Live::new("p".into(), Policy::Everyone, 1, Some(item()), 0);
         l.join(2, "bob", "d2", "c2", 0);
-        assert_eq!(l.members[0].status, MemberStatus::Waiting);
+        assert_eq!(l.room.members[0].status, MemberStatus::Waiting);
         let out = ready(&mut l, 2, "d2", 0.0, 1);
         assert!(out.iter().any(|e| matches!(e, Effect::Members { .. })));
-        assert_eq!(l.members[0].status, MemberStatus::Ready);
+        assert_eq!(l.room.members[0].status, MemberStatus::Ready);
         l.status(2, "d2", MemberStatus::Waiting, 0.0, None, 2)
             .unwrap();
-        assert_eq!(l.members[0].status, MemberStatus::Waiting);
-        assert_eq!(l.state, State::Idle);
-        let out = l.go_live(3);
-        assert!(!l.lobby);
+        assert_eq!(l.room.members[0].status, MemberStatus::Waiting);
+        assert!(l.playback.is_none());
+        let out = l.go_live(3).unwrap();
         assert!(out.iter().any(|e| matches!(e, Effect::State { .. })));
-        assert_eq!(l.state, State::Idle);
+        assert_eq!(l.pb().state, State::Idle);
+        assert_eq!(l.pb().item, item());
+        assert_eq!(l.room.selection, None);
+    }
+
+    #[test]
+    fn a_room_without_playback_refuses_playback_intents_and_the_start_needs_a_selection() {
+        let mut l = Live::new("p".into(), Policy::Everyone, 1, None, 0);
+        l.join(1, "alice", "d1", "c1", 0);
+        let intent = Intent {
+            action: Action::Play,
+            position: None,
+            item: None,
+            item_title: None,
+            base_rev: 0,
+        };
+        assert_eq!(l.intent(1, "d1", intent, 1).err(), Some(Error::NotStarted));
+        assert_eq!(l.go_live(2).err(), Some(Error::NoItem));
+        assert!(l.playback.is_none());
+        let out = l.room.select(Some(item()));
+        assert!(matches!(
+            &out[..],
+            [Effect::Selection { item: Some(_), .. }]
+        ));
+        l.go_live(3).unwrap();
+        assert_eq!(l.pb().state, State::Waiting);
     }
 
     #[test]
     fn go_live_with_the_host_in_plays_once_everyone_is_ready() {
-        let mut l = Live::new("p".into(), Policy::Everyone, 1, item(), 0.0, 0);
-        l.lobby = true;
+        let mut l = Live::new("p".into(), Policy::Everyone, 1, Some(item()), 0);
         l.join(1, "alice", "d1", "c1", 0);
         l.join(2, "bob", "d2", "c2", 0);
-        l.go_live(1);
-        assert_eq!(l.state, State::Waiting);
+        l.go_live(1).unwrap();
+        assert_eq!(l.pb().state, State::Waiting);
         ready(&mut l, 1, "d1", 0.0, 2);
-        assert_eq!(l.state, State::Waiting);
+        assert_eq!(l.pb().state, State::Waiting);
         let out = ready(&mut l, 2, "d2", 0.0, 3);
         assert_eq!(state_of(&out).map(|s| s.0), Some(State::Playing));
     }
@@ -1401,7 +1568,7 @@ mod tests {
     #[test]
     fn host_only_blocks_non_host_moves_but_not_status() {
         let mut l = party();
-        l.policy = Policy::HostOnly;
+        l.room.policy = Policy::HostOnly;
         for a in [Action::Play, Action::Pause, Action::Seek, Action::SetItem] {
             let r = l.intent(
                 2,
@@ -1411,7 +1578,7 @@ mod tests {
                     position: Some(1.0),
                     item: Some(item()),
                     item_title: None,
-                    base_rev: l.rev,
+                    base_rev: l.room.rev,
                 },
                 0,
             );
@@ -1426,7 +1593,7 @@ mod tests {
                     position: None,
                     item: None,
                     item_title: None,
-                    base_rev: l.rev
+                    base_rev: l.room.rev
                 },
                 0
             )
@@ -1437,9 +1604,9 @@ mod tests {
     #[test]
     fn a_stale_seek_or_set_item_is_refused_but_play_pause_apply() {
         let mut l = party();
-        let old = l.rev;
+        let old = l.room.rev;
         play(&mut l, 1, "d1", 0);
-        assert!(l.rev > old);
+        assert!(l.room.rev > old);
         let r = l.intent(
             2,
             "d2",
@@ -1501,8 +1668,8 @@ mod tests {
     #[test]
     fn set_item_resets_the_position_and_ended_goes_idle_for_the_host_only() {
         let mut l = party();
-        l.state = State::Paused;
-        l.anchor.position = 42.0;
+        l.pb_mut().state = State::Paused;
+        l.pb_mut().anchor.position = 42.0;
         let next = Item {
             media_id: 1,
             media_file_id: None,
@@ -1517,20 +1684,20 @@ mod tests {
                     position: None,
                     item: Some(next.clone()),
                     item_title: None,
-                    base_rev: l.rev,
+                    base_rev: l.room.rev,
                 },
                 0,
             )
             .unwrap()
             .1;
-        assert_eq!(l.item, next);
-        assert_eq!(l.anchor.position, 0.0);
+        assert_eq!(l.pb().item, next);
+        assert_eq!(l.pb().anchor.position, 0.0);
         assert!(
             out.iter()
                 .any(|e| matches!(e, Effect::Persist { position, .. } if *position == 0.0))
         );
-        l.state = State::Playing;
-        let before = l.rev;
+        l.pb_mut().state = State::Playing;
+        let before = l.room.rev;
         assert!(
             l.intent(
                 2,
@@ -1548,7 +1715,7 @@ mod tests {
             .1
             .is_empty()
         );
-        assert_eq!(l.rev, before);
+        assert_eq!(l.room.rev, before);
         let out = l
             .intent(
                 1,
@@ -1565,7 +1732,7 @@ mod tests {
             .unwrap()
             .1;
         assert_eq!(state_of(&out), Some((State::Idle, None)));
-        assert_eq!(l.item, next);
+        assert_eq!(l.pb().item, next);
     }
 
     #[test]
@@ -1573,15 +1740,16 @@ mod tests {
         let mut l = party();
         l.join(3, "carol", "d3", "c3", 0);
         l.leave(1, "d1", 10).unwrap();
-        assert_eq!(l.host_id, 2);
+        assert_eq!(l.room.host_id, 2);
         assert!(
-            l.chat
+            l.room
+                .chat
                 .iter()
                 .any(|m| m.system.as_ref().is_some_and(|s| s.kind == "host_changed"))
         );
         l.join(2, "bob", "d2b", "c2b", 11);
         l.leave(2, "d2", 12).unwrap();
-        assert_eq!(l.host_id, 2);
+        assert_eq!(l.room.host_id, 2);
     }
 
     #[test]
@@ -1589,12 +1757,12 @@ mod tests {
         let mut l = party();
         let out = l.tick(1000, |c| c != "c1");
         assert!(out.iter().any(|e| matches!(e, Effect::Members { .. })));
-        assert_eq!(l.members[0].status, MemberStatus::Away);
+        assert_eq!(l.room.members[0].status, MemberStatus::Away);
         l.tick(1000 + AWAY_GRACE_MS - 1, |c| c != "c1");
-        assert_eq!(l.members.len(), 2);
+        assert_eq!(l.room.members.len(), 2);
         l.tick(1000 + AWAY_GRACE_MS, |c| c != "c1");
-        assert_eq!(l.members.len(), 1);
-        assert_eq!(l.host_id, 2);
+        assert_eq!(l.room.members.len(), 1);
+        assert_eq!(l.room.host_id, 2);
     }
 
     #[test]
@@ -1605,9 +1773,9 @@ mod tests {
         let out = ready(&mut l, 1, "d1", 0.0, 2);
         assert_eq!(state_of(&out).map(|s| s.0), Some(State::Playing));
         l.join(2, "bob", "d2", "c2x", 3);
-        assert_eq!(l.members[1].status, MemberStatus::Ready);
-        assert_eq!(l.members[1].connection_id, "c2x");
-        assert_eq!(l.members.len(), 2);
+        assert_eq!(l.room.members[1].status, MemberStatus::Ready);
+        assert_eq!(l.room.members[1].connection_id, "c2x");
+        assert_eq!(l.room.members.len(), 2);
     }
 
     #[test]
@@ -1633,7 +1801,7 @@ mod tests {
         assert!(expired(&l.tick(EMPTY_TTL_MS, |_| false)));
         let mut b = Live::boot("p".into(), Policy::Everyone, 1, item(), 12.0, 0);
         assert_eq!(
-            (b.state, b.anchor.position, b.members.len()),
+            (b.pb().state, b.pb().anchor.position, b.room.members.len()),
             (State::Paused, 12.0, 0)
         );
         assert!(!expired(&b.tick(EMPTY_TTL_MS - 1, |_| true)));
@@ -1648,7 +1816,7 @@ mod tests {
         assert!(
             matches!(&out[0], Effect::Closed { reason: CloseReason::Kicked, to } if to.len() == 2)
         );
-        assert!(!l.has_user(2));
+        assert!(!l.room.has_user(2));
         assert_eq!(l.kick(1, "alice", 6).unwrap_err(), Error::Invalid("host"));
     }
 
@@ -1656,38 +1824,41 @@ mod tests {
     fn chat_and_reactions_are_rate_limited_per_member() {
         let mut l = party();
         for i in 0..5 {
-            l.post_message(1, "d1", "hi", i).unwrap();
+            l.room.post_message(1, "d1", "hi", i).unwrap();
         }
         assert_eq!(
-            l.post_message(1, "d1", "hi", 5).unwrap_err(),
+            l.room.post_message(1, "d1", "hi", 5).unwrap_err(),
             Error::RateLimited
         );
-        assert!(l.post_message(2, "d2", "hi", 5).is_ok());
-        assert!(l.post_message(1, "d1", "hi", RATE_WINDOW_MS).is_ok());
+        assert!(l.room.post_message(2, "d2", "hi", 5).is_ok());
+        assert!(l.room.post_message(1, "d1", "hi", RATE_WINDOW_MS).is_ok());
         for i in 0..10 {
-            l.react(1, "d1", "🔥", i).unwrap();
+            l.room.react(1, "d1", "🔥", i).unwrap();
         }
-        assert_eq!(l.react(1, "d1", "🔥", 10).unwrap_err(), Error::RateLimited);
+        assert_eq!(
+            l.room.react(1, "d1", "🔥", 10).unwrap_err(),
+            Error::RateLimited
+        );
     }
 
     fn voice(l: &mut Live, user: i32, dev: &str, joined: bool) -> Result<Vec<Effect>, Error> {
-        l.set_voice(user, dev, joined, false, 0)
+        l.room.set_voice(user, dev, joined, false, 0)
     }
 
     #[test]
     fn voice_join_and_leave_bump_rev_and_write_a_system_message() {
         let mut l = party();
-        let rev = l.rev;
+        let rev = l.room.rev;
         let out = voice(&mut l, 2, "d2", true).unwrap();
-        assert_eq!(l.rev, rev + 1);
-        assert_eq!(l.members[1].voice, Some(Voice { muted: false }));
+        assert_eq!(l.room.rev, rev + 1);
+        assert_eq!(l.room.members[1].voice, Some(Voice { muted: false }));
         assert!(out.iter().any(|e| matches!(e, Effect::Message(m)
             if m.system.as_ref().is_some_and(|s| s.kind == "voice_joined"))));
-        let out = l.set_voice(2, "d2", true, true, 1).unwrap();
-        assert_eq!(l.members[1].voice, Some(Voice { muted: true }));
+        let out = l.room.set_voice(2, "d2", true, true, 1).unwrap();
+        assert_eq!(l.room.members[1].voice, Some(Voice { muted: true }));
         assert!(!out.iter().any(|e| matches!(e, Effect::Message(_))));
         let out = voice(&mut l, 2, "d2", false).unwrap();
-        assert_eq!(l.members[1].voice, None);
+        assert_eq!(l.room.members[1].voice, None);
         assert!(out.iter().any(|e| matches!(e, Effect::Message(m)
             if m.system.as_ref().is_some_and(|s| s.kind == "voice_left"))));
         assert_eq!(voice(&mut l, 3, "d3", true), Err(Error::NotMember));
@@ -1695,7 +1866,7 @@ mod tests {
 
     #[test]
     fn the_ninth_voice_member_is_refused_but_a_mute_change_is_not() {
-        let mut l = Live::new("p".into(), Policy::Everyone, 1, item(), 0.0, 0);
+        let mut l = started(0);
         for i in 0..=VOICE_MAX as i32 {
             l.join(i, "u", "d", &format!("c{i}"), 0);
         }
@@ -1706,7 +1877,7 @@ mod tests {
             voice(&mut l, VOICE_MAX as i32, "d", true),
             Err(Error::VoiceFull)
         );
-        l.set_voice(0, "d", true, true, 0).unwrap();
+        l.room.set_voice(0, "d", true, true, 0).unwrap();
         voice(&mut l, 0, "d", false).unwrap();
         voice(&mut l, VOICE_MAX as i32, "d", true).unwrap();
     }
@@ -1717,68 +1888,80 @@ mod tests {
         voice(&mut l, 1, "d1", true).unwrap();
         voice(&mut l, 2, "d2", true).unwrap();
         l.tick(1, |c| c != "c2");
-        assert_eq!(l.members[1].status, MemberStatus::Away);
-        assert!(l.members[1].voice.is_some());
+        assert_eq!(l.room.members[1].status, MemberStatus::Away);
+        assert!(l.room.members[1].voice.is_some());
         l.join(2, "bob", "d2", "c2b", 2);
-        assert!(l.members[1].voice.is_some());
+        assert!(l.room.members[1].voice.is_some());
         l.kick(2, "alice", 3).unwrap();
         l.join(2, "bob", "d2", "c2", 4);
-        assert_eq!(l.members[1].voice, None);
+        assert_eq!(l.room.members[1].voice, None);
         voice(&mut l, 2, "d2", true).unwrap();
         l.leave(2, "d2", 5).unwrap();
         l.join(2, "bob", "d2", "c2", 6);
-        assert_eq!(l.members[1].voice, None);
+        assert_eq!(l.room.members[1].voice, None);
         voice(&mut l, 2, "d2", true).unwrap();
         l.tick(7, |c| c != "c2");
         l.tick(7 + AWAY_GRACE_MS, |c| c != "c2");
-        assert_eq!(l.members.len(), 1);
+        assert_eq!(l.room.members.len(), 1);
     }
 
     #[test]
     fn signals_need_voice_on_both_sides_and_are_rate_limited() {
         let mut l = party();
         assert_eq!(
-            l.signal_target(1, "d1", "d2", 0),
+            l.room.signal_target(1, "d1", "d2", 0),
             Err(Error::VoiceNotJoined)
         );
         voice(&mut l, 1, "d1", true).unwrap();
         assert_eq!(
-            l.signal_target(1, "d1", "d2", 0),
+            l.room.signal_target(1, "d1", "d2", 0),
             Err(Error::VoiceNotJoined)
         );
         voice(&mut l, 2, "d2", true).unwrap();
-        assert_eq!(l.signal_target(1, "d1", "d2", 0), Ok((2, "c2".into())));
+        assert_eq!(l.room.signal_target(1, "d1", "d2", 0), Ok((2, "c2".into())));
         assert_eq!(
-            l.signal_target(1, "d1", "nope", 0),
+            l.room.signal_target(1, "d1", "nope", 0),
             Err(Error::VoiceNotJoined)
         );
-        let rev = l.rev;
+        let rev = l.room.rev;
         for _ in 1..MAX_SIGNALS {
-            l.signal_target(1, "d1", "d2", 1).unwrap();
+            l.room.signal_target(1, "d1", "d2", 1).unwrap();
         }
-        assert_eq!(l.signal_target(1, "d1", "d2", 2), Err(Error::RateLimited));
-        assert!(l.signal_target(1, "d1", "d2", RATE_WINDOW_MS + 1).is_ok());
-        assert_eq!(l.rev, rev);
+        assert_eq!(
+            l.room.signal_target(1, "d1", "d2", 2),
+            Err(Error::RateLimited)
+        );
+        assert!(
+            l.room
+                .signal_target(1, "d1", "d2", RATE_WINDOW_MS + 1)
+                .is_ok()
+        );
+        assert_eq!(l.room.rev, rev);
     }
 
     #[test]
     fn every_mutation_bumps_rev_and_chat_is_a_ring() {
         let mut l = party();
-        let r = l.rev;
-        l.set_settings(Some("n".into()), Some(Policy::HostOnly), None, None, None);
-        assert_eq!(l.rev, r + 1);
+        let r = l.room.rev;
+        l.room
+            .set_settings(Some("n".into()), Some(Policy::HostOnly), None, None, None);
+        assert_eq!(l.room.rev, r + 1);
         for i in 0..250 {
-            l.post_message(1, "d1", "m", i * RATE_WINDOW_MS).unwrap();
+            l.room
+                .post_message(1, "d1", "m", i * RATE_WINDOW_MS)
+                .unwrap();
         }
-        assert_eq!(l.chat.len(), CHAT_CAP);
-        assert_eq!(l.recent_messages().len(), SNAPSHOT_MESSAGES);
+        assert_eq!(l.room.chat.len(), CHAT_CAP);
+        assert_eq!(l.room.recent_messages().len(), SNAPSHOT_MESSAGES);
     }
 
     #[test]
     fn switched_off_chat_and_reactions_refuse_but_system_messages_flow() {
         let mut l = party();
-        let r = l.rev;
-        let e = l.set_settings(None, None, Some(false), Some(false), Some(false));
+        let r = l.room.rev;
+        let e = l
+            .room
+            .set_settings(None, None, Some(false), Some(false), Some(false));
         assert!(matches!(
             e[0],
             Effect::Settings {
@@ -1788,14 +1971,18 @@ mod tests {
                 ..
             }
         ));
-        assert_eq!(l.rev, r + 1);
-        assert_eq!(l.react(1, "d1", "x", 0), Err(Error::ReactionsOff));
-        assert_eq!(l.post_message(1, "d1", "m", 0).unwrap_err(), Error::ChatOff);
+        assert_eq!(l.room.rev, r + 1);
+        assert_eq!(l.room.react(1, "d1", "x", 0), Err(Error::ReactionsOff));
+        assert_eq!(
+            l.room.post_message(1, "d1", "m", 0).unwrap_err(),
+            Error::ChatOff
+        );
         let left = l.leave(2, "d2", 1).unwrap();
         assert!(left.iter().any(|e| matches!(e, Effect::Message(_))));
-        l.set_settings(None, None, Some(true), Some(true), Some(true));
-        assert!(l.react(1, "d1", "x", 0).is_ok());
-        assert!(l.post_message(1, "d1", "m", 0).is_ok());
+        l.room
+            .set_settings(None, None, Some(true), Some(true), Some(true));
+        assert!(l.room.react(1, "d1", "x", 0).is_ok());
+        assert!(l.room.post_message(1, "d1", "m", 0).is_ok());
     }
 
     fn row(media: i32, episode: Option<i32>) -> Item {
@@ -1837,7 +2024,7 @@ mod tests {
                     position: None,
                     item: Some(row(2, Some(3))),
                     item_title: Some("Show S01E03".into()),
-                    base_rev: l.rev,
+                    base_rev: l.room.rev,
                 },
                 0,
             )
@@ -1865,57 +2052,60 @@ mod tests {
     #[test]
     fn the_end_of_the_queue_idles_the_party_once() {
         let mut l = party();
-        l.state = State::Playing;
-        let rev = l.rev;
+        l.pb_mut().state = State::Playing;
+        let rev = l.room.rev;
         let out = l
             .advance(1, "d1", rev, step(true, &["Show S01E02"], None), 5)
             .unwrap()
             .1;
-        assert_eq!(l.state, State::Idle);
+        assert_eq!(l.pb().state, State::Idle);
         assert_eq!(state_of(&out).unwrap().0, State::Idle);
         assert_eq!(kinds(&out), ["item_skipped", "queue_ended"]);
-        let (rev, chat) = (l.rev, l.chat.len());
+        let (rev, chat) = (l.room.rev, l.room.chat.len());
         let out = l
             .advance(1, "d1", rev, step(true, &["Show S01E02"], None), 6)
             .unwrap()
             .1;
         assert!(out.is_empty());
-        assert_eq!((l.rev, l.chat.len()), (rev, chat));
+        assert_eq!((l.room.rev, l.room.chat.len()), (rev, chat));
     }
 
     #[test]
     fn a_backward_step_with_nothing_found_changes_nothing() {
         let mut l = party();
-        l.state = State::Playing;
-        let (rev, chat) = (l.rev, l.chat.len());
+        l.pb_mut().state = State::Playing;
+        let (rev, chat) = (l.room.rev, l.room.chat.len());
         let out = l
             .advance(1, "d1", rev, step(false, &["Gap"], None), 5)
             .unwrap()
             .1;
         assert!(out.is_empty());
-        assert_eq!((l.state, l.rev, l.chat.len()), (State::Playing, rev, chat));
+        assert_eq!(
+            (l.pb().state, l.room.rev, l.room.chat.len()),
+            (State::Playing, rev, chat)
+        );
     }
 
     #[test]
     fn an_advance_skips_then_switches_and_a_refused_one_leaves_no_message() {
         let mut l = party();
-        let rev = l.rev;
+        let rev = l.room.rev;
         let next = || step(true, &["Gap"], Some((row(3, None), "Film")));
         let out = l.advance(1, "d1", rev, next(), 0).unwrap().1;
         assert_eq!(kinds(&out), ["item_skipped", "item_changed"]);
-        assert_eq!(l.item, row(3, None));
-        let chat = l.chat.len();
+        assert_eq!(l.pb().item, row(3, None));
+        let chat = l.room.chat.len();
         assert_eq!(
             l.advance(1, "d1", rev, next(), 0).unwrap_err(),
             Error::Stale
         );
-        l.policy = Policy::HostOnly;
+        l.room.policy = Policy::HostOnly;
         assert_eq!(
-            l.advance(2, "d2", l.rev, step(true, &[], None), 0)
+            l.advance(2, "d2", l.room.rev, step(true, &[], None), 0)
                 .unwrap_err(),
             Error::HostOnly
         );
-        assert_eq!(l.chat.len(), chat);
+        assert_eq!(l.room.chat.len(), chat);
     }
 
     fn ended(l: &mut Live, user: i32, dev: &str, item: Option<Item>) -> Vec<Effect> {
@@ -1938,28 +2128,28 @@ mod tests {
     #[test]
     fn an_ended_counts_only_for_the_current_item_while_playing_or_paused() {
         let mut l = party();
-        l.state = State::Playing;
+        l.pb_mut().state = State::Playing;
         assert!(ended(&mut l, 1, "d1", Some(row(9, None))).is_empty());
-        assert_eq!(l.state, State::Playing);
+        assert_eq!(l.pb().state, State::Playing);
         assert_eq!(
             state_of(&ended(&mut l, 1, "d1", Some(item()))).unwrap().0,
             State::Idle
         );
         // A second device's `ended` for the same item finds the party idle.
         assert!(ended(&mut l, 1, "d1", Some(item())).is_empty());
-        l.state = State::Waiting;
+        l.pb_mut().state = State::Waiting;
         assert!(ended(&mut l, 1, "d1", None).is_empty());
     }
 
     #[test]
     fn a_member_ends_the_item_only_while_the_host_is_away_and_names_it() {
         let mut l = party();
-        l.state = State::Playing;
+        l.pb_mut().state = State::Playing;
         assert!(ended(&mut l, 2, "d2", Some(item())).is_empty());
         l.tick(0, |c| c != "c1");
         assert!(ended(&mut l, 2, "d2", None).is_empty());
         assert!(ended(&mut l, 2, "d2", Some(row(9, None))).is_empty());
-        assert_eq!(l.state, State::Playing);
+        assert_eq!(l.pb().state, State::Playing);
         assert_eq!(
             state_of(&ended(&mut l, 2, "d2", Some(item()))).unwrap().0,
             State::Idle
@@ -1969,20 +2159,23 @@ mod tests {
     #[test]
     fn an_ended_advance_is_dropped_when_the_item_moved_on() {
         let mut l = party();
-        l.state = State::Playing;
+        l.pb_mut().state = State::Playing;
         let to = || step(true, &[], Some((row(3, None), "Film")));
         let out = l
             .advance_after_ended(1, "d1", None, &row(8, None), to(), 5)
             .unwrap()
             .1;
         assert!(out.is_empty());
-        assert_eq!((l.state, l.item.clone()), (State::Playing, item()));
+        assert_eq!(
+            (l.pb().state, l.pb().item.clone()),
+            (State::Playing, item())
+        );
         let out = l
             .advance_after_ended(1, "d1", Some(&item()), &item(), to(), 5)
             .unwrap()
             .1;
         assert_eq!(kinds(&out), ["item_changed"]);
-        assert_eq!(l.item, row(3, None));
+        assert_eq!(l.pb().item, row(3, None));
         let out = l
             .advance_after_ended(1, "d1", Some(&item()), &item(), step(true, &[], None), 6)
             .unwrap()
@@ -1993,7 +2186,7 @@ mod tests {
     #[test]
     fn the_end_of_the_queue_after_an_ended_says_so_once() {
         let mut l = party();
-        l.state = State::Playing;
+        l.pb_mut().state = State::Playing;
         let out = l
             .advance_after_ended(1, "d1", Some(&item()), &item(), step(true, &[], None), 5)
             .unwrap()
@@ -2012,20 +2205,20 @@ mod tests {
             })
         };
         let out = l.leave(1, "d1", 5).unwrap();
-        assert_eq!((l.host_id, host_of(&out)), (2, Some(2)));
+        assert_eq!((l.room.host_id, host_of(&out)), (2, Some(2)));
         let mut l = party();
         l.tick(0, |c| c != "c1");
         let out = l.tick(AWAY_GRACE_MS, |c| c != "c1");
-        assert_eq!((l.host_id, host_of(&out)), (2, Some(2)));
+        assert_eq!((l.room.host_id, host_of(&out)), (2, Some(2)));
     }
 
     #[test]
     fn rev_and_message_ids_start_past_what_an_older_machine_issued() {
-        let old = Live::new("p".into(), Policy::Everyone, 1, item(), 0.0, 1_000);
-        let mut new = Live::new("p".into(), Policy::Everyone, 1, item(), 0.0, 5_000);
-        assert!(new.rev > old.rev + 1_000);
+        let old = started(1_000);
+        let mut new = started(5_000);
+        assert!(new.room.rev > old.room.rev + 1_000);
         new.join(1, "alice", "d1", "c1", 5_000);
-        assert!(new.chat[0].id >= 5_000);
+        assert!(new.room.chat[0].id >= 5_000);
     }
 
     #[test]
@@ -2043,11 +2236,11 @@ mod tests {
     #[test]
     fn a_left_member_keeps_a_running_rate_window_and_drops_a_finished_one() {
         let mut l = party();
-        l.post_message(2, "d2", "m", 0).unwrap();
+        l.room.post_message(2, "d2", "m", 0).unwrap();
         l.leave(2, "d2", 1).unwrap();
-        assert_eq!(l.limits.len(), 1);
+        assert_eq!(l.room.limits.len(), 1);
         l.leave(1, "d1", RATE_WINDOW_MS + 1).unwrap();
-        assert!(l.limits.is_empty());
+        assert!(l.room.limits.is_empty());
     }
 
     fn kinds(out: &[Effect]) -> Vec<String> {

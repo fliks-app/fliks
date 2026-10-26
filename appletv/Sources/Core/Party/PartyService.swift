@@ -7,7 +7,10 @@ import Foundation
     static let shared = PartyService()
 
     private(set) var party: Party?
+    /// What plays: nil in the lobby, before the host starts.
     private(set) var live: PartyLiveState?
+    /// In the party's room, whether or not a film plays yet.
+    private(set) var joined = false
     private(set) var members: [PartyMember] = []
     private(set) var messages: [PartyMessage] = []
     private(set) var bubbles: [PartyMessage] = []
@@ -60,8 +63,8 @@ import Foundation
     }
 
     var deviceId: String { DeviceId.current + "#party" }
-    var active: Bool { party != nil && live != nil }
-    var lobby: Bool { party?.status == "scheduled" && live != nil }
+    var active: Bool { party != nil && joined }
+    var lobby: Bool { party?.status == "scheduled" && joined }
     var me: PartyMember? {
         let uid = AuthService.shared.currentUser?.id
         return members.first { $0.userId == uid && $0.deviceId == deviceId }
@@ -114,7 +117,7 @@ import Foundation
                 return
             }
             adopt(dto)
-            if dto.status == "live" { await openPlayer(dto.item) } else { onOpenLobby?(id) }
+            if dto.status == "live", let item = dto.item { await openPlayer(item) } else { onOpenLobby?(id) }
         } catch {
             show(describe(error))
             if party == nil { stream.stop() }
@@ -126,7 +129,7 @@ import Foundation
         do {
             let dto: Party = try await APIClient.shared.post("/api/parties/\(id)/start")
             applySnapshot(dto)
-            await openPlayer(dto.item)
+            if let item = dto.item { await openPlayer(item) }
         } catch {
             show(describe(error))
         }
@@ -331,6 +334,7 @@ import Foundation
         leaveConfirm = false
         lastRev = 0
         queuedFor = nil
+        joined = false
     }
 
     func applySnapshot(_ dto: Party) {
@@ -339,9 +343,11 @@ import Foundation
         // A snapshot older than what events already applied would roll the party back.
         guard snap.rev >= lastRev else { return }
         lastRev = snap.rev
+        joined = true
         members = snap.members
         if messages.isEmpty { messages = snap.messages }
-        setLive(PartyLiveState(rev: snap.rev, state: snap.state, item: dto.item, anchor: snap.anchor, whenMs: nil))
+        guard let playback = snap.playback, let item = dto.item else { live = nil; return }
+        setLive(PartyLiveState(rev: snap.rev, state: playback.state, item: item, anchor: playback.anchor, whenMs: nil))
     }
 
     private func setLive(_ state: PartyLiveState) {
@@ -372,7 +378,7 @@ import Foundation
         let wasLobby = lobby
         guard let dto: Party = try? await APIClient.shared.get("/api/parties/\(id)") else { return }
         applySnapshot(dto)
-        if wasLobby, dto.status == "live" { await openPlayer(dto.item) }
+        if wasLobby, dto.status == "live", let item = dto.item { await openPlayer(item) }
     }
 
     /// After a dropped stream the server marked us away: a fresh join rebinds the connection.
@@ -446,6 +452,9 @@ import Foundation
             if lobby { Task { await refetch() } }
             guard acceptRev(e.rev) else { return }
             setLive(PartyLiveState(rev: e.rev, state: e.state, item: e.item, anchor: e.anchor, whenMs: e.whenMs))
+        case let .selection(partyId, rev, item):
+            guard partyId == party?.id, acceptRev(rev) else { return }
+            party?.item = item
         case let .members(partyId, rev, list):
             guard partyId == party?.id, acceptRev(rev) else { return }
             members = list

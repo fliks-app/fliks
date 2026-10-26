@@ -16,7 +16,9 @@
       @if (h.playlist; as pl) {
         <p class="text-base-content/60 mt-0.5 lg:mt-1">{{ 'party.playlist_label' | translate: { name: pl.name } }}</p>
       }
-      @if (h.name !== h.item.title || episode()) {
+      @if (!h.item) {
+        <p class="text-base-content/70 mt-0.5 lg:mt-1 lg:text-lg">{{ 'party.no_item' | translate }}</p>
+      } @else if (h.name !== h.item.title || episode()) {
         <p class="text-base-content/70 mt-0.5 lg:mt-1 lg:text-lg">
           @if (h.name !== h.item.title) { {{ h.item.title }} }
           @if (h.name !== h.item.title && episode()) { · }
@@ -59,7 +61,7 @@
         } @else if (phase() === 'lobby') {
           @if (joined()) {
             @if (party.isHost()) {
-              <button type="button" class="btn btn-primary gap-2" [class.flex-1]="!desktopLayout()" autofocus (click)="start()">
+              <button type="button" class="btn btn-primary gap-2" [class.flex-1]="!desktopLayout()" autofocus [disabled]="!h.item" (click)="start()">
                 <svg lucidePlay class="h-5 w-5" fill="currentColor"></svg>
                 {{ 'party.start' | translate }}
               </button>
@@ -131,10 +133,10 @@
         [style.padding-top]="!navbar.isHeroPage() || navbar.effectiveSidebarPinned() || tv.isTv() ? null : navbar.mobileNavbarVisible() ? 'calc(env(safe-area-inset-top, 0px) + 3rem)' : null"
       >
         <div class="shrink-0 rounded-xl overflow-hidden w-[140px] lg:w-[200px] xl:w-[220px] 2xl:w-[280px]">
-          @if (h.item.posterUrl) {
+          @if (h.item?.posterUrl; as poster) {
             <img
-              [src]="h.item.posterUrl | resolveUrl: 'medium'"
-              [alt]="h.item.title"
+              [src]="poster | resolveUrl: 'medium'"
+              [alt]="h.item?.title"
               loading="eager"
               fetchpriority="high"
               decoding="async"

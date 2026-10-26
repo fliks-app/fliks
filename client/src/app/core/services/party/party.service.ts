@@ -95,7 +95,10 @@ export class PartyService {
   private readonly injector = inject(Injector);
 
   readonly party = signal<PartyDto | null>(null);
+  /** What plays: null in the lobby, before the host starts. */
   readonly live = signal<PartyLiveState | null>(null);
+  /** In the party's room, whether or not a film plays yet. */
+  private readonly joined = signal(false);
   readonly members = signal<PartyMember[]>([]);
   readonly messages = signal<PartyMessage[]>([]);
   readonly unread = signal(0);
@@ -110,9 +113,9 @@ export class PartyService {
   /** Set to open the create dialog mounted in the layout. */
   readonly createRequest = signal<PartyCreateTarget | null>(null);
   /** Joined to the lobby of a scheduled party (no player yet). */
-  readonly lobby = computed(() => this.party()?.status === 'scheduled' && this.live() !== null);
+  readonly lobby = computed(() => this.party()?.status === 'scheduled' && this.joined());
 
-  readonly active = computed(() => this.party() !== null && this.live() !== null);
+  readonly active = computed(() => this.party() !== null && this.joined());
   readonly item = computed(() => this.live()?.item ?? this.party()?.item ?? null);
   readonly policy = computed(() => this.party()?.policy ?? 'everyone');
   readonly reactionsEnabled = computed(() => this.party()?.reactionsEnabled ?? true);
@@ -228,7 +231,7 @@ export class PartyService {
       return;
     }
     this.adopt(dto);
-    if (dto.status === 'live') await this.openPlayer(dto.item);
+    if (dto.status === 'live' && dto.item) await this.openPlayer(dto.item);
     else this.openPage(id, token);
   }
 
@@ -261,7 +264,8 @@ export class PartyService {
     if (id == null) return;
     try {
       this.applySnapshot(await this.api.start(id));
-      await this.openPlayer(this.party()!.item);
+      const item = this.party()?.item;
+      if (item) await this.openPlayer(item);
     } catch {
       /* the error interceptor already toasted it */
     }
@@ -308,6 +312,7 @@ export class PartyService {
     this.clock.stop();
     this.party.set(null);
     this.live.set(null);
+    this.joined.set(false);
     this.members.set([]);
     this.messages.set([]);
     this.bubbles.set([]);
@@ -380,16 +385,14 @@ export class PartyService {
     this.lastRev = live.rev;
     this.members.set(live.members);
     if (!this.messages().length) this.messages.set(live.messages);
-    this.live.set({
-      rev: live.rev,
-      state: live.state,
-      item: dto.item,
-      anchor: live.anchor,
-      whenMs: null,
-      by: null,
-      action: null,
-    });
-    this.syncQueue(dto.item);
+    this.joined.set(true);
+    const { playback } = live;
+    this.live.set(
+      playback && dto.item
+        ? { rev: live.rev, state: playback.state, item: dto.item, anchor: playback.anchor, whenMs: null, by: null, action: null }
+        : null,
+    );
+    if (dto.item) this.syncQueue(dto.item);
   }
 
   /** One fetch at a time: a call during a fetch asks for one more after it, so the start fan-out opens the player once. */
@@ -415,7 +418,7 @@ export class PartyService {
     try {
       const dto = await this.api.get(id);
       this.applySnapshot(dto);
-      if (wasLobby && dto.status === 'live') await this.openPlayer(dto.item);
+      if (wasLobby && dto.status === 'live' && dto.item) await this.openPlayer(dto.item);
     } catch {
       /* the next event or reconnect retries */
     }
@@ -470,6 +473,10 @@ export class PartyService {
         });
         this.party.update((p) => (p ? { ...p, item: e.item } : p));
         this.syncQueue(e.item);
+        break;
+      case 'party.selection':
+        if (!this.acceptRev(e.rev)) return;
+        this.party.update((p) => (p ? { ...p, item: e.item } : p));
         break;
       case 'party.members':
         if (!this.acceptRev(e.rev)) return;

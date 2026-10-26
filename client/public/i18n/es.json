@@ -3655,6 +3655,7 @@
     "ready": "Estoy listo",
     "not_ready": "No estoy listo",
     "start": "Empezar",
+    "no_item": "Película por elegir",
     "invitees": "Invitados",
     "link": "Enlace de invitación",
     "start_now": "Abrir la sala ahora",

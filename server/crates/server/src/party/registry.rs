@@ -2,7 +2,7 @@
 //! the 1 s tick that runs timeouts, away members, empty-party expiry and the scheduled lobby/expiry.
 use super::{
     db::{self, Row},
-    dto::{MemberDto, PartyItem, UserRef},
+    dto::{MemberDto, PartyItem, PlaybackDto, UserRef},
 };
 use crate::{events::SseEvent, state::AppState, sync::MutexExt};
 use chrono::{DateTime, Utc};
@@ -38,9 +38,9 @@ pub struct Parties(Arc<Mutex<Inner>>);
 /// A copy of what a snapshot needs.
 pub struct View {
     pub rev: u64,
-    pub state: fliks_domain::party::State,
-    pub anchor: fliks_domain::party::Anchor,
-    pub item: Item,
+    pub playback: Option<PlaybackDto>,
+    /// The playing item, else the selection.
+    pub item: Option<Item>,
     pub host_id: i32,
     pub members: Vec<Member>,
     pub messages: Vec<fliks_domain::party::Message>,
@@ -49,8 +49,15 @@ pub struct View {
 /// What a summary needs of a machine.
 pub struct Brief {
     pub host_id: i32,
-    pub item: Item,
+    pub item: Option<Item>,
     pub member_count: usize,
+}
+
+fn item_of(l: &Live) -> Option<Item> {
+    l.playback
+        .as_ref()
+        .map(|p| p.item.clone())
+        .or_else(|| l.room.selection.clone())
 }
 
 impl Parties {
@@ -58,28 +65,21 @@ impl Parties {
         self.0.lock_clean()
     }
 
-    /// Creates the machine for a row that has none: a `live` row boots paused (rule 10), else idle.
+    /// Creates the machine for a row that has none: a `live` row boots paused (rule 10), else a
+    /// room holding the chosen film, with nothing playing.
     pub fn ensure(&self, row: &Row, fresh: bool) {
-        let args = (
-            row.name.clone(),
-            row.policy,
-            row.owner_id,
-            row.item(),
-            row.position,
-            now_ms(),
-        );
+        let args = (row.name.clone(), row.policy, row.owner_id, now_ms());
         self.inner().live.entry(row.id).or_insert_with(|| {
-            let (n, p, h, i, pos, now) = args;
-            let mut l = if row.status == "live" && !fresh {
-                Live::boot(n, p, h, i, pos, now)
-            } else {
-                let mut l = Live::new(n, p, h, i, pos, now);
-                l.lobby = row.status == "scheduled";
-                l
+            let (n, p, h, now) = args;
+            let mut l = match row.item() {
+                Some(item) if row.status == "live" && !fresh => {
+                    Live::boot(n, p, h, item, row.position, now)
+                }
+                item => Live::new(n, p, h, item, now),
             };
-            l.reactions_enabled = row.reactions_enabled;
-            l.chat_enabled = row.chat_enabled;
-            l.link_sharing = row.link_sharing;
+            l.room.reactions_enabled = row.reactions_enabled;
+            l.room.chat_enabled = row.chat_enabled;
+            l.room.link_sharing = row.link_sharing;
             l
         });
     }
@@ -103,13 +103,15 @@ impl Parties {
         let g = self.inner();
         let l = g.live.get(&id)?;
         Some(View {
-            rev: l.rev,
-            state: l.state,
-            anchor: l.anchor,
-            item: l.item.clone(),
-            host_id: l.host_id,
-            members: l.members.clone(),
-            messages: l.recent_messages(),
+            rev: l.room.rev,
+            playback: l.playback.as_ref().map(|p| PlaybackDto {
+                state: p.state,
+                anchor: p.anchor,
+            }),
+            item: item_of(l),
+            host_id: l.room.host_id,
+            members: l.room.members.clone(),
+            messages: l.room.recent_messages(),
         })
     }
 
@@ -117,14 +119,17 @@ impl Parties {
         let g = self.inner();
         let l = g.live.get(&id)?;
         Some(Brief {
-            host_id: l.host_id,
-            item: l.item.clone(),
-            member_count: l.members.len(),
+            host_id: l.room.host_id,
+            item: item_of(l),
+            member_count: l.room.members.len(),
         })
     }
 
     pub fn has_user(&self, id: i32, user: i32) -> bool {
-        self.inner().live.get(&id).is_some_and(|l| l.has_user(user))
+        self.inner()
+            .live
+            .get(&id)
+            .is_some_and(|l| l.room.has_user(user))
     }
 
     /// Whether an `ended` from this device would take effect right now.
@@ -155,7 +160,7 @@ impl Parties {
             r,
             Delivery {
                 effects,
-                audience: l.audience(),
+                audience: l.room.audience(),
             },
         ))
     }
@@ -190,6 +195,19 @@ pub fn item_dto_of(info: Option<db::ItemInfo>, item: &Item) -> PartyItem {
         fanart_url,
         additional_fanart_urls,
     }
+}
+
+/// The items that exist, resolved in one query; `None` stays `None`.
+pub async fn opt_item_dtos(
+    st: &AppState,
+    items: &[Option<Item>],
+) -> sqlx::Result<Vec<Option<PartyItem>>> {
+    let present: Vec<Item> = items.iter().flatten().cloned().collect();
+    let mut dtos = item_dtos(st, &present).await?.into_iter();
+    Ok(items
+        .iter()
+        .map(|i| i.as_ref().and_then(|_| dtos.next()))
+        .collect())
 }
 
 pub async fn item_dto(st: &AppState, item: &Item) -> sqlx::Result<PartyItem> {
@@ -294,6 +312,21 @@ pub async fn deliver(st: &AppState, party: i32, d: Delivery) {
                     action: action.map(Into::into),
                 });
             }
+            Effect::Selection { rev, item } => {
+                let dto = match item {
+                    Some(item) => Some(
+                        item_dto(st, &item)
+                            .await
+                            .unwrap_or_else(|_| item_dto_of(None, &item)),
+                    ),
+                    None => None,
+                };
+                emit(SseEvent::PartySelection {
+                    party_id: pid,
+                    rev: rev as i64,
+                    item: dto.map(json),
+                });
+            }
             Effect::Members {
                 rev,
                 host_id,
@@ -366,7 +399,7 @@ pub async fn notify_updated(st: &AppState, row: &Row) -> sqlx::Result<()> {
 /// Sets `ended`, tells the members, drops the machine and refreshes the rail.
 pub async fn end(st: &AppState, row: &Row, reason: CloseReason) -> sqlx::Result<()> {
     db::set_ended(&st.db, row.id).await?;
-    mutate(st, row.id, |l| ((), vec![l.close(reason)])).await;
+    mutate(st, row.id, |l| ((), vec![l.room.close(reason)])).await;
     st.parties.remove(row.id);
     st.parties.forget_notice(row.id);
     notify_updated(st, row).await

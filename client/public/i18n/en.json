@@ -3655,6 +3655,7 @@
     "ready": "I'm ready",
     "not_ready": "Not ready",
     "start": "Start",
+    "no_item": "Film to choose",
     "invitees": "Invited",
     "link": "Invite link",
     "start_now": "Open the lobby now",
