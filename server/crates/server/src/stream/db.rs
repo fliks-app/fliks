@@ -55,7 +55,7 @@ pub async fn resume_position(
         .map(|r| r.position_seconds))
 }
 
-/// Ensures the history row exists and bumps `lastPlayedAt`; never sets `playedAt`.
+/// Ensures the history row exists, links it to `file` and bumps `lastPlayedAt`; never sets `playedAt`.
 pub async fn mark_started(
     db: &PgPool,
     user: i32,
@@ -66,8 +66,10 @@ pub async fn mark_started(
     match find_state(db, user, media, episode).await? {
         Some(row) => {
             sqlx::query!(
-                r#"UPDATE playback_states SET "lastPlayedAt" = now(), "updatedAt" = now() WHERE id = $1"#,
-                row.id
+                r#"UPDATE playback_states SET "mediaFileId" = $2, "lastPlayedAt" = now(), "updatedAt" = now()
+                   WHERE id = $1"#,
+                row.id,
+                file
             )
             .execute(db)
             .await?;
